@@ -98,3 +98,37 @@ func TestDecideTileClick(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitNav(t *testing.T) {
+	for _, c := range []struct {
+		ctrl, meta, want bool
+	}{
+		{false, false, false},
+		{true, false, true},
+		{false, true, true}, // cmd, the macOS open-elsewhere modifier
+		{true, true, true},
+	} {
+		if got := SplitNav(c.ctrl, c.meta); got != c.want {
+			t.Errorf("SplitNav(ctrl=%v, meta=%v) = %v, want %v", c.ctrl, c.meta, got, c.want)
+		}
+	}
+}
+
+// macOS reports a ctrl + left press as a right press with ctrl held, so a
+// right press that asks for a split and never became a drag is that click.
+func TestRightClickIsSplitNav(t *testing.T) {
+	for _, c := range []struct {
+		name              string
+		splitNav, dragged bool
+		want              bool
+	}{
+		{"ctrl right click", true, false, true},
+		{"ctrl right drag is the link drag", true, true, false},
+		{"bare right click stays a no-op", false, false, false},
+		{"bare right drag", false, true, false},
+	} {
+		if got := RightClickIsSplitNav(c.splitNav, c.dragged); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}

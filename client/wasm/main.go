@@ -525,7 +525,7 @@ type dragState struct {
 	// menuNS is the node whose menu offered a template: primitives create there.
 	menuNS       string
 	originPaneID string
-	// splitNav records ctrl at left-press: a bare click descends in a new split.
+	// splitNav is gesture.SplitNav at left-press: a bare click descends in a new split.
 	splitNav     bool
 	tileID       string
 	cellOffsetX  float64

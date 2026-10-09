@@ -44,7 +44,10 @@ type rightDragState struct {
 	// pane follow the drag, so the direction can flip until release.
 	splitAxis pane.Direction
 
-	// Tile-only.
+	// Tile-only. splitNav is gesture.SplitNav at the press and dragged that
+	// the cursor crossed dragThreshold since; see gesture.RightClickIsSplitNav.
+	splitNav   bool
+	dragged    bool
 	tilePaneID string
 	tileNode   *gridwellv1.Tile
 	tilePane   *pane.Pane // for path/grid lookups at commit time
@@ -76,8 +79,8 @@ func rightDragIntent(ev js.Value) dragdrop.Intent {
 
 // onRightDown arms the matching gesture state. No tree or store edits happen
 // here; those wait for release, or the next move tick for a pane resize. intent
-// reaches only the tile-center arm: the pane gestures have no destination.
-func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent dragdrop.Intent) {
+// and splitNav reach only the tile arms: the pane gestures have no destination.
+func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent dragdrop.Intent, splitNav bool) {
 	// Pure reads, held so the arming switch below reuses them.
 	in := gesture.Input{
 		InGridView: p.ContentID() == "",
@@ -95,7 +98,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 
 	switch gesture.Classify(in) {
 	case gesture.TileCenter, gesture.TileResize:
-		a.armTileGesture(p, r, tile, sx, sy, intent)
+		a.armTileGesture(p, r, tile, sx, sy, intent, splitNav)
 	case gesture.Swap:
 		a.rightDrag = &rightDragState{
 			kind:         rightDragSwap,
@@ -138,7 +141,7 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	// Without this a right-drag over a live URL view strands the menu.
 	a.focusToPane(p)
 	// IntentCopy: a content descent can only arm pane gestures, which ignore it.
-	a.onRightDown(p, r, sx, sy, dragdrop.IntentCopy)
+	a.onRightDown(p, r, sx, sy, dragdrop.IntentCopy, false)
 	a.draw()
 }
 
@@ -189,6 +192,9 @@ func (a *App) onRightMove(sx, sy float64) {
 	}
 	rd.curX = sx
 	rd.curY = sy
+	if math.Hypot(sx-rd.startX, sy-rd.startY) >= dragThreshold {
+		rd.dragged = true
+	}
 	switch rd.kind {
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
@@ -210,7 +216,7 @@ func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *gridwellv
 // armTileGesture arms the same model for every tile kind: the center 1/3 by 1/3
 // clones or links through a.dragging past the threshold, and everything outside
 // resizes, which has no destination and so ignores the intent.
-func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
+func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent, splitNav bool) {
 	ps, ok := p.Screen(r)
 	if !ok {
 		return
@@ -220,6 +226,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 		startY:     sy,
 		curX:       sx,
 		curY:       sy,
+		splitNav:   splitNav,
 		tilePaneID: p.ID,
 		tileNode:   n,
 		tilePane:   p,
@@ -286,14 +293,21 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	rd.curX = sx
 	rd.curY = sy
 
-	switch rd.kind {
-	case rightDragSwap:
+	tile := rd.kind == rightDragTileCenter || rd.kind == rightDragTileResize
+	switch {
+	case tile && gesture.RightClickIsSplitNav(rd.splitNav, rd.dragged):
+		a.dragging = nil
+		a.ghost = nil
+		if p := a.tree.FindPane(rd.tilePaneID); p != nil {
+			a.attemptDescentOrAscent(p, paneRectFor(a, p), rd.startX, rd.startY, true)
+		}
+	case rd.kind == rightDragSwap:
 		a.commitSwap(rd, sx, sy)
-	case rightDragSplit:
+	case rd.kind == rightDragSplit:
 		a.commitSplit(rd, sx, sy)
-	case rightDragTileCenter:
+	case rd.kind == rightDragTileCenter:
 		a.commitTileCenter(sx, sy)
-	case rightDragTileResize:
+	case rd.kind == rightDragTileResize:
 		a.commitTileResize(rd)
 	}
 	a.draw()

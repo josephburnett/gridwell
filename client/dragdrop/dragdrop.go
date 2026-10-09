@@ -229,7 +229,7 @@ const (
 	// DropNavigate is a bare click in any pane: descend, ascend or select,
 	// placing nothing.
 	DropNavigate      DropAction = iota
-	DropNavigateSplit            // that click with ctrl held at press
+	DropNavigateSplit            // that click asking for a split at press
 	DropCreateTemplate
 	DropPanEnd   // an empty-space drag, which persists the viewport
 	DropDelete   // a release over the source pane's trashcan button
@@ -247,8 +247,8 @@ const (
 // on a move, mirroring the server's PlaceTile.
 type DropInput struct {
 	Started bool
-	// SplitNav is ctrl at left-press time, fixed there so releasing it
-	// mid-click cannot change the verdict.
+	// SplitNav is gesture.SplitNav at left-press time, fixed there so letting
+	// the key go mid-click cannot change the verdict.
 	SplitNav   bool
 	IsTemplate bool
 	Intent     Intent

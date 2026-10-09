@@ -276,8 +276,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Cross-plugin a left-drag links too, because
   there is no cross-plugin move. Dashed means link; deleting a link
-  unlinks. Ctrl + left-click descends in a new pane split below — the
-  same split a link out of a live tile opens — in any pane. A press that
+  unlinks. Ctrl or cmd + left-click descends in a new pane split below —
+  the same split a link out of a live tile opens — in any pane; macOS
+  reports ctrl + left as a right press with ctrl held, so a ctrl or cmd
+  right-click on a tile that never becomes a drag is the same gesture
+  (2026-10-09, `gesture.SplitNav`). A press that
   crosses the drag threshold is a drag, even if it drops on its own cell:
   it snaps back and is not a click
   (2026-09-30, `dragdrop.DropRejected`). Esc cancels any drag in flight:
