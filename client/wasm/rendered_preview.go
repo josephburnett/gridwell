@@ -40,7 +40,7 @@ func (svgRasterizer) Rasterize(svg string, onReady func(rasterprev.Raster), onEr
 	release := func() { onload.Release(); onerror.Release() }
 	onload = js.FuncOf(func(js.Value, []js.Value) any {
 		release()
-		onReady(&svgRaster{img: img, url: url})
+		onReady(&svgRaster{img: img, url: url, svg: svg})
 		return nil
 	})
 	onerror = js.FuncOf(func(js.Value, []js.Value) any {
@@ -58,6 +58,7 @@ func (svgRasterizer) Rasterize(svg string, onReady func(rasterprev.Raster), onEr
 type svgRaster struct {
 	img     js.Value
 	url     string
+	svg     string // for paintedText
 	revoked bool
 }
 
@@ -105,6 +106,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 	if !ok {
 		return js.Value{}, 0, false
 	}
+	a.lastRasterSVG = sr.svg
 	return sr.img, madeAt, true
 }
 

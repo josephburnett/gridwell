@@ -39,7 +39,7 @@ type contentEntry struct {
 	base  rpc.ContentBasis
 	row   RowBasis
 	dirty bool
-	// gen names the bytes the server last gave; see BodyGen.
+	// gen names data; see BodyGen.
 	gen uint64
 }
 
@@ -141,10 +141,10 @@ func (c *Cache) nextGenLocked() uint64 {
 	return c.gens
 }
 
-// BodyGen is the generation of the body cached for a tile, as the server last
-// gave it, 0 when none is: what a picture or a wrap of the body is keyed by,
-// since a plugin row's version never moves when its bytes do. An unsaved edit
-// keeps the generation, as it keeps the version.
+// BodyGen is the generation of the bytes cached for a tile, 0 when none are:
+// what every picture or wrap of the body is keyed by, so it moves whenever the
+// bytes do, an unsaved edit included. A row's version cannot serve: a plugin
+// row's never moves, and an edit moves no one's.
 func (c *Cache) BodyGen(tileID string) uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -162,11 +162,12 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 	defer c.mu.Unlock()
 	e := c.content[tileID]
 	if e == nil {
-		e = &contentEntry{gen: c.nextGenLocked()}
+		e = &contentEntry{}
 		c.content[tileID] = e
 	}
 	e.data = cloneBytes(data)
 	e.dirty = true
+	e.gen = c.nextGenLocked()
 }
 
 // PutSavedContent stores the body a content write confirmed, filed under the
@@ -176,11 +177,16 @@ func (c *Cache) PutSavedContent(row *gridwellv1.Tile, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	base, filed := rpc.BasisOf(row), rowBasis(row)
-	if e, ok := c.content[row.Id]; ok && e.dirty && !bytes.Equal(e.data, data) {
+	e, ok := c.content[row.Id]
+	if ok && e.dirty && !bytes.Equal(e.data, data) {
 		e.base, e.row = base, filed
 		return
 	}
-	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: base, row: filed, gen: c.nextGenLocked()}
+	gen := c.nextGenLocked()
+	if ok && bytes.Equal(e.data, data) {
+		gen = e.gen
+	}
+	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: base, row: filed, gen: gen}
 }
 
 // SaveBasis returns the basis a content write must claim. Only fetches and

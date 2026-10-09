@@ -220,6 +220,14 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
+		// What each text face last painted; see App.paintedText.
+		"paintedText": js.FuncOf(func(js.Value, []js.Value) any {
+			out := map[string]any{}
+			for k, v := range a.paintedText {
+				out[k] = v
+			}
+			return out
+		}),
 		// The last banner line each tile drew: tileface.BannerText as painted.
 		"bannerTexts": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
