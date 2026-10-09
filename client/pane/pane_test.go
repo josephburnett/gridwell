@@ -24,7 +24,7 @@ func twoPaneTree(t *testing.T) (tr *Tree, a, b string) {
 }
 
 // threePaneTree returns a new Tree with three panes: a (original), b
-// (horizontal sibling of a), and c (vertical sibling of b, focused).
+// (horizontal sibling of a, focused), and c (vertical sibling of b).
 func threePaneTree(t *testing.T) (tr *Tree, a, b, c string) {
 	t.Helper()
 	tr, a, b = twoPaneTree(t)
@@ -459,4 +459,59 @@ func TestSplitBelowForOpen(t *testing.T) {
 	if !split || !shed || q.ContentID() != "77" {
 		t.Fatalf("content clone: (%v, %v, %v) content=%q", q.ID, split, shed, q.ContentID())
 	}
+}
+
+func TestRecencyFollowsFocus(t *testing.T) {
+	tr, a, b, c := threePaneTree(t)
+	if got := tr.Recency(); !equalIDs(got, []string{b, a}) {
+		t.Fatalf("after the splits Recency = %v, want [%s %s]", got, b, a)
+	}
+	for _, id := range []string{c, a, b, a} {
+		_ = tr.SetFocus(id)
+	}
+	if got := tr.Recency(); !equalIDs(got, []string{a, b, c}) {
+		t.Errorf("after c, a, b, a Recency = %v, want [%s %s %s]", got, a, b, c)
+	}
+	_ = tr.SetFocus("nope")
+	if got := tr.Recency(); !equalIDs(got, []string{a, b, c}) {
+		t.Errorf("an unknown focus changed Recency to %v", got)
+	}
+}
+
+func TestRecencyForgetsAClosedPane(t *testing.T) {
+	tr, a, b, c := threePaneTree(t)
+	var bNode TreeNode
+	var find func(n TreeNode)
+	find = func(n TreeNode) {
+		if n.IsLeaf() {
+			if n.Pane.ID == b {
+				bNode = n
+			}
+			return
+		}
+		find(n.Split.A)
+		find(n.Split.B)
+	}
+	find(tr.Root)
+	_ = tr.SetFocus(b)
+	_ = tr.SetFocus(a)
+	if !tr.RemoveSegment(bNode) {
+		t.Fatal("RemoveSegment refused")
+	}
+	_ = tr.SetFocus(c)
+	if got := tr.Recency(); !equalIDs(got, []string{c, a}) {
+		t.Errorf("Recency = %v, want [%s %s] without the closed %s", got, c, a, b)
+	}
+}
+
+func equalIDs(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

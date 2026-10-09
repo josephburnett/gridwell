@@ -202,7 +202,7 @@ func (t *Tree) RemoveSegment(seg TreeNode) bool {
 	}
 	t.Zoomed = "" // structural edit, same rule as CollapseSplit
 	if t.FindPane(t.Focus) == nil {
-		t.Focus = anyLeafID(t.Root)
+		t.focus(anyLeafID(t.Root))
 	}
 	return true
 }

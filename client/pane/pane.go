@@ -72,6 +72,10 @@ func (n TreeNode) IsLeaf() bool { return n.Pane != nil }
 type Tree struct {
 	Root  TreeNode
 	Focus string
+	// prior is the panes that held Focus before it, most recent first: with
+	// Focus at its head it is the focus recency order, part of the session
+	// selection like Focus itself. Only focus writes it.
+	prior []string
 	// Zoomed names the leaf pane that temporarily owns the whole layout. The
 	// split ratios underneath stay untouched, so unzooming restores the exact
 	// prior arrangement, and structural edits unzoom first. Session-local,
@@ -148,7 +152,7 @@ func (t *Tree) SplitOnSideAt(side Side, ratio float64) (*Pane, error) {
 	split := findParentSplit(&t.Root, newP.ID)
 	if split == nil {
 		// Split just inserted one, so this is unreachable.
-		t.Focus = newP.ID
+		t.focus(newP.ID)
 		return newP, nil
 	}
 	if side == SideTop || side == SideLeft {
@@ -160,7 +164,7 @@ func (t *Tree) SplitOnSideAt(side Side, ratio float64) (*Pane, error) {
 		// On the B side the split's A-fraction is 1 - ratio.
 		split.Ratio = 1 - clamp01(ratio)
 	}
-	t.Focus = newP.ID
+	t.focus(newP.ID)
 	return newP, nil
 }
 
@@ -272,8 +276,32 @@ func (t *Tree) SetFocus(id string) error {
 	if t.FindPane(id) == nil {
 		return errors.New("pane not found")
 	}
-	t.Focus = id
+	t.focus(id)
 	return nil
+}
+
+// focus is the one writer of Focus that keeps prior true. A Focus that is no
+// longer in the tree is not recorded, and neither is a closed pane.
+func (t *Tree) focus(id string) {
+	if id == t.Focus {
+		return
+	}
+	prior := make([]string, 0, len(t.prior)+1)
+	if t.FindPane(t.Focus) != nil {
+		prior = append(prior, t.Focus)
+	}
+	for _, p := range t.prior {
+		if p != id && t.FindPane(p) != nil {
+			prior = append(prior, p)
+		}
+	}
+	t.Focus, t.prior = id, prior
+}
+
+// Recency is the panes in the order they last held focus, the focused one
+// first. A pane never focused this session is absent.
+func (t *Tree) Recency() []string {
+	return append([]string{t.Focus}, t.prior...)
 }
 
 // SplitBelowForOpen is the one programmatic split: a link opened out of a

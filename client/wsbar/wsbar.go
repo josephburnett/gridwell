@@ -5,6 +5,8 @@
 // chrome moves with focus.
 package wsbar
 
+import "github.com/josephburnett/gridwell/client/pane"
+
 // Band returns paneH as both the pane tree's height and the band's top edge,
 // so layout and bar cannot disagree about where they meet. ok=false when what
 // is left cannot hold the band.
@@ -47,8 +49,9 @@ type Zone int
 const (
 	// ZoneOutside belongs to a pane or to the notice strip below.
 	ZoneOutside Zone = iota
-	// ZoneBand is the band's row off the bar. Nothing is under the band, so a
-	// point here is swallowed rather than passed to a pane.
+	// ZoneBand is the band's row off the bar. No pane is in the band, so a
+	// point here is never passed to one; a left press focuses the column
+	// above it (BandFocus).
 	ZoneBand
 	ZoneBar
 )
@@ -62,6 +65,29 @@ func Where(px, py, x, top, w float64) Zone {
 		return ZoneBand
 	}
 	return ZoneBar
+}
+
+// BandFocus is the pane a left press at x in the band beside the bar
+// focuses: of the panes whose span across covers x, the one that held focus
+// most recently in recency (pane.Tree.Recency), else the lowest, which sits
+// on the band. ok=false when no pane covers x.
+func BandFocus(rects map[string]pane.Rect, recency []string, x float64) (string, bool) {
+	covers := func(r pane.Rect) bool { return x >= r.X && x < r.X+r.W }
+	for _, id := range recency {
+		if r, ok := rects[id]; ok && covers(r) {
+			return id, true
+		}
+	}
+	best, found := "", false
+	for id, r := range rects {
+		if !covers(r) {
+			continue
+		}
+		if b := rects[best]; !found || r.Y > b.Y || (r.Y == b.Y && id < best) {
+			best, found = id, true
+		}
+	}
+	return best, found
 }
 
 // RowH keeps the band thin while a square crumb stays legible as a preview.
