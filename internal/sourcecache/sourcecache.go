@@ -944,7 +944,11 @@ func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.Til
 
 func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	resp, err := c.Namespace.SetFraming(ctx, in)
-	c.noteReachTile(ctx, err, in.TileId)
+	if in.RootGridId != "" {
+		c.noteReachGrid(ctx, err, in.RootGridId)
+	} else {
+		c.noteReachTile(ctx, err, in.TileId)
+	}
 	switch {
 	case err != nil:
 	case in.RootGridId != "":
