@@ -315,6 +315,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   divider per axis, so at the corner of three panes it grabs both and the
   one drag moves both: two ordinary resizes sharing one gesture, rather than
   a gesture of its own. `pane.GrabDividers`.
+- A right-drag from a pane's edge splits it. Inside a pane tile the outline
+  at the window edge is part of the pane it borders, so an edge is as easy
+  a target as an interior divider (2026-10-09, `pane.GutterPane`).
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.

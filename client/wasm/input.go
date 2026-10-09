@@ -152,6 +152,17 @@ func modsOf(ev js.Value) traceevent.Mods {
 		Alt: ev.Get("altKey").Truthy(), Meta: ev.Get("metaKey").Truthy()}
 }
 
+// paneAtGutter resolves a press on the pane-tile outline; see pane.GutterPane.
+func (a *App) paneAtGutter(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
+	rects := a.layoutPanes()
+	area := pane.Rect{W: a.width, H: a.paneAreaH()}
+	id, ok := pane.GutterPane(rects, a.rootLayoutRect(), area, sx, sy)
+	if !ok {
+		return nil, pane.Rect{}, false
+	}
+	return a.tree.FindPane(id), rects[id], true
+}
+
 func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	rects := a.layoutPanes()
 	for id, r := range rects {
@@ -394,14 +405,17 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			return nil
 		}
 	}
+	button := args[0].Get("button").Int()
 	p, r, ok := a.paneAtScreen(sx, sy)
+	if !ok && button == 2 {
+		p, r, ok = a.paneAtGutter(sx, sy)
+	}
 	if !ok {
 		return nil
 	}
 	a.focusToPane(p)
 	// Last, once the press has shown, un-parked or left what it acts on.
 	defer a.takeKeyboard()
-	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")
 		// The modifiers are read at the press and never again; see
