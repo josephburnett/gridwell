@@ -24,7 +24,7 @@ const (
 	// ActionRename edits the centered title.
 	ActionRename
 	// ActionZoom toggles the focused pane's zoom; the title is the pane's
-	// handle.
+	// handle, and for the left button the handle is the whole name area.
 	ActionZoom
 	// ActionWorkspaceRename edits Segment's pane-tile crumb.
 	ActionWorkspaceRename
@@ -48,7 +48,8 @@ type Click struct {
 	BarW     float64
 	Segments []Segment
 	Chain    []pane.NavCrumb
-	// Title is the centered title's span; ok=false when it did not fit.
+	// Title is the centered title's span, the right button's target;
+	// ok=false when it did not fit.
 	TitleX, TitleW float64
 	TitleOK        bool
 	// SlotMenu is whether the slot's mode has a right-click menu at all; see
@@ -66,7 +67,10 @@ type Hit struct {
 }
 
 // RouteClick asks the zone, then the two fixed ends of the bar, then the
-// chain, because the slot and the title sit over the band and not in it.
+// chain, because the slot and the title sit over the band and not in it. A
+// left press anywhere between the crumbs and the slot is a press on the name,
+// so the zoom handle is as wide as the room the name is centered in; rename
+// stays on the drawn text, so an edit is never offered off the name it edits.
 func RouteClick(in Click) Hit {
 	switch in.Zone {
 	case ZoneOutside:
@@ -76,6 +80,7 @@ func RouteClick(in Click) Hit {
 	}
 	inSlot := in.X >= in.BarW-SlotW
 	inTitle := in.TitleOK && in.X >= in.TitleX && in.X < in.TitleX+in.TitleW
+	inNameArea := in.TitleOK && in.X >= CrumbsEnd(in.Segments)
 	if in.Button == 2 {
 		switch {
 		case inSlot:
@@ -94,7 +99,7 @@ func RouteClick(in Click) Hit {
 	switch {
 	case inSlot:
 		return Hit{Action: ActionSlot}
-	case inTitle:
+	case inNameArea:
 		if in.Button == 0 {
 			return Hit{Action: ActionZoom}
 		}

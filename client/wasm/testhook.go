@@ -914,8 +914,8 @@ func (a *App) thBar(js.Value, []js.Value) any {
 		"button":   button,
 		"segments": out,
 	}
-	// The centered title: the rect drawBarTitle renders and bottomBarClick
-	// hit-tests.
+	// The centered title: the rect drawBarTitle renders and a right press
+	// renames on; a left press zooms anywhere past the crumbs (wsbar.RouteClick).
 	if x, w, _, label, editable, muted, ok := a.barTitleGeom(); ok {
 		res["title"] = map[string]any{
 			"x": x, "w": w, "label": label, "editable": editable, "muted": muted,
