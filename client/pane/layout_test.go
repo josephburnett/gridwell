@@ -547,3 +547,52 @@ func TestCanSplitAgreesWithTheClamp(t *testing.T) {
 		t.Error("the horizontal axis follows the same rule")
 	}
 }
+
+// Inside a pane tile the layout root is inset by the outline; a press on the
+// outline belongs to the pane whose edge it borders, at every window edge.
+func TestGutterPaneOutlineBelongsToBorderingPane(t *testing.T) {
+	area := Rect{X: 0, Y: 0, W: 800, H: 600}
+	root := Rect{X: 3, Y: 3, W: 794, H: 594}
+	tree := NewTree()
+	if _, err := tree.Split(Vertical); err != nil {
+		t.Fatal(err)
+	}
+	rects := Layout(tree, root)
+	var left, right string
+	for id, r := range rects {
+		if r.X == root.X {
+			left = id
+		} else {
+			right = id
+		}
+	}
+	cases := []struct {
+		name   string
+		x, y   float64
+		want   string
+		wantOK bool
+	}{
+		{"right edge", 798.5, 300, right, true},
+		{"left edge", 1.5, 300, left, true},
+		{"bottom edge under left", 100, 598.5, left, true},
+		{"top edge over right", 700, 0, right, true},
+		{"corner", 799.9, 599.9, right, true},
+		{"inside a pane is not gutter", 100, 300, "", false},
+		{"below the pane area", 100, 600, "", false},
+		{"left of the window", -1, 300, "", false},
+	}
+	for _, c := range cases {
+		got, ok := GutterPane(rects, root, area, c.x, c.y)
+		if got != c.want || ok != c.wantOK {
+			t.Errorf("%s: got (%q, %v), want (%q, %v)", c.name, got, ok, c.want, c.wantOK)
+		}
+	}
+	// The press is outside the pane's rect, so the region names the edge side
+	// and the right button reads it as a split.
+	if reg := ClassifyRegion(rects[right], 10, 798.5, 300); reg.Side() != SideRight || !reg.IsResize() {
+		t.Errorf("right outline press region = %v, want a right-edge band", reg)
+	}
+	if reg := ClassifyRegion(rects[left], 10, 100, 598.5); reg.Side() != SideBottom || !reg.IsResize() {
+		t.Errorf("bottom outline press region = %v, want a bottom-edge band", reg)
+	}
+}

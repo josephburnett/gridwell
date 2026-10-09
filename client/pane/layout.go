@@ -1,6 +1,10 @@
 package pane
 
-import "github.com/josephburnett/gridwell/client/zoomtrans"
+import (
+	"math"
+
+	"github.com/josephburnett/gridwell/client/zoomtrans"
+)
 
 // Rect is the screen-space rectangle in logical pixels, one shape, aliased by
 // client/palette.
@@ -45,6 +49,24 @@ func layoutInto(n TreeNode, r Rect, out map[string]Rect) {
 	a, b := SplitRect(r, n.Split.Dir, n.Split.Ratio)
 	layoutInto(n.Split.A, a, out)
 	layoutInto(n.Split.B, b, out)
+}
+
+// GutterPane is the pane a press in area but outside root borders: the one
+// holding the press clamped into root. Inside a pane tile root is inset from
+// the pane area by the outline, which belongs to no pane, so without this the
+// window-edge split target would be narrower than an interior divider's.
+func GutterPane(rects map[string]Rect, root, area Rect, sx, sy float64) (string, bool) {
+	if !area.Contains(sx, sy) || root.Contains(sx, sy) || root.W <= 0 || root.H <= 0 {
+		return "", false
+	}
+	cx := min(max(sx, root.X), math.Nextafter(root.X+root.W, math.Inf(-1)))
+	cy := min(max(sy, root.Y), math.Nextafter(root.Y+root.H, math.Inf(-1)))
+	for id, r := range rects {
+		if r.Contains(cx, cy) {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 // SplitRect is the two child rectangles: A is the top or left one.
