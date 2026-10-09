@@ -41,7 +41,7 @@ type ClickInput struct {
 	LeafLink bool
 	// DeadLink is client/deadref: it descends nowhere, so it births no pane.
 	DeadLink bool
-	// SplitNav is ctrl at left-press time; see dragdrop.DropInput.SplitNav.
+	// SplitNav is the press's SplitNav verdict; see dragdrop.DropInput.SplitNav.
 	SplitNav bool
 }
 
@@ -62,3 +62,14 @@ func DecideTileClick(in ClickInput) ClickVerdict {
 	}
 	return ClickDescend
 }
+
+// SplitNav reads a press's modifiers: ctrl, or meta (cmd on macOS), asks that
+// the click descend in a new pane split below. It is the one owner of which
+// keys ask.
+func SplitNav(ctrl, meta bool) bool { return ctrl || meta }
+
+// RightClickIsSplitNav is the verdict on a right press over a tile at its
+// release. macOS reports a ctrl + left press as a right press with ctrl held,
+// so one that asked for a split and never crossed the drag threshold is that
+// click; anywhere else such a release had nothing to do.
+func RightClickIsSplitNav(splitNav, dragged bool) bool { return splitNav && !dragged }

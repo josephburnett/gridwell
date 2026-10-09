@@ -58,7 +58,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	verdict := a.commitVerdict(in, d, t)
 	switch verdict {
 	case dragdrop.DropNavigate, dragdrop.DropNavigateSplit:
-		// The split flavor is the same click with ctrl held at press; focus
+		// The split flavor is the same click asking for a split; focus
 		// already followed the press.
 		focused := a.tree.FindPane(d.originPaneID)
 		if focused == nil {

@@ -404,8 +404,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	button := args[0].Get("button").Int()
 	if button == 2 {
 		args[0].Call("preventDefault")
-		// The modifier is read at the press and never again; see rightDragIntent.
-		a.onRightDown(p, r, sx, sy, rightDragIntent(args[0]))
+		// The modifiers are read at the press and never again; see
+		// rightDragIntent and gesture.RightClickIsSplitNav.
+		a.onRightDown(p, r, sx, sy, rightDragIntent(args[0]),
+			gesture.SplitNav(args[0].Get("ctrlKey").Truthy(), args[0].Get("metaKey").Truthy()))
 		return nil
 	}
 	if button == 1 {
@@ -462,7 +464,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	parentCell := ps.Cell()
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		splitNav:     args[0].Get("ctrlKey").Truthy(),
+		splitNav:     gesture.SplitNav(args[0].Get("ctrlKey").Truthy(), args[0].Get("metaKey").Truthy()),
 		tileID:       "",
 		startScreenX: sx,
 		startScreenY: sy,
@@ -643,7 +645,7 @@ func (a *App) overDeleteButton(d *dragState, sx, sy float64) bool {
 
 // attemptDescentOrAscent routes a bare left-click, which only ever descends.
 // It resolves the tile's facts and obeys gesture.DecideTileClick; inNewPane is
-// the ctrl-click ask. Which frame a descent pushes is the tile's declaration;
+// gesture.SplitNav's ask. Which frame a descent pushes is the tile's declaration;
 // see nav.go.
 func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, inNewPane bool) bool {
 	if p.ContentID() != "" {

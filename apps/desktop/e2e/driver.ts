@@ -530,13 +530,16 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
-  // descendCell with Control held, so the descent lands in a new pane split
-  // below, which takes focus. paneId names a pane other than the focused one.
-  async ctrlDescendCell(cx: number, cy: number, paneId?: string): Promise<void> {
+  // descendCell with Control (or key) held, so the descent lands in a new pane
+  // split below, which takes focus. paneId names a pane other than the focused
+  // one. button 'right' with Control is the press macOS reports for a ctrl +
+  // left click.
+  async ctrlDescendCell(cx: number, cy: number, paneId?: string,
+    key: 'Control' | 'Meta' = 'Control', button: 'left' | 'right' = 'left'): Promise<void> {
     const c = await this.cellCenter(paneId ?? (await this.focused()).id, cx, cy);
-    await this.win.keyboard.down('Control');
-    await this.win.mouse.click(c.x, c.y);
-    await this.win.keyboard.up('Control');
+    await this.win.keyboard.down(key);
+    await this.win.mouse.click(c.x, c.y, { button });
+    await this.win.keyboard.up(key);
     await this.waitIdle();
   }
 
