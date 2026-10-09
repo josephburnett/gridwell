@@ -334,3 +334,20 @@ func TestHasIsWhatIsStillOwed(t *testing.T) {
 		t.Error("a write the server kept is still owed")
 	}
 }
+
+// The disabled verdict is an answer: a write that met it is acked, never
+// parked for the backstop to re-post forever.
+func TestTheDisabledVerdictParksNothing(t *testing.T) {
+	o := New()
+	posts := 0
+	o.Send(k("SetFraming", "g1"), func() { posts++ }, func() clientsync.Outcome { return clientsync.OutcomeDisabled })
+	if o.Len() != 0 {
+		t.Fatalf("the disabled verdict left %d parked", o.Len())
+	}
+	for _, fn := range o.Drain() {
+		fn()
+	}
+	if posts != 0 {
+		t.Fatalf("a drain re-posted a write the source refused as disabled %d times", posts)
+	}
+}

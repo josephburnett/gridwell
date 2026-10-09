@@ -98,6 +98,7 @@ func TestReadOnlyTable(t *testing.T) {
 		{"text its source says takes none", rpc.KindText, true, "big.log is larger than a body shows", true},
 		{"text in a grid that takes none", rpc.KindText, false, "", true},
 		{"text refused by both", rpc.KindText, false, "x", true},
+		{"text from a disabled source", rpc.KindText, false, rpc.DisabledReason("rtb"), true},
 		{"a url is no read-only text", rpc.KindURL, false, "x", false},
 		{"a well is no read-only text", rpc.KindWell, true, "x", false},
 	}

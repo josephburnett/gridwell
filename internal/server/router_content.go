@@ -52,6 +52,9 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.refuseDisabled(first.TileId); err != nil {
+		return nil, err
+	}
 	bound := proto.CloneOf(first)
 	bound.TileId = local
 	sentBind := false
@@ -69,6 +72,9 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 func (rt *router) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
 	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
+		return nil, err
+	}
+	if err := rt.refuseDisabled(req.TileId, req.GridId); err != nil {
 		return nil, err
 	}
 	resp, err := c.PlaceTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))

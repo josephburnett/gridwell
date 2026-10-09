@@ -11,6 +11,7 @@ import (
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
@@ -107,10 +108,9 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
 		}
 	}
-	return &pb.GetGridResponse{
-		Grid:  g,
-		Tiles: qualifyTilesFor(transit, uuid, resp.Tiles),
-	}, nil
+	tiles := qualifyTilesFor(transit, uuid, resp.Tiles)
+	rt.srv.stampDisabled(req.GridId, g, tiles)
+	return &pb.GetGridResponse{Grid: g, Tiles: tiles}, nil
 }
 
 // infoFaceError says which grid could not be answered and why, transport-class
@@ -255,7 +255,11 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 		return nil, err
 	}
 	resp, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
-	return rt.tileResp(uuid, transit, resp, err)
+	out, err := rt.tileResp(uuid, transit, resp, err)
+	if err == nil {
+		rt.srv.stampDisabledTile(out.GetTile())
+	}
+	return out, err
 }
 
 // Search routes a scope to its owner, and an id: lookup is its own scope; free
@@ -306,6 +310,9 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	}
 	c, _, uuid, transit, err := rt.route(m.GridId)
 	if err != nil {
+		return nil, err
+	}
+	if err := rt.refuseDisabled(m.GridId); err != nil {
 		return nil, err
 	}
 	if err := rt.mintReferences(ctx, m.Tile); err != nil {
@@ -360,6 +367,10 @@ func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
 	if err != nil {
+		return nil, err
+	}
+	// The source is only read; the destination is written.
+	if err := rt.refuseDisabled(m.DestGridId); err != nil {
 		return nil, err
 	}
 	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
@@ -419,6 +430,9 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.refuseDisabled(req.TileId); err != nil {
+		return nil, err
+	}
 	resp, err := c.SetTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
 	return rt.tileResp(uuid, transit, resp, err)
 }
@@ -428,6 +442,9 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 	qualifiedID := m.TileId
 	c, local, _, transit, err := rt.route(m.TileId)
 	if err != nil {
+		return nil, err
+	}
+	if err := rt.refuseDisabled(m.TileId); err != nil {
 		return nil, err
 	}
 	// The layout blob is the only record of a pane tile's ephemerals: capture
@@ -534,6 +551,9 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	if err != nil {
 		return nil, err
 	}
+	if err := rt.refuseDisabled(ref); err != nil {
+		return nil, err
+	}
 	out := &pb.SetFramingRequest{Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}
 	if root {
 		out.RootGridId = ref
@@ -636,24 +656,33 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	}
 }
 
-// asSwitched is the one place a disabled source's health is told: whatever a
-// layer under the router says of it, its process dying or its fan-in failing,
-// it is disabled.
+// asSwitched is the one place a disabled source's events are told: whatever
+// a layer under the router says of its health, its process dying or its
+// fan-in failing, it is disabled, and a row it changes takes no edits
+// (stampDisabled).
 func (s *Server) asSwitched(ev *pb.Event) *pb.Event {
 	if h := ev.GetPluginHealth(); h != nil && s.pluginReg.Disabled(h.GetPluginUuid()) {
 		return rpc.DisabledEvent(h.GetPluginUuid())
+	}
+	if t := ev.GetTileChanged().GetTile(); t != nil {
+		if _, reason := s.disabledReason(t.GetId()); reason != "" {
+			ev = proto.Clone(ev).(*pb.Event)
+			s.stampDisabledTile(ev.GetTileChanged().GetTile())
+		}
 	}
 	return ev
 }
 
 // DisableSource switches off a plugin or connection this node declares until
-// the node exits (plugin.Registry.Disable), and tells every open stream.
+// the node exits (plugin.Registry.Disable), and tells every open stream, and
+// every view showing one of its grids (announceDisabled).
 func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest) (*pb.DisableSourceResponse, error) {
 	ns := req.GetNamespace()
 	if err := rt.srv.pluginReg.Disable(ns); err != nil {
 		return nil, status.Error(gcodes.FailedPrecondition, "disable: "+err.Error())
 	}
 	rt.srv.switchedOff.Publish(rpc.DisabledEvent(ns))
+	rt.srv.announceDisabled(ns)
 	return &pb.DisableSourceResponse{}, nil
 }
 

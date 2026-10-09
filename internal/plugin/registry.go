@@ -5,6 +5,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -34,8 +35,14 @@ type Registry struct {
 	// namespace its health event names: a plugin's id, a connection's
 	// "<node>/<name>". off is the one record of which were, held for the
 	// process's life and never written anywhere.
-	switches map[string]func()
+	switches map[string]sourceSwitch
 	off      map[string]bool
+}
+
+// sourceSwitch is one source's switch and the name its reason gives it.
+type sourceSwitch struct {
+	label string
+	stop  func()
 }
 
 func NewRegistry() *Registry {
@@ -44,7 +51,7 @@ func NewRegistry() *Registry {
 		kinds:    make(map[string]string),
 		labels:   make(map[string]string),
 		closers:  make(map[string]func()),
-		switches: make(map[string]func()),
+		switches: make(map[string]sourceSwitch),
 		off:      make(map[string]bool),
 	}
 }
@@ -103,12 +110,12 @@ func (r *Registry) Transport() (namespace.Namespace, bool) {
 	return r.transport, r.transport != nil
 }
 
-// Switch declares ns a source the user may disable, stop being what ends
-// its work for the rest of the process.
-func (r *Registry) Switch(ns string, stop func()) {
+// Switch declares ns a source the user may disable, label being what its
+// reason calls it and stop what ends its work for the rest of the process.
+func (r *Registry) Switch(ns, label string, stop func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.switches[ns] = stop
+	r.switches[ns] = sourceSwitch{label: label, stop: stop}
 }
 
 // Disable switches ns off until the process exits. A namespace with no
@@ -116,7 +123,7 @@ func (r *Registry) Switch(ns string, stop func()) {
 // node's to stop.
 func (r *Registry) Disable(ns string) error {
 	r.mu.Lock()
-	stop, ok := r.switches[ns]
+	sw, ok := r.switches[ns]
 	already := r.off[ns]
 	if ok {
 		r.off[ns] = true
@@ -126,7 +133,7 @@ func (r *Registry) Disable(ns string) error {
 		return fmt.Errorf("%q is not a plugin or connection this node declares", ns)
 	}
 	if !already {
-		stop()
+		sw.stop()
 	}
 	return nil
 }
@@ -136,6 +143,17 @@ func (r *Registry) Disabled(ns string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.off[ns]
+}
+
+// DisabledReason is the sentence a disabled source's rows carry and its
+// writes are refused with, "" while ns is on.
+func (r *Registry) DisabledReason(ns string) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.off[ns] {
+		return ""
+	}
+	return rpc.DisabledReason(r.switches[ns].label)
 }
 
 // DisabledNow is every source switched off, sorted.
@@ -167,7 +185,7 @@ func (r *Registry) Close() {
 	r.clients = make(map[string]namespace.Namespace)
 	r.kinds = make(map[string]string)
 	r.labels = make(map[string]string)
-	r.switches = make(map[string]func())
+	r.switches = make(map[string]sourceSwitch)
 	r.off = make(map[string]bool)
 	r.order = nil
 	r.mu.Unlock()

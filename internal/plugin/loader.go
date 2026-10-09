@@ -6,6 +6,7 @@
 package plugin
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -58,7 +59,7 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 		}
 		reg.Register(pc.ID, pc.Kind, ns, closer)
 		reg.SetLabel(pc.ID, pc.Label)
-		reg.Switch(pc.ID, sup.Disable)
+		reg.Switch(pc.ID, cmp.Or(pc.Label, pc.Kind), sup.Disable)
 	}
 	return nil
 }

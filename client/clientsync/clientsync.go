@@ -31,6 +31,10 @@ const (
 	// so nothing was heard and nothing is said; only reads are cancelled
 	// (inflight.Reads.CancelIf), by a caller that asks again.
 	OutcomeAbandoned
+	// OutcomeDisabled is a write to a source the user disabled
+	// (gwerr.IsSourceDisabled): a verdict that holds until the node
+	// restarts, so nothing parks or retries it.
+	OutcomeDisabled
 )
 
 // Of reads a non-connect error as Transport and every coded error as a server
@@ -39,7 +43,8 @@ const (
 // bytes. A Canceled the far side sent wraps no context.Canceled, so it stays
 // Transport. The door's stale-build refusal is Transport too: the verb never
 // ran, so a write's bytes are still owed, and the page's one answer to it is
-// client/nodebuild's, not a conflict's reload of the body.
+// client/nodebuild's, not a conflict's reload of the body. A source's
+// disabled refusal shares the conflict's code and is told apart by its detail.
 func Of(err error) Outcome {
 	if err == nil {
 		return OutcomeOK
@@ -56,6 +61,9 @@ func Of(err error) Outcome {
 	}
 	if _, stale := gwerr.StaleBuildOf(ce); stale {
 		return OutcomeTransport
+	}
+	if gwerr.IsSourceDisabled(ce) {
+		return OutcomeDisabled
 	}
 	switch ce.Code() {
 	case connect.CodeFailedPrecondition:
@@ -115,7 +123,7 @@ func React(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
 		return Reaction{Refetch: true}
-	case OutcomeRejected, OutcomeDead, OutcomeTransport, OutcomeAbandoned:
+	case OutcomeRejected, OutcomeDead, OutcomeTransport, OutcomeAbandoned, OutcomeDisabled:
 		return Reaction{Log: true}
 	}
 	return Reaction{}
@@ -123,9 +131,13 @@ func React(o Outcome) Reaction {
 
 // ReactOptimistic is for a caller that patched the local cache before the RPC.
 // Any server verdict rolls it back, or the cache stays ahead of the server;
-// Transport keeps the patch, which is the value the retry will land.
+// Transport keeps the patch, which is the value the retry will land. Disabled
+// costs nothing more: the source's chip already says it is off, and a pan
+// that refetched would pay a read per settled gesture.
 func ReactOptimistic(o Outcome) Reaction {
 	switch o {
+	case OutcomeDisabled:
+		return Reaction{DropLocal: true}
 	case OutcomeConflict:
 		return Reaction{Refetch: true, DropLocal: true}
 	case OutcomeRejected, OutcomeDead:
@@ -143,7 +155,7 @@ func ReactSave(o Outcome) Reaction {
 	switch o {
 	case OutcomeConflict:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
-	case OutcomeRejected, OutcomeDead:
+	case OutcomeRejected, OutcomeDead, OutcomeDisabled:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeTransport, OutcomeAbandoned:
 		return Reaction{Log: true, Retry: true}
@@ -190,6 +202,10 @@ func NoticesFor(r Reaction, o Outcome, ownWords bool) Notices {
 	case OutcomeTransport, OutcomeAbandoned:
 		n.Generic = false
 		n.Own = OwnRetry
+	case OutcomeDisabled:
+		if r.Log {
+			n.Own = OwnFailed
+		}
 	default:
 		n.Own = OwnFailed
 	}
