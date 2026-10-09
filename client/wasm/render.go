@@ -437,7 +437,7 @@ func (a *App) drawErrStrip() {
 		drawLabel(a.cctx, label, 12, row.Y+errsurface.RowH/2, opts)
 		if button {
 			fillRectC(a.cctx, bx, by, bw, bh, fg)
-			drawLabel(a.cctx, errsurface.ButtonLabel(errsurface.ActionOf(row.Notice.Source)), bx+bw/2, by+bh/2, labelOpts{
+			drawLabel(a.cctx, errsurface.ButtonLabel(row.Notice.Action), bx+bw/2, by+bh/2, labelOpts{
 				font: "12px system-ui, sans-serif", fill: bg, align: "center", baseline: "middle",
 			})
 		}

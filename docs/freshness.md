@@ -122,6 +122,9 @@ the namespace's stream forever and reports the down/up transitions as
 on recovery, never once per retry. Every relayed event is re-qualified by
 `qualifyEvent` → `rpc.QualifyEventIDs`: one segment prepended per hop, the
 health uuid included, so a far namespace's health stays addressable here.
+A source the user disabled (`plugin.Registry.Disable`) is told as disabled
+whatever a layer under the router says of it (`Server.asSwitched`), and a
+stream opens with every disabled one.
 The router holds no freshness state; it is a relay with a health contract.
 
 **6. The client cache** — `client/cache/cache.go`. The server is canonical.

@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -236,6 +237,9 @@ func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerCon
 	}
 	impl.ConnectAll(context.Background())
 	reg.SetTransport(front(impl), func() { closeImpl(impl) })
+	for _, c := range cfg.Connections {
+		reg.Switch(rpc.QualifyID(cfg.ID, c.Name), func() { impl.Disable(c.Name) })
+	}
 	return nil
 }
 

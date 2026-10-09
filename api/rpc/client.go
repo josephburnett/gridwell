@@ -223,6 +223,13 @@ func (c *Client) SetInterest(ctx context.Context, gridIDs []string) error {
 	return err
 }
 
+// DisableSource switches off one source this node declares until the node
+// restarts; the health event that follows is the verdict.
+func (c *Client) DisableSource(ctx context.Context, namespace string) error {
+	_, err := c.cl.DisableSource(ctx, connect.NewRequest(&pb.DisableSourceRequest{Namespace: namespace}))
+	return err
+}
+
 // Subscribe opens the event stream, which closes when ctx is cancelled.
 func (c *Client) Subscribe(ctx context.Context) (*EventStream, error) {
 	s, err := c.cl.Subscribe(ctx, connect.NewRequest(&pb.SubscribeRequest{Session: c.session}))

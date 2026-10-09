@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/josephburnett/gridwell/api/compose"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -138,7 +139,14 @@ func (s *Supervisor) OnHealth(fn func(healthy bool, detail string)) (cancel func
 }
 
 // Close is idempotent, and is the closer the registry runs at shutdown.
-func (s *Supervisor) Close() {
+func (s *Supervisor) Close() { s.stop("the node is shutting down") }
+
+// Disable is the plugin's switch (Registry.Switch): the process is killed and
+// never respawned, and every call fails with the reason until the node exits.
+func (s *Supervisor) Disable() { s.stop(rpc.DisabledDetail) }
+
+// stop ends the supervision for good; the first reason is the one that holds.
+func (s *Supervisor) stop(reason string) {
 	s.closeOnce.Do(func() {
 		close(s.done)
 		s.watchWG.Wait()
@@ -146,7 +154,7 @@ func (s *Supervisor) Close() {
 		proc := s.proc
 		s.proc = nil
 		s.mu.Unlock()
-		s.setHealth(false, "the node is shutting down")
+		s.setHealth(false, reason)
 		if proc != nil {
 			proc.Kill()
 		}

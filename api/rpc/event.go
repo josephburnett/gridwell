@@ -14,6 +14,18 @@ func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
 	}}}
 }
 
+// DisabledDetail is the reason a disabled source gives wherever a down
+// source gives one.
+const DisabledDetail = "disabled until the node restarts"
+
+// DisabledEvent is the health a source the user switched off reports for the
+// rest of the node's life.
+func DisabledEvent(uuid string) *pb.Event {
+	ev := HealthEvent(uuid, false, DisabledDetail)
+	ev.GetPluginHealth().Disabled = true
+	return ev
+}
+
 // FramingEvent is the one shape a root grid's framing write takes on the
 // wire, from the store and the plugin adapter alike.
 func FramingEvent(gridID string, f Framing) *pb.Event {

@@ -46,7 +46,7 @@ func bootInfo(ns namespace.Namespace) error {
 func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.Store) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
-		ns, closer, err := loadPlugin(pc, home, st)
+		ns, sup, closer, err := loadPlugin(pc, home, st)
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}
@@ -58,6 +58,7 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 		}
 		reg.Register(pc.ID, pc.Kind, ns, closer)
 		reg.SetLabel(pc.ID, pc.Label)
+		reg.Switch(pc.ID, sup.Disable)
 	}
 	return nil
 }
@@ -67,22 +68,22 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 // built over the supervisor, so a respawn swaps the process underneath it, and
 // the supervisor is also the adapter's source of health and says when the
 // plugin's Watch stream is re-opened.
-func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespace.Namespace, func(), error) {
+func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespace.Namespace, *Supervisor, func(), error) {
 	cfg, err := spawnConfig(pc, home)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if pc.Binary == "" {
-		return nil, nil, fmt.Errorf("kind %q: no binary path", pc.Kind)
+		return nil, nil, nil, fmt.Errorf("kind %q: no binary path", pc.Kind)
 	}
 	sup, err := Supervise(pc.ID, pc.Kind, pc.Binary, cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	a, stop := pluginhost.Start(pluginv1.NewPluginClient(sup), st.Namespace(pc.ID), sup, "plugin "+pc.ID+" watch")
-	return a, func() { stop(); sup.Close() }, nil
+	return a, sup, func() { stop(); sup.Close() }, nil
 }
 
 // spawnConfig carries the plugin's own keys, its identity, and state_dir, the

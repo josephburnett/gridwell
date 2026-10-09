@@ -48,3 +48,25 @@ func TestRegistry_CloseForgetsEveryFact(t *testing.T) {
 		t.Fatalf("after Close: Ordered() = %v, want empty", reg.Ordered())
 	}
 }
+
+// A switch stops its source once however often it is pressed, and a namespace
+// with none is refused rather than recorded off.
+func TestRegistry_DisableStopsOnceAndOnlyASwitch(t *testing.T) {
+	reg := plugin.NewRegistry()
+	stops := 0
+	reg.Switch("p1", func() { stops++ })
+	if err := reg.Disable("home"); err == nil || reg.Disabled("home") {
+		t.Fatal("a namespace with no switch was disabled")
+	}
+	for range 2 {
+		if err := reg.Disable("p1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if stops != 1 || !reg.Disabled("p1") {
+		t.Fatalf("stops = %d, disabled = %v; want one stop and p1 off", stops, reg.Disabled("p1"))
+	}
+	if got := reg.DisabledNow(); len(got) != 1 || got[0] != "p1" {
+		t.Fatalf("DisabledNow = %v, want [p1]", got)
+	}
+}

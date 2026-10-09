@@ -341,7 +341,7 @@ func TestNoticeWithAButton(t *testing.T) {
 	if got := s.PressAt(10, top+1, top, width); got != (Press{}) {
 		t.Errorf("a press beside the button did %+v", got)
 	}
-	if got := s.PressAt(x+w/2, y+h/2, top, width); got != (Press{Action: Reload}) {
+	if got := s.PressAt(x+w/2, y+h/2, top, width); got != (Press{Action: Reload, Source: BuildSource}) {
 		t.Errorf("a press on the button did %+v, want Reload", got)
 	}
 	s.Report(Info, BuildSource, "restated", t0)
@@ -398,5 +398,49 @@ func TestResolveAndDismissReportWhetherTheStripChanged(t *testing.T) {
 	}
 	if !s.Dismiss(s.Notices()[0].ID) {
 		t.Error("dismissing a notice reports no change")
+	}
+}
+
+// A health notice carries Disable only where its reporter offered it, and the
+// press names the source the button is for; the live-updates notice and
+// every other source carry none of their own.
+func TestDisableIsOfferedNotImpliedBySource(t *testing.T) {
+	s := New()
+	src := PluginHealthSource("node1/away")
+	s.Offer(Error, src, "away: live updates stopped — dial refused", Disable, t0)
+	s.Report(Error, PluginHealthSource("node1/rtb/far1"), "far: live updates stopped", t0)
+	s.Report(Error, LiveUpdatesSource("node1/away"), "away: live updates off", t0)
+	if ActionOf(src) != NoAction {
+		t.Fatal("a health source implies a button by itself; it must be offered")
+	}
+	top, width := 500.0, 800.0
+	rows := Rows(s.Notices(), top)
+	if rows[0].Notice.Source != src || ButtonLabel(rows[0].Notice.Action) != "Disable" {
+		t.Fatalf("row 0 = %+v, want the offered health notice with Disable", rows[0].Notice)
+	}
+	for _, r := range rows[1:] {
+		if _, _, _, _, ok := ButtonRect(r, width); ok {
+			t.Errorf("%s has a button it was not offered", r.Notice.Source)
+		}
+	}
+	x, y, w, h, _ := ButtonRect(rows[0], width)
+	press := s.PressAt(x+w/2, y+h/2, top, width)
+	if press != (Press{Action: Disable, Source: src}) {
+		t.Fatalf("press = %+v, want Disable on %s", press, src)
+	}
+	if uuid, ok := HealthUUID(press.Source); !ok || uuid != "node1/away" {
+		t.Fatalf("HealthUUID = %q %v, want the namespace", uuid, ok)
+	}
+	if _, ok := HealthUUID(LiveUpdatesSource("node1/away")); ok {
+		t.Error("a live-updates source read as a health source")
+	}
+	// The press is not the verdict: the notice stays until the health event.
+	if !hasSource(s, src) {
+		t.Error("pressing Disable took the notice down before the node answered")
+	}
+	// A restatement without the offer drops the button.
+	s.Report(Error, src, "away: live updates stopped — still refused", t0)
+	if rowOf(s, src).Action != NoAction {
+		t.Error("a re-report kept a button it no longer offers")
 	}
 }

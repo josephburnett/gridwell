@@ -24,6 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
+	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/interest"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -73,6 +74,10 @@ type Server struct {
 
 	interest *interest.Book
 
+	// switchedOff tells every open stream of a source the user just disabled
+	// (router.DisableSource); plugin.Registry owns which are.
+	switchedOff *eventhub.Hub[*pb.Event]
+
 	// build is tracewire.BuildCommit, read once: the handshake names it and
 	// staleBuild judges every page's call against it.
 	build string
@@ -90,6 +95,7 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 		shellWriteTimeout: defaultShellWriteTimeout,
 		infoCache:         map[string]*pb.InfoResponse{},
 		build:             tracewire.BuildCommit(),
+		switchedOff:       eventhub.New(rpc.EventKey),
 	}
 	srv.interest = interest.New(srv.spreadInterest)
 	srv.routes()

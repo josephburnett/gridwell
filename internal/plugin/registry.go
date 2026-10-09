@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -28,14 +30,22 @@ type Registry struct {
 	// its own Handshake's answer, asked like any other namespace's.
 	transport      namespace.Namespace
 	transportClose func()
+	// switches stop each source the user may switch off, keyed by the
+	// namespace its health event names: a plugin's id, a connection's
+	// "<node>/<name>". off is the one record of which were, held for the
+	// process's life and never written anywhere.
+	switches map[string]func()
+	off      map[string]bool
 }
 
 func NewRegistry() *Registry {
 	return &Registry{
-		clients: make(map[string]namespace.Namespace),
-		kinds:   make(map[string]string),
-		labels:  make(map[string]string),
-		closers: make(map[string]func()),
+		clients:  make(map[string]namespace.Namespace),
+		kinds:    make(map[string]string),
+		labels:   make(map[string]string),
+		closers:  make(map[string]func()),
+		switches: make(map[string]func()),
+		off:      make(map[string]bool),
 	}
 }
 
@@ -93,6 +103,53 @@ func (r *Registry) Transport() (namespace.Namespace, bool) {
 	return r.transport, r.transport != nil
 }
 
+// Switch declares ns a source the user may disable, stop being what ends
+// its work for the rest of the process.
+func (r *Registry) Switch(ns string, stop func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.switches[ns] = stop
+}
+
+// Disable switches ns off until the process exits. A namespace with no
+// switch is refused: home, and anything a far node declares, are not this
+// node's to stop.
+func (r *Registry) Disable(ns string) error {
+	r.mu.Lock()
+	stop, ok := r.switches[ns]
+	already := r.off[ns]
+	if ok {
+		r.off[ns] = true
+	}
+	r.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("%q is not a plugin or connection this node declares", ns)
+	}
+	if !already {
+		stop()
+	}
+	return nil
+}
+
+// Disabled says whether the user switched ns off.
+func (r *Registry) Disabled(ns string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.off[ns]
+}
+
+// DisabledNow is every source switched off, sorted.
+func (r *Registry) DisabledNow() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.off))
+	for ns := range r.off {
+		out = append(out, ns)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (r *Registry) Get(id string) (namespace.Namespace, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -114,5 +171,7 @@ func (r *Registry) Close() {
 	r.clients = make(map[string]namespace.Namespace)
 	r.kinds = make(map[string]string)
 	r.labels = make(map[string]string)
+	r.switches = make(map[string]func())
+	r.off = make(map[string]bool)
 	r.order = nil
 }

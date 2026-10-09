@@ -70,3 +70,19 @@ func ClickNotice(pl *gridwellv1.PluginInfo) (sev errsurface.Severity, source, me
 	}
 	return 0, "", "", false
 }
+
+// Disableable says whether the user may switch uuid off from its health
+// notice: a row of this node's own roster other than its home, so a plugin or
+// a connection, never a source a far node declares. The node's
+// plugin.Registry is the authority and refuses anything else.
+func Disableable(roster []*gridwellv1.PluginInfo, homeGrid, uuid string) bool {
+	if uuid == rpc.UUIDOf(homeGrid) {
+		return false
+	}
+	for _, pl := range roster {
+		if pl.GetUuid() == uuid {
+			return true
+		}
+	}
+	return false
+}

@@ -233,6 +233,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   above it, and every opening starts folded — the fold is the menu's live
   state and dies with it (`client/palette` decides what a state shows,
   `client/menu` owns the flag).
+- A plugin or connection the user disables, from the Disable button on its
+  health notice, stays disabled until the node restarts. It is held in the
+  node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or
+  `gridwell.db`, nothing tries it meanwhile, and it reads as dark, with no
+  notice standing (2026-10-09).
 - The web door always has a password (the minted 0600 `web-password` file;
   delete it to rotate). The connection door is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays

@@ -375,8 +375,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// and says what the press did. A button answers the left button only.
 	if stripH := errsurface.StripHeight(a.errs.Len()); stripH > 0 && sy >= a.height-stripH {
 		press := a.errs.PressAt(sx, sy, a.height-stripH, a.width)
-		if press.Action == errsurface.Reload && args[0].Get("button").Int() == 0 {
-			a.reloadPage()
+		if args[0].Get("button").Int() == 0 {
+			switch press.Action {
+			case errsurface.Reload:
+				a.reloadPage()
+			case errsurface.Disable:
+				go a.disableSource(press.Source)
+			}
 		}
 		if press.Dismissed {
 			a.draw()

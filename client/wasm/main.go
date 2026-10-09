@@ -34,6 +34,7 @@ import (
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
+	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/retry"
@@ -1057,6 +1058,20 @@ func (a *App) startSSE() {
 	}
 }
 
+// disableSource is errsurface.Disable: the node switches the source off, and
+// its health event, not this call, takes the notice down.
+func (a *App) disableSource(source string) {
+	uuid, ok := errsurface.HealthUUID(source)
+	if !ok {
+		return
+	}
+	ctx, cancel := inflight.Bounded()
+	defer cancel()
+	if err := a.cl.DisableSource(ctx, uuid); err != nil {
+		a.reportErr(errsurface.Error, "rpc:DisableSource", "disable failed: "+rpcErrText(err))
+	}
+}
+
 // retryKick drains what a transport gap or a settled health transition
 // (events.Resyncs) left behind. cache.ServedBy owns what a scope covers; the
 // outbox drain is never scoped, because a parked write is the user's bytes.
@@ -1169,13 +1184,29 @@ func (a *App) refetchGridOnConflict(gridID string, where string) {
 
 // reportErr is the one wasm entry into the error surface; it also logs.
 func (a *App) reportErr(sev errsurface.Severity, source, message string) {
+	a.logNotice(sev, source, message)
+	a.errs.Report(sev, source, message, time.Now())
+	a.noticed()
+}
+
+// offerErr is reportErr with the button its reporter decided (errsurface.Offer).
+func (a *App) offerErr(sev errsurface.Severity, source, message string, act errsurface.Action) {
+	a.logNotice(sev, source, message)
+	a.errs.Offer(sev, source, message, act, time.Now())
+	a.noticed()
+}
+
+func (a *App) logNotice(sev errsurface.Severity, source, message string) {
 	method := "error"
 	if sev == errsurface.Info {
 		method = "warn"
 	}
 	js.Global().Get("console").Call(method, "gridwell: ["+source+"] "+message)
 	a.emit(traceevent.Notice(sev, source, message))
-	a.errs.Report(sev, source, message, time.Now())
+}
+
+// noticed arms the expiry and the repaint a changed strip owes.
+func (a *App) noticed() {
 	a.scheduleErrExpiry()
 	a.scheduleFrame(traceevent.WhyNotice)
 }
@@ -1213,12 +1244,12 @@ func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
 	}
 	// The client's one copy of which sources are not answering.
 	wasDark := a.c.NoteHealth(h.PluginUuid, h.Healthy)
-	r := events.ReactHealth(h, label, wasDark)
+	r := events.ReactHealth(h, label, wasDark, pluginhealth.Disableable(a.plugins, a.home, h.PluginUuid))
 	for _, n := range []events.StickyNotice{r.Dark, r.LiveOff} {
 		if n.Message == "" {
 			a.resolveErr(n.Source)
 		} else {
-			a.reportErr(errsurface.Error, n.Source, n.Message)
+			a.offerErr(errsurface.Error, n.Source, n.Message, n.Action)
 		}
 	}
 	if r.Resync != "" {
