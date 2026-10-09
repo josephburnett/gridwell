@@ -21,16 +21,25 @@ import (
 // like the editing textarea. The styled rendered view is a sanitized-HTML
 // overlay div, in rendered_overlay.go.
 
-// textContentWidth is the logical width rendered markdown wraps at for pane
+// textContentWidth is the logical width raw text wraps at for pane
 // p. The pane's own width is what reflows the doc to it; a fixed width would
-// lay it out wider than a split pane. The painter, the textarea sizing and
-// the preview's ContentW all read this one width, so an unfocused pane is a
-// scaled copy rather than a re-wrap.
+// lay it out wider than a split pane. The painter and the textarea sizing
+// both read this one width, so an unfocused raw pane is a scaled copy rather
+// than a re-wrap; a rendered one reads renderedContentWidth.
 func (a *App) textContentWidth(p *pane.Pane) float64 {
 	_, _, w, _ := textInnerBox(paneRectFor(a, p))
 	// The wrap width the layout runs at, which textScaleFor blows back up, so
 	// zooming re-wraps lines to keep filling the pane.
 	return w / a.textScaleFor(p)
+}
+
+// renderedContentWidth is textContentWidth less the rendered overlay's
+// scrollbar gutter: the width a pane's rendered document lays out at, its
+// raster's and its overlay's alike.
+func (a *App) renderedContentWidth(p *pane.Pane) float64 {
+	a.ensureRenderedView() // measures the gutter
+	_, _, w, _ := textInnerBox(paneRectFor(a, p))
+	return (w - a.overlays.renderedGutter) / a.textScaleFor(p)
 }
 
 // drawMarkdownInPane renders a text document in the pane descended into it,
@@ -61,7 +70,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 					Scale:    scale,
 					ScrollX:  p.TextScrollX,
 					ScrollY:  p.TextScrollY,
-					ContentW: a.textContentWidth(p),
+					ContentW: a.renderedContentWidth(p),
 				}
 				if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
 					// e2e attribution, read by the renderedPreviews testhook.

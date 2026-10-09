@@ -11,13 +11,14 @@ import (
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
 // The read-only rendered view: one DOM overlay div positioned over the
 // focused rendered text descent each frame, whose innerHTML is
-// markdown.RenderHTML's sanitized output. The canvas paints raw source for
-// every non-focused view, and this div is the one styled surface.
+// markdown.RenderHTML's sanitized output. Every other rendered view is drawn
+// on canvas from its raster (rendered_preview.go), laid out at the same width.
 
 // renderedViewSel scopes the overlay's stylesheet; the rasterized preview
 // wears the same rules under its own root class.
@@ -42,7 +43,9 @@ func (a *App) ensureRenderedView() {
 	s.Set("boxSizing", "border-box")
 	s.Set("background", a.pal.FileInnerBg)
 	s.Set("zIndex", "5")
-	s.Set("padding", "6px 10px")
+	// A gutter that is always kept is one the raster can leave too, so a
+	// document long enough to scroll wraps as a short one does.
+	s.Set("scrollbarGutter", "stable")
 
 	// Links never navigate the app page: an http(s) link opens as an
 	// ephemeral visit below, the one live-link vocabulary, and everything
@@ -85,6 +88,11 @@ func (a *App) ensureRenderedView() {
 
 	a.doc.Get("body").Call("appendChild", div)
 	a.overlays.renderedView = div
+	s.Set("visibility", "hidden")
+	s.Set("display", "block")
+	a.overlays.renderedGutter = float64(div.Get("offsetWidth").Int() - div.Get("clientWidth").Int())
+	s.Set("display", "none")
+	s.Set("visibility", "")
 }
 
 // refreshRenderedOverlay shows, positions and fills the rendered view for the
@@ -116,8 +124,14 @@ func (a *App) refreshRenderedOverlay() {
 	x, y, w, h := textInnerBox(r)
 	s := div.Get("style")
 	setBoundsPx(s, x, y, w, h)
-	// The CSS is em-relative, so content zoom rides the base font size.
-	s.Set("fontSize", pxf(14*a.textScaleFor(p)))
+	// The CSS is em-relative, so content zoom rides the base font size. The
+	// document lays out at its raster's width, so the pane wraps the same
+	// lines when focus leaves it and the raster is drawn instead.
+	scale := a.textScaleFor(p)
+	s.Set("fontSize", pxf(14*scale))
+	top, right, bottom, left := markdown.RenderedInset(w-a.overlays.renderedGutter,
+		rasterprev.Bucket(a.renderedContentWidth(p)), scale)
+	s.Set("padding", pxf(top)+" "+pxf(right)+" "+pxf(bottom)+" "+pxf(left))
 	s.Set("display", "block")
 
 	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +

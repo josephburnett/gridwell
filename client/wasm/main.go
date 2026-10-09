@@ -221,6 +221,8 @@ type overlayState struct {
 	renderedStyle   js.Value
 	renderedReady   bool
 	lastRenderedKey string
+	// renderedGutter is the px the overlay's scrollbar keeps, measured once.
+	renderedGutter float64
 
 	// choiceMenu is the DOM popover the circle's right-click opens on a host
 	// with no native menu; choiceMenuCbs are its listener removers.

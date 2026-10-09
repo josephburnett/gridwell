@@ -318,7 +318,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   raster) keyed by `cache.BodyGen`, which every change to the bytes moves,
   an unsaved edit included, so no picture outlives the bytes it was made
   of. A slot's last picture stands in only while its successor rasterizes
-  (`rasterprev.Cache`, 2026-10-09).
+  (`rasterprev.Cache`). A pane's rendered overlay lays the document out at
+  its raster's width, scrollbar gutter kept, so it wraps the same lines
+  focused or not (`markdown.RenderedInset`, 2026-10-09).
 - The Chromium session is host-local: one partition for every live url
   tile. Nothing about sessions or networks crosses the wire.
 - No parameterized plugins. Modals center on the active pane.

@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -37,6 +38,28 @@ func TestPreviewSVGShape(t *testing.T) {
 	} {
 		if !strings.Contains(svg, want) {
 			t.Fatalf("svg missing %q:\n%s", want, svg)
+		}
+	}
+}
+
+// The focused overlay lays the document out at the raster's width, so an
+// unfocused pane, which draws the raster, wraps the same lines: the content
+// box both leave is (layoutW - 2*RenderedPadX) at scale.
+func TestRenderedInsetLaysOutAtTheRastersWidth(t *testing.T) {
+	for _, c := range []struct{ boxW, layoutW, scale float64 }{
+		{565, 512, 1}, {565, 565, 1}, {900, 640, 1.25}, {300, 410, 0.7},
+	} {
+		top, right, bottom, left := RenderedInset(c.boxW, c.layoutW, c.scale)
+		got := c.boxW - left - right
+		want := (c.layoutW - 2*RenderedPadX) * c.scale
+		if math.Abs(got-want) > 1e-9 {
+			t.Errorf("%+v: overlay content %v px, raster content %v px", c, got, want)
+		}
+		if top != RenderedPadY*c.scale || bottom != top || left != RenderedPadX*c.scale {
+			t.Errorf("%+v: inset %v %v %v, want the raster's scaled", c, top, bottom, left)
+		}
+		if right < left {
+			t.Errorf("%+v: right %v narrower than the document's own inset", c, right)
 		}
 	}
 }

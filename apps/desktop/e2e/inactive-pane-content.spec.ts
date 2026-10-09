@@ -120,3 +120,57 @@ test('an fs file changed on disk shows its new bytes in the pane focus left', as
     .toBe('version two, from disk\n');
 });
 
+// The share of pixels that differ between two same-size screenshots, decoded
+// in the page because the harness carries no image library.
+async function pixelDiff(window: any, a: Buffer, b: Buffer): Promise<number> {
+  return window.evaluate(async ([a64, b64]: [string, string]) => {
+    const load = (s: string) =>
+      new Promise<HTMLImageElement>((res, rej) => {
+        const img = new Image();
+        img.onload = () => res(img);
+        img.onerror = rej;
+        img.src = 'data:image/png;base64,' + s;
+      });
+    const [ia, ib] = await Promise.all([load(a64), load(b64)]);
+    const px = (img: HTMLImageElement) => {
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      return ctx.getImageData(0, 0, img.width, img.height).data;
+    };
+    const da = px(ia);
+    const db = px(ib);
+    let off = 0;
+    for (let i = 0; i < da.length; i += 4) {
+      const d = Math.max(Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2]));
+      if (d > 64) off++;
+    }
+    return off / (da.length / 4);
+  }, [a.toString('base64'), b.toString('base64')]);
+}
+
+test('a rendered pane wraps the same lines focused or not', async ({ gw, window }) => {
+  const para =
+    'The quick brown fox jumps over the lazy dog, again and again, until the paragraph wraps across ' +
+    'several lines of the pane, and then some more words so that a narrower layout breaks them elsewhere.';
+  // Long enough to scroll, so the overlay's scrollbar is on screen.
+  const { left, right } = await splitOnText(gw, `# Heading\n\n` + `${para}\n\n`.repeat(12));
+  await gw.toggleTextMode(); // rendered
+  await expect(window.locator('#gw-rendered-view')).toBeVisible();
+  const box = await window.evaluate(() => (window as any).__gridwellTest.textInnerBox());
+  // Short of the scrollbar, which only the overlay draws.
+  const inner = await window.evaluate(() => document.getElementById('gw-rendered-view')!.clientWidth);
+  const clip = { x: Math.ceil(box.x), y: Math.ceil(box.y), width: inner - 2, height: 160 };
+  await gw.waitIdle();
+  const focused = await window.screenshot({ clip });
+
+  await gw.focusPane(await paneById(gw, right.id));
+  await expect
+    .poll(async () => (await painted(window))['pane:' + left.id] ?? '', { timeout: 10_000 })
+    .toMatch(/^raster:/);
+  await gw.waitIdle();
+  const unfocused = await window.screenshot({ clip });
+  expect(await pixelDiff(window, focused, unfocused), 'the pane re-wrapped when focus left it').toBeLessThan(0.01);
+});

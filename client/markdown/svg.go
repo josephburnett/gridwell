@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/josephburnett/gridwell/client/theme"
@@ -46,6 +47,23 @@ func RenderedCSS(sel string, p theme.Palette) string {
 	return r.Replace(renderedCSSRules)
 }
 
+// RenderedPadX and RenderedPadY are the rendered document's inset at scale 1,
+// in px, in the overlay and the raster alike.
+const (
+	RenderedPadX = 10.0
+	RenderedPadY = 6.0
+)
+
+// RenderedInset is the rendered overlay's padding in px at scale, for a box
+// boxW px wide whose document lays out at layoutW logical px, the width its
+// raster is made at: the inset scaled, and on the right whatever of the box
+// is wider than the layout, so a pane wraps the same lines focused or not.
+func RenderedInset(boxW, layoutW, scale float64) (top, right, bottom, left float64) {
+	top, bottom, left = RenderedPadY*scale, RenderedPadY*scale, RenderedPadX*scale
+	right = math.Max(left, boxW-(layoutW-RenderedPadX)*scale)
+	return top, right, bottom, left
+}
+
 // PreviewSVG wraps a rendered body in an SVG foreignObject, which rasterizes
 // styled HTML without a second layout engine, so RenderHTML stays the one
 // renderer. xhtml must be well-formed XML, goldmark's HTML5 output leaving
@@ -58,7 +76,7 @@ func PreviewSVG(xhtml string, w, h float64, p theme.Palette) string {
 		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f">`+
 			`<foreignObject width="100%%" height="100%%">`+
 			`<div xmlns="http://www.w3.org/1999/xhtml" class="gw-md-root" `+
-			`style="width:%.0fpx;box-sizing:border-box;padding:6px 10px;font-size:14px;background:%s">`+
+			`style="width:%.0fpx;box-sizing:border-box;padding:%gpx %gpx;font-size:14px;background:%s">`+
 			`<style>%s</style>%s</div></foreignObject></svg>`,
-		w, h, w, p.FileInnerBg, RenderedCSS(".gw-md-root", p), xhtml)
+		w, h, w, RenderedPadY, RenderedPadX, p.FileInnerBg, RenderedCSS(".gw-md-root", p), xhtml)
 }
