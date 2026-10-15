@@ -272,6 +272,11 @@ func BasisOf(t *pb.Tile) ContentBasis {
 	return ContentBasis{Version: t.GetVersion(), Stamp: t.GetContentStamp()}
 }
 
+// PlacementOf is where t sits, as a claim names it.
+func PlacementOf(t *pb.Tile) *pb.Placement {
+	return &pb.Placement{GridId: t.GetGridId(), X: t.GetX(), Y: t.GetY(), W: t.GetW(), H: t.GetH()}
+}
+
 // ContentID is the tile id that owns a tile's content: a leaf link's target, or
 // the tile's own id.
 func ContentID(t *pb.Tile) string {

@@ -101,3 +101,29 @@ func TestAStalePlacementIsRefusedAndTheFirstMoveStands(t *testing.T) {
 		})
 	}
 }
+
+func TestAStaleDeleteIsRefusedAndTheTileStands(t *testing.T) {
+	ctx := context.Background()
+	m := staleMesh(t)
+	for where, grid := range staleWhere(m) {
+		t.Run(where, func(t *testing.T) {
+			cl := m.nodes[meNode].cl
+			tile := m.text(ctx, meNode, grid, 30, "# kept")
+			seen := m.tileIn(ctx, meNode, grid, tile.Id) // both windows read it here
+			edited, err := cl.WriteContent(ctx, tile.Id, rpc.BasisOf(seen), []byte("# kept, edited"))
+			if err != nil {
+				t.Fatalf("first window's edit: %v", err)
+			}
+			_, err = cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id,
+				ClaimVersion: seen.Version, Claim: placementOf(seen)})
+			wantConflict(t, "delete over an edit it never saw", err)
+			if got := m.tileIn(ctx, meNode, grid, tile.Id); got.Version != edited.Version {
+				t.Fatalf("version %d, want the edited %d standing", got.Version, edited.Version)
+			}
+			if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id,
+				ClaimVersion: edited.Version, Claim: placementOf(seen)}); err != nil {
+				t.Fatalf("delete of what the writer saw: %v", err)
+			}
+		})
+	}
+}

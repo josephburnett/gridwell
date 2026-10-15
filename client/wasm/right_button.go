@@ -8,6 +8,7 @@ import (
 	"math"
 	"syscall/js"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -424,21 +425,25 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	if t != nil {
 		dstGridID = t.gridID
 	}
-	req := &gridwellv1.DeleteTileRequest{TileId: d.tileID}
+	// It claims the row as the press saw it: a tile edited or moved since is
+	// refused and its grid re-read, never deleted blind.
+	src := d.snapshotTile
+	req := &gridwellv1.DeleteTileRequest{TileId: d.tileID,
+		ClaimVersion: src.Version, Claim: rpc.PlacementOf(src)}
 	// The row is moving to the trash or going for good, and its session goes
 	// with the last row naming it, so its cached verdict is stale either way.
 	a.forgetShellAlive(d.tileID)
 	// No snapback: the tile vanishes either way, so a failed delete putting the
 	// row back on screen is the reconcile.
-	src, dst := d.srcGridID, dstGridID
+	srcGrid, dst := d.srcGridID, dstGridID
 	refetch := func() {
-		a.refetchGrid(src)
-		if dst != "" && dst != src {
+		a.refetchGrid(srcGrid)
+		if dst != "" && dst != srcGrid {
 			a.refetchGrid(dst)
 		}
 	}
 	a.post(write{
-		label: "DeleteTile", gid: src,
+		label: "DeleteTile", gid: srcGrid,
 		call: a.deleteCall(req),
 		undo: refetch,
 	})
@@ -461,6 +466,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 		Y:      rd.tileNewY,
 		W:      rd.tileNewW,
 		H:      rd.tileNewH,
+		Claim:  rpc.PlacementOf(n),
 	}, nil)
 }
 

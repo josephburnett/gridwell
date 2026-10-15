@@ -726,8 +726,8 @@ func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest
 }
 
 func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.DeleteTileRequest {
-		out := proto.Clone(req).(*gridwellv1.DeleteTileRequest)
+	return forwardVerb(ctx, s, req.TileId, func(local string, hop rpc.Hop) *gridwellv1.DeleteTileRequest {
+		out := rpc.PeelRequest(hop, req)
 		out.TileId = local
 		return out
 	}, namespace.Namespace.DeleteTile, asIs)

@@ -70,3 +70,26 @@ func TestAPluginRowsPlacementClaimsWhatTheWriterSaw(t *testing.T) {
 		t.Fatalf("row at x=%d version %d, want the first move's 9 at version 0", got.Tile.X, got.Tile.Version)
 	}
 }
+
+func TestAPluginRowsDeleteClaimsWhatTheWriterSaw(t *testing.T) {
+	ctx := context.Background()
+	a, rows := claimAdapter(t)
+	row := rows[rpc.KindText]
+	seen := &gridwellv1.Placement{GridId: row.GridId, X: row.X, Y: row.Y, W: row.W, H: row.H}
+	moved, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: row.Id, X: 9, Y: 9, W: 1, H: 1, Claim: seen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = a.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: moved.Tile.Id, Claim: seen})
+	wantConflict(t, "delete over a move it never saw", err)
+	if _, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: moved.Tile.Id}); err != nil {
+		t.Fatalf("the refused row did not stand: %v", err)
+	}
+	now := &gridwellv1.Placement{GridId: row.GridId, X: 9, Y: 9, W: 1, H: 1}
+	// This plugin serves no Delete, so the claim passing is the source's
+	// own answer, never the conflict.
+	_, err = a.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: moved.Tile.Id, Claim: now})
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("delete of what the writer saw: %v, want it handed to the plugin", err)
+	}
+}

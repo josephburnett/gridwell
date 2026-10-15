@@ -164,18 +164,3 @@ func TestPlacingAnUncachedRowHoldsNothing(t *testing.T) {
 	pl.Landed(nil)
 	pl.Failed()
 }
-
-// A placement claims where the cache held the tile before the move, never the
-// place it is moving to, so a write over a move it never saw is refused.
-func TestAPlacementClaimsWhereTheTileWas(t *testing.T) {
-	c := New()
-	c.PutGrid(&gridwellv1.Grid{Id: "g"}, []*gridwellv1.Tile{{Id: "t", GridId: "g", X: 1, Y: 2, W: 1, H: 1}})
-	pl := c.Place("t", Placement{GridID: "g", X: 5, Y: 2, W: 1, H: 1})
-	claim := pl.Claim()
-	if claim.GridId != "g" || claim.X != 1 || claim.Y != 2 || claim.W != 1 || claim.H != 1 {
-		t.Fatalf("claim = %v, want the placement before the move", claim)
-	}
-	if (*Placing)(nil).Claim() != nil {
-		t.Fatal("an uncached row claimed a placement")
-	}
-}

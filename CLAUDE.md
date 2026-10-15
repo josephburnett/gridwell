@@ -137,12 +137,15 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Every write of something the user made or placed claims what it was read
   at, one claim per fact (2026-10-14): content — a text body, a url address,
   a typed name, a pane tile's layout — claims the version and bumps it; a
-  placement claims the placement it saw (grid, x, y, w, h) and bumps
-  nothing, so a move never conflicts with typing nor ages a body. A stale
+  placement claims the placement the press saw (grid, x, y, w, h) and bumps
+  nothing, so a move never conflicts with typing nor ages a body; a delete
+  claims both the version and the placement, so we know what we are
+  deleting. A stale
   claim is refused with the version conflict and the client reconciles to the
   row on disk, surfaced, never silently: a layout replaces the open tree
   whole (`pane.Levels.Claim`, `nav.GestureReconcileLevel`), a move snaps back
-  and re-reads its grid (`cache.Placing.Claim`). A write landing where the row
+  and re-reads its grid (`App.postPlacement`), a delete leaves the tile and
+  re-reads its grid. A write landing where the row
   already is writes nothing and loses nothing. Only framing (pan and zoom, the
   text window, content zoom) and captures carry no claim. A pane tile's layout
   counted as framing until this decision.

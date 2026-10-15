@@ -1102,6 +1102,16 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	if err != nil {
 		return nil, err
 	}
+	if req.GetClaim() != nil {
+		// The row as the client saw it, its grid fixed by its listing.
+		t, err := a.tileByID(ctx, req.TileId)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.DeleteClaim(t, req, false); err != nil {
+			return nil, gwerr.ToStatus(err)
+		}
+	}
 	if _, err := ask(&a.lacks, "Delete", func() (*pluginv1.DeleteResponse, error) {
 		return a.cp.Delete(ctx, &pluginv1.DeleteRequest{Key: ref.key})
 	}); err != nil {

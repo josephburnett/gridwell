@@ -464,8 +464,8 @@ The version interlock, the outbox park, and the drain.
    value the retry will land.
    A placement (`App.postPlacement`, a move or a resize) is optimistic too,
    but parks nothing: any failure puts the tile back and the drag snaps back.
-   A placement claims where the cache held the tile before the move
-   (`cache.Placing.Claim`), not a version, so the interlock in step 5 cannot
+   A placement claims where the press saw the tile (`rpc.PlacementOf` of
+   the drag's snapshot), not a version, so the interlock in step 5 cannot
    order two placements; a stale one is refused, snaps back and re-reads the
    grid. `cache.Place` holds the placement against every older row
    instead, until the stream carries it (the stream is ordered, so nothing

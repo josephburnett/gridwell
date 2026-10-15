@@ -119,7 +119,8 @@ every open. Never relax them.
   `finishContentEdit` bumps. Everything else — captures, framing, layout —
   goes through `loadForWrite` + `emitTileChanged` and bumps nothing; a
   placement claims the placement it saw (`claimPlacement`, home and a
-  plugin's rows alike). Those single-tile writes run in `withTileWrite`, so one that lands
+  plugin's rows alike), and a delete claims the version and the placement
+  (`DeleteClaim`). Those single-tile writes run in `withTileWrite`, so one that lands
   where the row already is writes nothing and tells no one
   (`repeat_write_test.go`). A stale placement is refused; the overlap check in the
   same transaction is what prevents two tiles in one cell.

@@ -438,13 +438,12 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 }
 
 func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
-	m := req
-	qualifiedID := m.TileId
-	c, local, _, transit, err := rt.route(m.TileId)
+	qualifiedID := req.TileId
+	c, local, _, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	if err := rt.refuseDisabled(m.TileId); err != nil {
+	if err := rt.refuseDisabled(req.TileId); err != nil {
 		return nil, err
 	}
 	// The layout blob is the only record of a pane tile's ephemerals: capture
@@ -454,6 +453,7 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 	if !transit {
 		candidates = rt.workspaceEphemeralCandidates(ctx, c, local, qualifiedID)
 	}
+	m := rpc.PeelRequest(rt.hop(req.TileId, transit), req)
 	m.TileId = local
 	resp, err := c.DeleteTile(ctx, m)
 	if err != nil {

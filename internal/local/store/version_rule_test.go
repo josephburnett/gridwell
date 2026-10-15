@@ -278,9 +278,15 @@ var versionCases = []versionCase{
 	{
 		// A delete on an ordinary grid moves the row into the trash, same id
 		// and same row, so it is layout and the version is untouched.
-		name: "DeleteTile/move to trash", subject: textSubject, bumps: false,
+		// It claims what the writer saw: the content version and the place.
+		name: "DeleteTile/move to trash", subject: textSubject, bumps: false, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			return s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id})
+			return s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id,
+				ClaimVersion: tile.Version, Claim: placementOf(tile)})
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			return s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id,
+				ClaimVersion: tile.Version + 7, Claim: placementOf(tile)})
 		},
 	},
 }
@@ -335,10 +341,10 @@ func TestVersionRuleClaim(t *testing.T) {
 			}
 		})
 	}
-	// The six content arms, a pane tile's layout among them, and the
-	// placement. A change to this number is a change to the rule.
-	if claimable != 7 {
-		t.Errorf("%d writes can be handed a claim, want 7 — a new one appeared, or one lost its claim", claimable)
+	// The six content arms, a pane tile's layout among them, the placement
+	// and the delete. A change to this number is a change to the rule.
+	if claimable != 8 {
+		t.Errorf("%d writes can be handed a claim, want 8 — a new one appeared, or one lost its claim", claimable)
 	}
 }
 
