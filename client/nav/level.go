@@ -34,8 +34,10 @@ type levelData struct {
 	// Followed latches the one pane-link hop, so links cannot walk forever.
 	Followed bool
 
-	Tile     *gridwellv1.Tile
-	Data     []byte
+	Tile *gridwellv1.Tile
+	Data []byte
+	// Basis is the version Data was read at, or the row's for a capture.
+	Basis    int64
 	Tree     *pane.Tree
 	Capture  bool
 	ReadOnly bool
@@ -54,7 +56,7 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 		PaneID:   p.ID,
 		Origin:   p.Stack.Clone(),
 		TileID:   pt.Id,
-		IDPrefix: "w" + strconv.Itoa(w.LevelDepth+1) + ":",
+		IDPrefix: levelIDPrefix(w.LevelDepth + 1),
 	}
 	ld.Barrier = m.mintBarrier(p.ID, 2, ld)
 
@@ -127,6 +129,7 @@ func (m *Machine) levelTile(c cont, r Result, pl *planner) Plan {
 		return pl.plan()
 	}
 	ld.Tile = t
+	ld.Basis = t.Version
 	if t.BlobId == 0 {
 		// Never arranged. A descent captures the window layout at install time,
 		// after the origin pane's place is back.
@@ -144,27 +147,30 @@ func (m *Machine) levelTile(c cont, r Result, pl *planner) Plan {
 	return pl.plan()
 }
 
-// levelBody decodes the layout blob. An unreadable blob opens the default
-// read-only: overwriting a blob this session could not read would downgrade a
-// newer format.
+// levelBody decodes the layout blob.
 func (m *Machine) levelBody(c cont, r Result, pl *planner) Plan {
 	ld := c.Level
 	if !r.OK {
 		return m.levelFailed(ld, "ReadContent", r, pl)
 	}
-	ld.Data = r.Data
+	ld.Data, ld.Basis = r.Data, r.Version
+	ld.Tree, ld.ReadOnly = m.decodeLevel(ld, pl)
+	return m.levelReady(ld, pl)
+}
+
+// decodeLevel is ld.Data as a tree. An unreadable blob opens the default
+// read-only: overwriting a blob this session could not read would downgrade a
+// newer format.
+func (m *Machine) decodeLevel(ld *levelData, pl *planner) (tree *pane.Tree, readOnly bool) {
 	prefix := pane.ChainPrefix(ld.TileID)
-	tree, err := pane.DecodeLayout(r.Data, func(id string) string { return prefix + id }, ld.IDPrefix)
+	tree, err := pane.DecodeLayout(ld.Data, func(id string) string { return prefix + id }, ld.IDPrefix)
 	if err != nil {
 		pl.add(Effect{Kind: EffReport, Severity: errsurface.Error,
 			Source:  "layout:" + ld.TileID,
 			Message: "workspace layout unreadable — opened read-only: " + err.Error()})
-		ld.Tree = m.levelFallbackTree(ld)
-		ld.ReadOnly = true
-		return m.levelReady(ld, pl)
+		return m.levelFallbackTree(ld), true
 	}
-	ld.Tree = tree
-	return m.levelReady(ld, pl)
+	return tree, false
 }
 
 // levelFallbackTree is the single-pane default: the pane tile's grid centred
@@ -239,6 +245,7 @@ func (m *Machine) installLevelData(ld *levelData, pl *planner) {
 		// a crumb rename round-trips an empty name honestly.
 		Name:     ld.Tile.AltText,
 		ReadOnly: ld.ReadOnly,
+		Basis:    ld.Basis,
 	}
 	pl.add(Effect{Kind: EffInstallLevel, PaneID: ld.PaneID, TileID: ld.Tile.Id,
 		Level: &lvl, Tree: ld.Tree, Baseline: ld.Data, KeepOuter: !ld.Boot,
@@ -248,6 +255,58 @@ func (m *Machine) installLevelData(ld *levelData, pl *planner) {
 	pl.add(Effect{Kind: EffRefreshOverlay})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	// Its leaves are only known once it is installed.
+	pl.then(Gesture{Kind: GestureEngageLeaves})
+}
+
+// levelIDPrefix namespaces the pane ids of the level at depth, since stacked
+// trees are all alive at once.
+func levelIDPrefix(depth int) string { return "w" + strconv.Itoa(depth) + ":" }
+
+// reconcileLevel answers a layout write the node refused as stale: the
+// arrangement on disk wins. The open level's tree is replaced by it whole,
+// never merged, so what another writer arranged is what this window shows.
+func (m *Machine) reconcileLevel(g Gesture, w World) Plan {
+	var pl planner
+	guard := Guard{Kind: GuardLevelOpen, TileID: g.TileID}
+	if !guard.holds(w) {
+		return pl.plan()
+	}
+	// Key carries the open level's pane-id prefix.
+	tok := m.mint(cont{Guard: guard, Step: stepReconcileLevel, TileID: g.TileID,
+		Key: levelIDPrefix(w.LevelDepth)})
+	pl.add(Effect{Kind: EffAwait, Token: tok,
+		Request: Request{Kind: RequestReadLayout, ID: g.TileID}})
+	return pl.plan()
+}
+
+// reconciledLevel installs the arrangement the reconcile read in place of the
+// open tree. The tree being dropped flushes what its panes owe and closes
+// their surfaces, as leaving the level would, and the layout is not flushed:
+// its bytes are the ones the node refused. A blob this session cannot decode
+// keeps the tree on screen and latches the level read-only, as a descent does.
+func (m *Machine) reconciledLevel(c cont, r Result, pl *planner) {
+	if !r.OK {
+		pl.add(Effect{Kind: EffReport, Severity: errsurface.Error,
+			Source: "rpc:ReadContent", Message: "ReadContent failed: " + r.Err})
+		return
+	}
+	prefix := pane.ChainPrefix(c.TileID)
+	tree, err := pane.DecodeLayout(r.Data, func(id string) string { return prefix + id }, c.Key)
+	if err != nil {
+		pl.add(Effect{Kind: EffReport, Severity: errsurface.Error,
+			Source:  "layout:" + c.TileID,
+			Message: "workspace layout unreadable — read-only: " + err.Error()})
+		pl.add(Effect{Kind: EffReplaceLevel, TileID: c.TileID,
+			Level: &pane.Level{Basis: r.Version, ReadOnly: true}})
+		return
+	}
+	pl.add(Effect{Kind: EffCancelTransition})
+	pl.add(Effect{Kind: EffCloseMenu})
+	pl.add(Effect{Kind: EffFlushDroppedSubtree})
+	pl.add(Effect{Kind: EffReplaceLevel, TileID: c.TileID, Tree: tree, Baseline: r.Data,
+		Level: &pane.Level{Basis: r.Version}})
+	pl.add(Effect{Kind: EffRefreshOverlay})
+	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	pl.then(Gesture{Kind: GestureEngageLeaves})
 }
 

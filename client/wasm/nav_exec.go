@@ -53,6 +53,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.navRelocatePane(e)
 	case nav.EffInstallLevel:
 		a.navInstallLevel(e)
+	case nav.EffReplaceLevel:
+		a.navReplaceLevel(e)
 	case nav.EffPopLevel:
 		a.navPopLevel(e)
 	case nav.EffFlushLayout:
@@ -331,11 +333,11 @@ func (a *App) navAwait(e nav.Effect) {
 		// call: a layout is not a document, so it never seeds the text
 		// overlay and is not cached as a body.
 		a.await(tok, inflight.Bounded, a.navWorldCommon, func(ctx context.Context) nav.Result {
-			data, _, _, err := a.cl.ReadContent(ctx, id)
+			data, _, basis, err := a.cl.ReadContent(ctx, id)
 			if err != nil {
 				return nav.Result{Err: rpcErrText(err)}
 			}
-			return nav.Result{OK: true, Data: data}
+			return nav.Result{OK: true, Data: data, Version: basis.Version}
 		})
 	case nav.RequestSearch:
 		req := e.Request

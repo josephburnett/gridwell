@@ -25,6 +25,10 @@ const (
 	// (nil with Capture: the window layout at the swap), Baseline, KeepOuter,
 	// IDPrefix.
 	EffInstallLevel
+	// EffReplaceLevel puts the arrangement on disk in place of the open
+	// level's tree: TileID, Tree (nil keeps the tree), Baseline, and Level's
+	// Basis and ReadOnly.
+	EffReplaceLevel
 	// EffPopLevel leaves one pane-tile level, restoring the tree it parked or
 	// a fresh pane at GridID: GridID.
 	EffPopLevel
@@ -195,6 +199,8 @@ type Result struct {
 	// means the tile sits at a root.
 	Wells []*gridwellv1.Tile
 	Data  []byte
+	// Version is the row version a RequestReadLayout's Data was read at.
+	Version int64
 	// Err is a failed read's text, stripped of the wire prefix.
 	Err string
 	// Dead is a failed read whose verdict was that the id's path ends in

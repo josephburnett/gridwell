@@ -27,7 +27,10 @@ type Level struct {
 	Name   string // the tile's label at descent time
 	// ReadOnly latches when the layout blob could not be decoded, so the
 	// session shows a default and never persists over what it could not read.
-	ReadOnly  bool
+	ReadOnly bool
+	// Basis is the version of the arrangement this tree derives from: what the
+	// level's next layout write claims (see Levels.Claim).
+	Basis     int64
 	savedHash string // the persister's diff key over the bytes last sent
 }
 
@@ -95,6 +98,30 @@ func (s *Levels) Top() *Level {
 		return nil
 	}
 	return &s.frames[len(s.frames)-1]
+}
+
+// Claim is the version a layout write to tileID claims, read at send time
+// because the write before it on the save chain may have just landed: the
+// innermost open level's basis, or fallback once no level is open on it.
+func (s *Levels) Claim(tileID string, fallback int64) int64 {
+	for i := len(s.frames) - 1; i >= 0; i-- {
+		if s.frames[i].TileID == tileID {
+			return s.frames[i].Basis
+		}
+	}
+	return fallback
+}
+
+// Landed records that this client's write to tileID claimed claimed and landed
+// at landed. A level whose tree derived from the claim now derives from what
+// landed; one on any other basis was not the writer's and keeps it, so its next
+// write is refused rather than overwriting what it never read.
+func (s *Levels) Landed(tileID string, claimed, landed int64) {
+	for i := range s.frames {
+		if f := &s.frames[i]; f.TileID == tileID && f.Basis == claimed {
+			f.Basis = landed
+		}
+	}
 }
 
 // At returns the level at a 1-based nesting depth, mutable so the crumb

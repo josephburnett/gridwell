@@ -134,3 +134,23 @@ func TestForgetSavedOnlyUndoesItsOwnMark(t *testing.T) {
 		t.Fatal("an older write failing must not undo the newer mark")
 	}
 }
+
+func TestLevelsClaimAndLanded(t *testing.T) {
+	var s Levels
+	if got := s.Claim("pt", 9); got != 9 {
+		t.Fatalf("no level open: claim %d, want the fallback", got)
+	}
+	s.Push(Level{TileID: "pt", Basis: 4})
+	if got := s.Claim("pt", 9); got != 4 {
+		t.Fatalf("claim %d, want the level's basis", got)
+	}
+	s.Landed("pt", 4, 5)
+	if got := s.Claim("pt", 9); got != 5 {
+		t.Fatalf("own write landed: claim %d, want 5", got)
+	}
+	// A write that claimed another basis was not this tree's.
+	s.Landed("pt", 3, 8)
+	if got := s.Claim("pt", 9); got != 5 {
+		t.Fatalf("claim %d after a foreign landing, want 5 kept", got)
+	}
+}

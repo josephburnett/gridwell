@@ -71,8 +71,10 @@ type cont struct {
 	PaneID string
 	TileID string
 	Tile   *gridwellv1.Tile
-	Key    string // the shell session a probe answers for
-	Stack  pane.Stack
+	// Key is the shell session a probe answers for, or a reconcile's level
+	// pane-id prefix.
+	Key   string
+	Stack pane.Stack
 	// Restore continuations leave PaneID empty; see awaitGrid.
 	Restore *restoreData
 	Level   *levelData
@@ -103,6 +105,7 @@ const (
 	// layout that no longer names it: deleted first, a pane-tile preview of
 	// the layout would resolve a gone tile.
 	stepRetireVisit
+	stepReconcileLevel // installs the arrangement on disk over a refused one
 )
 
 func (m *Machine) mint(c cont) Token {
@@ -196,6 +199,8 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		return m.promote(g, w)
 	case GestureFollowLink:
 		return m.followLink(g, w)
+	case GestureReconcileLevel:
+		return m.reconcileLevel(g, w)
 	case GestureEngageLeaves:
 		var pl planner
 		m.engageLeaves(w, &pl)
@@ -272,6 +277,8 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		return m.levelBody(c, r, &pl)
 	case stepLevelRecentre:
 		m.levelRecentre(c, r, w, &pl)
+	case stepReconcileLevel:
+		m.reconciledLevel(c, r, &pl)
 	case stepLinkTarget:
 		if r.Dead {
 			// The link now draws dead, which says it all, and the descent has

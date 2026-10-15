@@ -194,43 +194,45 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 // commitRename posts the user-owned name and patches the cache so the title
 // reflects it immediately. The TileChanged event confirms.
 func (a *App) commitRename(tileID, alt string) {
-	a.commitRenameRetained(tileID, alt, func(t *gridwellv1.Tile) {
+	a.commitRenameRetained(tileID, alt, "", func(t *gridwellv1.Tile, _ int64) {
 		a.c.PutWriteResponse(t.GridId, t, cache.WroteName)
 	})
 }
 
 // commitRenameRetained is the one rename commit, running `apply` on success.
 // The input element is gone by the time an RPC fails, so the closure parked
-// in the outbox is the only copy of what the user typed.
-func (a *App) commitRenameRetained(tileID, alt string, apply func(*gridwellv1.Tile)) {
+// in the outbox is the only copy of what the user typed. apply hears the
+// version the rename claimed; chain is post's.
+func (a *App) commitRenameRetained(tileID, alt, chain string, apply func(t *gridwellv1.Tile, claimed int64)) {
 	var tile *gridwellv1.Tile
+	var claimed int64
 	a.post(write{
 		label: "Rename", gid: a.gridIDOfTile(tileID), id: tileID,
-		source: "rename", failText: "rename",
+		source: "rename", failText: "rename", chain: chain,
 		call: func(ctx context.Context) error {
 			var err error
-			tile, err = a.postRename(ctx, tileID, alt)
+			claimed = a.renameClaim(tileID)
+			tile, err = a.cl.RenameTile(ctx, tileID, claimed, alt)
 			return err
 		},
 		then: func() {
 			if tile != nil {
-				apply(tile)
+				apply(tile, claimed)
 			}
 			a.draw()
 		},
 	})
 }
 
-// postRename is the one rename door. A name the user types is a content
-// edit, so it claims a version and bumps one. A conflict surfaces rather than
-// re-claiming: captures do not bump the row, so a conflict here is a genuine
-// concurrent edit.
-func (a *App) postRename(ctx context.Context, tileID, alt string) (*gridwellv1.Tile, error) {
-	version := int64(0)
+// renameClaim is the version a rename claims: a name the user types is a
+// content edit, so it claims a version and bumps one. A conflict surfaces
+// rather than re-claiming: captures do not bump the row, so a conflict here is
+// a genuine concurrent edit.
+func (a *App) renameClaim(tileID string) int64 {
 	if t := a.cachedTileByID(tileID); t != nil {
-		version = t.Version
+		return t.Version
 	}
-	return a.cl.RenameTile(ctx, tileID, version, alt)
+	return 0
 }
 
 // gridIDOfTile is which grid's cache reconciles if a write is refused, for a
