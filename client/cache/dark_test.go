@@ -111,3 +111,26 @@ func TestAGridIsCurrentWhenHeldFromAnAnsweringSource(t *testing.T) {
 		t.Error("the far home stayed not current after its source came back")
 	}
 }
+
+// A source that lists but cannot watch is not dark, but nothing will tell this
+// client its changes, so its grids are not current: every look reads them.
+func TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent(t *testing.T) {
+	c := seedSources(t)
+	c.NoteLiveUpdates(fsPl, false)
+	cur := c.Current()
+	for _, id := range []string{fsPl + "/1", fsPl + "/12"} {
+		if cur[id] {
+			t.Errorf("%s has no live updates and is current", id)
+		}
+		if c.SourceDark(id) {
+			t.Errorf("%s still lists, so it is not dark", id)
+		}
+	}
+	if !cur[node+"/7"] || !cur[farHome+"/1"] {
+		t.Error("another source's live updates went off with the plugin's")
+	}
+	c.NoteLiveUpdates(fsPl, true)
+	if !c.Current()[fsPl+"/1"] {
+		t.Error("the plugin's grid stayed not current after its live updates came back")
+	}
+}

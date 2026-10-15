@@ -5,6 +5,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 )
 
 // The node tells this client every change to a grid it holds, so a plan asks
@@ -230,5 +231,32 @@ func TestReEngageReadsTheCachedRowWhenItIsCurrent(t *testing.T) {
 				t.Fatalf("effects = %v, want %v", kinds(plan), c.want)
 			}
 		})
+	}
+}
+
+// Across the seam: a source that lists but cannot watch is not dark, yet no
+// event carries its changes, so a descent onto its held grid still reads it.
+func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
+	c := cache.New()
+	c.PutGrid(&gridwellv1.Grid{Id: "pl1/2"}, nil)
+	well := &gridwellv1.Tile{Id: "pl1/w", Kind: rpc.KindWell, GridId: "g1",
+		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "pl1/2"}
+	descend := func() Plan {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Door = &DoorWorld{}
+		w.Current = c.Current()
+		return New().Do(descendGesture("pane1", well), w)
+	}
+
+	if n := gridFetches(descend()); n != 0 {
+		t.Fatalf("asked for %d grids while the source's changes are told", n)
+	}
+	c.NoteLiveUpdates("pl1", false)
+	if f := only(t, descend(), EffFetchGrid); f.GridID != "pl1/2" {
+		t.Fatalf("fetched %+v, want the grid nothing tells this client about", f)
+	}
+	c.NoteLiveUpdates("pl1", true)
+	if n := gridFetches(descend()); n != 0 {
+		t.Fatalf("asked for %d grids once live updates came back", n)
 	}
 }
