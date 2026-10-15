@@ -11,6 +11,10 @@ type FramingOwner struct {
 	// Content: the place is a content tile, so what settles is its text
 	// scroll, not grid framing.
 	Content bool
+	// Layout: the pane is inside a pane tile, whose layout blob owns its grid
+	// views (2026-10-14), so nothing is written to the row named below. That
+	// row's framing is still where a frame with no view of its own starts.
+	Layout bool
 	// TileID is the doorway the pane came in through, or the content tile.
 	// Empty at a root grid with no doorway.
 	TileID     string
@@ -23,13 +27,14 @@ type FramingOwner struct {
 }
 
 // FramingTarget is the row that owns the pane's framing: the doorway it came
-// in by, or the grid itself at a root.
-func (s *Stack) FramingTarget() FramingOwner {
+// in by, or the grid itself at a root. Inside a pane tile a grid place's view
+// is the layout's, so the answer names the row for reading only.
+func (s *Stack) FramingTarget(inPaneTile bool) FramingOwner {
 	if s.Content {
 		return FramingOwner{Content: true, TileID: s.Door}
 	}
 	anchor, path := s.AnchorPathAt(len(s.below))
-	own := FramingOwner{RootGridID: anchor}
+	own := FramingOwner{RootGridID: anchor, Layout: inPaneTile}
 	if s.Door == "" {
 		return own
 	}
@@ -48,10 +53,11 @@ type PaneGrid struct {
 	GridID string
 }
 
-// FramingWriters applies the one-active-surface rule to grid framing: of
+// FramingWriters applies the one-active-surface rule to a framing row: of
 // several panes showing one grid only the focused one writes, because every
 // sibling writing its own rect-derived values each settle tick thrashes the
-// persisted framing. A pane laid has no area in (hidden under a zoomed
+// persisted framing. Inside a pane tile no grid row is written, so the rule
+// is left only to the text scroll of a shared content tile. A pane laid has no area in (hidden under a zoomed
 // sibling) shows nothing, so it neither writes nor counts.
 func FramingWriters(panes []PaneGrid, focusedID string, laid map[string]Rect) map[string]bool {
 	shown := func(id string) bool {

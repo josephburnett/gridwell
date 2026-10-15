@@ -227,7 +227,7 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 	if p == nil {
 		return lw
 	}
-	own := p.FramingTarget()
+	own := p.FramingTarget(a.ws.Depth() > 0)
 	switch {
 	case own.Content:
 		if file, ok := a.descendedTile(p); ok {

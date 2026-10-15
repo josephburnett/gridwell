@@ -339,11 +339,13 @@ frame is the grid you are in, the tile you came through, and your viewport
 there. Every descent pushes a frame; every ascent pops one, restoring the
 viewport that frame holds. The URL (`url.go`) and the pane-tile
 layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
-project it. The blob holds the arrangement, the focused pane and the zoomed
-pane, and no view, so a pane tile reopens on the pane it was left on
-(`pane.LayoutFingerprint` keys the write). A restored leaf
-shows its grid at the framing row and its text at the tile row, so a pan
-inside a pane tile writes `SetFraming` alone. A pane tile swaps the whole
+project it. The blob holds the arrangement, the focused pane, the zoomed
+pane and every grid frame's view, so a pane tile reopens on the pane it was
+left on, each pane where it was at every level (`pane.LayoutFingerprint`
+keys the write). A pan inside a pane tile writes the blob and never a
+framing row (`pane.FramingOwner.Layout`); a frame the blob has no view for
+starts at its framing row, and a text leaf's scroll is its tile row's. A
+pane tile swaps the whole
 pane tree instead — that is the one second axis (`levels.go`), and it is
 session-only.
 
@@ -351,8 +353,8 @@ There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
 descent lands is the tile's own declaration: a well or link pushes a frame
 onto the child grid, a text, url or shell tile pushes one onto the tile
 itself, a pane tile descends the window a level. Every ascent hop writes
-framing back through `SetFraming` and freezes a live preview, with no claim
-and no version bump.
+framing back through `SetFraming`, except inside a pane tile where the blob
+owns it, and freezes a live preview, with no claim and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
 
 **Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a

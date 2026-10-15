@@ -159,7 +159,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 // retires, nil when there is none.
 func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, doorTile, visit *gridwellv1.Tile) {
 	lw := w.Leave
-	own := p.Stack.FramingTarget()
+	own := p.Stack.FramingTarget(w.LevelDepth > 0)
 	if own.Content {
 		file := lw.DescendedTile
 		if file == nil {
@@ -186,6 +186,11 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 			visit = file
 		}
 		return own.TileID, file, visit
+	}
+	if own.Layout {
+		// The view leaves with the popped frame and the layout write follows
+		// from the settle; the ascent animates onto the doorway's own framing.
+		return own.TileID, lw.DoorTile, nil
 	}
 	if own.TileID == "" {
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})

@@ -330,3 +330,33 @@ func findKind(p Plan, k EffectKind) (Effect, bool) {
 	}
 	return Effect{}, false
 }
+
+// Inside a pane tile the layout owns a grid frame's view, so an ascent writes
+// nothing to the doorway row, at a well and at a root, and animates onto the
+// row's own framing, the face the well shows from outside.
+func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
+	door := doorRow()
+	door.ViewCx, door.ViewCy, door.ViewZoom = 99, 99, 0.5
+	root := gridPane("pane1", "g1")
+	root.Stack = pane.StackOf([]pane.Frame{framed(pane.Frame{GridID: "g1"}, 0, 0, 1), framed(pane.Frame{GridID: "g2"}, 0, 0, 1)})
+	for _, c := range []struct {
+		name  string
+		pane  PaneView
+		leave LeaveWorld
+	}{
+		{"a well", wellPane("pane1"), LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: door}},
+		{"a root", root, LeaveWorld{}},
+	} {
+		w := baseWorld(c.pane)
+		w.LevelDepth = 1
+		lw := c.leave
+		w.Leave = &lw
+		plan := New().Do(ascendGesture("pane1", 1, true), w)
+		if pf, ok := findKind(plan, EffPersistFraming); ok {
+			t.Errorf("%s: an ascent inside a pane tile wrote framing: %+v", c.name, pf)
+		}
+		if c.leave.DoorTile != nil && door.ViewCx != 99 {
+			t.Errorf("%s: the doorway row was patched", c.name)
+		}
+	}
+}

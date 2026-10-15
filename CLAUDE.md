@@ -136,7 +136,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   points writes nothing (2026-09-30).
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
-  wire verb (`SetFraming`), one store writer, one client function.
+  wire verb (`SetFraming`), one store writer, one client function. Inside a
+  pane tile a grid's view is per pane, not the row's: each frame of each
+  pane's stack keeps its center and zoom in the layout blob, a pan there
+  writes the blob on the layout's settle and never the doorway row, and the
+  one-active-surface rule is the home view's only, since no row is shared
+  (`pane.FramingOwner.Layout`, 2026-10-14).
 - Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.
@@ -286,8 +291,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   it; a started one that is gone is never recreated behind a face. The
   session dies when the last row naming it is destroyed. A shell cloned
   across nodes lands as a link (2026-10-01).
-- Session-ephemeral: the pane tree, the selection, the level stack, and the
-  outer frames' viewports. The durable home for a layout is the pane tile.
+- Session-ephemeral: the pane tree, the selection, the level stack, and,
+  outside a pane tile, the outer frames' viewports. The durable home for a
+  layout is the pane tile, and inside one every frame's viewport is part of
+  it (2026-10-14).
   Inside a pane tile the focused pane and the zoomed pane are part of the
   layout the tile remembers, written with it on every change, so a workspace
   reopens on the pane it was left on; the selection is session-ephemeral
