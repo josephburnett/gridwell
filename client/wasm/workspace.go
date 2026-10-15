@@ -17,6 +17,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cadence"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -56,6 +57,23 @@ func (a *App) navInstallLevel(e nav.Effect) {
 	a.ws.Push(f)
 	a.tree = tree
 	a.restoreWorkspaceLeaves(tree)
+}
+
+// navReplaceLevel puts the arrangement nav.GestureReconcileLevel read in
+// place of the open level's tree, seeding the persister's diff with it so the
+// reconciled tree is not written back.
+func (a *App) navReplaceLevel(e nav.Effect) {
+	top := a.ws.Top()
+	if top == nil || top.TileID != e.TileID || e.Level == nil {
+		return
+	}
+	top.Basis, top.ReadOnly = e.Level.Basis, e.Level.ReadOnly
+	if e.Tree == nil {
+		return
+	}
+	pane.MarkSaved(top, e.Baseline)
+	a.tree = e.Tree
+	a.restoreWorkspaceLeaves(e.Tree)
 }
 
 // navPopLevel leaves one level: the parked tree comes back verbatim with
@@ -136,15 +154,16 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 }
 
 // commitWorkspaceRename posts the user-owned name for the pane tile at
-// `level`. A rename bumps the tile version, so the response updates the cache
-// and the persister's next write carries the fresh claim.
+// `level`. A rename bumps the tile version, so it rides the layout's save
+// chain and its landing advances the level's basis like a layout write's.
 func (a *App) commitWorkspaceRename(level int, alt string) {
 	f := a.ws.At(level)
 	if f == nil {
 		return
 	}
 	tileID := f.TileID
-	a.commitRenameRetained(tileID, alt, func(tile *gridwellv1.Tile) {
+	a.commitRenameRetained(tileID, alt, tileID, func(tile *gridwellv1.Tile, claimed int64) {
+		a.ws.Landed(tileID, claimed, tile.Version)
 		// The level may be gone by the time a parked retry lands. The rename
 		// still landed on the tile row; only the crumb update is
 		// conditional.
@@ -203,12 +222,17 @@ func (a *App) flushWorkspaceSave(held func(ok bool)) {
 
 // postPaneLayout sends one layout write through WriteContent on the tile's
 // save chain, so no older layout lands after it (see outbox.SaveQueue). A
-// pane layout is framing-class: no version claim and no bump. A transport
-// failure parks the encoded layout, because the ascent-boundary flush fires
-// once and then pops the frame, leaving `data` the only copy. held hears the
-// first attempt's verdict: a parked write is not held.
+// layout is the user's bytes: it claims the version its tree derives from
+// (pane.Levels.Claim) and bumps it. A transport failure parks the encoded
+// layout, because the ascent-boundary flush fires once and then pops the
+// frame, leaving `data` the only copy; a conflict hands the level to
+// nav.GestureReconcileLevel. held hears the first attempt's verdict: a parked
+// write is not held.
 func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 	var tile *gridwellv1.Tile
+	var claimed int64
+	var callErr error
+	fallback := a.ws.Claim(tileID, 0)
 	landed, answered := false, false
 	end := func() {}
 	a.post(write{
@@ -216,11 +240,12 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 		source: "layout:" + tileID, failText: "workspace layout unsaved",
 		call: func(ctx context.Context) error {
 			end = a.c.BeginWrite(tileID)
-			var err error
-			tile, err = a.cl.WriteContent(ctx, tileID, rpc.ContentBasis{}, data)
-			return err
+			claimed = a.ws.Claim(tileID, fallback)
+			tile, callErr = a.cl.WriteContent(ctx, tileID, rpc.ContentBasis{Version: claimed}, data)
+			return callErr
 		},
 		then: func() {
+			a.ws.Landed(tileID, claimed, tile.Version)
 			a.c.PutSavedContent(tile, data)
 			a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 			a.resolveErr("rpc:PaneLayout")
@@ -230,11 +255,17 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 		},
 		done: func() {
 			end()
+			conflict := !landed && clientsync.Of(callErr) == clientsync.OutcomeConflict
+			if conflict {
+				// The arrangement on disk wins; the refused bytes are not
+				// sent again.
+				a.runGesture(nav.Gesture{Kind: nav.GestureReconcileLevel, TileID: tileID})
+			}
 			if answered {
 				return
 			}
 			answered = true
-			if !landed {
+			if !landed && !conflict {
 				if top := a.ws.Top(); top != nil && top.TileID == tileID {
 					pane.ForgetSaved(top, data)
 				}
@@ -242,7 +273,8 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 			held(landed)
 		},
 		beacon: func() (string, []byte, string) {
-			path, body := rpc.WriteContentBeacon(tileID, rpc.ContentBasis{}, data)
+			claim := rpc.ContentBasis{Version: a.ws.Claim(tileID, fallback)}
+			path, body := rpc.WriteContentBeacon(tileID, claim, data)
 			return path, body, rpc.BeaconStreamType
 		},
 	})

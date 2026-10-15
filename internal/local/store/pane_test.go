@@ -11,7 +11,7 @@ import (
 )
 
 // A fresh pane tile has no layout blob, meaning never arranged, carries its
-// name, and SetPaneLayout enforces the kind guard and no version guard.
+// name, and SetPaneLayout enforces the kind guard and the version claim.
 func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -38,10 +38,10 @@ func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 	if _, err := s.SetPaneLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotPaneTile) {
 		t.Errorf("SetPaneLayout on text tile: err = %v, want ErrNotPaneTile", err)
 	}
-	// No version guard: a layout write is framing-class and
-	// last-writer-wins, and carries no claim. See version_rule_test.go.
-	if _, err := s.SetPaneLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); err != nil {
-		t.Errorf("stale claim must be accepted: %v", err)
+	// A layout is the user's bytes and claims its version. See
+	// version_rule_test.go.
+	if _, err := s.SetPaneLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); !errors.Is(err, ErrVersionConflict) {
+		t.Errorf("stale claim: err = %v, want ErrVersionConflict", err)
 	}
 	// An empty layout can never be written (NULL means never-arranged; an
 	// arranged workspace always has at least one pane).

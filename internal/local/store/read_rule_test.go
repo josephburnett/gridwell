@@ -57,7 +57,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 	if _, err := s.SetURLState(ctx, url.Id, []byte("jpegbytes"), "Example", `["https://example.com"]`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetFrozen(ctx, url.Id, true); err != nil {
+	if _, err := s.SetFrozen(ctx, url.Id, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SetContentZoom(ctx, url.Id, zoomOf(1.5)); err != nil {

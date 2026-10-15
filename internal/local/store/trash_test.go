@@ -283,3 +283,38 @@ func TestRestoreFromTrashIsAPlainMove(t *testing.T) {
 		t.Errorf("re-deleted tile must be back in the trash, not destroyed: %v", err)
 	}
 }
+
+// A delete claims what the writer saw, the content and the place: a tile
+// edited or moved since is refused and stands; one unchanged goes.
+func TestDeleteClaimsWhatTheWriterSaw(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+	tile, err := s.CreateText(ctx, root, 0, 0, 1, 1, []byte("# hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := &gridwellv1.Placement{GridId: tile.GridId, X: 0, Y: 0, W: 1, H: 1}
+	edited, err := s.WriteContent(ctx, tile.Id, tile.Version, []byte("# edited"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	del := func(version int64, p *gridwellv1.Placement) error {
+		return s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id, ClaimVersion: version, Claim: p})
+	}
+	if err := del(tile.Version, seen); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("delete over an edit it never saw: got %v, want ErrVersionConflict", err)
+	}
+	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: root, X: 4, Y: 0, W: 1, H: 1, Claim: seen}); err != nil {
+		t.Fatal(err)
+	}
+	if err := del(edited.Version, seen); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("delete over a move it never saw: got %v, want ErrVersionConflict", err)
+	}
+	if got, err := s.GetTile(ctx, tile.Id); err != nil || got.GridId != tile.GridId {
+		t.Fatalf("the refused tile did not stand: %v, %v", got, err)
+	}
+	if err := del(edited.Version, &gridwellv1.Placement{GridId: tile.GridId, X: 4, Y: 0, W: 1, H: 1}); err != nil {
+		t.Fatalf("delete of what the writer saw: %v", err)
+	}
+}

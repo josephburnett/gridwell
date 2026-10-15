@@ -132,6 +132,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		Y:      dropY,
 		W:      d.snapshotTile.W,
 		H:      d.snapshotTile.H,
+		Claim:  rpc.PlacementOf(d.snapshotTile),
 	}
 	a.postPlacement(d.srcGridID, req, func() { a.snapBackToOrigin(d) })
 	a.draw()
@@ -139,10 +140,13 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 }
 
 // postPlacement is the one placement writeback, PlaceTile: an id plus the
-// full (grid, x, y, w, h) fact, no version claim, last-writer-wins. The cache
-// holds the placement from the release (cache.Place), so the tile is where
-// the user put it before any event. A failure puts it back, and snapBack is
-// the caller's animation of that; a placement parks nothing.
+// full (grid, x, y, w, h) fact, claiming the placement the press saw, so a
+// move that landed during the drag is refused rather than undone. The cache
+// holds the placement from the release
+// (cache.Place), so the tile is where the user put it before any event. A
+// failure puts it back, and snapBack is the caller's animation of that; a
+// conflict also re-reads the grid, so the tile lands where the node holds it.
+// A placement parks nothing.
 func (a *App) postPlacement(gid string, req *gridwellv1.PlaceTileRequest, snapBack func()) {
 	pl := a.c.Place(req.TileId, cache.Placement{GridID: req.GridId, X: req.X, Y: req.Y, W: req.W, H: req.H})
 	var resp *gridwellv1.Tile

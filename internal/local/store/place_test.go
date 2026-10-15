@@ -226,3 +226,42 @@ func TestPlaceTileAncestryCycleAnswers(t *testing.T) {
 		t.Fatal("PlaceTile hung walking a cyclic ancestry chain")
 	}
 }
+
+// A placement claims where the writer saw the tile. A stale one is refused
+// with the placement on disk standing; the claim is the state, not its
+// history, so a tile moved away and back is where the writer saw it; and a
+// tile already where the write puts it is no conflict.
+func TestPlaceTileClaimsThePlacementItSaw(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+	tile, err := s.CreateText(ctx, root, 0, 0, 1, 1, []byte("# hi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := &gridwellv1.Placement{GridId: tile.GridId, X: 0, Y: 0, W: 1, H: 1}
+	place := func(x int64, claim *gridwellv1.Placement) (*gridwellv1.Tile, error) {
+		return s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: root, X: x, Y: 0, W: 1, H: 1, Claim: claim})
+	}
+	if _, err := place(3, seen); err != nil {
+		t.Fatalf("first writer: %v", err)
+	}
+	if _, err := place(5, seen); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale placement: got %v, want ErrVersionConflict", err)
+	}
+	if got, _ := s.GetTile(ctx, tile.Id); got.X != 3 {
+		t.Fatalf("x = %d, want the first writer's 3 standing", got.X)
+	}
+	if _, err := place(3, seen); err != nil {
+		t.Fatalf("a stale writer asking for where the tile already is: %v", err)
+	}
+	if _, err := place(0, &gridwellv1.Placement{GridId: tile.GridId, X: 3, Y: 0, W: 1, H: 1}); err != nil {
+		t.Fatalf("move back: %v", err)
+	}
+	if _, err := place(7, seen); err != nil {
+		t.Fatalf("moved away and back is where the writer saw it: %v", err)
+	}
+	if got, _ := s.GetTile(ctx, tile.Id); got.Version != tile.Version {
+		t.Fatalf("version %d -> %d: a placement claims no version and bumps none", tile.Version, got.Version)
+	}
+}

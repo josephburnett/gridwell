@@ -260,3 +260,32 @@ func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
 		t.Fatalf("asked for %d grids once live updates came back", n)
 	}
 }
+
+// A pane tile's row comes from the cache when its grid is current: a layout
+// write claims its version, so a stale row's write is refused rather than
+// overwriting, and asking again would be asking what the stream told.
+func TestEnteringALevelReadsTheCachedRowWhenCurrent(t *testing.T) {
+	row := arranged(paneTile())
+	row.Version = 4
+	enter := func(current map[string]bool) Plan {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Current = current
+		w.Level = &LevelWorld{Tile: row}
+		return New().Do(enterGesture("pane1", row), w)
+	}
+	for _, e := range enter(currentOf("g1")).Effects {
+		if e.Kind == EffAwait && e.Request.Kind == RequestGetTile {
+			t.Fatal("the row was asked for though its grid is current")
+		}
+	}
+	if e := only(t, enter(currentOf("g1")), EffAwait); e.Request.Kind != RequestReadLayout {
+		t.Fatalf("await = %+v, want the layout read straight off the cached row", e.Request)
+	}
+	asked := false
+	for _, e := range enter(nil).Effects {
+		asked = asked || (e.Kind == EffAwait && e.Request.Kind == RequestGetTile)
+	}
+	if !asked {
+		t.Fatal("a row whose grid is not current was not asked for")
+	}
+}

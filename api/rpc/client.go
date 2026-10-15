@@ -196,9 +196,9 @@ func (c *Client) SetContentZoom(ctx context.Context, tileID string, zoom float64
 
 // SetFrozen writes the standing freeze, on a url or a shell. It is framing:
 // no claim, and it never bumps version.
-func (c *Client) SetFrozen(ctx context.Context, tileID string, frozen bool) (*pb.Tile, error) {
+func (c *Client) SetFrozen(ctx context.Context, tileID string, frozen bool, claim *bool) (*pb.Tile, error) {
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
-		TileId: tileID, UrlFrozen: &frozen,
+		TileId: tileID, UrlFrozen: &frozen, ClaimFrozen: claim,
 	})))
 }
 

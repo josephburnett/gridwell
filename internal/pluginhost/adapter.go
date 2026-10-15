@@ -805,9 +805,9 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err != nil {
 		return nil, err
 	}
-	changed, err := a.mem.Place(id, req.X, req.Y, req.W, req.H)
+	changed, err := a.mem.Place(id, req.X, req.Y, req.W, req.H, req.Claim)
 	if err != nil {
-		return nil, err
+		return nil, gwerr.ToStatus(err)
 	}
 	// A placement is part of the grid's answer, so it announces the grid.
 	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
@@ -853,7 +853,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	case req.ContentZoom != nil:
 		changed, err = a.mem.SetContentZoom(id, zoom)
 	case req.UrlFrozen != nil:
-		changed, err = a.mem.SetFrozen(id, *req.UrlFrozen)
+		changed, err = a.mem.SetFrozen(id, *req.UrlFrozen, req.ClaimFrozen)
 	default:
 		t := req.GetTile()
 		switch t.GetKind() {
@@ -1104,6 +1104,16 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return nil, err
+	}
+	if req.GetClaim() != nil {
+		// The row as the client saw it, its grid fixed by its listing.
+		t, err := a.tileByID(ctx, req.TileId)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.DeleteClaim(t, req, false); err != nil {
+			return nil, gwerr.ToStatus(err)
+		}
 	}
 	if _, err := ask(&a.lacks, "Delete", func() (*pluginv1.DeleteResponse, error) {
 		return a.cp.Delete(ctx, &pluginv1.DeleteRequest{Key: ref.key})

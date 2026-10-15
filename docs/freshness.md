@@ -145,9 +145,8 @@ does change the framing columns. A body is bound to the row it derives from:
 `Base`, the version of its bytes, and the blob id it was filed under — the
 row's blob as the cache held it when the read was asked
 (`Cache.AskContent`), or the save response's. `contentEntry.behind` is the
-one rule: a higher row version, or the same version with another blob (a
-pane layout write mints a blob without a bump), is a body the row has moved
-past. A row with no claim — a plugin's, version 0 and no blob — has no fact
+one rule: a higher row version, or the same version with another blob, is a
+body the row has moved past. A row with no claim — a plugin's, version 0 and no blob — has no fact
 that orders its bytes. Where its source names them (`Tile.content_stamp`,
 the plugin's `Entry.content_stamp`, which the read answers with the bytes),
 the stamp decides as a version would: a row under another stamp makes a
@@ -405,7 +404,10 @@ The version interlock, the outbox park, and the drain.
    typed during an outage cannot stay out of the outbox.
 2. The debounce sweep or an ascent flush calls `App.enqueueTextSave`, which
    goes through `contentSaves` (`outbox.SaveQueue`), the per-key serial
-   queue a pane layout shares. The basis is claimed AT SEND TIME, after
+   queue a pane layout shares. A layout claims the version its open tree
+   derives from (`pane.Levels.Claim`), and a refused one replaces the tree
+   with the arrangement on disk (`nav.GestureReconcileLevel`). The basis is
+   claimed AT SEND TIME, after
    any earlier write for the same tile has
    advanced it: `a.c.SaveBasis(tileID)`, never the grid row's.
    The row advances when a foreign writer's event or a refetch lands without
@@ -465,8 +467,10 @@ The version interlock, the outbox park, and the drain.
    value the retry will land.
    A placement (`App.postPlacement`, a move or a resize) is optimistic too,
    but parks nothing: any failure puts the tile back and the drag snaps back.
-   Layout claims no version, so the interlock in step 5 cannot order two
-   placements; `cache.Place` holds the placement against every older row
+   A placement claims where the press saw the tile (`rpc.PlacementOf` of
+   the drag's snapshot), not a version, so the interlock in step 5 cannot
+   order two placements; a stale one is refused, snaps back and re-reads the
+   grid. `cache.Place` holds the placement against every older row
    instead, until the stream carries it (the stream is ordered, so nothing
    older follows) or, once the write has landed, a grid read answers.
 9. The drain. `retry.Events` sets `gap` on any stream error and on a clean
@@ -505,8 +509,9 @@ far node in the last 30 seconds whose event did not arrive is not on screen
 and nothing says so. Only a grid the cache has never seen waits on the
 source.
 
-**Framing is last-writer-wins.** `version` means the user's content bytes
-and nothing else, so framing, captures, and layout carry no claim and cannot
+**Framing is last-writer-wins.** `version` means the user's content bytes,
+a pane tile's layout among them, and nothing else. A placement claims the
+placement it saw instead. Framing and captures carry no claim and cannot
 conflict. Two panes settling the same doorway resolve by arrival order, and
 the outbox keeps one live entry per key by design.
 

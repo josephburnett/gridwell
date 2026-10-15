@@ -129,11 +129,29 @@ These were decided deliberately. Do not reverse one without a new decision.
   to absorb a schema change. Retired wire fields are `reserved`. The
   contract is `internal/local/store/CLAUDE.md`.
 - `version` means the user's content bytes: a text body, a typed url, a
-  typed name. Captures, framing, and layout carry no claim and cause no
-  bump. A url's address follows where the user went: the address a live view
-  settles on after a navigation, an ascent or a freeze is written as content
-  and claims a version like a typed one, and landing where the row already
-  points writes nothing (2026-09-30).
+  typed name, a pane tile's layout. Captures, framing, placement and the
+  freeze cause no bump. A url's address follows where the user went: the
+  address a live view settles on after a navigation, an ascent or a freeze
+  is written as content and claims a version like a typed one, and landing
+  where the row already points writes nothing (2026-09-30).
+- Every write of something the user made or placed claims what it was read
+  at, one claim per fact, because content, placement and the freeze are
+  three facts with one owner each (2026-10-14): content (a text body, a url
+  address, a typed name, a pane tile's layout) claims the version and bumps
+  it; a move or resize claims the placement the press saw (grid, x, y, w, h),
+  so a move never conflicts with typing nor ages a body; a freeze or
+  unfreeze claims the freeze it saw; a delete claims the version and the
+  placement, so we know what we are deleting. A stale claim is refused with
+  the version conflict and the client reconciles to the row on disk,
+  surfaced, never silently: a layout replaces the open tree whole
+  (`pane.Levels.Claim`, `nav.GestureReconcileLevel`), a move snaps back and
+  re-reads its grid (`App.postPlacement`), a refused delete or freeze
+  re-reads it. A claim is about the state, not its history: a tile moved
+  away and back is where the writer saw it. A write landing where the row
+  already is writes nothing and loses nothing, and a request with no claim
+  is the node's own (a reap, a cleanup). Only framing (pan and zoom, the
+  text window, content zoom) and captures carry no claim. A pane tile's
+  layout counted as framing until this decision.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a

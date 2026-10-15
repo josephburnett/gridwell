@@ -6,8 +6,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Placement is a tile's layout: its grid and footprint. It claims no version,
-// so the version interlock cannot order two of them.
+// Placement is a tile's layout: its grid and footprint. A placement write
+// claims the placement it saw, not a version, so the version interlock cannot
+// order two of them.
 type Placement struct {
 	GridID     string
 	X, Y, W, H int64

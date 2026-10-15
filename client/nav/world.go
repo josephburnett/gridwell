@@ -81,10 +81,18 @@ func (ew *EngageWorld) tile() *gridwellv1.Tile {
 	return ew.Tile
 }
 
-// LevelWorld is the row the return animation zooms out onto. nil means it is
-// not cached and the landing is instant.
+// LevelWorld is a pane tile's row as the cache holds it: what a level landing
+// zooms out onto, and what entering one opens off when its grid is current.
+// nil, or a nil Tile, means it is not cached.
 type LevelWorld struct {
 	Tile *gridwellv1.Tile
+}
+
+func (lw *LevelWorld) tile() *gridwellv1.Tile {
+	if lw == nil {
+		return nil
+	}
+	return lw.Tile
 }
 
 // PromoteWorld is the ephemeral row being promoted away from, as the cache

@@ -179,6 +179,7 @@ test('coming back to what the cache holds asks for nothing again', async ({ gw, 
 
   expect.soft(count(grids, home.gridID), 'GetGrid of the home the cache held').toBe(0);
   expect(count(tiles, text.id), 'GetTile of the text row the cache held').toBe(0);
+  expect(count(tiles, pt!.id), 'GetTile of the pane tile row the cache held').toBe(0);
   await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
   await window.unroute('**/gridwell.v1.Gridwell/GetTile');
 });

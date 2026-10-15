@@ -29,6 +29,9 @@ const (
 	// GestureEngageLeaves settles a freshly installed pane tree: every leaf's
 	// grid asked for unless held current, every content leaf re-engaged.
 	GestureEngageLeaves
+	// GestureReconcileLevel replaces the open level's tree with the
+	// arrangement on disk after the node refused a stale layout write: TileID.
+	GestureReconcileLevel
 )
 
 // Gesture is one navigation verb with its arguments. Like Effect it is a

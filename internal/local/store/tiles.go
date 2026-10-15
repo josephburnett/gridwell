@@ -19,7 +19,7 @@ const MaxBlobBytes = rpc.MaxContentBytes
 // claimContentVersion verifies the caller's content claim against the row. It
 // is the store's only optimistic-concurrency check, and "version is the claim
 // for content and nothing else" is enforced by who can reach it: WriteContent's
-// text and url arms, and RenameTile.
+// text, url and pane arms, and RenameTile.
 func (s *Store) claimContentVersion(ctx context.Context, q gridReader, tileID, claimed int64) (*gridwellv1.Tile, error) {
 	t, err := s.loadTile(ctx, q, tileID)
 	if err != nil {
@@ -30,6 +30,21 @@ func (s *Store) claimContentVersion(ctx context.Context, q gridReader, tileID, c
 			ErrVersionConflict, tileID, t.Version, claimed)
 	}
 	return t, nil
+}
+
+// DeleteClaim verifies a delete's claim against row t: the content version and
+// the placement the writer saw, so a delete takes only what the user was
+// looking at. A request with no placement claim is the node's own (a reap)
+// and is not checked. withGrid is claimPlacement's.
+func DeleteClaim(t *gridwellv1.Tile, req *gridwellv1.DeleteTileRequest, withGrid bool) error {
+	if req.GetClaim() == nil {
+		return nil
+	}
+	if t.Version != req.ClaimVersion {
+		return fmt.Errorf("%w: tile %s at version %d, the delete saw %d",
+			ErrVersionConflict, t.Id, t.Version, req.ClaimVersion)
+	}
+	return claimPlacement(t, req.Claim, withGrid)
 }
 
 // loadForWrite is the shared preamble for an unclaimed single-tile mutation:
@@ -351,6 +366,9 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 	return s.withMutation(ctx, "DeleteTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		t, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
+			return err
+		}
+		if err := DeleteClaim(t, req, true); err != nil {
 			return err
 		}
 		srcGrid, err := parseID(t.GridId)

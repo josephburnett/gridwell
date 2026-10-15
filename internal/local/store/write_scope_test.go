@@ -63,10 +63,11 @@ var writeScopes = map[string]writeScope{
 	// ── Content: the bytes, and the claim that guards them. ────────────
 	"WriteContent/text body": {tile: []string{"version", "blob_id", "alt_text"}, mints: true},
 	// A no-op write never mutates, so it may not even stamp updated_at.
-	"WriteContent/text body unchanged":   {},
-	"WriteContent/url address":           {tile: []string{"version", "url_string"}},
-	"WriteContent/url address unchanged": {},
-	"RenameTile/user rename":             {tile: []string{"version", "alt_text", "alt_user"}},
+	"WriteContent/text body unchanged":    {},
+	"WriteContent/url address":            {tile: []string{"version", "url_string"}},
+	"WriteContent/url address unchanged":  {},
+	"RenameTile/user rename":              {tile: []string{"version", "alt_text", "alt_user"}},
+	"SetPaneLayout/workspace arrangement": {tile: []string{"version", "blob_id"}, mints: true},
 
 	// ── Captures: what the server observed, on top of the user's row. ──
 	"SetTileAlt/automatic capture": {tile: []string{"alt_text"}},
@@ -74,11 +75,10 @@ var writeScopes = map[string]writeScope{
 	"SetShellPreview/frozen frame": {tile: []string{"preview_blob_id"}, mints: true},
 
 	// ── Framing: how it looked. ────────────────────────────────────────
-	"SetTextView/window and mode":         {tile: []string{"text_x", "text_y", "text_w", "text_h", "text_mode"}},
-	"SetContentZoom/content scale":        {tile: []string{"content_zoom"}},
-	"SetFrozen/standing freeze":           {tile: []string{"url_frozen"}},
-	"SetFraming/doorway viewport":         {tile: []string{"view_cx", "view_cy", "view_zoom"}},
-	"SetPaneLayout/workspace arrangement": {tile: []string{"blob_id"}, mints: true},
+	"SetTextView/window and mode":  {tile: []string{"text_x", "text_y", "text_w", "text_h", "text_mode"}},
+	"SetContentZoom/content scale": {tile: []string{"content_zoom"}},
+	"SetFrozen/standing freeze":    {tile: []string{"url_frozen"}},
+	"SetFraming/doorway viewport":  {tile: []string{"view_cx", "view_cy", "view_zoom"}},
 
 	// ── Layout: where it sits. ─────────────────────────────────────────
 	"PlaceTile/move and resize": {tile: []string{"x", "y", "w", "h"}},

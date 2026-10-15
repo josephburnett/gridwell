@@ -372,9 +372,8 @@ message ContentChunk {
 // accepted; subsequent messages carry data only. The write commits at close, so
 // the new value becomes visible only when the stream closes cleanly and a broken
 // stream leaves the old value byte-for-byte intact. Version semantics are
-// kind-determined in the store's one table: a text body is a content edit that
-// claims and bumps, while a pane layout is framing-class with no claim and no
-// bump. Not accepted on link tiles, because a content operation writes through
+// kind-determined in the store's one table: a text body and a pane layout are
+// the user's bytes, each claiming and bumping. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
 //
 // A row with no version (a plugin's) claims content_stamp instead, the stamp
@@ -418,6 +417,10 @@ message ServeContentChunk {
 // overlap, and refuses placing a well inside its own subtree by walking
 // ancestors from grid_id, with no client-supplied path. Placement never crosses
 // a plugin boundary; there is no cross-plugin move, only link or clone.
+//
+// claim is the placement the writer saw. A tile no longer there is refused
+// with the version conflict, the placement on disk standing; a request with no
+// claim is the node's own and is not checked.
 message PlaceTileRequest {
   string tile_id = 1;
   reserved 2; // version
@@ -426,6 +429,17 @@ message PlaceTileRequest {
   int64 y = 5;
   int64 w = 6;
   int64 h = 7;
+  Placement claim = 8;
+}
+
+// Placement is where a tile sits: its grid and footprint. As a claim it is
+// compared whole, so a tile moved away and back is where the writer saw it.
+message Placement {
+  string grid_id = 1;
+  int64 x = 2;
+  int64 y = 3;
+  int64 w = 4;
+  int64 h = 5;
 }
 
 // GetTile reads a single tile's metadata. The server's preview + shell
@@ -669,8 +683,8 @@ message CloneTileRequest {
 // and rides WriteContent; a SetTile carrying url_string is refused as
 // InvalidArgument, so the address has one writer.
 //
-// Nothing this message can write is a user content edit, so no arm bumps the
-// version and no arm carries a claim, apart from rename. Empty preview,
+// Rename is the one user content edit this message carries, the one arm that
+// bumps the version; it and url_frozen are the arms that claim. Empty preview,
 // alt_text, and url_history fields are skipped so a partial capture never
 // clobbers good state.
 message SetTileRequest {
@@ -699,17 +713,28 @@ message SetTileRequest {
   // bumps version. Refused for wells, and outside the range rpc.NewContentZoom
   // declares. optional so presence is explicit: an absent zoom is no write.
   optional double content_zoom = 7;
-  // url_frozen is the user's standing freeze on a url or shell tile. Framing:
-  // no claim, and it never bumps version. Refused for a kind that cannot go
-  // live. optional so clearing (false) is distinct from absent.
+  // url_frozen is the user's standing freeze on a url or shell tile. It never
+  // bumps version; it claims the value the writer saw (claim_frozen), and a
+  // tile whose freeze moved meanwhile is refused with the version conflict.
+  // Refused for a kind that cannot go live. optional so clearing (false) is
+  // distinct from absent.
   optional bool url_frozen = 8;
   reserved 9; // adopt_child_grid
+  // claim_frozen is url_frozen's claim; absent is the node's own write and is
+  // not checked.
+  optional bool claim_frozen = 10;
 }
 
+// DeleteTileRequest claims what the writer saw: the content version and the
+// placement. A tile whose content or place moved meanwhile is refused with the
+// version conflict and stands; a request with no claim is the node's own (a
+// reap) and is not checked.
 message DeleteTileRequest {
   reserved 1; // path
   string tile_id = 2;
   reserved 3; // version
+  int64 claim_version = 4;
+  Placement claim = 5;
 }
 // DeleteTileResponse answers a delete that landed. session_left is why a shell
 // session the destroy should have ended is still running, the row's own or an

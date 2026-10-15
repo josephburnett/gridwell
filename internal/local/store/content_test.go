@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 )
 
 // The content-stream suite: WriteContent and ReadContent are the one way
@@ -45,7 +46,10 @@ func TestWriteContentTextBumpsAndPairsWithRead(t *testing.T) {
 	}
 }
 
-func TestWriteContentPaneLayoutNeverBumps(t *testing.T) {
+// A pane tile's layout is the user's bytes: a write claims the version it was
+// read at and bumps it, a stale one is refused with the arrangement on disk
+// untouched, and identical bytes at the current version write nothing.
+func TestWriteContentPaneLayoutClaimsAndBumps(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
@@ -53,13 +57,34 @@ func TestWriteContentPaneLayoutNeverBumps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}
-
-	got, err := s.WriteContent(ctx, pane.Id, pane.Version, []byte(`{"v":1}`))
+	first := []byte(`{"v":1,"a":1}`)
+	got, err := s.WriteContent(ctx, pane.Id, pane.Version, first)
 	if err != nil {
 		t.Fatalf("write layout: %v", err)
 	}
-	if got.Version != pane.Version {
-		t.Errorf("pane layout is framing-class: version %d must stay %d", got.Version, pane.Version)
+	if got.Version != pane.Version+1 {
+		t.Fatalf("version %d -> %d, want a bump", pane.Version, got.Version)
+	}
+	if _, err := s.WriteContent(ctx, pane.Id, pane.Version, []byte(`{"v":1,"b":2}`)); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale layout write: got %v, want ErrVersionConflict", err)
+	}
+	data, _, version, err := s.ReadContent(ctx, pane.Id)
+	if err != nil || !bytes.Equal(data, first) || version != got.Version {
+		t.Fatalf("after the refusal: %q at %d (%v), want %q at %d", data, version, err, first, got.Version)
+	}
+	events, cancel := s.SubscribeEvents()
+	defer cancel()
+	before := storetest.DumpOf(t, s.db)
+	if _, err := s.WriteContent(ctx, pane.Id, got.Version, first); err != nil {
+		t.Fatalf("identical write: %v", err)
+	}
+	if ch := storetest.Changed(before, storetest.DumpOf(t, s.db)); len(ch) > 0 {
+		t.Fatalf("identical bytes wrote %v", ch)
+	}
+	select {
+	case ev := <-events:
+		t.Fatalf("identical bytes told a subscriber: %v", ev)
+	default:
 	}
 }
 

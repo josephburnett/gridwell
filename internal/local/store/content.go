@@ -16,7 +16,7 @@ import (
 // Version semantics are kind-determined:
 //
 //	text → a content edit: bumps version, and alt derives from the first line
-//	pane → a framing-class layout write: never bumps
+//	pane → the layout, the user's bytes: claims and bumps like text
 //	url  → the address: changing where a tile points bumps
 //
 // A frozen preview rides SetTile and a well has no local content. A leaf link

@@ -122,6 +122,14 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 	case *pb.PlaceTileRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.GridId = h.PeelID(r.GridId)
+		if r.Claim != nil {
+			r.Claim.GridId = h.PeelID(r.Claim.GridId)
+		}
+	case *pb.DeleteTileRequest:
+		r.TileId = h.PeelID(r.TileId)
+		if r.Claim != nil {
+			r.Claim.GridId = h.PeelID(r.Claim.GridId)
+		}
 	case *pb.CloneTileRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.DestGridId = h.PeelID(r.DestGridId)

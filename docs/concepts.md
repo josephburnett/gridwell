@@ -59,10 +59,10 @@ those, so it has no status at all — nothing draws it, and no click reaches it.
 
 | Concept | What it does |
 |---|---|
-| **content** | The user's bytes: a text body, a typed url, a typed name. The only class that claims a version and can 409. A plugin's body has no version, so its write claims the source's stamp of the bytes it was typed over (`Tile.content_stamp`), and a stale stamp is the same conflict. |
-| **framing** | Where you left a view: `SetFraming`, and `SetTile`'s text-window, content-zoom and url-frozen arms. No claim, no bump. |
+| **content** | The user's bytes: a text body, a typed url, a typed name, a pane tile's layout. The only class that claims a version and can 409. A plugin's body has no version, so its write claims the source's stamp of the bytes it was typed over (`Tile.content_stamp`), and a stale stamp is the same conflict. |
+| **framing** | Where you left a view: `SetFraming`, and `SetTile`'s text-window and content-zoom arms. No claim, no bump. The standing freeze (`SetTile`'s url-frozen arm) bumps nothing but claims the freeze it saw. |
 | **capture** | What the machine observed: a preview JPEG, a page title, a url trail. No claim, no bump. |
-| **layout** | Where things sit: place, clone, delete. No claim, no bump; last-writer-wins. |
+| **layout** | Where things sit: place, clone, delete. A move claims the placement it saw (grid and footprint), not a version, and bumps none; a delete claims the version and the placement. A stale one is refused and the tile stays where it is. |
 
 The store enforces two of these, not four: `claimContentVersion` +
 `finishContentEdit` for content, `loadForWrite` + `emitTileChanged` for the

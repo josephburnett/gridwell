@@ -62,7 +62,7 @@ func TestALayoutWriteEchoLeadingItsResponseIsNotReadBack(t *testing.T) {
 
 	// As App.postPaneLayout sends it.
 	end := c.BeginWrite(pt.Id)
-	resp, err := cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{}, after)
+	resp, err := cl.WriteContent(ctx, pt.Id, basis, after)
 	if err != nil {
 		t.Fatal(err)
 	}

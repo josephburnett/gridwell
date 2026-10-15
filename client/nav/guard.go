@@ -18,6 +18,8 @@ const (
 	// pushed on it, the post-reload level landing's re-centre guard. PaneID,
 	// Anchor.
 	GuardPaneUntouched
+	// GuardLevelOpen: the window is still inside this pane tile. TileID.
+	GuardLevelOpen
 )
 
 // Guard is one precondition.
@@ -43,6 +45,8 @@ func (g Guard) holds(w World) bool {
 	case GuardPaneUntouched:
 		p, ok := w.Pane(g.PaneID)
 		return ok && p.Stack.Depth() == 1 && p.Stack.Anchor() == g.Anchor
+	case GuardLevelOpen:
+		return w.LevelTop != nil && w.LevelTop.TileID == g.TileID
 	}
 	return false
 }

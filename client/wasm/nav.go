@@ -78,6 +78,8 @@ func (a *App) navWorld(g nav.Gesture) nav.World {
 		w.Restore = a.navWorldForRestore().Restore
 	case nav.GestureLandLevel:
 		w.Level = a.navWorldForLevel(g.PaneID, g.TileID)
+	case nav.GestureEnterLevel:
+		w.Level = &nav.LevelWorld{Tile: a.cachedTileByID(g.Door.GetId())}
 	case nav.GesturePromote:
 		w.Promote = &nav.PromoteWorld{OldTile: a.cachedTileByID(g.OldID)}
 	case nav.GestureReEngage:
