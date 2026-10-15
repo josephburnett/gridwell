@@ -258,7 +258,7 @@ type viewCaches struct {
 	// renderedPrev caches rasterized rendered-mode previews by version and width.
 	renderedPrev *rasterprev.Cache
 
-	// paneLayouts memoizes the decode, invalidated by blob generation.
+	// paneLayouts memoizes the decode, keyed by cache.BodyGen.
 	paneLayouts *panepreview.Layouts
 
 	// menuCtxs is keyed by the grid-stamped node_ns; "" is a.plugins, a.caps.

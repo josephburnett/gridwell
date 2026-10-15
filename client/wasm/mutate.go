@@ -275,6 +275,7 @@ func (a *App) putEditedContent(cid string, data []byte) {
 func (a *App) postWriteContent(gid, tileID string, claim rpc.ContentBasis, newContent []byte) (*gridwellv1.Tile, bool) {
 	ctx, cancel := inflight.Bounded()
 	defer cancel()
+	defer a.c.BeginWrite(tileID)()
 	tile, err := a.cl.WriteContent(ctx, tileID, claim, newContent)
 	if err != nil {
 		o := clientsync.Of(err)

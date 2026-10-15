@@ -823,12 +823,13 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 }
 
 // fetchTileContent never doubles an in-flight fetch, or a stale reply could
-// land after a fresher one.
+// land after a fresher one, and never asks for bytes this client's own write
+// is about to file.
 func (a *App) fetchTileContent(tileID string) {
 	if tileID == "" {
 		return
 	}
-	if _, ok := a.c.TileContent(tileID); ok {
+	if _, ok := a.c.TileContent(tileID); ok || a.c.Writing(tileID) {
 		return
 	}
 	// A leaf link in an undeclared namespace is not asked; see fetchGrid.

@@ -156,7 +156,10 @@ refetch after `GridChanged`, whose rows are equal, keeps every open body,
 and a framing write on the same row keeps it too. `ageContentLocked`
 applies the rule to every row the cache learns — event,
 `PutGrid` refetch, or write response, whether or not the row's grid is
-cached — and `PutFetchedContent` to a reply whose row moved blob or stamp
+cached — except while this client's own write to the tile is in flight
+(`Cache.BeginWrite`): its echo can overtake its response and no row can yet
+tell it from a foreign change, so the body is aged once, against the row then
+held, when the write ends after its response filed the bytes — and `PutFetchedContent` to a reply whose row moved blob or stamp
 while it was in flight. Who reads the body again is whoever draws it: the cache
 only drops it. What is drawn from a body (a face's raster, a wrap, the rendered
 overlay) is keyed by `Cache.BodyGen`, which moves whenever the cached bytes
@@ -429,7 +432,11 @@ The version interlock, the outbox park, and the drain.
    stands. A plugin's write echoes twice — the adapter's `TileChanged` and the
    plugin's own `Watch` `EntryChanged` — both carrying the written bytes'
    stamp, which the body is now filed under, so neither drops it: the typed
-   text stays, saved or still being typed.
+   text stays, saved or still being typed. An echo that overtakes its
+   response ages nothing: every content write, text or pane layout, holds
+   its tile from send to filed response (`Cache.BeginWrite`), so the client
+   never reads back the bytes it just sent, and a foreign row that landed
+   meanwhile ages the body when the hold ends.
 
    There is one door into a grid's tile map, `Cache.putTileLocked`, and both
    `Apply` and `UpdateTile` are it: the interlock and content aging
@@ -593,6 +600,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Live: typing survives a server outage and saves itself after restart; settled framing lands too; a swallowed grid read un-latches | `apps/desktop/e2e-web/web-outage.spec.ts` |
 | The backstop re-posts a parked write on its interval and not before, at a cadence the spec retunes | `apps/desktop/e2e-web/web-outage.spec.ts` ("the backstop re-posts a parked write on its interval, not before"), `client/retry/retry_test.go` |
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
+| A write's own echo overtaking its response keeps the body, so the client never reads back what it just wrote; a foreign row during the write still ages it when the write ends | `internal/server/own_echo_seam_test.go:TestALayoutWriteEchoLeadingItsResponseIsNotReadBack` (seam), `client/cache/own_write_test.go` (unit) |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
 | An older write RESPONSE is refused by the same interlock an older echo is: one door into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneDoor`, `TestUpdateTileAgesTheBodyToo` (unit) |
 | A plugin body saves as a home one does: a clean save lands on disk and its own echoes keep the typed text; bytes changed on disk under a dirty edit refuse the save as a conflict and show the file; a write the plugin cannot take parks under its key-form id and lands when it is back; a verdict never parks | `internal/server/fs_write_seam_test.go`, `internal/pluginhost/adapter_caps_test.go:TestAdapterStampsTheWriteFactsThePluginDeclares`, the fs plugin's `fs/plugin/write_test.go`; live, `apps/desktop/e2e/fs-edit.spec.ts` |

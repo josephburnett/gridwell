@@ -28,7 +28,9 @@ type Cache struct {
 	gens    uint64
 	// holds is the placements written ahead of their echo, by tile id.
 	holds map[string]*hold
-	seq   uint64
+	// writing is the content writes in flight, by tile id; see BeginWrite.
+	writing map[string]*ownWrite
+	seq     uint64
 }
 
 // contentEntry is a body, the basis and row it derives from, and whether it
@@ -105,7 +107,7 @@ func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
 // New returns an empty cache.
 func New() *Cache {
 	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{},
-		dark: map[string]bool{}, holds: map[string]*hold{}}
+		dark: map[string]bool{}, holds: map[string]*hold{}, writing: map[string]*ownWrite{}}
 }
 
 // AskContent is the basis a content read is filed under, taken before the
@@ -288,10 +290,66 @@ func (c *Cache) evictElsewhereLocked(tileID, home string) {
 
 // ageContentLocked drops a clean body row n has moved past, or that an event
 // told has changed (see contentEntry.behind), whether or not its grid is
-// cached. Callers hold c.mu.
+// cached. A tile with a write in flight is aged when the write ends. Callers
+// hold c.mu.
 func (c *Cache) ageContentLocked(n *gridwellv1.Tile, told bool) {
+	if w, ok := c.writing[n.Id]; ok {
+		w.told, w.last = w.told || told, n
+		return
+	}
 	if e, ok := c.content[n.Id]; ok && e.behind(n, told) {
 		delete(c.content, n.Id)
+	}
+}
+
+// ownWrite counts one tile's content writes in flight, and keeps the last row
+// and whether an event said the content changed meanwhile.
+type ownWrite struct {
+	n    int
+	told bool
+	last *gridwellv1.Tile
+}
+
+// BeginWrite marks a content write to a tile in flight until end, which is
+// idempotent. Its echo can overtake its response, and until the response files
+// the bytes no row can tell the echo from a foreign change, so no row ages the
+// body meanwhile; the last end ages it against the row the cache then holds.
+// A caller files the response's bytes before it calls end.
+func (c *Cache) BeginWrite(tileID string) (end func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	w := c.writing[tileID]
+	if w == nil {
+		w = &ownWrite{}
+		c.writing[tileID] = w
+	}
+	w.n++
+	var once sync.Once
+	return func() { once.Do(func() { c.endWrite(tileID, w) }) }
+}
+
+// Writing reports a content write to the tile in flight: its response files
+// the bytes a read would ask for.
+func (c *Cache) Writing(tileID string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.writing[tileID]
+	return ok
+}
+
+func (c *Cache) endWrite(tileID string, w *ownWrite) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if w.n--; w.n > 0 {
+		return
+	}
+	delete(c.writing, tileID)
+	n := c.rowLocked(tileID)
+	if n == nil {
+		n = w.last
+	}
+	if n != nil {
+		c.ageContentLocked(n, w.told)
 	}
 }
 
