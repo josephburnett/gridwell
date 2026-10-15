@@ -53,3 +53,61 @@ func TestATileGoneWhileBlindTakesItsBodyWithIt(t *testing.T) {
 		t.Errorf("the gone tile's remembered body survived: %d content row(s) no tile row names", n)
 	}
 }
+
+// Every way a tile row leaves frees what was kept under its id, and only when
+// no row names the id any more: a tile that moved to another grid keeps its own.
+func TestATileRowLeavingFreesOnlyWhatNoRowNames(t *testing.T) {
+	cc, _, _, _ := fixture(t)
+	ctx := context.Background()
+	keep := func(id string) {
+		t.Helper()
+		for _, q := range []string{
+			`INSERT INTO content (tile_id, media_type, version, data, fetched_at) VALUES (?, 'text/plain', 1, x'61', 0)`,
+			`INSERT INTO contentstamps (tile_id, stamp) VALUES (?, 's')`,
+			`INSERT INTO previews (tile_id, jpeg, fetched_at) VALUES (?, x'00', 0)`,
+			`INSERT INTO servecontent (tile_id, subpath, status, media_type, data, fetched_at) VALUES (?, '', 200, 'text/html', x'00', 0)`,
+		} {
+			if _, err := cc.db.Exec(q, id); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	kept := func(id string) int {
+		t.Helper()
+		total := 0
+		for _, table := range tileKeyed {
+			var n int
+			if err := cc.db.QueryRow(`SELECT COUNT(1) FROM `+table+` WHERE tile_id = ?`, id).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			total += n
+		}
+		return total
+	}
+	grid := func(id string, tiles ...string) *pb.GetGridResponse {
+		r := &pb.GetGridResponse{Grid: &pb.Grid{Id: id}}
+		for _, tid := range tiles {
+			r.Tiles = append(r.Tiles, &pb.Tile{Id: tid, GridId: id, Kind: "text"})
+		}
+		return r
+	}
+	cc.storeGrid(ctx, "ga", grid("ga", "mover", "evicted"))
+	cc.storeGrid(ctx, "gb", grid("gb", "removed"))
+	for _, id := range []string{"mover", "evicted", "removed"} {
+		keep(id)
+	}
+
+	cc.storeGrid(ctx, "gb", grid("gb", "removed", "mover"))
+	cc.storeGrid(ctx, "ga", grid("ga", "evicted"))
+	if n := kept("mover"); n != len(tileKeyed) {
+		t.Errorf("a tile that moved grids lost what was kept under it: %d of %d rows", n, len(tileKeyed))
+	}
+	cc.evictGrid(ctx, "ga")
+	if n := kept("evicted"); n != 0 {
+		t.Errorf("an evicted grid's tile kept %d row(s)", n)
+	}
+	cc.deleteTile(ctx, "removed")
+	if n := kept("removed"); n != 0 {
+		t.Errorf("a removed tile kept %d row(s)", n)
+	}
+}
