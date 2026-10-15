@@ -55,14 +55,26 @@ type LayoutFrame struct {
 // innermost namespace level. Place wins where present and is written only
 // where the projection would lose a level, so what the projection holds in
 // full still encodes byte-identically.
-// A leaf holds no view; its rows own that. Retired keys, never reused: cx, cy,
-// zoom, text_mode, text_scroll_x, text_scroll_y, text_zoom.
+// Views is the viewport each frame of the place was left at, root first, one
+// per frame, null where a frame has none; absent when no frame has one. A
+// text descent's scroll and mode are its tile row's. Retired keys, never
+// reused: cx, cy, zoom, text_mode, text_scroll_x, text_scroll_y, text_zoom.
 type LayoutPane struct {
 	ID        string        `json:"id"`
 	Anchor    string        `json:"anchor,omitempty"`
 	Path      []string      `json:"path,omitempty"`
 	TextFocus string        `json:"text_focus,omitempty"`
 	Place     []LayoutFrame `json:"place,omitempty"`
+	Views     []*LayoutView `json:"views,omitempty"`
+}
+
+// LayoutView is one frame's viewport: a center in its grid's cells and the
+// live zoom, the scale the pane drew it at, so a reopened pane draws the
+// cells the size it left them whatever the window's size.
+type LayoutView struct {
+	Cx   float64 `json:"x"`
+	Cy   float64 `json:"y"`
+	Zoom float64 `json:"z"`
 }
 
 // Parse unmarshals a layout blob and rejects an unsupported Version.

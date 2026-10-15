@@ -3,11 +3,11 @@ package pane
 import "testing"
 
 // The table the two settle persisters are armed by. The layout persister
-// writes the arrangement and the framing persister writes the view, so each
-// row says which of them the change is a fact for. A fact missing from a
-// column is a write that never happens; one wrongly in it is a write of
-// something that did not change, and a pan wrongly in the layout column is a
-// layout write per pan.
+// writes the arrangement and, inside a pane tile, every grid frame's view
+// (2026-10-14); the framing persister writes the view to its row elsewhere
+// and a text descent's state everywhere. Each row says which of them the
+// change is a fact for. A fact missing from a column is a write that never
+// happens; one wrongly in it is a write of something that did not change.
 func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 	build := func() *Tree {
 		tr := NewTree()
@@ -21,8 +21,8 @@ func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 		layout, framing bool
 		do              func(*Tree)
 	}{
-		{"a pan", false, true, func(tr *Tree) { tr.FocusedPane().SetView(1.5, 2, 3) }},
-		{"a zoom", false, true, func(tr *Tree) { tr.FocusedPane().SetView(1, 2, 6) }},
+		{"a pan", true, true, func(tr *Tree) { tr.FocusedPane().SetView(1.5, 2, 3) }},
+		{"a zoom", true, true, func(tr *Tree) { tr.FocusedPane().SetView(1, 2, 6) }},
 		{"a descent", true, true, func(tr *Tree) { tr.FocusedPane().Push(viewed(Frame{Door: "t7abcde"}, 0, 0, 1)) }},
 		{"a text scroll", false, true, func(tr *Tree) { tr.FocusedPane().TextScrollY = 40 }},
 		{"a text mode toggle", false, true, func(tr *Tree) { tr.FocusedPane().TextMode = "rendered" }},

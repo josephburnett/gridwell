@@ -23,8 +23,8 @@ type Frame struct {
 	Content bool
 
 	// View is the viewport this level was left at, its zoom the live one, or
-	// none: a level a URL or layout blob restored and the pane has not shown.
-	// SetView is its one writer.
+	// none: a level a URL, or a layout blob without its view, restored and
+	// the pane has not shown. SetView is its one writer.
 	View rpc.View
 
 	// TextMode picks the textarea overlay or the sanitized-HTML one.
@@ -38,9 +38,13 @@ type Frame struct {
 	// back restores it.
 	MenuOpen bool
 
-	// ViewPending marks a frame restored from a layout blob: until Adopt, its
-	// view is a placeholder that must never be written to its owner row.
+	// ViewPending marks a top frame a layout blob restored with no view: until
+	// Adopt, its view is a placeholder that must never be written to its owner row.
 	ViewPending bool
+	// adopted is the view Adopt took from the owner row. Until the pane moves
+	// off it, it is the row's view, not one the layout keeps, so opening a
+	// pane tile without moving writes nothing.
+	adopted rpc.View
 }
 
 // ScrollText is the one writer of a content descent's scroll, from the wheel
@@ -93,8 +97,8 @@ func (f *Frame) SetView(cx, cy, zoom float64) bool {
 func (f Frame) Live() (rpc.Framing, bool) { return f.View.Framing() }
 
 // HasView reports whether the frame carries a viewport the pane was left at. A
-// frame restored from a URL or a layout blob has none, so the ascent onto it
-// falls back to the grid's persisted framing rather than an arbitrary origin.
+// frame restored from a URL, or from a layout blob without its view, has none,
+// so the ascent onto it falls back to the grid's persisted framing rather than an arbitrary origin.
 func (f Frame) HasView() bool {
 	_, ok := f.Live()
 	return ok && !f.ViewPending
@@ -109,7 +113,7 @@ func (s *Stack) Adopt(v Frame) bool {
 	if _, ok := v.Live(); !ok {
 		return false
 	}
-	s.View = v.View
+	s.View, s.adopted = v.View, v.View
 	s.TextMode, s.TextScrollX, s.TextScrollY = v.TextMode, v.TextScrollX, v.TextScrollY
 	s.ViewPending = false
 	return true

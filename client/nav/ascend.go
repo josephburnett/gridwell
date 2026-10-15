@@ -230,8 +230,8 @@ func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 }
 
 // landingView is the viewport an ascent lands at: the frame's own, or the
-// grid's persisted framing when a URL or layout blob encoded the place but not
-// the viewports above it. Never an arbitrary origin.
+// grid's persisted framing when a URL or an older layout blob encoded the
+// place but not the viewports above it. Never an arbitrary origin.
 func landingView(landing pane.Stack, w World) (rpc.Framing, bool) {
 	if landing.HasView() {
 		return landing.Live()

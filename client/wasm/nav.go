@@ -242,8 +242,8 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 			}
 		}
 	}
-	// A frame restored from a URL or a layout blob carries no viewport, so
-	// the ascent lands at the grid's persisted framing.
+	// A frame restored from a URL, or from a layout blob without its view,
+	// carries none, so the ascent lands at the grid's persisted framing.
 	landing := p.Popped(1)
 	lw.LandingGridID = a.gridIDForPathFrom(landing.Anchor(), landing.Path())
 	if !landing.HasView() && !landing.Content {

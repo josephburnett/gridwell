@@ -12,9 +12,9 @@ import (
 )
 
 // treesEqual compares two trees on everything the layout persists: structure,
-// split dir/ratio, every leaf's whole place, Focus, Zoomed. No view is
-// persisted (wire.go), and nextID is covered by the mint-no-collision
-// assertion instead.
+// split dir/ratio, every leaf's whole place, Focus, Zoomed. Views have their
+// own tests, and nextID is covered by the mint-no-collision assertion
+// instead.
 func treesEqual(a, b *Tree) bool {
 	return a.Focus == b.Focus && a.Zoomed == b.Zoomed && nodesEqual(a.Root, b.Root)
 }
@@ -403,33 +403,90 @@ func TestLayoutRestoresTheWholePlace(t *testing.T) {
 	}
 }
 
-// TestLayoutOuterViewportsStaySessionOnly: the frames a pane would ascend
-// through keep their identity in the blob, never their viewports, and a
-// restored ascent falls back to each grid's persisted framing (Frame.HasView).
-func TestLayoutOuterViewportsStaySessionOnly(t *testing.T) {
+// TestLayoutKeepsEveryFramesView: inside a pane tile the blob owns each grid
+// frame's view (2026-10-14), so a restored pane shows its top frame where it
+// was left and an ascent lands on the view the frame below was left at.
+func TestLayoutKeepsEveryFramesView(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
 	p.Stack = NewStack("plugin/1")
 	p.SetView(11, 22, 3)
-	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 0, 0, 1))
+	p.Push(viewed(Frame{Door: "plugin/4"}, -5, 6.5, 0.75))
+	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 1.25, 2, 1.5))
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if bytes.Contains(data, []byte("11")) || bytes.Contains(data, []byte("22")) {
-		t.Fatalf("an outer viewport leaked into the blob: %s", data)
 	}
 	got, err := DecodeLayout(data, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	gp := got.FocusedPane()
-	if !gp.Pop() {
-		t.Fatal("restored pane cannot ascend")
+	want := [][3]float64{{1.25, 2, 1.5}, {-5, 6.5, 0.75}, {11, 22, 3}}
+	for i, w := range want {
+		if gp.ViewPending || !gp.HasView() || !viewIs(gp.View, w[0], w[1], w[2]) {
+			t.Fatalf("level %d restored %+v pending=%v, want %v", gp.Depth(), gp.View, gp.ViewPending, w)
+		}
+		if i < len(want)-1 && !gp.Pop() {
+			t.Fatalf("restored pane cannot ascend from level %d", gp.Depth())
+		}
 	}
-	if gp.HasView() {
-		t.Fatalf("restored outer frame carries a viewport: %+v", gp.Frame)
+}
+
+// TestLayoutGoldenViews pins the shape a view takes in the blob, beside the
+// v1 fixture: one entry per frame, root first, null for a frame with none.
+// These bytes are forever too.
+func TestLayoutGoldenViews(t *testing.T) {
+	golden := `{"v":1,"root":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7","aaaa/9"],` +
+		`"views":[{"x":3.5,"y":-2,"z":1.5},null,{"x":0.25,"y":4,"z":0.5}]}},"focus":"p1"}`
+	got, err := DecodeLayout([]byte(golden), nil, "")
+	if err != nil {
+		t.Fatalf("golden views blob failed to decode: %v", err)
+	}
+	p := got.FocusedPane()
+	if p.ViewPending || !viewIs(p.View, 0.25, 4, 0.5) {
+		t.Fatalf("top = %+v pending=%v", p.View, p.ViewPending)
+	}
+	p.Pop()
+	if p.HasView() {
+		t.Fatalf("a null view restored one: %+v", p.View)
+	}
+	p.Pop()
+	if !p.HasView() || !viewIs(p.View, 3.5, -2, 1.5) {
+		t.Fatalf("root = %+v", p.View)
+	}
+	p.Push(Frame{Door: "aaaa/7"})
+	p.Push(viewed(Frame{Door: "aaaa/9"}, 0.25, 4, 0.5))
+	data, _, err := EncodeLayout(got, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != golden {
+		t.Fatalf("re-encode drifted:\ngot  %s\nwant %s", data, golden)
+	}
+}
+
+// TestLayoutWithoutViewsFallsBackToTheRow: a blob from before views, or one
+// whose views do not match its place frame for frame, restores no view, so
+// the top frame waits on its framing row and an ascent lands on the row's.
+func TestLayoutWithoutViewsFallsBackToTheRow(t *testing.T) {
+	for _, blob := range []string{
+		`{"v":1,"root":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7"]}},"focus":"p1"}`,
+		`{"v":1,"root":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7"],"views":[{"x":1,"y":2,"z":3}]}},"focus":"p1"}`,
+	} {
+		got, err := DecodeLayout([]byte(blob), nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := got.FocusedPane()
+		if !p.ViewPending || p.HasView() {
+			t.Errorf("%s: top restored a view: %+v", blob, p.Frame)
+		}
+		p.Pop()
+		if p.HasView() {
+			t.Errorf("%s: the outer frame restored a view: %+v", blob, p.Frame)
+		}
 	}
 }
 
@@ -545,11 +602,10 @@ func goldenLeaf(id, anchor string, path []string, content string) *Pane {
 	return &Pane{ID: id, Stack: StackAt(anchor, path, content)}
 }
 
-// TestLayoutHoldsNoView: a grid's view is its framing row's and a text
-// descent's scroll and mode are its tile row's, so the blob holds neither.
-// Two trees that differ only in those encode to the same bytes, which is what
-// keeps a pan from writing the layout.
-func TestLayoutHoldsNoView(t *testing.T) {
+// TestLayoutHoldsNoTextState: a text descent's scroll and mode are its tile
+// row's, so two trees that differ only in those encode to the same bytes,
+// while a grid frame's view is the blob's and changes them.
+func TestLayoutHoldsNoTextState(t *testing.T) {
 	build := func(cx, cy, zoom float64, mode string, sx, sy, tz float64) *Tree {
 		tr := NewTree()
 		g := tr.FocusedPane()
@@ -564,16 +620,18 @@ func TestLayoutHoldsNoView(t *testing.T) {
 		c.TextMode, c.TextScrollX, c.TextScrollY, c.TextZoom = mode, sx, sy, tz
 		return tr
 	}
-	a, _, err := EncodeLayout(build(3, 4, 1.5, "text", 0, 10, 1), nil)
-	if err != nil {
-		t.Fatal(err)
+	enc := func(tr *Tree) []byte {
+		d, _, err := EncodeLayout(tr, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
 	}
-	b, _, err := EncodeLayout(build(-7, 9, 0.25, "rendered", 30, 400, 1.75), nil)
-	if err != nil {
-		t.Fatal(err)
+	if a, b := enc(build(3, 4, 1.5, "text", 0, 10, 1)), enc(build(3, 4, 1.5, "rendered", 30, 400, 1.75)); !bytes.Equal(a, b) {
+		t.Fatalf("text state reached the blob:\n%s\n%s", a, b)
 	}
-	if !bytes.Equal(a, b) {
-		t.Fatalf("a view reached the blob:\n%s\n%s", a, b)
+	if a, b := enc(build(3, 4, 1.5, "text", 0, 0, 1)), enc(build(-7, 9, 0.25, "text", 0, 0, 1)); bytes.Equal(a, b) {
+		t.Fatalf("a grid view did not reach the blob: %s", a)
 	}
 }
 
@@ -602,5 +660,31 @@ func TestLayoutOldViewsAreNotRead(t *testing.T) {
 	}
 	if c.TextMode != "" || c.TextScrollX != 0 || c.TextScrollY != 0 || c.TextZoom != 0 {
 		t.Errorf("the blob's text state was read: %+v", c.Frame)
+	}
+}
+
+// TestLayoutAdoptedViewIsNotWritten: a leaf from a blob with no view takes its
+// row's view on Adopt, and until the user moves it the blob re-encodes byte
+// for byte, so opening a pane tile and looking writes nothing.
+func TestLayoutAdoptedViewIsNotWritten(t *testing.T) {
+	blob := `{"v":1,"root":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7"]}},"focus":"p1"}`
+	tr, err := DecodeLayout([]byte(blob), nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := tr.FocusedPane()
+	before := LayoutFingerprint(tr).Value()
+	if !p.Adopt(viewed(Frame{}, 4, 5, 2)) {
+		t.Fatal("Adopt refused a view")
+	}
+	if got, _, _ := EncodeLayout(tr, nil); string(got) != blob {
+		t.Fatalf("an adopted view was written:\ngot  %s\nwant %s", got, blob)
+	}
+	if LayoutFingerprint(tr).Value() != before {
+		t.Fatal("adopting a view armed a layout write")
+	}
+	p.SetView(4.5, 5, 2)
+	if got, _, _ := EncodeLayout(tr, nil); !bytes.Contains(got, []byte(`"views"`)) {
+		t.Fatalf("a pan after adopting was not written: %s", got)
 	}
 }
