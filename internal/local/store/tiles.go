@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -355,9 +354,8 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 // ordinary grid moves into the trashcan's current-month subgrid, same id and
 // same row, so links keep resolving; a second delete, on a tile already in the
 // trash tree, destroys it and releases its blobs and its interior child grid.
-// Scratch-grid tiles always delete for real. An exit well's qualified
-// child_grid_id does not parse as a local grid id, so only the reference is
-// dropped.
+// Scratch-grid tiles always delete for real. What a destroy releases is
+// tileRefs's to say.
 func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) error {
 	tileID, err := parseID(req.TileId)
 	if err != nil {
@@ -385,8 +383,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
 			return err
 		}
-		childGridID, _ := strconv.ParseInt(t.ChildGridId, 10, 64)
-		if err := s.decTileRefs(ctx, tx, t.Kind, childGridID, t.BlobId, t.PreviewBlobId); err != nil {
+		if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridId, t.BlobId, t.PreviewBlobId); err != nil {
 			return err
 		}
 		gridID, _ := parseID(t.GridId)
