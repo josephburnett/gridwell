@@ -20,6 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // wsExpandState is the first-descent capture animation: the pane tile's rect
@@ -213,23 +214,26 @@ func (a *App) flushWorkspaceSave(held func(ok bool)) {
 func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 	var tile *gridwellv1.Tile
 	landed, answered := false, false
+	end := func() {}
 	a.post(write{
 		label: "PaneLayout", gid: a.gridIDOfTile(tileID), id: tileID, chain: tileID,
 		source: "layout:" + tileID, failText: "workspace layout unsaved",
 		call: func(ctx context.Context) error {
+			end = a.c.BeginWrite(tileID)
 			var err error
 			tile, err = a.cl.WriteContent(ctx, tileID, rpc.ContentBasis{}, data)
 			return err
 		},
 		then: func() {
-			// Filed before the row lands, so no frame sees the new blob
-			// without its bytes and the preview never refetches this write.
 			a.c.PutSavedContent(tile, data)
 			a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 			a.resolveErr("rpc:PaneLayout")
 			landed = true
+			// A frame the echo drew skipped the body while it was in flight.
+			a.scheduleFrame(traceevent.WhyContent)
 		},
 		done: func() {
+			end()
 			if answered {
 				return
 			}
