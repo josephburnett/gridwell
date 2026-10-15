@@ -547,13 +547,72 @@ func unversioned(g *pb.Grid) *pb.Grid {
 	return g
 }
 
-// evictGrid forgets a grid and its tile rows. Content and preview rows linger
-// unreachable and refresh on their next live read.
+// evictGrid forgets a grid, its tile rows, and what was kept under each.
 func (c *Layer) evictGrid(ctx context.Context, gridID string) {
-	_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID)
-	c.noteCache("evict tiles", err)
-	_, err = c.db.ExecContext(ctx, `DELETE FROM grids WHERE id = ?`, gridID)
-	c.noteCache("evict grid", err)
+	c.inTx(ctx, "evict grid", func(tx *sql.Tx) error {
+		gone, err := gridTileIDs(ctx, tx, gridID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM grids WHERE id = ?`, gridID); err != nil {
+			return err
+		}
+		return forgetUnnamed(ctx, tx, gone)
+	})
+}
+
+func (c *Layer) inTx(ctx context.Context, op string, f func(*sql.Tx) error) {
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		c.noteCache(op, err)
+		return
+	}
+	if err := f(tx); err != nil {
+		c.noteCache(op, err)
+		_ = tx.Rollback()
+		return
+	}
+	c.noteCache(op, tx.Commit())
+}
+
+func gridTileIDs(ctx context.Context, tx *sql.Tx, gridID string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM tiles WHERE grid_id = ?`, gridID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// tileKeyed is every table that keeps something under a tile id beside its
+// tiles row. Each is keyed by the id alone, so no body is shared between tiles.
+var tileKeyed = []string{"content", "contentstamps", "previews", "servecontent"}
+
+// forgetUnnamed drops everything in tileKeyed under each id no tiles row names.
+// Every writer that removes tile rows calls it in the same transaction, after
+// the removal, because a tile gone while blind gets no TileRemoved to free its
+// body; an id the new rows name again (a tile that moved grids) keeps its own.
+func forgetUnnamed(ctx context.Context, tx *sql.Tx, ids []string) error {
+	for _, id := range ids {
+		for _, table := range tileKeyed {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE tile_id = ?
+				AND NOT EXISTS (SELECT 1 FROM tiles WHERE id = ?)`, id, id); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // storeGrid replaces the grid row and its whole tile set in one transaction. A
@@ -565,42 +624,35 @@ func (c *Layer) storeGrid(ctx context.Context, gridID string, resp *pb.GetGridRe
 		c.noteCache("marshal grid", err)
 		return
 	}
-	tx, err := c.db.BeginTx(ctx, nil)
-	if err != nil {
-		c.noteCache("store grid", err)
-		return
-	}
-	ts := now()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO grids (id, proto, fetched_at) VALUES (?, ?, ?)
+	c.inTx(ctx, "store grid", func(tx *sql.Tx) error {
+		ts := now()
+		if _, err := tx.ExecContext(ctx, `INSERT INTO grids (id, proto, fetched_at) VALUES (?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET proto=excluded.proto, fetched_at=excluded.fetched_at`, gridID, gb, ts); err != nil {
-		c.noteCache("store grid", err)
-		_ = tx.Rollback()
-		return
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID); err != nil {
-		c.noteCache("store grid", err)
-		_ = tx.Rollback()
-		return
-	}
-	for _, t := range resp.GetTiles() {
-		tb, merr := proto.Marshal(t)
-		if merr != nil {
-			c.noteCache("marshal tile", merr)
-			_ = tx.Rollback()
-			return
+			return err
 		}
-		// Upsert, never a plain insert: after an id migration the same grid
-		// answers under two keys and its tiles keep their ids, so a row may
-		// already exist under the old grid key. The upsert moves it here.
-		if _, err := tx.ExecContext(ctx, `INSERT INTO tiles (id, grid_id, proto, fetched_at) VALUES (?, ?, ?, ?)
+		was, err := gridTileIDs(ctx, tx, gridID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE grid_id = ?`, gridID); err != nil {
+			return err
+		}
+		for _, t := range resp.GetTiles() {
+			tb, err := proto.Marshal(t)
+			if err != nil {
+				return err
+			}
+			// Upsert, never a plain insert: after an id migration the same grid
+			// answers under two keys and its tiles keep their ids, so a row may
+			// already exist under the old grid key. The upsert moves it here.
+			if _, err := tx.ExecContext(ctx, `INSERT INTO tiles (id, grid_id, proto, fetched_at) VALUES (?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET grid_id=excluded.grid_id, proto=excluded.proto, fetched_at=excluded.fetched_at`,
-			t.GetId(), gridID, tb, ts); err != nil {
-			c.noteCache("store tile", err)
-			_ = tx.Rollback()
-			return
+				t.GetId(), gridID, tb, ts); err != nil {
+				return err
+			}
 		}
-	}
-	c.noteCache("store grid", tx.Commit())
+		return forgetUnnamed(ctx, tx, was)
+	})
 }
 
 func (c *Layer) loadGrid(ctx context.Context, gridID string) (resp *pb.GetGridResponse, fetchedAt int64, ok bool) {
@@ -679,11 +731,12 @@ func (c *Layer) foldTile(ctx context.Context, t *pb.Tile) {
 
 func (c *Layer) deleteTile(ctx context.Context, tileID string) {
 	c.order.fold([]string{tileID}, func() {
-		_, err := c.db.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID)
-		c.noteCache("delete tile", err)
-		c.dropContent(ctx, tileID, "delete content")
-		_, err = c.db.ExecContext(ctx, `DELETE FROM previews WHERE tile_id = ?`, tileID)
-		c.noteCache("delete preview", err)
+		c.inTx(ctx, "delete tile", func(tx *sql.Tx) error {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, tileID); err != nil {
+				return err
+			}
+			return forgetUnnamed(ctx, tx, []string{tileID})
+		})
 	})
 }
 
