@@ -102,11 +102,11 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		verb, keys string
 		write      func() error
 	}{
-		{"Place", "plug1:t/" + ts, func() error { return d.Place(id, 3, 3, 1, 1) }},
-		{"SetFraming", "plug1:t/" + ts, func() error { return d.SetFraming(id, 0, f) }},
-		{"SetFraming", "plug1:f/" + gs, func() error { return d.SetFraming(0, gid, f) }},
-		{"SetTextView", "plug1:t/" + ts, func() error { return d.SetTextView(id, 0, 0, 4, 4, "") }},
-		{"SetContentZoom", "plug1:t/" + ts, func() error { return d.SetContentZoom(id, z) }},
+		{"Place", "plug1:t/" + ts, func() error { _, err := d.Place(id, 3, 3, 1, 1); return err }},
+		{"SetFraming", "plug1:t/" + ts, func() error { _, err := d.SetFraming(id, 0, f); return err }},
+		{"SetFraming", "plug1:f/" + gs, func() error { _, err := d.SetFraming(0, gid, f); return err }},
+		{"SetTextView", "plug1:t/" + ts, func() error { _, err := d.SetTextView(id, 0, 0, 4, 4, ""); return err }},
+		{"SetContentZoom", "plug1:t/" + ts, func() error { _, err := d.SetContentZoom(id, z); return err }},
 		{"Mint", "plug1:g/" + gs + "/b", func() error {
 			_, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)
 			return err
@@ -130,7 +130,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 // A refused plugin-row write says so, as a refused home write does.
 func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
 	_, d := openExt(t)
-	if err := d.Place(999999, 0, 0, 1, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := d.Place(999999, 0, 0, 1, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Place on no row = %v, want ErrNotFound", err)
 	}
 	for _, rec := range trace.Default().Snapshot() {

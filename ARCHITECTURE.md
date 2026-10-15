@@ -339,7 +339,9 @@ frame is the grid you are in, the tile you came through, and your viewport
 there. Every descent pushes a frame; every ascent pops one, restoring the
 viewport that frame holds. The URL (`url.go`) and the pane-tile
 layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
-project it. The blob holds the arrangement and no view: a restored leaf
+project it. The blob holds the arrangement, the focused pane and the zoomed
+pane, and no view, so a pane tile reopens on the pane it was left on
+(`pane.LayoutFingerprint` keys the write). A restored leaf
 shows its grid at the framing row and its text at the tile row, so a pan
 inside a pane tile writes `SetFraming` alone. A pane tile swaps the whole
 pane tree instead — that is the one second axis (`levels.go`), and it is

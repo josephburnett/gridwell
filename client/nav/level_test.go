@@ -492,3 +492,48 @@ func TestFollowLinkTarget(t *testing.T) {
 		only(t, m.Resume(aw.Token, Result{Err: "refused"}, descended), EffReport)
 	})
 }
+
+// A pane tile remembers which pane was focused and which was zoomed, so a
+// descent and a reload both open on the pane it was left on; see
+// pane.LayoutFingerprint.
+func TestLevelOpensOnRememberedFocus(t *testing.T) {
+	left := pane.TreeAtPlace("w1:", "g2", nil, rpc.ViewOf(1, 2, 1))
+	second, err := left.Split(pane.Vertical)
+	if err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	if err := left.SetFocus(second.ID); err != nil {
+		t.Fatalf("focus: %v", err)
+	}
+	left.ToggleZoom(second.ID)
+	if left.Root.Split.A.Pane.ID == second.ID {
+		t.Fatalf("the focused pane is the first leaf; the case would pass by fallback")
+	}
+	data, _, err := pane.EncodeLayout(left, nil)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	check := func(t *testing.T, e Effect) {
+		t.Helper()
+		if e.Tree == nil || e.Tree.Focus != second.ID || e.Tree.Zoomed != second.ID {
+			t.Fatalf("installed focus %q zoomed %q, want %q for both", e.Tree.Focus, e.Tree.Zoomed, second.ID)
+		}
+	}
+
+	t.Run("descent", func(t *testing.T) {
+		m := New()
+		anim, fetch, w := enter(t, m, arranged(paneTile()))
+		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: arranged(paneTile())}, w), EffAwait)
+		m.Resume(body.Token, Result{OK: true, Data: data}, w)
+		check(t, only(t, m.Land(anim.Land, w), EffInstallLevel))
+	})
+
+	t.Run("reload", func(t *testing.T) {
+		m := New()
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Home = "g1"
+		fetch := only(t, m.Do(Gesture{Kind: GestureRestore, Raw: "/?w=pt1"}, w), EffAwait)
+		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: arranged(paneTile())}, w), EffAwait)
+		check(t, only(t, m.Resume(body.Token, Result{OK: true, Data: data}, w), EffInstallLevel))
+	})
+}

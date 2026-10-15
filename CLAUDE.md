@@ -74,9 +74,9 @@ comment beside it says.
    `sendError`. A rejected optimistic mutation reconciles visibly.
 7. **No client-only state.** Anything the user can change is a server fact,
    written through the store and reflected by an event. The exceptions are
-   decided, not accidental: the session pane tree, the selection, the outer
-   frames of a pane's place, the pane-tile level stack, Chromium's own
-   session storage, and the theme — a client view preference, not a fact
+   decided, not accidental: the session pane tree, the selection outside a
+   pane tile, the outer frames of a pane's place, the pane-tile level stack,
+   Chromium's own session storage, and the theme — a client view preference, not a fact
    about your things, so it lives in `localStorage` (2026-09-19). Do not add
    to that list without a decision.
 8. **DRY is correctness.** If a fix in one place doesn't fix an identical
@@ -282,6 +282,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, the selection, the level stack, and the
   outer frames' viewports. The durable home for a layout is the pane tile.
+  Inside a pane tile the focused pane and the zoomed pane are part of the
+  layout the tile remembers, written with it on every change, so a workspace
+  reopens on the pane it was left on; the selection is session-ephemeral
+  only outside a pane tile (2026-10-14, `pane.LayoutFingerprint`).
 - Left-drag moves, right-drag clones, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Cross-plugin a left-drag links too, because

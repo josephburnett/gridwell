@@ -61,9 +61,8 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 // SetURLPreview is a plugin url tile's screenshot, the face half of home's
 // SetURLState: the address, title and history are the plugin's to say, so
 // only the picture is the node's to keep.
-func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) error {
-	ctx := context.Background()
-	return n.s.withMutation(ctx, "SetURLPreview", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err error) {
+	return n.rowWrite("SetURLPreview", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		kind, err := liveKind(ctx, tx, n.ns, tileID)
 		if err != nil {
 			return err

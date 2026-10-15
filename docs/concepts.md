@@ -31,7 +31,7 @@ here.
 | **menu fold** | The + menu's doorway row is an open set, so it opens folded behind a chevron over the primitives, and every opening starts folded. The fold is the menu's live state (`client/menu`); what a folded or open menu shows is `client/palette`'s. |
 | **frame** | One step through a doorway (`pane.Frame`), into a grid or into a tile, with where you left it. The whole of where a pane is, and a descent into a document is the same step as a descent into a grid, ascended out of the same way. Text scroll, text mode and content zoom belong to the tile's row, written by `SetTile`; the frame carries the working copy while you are inside it, as it carries the viewport `SetFraming` writes back to the doorway's row. |
 | **level** | A pane-tile descent (`pane.Level`), session-only: a frame moves one pane, a level parks the window's whole pane tree. One pane tile can hold a whole arrangement without the frame stack encoding a tree. |
-| **zoomed pane** | One leaf owns the whole window while the split ratios beneath it stay untouched (`pane.Tree.Zoomed`, the ⛶ title, a click on the title). Session-only; a structural edit unzooms first. |
+| **zoomed pane** | One leaf owns the whole window while the split ratios beneath it stay untouched (`pane.Tree.Zoomed`, the ⛶ title, a click on the title). Session-only outside a pane tile; inside one it is part of the layout the tile remembers, with the focused pane (`pane.LayoutFingerprint`). A structural edit unzooms first. |
 
 ## Lifecycle spaces
 

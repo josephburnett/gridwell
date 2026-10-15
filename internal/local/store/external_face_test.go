@@ -35,7 +35,7 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 	a := mintOne(t, d, pageEntry("a.html"))
 	b := mintOne(t, d, pageEntry("b.html"))
 
-	if err := d.SetURLPreview(a, []byte("shot-1")); err != nil {
+	if _, err := d.SetURLPreview(a, []byte("shot-1")); err != nil {
 		t.Fatal(err)
 	}
 	got, err := d.Preview(a)
@@ -43,15 +43,15 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 		t.Fatalf("Preview = %q (%v), want shot-1", got, err)
 	}
 	// The same bytes on another row share the one blob.
-	if err := d.SetURLPreview(b, []byte("shot-1")); err != nil {
+	if _, err := d.SetURLPreview(b, []byte("shot-1")); err != nil {
 		t.Fatal(err)
 	}
 	verifyRefcounts(t, st)
 	// A new capture replaces the face, and an empty one keeps it.
-	if err := d.SetURLPreview(a, []byte("shot-2")); err != nil {
+	if _, err := d.SetURLPreview(a, []byte("shot-2")); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.SetURLPreview(a, nil); err != nil {
+	if _, err := d.SetURLPreview(a, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := d.Preview(a); string(got) != "shot-2" {
@@ -71,10 +71,10 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 func TestAPluginScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
 	_, d := openExt(t)
 	text := mintOne(t, d, &pluginv1.Entry{Key: "n.md", Kind: rpc.KindText, Label: "n.md"})
-	if err := d.SetURLPreview(text, []byte("shot")); !errors.Is(err, ErrNotURLTile) {
+	if _, err := d.SetURLPreview(text, []byte("shot")); !errors.Is(err, ErrNotURLTile) {
 		t.Fatalf("SetURLPreview on a text row = %v, want ErrNotURLTile", err)
 	}
-	if err := d.SetFrozen(text, true); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := d.SetFrozen(text, true); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("SetFrozen on a text row = %v, want ErrInvalidArgument", err)
 	}
 }
@@ -84,7 +84,7 @@ func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 	gid, _ := d.ContextID("root")
 	id := mintOne(t, d, pageEntry("a.html"))
 	for _, want := range []bool{true, false} {
-		if err := d.SetFrozen(id, want); err != nil {
+		if _, err := d.SetFrozen(id, want); err != nil {
 			t.Fatal(err)
 		}
 		tiles, err := d.Overlay(gid, []*pluginv1.Entry{pageEntry("a.html")})
@@ -102,7 +102,7 @@ func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 	st, d := openExt(t)
 	id := mintOne(t, d, pageEntry("a.html"))
-	if err := d.SetURLPreview(id, []byte("shot")); err != nil {
+	if _, err := d.SetURLPreview(id, []byte("shot")); err != nil {
 		t.Fatal(err)
 	}
 	var blob int64
@@ -116,7 +116,7 @@ func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 		t.Fatal("the retired row's screenshot is still stored")
 	}
 	verifyRefcounts(t, st)
-	if err := d.SetFrozen(id, true); !errors.Is(err, ErrNotFound) {
+	if _, err := d.SetFrozen(id, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("SetFrozen on a retired row = %v, want ErrNotFound", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestDroppingAPluginScreenshotReleasesItsBlob(t *testing.T) {
 	if err := d.DropURLPreview(id); err != nil {
 		t.Fatalf("dropping no screenshot = %v, want nothing to do", err)
 	}
-	if err := d.SetURLPreview(id, []byte("shot")); err != nil {
+	if _, err := d.SetURLPreview(id, []byte("shot")); err != nil {
 		t.Fatal(err)
 	}
 	var blob int64
@@ -143,7 +143,7 @@ func TestDroppingAPluginScreenshotReleasesItsBlob(t *testing.T) {
 		t.Fatal("the dropped screenshot is still stored")
 	}
 	verifyRefcounts(t, st)
-	if err := d.SetURLPreview(id, []byte("next")); err != nil {
+	if _, err := d.SetURLPreview(id, []byte("next")); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := d.Preview(id); string(got) != "next" {

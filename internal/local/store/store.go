@@ -299,7 +299,7 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidArgument, err)
 	}
-	return s.withMutation(ctx, "SetFraming/root", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	_, err = s.withRowWrite(ctx, "SetFraming/root", "grids", gridID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := updateFraming(ctx, tx, "", 0, gridID, f, s.now().Unix())
 		if err != nil {
 			return err
@@ -310,6 +310,7 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 		*events = append(*events, rpc.FramingEvent(req.RootGridId, f))
 		return nil
 	})
+	return err
 }
 
 func rootGridID(ctx context.Context, q gridReader) (int64, error) {
@@ -386,39 +387,50 @@ func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.T
 	return nil
 }
 
-// errUnchanged rolls back a tile write that left its row as it found it.
+// errUnchanged rolls back a row write that left its row as it found it.
 var errUnchanged = errors.New("store: write changed nothing")
 
-// withTileWrite is withMutation for a write without a claim to one existing
-// tile: framing, layout, a capture. One that lands where the row already is
-// rolls back, so it neither stamps updated_at nor tells a subscriber, because
-// every open view would re-read and re-settle against a change that is not
-// one. The row is compared whole, columns off the wire included.
+// withTileWrite is withRowWrite on one existing tile row: framing, layout, a
+// capture.
 func (s *Store) withTileWrite(ctx context.Context, verb string, tileID int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
-	return s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		before, err := tileImage(ctx, tx, tileID)
+	_, err := s.withRowWrite(ctx, verb, "tiles", tileID, fn)
+	return err
+}
+
+// withRowWrite is withMutation for a write without a claim to one existing
+// row of table. One that lands where the row already is rolls back, so it
+// neither stamps updated_at nor tells a subscriber, because every open view
+// would re-read and re-settle against a change that is not one. The row is
+// compared whole, columns off the wire included. changed is false for that
+// roll-back, so a caller announcing the write itself can stay silent too.
+func (s *Store) withRowWrite(ctx context.Context, verb, table string, id int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error, rows ...string) (changed bool, err error) {
+	err = s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		changed = false
+		before, err := rowImage(ctx, tx, table, id)
 		if err != nil {
 			return err
 		}
 		if err := fn(tx, events); err != nil {
 			return err
 		}
-		after, err := tileImage(ctx, tx, tileID)
+		after, err := rowImage(ctx, tx, table, id)
 		if err != nil {
 			return err
 		}
 		if after == before {
 			return errUnchanged
 		}
+		changed = true
 		return nil
-	})
+	}, rows...)
+	return changed && err == nil, err
 }
 
-// tileImage is a tile row as one comparable value, every column but
-// updated_at. A missing row is the empty image, so the write's own load
-// reports it.
-func tileImage(ctx context.Context, tx *sql.Tx, tileID int64) (string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT * FROM tiles WHERE id = ?`, tileID)
+// rowImage is a row of table ("tiles" or "grids") as one comparable value,
+// every column but updated_at. A missing row is the empty image, so the
+// write's own load reports it.
+func rowImage(ctx context.Context, tx *sql.Tx, table string, id int64) (string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT * FROM `+table+` WHERE id = ?`, id)
 	if err != nil {
 		return "", err
 	}
