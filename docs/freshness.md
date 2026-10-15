@@ -121,9 +121,12 @@ one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
 retries `Info` with backoff and hands off to `fanInEvents`, which re-dials
 the namespace's stream forever and reports the down/up transitions as
 `EventPluginHealth` through `reportHealth` — down on the first failure, up
-on recovery, never once per retry. Once every namespace's stream has settled the
-stream sends its header, so a client knows the node is listening before any
-event (`namespace.Namespace.Subscribe`'s `send(nil)`). Every relayed event is re-qualified by
+on recovery, never once per retry. Every namespace sends its header once it
+is attached (`namespace.Namespace.Subscribe`'s `send(nil)`), and a stream is
+established by that header or its first event, never by time
+(`namespace.Follow`): a far node not yet listening never reads as back. Once
+every namespace's stream has settled the node's stream sends its own header,
+so a client knows the node is listening before any event. Every relayed event is re-qualified by
 `qualifyEvent` → `rpc.QualifyEventIDs`: one segment prepended per hop, the
 health uuid included, so a far namespace's health stays addressable here.
 A source the user disabled (`plugin.Registry.Disable`) is told as disabled
@@ -361,7 +364,7 @@ the join `cache.ServedBy` makes of the health uuid and the ids the client
 already holds. The reads a resync cancels are the client's own doing, so they
 say nothing (`clientsync.OutcomeAbandoned`).
 
-**Up.** The next `namespace.Follow` establishes; `noteHealth(ns, true, "")`
+**Up.** The next `namespace.Follow` establishes, on the far node's header; `noteHealth(ns, true, "")`
 publishes the recovery, and `learnRoot` publishes one too on a first or
 healed landing. `Layer.applyEvent` clears `dark[conn]`; the next successful
 pass-through call would have cleared it anyway through `noteReach`.

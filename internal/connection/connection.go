@@ -808,6 +808,9 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := s.hub.Subscribe()
 	defer cancel()
+	if err := send(nil); err != nil {
+		return err
+	}
 	for _, ev := range s.darkNow() {
 		if err := send(ev); err != nil {
 			return err

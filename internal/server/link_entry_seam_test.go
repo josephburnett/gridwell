@@ -340,7 +340,7 @@ func (o *oneEntrySource) List(context.Context, *pluginv1.ListRequest) (*pluginv1
 type lateAttach struct{ namespace.Namespace }
 
 func (l lateAttach) Subscribe(ctx context.Context, req *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
-	time.Sleep(namespace.SettleTime / 2)
+	time.Sleep(125 * time.Millisecond)
 	return l.Namespace.Subscribe(ctx, req, send)
 }
 
@@ -457,7 +457,6 @@ func TestATargetsNewBytesReachTheBodyALinkShows(t *testing.T) {
 			t.Fatal("the Watch scope never named the context the box links into")
 		}
 	}
-	time.Sleep(namespace.SettleTime)
 
 	src.set(func(m *mailSource) { m.card = "card of t1, read" })
 	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{

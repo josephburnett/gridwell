@@ -23,7 +23,10 @@ func (failingSearch) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1
 	return &gridwellv1.InfoResponse{}, nil
 }
 
-func (failingSearch) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+func (failingSearch) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }

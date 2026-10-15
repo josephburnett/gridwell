@@ -17,7 +17,7 @@ import (
 
 // flakyWatchPlugin is a plugin whose Info always succeeds and whose Subscribe
 // stream fails its first failSubFirstN calls before settling into a healthy
-// (never-sending, context-lived) stream. It is the seam-level fake for the fan-in's down/recovery
+// stream that sends its header and nothing else until its context ends. It is the seam-level fake for the fan-in's down/recovery
 // transition — a unit test on the loop in isolation would not prove the
 // transition reaches a real client stream over the real wire; this does.
 type flakyWatchPlugin struct {
@@ -30,10 +30,13 @@ func (p *flakyWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRespo
 	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
-func (p *flakyWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+func (p *flakyWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	n := p.subCalls.Add(1)
 	if n <= p.failSubFirstN {
 		return errors.New("simulated plugin stream failure")
+	}
+	if err := send(nil); err != nil {
+		return err
 	}
 	<-ctx.Done()
 	return nil
@@ -118,7 +121,10 @@ func (p *alwaysFailInfoWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.
 	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
-func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }

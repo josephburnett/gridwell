@@ -226,6 +226,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   nobody": the store needs the result, because offline readability means
   everything on the far machine, not only what was visited
   (`sourcecache.kickPrefetch`, 2026-10-06).
+- A stream is established by its header, never by time: a source is back
+  when it says it is listening, so a change made before then is not missed.
+  Both ends of a connection run a build that sends it; a far node that sends
+  none reads as dark until it is upgraded (`namespace.Follow`, 2026-10-14).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections

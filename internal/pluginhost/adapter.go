@@ -155,6 +155,9 @@ func (a *Adapter) contextFraming(ckey string) (rpc.View, error) {
 func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, detach := a.hub.Subscribe()
 	defer detach()
+	if err := send(nil); err != nil {
+		return err
+	}
 	up := true
 	if a.sup != nil {
 		cancel := a.sup.OnHealth(func(healthy bool, detail string) { a.emitHealth(healthy, detail) })
