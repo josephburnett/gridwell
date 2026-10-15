@@ -185,9 +185,9 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 	return newID, nil
 }
 
-// deleteGrid recursively deletes a grid and everything it owns. Source grids
-// behind file and process wells are left alone, being shared by identity. An
-// owned grid is 1:1 with its parent well, so there is no refcount to consult.
+// deleteGrid recursively deletes a grid and everything it owns, which
+// tileRefs decides per row. An owned grid is 1:1 with its parent well, so
+// there is no refcount to consult.
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id, kind, child_grid_id, blob_id, preview_blob_id FROM tiles WHERE grid_id = ?`, gridID)
@@ -197,7 +197,7 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 	type ref struct {
 		id      int64
 		kind    string
-		child   sql.NullInt64
+		child   sql.NullString
 		blob    sql.NullInt64
 		preview sql.NullInt64
 	}
@@ -214,7 +214,7 @@ func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error 
 			return err
 		}
 		if err := s.decTileRefs(ctx, tx, r.kind,
-			nullToInt(r.child), nullToInt(r.blob), nullToInt(r.preview)); err != nil {
+			r.child.String, nullToInt(r.blob), nullToInt(r.preview)); err != nil {
 			return err
 		}
 	}
@@ -310,13 +310,18 @@ func nullToInt(n sql.NullInt64) int64 {
 }
 
 // tileRefs is the one description of what a tile owns: an interior well's
-// child grid, and the blob it holds a refcount on. A file or process well
-// points at a source grid shared by identity, so it owns no grid. Clone,
-// single-delete and grid teardown all route through it.
-func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef int64) {
+// child grid, and the blob it holds a refcount on. childGrid is the stored
+// child_grid_id; an exit well's is a qualified reference that does not parse
+// as a local grid id, so it owns no grid and only the reference goes.
+// Single-delete and grid teardown both route through it.
+func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch {
 	case isWellKind(kind):
-		return childGrid, 0
+		g, err := strconv.ParseInt(childGrid, 10, 64)
+		if err != nil {
+			return 0, 0
+		}
+		return g, 0
 	case rpc.IsBodyKind(kind):
 		// The places a pane layout references are not owned, so deleting a
 		// pane tile deletes only the arrangement.
@@ -329,7 +334,7 @@ func tileRefs(kind string, childGrid, blob, previewBlob int64) (gridRef, blobRef
 
 // decTileRefs releases what a deleted tile owned: its interior-well child
 // grid, recursively, and its blob, collected at refcount zero.
-func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind string, childGrid, blob, previewBlob int64) error {
+func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind, childGrid string, blob, previewBlob int64) error {
 	g, b := tileRefs(kind, childGrid, blob, previewBlob)
 	if g != 0 {
 		if err := s.deleteGrid(ctx, tx, g); err != nil {
