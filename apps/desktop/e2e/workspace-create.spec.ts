@@ -2,11 +2,8 @@ import { test, expect } from './fixtures';
 import { tileAt, writeContent } from './oracle';
 
 // The palette's fifth "pane" swatch persists a kind="pane" tile, and a foreign
-// layout write reaches this client's preview state. A pane layout is
-// framing-class, so the version stays put and the echo arrives at the same
-// version with only the blob differing: for the signature to move, a
-// same-version event must still apply, because the interlock drops only
-// strictly older ones.
+// layout write reaches this client's preview state: a layout is the user's
+// bytes, so the write claims version 0 and its echo arrives one version on.
 
 // The layout write rides the one content door, WriteContent.
 async function setPaneLayout(origin: string, tileId: string, version: number, layout: unknown): Promise<void> {

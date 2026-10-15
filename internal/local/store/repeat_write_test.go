@@ -17,15 +17,14 @@ import (
 // re-settle against it. The rest claim a version the first call spent, or make
 // rows.
 var repeatWritesNothing = map[string]bool{
-	"SetTextView/window and mode":         true,
-	"SetContentZoom/content scale":        true,
-	"SetFrozen/standing freeze":           true,
-	"SetFraming/doorway viewport":         true,
-	"SetPaneLayout/workspace arrangement": true,
-	"PlaceTile/move and resize":           true,
-	"SetTileAlt/automatic capture":        true,
-	"SetURLState/freeze capture":          true,
-	"SetShellPreview/frozen frame":        true,
+	"SetTextView/window and mode":  true,
+	"SetContentZoom/content scale": true,
+	"SetFrozen/standing freeze":    true,
+	"SetFraming/doorway viewport":  true,
+	"PlaceTile/move and resize":    true,
+	"SetTileAlt/automatic capture": true,
+	"SetURLState/freeze capture":   true,
+	"SetShellPreview/frozen frame": true,
 }
 
 func TestARepeatedWriteWritesNothing(t *testing.T) {

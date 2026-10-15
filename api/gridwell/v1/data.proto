@@ -372,9 +372,8 @@ message ContentChunk {
 // accepted; subsequent messages carry data only. The write commits at close, so
 // the new value becomes visible only when the stream closes cleanly and a broken
 // stream leaves the old value byte-for-byte intact. Version semantics are
-// kind-determined in the store's one table: a text body is a content edit that
-// claims and bumps, while a pane layout is framing-class with no claim and no
-// bump. Not accepted on link tiles, because a content operation writes through
+// kind-determined in the store's one table: a text body and a pane layout are
+// the user's bytes, each claiming and bumping. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
 //
 // A row with no version (a plugin's) claims content_stamp instead, the stamp

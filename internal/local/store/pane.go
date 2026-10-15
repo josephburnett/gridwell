@@ -51,11 +51,9 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 		})
 }
 
-// SetPaneLayout writes a pane tile's layout blob. It is framing-class: the
-// layout is an arrangement of references to other content, so it never bumps
-// version and carries no claim, and the version parameter, which
-// WriteContent's signature forces, is ignored. Identical bytes are a pure
-// no-op, so a re-save cannot churn the DB.
+// SetPaneLayout writes a pane tile's layout blob. A layout is the user's
+// bytes, so it claims the version it was read at and bumps it, as a text save
+// does. Identical bytes are a pure no-op, so a re-save cannot churn the DB.
 func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data []byte) (*gridwellv1.Tile, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("%w: empty layout", ErrInvalidArgument)
@@ -64,18 +62,23 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err := s.withTileWrite(ctx, "SetPaneLayout", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
+	err := s.withMutation(ctx, "SetPaneLayout", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		n, err := s.claimContentVersion(ctx, tx, tileID, version)
 		if err != nil {
 			return err
 		}
 		if n.Kind != rpc.KindPane {
 			return ErrNotPaneTile
 		}
-		if _, _, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, panelayout.LayoutMediaType); err != nil {
+		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, panelayout.LayoutMediaType)
+		if err != nil {
 			return err
 		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		if !changed {
+			out = n
+			return nil
+		}
+		out, err = s.finishContentEdit(ctx, tx, tileID, events)
 		return err
 	})
 	if err != nil {

@@ -59,7 +59,7 @@ those, so it has no status at all — nothing draws it, and no click reaches it.
 
 | Concept | What it does |
 |---|---|
-| **content** | The user's bytes: a text body, a typed url, a typed name. The only class that claims a version and can 409. A plugin's body has no version, so its write claims the source's stamp of the bytes it was typed over (`Tile.content_stamp`), and a stale stamp is the same conflict. |
+| **content** | The user's bytes: a text body, a typed url, a typed name, a pane tile's layout. The only class that claims a version and can 409. A plugin's body has no version, so its write claims the source's stamp of the bytes it was typed over (`Tile.content_stamp`), and a stale stamp is the same conflict. |
 | **framing** | Where you left a view: `SetFraming`, and `SetTile`'s text-window, content-zoom and url-frozen arms. No claim, no bump. |
 | **capture** | What the machine observed: a preview JPEG, a page title, a url trail. No claim, no bump. |
 | **layout** | Where things sit: place, clone, delete. No claim, no bump; last-writer-wins. |

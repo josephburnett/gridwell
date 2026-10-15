@@ -196,8 +196,8 @@ func TestPaneDispatch(t *testing.T) {
 		t.Fatalf("WriteContent(layout): %v", err)
 	}
 	after := getTile(t, p, pt.Id)
-	if after.Version != pt.Version {
-		t.Errorf("layout write bumped version %d -> %d (framing must not)", pt.Version, after.Version)
+	if after.Version != pt.Version+1 {
+		t.Errorf("layout write moved version %d -> %d, want one bump (a layout is the user's bytes)", pt.Version, after.Version)
 	}
 	if after.BlobId == pt.BlobId {
 		t.Errorf("layout write did not move the blob")

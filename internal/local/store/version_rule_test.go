@@ -18,13 +18,13 @@ func zoomOf(z float64) rpc.ContentZoom {
 }
 
 // The one pin on what a tile row's `version` means: the user's content bytes
-// changed. It is the optimistic-concurrency claim for those edits and nothing
-// else. Everything else the store writes to a tile row rides the same tile
+// changed, a pane tile's layout among them. It is the optimistic-concurrency
+// claim for those edits and nothing else. Everything else the store writes to a tile row rides the same tile
 // event and is last-writer-wins, with no claim to lose and no bump to make:
 //
 //   - captures, facts the server observed rather than edits the user made, so
 //     a capture must never outrank the user's own claim;
-//   - framing, from the viewport to a pane tile's layout;
+//   - framing, the viewport and the text window;
 //   - layout: place, move, resize, clone, delete. When two clients race,
 //     whoever moved it last moved it, and overlap, the one thing a race could
 //     corrupt, is refused server-side in the same transaction.
@@ -226,9 +226,8 @@ var versionCases = []versionCase{
 		},
 	},
 	{
-		// The one framing write that still sees a version, because a pane
-		// layout rides WriteContent's kind dispatch. This arm must ignore it.
-		name: "SetPaneLayout/workspace arrangement", subject: paneSubject, bumps: false, claims: false,
+		// A pane tile's layout is the user's bytes, claimed like a text body.
+		name: "SetPaneLayout/workspace arrangement", subject: paneSubject, bumps: true, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
 			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.Id), tile.Version,
 				[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
@@ -322,8 +321,8 @@ func TestVersionRuleClaim(t *testing.T) {
 			}
 		})
 	}
-	// The five content arms plus the pane arm that must ignore its version. A
-	// change to this number is a change to the rule.
+	// The six content arms, a pane tile's layout among them. A change to this
+	// number is a change to the rule.
 	if claimable != 6 {
 		t.Errorf("%d writes can be handed a version, want 6 — a new one appeared, or one lost its claim", claimable)
 	}

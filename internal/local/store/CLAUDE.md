@@ -115,7 +115,7 @@ every open. Never relax them.
 
 - Ids are `AUTOINCREMENT` and never reused.
 - `version` means the user's content bytes changed. `claimContentVersion`
-  (callers: `WriteContent`'s text and url arms, `RenameTile`) claims and
+  (callers: `WriteContent`'s text, url and pane arms, `RenameTile`) claims and
   `finishContentEdit` bumps. Everything else — captures, framing, layout —
   goes through `loadForWrite` + `emitTileChanged` and neither claims nor
   bumps. Those single-tile writes run in `withTileWrite`, so one that lands

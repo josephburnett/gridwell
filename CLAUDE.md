@@ -129,11 +129,18 @@ These were decided deliberately. Do not reverse one without a new decision.
   to absorb a schema change. Retired wire fields are `reserved`. The
   contract is `internal/local/store/CLAUDE.md`.
 - `version` means the user's content bytes: a text body, a typed url, a
-  typed name. Captures, framing, and layout carry no claim and cause no
-  bump. A url's address follows where the user went: the address a live view
+  typed name, a pane tile's layout. Captures, framing, and layout (where a
+  tile sits) carry no claim and cause no bump. A url's address follows where the user went: the address a live view
   settles on after a navigation, an ascent or a freeze is written as content
   and claims a version like a typed one, and landing where the row already
   points writes nothing (2026-09-30).
+- A pane tile's layout is the user's bytes, not framing (2026-10-14,
+  reversing its 2026-09-30 place among the unclaimed): a layout write claims
+  the version the arrangement was read at and bumps it when it lands, as a
+  text save does, and identical bytes write nothing. A stale one is refused
+  with the version conflict, and the client replaces the open tree with the
+  arrangement on disk, never merging and never overwriting it
+  (`pane.Levels.Claim`, `nav.GestureReconcileLevel`).
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function.
