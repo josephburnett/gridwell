@@ -190,7 +190,8 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	if _, err := v2.GetTile(ctx, bin.Id); err == nil {
 		t.Fatal("a retired tile still reads")
 	}
-	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id,
+		ClaimVersion: bin.Version, Claim: rpc.PlacementOf(bin)}); err != nil {
 		t.Fatalf("delete must be idempotent: %v", err)
 	}
 	// Recreation mints a fresh ROW. The entry's public id is its key's address
