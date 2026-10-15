@@ -299,11 +299,18 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 }
 
 // postFrozen is the one dispatcher for the standing freeze intent, keying one
-// outbox entry so the last gesture wins. after runs once, after the first
-// attempt, because the teardown must happen exactly once.
+// outbox entry so the last gesture wins. It claims the freeze the row showed
+// at the gesture, so one that moved under it is refused and re-read. after
+// runs once, after the first attempt, because the teardown must happen exactly
+// once.
 func (a *App) postFrozen(tileID string, frozen bool, after func()) {
 	var tile *gridwellv1.Tile
 	var once sync.Once
+	var claim *bool
+	if t := a.cachedTileByID(tileID); t != nil {
+		saw := t.UrlFrozen
+		claim = &saw
+	}
 	a.post(write{
 		label: "SetFrozen", gid: a.gridIDOfTile(tileID), id: tileID,
 		// Its own source, because the teardown's capture reports under
@@ -311,7 +318,7 @@ func (a *App) postFrozen(tileID string, frozen bool, after func()) {
 		source: "frozen", failText: "freeze state save failed",
 		call: func(ctx context.Context) error {
 			var err error
-			tile, err = a.cl.SetFrozen(ctx, tileID, frozen)
+			tile, err = a.cl.SetFrozen(ctx, tileID, frozen, claim)
 			return err
 		},
 		then: func() {

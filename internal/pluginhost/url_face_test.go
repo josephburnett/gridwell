@@ -181,7 +181,7 @@ func TestAPluginPageHoldsTheStandingFreeze(t *testing.T) {
 	ctx := context.Background()
 	page := faceOf(t, cl, grid, "page.html")
 	for _, want := range []bool{true, false} {
-		if _, err := cl.SetFrozen(ctx, page.Id, want); err != nil {
+		if _, err := cl.SetFrozen(ctx, page.Id, want, nil); err != nil {
 			t.Fatalf("SetFrozen(%v) on a plugin page: %v", want, err)
 		}
 		if got := faceOf(t, cl, grid, "page.html").UrlFrozen; got != want {

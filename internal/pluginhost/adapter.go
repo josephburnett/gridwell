@@ -850,7 +850,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	case req.ContentZoom != nil:
 		changed, err = a.mem.SetContentZoom(id, zoom)
 	case req.UrlFrozen != nil:
-		changed, err = a.mem.SetFrozen(id, *req.UrlFrozen)
+		changed, err = a.mem.SetFrozen(id, *req.UrlFrozen, req.ClaimFrozen)
 	default:
 		t := req.GetTile()
 		switch t.GetKind() {

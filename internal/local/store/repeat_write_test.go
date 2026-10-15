@@ -134,7 +134,7 @@ func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 		{"root framing", func() (bool, error) { return d.SetFraming(0, gid, f) }},
 		{"text view", func() (bool, error) { return d.SetTextView(text, 0, 0, 4, 4, rpc.TextModeRendered) }},
 		{"content zoom", func() (bool, error) { return d.SetContentZoom(text, zoomOf(1.25)) }},
-		{"standing freeze", func() (bool, error) { return d.SetFrozen(page, true) }},
+		{"standing freeze", func() (bool, error) { return d.SetFrozen(page, true, nil) }},
 		{"screenshot", func() (bool, error) { return d.SetURLPreview(page, []byte("shot")) }},
 	} {
 		t.Run(w.name, func(t *testing.T) {

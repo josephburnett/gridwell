@@ -213,9 +213,16 @@ var versionCases = []versionCase{
 		},
 	},
 	{
-		name: "SetFrozen/standing freeze", subject: urlSubject, bumps: false,
+		// The freeze claims the value it saw, not a version.
+		name: "SetFrozen/standing freeze", subject: urlSubject, bumps: false, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetFrozen(ctx, tile.Id, true)
+			saw := tile.UrlFrozen
+			_, err := s.SetFrozen(ctx, tile.Id, true, &saw)
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			saw := !tile.UrlFrozen
+			_, err := s.SetFrozen(ctx, tile.Id, true, &saw)
 			return err
 		},
 	},
@@ -341,10 +348,11 @@ func TestVersionRuleClaim(t *testing.T) {
 			}
 		})
 	}
-	// The six content arms, a pane tile's layout among them, the placement
-	// and the delete. A change to this number is a change to the rule.
-	if claimable != 8 {
-		t.Errorf("%d writes can be handed a claim, want 8 — a new one appeared, or one lost its claim", claimable)
+	// The six content arms, a pane tile's layout among them, the placement,
+	// the delete and the freeze. A change to this number is a change to the
+	// rule.
+	if claimable != 9 {
+		t.Errorf("%d writes can be handed a claim, want 9 — a new one appeared, or one lost its claim", claimable)
 	}
 }
 

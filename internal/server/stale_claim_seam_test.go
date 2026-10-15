@@ -127,3 +127,33 @@ func TestAStaleDeleteIsRefusedAndTheTileStands(t *testing.T) {
 		})
 	}
 }
+
+// Window one sees the page frozen by another and freezes it again over an
+// unfreeze it never saw: refused, the unfreeze standing.
+func TestAStaleFreezeIsRefusedAndTheNewerFreezeStateStands(t *testing.T) {
+	ctx := context.Background()
+	m := staleMesh(t)
+	for where, grid := range staleWhere(m) {
+		t.Run(where, func(t *testing.T) {
+			cl := m.nodes[meNode].cl
+			page, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: grid,
+				Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 40, Y: 0, W: 1, H: 1, UrlString: "https://example.com/"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			no, yes := false, true
+			if _, err := cl.SetFrozen(ctx, page.Id, true, &no); err != nil {
+				t.Fatalf("freeze: %v", err)
+			}
+			// Window one read it frozen here; window two unfreezes it.
+			if _, err := cl.SetFrozen(ctx, page.Id, false, &yes); err != nil {
+				t.Fatalf("unfreeze: %v", err)
+			}
+			_, err = cl.SetFrozen(ctx, page.Id, true, &yes)
+			wantConflict(t, "freeze over an unfreeze it never saw", err)
+			if got := m.tileIn(ctx, meNode, grid, page.Id); got.UrlFrozen || got.Version != page.Version {
+				t.Fatalf("frozen=%v version %d, want the unfreeze standing at version %d", got.UrlFrozen, got.Version, page.Version)
+			}
+		})
+	}
+}

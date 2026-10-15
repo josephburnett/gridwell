@@ -93,3 +93,27 @@ func TestAPluginRowsDeleteClaimsWhatTheWriterSaw(t *testing.T) {
 		t.Fatalf("delete of what the writer saw: %v, want it handed to the plugin", err)
 	}
 }
+
+func TestAPluginRowsFreezeClaimsWhatTheWriterSaw(t *testing.T) {
+	ctx := context.Background()
+	a, rows := claimAdapter(t)
+	page := rows[rpc.KindURL]
+	no, yes := false, true
+	frozen, err := a.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: page.Id, UrlFrozen: &yes, ClaimFrozen: &no})
+	if err != nil {
+		t.Fatalf("freeze: %v", err)
+	}
+	id := frozen.Tile.Id
+	if _, err := a.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: id, UrlFrozen: &no, ClaimFrozen: &yes}); err != nil {
+		t.Fatalf("unfreeze: %v", err)
+	}
+	_, err = a.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: id, UrlFrozen: &yes, ClaimFrozen: &yes})
+	wantConflict(t, "freeze over an unfreeze it never saw", err)
+	got, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tile.UrlFrozen || got.Tile.Version != 0 {
+		t.Fatalf("frozen=%v version %d, want the unfreeze standing at version 0", got.Tile.UrlFrozen, got.Tile.Version)
+	}
+}

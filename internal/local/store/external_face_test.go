@@ -74,7 +74,7 @@ func TestAPluginScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
 	if _, err := d.SetURLPreview(text, []byte("shot")); !errors.Is(err, ErrNotURLTile) {
 		t.Fatalf("SetURLPreview on a text row = %v, want ErrNotURLTile", err)
 	}
-	if _, err := d.SetFrozen(text, true); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := d.SetFrozen(text, true, nil); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("SetFrozen on a text row = %v, want ErrInvalidArgument", err)
 	}
 }
@@ -84,7 +84,7 @@ func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 	gid, _ := d.ContextID("root")
 	id := mintOne(t, d, pageEntry("a.html"))
 	for _, want := range []bool{true, false} {
-		if _, err := d.SetFrozen(id, want); err != nil {
+		if _, err := d.SetFrozen(id, want, nil); err != nil {
 			t.Fatal(err)
 		}
 		tiles, err := d.Overlay(gid, []*pluginv1.Entry{pageEntry("a.html")})
@@ -116,7 +116,7 @@ func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 		t.Fatal("the retired row's screenshot is still stored")
 	}
 	verifyRefcounts(t, st)
-	if _, err := d.SetFrozen(id, true); !errors.Is(err, ErrNotFound) {
+	if _, err := d.SetFrozen(id, true, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("SetFrozen on a retired row = %v, want ErrNotFound", err)
 	}
 }
