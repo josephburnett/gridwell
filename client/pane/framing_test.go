@@ -10,14 +10,14 @@ import (
 func TestFramingTargetPicksTheDoorway(t *testing.T) {
 	// A root grid: no doorway, the grid row owns it.
 	s := NewStack("home/1")
-	if got := s.FramingTarget(); got.TileID != "" || got.RootGridID != "home/1" || got.Content {
+	if got := s.FramingTarget(false); got.TileID != "" || got.RootGridID != "home/1" || got.Content {
 		t.Fatalf("root = %+v", got)
 	}
 
 	// A well descent: the well is the doorway, and it lives one level out.
 	s.Push(Frame{Door: "4"})
 	s.Push(Frame{Door: "9"})
-	got := s.FramingTarget()
+	got := s.FramingTarget(false)
 	if got.TileID != "9" || got.DoorAnchor != "home/1" ||
 		!reflect.DeepEqual(got.DoorPath, []string{"4"}) || got.RootGridID != "home/1" {
 		t.Fatalf("well = %+v", got)
@@ -26,7 +26,7 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 	// The link tile is the doorway and lives in the level below. The frame
 	// remembers it, so nothing searches the parent grid for it.
 	s.Push(Frame{GridID: "k3x9m2q/1", Door: "lnk"})
-	got = s.FramingTarget()
+	got = s.FramingTarget(false)
 	if got.TileID != "lnk" || got.DoorAnchor != "home/1" ||
 		!reflect.DeepEqual(got.DoorPath, []string{"4", "9"}) {
 		t.Fatalf("portal = %+v", got)
@@ -39,8 +39,32 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 
 	// A content descent settles its text scroll, not grid framing.
 	s.Push(Frame{Door: "77", Content: true})
-	if got := s.FramingTarget(); !got.Content || got.TileID != "77" {
+	if got := s.FramingTarget(false); !got.Content || got.TileID != "77" {
 		t.Fatalf("content = %+v", got)
+	}
+}
+
+// Inside a pane tile a grid place's view is the layout's: the owner still
+// names the row a frame with no view starts from, but says nothing is written
+// to it. A content place's scroll stays its tile row's.
+func TestFramingTargetInsideAPaneTileIsTheLayout(t *testing.T) {
+	s := NewStack("home/1")
+	if got := s.FramingTarget(true); !got.Layout || got.RootGridID != "home/1" {
+		t.Fatalf("root in a pane tile = %+v", got)
+	}
+	if got := s.FramingTarget(false); got.Layout {
+		t.Fatalf("root outside a pane tile = %+v, want its row", got)
+	}
+	s.Push(Frame{Door: "4"})
+	if got := s.FramingTarget(true); !got.Layout || got.TileID != "4" || got.DoorAnchor != "home/1" {
+		t.Fatalf("well in a pane tile = %+v", got)
+	}
+	if got := s.FramingTarget(false); got.Layout || got.TileID != "4" {
+		t.Fatalf("well outside a pane tile = %+v", got)
+	}
+	s.Push(Frame{Door: "77", Content: true})
+	if got := s.FramingTarget(true); got.Layout || !got.Content {
+		t.Fatalf("content in a pane tile = %+v, want its tile row", got)
 	}
 }
 

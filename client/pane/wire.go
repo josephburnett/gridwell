@@ -3,9 +3,10 @@
 //
 // It is a versioned DTO rather than json.Marshal(Tree) because LayoutV1's
 // bytes are forever (the golden fixture in wire_test.go pins them). A leaf
-// persists its whole place and no view: the framing rows own that
-// (Frame.ViewPending). Ids are stored in the owning node's namespace frame, so
-// a pane tile mounted over ssh restores against the reader's chain.
+// persists its whole place and the viewport of every grid frame in it: inside
+// a pane tile the blob owns those (2026-10-14), so two panes on one grid keep
+// two views. Ids are stored in the owning node's namespace frame, so a pane
+// tile mounted over ssh restores against the reader's chain.
 package pane
 
 import (
@@ -45,7 +46,18 @@ type (
 	LayoutSplit = panelayout.LayoutSplit
 	LayoutPane  = panelayout.LayoutPane
 	LayoutFrame = panelayout.LayoutFrame
+	LayoutView  = panelayout.LayoutView
 )
+
+// layoutView is the viewport the blob keeps for f: none for a content frame,
+// whose scroll its tile row owns, for a frame not yet shown, or for one still
+// at the view it adopted from its row.
+func layoutView(f Frame) (rpc.Framing, bool) {
+	if f.Content || !f.HasView() || f.View == f.adopted {
+		return rpc.Framing{}, false
+	}
+	return f.Live()
+}
 
 // EncodeLayout serializes the tree as a LayoutV1 blob. rel maps a client-view
 // id into the owning node's frame, answering false for a leaf looking outside
@@ -160,7 +172,25 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 	}
 	return &LayoutPane{
 		ID: bareID, Anchor: anchor, Path: path, TextFocus: textFocus, Place: place,
+		Views: encodeViews(p.Frames()),
 	}, true
+}
+
+// encodeViews is nil when no frame has a view, so a blob with none encodes as
+// it always did.
+func encodeViews(frames []Frame) []*LayoutView {
+	views := make([]*LayoutView, len(frames))
+	any := false
+	for i, f := range frames {
+		if v, ok := layoutView(f); ok {
+			views[i] = &LayoutView{Cx: v.Cx(), Cy: v.Cy(), Zoom: v.Zoom()}
+			any = true
+		}
+	}
+	if !any {
+		return nil
+	}
+	return views
 }
 
 // DecodeLayout parses a layout blob back into a Tree. abs prepends the
@@ -252,10 +282,25 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 	}
 }
 
+// decodeLeaf restores each frame's view. A top frame with none is pending
+// (Frame.ViewPending) and a lower one has none, so both fall back to the
+// framing row, as every blob older than Views does. Views that do not match
+// the place frame for frame are dropped whole.
 func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
-	p := &Pane{ID: idPrefix + lp.ID, Stack: decodePlace(lp, abs)}
-	p.View = rpc.Saved(zoomtrans.Origin)
-	p.ViewPending = true
+	s := decodePlace(lp, abs)
+	frames := s.Frames()
+	if len(lp.Views) == len(frames) {
+		for i, v := range lp.Views {
+			if v != nil && !frames[i].Content {
+				frames[i].SetView(v.Cx, v.Cy, v.Zoom)
+			}
+		}
+	}
+	p := &Pane{ID: idPrefix + lp.ID, Stack: StackOf(frames)}
+	if _, ok := p.Live(); !ok {
+		p.View = rpc.Saved(zoomtrans.Origin)
+		p.ViewPending = true
+	}
 	return p
 }
 

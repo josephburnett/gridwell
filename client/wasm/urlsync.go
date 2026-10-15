@@ -81,16 +81,17 @@ func (a *App) flushWellWheelSaves() {
 
 // persistPaneFraming writes pane p's current place framing, the same write an
 // ascent flushes. Which row owns it is pane.FramingTarget's projection. A
-// no-op when the place is unresolvable; the next settle retries.
+// no-op inside a pane tile, whose blob owns a grid's view, and when the place
+// is unresolvable; the next settle retries.
 func (a *App) persistPaneFraming(p *pane.Pane) {
-	own := p.FramingTarget()
+	own := p.FramingTarget(a.ws.Depth() > 0)
 	if own.Content {
 		a.persistTextScroll(p)
 		return
 	}
 	door, ok := a.framingDoor(own)
 	switch {
-	case !ok:
+	case own.Layout, !ok:
 	case door == nil:
 		a.persistFraming(p, nil, "", nil)
 	default:
@@ -125,7 +126,7 @@ func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
 	if !ok {
 		return pane.Frame{}, false
 	}
-	own := p.FramingTarget()
+	own := p.FramingTarget(a.ws.Depth() > 0)
 	if own.Content {
 		file, ok := a.descendedTile(p)
 		if !ok {

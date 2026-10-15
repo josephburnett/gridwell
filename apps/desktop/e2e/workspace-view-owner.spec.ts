@@ -3,10 +3,10 @@ import { tileAt, updateText, writeContent } from './oracle';
 import { settle } from './cadence';
 import { dumpViaDoor, TraceLine } from './trace';
 
-// A grid's view has one owner, its framing row, and the pane-tile layout blob
-// holds the arrangement only. These cross the seam from the gesture to the
-// node's own record of what it wrote, and from stored bytes to what a restored
-// leaf shows.
+// Inside a pane tile a grid's view is the layout blob's (2026-10-14) and a
+// text leaf's scroll is its tile row's. These cross the seam from the gesture
+// to the node's own record of what it wrote, and from stored bytes to what a
+// restored leaf shows.
 
 async function workspaceDepth(window: any): Promise<number> {
   return (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
@@ -33,7 +33,7 @@ function rpcStarts(lines: TraceLine[], verb: string): number {
   return lines.filter((l) => l.src === 'router' && l.kind === 'rpc' && l.msg === `${verb} start`).length;
 }
 
-test('a pan inside a pane tile writes the framing row alone, and the round trip returns to it', async ({
+test('a pan inside a pane tile writes the layout blob once and no framing row, and the round trip returns to it', async ({
   gw,
   home,
   window,
@@ -65,34 +65,36 @@ test('a pan inside a pane tile writes the framing row alone, and the round trip 
       timeout: 10_000,
     })
     .toBe(true);
-  await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs));
+  // The zoom settles on its own, so what follows counts the pan alone. The
+  // child is empty, so the pan press lands on no tile.
+  await gw.wheelAtFocusedCenter(-300);
+  await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs) * 2);
 
   const before = await dumpViaDoor(gw.origin, token);
   const layoutBefore = storeWrites(before, isLayout);
   const writeContentBefore = rpcStarts(before, 'WriteContent');
   const framingBefore = storeWrites(before, isFraming);
 
-  // The child is empty, so the pan press lands on no tile.
-  await gw.wheelAtFocusedCenter(-300);
   const zc = await gw.focused();
   await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy) - 1);
   const left = await gw.focused();
 
   await expect
-    .poll(async () => storeWrites(await dumpViaDoor(gw.origin, token), isFraming), {
-      message: 'the pan settles into SetFraming',
+    .poll(async () => storeWrites(await dumpViaDoor(gw.origin, token), isLayout), {
+      message: 'the pan settles into one layout write',
       timeout: 10_000,
     })
-    .toBeGreaterThan(framingBefore);
-  // Two more layout windows, so a layout write armed by the pan has had its
-  // chance to land.
-  await settle(window, c.workspaceSaveMs);
+    .toBeGreaterThan(layoutBefore);
+  // Two more windows of each, so any write armed by the pan has landed.
+  await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs) * 2);
   const after = await dumpViaDoor(gw.origin, token);
-  expect(storeWrites(after, isLayout), 'a pan wrote the layout blob').toBe(layoutBefore);
-  expect(rpcStarts(after, 'WriteContent'), 'a pan sent WriteContent').toBe(writeContentBefore);
+  expect(storeWrites(after, isLayout), 'one pan, one layout write').toBe(layoutBefore + 1);
+  expect(rpcStarts(after, 'WriteContent'), 'one pan, one WriteContent').toBe(writeContentBefore + 1);
+  expect(storeWrites(after, isFraming), 'a pan inside a pane tile wrote a framing row').toBe(framingBefore);
+  const layoutAfterPan = storeWrites(after, isLayout);
 
   // Out of the pane tile and back in: the blob is read again, and the leaf
-  // shows the grid where the framing row says it was left.
+  // shows the grid where the blob says it was left.
   await gw.leaveWorkspace();
   await expect.poll(() => workspaceDepth(window)).toBe(0);
   await gw.descendCell(wx, wy);
@@ -105,11 +107,11 @@ test('a pan inside a pane tile writes the framing row alone, and the round trip 
   expect(back.cy, 'center y round-tripped').toBeCloseTo(left.cy, 1);
 
   const end = await dumpViaDoor(gw.origin, token);
-  expect(storeWrites(end, isLayout), 'the round trip wrote the layout blob').toBe(layoutBefore);
+  expect(storeWrites(end, isLayout), 'the round trip wrote the layout blob').toBe(layoutAfterPan);
   await gw.leaveWorkspace();
 });
 
-test("a stored blob's viewport is not read: a leaf restores to its grid's framing row", async ({
+test("an old blob's retired viewport is not read: a leaf restores to its grid's framing row", async ({
   gw,
   window,
 }) => {
