@@ -86,48 +86,20 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
 
 // The read of a grid and an event about it can cross on the wire: the answer
 // is taken before a tile is created, the event arrives first, and the answer
-// lands after, over the fold. So a tile event owes the grid's read in flight
-// a re-ask (events.Owe); without that the stale answer stands and the tile
-// never shows. The hold makes the crossing deterministic.
+// lands after. So a tile event owes the grid's read in flight a re-ask
+// (events.Owe); without that the stale answer stands and the tile never
+// shows. The read held is a well preview's first read of its child grid, the
+// one the client makes however it navigates: a descent onto a grid it holds
+// reads nothing. The hold makes the crossing deterministic.
 test('a tile event that crosses its grid read on the wire still reaches the pane', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
-  await gw.openPalette();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
-  const child = well.childGridId as string;
   const origin = await hook<string>(window, 'origin()');
-
-  // The descent's read of the child grid is answered now and held; the
-  // answer predates the injection below. The well's preview already read the
-  // grid, so the event folds into the cache and the held answer would land
-  // over the fold.
-  let release: (() => Promise<void>) | null = null;
-  let childReads = 0;
-  await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
-    if (!(r.request().postData() ?? '').includes(child)) {
-      await r.continue();
-      return;
-    }
-    childReads++;
-    if (!release) {
-      const resp = await r.fetch();
-      const body = await resp.body();
-      release = () => r.fulfill({ response: resp, body });
-      return;
-    }
-    await r.continue();
-  });
-  try {
-    const c = await gw.cellCenter(a.id, cx, cy);
-    await window.mouse.click(c.x, c.y);
-    await expect
-      .poll(() => release !== null, { message: 'the child grid read is held on the wire', timeout: 10_000 })
-      .toBe(true);
-    const ok = await window.evaluate(
-      async ([org, gridId, wellId]: string[]) => {
+  const create = (gridId: string, tile: object) =>
+    window.evaluate(
+      async ([org, body]: string[]) => {
         const r = await fetch(`${org}/gridwell.v1.Gridwell/CreateTile`, {
           method: 'POST',
           headers: {
@@ -136,18 +108,47 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
             // The door refuses a page's call that names no build (Server.staleBuild).
             'Gridwell-Build': (window as any).__gridwellTest.build(),
           },
-          body: JSON.stringify({
-            gridId,
-            path: { wellIds: [wellId] },
-            tile: { kind: 'text', x: 0, y: 0, w: 1, h: 1 },
-            data: btoa('# crossed the read'),
-          }),
+          body,
         });
-        return r.ok;
+        return { ok: r.ok, tile: r.ok ? (await r.json()).tile : null };
       },
-      [origin, child, well.id],
+      [origin, JSON.stringify({ gridId, tile })],
     );
-    expect(ok, 'injection CreateTile succeeded').toBe(true);
+
+  // The first read of a grid other than home is the new well's preview read
+  // of its child: answered now, held, so its answer predates the injection.
+  let release: (() => Promise<void>) | null = null;
+  let heldID = '';
+  const reads: string[] = [];
+  await window.route('**/gridwell.v1.Gridwell/GetGrid', async (r: any) => {
+    const id = String(JSON.parse(r.request().postData() ?? '{}').gridId ?? '');
+    if (id === a.gridID || (release && id !== heldID)) {
+      await r.continue();
+      return;
+    }
+    reads.push(id);
+    if (!release) {
+      heldID = id;
+      const resp = await r.fetch();
+      const body = await resp.body();
+      release = () => r.fulfill({ response: resp, body });
+      return;
+    }
+    await r.continue();
+  });
+  let child = '';
+  let wellID = '';
+  try {
+    const made = await create(a.gridID, { kind: 'well', x: cx, y: cy, w: 1, h: 1 });
+    expect(made.ok, 'the well was created').toBe(true);
+    child = made.tile.childGridId;
+    wellID = made.tile.id;
+    await expect
+      .poll(() => release !== null, { message: "the preview's child grid read is held on the wire", timeout: 10_000 })
+      .toBe(true);
+    expect(heldID, 'the held read is the child grid').toBe(child);
+    const injected = await create(child, { kind: 'text', x: 0, y: 0, w: 1, h: 1 });
+    expect(injected.ok, 'injection CreateTile succeeded').toBe(true);
     // The node publishes the tile's event before it answers the create; the
     // oracle round trip below is the event's time to reach the client.
     expect((await gw.getGrid(child)).tiles?.length, 'the node holds the injected tile').toBe(1);
@@ -156,12 +157,19 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
     // The owed re-ask is the fix under test; the route stays up until it has
     // been let through, or tearing the route down fails that read.
     await expect
-      .poll(() => childReads, { message: 'the stale answer owed the grid a re-ask', timeout: 10_000 })
+      .poll(() => reads.filter((id) => id === child).length, {
+        message: 'the stale answer owed the grid a re-ask',
+        timeout: 10_000,
+      })
       .toBeGreaterThanOrEqual(2);
   } finally {
     await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
   }
+  await gw.waitIdle();
 
+  await gw.waitClientTileAt(a.id, cx, cy, wellID);
+  await gw.descendCell(cx, cy);
+  expect((await gw.focused()).gridID, 'descended into the child grid').toBe(child);
   await expect
     .poll(async () => (await gw.focused()).tileIds, {
       message: 'the injected tile reached the pane after the stale answer landed',
