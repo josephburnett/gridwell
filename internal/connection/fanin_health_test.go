@@ -84,6 +84,9 @@ func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
 	t.Cleanup(subCancel)
 	go func() {
 		_ = s.Subscribe(subCtx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+			if ev == nil {
+				return nil // the header
+			}
 			select {
 			case late <- ev:
 			default:
@@ -132,6 +135,9 @@ func TestASubscriberIsToldOfAConnectionThatCannotDial(t *testing.T) {
 	t.Cleanup(subCancel)
 	go func() {
 		_ = s.Subscribe(subCtx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+			if ev == nil {
+				return nil // the header
+			}
 			select {
 			case events <- ev:
 			default:
@@ -153,7 +159,7 @@ func TestASubscriberIsToldOfAConnectionThatCannotDial(t *testing.T) {
 	}
 }
 
-// flakySubscribeClient's stream fails its first failN dials, then lives until
+// flakySubscribeClient's stream fails its first failN dials, then listens until
 // its context ends: a tunnel that comes back.
 type flakySubscribeClient struct {
 	namespace.Namespace
@@ -161,9 +167,12 @@ type flakySubscribeClient struct {
 	failN int32
 }
 
-func (c *flakySubscribeClient) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+func (c *flakySubscribeClient) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	if c.calls.Add(1) <= c.failN {
 		return status.Error(codes.Unavailable, "tunnel down")
+	}
+	if err := send(nil); err != nil {
+		return err
 	}
 	<-ctx.Done()
 	return nil
@@ -209,6 +218,77 @@ func TestFanInRemoteRetriesOnTheDeclaredBackoff(t *testing.T) {
 			return
 		case <-time.After(5 * time.Second):
 			t.Fatal("the connection came back and the fan-in never published the recovery")
+		}
+	}
+}
+
+// lateListeningFar is a far node that comes back slowly: its first stream
+// fails, and the next starts listening only after attachAfter, sending its
+// header then. A change made before it listens reaches no stream.
+type lateListeningFar struct {
+	namespace.Namespace
+	attachAfter time.Duration
+	calls       atomic.Int32
+	listening   atomic.Pointer[func(*gridwellv1.Event) error]
+}
+
+func (f *lateListeningFar) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if f.calls.Add(1) == 1 {
+		return status.Error(codes.Unavailable, "tunnel down")
+	}
+	select {
+	case <-time.After(f.attachAfter):
+	case <-ctx.Done():
+		return nil
+	}
+	f.listening.Store(&send)
+	if err := send(nil); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return nil
+}
+
+func (f *lateListeningFar) change(gridID string) {
+	if send := f.listening.Load(); send != nil {
+		_ = (*send)(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: gridID}}})
+	}
+}
+
+// A connection is back when the far node says it is listening, and not
+// before: a change made the moment the recovery is published reaches the near
+// node, however long the far node took to start listening.
+func TestAConnectionIsBackOnlyOnceTheFarNodeListens(t *testing.T) {
+	was := namespace.DefaultBackoff
+	t.Cleanup(func() { namespace.DefaultBackoff = was })
+	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
+
+	s := newTestServer(t, openStore(t))
+	events, unsub := s.hub.Subscribe()
+	t.Cleanup(unsub)
+	far := &lateListeningFar{attachAfter: time.Second}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go s.fanInRemote(ctx, "rtb", far)
+
+	deadline := time.After(10 * time.Second)
+	for back := false; !back; {
+		select {
+		case ev := <-events:
+			back = ev.GetPluginHealth().GetHealthy()
+		case <-deadline:
+			t.Fatal("the far node came back and the connection never said so")
+		}
+	}
+	far.change("g")
+	for {
+		select {
+		case ev := <-events:
+			if ev.GetGridChanged().GetGridId() == "rtb/g" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("a change made once the connection read as back never arrived: it was back before the far node listened")
 		}
 	}
 }

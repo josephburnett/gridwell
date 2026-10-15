@@ -35,7 +35,10 @@ func (s *interestSink) Info(context.Context, *gridwellv1.InfoRequest) (*gridwell
 	return &gridwellv1.InfoResponse{}, nil
 }
 
-func (s *interestSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+func (s *interestSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }

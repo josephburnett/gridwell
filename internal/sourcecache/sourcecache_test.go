@@ -682,7 +682,10 @@ type streaming struct {
 	namespace.Namespace
 }
 
-func (streaming) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+func (streaming) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }

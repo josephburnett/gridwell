@@ -543,6 +543,9 @@ func (p *Plugin) endSession(ctx context.Context, key string) string {
 func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := p.st.SubscribeEvents()
 	defer cancel()
+	if err := send(nil); err != nil {
+		return err
+	}
 	for {
 		select {
 		case ev, ok := <-ch:

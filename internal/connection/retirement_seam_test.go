@@ -26,7 +26,10 @@ func (c landingClient) Info(context.Context, *gridwellv1.InfoRequest) (*gridwell
 	return &gridwellv1.InfoResponse{RootGridId: c.root}, nil
 }
 
-func (c landingClient) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+func (c landingClient) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return ctx.Err()
 }

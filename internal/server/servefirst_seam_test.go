@@ -53,7 +53,10 @@ func (f *farConnection) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.G
 	return resp, nil
 }
 
-func (f *farConnection) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+func (f *farConnection) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }

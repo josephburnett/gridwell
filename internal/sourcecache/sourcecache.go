@@ -265,18 +265,33 @@ func (s *Store) Front(upstream namespace.Namespace, opts Options) namespace.Name
 }
 
 // missing is the front over a store with no file. Every call passes through;
-// the stream opens with the health, once per subscriber, because a cache that
-// never opened has no transition to announce.
+// the stream tells the health once per subscriber, right after the upstream's
+// header, because a cache that never opened has no transition to announce and
+// an event ahead of the header would establish a stream not yet listening.
 type missing struct {
 	namespace.Namespace
 	detail string
 }
 
 func (m *missing) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
-	if err := send(rpc.HealthEvent("", false, m.detail)); err != nil {
-		return err
-	}
-	return m.Namespace.Subscribe(ctx, in, send)
+	told := false
+	return m.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
+		if !told {
+			told = true
+			if ev == nil {
+				if err := send(nil); err != nil {
+					return err
+				}
+			}
+			if err := send(rpc.HealthEvent("", false, m.detail)); err != nil {
+				return err
+			}
+			if ev == nil {
+				return nil
+			}
+		}
+		return send(ev)
+	})
 }
 
 func (s *Store) front(upstream namespace.Namespace, opts Options) *Layer {
@@ -841,15 +856,19 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 			}
 		}
 	}()
+	// The upstream's header is ours: this layer's own stream is attached.
 	err := c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
-		c.applyEvent(ctx, ev)
+		if ev != nil {
+			c.applyEvent(ctx, ev)
+		}
 		return emit(ev)
 	})
 	if status.Code(err) == codes.Unimplemented {
 		// An upstream with no stream of its own: ours stands alone until the
 		// subscriber goes away.
-		<-ctx.Done()
-		err = nil
+		if err = emit(nil); err == nil {
+			<-ctx.Done()
+		}
 	}
 	cancel()
 	<-own

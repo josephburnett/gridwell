@@ -71,7 +71,10 @@ func (f *framingSource) SetTile(context.Context, *pb.SetTileRequest) (*pb.TileRe
 	return nil, status.Error(codes.Unimplemented, "not in this fixture")
 }
 
-func (f *framingSource) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, _ func(*pb.Event) error) error {
+func (f *framingSource) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }

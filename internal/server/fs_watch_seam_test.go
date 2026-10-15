@@ -309,7 +309,10 @@ func (wideFar) GetTilePreview(context.Context, *gridwellv1.GetTilePreviewRequest
 	return &gridwellv1.GetTilePreviewResponse{}, nil
 }
 
-func (wideFar) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, _ func(*gridwellv1.Event) error) error {
+func (wideFar) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return nil
 }
