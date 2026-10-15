@@ -87,18 +87,13 @@ func TestSubscribeStreamsEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Subscribe + Recv happens in a goroutine because the underlying
-	// HTTP/1.1 streaming response only flushes headers once the
-	// server sends its first frame — so cl.Subscribe blocks until the
-	// CreateWell below fires. Concurrent setup avoids the deadlock.
 	doneCh := make(chan *gridwellv1.Event, 1)
 	errCh := make(chan error, 1)
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		stream, err := cl.Subscribe(ctx)
-		if err != nil {
-			errCh <- err
-			return
-		}
 		defer stream.Close()
 		ev, ok, err := stream.Recv()
 		if err != nil {
@@ -112,9 +107,6 @@ func TestSubscribeStreamsEvents(t *testing.T) {
 		doneCh <- ev
 	}()
 
-	// Give the goroutine a moment to land its subscribe request on the
-	// server's subscriber list before triggering the event.
-	time.Sleep(100 * time.Millisecond)
 	if _, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}}); err != nil {
 		t.Fatalf("create well: %v", err)
 	}

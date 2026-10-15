@@ -69,27 +69,25 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	theirs := mkFramingExt(-3, 4, 0.5)
-	events := make(chan *gridwellv1.Event, 64)
-	go func() {
-		es, err := h.localCl.Subscribe(ctx)
-		if err != nil {
-			return
+	es, err := h.localCl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer es.Close()
+	if _, err := h.remoteCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
+		RootGridId: rpc.HomeGrid(farHome), Cx: theirs.Cx(), Cy: theirs.Cy(), Zoom: theirs.Zoom()}); err != nil {
+		t.Fatalf("SetFraming on the far node: %v", err)
+	}
+	for {
+		ev, ok, err := es.Recv()
+		if err != nil || !ok {
+			t.Fatalf("the far node's framing event never reached the client under %s: %v", root, err)
 		}
-		defer es.Close()
-		for {
-			ev, ok, err := es.Recv()
-			if err != nil || !ok {
-				return
-			}
-			events <- ev
+		fc := ev.GetGridFramingChanged()
+		if fc.GetGridId() == root && rpc.Saved(theirs).SameAs(rpc.ViewOf(fc.GetViewCx(), fc.GetViewCy(), fc.GetViewZoom())) {
+			break
 		}
-	}()
-	awaitFraming(ctx, t, events, root, theirs, func() {
-		if _, err := h.remoteCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-			RootGridId: rpc.HomeGrid(farHome), Cx: theirs.Cx(), Cy: theirs.Cy(), Zoom: theirs.Zoom()}); err != nil {
-			t.Fatalf("SetFraming on the far node: %v", err)
-		}
-	})
+	}
 
 	h.stopFarNode()
 
@@ -139,29 +137,4 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 
 func framingOf(pl *gridwellv1.PluginInfo) rpc.View {
 	return rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom())
-}
-
-// awaitFraming makes the write until its event reaches the client under
-// gridID. The stream attaches behind a goroutine, so a write made before it
-// did is nobody's; the write is a last-writer-wins overwrite of one value, so
-// making it again changes nothing on the far node.
-func awaitFraming(ctx context.Context, t *testing.T, events <-chan *gridwellv1.Event, gridID string, f rpc.Framing, write func()) {
-	t.Helper()
-	for {
-		write()
-		deadline := time.After(250 * time.Millisecond)
-		for waiting := true; waiting; {
-			select {
-			case ev := <-events:
-				fc := ev.GetGridFramingChanged()
-				if fc.GetGridId() == gridID && rpc.Saved(f).SameAs(rpc.ViewOf(fc.GetViewCx(), fc.GetViewCy(), fc.GetViewZoom())) {
-					return
-				}
-			case <-deadline:
-				waiting = false
-			case <-ctx.Done():
-				t.Fatalf("the far node's framing event never reached the client under %s", gridID)
-			}
-		}
-	}
 }

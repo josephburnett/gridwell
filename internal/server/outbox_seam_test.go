@@ -228,12 +228,11 @@ func echoesOf(t *testing.T, cl *rpc.Client, tileID string, basis int64) (resp, e
 
 	rows := make(chan *gridwellv1.Tile, 32)
 	streamErr := make(chan error, 1)
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		stream, err := cl.Subscribe(ctx)
-		if err != nil {
-			streamErr <- err
-			return
-		}
 		defer stream.Close()
 		for {
 			ev, ok, err := stream.Recv()
@@ -246,7 +245,6 @@ func echoesOf(t *testing.T, cl *rpc.Client, tileID string, basis int64) (resp, e
 			}
 		}
 	}()
-	time.Sleep(300 * time.Millisecond) // the stream is fanned in before the writes
 
 	for i, body := range [][]byte{[]byte("first"), []byte("second")} {
 		tile, err := cl.WriteContent(ctx, tileID, rpc.ContentBasis{Version: basis}, body)

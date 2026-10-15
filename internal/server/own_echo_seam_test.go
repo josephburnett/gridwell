@@ -42,11 +42,11 @@ func TestALayoutWriteEchoLeadingItsResponseIsNotReadBack(t *testing.T) {
 	gen := c.BodyGen(pt.Id)
 
 	echoes := make(chan *gridwellv1.Tile, 32)
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		stream, err := cl.Subscribe(ctx)
-		if err != nil {
-			return
-		}
 		defer stream.Close()
 		for {
 			ev, ok, err := stream.Recv()
@@ -58,7 +58,6 @@ func TestALayoutWriteEchoLeadingItsResponseIsNotReadBack(t *testing.T) {
 			}
 		}
 	}()
-	time.Sleep(300 * time.Millisecond) // the stream is fanned in before the write
 
 	// As App.postPaneLayout sends it.
 	end := c.BeginWrite(pt.Id)
