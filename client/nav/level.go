@@ -89,6 +89,9 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 		Expand: expand, Tile: pt, Segments: []transition.Segment{seg}})
 
 	// The fetch arm.
+	if t := w.Level.tile(); t != nil && t.Id == pt.Id && w.current(t.GridId) {
+		return m.levelRow(ld, t, &pl)
+	}
 	m.awaitLevelTile(ld, &pl)
 	return pl.plan()
 }
@@ -99,10 +102,7 @@ func (m *Machine) bootLevel(tileID string, pl *planner) {
 	m.awaitLevelTile(&levelData{Boot: true, TileID: tileID, IDPrefix: "w1:"}, pl)
 }
 
-// awaitLevelTile reads the level's row, refetched rather than cached: a stale
-// BlobID of 0 would install the writable default and let the persister
-// overwrite a fresh arrangement, layout writes carrying no version to conflict
-// on.
+// awaitLevelTile reads the level's row when the cache cannot vouch for it.
 func (m *Machine) awaitLevelTile(ld *levelData, pl *planner) {
 	tok := m.mint(cont{Guard: Guard{Kind: GuardAlways}, Step: stepLevelTile,
 		Barrier: ld.Barrier, PaneID: ld.PaneID, Level: ld})
@@ -111,11 +111,14 @@ func (m *Machine) awaitLevelTile(ld *levelData, pl *planner) {
 }
 
 func (m *Machine) levelTile(c cont, r Result, pl *planner) Plan {
-	ld := c.Level
 	if !r.OK || r.Tile == nil {
-		return m.levelFailed(ld, "GetTile", r, pl)
+		return m.levelFailed(c.Level, "GetTile", r, pl)
 	}
-	t := r.Tile
+	return m.levelRow(c.Level, r.Tile, pl)
+}
+
+// levelRow opens the level off its row, read or held current.
+func (m *Machine) levelRow(ld *levelData, t *gridwellv1.Tile, pl *planner) Plan {
 	if rpc.LeafLink(t) && !ld.Followed {
 		// A pane link opens and writes back through the target's layout.
 		ld.Followed = true
