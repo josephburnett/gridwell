@@ -392,11 +392,21 @@ func (n *Namespace) write(verb, row string, fn func(ctx context.Context, tx *sql
 
 func tileRow(id int64) string { return "t/" + strconv.FormatInt(id, 10) }
 
+// rowWrite is write for one existing row of table that carries no claim
+// (store.withRowWrite): changed is false when it landed where the row already
+// was, and the caller, which announces plugin rows itself, then says nothing.
+func (n *Namespace) rowWrite(verb, table string, id int64, row string, fn func(ctx context.Context, tx *sql.Tx) error) (changed bool, err error) {
+	ctx := context.Background()
+	return n.s.withRowWrite(ctx, verb, table, id, func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		return fn(ctx, tx)
+	}, n.ns+":"+row)
+}
+
 // exec runs a single-row UPDATE on a live row of this namespace, mapping zero
 // rows to ErrNotFound: a retired row refuses mutation.
-func (n *Namespace) exec(verb, set string, tileID int64, args ...any) error {
+func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed bool, err error) {
 	args = append(args, tileID, n.ns)
-	return n.write(verb, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+	return n.rowWrite(verb, "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+` WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
 		if err != nil {
 			return err
@@ -413,18 +423,18 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) error {
 }
 
 // Place is the placement writeback; the grid never changes.
-func (n *Namespace) Place(tileID, x, y, w, h int64) error {
+func (n *Namespace) Place(tileID, x, y, w, h int64) (changed bool, err error) {
 	return n.exec("Place", placementSet, tileID, x, y, w, h)
 }
 
 // SetFraming persists framing into this namespace's memory, the one writer of
 // the one shape (framing.go). Exactly one of tileID and rootGridID is set.
-func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) error {
-	row := tileRow(tileID)
+func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed bool, err error) {
+	table, id, row := "tiles", tileID, tileRow(tileID)
 	if tileID == 0 {
-		row = "f/" + strconv.FormatInt(rootGridID, 10)
+		table, id, row = "grids", rootGridID, "f/"+strconv.FormatInt(rootGridID, 10)
 	}
-	return n.write("SetFraming", row, func(ctx context.Context, tx *sql.Tx) error {
+	return n.rowWrite("SetFraming", table, id, row, func(ctx context.Context, tx *sql.Tx) error {
 		k, err := updateFraming(ctx, tx, n.ns, tileID, rootGridID, f, n.s.now().UnixNano())
 		if err != nil {
 			return err
@@ -437,7 +447,7 @@ func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) error {
 }
 
 // SetTextView persists a text tile's framed window.
-func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) error {
+func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) (changed bool, err error) {
 	var m any
 	if mode != "" {
 		m = mode
@@ -446,7 +456,7 @@ func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) error
 }
 
 // SetContentZoom persists the per-tile content scale.
-func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) error {
+func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) (changed bool, err error) {
 	return n.exec("SetContentZoom", contentZoomSet, tileID, zoom.Float())
 }
 

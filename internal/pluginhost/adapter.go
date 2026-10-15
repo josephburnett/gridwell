@@ -802,7 +802,8 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err != nil {
 		return nil, err
 	}
-	if err := a.mem.Place(id, req.X, req.Y, req.W, req.H); err != nil {
+	changed, err := a.mem.Place(id, req.X, req.Y, req.W, req.H)
+	if err != nil {
 		return nil, err
 	}
 	// A placement is part of the grid's answer, so it announces the grid.
@@ -810,7 +811,9 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err != nil {
 		return nil, err
 	}
-	a.emitGridChanged(resp.GetTile().GetGridId())
+	if changed {
+		a.emitGridChanged(resp.GetTile().GetGridId())
+	}
 	return resp, nil
 }
 
@@ -842,18 +845,19 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	if err != nil {
 		return nil, err
 	}
+	var changed bool
 	switch {
 	case req.ContentZoom != nil:
-		err = a.mem.SetContentZoom(id, zoom)
+		changed, err = a.mem.SetContentZoom(id, zoom)
 	case req.UrlFrozen != nil:
-		err = a.mem.SetFrozen(id, *req.UrlFrozen)
+		changed, err = a.mem.SetFrozen(id, *req.UrlFrozen)
 	default:
 		t := req.GetTile()
 		switch t.GetKind() {
 		case rpc.KindText:
-			err = a.mem.SetTextView(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode())
+			changed, err = a.mem.SetTextView(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode())
 		case rpc.KindURL:
-			err = a.mem.SetURLPreview(id, req.Preview)
+			changed, err = a.mem.SetURLPreview(id, req.Preview)
 		default:
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
@@ -861,23 +865,25 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
-	t, err := a.changedTile(ctx, id)
+	t, err := a.changedTile(ctx, id, changed)
 	if err != nil {
 		return nil, err
 	}
 	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
-// changedTile reads back and announces a write to one tile row that changes
-// no listing, so a client applies it in place.
-func (a *Adapter) changedTile(ctx context.Context, id int64) (*gridwellv1.Tile, error) {
+// changedTile reads back a write to one tile row that changes no listing and,
+// when it changed the row, announces it, so a client applies it in place.
+func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool) (*gridwellv1.Tile, error) {
 	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
 	if err != nil {
 		return nil, err
 	}
-	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: resp.GetTile()},
-	}})
+	if changed {
+		a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
+			TileChanged: &gridwellv1.TileChanged{Tile: resp.GetTile()},
+		}})
+	}
 	return resp.GetTile(), nil
 }
 
@@ -898,20 +904,24 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 		if err != nil {
 			return nil, err
 		}
-		if err := a.mem.SetFraming(0, gid, f); err != nil {
+		changed, err := a.mem.SetFraming(0, gid, f)
+		if err != nil {
 			return nil, err
 		}
-		a.hub.Publish(rpc.FramingEvent(rpc.EntryGridID(ckey), f))
+		if changed {
+			a.hub.Publish(rpc.FramingEvent(rpc.EntryGridID(ckey), f))
+		}
 		return &gridwellv1.SetFramingResponse{}, nil
 	}
 	id, err := a.mint(ctx, req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.mem.SetFraming(id, 0, f); err != nil {
+	changed, err := a.mem.SetFraming(id, 0, f)
+	if err != nil {
 		return nil, err
 	}
-	t, err := a.changedTile(ctx, id)
+	t, err := a.changedTile(ctx, id, changed)
 	if err != nil {
 		return nil, err
 	}

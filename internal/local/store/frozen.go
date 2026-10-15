@@ -35,9 +35,8 @@ func (s *Store) SetFrozen(ctx context.Context, tileIDStr string, frozen bool) (*
 
 // SetFrozen is the standing freeze on a plugin's tile, the write home's rows
 // take.
-func (n *Namespace) SetFrozen(tileID int64, frozen bool) error {
-	ctx := context.Background()
-	return n.s.withMutation(ctx, "SetFrozen", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+func (n *Namespace) SetFrozen(tileID int64, frozen bool) (changed bool, err error) {
+	return n.rowWrite("SetFrozen", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		return n.s.setFrozenTx(ctx, tx, n.ns, tileID, frozen)
 	})
 }

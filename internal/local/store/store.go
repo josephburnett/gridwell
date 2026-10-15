@@ -299,7 +299,7 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidArgument, err)
 	}
-	return s.withRowWrite(ctx, "SetFraming/root", "grids", gridID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	_, err = s.withRowWrite(ctx, "SetFraming/root", "grids", gridID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := updateFraming(ctx, tx, "", 0, gridID, f, s.now().Unix())
 		if err != nil {
 			return err
@@ -310,6 +310,7 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 		*events = append(*events, rpc.FramingEvent(req.RootGridId, f))
 		return nil
 	})
+	return err
 }
 
 func rootGridID(ctx context.Context, q gridReader) (int64, error) {
@@ -392,16 +393,19 @@ var errUnchanged = errors.New("store: write changed nothing")
 // withTileWrite is withRowWrite on one existing tile row: framing, layout, a
 // capture.
 func (s *Store) withTileWrite(ctx context.Context, verb string, tileID int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
-	return s.withRowWrite(ctx, verb, "tiles", tileID, fn)
+	_, err := s.withRowWrite(ctx, verb, "tiles", tileID, fn)
+	return err
 }
 
 // withRowWrite is withMutation for a write without a claim to one existing
 // row of table. One that lands where the row already is rolls back, so it
 // neither stamps updated_at nor tells a subscriber, because every open view
 // would re-read and re-settle against a change that is not one. The row is
-// compared whole, columns off the wire included.
-func (s *Store) withRowWrite(ctx context.Context, verb, table string, id int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {
-	return s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+// compared whole, columns off the wire included. changed is false for that
+// roll-back, so a caller announcing the write itself can stay silent too.
+func (s *Store) withRowWrite(ctx context.Context, verb, table string, id int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error, rows ...string) (changed bool, err error) {
+	err = s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		changed = false
 		before, err := rowImage(ctx, tx, table, id)
 		if err != nil {
 			return err
@@ -416,8 +420,10 @@ func (s *Store) withRowWrite(ctx context.Context, verb, table string, id int64, 
 		if after == before {
 			return errUnchanged
 		}
+		changed = true
 		return nil
-	})
+	}, rows...)
+	return changed && err == nil, err
 }
 
 // rowImage is a row of table ("tiles" or "grids") as one comparable value,
