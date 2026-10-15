@@ -76,8 +76,8 @@ func (b RowBasis) blobDiffers(blob int64) bool {
 }
 
 // behind reports that row n names bytes the entry does not hold. Version
-// orders content edits, and a pane layout mints a blob without a bump, so
-// within one version the blob decides. A row with no claim has no fact that
+// orders content edits, a pane layout's among them; within one version the
+// blob decides. A row with no claim has no fact that
 // orders its bytes: where its source names them (Tile.content_stamp) the
 // stamp decides, so the echo of the entry's own save is not news; where it
 // names none, told, the event saying they changed

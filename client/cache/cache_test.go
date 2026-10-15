@@ -308,9 +308,9 @@ func TestRemoveTileFreesContent(t *testing.T) {
 	}
 }
 
-// A pane tile's layout never bumps version, so a new blob at the same version
+// A row with no claim to order its bytes, the same version under a new blob,
 // must invalidate the body; the content fetch short-circuits on a cache hit
-// and would serve the old layout forever.
+// and would serve the old bytes forever.
 func TestApplyBlobChangeDropsContent(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
@@ -322,7 +322,7 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 8},
 	}}})
 	if !changed {
-		t.Fatal("same-version blob change must apply (framing writes never bump)")
+		t.Fatal("same-version blob change must apply")
 	}
 	if _, ok := c.TileContent("10"); ok {
 		t.Fatal("stale content bytes survived a blob change — the preview would never repaint")
@@ -745,3 +745,29 @@ func mustRow(t *testing.T, c *Cache, gridID, tileID string) *gridwellv1.Tile {
 
 // vb is a versioned body's basis.
 func vb(v int64) rpc.ContentBasis { return rpc.ContentBasis{Version: v} }
+
+// A layout write bumps the version, so a response older than a foreign row the
+// cache already holds says nothing new: this client's blob must not land over
+// the newer arrangement, and the body it filed ages against that row.
+func TestALayoutResponseOlderThanAForeignRowIsNotFolded(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
+		{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 7},
+	})
+	end := c.BeginWrite("10")
+	// The foreign writer's echo lands first, one version past this write's.
+	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
+		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 5, BlobId: 9},
+	}}})
+	own := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 4, BlobId: 8}
+	c.PutSavedContent(own, []byte(`{"v":1,"own":true}`))
+	c.PutWriteResponse("1", own, WroteBody)
+	end()
+	g, _ := c.Grid("1")
+	if got := g.Tiles["10"]; got.Version != 5 || got.BlobId != 9 {
+		t.Fatalf("cached row %d/%d, want the foreign 5/9", got.Version, got.BlobId)
+	}
+	if _, ok := c.TileContent("10"); ok {
+		t.Fatal("this client's older layout stayed cached as the body of the newer row")
+	}
+}
