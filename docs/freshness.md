@@ -121,7 +121,9 @@ one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
 retries `Info` with backoff and hands off to `fanInEvents`, which re-dials
 the namespace's stream forever and reports the down/up transitions as
 `EventPluginHealth` through `reportHealth` — down on the first failure, up
-on recovery, never once per retry. Every relayed event is re-qualified by
+on recovery, never once per retry. Once every namespace's stream has settled the
+stream sends its header, so a client knows the node is listening before any
+event (`namespace.Namespace.Subscribe`'s `send(nil)`). Every relayed event is re-qualified by
 `qualifyEvent` → `rpc.QualifyEventIDs`: one segment prepended per hop, the
 health uuid included, so a far namespace's health stays addressable here.
 A source the user disabled (`plugin.Registry.Disable`) is told as disabled
@@ -203,8 +205,13 @@ tile content, url previews, and the + menu's per-node context. A deduped read th
 beside its own cache — was bounded by nothing and cancelled by nothing, so a
 request the network swallowed held its key for the life of the page and the
 face it fed never loaded, never retried, and never said a word.
-`retry.Reconnect` marks a gap on any stream break and tells `App.startSSE` to
-fire `retryKick(true, cache.EverySource)` on the next successful subscribe: clear
+`retry.Reconnect` marks a gap on any stream break and tells `retry.Events`,
+the loop `App.startSSE` runs, to fire `retryKick(true, cache.EverySource)` on
+the next stream that opens. A stream is open at its header, which the node
+sends once every namespace's stream has settled (`router.Subscribe`), not at
+its first event: a gap's resync must not wait for news the gap may have been
+the last of. The kick is unconditional, never skipped for a grid the cache
+already holds, since a gap leaves every held grid in doubt: clear
 the failure latches, cancel every fetch set, refetch every named and
 known grid, then `syncContentOutbox` and drain. `retryBackstop` runs
 `retryKick(false, …)` every `retry.Backstop` while anything is parked, and
@@ -452,9 +459,9 @@ The version interlock, the outbox park, and the drain.
    placements; `cache.Place` holds the placement against every older row
    instead, until the stream carries it (the stream is ordered, so nothing
    older follows) or, once the write has landed, a grid read answers.
-9. The drain. `startSSE` sets `gap` on any stream error and on a clean EOF —
-   Subscribe has no cursor, so both are gaps — and calls
-   `retryKick(true, cache.EverySource)` on the next successful subscribe. The
+9. The drain. `retry.Events` sets `gap` on any stream error and on a clean
+   EOF — Subscribe has no cursor, so both are gaps — and calls
+   `retryKick(true, cache.EverySource)` once the next stream opens. The
    drain itself is never scoped by a source: a parked write is the user's
    bytes and is owed a verdict whatever flapped.
    `syncContentOutbox` re-derives the content
@@ -469,7 +476,7 @@ The version interlock, the outbox park, and the drain.
 ## What is deliberately NOT guaranteed
 
 **An event gap loses events.** `Subscribe` has no cursor. A break on either
-side — the client's stream (`startSSE`'s `gap`) or the server's re-dial
+side — the client's stream (`retry.Events`' `gap`) or the server's re-dial
 (`fanInEvents`) — loses whatever happened in the window, and nothing replays
 it. The cure is blunt resync: `retryKick(true, cache.EverySource)` refetches
 every known grid. Blunt on purpose, and only here — the gap names no source,
@@ -558,6 +565,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A refused Watch is its own sticky notice beside the dark one, each clears on its own field, and the field alone resyncs nothing | `client/events/events_test.go:TestReactHealthTable`, `client/events/resync_test.go`; live, `apps/desktop/e2e/live-updates-off.spec.ts` |
 | A flap resyncs the flapping source's grids and NOBODY else's, including a chain through it | `client/cache/resync_test.go:TestAFlapResyncsOnlyTheGridsItsSourceServes`, `TestAConnectionsFlapOwnsEveryGridChainedThroughIt`; the chain rule at its owner, `api/rpc/segment_test.go:TestChainedThroughIsTheWholeChainNotOneNodesPeel` |
 | The gap paths keep their breadth: `cache.EverySource` is the whole cache | `client/cache/resync_test.go:TestEverySourceIsTheWholeCache` |
+| A change made while the client's stream is broken reaches it with no later event: the stream opens at the node's header and the resync re-reads | `internal/server/resync_seam_test.go:TestAChangeDuringAStreamBreakReachesTheClientWithoutAnotherEvent`, `client/retry/events_test.go`, `internal/namespace/roundtrip_test.go:TestSubscribeHeaderRoundTrips` |
 | A flap cancels only the fetches that rode through it | `client/inflight/inflight_test.go:TestCancelIfLeavesTheFetchesThatKeptTheirLink` |
 | The menu claim's scope — a source's own name, and every node behind it | `client/cache/resync_test.go:TestReachesCoversTheSourceItselfAndEveryNodeBehindIt` |
 | A swallowed menu read does not latch a remote pane's + menu empty: it gives up, surfaces, and the menu fills itself in | `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a menu read the network swallows does not latch the remote menu empty") |

@@ -1079,6 +1079,8 @@ func (a *App) disableSource(source string) {
 // outbox drain is never scoped, because a parked write is the user's bytes.
 func (a *App) retryKick(resync bool, source string) {
 	if resync {
+		// Unconditional: what the source missed telling is unknown, so no
+		// "the cache already holds it" check may skip a grid here.
 		served := func(id string) bool { return cache.ServedBy(id, source) }
 		// Failure latches are gap state, asked again by name. The menu set's
 		// predicate is cache.Reaches: a connection's flap covers the nodes behind it.

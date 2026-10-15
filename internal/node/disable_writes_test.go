@@ -67,7 +67,7 @@ func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 	}
 
 	// The grid is on screen: the stream is open and the set names it. The
-	// stream opens on its first event, so it is read beside the rest.
+	// stream is read beside the rest.
 	changed := make(chan string, 64)
 	go func() {
 		stream, err := cl.Subscribe(ctx)

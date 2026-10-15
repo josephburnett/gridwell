@@ -87,7 +87,18 @@ func (g *grpcServer) ServeContent(req *pb.ServeContentRequest, stream pb.Gridwel
 }
 
 func (g *grpcServer) Subscribe(req *pb.SubscribeRequest, stream pb.Gridwell_SubscribeServer) error {
-	return g.ns.Subscribe(stream.Context(), req, stream.Send)
+	sent := false
+	return g.ns.Subscribe(stream.Context(), req, func(ev *pb.Event) error {
+		if ev == nil && sent {
+			// The first event already carried the header.
+			return nil
+		}
+		sent = true
+		if ev == nil {
+			return stream.SendHeader(nil)
+		}
+		return stream.Send(ev)
+	})
 }
 
 func (g *grpcServer) WriteContent(stream pb.Gridwell_WriteContentServer) error {

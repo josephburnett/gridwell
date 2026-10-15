@@ -77,7 +77,7 @@ func TestADisabledPluginIsStoppedAndNeverRespawned(t *testing.T) {
 	if children(t) != 1 {
 		t.Fatal("the fs subprocess is not running before the disable")
 	}
-	// The stream opens on its first event, so it is read beside the verb.
+	// The stream is read beside the verb.
 	told := make(chan *gridwellv1.EventPluginHealth, 1)
 	go func() {
 		stream, err := cl.Subscribe(ctx)

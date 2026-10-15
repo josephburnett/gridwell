@@ -277,7 +277,9 @@ func TestSubscribeStreamRoundTrips(t *testing.T) {
 	got := make(chan *pb.Event, 1)
 	go func() {
 		_ = ns.Subscribe(ctx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
-			got <- ev
+			if ev != nil {
+				got <- ev
+			}
 			return nil
 		})
 	}()
@@ -335,4 +337,38 @@ func TestOpenShellBidiRoundTrips(t *testing.T) {
 			t.Fatalf("no shell frame for %q", want)
 		}
 	}
+}
+
+// The header crosses the codec as a header: a silent far stream is open on
+// the near side before any event, so a near read after it misses nothing.
+func TestSubscribeHeaderRoundTrips(t *testing.T) {
+	ns := loopback(t, headerOnly{})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got := make(chan *pb.Event, 1)
+	go func() {
+		_ = ns.Subscribe(ctx, &pb.SubscribeRequest{}, func(ev *pb.Event) error {
+			got <- ev
+			return nil
+		})
+	}()
+	select {
+	case ev := <-got:
+		if ev != nil {
+			t.Fatalf("the header crossed as the event %v", ev)
+		}
+	case <-ctx.Done():
+		t.Fatal("no header crossed the codec")
+	}
+}
+
+// headerOnly says it is listening and nothing else.
+type headerOnly struct{ namespace.Unimplemented }
+
+func (headerOnly) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return nil
 }
