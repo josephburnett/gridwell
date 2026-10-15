@@ -82,7 +82,7 @@ func TestAMemoryAnswerKeepsEveryRowAndReportsTheReason(t *testing.T) {
 			grid = plugintest.LandingOf(t, p)
 		}
 	}
-	// Subscribe answers with its first event, so it is opened aside.
+	// The stream is read for the life of the test, so it is opened aside.
 	health := make(chan *gridwellv1.EventPluginHealth, 16)
 	go func() {
 		stream, err := cl.Subscribe(ctx)

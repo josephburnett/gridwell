@@ -104,3 +104,36 @@ func TestFollowEstablishesASilentStreamAfterSettleTime(t *testing.T) {
 		t.Fatalf("a healthy silent subscription never established; SettleTime is %v", SettleTime)
 	}
 }
+
+// A header establishes at once, as a first event does, and is not an event.
+func TestFollowEstablishesOnTheHeaderAndDeliversNoEvent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	ns := followNS{run: func(ctx context.Context, send func(*pb.Event) error) error {
+		if err := send(nil); err != nil {
+			return err
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	est := make(chan time.Duration, 1)
+	heard := make(chan *pb.Event, 1)
+	start := time.Now()
+	go func() {
+		_ = Follow(ctx, ns, &pb.SubscribeRequest{}, func(ev *pb.Event) error { heard <- ev; return nil },
+			func() { est <- time.Since(start) })
+	}()
+	select {
+	case at := <-est:
+		if at >= SettleTime {
+			t.Fatalf("established after %v — a header must not wait out SettleTime (%v)", at, SettleTime)
+		}
+	case <-time.After(4 * SettleTime):
+		t.Fatal("a header arrived and the subscription never established")
+	}
+	select {
+	case ev := <-heard:
+		t.Fatalf("the header reached onEvent as %v", ev)
+	case <-time.After(SettleTime):
+	}
+}

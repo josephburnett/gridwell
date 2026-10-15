@@ -83,8 +83,8 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// One live subscription, as the real client holds one: it carries the
 	// connection's health through the source cache and triggers the
 	// whole-source walk. It opens before the tiles exist, so that walk cannot
-	// have warmed anything below, and lives in a goroutine because over
-	// HTTP/1.1 the call does not return until the first event arrives.
+	// have warmed anything below, and lives in a goroutine because it reads
+	// for the life of the test.
 	subCtx, subCancel := context.WithCancel(ctx)
 	defer subCancel()
 	health := make(chan *gridwellv1.Event, 64)

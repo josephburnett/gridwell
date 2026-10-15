@@ -66,8 +66,7 @@ func (s *interestSink) await(t *testing.T, want []string) {
 }
 
 // subscribed opens cl's event stream and returns its close. The open is not
-// awaited: a stream with nothing to say has not answered yet, and a set sent
-// before the node sees the stream is held until it does.
+// awaited: a set sent before the node sees the stream is held until it does.
 func subscribed(cl *rpc.Client) func() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {

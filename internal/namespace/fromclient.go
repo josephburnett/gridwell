@@ -98,6 +98,12 @@ func (f fromClient) Subscribe(ctx context.Context, req *pb.SubscribeRequest, sen
 	if err != nil {
 		return err
 	}
+	// A stream that ends unopened has no header, and Recv says how.
+	if md, _ := up.Header(); md != nil {
+		if err := send(nil); err != nil {
+			return err
+		}
+	}
 	return pump(up.Recv, send)
 }
 

@@ -75,7 +75,10 @@ type Namespace interface {
 	ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error)
 	// OpenShell's first recv binds the tile id and the initial size.
 	OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error
-	// Subscribe streams this namespace's change events until ctx ends.
+	// Subscribe streams this namespace's change events until ctx ends. A
+	// send(nil) is the stream's header, carrying no event: the namespace is
+	// listening, so a read after it misses no change. A codec writes it as its
+	// transport's header; Follow takes it as established.
 	Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error
 	// SetInterest names the grids someone is showing. At the node's door it
 	// is one session's set (interest.Book); from the node to one of its
