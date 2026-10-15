@@ -264,26 +264,29 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	// Hop 1: the transport's own stream carries the remote's events with
 	// the connection segment prepended.
 	transportEvents := make(chan *gridwellv1.Event, 32)
+	listening := make(chan struct{})
 	go func() {
-		_ = h.tClient.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+		_ = namespace.Follow(ctx, h.tClient, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
 			select {
 			case transportEvents <- ev:
 			case <-ctx.Done():
 			}
 			return nil
-		})
+		}, func() { close(listening) })
 	}()
+	select {
+	case <-listening:
+	case <-ctx.Done():
+		t.Fatal("hop 1 (transport stream) never said it is listening")
+	}
 	// Hop 2: the local door's stream carries them under the node's id.
-	// (Connect's server-stream call returns only once headers flush — on
-	// the first event — so it runs in a goroutine, like server_test does.)
 	doorEvents := make(chan *gridwellv1.Event, 16)
 	doorErr := make(chan error, 1)
+	es, err := h.localCl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		es, err := h.localCl.Subscribe(ctx)
-		if err != nil {
-			doorErr <- err
-			return
-		}
 		defer es.Close()
 		for {
 			ev, ok, err := es.Recv()
@@ -294,7 +297,6 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 			doorEvents <- ev
 		}
 	}()
-	time.Sleep(300 * time.Millisecond)
 	if _, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}); err != nil {
 		t.Fatal(err)
 	}
@@ -339,12 +341,12 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 
 	health := make(chan *gridwellv1.EventPluginHealth, 8)
 	doorErr := make(chan error, 1)
+	// The down transition is published once, so be listening before causing it.
+	es, err := h.localCl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		es, err := h.localCl.Subscribe(ctx)
-		if err != nil {
-			doorErr <- err
-			return
-		}
 		defer es.Close()
 		for {
 			ev, ok, err := es.Recv()
@@ -357,9 +359,6 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 			}
 		}
 	}()
-	// The stream registers asynchronously, and the down transition is
-	// published once — so be attached before causing it.
-	time.Sleep(500 * time.Millisecond)
 	h.cutFarStream()
 
 	for {
@@ -471,14 +470,12 @@ func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
 
 	const subscribers = 4
 	ids := make(chan string, subscribers*8)
-	errs := make(chan error, subscribers)
 	for i := 0; i < subscribers; i++ {
+		es, err := h.localCl.Subscribe(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
 		go func() {
-			es, err := h.localCl.Subscribe(ctx)
-			if err != nil {
-				errs <- err
-				return
-			}
 			defer es.Close()
 			for {
 				ev, ok, err := es.Recv()
@@ -495,7 +492,6 @@ func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
 			}
 		}()
 	}
-	time.Sleep(500 * time.Millisecond) // every subscriber is fanned in
 
 	if _, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}); err != nil {
 		t.Fatal(err)
@@ -513,8 +509,6 @@ func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
 				t.Fatalf("subscriber saw id %q — a segment was applied twice (an event mutated in place)", id)
 			}
 			seen++
-		case err := <-errs:
-			t.Fatalf("subscribe: %v", err)
 		case <-ctx.Done():
 			t.Fatalf("only %d of %d subscribers saw the event", seen, subscribers)
 		}

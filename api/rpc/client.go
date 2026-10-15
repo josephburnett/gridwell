@@ -247,7 +247,8 @@ func (c *Client) DisableSource(ctx context.Context, namespace string) error {
 	return err
 }
 
-// Subscribe opens the event stream, which closes when ctx is cancelled.
+// Subscribe opens the event stream, which closes when ctx is cancelled. It
+// returns once the node says it is listening, so a change made after it is told.
 func (c *Client) Subscribe(ctx context.Context) (*EventStream, error) {
 	s, err := c.cl.Subscribe(ctx, connect.NewRequest(&pb.SubscribeRequest{Session: c.session}))
 	if err != nil {

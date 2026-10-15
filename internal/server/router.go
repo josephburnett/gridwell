@@ -613,22 +613,20 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // told as EventPluginHealth; a disabled source is told so first, and only so
 // after (asSwitched). Once every namespace's stream has settled the node is
 // listening, and only then: the header goes out, which is what a client's
-// resync waits on (retry.Events), and its session's interest is counted
-// (interest.Book.Open), since interest is what starts a source watching and a
-// change it reports before this stream hears it would reach no one.
+// Subscribe returns on and its resync waits for (retry.Events), and its
+// session's interest is counted (interest.Book.Open), since interest is what
+// starts a source watching and a change it reports before this stream hears
+// it would reach no one.
 func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	subCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Attached before the record is read, so a disable racing this open is
-	// told at least once.
+	// told at least once. Nothing is sent before the header: the first word
+	// flushes the response, and a client takes that for listening.
 	off, detach := rt.srv.switchedOff.Subscribe()
 	defer detach()
-	for _, ns := range rt.srv.pluginReg.DisabledNow() {
-		if err := send(rpc.DisabledEvent(ns)); err != nil {
-			return err
-		}
-	}
+	disabled := rt.srv.pluginReg.DisabledNow()
 
 	events := make(chan *pb.Event, 64)
 	var settling sync.WaitGroup
@@ -659,14 +657,21 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 		defer func() { cancel(); (<-counted)() }()
 	}
 
-	header := listening
+	select {
+	case <-listening:
+	case <-ctx.Done():
+		return nil
+	}
+	if err := send(nil); err != nil {
+		return err
+	}
+	for _, ns := range disabled {
+		if err := send(rpc.DisabledEvent(ns)); err != nil {
+			return err
+		}
+	}
 	for {
 		select {
-		case <-header:
-			header = nil
-			if err := send(nil); err != nil {
-				return err
-			}
 		case ev := <-events:
 			if err := send(rt.srv.asSwitched(ev)); err != nil {
 				return err
@@ -719,8 +724,9 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 	defer settled()
 	namespace.Refollow{
 		Label: "subscribe: plugin " + uuid,
-		Down:  func(detail string) { reportHealth(ctx, events, uuid, false, detail); settled() },
-		Up:    func() { reportHealth(ctx, events, uuid, true, "") },
+		// Settled first: until every source has, nothing drains events.
+		Down: func(detail string) { settled(); reportHealth(ctx, events, uuid, false, detail) },
+		Up:   func() { reportHealth(ctx, events, uuid, true, "") },
 		Attempt: func(ctx context.Context, established func()) error {
 			if _, err := infoOf(ctx); err != nil {
 				return err

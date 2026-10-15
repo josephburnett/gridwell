@@ -82,12 +82,11 @@ func TestAnAbandonedReadIsNoHealthNews(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	events := make(chan *gridwellv1.Event, 64)
+	es, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		es, err := cl.Subscribe(ctx)
-		if err != nil {
-			close(events)
-			return
-		}
 		defer es.Close()
 		for {
 			ev, ok, err := es.Recv()
@@ -100,13 +99,9 @@ func TestAnAbandonedReadIsNoHealthNews(t *testing.T) {
 	}()
 	// A framing write is announced on the same stream, so its arrival marks
 	// everything published before it as delivered.
-	// Until the stream is attached a marker is nobody's, so the first is
-	// repeated until one arrives.
 	zoom := 1.0
-	marker := func(repeat bool) {
+	marker := func() {
 		t.Helper()
-		tick := time.NewTicker(100 * time.Millisecond)
-		defer tick.Stop()
 		zoom++
 		if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: grid, Zoom: zoom}); err != nil {
 			t.Fatal(err)
@@ -120,22 +115,15 @@ func TestAnAbandonedReadIsNoHealthNews(t *testing.T) {
 				if h := ev.GetPluginHealth(); h != nil {
 					t.Fatalf("health event %v: an abandoned read was taken as news of the source", h)
 				}
-				if f := ev.GetGridFramingChanged(); f != nil && (f.ViewZoom == zoom || repeat) {
+				if f := ev.GetGridFramingChanged(); f != nil && f.ViewZoom == zoom {
 					return
-				}
-			case <-tick.C:
-				if repeat {
-					zoom++
-					if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: grid, Zoom: zoom}); err != nil {
-						t.Fatal(err)
-					}
 				}
 			case <-ctx.Done():
 				t.Fatalf("framing marker %v never arrived", zoom)
 			}
 		}
 	}
-	marker(true)
+	marker()
 
 	p.armed.Store(true)
 	readCtx, abandon := context.WithCancel(ctx)
@@ -161,5 +149,5 @@ func TestAnAbandonedReadIsNoHealthNews(t *testing.T) {
 	if _, err := cl.GetGrid(ctx, grid); err != nil {
 		t.Fatal(err)
 	}
-	marker(false)
+	marker()
 }
