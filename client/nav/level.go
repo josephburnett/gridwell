@@ -247,6 +247,8 @@ func (m *Machine) installLevelData(ld *levelData, pl *planner) {
 	// singleton rebinds or the overlay keeps tracking its pre-swap tile.
 	pl.add(Effect{Kind: EffRefreshOverlay})
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
+	// Its leaves are only known once it is installed.
+	pl.then(Gesture{Kind: GestureEngageLeaves})
 }
 
 // leaveLevels leaves one pane-tile level and hands the rest back: the
@@ -280,7 +282,7 @@ func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	}
 	pl.add(pop)
 	if !outer {
-		pl.add(Effect{Kind: EffFetchGrid, GridID: pop.GridID})
+		pl.fetchGrid(w, pop.GridID)
 	}
 	// The landing reads the tree the pop just installed, so it is planned
 	// against a world gathered after it.
@@ -307,11 +309,7 @@ func (m *Machine) landLevel(g Gesture, w World) Plan {
 	pl.add(Effect{Kind: EffRefreshOverlay})
 	// For a pane that lost its surface to the one-surface rule while a higher
 	// level held the same tile: that holder just closed.
-	for _, p := range w.Panes {
-		if id := p.Stack.ContentID(); id != "" {
-			pl.add(Effect{Kind: EffReEngage, PaneID: p.ID, TileID: id})
-		}
-	}
+	m.engageLeaves(w, &pl)
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	return pl.plan()
 }
@@ -379,6 +377,6 @@ func (m *Machine) levelRecentre(c cont, r Result, w World, pl *planner) {
 		zoom = live.Zoom()
 	}
 	pl.install(c.PaneID, oneFrame(t.GridId, rpc.ViewOf(cx, cy, zoom)), nil)
-	pl.add(Effect{Kind: EffFetchGrid, GridID: t.GridId})
+	pl.fetchGrid(w, t.GridId)
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 }

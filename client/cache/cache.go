@@ -360,12 +360,30 @@ func (c *Cache) NoteHealth(uuid string, healthy bool) (wasDark bool) {
 func (c *Cache) SourceDark(gridID string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.darkLocked(gridID)
+}
+
+func (c *Cache) darkLocked(gridID string) bool {
 	for src := range c.dark {
 		if ServedBy(gridID, src) {
 			return true
 		}
 	}
 	return false
+}
+
+// Current is every held grid whose source is answering. The event stream
+// keeps those true, so a reader asking for one again asks what it was told.
+func (c *Cache) Current() map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]bool, len(c.grids))
+	for id := range c.grids {
+		if !c.darkLocked(id) {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // ResyncSet is every cached grid served through source, sorted: one owner for

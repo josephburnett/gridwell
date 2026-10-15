@@ -86,3 +86,28 @@ func TestNoteHealthAnswersWhatItWas(t *testing.T) {
 		}
 	}
 }
+
+// A grid is current when the cache holds it and its source is answering: the
+// event stream keeps that one true, so navigation asks for nothing in it.
+func TestAGridIsCurrentWhenHeldFromAnAnsweringSource(t *testing.T) {
+	c := seedSources(t)
+	c.NoteHealth(conn, false)
+	cur := c.Current()
+	for _, id := range []string{node + "/7", fsPl + "/1", fsPl + "/12"} {
+		if !cur[id] {
+			t.Errorf("%s is held from an answering source and not current", id)
+		}
+	}
+	for _, id := range []string{farHome + "/1", farPl + "/4"} {
+		if cur[id] {
+			t.Errorf("%s rides the dark connection and is current", id)
+		}
+	}
+	if cur[node+"/never-held"] {
+		t.Error("a grid the cache never held is current")
+	}
+	c.NoteHealth(conn, true)
+	if !c.Current()[farHome+"/1"] {
+		t.Error("the far home stayed not current after its source came back")
+	}
+}

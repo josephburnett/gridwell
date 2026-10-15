@@ -113,6 +113,10 @@ func TestEnterLevelArmsJoin(t *testing.T) {
 		if string(e.Baseline) != string(blob) {
 			t.Fatalf("baseline is not the bytes that were read")
 		}
+		// The installed tree's leaves are settled against the world after it.
+		if plan.Next == nil || plan.Next.Kind != GestureEngageLeaves {
+			t.Fatalf("next = %+v, want the installed tree's leaves engaged", plan.Next)
+		}
 	})
 
 	t.Run("the fetch finishes first", func(t *testing.T) {
@@ -343,8 +347,9 @@ func TestLeaveLevels(t *testing.T) {
 		if plan.Next == nil || !plan.Next.Outer || !plan.Next.Animate {
 			t.Fatalf("no animated landing asked for: %+v", plan.Next)
 		}
-		// The landing reads the tree the pop installed.
+		// The landing reads the tree the pop installed, whose grid is held.
 		after := baseWorld(gridPane("pane1", "g1"))
+		after.Current = currentOf("g1")
 		after.Level = &LevelWorld{Tile: &gridwellv1.Tile{Id: "pt1", GridId: "g1", X: 2, Y: 3, W: 4, H: 4}}
 		land := m.Do(*plan.Next, after)
 		if !sameKinds(kinds(land), []EffectKind{EffStartTransition, EffRefreshOverlay,
@@ -361,6 +366,7 @@ func TestLeaveLevels(t *testing.T) {
 		m := New()
 		plan := m.Do(leaveGesture(1), levelWorld(true))
 		after := baseWorld(gridPane("pane1", "g1"))
+		after.Current = currentOf("g1")
 		after.Level = &LevelWorld{}
 		land := m.Do(*plan.Next, after)
 		if !sameKinds(kinds(land), []EffectKind{EffRefreshOverlay, EffScheduleURLUpdate}) {

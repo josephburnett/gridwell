@@ -267,6 +267,8 @@ func Nav(g nav.Gesture) Event {
 		e.Kind, e.Msg, e.KV = "promote", "promote ephemeral", kv("pane", g.PaneID, "tile", g.OldID)
 	case nav.GestureReEngage:
 		e.Kind, e.Msg, e.KV = "reengage", "re-engage content", kv("pane", g.PaneID, "tile", g.TileID)
+	case nav.GestureEngageLeaves:
+		e.Kind, e.Msg = "reengage", "engage installed leaves"
 	default:
 		e.Kind, e.Msg = "unknown", "unnamed gesture "+strconv.Itoa(int(g.Kind))
 	}
