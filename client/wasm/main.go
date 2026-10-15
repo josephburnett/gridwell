@@ -989,34 +989,29 @@ func (a *App) ghostHiddenPane() string {
 }
 
 // startSSE keeps one event stream open for the life of the page;
-// retry.Reconnect decides the waits and kicks.
+// retry.Events decides the waits and when a stream owes the resync.
 func (a *App) startSSE() {
-	var pace retry.Reconnect
-	for {
-		// The node forgets this session's interest when its stream closes.
-		a.interest.Reopened()
-		a.kickInterest()
-		stream, err := a.cl.Subscribe(context.Background())
-		if err != nil {
-			// Until this reconnects, everything on screen is silently going stale.
-			a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
-			time.Sleep(pace.SubscribeFailed())
-			continue
-		}
-		a.resolveErr("events")
-		if pace.Subscribed() {
-			// The gap swallowed events without saying whose, so nothing scopes.
-			a.retryKick(true, cache.EverySource)
-		}
-		for {
-			ev, ok, err := stream.Recv()
+	sse := retry.Events{
+		Subscribe: func(ctx context.Context) (retry.Stream, error) {
+			// The node forgets this session's interest when its stream closes.
+			a.interest.Reopened()
+			a.kickInterest()
+			s, err := a.cl.Subscribe(ctx)
 			if err != nil {
-				a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying")
-				break
+				return nil, err
 			}
-			if !ok {
-				break
+			return s, nil
+		},
+		Opened: func(resync bool) {
+			a.resolveErr("events")
+			if resync {
+				// The gap swallowed events without saying whose, so nothing scopes.
+				a.retryKick(true, cache.EverySource)
 			}
+		},
+		// Until this reconnects, everything on screen is silently going stale.
+		Broken: func() { a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying") },
+		Event: func(ev *gridwellv1.Event) {
 			a.emit(traceevent.EventRecv(ev))
 			if a.c.Apply(ev) {
 				a.emit(traceevent.EventApplied(ev))
@@ -1060,10 +1055,9 @@ func (a *App) startSSE() {
 			if plan.Health != nil {
 				a.reportPluginHealth(plan.Health)
 			}
-		}
-		stream.Close()
-		time.Sleep(pace.StreamEnded())
+		},
 	}
+	sse.Run(context.Background())
 }
 
 // disableSource is errsurface.Disable: the node switches the source off, and

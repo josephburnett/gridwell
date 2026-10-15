@@ -11,7 +11,7 @@ import (
 // by the source line that opens them. Both are long-lived streams with their
 // own re-dial loop, so waiting is what they are for.
 var unboundedOK = map[string]string{
-	"client/wasm/main.go": "a.cl.Subscribe(context.Background())",
+	"client/wasm/main.go": "sse.Run(context.Background())",
 }
 
 // The gate behind the bounded-RPC rule client/inflight owns. It reads the
