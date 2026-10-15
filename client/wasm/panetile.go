@@ -18,7 +18,7 @@ import (
 // paneTileLayout is panepreview.Layouts over the content cache; the memo
 // policy is that package's. A missing body kicks its fetch here.
 func (a *App) paneTileLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
-	return a.views.paneLayouts.Tree(n.Id, n.BlobId, func() ([]byte, bool) {
+	return a.views.paneLayouts.Tree(n.Id, n.BlobId, a.c.BodyGen(n.Id), func() ([]byte, bool) {
 		body, ok := a.c.TileContent(n.Id)
 		if !ok {
 			a.fetchTileContent(n.Id)
