@@ -71,3 +71,33 @@ func TestAStaleLayoutWriteIsRefusedAndTheNewerArrangementStands(t *testing.T) {
 		})
 	}
 }
+
+func placementOf(t *gridwellv1.Tile) *gridwellv1.Placement {
+	return &gridwellv1.Placement{GridId: t.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}
+}
+
+func TestAStalePlacementIsRefusedAndTheFirstMoveStands(t *testing.T) {
+	ctx := context.Background()
+	m := staleMesh(t)
+	for where, grid := range staleWhere(m) {
+		t.Run(where, func(t *testing.T) {
+			cl := m.nodes[meNode].cl
+			tile := m.text(ctx, meNode, grid, 20, "# placed")
+			seen := placementOf(m.tileIn(ctx, meNode, grid, tile.Id)) // both windows read it here
+			moved, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: grid,
+				X: 22, Y: 0, W: 1, H: 1, Claim: seen})
+			if err != nil {
+				t.Fatalf("first move: %v", err)
+			}
+			if moved.Version != tile.Version {
+				t.Fatalf("version %d -> %d: a move bumps no version", tile.Version, moved.Version)
+			}
+			_, err = cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: grid,
+				X: 24, Y: 0, W: 1, H: 1, Claim: seen})
+			wantConflict(t, "stale move", err)
+			if got := m.tileIn(ctx, meNode, grid, tile.Id); got.X != 22 {
+				t.Fatalf("x = %d, want the first move's 22 standing", got.X)
+			}
+		})
+	}
+}

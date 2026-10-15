@@ -19,18 +19,22 @@ func zoomOf(z float64) rpc.ContentZoom {
 
 // The one pin on what a tile row's `version` means: the user's content bytes
 // changed, a pane tile's layout among them. It is the optimistic-concurrency
-// claim for those edits and nothing else. Everything else the store writes to a tile row rides the same tile
-// event and is last-writer-wins, with no claim to lose and no bump to make:
+// claim for those edits. Everything else the store writes to a tile row rides
+// the same tile event and bumps nothing:
 //
 //   - captures, facts the server observed rather than edits the user made, so
 //     a capture must never outrank the user's own claim;
-//   - framing, the viewport and the text window;
-//   - layout: place, move, resize, clone, delete. When two clients race,
-//     whoever moved it last moved it, and overlap, the one thing a race could
-//     corrupt, is refused server-side in the same transaction.
+//   - framing, the viewport and the text window, last-writer-wins;
+//   - layout: place, move, resize, clone, delete. A move claims the placement
+//     it saw rather than a version, so it never conflicts with typing; overlap
+//     is refused server-side in the same transaction.
 //
 // The table below is the whole rule. A new mutation adds a row here; a row
 // that cannot be written is a mutation that broke the rule.
+
+func placementOf(t *gridwellv1.Tile) *gridwellv1.Placement {
+	return &gridwellv1.Placement{GridId: t.GridId, X: t.X, Y: t.Y, W: t.W, H: t.H}
+}
 
 // tileVersion reads a tile's current version straight from the row.
 func tileVersion(t *testing.T, s *Store, tileID string) int64 {
@@ -242,10 +246,20 @@ var versionCases = []versionCase{
 
 	// ── Layout: where it sits. No bump, no claim. ──────────────────────
 	{
-		name: "PlaceTile/move and resize", subject: textSubject, bumps: false,
+		// A placement claims the placement it saw, not the version: a move
+		// never conflicts with typing.
+		name: "PlaceTile/move and resize", subject: textSubject, bumps: false, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
 			_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
-				TileId: tile.Id, GridId: tile.GridId, X: 6, Y: 7, W: 3, H: 3,
+				TileId: tile.Id, GridId: tile.GridId, X: 6, Y: 7, W: 3, H: 3, Claim: placementOf(tile),
+			})
+			return err
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			seen := placementOf(tile)
+			seen.X += 20
+			_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+				TileId: tile.Id, GridId: tile.GridId, X: 6, Y: 7, W: 3, H: 3, Claim: seen,
 			})
 			return err
 		},
@@ -321,10 +335,10 @@ func TestVersionRuleClaim(t *testing.T) {
 			}
 		})
 	}
-	// The six content arms, a pane tile's layout among them. A change to this
-	// number is a change to the rule.
-	if claimable != 6 {
-		t.Errorf("%d writes can be handed a version, want 6 — a new one appeared, or one lost its claim", claimable)
+	// The six content arms, a pane tile's layout among them, and the
+	// placement. A change to this number is a change to the rule.
+	if claimable != 7 {
+		t.Errorf("%d writes can be handed a claim, want 7 — a new one appeared, or one lost its claim", claimable)
 	}
 }
 

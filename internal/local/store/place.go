@@ -15,11 +15,11 @@ const placementSet = `x = ?, y = ?, w = ?, h = ?`
 
 // PlaceTile is the single placement writeback: placement is one fact,
 // (grid_id, x, y, w, h), and this verb owns all of it, id-addressed with no
-// descent path. Placement is layout, not content: no claim, no bump, and when
-// two clients race, whoever moved it last moved it. The one thing a race could
-// corrupt, two tiles in one cell, is refused by the overlap check in this same
-// transaction. Moving a well into its own subtree is refused by
-// wellWouldContainItself, walking a chain the server derives itself.
+// descent path. It claims the placement the writer saw (claimPlacement) and
+// bumps no version, so a move never conflicts with typing. Two tiles in one
+// cell is refused by the overlap check in this same transaction. Moving a well
+// into its own subtree is refused by wellWouldContainItself, walking a chain
+// the server derives itself.
 func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
@@ -41,6 +41,15 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 		srcGrid, err := parseID(n.GridId)
 		if err != nil {
 			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, n.GridId, err)
+		}
+		if srcGrid == destGridID && n.X == req.X && n.Y == req.Y && n.W == req.W && n.H == req.H {
+			// Already where the write puts it: nothing to overwrite, so no
+			// claim to lose.
+			out = n
+			return nil
+		}
+		if err := claimPlacement(n, req.Claim, true); err != nil {
+			return err
 		}
 		if _, err := s.loadGrid(ctx, tx, destGridID); err != nil {
 			return fmt.Errorf("%w: destination grid %d: %v", ErrInvalidArgument, destGridID, err)
@@ -83,6 +92,27 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 		return err
 	})
 	return out, err
+}
+
+// claimPlacement verifies a placement claim against row n: the placement the
+// writer saw must be the one the row holds. It is the state, not its history,
+// so a tile moved away and back is where the writer saw it and the write
+// lands. A nil claim is the node's own write. withGrid is false for a plugin's
+// row, whose grid its listing fixes.
+func claimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) error {
+	if c == nil {
+		return nil
+	}
+	gridMoved := false
+	if withGrid {
+		have, herr := parseID(n.GetGridId())
+		saw, serr := parseID(c.GridId)
+		gridMoved = herr != nil || serr != nil || have != saw
+	}
+	if gridMoved || n.X != c.X || n.Y != c.Y || n.W != c.W || n.H != c.H {
+		return fmt.Errorf("%w: tile %s is no longer where the writer saw it", ErrVersionConflict, n.Id)
+	}
+	return nil
 }
 
 // wellWouldContainItself refuses placing a well inside its own subtree, walking

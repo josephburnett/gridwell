@@ -129,7 +129,7 @@ func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 		name  string
 		write func() (bool, error)
 	}{
-		{"place", func() (bool, error) { return d.Place(text, 3, 3, 1, 1) }},
+		{"place", func() (bool, error) { return d.Place(text, 3, 3, 1, 1, nil) }},
 		{"tile framing", func() (bool, error) { return d.SetFraming(text, 0, f) }},
 		{"root framing", func() (bool, error) { return d.SetFraming(0, gid, f) }},
 		{"text view", func() (bool, error) { return d.SetTextView(text, 0, 0, 4, 4, rpc.TextModeRendered) }},

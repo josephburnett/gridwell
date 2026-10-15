@@ -129,18 +129,23 @@ These were decided deliberately. Do not reverse one without a new decision.
   to absorb a schema change. Retired wire fields are `reserved`. The
   contract is `internal/local/store/CLAUDE.md`.
 - `version` means the user's content bytes: a text body, a typed url, a
-  typed name, a pane tile's layout. Captures, framing, and layout (where a
-  tile sits) carry no claim and cause no bump. A url's address follows where the user went: the address a live view
+  typed name, a pane tile's layout. Captures, framing, and placement (where
+  a tile sits) cause no bump. A url's address follows where the user went: the address a live view
   settles on after a navigation, an ascent or a freeze is written as content
   and claims a version like a typed one, and landing where the row already
   points writes nothing (2026-09-30).
-- A pane tile's layout is the user's bytes, not framing (2026-10-14,
-  reversing its 2026-09-30 place among the unclaimed): a layout write claims
-  the version the arrangement was read at and bumps it when it lands, as a
-  text save does, and identical bytes write nothing. A stale one is refused
-  with the version conflict, and the client replaces the open tree with the
-  arrangement on disk, never merging and never overwriting it
-  (`pane.Levels.Claim`, `nav.GestureReconcileLevel`).
+- Every write of something the user made or placed claims what it was read
+  at, one claim per fact (2026-10-14): content — a text body, a url address,
+  a typed name, a pane tile's layout — claims the version and bumps it; a
+  placement claims the placement it saw (grid, x, y, w, h) and bumps
+  nothing, so a move never conflicts with typing nor ages a body. A stale
+  claim is refused with the version conflict and the client reconciles to the
+  row on disk, surfaced, never silently: a layout replaces the open tree
+  whole (`pane.Levels.Claim`, `nav.GestureReconcileLevel`), a move snaps back
+  and re-reads its grid (`cache.Placing.Claim`). A write landing where the row
+  already is writes nothing and loses nothing. Only framing (pan and zoom, the
+  text window, content zoom) and captures carry no claim. A pane tile's layout
+  counted as framing until this decision.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function.

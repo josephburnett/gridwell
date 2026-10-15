@@ -117,10 +117,11 @@ every open. Never relax them.
 - `version` means the user's content bytes changed. `claimContentVersion`
   (callers: `WriteContent`'s text, url and pane arms, `RenameTile`) claims and
   `finishContentEdit` bumps. Everything else — captures, framing, layout —
-  goes through `loadForWrite` + `emitTileChanged` and neither claims nor
-  bumps. Those single-tile writes run in `withTileWrite`, so one that lands
+  goes through `loadForWrite` + `emitTileChanged` and bumps nothing; a
+  placement claims the placement it saw (`claimPlacement`, home and a
+  plugin's rows alike). Those single-tile writes run in `withTileWrite`, so one that lands
   where the row already is writes nothing and tells no one
-  (`repeat_write_test.go`). Layout races resolve last-writer-wins; the overlap check in the
+  (`repeat_write_test.go`). A stale placement is refused; the overlap check in the
   same transaction is what prevents two tiles in one cell.
   `version_rule_test.go` is the table.
 - Blobs are sha256-addressed, immutable, refcounted, and carry their

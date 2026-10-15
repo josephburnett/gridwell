@@ -73,7 +73,7 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Place(id, 6, -3, 2, 1); err != nil {
+	if _, err := d.Place(id, 6, -3, 2, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.SetURLPreview(id, []byte("shot")); err != nil {

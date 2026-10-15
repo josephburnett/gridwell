@@ -6,8 +6,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Placement is a tile's layout: its grid and footprint. It claims no version,
-// so the version interlock cannot order two of them.
+// Placement is a tile's layout: its grid and footprint. It claims the
+// placement it moved from rather than a version, so the version interlock
+// cannot order two of them.
 type Placement struct {
 	GridID     string
 	X, Y, W, H int64
@@ -63,6 +64,17 @@ func (c *Cache) Place(tileID string, p Placement) *Placing {
 // Landed folds the write's answer in for what it set, then lets a read
 // decide the layout. An answer under another id is a plugin's minted row,
 // whose echo will never name this one, so the hold ends there.
+// Claim is the placement the write moves the tile from, as this cache held it
+// before the move: what the node must still hold for the write to land. Nil
+// when the row was not cached, which claims nothing.
+func (pl *Placing) Claim() *gridwellv1.Placement {
+	if pl == nil {
+		return nil
+	}
+	o := pl.origin
+	return &gridwellv1.Placement{GridId: o.GridID, X: o.X, Y: o.Y, W: o.W, H: o.H}
+}
+
 func (pl *Placing) Landed(resp *gridwellv1.Tile) {
 	if pl == nil || resp == nil {
 		return

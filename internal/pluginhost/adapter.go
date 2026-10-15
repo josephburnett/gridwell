@@ -802,9 +802,9 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err != nil {
 		return nil, err
 	}
-	changed, err := a.mem.Place(id, req.X, req.Y, req.W, req.H)
+	changed, err := a.mem.Place(id, req.X, req.Y, req.W, req.H, req.Claim)
 	if err != nil {
-		return nil, err
+		return nil, gwerr.ToStatus(err)
 	}
 	// A placement is part of the grid's answer, so it announces the grid.
 	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})

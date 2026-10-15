@@ -147,7 +147,7 @@ func TestExtUserPlacementSurvivesMerges(t *testing.T) {
 	gid, _ := d.ContextID("root")
 	tiles := mintAll(t, d, gid, textEntries("a", "b"), true)
 	a := extByKey(t, tiles, "a")
-	if _, err := d.Place(a.ID, 5, 3, 2, 2); err != nil {
+	if _, err := d.Place(a.ID, 5, 3, 2, 2, nil); err != nil {
 		t.Fatal(err)
 	}
 	tiles = mintAll(t, d, gid, textEntries("a", "b", "c", "d"), true)
@@ -172,7 +172,7 @@ func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 	if e.X != 10 || e.Y != 2 || e.W != 2 {
 		t.Fatalf("hint not honored at first sight: %+v", e)
 	}
-	if _, err := d.Place(e.ID, 0, 0, 1, 1); err != nil {
+	if _, err := d.Place(e.ID, 0, 0, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	ev[0].PlacementHint = &pluginv1.PlacementHint{X: 20, Y: 20, W: 1, H: 1}
@@ -195,7 +195,7 @@ func TestExtAuthoritativeAbsenceRetiresAndRecreationMintsFresh(t *testing.T) {
 	if err != nil || key != "a" || !tomb {
 		t.Fatalf("retired row lost interpretability: key=%q tomb=%v err=%v", key, tomb, err)
 	}
-	if _, err := d.Place(oldA.ID, 1, 1, 1, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := d.Place(oldA.ID, 1, 1, 1, 1, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("mutating a retired row: err=%v, want ErrNotFound", err)
 	}
 	tiles = mintAll(t, d, gid, textEntries("a", "b"), true)
@@ -209,7 +209,7 @@ func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 	gid, _ := d.ContextID("procroot")
 	tiles := mintAll(t, d, gid, textEntries("pid:1", "pid:2"), false)
 	p2 := extByKey(t, tiles, "pid:2")
-	if _, err := d.Place(p2.ID, 4, 4, 1, 1); err != nil {
+	if _, err := d.Place(p2.ID, 4, 4, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	tiles = mintAll(t, d, gid, textEntries("pid:1"), false)
@@ -291,7 +291,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 	gid, _ := d.ContextID("root")
 	tiles := mintAll(t, d, gid, textEntries("a"), true)
 	a := extByKey(t, tiles, "a")
-	if _, err := d.Place(a.ID, 2, 2, 1, 1); err != nil {
+	if _, err := d.Place(a.ID, 2, 2, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Close(); err != nil {
@@ -414,7 +414,7 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Place(id, 3, 4, 1, 1); err != nil {
+	if _, err := d.Place(id, 3, 4, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	after, err := d.Overlay(gid, entries)

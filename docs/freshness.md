@@ -464,8 +464,10 @@ The version interlock, the outbox park, and the drain.
    value the retry will land.
    A placement (`App.postPlacement`, a move or a resize) is optimistic too,
    but parks nothing: any failure puts the tile back and the drag snaps back.
-   Layout claims no version, so the interlock in step 5 cannot order two
-   placements; `cache.Place` holds the placement against every older row
+   A placement claims where the cache held the tile before the move
+   (`cache.Placing.Claim`), not a version, so the interlock in step 5 cannot
+   order two placements; a stale one is refused, snaps back and re-reads the
+   grid. `cache.Place` holds the placement against every older row
    instead, until the stream carries it (the stream is ordered, so nothing
    older follows) or, once the write has landed, a grid read answers.
 9. The drain. `retry.Events` sets `gap` on any stream error and on a clean
@@ -505,8 +507,9 @@ and nothing says so. Only a grid the cache has never seen waits on the
 source.
 
 **Framing is last-writer-wins.** `version` means the user's content bytes,
-a pane tile's layout among them, and nothing else, so framing, captures, and
-placement carry no claim and cannot conflict. Two panes settling the same doorway resolve by arrival order, and
+a pane tile's layout among them, and nothing else. A placement claims the
+placement it saw instead. Framing and captures carry no claim and cannot
+conflict. Two panes settling the same doorway resolve by arrival order, and
 the outbox keeps one live entry per key by design.
 
 **Absence is never inferred from silence.** A non-authoritative listing

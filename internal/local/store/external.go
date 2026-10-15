@@ -422,9 +422,28 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed b
 	})
 }
 
-// Place is the placement writeback; the grid never changes.
-func (n *Namespace) Place(tileID, x, y, w, h int64) (changed bool, err error) {
-	return n.exec("Place", placementSet, tileID, x, y, w, h)
+// Place is the placement writeback; the grid never changes. It claims the
+// footprint the writer saw, as home's PlaceTile does (claimPlacement).
+func (n *Namespace) Place(tileID, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
+	return n.rowWrite("Place", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
+		err := tx.QueryRowContext(ctx, `SELECT x, y, w, h FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
+			tileID, n.ns).Scan(&cur.X, &cur.Y, &cur.W, &cur.H)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if cur.X == x && cur.Y == y && cur.W == w && cur.H == h {
+			return nil
+		}
+		if err := claimPlacement(cur, claim, false); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE tiles SET `+placementSet+` WHERE id = ?`, x, y, w, h, tileID)
+		return err
+	})
 }
 
 // SetFraming persists framing into this namespace's memory, the one writer of
