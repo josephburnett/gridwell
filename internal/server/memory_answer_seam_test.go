@@ -16,6 +16,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -126,7 +127,7 @@ func TestAMemoryAnswerKeepsEveryRowAndReportsTheReason(t *testing.T) {
 	if t3 == nil {
 		t.Fatalf("no t3 in %v", before.Tiles)
 	}
-	if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: t3.Id, X: 6, Y: 6, W: 1, H: 1}); err != nil {
+	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: t3.Id, X: 6, Y: 6, W: 1, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 

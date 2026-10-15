@@ -21,6 +21,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
@@ -264,7 +265,7 @@ func TestPagesPluginDeleteIsRefusedWithItsReason(t *testing.T) {
 	cl := pagesRPC(t, hs)
 	ctx := t.Context()
 
-	_, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pagesNS + "/" + hello.Id})
+	_, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pagesNS + "/" + hello.Id}))
 	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), "fixed") {
 		t.Fatalf("DeleteTile = %v, want Unimplemented saying the site is fixed", err)
 	}

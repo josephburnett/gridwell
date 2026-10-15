@@ -11,6 +11,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -119,7 +120,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	}
 
 	// Deleting the link only unlinks — the source well and its content survive.
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: link.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: link.Id})); err != nil {
 		t.Fatalf("delete link: %v", err)
 	}
 	if _, err := cl.GetTile(ctx, well.Id); err != nil {
@@ -265,7 +266,7 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	}
 
 	// Deleting the link only unlinks — the source and its bytes survive.
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: link.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: link.Id})); err != nil {
 		t.Fatalf("delete leaf link: %v", err)
 	}
 	if body, _, _, err := cl.ReadContent(ctx, txt.Id); err != nil || string(body) != "# the one copy" {

@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
@@ -289,6 +290,7 @@ func TestNodeExportContentStreams(t *testing.T) {
 
 	placed, err := c.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
 		TileId: created.Tile.Id, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
+		Claim: rpc.PlacementOf(created.Tile),
 	})
 	if err != nil {
 		t.Fatalf("PlaceTile: %v", err)

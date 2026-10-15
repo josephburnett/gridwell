@@ -296,7 +296,7 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 	case stepRetireVisit:
 		// A layout the node did not take still names the visit, so it stays.
 		if r.OK && !w.otherPaneShows("", c.Tile.Id) {
-			pl.add(Effect{Kind: EffDeleteEphemeral, GridID: c.Tile.GridId, TileID: c.Tile.Id})
+			pl.add(Effect{Kind: EffDeleteEphemeral, Tile: c.Tile})
 		}
 	case stepRestoreCursor:
 		// The cursor goes after the seeding, or it lands in an empty document

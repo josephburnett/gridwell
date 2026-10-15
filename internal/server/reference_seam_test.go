@@ -7,6 +7,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
@@ -93,7 +94,7 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 	}
 
 	// The secondary ids of placement and a same-namespace clone.
-	placed, err := h.localCl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: target.Id, GridId: farGrid, X: 0, Y: 4, W: 1, H: 1})
+	placed, err := h.localCl.PlaceTile(ctx, claimtest.Claimed(t, h.localCl, &gridwellv1.PlaceTileRequest{TileId: target.Id, GridId: farGrid, X: 0, Y: 4, W: 1, H: 1}))
 	if err != nil {
 		t.Fatalf("place into the far grid: %v", err)
 	}

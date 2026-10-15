@@ -11,6 +11,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
@@ -67,7 +68,7 @@ func TestACollidingHintNeverLandsOnAStoredRow(t *testing.T) {
 		if tl == nil {
 			t.Fatalf("no %q in %+v", prefix, wk.Tiles)
 		}
-		if kept[prefix], err = cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tl.Id, X: tl.X, Y: tl.Y, W: tl.W, H: tl.H}); err != nil {
+		if kept[prefix], err = cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: tl.Id, X: tl.X, Y: tl.Y, W: tl.W, H: tl.H})); err != nil {
 			t.Fatal(err)
 		}
 	}

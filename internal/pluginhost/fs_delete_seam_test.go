@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
@@ -35,13 +36,13 @@ func TestFsDeleteInAnUnreadableDirectorySurfacesAndKeepsTheRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	notes := tileNamed(g.Tiles, "notes.md")
-	if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1}); err != nil {
+	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 	row := rowIDOf(t, st.Namespace("p1"), ".", "notes.md")
 
 	lighten := darken(t, root)
-	_, err = cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: notes.Id})
+	_, err = cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: notes.Id}))
 	var ce *connect.Error
 	if !errors.As(err, &ce) || ce.Code() != connect.CodeUnavailable || !strings.Contains(ce.Message(), "permission denied") {
 		t.Fatalf("DeleteTile in an unreadable directory = %v, want Unavailable naming the reason", err)

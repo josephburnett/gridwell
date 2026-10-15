@@ -1106,13 +1106,18 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 		return nil, err
 	}
 	if req.GetClaim() != nil {
-		// The row as the client saw it, its grid fixed by its listing.
+		// The row as the client saw it, its grid fixed by its listing. A key
+		// the source says is gone has nothing left the claim could lose, and
+		// its delete is what retires the row.
 		t, err := a.tileByID(ctx, req.TileId)
-		if err != nil {
+		switch {
+		case gwerr.IsDeadRef(err):
+		case err != nil:
 			return nil, err
-		}
-		if err := store.DeleteClaim(t, req, false); err != nil {
-			return nil, gwerr.ToStatus(err)
+		default:
+			if err := store.DeleteClaim(t, req, false); err != nil {
+				return nil, gwerr.ToStatus(err)
+			}
 		}
 	}
 	if _, err := ask(&a.lacks, "Delete", func() (*pluginv1.DeleteResponse, error) {

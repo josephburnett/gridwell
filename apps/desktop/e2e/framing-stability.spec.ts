@@ -43,7 +43,7 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   // Race: a foreign placement bumps the well's version inside the settle window,
   // so the framing flush's claim is stale.
   const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
-  await placeTile(gw.origin, well.id, well.version as number, home.gridID, cx, cy, 2, 2);
+  await placeTile(gw.origin, well.id, home.gridID, cx, cy, 2, 2);
   await expect
     .poll(
       async () =>

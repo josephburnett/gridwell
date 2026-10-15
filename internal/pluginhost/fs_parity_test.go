@@ -18,6 +18,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -118,7 +119,7 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	if notes.Id == "" {
 		t.Fatal("no notes.md tile")
 	}
-	placed, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1})
+	placed, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +174,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	// "recreation mints fresh" half of the contract needs one. An entry nobody
 	// ever touched has no row — deleting it is the plugin's verdict and
 	// nothing else, which the last stanza pins.
-	minted, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: bin.Id, GridId: rootGrid, X: 4, Y: 4, W: 1, H: 1})
+	minted, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{TileId: bin.Id, GridId: rootGrid, X: 4, Y: 4, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +182,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 		t.Fatalf("the placement renamed the entry: %q, was %q", minted.Id, bin.Id)
 	}
 	bin = minted
-	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.DeleteTileRequest{TileId: bin.Id})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "data.bin")); !os.IsNotExist(err) {
@@ -190,7 +191,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	if _, err := v2.GetTile(ctx, bin.Id); err == nil {
 		t.Fatal("a retired tile still reads")
 	}
-	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: bin.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, rpc.DeleteOf(bin)); err != nil {
 		t.Fatalf("delete must be idempotent: %v", err)
 	}
 	// Recreation mints a fresh ROW. The entry's public id is its key's address
@@ -221,7 +222,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 			doc = tile
 		}
 	}
-	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: doc.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.DeleteTileRequest{TileId: doc.Id})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "notes.md")); !os.IsNotExist(err) {
@@ -266,9 +267,9 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 		return &gridwellv1.Tile{}
 	}
 	notes, sub := find("notes.md"), find("sub")
-	if _, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
 		TileId: notes.Id, GridId: rootGrid, X: 6, Y: 2, W: 2, H: 1,
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := v2.SetFraming(ctx, &gridwellv1.SetFramingRequest{
@@ -326,7 +327,7 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 			arranged = tile
 		}
 	}
-	placed, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: arranged.Id, GridId: rootGrid, X: 6, Y: 6, W: 1, H: 1})
+	placed, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{TileId: arranged.Id, GridId: rootGrid, X: 6, Y: 6, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -255,7 +256,7 @@ func TestATouchedEntryThatBecomesALinkKeepsItsPlace(t *testing.T) {
 	if before.Reference {
 		t.Fatal("an entry with no link_target drew as a link")
 	}
-	if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: -2, W: 2, H: 1}); err != nil {
+	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: -2, W: 2, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 	src.set(func(m *mailSource) { m.asLink = true })
@@ -275,7 +276,7 @@ func TestTheSweepProbesTheContextItSweeps(t *testing.T) {
 	cl, _, _ := linkStack(t, src)
 	ctx := context.Background()
 	link := boxLink(t, cl)
-	if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: link.Id, X: 4, Y: 4, W: 1, H: 1}); err != nil {
+	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: link.Id, X: 4, Y: 4, W: 1, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 	src.set(func(m *mailSource) { m.inBox = false })

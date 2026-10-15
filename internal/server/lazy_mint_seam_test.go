@@ -24,6 +24,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -165,9 +166,9 @@ func TestTouchingEveryTileChangesNothingTheClientCanSee(t *testing.T) {
 	// Every tile placed where it already is: the durable touch that mints,
 	// with nothing about the arrangement changed.
 	for _, tile := range derived.Tiles {
-		if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+		if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
 			TileId: tile.Id, GridId: root, X: tile.X, Y: tile.Y, W: tile.W, H: tile.H,
-		}); err != nil {
+		})); err != nil {
 			t.Fatalf("touch %q: %v", tile.AltText, err)
 		}
 	}
@@ -201,9 +202,9 @@ func TestOneMoveMintsExactlyOneRow(t *testing.T) {
 	}
 	tiles0, grids0 := pluginRows(t, st)
 
-	moved, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
 		TileId: g.Tiles[3].Id, GridId: root, X: 9, Y: 4, W: 2, H: 2,
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}

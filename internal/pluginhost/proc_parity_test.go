@@ -22,6 +22,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -112,9 +113,9 @@ func TestProcPluginSweepAndPlacement(t *testing.T) {
 	if tileNamed(g.Tiles, dying).Id == "" {
 		t.Fatalf("child %s not found among %v", dying, g.Tiles)
 	}
-	if _, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
 		TileId: child.Id, GridId: rootGrid, X: 5, Y: 5, W: 1, H: 1,
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 	// The other child dies: the next read probes and sweeps it.
@@ -248,9 +249,9 @@ func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 		t.Errorf("@info presents %q; want %q", info.TextPresentation, rpc.TextPresentationBoth)
 	}
 	for i, tile := range []*gridwellv1.Tile{info, tileNamed(g.Tiles, child)} {
-		if _, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+		if _, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
 			TileId: tile.Id, GridId: well.ChildGridId, X: int64(4 + 2*i), Y: 4, W: 1, H: 1,
-		}); err != nil {
+		})); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -286,14 +287,14 @@ func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	placed, err := v2.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	placed, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
 		TileId: tileNamed(g.Tiles, gone).Id, GridId: rootGrid, X: 5, Y: 5, W: 1, H: 1,
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	reap()
-	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: placed.Id}); err != nil {
+	if _, err := v2.DeleteTile(ctx, rpc.DeleteOf(placed)); err != nil {
 		t.Fatalf("delete of a gone process: %v", err)
 	}
 	db, err := sql.Open("sqlite", memPath)
@@ -310,7 +311,7 @@ func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileNamed(sg.Tiles, "@info").Id}); err == nil {
+	if _, err := v2.DeleteTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.DeleteTileRequest{TileId: tileNamed(sg.Tiles, "@info").Id})); err == nil {
 		t.Error("deleting @info succeeded; want a refusal")
 	}
 	pid, _ := strconv.Atoi(alive)

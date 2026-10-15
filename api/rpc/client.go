@@ -3,9 +3,11 @@ package rpc
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"net/http"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
@@ -93,6 +95,9 @@ func (c *Client) CreateWithContent(ctx context.Context, req *pb.CreateTileReques
 // SetTile is the one capture and framing writeback; each scalar arm carries
 // exactly one operation per call.
 func (c *Client) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile, error) {
+	if err := unclaimed(req); err != nil {
+		return nil, err
+	}
 	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(req)))
 }
 
@@ -163,6 +168,9 @@ func (c *Client) WriteContent(ctx context.Context, tileID string, claim ContentB
 // PlaceTile is the single placement writeback: one verb owns (grid, x, y, w,
 // h), move or resize or both.
 func (c *Client) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.Tile, error) {
+	if err := unclaimed(req); err != nil {
+		return nil, err
+	}
 	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(req)))
 }
 
@@ -194,20 +202,29 @@ func (c *Client) SetContentZoom(ctx context.Context, tileID string, zoom float64
 	})))
 }
 
-// SetFrozen writes the standing freeze, on a url or a shell. It is framing:
-// no claim, and it never bumps version.
-func (c *Client) SetFrozen(ctx context.Context, tileID string, frozen bool, claim *bool) (*pb.Tile, error) {
-	return tileResp(c.cl.SetTile(ctx, connect.NewRequest(&pb.SetTileRequest{
-		TileId: tileID, UrlFrozen: &frozen, ClaimFrozen: claim,
-	})))
+// SetFrozen writes the standing freeze, on a url or a shell, claiming the
+// freeze the writer saw. It never bumps version.
+func (c *Client) SetFrozen(ctx context.Context, tileID string, frozen, claim bool) (*pb.Tile, error) {
+	return c.SetTile(ctx, &pb.SetTileRequest{TileId: tileID, UrlFrozen: &frozen, ClaimFrozen: &claim})
 }
 
 func (c *Client) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
+	if err := unclaimed(req); err != nil {
+		return nil, err
+	}
 	resp, err := c.cl.DeleteTile(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, err
 	}
 	return resp.Msg, nil
+}
+
+// unclaimed refuses here what the door would: see UnclaimedWrite.
+func unclaimed(req proto.Message) error {
+	if why := UnclaimedWrite(req); why != "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New(why))
+	}
+	return nil
 }
 
 // EventStream wraps Connect's server-stream client. Always call Close.

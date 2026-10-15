@@ -63,7 +63,7 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		}
 		landed := baseWorld(gridPane("pane1", "g1"))
 		d := only(t, m.Resume(a.Token, Result{OK: true}, landed), EffDeleteEphemeral)
-		if d.TileID != "r1" || d.GridID != "sg" {
+		if d.Tile.GetId() != "r1" || d.Tile.GetGridId() != "sg" {
 			t.Fatalf("deleted %+v, want the visit", d)
 		}
 	})
@@ -77,7 +77,7 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		landed := baseWorld(gridPane("pane1", "g1"))
 		land := m.Land(only(t, plan, EffStartTransition).Land, landed)
 		a := flushAwait(t, land, EffFetchGrid)
-		if d := only(t, m.Resume(a.Token, Result{OK: true}, landed), EffDeleteEphemeral); d.TileID != "r1" {
+		if d := only(t, m.Resume(a.Token, Result{OK: true}, landed), EffDeleteEphemeral); d.Tile.GetId() != "r1" {
 			t.Fatalf("deleted %+v, want the visit", d)
 		}
 	})
@@ -106,7 +106,7 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		a := flushAwait(t, m.Do(ascendGesture("pane1", 1, false),
 			ephemeralWorld(contentPane("pane1", "r1"))), EffInstallPlace)
 		m.Forget("pane1")
-		if d := only(t, m.Resume(a.Token, Result{OK: true}, baseWorld()), EffDeleteEphemeral); d.TileID != "r1" {
+		if d := only(t, m.Resume(a.Token, Result{OK: true}, baseWorld()), EffDeleteEphemeral); d.Tile.GetId() != "r1" {
 			t.Fatalf("deleted %+v, want the visit", d)
 		}
 	})
@@ -126,7 +126,7 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		w.Promote = &PromoteWorld{OldTile: &gridwellv1.Tile{Id: "v1", Kind: rpc.KindURL, GridId: "sg"}}
 		a := flushAwait(t, m.Do(promoteGesture(created), w), EffRelocatePane)
 		after := baseWorld(contentPane("pane1", "n1"), gridPane("pane2", "g2"))
-		if d := only(t, m.Resume(a.Token, Result{OK: true}, after), EffDeleteEphemeral); d.TileID != "v1" || d.GridID != "sg" {
+		if d := only(t, m.Resume(a.Token, Result{OK: true}, after), EffDeleteEphemeral); d.Tile.GetId() != "v1" || d.Tile.GetGridId() != "sg" {
 			t.Fatalf("deleted %+v, want the visit", d)
 		}
 	})

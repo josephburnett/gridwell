@@ -89,7 +89,7 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 		return
 	}
 	if plan.Unfreeze {
-		a.postFrozen(t.Id, false, nil)
+		a.postFrozen(t, false, nil)
 	}
 	if plan.FollowLink {
 		// The target's grid is likely never loaded, so read its row first.
@@ -292,25 +292,21 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 	if !ok || tile.Kind != rpc.KindURL || a.possiblyEphemeral(p, tile) {
 		return
 	}
-	a.postFrozen(tile.Id, true, func() {
+	a.postFrozen(tile, true, func() {
 		a.closeURLStream(paneID, true)
 		a.draw()
 	})
 }
 
 // postFrozen is the one dispatcher for the standing freeze intent, keying one
-// outbox entry so the last gesture wins. It claims the freeze the row showed
-// at the gesture, so one that moved under it is refused and re-read. after
-// runs once, after the first attempt, because the teardown must happen exactly
-// once.
-func (a *App) postFrozen(tileID string, frozen bool, after func()) {
+// outbox entry so the last gesture wins. It claims the freeze of row, the one
+// the gesture decided from, so one that moved under it is refused and
+// re-read. after runs once, after the first attempt, because the teardown
+// must happen exactly once.
+func (a *App) postFrozen(row *gridwellv1.Tile, frozen bool, after func()) {
 	var tile *gridwellv1.Tile
 	var once sync.Once
-	var claim *bool
-	if t := a.cachedTileByID(tileID); t != nil {
-		saw := t.UrlFrozen
-		claim = &saw
-	}
+	tileID, claim := row.Id, row.UrlFrozen
 	a.post(write{
 		label: "SetFrozen", gid: a.gridIDOfTile(tileID), id: tileID,
 		// Its own source, because the teardown's capture reports under

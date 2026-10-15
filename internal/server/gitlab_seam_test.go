@@ -13,6 +13,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -266,7 +267,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 
 	// The user moves the todo somewhere of their own, and drags a link to it
 	// onto the home grid — a weekly plan naming this todo.
-	moved, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: todo.Id, X: 5, Y: 5, W: 3, H: 2})
+	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: todo.Id, X: 5, Y: 5, W: 3, H: 2}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +283,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 	}
 
 	// The trash gesture. GitLab accepts the mark-as-done; the todo stays.
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: todo.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: todo.Id})); err != nil {
 		t.Fatalf("trash a todo: %v", err)
 	}
 

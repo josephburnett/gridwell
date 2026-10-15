@@ -652,6 +652,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	// re-list through the tunnel tells the two apart.
 	placed := rpc(t, localOrigin, "PlaceTile", map[string]any{
 		"tileId": farID, "gridId": fsRoot, "x": 6, "y": 3, "w": 1, "h": 1,
+		"claim": map[string]any{"gridId": back["gridId"], "x": back["x"], "y": back["y"], "w": back["w"], "h": back["h"]},
 	})["tile"].(map[string]any)
 	if placed["id"] != farID {
 		t.Fatalf("the touch renamed the far entry: %v, was %q", placed["id"], farID)

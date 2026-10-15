@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/client/shellws"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/shelldriver"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
@@ -559,10 +560,10 @@ func TestADeleteThatLeavesTheSessionRunningSaysSo(t *testing.T) {
 	f := newShellDoorFixture(t, Config{ID: "lnode1"})
 	sh := f.createShell(t, 0, 0)
 	f.fake.KillErr = errors.New("tmux: server exited unexpectedly")
-	if resp, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: sh.Id}); err != nil || resp.SessionLeft != "" {
+	if resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: sh.Id})); err != nil || resp.SessionLeft != "" {
 		t.Fatalf("to the trash = (%v, %v), want a clean delete: the trash keeps the session", resp, err)
 	}
-	resp, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: sh.Id})
+	resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: sh.Id}))
 	if err != nil {
 		t.Fatalf("destroy = %v, want it to land", err)
 	}
