@@ -22,6 +22,9 @@ type Cache struct {
 	// dark is the sources whose latest health event said they are not
 	// answering, keyed by that event's uuid.
 	dark map[string]bool
+	// unwatched is the sources that answer but whose changes nothing tells
+	// this client (live_updates_off), keyed the same way.
+	unwatched map[string]bool
 	// content is the one body store, keyed by tile id because blob ids are
 	// not routable and editing one clone must leave a sibling alone.
 	content map[string]*contentEntry
@@ -107,7 +110,7 @@ func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
 // New returns an empty cache.
 func New() *Cache {
 	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{},
-		dark: map[string]bool{}, holds: map[string]*hold{}, writing: map[string]*ownWrite{}}
+		dark: map[string]bool{}, unwatched: map[string]bool{}, holds: map[string]*hold{}, writing: map[string]*ownWrite{}}
 }
 
 // AskContent is the basis a content read is filed under, taken before the
@@ -413,17 +416,55 @@ func (c *Cache) NoteHealth(uuid string, healthy bool) (wasDark bool) {
 	return wasDark
 }
 
+// NoteLiveUpdates folds in whether a source's changes reach this client
+// (EventPluginHealth.live_updates_off empty), told on every health event.
+func (c *Cache) NoteLiveUpdates(uuid string, live bool) {
+	if uuid == EverySource {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if live {
+		delete(c.unwatched, uuid)
+		return
+	}
+	c.unwatched[uuid] = true
+}
+
 // SourceDark reports that the source serving gridID is not answering, so this
 // room is a memory rather than an answer. Derived, never stored.
 func (c *Cache) SourceDark(gridID string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for src := range c.dark {
+	return c.darkLocked(gridID)
+}
+
+func (c *Cache) darkLocked(gridID string) bool {
+	return servedByAny(gridID, c.dark)
+}
+
+func servedByAny(gridID string, sources map[string]bool) bool {
+	for src := range sources {
 		if ServedBy(gridID, src) {
 			return true
 		}
 	}
 	return false
+}
+
+// Current is every held grid whose source is answering and whose changes are
+// told. The event stream keeps those true, so a reader asking for one again
+// asks what it was told.
+func (c *Cache) Current() map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make(map[string]bool, len(c.grids))
+	for id := range c.grids {
+		if !c.darkLocked(id) && !servedByAny(id, c.unwatched) {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // ResyncSet is every cached grid served through source, sorted: one owner for

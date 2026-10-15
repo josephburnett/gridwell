@@ -545,6 +545,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The event crosses layer stream → fan-in → qualification → client, and the next read serves the correction | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient` |
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
 | The client's own arm: `GridChanged` clears `fetch.grids`' latches and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
+| Navigation asks for a grid or a row only when the cache does not hold it current (`cache.Current`): a descent, an ascent, a level change and a re-engagement onto a held grid read nothing, unless its source is dark or has live updates off | `client/nav/current_test.go`, `client/cache/dark_test.go:TestAGridIsCurrentWhenHeldFromAnAnsweringSource`, `TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent`, `apps/desktop/e2e/read-once.spec.ts`, `apps/desktop/e2e/live-updates-off.spec.ts` |
 
 ### Trace (b)
 

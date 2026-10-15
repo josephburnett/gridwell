@@ -26,6 +26,9 @@ const (
 	GestureLandLevel
 	GestureReEngage   // re-engages a restored content frame: PaneID, TileID
 	GestureFollowLink // places a live url view on a link's target: PaneID, Door
+	// GestureEngageLeaves settles a freshly installed pane tree: every leaf's
+	// grid asked for unless held current, every content leaf re-engaged.
+	GestureEngageLeaves
 )
 
 // Gesture is one navigation verb with its arguments. Like Effect it is a

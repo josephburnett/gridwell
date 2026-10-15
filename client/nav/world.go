@@ -63,6 +63,22 @@ type LeaveWorld struct {
 	// LandingView is persistedGridView for the grid being landed on, nil when
 	// nothing is persisted or the owning row is not cached.
 	LandingView *rpc.Framing
+	// LandingGridID is the grid the popped place names, "" when the walk to it
+	// missed.
+	LandingGridID string
+}
+
+// EngageWorld is the content row a re-engage reads.
+type EngageWorld struct {
+	// Tile is the row as the cache holds it, nil when no cached grid holds it.
+	Tile *gridwellv1.Tile
+}
+
+func (ew *EngageWorld) tile() *gridwellv1.Tile {
+	if ew == nil {
+		return nil
+	}
+	return ew.Tile
 }
 
 // LevelWorld is the row the return animation zooms out onto. nil means it is
@@ -160,13 +176,18 @@ type World struct {
 	ShellAlive      map[string]bool
 	ShellAliveKnown map[string]bool
 
+	// Current is every grid the cache holds current (cache.Current). The
+	// event stream keeps those true, so a plan never asks for one again.
+	Current map[string]bool
+
 	// One per verb: a descent, an ascent hop, a restore and every step of its
-	// walk, a pane-tile landing, a promote.
+	// walk, a pane-tile landing, a promote, a re-engage.
 	Door    *DoorWorld
 	Leave   *LeaveWorld
 	Restore *RestoreWorld
 	Level   *LevelWorld
 	Promote *PromoteWorld
+	Engage  *EngageWorld
 }
 
 func (w World) Pane(id string) (PaneView, bool) {
@@ -176,6 +197,12 @@ func (w World) Pane(id string) (PaneView, bool) {
 		}
 	}
 	return PaneView{}, false
+}
+
+// current reports that the cache holds gridID current; "" is a grid only the
+// executor can resolve, which is never known current.
+func (w World) current(gridID string) bool {
+	return gridID != "" && w.Current[gridID]
 }
 
 // otherPaneShows reports that another pane is descended into tileID, so

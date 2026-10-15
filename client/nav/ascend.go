@@ -73,7 +73,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		}
 		pl.install(p.ID, landing, vp)
 		pl.add(Effect{Kind: EffClearSelection, PaneID: p.ID})
-		m.landOnFrame(p.ID, landing, pl)
+		m.landOnFrame(p.ID, landing, w.Leave.LandingGridID, w, pl)
 		m.retireVisit(visit, pl)
 	}
 	// A pane with no rect or no view has no geometry to animate through.
@@ -267,10 +267,11 @@ func (m *Machine) retireVisit(visit *gridwellv1.Tile, pl *planner) {
 	pl.add(Effect{Kind: EffAwait, Token: tok, Request: Request{Kind: RequestFlushLayout}})
 }
 
-// landOnFrame finishes an ascent on whatever frame the pane landed on. A
-// content frame is re-engaged through the same one-owner decision every
-// descent applies, and the menu comes back if it was open on this level.
-func (m *Machine) landOnFrame(paneID string, place pane.Stack, pl *planner) {
+// landOnFrame finishes an ascent on whatever frame the pane landed on, gridID
+// being the grid place names. A content frame is re-engaged through the same
+// one-owner decision every descent applies, and the menu comes back if it was
+// open on this level.
+func (m *Machine) landOnFrame(paneID string, place pane.Stack, gridID string, w World, pl *planner) {
 	if place.MenuOpen {
 		pl.add(Effect{Kind: EffOpenMenu, PaneID: paneID})
 	}
@@ -278,11 +279,9 @@ func (m *Machine) landOnFrame(paneID string, place pane.Stack, pl *planner) {
 		pl.add(Effect{Kind: EffScaleContent, PaneID: paneID})
 		pl.add(Effect{Kind: EffRefreshOverlay})
 		pl.add(Effect{Kind: EffReEngage, PaneID: paneID, TileID: id})
-		// The pane's own grid, though nothing draws it from in here: it
-		// carries the scratch stamp, and a restore straight into a content
-		// frame is the one path that gets here without having fetched it.
-		pl.add(Effect{Kind: EffFetchGrid, PaneID: paneID})
-		return
 	}
-	pl.add(Effect{Kind: EffFetchGrid, PaneID: paneID})
+	// A content frame too, though nothing draws its grid from in there: the
+	// grid carries the scratch stamp, and a restore straight into a content
+	// frame is the one path that gets here without having read it.
+	pl.fetchPaneGrid(w, paneID, gridID)
 }

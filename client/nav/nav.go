@@ -196,6 +196,10 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		return m.promote(g, w)
 	case GestureFollowLink:
 		return m.followLink(g, w)
+	case GestureEngageLeaves:
+		var pl planner
+		m.engageLeaves(w, &pl)
+		return pl.plan()
 	}
 	return Plan{}
 }
@@ -250,10 +254,7 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		if !r.OK || r.Tile == nil {
 			break
 		}
-		if m.healStale(c.PaneID, r.Tile, w, &pl) {
-			break
-		}
-		m.autoLiveOnDescent(c.PaneID, r.Tile, nil, w, &pl)
+		m.engage(c.PaneID, r.Tile, w, &pl)
 	case stepHealed:
 		// A tile from a plugin without Search keeps the place it was restored
 		// with; the engagement happens either way.
@@ -323,7 +324,7 @@ func (m *Machine) Land(tok Token, w World) Plan {
 		if !ok {
 			return Plan{}
 		}
-		m.landOnFrame(p.ID, p.Stack, &pl)
+		m.landOnFrame(p.ID, p.Stack, p.GridID, w, &pl)
 		m.retireVisit(c.Tile, &pl)
 	case stepLevelAnimated:
 		if b, done := m.arrive(c.Barrier, false); done {
@@ -341,6 +342,23 @@ type planner struct {
 func (p *planner) add(e Effect)   { p.effects = append(p.effects, e) }
 func (p *planner) then(g Gesture) { c := g; p.next = &c }
 func (p *planner) plan() Plan     { return Plan{Effects: p.effects, Next: p.next} }
+
+// fetchGrid asks for gridID unless the cache holds it current; asking for one
+// it holds current would be asking what the event stream already told.
+func (p *planner) fetchGrid(w World, gridID string) {
+	if !w.current(gridID) {
+		p.add(Effect{Kind: EffFetchGrid, GridID: gridID})
+	}
+}
+
+// fetchPaneGrid is fetchGrid for the grid paneID's place names once the
+// effects above it have run, which only the executor resolves; gridID is that
+// grid as the gatherer resolved it.
+func (p *planner) fetchPaneGrid(w World, paneID, gridID string) {
+	if !w.current(gridID) {
+		p.add(Effect{Kind: EffFetchGrid, PaneID: paneID})
+	}
+}
 
 // install installs a pane's place on the plan's own copy of the stack, so what
 // the caller does with its own afterwards reaches nobody.

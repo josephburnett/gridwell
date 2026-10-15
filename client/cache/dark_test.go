@@ -86,3 +86,51 @@ func TestNoteHealthAnswersWhatItWas(t *testing.T) {
 		}
 	}
 }
+
+// A grid is current when the cache holds it and its source is answering: the
+// event stream keeps that one true, so navigation asks for nothing in it.
+func TestAGridIsCurrentWhenHeldFromAnAnsweringSource(t *testing.T) {
+	c := seedSources(t)
+	c.NoteHealth(conn, false)
+	cur := c.Current()
+	for _, id := range []string{node + "/7", fsPl + "/1", fsPl + "/12"} {
+		if !cur[id] {
+			t.Errorf("%s is held from an answering source and not current", id)
+		}
+	}
+	for _, id := range []string{farHome + "/1", farPl + "/4"} {
+		if cur[id] {
+			t.Errorf("%s rides the dark connection and is current", id)
+		}
+	}
+	if cur[node+"/never-held"] {
+		t.Error("a grid the cache never held is current")
+	}
+	c.NoteHealth(conn, true)
+	if !c.Current()[farHome+"/1"] {
+		t.Error("the far home stayed not current after its source came back")
+	}
+}
+
+// A source that lists but cannot watch is not dark, but nothing will tell this
+// client its changes, so its grids are not current: every look reads them.
+func TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent(t *testing.T) {
+	c := seedSources(t)
+	c.NoteLiveUpdates(fsPl, false)
+	cur := c.Current()
+	for _, id := range []string{fsPl + "/1", fsPl + "/12"} {
+		if cur[id] {
+			t.Errorf("%s has no live updates and is current", id)
+		}
+		if c.SourceDark(id) {
+			t.Errorf("%s still lists, so it is not dark", id)
+		}
+	}
+	if !cur[node+"/7"] || !cur[farHome+"/1"] {
+		t.Error("another source's live updates went off with the plugin's")
+	}
+	c.NoteLiveUpdates(fsPl, true)
+	if !c.Current()[fsPl+"/1"] {
+		t.Error("the plugin's grid stayed not current after its live updates came back")
+	}
+}

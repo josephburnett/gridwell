@@ -100,9 +100,10 @@ func TestEveryGestureIsNamed(t *testing.T) {
 		{nav.Gesture{Kind: nav.GestureLandLevel, TileID: "t7abcde"}, "pop", "land level"},
 		{nav.Gesture{Kind: nav.GestureReEngage, TileID: "t7abcde"}, "reengage", "re-engage content"},
 		{nav.Gesture{Kind: nav.GestureFollowLink, Door: &pb.Tile{Id: "l7abcde"}}, "push", "follow link"},
+		{nav.Gesture{Kind: nav.GestureEngageLeaves}, "reengage", "engage installed leaves"},
 	}
-	if len(cases) != int(nav.GestureFollowLink)+1 {
-		t.Fatalf("%d gestures named, %d declared", len(cases), int(nav.GestureFollowLink)+1)
+	if len(cases) != int(nav.GestureEngageLeaves)+1 {
+		t.Fatalf("%d gestures named, %d declared", len(cases), int(nav.GestureEngageLeaves)+1)
 	}
 	for _, c := range cases {
 		e := Nav(c.g)
@@ -110,7 +111,7 @@ func TestEveryGestureIsNamed(t *testing.T) {
 			t.Errorf("gesture %d is %+v, want kind %q msg %q", c.g.Kind, e, c.kind, c.msg)
 		}
 	}
-	if e := Nav(nav.Gesture{Kind: nav.GestureFollowLink + 1}); e.Kind != "unknown" {
+	if e := Nav(nav.Gesture{Kind: nav.GestureEngageLeaves + 1}); e.Kind != "unknown" {
 		t.Errorf("an unnamed gesture reads %+v", e)
 	}
 	// The door is what a reader follows into the next grid.

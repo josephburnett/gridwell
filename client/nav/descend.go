@@ -90,7 +90,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 		mid.Cx = float64(well.X) + float64(well.W)/2
 		mid.Cy = float64(well.Y) + float64(well.H)/2
 	}
-	pl.add(Effect{Kind: EffFetchGrid, GridID: well.ChildGridId})
+	pl.fetchGrid(w, well.ChildGridId)
 
 	child := base.Clone()
 	child.Push(next)
@@ -141,7 +141,7 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 		// match forever: drop before fetching.
 		if w.Door.ReadOnly {
 			pl.add(Effect{Kind: EffDropTileContent, ContentID: rpc.ContentID(file)})
-			pl.add(Effect{Kind: EffFetchGrid, PaneID: p.ID})
+			pl.fetchPaneGrid(w, p.ID, p.GridID)
 		}
 		pl.add(Effect{Kind: EffFetchTileContent, TileID: file.Id})
 	}
@@ -190,12 +190,20 @@ func descentTextMode(file *gridwellv1.Tile, readOnly bool) string {
 }
 
 // reEngage re-applies the auto-live verdict to a pane already in a content
-// descent. The row is always refetched: that resolves a link's target and a
-// tile that moved.
+// descent, from the row as the cache holds it when that is current: a tile
+// that moved was told, so the held row already says where it went. Only a row
+// the cache cannot vouch for is read.
 func (m *Machine) reEngage(g Gesture, w World) Plan {
 	var pl planner
+	guard := Guard{Kind: GuardDescendedIn, PaneID: g.PaneID, TileID: g.TileID}
+	if t := w.Engage.tile(); t != nil && w.current(t.GridId) {
+		if guard.holds(w) {
+			m.engage(g.PaneID, t, w, &pl)
+		}
+		return pl.plan()
+	}
 	tok := m.mint(cont{
-		Guard:  Guard{Kind: GuardDescendedIn, PaneID: g.PaneID, TileID: g.TileID},
+		Guard:  guard,
 		Step:   stepReEngage,
 		PaneID: g.PaneID,
 		TileID: g.TileID,
@@ -203,6 +211,25 @@ func (m *Machine) reEngage(g Gesture, w World) Plan {
 	pl.add(Effect{Kind: EffAwait, Token: tok,
 		Request: Request{Kind: RequestGetTile, ID: g.TileID}})
 	return pl.plan()
+}
+
+// engage heals a stale path to the descended row, or goes live on it.
+func (m *Machine) engage(paneID string, tile *gridwellv1.Tile, w World, pl *planner) {
+	if m.healStale(paneID, tile, w, pl) {
+		return
+	}
+	m.autoLiveOnDescent(paneID, tile, nil, w, pl)
+}
+
+// engageLeaves settles every pane of a tree just installed or handed back:
+// its grid asked for unless held current, and a content leaf re-engaged.
+func (m *Machine) engageLeaves(w World, pl *planner) {
+	for _, p := range w.Panes {
+		pl.fetchPaneGrid(w, p.ID, p.GridID)
+		if id := p.Stack.ContentID(); id != "" {
+			pl.add(Effect{Kind: EffReEngage, PaneID: p.ID, TileID: id})
+		}
+	}
 }
 
 // followLink places the live view on a url link's target row, which owns the
@@ -269,7 +296,7 @@ func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, 
 	}
 	st.SetView(float64(tile.X)+float64(tile.W)/2, float64(tile.Y)+float64(tile.H)/2, zoom)
 	pl.install(paneID, st, nil)
-	pl.add(Effect{Kind: EffFetchGrid, GridID: tile.GridId})
+	pl.fetchGrid(w, tile.GridId)
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 }
 

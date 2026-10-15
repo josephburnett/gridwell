@@ -140,6 +140,12 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.
+- Navigation asks for a grid or a row only when the cache does not hold it
+  current: held, from a source that is answering and whose changes are told
+  (`cache.Current`; a source with live updates off is read on every move). The
+  event stream keeps those true, so coming back to one reads nothing; a stream
+  gap still re-reads every held grid. The planner decides
+  (`nav` `planner.fetchGrid`), never the executor (2026-10-14).
 - Clone is an eager deep copy. COW was tried and torn out.
 - A clone of a link is another link to the same target, never a copy of the
   target: the deep copy is of content, and a link's content is its path

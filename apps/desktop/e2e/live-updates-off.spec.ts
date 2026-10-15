@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { tileAt } from './oracle';
 
 // A source that lists but cannot watch is not dark: the node says so as
 // EventPluginHealth.live_updates_off on a healthy event, and the client shows
@@ -6,7 +7,8 @@ import { test, expect } from './fixtures';
 // (events.ReactHealth). The node side, a real refused Watch whose listings
 // still answer, is internal/server/live_updates_off_seam_test.go: no OS lever
 // makes the shipped fs plugin refuse a watch while it still lists, so the
-// page's Subscribe is the lever here, one held stream per stage.
+// page's Subscribe is the lever here, one held stream per stage. Nothing tells
+// the client such a source's changes, so a move onto its grid reads it.
 
 // envelope frames one Connect streaming message: a flag byte, a big-endian
 // length, the JSON payload. Flag 2 is the end of the stream.
@@ -22,6 +24,16 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
   const cad = await gw.cadences();
   const home = (await gw.plugins()).find((p) => p.label === 'home')!;
   const landed = await gw.focused();
+  const cx = Math.round(landed.cx);
+  const cy = Math.round(landed.cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx, cy);
+  expect(tileAt(await gw.getGrid(landed.gridID), 'well', cx, cy), 'a well to move through').toBeTruthy();
+  const roundTrip = async () => {
+    await gw.descendCell(cx, cy);
+    await gw.ascendViaCrumb();
+    await gw.waitIdle();
+  };
   const health = (h: object) => envelope(0, { pluginHealth: { pluginUuid: home.uuid, ...h } });
   const refused = 'the OS refused another change watch';
 
@@ -87,6 +99,8 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     expect.soft(of(ns, dark), 'a source that lists is not dark').toEqual([]);
     expect.soft((await gw.focused()).stale, 'its rooms are answers, not memories').toBeFalsy();
     expect.soft(reads.filter((id) => id === landed.gridID), 'a refused watch alone costs no resync').toEqual([]);
+    await roundTrip();
+    expect.soft(reads.filter((id) => id === landed.gridID).length, 'an ascent reads the grid nothing tells').toBeGreaterThan(0);
 
     gates[1].open();
     await expect.poll(async () => of(await notices(), dark).length, { message: 'going dark is its own notice' }).toBe(1);
@@ -102,6 +116,12 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     await expect
       .poll(async () => of(await notices(), live).length, { message: 'the watch opening takes the notice down' })
       .toBe(0);
+    // Past the settle window the dark spell's recovery resync rides on.
+    await window.waitForTimeout(cad.healthSettleMs * 2);
+    await gw.waitIdle();
+    reads.length = 0;
+    await roundTrip();
+    expect.soft(reads.filter((id) => id === landed.gridID), 'told again, an ascent reads nothing').toEqual([]);
   } finally {
     for (const g of gates) g.open();
     release();

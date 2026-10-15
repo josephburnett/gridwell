@@ -57,7 +57,8 @@ const (
 	EffScaleContent
 
 	// EffFetchGrid warms a grid: GridID, or PaneID for the grid this pane's
-	// place names, which only the executor can resolve.
+	// place names, which only the executor can resolve. Planned only through
+	// planner.fetchGrid.
 	EffFetchGrid
 	EffFetchTileContent // warms a tile's body: TileID
 	EffDropTileContent  // drops a cached body before refetching it: ContentID

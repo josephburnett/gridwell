@@ -124,17 +124,13 @@ func (a *App) reportLayoutSkipped(tileID string, skipped []string) {
 		"a pane views content the workspace's node cannot reach; it will reopen at home")
 }
 
-// restoreWorkspaceLeaves applies the boot-blank fixups a freshly-installed
-// tree needs: an empty anchor means the node's home grid, and every leaf's
-// grid fetch is kicked. Loose, per the urlwalk rule.
+// restoreWorkspaceLeaves applies the boot-blank fixup a freshly-installed
+// tree needs: an empty anchor means the node's home grid. Loose, per the
+// urlwalk rule. The leaves' reads and surfaces are nav.GestureEngageLeaves.
 func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	tree.Walk(func(p *pane.Pane) {
 		if p.Anchor() == "" {
 			p.Reset(pane.Frame{GridID: a.home, View: rpc.Saved(zoomtrans.Origin), ViewPending: true})
-		}
-		a.fetchGrid(a.gridIDForPane(p))
-		if p.ContentID() != "" {
-			a.navReEngage(p.ID, p.ContentID())
 		}
 	})
 }

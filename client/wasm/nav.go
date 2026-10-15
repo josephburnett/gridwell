@@ -80,6 +80,8 @@ func (a *App) navWorld(g nav.Gesture) nav.World {
 		w.Level = a.navWorldForLevel(g.PaneID, g.TileID)
 	case nav.GesturePromote:
 		w.Promote = &nav.PromoteWorld{OldTile: a.cachedTileByID(g.OldID)}
+	case nav.GestureReEngage:
+		w.Engage = &nav.EngageWorld{Tile: a.cachedTileByID(g.TileID)}
 	}
 	return w
 }
@@ -163,6 +165,7 @@ func (a *App) navWorldCommon() nav.World {
 		LevelTop:        a.ws.Top(),
 		ShellAlive:      map[string]bool{},
 		ShellAliveKnown: map[string]bool{},
+		Current:         a.c.Current(),
 	}
 	rects := a.layoutPanes()
 	a.tree.Walk(func(p *pane.Pane) {
@@ -242,6 +245,7 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 	// A frame restored from a URL or a layout blob carries no viewport, so
 	// the ascent lands at the grid's persisted framing.
 	landing := p.Popped(1)
+	lw.LandingGridID = a.gridIDForPathFrom(landing.Anchor(), landing.Path())
 	if !landing.HasView() && !landing.Content {
 		if f, ok := a.persistedGridView(p, landing.Anchor(), landing.Path()); ok {
 			lw.LandingView = &f

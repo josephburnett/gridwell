@@ -182,9 +182,10 @@ func (m *Machine) restoreWalk(d *restoreData, w World, pl *planner) Plan {
 
 // finishRestore rewrites the address in case the walk truncated it.
 func (m *Machine) finishRestore(d *restoreData, path []string, w World, pl *planner) Plan {
+	// A grid the walk itself read is not asked twice.
 	gid := leafGrid(d.State.Anchor, path, w.Restore)
 	if _, read := w.Restore.rows(gid); !read || !d.Asked[gid] {
-		pl.add(Effect{Kind: EffFetchGrid, PaneID: d.PaneID})
+		pl.fetchPaneGrid(w, d.PaneID, gid)
 	}
 	pl.add(Effect{Kind: EffScheduleURLUpdate})
 	return m.endRestore(d, pl)
