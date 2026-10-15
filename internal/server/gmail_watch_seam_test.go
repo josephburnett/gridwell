@@ -20,6 +20,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -290,7 +291,7 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 		if before.Reference {
 			t.Fatalf("%s drew a link from an entry with no link_target", grid)
 		}
-		if _, err := n.cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1}); err != nil {
+		if _, err := n.cl.PlaceTile(ctx, claimtest.Claimed(t, n.cl, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1})); err != nil {
 			t.Fatal(err)
 		}
 		placed[grid] = before
@@ -315,7 +316,7 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	msg := n.message(t, "Lunch plans")
-	_, err := n.cl.DeleteTile(t.Context(), &gridwellv1.DeleteTileRequest{TileId: msg.Id})
+	_, err := n.cl.DeleteTile(t.Context(), claimtest.Claimed(t, n.cl, &gridwellv1.DeleteTileRequest{TileId: msg.Id}))
 	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), "read-only projection") {
 		t.Fatalf("DeleteTile = %v, want the plugin's read-only refusal", err)
 	}

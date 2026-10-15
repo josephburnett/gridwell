@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
@@ -68,7 +69,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
 		t.Fatalf("DeleteTile(pane): %v", err)
 	}
 
@@ -82,7 +83,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 	// The second delete (inside the trash) DESTROYS — and only then does
 	// the router reap what the arrangement owned.
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
 		t.Fatalf("DeleteTile(pane, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
@@ -105,13 +106,13 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	if _, err := cl.WriteContent(ctx, pt2.Id, rpc.ContentBasis{Version: pt2.Version}, []byte(`{"v":999,"root":{}}`)); err != nil {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt2.Id})); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, pt2.Id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt2.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt2.Id})); err != nil {
 		t.Fatalf("DeleteTile(pane, unreadable blob, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph2.Id); err != nil {
@@ -144,10 +145,10 @@ func TestAReapThatLeavesASessionRunningSaysSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.fake.KillErr = fmt.Errorf("tmux: server exited unexpectedly")
-	if _, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
 		t.Fatal(err)
 	}
-	resp, err := f.cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Id})
+	resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id}))
 	if err != nil {
 		t.Fatalf("destroy = %v, want it to land", err)
 	}

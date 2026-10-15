@@ -13,6 +13,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/door"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -218,9 +219,9 @@ func TestResizeAndSetFramingRPCs(t *testing.T) {
 	}
 	id := tile.Id
 
-	resized, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	resized, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
 		TileId: id, GridId: root, X: 0, Y: 0, W: 2, H: 2,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -268,7 +269,7 @@ func TestDeleteTileRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tile.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: tile.Id})); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 }
@@ -307,10 +308,10 @@ func TestCloneAndMoveRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	moved, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
 		TileId: clone.Id,
 		GridId: root, X: 8, Y: 8, W: clone.W, H: clone.H,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("move: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
@@ -46,7 +47,7 @@ func destroyPane(t *testing.T, cl *rpc.Client, tileID string) {
 	t.Helper()
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
-		if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: tileID}); err != nil {
+		if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: tileID})); err != nil {
 			t.Fatalf("DeleteTile(pane) %d: %v", i+1, err)
 		}
 	}

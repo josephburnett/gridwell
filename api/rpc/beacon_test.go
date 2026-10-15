@@ -51,11 +51,15 @@ func TestBeaconBodies(t *testing.T) {
 	// The ephemeral cleanup parks, so it can be drained at unload: a quit
 	// mid-ascent must still take the scratch row, and a shell's tmux session,
 	// with it.
-	path, body = DeleteTileBeacon(&pb.DeleteTileRequest{TileId: "u1/7"})
+	path, body = DeleteTileBeacon(DeleteOf(&pb.Tile{Id: "u1/7", GridId: "u1/2", W: 1, H: 1}))
 	if path != "/gridwell.v1.Gridwell/DeleteTile" {
 		t.Errorf("delete path = %q", path)
 	}
 	if err := json.Unmarshal(body, &m); err != nil || m["tileId"] != "u1/7" {
 		t.Errorf("delete body = %s err=%v", body, err)
+	}
+	// One the door would refuse is posted instead, so the refusal surfaces.
+	if _, body = DeleteTileBeacon(&pb.DeleteTileRequest{TileId: "u1/7"}); body != nil {
+		t.Errorf("an unclaimed delete got a beacon body: %s", body)
 	}
 }

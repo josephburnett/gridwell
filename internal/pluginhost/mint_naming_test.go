@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
@@ -52,7 +53,7 @@ func TestATouchedWellsChildGridKeepsItsName(t *testing.T) {
 	// The touch: a placement is a durable fact, so it mints the well's row and
 	// its child grid's. Exactly what descending into a week and leaving a
 	// framing behind does.
-	if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 5, Y: 2, W: 1, H: 1}); err != nil {
+	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 5, Y: 2, W: 1, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 

@@ -55,7 +55,7 @@ test('stream break: a change made in the gap reaches the view with no later even
     .toBe(true);
   // Another writer moves the tile while no stream is open; nothing after this
   // changes, so no event will ever say so.
-  await placeTile(serve.origin, t.id!, undefined, f.gridID, cx + 2, cy, 1, 1);
+  await placeTile(serve.origin, t.id!, f.gridID, cx + 2, cy, 1, 1);
   await window.evaluate(() => (window as any).__mendStream());
 
   await gw.waitClientTileAt(f.id, cx + 2, cy, t.id!);

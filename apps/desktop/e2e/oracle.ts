@@ -123,21 +123,38 @@ export async function writeContent(
   }
 }
 
-// A foreign writer moving a tile out from under the app's stored references.
+// The row as the node holds it now. A foreign writer reads it before it
+// writes, because the door refuses a move or delete that names no claim.
+export async function getTile(origin: string, tileId: string): Promise<Tile> {
+  const res = await fetch(`${origin}/${SERVICE}/GetTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ tileId }),
+  });
+  if (!res.ok) throw new Error(`GetTile(${tileId}) failed: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as { tile: Tile }).tile;
+}
+
+function placementOf(t: Tile) {
+  return { gridId: t.gridId, x: Number(t.x ?? 0), y: Number(t.y ?? 0), w: Number(t.w ?? 0), h: Number(t.h ?? 0) };
+}
+
+// A foreign writer moving a tile out from under the app's stored references,
+// claiming the placement it read.
 export async function placeTile(
   origin: string,
   tileId: string,
-  version: number | string | undefined,
   gridId: string,
   x: number,
   y: number,
   w: number,
   h: number,
 ): Promise<void> {
+  const claim = placementOf(await getTile(origin, tileId));
   const res = await fetch(`${origin}/${SERVICE}/PlaceTile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: JSON.stringify({ tileId, version: Number(version ?? 0), gridId, x, y, w, h }),
+    body: JSON.stringify({ tileId, gridId, x, y, w, h, claim }),
   });
   if (!res.ok) {
     throw new Error(`PlaceTile(${tileId}) failed: ${res.status} ${await res.text()}`);
@@ -164,8 +181,9 @@ export async function setRootFraming(
 }
 
 // A foreign writer deleting a row out from under the app: another device, or
-// this one in a pane the spec is not driving.
+// this one in a pane the spec is not driving. It claims the row it read.
 export async function deleteTile(origin: string, tileId: string): Promise<void> {
+  const row = await getTile(origin, tileId);
   const res = await fetch(`${origin}/${SERVICE}/DeleteTile`, {
     method: 'POST',
     headers: {
@@ -173,7 +191,7 @@ export async function deleteTile(origin: string, tileId: string): Promise<void> 
       'Connect-Protocol-Version': '1',
       ...authHeaders(origin),
     },
-    body: JSON.stringify({ tileId }),
+    body: JSON.stringify({ tileId, claimVersion: Number(row.version ?? 0), claim: placementOf(row) }),
   });
   if (!res.ok) {
     throw new Error(`DeleteTile(${tileId}) failed: ${res.status} ${await res.text()}`);

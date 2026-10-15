@@ -70,6 +70,9 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 
 // PlaceTile is the single placement writeback.
 func (rt *router) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+	if err := refuseUnclaimed(req); err != nil {
+		return nil, err
+	}
 	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err

@@ -31,6 +31,16 @@ var _ namespace.Namespace = (*router)(nil)
 
 func newRouter(srv *Server) *router { return &router{srv: srv} }
 
+// refuseUnclaimed is both doors' refusal of a user write that names no claim
+// (rpc.UnclaimedWrite). It lives on the router because the router serves only
+// the doors; the node's own writers call their namespace directly.
+func refuseUnclaimed(req proto.Message) error {
+	if why := rpc.UnclaimedWrite(req); why != "" {
+		return status.Error(gcodes.InvalidArgument, why)
+	}
+	return nil
+}
+
 // route resolves the namespace that owns id. Ids are always qualified; there
 // is no privileged namespace a bare id falls back to.
 func (rt *router) route(id string) (ns namespace.Namespace, local, uuid string, transit bool, err error) {
@@ -426,6 +436,9 @@ func readAllContent(ctx context.Context, c namespace.Namespace, tileID string) (
 }
 
 func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error) {
+	if err := refuseUnclaimed(req); err != nil {
+		return nil, err
+	}
 	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
@@ -438,6 +451,9 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 }
 
 func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
+	if err := refuseUnclaimed(req); err != nil {
+		return nil, err
+	}
 	qualifiedID := req.TileId
 	c, local, _, transit, err := rt.route(req.TileId)
 	if err != nil {

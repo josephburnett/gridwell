@@ -142,14 +142,14 @@ func TestAStaleFreezeIsRefusedAndTheNewerFreezeStateStands(t *testing.T) {
 				t.Fatal(err)
 			}
 			no, yes := false, true
-			if _, err := cl.SetFrozen(ctx, page.Id, true, &no); err != nil {
+			if _, err := cl.SetFrozen(ctx, page.Id, true, no); err != nil {
 				t.Fatalf("freeze: %v", err)
 			}
 			// Window one read it frozen here; window two unfreezes it.
-			if _, err := cl.SetFrozen(ctx, page.Id, false, &yes); err != nil {
+			if _, err := cl.SetFrozen(ctx, page.Id, false, yes); err != nil {
 				t.Fatalf("unfreeze: %v", err)
 			}
-			_, err = cl.SetFrozen(ctx, page.Id, true, &yes)
+			_, err = cl.SetFrozen(ctx, page.Id, true, yes)
 			wantConflict(t, "freeze over an unfreeze it never saw", err)
 			if got := m.tileIn(ctx, meNode, grid, page.Id); got.UrlFrozen || got.Version != page.Version {
 				t.Fatalf("frozen=%v version %d, want the unfreeze standing at version %d", got.UrlFrozen, got.Version, page.Version)

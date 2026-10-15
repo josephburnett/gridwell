@@ -100,12 +100,12 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 // deleteEphemeralTile removes an ended ephemeral visit, and for a
 // shell the plugin kills its tmux session too. Unlike the trashcan delete it
 // parks, because an ephemeral row is off-grid and a lost cleanup is invisible
-// until the startup sweep.
-func (a *App) deleteEphemeralTile(gridID, tileID string) {
-	// No claim: the stream close that precedes this triggers the plugin's
-	// detach-time title capture, and captures do not bump the row, so the two
-	// cannot race.
-	req := &gridwellv1.DeleteTileRequest{TileId: tileID}
+// until the startup sweep. It claims seen, the row the visit held: no durable
+// write lands on a visit (possiblyEphemeral), and the detach-time title
+// capture bumps nothing.
+func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
+	gridID, tileID := seen.GridId, seen.Id
+	req := rpc.DeleteOf(seen)
 	// The row is going, and so is the tmux session behind it.
 	a.forgetShellAlive(tileID)
 	// No refetch: nothing renders the scratch grid, and the event stream

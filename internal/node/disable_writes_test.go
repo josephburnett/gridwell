@@ -13,6 +13,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -128,7 +129,7 @@ func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 	_, writes["WriteContent"] = cl.WriteContent(ctx, note.GetId(), rpc.BasisOf(note), []byte("lost"))
 	_, writes["CreateTile"] = cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 3, Y: 3, W: 1, H: 1}})
-	_, writes["DeleteTile"] = cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: note.GetId()})
+	_, writes["DeleteTile"] = cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: note.GetId()}))
 	for verb, err := range writes {
 		if !gwerr.IsSourceDisabled(err) {
 			t.Errorf("%s on a disabled connection = %v (code %v), want the disabled verdict", verb, err, connect.CodeOf(err))

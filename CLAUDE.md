@@ -148,10 +148,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   re-reads its grid (`App.postPlacement`), a refused delete or freeze
   re-reads it. A claim is about the state, not its history: a tile moved
   away and back is where the writer saw it. A write landing where the row
-  already is writes nothing and loses nothing, and a request with no claim
-  is the node's own (a reap, a cleanup). Only framing (pan and zoom, the
-  text window, content zoom) and captures carry no claim. A pane tile's
-  layout counted as framing until this decision.
+  already is writes nothing and loses nothing. The doors refuse a user write
+  that names no claim (`rpc.UnclaimedWrite`, which the client checks too), so
+  only the node's own writers (a reap, the boot sweep) reach a namespace
+  without one; the ephemeral cleanup claims the row its visit held
+  (2026-10-14). Only framing (pan and zoom, the text window, content zoom)
+  and captures carry no claim. A pane tile's layout counted as framing
+  until this decision.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a

@@ -57,7 +57,7 @@ test('placement: a refused move goes back and says so', async ({ gw, window, ser
 
   // Another writer takes the cell; the client is not told.
   await holdEchoFor(window, 60_000);
-  await placeTile(serve.origin, b.id!, undefined, f.gridID, cx + 2, cy, 1, 1);
+  await placeTile(serve.origin, b.id!, f.gridID, cx + 2, cy, 1, 1);
   await gw.dragTileCell(cx, cy, cx + 2, cy);
 
   expect(await clientTileAt(window, f.id, cx, cy), 'the refused move is back').toBe(a.id);

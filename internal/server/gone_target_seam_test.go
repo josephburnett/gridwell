@@ -9,6 +9,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 )
 
 // goneReads asserts every read a link on screen takes answers the dead
@@ -125,7 +126,7 @@ func TestALinkToADestroyedHomeTileIsDead(t *testing.T) {
 	// The first delete moves the target to the trash, where links keep
 	// resolving; the second destroys it.
 	for range 2 {
-		if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: target.Id}); err != nil {
+		if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: target.Id})); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := cl.GetTile(ctx, link.Id); err != nil {
@@ -133,7 +134,7 @@ func TestALinkToADestroyedHomeTileIsDead(t *testing.T) {
 		}
 	}
 	goneReads(ctx, t, cl, link, "the target was destroyed")
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: link.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: link.Id})); err != nil {
 		t.Fatalf("deleting the dead link: %v", err)
 	}
 }

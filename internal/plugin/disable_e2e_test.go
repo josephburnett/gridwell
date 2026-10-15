@@ -123,7 +123,7 @@ func TestADisabledPluginIsStoppedAndNeverRespawned(t *testing.T) {
 	writes := map[string]error{}
 	_, writes["WriteContent"] = cl.WriteContent(ctx, notes.GetId(), rpc.BasisOf(notes), []byte("lost"))
 	_, writes["SetFraming"] = cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: landing, Cx: 1, Cy: 1, Zoom: 1})
-	_, writes["PlaceTile"] = cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: notes.GetId(), X: 7, Y: 3, W: 1, H: 1})
+	_, writes["PlaceTile"] = cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: notes.GetId(), X: 7, Y: 3, W: 1, H: 1, Claim: rpc.PlacementOf(notes)})
 	for verb, err := range writes {
 		if !gwerr.IsSourceDisabled(err) {
 			t.Errorf("%s on a disabled plugin = %v, want the disabled verdict", verb, err)

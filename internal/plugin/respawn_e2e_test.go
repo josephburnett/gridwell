@@ -26,6 +26,7 @@ import (
 
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -152,7 +153,7 @@ func TestAPluginSubprocessCrashSurfacesAndRespawns(t *testing.T) {
 			if time.Now().After(deadline) {
 				t.Fatal("a write's GridChanged never reached the client stream")
 			}
-			if _, perr := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: g.Tiles[0].Id, X: 4, Y: 4, W: 1, H: 1}); perr != nil {
+			if _, perr := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: g.Tiles[0].Id, X: 4, Y: 4, W: 1, H: 1})); perr != nil {
 				t.Fatal(perr)
 			}
 			timeout := time.After(300 * time.Millisecond)

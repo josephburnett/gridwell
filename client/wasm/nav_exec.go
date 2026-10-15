@@ -115,7 +115,7 @@ func (a *App) runNavEffect(e nav.Effect) {
 	case nav.EffPlaceCursor:
 		a.placeCursorAt(e.Col, e.Row)
 	case nav.EffDeleteEphemeral:
-		a.deleteEphemeralTile(e.GridID, e.TileID)
+		a.deleteEphemeralTile(e.Tile)
 	case nav.EffReport:
 		a.reportErr(e.Severity, e.Source, e.Message)
 	case nav.EffEnterLevel:

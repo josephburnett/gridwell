@@ -1651,8 +1651,9 @@ func (x *ServeContentChunk) GetData() []byte {
 // a plugin boundary; there is no cross-plugin move, only link or clone.
 //
 // claim is the placement the writer saw. A tile no longer there is refused
-// with the version conflict, the placement on disk standing; a request with no
-// claim is the node's own and is not checked.
+// with the version conflict, the placement on disk standing. The doors refuse
+// a request with no claim (rpc.UnclaimedWrite); only the node's own writers
+// reach a namespace without one.
 type PlaceTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
@@ -3004,8 +3005,8 @@ type SetTileRequest struct {
 	// Refused for a kind that cannot go live. optional so clearing (false) is
 	// distinct from absent.
 	UrlFrozen *bool `protobuf:"varint,8,opt,name=url_frozen,json=urlFrozen,proto3,oneof" json:"url_frozen,omitempty"`
-	// claim_frozen is url_frozen's claim; absent is the node's own write and is
-	// not checked.
+	// claim_frozen is url_frozen's claim; the doors refuse url_frozen without
+	// it, so absent is only the node's own write.
 	ClaimFrozen   *bool `protobuf:"varint,10,opt,name=claim_frozen,json=claimFrozen,proto3,oneof" json:"claim_frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3099,8 +3100,8 @@ func (x *SetTileRequest) GetClaimFrozen() bool {
 
 // DeleteTileRequest claims what the writer saw: the content version and the
 // placement. A tile whose content or place moved meanwhile is refused with the
-// version conflict and stands; a request with no claim is the node's own (a
-// reap) and is not checked.
+// version conflict and stands. The doors refuse a request with no claim; only
+// the node's own writers (a reap) reach a namespace without one.
 type DeleteTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,2,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`

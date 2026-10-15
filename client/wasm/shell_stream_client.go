@@ -189,10 +189,8 @@ func (a *App) forgetShellAlive(tileID string) {
 // terminal on the same session first. key is the session tileID resolves to
 // (shellconn.SessionKey). disable_shells refuses.
 func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
-	frozen := false
-	if t := a.findTileByID(tileID); t != nil {
-		frozen = t.UrlFrozen
-	}
+	row := a.findTileByID(tileID)
+	frozen := row != nil && row.UrlFrozen
 	// Attaching clears the standing freeze, as the url side does. A shell link
 	// never follows its target, so the link row holds and clears the freeze.
 	plan, ok := shellconn.DecideGoLive(a.caps.Shells, frozen, false)
@@ -201,7 +199,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 		return
 	}
 	if plan.Unfreeze {
-		a.postFrozen(tileID, false, nil)
+		a.postFrozen(row, false, nil)
 	}
 	tileID = a.contentKey(tileID)
 	if !a.engage(a.shellSurface(), p, key, tileID) {
@@ -617,7 +615,7 @@ func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
 	if !ok || t.Kind != rpc.KindShell {
 		return
 	}
-	a.postFrozen(t.Id, true, func() {
+	a.postFrozen(t, true, func() {
 		// A freeze still owed is the outbox's business.
 		a.closeShellStream(p.ID, true)
 		a.draw()

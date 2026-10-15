@@ -21,6 +21,7 @@ import (
 	"connectrpc.com/connect"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection"
@@ -40,8 +41,9 @@ type meshNode struct {
 	id   string
 	st   *store.Store
 	reg  *plugin.Registry
-	cl   *rpc.Client // the node's browser door
-	root string      // the home's bare root grid id
+	cl   *rpc.Client                      // the node's browser door
+	web  gridwellv1connect.GridwellClient // the same door without Client's guards
+	root string                           // the home's bare root grid id
 	door *swapHandler
 	far  gridwellv1.GridwellClient
 }
@@ -132,6 +134,7 @@ func newMesh(t *testing.T, ids []string, edges []meshEdge) *mesh {
 		n.door.mu.Unlock()
 		web := servertest.Serve(t, srv)
 		n.cl = rpc.NewClient(web.Client(), web.URL, connect.WithProtoJSON())
+		n.web = gridwellv1connect.NewGridwellClient(web.Client(), web.URL, connect.WithProtoJSON())
 	}
 	for _, id := range ids {
 		m.connect(id)

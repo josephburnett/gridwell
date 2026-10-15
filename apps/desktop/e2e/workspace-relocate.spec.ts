@@ -58,8 +58,7 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
     .toBe(0);
 
   // A foreign writer moves the tile into the well.
-  const fresh = (await gw.getGrid(grid)).tiles!.find((t: any) => t.id === doc.id)!;
-  await placeTile(gw.origin, doc.id, Number(fresh.version), well.childGridId!, 0, 0, 1, 1);
+  await placeTile(gw.origin, doc.id, well.childGridId!, 0, 0, 1, 1);
   await expect
     .poll(async () => ((await gw.getGrid(well.childGridId!)).tiles ?? []).some((t: any) => t.id === doc.id))
     .toBe(true);

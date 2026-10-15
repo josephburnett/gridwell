@@ -646,7 +646,7 @@ pane is inside" and do not spread the word.
 | Invariant | Enforced by |
 |---|---|
 | Ids never reused | AUTOINCREMENT |
-| `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement; framing, captures carry no claim | the two store pairs; reserved request fields; `version_rule_test.go` |
+| `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both doors refuse one that names none; framing, captures carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
 | Clone is an eager deep copy | `CloneTile` |
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |

@@ -419,8 +419,9 @@ message ServeContentChunk {
 // a plugin boundary; there is no cross-plugin move, only link or clone.
 //
 // claim is the placement the writer saw. A tile no longer there is refused
-// with the version conflict, the placement on disk standing; a request with no
-// claim is the node's own and is not checked.
+// with the version conflict, the placement on disk standing. The doors refuse
+// a request with no claim (rpc.UnclaimedWrite); only the node's own writers
+// reach a namespace without one.
 message PlaceTileRequest {
   string tile_id = 1;
   reserved 2; // version
@@ -657,11 +658,12 @@ message ShellSessionAliveResponse {
   bool alive = 1;
 }
 
-// Mutations. A version claim rides only the writes that change the user's
-// content bytes — WriteContent, whose claim for a row with no version is its
-// stamp, and SetTile's rename arm — and the server returns a conflict error
-// when it does not match. Layout, framing, and capture writes carry no claim
-// at all.
+// Mutations. A write of something the user made or placed claims what it was
+// read at, one claim per fact: WriteContent and SetTile's rename claim the
+// version (a row with no version, its stamp), PlaceTile the placement,
+// url_frozen the freeze, DeleteTile the version and placement. A stale claim
+// is the version conflict, and the doors refuse a missing one. Framing and
+// capture writes carry no claim.
 
 message CloneTileRequest {
   reserved 1, 5; // path, dest_path
@@ -720,15 +722,15 @@ message SetTileRequest {
   // distinct from absent.
   optional bool url_frozen = 8;
   reserved 9; // adopt_child_grid
-  // claim_frozen is url_frozen's claim; absent is the node's own write and is
-  // not checked.
+  // claim_frozen is url_frozen's claim; the doors refuse url_frozen without
+  // it, so absent is only the node's own write.
   optional bool claim_frozen = 10;
 }
 
 // DeleteTileRequest claims what the writer saw: the content version and the
 // placement. A tile whose content or place moved meanwhile is refused with the
-// version conflict and stands; a request with no claim is the node's own (a
-// reap) and is not checked.
+// version conflict and stands. The doors refuse a request with no claim; only
+// the node's own writers (a reap) reach a namespace without one.
 message DeleteTileRequest {
   reserved 1; // path
   string tile_id = 2;

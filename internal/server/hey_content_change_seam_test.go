@@ -222,7 +222,7 @@ func TestAHeyReplyRetiresTheThreadsScreenshotFace(t *testing.T) {
 func TestAFrozenHeyThreadKeepsItsScreenshotThroughAReply(t *testing.T) {
 	s := showHeyThread(t)
 	shot := s.capture(t, "\xff\xd8\xff frozen")
-	if _, err := s.cl.SetFrozen(s.ctx, s.tile.Id, true, nil); err != nil {
+	if _, err := s.cl.SetFrozen(s.ctx, s.tile.Id, true, s.tile.UrlFrozen); err != nil {
 		t.Fatal(err)
 	}
 	ev := s.reply(t)

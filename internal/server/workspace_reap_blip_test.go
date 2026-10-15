@@ -12,6 +12,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -90,7 +91,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 
 	_, paneLocal, _ := rpc.SplitID(pt.Id)
 	bc.armID = paneLocal
-	if _, err := cl.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: pt.Id}); err != nil {
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &pb.DeleteTileRequest{TileId: pt.Id})); err != nil {
 		t.Fatalf("DeleteTile: %v", err)
 	}
 	bc.blip.Store(false)

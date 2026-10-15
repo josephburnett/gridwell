@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/claimtest"
 )
 
 // TestFileWellLifecycleE2E exercises the whole new path through the public RPC
@@ -76,11 +77,11 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 3. Move alpha.txt and confirm the new position survives a re-descent.
-	moved, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
 		TileId: alpha.Id,
 		GridId: child,
 		X:      5, Y: 6, W: alpha.W, H: alpha.H,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("MoveTile: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	if held, err := cl.GetTile(ctx, alpha.Id); err != nil || held.Id != moved.Id {
 		t.Errorf("the pre-mint address stopped resolving: %+v (%v), want %s", held, err, moved.Id)
 	}
-	again, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: moved.Id, GridId: child, X: 5, Y: 6, W: alpha.W, H: alpha.H})
+	again, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: moved.Id, GridId: child, X: 5, Y: 6, W: alpha.W, H: alpha.H}))
 	if err != nil {
 		t.Fatalf("second move: %v", err)
 	}
@@ -113,9 +114,9 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 4. Delete alpha.txt: the file is removed from disk and swept from the grid.
-	if _, err := cl.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{
+	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{
 		TileId: alpha.Id,
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("DeleteTile: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "alpha.txt")); !os.IsNotExist(err) {
