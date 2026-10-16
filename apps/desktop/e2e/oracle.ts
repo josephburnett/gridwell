@@ -194,21 +194,6 @@ export async function setRootFraming(
   }
 }
 
-// Sets a grid's selection the way another window would, claiming the set the
-// node holds now.
-export async function setSelection(origin: string, gridId: string, tileIds: string[]): Promise<void> {
-  const snap = await getGrid(origin, gridId);
-  const seen = ((snap.grid as { selection?: string[] } | undefined)?.selection) ?? [];
-  const res = await fetch(`${origin}/${SERVICE}/SetSelection`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: JSON.stringify({ gridId, claim: { tileIds: seen }, tileIds }),
-  });
-  if (!res.ok) {
-    throw new Error(`SetSelection(${gridId}) failed: ${res.status} ${await res.text()}`);
-  }
-}
-
 // A foreign writer deleting a row out from under the app: another device, or
 // this one in a pane the spec is not driving. It claims the row it read.
 export async function deleteTile(origin: string, tileId: string): Promise<void> {
