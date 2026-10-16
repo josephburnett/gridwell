@@ -219,6 +219,7 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 		{&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: "t7abcde"}}}, "tile removed", "t7abcde"},
 		{&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "g7abcde"}}}, "grid changed", "g7abcde"},
 		{&pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{GridId: "g7abcde"}}}, "grid framing changed", "g7abcde"},
+		{&pb.Event{Payload: &pb.Event_SelectionChanged{SelectionChanged: &pb.SelectionChanged{GridId: "g7abcde"}}}, "selection changed", "g7abcde"},
 		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde"}}}, "namespace unhealthy", "n7abcde"},
 		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde", Healthy: true}}}, "namespace healthy", "n7abcde"},
 	}

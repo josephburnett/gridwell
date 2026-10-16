@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -298,5 +299,31 @@ func TestQualifyEventIDsNamesEveryPayloadArm(t *testing.T) {
 		if QualifyEventIDs("u", ev, func(t *pb.Tile) *pb.Tile { return t }) == ev {
 			t.Errorf("payload arm %s passes through unqualified", fd.Name())
 		}
+	}
+}
+
+// A selection names tiles by id, so every id it carries crosses a hop like
+// the grid's own: peeled on the way in, claim included, and prepended on the
+// way out, on the grid and on the event alike.
+func TestSelectionIDsCrossEveryHop(t *testing.T) {
+	h := InboundHop("c1/9", "", true)
+	in := &pb.SetSelectionRequest{GridId: "c1/9", TileIds: []string{"c1/3", "c1/4"},
+		Claim: &pb.SelectionClaim{TileIds: []string{"c1/3"}}}
+	got := PeelRequest(h, in)
+	want := &pb.SetSelectionRequest{GridId: "9", TileIds: []string{"3", "4"},
+		Claim: &pb.SelectionClaim{TileIds: []string{"3"}}}
+	if !proto.Equal(got, want) {
+		t.Errorf("peeled = %v, want %v", got, want)
+	}
+	if in.TileIds[0] != "c1/3" || in.Claim.TileIds[0] != "c1/3" {
+		t.Error("the peel mutated its input")
+	}
+	g := TransitQualifyGrid("u", &pb.Grid{Id: "9", Selection: []string{"3", "4"}})
+	if !slices.Equal(g.Selection, []string{"u/3", "u/4"}) {
+		t.Errorf("grid selection = %v", g.Selection)
+	}
+	ev := TransitQualifyEvent("u", SelectionEvent("9", []string{"3"})).GetSelectionChanged()
+	if ev.GetGridId() != "u/9" || !slices.Equal(ev.GetTileIds(), []string{"u/3"}) {
+		t.Errorf("SelectionChanged = %v", ev)
 	}
 }

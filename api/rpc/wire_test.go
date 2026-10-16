@@ -59,6 +59,10 @@ func fill(t *testing.T, v reflect.Value) {
 			fv.Set(reflect.ValueOf(&b))
 		case reflect.Slice:
 			et := f.Type.Elem()
+			if et.Kind() == reflect.String {
+				fv.Set(reflect.ValueOf([]string{fmt.Sprintf("%s-%d", f.Name, n)}))
+				continue
+			}
 			if et.Kind() != reflect.Pointer || et.Elem().Kind() != reflect.Struct {
 				t.Fatalf("fill: %s.%s is a slice of %s — extend fill", rt.Name(), f.Name, et.Kind())
 			}

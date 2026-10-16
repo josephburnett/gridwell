@@ -84,6 +84,12 @@ message Grid {
   // node built before it split from writable, whose one bit said both, and
   // rpc.TransitQualifyGrid reads that bit for it. Wire-only.
   optional bool accepts_tiles = 16;
+  // selection is the set of this grid's tiles the user has in hand: a node
+  // fact on the grid row of the namespace that owns the grid, persisted,
+  // written only by SetSelection and told by SelectionChanged. It names only
+  // tiles on this grid, and its order means nothing. Each id is qualified
+  // per hop like the tiles'.
+  repeated string selection = 17;
 }
 
 // MenuEntry is one declared (+) menu entry: a doorway onto one collection,
@@ -775,6 +781,24 @@ message SetFramingResponse {
   Tile tile = 1;
 }
 
+// SetSelectionRequest replaces grid_id's selection with tile_ids. claim is
+// the set the writer saw, and a write whose claim the row no longer holds is
+// refused with the version conflict. An empty set is a claim like any other,
+// so the claim is a message whose presence says it was made; the doors refuse
+// a request without one (rpc.UnclaimedWrite). A selection is not content: no
+// version moves, the grid's or any tile's.
+message SetSelectionRequest {
+  string         grid_id  = 1;
+  SelectionClaim claim    = 2;
+  repeated string tile_ids = 3;
+}
+message SelectionClaim {
+  repeated string tile_ids = 1;
+}
+// SetSelectionResponse is empty: the set on disk reaches every view, the
+// writer's included, as SelectionChanged.
+message SetSelectionResponse {}
+
 // Event stream.
 
 // SubscribeRequest's session names the client holding the stream, a string
@@ -822,6 +846,13 @@ message GridFramingChanged {
   double view_zoom = 4;
 }
 
+// SelectionChanged carries a grid's whole new selection, so no view reads
+// the grid again to learn it.
+message SelectionChanged {
+  string          grid_id  = 1;
+  repeated string tile_ids = 2;
+}
+
 message TileChanged {
   Tile tile = 1;
   // content_changed: the bytes behind this row changed though nothing on the
@@ -865,6 +896,7 @@ message Event {
     TileRemoved tile_removed = 3;
     EventPluginHealth plugin_health = 4;
     GridFramingChanged grid_framing_changed = 5;
+    SelectionChanged selection_changed = 6;
   }
 }
 
@@ -908,6 +940,9 @@ service Gridwell {
   // entered through, or onto the grid row itself for a root that has no
   // doorway. One verb, one shape, both rows.
   rpc SetFraming(SetFramingRequest) returns (SetFramingResponse);
+
+  // SetSelection replaces a grid's selection, claiming the set it saw.
+  rpc SetSelection(SetSelectionRequest) returns (SetSelectionResponse);
 
   // ShellSessionAlive gates the client's refresh button on shell descent.
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);

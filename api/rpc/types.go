@@ -39,6 +39,18 @@ func IsWellKind(kind string) bool {
 // UUIDOf and NamespaceOf are its only encode/decode points.
 func QualifyID(uuid, local string) string { return uuid + "/" + local }
 
+// QualifyIDs is QualifyID over a list, into a new one.
+func QualifyIDs(uuid string, locals []string) []string {
+	if locals == nil {
+		return nil
+	}
+	out := make([]string, len(locals))
+	for i, l := range locals {
+		out[i] = QualifyID(uuid, l)
+	}
+	return out
+}
+
 // QualifyNS prepends one hop segment to a namespace chain. Distinct from
 // QualifyID because a namespace may legitimately be empty.
 func QualifyNS(hop, ns string) string {

@@ -480,12 +480,14 @@ func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) (changed 
 }
 
 // Retire tombstones one tile row: the delete-gesture path. The row stays so a
-// stale reference stays interpretable, and its screenshot is released.
+// stale reference stays interpretable, its screenshot is released, and it
+// leaves its grid's selection.
 func (n *Namespace) Retire(tileID int64) error {
 	return n.write("Retire", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		var preview sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
-			tileID, n.ns).Scan(&preview)
+		var gridID int64
+		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id, grid_id FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
+			tileID, n.ns).Scan(&preview, &gridID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -493,6 +495,9 @@ func (n *Namespace) Retire(tileID int64) error {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET tombstoned = 1, preview_blob_id = NULL WHERE id = ?`, tileID); err != nil {
+			return err
+		}
+		if _, _, err := leaveSelection(ctx, tx, gridID, tileID); err != nil {
 			return err
 		}
 		if preview.Valid {

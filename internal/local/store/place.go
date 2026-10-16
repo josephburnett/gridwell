@@ -83,10 +83,9 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 			if err := s.bumpGridVersion(ctx, tx, destGridID); err != nil {
 				return err
 			}
-			*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{TileRemoved: &gridwellv1.TileRemoved{
-				GridId: strconv.FormatInt(srcGrid, 10),
-				TileId: strconv.FormatInt(tileID, 10),
-			}}})
+			if err := s.tileLeft(ctx, tx, events, srcGrid, tileID); err != nil {
+				return err
+			}
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
 		return err

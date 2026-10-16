@@ -79,6 +79,8 @@ const (
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
 	// GridwellSetFramingProcedure is the fully-qualified name of the Gridwell's SetFraming RPC.
 	GridwellSetFramingProcedure = "/gridwell.v1.Gridwell/SetFraming"
+	// GridwellSetSelectionProcedure is the fully-qualified name of the Gridwell's SetSelection RPC.
+	GridwellSetSelectionProcedure = "/gridwell.v1.Gridwell/SetSelection"
 	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
 	// ShellSessionAlive RPC.
 	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
@@ -122,6 +124,8 @@ type GridwellClient interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
+	// SetSelection replaces a grid's selection, claiming the set it saw.
+	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
@@ -242,6 +246,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetFraming")),
 			connect.WithClientOptions(opts...),
 		),
+		setSelection: connect.NewClient[v1.SetSelectionRequest, v1.SetSelectionResponse](
+			httpClient,
+			baseURL+GridwellSetSelectionProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetSelection")),
+			connect.WithClientOptions(opts...),
+		),
 		shellSessionAlive: connect.NewClient[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse](
 			httpClient,
 			baseURL+GridwellShellSessionAliveProcedure,
@@ -288,6 +298,7 @@ type gridwellClient struct {
 	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	setFraming        *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
+	setSelection      *connect.Client[v1.SetSelectionRequest, v1.SetSelectionResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
 	setInterest       *connect.Client[v1.SetInterestRequest, v1.SetInterestResponse]
@@ -379,6 +390,11 @@ func (c *gridwellClient) SetFraming(ctx context.Context, req *connect.Request[v1
 	return c.setFraming.CallUnary(ctx, req)
 }
 
+// SetSelection calls gridwell.v1.Gridwell.SetSelection.
+func (c *gridwellClient) SetSelection(ctx context.Context, req *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error) {
+	return c.setSelection.CallUnary(ctx, req)
+}
+
 // ShellSessionAlive calls gridwell.v1.Gridwell.ShellSessionAlive.
 func (c *gridwellClient) ShellSessionAlive(ctx context.Context, req *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
 	return c.shellSessionAlive.CallUnary(ctx, req)
@@ -431,6 +447,8 @@ type GridwellHandler interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
+	// SetSelection replaces a grid's selection, claiming the set it saw.
+	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
@@ -547,6 +565,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetFraming")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellSetSelectionHandler := connect.NewUnaryHandler(
+		GridwellSetSelectionProcedure,
+		svc.SetSelection,
+		connect.WithSchema(gridwellMethods.ByName("SetSelection")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellShellSessionAliveHandler := connect.NewUnaryHandler(
 		GridwellShellSessionAliveProcedure,
 		svc.ShellSessionAlive,
@@ -607,6 +631,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
 		case GridwellSetFramingProcedure:
 			gridwellSetFramingHandler.ServeHTTP(w, r)
+		case GridwellSetSelectionProcedure:
+			gridwellSetSelectionHandler.ServeHTTP(w, r)
 		case GridwellShellSessionAliveProcedure:
 			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
@@ -690,6 +716,10 @@ func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request
 
 func (UnimplementedGridwellHandler) SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetFraming is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetSelection is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {

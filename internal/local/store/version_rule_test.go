@@ -227,6 +227,16 @@ var versionCases = []versionCase{
 		},
 	},
 	{
+		// The selection lives on the grid row, and no tile it names moves.
+		name: "SetSelection/the grid's selection", subject: textSubject, bumps: false, claims: true,
+		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			return s.SetSelection(ctx, tile.GridId, &gridwellv1.SelectionClaim{}, []string{tile.Id})
+		},
+		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
+			return s.SetSelection(ctx, tile.GridId, &gridwellv1.SelectionClaim{TileIds: []string{tile.Id}}, []string{tile.Id})
+		},
+	},
+	{
 		name: "SetFraming/doorway viewport", subject: wellSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
 			_, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
@@ -349,10 +359,10 @@ func TestVersionRuleClaim(t *testing.T) {
 		})
 	}
 	// The six content arms, a pane tile's layout among them, the placement,
-	// the delete and the freeze. A change to this number is a change to the
-	// rule.
-	if claimable != 9 {
-		t.Errorf("%d writes can be handed a claim, want 9 — a new one appeared, or one lost its claim", claimable)
+	// the delete, the freeze and the selection. A change to this number is a
+	// change to the rule.
+	if claimable != 10 {
+		t.Errorf("%d writes can be handed a claim, want 10 — a new one appeared, or one lost its claim", claimable)
 	}
 }
 

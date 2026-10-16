@@ -80,6 +80,9 @@ var writeScopes = map[string]writeScope{
 	"SetFrozen/standing freeze":    {tile: []string{"url_frozen"}},
 	"SetFraming/doorway viewport":  {tile: []string{"view_cx", "view_cy", "view_zoom"}},
 
+	// ── Selection: what the user has in hand, on the grid row. ─────────
+	"SetSelection/the grid's selection": {grid: []string{"selection"}},
+
 	// ── Layout: where it sits. ─────────────────────────────────────────
 	"PlaceTile/move and resize": {tile: []string{"x", "y", "w", "h"}},
 	// The copy is new rows, and the grid it lands in counts one more tile; the
@@ -87,8 +90,8 @@ var writeScopes = map[string]writeScope{
 	"CloneTile/source row": {grid: []string{"version"}, mints: true},
 	// A delete on an ordinary grid is a move into the trash: the same row, at
 	// a new address, under the month well the trash mints on first use, which
-	// the trash grid counts.
-	"DeleteTile/move to trash": {tile: []string{"grid_id", "x", "y"}, grid: []string{"version"}, trash: []string{"version"}, mints: true},
+	// the trash grid counts. A tile that leaves its grid leaves its selection.
+	"DeleteTile/move to trash": {tile: []string{"grid_id", "x", "y"}, grid: []string{"version", "selection"}, trash: []string{"version"}, mints: true},
 }
 
 func TestAWriteTouchesOnlyWhatItOwns(t *testing.T) {

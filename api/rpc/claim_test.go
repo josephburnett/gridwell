@@ -26,6 +26,8 @@ func TestUnclaimedWriteNamesTheMissingClaim(t *testing.T) {
 		{"freeze with claim", &pb.SetTileRequest{TileId: "u1/7", UrlFrozen: &yes, ClaimFrozen: &no}, ""},
 		{"capture claims nothing", &pb.SetTileRequest{TileId: "u1/7", Preview: []byte{1}}, ""},
 		{"create claims nothing", &pb.CreateTileRequest{GridId: "u1/2"}, ""},
+		{"select without claim", &pb.SetSelectionRequest{GridId: "u1/2", TileIds: []string{"u1/7"}}, "selection"},
+		{"select claiming the empty set", &pb.SetSelectionRequest{GridId: "u1/2", Claim: &pb.SelectionClaim{}}, ""},
 	} {
 		got := UnclaimedWrite(c.req)
 		if (got == "") != (c.want == "") || !strings.Contains(got, c.want) {
@@ -38,9 +40,10 @@ func TestUnclaimedWriteNamesTheMissingClaim(t *testing.T) {
 // verb that gains a claim cannot be sent without it by omission.
 func TestUnclaimedWriteKnowsEveryClaim(t *testing.T) {
 	owned := map[protoreflect.FullName]bool{
-		"gridwell.v1.PlaceTileRequest":  true,
-		"gridwell.v1.DeleteTileRequest": true,
-		"gridwell.v1.SetTileRequest":    true,
+		"gridwell.v1.PlaceTileRequest":    true,
+		"gridwell.v1.DeleteTileRequest":   true,
+		"gridwell.v1.SetTileRequest":      true,
+		"gridwell.v1.SetSelectionRequest": true,
 	}
 	msgs := pb.File_gridwell_v1_data_proto.Messages()
 	for i := 0; i < msgs.Len(); i++ {

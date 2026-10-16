@@ -38,6 +38,14 @@ func FramingEvent(gridID string, f Framing) *pb.Event {
 	}}}
 }
 
+// SelectionEvent is the one shape a grid's new selection takes on the wire,
+// the whole set, from the store and the plugin adapter alike.
+func SelectionEvent(gridID string, tileIDs []string) *pb.Event {
+	return &pb.Event{Payload: &pb.Event_SelectionChanged{SelectionChanged: &pb.SelectionChanged{
+		GridId: gridID, TileIds: tileIDs,
+	}}}
+}
+
 // EventKey names the entity a wire event is about, so internal/eventhub can
 // replace an older undelivered event for the same entity and drop no distinct
 // one. "" is unkeyable and never coalesces. It is one arm set for every hub:
@@ -49,6 +57,9 @@ func EventKey(ev *pb.Event) string {
 		return "g/" + p.GridChanged.GetGridId()
 	case *pb.Event_GridFramingChanged:
 		return "f/" + p.GridFramingChanged.GetGridId()
+	case *pb.Event_SelectionChanged:
+		// The event carries the whole set, so a newer one replaces it whole.
+		return "s/" + p.SelectionChanged.GetGridId()
 	case *pb.Event_TileChanged:
 		// A content change is keyed apart, so a framing event on the same row
 		// behind it cannot replace the news that its bytes moved.

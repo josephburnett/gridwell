@@ -239,6 +239,14 @@ field, which is why it is storage-only here.`,
 	},
 	{name: "root_cy", ddl: "REAL", since: 11},
 	{name: "root_zoom", ddl: "REAL", since: 11},
+	{
+		name: "selection", ddl: "TEXT NOT NULL DEFAULT ''", since: 17,
+		comment: `selection is the set of this grid's tiles the user has in hand, as
+their row ids in ascending order joined by commas, so the same set is
+always the same bytes. It names only live tiles on this grid (see
+leaveSelection). Not content: writing it bumps no version.`,
+		bind: func(g *gridwellv1.Grid) any { return selectionScan{&g.Selection} },
+	},
 }
 
 // connectionsColumns is the connections table, in DDL order: what the node
