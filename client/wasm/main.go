@@ -1051,6 +1051,9 @@ func (a *App) startSSE() {
 			if plan.Reload != "" {
 				a.owePageReload(plan.Reload)
 			}
+			if plan.Unselect != "" && a.ws.Unselect(a.tree, plan.Unselect) {
+				a.draw()
+			}
 			if plan.ClearLatch != "" {
 				a.fetch.grids.Change(plan.ClearLatch)
 			}

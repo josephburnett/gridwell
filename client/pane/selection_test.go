@@ -106,3 +106,44 @@ func TestLayoutWithoutSelectionIsUnchanged(t *testing.T) {
 		t.Errorf("a mismatched sel restored %v", s)
 	}
 }
+
+// A tile that left its grid leaves every frame's set that names it, top and
+// parked, in the open tree and in every tree a pane-tile descent parked, so it
+// comes back unselected; a frame that never named it is untouched.
+func TestUnselectDropsALeaverEverywhere(t *testing.T) {
+	outer := NewTree()
+	outer.FocusedPane().Stack = StackAt("n/1", []string{"n/7"}, "")
+	outer.FocusedPane().Select([]string{"n/4", "n/9"})
+
+	tr := NewTree()
+	p := tr.FocusedPane()
+	p.Stack = StackAt("n/1", []string{"n/7"}, "")
+	p.Pop()
+	p.Select([]string{"n/4", "n/7"})
+	p.Push(Frame{Door: "n/7"})
+	p.Select([]string{"n/4", "n/5"})
+	q, err := tr.Split(Horizontal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.Select([]string{"n/6"})
+
+	var ls Levels
+	ls.Push(Level{OuterTree: outer})
+	if !ls.Unselect(tr, "n/4") {
+		t.Fatal("Unselect reported no change")
+	}
+	fr := p.Frames()
+	if !slices.Equal(fr[0].Selection, []string{"n/7"}) || !slices.Equal(fr[1].Selection, []string{"n/5"}) {
+		t.Errorf("open pane's frames = %v, %v", fr[0].Selection, fr[1].Selection)
+	}
+	if !slices.Equal(q.Selection, []string{"n/6"}) {
+		t.Errorf("a pane that never named it = %v", q.Selection)
+	}
+	if !slices.Equal(outer.FocusedPane().Selection, []string{"n/9"}) {
+		t.Errorf("parked tree = %v", outer.FocusedPane().Selection)
+	}
+	if ls.Unselect(tr, "n/4") {
+		t.Error("a second Unselect reported a change")
+	}
+}

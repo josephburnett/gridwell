@@ -167,7 +167,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   grid to learn it. Inside a pane tile the selection is per pane, in the
   layout blob: each grid frame of each pane's stack keeps its own set beside
   its view, and a select there writes the layout, never the grid row
-  (`pane.SelectionTarget`). It is not a pane's focused tile, which a plain
+  (`pane.SelectionTarget`); the node's `TileRemoved` takes the tile out of
+  every pane's set in the open layouts too (`pane.Levels.Unselect`). It is not a pane's focused tile, which a plain
   click moves. Shift + left-click toggles a tile; shift + left-drag on the
   background sweeps a cell-snapped band and adds the tiles wholly inside it,
   never one it only touches; Esc with no drag in flight clears the focused
