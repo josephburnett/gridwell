@@ -123,6 +123,20 @@ func TestServingBanner(t *testing.T) {
 	}
 }
 
+// The serve banner's MCP line is the command Claude Code registers the door
+// with; a door on every interface is named by loopback.
+func TestMCPAddLine(t *testing.T) {
+	for addr, want := range map[string]string{
+		"127.0.0.1:7777": `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2"`,
+		"[::]:7777":      `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2"`,
+		"10.0.0.5:80":    `gridwell: agents: claude mcp add --transport http gridwell http://10.0.0.5:80/mcp -H "Authorization: Bearer hunter2"`,
+	} {
+		if got := mcpAddLine(addr, "hunter2"); got != want {
+			t.Errorf("mcpAddLine(%q) = %q, want %q", addr, got, want)
+		}
+	}
+}
+
 // A missing config is a fresh home: id minted, file written, store created.
 // There is no init step.
 func TestBuildServeConfigFreshHome(t *testing.T) {
