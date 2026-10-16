@@ -352,7 +352,8 @@ pane and every grid frame's view, so a pane tile reopens on the pane it was
 left on, each pane where it was at every level (`pane.LayoutFingerprint`
 keys the write). A pan inside a pane tile writes the blob and never a
 framing row (`pane.FramingOwner.Layout`); a frame the blob has no view for
-starts at its framing row, and a text leaf's scroll is its tile row's. A
+starts at its framing row. A text leaf's scroll is the blob's too once the
+user moves it, and its tile row takes only the mode there. A
 pane tile swaps the whole
 pane tree instead — that is the one second axis (`levels.go`), and it is
 session-only.

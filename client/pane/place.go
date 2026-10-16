@@ -49,18 +49,22 @@ type Frame struct {
 	// off it, it is the row's view, not one the layout keeps, so opening a
 	// pane tile without moving writes nothing.
 	adopted rpc.View
+	// ownScroll: the text scroll was moved by the user or restored from a
+	// layout blob, so inside a pane tile it is the layout's, not the row's.
+	ownScroll bool
 }
 
 // ScrollText is the one writer of a content descent's scroll, from the wheel
 // and from either overlay's own scroll, clamped at the top. It reports whether
 // the scroll moved, which is a framing change like a pan: the caller redraws,
-// and the redraw arms the settle persister on FramingFingerprint.
+// and the redraw arms the settle persister on FramingFingerprint, and inside a
+// pane tile the layout's on LayoutFingerprint.
 func (f *Frame) ScrollText(x, y float64) bool {
 	x, y = max(x, 0), max(y, 0)
 	if x == f.TextScrollX && y == f.TextScrollY {
 		return false
 	}
-	f.TextScrollX, f.TextScrollY = x, y
+	f.TextScrollX, f.TextScrollY, f.ownScroll = x, y, true
 	return true
 }
 
@@ -109,7 +113,8 @@ func (f Frame) HasView() bool {
 }
 
 // Adopt settles a pending top frame on v's view and text state, refusing a v
-// with no view. A frame that is not pending keeps its own.
+// with no view. A frame that is not pending keeps its own, and a scroll the
+// layout restored stays.
 func (s *Stack) Adopt(v Frame) bool {
 	if !s.ViewPending {
 		return false
@@ -118,7 +123,10 @@ func (s *Stack) Adopt(v Frame) bool {
 		return false
 	}
 	s.View, s.adopted = v.View, v.View
-	s.TextMode, s.TextScrollX, s.TextScrollY = v.TextMode, v.TextScrollX, v.TextScrollY
+	s.TextMode = v.TextMode
+	if !s.ownScroll {
+		s.TextScrollX, s.TextScrollY = v.TextScrollX, v.TextScrollY
+	}
 	s.ViewPending = false
 	return true
 }

@@ -3,8 +3,8 @@ import { tileAt, updateText, writeContent } from './oracle';
 import { settle } from './cadence';
 import { dumpViaDoor, TraceLine } from './trace';
 
-// Inside a pane tile a grid's view is the layout blob's (2026-10-14) and a
-// text leaf's scroll is its tile row's. These cross the seam from the gesture
+// Inside a pane tile a grid's view is the layout blob's (2026-10-14), and so
+// is a text leaf's scroll (2026-10-16). These cross the seam from the gesture
 // to the node's own record of what it wrote, and from stored bytes to what a
 // restored leaf shows.
 
@@ -167,13 +167,14 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   await gw.leaveWorkspace();
 });
 
-test("a text leaf's scroll is its tile row's: scrolling writes SetTextView alone, and re-entry restores it", async ({
+test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetTextView, the mode reaches the row, and re-entry restores both", async ({
   gw,
   home,
   window,
 }) => {
   const token = await loginToken(gw.origin, homePassword(home));
   const c = await gw.cadences();
+  const settleMs = Math.max(c.workspaceSaveMs, c.framingSaveMs);
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
@@ -195,25 +196,39 @@ test("a text leaf's scroll is its tile row's: scrolling writes SetTextView alone
   await expect
     .poll(async () => (await gw.getTileContent(pt.id)).includes(doc.id), { timeout: 10_000 })
     .toBe(true);
-  await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs));
-  const layoutBefore = storeWrites(await dumpViaDoor(gw.origin, token), isLayout);
+  await settle(window, settleMs);
 
-  // The mode is the row's too, so the leaf leaves in the one it did not open
-  // in.
+  // The mode is the row's, so the toggle reaches it: that is how the tile
+  // presents from outside.
+  const row = async () => tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy) as Record<string, unknown>;
   const opened = (await gw.focused()).textMode;
   await gw.toggleTextMode();
   await expect.poll(async () => (await gw.focused()).textMode).not.toBe(opened);
   const mode = (await gw.focused()).textMode;
+  await expect.poll(async () => String((await row()).textMode ?? ''), { message: 'the toggle reached the row' })
+    .toBe(mode);
+  await settle(window, settleMs);
+
+  const textViews = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextView ?? 0));
+  const textViewsBefore = await textViews();
+  const layoutBefore = storeWrites(await dumpViaDoor(gw.origin, token), isLayout);
+  const rowBefore = Number((await row()).textY ?? 0);
+
   const p = await gw.focused();
   await window.mouse.move(p.x + p.w / 2, p.y + p.h / 2);
   for (let i = 0; i < 8; i++) await window.mouse.wheel(0, 120);
-  const textY = async () =>
-    Number((tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy) as { textY?: number | string })?.textY ?? 0);
-  await expect.poll(textY, { message: 'the scroll reached the tile row', timeout: 10_000 }).toBeGreaterThan(0);
-  await settle(window, c.workspaceSaveMs);
-  expect(storeWrites(await dumpViaDoor(gw.origin, token), isLayout), 'a scroll wrote the layout blob')
-    .toBe(layoutBefore);
-  const scrolled = await textY();
+  await expect
+    .poll(async () => storeWrites(await dumpViaDoor(gw.origin, token), isLayout), {
+      message: 'the scroll settles into a layout write',
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(layoutBefore);
+  await settle(window, settleMs * 2);
+  expect(await textViews(), 'a scroll inside a pane tile posted SetTextView').toBe(textViewsBefore);
+  expect(Number((await row()).textY ?? 0), "a scroll inside a pane tile moved the row's window").toBe(rowBefore);
+  const scrolled = await shownScroll(window);
+  expect(scrolled, 'the wheel scrolled the document').toBeGreaterThan(0);
 
   await gw.leaveWorkspace();
   await expect.poll(() => workspaceDepth(window)).toBe(0);
@@ -223,9 +238,7 @@ test("a text leaf's scroll is its tile row's: scrolling writes SetTextView alone
   await expect.poll(async () => (await gw.focused()).textMode, { message: "re-entry shows the row's mode" })
     .toBe(mode);
   await expect
-    .poll(() => shownScroll(window), {
-      message: "re-entry shows the row's scroll",
-    })
+    .poll(() => shownScroll(window), { message: "re-entry shows the layout's scroll" })
     .toBeCloseTo(scrolled, -1);
   await gw.leaveWorkspace();
 });

@@ -139,3 +139,25 @@ func TestAWindowSizeIsNotAReframe(t *testing.T) {
 		t.Error("a pane of another size reframed a row nobody scrolled")
 	}
 }
+
+// Inside a pane tile the layout owns the scroll, so a settle or an ascent
+// there takes only the mode to the row: a scroll writes nothing to it, a
+// toggle does, and a never-framed row looked at is still left alone.
+func TestInsideAPaneTileTheRowTakesOnlyTheMode(t *testing.T) {
+	stored := Framing{X: 0, Y: 240, Mode: rpc.TextModeRendered}
+	scrolled := Framing{Y: 900, Mode: rpc.TextModeRendered}
+	if Reframes(stored, RowFraming(stored, scrolled, true), false) {
+		t.Error("a scroll inside a pane tile reframed the row")
+	}
+	if !Reframes(stored, RowFraming(stored, scrolled, false), false) {
+		t.Error("a scroll outside a pane tile did not reframe the row")
+	}
+	toggled := Framing{Y: 900, Mode: rpc.TextModeText}
+	if got := RowFraming(stored, toggled, true); got != (Framing{Y: 240, Mode: rpc.TextModeText}) {
+		t.Errorf("a toggle inside a pane tile writes %+v, want the row's scroll and the new mode", got)
+	}
+	shown := DescentMode(ModeInput{TextDocument: true, Cached: true})
+	if Reframes(Framing{}, RowFraming(Framing{}, Framing{Y: 300, Mode: shown}, true), false) {
+		t.Error("a scroll inside a pane tile stamped a never-framed row")
+	}
+}

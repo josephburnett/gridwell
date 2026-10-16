@@ -191,7 +191,11 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A text tile's window is its scroll and its mode, never the box it is
   shown in: the pane's size is the viewer's geometry, so a look from a pane
   of another size, on another device, writes nothing (`textedit.Framing`,
-  2026-10-16). `text_w`/`text_h` are dead storage.
+  2026-10-16). `text_w`/`text_h` are dead storage. Inside a pane tile the
+  scroll is the layout's like a grid's view: a scroll there writes the blob
+  on the layout's settle, the row takes only the mode, which is how the tile
+  presents from outside, and a leaf the blob has no scroll for starts at the
+  row's (`pane.FramingOwner.Layout`, `textedit.RowFraming`, 2026-10-16).
 - Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.

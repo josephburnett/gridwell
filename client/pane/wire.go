@@ -47,10 +47,11 @@ type (
 	LayoutPane  = panelayout.LayoutPane
 	LayoutFrame = panelayout.LayoutFrame
 	LayoutView  = panelayout.LayoutView
+	LayoutText  = panelayout.LayoutText
 )
 
 // layoutView is the viewport the blob keeps for f: none for a content frame,
-// whose scroll its tile row owns, for a frame not yet shown, or for one still
+// whose scroll is encodeText's, for a frame not yet shown, or for one still
 // at the view it adopted from its row.
 func layoutView(f Frame) (rpc.Framing, bool) {
 	if f.Content || !f.HasView() || f.View == f.adopted {
@@ -176,8 +177,18 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 	}
 	return &LayoutPane{
 		ID: bareID, Anchor: anchor, Path: path, TextFocus: textFocus, Place: place,
-		Views: encodeViews(p.Frames()), Sels: sels,
+		Views: encodeViews(p.Frames()), Sels: sels, Text: encodeText(p.Frame),
 	}, true
+}
+
+// encodeText is the top frame's scroll once it is the layout's own; until the
+// user moves it, it is the row's and the blob keeps none, so opening a
+// document writes nothing.
+func encodeText(f Frame) *LayoutText {
+	if !f.Content || !f.ownScroll {
+		return nil
+	}
+	return &LayoutText{X: f.TextScrollX, Y: f.TextScrollY}
 }
 
 // encodeSels is nil when no frame holds a selection, so a blob with none
@@ -310,7 +321,8 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 	}
 }
 
-// decodeLeaf restores each frame's view and selection. A top frame with no
+// decodeLeaf restores each frame's view and selection, and a text leaf's
+// scroll. A top frame with no
 // view is pending (Frame.ViewPending) and a lower one has none, so both fall
 // back to the framing row, as every blob older than Views does. Views or
 // selections that do not match the place frame for frame are dropped whole.
@@ -335,6 +347,10 @@ func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane 
 			}
 			frames[i].Select(abss)
 		}
+	}
+	if t := lp.Text; t != nil && len(frames) > 0 && frames[len(frames)-1].Content {
+		top := &frames[len(frames)-1]
+		top.TextScrollX, top.TextScrollY, top.ownScroll = t.X, t.Y, true
 	}
 	p := &Pane{ID: idPrefix + lp.ID, Stack: StackOf(frames)}
 	if _, ok := p.Live(); !ok {

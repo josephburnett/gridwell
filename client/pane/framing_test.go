@@ -46,7 +46,8 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 
 // Inside a pane tile a grid place's view is the layout's: the owner still
 // names the row a frame with no view starts from, but says nothing is written
-// to it. A content place's scroll stays its tile row's.
+// to it. A content place's scroll is the layout's too; its tile row keeps the
+// mode.
 func TestFramingTargetInsideAPaneTileIsTheLayout(t *testing.T) {
 	s := NewStack("home/1")
 	if got := s.FramingTarget(true); !got.Layout || got.RootGridID != "home/1" {
@@ -63,8 +64,11 @@ func TestFramingTargetInsideAPaneTileIsTheLayout(t *testing.T) {
 		t.Fatalf("well outside a pane tile = %+v", got)
 	}
 	s.Push(Frame{Door: "77", Content: true})
-	if got := s.FramingTarget(true); got.Layout || !got.Content {
-		t.Fatalf("content in a pane tile = %+v, want its tile row", got)
+	if got := s.FramingTarget(true); !got.Layout || !got.Content || got.TileID != "77" {
+		t.Fatalf("content in a pane tile = %+v, want the layout's scroll on its tile row", got)
+	}
+	if got := s.FramingTarget(false); got.Layout || !got.Content {
+		t.Fatalf("content outside a pane tile = %+v, want its tile row", got)
 	}
 }
 

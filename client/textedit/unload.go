@@ -64,6 +64,17 @@ func Reframes(stored, next Framing, readOnly bool) bool {
 	return FramingChanged(ShownFraming(stored, readOnly), next)
 }
 
+// RowFraming is what a text pane writes to its tile row from the window it
+// shows. Inside a pane tile the layout owns the scroll (pane.FramingOwner),
+// so the row keeps its own and takes only the mode, which is how the tile
+// presents from outside.
+func RowFraming(stored, shown Framing, layoutOwnsScroll bool) Framing {
+	if !layoutOwnsScroll {
+		return shown
+	}
+	return Framing{X: stored.X, Y: stored.Y, Mode: shown.Mode}
+}
+
 // ModeInput is everything the descent-mode decision reads.
 type ModeInput struct {
 	TextDocument bool // rpc.TextDocument: nothing else has a text mode
