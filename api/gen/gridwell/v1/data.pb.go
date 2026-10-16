@@ -3700,8 +3700,14 @@ type ViewPane struct {
 	ContentId string `protobuf:"bytes,4,opt,name=content_id,json=contentId,proto3" json:"content_id,omitempty"`
 	// grid_id is the grid the pane is at, or that its content tile sits in,
 	// derived on the client as shown_grid_ids is; "" while it is not cached.
-	GridId        string `protobuf:"bytes,5,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	Focused       bool   `protobuf:"varint,6,opt,name=focused,proto3" json:"focused,omitempty"`
+	GridId  string `protobuf:"bytes,5,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	Focused bool   `protobuf:"varint,6,opt,name=focused,proto3" json:"focused,omitempty"`
+	// layout_pane_id is the pane's id inside the layout blob of the innermost
+	// pane tile, "" outside every pane tile. id is namespaced per level on the
+	// client (pane.Tree.IDPrefix), and the blob keeps each pane's own view and
+	// selection under the bare id, so this is how the node finds the set the
+	// pane shows (pane.SelectionTarget).
+	LayoutPaneId  string `protobuf:"bytes,7,opt,name=layout_pane_id,json=layoutPaneId,proto3" json:"layout_pane_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3776,6 +3782,13 @@ func (x *ViewPane) GetFocused() bool {
 		return x.Focused
 	}
 	return false
+}
+
+func (x *ViewPane) GetLayoutPaneId() string {
+	if x != nil {
+		return x.LayoutPaneId
+	}
+	return ""
 }
 
 // DisableSource switches off a plugin or connection this node declares,
@@ -4648,7 +4661,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05panes\x18\x04 \x03(\v2\x15.gridwell.v1.ViewPaneR\x05panes\x12\x1d\n" +
 	"\n" +
 	"pane_tiles\x18\x05 \x03(\tR\tpaneTiles\"\x11\n" +
-	"\x0fSetViewResponse\"\x98\x01\n" +
+	"\x0fSetViewResponse\"\xbe\x01\n" +
 	"\bViewPane\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06anchor\x18\x02 \x01(\tR\x06anchor\x12\x12\n" +
@@ -4656,7 +4669,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"content_id\x18\x04 \x01(\tR\tcontentId\x12\x17\n" +
 	"\agrid_id\x18\x05 \x01(\tR\x06gridId\x12\x18\n" +
-	"\afocused\x18\x06 \x01(\bR\afocused\"4\n" +
+	"\afocused\x18\x06 \x01(\bR\afocused\x12$\n" +
+	"\x0elayout_pane_id\x18\a \x01(\tR\flayoutPaneId\"4\n" +
 	"\x14DisableSourceRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\x17\n" +
 	"\x15DisableSourceResponse\"&\n" +

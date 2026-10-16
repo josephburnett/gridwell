@@ -851,6 +851,12 @@ message ViewPane {
   // derived on the client as shown_grid_ids is; "" while it is not cached.
   string          grid_id    = 5;
   bool            focused    = 6;
+  // layout_pane_id is the pane's id inside the layout blob of the innermost
+  // pane tile, "" outside every pane tile. id is namespaced per level on the
+  // client (pane.Tree.IDPrefix), and the blob keeps each pane's own view and
+  // selection under the bare id, so this is how the node finds the set the
+  // pane shows (pane.SelectionTarget).
+  string          layout_pane_id = 7;
 }
 
 // DisableSource switches off a plugin or connection this node declares,

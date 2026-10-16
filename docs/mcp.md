@@ -61,17 +61,28 @@ tile sits now; a delete claims its version and where it sits.
 | `clone` | `id`, `grid`, `at` | A deep copy, in `grid` or the tile's own, at `at` or beside the tile. Across namespaces a source that does not answer lands as a link. |
 | `link` | `id`, `grid`, `at` | A link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
 | `delete` | `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
-| `select` | `grid`, `tiles`, `claim` | Sets the grid's selection to `tiles` (empty clears it), claiming the `selection` read_grid gave. Use it to hand a set back: "I selected the five I changed". |
-| `sessions` | none | Every screen showing the node now: its id, label (`desktop` or `browser`), when its view last changed, the pane tiles it is inside, and each pane's place (`anchor` and `path`), the grid it shows, the content tile it is inside, and whether it has focus. The most recently changed first. |
+| `select` | `grid`, `tiles`, `claim` | Sets the grid's selection to `tiles` (empty clears it), claiming the `selection` read_grid gave. Use it to hand a set back: "I selected the five I changed". A pane inside a pane tile does not show it (see Pointing). |
+| `sessions` | none | Every screen showing the node now: its id, label (`desktop` or `browser`), when its view last changed, the pane tiles it is inside, and each pane's place (`anchor` and `path`), the grid it shows, the content tile it is inside, the pane tile whose layout it is part of (`pane_tile`), and whether it has focus. The most recently changed first. |
 | `pointed` | `session`, optional | What the user means by "here" and "these" (see Pointing). |
 
 ## Pointing
 
 When the user says "this", "here" or "these", they mean what is in front of
-them: in the focused pane of their screen, the tiles they have selected on
-that grid, or the grid itself when nothing is selected. `pointed` answers
-which (`points_at` is `selection` or `grid`), with the selected tiles as
-`read_grid` answers them.
+them: in the focused pane of their screen, the tiles that pane shows selected,
+or the grid itself when it shows none. `pointed` answers which (`points_at` is
+`selection` or `grid`), with the selected tiles as `read_grid` answers them.
+
+Outside a pane tile, a pane shows the grid's own selection, the one
+`read_grid` answers and `select` writes. Inside a pane tile, each pane keeps
+its own selection in the pane tile's layout, so two panes on one grid can hold
+two sets, and the grid's selection is not what that pane shows. `pointed` then
+answers the pane's own set and names the pane tile (`pane_tile`);
+`selection_in` says which it is (`grid` or `pane tile`). A pane inside a text
+or url tile shows no selection, so it points at the grid that tile sits in.
+
+`select` cannot set a pane's own selection inside a pane tile: the open
+window holds that layout, and a write from outside would make its next change
+a conflict. Tell the user which tiles instead.
 
 Which screen is theirs, in this order:
 
