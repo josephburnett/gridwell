@@ -399,9 +399,10 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// DropClone: one CloneTile per carried tile at its offset. The ghost
-	// snaps back only for a lone tile; see commitMove.
+	// DropClone: one CloneTile per carried tile at its offset; a refused one
+	// flies home alone, as in commitMove.
 	a.landGhostAtCell(t, dropX, dropY)
+	gh := a.ghost
 	to := d.carry().At(dropX, dropY)
 	for i, row := range d.carried {
 		req := &gridwellv1.CloneTileRequest{
@@ -410,10 +411,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 			X:          to[i].X,
 			Y:          to[i].Y,
 		}
-		var undo func()
-		if len(d.carried) == 1 {
-			undo = func() { a.snapBackToOrigin(d) }
-		}
+		undo := func() { a.snapBackMember(gh, d, i) }
 		a.post(write{
 			label: "CloneTile", gid: d.srcGridID,
 			call: func(ctx context.Context) error {

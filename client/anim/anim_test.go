@@ -194,3 +194,46 @@ func TestALandingEndsOnlyItsOwnFlight(t *testing.T) {
 		}
 	}
 }
+
+// A carried member sent back flies home on its own, from where it is drawn,
+// growing to its home cell size, while the rest land with the lead; the
+// formation ends only when the lead and every member sent back have.
+func TestFormationReturnsOneMemberAlone(t *testing.T) {
+	f := Formation{Flight: Flight{X: 0, Y: 0}}
+	f.Land(100, 0, 0, 100)
+	if _, ok := f.Returning(1); ok {
+		t.Fatal("a member returning before it was sent")
+	}
+	f.Step(50)
+	f.Return(1, f.X+10, f.Y, 10, 0, 0, 20, 50, 200)
+	if _, ok := f.Returning(0); ok {
+		t.Fatal("the lead returned with its member")
+	}
+	if landing, done := f.Step(100); !landing || done {
+		t.Fatalf("the lead landed but a member is still flying: landing=%v done=%v", landing, done)
+	}
+	if !near(f.X, 100) {
+		t.Errorf("the lead is at %v, want 100", f.X)
+	}
+	r, _ := f.Returning(1)
+	if r.X <= 0 || r.X >= f.X+10 || r.Cell <= 10 || r.Cell >= 20 {
+		t.Errorf("mid-return the member is at %v, cell %v", r.X, r.Cell)
+	}
+	if landing, done := f.Step(250); !landing || !done || !near(r.X, 0) || !near(r.Cell, 20) {
+		t.Fatalf("at the end: landing=%v done=%v at %v cell %v", landing, done, r.X, r.Cell)
+	}
+}
+
+// Sending a member back twice starts the second from where the first left it.
+func TestFormationReturnRestartsWhereItIs(t *testing.T) {
+	var f Formation
+	f.Land(0, 0, 0, 10)
+	f.Return(0, 100, 0, 10, 0, 0, 10, 0, 100)
+	f.Step(50)
+	r, _ := f.Returning(0)
+	mid := r.X
+	f.Return(0, 999, 999, 10, 0, 0, 10, 50, 100)
+	if r, _ = f.Returning(0); r.X != mid {
+		t.Errorf("the second return jumped to %v from %v", r.X, mid)
+	}
+}

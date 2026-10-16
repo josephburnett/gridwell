@@ -538,13 +538,25 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					if gcs <= 0 {
 						gcs = cellSize
 					}
-					a.drawGhostTile(a.ghost.tile, a.ghost.X, a.ghost.Y, gcs, r,
-						a.ghost.displayedFragmentation)
+					if _, back := a.ghost.Returning(0); !back {
+						a.drawGhostTile(a.ghost.tile, a.ghost.X, a.ghost.Y, gcs, r,
+							a.ghost.displayedFragmentation)
+					}
 					c := carryOf(a.ghost.carried)
 					for i := 1; i < len(c); i++ {
+						if _, back := a.ghost.Returning(i); back {
+							continue
+						}
 						dx, dy := c.Offset(i)
 						a.drawGhostTile(a.ghost.carried[i], a.ghost.X+float64(dx)*gcs,
 							a.ghost.Y+float64(dy)*gcs, gcs, r, a.ghost.displayedFragmentation)
+					}
+				}
+				if a.ghost != nil && a.ghost.homePaneID == p.ID {
+					for i, n := range a.ghost.carried {
+						if b, back := a.ghost.Returning(i); back {
+							a.drawGhostTile(n, b.X, b.Y, b.Cell, r, a.ghost.displayedFragmentation)
+						}
 					}
 				}
 			}

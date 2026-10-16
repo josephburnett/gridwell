@@ -506,13 +506,17 @@ type traceState struct {
 	startMs float64
 }
 
-// ghost is a transient floating render of a tile within one pane; its Flight
-// is its screen position and its landing. displayedCellSize lerps toward
+// ghost is a transient floating render of the carried tiles within one pane;
+// its Formation is their screen position and landing, and each one's flight
+// home when its write is refused. displayedCellSize lerps toward
 // targetCellSize each frame.
 type ghost struct {
-	anim.Flight
-	tile              *gridwellv1.Tile
-	paneID            string
+	anim.Formation
+	tile   *gridwellv1.Tile
+	paneID string
+	// homePaneID is the pane the drag started in, where a carried tile sent
+	// back alone is drawn (snapBackMember).
+	homePaneID        string
 	displayedCellSize float64
 	targetCellSize    float64
 
