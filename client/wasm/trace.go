@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
-	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
@@ -25,41 +24,24 @@ import (
 // traceContentType is the batch's wire form: one JSON record per line.
 const traceContentType = "application/x-ndjson"
 
-// emit is the shim's entry into the ring. Arming is the ring's own, through
-// OnEmit, so a record made anywhere else arms too; what is added here is the
-// post a burst has already earned.
+// emit is the shim's entry into the ring; the ring's OnEmit is the flush
+// loop (trace.Flusher), so a record made anywhere else posts the same way.
 func (a *App) emit(e traceevent.Event) {
 	a.tr.Emit(e.Src, e.Kind, e.Msg, e.KV, time.Now())
-	a.flushTrace()
 }
 
-// armTraceFlush defers a flush by the trace's own window, coalescing with one
-// already waiting. Nothing owed arms nothing, so an idle client holds no timer.
-func (a *App) armTraceFlush() {
-	if a.tr.PendingCount() > 0 {
-		a.persist.sched.traceFlush.Arm(cadence.TraceFlushMs)
-	}
-}
-
-// flushTrace posts one batch if the pump says it is due. The reply arrives
-// long after the gesture, so the acknowledgement is the goroutine's.
-func (a *App) flushTrace() {
-	batch, done := a.pump.Start(a.tr, time.Now())
-	if batch == nil {
-		return
-	}
-	go a.postTraceBatch(batch, done)
-}
-
+// postTraceBatch is the Flusher's post. The reply arrives long after the
+// gesture, so the acknowledgement is the goroutine's.
 func (a *App) postTraceBatch(batch []byte, done func(kept bool)) {
-	_, err := a.postTrace(tracewire.Path, batch)
-	// The completion first: it is what tells the pump the next post waits for
-	// the clock, so the record below cannot start one.
-	done(err == nil)
-	if err != nil {
-		a.emit(traceevent.FlushFailed(err.Error()))
-	}
-	a.armTraceFlush()
+	go func() {
+		_, err := a.postTrace(tracewire.Path, batch)
+		// The answer first: it is what tells the pump the next post waits for
+		// the clock, so the record below cannot start one.
+		done(err == nil)
+		if err != nil {
+			a.emit(traceevent.FlushFailed(err.Error()))
+		}
+	}()
 }
 
 // dumpTrace has every half hand the node what it is still holding, then asks
@@ -86,7 +68,7 @@ func (a *App) dumpTrace() {
 // they did not reach the node, empty when they did. It blocks, so it runs only
 // off the event loop.
 func (a *App) handOverTrace() string {
-	batch, done := a.pump.Force(a.tr, time.Now())
+	batch, done := a.flush.Force()
 	if batch == nil {
 		return ""
 	}

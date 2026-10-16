@@ -11,7 +11,7 @@ import (
 // to hear, and the batch stays small enough for one body.
 const FlushBatch = 200
 
-// NeedFlush is the one flush decision: the shim asks it on its timer and
+// NeedFlush is the one flush decision: the Flusher asks it on its timer and
 // after an emit. Nothing owed is nothing to post, so an idle client costs no
 // round trips.
 func NeedFlush(pendingCount int, sinceLast time.Duration) bool {

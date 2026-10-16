@@ -103,9 +103,9 @@ type App struct {
 	// reports through a.reportErr or a.resolveErr.
 	errs *errsurface.Surface
 
-	// tr is this client's trace ring and pump the one post in flight.
-	tr   *trace.Client
-	pump *trace.Pump
+	// tr is this client's trace ring and flush the loop that posts it.
+	tr    *trace.Client
+	flush *trace.Flusher
 
 	views viewCaches
 
@@ -395,9 +395,6 @@ type scheduler struct {
 
 	errExpire *debounce.Debounce
 
-	// traceFlush posts the records owed; nothing owed arms nothing.
-	traceFlush *debounce.Debounce
-
 	healthResync *events.Resyncs
 }
 
@@ -411,7 +408,6 @@ func newScheduler(a *App) scheduler {
 		framingSave:  debounce.New(setTimeoutMs, nowMs, cadence.FramingSaveMode, a.flushFramingSave),
 		textSave:     debounce.New(setTimeoutMs, nowMs, cadence.TextSaveMode, a.flushDirtyText),
 		urlAddress:   debounce.New(setTimeoutMs, nowMs, cadence.URLAddressMode, a.flushDirtyText),
-		traceFlush:   debounce.New(setTimeoutMs, nowMs, cadence.TraceFlushMode, a.flushTrace),
 		healthResync: events.NewResyncs(setTimeoutMs, nowMs, func(source string) { a.retryKick(true, source) }),
 		// A notice's own deadline, and a throttle: a settle would push the window
 		// out on every new notice.
@@ -604,7 +600,6 @@ func main() {
 		menu:               menu.New(),
 		errs:               errsurface.New(),
 		tr:                 tr,
-		pump:               trace.NewPump(time.Now()),
 		caps:               caps.Derive(bridgeCaps(), false),
 		fetch:              newFetchState(),
 		shellAlive:         map[string]bool{},
@@ -619,9 +614,9 @@ func main() {
 	}
 	// Before anything can draw: the settle timers close over the App.
 	app.persist = newPersistState(app)
-	// The flush timer exists now; the interceptor's records reach the ring no
-	// other way.
-	tr.OnEmit = app.armTraceFlush
+	// The interceptor has been recording into the ring since it was built;
+	// from here the flush loop posts it.
+	app.flush = trace.NewFlusher(tr, time.Now, setTimeoutMs, app.postTraceBatch)
 	app.emit(traceevent.Boot(gate.Build(), runtime.Version(),
 		jsString(js.Global().Get("navigator").Get("userAgent"))))
 	app.views = newViewCaches(app.previewDecodeFailed, app.renderedRasterFailed, app.paneLayoutUnreadable)
