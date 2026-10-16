@@ -1,8 +1,8 @@
 package server
 
 // Password auth for the browser surface. Single-tenant by design: one
-// plaintext password, the minted <home>/web-password file, one derived cookie,
-// no accounts and no sessions table. AuthToken(password) is both the cookie a
+// plaintext password, the minted <home>/web-password file, one derived cookie
+// (or the password as a bearer), no accounts and no sessions table. AuthToken(password) is both the cookie a
 // login sets and the value every request is checked against, so changing the
 // password invalidates every outstanding cookie with no revocation state.
 //
@@ -72,11 +72,15 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 	})
 }
 
-// authed compares fixed-length hashes, so the constant-time compare leaks
-// nothing.
+// authed admits the cookie, or the password itself as a bearer, which is how
+// an agent that never logged in reaches the MCP door. Both compare
+// fixed-length hashes, so the constant-time compare leaks nothing.
 func authed(r *http.Request, token string) bool {
-	c, err := r.Cookie(AuthCookieName)
-	return err == nil && subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1
+	if c, err := r.Cookie(AuthCookieName); err == nil && subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1 {
+		return true
+	}
+	bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return ok && subtle.ConstantTimeCompare([]byte(AuthToken(bearer)), []byte(token)) == 1
 }
 
 func setAuthCookie(w http.ResponseWriter, token string) {

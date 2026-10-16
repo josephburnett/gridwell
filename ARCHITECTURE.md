@@ -27,7 +27,8 @@ store               internal/local/store      gridwell.db
 Inside the node a namespace is a Go interface (`internal/namespace`). There
 are exactly two gRPC hops, both across a real process boundary: the plugin
 subprocess (`plugin.v1`) and the connection door (`gridwell.v1`). Connect
-over HTTP is the third codec, and it crosses to the browser.
+over HTTP is the third codec, and it crosses to the browser; MCP over HTTP is
+the fourth, and it crosses to an agent (`internal/mcpdoor`, `docs/mcp.md`).
 
 ## Ids
 
@@ -130,9 +131,12 @@ read rather than serving a grid with a face nobody declared. `Grid.node_ns` come
 ## The router
 
 `internal/server/router.go` is a `namespace.Namespace` over qualified ids.
-It holds no state. Two codecs stand on it and route nothing themselves:
-`connect_codec.go` for the browser and `namespace.Server` (`nodeexport.go`)
-for other nodes. They cannot drift because they are the same value.
+It holds no state. Three codecs stand on it and route nothing themselves:
+`connect_codec.go` for the browser, `namespace.Server` (`nodeexport.go`)
+for other nodes, and `mcp_door.go` for agents. They cannot drift because
+they are the same value. The MCP door's tools make the calls the client makes
+for the same gesture, reading first and claiming what they read, and hand
+every refusal back with the router's reason.
 
 A clone names two ids and runs at the nearest node that sees both ends. Where
 they share an owner (`rpc.SharedOwner`), a connection included, the router
@@ -142,10 +146,13 @@ the other. So bytes travel no further than the two ends are apart. Two
 connections are two owners even though one transport serves both.
 
 Two listeners. The web door (`web.bind`) serves Connect, the content door,
-and the shell door behind a password cookie; serve mints the 0600
-`web-password` file and prints it, delete it to rotate. Behind the cookie the
+the shell door and the MCP door (`/mcp`) behind a password cookie, or the
+password itself as a bearer, which is how an agent authenticates; serve mints
+the 0600 `web-password` file and prints it with the `claude mcp add` line,
+delete it to rotate. Behind the cookie the
 build gate (`Server.staleBuild`) refuses any call a page of another build
-makes, before the verb runs; the page offers a reload (`client/nodebuild`). The
+makes, before the verb runs; the page offers a reload (`client/nodebuild`). An
+agent's MCP call is no page's, so the gate never judges it. The
 connection door is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
 `server.yaml` key is `federation:` and its file is `federation.sock`, kept
 because an existing home already has them written down.
@@ -620,6 +627,8 @@ copy:
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | does this page run the node's build, and what it does when not | `Server.staleBuild`; `gwerr.StaleBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
+| where a tile lands when nobody chose a cell | `store.FreeSlot` over the one auto-place rule (`autoplace.go`) |
+| what a link to a tile is | `rpc.LinkOf` |
 | this event stream is established | `namespace.Follow` |
 | which grids the clients are showing | `interest.Book`, fed by `SetInterest`, counted by the `Subscribe` stream |
 | how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
@@ -650,7 +659,7 @@ pane is inside" and do not spread the word.
 | Clone is an eager deep copy | `CloneTile` |
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |
-| Two wire surfaces cannot drift | both are codecs over one `namespace.Namespace` |
+| The wire surfaces cannot drift | every one is a codec over one `namespace.Namespace` |
 | A hop peels in exactly what it prepends out | one field list, `rpc.tileIDFields`; `TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest`, `TestIdsWrittenIntoAFarGridComeBackAsSent` |
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
