@@ -52,6 +52,7 @@ func TestArgsCreate(t *testing.T) {
 		"/usr/bin/tmux", "-L", "test", "-f", "/tmp/cfg.conf",
 		"new-session", "-A", "-s", SessionName("t/42"),
 		"-c", "/home/joe",
+		"-e", "GRIDWELL_SHELL=t/42",
 		"-x", "80", "-y", "24", "bash",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -588,5 +589,26 @@ func TestArgsCreateInjectsBrowserEnv(t *testing.T) {
 func TestConfigAllowsPassthrough(t *testing.T) {
 	if !strings.Contains(gridwellConfig, "allow-passthrough on") {
 		t.Error("gridwell tmux config must set allow-passthrough on")
+	}
+}
+
+// TestArgsCreateNamesTheSession: a new session carries GRIDWELL_SHELL, its
+// key, so a program inside it (Claude Code) can tell the MCP door which shell
+// it runs in; an attach starts nothing and carries nothing.
+func TestArgsCreateNamesTheSession(t *testing.T) {
+	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "bash"}
+	has := func(argv []string) bool {
+		for i, a := range argv {
+			if a == "-e" && i+1 < len(argv) && argv[i+1] == "GRIDWELL_SHELL=k3x9a2b" {
+				return true
+			}
+		}
+		return false
+	}
+	if got := c.Args("k3x9a2b", ModeCreate, 80, 24, ""); !has(got) {
+		t.Errorf("create argv missing -e GRIDWELL_SHELL=<key>: %v", got)
+	}
+	if got := c.Args("k3x9a2b", ModeAttach, 80, 24, ""); has(got) {
+		t.Errorf("attach argv sets GRIDWELL_SHELL: %v", got)
 	}
 }

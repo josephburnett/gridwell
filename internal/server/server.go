@@ -76,6 +76,9 @@ type Server struct {
 
 	interest *interest.Book
 
+	// shells is every open /shell attachment and the session it rides under.
+	shells liveShells
+
 	// switchedOff tells every open stream of a source the user just disabled
 	// (router.DisableSource); plugin.Registry owns which are.
 	switchedOff *eventhub.Hub[*pb.Event]

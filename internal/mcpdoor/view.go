@@ -38,10 +38,11 @@ type GridOut struct {
 
 // Grid is a grid's own facts.
 type Grid struct {
-	ID           string `json:"id"`
-	Writable     bool   `json:"writable" jsonschema:"its text bodies take edits"`
-	AcceptsTiles bool   `json:"accepts_tiles" jsonschema:"it takes new tiles"`
-	Source       string `json:"source,omitempty" jsonschema:"what its source calls what backs it"`
+	ID           string   `json:"id"`
+	Writable     bool     `json:"writable" jsonschema:"its text bodies take edits"`
+	AcceptsTiles bool     `json:"accepts_tiles" jsonschema:"it takes new tiles"`
+	Source       string   `json:"source,omitempty" jsonschema:"what its source calls what backs it"`
+	Selection    []string `json:"selection" jsonschema:"the tiles the user has in hand on this grid, the claim select takes"`
 }
 
 // TileOut answers read_tile and every write: the row, and on a read the
@@ -103,7 +104,8 @@ func tileOf(t *pb.Tile, roster []*pb.PluginInfo, node string) Tile {
 }
 
 func gridOf(g *pb.Grid) Grid {
-	return Grid{ID: g.GetId(), Writable: g.GetWritable(), AcceptsTiles: g.GetAcceptsTiles(), Source: g.GetSourceLabel()}
+	return Grid{ID: g.GetId(), Writable: g.GetWritable(), AcceptsTiles: g.GetAcceptsTiles(), Source: g.GetSourceLabel(),
+		Selection: append([]string{}, g.GetSelection()...)}
 }
 
 func dead(err error) bool { return gwerr.IsDeadRef(err) }

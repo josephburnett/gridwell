@@ -11,6 +11,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -18,6 +20,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -112,12 +115,73 @@ func (s *Server) shellDoor() http.Handler {
 		// The PTY is acquired only now: an upgrade nobody completed must never
 		// leave a session behind.
 		trace.Emit("shelldoor", "pty", "open", kv)
+		defer s.shells.hold(attach.TileID, attach.Session)()
 		msg, gone := pumpShell(ctx, cancel, conn, s.shellWriteTimeout, func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
 			return s.openShellBound(ctx, ns, local, bind, recv, send)
 		})
 		trace.Emit("shelldoor", "pty", closeVerdict(msg, gone), kv)
 		writeShellExit(conn, s.shellWriteTimeout, shellwire.EncodeExit(msg, gone))
 	})
+}
+
+// liveShells joins each open attachment to the client session it rides under.
+// The PTY's owner (shellsvc.Manager) knows it has a holder but not whose
+// screen that is, and this door is the one place both are in hand.
+type liveShells struct {
+	mu   sync.Mutex
+	next uint64
+	open []shellAttach // oldest first
+}
+
+type shellAttach struct {
+	seq           uint64
+	tile, session string
+}
+
+// hold records one attachment until release.
+func (l *liveShells) hold(tile, session string) (release func()) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.next++
+	seq := l.next
+	l.open = append(l.open, shellAttach{seq: seq, tile: tile, session: session})
+	return func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.open = slices.DeleteFunc(l.open, func(a shellAttach) bool { return a.seq == seq })
+	}
+}
+
+func (l *liveShells) newestFirst() []shellAttach {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := slices.Clone(l.open)
+	slices.Reverse(out)
+	return out
+}
+
+// ShellHolder is the client session holding the home's shell session key live
+// right now, key as tmux.SessionEnv names it. The newest attachment naming the
+// key holds it: a later attach takes the PTY over (shellsvc.Manager.Acquire)
+// and the older socket closes. ok is false when no open attachment names it;
+// err is a tile read that failed, so a miss it caused is not taken for one.
+func (s *Server) ShellHolder(ctx context.Context, key string) (session string, ok bool, err error) {
+	want := s.homeUUID() + "/" + key
+	rt := newRouter(s)
+	for _, a := range s.shells.newestFirst() {
+		if a.session == "" {
+			continue
+		}
+		resp, rerr := rt.GetTile(ctx, &pb.GetTileRequest{TileId: a.tile})
+		if rerr != nil {
+			err = rerr
+			continue
+		}
+		if rpc.ShellSession(resp.GetTile()) == want {
+			return a.session, true, nil
+		}
+	}
+	return "", false, err
 }
 
 // closeVerdict is the one spelling of how an attachment ended, for the record.

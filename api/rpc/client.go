@@ -242,6 +242,9 @@ type EventStream struct {
 	s *connect.ServerStreamForClient[pb.Event]
 }
 
+// Session is the id this client names itself by to the node.
+func (c *Client) Session() string { return c.session }
+
 // SetView tells the node what this client shows, under this client's
 // session. The node forgets it when the client's last event stream closes, so
 // a client says it again after every re-open.

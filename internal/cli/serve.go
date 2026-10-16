@@ -17,6 +17,7 @@ import (
 	"syscall"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local/tmux"
 	"github.com/josephburnett/gridwell/internal/mcpdoor"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -96,7 +97,9 @@ func servingBanner(addr, fedSocket, staticDir string, plugins int, password stri
 
 // mcpAddLine is the command that registers this node's MCP door with Claude
 // Code, for the human at the process. A door bound to every interface is
-// reached on loopback from this machine.
+// reached on loopback from this machine. The shell header is single-quoted so
+// the shell it is pasted into leaves it for Claude Code, which expands it when
+// it starts: inside a shell tile it names that shell, elsewhere it is empty.
 func mcpAddLine(addr, password string) string {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -105,8 +108,8 @@ func mcpAddLine(addr, password string) string {
 	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
 		host = "127.0.0.1"
 	}
-	return fmt.Sprintf(`gridwell: agents: claude mcp add --transport http gridwell http://%s%s -H "Authorization: Bearer %s"`,
-		net.JoinHostPort(host, port), mcpdoor.Path, password)
+	return fmt.Sprintf(`gridwell: agents: claude mcp add --transport http gridwell http://%s%s -H "Authorization: Bearer %s" -H '%s: ${%s:-}'`,
+		net.JoinHostPort(host, port), mcpdoor.Path, password, mcpdoor.ShellHeader, tmux.SessionEnv)
 }
 
 // staticFS resolves the static override: "" is the embedded web client, so

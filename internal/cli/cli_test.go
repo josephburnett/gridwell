@@ -127,9 +127,9 @@ func TestServingBanner(t *testing.T) {
 // with; a door on every interface is named by loopback.
 func TestMCPAddLine(t *testing.T) {
 	for addr, want := range map[string]string{
-		"127.0.0.1:7777": `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2"`,
-		"[::]:7777":      `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2"`,
-		"10.0.0.5:80":    `gridwell: agents: claude mcp add --transport http gridwell http://10.0.0.5:80/mcp -H "Authorization: Bearer hunter2"`,
+		"127.0.0.1:7777": `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2" -H 'X-Gridwell-Shell: ${GRIDWELL_SHELL:-}'`,
+		"[::]:7777":      `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2" -H 'X-Gridwell-Shell: ${GRIDWELL_SHELL:-}'`,
+		"10.0.0.5:80":    `gridwell: agents: claude mcp add --transport http gridwell http://10.0.0.5:80/mcp -H "Authorization: Bearer hunter2" -H 'X-Gridwell-Shell: ${GRIDWELL_SHELL:-}'`,
 	} {
 		if got := mcpAddLine(addr, "hunter2"); got != want {
 			t.Errorf("mcpAddLine(%q) = %q, want %q", addr, got, want)

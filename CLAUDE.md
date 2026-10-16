@@ -295,7 +295,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   read, every refusal is a tool error with the router's reason, and a tile it
   places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
-  `docs/mcp.md` is the contract.
+  `docs/mcp.md` is the contract. An agent points as the user does
+  (2026-10-15): `pointed` is the focused pane's grid of one session, its
+  selection when non-empty, else the grid, and the session is the one named,
+  else the one holding the agent's shell live, else the one whose view
+  changed last, the others named. A new tmux session carries its key in
+  `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`, and the shell
+  door, the one place a socket and its session are both in hand, joins the
+  two (`Server.ShellHolder`).
 - A plugin or connection the user disables, from the Disable button on its
   health notice, stays disabled until the node restarts. It is held in the
   node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or

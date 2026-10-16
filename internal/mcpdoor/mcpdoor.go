@@ -26,16 +26,18 @@ qualified address ("<node>/12", "<node>/<connection>/<far-node>/7"); name it
 back exactly as a tool answered it. A write claims what you read: pass the
 version read_tile or read_grid gave you and a write made since is refused as a
 version conflict, or omit it to claim the row as it stands now. Nothing here
-destroys a tile: delete moves it to the trash. Shells are not reachable here.`
+destroys a tile: delete moves it to the trash. Shells are not reachable here.
+When the user says "this", "here" or "these", call pointed: it answers the
+grid or the selection in front of them.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
 // the browser codec does. node is the node's own id, the frame dead links are
-// judged in.
-func New(rt namespace.Namespace, node, version string) *mcp.Server {
-	d := &door{rt: rt, node: node}
+// judged in, and screens is what the node knows of the clients showing it.
+func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Server {
+	d := &door{rt: rt, node: node, screens: screens}
 	s := mcp.NewServer(&mcp.Implementation{Name: "gridwell", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
-	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
+	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_tile", Description: "Read one tile: its row, and the body of a text tile, the address of a url, the session a shell names, or the grid a well holds."}, d.readTile)
 	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside."}, d.find)
 	mcp.AddTool(s, &mcp.Tool{Name: "create_text", Description: "Create a text tile with a body in a grid. Its name is the body's first line. It lands at the first free cell, or at or below the cell named in near."}, d.createText)
@@ -45,12 +47,16 @@ func New(rt namespace.Namespace, node, version string) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{Name: "clone", Description: "Deep-copy a tile into a grid (its own when none is named), at the first free cell near it or at the cell named."}, d.clone)
 	mcp.AddTool(s, &mcp.Tool{Name: "link", Description: "Create a link to a tile in a grid: a dashed tile showing the same content, in this namespace or across one."}, d.link)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete a tile: it moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
+	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Set a grid's selection, the tiles the user has in hand, claiming the selection read_grid gave (or the one on disk now when none is given). An empty list clears it."}, d.selectTiles)
+	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List every screen showing this node now: each client session's label, when its view last changed, and its panes, each with its place, the grid it shows, and whether it has focus."}, d.sessions)
+	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the grid's selection when it has one, else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last."}, d.pointed)
 	return s
 }
 
 type door struct {
-	rt   namespace.Namespace
-	node string
+	rt      namespace.Namespace
+	node    string
+	screens Screens
 }
 
 // Cell is a grid cell.
@@ -71,19 +77,25 @@ type gridIn struct {
 }
 
 func (d *door) readGrid(ctx context.Context, _ *mcp.CallToolRequest, in gridIn) (*mcp.CallToolResult, GridOut, error) {
+	out, err := d.grid(ctx, in.ID)
+	return nil, out, err
+}
+
+// grid is read_grid's answer for id, the home grid when id is empty.
+func (d *door) grid(ctx context.Context, id string) (GridOut, error) {
 	hs, err := d.rt.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
-		return nil, GridOut{}, refusal(err)
+		return GridOut{}, refusal(err)
 	}
-	g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: cmp.Or(in.ID, hs.GetHomeGridId())})
+	g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: cmp.Or(id, hs.GetHomeGridId())})
 	if err != nil {
-		return nil, GridOut{}, refusal(err)
+		return GridOut{}, refusal(err)
 	}
 	out := GridOut{Grid: gridOf(g.GetGrid()), Tiles: []Tile{}}
 	for _, t := range g.GetTiles() {
 		out.Tiles = append(out.Tiles, tileOf(t, hs.GetPlugins(), d.node))
 	}
-	return nil, out, nil
+	return out, nil
 }
 
 type tileIn struct {
@@ -275,6 +287,31 @@ func (d *door) delete(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) 
 		return nil, DeleteOut{}, refusal(err)
 	}
 	return nil, DeleteOut{Deleted: row.GetId(), SessionLeft: resp.GetSessionLeft()}, nil
+}
+
+type selectIn struct {
+	Grid  string    `json:"grid" jsonschema:"the grid"`
+	Tiles []string  `json:"tiles" jsonschema:"the tiles to have in hand, all on this grid; empty clears the selection"`
+	Claim *[]string `json:"claim,omitempty" jsonschema:"the selection read_grid gave; omitted claims the one on disk now"`
+}
+
+func (d *door) selectTiles(ctx context.Context, _ *mcp.CallToolRequest, in selectIn) (*mcp.CallToolResult, GridOut, error) {
+	var claim []string
+	if in.Claim != nil {
+		claim = *in.Claim
+	} else {
+		g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: in.Grid})
+		if err != nil {
+			return nil, GridOut{}, refusal(err)
+		}
+		claim = g.GetGrid().GetSelection()
+	}
+	if _, err := d.rt.SetSelection(ctx, &pb.SetSelectionRequest{GridId: in.Grid,
+		Claim: &pb.SelectionClaim{TileIds: claim}, TileIds: in.Tiles}); err != nil {
+		return nil, GridOut{}, refusal(err)
+	}
+	out, err := d.grid(ctx, in.Grid)
+	return nil, out, err
 }
 
 // tile is the row a write reads first, the claim's source.

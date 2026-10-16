@@ -31,6 +31,9 @@ type Options struct {
 	// (client/nodebuild). Nil hears nothing.
 	Build        string
 	OnStaleBuild func(node string)
+	// Session is the client session every attachment rides under
+	// (rpc.Client.Session), which the node joins to the shell it holds.
+	Session string
 	// HTTPClient and Header are honored off-browser only: a browser attaches
 	// its own cookies and forbids setting handshake headers.
 	HTTPClient *http.Client
@@ -48,7 +51,7 @@ func Dialer(o Options) shellstream.Dialer {
 			bound = DefaultWriteTimeout
 		}
 		c := &conn{wake: make(chan struct{}, 1), ctx: ctx, cancel: cancel, onEnd: onEnd, writeBound: bound}
-		addr, err := shellwire.AttachURL(o.Origin, o.Build, tileID, cols, rows)
+		addr, err := shellwire.AttachURL(o.Origin, o.Build, o.Session, tileID, cols, rows)
 		if err != nil {
 			c.end("shell address: "+err.Error(), false)
 			return c
