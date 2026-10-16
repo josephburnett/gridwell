@@ -4,7 +4,7 @@ import { settle } from './cadence';
 import { dumpViaDoor, TraceLine } from './trace';
 
 // Inside a pane tile a grid's view is the layout blob's (2026-10-14), and so
-// is a text leaf's scroll (2026-10-16). These cross the seam from the gesture
+// is a text leaf's live scroll, while leaving it writes its row (2026-10-16). These cross the seam from the gesture
 // to the node's own record of what it wrote, and from stored bytes to what a
 // restored leaf shows.
 
@@ -239,6 +239,60 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
     .toBe(mode);
   await expect
     .poll(() => shownScroll(window), { message: "re-entry shows the layout's scroll" })
+    .toBeCloseTo(scrolled, -1);
+  await gw.leaveWorkspace();
+});
+
+test('inside a pane tile a document scrolled and left reopens where it was left, and only the leave wrote its row', async ({
+  gw,
+  window,
+}) => {
+  const c = await gw.cadences();
+  const settleMs = Math.max(c.workspaceSaveMs, c.framingSaveMs);
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const rootGrid = f.gridID;
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+
+  await gw.openPalette();
+  await gw.dragCreate('pane', wx, wy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', wx + 1, wy);
+  const doc = tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy)!;
+  await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
+  const row = async () => tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy) as Record<string, unknown>;
+
+  await gw.descendCell(wx, wy);
+  await expect.poll(() => workspaceDepth(window)).toBe(1);
+  await gw.descendCell(wx + 1, wy);
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe(doc.id);
+  await gw.toggleTextMode();
+  await expect.poll(async () => (await gw.focused()).textMode).toBe('rendered');
+  await settle(window, settleMs);
+
+  const textViews = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextView ?? 0));
+  const before = await textViews();
+  const p = await gw.focused();
+  await window.mouse.move(p.x + p.w / 2, p.y + p.h / 2);
+  for (let i = 0; i < 8; i++) await window.mouse.wheel(0, 120);
+  await expect.poll(() => shownScroll(window)).toBeGreaterThan(0);
+  await settle(window, settleMs * 2);
+  const scrolled = await shownScroll(window);
+  expect(await textViews(), 'the scroll settle posted SetTextView before any leave').toBe(before);
+  expect(Number((await row()).textY ?? 0), 'the settle moved the row').toBe(0);
+
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
+  await expect
+    .poll(async () => Number((await row()).textY ?? 0), { message: 'the leave wrote where the document was left' })
+    .toBeCloseTo(scrolled, -1);
+
+  await gw.descendCell(wx + 1, wy);
+  await expect.poll(async () => (await gw.focused()).textFocus).toBe(doc.id);
+  await expect
+    .poll(() => shownScroll(window), { message: 'the document reopened where it was left' })
     .toBeCloseTo(scrolled, -1);
   await gw.leaveWorkspace();
 });

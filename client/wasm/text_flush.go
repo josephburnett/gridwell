@@ -125,9 +125,8 @@ func (a *App) contentKey(tileID string) string {
 
 // saveTextBeforeAscent posts the editor buffer and the window (scroll and
 // mode, textedit.Framing) when a pane leaves a text descent, through the
-// dispatcher like every other mutation. The row's window is what the grid
-// preview shows; inside a pane tile it takes only the mode
-// (textedit.RowFraming).
+// dispatcher like every other mutation. Leaving writes the row's whole
+// window, inside a pane tile too: see textedit.RowFraming.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// A url or shell row carries no text framing, and the server rejects a
 	// non-text kind with InvalidArgument.
@@ -155,7 +154,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	_, sized := r.Size()
 	stored := textedit.FramingOf(file)
 	next := textedit.RowFraming(stored, textedit.Framing{X: scrollX, Y: scrollY, Mode: p.TextMode},
-		p.FramingTarget(a.ws.Depth() > 0).Layout)
+		p.FramingTarget(a.ws.Depth() > 0).Layout, true)
 	reframed := sized && !p.ViewPending && textedit.Reframes(stored, next, !editable)
 	if reframed {
 		// Patched before the round trip, so the ascent transition reflects

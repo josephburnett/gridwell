@@ -65,11 +65,13 @@ func Reframes(stored, next Framing, readOnly bool) bool {
 }
 
 // RowFraming is what a text pane writes to its tile row from the window it
-// shows. Inside a pane tile the layout owns the scroll (pane.FramingOwner),
-// so the row keeps its own and takes only the mode, which is how the tile
-// presents from outside.
-func RowFraming(stored, shown Framing, layoutOwnsScroll bool) Framing {
-	if !layoutOwnsScroll {
+// shows. The row's window is where the tile was left: the grid preview crops
+// there and a fresh descent opens there. So leaving writes it whole, and so
+// does a settle outside a pane tile; a settle inside one, whose layout owns
+// the live scroll (pane.FramingOwner), takes only the mode, so a look or a
+// focus tap on another device moves no one's window.
+func RowFraming(stored, shown Framing, layoutOwnsScroll, leaving bool) Framing {
+	if leaving || !layoutOwnsScroll {
 		return shown
 	}
 	return Framing{X: stored.X, Y: stored.Y, Mode: shown.Mode}

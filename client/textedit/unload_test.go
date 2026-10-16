@@ -140,24 +140,33 @@ func TestAWindowSizeIsNotAReframe(t *testing.T) {
 	}
 }
 
-// Inside a pane tile the layout owns the scroll, so a settle or an ascent
-// there takes only the mode to the row: a scroll writes nothing to it, a
-// toggle does, and a never-framed row looked at is still left alone.
-func TestInsideAPaneTileTheRowTakesOnlyTheMode(t *testing.T) {
+// Inside a pane tile the layout owns the scroll, so a settle there takes only
+// the mode to the row: a scroll writes nothing to it, a toggle does, and a
+// never-framed row looked at is still left alone. Leaving is different: the
+// row's window is where the tile was left, so an ascent writes it whole.
+func TestInsideAPaneTileASettleTakesTheModeAndALeaveTheWindow(t *testing.T) {
 	stored := Framing{X: 0, Y: 240, Mode: rpc.TextModeRendered}
 	scrolled := Framing{Y: 900, Mode: rpc.TextModeRendered}
-	if Reframes(stored, RowFraming(stored, scrolled, true), false) {
-		t.Error("a scroll inside a pane tile reframed the row")
+	if Reframes(stored, RowFraming(stored, scrolled, true, false), false) {
+		t.Error("a settle inside a pane tile reframed the row's scroll")
 	}
-	if !Reframes(stored, RowFraming(stored, scrolled, false), false) {
-		t.Error("a scroll outside a pane tile did not reframe the row")
+	if got := RowFraming(stored, scrolled, true, true); got != scrolled {
+		t.Errorf("leaving inside a pane tile writes %+v, want the window left %+v", got, scrolled)
+	}
+	for _, leaving := range []bool{false, true} {
+		if got := RowFraming(stored, scrolled, false, leaving); got != scrolled {
+			t.Errorf("outside a pane tile (leaving %v) writes %+v, want %+v", leaving, got, scrolled)
+		}
 	}
 	toggled := Framing{Y: 900, Mode: rpc.TextModeText}
-	if got := RowFraming(stored, toggled, true); got != (Framing{Y: 240, Mode: rpc.TextModeText}) {
-		t.Errorf("a toggle inside a pane tile writes %+v, want the row's scroll and the new mode", got)
+	if got := RowFraming(stored, toggled, true, false); got != (Framing{Y: 240, Mode: rpc.TextModeText}) {
+		t.Errorf("a toggle settled inside a pane tile writes %+v, want the row's scroll and the new mode", got)
 	}
 	shown := DescentMode(ModeInput{TextDocument: true, Cached: true})
-	if Reframes(Framing{}, RowFraming(Framing{}, Framing{Y: 300, Mode: shown}, true), false) {
-		t.Error("a scroll inside a pane tile stamped a never-framed row")
+	if Reframes(Framing{}, RowFraming(Framing{}, Framing{Y: 300, Mode: shown}, true, false), false) {
+		t.Error("a settle inside a pane tile stamped a never-framed row")
+	}
+	if Reframes(Framing{}, RowFraming(Framing{}, Framing{Mode: shown}, true, true), false) {
+		t.Error("leaving a never-framed row unscrolled stamped it")
 	}
 }

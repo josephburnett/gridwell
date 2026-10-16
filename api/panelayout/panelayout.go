@@ -57,8 +57,9 @@ type LayoutFrame struct {
 // full still encodes byte-identically.
 // Views is the viewport each frame of the place was left at, root first, one
 // per frame, null where a frame has none; absent when no frame has one. Text
-// is the scroll of a text descent on top, absent until the user moves it off
-// the row's; its mode is its tile row's (2026-10-16). Sels is each grid
+// is the live scroll of a text descent on top, absent until the user moves it
+// off the row's; its mode, and its window once left, are its tile row's
+// (2026-10-16). Sels is each grid
 // frame's selection the same way: inside a pane tile a pane's selection is
 // the layout's, not the grid row's (2026-10-15). Retired keys, never reused:
 // cx, cy, zoom, text_mode, text_scroll_x, text_scroll_y, text_zoom.

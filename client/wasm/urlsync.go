@@ -259,8 +259,8 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 
 // persistTextScroll is the settle persister's text arm: a text descent's
 // scroll and mode persist framing-class, no version bump, one SetTextView when
-// they moved: see textedit.Reframes. Inside a pane tile the row takes only the
-// mode (textedit.RowFraming). A read-only host tile scrolls like any other,
+// they moved: see textedit.Reframes. Inside a pane tile a settle takes only
+// the mode to the row (textedit.RowFraming). A read-only host tile scrolls like any other,
 // because where the user left the window is the node's fact even when the
 // body is the plugin's.
 func (a *App) persistTextScroll(p *pane.Pane) {
@@ -277,7 +277,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	gid := a.gridIDForPane(p)
 	stored := textedit.FramingOf(file)
 	next := textedit.RowFraming(stored, textedit.Framing{X: scrollX, Y: scrollY, Mode: p.TextMode},
-		p.FramingTarget(a.ws.Depth() > 0).Layout)
+		p.FramingTarget(a.ws.Depth() > 0).Layout, false)
 	if !textedit.Reframes(stored, next, a.tileReadOnly(file)) {
 		return
 	}
