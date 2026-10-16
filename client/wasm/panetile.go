@@ -88,7 +88,7 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2
 		drawGridLinesIn(c, a.pal.GridLineInterior, r.X, r.Y, r.W, r.H, cell, cx-v.Cx()*cell, cy-v.Cy()*cell)
 		if g, ok := a.c.Grid(gid); ok {
-			a.drawChildPreview(g, v.Cx(), v.Cy(), cx, cy, cell, r.X, r.Y, r.W, r.H, "")
+			a.drawChildPreview(g, v.Cx(), v.Cy(), cx, cy, cell, r.X, r.Y, r.W, r.H, nil)
 		}
 	})
 }

@@ -32,6 +32,8 @@ export interface PaneInfo {
   // The ids of the tiles this pane renders, which is its cache contents. A tile
   // the getGrid oracle sees but this does not has disappeared from the client.
   tileIds: string[];
+  // The grid's selection as the client's cache holds it.
+  selection: string[];
 }
 
 // The waits client/cadence declares, in ms.

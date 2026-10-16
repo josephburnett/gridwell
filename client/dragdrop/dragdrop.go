@@ -81,11 +81,11 @@ func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
 		int64(math.Floor((sy - originY) / cellSize))
 }
 
-// HiddenMatch reports whether a tile is skipped during render because it is
-// being dragged. It matches by tile id: matching on anything a clone shares
-// with its source would make every clone vanish during the drag.
-func HiddenMatch(hiddenTileID string, hiddenPaneID, currentPaneID string, tileID string) bool {
-	return hiddenTileID != "" && hiddenPaneID == currentPaneID && tileID == hiddenTileID
+// HiddenMatch reports whether a tile is skipped during render because a move
+// carries it. It matches by tile id: matching on anything a clone shares with
+// its source would make every clone vanish during the drag.
+func HiddenMatch(hidden Carry, hiddenPaneID, currentPaneID string, tileID string) bool {
+	return hiddenPaneID == currentPaneID && hidden.Has(tileID)
 }
 
 // ChildPreview's Origin is the screen coordinate of child cell (0, 0).
@@ -243,8 +243,8 @@ const (
 
 // DropInput is every world-read a drop decision needs, gathered once before
 // any teardown clears the drag state. It holds no App fields and no js.Value,
-// so a cleared field can never be read late. Occupied excludes the moving tile
-// on a move, mirroring the server's PlaceTile.
+// so a cleared field can never be read late. The grabbed tile stands for
+// everything the drag carries; Occupied is Carry.Occupied's verdict for all.
 type DropInput struct {
 	Started bool
 	// SplitNav is gesture.SplitNav at left-press time, fixed there so letting
@@ -335,9 +335,9 @@ func GhostPlanForDrop(action DropAction, forbidden bool,
 	}
 }
 
-// PromoteToWell excludes the dragged tile: a well dropped into its own subtree
-// is a cycle the server rejects. The caller resolves isWell from
+// PromoteToWell excludes every carried tile: a well dropped into its own
+// subtree is a cycle the server rejects. The caller resolves isWell from
 // rpc.IsWellKind, keeping api/rpc out of here.
-func PromoteToWell(isWell bool, childGridID, tileID, draggedTileID string) bool {
-	return isWell && childGridID != "" && tileID != draggedTileID
+func PromoteToWell(isWell bool, childGridID, tileID string, carried Carry) bool {
+	return isWell && childGridID != "" && !carried.Has(tileID)
 }

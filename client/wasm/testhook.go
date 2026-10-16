@@ -656,6 +656,8 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			// Doorways deep: one number, because there is one place stack.
 			"placeDepth": p.Depth() - 1,
 			"tileIds":    a.paneTileIDs(p),
+			// The grid's selection as the client's cache holds it.
+			"selection": a.paneSelection(p),
 		})
 	}
 	return out
@@ -674,6 +676,14 @@ func (a *App) paneTileIDs(p *pane.Pane) []any {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func (a *App) paneSelection(p *pane.Pane) []any {
+	g, ok := a.c.Grid(a.gridIDForPane(p))
+	if !ok {
+		return []any{}
+	}
+	return stringsToAny(g.Meta.GetSelection())
 }
 
 // thPlugins returns the configured menu rows: identity, the row's own grid
@@ -798,13 +808,22 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 	}
 }
 
-// thGhost reports the drag ghost the renderer would paint and the source tile
-// it hides, the two facts the tile loop reads at its hide check.
+// thGhost reports the drag ghost the renderer would paint and the source
+// tiles it hides, the facts the tile loop reads at its hide check, and every
+// tile it draws.
 func (a *App) thGhost(js.Value, []js.Value) any {
+	carried := []any{}
+	if a.ghost != nil {
+		for _, n := range a.ghost.carried {
+			carried = append(carried, n.Id)
+		}
+	}
 	return map[string]any{
 		"active":       a.ghost != nil,
 		"hiddenTileID": a.ghostHiddenTile(),
+		"hidden":       stringsToAny(a.ghostHidden().IDs()),
 		"hiddenPaneID": a.ghostHiddenPane(),
+		"carried":      carried,
 	}
 }
 

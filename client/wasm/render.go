@@ -496,7 +496,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 			} else {
 				inHost := g.HostContent()
 				for _, n := range g.Tiles {
-					if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.Id) {
+					if dragdrop.HiddenMatch(a.ghostHidden(), a.ghostHiddenPane(), p.ID, n.Id) {
 						continue
 					}
 					if !pscreen.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
@@ -523,15 +523,18 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				}
 				a.drawEdgeIndicators(g.Tiles, pscreen, r)
 				if a.ghost != nil && a.ghost.paneID == p.ID {
-					gn := a.ghost.tile
 					gcs := a.ghost.displayedCellSize
 					if gcs <= 0 {
 						gcs = cellSize
 					}
-					w := float64(gn.W) * gcs
-					h := float64(gn.H) * gcs
-					a.drawGhostTile(gn, a.ghost.X, a.ghost.Y, w, h, gcs, r,
+					a.drawGhostTile(a.ghost.tile, a.ghost.X, a.ghost.Y, gcs, r,
 						a.ghost.displayedFragmentation)
+					c := carryOf(a.ghost.carried)
+					for i := 1; i < len(c); i++ {
+						dx, dy := c.Offset(i)
+						a.drawGhostTile(a.ghost.carried[i], a.ghost.X+float64(dx)*gcs,
+							a.ghost.Y+float64(dy)*gcs, gcs, r, a.ghost.displayedFragmentation)
+					}
 				}
 			}
 		}
@@ -719,9 +722,9 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 			drawGridLinesIn(a.cctx, a.pal.GridLineInterior, x, y, w, h, previewCell, originX, originY)
 
 			if showPreview {
-				var hide string
+				var hide dragdrop.Carry
 				if a.ghost != nil && a.ghost.hiddenPaneID == paintPaneID {
-					hide = a.ghost.hiddenTileID
+					hide = a.ghost.hidden
 				}
 				a.drawChildPreview(child, viewCenterX, viewCenterY,
 					wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
@@ -883,13 +886,13 @@ func (a *App) tileBody(n *gridwellv1.Tile) ([]byte, bool) {
 func (a *App) drawChildPreview(child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
-	hiddenTileID string,
+	hidden dragdrop.Carry,
 ) {
 	c := a.cctx
 	childInHost := child.HostContent()
 	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
-		if hiddenTileID != "" && n.Id == hiddenTileID {
+		if hidden.Has(n.Id) {
 			continue
 		}
 		nodeScreenX := centerScreenX + (float64(n.X)-centerCellX)*previewCell
@@ -938,8 +941,10 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 }
 
 // drawGhostTile is drawNodeWithPreview at near-zero fragmentation; over a
-// black hole it cross-fades into a trashcan.
-func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, r pane.Rect, frag float64) {
+// black hole it cross-fades into a trashcan. n is drawn at its own size in
+// cells of parentCellSize.
+func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r pane.Rect, frag float64) {
+	w, h := float64(n.W)*parentCellSize, float64(n.H)*parentCellSize
 	outside := tileface.Outside(n, false)
 	// Dashed means this is, or becomes, a reference: it shows mid-drag which
 	// right-button mode is armed.

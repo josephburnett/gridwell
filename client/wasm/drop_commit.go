@@ -112,8 +112,8 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		// A cross-namespace left-drag links, because there is no
 		// cross-plugin move.
 		if a.ghost != nil {
-			// The source was hidden for a would-be move, but it stays.
-			a.ghost.hiddenTileID = ""
+			// The sources were hidden for a would-be move, but they stay.
+			a.ghost.hidden = nil
 			a.ghost.hiddenPaneID = ""
 		}
 		a.landGhostAtCell(t, dropX, dropY)
@@ -124,19 +124,38 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 
 	// DropMove.
 	a.landGhostAtCell(t, dropX, dropY)
-
-	req := &gridwellv1.PlaceTileRequest{
-		TileId: d.tileID,
-		GridId: t.gridID,
-		X:      dropX,
-		Y:      dropY,
-		W:      d.snapshotTile.W,
-		H:      d.snapshotTile.H,
-		Claim:  rpc.PlacementOf(d.snapshotTile),
-	}
-	a.postPlacement(d.srcGridID, req, func() { a.snapBackToOrigin(d) })
+	a.commitMove(d, t, dropX, dropY)
 	a.draw()
 	return true
+}
+
+// commitMove places every carried tile by the grabbed tile's offset, each
+// its own PlaceTile claiming the placement the press saw, so a stale row is
+// refused alone and its cache puts it back alone. They run one after another
+// in dragdrop.Carry.MoveOrder, because the node checks each against the grid
+// as the last one left it. The ghost snaps back only for a lone tile; a set's
+// ghost has landed for every member.
+func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
+	c := d.carry()
+	to := c.At(dropX, dropY)
+	ws := make([]write, 0, len(c))
+	for _, i := range c.MoveOrder(dropX, dropY) {
+		row := d.carried[i]
+		var snapBack func()
+		if len(c) == 1 {
+			snapBack = func() { a.snapBackToOrigin(d) }
+		}
+		ws = append(ws, a.placementWrite(d.srcGridID, &gridwellv1.PlaceTileRequest{
+			TileId: row.Id,
+			GridId: t.gridID,
+			X:      to[i].X,
+			Y:      to[i].Y,
+			W:      row.W,
+			H:      row.H,
+			Claim:  rpc.PlacementOf(row),
+		}, snapBack))
+	}
+	a.postInOrder(ws)
 }
 
 // postPlacement is the one placement writeback, PlaceTile: an id plus the
@@ -148,9 +167,15 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 // conflict also re-reads the grid, so the tile lands where the node holds it.
 // A placement parks nothing.
 func (a *App) postPlacement(gid string, req *gridwellv1.PlaceTileRequest, snapBack func()) {
+	a.post(a.placementWrite(gid, req, snapBack))
+}
+
+// placementWrite holds the placement in the cache now and is the write that
+// tells the node; see postPlacement.
+func (a *App) placementWrite(gid string, req *gridwellv1.PlaceTileRequest, snapBack func()) write {
 	pl := a.c.Place(req.TileId, cache.Placement{GridID: req.GridId, X: req.X, Y: req.Y, W: req.W, H: req.H})
 	var resp *gridwellv1.Tile
-	a.post(write{
+	return write{
 		label: "PlaceTile", gid: gid, optimistic: true,
 		call: func(ctx context.Context) error {
 			var err error
@@ -165,39 +190,38 @@ func (a *App) postPlacement(gid string, req *gridwellv1.PlaceTileRequest, snapBa
 			}
 			a.scheduleFrame(traceevent.WhyDrag)
 		},
-	})
-}
-
-// commitLinkDrop creates the link a DropLink verdict asks for; what that link
-// is, is rpc.LinkOf's. Ids are qualified in every namespace, so one request
-// shape links inside one and across one.
-func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
-	label := "CreateLeafLink"
-	if rpc.IsWellKind(d.snapshotTile.Kind) {
-		label = "CreateWell"
 	}
-	a.createTile(label, t.gridID, &gridwellv1.CreateTileRequest{GridId: t.gridID,
-		Tile: rpc.LinkOf(d.snapshotTile, dropX, dropY)}, nil)
 }
 
-// occupiedForDrop reports whether the dropped footprint overlaps a cached
-// tile other than excludeID. A move passes the dragged tile's own id,
-// mirroring the server's PlaceTile self-exclusion; a clone passes "", because
-// the source tile is a real neighbor there.
-func (a *App) occupiedForDrop(gridID string, x, y, w, h int64, excludeID string) bool {
+// commitLinkDrop creates the links a DropLink verdict asks for, one per
+// carried tile at its offset; what a link is, is rpc.LinkOf's. Ids are
+// qualified in every namespace, so one request shape links inside one and
+// across one.
+func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+	to := d.carry().At(dropX, dropY)
+	for i, row := range d.carried {
+		label := "CreateLeafLink"
+		if rpc.IsWellKind(row.Kind) {
+			label = "CreateWell"
+		}
+		a.createTile(label, t.gridID, &gridwellv1.CreateTileRequest{GridId: t.gridID,
+			Tile: rpc.LinkOf(row, to[i].X, to[i].Y)}, nil)
+	}
+}
+
+// occupiedForDrop is dragdrop.Carry.Occupied over the target grid's cached
+// rows: c landed with its first tile at (x, y). vacates is a move's, which
+// mirrors the server's PlaceTile self-exclusion.
+func (a *App) occupiedForDrop(gridID string, c dragdrop.Carry, x, y int64, vacates bool) bool {
 	g, ok := a.c.Grid(gridID)
 	if !ok {
 		return false
 	}
+	occupants := make([]dragdrop.Member, 0, len(g.Tiles))
 	for _, n := range g.Tiles {
-		if n.Id == excludeID {
-			continue
-		}
-		if dragdrop.RectsOverlap(n.X, n.Y, n.W, n.H, x, y, w, h) {
-			return true
-		}
+		occupants = append(occupants, memberOf(n))
 	}
-	return false
+	return c.Occupied(x, y, occupants, vacates)
 }
 
 // landGhostAtCell lands the ghost on the drop target's cell. Move, link and

@@ -2,6 +2,7 @@ package dragdrop
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -172,20 +173,25 @@ func TestHiddenMatchByTileIDNotLineage(t *testing.T) {
 	const cloneID = "7" // a different row showing the same content
 	const otherID = "9"
 
-	if !HiddenMatch(sourceID, "p1", "p1", sourceID) {
+	src := Carry{{ID: sourceID}}
+	if !HiddenMatch(src, "p1", "p1", sourceID) {
 		t.Error("dragged source tile should be hidden in its pane")
 	}
-	if HiddenMatch(sourceID, "p1", "p1", cloneID) {
+	if HiddenMatch(src, "p1", "p1", cloneID) {
 		t.Error("a clone (different row id) must NOT be hidden")
 	}
-	if HiddenMatch(sourceID, "p1", "p1", otherID) {
+	if HiddenMatch(src, "p1", "p1", otherID) {
 		t.Error("an unrelated tile must NOT be hidden")
 	}
-	if HiddenMatch(sourceID, "p1", "p2", sourceID) {
+	if HiddenMatch(src, "p1", "p2", sourceID) {
 		t.Error("source tile in a DIFFERENT pane must NOT be hidden")
 	}
-	if HiddenMatch("", "p1", "p1", sourceID) {
-		t.Error(`no active hide (hiddenTileID=="") must hide nothing`)
+	if HiddenMatch(nil, "p1", "p1", sourceID) {
+		t.Error("no active hide must hide nothing")
+	}
+	set := Carry{{ID: sourceID}, {ID: otherID}}
+	if !HiddenMatch(set, "p1", "p1", otherID) {
+		t.Error("every tile a set move carries should be hidden")
 	}
 }
 
@@ -547,10 +553,17 @@ func TestPromoteToWell(t *testing.T) {
 		{"non-well never promotes", false, "g9", "t1", "t2", false},
 		{"well with no child never promotes", true, "", "t1", "t2", false},
 		{"the dragged well itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
+		{"a well the set carries never promotes", true, "g9", "t3", "t1,t3", false},
 		{"no drag in flight still promotes", true, "g9", "t1", "", true},
 	}
 	for _, c := range cases {
-		if got := PromoteToWell(c.isWell, c.childGridID, c.tileID, c.draggedTileID); got != c.want {
+		var carried Carry
+		for _, id := range strings.Split(c.draggedTileID, ",") {
+			if id != "" {
+				carried = append(carried, Member{ID: id})
+			}
+		}
+		if got := PromoteToWell(c.isWell, c.childGridID, c.tileID, carried); got != c.want {
 			t.Errorf("%s: PromoteToWell = %v, want %v", c.name, got, c.want)
 		}
 	}
