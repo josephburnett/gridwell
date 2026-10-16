@@ -1,7 +1,8 @@
 // Package server is the HTTP layer of Gridwell: a Connect-RPC codec at
-// /gridwell.v1.Gridwell/<Method>, the static web client at /, and the shell
-// WebSocket, so every host that runs the client has shells. Two doors,
-// WebHandler and ConnectionHandler; nodeexport.go declares both.
+// /gridwell.v1.Gridwell/<Method>, the static web client at /, the shell
+// WebSocket, so every host that runs the client has shells, and the MCP door
+// for agents. Two doors, WebHandler and ConnectionHandler; nodeexport.go
+// declares both.
 package server
 
 import (
@@ -26,6 +27,7 @@ import (
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/interest"
+	"github.com/josephburnett/gridwell/internal/mcpdoor"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"strconv"
@@ -230,6 +232,9 @@ func (s *Server) routes() {
 
 	// One live PTY per WebSocket, on the same gated mux (shell_door.go).
 	s.mux.Handle(shellwire.Path, s.shellDoor())
+
+	// The agents' door (mcp_door.go), gated like the browser's.
+	s.mux.Handle(mcpdoor.Path, s.mcpDoor())
 
 	// Exempt from the cookie gate; see content_door.go.
 	s.mux.Handle(contentPathPrefix, s.contentDoor())

@@ -2,9 +2,37 @@ package store
 
 // The one automatic placement: where a tile lands when nobody chose a cell. A
 // plugin entry with no placement hint takes the next free slot of its
-// collection's overlay, and a deleted tile takes the next free slot of its
-// trash month. Both read this rule, so touching one cannot move the other.
-// It is layout only; the user rearranges afterwards and it stays as left.
+// collection's overlay, a deleted tile takes the next free slot of its trash
+// month, and a tile the MCP door creates or clones takes FreeSlot. All read
+// this rule, so touching one cannot move another. It is layout only; the user
+// rearranges afterwards and it stays as left.
+
+import gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+
+// FreeSlot is where a w×h tile lands among taken: at or below near in near's
+// column when the caller names a cell, as a plugin's hint does, else the first
+// free slot from the origin in reading order.
+func FreeSlot(taken []*gridwellv1.Tile, near *[2]int64, w, h int64) (x, y int64) {
+	occupied := map[[2]int64]bool{}
+	for _, t := range taken {
+		occupyRect(occupied, t.GetX(), t.GetY(), t.GetW(), t.GetH())
+	}
+	if near != nil {
+		x, y = near[0], belowHint(occupied, near[0], near[1], w, h)
+		return x, y
+	}
+	var cur cursor
+	return nextFreeRect(occupied, &cur, w, h)
+}
+
+// belowHint is the first row at or below y where a w×h rect at column x is
+// free, so a hint is a preference that never lands on an occupied cell.
+func belowHint(occupied map[[2]int64]bool, x, y, w, h int64) int64 {
+	for !rectFree(occupied, x, y, max(w, 1), max(h, 1)) {
+		y++
+	}
+	return y
+}
 
 // AutoPlaceWidth is the fill width the reading order wraps at.
 const AutoPlaceWidth int64 = 8

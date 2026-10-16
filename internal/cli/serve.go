@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -16,6 +17,7 @@ import (
 	"syscall"
 
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/mcpdoor"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -90,6 +92,21 @@ func servingBanner(addr, fedSocket, staticDir string, plugins int, password stri
 	}
 	return fmt.Sprintf(bannerPrefix+"%s (static=%s plugins=%d auth=%s federation=%s)",
 		addr, staticDir, plugins, server.AuthToken(password), fedSocket)
+}
+
+// mcpAddLine is the command that registers this node's MCP door with Claude
+// Code, for the human at the process. A door bound to every interface is
+// reached on loopback from this machine.
+func mcpAddLine(addr, password string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "127.0.0.1"
+	}
+	return fmt.Sprintf(`gridwell: agents: claude mcp add --transport http gridwell http://%s%s -H "Authorization: Bearer %s"`,
+		net.JoinHostPort(host, port), mcpdoor.Path, password)
 }
 
 // staticFS resolves the static override: "" is the embedded web client, so
@@ -251,6 +268,9 @@ func RunServe(args []string) int {
 	// The password itself, for the human at the process.
 	fmt.Fprintf(os.Stderr, "gridwell: web password: %s  (%s — delete the file to rotate; every browser logs in again)\n",
 		cfg.WebPassword, config.PasswordFile(home))
+	if line := mcpAddLine(n.Ln.Addr().String(), cfg.WebPassword); line != "" {
+		fmt.Fprintln(os.Stderr, line)
+	}
 	// The lock file's banner is the "already serving" reprint.
 	lock.WriteBanner(banner)
 

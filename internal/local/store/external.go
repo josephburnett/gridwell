@@ -193,18 +193,15 @@ func snapshotOf(e *pluginv1.Entry) entrySnapshot {
 }
 
 // derivePlacement places a hinted entry at the first free rect of the hint's
-// size at or below the hint, in the hint's own column, so a hint is a
-// preference that never lands on an occupied cell and a calendar's column
-// stays its column. Any other entry takes the next free cell from the
+// size at or below the hint (belowHint), so a calendar's column stays its
+// column. Any other entry takes the next free cell from the
 // listing's cursor by the one auto-place rule (autoplace.go). Overlay derives
 // with it and Mint stores what Overlay derived, so touching a tile never
 // moves it.
 func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *pluginv1.PlacementHint) (x, y, w, h int64) {
 	if hint != nil {
-		x, y, w, h = hint.X, hint.Y, max(hint.W, 1), max(hint.H, 1)
-		for !rectFree(occupied, x, y, w, h) {
-			y++
-		}
+		x, w, h = hint.X, max(hint.W, 1), max(hint.H, 1)
+		y = belowHint(occupied, x, hint.Y, w, h)
 		occupyRect(occupied, x, y, w, h)
 		return x, y, w, h
 	}

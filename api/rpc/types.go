@@ -298,6 +298,20 @@ func ContentID(t *pb.Tile) string {
 	return t.Id
 }
 
+// LinkOf is the tile a link to src creates at (x, y), src's size: an exit
+// well onto a well's child grid with its framing, or a leaf link to the
+// content src names (ContentID), so a link to a link names the content and
+// links never chain through middleman tiles.
+func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
+	if IsWellKind(src.Kind) {
+		return &pb.Tile{Kind: KindWell, X: x, Y: y, W: src.W, H: src.H,
+			ChildGridId: src.ChildGridId, AltText: src.AltText,
+			ViewCx: src.ViewCx, ViewCy: src.ViewCy, ViewZoom: src.ViewZoom}
+	}
+	return &pb.Tile{Kind: src.Kind, X: x, Y: y, W: src.W, H: src.H,
+		LinkTargetId: ContentID(src), AltText: src.AltText}
+}
+
 // ShellSession names the tmux session a shell tile attaches: the session its
 // row names, which a clone shares with its source, or else its content tile's.
 func ShellSession(t *pb.Tile) string {

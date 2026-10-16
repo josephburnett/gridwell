@@ -256,6 +256,20 @@ func TestContentID(t *testing.T) {
 	}
 }
 
+// A link names content, never a middleman: a link to a link targets what the
+// first one targets, and a well's link is an exit well onto the same grid,
+// framed where the source was.
+func TestLinkOfNamesTheContentNotTheMiddleman(t *testing.T) {
+	link := LinkOf(&pb.Tile{Id: "b/9", Kind: KindText, W: 2, H: 1, LinkTargetId: "a/42", AltText: "notes"}, 3, 4)
+	if link.LinkTargetId != "a/42" || link.Kind != KindText || link.X != 3 || link.Y != 4 || link.W != 2 || link.AltText != "notes" {
+		t.Errorf("leaf link = %v, want a 2x1 text link to a/42 at (3,4)", link)
+	}
+	well := LinkOf(&pb.Tile{Id: "a/7", Kind: KindWell, W: 1, H: 1, ChildGridId: "a/8", ViewZoom: 2}, 0, 0)
+	if well.ChildGridId != "a/8" || well.LinkTargetId != "" || well.ViewZoom != 2 {
+		t.Errorf("well link = %v, want an exit well onto a/8 keeping its framing", well)
+	}
+}
+
 // TestTextDocumentAndPageContent pins the two derivations of "is this a
 // page", which were spelled three ways across the shim before they had
 // owners. A served page is a url tile: web content wherever the address comes

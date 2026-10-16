@@ -135,11 +135,6 @@ func (s *Store) firstFreeCell(ctx context.Context, tx *sql.Tx, gridID, w, h int6
 	if err != nil {
 		return 0, 0, err
 	}
-	occupied := map[[2]int64]bool{}
-	for _, t := range tiles {
-		occupyRect(occupied, t.X, t.Y, t.W, t.H)
-	}
-	var cur cursor
-	x, y := nextFreeRect(occupied, &cur, w, h)
+	x, y := FreeSlot(tiles, nil, w, h)
 	return x, y, nil
 }

@@ -288,6 +288,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   above it, and every opening starts folded — the fold is the menu's live
   state and dies with it (`client/palette` decides what a state shows,
   `client/menu` owns the flag).
+- Agents reach the node through the MCP door (2026-10-15): `/mcp` on the
+  web door, Streamable HTTP, the web password as a bearer beside the cookie,
+  and no build gate, since no page is behind it. It is a codec over the one
+  router (`internal/mcpdoor`): every write reads first and claims what it
+  read, every refusal is a tool error with the router's reason, and a tile it
+  places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
+  exposes no destroy from the trash, no shells and no config;
+  `docs/mcp.md` is the contract.
 - A plugin or connection the user disables, from the Disable button on its
   health notice, stays disabled until the node restarts. It is held in the
   node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or

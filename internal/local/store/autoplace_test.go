@@ -1,6 +1,10 @@
 package store
 
-import "testing"
+import (
+	"testing"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+)
 
 // nextFreeRect is the one auto-place rule; the overlay and the trash fill
 // both read it. The reading order wraps at AutoPlaceWidth, a slot skips
@@ -40,5 +44,21 @@ func TestNextFreeRectIsTheOneReadingOrder(t *testing.T) {
 	}
 	if !occ[[2]int64{AutoPlaceWidth + 3, 0}] {
 		t.Fatal("the wide slot's far cells are not marked occupied")
+	}
+}
+
+// FreeSlot reads the same rule over a grid's rows: with no cell named it is
+// the reading order from the origin, and a named cell is a hint that stacks
+// below in its own column when taken, as a plugin's hint does.
+func TestFreeSlotIsTheAutoPlaceRuleOverAGridsRows(t *testing.T) {
+	taken := []*gridwellv1.Tile{{X: 0, Y: 0, W: 1, H: 1}, {X: 1, Y: 0, W: 2, H: 1}, {X: 5, Y: 3, W: 1, H: 2}}
+	if x, y := FreeSlot(taken, nil, 1, 1); x != 3 || y != 0 {
+		t.Fatalf("unaimed = (%d,%d), want (3,0)", x, y)
+	}
+	if x, y := FreeSlot(taken, &[2]int64{5, 3}, 1, 1); x != 5 || y != 5 {
+		t.Fatalf("near a taken cell = (%d,%d), want (5,5), below it in its column", x, y)
+	}
+	if x, y := FreeSlot(taken, &[2]int64{9, 9}, 1, 1); x != 9 || y != 9 {
+		t.Fatalf("near a free cell = (%d,%d), want the cell itself", x, y)
 	}
 }
