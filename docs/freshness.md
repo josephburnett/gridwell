@@ -182,11 +182,14 @@ carries the three numbers, and `events.Route` applies them through
 and nothing else.
 
 A grid's selection is on its cached row, filed by a read and replaced whole by
-`SelectionChanged`, which fetches nothing. The stream orders the sets and each
-is whole, so this client's own echo needs no interlock like `BeginWrite`, and
-the write's reply carries no set to file out of that order. A read begun
-before the event is asked again (`events.Owe`), so it cannot put the older set
-back.
+`SelectionChanged`, which fetches nothing. A select is drawn from the press
+(`cache.Select`) and its write, on the grid's own save chain, sends the set
+drawn when it goes and claims the one the node holds as far as the client has
+heard: the set the last write landed, until the stream speaks, which is newer
+than any reply (`cache.SelectionClaim`). The stream orders the sets and each is
+whole, so the echo ends what was drawn ahead when it is that set, and a refusal
+drops it for the re-read. A read begun before the event is asked again
+(`events.Owe`), so it cannot put the older set back.
 
 **7. The outbox and the retry** — `client/outbox/`, `client/inflight/`,
 `client/wasm/main.go`. `outbox.Send` is the one order and `outbox.Record` the
@@ -581,7 +584,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |
 | A doorway answered with no framing keeps the remembered one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt` |
 | Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its wells | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
-| A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent` |
+| A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, each next one claiming it, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
 | A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |

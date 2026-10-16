@@ -158,6 +158,9 @@ type App struct {
 	// leftResize clamps to the pane minimum; the release decides a close.
 	leftResize *leftResizeState
 
+	// band is a shift + left-drag sweep in flight; see selection.go.
+	band *bandState
+
 	// shellAlive caches the ShellSessionAlive probe by session (missing: unknown);
 	// shellAliveProbing single-flights it.
 	shellAlive        map[string]bool
@@ -175,7 +178,7 @@ type App struct {
 	// shellMirrorPasses counts shell mirror snapshots, for e2e.
 	shellMirrorPasses int
 
-	// traces holds the per-pane ascent-trace highlight, ephemeral like selection.
+	// traces holds the per-pane ascent-trace highlight, session-ephemeral.
 	traces map[string]traceState
 
 	overlays overlayState
@@ -198,6 +201,9 @@ type App struct {
 	lastRasterSVG string
 	// bannerTexts is e2e attribution: the last banner line each tile drew.
 	bannerTexts map[string]string
+	// selectionPainted is e2e attribution: the tiles each pane last drew with
+	// the selection border.
+	selectionPainted map[string][]string
 
 	// backstop is the outbox re-post cadence, retry.Backstop until the e2e
 	// lowers it to bound one.
@@ -597,6 +603,7 @@ func main() {
 		textFaces:          map[string]textFace{},
 		paintedText:        map[string]string{},
 		bannerTexts:        map[string]string{},
+		selectionPainted:   map[string][]string{},
 		backstop:           retry.NewInterval(retry.Backstop),
 	}
 	// Before anything can draw: the settle timers close over the App.

@@ -96,8 +96,8 @@ func previewBorderPxFor(previewCell float64) float64 {
 	return bp
 }
 
-func (a *App) drawSelectedTileOutline(c js.Value, x, y, w, h float64) {
-	c.Set("strokeStyle", a.pal.Selected)
+func (a *App) drawFocusedTileOutline(c js.Value, x, y, w, h float64) {
+	c.Set("strokeStyle", a.pal.FocusedTile)
 	c.Set("lineWidth", 2.0)
 	c.Call("strokeRect", x-1, y-1, w+2, h+2)
 	c.Set("lineWidth", 1.0)
@@ -113,7 +113,7 @@ func (a *App) strokeTileFrame(c js.Value, x, y, w, h float64, color string, dash
 		clearTileDash(c)
 	}
 	if selected {
-		a.drawSelectedTileOutline(c, x, y, w, h)
+		a.drawFocusedTileOutline(c, x, y, w, h)
 	}
 }
 
@@ -495,6 +495,11 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 				}
 			} else {
 				inHost := g.HostContent()
+				picked := map[string]bool{}
+				for _, id := range a.selectionShown(p) {
+					picked[id] = true
+				}
+				var painted []string
 				for _, n := range g.Tiles {
 					if dragdrop.HiddenMatch(a.ghostHiddenTile(), a.ghostHiddenPane(), p.ID, n.Id) {
 						continue
@@ -511,7 +516,13 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(nn, left, top, w, h)
 					a.drawDeadLinkFace(nn, left, top, w, h)
+					if picked[n.Id] {
+						a.drawSelectionBorder(a.cctx, left, top, w, h)
+						painted = append(painted, n.Id)
+					}
 				}
+				a.selectionPainted[p.ID] = painted
+				a.drawBand(pscreen, p)
 				// The fading outline on the tile this pane most recently ascended out of.
 				if tr, ok := a.traces[p.ID]; ok {
 					if n, ok := g.Tiles[tr.tileID]; ok {
@@ -933,7 +944,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 		strokeTileBorder(c, x, y, w, h, line, borderPx)
 	}
 	if selected {
-		a.drawSelectedTileOutline(c, x, y, w, h)
+		a.drawFocusedTileOutline(c, x, y, w, h)
 	}
 }
 

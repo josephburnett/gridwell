@@ -68,14 +68,38 @@ func TestLongPressIsRightButton(t *testing.T) {
 	wantActions(t, as, Action{Kind: MouseUp, Pos: pt(240, 200), Button: 2})
 }
 
-func TestLongPressReleaseInPlaceIsRightClick(t *testing.T) {
-	// Hold without moving and lift is a right click, matching the desktop
-	// right-click-corner gesture.
+func TestLongPressReleaseInPlaceIsRightClickThenSelect(t *testing.T) {
+	// Hold without moving and lift ends the right click, matching the desktop
+	// right-click-corner gesture, then toggles the selection as a shift-click
+	// at the press would: a phone has no shift key.
 	m := New()
 	m.Start([]Point{pt(10, 10)}, 0)
 	m.Timer(HoldMs)
+	m.Move([]Point{pt(10+SlopPx-1, 10)}, HoldMs+20) // jitter within slop
+	as := m.End(nil, HoldMs+80)
+	wantActions(t, as,
+		Action{Kind: MouseUp, Pos: pt(10+SlopPx-1, 10), Button: 2},
+		Action{Kind: MouseDown, Pos: pt(10, 10), Button: 0, Shift: true},
+		Action{Kind: MouseUp, Pos: pt(10, 10), Button: 0, Shift: true},
+	)
+}
+
+// A long-press that strayed and came back was a right drag, never a select.
+func TestLongPressThatStrayedIsNoSelect(t *testing.T) {
+	m := New()
+	m.Start([]Point{pt(10, 10)}, 0)
+	m.Timer(HoldMs)
+	m.Move([]Point{pt(60, 10)}, HoldMs+20)
+	m.Move([]Point{pt(10, 10)}, HoldMs+40)
 	as := m.End(nil, HoldMs+80)
 	wantActions(t, as, Action{Kind: MouseUp, Pos: pt(10, 10), Button: 2})
+
+	// The next hold starts clean.
+	m.Start([]Point{pt(10, 10)}, 1000)
+	m.Timer(1000 + HoldMs)
+	if as := m.End(nil, 1000+HoldMs+80); len(as) != 3 {
+		t.Errorf("the next in-place hold = %+v, want the select", as)
+	}
 }
 
 func TestTimerAfterDragStartedDoesNotFireRight(t *testing.T) {

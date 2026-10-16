@@ -174,6 +174,7 @@ var kinds = map[string][2]string{
 	"PaneLayout":      {"layout change", "layout changes"},
 	"DeleteTile":      {"delete", "deletes"},
 	"SetFraming":      {"view change", "view changes"},
+	"SetSelection":    {"selection", "selections"},
 	"SetContentZoom":  {"view change", "view changes"},
 	"SetTextView":     {"view change", "view changes"},
 	"SetURLState":     {"page capture", "page captures"},

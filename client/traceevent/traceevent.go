@@ -90,6 +90,7 @@ const (
 	WhyPreview    = "preview decoded"
 	WhyDrag       = "drag snap"
 	WhyReask      = "latched read re-asked"
+	WhySelection  = "selection reconciled"
 )
 
 // FrameAsks is the paint asked for and not yet drawn. Asks coalesce, so the
@@ -333,6 +334,13 @@ func Cancel(paneID string, relayed bool) Event {
 		via = "live view"
 	}
 	return Event{Src: "gesture", Kind: "cancel", Msg: "escape", KV: kv("pane", paneID, "via", via)}
+}
+
+// Select is a selection gesture: how (toggle, band, clear), the pane, the grid
+// and how many tiles the set holds after it.
+func Select(how, paneID, gridID string, n int) Event {
+	return Event{Src: "gesture", Kind: "select", Msg: how,
+		KV: kv("pane", paneID, "grid", gridID, "n", strconv.Itoa(n))}
 }
 
 // buttonName is the table over MouseEvent.button.

@@ -332,3 +332,12 @@ func TestCancelNamesThePane(t *testing.T) {
 		t.Errorf("a cancel relayed from a live view says via %q", got)
 	}
 }
+
+// A select names how, where, and the size of the set it left.
+func TestSelectNamesTheGridAndTheCount(t *testing.T) {
+	s := Select("band", "p2", "n/1", 3)
+	if s.Src != "gesture" || s.Kind != "select" || s.Msg != "band" ||
+		s.KV["pane"] != "p2" || s.KV["grid"] != "n/1" || s.KV["n"] != "3" {
+		t.Errorf("a select reads %+v", s)
+	}
+}

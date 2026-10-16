@@ -110,11 +110,11 @@ func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 			if target.IsUndefined() || target.IsNull() || act.Button == 1 {
 				target = a.canvas
 			}
-			a.dispatchMouse(target, "mousedown", act.Pos.X, act.Pos.Y, act.Button, buttonsMask(act.Button))
+			a.dispatchMouse(target, "mousedown", act, buttonsMask(act.Button))
 		case touchgest.MouseMove:
-			a.dispatchMouse(a.canvas, "mousemove", act.Pos.X, act.Pos.Y, act.Button, buttonsMask(act.Button))
+			a.dispatchMouse(a.canvas, "mousemove", act, buttonsMask(act.Button))
 		case touchgest.MouseUp:
-			a.dispatchMouse(a.canvas, "mouseup", act.Pos.X, act.Pos.Y, act.Button, 0)
+			a.dispatchMouse(a.canvas, "mouseup", act, 0)
 		case touchgest.Wheel:
 			a.dispatchWheel(act.Pos.X, act.Pos.Y, act.DeltaY)
 		}
@@ -134,12 +134,13 @@ func buttonsMask(button int) int {
 	}
 }
 
-func (a *App) dispatchMouse(target js.Value, typ string, clientX, clientY float64, button, buttons int) {
+func (a *App) dispatchMouse(target js.Value, typ string, act touchgest.Action, buttons int) {
 	init := js.Global().Get("Object").New()
-	init.Set("clientX", clientX)
-	init.Set("clientY", clientY)
-	init.Set("button", button)
+	init.Set("clientX", act.Pos.X)
+	init.Set("clientY", act.Pos.Y)
+	init.Set("button", act.Button)
 	init.Set("buttons", buttons)
+	init.Set("shiftKey", act.Shift)
 	init.Set("bubbles", true)
 	init.Set("cancelable", true)
 	ev := js.Global().Get("MouseEvent").New(typ, init)

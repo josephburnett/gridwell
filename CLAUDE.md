@@ -165,7 +165,17 @@ These were decided deliberately. Do not reverse one without a new decision.
   no version, the grid's or any tile's, so a select never refuses a text
   save. `SelectionChanged` carries the whole set, so no view re-reads the
   grid to learn it. Inside a pane tile the selection is per pane, in the
-  layout blob. It is not a pane's focused tile, which a plain click moves.
+  layout blob: each grid frame of each pane's stack keeps its own set beside
+  its view, and a select there writes the layout, never the grid row
+  (`pane.SelectionTarget`). It is not a pane's focused tile, which a plain
+  click moves. Shift + left-click toggles a tile; shift + left-drag on the
+  background sweeps a cell-snapped band and adds the tiles wholly inside it,
+  never one it only touches; Esc with no drag in flight clears the focused
+  grid's set; on touch a long-press lifted in place toggles. Shift is the
+  only select key, since ctrl and cmd are the split's
+  (`gesture.ClassifySelect`). A select is drawn on the press and reconciles
+  on the verdict like a move; every selected tile wears the yellow border
+  (`theme.Palette.Selection`) in every open view (2026-10-15).
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a

@@ -53,9 +53,11 @@ func (a *App) installCanvasInput() {
 	// Window-level so the content-zoom chord is caught wherever focus sits.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
 	// In the capture phase, ahead of every overlay's own Esc: a drag in flight
-	// owns the key wherever DOM focus sits. With none, Esc goes on as before.
+	// owns the key wherever DOM focus sits. With none, Esc on the canvas
+	// clears the focused grid's selection, and anywhere else goes on as before.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(func(this js.Value, args []js.Value) any {
-		if args[0].Get("key").String() == "Escape" && a.cancelGesture(false) {
+		if args[0].Get("key").String() == "Escape" &&
+			a.cancelGesture(false, args[0].Get("target").Equal(a.canvas)) {
 			args[0].Call("preventDefault")
 			args[0].Call("stopPropagation")
 		}
@@ -66,8 +68,8 @@ func (a *App) installCanvasInput() {
 	a.installFocusTrace()
 }
 
-// onKeyDown owns the content-zoom chord. Esc on a drag in flight is
-// cancelGesture's; overlays own every other key.
+// onKeyDown owns the content-zoom chord. Esc on a drag in flight, or on the
+// canvas with a selection, is cancelGesture's; overlays own every other key.
 func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 	if len(args) == 0 {
 		return nil
@@ -79,10 +81,10 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 
 // gestureInFlight is the routing gate for the window-level move and up.
 func (a *App) gestureInFlight() bool {
-	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil
+	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil || a.band != nil
 }
 
-// armed reports the three gesture states to the verdicts in client/gesture.
+// armed reports the gesture states to the verdicts in client/gesture.
 func (a *App) armed() gesture.Armed {
 	d := a.dragging
 	return gesture.Armed{
@@ -91,19 +93,25 @@ func (a *App) armed() gesture.Armed {
 		Drag:        d != nil,
 		DragCreates: d != nil && d.intent.Creates(),
 		Pan:         d != nil && d.tileID == "" && !d.isTemplate,
+		Band:        a.band != nil,
 	}
 }
 
-// cancelGesture lets go of every armed gesture and puts back what
-// gesture.Escape names; false when nothing is armed. relayed is a key a parked
-// live view handed on.
-func (a *App) cancelGesture(relayed bool) bool {
-	u, ok := gesture.Escape(a.armed())
+// cancelGesture runs gesture.Escape's verdict: it lets go of every armed
+// gesture and puts back what it names, or with none armed clears the focused
+// grid's selection; false when Esc is not its to take. relayed is a key a
+// parked live view handed on, onCanvas one the canvas heard.
+func (a *App) cancelGesture(relayed, onCanvas bool) bool {
+	u, ok := gesture.Escape(a.armed(), a.escapeIdle(onCanvas))
 	if !ok {
 		return false
 	}
+	if u.ClearSelection {
+		a.clearSelection()
+		return true
+	}
 	lr, d := a.leftResize, a.dragging
-	a.leftResize, a.rightDrag, a.dragging = nil, nil, nil
+	a.leftResize, a.rightDrag, a.dragging, a.band = nil, nil, nil, nil
 	// Every press focuses its pane before it arms anything.
 	a.emit(traceevent.Cancel(a.tree.Focus, relayed))
 	if u.Dividers {
@@ -134,6 +142,9 @@ func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
 		return true
 	case gesture.FinishLeftDrag:
 		return a.finishLeftDrag(sx, sy)
+	case gesture.FinishBand:
+		a.finishBand(sx, sy)
+		return true
 	}
 	return false
 }
@@ -480,6 +491,17 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	cellX, cellY := ps.CellAt(sx, sy)
 	n := a.tileAtCell(p, cellX, cellY)
+	switch gesture.ClassifySelect(gesture.SelectInput{
+		Shift: args[0].Get("shiftKey").Truthy(), Ctrl: args[0].Get("ctrlKey").Truthy(),
+		Meta: args[0].Get("metaKey").Truthy(), GridPlace: p.ContentID() == "", OverTile: n != nil,
+	}) {
+	case gesture.SelectToggle:
+		a.toggleSelected(p, n)
+		return nil
+	case gesture.SelectBand:
+		a.armBand(p, cellX, cellY)
+		return nil
+	}
 	parentCell := ps.Cell()
 	a.dragging = &dragState{
 		originPaneID: p.ID,
@@ -522,6 +544,10 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	}
 	if a.leftResize != nil {
 		a.onLeftResizeMove(sx, sy)
+		return nil
+	}
+	if a.band != nil {
+		a.moveBand(sx, sy)
 		return nil
 	}
 	// A move over a live URL view's content box belongs to the page. An in-flight
@@ -634,6 +660,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishLeftResize()
 	case gesture.FinishLeftDrag:
 		a.finishLeftDrag(sx, sy)
+	case gesture.FinishBand:
+		a.finishBand(sx, sy)
 	}
 	return nil
 }

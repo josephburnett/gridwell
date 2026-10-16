@@ -6,6 +6,8 @@
 //	long-press (hold)  → right button      (the whole right-drag vocabulary:
 //	                                        ascend circle, clone, resize,
 //	                                        split, swap)
+//	long-press, lifted → shift + left click (select toggle)
+//	  without moving
 //	two-finger tap     → middle click      (ascend)
 //	two-finger pinch   → wheel at midpoint (zoom; spread = wheel-up = zoom in)
 //	two-finger scroll  → wheel at midpoint (doc scroll, matching a trackpad)
@@ -29,12 +31,14 @@ const (
 )
 
 // Action is one synthetic input event for the shell to dispatch. Button
-// follows MouseEvent.button (0 left, 1 middle, 2 right); DeltaY is Wheel only.
+// follows MouseEvent.button (0 left, 1 middle, 2 right); DeltaY is Wheel only;
+// Shift is MouseEvent.shiftKey.
 type Action struct {
 	Kind   Kind
 	Pos    Point
 	Button int
 	DeltaY float64
+	Shift  bool
 }
 
 // Tunables. Times are milliseconds (event.timeStamp domain), distances CSS px.
@@ -74,6 +78,8 @@ type Machine struct {
 	origin Point   // pending1: press point; drags: anchored press point
 	last   Point   // most recent single-finger position
 	t0     float64 // time the current classification window opened
+	// strayed: a long-press has left its slop, so its lift is a drag's end.
+	strayed bool
 
 	mid     Point   // current midpoint
 	dist    float64 // current inter-finger distance
@@ -152,6 +158,9 @@ func (m *Machine) Move(pts []Point, t float64) []Action {
 			return nil
 		}
 		m.last = pts[0]
+		if dist(m.origin, pts[0]) > SlopPx {
+			m.strayed = true
+		}
 		return []Action{{Kind: MouseMove, Pos: pts[0], Button: m.dragButton()}}
 	case twoDown, twoPinch, twoScroll:
 		if len(pts) != 2 {
@@ -225,12 +234,18 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 			{Kind: MouseDown, Pos: m.origin, Button: 0},
 			{Kind: MouseUp, Pos: m.origin, Button: 0},
 		}
-	case dragLeft, dragRight:
-		btn := 0
-		if st == dragRight {
-			btn = 2
+	case dragLeft:
+		return []Action{{Kind: MouseUp, Pos: m.last, Button: 0}}
+	case dragRight:
+		up := []Action{{Kind: MouseUp, Pos: m.last, Button: 2}}
+		if m.strayed {
+			return up
 		}
-		return []Action{{Kind: MouseUp, Pos: m.last, Button: btn}}
+		// The right press went nowhere, so the hold was a select: a phone has
+		// no shift key to hold.
+		return append(up,
+			Action{Kind: MouseDown, Pos: m.origin, Button: 0, Shift: true},
+			Action{Kind: MouseUp, Pos: m.origin, Button: 0, Shift: true})
 	case twoDown, twoLift:
 		if t-m.twoT0 <= TwoTapMs && m.accDist < SlopPx && m.accTrav < SlopPx {
 			return []Action{
@@ -252,6 +267,7 @@ func (m *Machine) Timer(t float64) []Action {
 	}
 	m.st = dragRight
 	m.last = m.origin
+	m.strayed = false
 	return []Action{{Kind: MouseDown, Pos: m.origin, Button: 2}}
 }
 

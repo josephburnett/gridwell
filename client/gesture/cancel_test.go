@@ -27,14 +27,44 @@ func TestEscape(t *testing.T) {
 			want:  Undo{Dividers: true, View: true},
 			ok:    true,
 		},
+		{"band sweep: nothing moved, the band goes", Armed{Band: true}, Undo{}, true},
 	}
+	// A drag in flight wins over a selection to clear.
+	idle := Idle{OnCanvas: true, GridPlace: true, Selected: true}
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := Escape(c.armed)
+			got, ok := Escape(c.armed, Idle{})
 			if got != c.want || ok != c.ok {
 				t.Errorf("Escape(%+v) = %+v, %v; want %+v, %v", c.armed, got, ok, c.want, c.ok)
 			}
+			if c.ok {
+				if got, _ := Escape(c.armed, idle); got != c.want {
+					t.Errorf("Escape(%+v) with a selection = %+v; want %+v", c.armed, got, c.want)
+				}
+			}
 		})
+	}
+}
+
+// With nothing in flight Esc clears the focused grid's selection, and only
+// when the key is the canvas's: a field, a modal or a live surface keeps its
+// own Esc, and an empty selection leaves the key alone.
+func TestEscapeIdleClearsTheSelection(t *testing.T) {
+	tests := []struct {
+		name string
+		idle Idle
+		ok   bool
+	}{
+		{"a selection on the focused grid", Idle{OnCanvas: true, GridPlace: true, Selected: true}, true},
+		{"nothing selected: Esc passes through", Idle{OnCanvas: true, GridPlace: true}, false},
+		{"the key is an overlay's", Idle{GridPlace: true, Selected: true}, false},
+		{"a content descent shows no grid", Idle{OnCanvas: true, Selected: true}, false},
+	}
+	for _, c := range tests {
+		got, ok := Escape(Armed{}, c.idle)
+		if ok != c.ok || got.ClearSelection != c.ok || got.Dividers || got.View || got.Ghost {
+			t.Errorf("%s: Escape = %+v, %v; want ClearSelection %v", c.name, got, ok, c.ok)
+		}
 	}
 }
 
@@ -68,6 +98,8 @@ func TestRelease(t *testing.T) {
 		{"left up ends a left drag", 0, Armed{Drag: true}, FinishLeftDrag},
 		{"a right drag's release outranks the left drag", 2, Armed{RightDrag: true, Drag: true}, FinishRightDrag},
 		{"a creating drag is the right button's", 0, Armed{RightDrag: true, Drag: true, DragCreates: true}, FinishNothing},
+		{"left up ends a band sweep", 0, Armed{Band: true}, FinishBand},
+		{"right up does not end a band sweep", 2, Armed{Band: true}, FinishNothing},
 	}
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {

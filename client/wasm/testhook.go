@@ -236,6 +236,18 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
+		// The tiles each pane last drew with the selection border.
+		"selectionPainted": js.FuncOf(func(js.Value, []js.Value) any {
+			out := map[string]any{}
+			for paneID, ids := range a.selectionPainted {
+				list := make([]any, len(ids))
+				for i, id := range ids {
+					list[i] = id
+				}
+				out[paneID] = list
+			}
+			return out
+		}),
 		"renderedPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			// The rendered-raster cache: tile id to decode state.
 			out := map[string]any{}
@@ -505,6 +517,7 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 		"dragging":     a.dragging != nil,
 		"leftResize":   a.leftResize != nil,
 		"rightDrag":    a.rightDrag != nil,
+		"band":         a.band != nil,
 		"gridInflight": grids,
 		"tileInflight": tiles,
 	}
