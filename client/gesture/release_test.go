@@ -37,6 +37,8 @@ func TestRecoverRelease(t *testing.T) {
 		{"left drag, left still held", ButtonsLeft, Armed{Drag: true}, FinishNothing},
 		{"left drag, left up", none, Armed{Drag: true}, FinishLeftDrag},
 		{"left drag, only right held", ButtonsRight, Armed{Drag: true}, FinishLeftDrag},
+		{"band, left still held", ButtonsLeft, Armed{Band: true}, FinishNothing},
+		{"band, left up", none, Armed{Band: true}, FinishBand},
 		{
 			name:    "resize outranks a right drag armed with it",
 			buttons: none,

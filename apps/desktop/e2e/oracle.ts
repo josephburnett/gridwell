@@ -19,7 +19,7 @@ export interface Tile {
 }
 
 export interface GridSnapshot {
-  grid?: { id: string; version?: number | string };
+  grid?: { id: string; version?: number | string; selection?: string[] };
   tiles?: Tile[];
 }
 
@@ -158,6 +158,20 @@ export async function placeTile(
   });
   if (!res.ok) {
     throw new Error(`PlaceTile(${tileId}) failed: ${res.status} ${await res.text()}`);
+  }
+}
+
+// A foreign writer replacing a grid's selection, claiming the set it reads
+// first.
+export async function setSelection(origin: string, gridId: string, tileIds: string[]): Promise<void> {
+  const claim = { tileIds: (await getGrid(origin, gridId)).grid?.selection ?? [] };
+  const res = await fetch(`${origin}/${SERVICE}/SetSelection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ gridId, tileIds, claim }),
+  });
+  if (!res.ok) {
+    throw new Error(`SetSelection(${gridId}) failed: ${res.status} ${await res.text()}`);
   }
 }
 

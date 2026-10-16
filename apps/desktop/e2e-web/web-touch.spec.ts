@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { tileAt } from '../e2e/oracle';
-import { longPressDrag, pinch, twoFingerTap } from './touch';
+import { longPress, longPressDrag, pinch, twoFingerTap } from './touch';
 import { installEchoGate, holdEchoFor } from './echo';
 
 // Crosses the touch seam, from client/touchgest through synthetic mouse and
@@ -161,4 +161,31 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
   await gw.waitIdle();
   p = await gw.focused();
   expect(p.textFocus, 'two-finger tap ascended').toBe('');
+});
+
+test('touch: a long-press lifted in place toggles the tile in its grid\'s selection', async ({ gw, window }) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+  expect(t, 'markdown tile created').toBeTruthy();
+  await gw.waitClientTileAt(f.id, cx, cy, t.id);
+  const pt = await gw.cellCenter(f.id, cx, cy);
+  const selection = async () => (await gw.getGrid(f.gridID)).grid?.selection ?? [];
+
+  await longPress(window, pt);
+  await gw.waitIdle();
+  await expect.poll(selection, { message: 'the hold selected the tile' }).toEqual([t.id]);
+  const p = await gw.focused();
+  expect(p.textFocus, 'the hold did not descend').toBe('');
+  expect(p.placeDepth, 'the hold did not descend').toBe(f.placeDepth);
+  const tiles = (await gw.getGrid(f.gridID)).tiles ?? [];
+  expect(tiles.filter((n) => n.kind === 'text').length, 'the hold made no clone').toBe(1);
+
+  await longPress(window, pt);
+  await gw.waitIdle();
+  await expect.poll(selection, { message: 'a second hold toggled it out' }).toEqual([]);
 });

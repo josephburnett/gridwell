@@ -327,7 +327,7 @@ func (a *App) installWebviewListeners() {
 		}},
 		// Esc while a parked view holds OS keyboard focus; see cancelGesture.
 		{"onEscapeKey", func(ev js.Value) {
-			a.cancelGesture(true)
+			a.cancelGesture(true, false)
 		}},
 		// A view that ended in main with no remove: a page that closed
 		// itself or a renderer that died. Nothing is left to capture; main's

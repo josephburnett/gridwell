@@ -48,6 +48,7 @@ func TestNotice(t *testing.T) {
 			Updated + " 2 layout changes were not saved."},
 		{"kinds in drain order", Offer, []string{"SetFraming", "PlaceTile", "SetTextView", "SetFrozen"}, 0,
 			Updated + " 2 view changes, 1 layout change and 1 page capture were not saved."},
+		{"a parked selection", Offer, []string{"SetSelection", "SetSelection"}, 0, Updated + " 2 selections were not saved."},
 		{"an op with no name is named by itself", Offer, []string{"SetFraming", "Mystery"}, 0,
 			Updated + " 1 view change and 1 Mystery were not saved."},
 		{"text the node never saved", Offer, []string{"Content"}, 1,

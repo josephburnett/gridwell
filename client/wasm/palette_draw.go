@@ -183,7 +183,7 @@ func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool
 		}
 	}
 	if hovered {
-		a.drawSelectedTileOutline(a.cctx, x, y, w, h)
+		a.drawFocusedTileOutline(a.cctx, x, y, w, h)
 	}
 }
 

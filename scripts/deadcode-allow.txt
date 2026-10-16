@@ -20,8 +20,3 @@ client/trace/interceptor.go interceptor.WrapStreamingHandler
 client/nodebuild/nodebuild.go interceptor.WrapUnary
 client/nodebuild/nodebuild.go interceptor.WrapStreamingClient
 client/nodebuild/nodebuild.go interceptor.WrapStreamingHandler
-
-
-# The selection's client verb, built with its wire ahead of the gestures that
-# call it. Remove this entry when the shim first calls it.
-api/rpc/client.go Client.SetSelection

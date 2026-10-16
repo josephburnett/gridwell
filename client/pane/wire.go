@@ -3,9 +3,9 @@
 //
 // It is a versioned DTO rather than json.Marshal(Tree) because LayoutV1's
 // bytes are forever (the golden fixture in wire_test.go pins them). A leaf
-// persists its whole place and the viewport of every grid frame in it: inside
-// a pane tile the blob owns those (2026-10-14), so two panes on one grid keep
-// two views. Ids are stored in the owning node's namespace frame, so a pane
+// persists its whole place and the viewport and selection of every grid frame
+// in it: inside a pane tile the blob owns those (2026-10-14, 2026-10-15), so
+// two panes on one grid keep two views and two selections. Ids are stored in the owning node's namespace frame, so a pane
 // tile mounted over ssh restores against the reader's chain.
 package pane
 
@@ -170,10 +170,38 @@ func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*Lay
 		}
 		textFocus = tf
 	}
+	sels, ok := encodeSels(p.Frames(), rel)
+	if !ok {
+		return home, false
+	}
 	return &LayoutPane{
 		ID: bareID, Anchor: anchor, Path: path, TextFocus: textFocus, Place: place,
-		Views: encodeViews(p.Frames()),
+		Views: encodeViews(p.Frames()), Sels: sels,
 	}, true
+}
+
+// encodeSels is nil when no frame holds a selection, so a blob with none
+// encodes as it always did.
+func encodeSels(frames []Frame, rel func(string) (string, bool)) ([][]string, bool) {
+	var sels [][]string
+	for i, f := range frames {
+		if f.Content || len(f.Selection) == 0 {
+			continue
+		}
+		ids := make([]string, len(f.Selection))
+		for k, id := range f.Selection {
+			r, ok := rel(id)
+			if !ok {
+				return nil, false
+			}
+			ids[k] = r
+		}
+		if sels == nil {
+			sels = make([][]string, len(frames))
+		}
+		sels[i] = ids
+	}
+	return sels, true
 }
 
 // encodeViews is nil when no frame has a view, so a blob with none encodes as
@@ -282,10 +310,10 @@ func decodeNode(n LayoutNode, abs func(string) string, idPrefix string) (TreeNod
 	}
 }
 
-// decodeLeaf restores each frame's view. A top frame with none is pending
-// (Frame.ViewPending) and a lower one has none, so both fall back to the
-// framing row, as every blob older than Views does. Views that do not match
-// the place frame for frame are dropped whole.
+// decodeLeaf restores each frame's view and selection. A top frame with no
+// view is pending (Frame.ViewPending) and a lower one has none, so both fall
+// back to the framing row, as every blob older than Views does. Views or
+// selections that do not match the place frame for frame are dropped whole.
 func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane {
 	s := decodePlace(lp, abs)
 	frames := s.Frames()
@@ -294,6 +322,18 @@ func decodeLeaf(lp *LayoutPane, abs func(string) string, idPrefix string) *Pane 
 			if v != nil && !frames[i].Content {
 				frames[i].SetView(v.Cx, v.Cy, v.Zoom)
 			}
+		}
+	}
+	if len(lp.Sels) == len(frames) {
+		for i, ids := range lp.Sels {
+			if len(ids) == 0 || frames[i].Content {
+				continue
+			}
+			abss := make([]string, len(ids))
+			for k, id := range ids {
+				abss[k] = abs(id)
+			}
+			frames[i].Select(abss)
 		}
 	}
 	p := &Pane{ID: idPrefix + lp.ID, Stack: StackOf(frames)}

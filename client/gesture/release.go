@@ -16,6 +16,7 @@ const (
 	FinishLeftResize
 	FinishRightDrag
 	FinishLeftDrag
+	FinishBand
 )
 
 // Armed is what a move finds armed. A left drag and a right-button gesture can
@@ -29,6 +30,8 @@ type Armed struct {
 	DragCreates bool
 	// Pan is a drag that grabbed no tile and no swatch: it moves the viewport.
 	Pan bool
+	// Band is a shift + left-drag sweeping a band over the grid (SelectPress).
+	Band bool
 }
 
 // Release is the commit path a mouseup of button finishes. A left drag ends on
@@ -42,6 +45,8 @@ func Release(button int, armed Armed) Recovery {
 		return FinishLeftResize
 	case armed.Drag && !armed.DragCreates:
 		return FinishLeftDrag
+	case armed.Band && button == 0:
+		return FinishBand
 	}
 	return FinishNothing
 }
@@ -57,6 +62,8 @@ func RecoverRelease(buttons int, armed Armed) Recovery {
 		return FinishRightDrag
 	case armed.Drag && !armed.DragCreates && buttons&ButtonsLeft == 0:
 		return FinishLeftDrag
+	case armed.Band && buttons&ButtonsLeft == 0:
+		return FinishBand
 	}
 	return FinishNothing
 }

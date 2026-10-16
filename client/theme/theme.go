@@ -106,8 +106,15 @@ type Palette struct {
 	NoEntryFill   string
 	NoEntryStroke string
 	Locked        string
-	Selected      string
-	// Trace reads stronger than the selection gold, so both can show at once.
+	// FocusedTile outlines a pane's focused tile, the keyboard target a plain
+	// click lands on, and the menu swatch under the cursor, outside the tile.
+	FocusedTile string
+	// Selection is the yellow border inside every tile of a grid's selection,
+	// a hue no other role uses, so it reads beside the focused tile's gold,
+	// a link's dashes and the crush red.
+	Selection string
+	// Trace reads stronger than the focused tile's gold, so both can show at
+	// once.
 	Trace   string
 	EdgeDot string
 	PlusBg  string
@@ -225,7 +232,8 @@ var dark = Palette{
 	NoEntryFill:   "#c93030",
 	NoEntryStroke: "#f6f6f6",
 	Locked:        "#26262a",
-	Selected:      "#e3b16f",
+	FocusedTile:   "#e3b16f",
+	Selection:     "#f7ea1c",
 	Trace:         "#ffd94a",
 	EdgeDot:       "#5a6a8a",
 	PlusBg:        "#23252d",
@@ -323,7 +331,8 @@ var light = Palette{
 	NoEntryFill:   "#c93030",
 	NoEntryStroke: "#ffffff",
 	Locked:        "#e3e3e8",
-	Selected:      "#a8731a",
+	FocusedTile:   "#a8731a",
+	Selection:     "#d6c100",
 	Trace:         "#7f4300",
 	EdgeDot:       "#7d8aa6",
 	PlusBg:        "#e7e8ee",
