@@ -1,7 +1,7 @@
 // Package shellwire is the shell transport's wire grammar, the one place the
 // client and the server agree on how PTY bytes cross the web door:
 //
-//	GET <origin>/shell?tile_id=<qualified>&cols=N&rows=N&gridwell_build=B   (Upgrade: websocket)
+//	GET <origin>/shell?tile_id=<qualified>&session=S&cols=N&rows=N&gridwell_build=B   (Upgrade: websocket)
 //	  · gated by the same auth cookie as every other page request
 //	    (internal/server/auth.go) and strict same-origin;
 //	  · binary frames both ways are raw PTY bytes, nothing wrapping them;
@@ -31,8 +31,11 @@ const ReadLimit = 8 << 20
 // frame, so no socket is ever open but bound to nothing.
 const (
 	QueryTileID = "tile_id"
-	QueryCols   = "cols"
-	QueryRows   = "rows"
+	// QuerySession is the client session the attachment rides under, the id
+	// its SetView and event stream name (rpc.Client.Session).
+	QuerySession = "session"
+	QueryCols    = "cols"
+	QueryRows    = "rows"
 )
 
 // Control kinds. The set is closed: anything else is a protocol error.
@@ -61,9 +64,9 @@ type Control struct {
 
 // AttachURL is the address a client dials to attach to tileID's PTY. origin is
 // the page's own http(s) origin, whose scheme is swapped to ws(s); build is
-// the page's, which a browser cannot send as a header.
+// the page's, which a browser cannot send as a header, as is session.
 // shellsvc.ClampSize owns the size bounds, so nothing is re-clamped here.
-func AttachURL(origin, build, tileID string, cols, rows int) (string, error) {
+func AttachURL(origin, build, session, tileID string, cols, rows int) (string, error) {
 	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
@@ -82,6 +85,9 @@ func AttachURL(origin, build, tileID string, cols, rows int) (string, error) {
 	u.Path = Path
 	q := url.Values{}
 	q.Set(QueryTileID, tileID)
+	if session != "" {
+		q.Set(QuerySession, session)
+	}
 	q.Set(QueryCols, strconv.Itoa(cols))
 	q.Set(QueryRows, strconv.Itoa(rows))
 	q.Set(tracewire.BuildQuery, build)
@@ -93,6 +99,8 @@ func AttachURL(origin, build, tileID string, cols, rows int) (string, error) {
 // Attach is the bind AttachURL encodes, as the door reads it back.
 type Attach struct {
 	TileID string
+	// Session is "" from a client that names none, such as a seam test.
+	Session string
 	// Cols/Rows are 0 when absent or unparseable; the serving plugin
 	// substitutes its defaults, so the door never invents a size.
 	Cols int
@@ -102,7 +110,7 @@ type Attach struct {
 // ParseAttach reads the bind out of a request's query string. A missing
 // tile_id is the one hard error.
 func ParseAttach(q url.Values) (Attach, error) {
-	a := Attach{TileID: q.Get(QueryTileID)}
+	a := Attach{TileID: q.Get(QueryTileID), Session: q.Get(QuerySession)}
 	if a.TileID == "" {
 		return Attach{}, errors.New("shellwire: missing " + QueryTileID)
 	}

@@ -26,13 +26,15 @@ qualified address ("<node>/12", "<node>/<connection>/<far-node>/7"); name it
 back exactly as a tool answered it. A write claims what you read: pass the
 version read_tile or read_grid gave you and a write made since is refused as a
 version conflict, or omit it to claim the row as it stands now. Nothing here
-destroys a tile: delete moves it to the trash. Shells are not reachable here.`
+destroys a tile: delete moves it to the trash. Shells are not reachable here.
+When the user says "this", "here" or "these", call pointed: it answers the
+grid or the selection in front of them.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
 // the browser codec does. node is the node's own id, the frame dead links are
-// judged in.
-func New(rt namespace.Namespace, node, version string) *mcp.Server {
-	d := &door{rt: rt, node: node}
+// judged in, and screens is what the node knows of the clients showing it.
+func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Server {
+	d := &door{rt: rt, node: node, screens: screens}
 	s := mcp.NewServer(&mcp.Implementation{Name: "gridwell", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
@@ -46,12 +48,15 @@ func New(rt namespace.Namespace, node, version string) *mcp.Server {
 	mcp.AddTool(s, &mcp.Tool{Name: "link", Description: "Create a link to a tile in a grid: a dashed tile showing the same content, in this namespace or across one."}, d.link)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete a tile: it moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
 	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Set a grid's selection, the tiles the user has in hand, claiming the selection read_grid gave (or the one on disk now when none is given). An empty list clears it."}, d.selectTiles)
+	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List every screen showing this node now: each client session's label, when its view last changed, and its panes, each with its place, the grid it shows, and whether it has focus."}, d.sessions)
+	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the grid's selection when it has one, else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last."}, d.pointed)
 	return s
 }
 
 type door struct {
-	rt   namespace.Namespace
-	node string
+	rt      namespace.Namespace
+	node    string
+	screens Screens
 }
 
 // Cell is a grid cell.

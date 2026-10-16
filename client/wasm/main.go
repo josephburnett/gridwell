@@ -651,7 +651,7 @@ func main() {
 
 	// PTY bytes ride the /shell WebSocket on this page's origin and cookie.
 	app.shells = shellstream.New(
-		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnStaleBuild: gate.Stale}),
+		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnStaleBuild: gate.Stale, Session: app.cl.Session()}),
 		func(key string, data []byte) { app.onShellData(key, data) },
 		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.SessionGone) },
 	)

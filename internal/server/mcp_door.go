@@ -18,7 +18,7 @@ import (
 // mcpDoor is stateless: each request stands alone, so the door holds no
 // session for an agent that went away.
 func (s *Server) mcpDoor() http.Handler {
-	srv := mcpdoor.New(newRouter(s), s.cfg.ID, s.build)
+	srv := mcpdoor.New(newRouter(s), s.cfg.ID, s.build, s)
 	srv.AddReceivingMiddleware(traceTools)
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})

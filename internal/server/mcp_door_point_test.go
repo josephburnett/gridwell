@@ -1,11 +1,190 @@
 package server
 
 import (
+	"context"
+	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
+	"connectrpc.com/connect"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/shellstream"
+	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/internal/mcpdoor"
 )
+
+// viewer is a client session showing the node: its event stream open and its
+// view said, as the wasm client does at boot.
+func viewer(t *testing.T, hs *httptest.Server, label string, panes ...*gridwellv1.ViewPane) *rpc.Client {
+	t.Helper()
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); _ = stream.Close() })
+	say(t, cl, label, panes...)
+	return cl
+}
+
+func say(t *testing.T, cl *rpc.Client, label string, panes ...*gridwellv1.ViewPane) {
+	t.Helper()
+	// The book stamps a change with the clock; keep two views' stamps apart.
+	time.Sleep(2 * time.Millisecond)
+	if err := cl.SetView(context.Background(), &gridwellv1.SetViewRequest{Label: label, Panes: panes}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func focusedOn(grid string) *gridwellv1.ViewPane {
+	return &gridwellv1.ViewPane{Id: "p1", Anchor: grid, GridId: grid, Focused: true}
+}
+
+func agentAt(t *testing.T, hs *httptest.Server, hdr map[string]string) *mcp.ClientSession {
+	t.Helper()
+	h := bearer(testPassword)
+	for k, v := range hdr {
+		h[k] = v
+	}
+	s, err := (&mcpNode{url: hs.URL + mcpdoor.Path, web: hs.Client()}).agent(t, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// sessions lists the screens showing the node, with each pane's place, and
+// leaves out another node telling its share, which shows no screen.
+func TestMCPSessionsListsTheScreensShowingTheNode(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	cl := viewer(t, f.hs, "desktop", focusedOn(f.root),
+		&gridwellv1.ViewPane{Id: "p2", Anchor: f.root, Path: []string{"k1"}, ContentId: "c1", GridId: f.root})
+	far := viewer(t, f.hs, "node")
+	if err := far.SetView(context.Background(), &gridwellv1.SetViewRequest{Label: "node", ShownGridIds: []string{f.root}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out mcpdoor.SessionsOut
+	call(t, agentAt(t, f.hs, nil), "sessions", nil, &out)
+	if len(out.Sessions) != 1 {
+		t.Fatalf("sessions = %+v, want the one desktop session and not the node's", out.Sessions)
+	}
+	s := out.Sessions[0]
+	if s.ID != cl.Session() || s.Label != "desktop" || s.Changed == "" || len(s.Panes) != 2 {
+		t.Fatalf("session = %+v, want %s labelled desktop with two panes", s, cl.Session())
+	}
+	if p := s.Panes[0]; !p.Focused || p.Grid != f.root || p.Anchor != f.root {
+		t.Errorf("pane 1 = %+v, want focused on %s", p, f.root)
+	}
+	if p := s.Panes[1]; p.Focused || p.Content != "c1" || !slices.Equal(p.Path, []string{"k1"}) {
+		t.Errorf("pane 2 = %+v, want inside c1 by path [k1], unfocused", p)
+	}
+}
+
+// pointed answers the focused pane's grid's selection when it has one, the
+// tiles as read_grid answers them, and the grid itself when it has none.
+func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	s := agentAt(t, f.hs, nil)
+	if res := callRaw(t, s, "pointed", nil); !res.IsError || !strings.HasPrefix(toolText(res), "no session:") {
+		t.Fatalf("with no screen open, pointed = %q, want a plain no session", toolText(res))
+	}
+	cl := viewer(t, f.hs, "browser", focusedOn(f.root))
+	var a, b mcpdoor.TileOut
+	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "a"}, &a)
+	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "b"}, &b)
+
+	var p mcpdoor.PointedOut
+	call(t, s, "pointed", nil, &p)
+	if p.Session != cl.Session() || p.ChosenBy != "most recent" || p.Points != "grid" || p.Grid.ID != f.root || len(p.Tiles) != 0 {
+		t.Fatalf("pointed = %+v, want the grid %s itself", p, f.root)
+	}
+
+	var g mcpdoor.GridOut
+	call(t, s, "select", map[string]any{"grid": f.root, "tiles": []string{b.Tile.ID}, "claim": []string{}}, &g)
+	call(t, s, "pointed", nil, &p)
+	if p.Points != "selection" || len(p.Tiles) != 1 || p.Tiles[0].ID != b.Tile.ID || p.Tiles[0].Name != "b" {
+		t.Fatalf("pointed = %+v, want the selection [%s] as read_grid answers it", p, b.Tile.ID)
+	}
+}
+
+// A session named is the one answered; unnamed, the one whose view changed
+// last, with the others named so the agent can ask.
+func TestMCPPointedChoosesTheNamedElseTheMostRecentSession(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	older := viewer(t, f.hs, "desktop", focusedOn(f.root))
+	newer := viewer(t, f.hs, "browser", focusedOn(f.root))
+	s := agentAt(t, f.hs, nil)
+
+	var p mcpdoor.PointedOut
+	call(t, s, "pointed", nil, &p)
+	if p.Session != newer.Session() || p.ChosenBy != "most recent" || len(p.Others) != 1 || p.Others[0].ID != older.Session() {
+		t.Fatalf("pointed = %+v, want %s, naming %s as the other", p, newer.Session(), older.Session())
+	}
+	call(t, s, "pointed", map[string]any{"session": older.Session()}, &p)
+	if p.Session != older.Session() || p.ChosenBy != "argument" || p.Label != "desktop" {
+		t.Fatalf("pointed(session) = %+v, want the session named", p)
+	}
+	refusedWith(t, callRaw(t, s, "pointed", map[string]any{"session": "nobody"}), "not found:")
+
+	// Saying its view again moves the older session to the front.
+	say(t, older, "desktop", focusedOn(f.root), &gridwellv1.ViewPane{Id: "p2", Anchor: f.root, GridId: f.root})
+	call(t, s, "pointed", nil, &p)
+	if p.Session != older.Session() {
+		t.Errorf("after the desktop's view changed, pointed chose %s, want %s", p.Session, older.Session())
+	}
+}
+
+// attach goes live on a shell tile from cl's session, as the wasm client's
+// shell stack does.
+func attach(t *testing.T, f *shellDoorFixture, cl *rpc.Client, tile string) {
+	t.Helper()
+	reg := shellstream.New(shellws.Dialer(shellws.Options{Origin: f.hs.URL, HTTPClient: f.hs.Client(), Session: cl.Session()}),
+		func(string, []byte) {}, func(shellstream.Exit) {})
+	reg.Open(tile, tile, 80, 24)
+	t.Cleanup(func() { reg.Close(tile) })
+}
+
+// The X-Gridwell-Shell header names the agent's shell, and pointed answers
+// the session holding it live now, the newest attachment after a takeover. A
+// shell live nowhere falls back to the most recent session and says so.
+func TestMCPPointedFollowsTheShellTheAgentRunsIn(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	tile := f.createShell(t, 0, 0)
+	desk := viewer(t, f.hs, "desktop", focusedOn(f.root))
+	attach(t, f, desk, tile.Id)
+	waitSession(t, f.fake)
+	phone := viewer(t, f.hs, "browser", focusedOn(f.root))
+
+	key := rpc.LocalOf(rpc.ShellSession(tile))
+	s := agentAt(t, f.hs, map[string]string{mcpdoor.ShellHeader: key})
+	var p mcpdoor.PointedOut
+	call(t, s, "pointed", nil, &p)
+	if p.Session != desk.Session() || p.ChosenBy != "your shell" {
+		t.Fatalf("pointed = %+v, want %s, whose pane holds shell %s, over the more recent %s", p, desk.Session(), key, phone.Session())
+	}
+
+	attach(t, f, phone, tile.Id)
+	deadline := time.Now().Add(3 * time.Second)
+	for call(t, s, "pointed", nil, &p); p.Session != phone.Session(); call(t, s, "pointed", nil, &p) {
+		if time.Now().After(deadline) {
+			t.Fatalf("after the browser took the shell over, pointed = %+v, want %s", p, phone.Session())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	dead := agentAt(t, f.hs, map[string]string{mcpdoor.ShellHeader: "zzzzzzz"})
+	call(t, dead, "pointed", nil, &p)
+	if p.Session != phone.Session() || p.ChosenBy != "most recent" || !strings.Contains(p.Note, "zzzzzzz") {
+		t.Fatalf("pointed with a shell live nowhere = %+v, want the most recent session and a note naming the shell", p)
+	}
+}
 
 // select sets a grid's selection claiming what read_grid gave, and read_grid
 // answers it back; a claim another writer has moved past is refused and the
