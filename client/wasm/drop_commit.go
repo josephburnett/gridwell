@@ -131,20 +131,17 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 
 // commitMove places every carried tile by the grabbed tile's offset, each
 // its own PlaceTile claiming the placement the press saw, so a stale row is
-// refused alone and its cache puts it back alone. They run one after another
-// in dragdrop.Carry.MoveOrder, because the node checks each against the grid
-// as the last one left it. The ghost snaps back only for a lone tile; a set's
-// ghost has landed for every member.
+// refused alone, its cache puts it back alone, and its ghost flies home alone
+// (snapBackMember). They run one after another in dragdrop.Carry.MoveOrder,
+// because the node checks each against the grid as the last one left it.
 func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 	c := d.carry()
 	to := c.At(dropX, dropY)
+	gh := a.ghost
 	ws := make([]write, 0, len(c))
 	for _, i := range c.MoveOrder(dropX, dropY) {
 		row := d.carried[i]
-		var snapBack func()
-		if len(c) == 1 {
-			snapBack = func() { a.snapBackToOrigin(d) }
-		}
+		snapBack := func() { a.snapBackMember(gh, d, i) }
 		ws = append(ws, a.placementWrite(d.srcGridID, &gridwellv1.PlaceTileRequest{
 			TileId: row.Id,
 			GridId: t.gridID,
@@ -260,6 +257,26 @@ func (a *App) cancelDragSnapBack(d *dragState) {
 		return
 	}
 	a.snapBackToOrigin(d)
+}
+
+// snapBackMember flies carried tile i of the drop gh landed home alone, from
+// where gh draws it to where the press found it: the animation of a refused
+// write, one per tile, so a lone tile and each tile of a set return the same
+// way. A ghost that has ended or given way to a newer press is left be.
+func (a *App) snapBackMember(gh *ghost, d *dragState, i int) {
+	if gh == nil || gh != a.ghost {
+		return
+	}
+	dx, dy := d.carry().Offset(i)
+	cell := gh.displayedCellSize
+	home := d.srcCellSize
+	if home <= 0 {
+		home = cell
+	}
+	gh.Return(i, gh.X+float64(dx)*cell, gh.Y+float64(dy)*cell, cell,
+		d.originScreenX+float64(dx)*home, d.originScreenY+float64(dy)*home, home,
+		nowMs(), snapBackMs)
+	a.scheduleFrame(traceevent.WhyDrag)
 }
 
 // snapBackToOrigin animates the ghost back to the dragged tile's original

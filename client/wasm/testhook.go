@@ -822,13 +822,16 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 }
 
 // thGhost reports the drag ghost the renderer would paint and the source
-// tiles it hides, the facts the tile loop reads at its hide check, and every
-// tile it draws.
+// tiles it hides, the facts the tile loop reads at its hide check, every
+// tile it draws, and those flying home alone.
 func (a *App) thGhost(js.Value, []js.Value) any {
-	carried := []any{}
+	carried, returning := []any{}, []any{}
 	if a.ghost != nil {
-		for _, n := range a.ghost.carried {
+		for i, n := range a.ghost.carried {
 			carried = append(carried, n.Id)
+			if _, back := a.ghost.Returning(i); back {
+				returning = append(returning, n.Id)
+			}
 		}
 	}
 	return map[string]any{
@@ -837,6 +840,7 @@ func (a *App) thGhost(js.Value, []js.Value) any {
 		"hidden":       stringsToAny(a.ghostHidden().IDs()),
 		"hiddenPaneID": a.ghostHiddenPane(),
 		"carried":      carried,
+		"returning":    returning,
 	}
 }
 

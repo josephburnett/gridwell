@@ -77,6 +77,60 @@ func (f *Flight) Step(nowMs float64) (landing, done bool) {
 	return true, done
 }
 
+// Formation is a drag ghost's carried tiles. They fly as one at their offsets
+// from the lead Flight until Return sends one home alone, which a refused
+// write does to its own tile and no other.
+type Formation struct {
+	Flight
+	back map[int]*Return
+}
+
+// Return is one member's flight home and the cell size it is drawn at, eased
+// from where it was sent toward its home pane's.
+type Return struct {
+	Flight
+	Cell             float64
+	fromCell, toCell float64
+}
+
+// Return sends member i home: from (fromX, fromY) at cell size fromCell to
+// (toX, toY) at toCell. A member already on its way starts again from where
+// it is.
+func (f *Formation) Return(i int, fromX, fromY, fromCell, toX, toY, toCell, startMs, durationMs float64) {
+	if r, ok := f.back[i]; ok {
+		fromX, fromY, fromCell = r.X, r.Y, r.Cell
+	}
+	if f.back == nil {
+		f.back = map[int]*Return{}
+	}
+	r := &Return{Flight: Flight{X: fromX, Y: fromY}, Cell: fromCell, fromCell: fromCell, toCell: toCell}
+	r.Land(toX, toY, startMs, durationMs)
+	f.back[i] = r
+}
+
+// Returning is member i's flight home, if it was sent.
+func (f *Formation) Returning(i int) (*Return, bool) {
+	r, ok := f.back[i]
+	return r, ok
+}
+
+// Step moves the lead and every member sent home to nowMs. The formation is
+// landing once any of them has a landing, and ends when the lead and all of
+// them have.
+func (f *Formation) Step(nowMs float64) (landing, done bool) {
+	landing, done = f.Flight.Step(nowMs)
+	if len(f.back) == 0 {
+		return landing, done
+	}
+	for _, r := range f.back {
+		_, home := r.Step(nowMs)
+		l := r.landing
+		r.Cell = Lerp(r.fromCell, r.toCell, EaseOutCubic(Progress(nowMs, l.StartMs, l.DurationMs)))
+		done = done && home
+	}
+	return true, done
+}
+
 // SplitN apportions totalMs across phases by relative distance. A phase under
 // the epsilon gets zero time; if every phase is, the time divides equally so
 // the transition does not complete instantly. The last phase with distance

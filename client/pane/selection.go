@@ -44,3 +44,48 @@ func (f *Frame) Select(ids []string) bool {
 	f.Selection = next
 	return true
 }
+
+// Unselect takes tileID out of every frame's set in cur and in every tree a
+// descent parked, reporting whether any set changed. The node's TileRemoved
+// is its one caller's cue (events.Plan.Unselect): the tile left its grid, a
+// set names only tiles on its grid, and a frame's set is the layout's, which
+// the persister then writes like any change (2026-10-15).
+func (s *Levels) Unselect(cur *Tree, tileID string) bool {
+	changed := cur.unselect(tileID)
+	for _, l := range s.frames {
+		if l.OuterTree != nil && l.OuterTree.unselect(tileID) {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func (t *Tree) unselect(tileID string) bool {
+	changed := false
+	t.Walk(func(p *Pane) {
+		if p.Frame.unselect(tileID) {
+			changed = true
+		}
+		for i := range p.below {
+			if p.below[i].unselect(tileID) {
+				changed = true
+			}
+		}
+	})
+	return changed
+}
+
+func (f *Frame) unselect(tileID string) bool {
+	if !slices.Contains(f.Selection, tileID) {
+		return false
+	}
+	return f.Select(slices.DeleteFunc(slices.Clone(f.Selection), func(id string) bool { return id == tileID }))
+}
+
+// unselectAll empties every frame's set.
+func (s *Stack) unselectAll() {
+	s.Frame.Select(nil)
+	for i := range s.below {
+		s.below[i].Select(nil)
+	}
+}

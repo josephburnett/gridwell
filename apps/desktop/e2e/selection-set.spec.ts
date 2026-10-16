@@ -22,7 +22,7 @@ async function watchWrites(win: Page): Promise<() => string[]> {
   return () => seen.slice();
 }
 
-function ghost(win: Page): Promise<{ active: boolean; hidden: string[]; carried: string[] }> {
+function ghost(win: Page): Promise<{ active: boolean; hidden: string[]; carried: string[]; returning: string[] }> {
   return win.evaluate(() => (window as any).__gridwellTest.ghost());
 }
 
@@ -168,4 +168,70 @@ test('Esc mid set-drag returns every tile and writes nothing', async ({ gw, wind
   expect(tileAt(snap, 'text', cx - 1, cy)?.id).toBe(a.id);
   expect(tileAt(snap, 'text', cx + 1, cy)?.id).toBe(b.id);
   expect(writes(), 'no write left the client').toEqual([]);
+});
+
+// A refused write sends its own tile home alone, the way a lone tile's ghost
+// snaps back (snapBackMember): each refused tile of the set is seen flying
+// home while the ghost lives. The landing is held open so the verdicts arrive
+// inside it.
+async function holdLanding(win: Page, ms: number) {
+  await win.evaluate((v) => (window as any).__gridwellTest.setSnapMs(v), ms);
+}
+
+test('a refused set move flies every refused tile home', async ({ gw, window }) => {
+  const { f, cx, cy, a, b } = await selectedPair(gw);
+  const { snapBackMs } = await gw.cadences();
+  await holdLanding(window, 4 * snapBackMs);
+  const m = window.mouse;
+  const from = await gw.cellCenter(f.id, cx - 1, cy);
+  const to = await gw.cellCenter(f.id, cx - 1, cy - 2);
+  await m.move(from.x, from.y);
+  await m.down({ button: 'left' });
+  await m.move(from.x + 8, from.y + 8);
+  // Another window moves both before the drop, so both claims are stale.
+  await placeTile(gw.origin, a.id, f.gridID, cx - 4, cy + 1, 1, 1);
+  await placeTile(gw.origin, b.id, f.gridID, cx + 4, cy + 1, 1, 1);
+  await m.move(to.x, to.y, { steps: 8 });
+  await m.up({ button: 'left' });
+  await expect
+    .poll(async () => (await ghost(window)).returning.slice().sort(), { message: 'each refused tile flies home' })
+    .toEqual([a.id, b.id].sort());
+  expect((await ghost(window)).active, 'while the ghost lives').toBe(true);
+  await expect.poll(async () => (await ghost(window)).active, { message: 'the ghost went home' }).toBe(false);
+  await holdLanding(window, 110);
+  await gw.waitClientTileAt(f.id, cx - 4, cy + 1, a.id);
+  await gw.waitClientTileAt(f.id, cx + 4, cy + 1, b.id);
+  const snap = await gw.getGrid(f.gridID);
+  expect(tileAt(snap, 'text', cx - 4, cy + 1)?.id, "a stays where the other window put it").toBe(a.id);
+  expect(tileAt(snap, 'text', cx + 4, cy + 1)?.id, "b stays where the other window put it").toBe(b.id);
+});
+
+test('a refused clone of one tile of the set flies that tile home alone', async ({ gw, window }) => {
+  const { f, cx, cy, a, b } = await selectedPair(gw);
+  const { snapBackMs } = await gw.cadences();
+  await holdLanding(window, 4 * snapBackMs);
+  await window.route('**/gridwell.v1.Gridwell/CloneTile', async (r) => {
+    if ((r.request().postDataBuffer()?.toString('latin1') ?? '').includes(b.id)) {
+      await r.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ code: 'failed_precondition', message: 'refused for the spec' }),
+      });
+      return;
+    }
+    await r.continue();
+  });
+  const n = texts(await gw.getGrid(f.gridID)).length;
+  await gw.cloneTileCell(cx - 1, cy, cx - 1, cy - 2);
+  await expect
+    .poll(async () => (await ghost(window)).returning, { message: 'the refused copy flies home' })
+    .toEqual([b.id]);
+  await expect.poll(async () => (await ghost(window)).active, { message: 'the ghost went home' }).toBe(false);
+  await holdLanding(window, 110);
+  await expect.poll(async () => texts(await gw.getGrid(f.gridID)).length, { message: 'one copy landed' }).toBe(n + 1);
+  const snap = await gw.getGrid(f.gridID);
+  expect(tileAt(snap, 'text', cx - 1, cy - 2), 'a copy of a').toBeTruthy();
+  expect(tileAt(snap, 'text', cx + 1, cy - 2), 'no copy of b').toBeFalsy();
+  expect(tileAt(snap, 'text', cx - 1, cy)?.id).toBe(a.id);
+  expect(tileAt(snap, 'text', cx + 1, cy)?.id).toBe(b.id);
 });

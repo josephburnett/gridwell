@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { tileAt, Tile } from './oracle';
+import { placeTile, tileAt, Tile } from './oracle';
 import type { GridwellDriver } from './driver';
 
 // The selection is a node fact on the grid row (2026-10-15). These cross from
@@ -224,4 +224,53 @@ test('inside a pane tile the selection is the pane\'s, in the layout, never the 
   await gw.waitIdle();
   await expect.poll(() => painted(window, back.id), { message: 'Esc inside clears the pane\'s set' }).toEqual([]);
   expect(await onNode(gw, f.gridID), 'still nothing on the grid row').toEqual([]);
+});
+
+test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and comes back unselected', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('pane', wx, wy);
+  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
+  expect(pt, 'pane tile').toBeTruthy();
+  await gw.openPalette();
+  await gw.dragCreate('well', wx, wy + 2);
+  const well = tileAt(await gw.getGrid(f.gridID), 'well', wx, wy + 2)!;
+  expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
+  const a = await textTile(gw, wx + 2, wy);
+
+  await gw.descendCell(wx, wy);
+  await expect
+    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
+    .toBe(1);
+  const inner = await gw.focused();
+  await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  await shiftClick(gw, window, wx + 2, wy);
+  await expect.poll(() => painted(window, inner.id), { message: 'selected inside' }).toEqual([a.id]);
+  await expect
+    .poll(async () => (await gw.getTileContent(pt.id)).includes(a.id.split('/').pop()!), {
+      message: 'the set reached the layout blob',
+      timeout: 10_000,
+    })
+    .toBe(true);
+
+  // Another window moves the tile into the well and back to its cell.
+  await placeTile(gw.origin, a.id, well.childGridId!, 0, 0, Number(a.w ?? 1), Number(a.h ?? 1));
+  await expect.poll(async () => (await gw.focused()).tileIds.includes(a.id), { message: 'a left' }).toBe(false);
+  await placeTile(gw.origin, a.id, f.gridID, wx + 2, wy, Number(a.w ?? 1), Number(a.h ?? 1));
+  await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  await gw.waitIdle();
+  await expect.poll(() => painted(window, inner.id), { message: 'back, unselected' }).toEqual([]);
+  await expect
+    .poll(async () => (await gw.getTileContent(pt.id)).includes(`"sel"`), {
+      message: 'the layout blob carries the cleaned set',
+      timeout: 10_000,
+    })
+    .toBe(false);
+  expect(await onNode(gw, f.gridID), 'the grid row is untouched').toEqual([]);
 });

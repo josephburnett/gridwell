@@ -17,6 +17,9 @@ type Plan struct {
 	// must be released: a removed one, or deleting tiles leaks browser images,
 	// or a page whose capture no longer answers (urlview.PageMoved).
 	DropPreviews string
+	// Unselect names a tile that left its grid, which leaves every pane
+	// frame's selection (pane.Levels.Unselect).
+	Unselect string
 	// Reload names a tile whose live views load their page again
 	// (urlview.PageMoved).
 	Reload string
@@ -45,7 +48,8 @@ type Plan struct {
 func Route(ev *pb.Event) Plan {
 	switch p := ev.GetPayload().(type) {
 	case *pb.Event_TileRemoved:
-		return Plan{DropPreviews: p.TileRemoved.GetTileId()}
+		id := p.TileRemoved.GetTileId()
+		return Plan{DropPreviews: id, Unselect: id}
 	case *pb.Event_TileChanged:
 		if t := p.TileChanged.GetTile(); t != nil {
 			plan := Plan{ClearContent: rpc.ContentID(t)}
