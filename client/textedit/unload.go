@@ -29,41 +29,52 @@ func DecideUnloadFlush(rowKnown, rowTakesBytes, rowOwnsContent bool, row, basis 
 	return SaveClaim(rowKnown && rowOwnsContent, row, basis, haveBasis), UnloadBeacon
 }
 
-// Framing is a text tile's persisted window, the SetTextView payload. Both
-// framing writers gate on Reframes, because writing unconditionally
-// would mutate updated_at and broadcast an event for a read.
+// Framing is a text tile's persisted window, the SetTextView payload: where
+// the doc is scrolled and the mode it shows. The box it is shown in is the
+// viewer's geometry, so it is not here: two devices with different pane sizes
+// would otherwise each rewrite the row on every look. Both framing writers
+// gate on Reframes, because writing unconditionally would mutate updated_at
+// and broadcast an event for a read.
 type Framing struct {
-	X, Y, W, H int64
-	Mode       string
+	X, Y int64
+	Mode string
 }
 
 // FramingOf is the tile's stored framing.
 func FramingOf(t *gridwellv1.Tile) Framing {
-	return Framing{X: t.TextX, Y: t.TextY, W: t.TextW, H: t.TextH, Mode: t.TextMode}
+	return Framing{X: t.TextX, Y: t.TextY, Mode: t.TextMode}
 }
 
 // FramingChanged reports whether next differs from cur in any field.
 func FramingChanged(cur, next Framing) bool { return cur != next }
 
-// Box is the window a text tile is shown in: the descended pane's inner box,
-// in doc px, which is the rectangle a framing writer measures.
-type Box struct{ W, H int64 }
-
 // ShownFraming is the framing a text row is already showing: the stored one,
-// or for a never-framed row the top of the doc in its box at DescentMode's
-// mode. Both framing writers diff against this, so a look stamps nothing.
-func ShownFraming(stored Framing, box Box, readOnly bool) Framing {
+// or for a never-framed row the top of the doc at DescentMode's mode. Both
+// framing writers diff against this, so a look stamps nothing.
+func ShownFraming(stored Framing, readOnly bool) Framing {
 	if stored != (Framing{}) {
 		return stored
 	}
-	return Framing{W: box.W, H: box.H,
-		Mode: DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})}
+	return Framing{Mode: DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})}
 }
 
 // Reframes is the one test both text framing writers make: whether next
 // differs from ShownFraming.
 func Reframes(stored, next Framing, readOnly bool) bool {
-	return FramingChanged(ShownFraming(stored, Box{W: next.W, H: next.H}, readOnly), next)
+	return FramingChanged(ShownFraming(stored, readOnly), next)
+}
+
+// RowFraming is what a text pane writes to its tile row from the window it
+// shows. The row's window is where the tile was left: the grid preview crops
+// there and a fresh descent opens there. So leaving writes it whole, and so
+// does a settle outside a pane tile; a settle inside one, whose layout owns
+// the live scroll (pane.FramingOwner), takes only the mode, so a look or a
+// focus tap on another device moves no one's window.
+func RowFraming(stored, shown Framing, layoutOwnsScroll, leaving bool) Framing {
+	if leaving || !layoutOwnsScroll {
+		return shown
+	}
+	return Framing{X: stored.X, Y: stored.Y, Mode: shown.Mode}
 }
 
 // ModeInput is everything the descent-mode decision reads.

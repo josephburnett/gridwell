@@ -258,10 +258,11 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 }
 
 // persistTextScroll is the settle persister's text arm: a text descent's
-// scroll persists framing-class, no version bump, one SetTextView when it
-// moved: see textedit.Reframes. A read-only host tile scrolls like
-// any other, because where the user left the window is the node's fact even
-// when the body is the plugin's.
+// scroll and mode persist framing-class, no version bump, one SetTextView when
+// they moved: see textedit.Reframes. Inside a pane tile a settle takes only
+// the mode to the row (textedit.RowFraming). A read-only host tile scrolls like any other,
+// because where the user left the window is the node's fact even when the
+// body is the plugin's.
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
 	if !ok || p.ViewPending || !rpc.TextDocument(file) || a.possiblyEphemeral(p, file) {
@@ -274,18 +275,17 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	scrollX := int64(p.TextScrollX + 0.5)
 	scrollY := int64(p.TextScrollY + 0.5)
 	gid := a.gridIDForPane(p)
-	_, _, iw, ih := textInnerBox(r)
-	next := textedit.Framing{X: scrollX, Y: scrollY, W: int64(iw + 0.5), H: int64(ih + 0.5), Mode: p.TextMode}
-	if !textedit.Reframes(textedit.FramingOf(file), next, a.tileReadOnly(file)) {
+	stored := textedit.FramingOf(file)
+	next := textedit.RowFraming(stored, textedit.Framing{X: scrollX, Y: scrollY, Mode: p.TextMode},
+		p.FramingTarget(a.ws.Depth() > 0).Layout, false)
+	if !textedit.Reframes(stored, next, a.tileReadOnly(file)) {
 		return
 	}
 	req := &gridwellv1.SetTileRequest{TileId: file.Id,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindText,
-			TextX: next.X, TextY: next.Y, TextW: next.W, TextH: next.H, TextMode: next.Mode}}
+			TextX: next.X, TextY: next.Y, TextMode: next.Mode}}
 	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
-		t.TextX, t.TextY = scrollX, scrollY
-		t.TextW, t.TextH = next.W, next.H
-		t.TextMode = p.TextMode
+		t.TextX, t.TextY, t.TextMode = next.X, next.Y, next.Mode
 	})
 	a.postFramingPersist("SetTextView", gid, file.Id,
 		func(ctx context.Context) error {

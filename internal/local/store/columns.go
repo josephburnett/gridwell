@@ -87,12 +87,17 @@ property test.`,
 	},
 	{
 		name: "text_x", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1,
-		comment: `text-only: the framed window in doc-space px (scroll offset + size)
-plus rendered/text mode.`,
-		bind: func(t *gridwellv1.Tile) any { return &t.TextX },
+		comment: `text-only: the scroll offset in doc-space px plus rendered/text mode.`,
+		bind:    func(t *gridwellv1.Tile) any { return &t.TextX },
 	},
 	{name: "text_y", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.TextY }},
-	{name: "text_w", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.TextW }},
+	{
+		name: "text_w", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1,
+		comment: `text_w/text_h: dead storage, kept until a retiring rebuild. No client
+writes them and nothing reads them, because the pane box a text tile is shown
+in is the viewer's geometry, not a fact about the tile.`,
+		bind: func(t *gridwellv1.Tile) any { return &t.TextW },
+	},
 	{name: "text_h", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.TextH }},
 	{name: "text_mode", ddl: "TEXT", since: 1, bind: func(t *gridwellv1.Tile) any { return nullString{&t.TextMode} }},
 	{name: "blob_id", ddl: "INTEGER REFERENCES blobs(id)", since: 1, bind: func(t *gridwellv1.Tile) any { return nullInt64{&t.BlobId} }},

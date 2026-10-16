@@ -384,9 +384,9 @@ type Tile struct {
 	ViewCx      float64 `protobuf:"fixed64,36,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
 	ViewCy      float64 `protobuf:"fixed64,37,opt,name=view_cy,json=viewCy,proto3" json:"view_cy,omitempty"`
 	ChildGridId string  `protobuf:"bytes,13,opt,name=child_grid_id,json=childGridId,proto3" json:"child_grid_id,omitempty"`
-	// text-only: text_x/text_y is the scroll offset; text_w/text_h is the
-	// window size; all four are doc-space px. text_mode is "rendered" or
-	// "text". blob_id points at the markdown source in the blobs table.
+	// text-only: text_x/text_y is the scroll offset in doc-space px;
+	// text_w/text_h are dead storage (see the store's columns.go). text_mode is
+	// "rendered" or "text". blob_id points at the markdown source in the blobs table.
 	TextX    int64  `protobuf:"varint,14,opt,name=text_x,json=textX,proto3" json:"text_x,omitempty"`
 	TextY    int64  `protobuf:"varint,15,opt,name=text_y,json=textY,proto3" json:"text_y,omitempty"`
 	TextW    int64  `protobuf:"varint,16,opt,name=text_w,json=textW,proto3" json:"text_w,omitempty"`
@@ -2973,7 +2973,7 @@ func (x *CloneTileRequest) GetY() int64 {
 // SetTileRequest is the single framing and capture writeback, dispatched on
 // tile.kind to the one operation that kind supports:
 //
-//	text  → text_x/text_y/text_w/text_h/text_mode  (framing)
+//	text  → text_x/text_y/text_mode                (framing)
 //	url   → alt_text (page title), preview jpeg, url_history
 //	                                              (automatic capture)
 //	shell → preview jpeg                          (automatic capture)

@@ -212,3 +212,46 @@ test('looking inside a long document and coming back writes nothing', async ({ g
     writes,
   );
 });
+
+// The box a text tile is shown in is the viewer's, not the tile's: a row
+// another device framed in a pane of another size is looked at, settled and
+// left, and nothing is written, so two devices on one tile never rewrite each
+// other's window.
+test("a document framed in another pane size is looked at without a write", async ({ gw, window }) => {
+  const settleMs = (await gw.cadences()).framingSaveMs;
+  await gw.enterPlugin('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openPalette();
+  await gw.dragCreate('markdown', cx, cy);
+  const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+  const { updateText, setTextView } = await import('./oracle');
+  await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
+  await setTextView(gw.origin, doc.id, { x: 0, y: 240, w: 123, h: 45, mode: 'rendered' });
+  await expect
+    .poll(async () => Number(tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)?.textH ?? 0))
+    .toBe(45);
+  await gw.waitIdle();
+  await settle(window, settleMs);
+
+  const before = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+  const writes = await framingWrites(window);
+  await gw.descendCell(cx, cy);
+  await expect
+    .poll(() => window.evaluate(() => document.getElementById('gw-rendered-view')?.scrollTop ?? 0), {
+      message: 'the descent shows the stored window',
+    })
+    .toBeGreaterThan(200);
+  await settle(window, settleMs);
+  expect(await framingWrites(window), 'settling on the stored window wrote it back at this pane size').toBe(
+    writes,
+  );
+  await gw.ascendViaCrumb();
+  await gw.waitIdle();
+  await settle(window, settleMs);
+
+  const after = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
+  expect(stable(after), 'the look rewrote the window another device left').toBe(stable(before));
+  expect(await framingWrites(window), 'the look dispatched a framing write').toBe(writes);
+});

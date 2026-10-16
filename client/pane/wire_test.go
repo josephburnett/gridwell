@@ -602,9 +602,11 @@ func goldenLeaf(id, anchor string, path []string, content string) *Pane {
 	return &Pane{ID: id, Stack: StackAt(anchor, path, content)}
 }
 
-// TestLayoutHoldsNoTextState: a text descent's scroll and mode are its tile
-// row's, so two trees that differ only in those encode to the same bytes,
-// while a grid frame's view is the blob's and changes them.
+// TestLayoutHoldsNoTextState: a text descent's mode and content zoom are its
+// tile row's, and so is a scroll the user has not moved off the row's
+// (TestLayoutKeepsAScrolledTextLeaf), so two trees that differ only in those
+// encode to the same bytes, while a grid frame's view is the blob's and
+// changes them.
 func TestLayoutHoldsNoTextState(t *testing.T) {
 	build := func(cx, cy, zoom float64, mode string, sx, sy, tz float64) *Tree {
 		tr := NewTree()
@@ -686,5 +688,57 @@ func TestLayoutAdoptedViewIsNotWritten(t *testing.T) {
 	p.SetView(4.5, 5, 2)
 	if got, _, _ := EncodeLayout(tr, nil); !bytes.Contains(got, []byte(`"views"`)) {
 		t.Fatalf("a pan after adopting was not written: %s", got)
+	}
+}
+
+// TestLayoutKeepsAScrolledTextLeaf: inside a pane tile a text leaf's scroll is
+// the layout's once the user moves it. Until then it is the row's, so opening
+// a document writes nothing; a scroll moves the layout fingerprint and reaches
+// the blob, and a restored leaf keeps the blob's scroll when it adopts its
+// row's mode.
+func TestLayoutKeepsAScrolledTextLeaf(t *testing.T) {
+	tr := NewTree()
+	p := tr.FocusedPane()
+	p.Stack = StackAt("aaaa/1", nil, "")
+	p.Push(ContentFrame("aaaa/12", Footprint{W: 1, H: 1}, 1, "rendered", 0, 240))
+	enc := func() []byte {
+		d, _, err := EncodeLayout(tr, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	looked := enc()
+	if bytes.Contains(looked, []byte(`"text"`)) {
+		t.Fatalf("a scroll taken from the row reached the blob: %s", looked)
+	}
+	before := LayoutFingerprint(tr).Value()
+	if !p.ScrollText(0, 900) {
+		t.Fatal("the scroll did not move")
+	}
+	if LayoutFingerprint(tr).Value() == before {
+		t.Fatal("a text scroll did not arm a layout write")
+	}
+	blob := enc()
+	if !bytes.Contains(blob, []byte(`"text":{"y":900}`)) {
+		t.Fatalf("the scroll is not in the blob: %s", blob)
+	}
+
+	got, err := DecodeLayout(blob, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := got.FocusedPane()
+	if q.TextScrollY != 900 {
+		t.Fatalf("restored scroll = %v, want the blob's 900", q.TextScrollY)
+	}
+	if !q.Adopt(ContentFrame("aaaa/12", Footprint{W: 1, H: 1}, 1, "text", 0, 240)) {
+		t.Fatal("Adopt refused the row's frame")
+	}
+	if q.TextScrollY != 900 || q.TextMode != "text" {
+		t.Errorf("adopted %+v, want the blob's scroll and the row's mode", q.Frame)
+	}
+	if again, _, _ := EncodeLayout(got, nil); !bytes.Equal(again, blob) {
+		t.Errorf("a restored scroll re-encodes differently:\ngot  %s\nwant %s", again, blob)
 	}
 }

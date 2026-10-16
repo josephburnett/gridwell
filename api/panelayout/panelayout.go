@@ -56,8 +56,10 @@ type LayoutFrame struct {
 // where the projection would lose a level, so what the projection holds in
 // full still encodes byte-identically.
 // Views is the viewport each frame of the place was left at, root first, one
-// per frame, null where a frame has none; absent when no frame has one. A
-// text descent's scroll and mode are its tile row's. Sels is each grid
+// per frame, null where a frame has none; absent when no frame has one. Text
+// is the live scroll of a text descent on top, absent until the user moves it
+// off the row's; its mode, and its window once left, are its tile row's
+// (2026-10-16). Sels is each grid
 // frame's selection the same way: inside a pane tile a pane's selection is
 // the layout's, not the grid row's (2026-10-15). Retired keys, never reused:
 // cx, cy, zoom, text_mode, text_scroll_x, text_scroll_y, text_zoom.
@@ -69,6 +71,13 @@ type LayoutPane struct {
 	Place     []LayoutFrame `json:"place,omitempty"`
 	Views     []*LayoutView `json:"views,omitempty"`
 	Sels      [][]string    `json:"sel,omitempty"`
+	Text      *LayoutText   `json:"text,omitempty"`
+}
+
+// LayoutText is a text descent's scroll in doc px.
+type LayoutText struct {
+	X float64 `json:"x,omitempty"`
+	Y float64 `json:"y,omitempty"`
 }
 
 // LayoutView is one frame's viewport: a center in its grid's cells and the

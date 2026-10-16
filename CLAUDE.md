@@ -188,6 +188,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   writes the blob on the layout's settle and never the doorway row, and the
   one-active-surface rule is the home view's only, since no row is shared
   (`pane.FramingOwner.Layout`, 2026-10-14).
+- A text tile's window is its scroll and its mode, never the box it is
+  shown in: the pane's size is the viewer's geometry, so a look from a pane
+  of another size, on another device, writes nothing (`textedit.Framing`,
+  2026-10-16). `text_w`/`text_h` are dead storage. The row's window is
+  where the tile was left: the grid preview crops there and a descent opens
+  there. Inside a pane tile the live scroll is the layout's: a scroll there
+  writes the blob on the layout's settle, a settle or a focus takes only the
+  mode to the row, and an ascent, which is leaving, writes the row's whole
+  window as it does anywhere; a leaf the blob has no scroll for starts at
+  the row's (`pane.FramingOwner.Layout`, `textedit.RowFraming`, 2026-10-16).
 - Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.

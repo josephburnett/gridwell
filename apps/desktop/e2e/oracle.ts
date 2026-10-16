@@ -194,6 +194,26 @@ export async function setRootFraming(
   }
 }
 
+// A foreign writer setting a text tile's stored window: another device that
+// framed the tile. w and h are what an older client stored beside the scroll.
+export async function setTextView(
+  origin: string,
+  tileId: string,
+  v: { x: number; y: number; w: number; h: number; mode: string },
+): Promise<void> {
+  const res = await fetch(`${origin}/${SERVICE}/SetTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({
+      tileId,
+      tile: { kind: 'text', textX: v.x, textY: v.y, textW: v.w, textH: v.h, textMode: v.mode },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`SetTile(${tileId}) failed: ${res.status} ${await res.text()}`);
+  }
+}
+
 // A foreign writer deleting a row out from under the app: another device, or
 // this one in a pane the spec is not driving. It claims the row it read.
 export async function deleteTile(origin: string, tileId: string): Promise<void> {
