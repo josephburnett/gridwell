@@ -63,3 +63,82 @@ func TestRenderedInsetLaysOutAtTheRastersWidth(t *testing.T) {
 		}
 	}
 }
+
+// A picture holds no form control: iOS WebKit paints an SVG image whose
+// foreignObject holds an <input> as nothing at all, while the load succeeds.
+// The task checkbox becomes the stand-in, its checked state carried, in every
+// shape the overlay's renderer or XMLSerializer writes it.
+func TestPreviewSVGHoldsNoFormControl(t *testing.T) {
+	dark := theme.Of(theme.Dark)
+	for _, c := range []struct {
+		name, xhtml   string
+		open, checked int
+	}{
+		{"renderer", RenderHTML([]byte("- [ ] a\n- [x] b\n- [ ] c\n"), false), 2, 1},
+		{"serialized", `<ul><li><input type="checkbox" /> a</li><li><input checked="" type="checkbox"/> b</li></ul>`, 1, 1},
+		{"attribute order", `<p><input type="checkbox" checked="checked" disabled=""/> x <INPUT TYPE='checkbox'> y</p>`, 1, 1},
+		{"other input", `<p><input type="text" value="v"/>z</p>`, 0, 0},
+	} {
+		svg := PreviewSVG(c.xhtml, 320, 4000, dark)
+		body := svg[strings.Index(svg, "</style>"):]
+		if strings.Contains(strings.ToLower(body), "<input") {
+			t.Errorf("%s: the picture holds a form control:\n%s", c.name, body)
+		}
+		if got := strings.Count(body, `<span class="gw-task"></span>`); got != c.open {
+			t.Errorf("%s: %d open stand-ins, want %d:\n%s", c.name, got, c.open, body)
+		}
+		if got := strings.Count(body, `<span class="gw-task gw-task-done"></span>`); got != c.checked {
+			t.Errorf("%s: %d checked stand-ins, want %d:\n%s", c.name, got, c.checked, body)
+		}
+	}
+}
+
+// The overlay's checkbox and the picture's stand-in are drawn by the same
+// rules, so the two faces lay a task list out alike: every rule that styles
+// one face styles the other in the same selector list.
+func TestRenderedCSSDrawsTheCheckboxAndItsStandInAlike(t *testing.T) {
+	css := RenderedCSS("S", theme.Of(theme.Dark))
+	pairs := []struct{ input, standIn string }{
+		{"S input[type=checkbox]", "S .gw-task"},
+		{"S input[type=checkbox]:checked", "S .gw-task.gw-task-done"},
+		{"S input[type=checkbox]:checked::after", "S .gw-task.gw-task-done::after"},
+	}
+	seen := make([]bool, len(pairs))
+	for _, rule := range strings.Split(css, "}") {
+		open := strings.Index(rule, "{")
+		if open < 0 {
+			continue
+		}
+		sels := map[string]bool{}
+		for _, s := range strings.Split(rule[:open], ",") {
+			sels[strings.TrimSpace(s)] = true
+		}
+		for i, p := range pairs {
+			if sels[p.input] != sels[p.standIn] {
+				t.Errorf("rule %q styles one face of the task box only", strings.TrimSpace(rule[:open]))
+			}
+			if sels[p.input] {
+				seen[i] = true
+				if !strings.Contains(rule, "appearance: none") && i == 0 {
+					t.Errorf("the overlay's checkbox keeps its native look: %q", rule)
+				}
+			}
+		}
+		for s := range sels {
+			if strings.Contains(s, "checkbox") || strings.Contains(s, "gw-task") {
+				known := false
+				for _, p := range pairs {
+					known = known || s == p.input || s == p.standIn
+				}
+				if !known {
+					t.Errorf("selector %q styles one face of the task box only", s)
+				}
+			}
+		}
+	}
+	for i, p := range pairs {
+		if !seen[i] {
+			t.Errorf("no rule draws %q", p.input)
+		}
+	}
+}

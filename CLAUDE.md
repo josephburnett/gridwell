@@ -435,6 +435,10 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.
+- A rendered pane's picture holds no form control: a task checkbox is drawn
+  by the one stylesheet, as the overlay's input is, because iOS WebKit
+  paints an SVG image holding a control as nothing while it loads
+  (`markdown.PictureXHTML`, 2026-10-16).
 - A pane shows one document whether or not it has focus. The focused pane
   shows the cached bytes; every other face is a picture of them (a wrap, a
   raster) keyed by `cache.BodyGen`, which every change to the bytes moves,

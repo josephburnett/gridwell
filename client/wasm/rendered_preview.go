@@ -16,10 +16,10 @@ import (
 // Rendered grid previews: a text tile whose stored text_mode is "rendered"
 // previews as the rendered document, so how you leave a tile is how it
 // presents from outside. markdown.RenderHTML stays the one renderer, and this
-// rasterizes its output through an SVG foreignObject image. Rasterization is
-// async, so raw source paints until the tile's first image decodes.
-// rasterprev.Cache owns
-// every caching decision; this file is the blob-and-Image glue.
+// rasterizes its output through an SVG foreignObject image, which holds no
+// form control (markdown.PictureXHTML). Rasterization is async, so raw source
+// paints until the tile's first image decodes. rasterprev.Cache owns every
+// caching decision; this file is the blob-and-Image glue.
 
 // renderedPreviewMaxH caps the rasterized document height in CSS px. Beyond
 // it a preview falls back to raw source: previews are a glance, not a

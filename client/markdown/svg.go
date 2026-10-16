@@ -3,6 +3,7 @@ package markdown
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/josephburnett/gridwell/client/theme"
@@ -12,7 +13,9 @@ import (
 // focused overlay div and the rasterized grid preview both wear it, so a
 // preview cannot drift from the descent. Sizes are em-relative. Colors are
 // substituted rather than named as custom properties, because the preview
-// raster is an SVG document of its own and inherits none from the page.
+// raster is an SVG document of its own and inherits none from the page. The
+// task box is drawn here for the overlay's input and the picture's stand-in
+// alike (see PictureXHTML), so the two faces lay a task list out the same.
 const renderedCSSRules = `
 @SCOPE@ { color: @FG@; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
 @SCOPE@ h1 { font-size: 1.7em; margin: 0.6em 0 0.4em; }
@@ -29,7 +32,9 @@ const renderedCSSRules = `
 @SCOPE@ th, @SCOPE@ td { border: 1px solid @RULE@; padding: 0.25em 0.6em; }
 @SCOPE@ img { max-width: 100%; }
 @SCOPE@ hr { border: 0; border-top: 1px solid @RULE@; }
-@SCOPE@ input[type=checkbox] { margin-right: 0.4em; }
+@SCOPE@ input[type=checkbox], @SCOPE@ .gw-task { -webkit-appearance: none; appearance: none; display: inline-block; position: relative; box-sizing: border-box; width: 1em; height: 1em; margin: 0 0.4em 0 0; padding: 0; vertical-align: middle; border: 0.1em solid @FG@; border-radius: 0.2em; background: transparent; font: inherit; color: inherit; cursor: pointer; }
+@SCOPE@ input[type=checkbox]:checked, @SCOPE@ .gw-task.gw-task-done { background: @LINK@; border-color: @LINK@; }
+@SCOPE@ input[type=checkbox]:checked::after, @SCOPE@ .gw-task.gw-task-done::after { content: ""; position: absolute; left: 0.28em; top: 0.08em; width: 0.25em; height: 0.5em; border: solid @BG@; border-width: 0 0.12em 0.12em 0; transform: rotate(45deg); }
 `
 
 // RenderedCSS returns the rendered-view stylesheet scoped under sel, in p's
@@ -43,6 +48,7 @@ func RenderedCSS(sel string, p theme.Palette) string {
 		"@QUOTEBAR@", p.DocQuoteBar,
 		"@QUOTEFG@", p.DocQuoteFg,
 		"@RULE@", p.DocRule,
+		"@BG@", p.FileInnerBg,
 	)
 	return r.Replace(renderedCSSRules)
 }
@@ -71,6 +77,7 @@ func RenderedInset(boxW, layoutW, scale float64) (top, right, bottom, left float
 // XMLSerializer. The base font size is 14px at scale 1. The raster is made in
 // the theme on screen, so switching theme re-rasterizes rather than leaving a
 // dark document on a pale grid; rasterprev.Key carries the theme that decides.
+// The body passes through PictureXHTML first.
 func PreviewSVG(xhtml string, w, h float64, p theme.Palette) string {
 	return fmt.Sprintf(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f">`+
@@ -78,5 +85,30 @@ func PreviewSVG(xhtml string, w, h float64, p theme.Palette) string {
 			`<div xmlns="http://www.w3.org/1999/xhtml" class="gw-md-root" `+
 			`style="width:%.0fpx;box-sizing:border-box;padding:%gpx %gpx;font-size:14px;background:%s">`+
 			`<style>%s</style>%s</div></foreignObject></svg>`,
-		w, h, w, RenderedPadY, RenderedPadX, p.FileInnerBg, RenderedCSS(".gw-md-root", p), xhtml)
+		w, h, w, RenderedPadY, RenderedPadX, p.FileInnerBg, RenderedCSS(".gw-md-root", p), PictureXHTML(xhtml))
+}
+
+var (
+	inputTag     = regexp.MustCompile(`(?i)<input\b[^>]*>`)
+	checkboxAttr = regexp.MustCompile(`(?i)\stype\s*=\s*["']?checkbox\b`)
+	checkedAttr  = regexp.MustCompile(`(?i)\schecked\b`)
+)
+
+// PictureXHTML strips every form control from a rendered body bound for a
+// picture, because iOS WebKit paints an SVG image whose foreignObject holds
+// one as nothing while the load succeeds. A task checkbox becomes a
+// span.gw-task (plus gw-task-done when checked), which RenderedCSS draws as
+// it draws the overlay's input; any other input is dropped, the sanitizer
+// letting no other control through.
+func PictureXHTML(xhtml string) string {
+	return inputTag.ReplaceAllStringFunc(xhtml, func(tag string) string {
+		switch {
+		case !checkboxAttr.MatchString(tag):
+			return ""
+		case checkedAttr.MatchString(tag):
+			return `<span class="gw-task gw-task-done"></span>`
+		default:
+			return `<span class="gw-task"></span>`
+		}
+	})
 }

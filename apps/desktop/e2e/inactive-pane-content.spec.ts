@@ -19,7 +19,8 @@ const WRITE = '**/gridwell.v1.Gridwell/WriteContent';
 const painted = (window: any): Promise<Record<string, string>> =>
   window.evaluate(() => (window as any).__gridwellTest.paintedText());
 const paneById = async (gw: any, id: string) => (await gw.panes()).find((p: any) => p.id === id)!;
-const checkedIn = (s: string) => (s.match(/<input[^>]*checked/g) ?? []).length;
+// A picture draws a checked task as a stand-in, never an input; see markdown.PictureXHTML.
+const checkedIn = (s: string) => (s.match(/gw-task-done/g) ?? []).length;
 
 // Two panes on the home grid, the left descended into a text tile holding
 // body, the right focused, so the left paints on canvas.
@@ -179,8 +180,12 @@ test('a rendered pane wraps the same lines focused or not', async ({ gw, window 
   const para =
     'The quick brown fox jumps over the lazy dog, again and again, until the paragraph wraps across ' +
     'several lines of the pane, and then some more words so that a narrower layout breaks them elsewhere.';
-  // Long enough to scroll, so the overlay keeps its scrollbar.
-  const { left, right } = await splitOnText(gw, `# Heading\n\n` + `${para}\n\n`.repeat(12));
+  // Long enough to scroll, so the overlay keeps its scrollbar. The task list
+  // pins that the overlay's checkbox and the picture's stand-in are one size.
+  const { left, right } = await splitOnText(
+    gw,
+    `# Heading\n\n- [ ] ${para}\n- [x] ${para}\n\n` + `${para}\n\n`.repeat(12),
+  );
   await gw.toggleTextMode(); // rendered
   await expect(window.locator('#gw-rendered-view')).toBeVisible();
   await gw.waitIdle();
