@@ -90,6 +90,7 @@ record shapes. Everything else derives from it:
 | Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
+| Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Claims the set it saw, bumps no version; `SelectionChanged` carries the whole new set. |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetInterest` — the grids a client shows, held while its stream is open |

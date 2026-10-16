@@ -63,8 +63,10 @@ those, so it has no status at all — nothing draws it, and no click reaches it.
 | **framing** | Where you left a view: `SetFraming`, and `SetTile`'s text-window and content-zoom arms. No claim, no bump. The standing freeze (`SetTile`'s url-frozen arm) bumps nothing but claims the freeze it saw. |
 | **capture** | What the machine observed: a preview JPEG, a page title, a url trail. No claim, no bump. |
 | **layout** | Where things sit: place, clone, delete. A move claims the placement it saw (grid and footprint), not a version, and bumps none; a delete claims the version and the placement. A stale one is refused and the tile stays where it is. |
+| **selection** (`Grid.selection`) | The set of a grid's tiles the user has in hand, kept on the grid's row by the node and persisted. `SetSelection` claims the set it saw and bumps no version; a stale one is refused. A tile that leaves the grid leaves the set. It is not a pane's focused tile, the keyboard target a plain click moves, which is the session's. |
 
-The store enforces two of these, not four: `claimContentVersion` +
+The selection is a grid row's, with its own writer (`setSelectionTx`). For
+the tile row the store enforces two of the other four, not four: `claimContentVersion` +
 `finishContentEdit` for content, `loadForWrite` + `emitTileChanged` for the
 other three. Framing, capture, and layout are three origins of one enforced
 class, and the word says who started the write.

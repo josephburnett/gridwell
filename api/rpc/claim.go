@@ -26,6 +26,10 @@ func UnclaimedWrite(req proto.Message) string {
 		if r.UrlFrozen != nil && r.ClaimFrozen == nil {
 			return "SetTile url_frozen names no claim_frozen: a freeze claims the freeze it saw"
 		}
+	case *pb.SetSelectionRequest:
+		if r.GetClaim() == nil {
+			return "SetSelection names no claim: a selection claims the set it saw"
+		}
 	}
 	return ""
 }

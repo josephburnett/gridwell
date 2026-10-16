@@ -23,7 +23,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 16
+const schemaVersion = 17
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -114,6 +114,9 @@ var migrations = []migration{
 	// or negative zoom, a NULL or non-finite part — becomes three NULLs, the
 	// never-visited it already read as.
 	{to: 16, run: migrateV16},
+	// v17: grids.selection, the grid's selection as a node fact. Additive:
+	// '' is the empty set, every existing grid's meaning.
+	{to: 17, run: addColumnDDL(`ALTER TABLE grids ADD COLUMN selection TEXT NOT NULL DEFAULT ''`)},
 }
 
 // finiteSQL holds when every column named is a finite number; SQLite reads

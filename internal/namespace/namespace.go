@@ -57,6 +57,7 @@ type Namespace interface {
 	CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error)
 	DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error)
 	SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error)
+	SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error)
 
 	// ── content ──────────────────────────────────────────────────────────
 

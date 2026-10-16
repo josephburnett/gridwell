@@ -74,8 +74,8 @@ comment beside it says.
    `sendError`. A rejected optimistic mutation reconciles visibly.
 7. **No client-only state.** Anything the user can change is a server fact,
    written through the store and reflected by an event. The exceptions are
-   decided, not accidental: the session pane tree, the selection outside a
-   pane tile, the outer frames of a pane's place, the pane-tile level stack,
+   decided, not accidental: the session pane tree, each pane's focused tile
+   outside a pane tile, the outer frames of a pane's place, the pane-tile level stack,
    Chromium's own session storage, and the theme — a client view preference, not a fact
    about your things, so it lives in `localStorage` (2026-09-19). Do not add
    to that list without a decision.
@@ -140,7 +140,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   address, a typed name, a pane tile's layout) claims the version and bumps
   it; a move or resize claims the placement the press saw (grid, x, y, w, h),
   so a move never conflicts with typing nor ages a body; a freeze or
-  unfreeze claims the freeze it saw; a delete claims the version and the
+  unfreeze claims the freeze it saw; a selection claims the set it saw
+  (2026-10-15); a delete claims the version and the
   placement, so we know what we are deleting. A stale claim is refused with
   the version conflict and the client reconciles to the row on disk,
   surfaced, never silently: a layout replaces the open tree whole
@@ -155,6 +156,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   (2026-10-14). Only framing (pan and zoom, the text window, content zoom)
   and captures carry no claim. A pane tile's layout counted as framing
   until this decision.
+- The selection is a node fact (2026-10-15): the set of a grid's tiles the
+  user has in hand lives on that grid's row (`grids.selection`), home's
+  grids and a plugin's alike, and a far grid's on the far node. It persists
+  across restarts. It names only tiles on its grid, so a tile that leaves
+  the grid leaves the set and lands elsewhere unselected
+  (`store.leaveSelection`). `SetSelection` claims the set it saw and bumps
+  no version, the grid's or any tile's, so a select never refuses a text
+  save. `SelectionChanged` carries the whole set, so no view re-reads the
+  grid to learn it. Inside a pane tile the selection is per pane, in the
+  layout blob. It is not a pane's focused tile, which a plain click moves.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a
@@ -316,14 +327,17 @@ These were decided deliberately. Do not reverse one without a new decision.
   it; a started one that is gone is never recreated behind a face. The
   session dies when the last row naming it is destroyed. A shell cloned
   across nodes lands as a link (2026-10-01).
-- Session-ephemeral: the pane tree, the selection, the level stack, and,
-  outside a pane tile, the outer frames' viewports. The durable home for a
+- Session-ephemeral: the pane tree, each pane's focused tile (the keyboard
+  target a plain click lands on, `pane.SessionState.Selected`; not the
+  selection, which is a node fact), the level stack, and, outside a pane
+  tile, the outer frames' viewports. The durable home for a
   layout is the pane tile, and inside one every frame's viewport is part of
   it (2026-10-14).
   Inside a pane tile the focused pane and the zoomed pane are part of the
   layout the tile remembers, written with it on every change, so a workspace
-  reopens on the pane it was left on; the selection is session-ephemeral
-  only outside a pane tile (2026-10-14, `pane.LayoutFingerprint`).
+  reopens on the pane it was left on; the focused tile is
+  session-ephemeral only outside a pane tile (2026-10-14,
+  `pane.LayoutFingerprint`).
 - Left-drag moves, right-drag clones, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Cross-plugin a left-drag links too, because
@@ -354,7 +368,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   full-width row reserved once, so no pane ever resizes. Panes end at that
   row's top edge; a left click on the background beside the bar focuses
   the most recently focused pane of the column above it, that recency being
-  part of the session selection (2026-10-09, `wsbar.BandFocus`). A crumb
+  part of the session's pane focus (2026-10-09, `wsbar.BandFocus`). A crumb
   click ascends; middle-click is the in-pane shortcut.
 - A click lands on what it hits, in any pane, and pane focus follows in
   the same press (2026-10-02, reversing 'moves focus, nothing else'). No

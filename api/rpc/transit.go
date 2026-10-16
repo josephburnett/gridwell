@@ -139,6 +139,16 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 	case *pb.SetFramingRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.RootGridId = h.PeelID(r.RootGridId)
+	case *pb.SetSelectionRequest:
+		r.GridId = h.PeelID(r.GridId)
+		for i, id := range r.TileIds {
+			r.TileIds[i] = h.PeelID(id)
+		}
+		if r.Claim != nil {
+			for i, id := range r.Claim.TileIds {
+				r.Claim.TileIds[i] = h.PeelID(id)
+			}
+		}
 	}
 	return out
 }
@@ -157,6 +167,7 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 		out.AcceptsTiles = proto.Bool(g.Writable)
 	}
 	out.Id = QualifyID(prefix, g.Id)
+	out.Selection = QualifyIDs(prefix, g.Selection)
 	if g.ScratchGridId != "" {
 		out.ScratchGridId = QualifyID(prefix, g.ScratchGridId)
 	}
@@ -198,6 +209,9 @@ func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb
 		f := proto.CloneOf(p.GridFramingChanged)
 		f.GridId = QualifyID(prefix, f.GridId)
 		return &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: f}}
+	case *pb.Event_SelectionChanged:
+		return SelectionEvent(QualifyID(prefix, p.SelectionChanged.GetGridId()),
+			QualifyIDs(prefix, p.SelectionChanged.GetTileIds()))
 	case *pb.Event_TileChanged:
 		t := proto.CloneOf(p.TileChanged)
 		t.Tile = qualifyTile(p.TileChanged.Tile)

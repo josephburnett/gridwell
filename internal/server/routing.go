@@ -16,6 +16,7 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 	}
 	out := proto.Clone(g).(*pb.Grid)
 	out.Id = rpc.QualifyID(uuid, g.Id)
+	out.Selection = rpc.QualifyIDs(uuid, g.Selection)
 	return out
 }
 

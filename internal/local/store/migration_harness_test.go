@@ -1252,6 +1252,35 @@ func init() {
 			}
 		},
 	})
+	// v17: grids.selection. Every grid, home's and a plugin context's, comes
+	// through holding the empty set, and a written set reads back as written.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 17,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key)
+				VALUES (100, 100, 'p17', 'v16 context')`); err != nil {
+				t.Fatalf("seed plugin context: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var n int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM grids WHERE selection != ''`).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			if n != 0 {
+				t.Errorf("%d grids came through v17 holding a selection, want none", n)
+			}
+			if _, err := db.Exec(`UPDATE grids SET selection = '3,12' WHERE ns = 'p17' AND context_key = 'v16 context'`); err != nil {
+				t.Fatalf("write a selection after v17: %v", err)
+			}
+			var got string
+			if err := db.QueryRow(`SELECT selection FROM grids WHERE ns = 'p17'`).Scan(&got); err != nil || got != "3,12" {
+				t.Errorf("selection = %q (err %v), want 3,12", got, err)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.

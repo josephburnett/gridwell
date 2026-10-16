@@ -162,6 +162,8 @@ func payloadOf(ev *pb.Event) (name, id string) {
 		return "grid changed", p.GridChanged.GetGridId()
 	case *pb.Event_GridFramingChanged:
 		return "grid framing changed", p.GridFramingChanged.GetGridId()
+	case *pb.Event_SelectionChanged:
+		return "selection changed", p.SelectionChanged.GetGridId()
 	case *pb.Event_PluginHealth:
 		h := "namespace unhealthy"
 		if p.PluginHealth.GetHealthy() {

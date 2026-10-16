@@ -48,6 +48,7 @@ const (
 	Gridwell_CloneTile_FullMethodName         = "/gridwell.v1.Gridwell/CloneTile"
 	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
 	Gridwell_SetFraming_FullMethodName        = "/gridwell.v1.Gridwell/SetFraming"
+	Gridwell_SetSelection_FullMethodName      = "/gridwell.v1.Gridwell/SetSelection"
 	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
 	Gridwell_SetInterest_FullMethodName       = "/gridwell.v1.Gridwell/SetInterest"
@@ -91,6 +92,8 @@ type GridwellClient interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(ctx context.Context, in *SetFramingRequest, opts ...grpc.CallOption) (*SetFramingResponse, error)
+	// SetSelection replaces a grid's selection, claiming the set it saw.
+	SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
@@ -300,6 +303,16 @@ func (c *gridwellClient) SetFraming(ctx context.Context, in *SetFramingRequest, 
 	return out, nil
 }
 
+func (c *gridwellClient) SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetSelectionResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetSelection_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ShellSessionAliveResponse)
@@ -386,6 +399,8 @@ type GridwellServer interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(context.Context, *SetFramingRequest) (*SetFramingResponse, error)
+	// SetSelection replaces a grid's selection, claiming the set it saw.
+	SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
@@ -451,6 +466,9 @@ func (UnimplementedGridwellServer) DeleteTile(context.Context, *DeleteTileReques
 }
 func (UnimplementedGridwellServer) SetFraming(context.Context, *SetFramingRequest) (*SetFramingResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetFraming not implemented")
+}
+func (UnimplementedGridwellServer) SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetSelection not implemented")
 }
 func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ShellSessionAlive not implemented")
@@ -755,6 +773,24 @@ func _Gridwell_SetFraming_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gridwell_SetSelection_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetSelectionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).SetSelection(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_SetSelection_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).SetSelection(ctx, req.(*SetSelectionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gridwell_ShellSessionAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ShellSessionAliveRequest)
 	if err := dec(in); err != nil {
@@ -878,6 +914,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetFraming",
 			Handler:    _Gridwell_SetFraming_Handler,
+		},
+		{
+			MethodName: "SetSelection",
+			Handler:    _Gridwell_SetSelection_Handler,
 		},
 		{
 			MethodName: "ShellSessionAlive",

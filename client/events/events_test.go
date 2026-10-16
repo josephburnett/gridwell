@@ -40,6 +40,8 @@ func TestRouteTable(t *testing.T) {
 		{"a changed event with no row asks for nothing",
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{}}},
 			Plan{}},
+		{"a new selection asks for nothing: the event is the whole set",
+			rpc.SelectionEvent("n/1", []string{"n/4"}), Plan{}},
 		{"an empty event asks for nothing", &pb.Event{}, Plan{}},
 	}
 	for _, c := range cases {
@@ -153,6 +155,8 @@ func TestOweNamesTheGridOfATileEvent(t *testing.T) {
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: &pb.Tile{Id: "n/4", GridId: "n/1"}}}}, "n/1"},
 		{"a TileRemoved owes its grid",
 			&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "n/1", TileId: "n/4"}}}, "n/1"},
+		{"a SelectionChanged owes its grid: a read begun before it would put the older set back",
+			rpc.SelectionEvent("n/1", []string{"n/4"}), "n/1"},
 		{"a GridChanged owes nothing here; Route fetches it",
 			&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "n/1"}}}, ""},
 	}

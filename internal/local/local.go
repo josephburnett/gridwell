@@ -140,6 +140,15 @@ func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 	return &gridwellv1.SetFramingResponse{Tile: t}, nil
 }
 
+// SetSelection replaces a home grid's selection, claiming the set the writer
+// saw. It never bumps a version.
+func (p *Plugin) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+	if err := p.st.SetSelection(ctx, req.GridId, req.Claim, req.TileIds); err != nil {
+		return nil, errToStatus(err)
+	}
+	return &gridwellv1.SetSelectionResponse{}, nil
+}
+
 func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	_, err := p.st.GetTile(ctx, req.TileId)
 	if errors.Is(err, store.ErrNotFound) {

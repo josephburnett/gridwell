@@ -73,6 +73,10 @@ func (Unimplemented) SetFraming(context.Context, *pb.SetFramingRequest) (*pb.Set
 	return nil, unimp("SetFraming")
 }
 
+func (Unimplemented) SetSelection(context.Context, *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	return nil, unimp("SetSelection")
+}
+
 func (Unimplemented) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
 	return nil, unimp("ShellSessionAlive")
 }

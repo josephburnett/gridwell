@@ -90,10 +90,9 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 			return err
 		}
 	}
-	*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{TileRemoved: &gridwellv1.TileRemoved{
-		GridId: strconv.FormatInt(srcGrid, 10),
-		TileId: t.Id,
-	}}})
+	if err := s.tileLeft(ctx, tx, events, srcGrid, tileID); err != nil {
+		return err
+	}
 	_, err = s.emitTileChanged(ctx, tx, tileID, events)
 	return err
 }
