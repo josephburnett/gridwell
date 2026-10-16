@@ -146,28 +146,18 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	editable := rpc.TextDocument(file) && !a.tileReadOnly(file)
 	hasBuf = hasBuf && textedit.DecideFlush(true, editable, false) == textedit.FlushPost
 
-	// Doc px, which equals screen px since scale is fixed at 1.0. The
-	// parent-grid preview crops this rectangle out of the re-rendered doc.
-	_, _, iw, ih := textInnerBox(r)
-	viewW := int64(iw + 0.5)
-	viewH := int64(ih + 0.5)
-
 	// Only when something moved: see textedit.Reframes. A pure
 	// descend-and-ascent writes nothing, and leaves nothing in the cache
 	// either, since the next ascent diffs against what it finds there.
 	// A pane with no rect has no window to frame: see pane.FramingWriters.
 	_, sized := r.Size()
-	next := textedit.Framing{X: scrollX, Y: scrollY, W: viewW, H: viewH, Mode: p.TextMode}
+	next := textedit.Framing{X: scrollX, Y: scrollY, Mode: p.TextMode}
 	reframed := sized && !p.ViewPending && textedit.Reframes(textedit.FramingOf(file), next, !editable)
 	if reframed {
 		// Patched before the round trip, so the ascent transition reflects
 		// the framed window rather than the one the server still holds.
 		a.c.PatchTile(file, func(t *gridwellv1.Tile) {
-			t.TextX = next.X
-			t.TextY = next.Y
-			t.TextW = next.W
-			t.TextH = next.H
-			t.TextMode = next.Mode
+			t.TextX, t.TextY, t.TextMode = next.X, next.Y, next.Mode
 		})
 	}
 
@@ -190,7 +180,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 		}
 		req := &gridwellv1.SetTileRequest{TileId: file.Id,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText,
-				TextX: next.X, TextY: next.Y, TextW: next.W, TextH: next.H, TextMode: next.Mode}}
+				TextX: next.X, TextY: next.Y, TextMode: next.Mode}}
 		a.do(write{
 			label: "SetTextView", gid: gid, id: file.Id,
 			call: func(ctx context.Context) error {

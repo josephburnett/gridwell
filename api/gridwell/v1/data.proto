@@ -141,9 +141,9 @@ message Tile {
   double view_cy = 37;
   string child_grid_id = 13;
 
-  // text-only: text_x/text_y is the scroll offset; text_w/text_h is the
-  // window size; all four are doc-space px. text_mode is "rendered" or
-  // "text". blob_id points at the markdown source in the blobs table.
+  // text-only: text_x/text_y is the scroll offset in doc-space px;
+  // text_w/text_h are dead storage (see the store's columns.go). text_mode is
+  // "rendered" or "text". blob_id points at the markdown source in the blobs table.
   int64 text_x = 14;
   int64 text_y = 15;
   int64 text_w = 16;
@@ -682,7 +682,7 @@ message CloneTileRequest {
 
 // SetTileRequest is the single framing and capture writeback, dispatched on
 // tile.kind to the one operation that kind supports:
-//   text  → text_x/text_y/text_w/text_h/text_mode  (framing)
+//   text  → text_x/text_y/text_mode                (framing)
 //   url   → alt_text (page title), preview jpeg, url_history
 //                                                 (automatic capture)
 //   shell → preview jpeg                          (automatic capture)

@@ -45,7 +45,7 @@ func TestWriteResponseDoesNotRevertALaterSameVersionFraming(t *testing.T) {
 		t.Errorf("cached TextY = %d after the WriteContent response, want %d: the node holds %d, "+
 			"so the cache reverted a later same-version framing write", got.TextY, newY, newY)
 	}
-	pane := textedit.Framing{Y: newY, W: 600, H: 400, Mode: rpc.TextModeText}
+	pane := textedit.Framing{Y: newY, Mode: rpc.TextModeText}
 	if textedit.Reframes(textedit.FramingOf(got), pane, false) {
 		t.Errorf("the next settle re-sends SetTextView %+v, which the node already holds", pane)
 	}

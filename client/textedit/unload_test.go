@@ -33,15 +33,14 @@ func TestDecideUnloadFlush(t *testing.T) {
 }
 
 func TestFramingChangedCountsEveryField(t *testing.T) {
-	cur := FramingOf(&gridwellv1.Tile{TextX: 1, TextY: 2, TextW: 300, TextH: 400, TextMode: "text"})
+	cur := FramingOf(&gridwellv1.Tile{TextX: 1, TextY: 2, TextMode: "text"})
 	if FramingChanged(cur, cur) {
 		t.Fatal("identical framing must not write")
 	}
 	for name, next := range map[string]Framing{
-		"x":    {X: 9, Y: 2, W: 300, H: 400, Mode: "text"},
-		"w":    {X: 1, Y: 2, W: 301, H: 400, Mode: "text"},
-		"h":    {X: 1, Y: 2, W: 300, H: 401, Mode: "text"},
-		"mode": {X: 1, Y: 2, W: 300, H: 400, Mode: "rendered"},
+		"x":    {X: 9, Y: 2, Mode: "text"},
+		"y":    {X: 1, Y: 3, Mode: "text"},
+		"mode": {X: 1, Y: 2, Mode: "rendered"},
 	} {
 		if !FramingChanged(cur, next) {
 			t.Errorf("%s change must write", name)
@@ -50,39 +49,34 @@ func TestFramingChangedCountsEveryField(t *testing.T) {
 }
 
 // A never-framed row is not a framing but the absence of one: no window and no
-// mode, and what the tile shows in its place is the top of the doc in the box
-// it is open in, at the mode a descent picks with nothing stored. Both framing
-// writers must diff against that, or the first ascent out of a document nobody
-// has opened stamps it with a window and a mode the user never chose.
+// mode, and what the tile shows in its place is the top of the doc at the mode
+// a descent picks with nothing stored. Both framing writers must diff against
+// that, or the first ascent out of a document nobody has opened stamps it with
+// a window and a mode the user never chose.
 func TestLookingAtADocumentNeverStampsAWindowOnIt(t *testing.T) {
-	for _, box := range []Box{{W: 600, H: 400}, {W: 320, H: 900}} {
-		for _, readOnly := range []bool{false, true} {
-			mode := DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})
-			shown := ShownFraming(Framing{}, box, readOnly)
-			// What an ascent measures after a pure look: the box it was
-			// opened in, the top of the doc, the mode the descent installed.
-			if FramingChanged(shown, Framing{W: box.W, H: box.H, Mode: mode}) {
-				t.Errorf("box %+v read-only %v: a look stamped %+v", box, readOnly, shown)
-			}
-			other := rpc.TextModeRendered
-			if mode == rpc.TextModeRendered {
-				other = rpc.TextModeText
-			}
-			for name, next := range map[string]Framing{
-				"a scroll":   {Y: 120, W: box.W, H: box.H, Mode: mode},
-				"a resize":   {W: box.W + 40, H: box.H, Mode: mode},
-				"a retoggle": {W: box.W, H: box.H, Mode: other},
-			} {
-				if !FramingChanged(shown, next) {
-					t.Errorf("box %+v read-only %v: %s must still be written", box, readOnly, name)
-				}
+	for _, readOnly := range []bool{false, true} {
+		mode := DescentMode(ModeInput{TextDocument: true, ReadOnly: readOnly, Cached: true})
+		// What an ascent measures after a pure look: the top of the doc, the
+		// mode the descent installed.
+		if Reframes(Framing{}, Framing{Mode: mode}, readOnly) {
+			t.Errorf("read-only %v: a look stamped a window", readOnly)
+		}
+		other := rpc.TextModeRendered
+		if mode == rpc.TextModeRendered {
+			other = rpc.TextModeText
+		}
+		for name, next := range map[string]Framing{
+			"a scroll":   {Y: 120, Mode: mode},
+			"a retoggle": {Mode: other},
+		} {
+			if !Reframes(Framing{}, next, readOnly) {
+				t.Errorf("read-only %v: %s must still be written", readOnly, name)
 			}
 		}
 	}
-	// A framed row is its own framing, whatever box it is read in, so every
-	// reframe of one is written as before.
-	stored := Framing{X: 1, Y: 2, W: 300, H: 400, Mode: rpc.TextModeText}
-	if got := ShownFraming(stored, Box{W: 900, H: 900}, false); got != stored {
+	// A framed row is its own framing, so every reframe of one is written.
+	stored := Framing{X: 1, Y: 2, Mode: rpc.TextModeText}
+	if got := ShownFraming(stored, false); got != stored {
 		t.Errorf("a framed row shows %+v, want the stored %+v", got, stored)
 	}
 }
@@ -133,5 +127,15 @@ func TestShownModeIsDescentModeAtDisplayTime(t *testing.T) {
 		if got := ShownMode(DescentMode(in), false); got != DescentMode(in) {
 			t.Errorf("stored %q: descent installs %q, display shows %q", stored, DescentMode(in), got)
 		}
+	}
+}
+
+// The pane's box is the viewer's geometry, not a fact about the tile: two
+// devices open one tile in panes of different sizes, and neither may write the
+// row for that alone, or each focus overwrites the other's window.
+func TestAWindowSizeIsNotAReframe(t *testing.T) {
+	stored := FramingOf(&gridwellv1.Tile{TextX: 1, TextY: 2, TextW: 300, TextH: 400, TextMode: rpc.TextModeText})
+	if Reframes(stored, Framing{X: 1, Y: 2, Mode: rpc.TextModeText}, false) {
+		t.Error("a pane of another size reframed a row nobody scrolled")
 	}
 }

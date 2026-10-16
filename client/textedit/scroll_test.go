@@ -50,13 +50,11 @@ func TestAScrollPersistsOnceAndStampsNoOtherRow(t *testing.T) {
 	b.Pop()
 	b.Push(pane.ContentFrame("doc-b", pane.Footprint{X: 2, W: 1, H: 1}, 1, rpc.TextModeText, 0, 0))
 
-	box := Box{W: 600, H: 400}
 	rows := map[string]Framing{"doc-a": {}, "doc-b": {}} // both never framed
 	var writes []string
 	flush := func() {
 		tree.Walk(func(p *pane.Pane) {
-			next := Framing{X: int64(p.TextScrollX + 0.5), Y: int64(p.TextScrollY + 0.5),
-				W: box.W, H: box.H, Mode: p.TextMode}
+			next := Framing{X: int64(p.TextScrollX + 0.5), Y: int64(p.TextScrollY + 0.5), Mode: p.TextMode}
 			if Reframes(rows[p.ContentID()], next, false) {
 				rows[p.ContentID()] = next
 				writes = append(writes, p.ContentID())
