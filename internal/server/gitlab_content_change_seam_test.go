@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
 )
@@ -24,7 +25,7 @@ func TestGitLabOpenTodoShowsItsNewText(t *testing.T) {
 	if got := k.body(id); !bytes.Contains(got, []byte("the first note")) {
 		t.Fatalf("open todo %q", got)
 	}
-	if err := k.cl.SetInterest(k.ctx, []string{week}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{week}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()

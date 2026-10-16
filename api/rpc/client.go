@@ -232,11 +232,16 @@ type EventStream struct {
 	s *connect.ServerStreamForClient[pb.Event]
 }
 
-// SetInterest tells the node every grid this client is showing. The node
-// forgets it when the client's last event stream closes, so a client says it
-// again after every re-open.
-func (c *Client) SetInterest(ctx context.Context, gridIDs []string) error {
-	_, err := c.cl.SetInterest(ctx, connect.NewRequest(&pb.SetInterestRequest{Session: c.session, GridIds: gridIDs}))
+// SetView tells the node what this client shows, under this client's
+// session. The node forgets it when the client's last event stream closes, so
+// a client says it again after every re-open.
+func (c *Client) SetView(ctx context.Context, v *pb.SetViewRequest) error {
+	req := &pb.SetViewRequest{}
+	if v != nil {
+		req = proto.CloneOf(v)
+	}
+	req.Session = c.session
+	_, err := c.cl.SetView(ctx, connect.NewRequest(req))
 	return err
 }
 

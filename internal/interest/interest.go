@@ -1,44 +1,60 @@
-// Package interest owns which grids the node's clients are showing: each
-// session's set, counted while that session's event stream is open, and the
-// union of every counted set, which is what the node's sources are asked to
-// watch.
+// Package interest owns what the node's clients are showing: each session's
+// view (SetView), held while that session's event stream is open, and the
+// union of every held view's shown grids, which is what the node's sources are
+// asked to watch. It lives in memory only; nothing here is a node fact.
 package interest
 
 import (
 	"slices"
+	"sort"
 	"sync"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// maxIdle bounds the sessions kept with no stream open. A set is sent and a
+// maxIdle bounds the sessions kept with no stream open. A view is sent and a
 // stream opened as two calls, and the node sees them in either order, so a
-// set whose stream is not open is kept uncounted rather than dropped. A client
-// that went away never comes back for its set, so only the newest few are
-// kept.
+// view whose stream is not open is kept uncounted rather than dropped. A
+// client that went away never comes back for its view, so only the newest few
+// are kept.
 const maxIdle = 16
 
-// Book is the node's one record of interest.
+// Book is the node's one record of what its clients show.
 type Book struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 	idle     []string // sessions with no stream open, oldest first
 	union    []string
 	spread   func(union []string)
+	now      func() time.Time
 }
 
 type session struct {
 	streams int
-	grids   []string
+	view    *pb.SetViewRequest
+	changed time.Time
+}
+
+// Session is one session's view as the node holds it: read-only, and its
+// label is View.Label.
+type Session struct {
+	ID      string
+	View    *pb.SetViewRequest
+	Changed time.Time // when the view last differed from the one before
 }
 
 // New builds an empty book. spread hears each new union, in order, under the
 // book's lock, so it must not block.
 func New(spread func(union []string)) *Book {
-	return &Book{sessions: map[string]*session{}, spread: spread}
+	return &Book{sessions: map[string]*session{}, spread: spread, now: time.Now}
 }
 
 // Open counts one event stream under id until close. A session counts only
 // while one of its streams is open, so a client that went away cannot keep a
-// source watched.
+// source watched nor be listed.
 func (b *Book) Open(id string) (close func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -59,11 +75,16 @@ func (b *Book) Open(id string) (close func()) {
 	}
 }
 
-// Set replaces id's set.
-func (b *Book) Set(id string, grids []string) {
+// Set replaces id's view. Saying the same view again, as a client does after
+// every re-open, is not a change.
+func (b *Book) Set(id string, v *pb.SetViewRequest) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.at(id).grids = slices.Clone(grids)
+	s := b.at(id)
+	if s.view == nil || !proto.Equal(s.view, v) {
+		s.view = proto.CloneOf(v)
+		s.changed = b.now()
+	}
 	b.recount()
 }
 
@@ -72,6 +93,20 @@ func (b *Book) Union() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return slices.Clone(b.union)
+}
+
+// Sessions is every counted session that has said what it shows, by id.
+func (b *Book) Sessions() []Session {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []Session
+	for id, s := range b.sessions {
+		if s.streams > 0 && s.view != nil {
+			out = append(out, Session{ID: id, View: proto.CloneOf(s.view), Changed: s.changed})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 func (b *Book) at(id string) *session {
@@ -97,7 +132,7 @@ func (b *Book) recount() {
 	var u []string
 	for _, s := range b.sessions {
 		if s.streams > 0 {
-			u = append(u, s.grids...)
+			u = append(u, s.view.GetShownGridIds()...)
 		}
 	}
 	slices.Sort(u)

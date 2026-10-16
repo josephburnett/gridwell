@@ -3,7 +3,15 @@ package interest
 import (
 	"slices"
 	"testing"
+	"time"
+
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
+
+// shown is a view of grids alone, the part the union reads.
+func shown(grids ...string) *pb.SetViewRequest {
+	return &pb.SetViewRequest{ShownGridIds: grids}
+}
 
 func record() (*Book, *[][]string) {
 	var heard [][]string
@@ -17,8 +25,8 @@ func TestUnionAcrossClientsAndDisconnect(t *testing.T) {
 	b, heard := record()
 	closeA := b.Open("a")
 	closeB := b.Open("b")
-	b.Set("a", []string{"n/1", "p/2"})
-	b.Set("b", []string{"p/2", "p/3"})
+	b.Set("a", shown("n/1", "p/2"))
+	b.Set("b", shown("p/2", "p/3"))
 	if got, want := union(b), []string{"n/1", "p/2", "p/3"}; !slices.Equal(got, want) {
 		t.Fatalf("union = %v, want %v", got, want)
 	}
@@ -35,13 +43,13 @@ func TestUnionAcrossClientsAndDisconnect(t *testing.T) {
 	}
 }
 
-// A set sent before its stream is open is held and counts from the open, and
+// A view sent before its stream is open is held and counts from the open, and
 // one said again while the node still holds the old stream survives that
 // stream's close into the new one: the node sees a client's two calls in
 // either order.
 func TestSetCountsOnlyWhileAStreamIsOpen(t *testing.T) {
 	b, _ := record()
-	b.Set("a", []string{"p/2"})
+	b.Set("a", shown("p/2"))
 	if got := union(b); len(got) != 0 {
 		t.Fatalf("with no stream open, union = %v, want empty", got)
 	}
@@ -49,7 +57,7 @@ func TestSetCountsOnlyWhileAStreamIsOpen(t *testing.T) {
 	if got := union(b); !slices.Equal(got, []string{"p/2"}) {
 		t.Fatalf("once the stream opens, union = %v, want [p/2]", got)
 	}
-	b.Set("a", []string{"p/3"})
+	b.Set("a", shown("p/3"))
 	closeA()
 	if got := union(b); len(got) != 0 {
 		t.Fatalf("with the stream closed, union = %v, want empty", got)
@@ -64,9 +72,9 @@ func TestSetCountsOnlyWhileAStreamIsOpen(t *testing.T) {
 // so the book does not grow with every page ever loaded.
 func TestIdleSessionsAreBounded(t *testing.T) {
 	b, _ := record()
-	b.Set("gone", []string{"p/2"})
+	b.Set("gone", shown("p/2"))
 	for i := range maxIdle {
-		b.Set(string(rune('a'+i)), []string{"p/9"})
+		b.Set(string(rune('a'+i)), shown("p/9"))
 	}
 	b.Open("gone")
 	if got := union(b); len(got) != 0 {
@@ -82,7 +90,7 @@ func TestIdleSessionsAreBounded(t *testing.T) {
 func TestOverlappingStreamsKeepTheSession(t *testing.T) {
 	b, _ := record()
 	closeOld := b.Open("a")
-	b.Set("a", []string{"p/2"})
+	b.Set("a", shown("p/2"))
 	b.Open("a")
 	closeOld()
 	closeOld()
@@ -96,9 +104,9 @@ func TestSpreadOnlyOnChange(t *testing.T) {
 	b, heard := record()
 	b.Open("a")
 	b.Open("b")
-	b.Set("a", []string{"p/2"})
-	b.Set("b", []string{"p/2"})
-	b.Set("a", []string{"p/2"})
+	b.Set("a", shown("p/2"))
+	b.Set("b", shown("p/2"))
+	b.Set("a", shown("p/2"))
 	if len(*heard) != 1 || !slices.Equal((*heard)[0], []string{"p/2"}) {
 		t.Errorf("spread %v, want exactly [[p/2]]", *heard)
 	}
@@ -109,4 +117,38 @@ func union(b *Book) []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return slices.Clone(b.union)
+}
+
+// A session's view is listed while a stream carrying it is open and not after,
+// with when it last changed: the same view said again after a re-open is no
+// change.
+func TestSessionsListOnlyOpenStreams(t *testing.T) {
+	b, _ := record()
+	clock := time.Unix(100, 0)
+	b.now = func() time.Time { return clock }
+	view := &pb.SetViewRequest{Label: "desktop", ShownGridIds: []string{"p/2"},
+		Panes: []*pb.ViewPane{{Id: "p0", Anchor: "p/1", Path: []string{"p/5"}, GridId: "p/2", Focused: true}}}
+	b.Set("a", view)
+	if got := b.Sessions(); len(got) != 0 {
+		t.Fatalf("with no stream open, sessions = %v, want none", got)
+	}
+	closeA := b.Open("a")
+	got := b.Sessions()
+	if len(got) != 1 || got[0].ID != "a" || got[0].View.GetLabel() != "desktop" ||
+		got[0].View.GetPanes()[0].GetGridId() != "p/2" || !got[0].Changed.Equal(time.Unix(100, 0)) {
+		t.Fatalf("sessions = %v, want a's desktop view changed at 100", got)
+	}
+	clock = time.Unix(200, 0)
+	b.Set("a", view)
+	if c := b.Sessions()[0].Changed; !c.Equal(time.Unix(100, 0)) {
+		t.Errorf("the same view said again moved changed to %v", c)
+	}
+	b.Set("a", shown("p/3"))
+	if c := b.Sessions()[0].Changed; !c.Equal(time.Unix(200, 0)) {
+		t.Errorf("a new view left changed at %v, want 200", c)
+	}
+	closeA()
+	if got := b.Sessions(); len(got) != 0 {
+		t.Errorf("after the stream closed, sessions = %v, want none", got)
+	}
 }

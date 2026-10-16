@@ -380,7 +380,7 @@ func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
 			events <- ev
 		}
 	}()
-	if err := cl.SetInterest(ctx, []string{boxGrid()}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{boxGrid()}}); err != nil {
 		t.Fatal(err)
 	}
 	for watched := false; !watched; {
@@ -447,7 +447,7 @@ func TestATargetsNewBytesReachTheBodyALinkShows(t *testing.T) {
 			events <- ev
 		}
 	}()
-	if err := cl.SetInterest(ctx, []string{boxGrid()}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{boxGrid()}}); err != nil {
 		t.Fatal(err)
 	}
 	for watched := false; !watched; {

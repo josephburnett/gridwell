@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -21,7 +22,7 @@ func TestProcOpenInfoShowsItsNewState(t *testing.T) {
 	if got := k.body(id); !bytes.Contains(got, []byte("state: S")) {
 		t.Fatalf("open @info %q", got)
 	}
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()

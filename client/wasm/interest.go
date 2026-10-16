@@ -43,7 +43,7 @@ func (a *App) sendInterest() {
 				break
 			}
 			ctx, cancel := inflight.Bounded()
-			err := a.cl.SetInterest(ctx, set)
+			err := a.cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: set})
 			cancel()
 			if err == nil {
 				a.resolveErr("interest")

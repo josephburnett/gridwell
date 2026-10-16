@@ -114,7 +114,7 @@ func TestProcWatchReachesAClientShowingThePid(t *testing.T) {
 	if _, err := cl.GetGrid(ctx, shown); err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown}}); err != nil {
 		t.Fatal(err)
 	}
 	await := func(what string) {

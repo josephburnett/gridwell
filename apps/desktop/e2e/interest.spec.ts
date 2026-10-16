@@ -4,11 +4,11 @@ import { dumpViaDoor, TraceLine } from './trace';
 
 // The node's sources watch only what some client shows, and only the client
 // knows what that is (pane.Showing, sent by the shim's syncInterest). The
-// node's interest/union record is its own account of what it heard, so this
+// node's view/union record is its own account of what it heard, so this
 // reads it across the whole seam: a gesture in the app, the union on the node.
 
 function lastUnion(lines: TraceLine[]): string[] | null {
-  const u = lines.filter((l) => l.src === 'interest' && l.kind === 'union');
+  const u = lines.filter((l) => l.src === 'view' && l.kind === 'union');
   if (u.length === 0) return null;
   const msg = u[u.length - 1].msg;
   return msg === '' ? [] : msg.split(' ');

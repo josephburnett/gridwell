@@ -778,23 +778,56 @@ message SetFramingResponse {
 // Event stream.
 
 // SubscribeRequest's session names the client holding the stream, a string
-// the client mints once (rpc.Client). What SetInterest says under that session
+// the client mints once (rpc.Client). What SetView says under that session
 // counts while a stream carrying it is open, and no longer, so a client that
 // goes away cannot keep a source watched. Empty names no session.
 message SubscribeRequest {
   string session = 1;
 }
 
-// SetInterest is the whole set of grids a client is showing, qualified, sent
-// whenever it changes and again whenever the client's stream re-opens. It is
-// unary rather than a Subscribe field because the set changes many times in
-// one stream's life. The node unions every open session's set, and each
-// plugin's share of the union is the scope of its Watch.
-message SetInterestRequest {
-  string          session  = 1;
-  repeated string grid_ids = 2;
+// SetView is the whole of what one session shows, sent whenever any of it
+// changes and again whenever the session's stream re-opens; it replaces the
+// retired SetInterest, whose two fields it keeps at their numbers. It is unary
+// rather than a Subscribe field because the view changes many times in one
+// stream's life. The node holds the latest per session in memory while a
+// stream carrying the session is open and never stores it.
+//
+// shown_grid_ids is derived on the client, because the layout rects that say
+// what is on screen are session-ephemeral client facts: each laid-out pane's
+// grid and the child grid of every well whose preview is on screen,
+// qualified, sorted, each once (pane.Showing). The node unions every open
+// session's shown_grid_ids, and each namespace's share of the union, sent to
+// it as a SetView with only shown_grid_ids and no session, is the scope of
+// its Watch.
+message SetViewRequest {
+  string          session        = 1;
+  repeated string shown_grid_ids = 2;
+  // label names the kind of client: "desktop", "browser", or "node" for
+  // another node telling its share through a connection.
+  string          label          = 3;
+  repeated ViewPane panes        = 4;
+  // pane_tiles is the window's pane-tile level, the pane tiles it is inside,
+  // outermost first; empty outside every pane tile. panes are the tree of the
+  // innermost.
+  repeated string pane_tiles     = 5;
 }
-message SetInterestResponse {}
+message SetViewResponse {}
+
+// ViewPane is one pane of a session's view: its place as the URL grammar
+// names it (pane.URLState), qualified, and whether it has focus.
+message ViewPane {
+  string          id         = 1;
+  // anchor is the grid the place's last namespace level is rooted at, and
+  // path the doorway tiles from it down to the pane's grid.
+  string          anchor     = 2;
+  repeated string path       = 3;
+  // content_id is the content tile the pane is inside, "" on a grid.
+  string          content_id = 4;
+  // grid_id is the grid the pane is at, or that its content tile sits in,
+  // derived on the client as shown_grid_ids is; "" while it is not cached.
+  string          grid_id    = 5;
+  bool            focused    = 6;
+}
 
 // DisableSource switches off a plugin or connection this node declares,
 // named as its health event names it, until the node restarts. It is held in
@@ -913,6 +946,8 @@ service Gridwell {
   rpc ShellSessionAlive(ShellSessionAliveRequest) returns (ShellSessionAliveResponse);
 
   rpc Subscribe(SubscribeRequest) returns (stream Event);
-  rpc SetInterest(SetInterestRequest) returns (SetInterestResponse);
+  // SetInterest is RETIRED (2026-10-15): SetView carries what it did.
+
+  rpc SetView(SetViewRequest) returns (SetViewResponse);
   rpc DisableSource(DisableSourceRequest) returns (DisableSourceResponse);
 }

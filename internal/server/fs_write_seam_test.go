@@ -99,7 +99,7 @@ func TestFsSaveLandsAndItsEchoLeavesTheTypedTextAlone(t *testing.T) {
 	k.fetchGrid(k.landing)
 	id := rpc.ContentID(k.tile("notes.md"))
 	k.body(id)
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()
@@ -159,7 +159,7 @@ func TestFsSaveOverBytesChangedOnDiskIsRefusedAndSurfaces(t *testing.T) {
 	k.fetchGrid(k.landing)
 	id := rpc.ContentID(k.tile("notes.md"))
 	k.body(id)
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()

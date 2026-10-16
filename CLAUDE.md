@@ -256,6 +256,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   when it says it is listening, so a change made before then is not missed.
   Both ends of a connection run a build that sends it; a far node that sends
   none reads as dark until it is upgraded (`namespace.Follow`, 2026-10-14).
+- A client tells the node what it shows as one view per session
+  (`SetView`): its panes, each pane's place and whether it has focus, the
+  window's pane-tile level, a label ("desktop", "browser"), and the grids on
+  screen, which the client derives because the layout rects are its own. The
+  view is the interest set's one owner: the union the sources watch derives
+  from it, and the node holds it in memory per session while a stream
+  carrying that session is open, never stored, so the pane tree stays
+  session-ephemeral (`interest.Book`, `Server.Sessions`, 2026-10-15).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections

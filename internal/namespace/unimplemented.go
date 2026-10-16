@@ -97,6 +97,6 @@ func (Unimplemented) Subscribe(context.Context, *pb.SubscribeRequest, func(*pb.E
 	return unimp("Subscribe")
 }
 
-func (Unimplemented) SetInterest(context.Context, *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
-	return nil, unimp("SetInterest")
+func (Unimplemented) SetView(context.Context, *pb.SetViewRequest) (*pb.SetViewResponse, error) {
+	return nil, unimp("SetView")
 }

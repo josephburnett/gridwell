@@ -1,8 +1,8 @@
 package server_test
 
-// Interest through the web door: what each client says it shows reaches each
-// namespace as its share of the union, held while that client's event stream
-// is open.
+// The view through the web door: what each client says it shows is held
+// while that client's event stream is open, and reaches each namespace as its
+// share of the union.
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -43,11 +44,11 @@ func (s *interestSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeReq
 	return nil
 }
 
-func (s *interestSink) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequest) (*gridwellv1.SetInterestResponse, error) {
+func (s *interestSink) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.share, s.heard = slices.Clone(req.GridIds), s.heard+1
-	return &gridwellv1.SetInterestResponse{}, nil
+	s.share, s.heard = slices.Clone(req.ShownGridIds), s.heard+1
+	return &gridwellv1.SetViewResponse{}, nil
 }
 
 // await waits for the sink's share to be want.
@@ -69,7 +70,7 @@ func (s *interestSink) await(t *testing.T, want []string) {
 }
 
 // subscribed opens cl's event stream and returns its close. The open is not
-// awaited: a set sent before the node sees the stream is held until it does.
+// awaited: a view sent before the node sees the stream is held until it does.
 func subscribed(cl *rpc.Client) func() {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -103,10 +104,10 @@ func TestInterestReachesEachNamespaceAsItsShare(t *testing.T) {
 
 	closeOne := subscribed(one)
 	closeTwo := subscribed(two)
-	if err := one.SetInterest(ctx, []string{a + "/1", a + "/2", b + "/9"}); err != nil {
+	if err := one.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{a + "/1", a + "/2", b + "/9"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := two.SetInterest(ctx, []string{a + "/2", a + "/3"}); err != nil {
+	if err := two.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{a + "/2", a + "/3"}}); err != nil {
 		t.Fatal(err)
 	}
 	sinkA.await(t, []string{"1", "2", "3"})
@@ -130,10 +131,63 @@ func TestInterestCrossesAConnection(t *testing.T) {
 	ctx := context.Background()
 
 	closeSub := subscribed(h.localCl)
-	if err := h.localCl.SetInterest(ctx, []string{localNodeID + "/geneva/" + far + "/5"}); err != nil {
+	if err := h.localCl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{localNodeID + "/geneva/" + far + "/5"}}); err != nil {
 		t.Fatal(err)
 	}
 	sink.await(t, []string{"5"})
 	closeSub()
 	sink.await(t, nil)
+}
+
+// A session's whole view crosses the Connect codec and is readable from
+// Sessions while its stream is open, with its label, panes and focus, and is
+// gone once the stream closes.
+func TestSessionsHoldEachViewWhileItsStreamIsOpen(t *testing.T) {
+	const a = "pinta01"
+	sink := &interestSink{}
+	reg := plugin.NewRegistry()
+	reg.Register(a, "feed", sink, nil)
+	srv := servertest.New(t, reg, server.Config{ID: localNodeID})
+	hs := servertest.Serve(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx := context.Background()
+
+	closeSub := subscribed(cl)
+	view := &gridwellv1.SetViewRequest{
+		Label:        "browser",
+		ShownGridIds: []string{a + "/2", a + "/7"},
+		PaneTiles:    []string{localNodeID + "9"},
+		Panes: []*gridwellv1.ViewPane{
+			{Id: "p0", Anchor: a + "/1", Path: []string{a + "/4"}, GridId: a + "/2", Focused: true},
+			{Id: "p1", Anchor: a + "/1", Path: []string{a + "/4"}, ContentId: a + "/5", GridId: a + "/2"},
+		},
+	}
+	if err := cl.SetView(ctx, view); err != nil {
+		t.Fatal(err)
+	}
+	sink.await(t, []string{"2", "7"})
+	var held []server.Session
+	deadline := time.Now().Add(5 * time.Second)
+	for len(held) == 0 && time.Now().Before(deadline) {
+		held = srv.Sessions()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(held) != 1 {
+		t.Fatalf("sessions = %v, want the one client", held)
+	}
+	got := held[0]
+	if got.ID == "" || got.Changed.IsZero() {
+		t.Errorf("session %q changed %v, want an id and a time", got.ID, got.Changed)
+	}
+	want := proto.CloneOf(view)
+	want.Session = got.ID
+	if !proto.Equal(got.View, want) {
+		t.Errorf("held view = %v, want %v", got.View, want)
+	}
+
+	closeSub()
+	sink.await(t, nil)
+	if held := srv.Sessions(); len(held) != 0 {
+		t.Errorf("after the stream closed, sessions = %v, want none", held)
+	}
 }

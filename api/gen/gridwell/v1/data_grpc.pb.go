@@ -50,7 +50,7 @@ const (
 	Gridwell_SetFraming_FullMethodName        = "/gridwell.v1.Gridwell/SetFraming"
 	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
-	Gridwell_SetInterest_FullMethodName       = "/gridwell.v1.Gridwell/SetInterest"
+	Gridwell_SetView_FullMethodName           = "/gridwell.v1.Gridwell/SetView"
 	Gridwell_DisableSource_FullMethodName     = "/gridwell.v1.Gridwell/DisableSource"
 )
 
@@ -94,7 +94,7 @@ type GridwellClient interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
-	SetInterest(ctx context.Context, in *SetInterestRequest, opts ...grpc.CallOption) (*SetInterestResponse, error)
+	SetView(ctx context.Context, in *SetViewRequest, opts ...grpc.CallOption) (*SetViewResponse, error)
 	DisableSource(ctx context.Context, in *DisableSourceRequest, opts ...grpc.CallOption) (*DisableSourceResponse, error)
 }
 
@@ -329,10 +329,10 @@ func (c *gridwellClient) Subscribe(ctx context.Context, in *SubscribeRequest, op
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_SubscribeClient = grpc.ServerStreamingClient[Event]
 
-func (c *gridwellClient) SetInterest(ctx context.Context, in *SetInterestRequest, opts ...grpc.CallOption) (*SetInterestResponse, error) {
+func (c *gridwellClient) SetView(ctx context.Context, in *SetViewRequest, opts ...grpc.CallOption) (*SetViewResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SetInterestResponse)
-	err := c.cc.Invoke(ctx, Gridwell_SetInterest_FullMethodName, in, out, cOpts...)
+	out := new(SetViewResponse)
+	err := c.cc.Invoke(ctx, Gridwell_SetView_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +389,7 @@ type GridwellServer interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
-	SetInterest(context.Context, *SetInterestRequest) (*SetInterestResponse, error)
+	SetView(context.Context, *SetViewRequest) (*SetViewResponse, error)
 	DisableSource(context.Context, *DisableSourceRequest) (*DisableSourceResponse, error)
 	mustEmbedUnimplementedGridwellServer()
 }
@@ -458,8 +458,8 @@ func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSess
 func (UnimplementedGridwellServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
 }
-func (UnimplementedGridwellServer) SetInterest(context.Context, *SetInterestRequest) (*SetInterestResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetInterest not implemented")
+func (UnimplementedGridwellServer) SetView(context.Context, *SetViewRequest) (*SetViewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetView not implemented")
 }
 func (UnimplementedGridwellServer) DisableSource(context.Context, *DisableSourceRequest) (*DisableSourceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DisableSource not implemented")
@@ -784,20 +784,20 @@ func _Gridwell_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) erro
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_SubscribeServer = grpc.ServerStreamingServer[Event]
 
-func _Gridwell_SetInterest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetInterestRequest)
+func _Gridwell_SetView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetViewRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).SetInterest(ctx, in)
+		return srv.(GridwellServer).SetView(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_SetInterest_FullMethodName,
+		FullMethod: Gridwell_SetView_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).SetInterest(ctx, req.(*SetInterestRequest))
+		return srv.(GridwellServer).SetView(ctx, req.(*SetViewRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -884,8 +884,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_ShellSessionAlive_Handler,
 		},
 		{
-			MethodName: "SetInterest",
-			Handler:    _Gridwell_SetInterest_Handler,
+			MethodName: "SetView",
+			Handler:    _Gridwell_SetView_Handler,
 		},
 		{
 			MethodName: "DisableSource",

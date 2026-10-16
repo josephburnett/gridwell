@@ -107,7 +107,7 @@ func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, shown 
 		}
 	}()
 	// A plugin watches only what some client shows.
-	if err := cl.SetInterest(ctx, shown); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: shown}); err != nil {
 		t.Fatal(err)
 	}
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -252,7 +252,7 @@ func TestPluginWatchIsScopedToWhatAClientShows(t *testing.T) {
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	closeSub := subscribed(cl)
-	if err := cl.SetInterest(context.Background(), []string{rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))}); err != nil {
+	if err := cl.SetView(context.Background(), &gridwellv1.SetViewRequest{ShownGridIds: []string{rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))}}); err != nil {
 		t.Fatal(err)
 	}
 	select {

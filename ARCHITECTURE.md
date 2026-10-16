@@ -92,7 +92,7 @@ record shapes. Everything else derives from it:
 | Framing | `SetFraming` — the one framing write |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
-| Events | `Subscribe`, `SetInterest` — the grids a client shows, held while its stream is open |
+| Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
 
 No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
@@ -231,9 +231,9 @@ each connection's reachability rather than only publishing the transition:
 the transport's event stream opens with every connection that is dark right now, so a client that
 subscribes after the machine died is told, and the cache in front of it
 stamps what it remembers. The transport is also one client of each far node:
-its share of the interest union (`SetInterest`) is cut by connection and
-told to that node under the session of the connection's own event stream
-(`connection.tellFar`), so a far plugin watches what is on screen here.
+its share of the interest union is cut by connection and told to that node
+as a `SetView` of grids alone, labelled `node`, under the session of the
+connection's own event stream (`connection.tellFar`), so a far plugin watches what is on screen here.
 
 **Disabled** is the one health a user sets. `DisableSource` names a plugin
 or a connection as its health event does, and `plugin.Registry` is the one
@@ -557,8 +557,9 @@ rides the end record), with the duration and, on a failure, the code. What emits
 store write (one record at `withMutation`, the transaction every mutation runs
 in), every publish, delivery and coalesce in `eventhub`, the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
-transition, the shell door's refusals, opens and closes, each new union of
-the grids the clients show (`interest/union`), and — through
+transition, the shell door's refusals, opens and closes, each session's
+view as it arrives (`view/set`), each new union of the grids the clients show
+(`view/union`), and — through
 `log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.
@@ -621,7 +622,7 @@ copy:
 | does this page run the node's build, and what it does when not | `Server.staleBuild`; `gwerr.StaleBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
 | this event stream is established | `namespace.Follow` |
-| which grids the clients are showing | `interest.Book`, fed by `SetInterest`, counted by the `Subscribe` stream |
+| what each session shows, and which grids the clients are showing | `interest.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
 | how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
 | the trace line, its door and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |

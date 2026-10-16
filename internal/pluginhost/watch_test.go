@@ -88,7 +88,7 @@ func show(t *testing.T, a *Adapter, contexts ...string) {
 	for _, c := range contexts {
 		grids = append(grids, rpc.EntryGridID(c))
 	}
-	if _, err := a.SetInterest(context.Background(), &gridwellv1.SetInterestRequest{GridIds: grids}); err != nil {
+	if _, err := a.SetView(context.Background(), &gridwellv1.SetViewRequest{ShownGridIds: grids}); err != nil {
 		t.Fatal(err)
 	}
 }

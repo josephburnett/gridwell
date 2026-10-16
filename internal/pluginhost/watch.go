@@ -4,7 +4,7 @@ package pluginhost
 // grid open on screen: a moved listing becomes the GridChanged a write through
 // this adapter would have published, and an entry changed in place the
 // TileChanged that carries its bytes' news. Its scope is the contexts some
-// client shows (SetInterest) and the contexts their link entries point into
+// client shows (SetView) and the contexts their link entries point into
 // (noteLinks).
 
 import (
@@ -375,13 +375,13 @@ func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func
 	}
 }
 
-// SetInterest takes this plugin's share of the node's interest, grids the
+// SetView takes this plugin's share of the node's interest, grids the
 // node serves for it, as the contexts shown. A grid that no longer resolves
 // is not watched. A share it cannot take leaves the scope where it was, so
 // live updates are off for what is shown until one lands.
-func (a *Adapter) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequest) (*gridwellv1.SetInterestResponse, error) {
+func (a *Adapter) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
 	var shown []string
-	for _, gid := range req.GetGridIds() {
+	for _, gid := range req.GetShownGridIds() {
 		_, c, err := a.resolveGrid(gid)
 		switch status.Code(err) {
 		case codes.OK:
@@ -400,7 +400,7 @@ func (a *Adapter) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequ
 	defer a.scopeMu.Unlock()
 	a.shown = shown
 	a.rescopeLocked()
-	return &gridwellv1.SetInterestResponse{}, nil
+	return &gridwellv1.SetViewResponse{}, nil
 }
 
 // noteLinks records the contexts one live listing's link entries point into.

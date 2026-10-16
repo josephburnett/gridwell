@@ -81,10 +81,10 @@ type Namespace interface {
 	// once attached, a codec writes it as its transport's header, and Follow
 	// takes it as established; a stream that never sends it never is.
 	Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error
-	// SetInterest names the grids someone is showing. At the node's door it
-	// is one session's set (interest.Book); from the node to one of its
-	// namespaces it is that namespace's whole share of the union, with no
-	// session, and one it cannot take it tells on its own stream as
-	// EventPluginHealth.live_updates_off.
-	SetInterest(ctx context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error)
+	// SetView says what someone is showing. At the node's door it is one
+	// session's whole view (interest.Book); from the node to one of its
+	// namespaces it is that namespace's whole share of the union as
+	// shown_grid_ids, with no session, and one it cannot take it tells on its
+	// own stream as EventPluginHealth.live_updates_off.
+	SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error)
 }

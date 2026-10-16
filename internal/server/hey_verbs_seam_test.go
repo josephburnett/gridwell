@@ -195,7 +195,7 @@ func TestHeyWatchHeaderArrivesWhenAStreamOpens(t *testing.T) {
 	}
 	hey.SetBox("imbox", heyfake.Thread{TopicID: 104, Subject: "Moved", Summary: "while nobody watched",
 		From: "Fay", Email: "fay@example.com", Created: time.Date(2026, 1, 10, 9, 0, 0, 0, time.UTC)})
-	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown}}); err != nil {
 		t.Fatal(err)
 	}
 	for {

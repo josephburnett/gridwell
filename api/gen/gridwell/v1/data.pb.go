@@ -3348,7 +3348,7 @@ func (x *SetFramingResponse) GetTile() *Tile {
 }
 
 // SubscribeRequest's session names the client holding the stream, a string
-// the client mints once (rpc.Client). What SetInterest says under that session
+// the client mints once (rpc.Client). What SetView says under that session
 // counts while a stream carrying it is open, and no longer, so a client that
 // goes away cannot keep a source watched. Empty names no session.
 type SubscribeRequest struct {
@@ -3395,33 +3395,50 @@ func (x *SubscribeRequest) GetSession() string {
 	return ""
 }
 
-// SetInterest is the whole set of grids a client is showing, qualified, sent
-// whenever it changes and again whenever the client's stream re-opens. It is
-// unary rather than a Subscribe field because the set changes many times in
-// one stream's life. The node unions every open session's set, and each
-// plugin's share of the union is the scope of its Watch.
-type SetInterestRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Session       string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
-	GridIds       []string               `protobuf:"bytes,2,rep,name=grid_ids,json=gridIds,proto3" json:"grid_ids,omitempty"`
+// SetView is the whole of what one session shows, sent whenever any of it
+// changes and again whenever the session's stream re-opens; it replaces the
+// retired SetInterest, whose two fields it keeps at their numbers. It is unary
+// rather than a Subscribe field because the view changes many times in one
+// stream's life. The node holds the latest per session in memory while a
+// stream carrying the session is open and never stores it.
+//
+// shown_grid_ids is derived on the client, because the layout rects that say
+// what is on screen are session-ephemeral client facts: each laid-out pane's
+// grid and the child grid of every well whose preview is on screen,
+// qualified, sorted, each once (pane.Showing). The node unions every open
+// session's shown_grid_ids, and each namespace's share of the union, sent to
+// it as a SetView with only shown_grid_ids and no session, is the scope of
+// its Watch.
+type SetViewRequest struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Session      string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	ShownGridIds []string               `protobuf:"bytes,2,rep,name=shown_grid_ids,json=shownGridIds,proto3" json:"shown_grid_ids,omitempty"`
+	// label names the kind of client: "desktop", "browser", or "node" for
+	// another node telling its share through a connection.
+	Label string      `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Panes []*ViewPane `protobuf:"bytes,4,rep,name=panes,proto3" json:"panes,omitempty"`
+	// pane_tiles is the window's pane-tile level, the pane tiles it is inside,
+	// outermost first; empty outside every pane tile. panes are the tree of the
+	// innermost.
+	PaneTiles     []string `protobuf:"bytes,5,rep,name=pane_tiles,json=paneTiles,proto3" json:"pane_tiles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetInterestRequest) Reset() {
-	*x = SetInterestRequest{}
+func (x *SetViewRequest) Reset() {
+	*x = SetViewRequest{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetInterestRequest) String() string {
+func (x *SetViewRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetInterestRequest) ProtoMessage() {}
+func (*SetViewRequest) ProtoMessage() {}
 
-func (x *SetInterestRequest) ProtoReflect() protoreflect.Message {
+func (x *SetViewRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3433,45 +3450,66 @@ func (x *SetInterestRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetInterestRequest.ProtoReflect.Descriptor instead.
-func (*SetInterestRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetViewRequest.ProtoReflect.Descriptor instead.
+func (*SetViewRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{44}
 }
 
-func (x *SetInterestRequest) GetSession() string {
+func (x *SetViewRequest) GetSession() string {
 	if x != nil {
 		return x.Session
 	}
 	return ""
 }
 
-func (x *SetInterestRequest) GetGridIds() []string {
+func (x *SetViewRequest) GetShownGridIds() []string {
 	if x != nil {
-		return x.GridIds
+		return x.ShownGridIds
 	}
 	return nil
 }
 
-type SetInterestResponse struct {
+func (x *SetViewRequest) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *SetViewRequest) GetPanes() []*ViewPane {
+	if x != nil {
+		return x.Panes
+	}
+	return nil
+}
+
+func (x *SetViewRequest) GetPaneTiles() []string {
+	if x != nil {
+		return x.PaneTiles
+	}
+	return nil
+}
+
+type SetViewResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetInterestResponse) Reset() {
-	*x = SetInterestResponse{}
+func (x *SetViewResponse) Reset() {
+	*x = SetViewResponse{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetInterestResponse) String() string {
+func (x *SetViewResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetInterestResponse) ProtoMessage() {}
+func (*SetViewResponse) ProtoMessage() {}
 
-func (x *SetInterestResponse) ProtoReflect() protoreflect.Message {
+func (x *SetViewResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3483,9 +3521,100 @@ func (x *SetInterestResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetInterestResponse.ProtoReflect.Descriptor instead.
-func (*SetInterestResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetViewResponse.ProtoReflect.Descriptor instead.
+func (*SetViewResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{45}
+}
+
+// ViewPane is one pane of a session's view: its place as the URL grammar
+// names it (pane.URLState), qualified, and whether it has focus.
+type ViewPane struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// anchor is the grid the place's last namespace level is rooted at, and
+	// path the doorway tiles from it down to the pane's grid.
+	Anchor string   `protobuf:"bytes,2,opt,name=anchor,proto3" json:"anchor,omitempty"`
+	Path   []string `protobuf:"bytes,3,rep,name=path,proto3" json:"path,omitempty"`
+	// content_id is the content tile the pane is inside, "" on a grid.
+	ContentId string `protobuf:"bytes,4,opt,name=content_id,json=contentId,proto3" json:"content_id,omitempty"`
+	// grid_id is the grid the pane is at, or that its content tile sits in,
+	// derived on the client as shown_grid_ids is; "" while it is not cached.
+	GridId        string `protobuf:"bytes,5,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
+	Focused       bool   `protobuf:"varint,6,opt,name=focused,proto3" json:"focused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ViewPane) Reset() {
+	*x = ViewPane{}
+	mi := &file_gridwell_v1_data_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ViewPane) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ViewPane) ProtoMessage() {}
+
+func (x *ViewPane) ProtoReflect() protoreflect.Message {
+	mi := &file_gridwell_v1_data_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ViewPane.ProtoReflect.Descriptor instead.
+func (*ViewPane) Descriptor() ([]byte, []int) {
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ViewPane) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ViewPane) GetAnchor() string {
+	if x != nil {
+		return x.Anchor
+	}
+	return ""
+}
+
+func (x *ViewPane) GetPath() []string {
+	if x != nil {
+		return x.Path
+	}
+	return nil
+}
+
+func (x *ViewPane) GetContentId() string {
+	if x != nil {
+		return x.ContentId
+	}
+	return ""
+}
+
+func (x *ViewPane) GetGridId() string {
+	if x != nil {
+		return x.GridId
+	}
+	return ""
+}
+
+func (x *ViewPane) GetFocused() bool {
+	if x != nil {
+		return x.Focused
+	}
+	return false
 }
 
 // DisableSource switches off a plugin or connection this node declares,
@@ -3501,7 +3630,7 @@ type DisableSourceRequest struct {
 
 func (x *DisableSourceRequest) Reset() {
 	*x = DisableSourceRequest{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[46]
+	mi := &file_gridwell_v1_data_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3513,7 +3642,7 @@ func (x *DisableSourceRequest) String() string {
 func (*DisableSourceRequest) ProtoMessage() {}
 
 func (x *DisableSourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[46]
+	mi := &file_gridwell_v1_data_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3526,7 +3655,7 @@ func (x *DisableSourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableSourceRequest.ProtoReflect.Descriptor instead.
 func (*DisableSourceRequest) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{46}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *DisableSourceRequest) GetNamespace() string {
@@ -3544,7 +3673,7 @@ type DisableSourceResponse struct {
 
 func (x *DisableSourceResponse) Reset() {
 	*x = DisableSourceResponse{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[47]
+	mi := &file_gridwell_v1_data_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3556,7 +3685,7 @@ func (x *DisableSourceResponse) String() string {
 func (*DisableSourceResponse) ProtoMessage() {}
 
 func (x *DisableSourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[47]
+	mi := &file_gridwell_v1_data_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3569,7 +3698,7 @@ func (x *DisableSourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisableSourceResponse.ProtoReflect.Descriptor instead.
 func (*DisableSourceResponse) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{47}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{48}
 }
 
 // GridChanged says a grid's listing changed: the client refetches it.
@@ -3582,7 +3711,7 @@ type GridChanged struct {
 
 func (x *GridChanged) Reset() {
 	*x = GridChanged{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[48]
+	mi := &file_gridwell_v1_data_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3594,7 +3723,7 @@ func (x *GridChanged) String() string {
 func (*GridChanged) ProtoMessage() {}
 
 func (x *GridChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[48]
+	mi := &file_gridwell_v1_data_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3607,7 +3736,7 @@ func (x *GridChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GridChanged.ProtoReflect.Descriptor instead.
 func (*GridChanged) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{48}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GridChanged) GetGridId() string {
@@ -3634,7 +3763,7 @@ type GridFramingChanged struct {
 
 func (x *GridFramingChanged) Reset() {
 	*x = GridFramingChanged{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[49]
+	mi := &file_gridwell_v1_data_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3646,7 +3775,7 @@ func (x *GridFramingChanged) String() string {
 func (*GridFramingChanged) ProtoMessage() {}
 
 func (x *GridFramingChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[49]
+	mi := &file_gridwell_v1_data_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3659,7 +3788,7 @@ func (x *GridFramingChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GridFramingChanged.ProtoReflect.Descriptor instead.
 func (*GridFramingChanged) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{49}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GridFramingChanged) GetGridId() string {
@@ -3706,7 +3835,7 @@ type TileChanged struct {
 
 func (x *TileChanged) Reset() {
 	*x = TileChanged{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[50]
+	mi := &file_gridwell_v1_data_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3718,7 +3847,7 @@ func (x *TileChanged) String() string {
 func (*TileChanged) ProtoMessage() {}
 
 func (x *TileChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[50]
+	mi := &file_gridwell_v1_data_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3731,7 +3860,7 @@ func (x *TileChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TileChanged.ProtoReflect.Descriptor instead.
 func (*TileChanged) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{50}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *TileChanged) GetTile() *Tile {
@@ -3758,7 +3887,7 @@ type TileRemoved struct {
 
 func (x *TileRemoved) Reset() {
 	*x = TileRemoved{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[51]
+	mi := &file_gridwell_v1_data_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3770,7 +3899,7 @@ func (x *TileRemoved) String() string {
 func (*TileRemoved) ProtoMessage() {}
 
 func (x *TileRemoved) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[51]
+	mi := &file_gridwell_v1_data_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3783,7 +3912,7 @@ func (x *TileRemoved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TileRemoved.ProtoReflect.Descriptor instead.
 func (*TileRemoved) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{51}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *TileRemoved) GetGridId() string {
@@ -3824,7 +3953,7 @@ type EventPluginHealth struct {
 
 func (x *EventPluginHealth) Reset() {
 	*x = EventPluginHealth{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[52]
+	mi := &file_gridwell_v1_data_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3836,7 +3965,7 @@ func (x *EventPluginHealth) String() string {
 func (*EventPluginHealth) ProtoMessage() {}
 
 func (x *EventPluginHealth) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[52]
+	mi := &file_gridwell_v1_data_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3849,7 +3978,7 @@ func (x *EventPluginHealth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventPluginHealth.ProtoReflect.Descriptor instead.
 func (*EventPluginHealth) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{52}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *EventPluginHealth) GetPluginUuid() string {
@@ -3904,7 +4033,7 @@ type Event struct {
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_gridwell_v1_data_proto_msgTypes[53]
+	mi := &file_gridwell_v1_data_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3916,7 +4045,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_gridwell_v1_data_proto_msgTypes[53]
+	mi := &file_gridwell_v1_data_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3929,7 +4058,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{53}
+	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *Event) GetPayload() isEvent_Payload {
@@ -4272,11 +4401,23 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x12SetFramingResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\",\n" +
 	"\x10SubscribeRequest\x12\x18\n" +
-	"\asession\x18\x01 \x01(\tR\asession\"I\n" +
-	"\x12SetInterestRequest\x12\x18\n" +
-	"\asession\x18\x01 \x01(\tR\asession\x12\x19\n" +
-	"\bgrid_ids\x18\x02 \x03(\tR\agridIds\"\x15\n" +
-	"\x13SetInterestResponse\"4\n" +
+	"\asession\x18\x01 \x01(\tR\asession\"\xb2\x01\n" +
+	"\x0eSetViewRequest\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12$\n" +
+	"\x0eshown_grid_ids\x18\x02 \x03(\tR\fshownGridIds\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12+\n" +
+	"\x05panes\x18\x04 \x03(\v2\x15.gridwell.v1.ViewPaneR\x05panes\x12\x1d\n" +
+	"\n" +
+	"pane_tiles\x18\x05 \x03(\tR\tpaneTiles\"\x11\n" +
+	"\x0fSetViewResponse\"\x98\x01\n" +
+	"\bViewPane\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06anchor\x18\x02 \x01(\tR\x06anchor\x12\x12\n" +
+	"\x04path\x18\x03 \x03(\tR\x04path\x12\x1d\n" +
+	"\n" +
+	"content_id\x18\x04 \x01(\tR\tcontentId\x12\x17\n" +
+	"\agrid_id\x18\x05 \x01(\tR\x06gridId\x12\x18\n" +
+	"\afocused\x18\x06 \x01(\bR\afocused\"4\n" +
 	"\x14DisableSourceRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\x17\n" +
 	"\x15DisableSourceResponse\"&\n" +
@@ -4306,7 +4447,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\ftile_removed\x18\x03 \x01(\v2\x18.gridwell.v1.TileRemovedH\x00R\vtileRemoved\x12E\n" +
 	"\rplugin_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventPluginHealthH\x00R\fpluginHealth\x12S\n" +
 	"\x14grid_framing_changed\x18\x05 \x01(\v2\x1f.gridwell.v1.GridFramingChangedH\x00R\x12gridFramingChangedB\t\n" +
-	"\apayload2\xc2\f\n" +
+	"\apayload2\xb6\f\n" +
 	"\bGridwell\x12;\n" +
 	"\x04Info\x12\x18.gridwell.v1.InfoRequest\x1a\x19.gridwell.v1.InfoResponse\x12>\n" +
 	"\x05Probe\x12\x19.gridwell.v1.ProbeRequest\x1a\x1a.gridwell.v1.ProbeResponse\x12J\n" +
@@ -4329,8 +4470,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"SetFraming\x12\x1e.gridwell.v1.SetFramingRequest\x1a\x1f.gridwell.v1.SetFramingResponse\x12b\n" +
 	"\x11ShellSessionAlive\x12%.gridwell.v1.ShellSessionAliveRequest\x1a&.gridwell.v1.ShellSessionAliveResponse\x12@\n" +
-	"\tSubscribe\x12\x1d.gridwell.v1.SubscribeRequest\x1a\x12.gridwell.v1.Event0\x01\x12P\n" +
-	"\vSetInterest\x12\x1f.gridwell.v1.SetInterestRequest\x1a .gridwell.v1.SetInterestResponse\x12V\n" +
+	"\tSubscribe\x12\x1d.gridwell.v1.SubscribeRequest\x1a\x12.gridwell.v1.Event0\x01\x12D\n" +
+	"\aSetView\x12\x1b.gridwell.v1.SetViewRequest\x1a\x1c.gridwell.v1.SetViewResponse\x12V\n" +
 	"\rDisableSource\x12!.gridwell.v1.DisableSourceRequest\x1a\".gridwell.v1.DisableSourceResponseB\xab\x01\n" +
 	"\x0fcom.gridwell.v1B\tDataProtoP\x01Z@github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridwellv1\xa2\x02\x03GXX\xaa\x02\vGridwell.V1\xca\x02\vGridwell\\V1\xe2\x02\x17Gridwell\\V1\\GPBMetadata\xea\x02\fGridwell::V1b\x06proto3"
 
@@ -4347,7 +4488,7 @@ func file_gridwell_v1_data_proto_rawDescGZIP() []byte {
 }
 
 var file_gridwell_v1_data_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_gridwell_v1_data_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),       // 0: gridwell.v1.ProbeResponse.Presence
 	(*Grid)(nil),                      // 1: gridwell.v1.Grid
@@ -4394,16 +4535,17 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*SetFramingRequest)(nil),         // 42: gridwell.v1.SetFramingRequest
 	(*SetFramingResponse)(nil),        // 43: gridwell.v1.SetFramingResponse
 	(*SubscribeRequest)(nil),          // 44: gridwell.v1.SubscribeRequest
-	(*SetInterestRequest)(nil),        // 45: gridwell.v1.SetInterestRequest
-	(*SetInterestResponse)(nil),       // 46: gridwell.v1.SetInterestResponse
-	(*DisableSourceRequest)(nil),      // 47: gridwell.v1.DisableSourceRequest
-	(*DisableSourceResponse)(nil),     // 48: gridwell.v1.DisableSourceResponse
-	(*GridChanged)(nil),               // 49: gridwell.v1.GridChanged
-	(*GridFramingChanged)(nil),        // 50: gridwell.v1.GridFramingChanged
-	(*TileChanged)(nil),               // 51: gridwell.v1.TileChanged
-	(*TileRemoved)(nil),               // 52: gridwell.v1.TileRemoved
-	(*EventPluginHealth)(nil),         // 53: gridwell.v1.EventPluginHealth
-	(*Event)(nil),                     // 54: gridwell.v1.Event
+	(*SetViewRequest)(nil),            // 45: gridwell.v1.SetViewRequest
+	(*SetViewResponse)(nil),           // 46: gridwell.v1.SetViewResponse
+	(*ViewPane)(nil),                  // 47: gridwell.v1.ViewPane
+	(*DisableSourceRequest)(nil),      // 48: gridwell.v1.DisableSourceRequest
+	(*DisableSourceResponse)(nil),     // 49: gridwell.v1.DisableSourceResponse
+	(*GridChanged)(nil),               // 50: gridwell.v1.GridChanged
+	(*GridFramingChanged)(nil),        // 51: gridwell.v1.GridFramingChanged
+	(*TileChanged)(nil),               // 52: gridwell.v1.TileChanged
+	(*TileRemoved)(nil),               // 53: gridwell.v1.TileRemoved
+	(*EventPluginHealth)(nil),         // 54: gridwell.v1.EventPluginHealth
+	(*Event)(nil),                     // 55: gridwell.v1.Event
 }
 var file_gridwell_v1_data_proto_depIdxs = []int32{
 	2,  // 0: gridwell.v1.Grid.menu_entries:type_name -> gridwell.v1.MenuEntry
@@ -4425,59 +4567,60 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	3,  // 16: gridwell.v1.SetTileRequest.tile:type_name -> gridwell.v1.Tile
 	21, // 17: gridwell.v1.DeleteTileRequest.claim:type_name -> gridwell.v1.Placement
 	3,  // 18: gridwell.v1.SetFramingResponse.tile:type_name -> gridwell.v1.Tile
-	3,  // 19: gridwell.v1.TileChanged.tile:type_name -> gridwell.v1.Tile
-	49, // 20: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
-	51, // 21: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
-	52, // 22: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
-	53, // 23: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
-	50, // 24: gridwell.v1.Event.grid_framing_changed:type_name -> gridwell.v1.GridFramingChanged
-	4,  // 25: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
-	6,  // 26: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
-	27, // 27: gridwell.v1.Gridwell.Handshake:input_type -> gridwell.v1.HandshakeRequest
-	8,  // 28: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
-	11, // 29: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
-	22, // 30: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
-	13, // 31: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
-	23, // 32: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
-	15, // 33: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
-	17, // 34: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
-	18, // 35: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
-	20, // 36: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
-	35, // 37: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
-	39, // 38: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
-	38, // 39: gridwell.v1.Gridwell.CloneTile:input_type -> gridwell.v1.CloneTileRequest
-	40, // 40: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
-	42, // 41: gridwell.v1.Gridwell.SetFraming:input_type -> gridwell.v1.SetFramingRequest
-	36, // 42: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
-	44, // 43: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
-	45, // 44: gridwell.v1.Gridwell.SetInterest:input_type -> gridwell.v1.SetInterestRequest
-	47, // 45: gridwell.v1.Gridwell.DisableSource:input_type -> gridwell.v1.DisableSourceRequest
-	5,  // 46: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
-	7,  // 47: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
-	30, // 48: gridwell.v1.Gridwell.Handshake:output_type -> gridwell.v1.HandshakeResponse
-	9,  // 49: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
-	12, // 50: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
-	31, // 51: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
-	14, // 52: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
-	25, // 53: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
-	16, // 54: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
-	31, // 55: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
-	19, // 56: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
-	31, // 57: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
-	31, // 58: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
-	31, // 59: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
-	31, // 60: gridwell.v1.Gridwell.CloneTile:output_type -> gridwell.v1.TileResponse
-	41, // 61: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
-	43, // 62: gridwell.v1.Gridwell.SetFraming:output_type -> gridwell.v1.SetFramingResponse
-	37, // 63: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
-	54, // 64: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
-	46, // 65: gridwell.v1.Gridwell.SetInterest:output_type -> gridwell.v1.SetInterestResponse
-	48, // 66: gridwell.v1.Gridwell.DisableSource:output_type -> gridwell.v1.DisableSourceResponse
-	46, // [46:67] is the sub-list for method output_type
-	25, // [25:46] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	47, // 19: gridwell.v1.SetViewRequest.panes:type_name -> gridwell.v1.ViewPane
+	3,  // 20: gridwell.v1.TileChanged.tile:type_name -> gridwell.v1.Tile
+	50, // 21: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
+	52, // 22: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
+	53, // 23: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
+	54, // 24: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
+	51, // 25: gridwell.v1.Event.grid_framing_changed:type_name -> gridwell.v1.GridFramingChanged
+	4,  // 26: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
+	6,  // 27: gridwell.v1.Gridwell.Probe:input_type -> gridwell.v1.ProbeRequest
+	27, // 28: gridwell.v1.Gridwell.Handshake:input_type -> gridwell.v1.HandshakeRequest
+	8,  // 29: gridwell.v1.Gridwell.OpenShell:input_type -> gridwell.v1.OpenShellRequest
+	11, // 30: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
+	22, // 31: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
+	13, // 32: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
+	23, // 33: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
+	15, // 34: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
+	17, // 35: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
+	18, // 36: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
+	20, // 37: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
+	35, // 38: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
+	39, // 39: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
+	38, // 40: gridwell.v1.Gridwell.CloneTile:input_type -> gridwell.v1.CloneTileRequest
+	40, // 41: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
+	42, // 42: gridwell.v1.Gridwell.SetFraming:input_type -> gridwell.v1.SetFramingRequest
+	36, // 43: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
+	44, // 44: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
+	45, // 45: gridwell.v1.Gridwell.SetView:input_type -> gridwell.v1.SetViewRequest
+	48, // 46: gridwell.v1.Gridwell.DisableSource:input_type -> gridwell.v1.DisableSourceRequest
+	5,  // 47: gridwell.v1.Gridwell.Info:output_type -> gridwell.v1.InfoResponse
+	7,  // 48: gridwell.v1.Gridwell.Probe:output_type -> gridwell.v1.ProbeResponse
+	30, // 49: gridwell.v1.Gridwell.Handshake:output_type -> gridwell.v1.HandshakeResponse
+	9,  // 50: gridwell.v1.Gridwell.OpenShell:output_type -> gridwell.v1.OpenShellResponse
+	12, // 51: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
+	31, // 52: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
+	14, // 53: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
+	25, // 54: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
+	16, // 55: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
+	31, // 56: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
+	19, // 57: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
+	31, // 58: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
+	31, // 59: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
+	31, // 60: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
+	31, // 61: gridwell.v1.Gridwell.CloneTile:output_type -> gridwell.v1.TileResponse
+	41, // 62: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
+	43, // 63: gridwell.v1.Gridwell.SetFraming:output_type -> gridwell.v1.SetFramingResponse
+	37, // 64: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
+	55, // 65: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
+	46, // 66: gridwell.v1.Gridwell.SetView:output_type -> gridwell.v1.SetViewResponse
+	49, // 67: gridwell.v1.Gridwell.DisableSource:output_type -> gridwell.v1.DisableSourceResponse
+	47, // [47:68] is the sub-list for method output_type
+	26, // [26:47] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_gridwell_v1_data_proto_init() }
@@ -4487,7 +4630,7 @@ func file_gridwell_v1_data_proto_init() {
 	}
 	file_gridwell_v1_data_proto_msgTypes[0].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[38].OneofWrappers = []any{}
-	file_gridwell_v1_data_proto_msgTypes[53].OneofWrappers = []any{
+	file_gridwell_v1_data_proto_msgTypes[54].OneofWrappers = []any{
 		(*Event_GridChanged)(nil),
 		(*Event_TileChanged)(nil),
 		(*Event_TileRemoved)(nil),
@@ -4500,7 +4643,7 @@ func file_gridwell_v1_data_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gridwell_v1_data_proto_rawDesc), len(file_gridwell_v1_data_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   54,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

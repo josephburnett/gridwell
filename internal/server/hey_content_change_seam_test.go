@@ -82,7 +82,7 @@ func showHeyThread(t *testing.T) *heyShown {
 	if _, err := s.cl.GetGrid(ctx, s.shown); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.cl.SetInterest(ctx, []string{s.shown}); err != nil {
+	if err := s.cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{s.shown}}); err != nil {
 		t.Fatal(err)
 	}
 	s.feed = hey.AwaitFeed(t)
