@@ -11,8 +11,8 @@ import (
 
 // The view names every pane on screen in tree order, each with its place as
 // the URL grammar names it, the grid it resolves to and whether it has focus;
-// the pane-tile level the window is inside; the label; and Showing, the well
-// previews included. A pane the layout hides is not on screen.
+// the pane-tile level the window is inside, with each pane's bare id in that
+// layout; the label; and Showing, the well previews included. A pane the layout hides is not on screen.
 func TestView(t *testing.T) {
 	grids := map[string]map[string]*gridwellv1.Tile{
 		"g-w5": {"w1": well("w1", 0, 0, "c/1")},
@@ -41,8 +41,8 @@ func TestView(t *testing.T) {
 		PaneTiles:    []string{"home/4", "p/9"},
 		ShownGridIds: []string{"c/1", "g-w2", "g-w5"},
 		Panes: []*gridwellv1.ViewPane{
-			{Id: first.ID, Anchor: "p/1", Path: []string{"w5"}, GridId: "g-w5"},
-			{Id: second.ID, Anchor: "n/1", Path: []string{"w2"}, ContentId: "t3", GridId: "g-w2", Focused: true},
+			{Id: first.ID, Anchor: "p/1", Path: []string{"w5"}, GridId: "g-w5", LayoutPaneId: "p1"},
+			{Id: second.ID, Anchor: "n/1", Path: []string{"w2"}, ContentId: "t3", GridId: "g-w2", Focused: true, LayoutPaneId: "p2"},
 		},
 	}
 	if !proto.Equal(got, want) {
