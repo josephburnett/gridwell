@@ -111,6 +111,16 @@ func (c *Client) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb
 	return resp.Msg.GetTile(), nil
 }
 
+// SetSelection replaces a grid's selection, claiming the set the writer saw.
+// The set on disk comes back as SelectionChanged, never in the reply.
+func (c *Client) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) error {
+	if err := unclaimed(req); err != nil {
+		return err
+	}
+	_, err := c.cl.SetSelection(ctx, connect.NewRequest(req))
+	return err
+}
+
 // ReadContent's first chunk carries the media type and the basis the bytes
 // belong to, which is the save basis. A leaf link resolves at the serving
 // node.

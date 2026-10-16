@@ -70,6 +70,10 @@ func (g *grpcServer) SetFraming(ctx context.Context, req *pb.SetFramingRequest) 
 	return g.ns.SetFraming(ctx, req)
 }
 
+func (g *grpcServer) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	return g.ns.SetSelection(ctx, req)
+}
+
 func (g *grpcServer) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
 	return g.ns.ShellSessionAlive(ctx, req)
 }

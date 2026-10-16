@@ -84,6 +84,10 @@ func (h *connectHandler) SetFraming(ctx context.Context, req *connect.Request[pb
 	return unary(h.rt.SetFraming)(ctx, req)
 }
 
+func (h *connectHandler) SetSelection(ctx context.Context, req *connect.Request[pb.SetSelectionRequest]) (*connect.Response[pb.SetSelectionResponse], error) {
+	return unary(h.rt.SetSelection)(ctx, req)
+}
+
 func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
 	return unary(h.rt.ShellSessionAlive)(ctx, req)
 }

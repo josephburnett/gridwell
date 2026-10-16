@@ -9,6 +9,7 @@ package sourcecache
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -950,6 +951,8 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		if f, ok := rpc.ViewOf(fc.GetViewCx(), fc.GetViewCy(), fc.GetViewZoom()).Framing(); ok {
 			c.reframe(ctx, fc.GetGridId(), f)
 		}
+	case *pb.Event_SelectionChanged:
+		c.reselect(ctx, p.SelectionChanged.GetGridId(), p.SelectionChanged.GetTileIds())
 	case *pb.Event_PluginHealth:
 		// The source's supervisor says whether it can be reached. A key deeper
 		// than a connection segment is a far plugin, not the machine. No
@@ -1032,6 +1035,45 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
 	}
 	return resp, err
+}
+
+// SetSelection passes through, and a write the source accepted is remembered
+// from the request: accepted, the source's row holds exactly that set.
+func (c *Layer) SetSelection(ctx context.Context, in *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	resp, err := c.Namespace.SetSelection(ctx, in)
+	c.noteReachGrid(ctx, err, in.GridId)
+	if err == nil {
+		c.reselect(ctx, in.GridId, in.TileIds)
+	}
+	return resp, err
+}
+
+// reselect is the one writer of a remembered grid's selection, from the
+// source's event and an accepted write alike, so a dark read answers with the
+// set the source last held.
+func (c *Layer) reselect(ctx context.Context, gridID string, ids []string) {
+	c.order.fold([]string{gridID}, func() {
+		c.inTx(ctx, "reselect", func(tx *sql.Tx) error {
+			var gb []byte
+			err := tx.QueryRowContext(ctx, `SELECT proto FROM grids WHERE id = ?`, gridID).Scan(&gb)
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			g := &pb.Grid{}
+			if err := proto.Unmarshal(gb, g); err != nil {
+				return err
+			}
+			g.Selection = ids
+			if gb, err = proto.Marshal(g); err != nil {
+				return err
+			}
+			_, err = tx.ExecContext(ctx, `UPDATE grids SET proto = ? WHERE id = ?`, gb, gridID)
+			return err
+		})
+	})
 }
 
 // reframe is the one writer of a root grid's remembered framing: it lands on

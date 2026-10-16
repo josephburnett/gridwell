@@ -110,8 +110,9 @@ folds in the same way (`applyEvent`): `TileChanged` and `TileRemoved` into
 the tile rows, a well's framing riding its tile, and `GridFramingChanged` into
 every remembered handshake's doorways rooted at that grid (`Layer.reframe`,
 over `rpc.Reframe`), which is also where an accepted root `SetFraming` lands,
-so a far grid reopens dark where it was last left. A write the source did not
-accept is remembered nowhere. `prefetch.go` warms
+so a far grid reopens dark where it was last left. `SelectionChanged` and an
+accepted `SetSelection` land the whole set on the remembered grid
+(`Layer.reselect`). A write the source did not accept is remembered nowhere. `prefetch.go` warms
 every source on Subscribe and one source when it comes back;
 `servecontent.go` gives the `/content/` door the same treatment under its own
 caps.
@@ -573,6 +574,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |
 | A doorway answered with no framing keeps the remembered one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt` |
 | Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its wells | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
+| A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
 | A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |

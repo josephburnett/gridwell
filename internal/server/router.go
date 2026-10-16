@@ -594,6 +594,25 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	return &pb.SetFramingResponse{Tile: t}, nil
 }
 
+// SetSelection routes a selection write to the namespace owning the grid,
+// every id it names peeled for that hop.
+func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	if err := refuseUnclaimed(req); err != nil {
+		return nil, err
+	}
+	c, _, _, transit, err := rt.route(req.GridId)
+	if err != nil {
+		return nil, err
+	}
+	if err := rt.refuseDisabled(req.GridId); err != nil {
+		return nil, err
+	}
+	if _, err := c.SetSelection(ctx, rpc.PeelRequest(rt.hop(req.GridId, transit), req)); err != nil {
+		return nil, err
+	}
+	return &pb.SetSelectionResponse{}, nil
+}
+
 // ShellSessionAlive routes the per-descent probe to the namespace holding the
 // PTY. With disable_shells every session is dead by design, a verdict; any
 // other failure is the owner's to answer and the client's to report.

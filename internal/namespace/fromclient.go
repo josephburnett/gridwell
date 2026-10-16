@@ -69,6 +69,10 @@ func (f fromClient) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (
 	return f.c.SetFraming(ctx, req)
 }
 
+func (f fromClient) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	return f.c.SetSelection(ctx, req)
+}
+
 func (f fromClient) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
 	return f.c.ShellSessionAlive(ctx, req)
 }

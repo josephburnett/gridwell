@@ -685,6 +685,12 @@ func (s *Server) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 	return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.SetFraming, asIs)
 }
 
+// SetSelection forwards a far grid's selection write: the selection is the far
+// node's fact.
+func (s *Server) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.SetSelection, asIs)
+}
+
 func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	return forwardVerb(ctx, s, req.GridId, func(local string, _ rpc.Hop) *gridwellv1.GetGridRequest {
 		return &gridwellv1.GetGridRequest{GridId: local}

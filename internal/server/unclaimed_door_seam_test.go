@@ -25,6 +25,7 @@ func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 		place  func(*gridwellv1.PlaceTileRequest) error
 		delete func(*gridwellv1.DeleteTileRequest) error
 		set    func(*gridwellv1.SetTileRequest) error
+		sel    func(*gridwellv1.SetSelectionRequest) error
 		code   func(error) codes.Code
 	}
 	doors := map[string]door{
@@ -41,12 +42,17 @@ func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 				_, err := me.web.SetTile(ctx, connect.NewRequest(r))
 				return err
 			},
+			sel: func(r *gridwellv1.SetSelectionRequest) error {
+				_, err := me.web.SetSelection(ctx, connect.NewRequest(r))
+				return err
+			},
 			code: func(err error) codes.Code { return codes.Code(connect.CodeOf(err)) },
 		},
 		"connection door": {
 			place:  func(r *gridwellv1.PlaceTileRequest) error { _, err := me.far.PlaceTile(ctx, r); return err },
 			delete: func(r *gridwellv1.DeleteTileRequest) error { _, err := me.far.DeleteTile(ctx, r); return err },
 			set:    func(r *gridwellv1.SetTileRequest) error { _, err := me.far.SetTile(ctx, r); return err },
+			sel:    func(r *gridwellv1.SetSelectionRequest) error { _, err := me.far.SetSelection(ctx, r); return err },
 			code:   status.Code,
 		},
 	}
@@ -77,6 +83,15 @@ func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 				refused("freeze", d.set(&gridwellv1.SetTileRequest{TileId: page.Id, UrlFrozen: &yes}), "claim_frozen")
 				if got := m.tileIn(ctx, meNode, grid, page.Id); got.UrlFrozen {
 					t.Fatal("a claimless freeze landed")
+				}
+
+				refused("select", d.sel(&gridwellv1.SetSelectionRequest{GridId: grid, TileIds: []string{tile.Id}}), "claim")
+				g, err := me.cl.GetGrid(ctx, grid)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(g.Grid.Selection) != 0 {
+					t.Fatalf("a claimless selection landed: %v", g.Grid.Selection)
 				}
 			})
 		}

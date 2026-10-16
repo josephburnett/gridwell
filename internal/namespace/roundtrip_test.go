@@ -54,6 +54,7 @@ type fake struct {
 	events   []*pb.Event
 	shellIn  []*pb.OpenShellRequest
 	interest []*pb.SetInterestRequest
+	selected []*pb.SetSelectionRequest
 }
 
 func (f *fake) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
@@ -97,6 +98,10 @@ func (f *fake) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTil
 }
 func (f *fake) SetFraming(context.Context, *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	return &pb.SetFramingResponse{Tile: f.tile}, nil
+}
+func (f *fake) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	f.selected = append(f.selected, req)
+	return &pb.SetSelectionResponse{}, nil
 }
 func (f *fake) SetInterest(_ context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
 	f.interest = append(f.interest, req)
@@ -182,6 +187,21 @@ func TestTileRoundTripsBytesIdentical(t *testing.T) {
 	}
 	if string(got) != string(wantBytes) {
 		t.Fatalf("tile changed across the codec:\n got %v\nwant %v", resp.GetTile(), want)
+	}
+}
+
+// An empty set is a claim like any other, so a claim of the empty set must
+// cross the codec as a claim and not as none.
+func TestAnEmptySelectionClaimCrossesAsAClaim(t *testing.T) {
+	f := &fake{}
+	ns := loopback(t, f)
+	if _, err := ns.SetSelection(context.Background(), &pb.SetSelectionRequest{
+		GridId: "3", Claim: &pb.SelectionClaim{}, TileIds: []string{"7"},
+	}); err != nil {
+		t.Fatalf("SetSelection: %v", err)
+	}
+	if len(f.selected) != 1 || f.selected[0].GetClaim() == nil || f.selected[0].GetTileIds()[0] != "7" {
+		t.Fatalf("server saw %v", f.selected)
 	}
 }
 

@@ -511,6 +511,10 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		return nil, err
 	}
 	addr := rpc.EntryGridID(ckey)
+	selection, err := a.selection(ckey, gid)
+	if err != nil {
+		return nil, err
+	}
 	g := &gridwellv1.Grid{
 		Id:           addr,
 		AcceptsTiles: proto.Bool(false),
@@ -518,6 +522,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		HostContent:  ci.HostContent,
 		Glyph:        ci.Glyph,
 		SourceLabel:  resp.SourceLabel,
+		Selection:    selection,
 	}
 	wire, err := buildTiles(addr, ckey, tiles, resp.Entries, a.mem.ContextKey)
 	if err != nil {
@@ -929,6 +934,86 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 		return nil, err
 	}
 	return &gridwellv1.SetFramingResponse{Tile: t}, nil
+}
+
+// SetSelection keeps a collection's selection on the node's row for its grid,
+// as its framing is kept; the plugin never sees it. A selected entry is
+// touched, so it gets its row.
+func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+	_, ckey, err := a.resolveGrid(req.GridId)
+	if err != nil {
+		return nil, err
+	}
+	var claim []int64
+	if req.Claim != nil {
+		claim = make([]int64, 0, len(req.Claim.TileIds))
+		for _, id := range req.Claim.TileIds {
+			ref, err := a.resolveTile(id)
+			switch {
+			case gwerr.IsDeadRef(err) || err == nil && ref.id == 0:
+				// The set on the row names only live rows, so this claim
+				// cannot be what it holds; -1 is no row id.
+				claim = append(claim, -1)
+			case err != nil:
+				return nil, err
+			default:
+				claim = append(claim, ref.id)
+			}
+		}
+	}
+	set := make([]int64, 0, len(req.TileIds))
+	for _, id := range req.TileIds {
+		ref, err := a.resolveTile(id)
+		if err != nil {
+			return nil, err
+		}
+		if ref.context != ckey {
+			return nil, status.Errorf(codes.InvalidArgument, "plugin: %q is not on grid %q", id, req.GridId)
+		}
+		row, err := a.mint(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, row)
+	}
+	gid, err := a.mem.ContextID(ckey)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := a.mem.SetSelection(gid, claim, set)
+	if err != nil {
+		return nil, gwerr.ToStatus(err)
+	}
+	if changed {
+		ids, err := a.selection(ckey, gid)
+		if err != nil {
+			return nil, err
+		}
+		a.hub.Publish(rpc.SelectionEvent(rpc.EntryGridID(ckey), ids))
+	}
+	return &gridwellv1.SetSelectionResponse{}, nil
+}
+
+// selection is a context's selection on the wire, each row named by its key
+// as every tile of the grid is; gid 0 is an untouched context, which holds
+// none.
+func (a *Adapter) selection(ckey string, gid int64) ([]string, error) {
+	if gid == 0 {
+		return nil, nil
+	}
+	rows, err := a.mem.Selection(gid)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rows))
+	for _, id := range rows {
+		_, key, _, err := a.mem.TileKey(id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rpc.EntryTileID(ckey, key))
+	}
+	return out, nil
 }
 
 func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
