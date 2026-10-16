@@ -46,7 +46,7 @@ tile sits now; a delete claims its version and where it sits.
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid. |
+| `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles; `selection`: the tiles the user has in hand) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid. |
 | `read_tile` | `id` | One row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux session a shell names, the grid a well holds. A link answers its target's content, or `dead` when the target is gone. |
 | `find` | `query`, `scope`, `limit` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. Each hit names the wells it sits inside; `skipped` names every namespace that did not answer. |
 | `create_text` | `grid`, `body`, `near` | A 1×1 text tile born with the body. Its name is the body's first line. It lands at the first free cell in reading order, or at `near` (`{x, y}`), or below it in its column when that cell is taken. |
@@ -56,6 +56,7 @@ tile sits now; a delete claims its version and where it sits.
 | `clone` | `id`, `grid`, `at` | A deep copy, in `grid` or the tile's own, at `at` or beside the tile. Across namespaces a source that does not answer lands as a link. |
 | `link` | `id`, `grid`, `at` | A link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
 | `delete` | `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
+| `select` | `grid`, `tiles`, `claim` | Sets the grid's selection to `tiles` (empty clears it), claiming the `selection` read_grid gave. Use it to hand a set back: "I selected the five I changed". |
 
 ## Refusals
 
