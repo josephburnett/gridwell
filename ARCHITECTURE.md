@@ -622,6 +622,7 @@ copy:
 | does this page run the node's build, and what it does when not | `Server.staleBuild`; `gwerr.StaleBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
 | this event stream is established | `namespace.Follow` |
+| what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/interest.Tracker` |
 | what each session shows, and which grids the clients are showing | `interest.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
 | how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
 | the trace line, its door and its header | `api/tracewire` |

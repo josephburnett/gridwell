@@ -348,7 +348,7 @@ func (a *App) draw() {
 	a.syncShellOverlayPosition()
 	a.syncURLViews()
 	a.syncMirrors(rects)
-	a.syncInterest(rects)
+	a.syncView(rects)
 	a.drawBottomBar()
 	a.drawErrStrip()
 	// Inside a pane tile, a teal line wraps the window in a reserved gutter.
