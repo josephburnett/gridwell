@@ -147,3 +147,31 @@ func TestUnselectDropsALeaverEverywhere(t *testing.T) {
 		t.Error("a second Unselect reported a change")
 	}
 }
+
+// A split copies the pane's place and views but not its selection: the set is
+// what one pane has in hand, and two panes holding it would carry it twice.
+func TestSplitStartsWithNoSelection(t *testing.T) {
+	tr := NewTree()
+	p := tr.FocusedPane()
+	p.Stack = StackAt("n/1", []string{"n/7"}, "")
+	p.Pop()
+	p.Select([]string{"n/7"})
+	p.Push(Frame{Door: "n/7"})
+	p.Select([]string{"n/4"})
+	p.SetView(3, 4, 2)
+	q, err := tr.Split(Vertical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.View != p.View {
+		t.Errorf("the view was not copied: %v vs %v", q.View, p.View)
+	}
+	for i, f := range q.Frames() {
+		if f.Selection != nil {
+			t.Errorf("new pane frame %d holds %v", i, f.Selection)
+		}
+	}
+	if fr := p.Frames(); !slices.Equal(fr[0].Selection, []string{"n/7"}) || !slices.Equal(fr[1].Selection, []string{"n/4"}) {
+		t.Errorf("the split pane lost its set: %v, %v", fr[0].Selection, fr[1].Selection)
+	}
+}

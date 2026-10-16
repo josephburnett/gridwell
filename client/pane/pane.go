@@ -186,7 +186,8 @@ func findParentSplit(n *TreeNode, targetID string) *Split {
 }
 
 // Split splits the focused pane along dir at ratio 0.5. The new pane is a
-// clone, place included.
+// clone, place and views included, holding no selection: the set is what one
+// pane has in hand (2026-10-15).
 func (t *Tree) Split(dir Direction) (*Pane, error) {
 	t.Zoomed = "" // structural edits unzoom first
 	focused := t.FocusedPane()
@@ -195,6 +196,7 @@ func (t *Tree) Split(dir Direction) (*Pane, error) {
 	}
 	t.nextID++
 	newPane := focused.Clone(fmt.Sprintf("%sp%d", t.IDPrefix, t.nextID))
+	newPane.unselectAll()
 
 	var replaced bool
 	t.Root, replaced = replacePane(t.Root, focused.ID, TreeNode{

@@ -81,3 +81,11 @@ func (f *Frame) unselect(tileID string) bool {
 	}
 	return f.Select(slices.DeleteFunc(slices.Clone(f.Selection), func(id string) bool { return id == tileID }))
 }
+
+// unselectAll empties every frame's set.
+func (s *Stack) unselectAll() {
+	s.Frame.Select(nil)
+	for i := range s.below {
+		s.below[i].Select(nil)
+	}
+}
