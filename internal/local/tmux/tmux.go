@@ -79,6 +79,11 @@ export PATH="$newpath"
 exec "$(basename "$0")" "$@"
 `
 
+// SessionEnv names the session key inside every session ModeCreate starts, so
+// a program running in a shell tile can say which shell it is in; the MCP door
+// reads it back as a header (docs/mcp.md).
+const SessionEnv = "GRIDWELL_SHELL"
+
 // Controller is one gridwell-owned tmux server. Construct with New.
 type Controller struct {
 	// binary: tests point it at a stub.
@@ -178,6 +183,7 @@ func (c *Controller) Args(key string, mode Mode, cols, rows uint16, startDir str
 			// See browserShimScript.
 			args = append(args, "-e", "BROWSER="+c.browserShim)
 		}
+		args = append(args, "-e", SessionEnv+"="+key)
 		args = append(args,
 			"-x", strconv.Itoa(int(cols)),
 			"-y", strconv.Itoa(int(rows)),
