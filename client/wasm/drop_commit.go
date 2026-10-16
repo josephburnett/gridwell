@@ -168,25 +168,16 @@ func (a *App) postPlacement(gid string, req *gridwellv1.PlaceTileRequest, snapBa
 	})
 }
 
-// commitLinkDrop creates the link a DropLink verdict asks for: an exit well
-// for a dragged well, a leaf link otherwise. A link to a link names the
-// content, so links never chain through middleman tiles. Ids are qualified in
-// every namespace, so one request shape links inside one and across one.
+// commitLinkDrop creates the link a DropLink verdict asks for; what that link
+// is, is rpc.LinkOf's. Ids are qualified in every namespace, so one request
+// shape links inside one and across one.
 func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
-	src := d.snapshotTile
-	dstGridID := t.gridID
-	if rpc.IsWellKind(src.Kind) {
-		a.createTile("CreateWell", dstGridID, &gridwellv1.CreateTileRequest{GridId: dstGridID,
-			Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: dropX, Y: dropY, W: src.W, H: src.H,
-				ChildGridId: src.ChildGridId, AltText: src.AltText,
-				ViewCx: src.ViewCx, ViewCy: src.ViewCy, ViewZoom: src.ViewZoom}}, nil)
-		return
+	label := "CreateLeafLink"
+	if rpc.IsWellKind(d.snapshotTile.Kind) {
+		label = "CreateWell"
 	}
-	// The same read-through every content operation takes.
-	target := rpc.ContentID(src)
-	a.createTile("CreateLeafLink", dstGridID, &gridwellv1.CreateTileRequest{GridId: dstGridID,
-		Tile: &gridwellv1.Tile{Kind: src.Kind, X: dropX, Y: dropY, W: src.W, H: src.H,
-			LinkTargetId: target, AltText: src.AltText}}, nil)
+	a.createTile(label, t.gridID, &gridwellv1.CreateTileRequest{GridId: t.gridID,
+		Tile: rpc.LinkOf(d.snapshotTile, dropX, dropY)}, nil)
 }
 
 // occupiedForDrop reports whether the dropped footprint overlaps a cached
