@@ -367,7 +367,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   it snaps back and is not a click
   (2026-09-30, `dragdrop.DropRejected`). Esc cancels any drag in flight:
   everything returns to where it was at the press, and the release is a
-  no-op (2026-10-01, `gesture.Escape`).
+  no-op (2026-10-01, `gesture.Escape`). A drag or a trashcan drop on a
+  selected tile acts on its grid's whole selection, and on an unselected
+  tile on that tile alone, leaving the selection be: the set keeps its
+  layout, one offset for all, and is refused whole when any tile would land
+  on a cell the set does not vacate; each tile is its own write with its
+  own claim, so a stale one is refused and snaps back alone
+  (2026-10-15, `dragdrop.CarryOf`).
 - A link is a path, and a link broken at ANY hop — a namespace this node
   does not declare, one a node further along the chain does not declare, or
   a target its namespace says is gone — is DEAD: greyed, inert, still

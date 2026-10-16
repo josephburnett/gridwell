@@ -10,6 +10,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/caps"
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/palette"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -145,8 +146,8 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 	if r.Target {
 		// The target's grid is the open well's child when the cursor promoted
 		// into one, not the pane's own leaf grid.
-		r.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
-			max(d.snapshotTile.W, 1), max(d.snapshotTile.H, 1), "")
+		r.Occupied = a.occupiedForDrop(t.gridID, dragdrop.Carry{{
+			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
 		if r.Doorway {

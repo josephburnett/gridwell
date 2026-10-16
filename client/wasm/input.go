@@ -505,11 +505,13 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			a.dragging.grabTile(child, cxF, cyF, tlX, tlY)
 			a.dragging.srcGridID = n.ChildGridId
 			a.dragging.srcCellSize = cp.CellPx
+			a.dragging.carried = a.carryRows(n.ChildGridId, child)
 			return nil
 		}
 		cx, cy := ps.ScreenToCell(sx, sy)
 		tlX, tlY := ps.CellToScreen(float64(n.X), float64(n.Y))
 		a.dragging.grabTile(n, cx, cy, tlX, tlY)
+		a.dragging.carried = a.carryRows(a.dragging.srcGridID, n)
 	}
 	return nil
 }
@@ -611,13 +613,14 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 	}
 	a.ghost = &ghost{
 		tile:              d.snapshotTile,
+		carried:           d.carried,
 		Flight:            anim.Flight{X: d.originScreenX, Y: d.originScreenY},
 		paneID:            d.originPaneID,
 		displayedCellSize: size,
 		targetCellSize:    size,
 	}
 	if d.tileID != "" && !d.intent.Creates() {
-		a.ghost.hiddenTileID = d.tileID
+		a.ghost.hidden = d.carry()
 		a.ghost.hiddenPaneID = d.originPaneID
 	}
 	return true

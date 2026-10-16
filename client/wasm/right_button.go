@@ -357,6 +357,7 @@ func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, s
 		srcCellSize:  ps.Cell(),
 	}
 	a.dragging.grabTile(n, cxF, cyF, tlX, tlY)
+	a.dragging.carried = a.carryRows(a.dragging.srcGridID, n)
 }
 
 // commitTileCenter no-ops on a bare release: the center is a grab handle.
@@ -398,41 +399,39 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// DropClone.
-	a.landGhost(t.pane.ID, t.cellSize, t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)
-	dstGridID := t.gridID
-	srcGridID := d.srcGridID
-	tileID := d.tileID
-	req := &gridwellv1.CloneTileRequest{
-		TileId:     tileID,
-		DestGridId: dstGridID,
-		X:          dropX,
-		Y:          dropY,
+	// DropClone: one CloneTile per carried tile at its offset. The ghost
+	// snaps back only for a lone tile; see commitMove.
+	a.landGhostAtCell(t, dropX, dropY)
+	to := d.carry().At(dropX, dropY)
+	for i, row := range d.carried {
+		req := &gridwellv1.CloneTileRequest{
+			TileId:     row.Id,
+			DestGridId: t.gridID,
+			X:          to[i].X,
+			Y:          to[i].Y,
+		}
+		var undo func()
+		if len(d.carried) == 1 {
+			undo = func() { a.snapBackToOrigin(d) }
+		}
+		a.post(write{
+			label: "CloneTile", gid: d.srcGridID,
+			call: func(ctx context.Context) error {
+				_, err := a.cl.CloneTile(ctx, req)
+				return err
+			},
+			undo: undo,
+		})
 	}
-	a.post(write{
-		label: "CloneTile", gid: srcGridID,
-		call: func(ctx context.Context) error {
-			_, err := a.cl.CloneTile(ctx, req)
-			return err
-		},
-		undo: func() { a.snapBackToOrigin(d) },
-	})
 }
 
-// runDeleteTile takes a nil t from the button path; it only names a second grid.
+// runDeleteTile deletes every carried tile, each its own DeleteTile. It takes
+// a nil t from the button path; it only names a second grid.
 func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 	var dstGridID string
 	if t != nil {
 		dstGridID = t.gridID
 	}
-	// It claims the row as the press saw it: a tile edited or moved since is
-	// refused and its grid re-read, never deleted blind.
-	src := d.snapshotTile
-	req := &gridwellv1.DeleteTileRequest{TileId: d.tileID,
-		ClaimVersion: src.Version, Claim: rpc.PlacementOf(src)}
-	// The row is moving to the trash or going for good, and its session goes
-	// with the last row naming it, so its cached verdict is stale either way.
-	a.forgetShellAlive(d.tileID)
 	// No snapback: the tile vanishes either way, so a failed delete putting the
 	// row back on screen is the reconcile.
 	srcGrid, dst := d.srcGridID, dstGridID
@@ -442,11 +441,21 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 			a.refetchGrid(dst)
 		}
 	}
-	a.post(write{
-		label: "DeleteTile", gid: srcGrid,
-		call: a.deleteCall(req),
-		undo: refetch,
-	})
+	for _, src := range d.carried {
+		// It claims the row as the press saw it: a tile edited or moved since
+		// is refused and its grid re-read, never deleted blind.
+		req := &gridwellv1.DeleteTileRequest{TileId: src.Id,
+			ClaimVersion: src.Version, Claim: rpc.PlacementOf(src)}
+		// The row is moving to the trash or going for good, and its session
+		// goes with the last row naming it, so its cached verdict is stale
+		// either way.
+		a.forgetShellAlive(src.Id)
+		a.post(write{
+			label: "DeleteTile", gid: srcGrid,
+			call: a.deleteCall(req),
+			undo: refetch,
+		})
+	}
 }
 
 // commitTileResize goes through postPlacement, the one placement writeback.

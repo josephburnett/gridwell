@@ -26,6 +26,42 @@ type dropTarget struct {
 	originY  float64
 }
 
+// carry is what the drag carries, as dragdrop sees it.
+func (d *dragState) carry() dragdrop.Carry { return carryOf(d.carried) }
+
+func carryOf(rows []*gridwellv1.Tile) dragdrop.Carry {
+	c := make(dragdrop.Carry, len(rows))
+	for i, n := range rows {
+		c[i] = memberOf(n)
+	}
+	return c
+}
+
+func memberOf(n *gridwellv1.Tile) dragdrop.Member {
+	return dragdrop.Member{ID: n.Id, X: n.X, Y: n.Y, W: n.W, H: n.H}
+}
+
+// carryRows is the rows a press on n in gridID carries, n first, as
+// dragdrop.CarryOf decides from the grid's cached selection.
+func (a *App) carryRows(gridID string, n *gridwellv1.Tile) []*gridwellv1.Tile {
+	g, ok := a.c.Grid(gridID)
+	if !ok {
+		return []*gridwellv1.Tile{n}
+	}
+	c := dragdrop.CarryOf(memberOf(n), g.Meta.GetSelection(), func(id string) (dragdrop.Member, bool) {
+		t, ok := g.Tiles[id]
+		if !ok {
+			return dragdrop.Member{}, false
+		}
+		return memberOf(t), true
+	})
+	rows := []*gridwellv1.Tile{n}
+	for _, m := range c[1:] {
+		rows = append(rows, g.Tiles[m.ID])
+	}
+	return rows
+}
+
 // commitVerdict is the verdict of a release that commits, recorded once. The
 // ghost's preview asks dragdrop.DecideDrop directly, being per pointer move.
 func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) dragdrop.DropAction {
@@ -42,7 +78,8 @@ func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) 
 // commit, the right commit and the ghost preview all read it, so the three
 // cannot disagree about the world they decide on. The flavor is d.intent, set
 // by the press: Forbidden is move-only, because no creation is forbidden, and
-// Occupied excludes the dragged tile on a move but nothing on a creation.
+// a move vacates the carried tiles' cells while a creation vacates none. The
+// grabbed tile's cell decides for the whole carry.
 //
 // placement asks for the drop cell too. The preview passes false, so it shows
 // the snap-to-cell even over an occupied cell, while the commit does the
@@ -58,7 +95,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 		TileID:     d.tileID,
 		OverDelete: a.overDeleteButton(d, sx, sy),
 	}
-	t, in.HasTarget = a.dropTargetAt(sx, sy, d.tileID)
+	t, in.HasTarget = a.dropTargetAt(sx, sy, d.carry())
 	if !in.HasTarget {
 		return in, t, 0, 0
 	}
@@ -76,12 +113,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	}
 	dropX, dropY = t.cellAtCursor(sx, sy, d.cellOffsetX, d.cellOffsetY)
 	in.SameCell = in.SameGrid && dropX == d.snapshotTile.X && dropY == d.snapshotTile.Y
-	exclude := d.tileID
-	if d.intent.Creates() {
-		exclude = ""
-	}
-	in.Occupied = a.occupiedForDrop(t.gridID, dropX, dropY,
-		d.snapshotTile.W, d.snapshotTile.H, exclude)
+	in.Occupied = a.occupiedForDrop(t.gridID, d.carry(), dropX, dropY, !d.intent.Creates())
 	return in, t, dropX, dropY
 }
 
@@ -118,10 +150,9 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 }
 
 // dropTargetAt resolves the cursor to a drop target, false over a content
-// descent or off-canvas. excludeTileID keeps a well at that row id from being
-// a drop-into-well target, so dragging well X cannot drop X into its own
-// child grid.
-func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, bool) {
+// descent or off-canvas. A carried well is never a drop-into-well target, so
+// dragging well X cannot drop X into its own child grid.
+func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
 		return nil, false
@@ -140,7 +171,7 @@ func (a *App) dropTargetAt(sx, sy float64, excludeTileID string) (*dropTarget, b
 	// The rule is dragdrop.PromoteToWell's.
 	cellX, cellY := ps.CellAt(sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
-		dragdrop.PromoteToWell(rpc.IsWellKind(n.Kind), n.ChildGridId, n.Id, excludeTileID) {
+		dragdrop.PromoteToWell(rpc.IsWellKind(n.Kind), n.ChildGridId, n.Id, carried) {
 		cp := wellPreviewFor(ps, n)
 		return &dropTarget{
 			pane:     p,

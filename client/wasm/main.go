@@ -510,9 +510,13 @@ type ghost struct {
 	displayedCellSize float64
 	targetCellSize    float64
 
-	// hiddenTileID and hiddenPaneID hide the source tile while the ghost stands in;
-	// the hide outlasts a.dragging.
-	hiddenTileID string
+	// carried is every row the drag carries, tile first, each drawn at its
+	// offset from it (dragdrop.Carry.Offset).
+	carried []*gridwellv1.Tile
+
+	// hidden and hiddenPaneID hide a move's source tiles while the ghost
+	// stands in; the hide outlasts a.dragging.
+	hidden       dragdrop.Carry
 	hiddenPaneID string
 
 	displayedFragmentation float64
@@ -547,7 +551,10 @@ type dragState struct {
 	// right-button release.
 	intent dragdrop.Intent
 	// snapshotTile is never nil: a press that grabbed no tile carries an empty row.
-	snapshotTile  *gridwellv1.Tile
+	snapshotTile *gridwellv1.Tile
+	// carried is every row the drag acts on as the press saw it, snapshotTile
+	// first: its grid's selection when that holds it (App.carryRows).
+	carried       []*gridwellv1.Tile
 	originScreenX float64
 	originScreenY float64
 
@@ -973,12 +980,20 @@ func (a *App) landTransition(tr *transition.Transition) {
 	a.draw()
 }
 
-// The render hide lives on the ghost: one owner, one lifecycle.
+// The render hide lives on the ghost: one owner, one lifecycle. The grabbed
+// tile is the one named.
 func (a *App) ghostHiddenTile() string {
-	if a.ghost == nil {
+	if a.ghost == nil || len(a.ghost.hidden) == 0 {
 		return ""
 	}
-	return a.ghost.hiddenTileID
+	return a.ghost.hidden[0].ID
+}
+
+func (a *App) ghostHidden() dragdrop.Carry {
+	if a.ghost == nil {
+		return nil
+	}
+	return a.ghost.hidden
 }
 
 func (a *App) ghostHiddenPane() string {

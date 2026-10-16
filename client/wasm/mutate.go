@@ -177,6 +177,25 @@ func (a *App) post(w write) {
 	go a.dispatch(w)
 }
 
+// postInOrder runs the writes one after another, each sent after the last
+// has its verdict, whatever that was. Every one is counted at once, so the
+// gesture never reads as idle between them.
+func (a *App) postInOrder(ws []write) {
+	for range ws {
+		a.writes.Start()
+	}
+	run := func() {
+		for _, w := range ws {
+			a.dispatch(w)
+		}
+	}
+	if a.unloading {
+		run()
+		return
+	}
+	go run()
+}
+
 // doOnUnload is `do` during beforeunload. The reply can never arrive and the
 // outbox dies with the page, so the beacon form is what survives. A write
 // without one is fired and never waited on: blocking the unload handler turns
