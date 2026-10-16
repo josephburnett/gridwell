@@ -47,9 +47,9 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	mcp.AddTool(s, &mcp.Tool{Name: "clone", Description: "Deep-copy a tile into a grid (its own when none is named), at the first free cell near it or at the cell named."}, d.clone)
 	mcp.AddTool(s, &mcp.Tool{Name: "link", Description: "Create a link to a tile in a grid: a dashed tile showing the same content, in this namespace or across one."}, d.link)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete a tile: it moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
-	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Set a grid's selection, the tiles the user has in hand, claiming the selection read_grid gave (or the one on disk now when none is given). An empty list clears it."}, d.selectTiles)
-	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List every screen showing this node now: each client session's label, when its view last changed, and its panes, each with its place, the grid it shows, and whether it has focus."}, d.sessions)
-	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the grid's selection when it has one, else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last."}, d.pointed)
+	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Set a grid's selection, the tiles the user has in hand, claiming the selection read_grid gave (or the one on disk now when none is given). An empty list clears it. A pane inside a pane tile shows its own set, which this does not write."}, d.selectTiles)
+	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List every screen showing this node now: each client session's label, when its view last changed, and its panes, each with its place, the grid it shows, the pane tile it is inside, and whether it has focus."}, d.sessions)
+	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the selection that pane shows when it has one (the grid's, or inside a pane tile the pane's own), else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last."}, d.pointed)
 	return s
 }
 

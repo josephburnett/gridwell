@@ -306,8 +306,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
   `docs/mcp.md` is the contract. An agent points as the user does
-  (2026-10-15): `pointed` is the focused pane's grid of one session, its
-  selection when non-empty, else the grid, and the session is the one named,
+  (2026-10-15): `pointed` is the focused pane's grid of one session, the
+  selection that pane shows when non-empty, else the grid: inside a pane
+  tile the pane's own, read from the layout under the id the view names
+  (`ViewPane.layout_pane_id`, `pane.SelectionTarget`), never the row's. The
+  door writes no layout, so `select` sets only a grid row's set: the open
+  window owns its layout, and an outside write would turn its next change
+  into a conflict. The session is the one named,
   else the one holding the agent's shell live, else the one whose view
   changed last, the others named. A new tmux session carries its key in
   `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`, and the shell
