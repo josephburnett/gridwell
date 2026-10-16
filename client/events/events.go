@@ -114,7 +114,8 @@ func ReactHealth(h *pb.EventPluginHealth, label string, wasDark, disableable boo
 	return r
 }
 
-// Owe names the grid whose read in flight is asked again after a tile event:
+// Owe names the grid whose read in flight is asked again after a tile or
+// selection event:
 // the answer on the wire may predate the event, and installing it would drop
 // the tile the cache folded in or could not fold. A grid nobody is reading
 // owes nothing; the next read sees the source's state.
@@ -124,6 +125,8 @@ func Owe(ev *pb.Event) string {
 		return p.TileChanged.GetTile().GetGridId()
 	case *pb.Event_TileRemoved:
 		return p.TileRemoved.GetGridId()
+	case *pb.Event_SelectionChanged:
+		return p.SelectionChanged.GetGridId()
 	}
 	return ""
 }

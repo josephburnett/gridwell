@@ -6,6 +6,7 @@ import (
 	"bytes"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"maps"
+	"slices"
 	"sort"
 	"sync"
 
@@ -646,6 +647,26 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		return present
 	case *gridwellv1.Event_GridChanged:
 		return p.GridChanged != nil
+	case *gridwellv1.Event_SelectionChanged:
+		return c.selectLocked(p.SelectionChanged.GetGridId(), p.SelectionChanged.GetTileIds())
 	}
 	return false
+}
+
+// selectLocked replaces a cached grid's selection with the set the node told,
+// whole. The stream orders the sets and every one is whole, so the writer's
+// own echo needs no interlock, and a write's reply, which the stream does not
+// order, carries none. Callers hold c.mu.
+func (c *Cache) selectLocked(gridID string, ids []string) bool {
+	g, ok := c.grids[gridID]
+	if !ok {
+		return false
+	}
+	if slices.Equal(slices.Sorted(slices.Values(g.Meta.GetSelection())), slices.Sorted(slices.Values(ids))) {
+		return false
+	}
+	meta := proto.CloneOf(g.Meta)
+	meta.Selection = slices.Clone(ids)
+	g.Meta = meta
+	return true
 }

@@ -8,6 +8,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 )
 
 // The selection through the whole seam, at home and on a far node alike: the
@@ -15,7 +16,8 @@ import (
 // write claims the set it saw, lands on the grid's row there, comes back to
 // the writer as SelectionChanged in the writer's own spelling of every id,
 // reads back on the grid, moves no version, and a stale claim is refused with
-// the conflict the client reconciles from.
+// the conflict the client reconciles from. The client's cache, folding the
+// real stream, holds each set the node told.
 func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 	m := staleMesh(t)
 	me := m.nodes[meNode]
@@ -31,7 +33,10 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			told := make(chan []string, 8)
+			// The client's cache, folding the stream as the client does.
+			c := cache.New()
+			c.PutGrid(before.Grid, before.Tiles)
+			told := make(chan *gridwellv1.Event, 8)
 			stream, err := me.cl.Subscribe(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -44,7 +49,7 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 						return
 					}
 					if sc := ev.GetSelectionChanged(); sc != nil && sc.GridId == grid {
-						told <- sc.TileIds
+						told <- ev
 					}
 				}
 			}()
@@ -53,13 +58,14 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 				slices.Sort(want)
 				for {
 					select {
-					case got := <-told:
-						got = slices.Sorted(slices.Values(got))
-						if slices.Equal(got, want) {
+					case ev := <-told:
+						c.Apply(ev)
+						held, _ := c.Grid(grid)
+						if slices.Equal(slices.Sorted(slices.Values(held.Meta.Selection)), want) {
 							return
 						}
 					case <-ctx.Done():
-						t.Fatalf("%s: no SelectionChanged carrying %v", what, want)
+						t.Fatalf("%s: the client's cache never held %v", what, want)
 					}
 				}
 			}
