@@ -54,6 +54,15 @@ func (p *Pump) force(c *Client, now time.Time) ([]byte, func(bool)) {
 	}
 }
 
+// Wait is how long until a post is due, or false when none is owed or one is
+// out, whose answer is the next look.
+func (p *Pump) Wait(c *Client, now time.Time) (time.Duration, bool) {
+	if p.inFlight || c.PendingCount() <= 0 {
+		return 0, false
+	}
+	return max(p.last.Add(cadence.TraceFlushMs*time.Millisecond).Sub(now), time.Millisecond), true
+}
+
 // due is NeedFlush plus the one rule the count alone gets wrong: after a post
 // the node did not keep, the next one waits for the clock. The failure is
 // itself a record, so a full ring would otherwise post, fail, grow by the
