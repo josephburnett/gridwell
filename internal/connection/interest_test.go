@@ -10,25 +10,26 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// hungFar never answers its first SetInterest and records every later one.
+// hungFar never answers its first SetView and records every later one.
 type hungFar struct {
 	namespace.Unimplemented
-	calls chan []string
+	calls chan *gridwellv1.SetViewRequest
 	first bool
 }
 
-func (h *hungFar) SetInterest(ctx context.Context, req *gridwellv1.SetInterestRequest) (*gridwellv1.SetInterestResponse, error) {
+func (h *hungFar) SetView(ctx context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
 	if !h.first {
 		h.first = true
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
-	h.calls <- req.GridIds
-	return &gridwellv1.SetInterestResponse{}, nil
+	h.calls <- req
+	return &gridwellv1.SetViewResponse{}, nil
 }
 
-// A far node that stops answering holds one set for tellFarWait and no
-// longer: the newer set behind it still reaches the node once it answers.
+// A far node that stops answering holds one share for tellFarWait and no
+// longer: the newer share behind it still reaches the node once it answers,
+// as a view labelled as another node's under the connection's session.
 func TestTellFarIsBoundedByTellFarWait(t *testing.T) {
 	old := tellFarWait
 	tellFarWait = 50 * time.Millisecond
@@ -37,20 +38,23 @@ func TestTellFarIsBoundedByTellFarWait(t *testing.T) {
 	s := newTestServer(t, openStore(t))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	far := &hungFar{calls: make(chan []string, 4)}
-	if _, err := s.SetInterest(ctx, &gridwellv1.SetInterestRequest{GridIds: []string{"geneva/p/1"}}); err != nil {
+	far := &hungFar{calls: make(chan *gridwellv1.SetViewRequest, 4)}
+	if _, err := s.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{"geneva/p/1"}}); err != nil {
 		t.Fatal(err)
 	}
 	go s.tellFar(ctx, "geneva", far)
-	if _, err := s.SetInterest(ctx, &gridwellv1.SetInterestRequest{GridIds: []string{"geneva/p/2", "other/p/3"}}); err != nil {
+	if _, err := s.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{"geneva/p/2", "other/p/3"}}); err != nil {
 		t.Fatal(err)
 	}
 	select {
 	case got := <-far.calls:
-		if !slices.Equal(got, []string{"p/2"}) {
-			t.Errorf("the far node was told %v, want its own share [p/2]", got)
+		if !slices.Equal(got.GetShownGridIds(), []string{"p/2"}) {
+			t.Errorf("the far node was told %v, want its own share [p/2]", got.GetShownGridIds())
+		}
+		if got.GetLabel() != farLabel || got.GetSession() == "" || len(got.GetPanes()) != 0 {
+			t.Errorf("the far node was told %v, want a pane-less %q view under a session", got, farLabel)
 		}
 	case <-time.After(20 * tellFarWait):
-		t.Fatal("the newer set never reached the far node past the hung call")
+		t.Fatal("the newer share never reached the far node past the hung call")
 	}
 }

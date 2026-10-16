@@ -77,8 +77,8 @@ func (f fromClient) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionA
 	return f.c.ShellSessionAlive(ctx, req)
 }
 
-func (f fromClient) SetInterest(ctx context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
-	return f.c.SetInterest(ctx, req)
+func (f fromClient) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
+	return f.c.SetView(ctx, req)
 }
 
 func (f fromClient) ReadContent(ctx context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {

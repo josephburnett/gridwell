@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
@@ -52,7 +53,7 @@ func TestFsBodyItWouldRefuseIsReadOnlyOnTheTile(t *testing.T) {
 	}
 
 	// A file made read-only while it is shown reads so with no gesture.
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()

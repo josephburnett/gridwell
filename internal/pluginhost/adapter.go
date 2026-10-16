@@ -58,7 +58,7 @@ type Adapter struct {
 
 	// The source's state as the listings and the Watch stream found it, held
 	// only to announce its transitions; setSource is the one writer. liveOff
-	// is the Watch stream's verdict and interestOff SetInterest's, neither of
+	// is the Watch stream's verdict and interestOff SetView's, neither of
 	// them darkness: a source that lists but cannot watch still answers live.
 	srcMu       sync.Mutex
 	srcDark     bool
@@ -69,7 +69,7 @@ type Adapter struct {
 	// shown is this plugin's share of the node's interest, as contexts, and
 	// links is, per context, the contexts its last live listing links into.
 	// The Watch stream's scope derives from both (scopeLocked); moved closes
-	// when it changes. SetInterest writes shown, synthesize writes links.
+	// when it changes. SetView writes shown, synthesize writes links.
 	scopeMu sync.Mutex
 	shown   []string
 	links   map[string][]string

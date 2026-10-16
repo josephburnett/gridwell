@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
 // A file's row and its read name its bytes by one stamp, carried from the
@@ -28,7 +30,7 @@ func TestFsRowAndBodyNameTheFilesBytesByOneStamp(t *testing.T) {
 		t.Fatalf("row stamp %q, read stamp %q; want one non-empty stamp", row.ContentStamp, basis.Stamp)
 	}
 	k.body(row.Id)
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()

@@ -78,8 +78,8 @@ func (g *grpcServer) ShellSessionAlive(ctx context.Context, req *pb.ShellSession
 	return g.ns.ShellSessionAlive(ctx, req)
 }
 
-func (g *grpcServer) SetInterest(ctx context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
-	return g.ns.SetInterest(ctx, req)
+func (g *grpcServer) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
+	return g.ns.SetView(ctx, req)
 }
 
 func (g *grpcServer) ReadContent(req *pb.ReadContentRequest, stream pb.Gridwell_ReadContentServer) error {

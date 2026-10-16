@@ -53,7 +53,7 @@ type fake struct {
 	written  []*pb.WriteContentRequest
 	events   []*pb.Event
 	shellIn  []*pb.OpenShellRequest
-	interest []*pb.SetInterestRequest
+	views    []*pb.SetViewRequest
 	selected []*pb.SetSelectionRequest
 }
 
@@ -103,9 +103,9 @@ func (f *fake) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*pb
 	f.selected = append(f.selected, req)
 	return &pb.SetSelectionResponse{}, nil
 }
-func (f *fake) SetInterest(_ context.Context, req *pb.SetInterestRequest) (*pb.SetInterestResponse, error) {
-	f.interest = append(f.interest, req)
-	return &pb.SetInterestResponse{}, nil
+func (f *fake) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
+	f.views = append(f.views, req)
+	return &pb.SetViewResponse{}, nil
 }
 func (f *fake) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
 	return &pb.ShellSessionAliveResponse{Alive: true}, nil
@@ -313,17 +313,21 @@ func TestSubscribeStreamRoundTrips(t *testing.T) {
 	}
 }
 
-// A session and its set cross the connection door whole, since the far node
+// A session and its view cross the connection door whole, since the far node
 // books what it hears (interest.Book).
-func TestSetInterestRoundTrips(t *testing.T) {
+func TestSetViewRoundTrips(t *testing.T) {
 	f := &fake{}
 	ns := loopback(t, f)
-	want := &pb.SetInterestRequest{Session: "s1", GridIds: []string{"p1/4", "n1/7"}}
-	if _, err := ns.SetInterest(context.Background(), want); err != nil {
-		t.Fatalf("SetInterest: %v", err)
+	want := &pb.SetViewRequest{
+		Session: "s1", Label: "node", ShownGridIds: []string{"p1/4", "n1/7"},
+		PaneTiles: []string{"n1/9"},
+		Panes:     []*pb.ViewPane{{Id: "p0", Anchor: "n1/1", Path: []string{"n1/2"}, ContentId: "n1/3", GridId: "n1/4", Focused: true}},
 	}
-	if len(f.interest) != 1 || !proto.Equal(f.interest[0], want) {
-		t.Fatalf("the far side saw %v, want %v", f.interest, want)
+	if _, err := ns.SetView(context.Background(), want); err != nil {
+		t.Fatalf("SetView: %v", err)
+	}
+	if len(f.views) != 1 || !proto.Equal(f.views[0], want) {
+		t.Fatalf("the far side saw %v, want %v", f.views, want)
 	}
 }
 

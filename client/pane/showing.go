@@ -9,7 +9,7 @@ import (
 )
 
 // Showing is the grids this client shows, sorted, each once: the one owner of
-// what it tells the node (SetInterest). A laid-out pane shows the grid it is
+// what it tells the node it shows (SetView's shown_grid_ids). A laid-out pane shows the grid it is
 // at, and a pane standing in a content tile shows the grid that tile sits in,
 // since Anchor and Path leave the content frame out. A well on a pane's screen
 // shows its child grid too, one level deep, because the renderer draws that

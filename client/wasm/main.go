@@ -168,7 +168,7 @@ type App struct {
 	// mirrors is what each mirror was last told; see syncMirrors.
 	mirrors mirrorState
 
-	// interest is what the node was told this client shows; see syncInterest.
+	// interest is what the node was told this client shows; see syncView.
 	interest     interest.Tracker
 	interestKick chan struct{}
 
@@ -708,7 +708,7 @@ func (a *App) afterBootstrap() {
 		a.fetchGrid(a.home)
 	}
 
-	go a.sendInterest()
+	go a.sendView()
 	go a.startSSE()
 	// The slow retry net behind the reconnect kick.
 	go a.retryBackstop()
@@ -993,7 +993,7 @@ func (a *App) ghostHiddenPane() string {
 func (a *App) startSSE() {
 	sse := retry.Events{
 		Subscribe: func(ctx context.Context) (retry.Stream, error) {
-			// The node forgets this session's interest when its stream closes.
+			// The node forgets this session's view when its stream closes.
 			a.interest.Reopened()
 			a.kickInterest()
 			s, err := a.cl.Subscribe(ctx)

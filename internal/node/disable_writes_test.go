@@ -86,7 +86,7 @@ func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 			}
 		}
 	}()
-	if err := cl.SetInterest(ctx, []string{root}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{root}}); err != nil {
 		t.Fatal(err)
 	}
 	awaitInterest(ctx, t, root)
@@ -165,7 +165,7 @@ func awaitInterest(ctx context.Context, t *testing.T, root string) {
 	t.Helper()
 	for ctx.Err() == nil {
 		for _, rec := range trace.Default().Snapshot() {
-			if rec.Src == "interest" && rec.Kind == "union" && slices.Contains(strings.Fields(rec.Msg), root) {
+			if rec.Src == "view" && rec.Kind == "union" && slices.Contains(strings.Fields(rec.Msg), root) {
 				return
 			}
 		}

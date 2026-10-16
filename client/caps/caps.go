@@ -49,6 +49,15 @@ func Derive(bridge Bridge, shellsDisabled bool) Caps {
 	}
 }
 
+// Label names this kind of client in the view it tells the node (SetView):
+// "desktop" for the host that places live url views, else "browser".
+func (c Caps) Label() string {
+	if c.LiveURL {
+		return "desktop"
+	}
+	return "browser"
+}
+
 // GoLiveNotice reports a gesture that asked for a live view without LiveURL. A
 // missing capability is expected, so Info, and one source coalesces taps.
 func GoLiveNotice() (sev errsurface.Severity, source, message string) {

@@ -80,7 +80,7 @@ func TestAnInterestTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
 
 	// The stream is open and the share taken once a poke reaches the door;
 	// only then is the store broken, so nothing but the next share hits it.
-	if err := cl.SetInterest(ctx, []string{grid("all")}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{grid("all")}}); err != nil {
 		t.Fatal(err)
 	}
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -100,7 +100,7 @@ func TestAnInterestTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
 	}
 
 	exec(`ALTER TABLE grids RENAME TO grids_away`)
-	if err := cl.SetInterest(ctx, []string{grid("all"), grid("other")}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{grid("all"), grid("other")}}); err != nil {
 		t.Fatal(err)
 	}
 	off := health()
@@ -109,7 +109,7 @@ func TestAnInterestTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
 	}
 
 	exec(`ALTER TABLE grids_away RENAME TO grids`)
-	if err := cl.SetInterest(ctx, []string{grid("all"), grid("other"), grid("third")}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{grid("all"), grid("other"), grid("third")}}); err != nil {
 		t.Fatal(err)
 	}
 	if on := health(); !on.Healthy || on.LiveUpdatesOff != "" {

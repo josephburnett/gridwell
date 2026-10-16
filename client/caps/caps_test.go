@@ -62,3 +62,17 @@ func TestGoLiveNotice(t *testing.T) {
 		t.Errorf("message %q should point the user at the desktop app", message)
 	}
 }
+
+// The view's label says which kind of client this is: the desktop app is the
+// host that places live url views, and anything else is a browser tab.
+func TestLabel(t *testing.T) {
+	if got := Derive(Bridge{LiveURL: true, ChoiceMenu: true, Trace: true}, false).Label(); got != "desktop" {
+		t.Errorf("the desktop bridge labels %q, want desktop", got)
+	}
+	if got := Derive(NoBridge(), false).Label(); got != "browser" {
+		t.Errorf("no bridge labels %q, want browser", got)
+	}
+	if got := Derive(Bridge{ChoiceMenu: true}, false).Label(); got != "browser" {
+		t.Errorf("a menu-only bridge labels %q, want browser", got)
+	}
+}

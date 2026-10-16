@@ -120,8 +120,8 @@ func (h *connectHandler) DisableSource(ctx context.Context, req *connect.Request
 	return unary(h.rt.DisableSource)(ctx, req)
 }
 
-func (h *connectHandler) SetInterest(ctx context.Context, req *connect.Request[pb.SetInterestRequest]) (*connect.Response[pb.SetInterestResponse], error) {
-	return unary(h.rt.SetInterest)(ctx, req)
+func (h *connectHandler) SetView(ctx context.Context, req *connect.Request[pb.SetViewRequest]) (*connect.Response[pb.SetViewResponse], error) {
+	return unary(h.rt.SetView)(ctx, req)
 }
 
 func (h *connectHandler) Subscribe(ctx context.Context, req *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {

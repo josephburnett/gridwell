@@ -202,7 +202,7 @@ func TestFsOpenFileShowsItsNewBytes(t *testing.T) {
 	if got := k.body(id); string(got) != "# before\n" {
 		t.Fatalf("open body %q", got)
 	}
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	k.settle()
@@ -226,7 +226,7 @@ func TestFsTextFaceShowsItsNewBytes(t *testing.T) {
 	}
 	k := newContentClient(t, "pfsface", root)
 	k.fetchGrid(k.landing)
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	id := rpc.ContentID(k.tile("todo.txt"))
@@ -258,7 +258,7 @@ func TestFsImageFaceShowsItsNewPicture(t *testing.T) {
 	}
 	k := newContentClient(t, "pfsimg", root)
 	k.fetchGrid(k.landing)
-	if err := k.cl.SetInterest(k.ctx, []string{k.landing}); err != nil {
+	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	before := k.tile("pic.png").PreviewBlobId

@@ -41,8 +41,8 @@ sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plu
 itself gone — fails the read outright at `cp.Info`, because the declared
 face is the plugin's own fact and nothing can supply it. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
-node holds one stream per subprocess while some client shows one of its
-grids, scoped to the contexts shown and those their link entries point into,
+node holds one stream per subprocess while some client's view (`SetView`)
+shows one of its grids, scoped to the contexts shown and those their link entries point into,
 and re-opened with the new set when that changes. A `ContextChanged` is
 checked, not relayed: the node lists the context and publishes the
 `GridChanged` a write would, on it and on every grid linking into it, each

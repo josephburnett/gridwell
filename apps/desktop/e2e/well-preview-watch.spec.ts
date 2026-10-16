@@ -14,7 +14,7 @@ const ROOT = makeRunDir();
 test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
 
 function lastUnion(lines: TraceLine[]): string[] {
-  const u = lines.filter((l) => l.src === 'interest' && l.kind === 'union');
+  const u = lines.filter((l) => l.src === 'view' && l.kind === 'union');
   const msg = u.length === 0 ? '' : u[u.length - 1].msg;
   return msg === '' ? [] : msg.split(' ');
 }

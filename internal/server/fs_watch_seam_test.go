@@ -86,7 +86,7 @@ func TestFsWatchReachesAClientShowingTheDirectory(t *testing.T) {
 	if _, err := cl.GetGrid(ctx, shown); err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown}}); err != nil {
 		t.Fatal(err)
 	}
 	await := func(what string) {
@@ -241,7 +241,7 @@ func TestFsShowingWhatWasReadAnnouncesNothing(t *testing.T) {
 			}
 		}
 	}
-	if err := cl.SetInterest(ctx, all); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: all}); err != nil {
 		t.Fatal(err)
 	}
 	if got := told(); len(got) != 0 {
@@ -256,7 +256,7 @@ func TestFsShowingWhatWasReadAnnouncesNothing(t *testing.T) {
 	}
 	readSub("d03")
 
-	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := told(); len(got) != 0 {
@@ -265,7 +265,7 @@ func TestFsShowingWhatWasReadAnnouncesNothing(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "d05", "gap.txt"), []byte("gap"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.SetInterest(ctx, all); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: all}); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := told(), map[string]int{subs["d05"]: 1}; !maps.Equal(got, want) {
@@ -383,7 +383,7 @@ func TestFsShowingTheNodeHomeWhileItsCacheWarmsSettles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown}}); err != nil {
 		t.Fatal(err)
 	}
 	walSize := func() int64 {
@@ -529,7 +529,7 @@ func TestFsBootingWhileShownAnnouncesOnlyWhatMoves(t *testing.T) {
 	// join the scope through the root's links, read by nobody.
 	readGrid(dirs["d0"])
 	readGrid(dirs["d1"])
-	if err := cl.SetInterest(ctx, []string{shown, dirs["d0"], dirs["d1"]}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown, dirs["d0"], dirs["d1"]}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := told(); len(got) != 0 {
@@ -556,7 +556,7 @@ func TestFsBootingWhileShownAnnouncesOnlyWhatMoves(t *testing.T) {
 
 	// A scope the client moves onto a grid it has just read tells it nothing.
 	readGrid(dirs["d4"])
-	if err := cl.SetInterest(ctx, []string{shown, dirs["d0"], dirs["d4"]}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown, dirs["d0"], dirs["d4"]}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := told(); len(got) != 0 {

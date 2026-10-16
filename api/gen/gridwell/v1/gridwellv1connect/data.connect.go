@@ -86,8 +86,8 @@ const (
 	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
 	// GridwellSubscribeProcedure is the fully-qualified name of the Gridwell's Subscribe RPC.
 	GridwellSubscribeProcedure = "/gridwell.v1.Gridwell/Subscribe"
-	// GridwellSetInterestProcedure is the fully-qualified name of the Gridwell's SetInterest RPC.
-	GridwellSetInterestProcedure = "/gridwell.v1.Gridwell/SetInterest"
+	// GridwellSetViewProcedure is the fully-qualified name of the Gridwell's SetView RPC.
+	GridwellSetViewProcedure = "/gridwell.v1.Gridwell/SetView"
 	// GridwellDisableSourceProcedure is the fully-qualified name of the Gridwell's DisableSource RPC.
 	GridwellDisableSourceProcedure = "/gridwell.v1.Gridwell/DisableSource"
 )
@@ -129,7 +129,7 @@ type GridwellClient interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
-	SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error)
+	SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error)
 	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
 }
 
@@ -264,10 +264,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("Subscribe")),
 			connect.WithClientOptions(opts...),
 		),
-		setInterest: connect.NewClient[v1.SetInterestRequest, v1.SetInterestResponse](
+		setView: connect.NewClient[v1.SetViewRequest, v1.SetViewResponse](
 			httpClient,
-			baseURL+GridwellSetInterestProcedure,
-			connect.WithSchema(gridwellMethods.ByName("SetInterest")),
+			baseURL+GridwellSetViewProcedure,
+			connect.WithSchema(gridwellMethods.ByName("SetView")),
 			connect.WithClientOptions(opts...),
 		),
 		disableSource: connect.NewClient[v1.DisableSourceRequest, v1.DisableSourceResponse](
@@ -301,7 +301,7 @@ type gridwellClient struct {
 	setSelection      *connect.Client[v1.SetSelectionRequest, v1.SetSelectionResponse]
 	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
 	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
-	setInterest       *connect.Client[v1.SetInterestRequest, v1.SetInterestResponse]
+	setView           *connect.Client[v1.SetViewRequest, v1.SetViewResponse]
 	disableSource     *connect.Client[v1.DisableSourceRequest, v1.DisableSourceResponse]
 }
 
@@ -405,9 +405,9 @@ func (c *gridwellClient) Subscribe(ctx context.Context, req *connect.Request[v1.
 	return c.subscribe.CallServerStream(ctx, req)
 }
 
-// SetInterest calls gridwell.v1.Gridwell.SetInterest.
-func (c *gridwellClient) SetInterest(ctx context.Context, req *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error) {
-	return c.setInterest.CallUnary(ctx, req)
+// SetView calls gridwell.v1.Gridwell.SetView.
+func (c *gridwellClient) SetView(ctx context.Context, req *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error) {
+	return c.setView.CallUnary(ctx, req)
 }
 
 // DisableSource calls gridwell.v1.Gridwell.DisableSource.
@@ -452,7 +452,7 @@ type GridwellHandler interface {
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
-	SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error)
+	SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error)
 	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
 }
 
@@ -583,10 +583,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("Subscribe")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellSetInterestHandler := connect.NewUnaryHandler(
-		GridwellSetInterestProcedure,
-		svc.SetInterest,
-		connect.WithSchema(gridwellMethods.ByName("SetInterest")),
+	gridwellSetViewHandler := connect.NewUnaryHandler(
+		GridwellSetViewProcedure,
+		svc.SetView,
+		connect.WithSchema(gridwellMethods.ByName("SetView")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellDisableSourceHandler := connect.NewUnaryHandler(
@@ -637,8 +637,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
 			gridwellSubscribeHandler.ServeHTTP(w, r)
-		case GridwellSetInterestProcedure:
-			gridwellSetInterestHandler.ServeHTTP(w, r)
+		case GridwellSetViewProcedure:
+			gridwellSetViewHandler.ServeHTTP(w, r)
 		case GridwellDisableSourceProcedure:
 			gridwellDisableSourceHandler.ServeHTTP(w, r)
 		default:
@@ -730,8 +730,8 @@ func (UnimplementedGridwellHandler) Subscribe(context.Context, *connect.Request[
 	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Subscribe is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) SetInterest(context.Context, *connect.Request[v1.SetInterestRequest]) (*connect.Response[v1.SetInterestResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetInterest is not implemented"))
+func (UnimplementedGridwellHandler) SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetView is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error) {

@@ -77,7 +77,7 @@ func TestARefusedWatchIsANoticeNotDarkness(t *testing.T) {
 			events <- ev
 		}
 	}()
-	if err := h.localCl.SetInterest(ctx, []string{grid}); err != nil {
+	if err := h.localCl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{grid}}); err != nil {
 		t.Fatal(err)
 	}
 	health := func() *gridwellv1.EventPluginHealth {

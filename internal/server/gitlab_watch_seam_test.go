@@ -97,7 +97,7 @@ func TestGitLabWatchReachesAClientShowingTheTodos(t *testing.T) {
 	if g, err := cl.GetGrid(ctx, shown); err != nil || len(g.Tiles) != 1 {
 		t.Fatalf("the todos = (%v, %v), want one week", g.GetTiles(), err)
 	}
-	if err := cl.SetInterest(ctx, []string{shown}); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{shown}}); err != nil {
 		t.Fatal(err)
 	}
 	// Whatever the stream's open announces is not the change under test.
@@ -123,7 +123,7 @@ func TestGitLabWatchReachesAClientShowingTheTodos(t *testing.T) {
 		t.Fatalf("after the change the todos = (%v, %v), want two weeks", g.GetTiles(), err)
 	}
 
-	if err := cl.SetInterest(ctx, nil); err != nil {
+	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{}); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(pluginLinger)

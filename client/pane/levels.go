@@ -143,6 +143,15 @@ func (s *Levels) PopCountTo(level int) int {
 	return len(s.frames) - level
 }
 
+// tileIDs is the pane tile of each level, outermost first.
+func (s *Levels) tileIDs() []string {
+	var out []string
+	for _, f := range s.frames {
+		out = append(out, f.TileID)
+	}
+	return out
+}
+
 func (s *Levels) Names() []string {
 	out := make([]string, len(s.frames))
 	for i, f := range s.frames {

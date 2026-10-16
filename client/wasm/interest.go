@@ -10,10 +10,11 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// syncInterest runs every frame, like syncMirrors: every change to what the
-// panes show draws one. interest.Tracker decides when a set is owed.
-func (a *App) syncInterest(rects map[string]pane.Rect) {
-	if a.interest.Show(pane.Showing(a.tree, rects, a.gridIDForPathFrom, a.cachedTiles)) {
+// syncView runs every frame, like syncMirrors: every change to what the panes
+// show draws one. pane.View is the view; interest.Tracker decides when it is
+// owed.
+func (a *App) syncView(rects map[string]pane.Rect) {
+	if a.interest.Show(pane.View(a.tree, &a.ws, rects, a.caps.Label(), a.gridIDForPathFrom, a.cachedTiles)) {
 		a.kickInterest()
 	}
 }
@@ -32,18 +33,18 @@ func (a *App) kickInterest() {
 	}
 }
 
-// sendInterest is the one sender, so two sets never reach the node out of
-// order. A transport failure is the event stream's to report; the next change
-// or the stream's re-open sends again.
-func (a *App) sendInterest() {
+// sendView is the one sender, so two views never reach the node out of order.
+// A transport failure is the event stream's to report; the next change or the
+// stream's re-open sends again.
+func (a *App) sendView() {
 	for range a.interestKick {
 		for {
-			set, ok := a.interest.Next()
+			v, ok := a.interest.Next()
 			if !ok {
 				break
 			}
 			ctx, cancel := inflight.Bounded()
-			err := a.cl.SetInterest(ctx, set)
+			err := a.cl.SetView(ctx, v)
 			cancel()
 			if err == nil {
 				a.resolveErr("interest")

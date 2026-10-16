@@ -170,7 +170,7 @@ func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
 			}
 		}
 	}()
-	if err := n.cl.SetInterest(ctx, []string{n.inbox, n.starred}); err != nil {
+	if err := n.cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{n.inbox, n.starred}}); err != nil {
 		t.Fatal(err)
 	}
 	// Nobody read either grid, so the open notes both, and the first walk

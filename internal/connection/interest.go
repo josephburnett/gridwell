@@ -20,7 +20,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// tellFarWait bounds one SetInterest to a far node, so a far node that stopped
+// farLabel is how a far node's view of this one reads: another node, telling
+// its share through a connection, with no panes.
+const farLabel = "node"
+
+// tellFarWait bounds one SetView to a far node, so a far node that stopped
 // answering cannot hold a newer set behind it.
 var tellFarWait = 10 * time.Second
 
@@ -59,12 +63,12 @@ func (s *Server) farLocked(name string) *farInterest {
 	return f
 }
 
-// SetInterest takes the transport's whole share, "<conn>/<far id>" each, and
+// SetView takes the transport's whole share, "<conn>/<far id>" each, and
 // passes each connection its part. It never dials: a share waits for the
 // connection's transport, whose tellFar sends it.
-func (s *Server) SetInterest(_ context.Context, req *gridwellv1.SetInterestRequest) (*gridwellv1.SetInterestResponse, error) {
+func (s *Server) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
 	shares := map[string][]string{}
-	for _, id := range req.GetGridIds() {
+	for _, id := range req.GetShownGridIds() {
 		if first, rest, ok := rpc.SplitID(id); ok && !rpc.IsTileSegment(first) {
 			shares[first] = append(shares[first], rest)
 		}
@@ -80,13 +84,13 @@ func (s *Server) SetInterest(_ context.Context, req *gridwellv1.SetInterestReque
 			f.poke()
 		}
 	}
-	return &gridwellv1.SetInterestResponse{}, nil
+	return &gridwellv1.SetViewResponse{}, nil
 }
 
 // tellFar sends a connection's share for as long as its transport lives, on
 // every change and every re-open of the far stream, since the far node
 // forgets a session whose stream closed. An empty share is sent only to
-// retract one the far node may hold. A far node from before interest answers
+// retract one the far node may hold. A far node from before SetView answers
 // Unimplemented and watches as it always did.
 func (s *Server) tellFar(ctx context.Context, name string, client namespace.Namespace) {
 	f := s.farOf(name)
@@ -97,7 +101,7 @@ func (s *Server) tellFar(ctx context.Context, name string, client namespace.Name
 		s.mu.Unlock()
 		if len(grids) > 0 || told {
 			cctx, cancel := context.WithTimeout(ctx, tellFarWait)
-			_, err := client.SetInterest(cctx, &gridwellv1.SetInterestRequest{Session: f.session, GridIds: grids})
+			_, err := client.SetView(cctx, &gridwellv1.SetViewRequest{Session: f.session, Label: farLabel, ShownGridIds: grids})
 			cancel()
 			told = len(grids) > 0
 			if err != nil && ctx.Err() == nil && status.Code(err) != codes.Unimplemented && !gwerr.IsTransport(err) {
