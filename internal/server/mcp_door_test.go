@@ -555,3 +555,20 @@ func TestTheBuildGateDoesNotApplyToTheMCPDoor(t *testing.T) {
 	var grid mcpdoor.GridOut
 	call(t, s, "read_grid", nil, &grid)
 }
+
+// A call is traced under the tile or grid it names first, a bulk call's
+// first item's.
+func TestAnMCPCallIsTracedUnderTheFirstIdItNames(t *testing.T) {
+	for raw, want := range map[string]string{
+		`{"id":"n/1"}`:                            "n/1",
+		`{"grid":"n/2"}`:                          "n/2",
+		`{"ids":["n/3","n/4"]}`:                   "n/3",
+		`{"items":[{"grid":"n/5"},{"id":"n/6"}]}`: "n/5",
+		`{"items":[{"id":"n/7","grid":"n/8"}]}`:   "n/7",
+		`{"query":"x"}`:                           "",
+	} {
+		if got := tracedID(json.RawMessage(raw)); got != want {
+			t.Errorf("tracedID(%s) = %q, want %q", raw, got, want)
+		}
+	}
+}
