@@ -40,7 +40,7 @@ spelling; each argument says which it takes.
 
 ## Claims
 
-A write claims what the agent read, as the app does. `read_tile` and
+A write claims what the agent read, as the app does. `read_tiles` and
 `read_grid` answer a `version` (and, for a text body, `body_version`, or
 `body_stamp` for a plugin's text). Pass it to a write and a change made since
 you read is refused as a conflict; read again and decide. Leave it out and the
@@ -49,23 +49,30 @@ tile sits now; a delete claims its version and where it sits. `select` claims
 nothing: it names the tiles it adds and removes, or clears, so the user's own
 selects made meanwhile stand beside it.
 
+## Lists and verdicts
+
+Every write takes `items`, a list, and applies them in order. Each item is
+its own write with its own claim, and the answer is one verdict per item, in
+the same order: `ok` with the tile as the write left it, or the refusal, in
+the same form as a refused call (see Refusals). A refused item stops nothing:
+the items after it still run. `read_tiles` answers the same way, one answer
+per id. A call is refused whole only when it is wrong as a whole, such as an
+empty list.
+
 ## Tools
 
 | Tool | Arguments | What it does |
 |---|---|---|
+| `pointed` | `session`, optional | What the user means by "here" and "these" (see Pointing), with the chosen screen's panes, and in `others` every other screen showing the node: its id, label (`desktop` or `browser`), when its view last changed, the pane tiles it is inside, and each pane's place (`anchor` and `path`), the grid it shows, the content tile it is inside, the pane tile whose layout it is part of (`pane_tile`), and whether it has focus. The most recently changed first. |
 | `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles; `selection`: the tiles the user has in hand) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid. |
-| `read_tile` | `id` | One row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux session a shell names, the grid a well holds. A link answers its target's content, or `dead` when the target is gone. |
-| `find` | `query`, `scope`, `limit` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. Each hit names the wells it sits inside; `skipped` names every namespace that did not answer. |
-| `create_text` | `grid`, `body`, `near` | A 1×1 text tile born with the body. Its name is the body's first line. It lands at the first free cell in reading order, or at `near` (`{x, y}`), or below it in its column when that cell is taken. |
-| `write_text` | `id`, `body`, `version` or `stamp` | Replaces a text tile's whole body. Through a link it writes the target. |
-| `rename` | `id`, `name`, `version` | Renames a url, shell, well or pane tile. |
-| `place` | `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same namespace. |
-| `clone` | `id`, `grid`, `at` | A deep copy, in `grid` or the tile's own, at `at` or beside the tile. Across namespaces a source that does not answer lands as a link. |
-| `link` | `id`, `grid`, `at` | A link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
-| `delete` | `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
+| `read_tiles` | `ids` | One answer per id, in order: the row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux session a shell names, the grid a well holds. A link answers its target's content, or `dead` when the target is gone. An id that cannot be read gets its refusal as its verdict. |
+| `find` | `query`, `scope`, `limit`, `grid`, `recurse`, `created`, `modified`, `content_changed`, `selected` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. The filters narrow it and combine: `grid` keeps the tiles on that grid, and with `recurse` the grids inside its wells, to any depth (a link well is not followed); `created`, `modified` (any write: a move, a framing, content) and `content_changed` keep the tiles whose time falls in the range, `{from, to}`, each an RFC 3339 time such as `2026-10-17T09:00:00Z`, inclusive, either left out for open; `selected` keeps the tiles in their grid's selection. With a filter the query may be empty, and the answer is what passes, newest first. Each hit names the wells it sits inside; `skipped` names every namespace that did not answer. |
+| `write_text` | `items`: `id`, `grid`, `body`, `version` or `stamp`, `near` | An item with `id` replaces that text tile's whole body; through a link it writes the target. An item with `grid` and no `id` creates a 1×1 text tile born with the body, its name the body's first line, at the first free cell in reading order, or at `near` (`{x, y}`), or below it in its column when that cell is taken. A new tile claims nothing. |
+| `rename` | `items`: `id`, `name`, `version` | Renames a url, shell, well or pane tile. |
+| `place` | `items`: `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same namespace. |
+| `copy` | `items`: `id`, `grid`, `at`, `link` | Lands in `grid` or the tile's own, at `at` or beside the tile. `link: false` is a deep copy; across namespaces a source that does not answer lands as a link. `link: true` is a link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
+| `delete` | `items`: `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
 | `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's wells, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". A pane inside a pane tile does not show it (see Pointing). |
-| `sessions` | none | Every screen showing the node now: its id, label (`desktop` or `browser`), when its view last changed, the pane tiles it is inside, and each pane's place (`anchor` and `path`), the grid it shows, the content tile it is inside, the pane tile whose layout it is part of (`pane_tile`), and whether it has focus. The most recently changed first. |
-| `pointed` | `session`, optional | What the user means by "here" and "these" (see Pointing). |
 
 ## Pointing
 
@@ -88,7 +95,7 @@ a conflict. Tell the user which tiles instead.
 
 Which screen is theirs, in this order:
 
-1. the `session` you name, an id from `sessions`;
+1. the `session` you name, an id from an earlier answer's `others`;
 2. the screen showing the shell you run in, live, right now. Every shell tile
    starts with `GRIDWELL_SHELL` set to its name, and the registration line
    sends it as the `X-Gridwell-Shell` header. Only one screen at a time shows
@@ -104,8 +111,8 @@ started again.
 
 ## Refusals
 
-A refused call is a tool error whose text starts with what kind of no it is,
-then the node's reason:
+A refused call is a tool error, and a refused item's verdict is text; each
+starts with what kind of no it is, then the node's reason:
 
 - `conflict:` the claim is stale (something changed since you read), or the
   cells are taken. Nothing was written.

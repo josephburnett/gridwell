@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -128,6 +130,74 @@ func refusedWith(t *testing.T, res *mcp.CallToolResult, lead string) {
 	}
 }
 
+// items is a bulk write's answer, failing on a whole-call refusal.
+func items(t *testing.T, s *mcp.ClientSession, tool string, args ...map[string]any) []mcpdoor.Verdict {
+	t.Helper()
+	var out mcpdoor.WriteOut
+	call(t, s, tool, map[string]any{"items": args}, &out)
+	if len(out.Items) != len(args) {
+		t.Fatalf("%s answered %d verdicts for %d items: %+v", tool, len(out.Items), len(args), out.Items)
+	}
+	return out.Items
+}
+
+// landed is the tile one bulk item wrote, failing on its refusal.
+func landed(t *testing.T, v mcpdoor.Verdict) mcpdoor.Tile {
+	t.Helper()
+	if v.Verdict != "ok" || v.Tile == nil {
+		t.Fatalf("verdict %+v, want ok with the tile", v)
+	}
+	return *v.Tile
+}
+
+// mkText creates a text tile on grid through write_text.
+func mkText(t *testing.T, s *mcp.ClientSession, grid, body string) mcpdoor.Tile {
+	t.Helper()
+	return landed(t, items(t, s, "write_text", map[string]any{"grid": grid, "body": body})[0])
+}
+
+// readTiles reads ids through read_tiles, one answer per id in order.
+func readTiles(t *testing.T, s *mcp.ClientSession, ids ...string) []mcpdoor.TileRead {
+	t.Helper()
+	var out mcpdoor.ReadTilesOut
+	call(t, s, "read_tiles", map[string]any{"ids": ids}, &out)
+	if len(out.Tiles) != len(ids) {
+		t.Fatalf("read_tiles answered %d for %d ids: %+v", len(out.Tiles), len(ids), out.Tiles)
+	}
+	return out.Tiles
+}
+
+// readOne is read_tiles of one id that must answer.
+func readOne(t *testing.T, s *mcp.ClientSession, id string) mcpdoor.TileRead {
+	t.Helper()
+	r := readTiles(t, s, id)[0]
+	if r.Verdict != "ok" {
+		t.Fatalf("read_tiles(%s) = %s", id, r.Verdict)
+	}
+	return r
+}
+
+// The door lists its ten tools and nothing else (docs/mcp.md).
+func TestTheMCPDoorListsItsTenTools(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, tl := range res.Tools {
+		got = append(got, tl.Name)
+	}
+	want := []string{"copy", "delete", "find", "place", "pointed", "read_grid", "read_tiles", "rename", "select", "write_text"}
+	if slices.Sort(got); !slices.Equal(got, want) {
+		t.Fatalf("tools = %v, want %v", got, want)
+	}
+}
+
 // Every tool crosses the real web door and the router, and every answer
 // names the tile by the qualified address the agent names it back with.
 func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
@@ -150,56 +220,51 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("read_grid() = %+v, want the empty home grid %s", grid, n.root)
 	}
 
-	var made mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": n.root, "body": "# plan\nfirst", "near": map[string]any{"x": 2, "y": 1}}, &made)
-	qualified("create_text", made.Tile.ID)
-	if made.Tile.Kind != rpc.KindText || made.Tile.X != 2 || made.Tile.Y != 1 || made.Tile.Name != "plan" {
-		t.Fatalf("create_text = %+v, want text \"plan\" at (2,1)", made.Tile)
+	near := map[string]any{"x": 2, "y": 1}
+	made := items(t, s, "write_text",
+		map[string]any{"grid": n.root, "body": "# plan\nfirst", "near": near},
+		map[string]any{"grid": n.root, "body": "beside", "near": near})
+	plan, second := landed(t, made[0]), landed(t, made[1])
+	qualified("write_text", plan.ID)
+	if plan.Kind != rpc.KindText || plan.X != 2 || plan.Y != 1 || plan.Name != "plan" {
+		t.Fatalf("write_text created %+v, want text \"plan\" at (2,1)", plan)
 	}
-	var second mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": n.root, "body": "beside", "near": map[string]any{"x": 2, "y": 1}}, &second)
-	if second.Tile.X != 2 || second.Tile.Y != 2 {
-		t.Fatalf("a create near a taken cell landed at (%d,%d), want (2,2), below it", second.Tile.X, second.Tile.Y)
+	if second.X != 2 || second.Y != 2 {
+		t.Fatalf("a create near a taken cell landed at (%d,%d), want (2,2), below it", second.X, second.Y)
 	}
 
-	var read mcpdoor.TileOut
-	call(t, s, "read_tile", map[string]any{"id": made.Tile.ID}, &read)
+	read := readOne(t, s, plan.ID)
 	if read.Body == nil || *read.Body != "# plan\nfirst" {
-		t.Fatalf("read_tile body = %v, want the created body", read.Body)
+		t.Fatalf("read_tiles body = %v, want the created body", read.Body)
 	}
 
-	var wrote mcpdoor.TileOut
-	call(t, s, "write_text", map[string]any{"id": made.Tile.ID, "body": "# plan\nsecond", "version": *read.BodyVersion}, &wrote)
-	if wrote.Tile.ID != made.Tile.ID || wrote.Tile.Version != *read.BodyVersion+1 {
-		t.Fatalf("write_text = %+v, want %s bumped past %d", wrote.Tile, made.Tile.ID, *read.BodyVersion)
+	wrote := landed(t, items(t, s, "write_text", map[string]any{"id": plan.ID, "body": "# plan\nsecond", "version": *read.BodyVersion})[0])
+	if wrote.ID != plan.ID || wrote.Version != *read.BodyVersion+1 {
+		t.Fatalf("write_text = %+v, want %s bumped past %d", wrote, plan.ID, *read.BodyVersion)
 	}
-	call(t, s, "write_text", map[string]any{"id": made.Tile.ID, "body": "# plan\nthird"}, &wrote)
-	call(t, s, "read_tile", map[string]any{"id": made.Tile.ID}, &read)
-	if *read.Body != "# plan\nthird" {
+	wrote = landed(t, items(t, s, "write_text", map[string]any{"id": plan.ID, "body": "# plan\nthird"})[0])
+	if read = readOne(t, s, plan.ID); *read.Body != "# plan\nthird" {
 		t.Fatalf("an unclaimed write_text left %q, want it to claim the row as it stands", *read.Body)
 	}
 
-	var placed mcpdoor.TileOut
-	call(t, s, "place", map[string]any{"id": made.Tile.ID, "x": 6, "y": 4, "w": 2}, &placed)
-	if p := placed.Tile; p.X != 6 || p.Y != 4 || p.W != 2 || p.H != 1 || p.Version != wrote.Tile.Version {
-		t.Fatalf("place = %+v, want 2x1 at (6,4) with the content version untouched", p)
+	placed := landed(t, items(t, s, "place", map[string]any{"id": plan.ID, "x": 6, "y": 4, "w": 2})[0])
+	if placed.X != 6 || placed.Y != 4 || placed.W != 2 || placed.H != 1 || placed.Version != wrote.Version {
+		t.Fatalf("place = %+v, want 2x1 at (6,4) with the content version untouched", placed)
 	}
 
-	var clone mcpdoor.TileOut
-	call(t, s, "clone", map[string]any{"id": made.Tile.ID}, &clone)
-	qualified("clone", clone.Tile.ID)
-	if clone.Tile.ID == made.Tile.ID || clone.Tile.X != 8 || clone.Tile.Y != 4 {
-		t.Fatalf("clone = %+v, want a new tile beside the source at (8,4)", clone.Tile)
+	copies := items(t, s, "copy",
+		map[string]any{"id": plan.ID, "link": false},
+		map[string]any{"id": plan.ID, "link": true, "at": map[string]any{"x": 0, "y": 9}})
+	clone, link := landed(t, copies[0]), landed(t, copies[1])
+	qualified("copy", clone.ID)
+	if clone.ID == plan.ID || clone.Link != "" || clone.X != 8 || clone.Y != 4 {
+		t.Fatalf("copy = %+v, want a new tile, no link, beside the source at (8,4)", clone)
 	}
-	var link mcpdoor.TileOut
-	call(t, s, "link", map[string]any{"id": made.Tile.ID, "at": map[string]any{"x": 0, "y": 9}}, &link)
-	if link.Tile.Link != made.Tile.ID || link.Tile.X != 0 || link.Tile.Y != 9 {
-		t.Fatalf("link = %+v, want a link to %s at (0,9)", link.Tile, made.Tile.ID)
+	if link.Link != plan.ID || link.X != 0 || link.Y != 9 {
+		t.Fatalf("copy with link = %+v, want a link to %s at (0,9)", link, plan.ID)
 	}
-	var through mcpdoor.TileOut
-	call(t, s, "read_tile", map[string]any{"id": link.Tile.ID}, &through)
-	if through.Body == nil || *through.Body != "# plan\nthird" || through.Tile.Dead {
-		t.Fatalf("read_tile through the link = %+v, want the target's body", through)
+	if through := readOne(t, s, link.ID); through.Body == nil || *through.Body != "# plan\nthird" || through.Tile.Dead {
+		t.Fatalf("read_tiles through the link = %+v, want the target's body", through)
 	}
 
 	well, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
@@ -207,12 +272,15 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var renamed mcpdoor.TileOut
-	call(t, s, "rename", map[string]any{"id": well.GetTile().GetId(), "name": "inbox"}, &renamed)
-	if renamed.Tile.Name != "inbox" || renamed.Tile.ChildGrid == "" {
-		t.Fatalf("rename = %+v, want the well named inbox", renamed.Tile)
+	renamed := items(t, s, "rename",
+		map[string]any{"id": well.GetTile().GetId(), "name": "inbox"},
+		map[string]any{"id": plan.ID, "name": "x"})
+	if r := landed(t, renamed[0]); r.Name != "inbox" || r.ChildGrid == "" {
+		t.Fatalf("rename = %+v, want the well named inbox", r)
 	}
-	refusedWith(t, callRaw(t, s, "rename", map[string]any{"id": made.Tile.ID, "name": "x"}), "refused:")
+	if !strings.HasPrefix(renamed[1].Verdict, "refused:") {
+		t.Fatalf("renaming a text tile = %q, want refused", renamed[1].Verdict)
+	}
 
 	var found mcpdoor.FindOut
 	call(t, s, "find", map[string]any{"query": "third"}, &found)
@@ -220,17 +288,182 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("find(third) = %+v, want the text", found)
 	}
 
-	var gone mcpdoor.DeleteOut
-	call(t, s, "delete", map[string]any{"id": clone.Tile.ID}, &gone)
-	if gone.Deleted != clone.Tile.ID {
+	if gone := items(t, s, "delete", map[string]any{"id": clone.ID})[0]; gone.Verdict != "ok" || gone.Deleted != clone.ID {
 		t.Fatalf("delete = %+v", gone)
 	}
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &grid)
 	for _, tl := range grid.Tiles {
-		if tl.ID == clone.Tile.ID {
+		if tl.ID == clone.ID {
 			t.Fatalf("the deleted clone is still on its grid: %+v", tl)
 		}
 	}
+}
+
+// verdicts asserts a bulk answer item by item: "ok", or the refusal's lead.
+func verdicts(t *testing.T, tool string, got []mcpdoor.Verdict, want ...string) {
+	t.Helper()
+	for i, v := range got {
+		if want[i] == "ok" && v.Verdict != "ok" || want[i] != "ok" && !strings.HasPrefix(v.Verdict, want[i]) {
+			t.Fatalf("%s item %d = %q, want %q (all: %+v)", tool, i, v.Verdict, want[i], got)
+		}
+	}
+}
+
+// Every bulk write applies its items in order, each with its own claim and
+// verdict: a refused item in the middle stops nothing, and the items either
+// side of it land.
+func TestAnMCPBulkWriteRefusesOneItemAndLandsTheRest(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b, c := mkText(t, s, n.root, "a"), mkText(t, s, n.root, "b"), mkText(t, s, n.root, "c")
+	stale := readOne(t, s, b.ID)
+	items(t, s, "write_text", map[string]any{"id": b.ID, "body": "b2"})
+
+	verdicts(t, "write_text", items(t, s, "write_text",
+		map[string]any{"id": a.ID, "body": "a3"},
+		map[string]any{"id": b.ID, "body": "b3", "version": *stale.BodyVersion},
+		map[string]any{"grid": n.root, "body": "new", "near": map[string]any{"x": 0, "y": 7}}),
+		"ok", "conflict:", "ok")
+	got := readTiles(t, s, a.ID, b.ID)
+	if *got[0].Body != "a3" || *got[1].Body != "b2" {
+		t.Fatalf("bodies %q %q, want a3 written and b2 kept", *got[0].Body, *got[1].Body)
+	}
+	verdicts(t, "write_text", items(t, s, "write_text",
+		map[string]any{"id": a.ID, "grid": n.root, "body": "both"},
+		map[string]any{"body": "neither"}),
+		"refused:", "refused:")
+
+	verdicts(t, "rename", items(t, s, "rename",
+		map[string]any{"id": a.ID, "name": "x"}, map[string]any{"id": "nowhere/1", "name": "y"}),
+		"refused:", "dead link:")
+
+	verdicts(t, "place", items(t, s, "place",
+		map[string]any{"id": a.ID, "x": 10, "y": 0},
+		map[string]any{"id": b.ID, "x": 10, "y": 0},
+		map[string]any{"id": c.ID, "x": 11, "y": 0}),
+		"ok", "conflict:", "ok")
+
+	verdicts(t, "copy", items(t, s, "copy",
+		map[string]any{"id": a.ID, "grid": n.root, "at": map[string]any{"x": 20, "y": 0}},
+		map[string]any{"id": "nowhere/1"},
+		map[string]any{"id": c.ID, "link": true, "grid": n.root, "at": map[string]any{"x": 20, "y": 1}}),
+		"ok", "dead link:", "ok")
+
+	verdicts(t, "delete", items(t, s, "delete",
+		map[string]any{"id": a.ID},
+		map[string]any{"id": b.ID, "version": *stale.BodyVersion},
+		map[string]any{"id": c.ID}),
+		"ok", "conflict:", "ok")
+	var grid mcpdoor.GridOut
+	call(t, s, "read_grid", map[string]any{"id": n.root}, &grid)
+	on := map[string]bool{}
+	for _, tl := range grid.Tiles {
+		on[tl.ID] = true
+	}
+	if on[a.ID] || !on[b.ID] || on[c.ID] {
+		t.Fatalf("after the bulk delete a:%v b:%v c:%v on the grid, want only b", on[a.ID], on[b.ID], on[c.ID])
+	}
+
+	refusedWith(t, callRaw(t, s, "delete", map[string]any{"items": []any{}}), "refused:")
+}
+
+// read_tiles answers each id in order: a dead link reads dead, and an id
+// that names nothing is that item's refusal, never the call's.
+func TestMCPReadTilesAnswersEachIdInOrder(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	a, gone := mkText(t, s, n.root, "a"), mkText(t, s, n.root, "gone")
+	link := landed(t, items(t, s, "copy", map[string]any{"id": gone.ID, "link": true})[0])
+	rt := newRouter(n.srv)
+	for range 2 { // to the trash, then out of it
+		row, err := rt.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: gone.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := rt.DeleteTile(ctx, rpc.DeleteOf(row.GetTile())); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := readTiles(t, s, a.ID, "nowhere/1", link.ID, a.ID)
+	if got[0].Verdict != "ok" || *got[0].Body != "a" || got[3].Verdict != "ok" || got[3].Tile.ID != a.ID {
+		t.Fatalf("the good ids = %+v, %+v, want a's body twice", got[0], got[3])
+	}
+	if !strings.HasPrefix(got[1].Verdict, "dead link:") || got[1].Body != nil {
+		t.Fatalf("an id naming nothing = %+v, want its own refusal", got[1])
+	}
+	if got[2].Verdict != "ok" || !got[2].Tile.Dead || got[2].Body != nil {
+		t.Fatalf("the link to a destroyed tile = %+v, want it read dead", got[2])
+	}
+}
+
+// find's filters reach the router: a grid with its wells, and the content
+// time, keep only the tile whose body was written since.
+func TestMCPFindFiltersReachTheStore(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	well, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 9, Y: 9, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := well.GetTile().GetChildGridId()
+	kept, still, outside := mkText(t, s, inner, "note kept"), mkText(t, s, inner, "note still"), mkText(t, s, n.root, "note outside")
+	made := time.Now().Unix()
+	for time.Now().Unix() == made {
+		time.Sleep(10 * time.Millisecond)
+	}
+	since := time.Now().UTC().Format(time.RFC3339)
+	items(t, s, "write_text", map[string]any{"id": kept.ID, "body": "note kept, rewritten"},
+		map[string]any{"id": outside.ID, "body": "note outside, rewritten"})
+
+	hits := func(args map[string]any) []string {
+		t.Helper()
+		var found mcpdoor.FindOut
+		call(t, s, "find", args, &found)
+		var ids []string
+		for _, h := range found.Hits {
+			ids = append(ids, h.Tile.ID)
+		}
+		slices.Sort(ids)
+		return ids
+	}
+	sorted := func(ids ...string) []string { slices.Sort(ids); return ids }
+	if got := hits(map[string]any{"query": "note", "grid": n.root, "recurse": true}); !slices.Equal(got, sorted(kept.ID, still.ID, outside.ID)) {
+		t.Fatalf("find in root with its wells = %v, want all three", got)
+	}
+	if got := hits(map[string]any{"query": "note", "grid": n.root}); !slices.Equal(got, []string{outside.ID}) {
+		t.Fatalf("find in root alone = %v, want [%s]", got, outside.ID)
+	}
+	if got := hits(map[string]any{"query": "note", "grid": n.root, "recurse": true,
+		"content_changed": map[string]any{"from": since}}); !slices.Equal(got, sorted(kept.ID, outside.ID)) {
+		t.Fatalf("find changed since %s = %v, want the two rewritten", since, got)
+	}
+	if got := hits(map[string]any{"grid": inner, "content_changed": map[string]any{"from": since}}); !slices.Equal(got, []string{kept.ID}) {
+		t.Fatalf("an empty query in the well changed since %s = %v, want [%s]", since, got, kept.ID)
+	}
+	if got := hits(map[string]any{"query": "note", "created": map[string]any{"to": "2000-01-01T00:00:00Z"}}); len(got) != 0 {
+		t.Fatalf("find created before 2000 = %v, want none", got)
+	}
+	if got := hits(map[string]any{"query": "note", "modified": map[string]any{"from": since}, "grid": inner}); !slices.Equal(got, []string{kept.ID}) {
+		t.Fatalf("find modified since %s in the well = %v, want [%s]", since, got, kept.ID)
+	}
+	var g mcpdoor.GridOut
+	call(t, s, "select", map[string]any{"grid": inner, "add": []string{still.ID}}, &g)
+	if got := hits(map[string]any{"query": "note", "selected": true}); !slices.Equal(got, []string{still.ID}) {
+		t.Fatalf("find selected = %v, want [%s]", got, still.ID)
+	}
+	refusedWith(t, callRaw(t, s, "find", map[string]any{"query": "note", "created": map[string]any{"from": "yesterday"}}), "refused:")
 }
 
 // A write claims what the agent read: once another write has landed, the
@@ -242,15 +475,13 @@ func TestAStaleMCPClaimIsRefusedWithTheReason(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var made, read, wrote mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": n.root, "body": "one"}, &made)
-	call(t, s, "read_tile", map[string]any{"id": made.Tile.ID}, &read)
-	call(t, s, "write_text", map[string]any{"id": made.Tile.ID, "body": "two", "version": *read.BodyVersion}, &wrote)
+	made := mkText(t, s, n.root, "one")
+	read := readOne(t, s, made.ID)
+	items(t, s, "write_text", map[string]any{"id": made.ID, "body": "two", "version": *read.BodyVersion})
 
-	refusedWith(t, callRaw(t, s, "write_text", map[string]any{"id": made.Tile.ID, "body": "three", "version": *read.BodyVersion}), "conflict:")
-	refusedWith(t, callRaw(t, s, "delete", map[string]any{"id": made.Tile.ID, "version": *read.BodyVersion}), "conflict:")
-	call(t, s, "read_tile", map[string]any{"id": made.Tile.ID}, &read)
-	if *read.Body != "two" {
+	verdicts(t, "write_text", items(t, s, "write_text", map[string]any{"id": made.ID, "body": "three", "version": *read.BodyVersion}), "conflict:")
+	verdicts(t, "delete", items(t, s, "delete", map[string]any{"id": made.ID, "version": *read.BodyVersion}), "conflict:")
+	if read = readOne(t, s, made.ID); *read.Body != "two" {
 		t.Fatalf("on disk %q, want the first writer's", *read.Body)
 	}
 }
@@ -272,13 +503,12 @@ func TestAnMCPWriteToADisabledSourceIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := made.GetTile().GetId()
-	refusedWith(t, callRaw(t, s, "write_text", map[string]any{"id": id, "body": "lost"}), "disabled:")
-	refusedWith(t, callRaw(t, s, "create_text", map[string]any{"grid": n.feedRoot, "body": "x"}), "disabled:")
-	refusedWith(t, callRaw(t, s, "delete", map[string]any{"id": id}), "disabled:")
-	var read mcpdoor.TileOut
-	call(t, s, "read_tile", map[string]any{"id": id}, &read)
-	if *read.Body != "kept" || read.Tile.ReadOnly == "" {
-		t.Fatalf("read_tile = %+v, want the body kept and the row read-only with the reason", read)
+	verdicts(t, "write_text", items(t, s, "write_text",
+		map[string]any{"id": id, "body": "lost"}, map[string]any{"grid": n.feedRoot, "body": "x"}),
+		"disabled:", "disabled:")
+	verdicts(t, "delete", items(t, s, "delete", map[string]any{"id": id}), "disabled:")
+	if read := readOne(t, s, id); *read.Body != "kept" || read.Tile.ReadOnly == "" {
+		t.Fatalf("read_tiles = %+v, want the body kept and the row read-only with the reason", read)
 	}
 }
 

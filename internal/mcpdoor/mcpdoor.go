@@ -8,7 +8,10 @@ package mcpdoor
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"io"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -23,13 +26,14 @@ const Path = "/mcp"
 
 const instructions = `Gridwell is a personal space of tiles on infinite grids. Every id is a
 qualified address ("<node>/12", "<node>/<connection>/<far-node>/7"); name it
-back exactly as a tool answered it. A write claims what you read: pass the
-version read_tile or read_grid gave you and a write made since is refused as a
-version conflict, or omit it to claim the row as it stands now; select claims
-nothing. Nothing here
-destroys a tile: delete moves it to the trash. Shells are not reachable here.
-When the user says "this", "here" or "these", call pointed: it answers the
-grid or the selection in front of them.`
+back exactly as a tool answered it. Every write takes a list of items and
+answers a verdict per item, in order: "ok", or the refusal. Each item claims
+what you read: pass the version read_tiles or read_grid gave you and a write
+made since is refused as a conflict, or omit it to claim the row as it stands
+now; select claims nothing. Nothing here destroys a tile: delete moves it to
+the trash. Shells are not reachable here. When the user says "this", "here"
+or "these", call pointed: it answers the grid or the selection in front of
+them, and names every other screen.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
 // the browser codec does. node is the node's own id, the frame dead links are
@@ -38,19 +42,16 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	d := &door{rt: rt, node: node, screens: screens}
 	s := mcp.NewServer(&mcp.Implementation{Name: "gridwell", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
+	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the selection that pane shows when it has one (the grid's, or inside a pane tile the pane's own), else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last. It answers that session's panes and every other screen showing the node, with theirs."}, d.pointed)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
-	mcp.AddTool(s, &mcp.Tool{Name: "read_tile", Description: "Read one tile: its row, and the body of a text tile, the address of a url, the session a shell names, or the grid a well holds."}, d.readTile)
-	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside."}, d.find)
-	mcp.AddTool(s, &mcp.Tool{Name: "create_text", Description: "Create a text tile with a body in a grid. Its name is the body's first line. It lands at the first free cell, or at or below the cell named in near."}, d.createText)
-	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Replace a text tile's body, claiming the version you read (or the one on disk now when none is given)."}, d.writeText)
-	mcp.AddTool(s, &mcp.Tool{Name: "rename", Description: "Rename a url, shell, well or pane tile. A text tile's name is its first line, so write_text renames it."}, d.rename)
-	mcp.AddTool(s, &mcp.Tool{Name: "place", Description: "Move or resize a tile, within its grid or to another grid of the same namespace, claiming the placement it has now."}, d.place)
-	mcp.AddTool(s, &mcp.Tool{Name: "clone", Description: "Deep-copy a tile into a grid (its own when none is named), at the first free cell near it or at the cell named."}, d.clone)
-	mcp.AddTool(s, &mcp.Tool{Name: "link", Description: "Create a link to a tile in a grid: a dashed tile showing the same content, in this namespace or across one."}, d.link)
-	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete a tile: it moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
+	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the session a shell names, or the grid a well holds. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
+	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its wells too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open, and selected (only tiles in their grid's selection). With a filter the query may be empty: it then lists what passes, newest first."}, d.find)
+	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Write text tiles, a list of items applied in order, a verdict per item. An item with id replaces that text tile's whole body (through a link, its target's), claiming the version you read or, with none, the one on disk now. An item with grid and no id creates a 1x1 text tile there, its name the body's first line, at the first free cell or at or below the cell named in near."}, d.writeText)
+	mcp.AddTool(s, &mcp.Tool{Name: "rename", Description: "Rename url, shell, well or pane tiles, a list of items applied in order, a verdict per item. A text tile's name is its first line, so write_text renames it."}, d.rename)
+	mcp.AddTool(s, &mcp.Tool{Name: "place", Description: "Move or resize tiles, within a grid or to another grid of the same namespace, a list of items applied in order, a verdict per item; each claims the placement its tile has now."}, d.place)
+	mcp.AddTool(s, &mcp.Tool{Name: "copy", Description: "Copy tiles into a grid (the tile's own when none is named), at the cell named or beside the tile, a list of items applied in order, a verdict per item. link false is a deep copy; link true is a link: a dashed tile showing the same content, in this namespace or across one."}, d.copy)
+	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete tiles, a list of items applied in order, a verdict per item: each moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
 	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Clear, add tiles to and take tiles out of a grid's selection, the tiles the user has in hand; clear with recurse also clears every grid inside its wells, and clear with all (no grid) clears every selection the node and its far nodes hold. It claims nothing: the user's own selects meanwhile stand, and the last select of a tile wins. A pane inside a pane tile shows its own set, which this does not write."}, d.selectTiles)
-	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List every screen showing this node now: each client session's label, when its view last changed, and its panes, each with its place, the grid it shows, the pane tile it is inside, and whether it has focus."}, d.sessions)
-	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the selection that pane shows when it has one (the grid's, or inside a pane tile the pane's own), else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last."}, d.pointed)
 	return s
 }
 
@@ -99,14 +100,27 @@ func (d *door) grid(ctx context.Context, id string) (GridOut, error) {
 	return out, nil
 }
 
-type tileIn struct {
-	ID string `json:"id" jsonschema:"the tile's id"`
+type readTilesIn struct {
+	IDs []string `json:"ids" jsonschema:"the tiles to read"`
 }
 
-func (d *door) readTile(ctx context.Context, _ *mcp.CallToolRequest, in tileIn) (*mcp.CallToolResult, TileOut, error) {
-	row, err := d.tile(ctx, in.ID)
+func (d *door) readTiles(ctx context.Context, _ *mcp.CallToolRequest, in readTilesIn) (*mcp.CallToolResult, ReadTilesOut, error) {
+	if len(in.IDs) == 0 {
+		return nil, ReadTilesOut{}, errNoItems
+	}
+	out := ReadTilesOut{Tiles: make([]TileRead, 0, len(in.IDs))}
+	for _, id := range in.IDs {
+		r, err := d.readTile(ctx, id)
+		out.Tiles = append(out.Tiles, TileRead{Verdict: verdictOf(err), TileOut: r})
+	}
+	return nil, out, nil
+}
+
+// readTile is one read_tiles answer.
+func (d *door) readTile(ctx context.Context, id string) (TileOut, error) {
+	row, err := d.tile(ctx, id)
 	if err != nil {
-		return nil, TileOut{}, err
+		return TileOut{}, err
 	}
 	out := TileOut{Tile: tileOf(row, nil, d.node)}
 	content := row
@@ -117,9 +131,9 @@ func (d *door) readTile(ctx context.Context, _ *mcp.CallToolRequest, in tileIn) 
 		if err != nil {
 			if dead(err) {
 				out.Tile.Dead = true
-				return nil, out, nil
+				return out, nil
 			}
-			return nil, TileOut{}, refusal(err)
+			return TileOut{}, refusal(err)
 		}
 		content = tr.GetTile()
 	}
@@ -127,7 +141,7 @@ func (d *door) readTile(ctx context.Context, _ *mcp.CallToolRequest, in tileIn) 
 	case rpc.KindText:
 		body, basis, err := d.readBody(ctx, row.GetId())
 		if err != nil {
-			return nil, TileOut{}, refusal(err)
+			return TileOut{}, refusal(err)
 		}
 		out.Body, out.BodyVersion, out.BodyStamp = &body, &basis.Version, basis.Stamp
 	case rpc.KindURL:
@@ -135,17 +149,63 @@ func (d *door) readTile(ctx context.Context, _ *mcp.CallToolRequest, in tileIn) 
 	case rpc.KindShell:
 		out.ShellSession = rpc.ShellSession(content)
 	}
-	return nil, out, nil
+	return out, nil
 }
 
 type findIn struct {
-	Query string `json:"query" jsonschema:"free text matched against names, bodies and addresses, or id:<tile-id>"`
-	Scope string `json:"scope,omitempty" jsonschema:"a namespace or id to search within; empty searches everything this node reaches"`
-	Limit int32  `json:"limit,omitempty" jsonschema:"the most hits each namespace answers; 0 is its default"`
+	Query          string `json:"query,omitempty" jsonschema:"free text matched against names, bodies and addresses, or id:<tile-id>; may be empty when a filter is given"`
+	Scope          string `json:"scope,omitempty" jsonschema:"a namespace or id to search within; empty searches everything this node reaches"`
+	Limit          int32  `json:"limit,omitempty" jsonschema:"the most hits each namespace answers; 0 is its default"`
+	Grid           string `json:"grid,omitempty" jsonschema:"keep only the tiles on this grid"`
+	Recurse        bool   `json:"recurse,omitempty" jsonschema:"with grid, also the tiles on the grids inside its wells, to any depth; a link well is not followed"`
+	Created        *Span  `json:"created,omitempty" jsonschema:"keep only the tiles made in this range"`
+	Modified       *Span  `json:"modified,omitempty" jsonschema:"keep only the tiles last written by anything (a move, a framing, content) in this range"`
+	ContentChanged *Span  `json:"content_changed,omitempty" jsonschema:"keep only the tiles whose content (a body, an address, a name) last changed in this range"`
+	Selected       bool   `json:"selected,omitempty" jsonschema:"keep only the tiles in their grid's selection"`
+}
+
+// Span is a time range, each end an RFC 3339 time; an empty end is open.
+type Span struct {
+	From string `json:"from,omitempty" jsonschema:"the earliest time, RFC 3339, such as 2026-10-17T09:00:00Z; empty is open"`
+	To   string `json:"to,omitempty" jsonschema:"the latest time, RFC 3339, inclusive; empty is open"`
+}
+
+// rangeOf is s as the wire's unix-second range.
+func (s *Span) rangeOf(name string) (*pb.TimeRange, error) {
+	if s == nil {
+		return nil, nil
+	}
+	var r pb.TimeRange
+	for _, end := range []struct {
+		name, at string
+		to       *int64
+	}{{"from", s.From, &r.From}, {"to", s.To, &r.To}} {
+		if end.at == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, end.at)
+		if err != nil {
+			return nil, fmt.Errorf("refused: %s.%s %q is not an RFC 3339 time such as 2026-10-17T09:00:00Z", name, end.name, end.at)
+		}
+		*end.to = t.Unix()
+	}
+	return &r, nil
 }
 
 func (d *door) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (*mcp.CallToolResult, FindOut, error) {
-	resp, err := d.rt.Search(ctx, &pb.SearchRequest{Query: in.Query, Scope: in.Scope, Limit: in.Limit})
+	req := &pb.SearchRequest{Query: in.Query, Scope: in.Scope, Limit: in.Limit,
+		GridId: in.Grid, Recurse: in.Recurse, Selected: in.Selected}
+	var err error
+	if req.Created, err = in.Created.rangeOf("created"); err != nil {
+		return nil, FindOut{}, err
+	}
+	if req.Modified, err = in.Modified.rangeOf("modified"); err != nil {
+		return nil, FindOut{}, err
+	}
+	if req.ContentChanged, err = in.ContentChanged.rangeOf("content_changed"); err != nil {
+		return nil, FindOut{}, err
+	}
+	resp, err := d.rt.Search(ctx, req)
 	if err != nil {
 		return nil, FindOut{}, refusal(err)
 	}
@@ -163,69 +223,107 @@ func (d *door) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (*mc
 	return nil, out, nil
 }
 
-type createTextIn struct {
-	Grid string `json:"grid" jsonschema:"the grid to create it in"`
-	Body string `json:"body" jsonschema:"the text, markdown; its first line is the tile's name"`
-	Near *Cell  `json:"near,omitempty" jsonschema:"a cell to land at, or below it in its column when taken"`
+// errNoItems refuses a call that names nothing to do.
+var errNoItems = errors.New("refused: the list is empty; name at least one")
+
+// each applies do to every item in order, one verdict per item: a refused
+// item is its verdict and stops nothing after it.
+func each[T any](items []T, do func(T) (Verdict, error)) (*mcp.CallToolResult, WriteOut, error) {
+	if len(items) == 0 {
+		return nil, WriteOut{}, errNoItems
+	}
+	out := WriteOut{Items: make([]Verdict, 0, len(items))}
+	for _, it := range items {
+		v, err := do(it)
+		if err != nil {
+			v = Verdict{}
+		}
+		v.Verdict = verdictOf(err)
+		out.Items = append(out.Items, v)
+	}
+	return nil, out, nil
 }
 
-func (d *door) createText(ctx context.Context, _ *mcp.CallToolRequest, in createTextIn) (*mcp.CallToolResult, TileOut, error) {
-	x, y, err := d.slot(ctx, in.Grid, in.Near.near(), 1, 1)
-	if err != nil {
-		return nil, TileOut{}, err
-	}
-	resp, err := d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: in.Grid,
-		Tile: &pb.Tile{Kind: rpc.KindText, X: x, Y: y, W: 1, H: 1}, Content: []byte(in.Body)})
-	return d.answer(resp, err)
+type writeTextItem struct {
+	ID      string `json:"id,omitempty" jsonschema:"the text tile to replace the body of, or a link to one; empty creates a tile in grid"`
+	Grid    string `json:"grid,omitempty" jsonschema:"with no id, the grid to create the tile in"`
+	Body    string `json:"body" jsonschema:"the whole body, markdown; its first line is the tile's name"`
+	Version *int64 `json:"version,omitempty" jsonschema:"with id, the body_version read_tiles gave; omitted claims the version on disk now"`
+	Stamp   string `json:"stamp,omitempty" jsonschema:"with id, for a plugin's text, the body_stamp read_tiles gave, in place of a version"`
+	Near    *Cell  `json:"near,omitempty" jsonschema:"with no id, a cell to land at, or below it in its column when taken"`
 }
 
 type writeTextIn struct {
-	ID      string `json:"id" jsonschema:"the text tile, or a link to one"`
-	Body    string `json:"body" jsonschema:"the whole new body"`
-	Version *int64 `json:"version,omitempty" jsonschema:"the body_version read_tile gave; omitted claims the version on disk now"`
-	Stamp   string `json:"stamp,omitempty" jsonschema:"for a plugin's text, the body_stamp read_tile gave, in place of a version"`
+	Items []writeTextItem `json:"items" jsonschema:"the bodies to write, applied in order"`
 }
 
-func (d *door) writeText(ctx context.Context, _ *mcp.CallToolRequest, in writeTextIn) (*mcp.CallToolResult, TileOut, error) {
-	row, err := d.tile(ctx, in.ID)
-	if err != nil {
-		return nil, TileOut{}, err
-	}
-	// A link owns no bytes; the write goes to the content it names, as the
-	// editor's does.
-	target := rpc.ContentID(row)
-	claim := rpc.ContentBasis{Stamp: in.Stamp}
-	if in.Version != nil {
-		claim.Version = *in.Version
-	} else if in.Stamp == "" {
-		if _, claim, err = d.readBody(ctx, target); err != nil {
-			return nil, TileOut{}, refusal(err)
+func (d *door) writeText(ctx context.Context, _ *mcp.CallToolRequest, in writeTextIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it writeTextItem) (Verdict, error) {
+		if it.ID == "" {
+			return d.createText(ctx, it)
 		}
-	}
-	resp, err := d.rt.WriteContent(ctx, chunks(target, claim, []byte(in.Body)))
-	return d.answer(resp, err)
+		if it.Grid != "" || it.Near != nil {
+			return Verdict{}, errors.New("refused: an item names either id, to replace a body, or grid and near, to create a tile, not both")
+		}
+		row, err := d.tile(ctx, it.ID)
+		if err != nil {
+			return Verdict{}, err
+		}
+		// A link owns no bytes; the write goes to the content it names, as the
+		// editor's does.
+		target := rpc.ContentID(row)
+		claim := rpc.ContentBasis{Stamp: it.Stamp}
+		if it.Version != nil {
+			claim.Version = *it.Version
+		} else if it.Stamp == "" {
+			if _, claim, err = d.readBody(ctx, target); err != nil {
+				return Verdict{}, refusal(err)
+			}
+		}
+		return d.landed(d.rt.WriteContent(ctx, chunks(target, claim, []byte(it.Body))))
+	})
 }
 
-type renameIn struct {
+func (d *door) createText(ctx context.Context, it writeTextItem) (Verdict, error) {
+	if it.Grid == "" {
+		return Verdict{}, errors.New("refused: an item names id, to replace a body, or grid, to create a tile")
+	}
+	if it.Version != nil || it.Stamp != "" {
+		return Verdict{}, errors.New("refused: a new tile has nothing to claim; version and stamp go with id")
+	}
+	x, y, err := d.slot(ctx, it.Grid, it.Near.near(), 1, 1)
+	if err != nil {
+		return Verdict{}, err
+	}
+	return d.landed(d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: it.Grid,
+		Tile: &pb.Tile{Kind: rpc.KindText, X: x, Y: y, W: 1, H: 1}, Content: []byte(it.Body)}))
+}
+
+type renameItem struct {
 	ID      string `json:"id" jsonschema:"the tile"`
 	Name    string `json:"name" jsonschema:"the new name"`
 	Version *int64 `json:"version,omitempty" jsonschema:"the version you read; omitted claims the version on disk now"`
 }
 
-func (d *door) rename(ctx context.Context, _ *mcp.CallToolRequest, in renameIn) (*mcp.CallToolResult, TileOut, error) {
-	row, err := d.tile(ctx, in.ID)
-	if err != nil {
-		return nil, TileOut{}, err
-	}
-	version := row.GetVersion()
-	if in.Version != nil {
-		version = *in.Version
-	}
-	resp, err := d.rt.SetTile(ctx, &pb.SetTileRequest{TileId: row.GetId(), Version: version, Rename: in.Name})
-	return d.answer(resp, err)
+type renameIn struct {
+	Items []renameItem `json:"items" jsonschema:"the renames, applied in order"`
 }
 
-type placeIn struct {
+func (d *door) rename(ctx context.Context, _ *mcp.CallToolRequest, in renameIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it renameItem) (Verdict, error) {
+		row, err := d.tile(ctx, it.ID)
+		if err != nil {
+			return Verdict{}, err
+		}
+		version := row.GetVersion()
+		if it.Version != nil {
+			version = *it.Version
+		}
+		return d.landed(d.rt.SetTile(ctx, &pb.SetTileRequest{TileId: row.GetId(), Version: version, Rename: it.Name}))
+	})
+}
+
+type placeItem struct {
 	ID   string `json:"id" jsonschema:"the tile"`
 	X    int64  `json:"x" jsonschema:"the column of its top-left cell"`
 	Y    int64  `json:"y" jsonschema:"the row of its top-left cell"`
@@ -234,60 +332,71 @@ type placeIn struct {
 	Grid string `json:"grid,omitempty" jsonschema:"the grid to move it to, in the same namespace; empty keeps its grid"`
 }
 
-func (d *door) place(ctx context.Context, _ *mcp.CallToolRequest, in placeIn) (*mcp.CallToolResult, TileOut, error) {
-	row, err := d.tile(ctx, in.ID)
-	if err != nil {
-		return nil, TileOut{}, err
-	}
-	resp, err := d.rt.PlaceTile(ctx, &pb.PlaceTileRequest{TileId: row.GetId(),
-		GridId: cmp.Or(in.Grid, row.GetGridId()), X: in.X, Y: in.Y,
-		W: cmp.Or(in.W, row.GetW()), H: cmp.Or(in.H, row.GetH()), Claim: rpc.PlacementOf(row)})
-	return d.answer(resp, err)
+type placeIn struct {
+	Items []placeItem `json:"items" jsonschema:"the moves, applied in order"`
+}
+
+func (d *door) place(ctx context.Context, _ *mcp.CallToolRequest, in placeIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it placeItem) (Verdict, error) {
+		row, err := d.tile(ctx, it.ID)
+		if err != nil {
+			return Verdict{}, err
+		}
+		return d.landed(d.rt.PlaceTile(ctx, &pb.PlaceTileRequest{TileId: row.GetId(),
+			GridId: cmp.Or(it.Grid, row.GetGridId()), X: it.X, Y: it.Y,
+			W: cmp.Or(it.W, row.GetW()), H: cmp.Or(it.H, row.GetH()), Claim: rpc.PlacementOf(row)}))
+	})
+}
+
+type copyItem struct {
+	ID   string `json:"id" jsonschema:"the tile"`
+	Grid string `json:"grid,omitempty" jsonschema:"the grid it lands in; empty is the tile's own grid"`
+	At   *Cell  `json:"at,omitempty" jsonschema:"a cell to land at, or below it in its column when taken; empty is beside the tile in its own grid, the first free cell of another"`
+	Link bool   `json:"link,omitempty" jsonschema:"false makes a deep copy; true makes a link, a dashed tile showing the same content"`
 }
 
 type copyIn struct {
-	ID   string `json:"id" jsonschema:"the tile"`
-	Grid string `json:"grid,omitempty" jsonschema:"the grid it lands in; empty is the tile's own grid"`
-	At   *Cell  `json:"at,omitempty" jsonschema:"a cell to land at, or below it in its column when taken"`
+	Items []copyItem `json:"items" jsonschema:"the copies, applied in order"`
 }
 
-func (d *door) clone(ctx context.Context, _ *mcp.CallToolRequest, in copyIn) (*mcp.CallToolResult, TileOut, error) {
-	src, grid, x, y, err := d.landing(ctx, in)
-	if err != nil {
-		return nil, TileOut{}, err
-	}
-	resp, err := d.rt.CloneTile(ctx, &pb.CloneTileRequest{TileId: src.GetId(), DestGridId: grid, X: x, Y: y})
-	return d.answer(resp, err)
+func (d *door) copy(ctx context.Context, _ *mcp.CallToolRequest, in copyIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it copyItem) (Verdict, error) {
+		src, grid, x, y, err := d.landing(ctx, it)
+		if err != nil {
+			return Verdict{}, err
+		}
+		if it.Link {
+			return d.landed(d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: grid, Tile: rpc.LinkOf(src, x, y)}))
+		}
+		return d.landed(d.rt.CloneTile(ctx, &pb.CloneTileRequest{TileId: src.GetId(), DestGridId: grid, X: x, Y: y}))
+	})
 }
 
-func (d *door) link(ctx context.Context, _ *mcp.CallToolRequest, in copyIn) (*mcp.CallToolResult, TileOut, error) {
-	src, grid, x, y, err := d.landing(ctx, in)
-	if err != nil {
-		return nil, TileOut{}, err
-	}
-	resp, err := d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: grid, Tile: rpc.LinkOf(src, x, y)})
-	return d.answer(resp, err)
-}
-
-type deleteIn struct {
+type deleteItem struct {
 	ID      string `json:"id" jsonschema:"the tile"`
 	Version *int64 `json:"version,omitempty" jsonschema:"the version you read; omitted claims the version on disk now"`
 }
 
-func (d *door) delete(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) (*mcp.CallToolResult, DeleteOut, error) {
-	row, err := d.tile(ctx, in.ID)
-	if err != nil {
-		return nil, DeleteOut{}, err
-	}
-	req := rpc.DeleteOf(row)
-	if in.Version != nil {
-		req.ClaimVersion = *in.Version
-	}
-	resp, err := d.rt.DeleteTile(ctx, req)
-	if err != nil {
-		return nil, DeleteOut{}, refusal(err)
-	}
-	return nil, DeleteOut{Deleted: row.GetId(), SessionLeft: resp.GetSessionLeft()}, nil
+type deleteIn struct {
+	Items []deleteItem `json:"items" jsonschema:"the tiles to delete, in order"`
+}
+
+func (d *door) delete(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it deleteItem) (Verdict, error) {
+		row, err := d.tile(ctx, it.ID)
+		if err != nil {
+			return Verdict{}, err
+		}
+		req := rpc.DeleteOf(row)
+		if it.Version != nil {
+			req.ClaimVersion = *it.Version
+		}
+		resp, err := d.rt.DeleteTile(ctx, req)
+		if err != nil {
+			return Verdict{}, refusal(err)
+		}
+		return Verdict{Deleted: row.GetId(), SessionLeft: resp.GetSessionLeft()}, nil
+	})
 }
 
 type selectIn struct {
@@ -320,7 +429,7 @@ func (d *door) tile(ctx context.Context, id string) (*pb.Tile, error) {
 // landing is where a copy or link of in.ID lands: the named grid or the
 // tile's own, at the named cell or, unnamed, beside the tile in its own grid
 // and at the first free cell of another.
-func (d *door) landing(ctx context.Context, in copyIn) (src *pb.Tile, grid string, x, y int64, err error) {
+func (d *door) landing(ctx context.Context, in copyItem) (src *pb.Tile, grid string, x, y int64, err error) {
 	if src, err = d.tile(ctx, in.ID); err != nil {
 		return nil, "", 0, 0, err
 	}
@@ -377,9 +486,11 @@ func chunks(id string, claim rpc.ContentBasis, data []byte) func() (*pb.WriteCon
 	}
 }
 
-func (d *door) answer(resp *pb.TileResponse, err error) (*mcp.CallToolResult, TileOut, error) {
+// landed is one write's verdict: the row it wrote, or its refusal.
+func (d *door) landed(resp *pb.TileResponse, err error) (Verdict, error) {
 	if err != nil {
-		return nil, TileOut{}, refusal(err)
+		return Verdict{}, refusal(err)
 	}
-	return nil, TileOut{Tile: tileOf(resp.GetTile(), nil, d.node)}, nil
+	t := tileOf(resp.GetTile(), nil, d.node)
+	return Verdict{Tile: &t}, nil
 }

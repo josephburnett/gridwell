@@ -61,9 +61,10 @@ func agentAt(t *testing.T, hs *httptest.Server, hdr map[string]string) *mcp.Clie
 	return s
 }
 
-// sessions lists the screens showing the node, with each pane's place, and
-// leaves out another node telling its share, which shows no screen.
-func TestMCPSessionsListsTheScreensShowingTheNode(t *testing.T) {
+// pointed names, beside the screen it chose, every other screen showing the
+// node with each pane's place, and leaves out another node telling its
+// share, which shows no screen.
+func TestMCPPointedNamesEveryOtherScreenWithItsPanes(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	cl := viewer(t, f.hs, "desktop", focusedOn(f.root),
 		&gridwellv1.ViewPane{Id: "p2", Anchor: f.root, Path: []string{"k1"}, ContentId: "c1", GridId: f.root})
@@ -71,21 +72,25 @@ func TestMCPSessionsListsTheScreensShowingTheNode(t *testing.T) {
 	if err := far.SetView(context.Background(), &gridwellv1.SetViewRequest{Label: "node", ShownGridIds: []string{f.root}}); err != nil {
 		t.Fatal(err)
 	}
+	phone := viewer(t, f.hs, "browser", focusedOn(f.root))
 
-	var out mcpdoor.SessionsOut
-	call(t, agentAt(t, f.hs, nil), "sessions", nil, &out)
-	if len(out.Sessions) != 1 {
-		t.Fatalf("sessions = %+v, want the one desktop session and not the node's", out.Sessions)
+	var p mcpdoor.PointedOut
+	call(t, agentAt(t, f.hs, nil), "pointed", nil, &p)
+	if p.Session != phone.Session() || len(p.Panes) != 1 || !p.Panes[0].Focused || p.Changed == "" {
+		t.Fatalf("pointed = %+v, want the browser %s with its one focused pane", p, phone.Session())
 	}
-	s := out.Sessions[0]
-	if s.ID != cl.Session() || s.Label != "desktop" || s.Changed == "" || len(s.Panes) != 2 {
-		t.Fatalf("session = %+v, want %s labelled desktop with two panes", s, cl.Session())
+	if len(p.Others) != 1 {
+		t.Fatalf("others = %+v, want the one desktop session and not the node's", p.Others)
 	}
-	if p := s.Panes[0]; !p.Focused || p.Grid != f.root || p.Anchor != f.root {
-		t.Errorf("pane 1 = %+v, want focused on %s", p, f.root)
+	o := p.Others[0]
+	if o.ID != cl.Session() || o.Label != "desktop" || o.Changed == "" || len(o.Panes) != 2 {
+		t.Fatalf("other = %+v, want %s labelled desktop with two panes", o, cl.Session())
 	}
-	if p := s.Panes[1]; p.Focused || p.Content != "c1" || !slices.Equal(p.Path, []string{"k1"}) {
-		t.Errorf("pane 2 = %+v, want inside c1 by path [k1], unfocused", p)
+	if q := o.Panes[0]; !q.Focused || q.Grid != f.root || q.Anchor != f.root {
+		t.Errorf("pane 1 = %+v, want focused on %s", q, f.root)
+	}
+	if q := o.Panes[1]; q.Focused || q.Content != "c1" || !slices.Equal(q.Path, []string{"k1"}) {
+		t.Errorf("pane 2 = %+v, want inside c1 by path [k1], unfocused", q)
 	}
 }
 
@@ -98,9 +103,8 @@ func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
 		t.Fatalf("with no screen open, pointed = %q, want a plain no session", toolText(res))
 	}
 	cl := viewer(t, f.hs, "browser", focusedOn(f.root))
-	var a, b mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "a"}, &a)
-	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "b"}, &b)
+	mkText(t, s, f.root, "a")
+	b := mkText(t, s, f.root, "b")
 
 	var p mcpdoor.PointedOut
 	call(t, s, "pointed", nil, &p)
@@ -109,10 +113,10 @@ func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
 	}
 
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{b.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{b.ID}}, &g)
 	call(t, s, "pointed", nil, &p)
-	if p.Points != "selection" || len(p.Tiles) != 1 || p.Tiles[0].ID != b.Tile.ID || p.Tiles[0].Name != "b" {
-		t.Fatalf("pointed = %+v, want the selection [%s] as read_grid answers it", p, b.Tile.ID)
+	if p.Points != "selection" || len(p.Tiles) != 1 || p.Tiles[0].ID != b.ID || p.Tiles[0].Name != "b" {
+		t.Fatalf("pointed = %+v, want the selection [%s] as read_grid answers it", p, b.ID)
 	}
 }
 
@@ -158,29 +162,26 @@ func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.
 }
 
 // Inside a pane tile the focused pane's set is its own in the layout, not the
-// grid row's: pointed answers that set, and sessions names the pane tile.
+// grid row's: pointed answers that set, and names the pane tile on every pane.
 func TestMCPPointedInsideAPaneTileIsThatPanesSet(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
-	var a, b, c mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "a"}, &a)
-	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "b"}, &b)
-	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "c"}, &c)
+	a := mkText(t, s, f.root, "a")
+	b := mkText(t, s, f.root, "b")
+	c := mkText(t, s, f.root, "c")
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.Tile.ID}}, &g)
-	cl, pt := paneTileView(t, f, []string{c.Tile.ID}, []string{b.Tile.ID})
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.ID}}, &g)
+	cl, pt := paneTileView(t, f, []string{c.ID}, []string{b.ID})
 
 	var p mcpdoor.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Session != cl.Session() || p.PaneTile != pt.Id || p.SetIn != "pane tile" || p.Points != "selection" ||
-		len(p.Tiles) != 1 || p.Tiles[0].ID != b.Tile.ID {
-		t.Fatalf("pointed = %+v, want the focused pane's own set [%s] in pane tile %s, not the row's [%s]", p, b.Tile.ID, pt.Id, a.Tile.ID)
+		len(p.Tiles) != 1 || p.Tiles[0].ID != b.ID {
+		t.Fatalf("pointed = %+v, want the focused pane's own set [%s] in pane tile %s, not the row's [%s]", p, b.ID, pt.Id, a.ID)
 	}
-	var out mcpdoor.SessionsOut
-	call(t, s, "sessions", nil, &out)
-	for _, sp := range out.Sessions[0].Panes {
+	for _, sp := range p.Panes {
 		if sp.PaneTile != pt.Id {
-			t.Errorf("sessions pane %+v, want it inside pane tile %s", sp, pt.Id)
+			t.Errorf("pointed pane %+v, want it inside pane tile %s", sp, pt.Id)
 		}
 	}
 }
@@ -190,11 +191,10 @@ func TestMCPPointedInsideAPaneTileIsThatPanesSet(t *testing.T) {
 func TestMCPPointedInsideAPaneTileIgnoresTheRowSet(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
-	var a mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "a"}, &a)
+	a := mkText(t, s, f.root, "a")
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.Tile.ID}}, &g)
-	paneTileView(t, f, []string{a.Tile.ID}, nil)
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.ID}}, &g)
+	paneTileView(t, f, []string{a.ID}, nil)
 
 	var p mcpdoor.PointedOut
 	call(t, s, "pointed", nil, &p)
@@ -299,29 +299,28 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var a, b mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": n.root, "body": "a"}, &a)
-	call(t, s, "create_text", map[string]any{"grid": n.root, "body": "b"}, &b)
+	a := mkText(t, s, n.root, "a")
+	b := mkText(t, s, n.root, "b")
 	var g mcpdoor.GridOut
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &g)
 	if g.Grid.Selection == nil || len(g.Grid.Selection) != 0 {
 		t.Fatalf("read_grid selection = %v, want an empty set", g.Grid.Selection)
 	}
 
-	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.ID}}, &g)
 	// The user, meanwhile, selects b on their screen.
 	page := map[string]string{"Cookie": AuthCookieName + "=" + AuthToken(testPassword), "Origin": n.connectURL}
 	cl := rpc.NewClient(&http.Client{Transport: headers{h: page, base: n.web.Transport}}, n.connectURL, connect.WithProtoJSON())
-	if err := cl.SetSelection(context.Background(), &gridwellv1.SetSelectionRequest{GridId: n.root, Add: []string{b.Tile.ID}}); err != nil {
+	if err := cl.SetSelection(context.Background(), &gridwellv1.SetSelectionRequest{GridId: n.root, Add: []string{b.ID}}); err != nil {
 		t.Fatal(err)
 	}
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &g)
-	if got := slices.Sorted(slices.Values(g.Grid.Selection)); !slices.Equal(got, slices.Sorted(slices.Values([]string{a.Tile.ID, b.Tile.ID}))) {
+	if got := slices.Sorted(slices.Values(g.Grid.Selection)); !slices.Equal(got, slices.Sorted(slices.Values([]string{a.ID, b.ID}))) {
 		t.Fatalf("read_grid selection = %v, want both tiles", got)
 	}
-	call(t, s, "select", map[string]any{"grid": n.root, "remove": []string{a.Tile.ID}, "add": []string{a.Tile.ID + "999"}}, &g)
-	if !slices.Equal(g.Grid.Selection, []string{b.Tile.ID}) {
-		t.Fatalf("after removing a, selection = %v, want [%s]", g.Grid.Selection, b.Tile.ID)
+	call(t, s, "select", map[string]any{"grid": n.root, "remove": []string{a.ID}, "add": []string{a.ID + "999"}}, &g)
+	if !slices.Equal(g.Grid.Selection, []string{b.ID}) {
+		t.Fatalf("after removing a, selection = %v, want [%s]", g.Grid.Selection, b.ID)
 	}
 
 	// clear with recurse empties this grid and every grid inside its wells;
@@ -331,9 +330,8 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var inner mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": well.ChildGridId, "body": "inner"}, &inner)
-	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.Tile.ID}}, &g)
+	inner := mkText(t, s, well.ChildGridId, "inner")
+	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.ID}}, &g)
 	if len(g.Grid.Selection) != 1 {
 		t.Fatalf("the inner grid's selection = %v", g.Grid.Selection)
 	}
@@ -348,11 +346,10 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	}
 
 	// all clears every grid the node holds, the feed plugin's included.
-	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.Tile.ID}}, &g)
-	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.Tile.ID}}, &g)
-	var f mcpdoor.TileOut
-	call(t, s, "create_text", map[string]any{"grid": n.feedRoot, "body": "f"}, &f)
-	call(t, s, "select", map[string]any{"grid": n.feedRoot, "add": []string{f.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.ID}}, &g)
+	f := mkText(t, s, n.feedRoot, "f")
+	call(t, s, "select", map[string]any{"grid": n.feedRoot, "add": []string{f.ID}}, &g)
 	refusedWith(t, callRaw(t, s, "select", map[string]any{"grid": n.root, "clear": true, "all": true}), "refused:")
 	call(t, s, "select", map[string]any{"clear": true, "all": true}, &g)
 	for _, id := range []string{n.root, well.ChildGridId, n.feedRoot} {

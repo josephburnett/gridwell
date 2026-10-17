@@ -349,7 +349,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   read, every refusal is a tool error with the router's reason, and a tile it
   places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
-  `docs/mcp.md` is the contract. An agent points as the user does
+  `docs/mcp.md` is the contract. It has ten tools (2026-10-17): `pointed`,
+  `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `place`, `copy`,
+  `delete` and `select`, and every write takes a list and answers a verdict
+  per item in order, each item its own write with its own claim, a refused
+  one stopping none after it. An agent points as the user does
   (2026-10-15): `pointed` is the focused pane's grid of one session, the
   selection that pane shows when non-empty, else the grid: inside a pane
   tile the pane's own, read from the layout under the id the view names
