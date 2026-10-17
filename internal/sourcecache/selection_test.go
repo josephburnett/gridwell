@@ -39,7 +39,20 @@ func TestAFarGridsSelectionIsRemembered(t *testing.T) {
 		t.Errorf("after the event the remembered selection = %v, want [%s]", got, farWell)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome,
-		Claim: &pb.SelectionClaim{TileIds: []string{farWell}}}); err != nil {
+		Remove: []string{farWell}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rememberedSelection(t, cc, src); len(got) != 0 {
+		t.Errorf("after an accepted remove the remembered selection = %v, want none", got)
+	}
+	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome,
+		Add: []string{farWell}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farWell}) {
+		t.Errorf("after an accepted add the remembered selection = %v, want [%s]", got, farWell)
+	}
+	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome, Clear: true}); err != nil {
 		t.Fatal(err)
 	}
 	if got := rememberedSelection(t, cc, src); len(got) != 0 {

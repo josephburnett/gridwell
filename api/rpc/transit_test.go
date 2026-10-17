@@ -303,19 +303,17 @@ func TestQualifyEventIDsNamesEveryPayloadArm(t *testing.T) {
 }
 
 // A selection names tiles by id, so every id it carries crosses a hop like
-// the grid's own: peeled on the way in, claim included, and prepended on the
-// way out, on the grid and on the event alike.
+// the grid's own: peeled on the way in, added and removed alike, and
+// prepended on the way out, on the grid and on the event alike.
 func TestSelectionIDsCrossEveryHop(t *testing.T) {
 	h := InboundHop("c1/9", "", true)
-	in := &pb.SetSelectionRequest{GridId: "c1/9", TileIds: []string{"c1/3", "c1/4"},
-		Claim: &pb.SelectionClaim{TileIds: []string{"c1/3"}}}
+	in := &pb.SetSelectionRequest{GridId: "c1/9", Add: []string{"c1/3", "c1/4"}, Remove: []string{"c1/5"}}
 	got := PeelRequest(h, in)
-	want := &pb.SetSelectionRequest{GridId: "9", TileIds: []string{"3", "4"},
-		Claim: &pb.SelectionClaim{TileIds: []string{"3"}}}
+	want := &pb.SetSelectionRequest{GridId: "9", Add: []string{"3", "4"}, Remove: []string{"5"}}
 	if !proto.Equal(got, want) {
 		t.Errorf("peeled = %v, want %v", got, want)
 	}
-	if in.TileIds[0] != "c1/3" || in.Claim.TileIds[0] != "c1/3" {
+	if in.Add[0] != "c1/3" || in.Remove[0] != "c1/5" {
 		t.Error("the peel mutated its input")
 	}
 	g := TransitQualifyGrid("u", &pb.Grid{Id: "9", Selection: []string{"3", "4"}})

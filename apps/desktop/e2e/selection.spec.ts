@@ -1,13 +1,15 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { placeTile, tileAt, Tile } from './oracle';
+import { createLeafLink, placeTile, setSelection, tileAt, Tile } from './oracle';
+import { pickFromNativeMenu } from './choicemenu';
 import type { GridwellDriver } from './driver';
 
 // The selection is a node fact on the grid row (2026-10-15). These cross from
 // the gesture to the row the node holds and back to the border every view
 // draws: shift + left-click toggles, shift + left-drag sweeps a band and takes
-// only the tiles wholly inside it, Esc with nothing in flight clears, and
-// inside a pane tile the set is the pane's, in the layout blob.
+// only the tiles wholly inside it, Esc with nothing in flight clears, the +
+// menu's Clear selection empties every set, and inside a pane tile the set is
+// the pane's, in the layout blob.
 
 async function textTile(gw: GridwellDriver, cx: number, cy: number): Promise<Tile> {
   const f = await gw.focused();
@@ -273,4 +275,71 @@ test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and
     })
     .toBe(false);
   expect(await onNode(gw, f.gridID), 'the grid row is untouched').toEqual([]);
+});
+
+// Clear selection, the + circle's right-click row, empties every grid's set
+// the node holds, not only the one on screen.
+test('Clear selection empties every grid\'s set', async ({ electronApp, gw, window }) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const a = await textTile(gw, cx, cy);
+  await gw.openPalette();
+  await gw.dragCreate('well', cx + 2, cy);
+  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx + 2, cy)!;
+  expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
+  const b = await createLeafLink(gw.origin, well.childGridId!, '', 'b.md', 0, 0);
+
+  await shiftClick(gw, window, cx, cy);
+  await setSelection(gw.origin, well.childGridId!, [b.id]);
+  await expectSelection(gw, window, f.id, f.gridID, [a.id], 'selected here');
+  expect(await onNode(gw, well.childGridId!), 'selected in the well').toEqual([b.id]);
+
+  const picked = pickFromNativeMenu(electronApp, 'Clear selection');
+  await gw.rightClickCircle();
+  await picked;
+  await expectSelection(gw, window, f.id, f.gridID, [], 'cleared here');
+  await expect.poll(() => onNode(gw, well.childGridId!), { message: 'cleared in the well' }).toEqual([]);
+});
+
+// Inside a pane tile the pane's own set is the layout's, which the node's
+// clear does not reach: the client empties it, and the layout is written.
+test('Clear selection empties a pane\'s own set inside a pane tile', async ({ electronApp, gw, window }) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+  await gw.openPalette();
+  await gw.dragCreate('pane', wx, wy);
+  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
+  expect(pt, 'pane tile').toBeTruthy();
+  const a = await textTile(gw, wx + 2, wy);
+
+  await gw.descendCell(wx, wy);
+  await expect
+    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
+    .toBe(1);
+  const inner = await gw.focused();
+  await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  await shiftClick(gw, window, wx + 2, wy);
+  await expect.poll(() => painted(window, inner.id), { message: 'selected inside' }).toEqual([a.id]);
+  // Every pane's sets in the blob ("sel": one list per frame), flattened.
+  const sels = async (): Promise<string[]> => {
+    const out: string[] = [];
+    const blob = await gw.getTileContent(pt.id);
+    if (!blob) return out;
+    JSON.stringify(JSON.parse(blob), (k, v) => {
+      if (k === 'sel') for (const frame of v as string[][]) out.push(...(frame ?? []));
+      return v;
+    });
+    return out;
+  };
+  await expect.poll(sels, { message: 'in the layout', timeout: 10_000 }).toHaveLength(1);
+
+  const picked = pickFromNativeMenu(electronApp, 'Clear selection');
+  await gw.rightClickCircle();
+  await picked;
+  await expect.poll(() => painted(window, inner.id), { message: 'cleared inside' }).toEqual([]);
+  await expect.poll(sels, { message: 'the layout no longer holds it', timeout: 10_000 }).toEqual([]);
 });

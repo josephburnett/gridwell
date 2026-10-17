@@ -86,7 +86,7 @@ message Grid {
   optional bool accepts_tiles = 16;
   // selection is the set of this grid's tiles the user has in hand: a node
   // fact on the grid row of the namespace that owns the grid, persisted,
-  // written only by SetSelection and told by SelectionChanged. It names only
+  // written only by SetSelection, told whole by SelectionChanged. It names only
   // tiles on this grid, and its order means nothing. Each id is qualified
   // per hop like the tiles'.
   repeated string selection = 17;
@@ -807,19 +807,25 @@ message SetFramingResponse {
   Tile tile = 1;
 }
 
-// SetSelectionRequest replaces grid_id's selection with tile_ids. claim is
-// the set the writer saw, and a write whose claim the row no longer holds is
-// refused with the version conflict. An empty set is a claim like any other,
-// so the claim is a message whose presence says it was made; the doors refuse
-// a request without one (rpc.UnclaimedWrite). A selection is not content: no
-// version moves, the grid's or any tile's.
+// SetSelectionRequest changes grid_id's selection: clear empties it, then add
+// puts tiles in, then remove takes tiles out, so a tile in both ends out. It
+// carries no claim: two selects of different tiles merge in whichever order
+// they land, and two of the same tile are the last one's. An added tile not on
+// the grid is ignored. recurse, only with clear, also empties every grid
+// nested under the grid's wells, to any depth, within the grid's namespace, in
+// one write; recurse without clear is refused. all, only with clear and no
+// grid, add, remove or recurse, empties every grid's set the node holds: home
+// and each plugin namespace, and, asked at the web door, each live
+// connection's far node, whose sets are its rows (rpc.SelectRefusal). A
+// selection is not content: no version moves, the grid's or any tile's.
 message SetSelectionRequest {
-  string         grid_id  = 1;
-  SelectionClaim claim    = 2;
-  repeated string tile_ids = 3;
-}
-message SelectionClaim {
-  repeated string tile_ids = 1;
+  string          grid_id = 1;
+  reserved 2, 3; // claim (SelectionClaim), tile_ids: the whole-set form
+  repeated string add     = 4;
+  repeated string remove  = 5;
+  bool            clear   = 6;
+  bool            recurse = 7;
+  bool            all     = 8;
 }
 // SetSelectionResponse is empty: the set on disk reaches every view, the
 // writer's included, as SelectionChanged.
@@ -1006,7 +1012,7 @@ service Gridwell {
   // doorway. One verb, one shape, both rows.
   rpc SetFraming(SetFramingRequest) returns (SetFramingResponse);
 
-  // SetSelection replaces a grid's selection, claiming the set it saw.
+  // SetSelection clears, adds to and takes from a grid's selection.
   rpc SetSelection(SetSelectionRequest) returns (SetSelectionResponse);
 
   // ShellSessionAlive gates the client's refresh button on shell descent.

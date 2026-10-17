@@ -27,6 +27,8 @@ func (a *App) openCircleMenu(p *pane.Pane) {
 				a.setTheme(v.Theme)
 			case circlemenu.ActionDump:
 				a.dumpTrace()
+			case circlemenu.ActionClearSelection:
+				a.clearAllSelections()
 			}
 		})
 	}

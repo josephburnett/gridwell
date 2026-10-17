@@ -60,6 +60,29 @@ func (s *Levels) Unselect(cur *Tree, tileID string) bool {
 	return changed
 }
 
+// UnselectAll empties every frame's set in cur and in every tree a descent
+// parked, reporting whether any changed: the client's share of the
+// all-clear, whose node writes reach no layout (2026-10-17).
+func (s *Levels) UnselectAll(cur *Tree) bool {
+	changed := cur.unselectAll()
+	for _, l := range s.frames {
+		if l.OuterTree != nil && l.OuterTree.unselectAll() {
+			changed = true
+		}
+	}
+	return changed
+}
+
+func (t *Tree) unselectAll() bool {
+	changed := false
+	t.Walk(func(p *Pane) {
+		if p.Stack.unselectAll() {
+			changed = true
+		}
+	})
+	return changed
+}
+
 func (t *Tree) unselect(tileID string) bool {
 	changed := false
 	t.Walk(func(p *Pane) {
@@ -82,10 +105,13 @@ func (f *Frame) unselect(tileID string) bool {
 	return f.Select(slices.DeleteFunc(slices.Clone(f.Selection), func(id string) bool { return id == tileID }))
 }
 
-// unselectAll empties every frame's set.
-func (s *Stack) unselectAll() {
-	s.Frame.Select(nil)
+// unselectAll empties every frame's set, reporting whether any changed.
+func (s *Stack) unselectAll() bool {
+	changed := s.Frame.Select(nil)
 	for i := range s.below {
-		s.below[i].Select(nil)
+		if s.below[i].Select(nil) {
+			changed = true
+		}
 	}
+	return changed
 }

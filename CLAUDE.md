@@ -140,8 +140,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   address, a typed name, a pane tile's layout) claims the version and bumps
   it; a move or resize claims the placement the press saw (grid, x, y, w, h),
   so a move never conflicts with typing nor ages a body; a freeze or
-  unfreeze claims the freeze it saw; a selection claims the set it saw
-  (2026-10-15); a delete claims the version and the
+  unfreeze claims the freeze it saw; a delete claims the version and the
   placement, so we know what we are deleting. A stale claim is refused with
   the version conflict and the client reconciles to the row on disk,
   surfaced, never silently: a layout replaces the open tree whole
@@ -153,17 +152,35 @@ These were decided deliberately. Do not reverse one without a new decision.
   that names no claim (`rpc.UnclaimedWrite`, which the client checks too), so
   only the node's own writers (a reap, the boot sweep) reach a namespace
   without one; the ephemeral cleanup claims the row its visit held
-  (2026-10-14). Only framing (pan and zoom, the text window, content zoom)
-  and captures carry no claim. A pane tile's layout counted as framing
+  (2026-10-14). A select is the decided exception: it names the tiles it
+  adds and removes and claims nothing (2026-10-17). Only framing (pan and
+  zoom, the text window, content zoom), captures and a select carry no claim. A pane tile's layout counted as framing
   until this decision.
 - The selection is a node fact (2026-10-15): the set of a grid's tiles the
   user has in hand lives on that grid's row (`grids.selection`), home's
   grids and a plugin's alike, and a far grid's on the far node. It persists
   across restarts. It names only tiles on its grid, so a tile that leaves
   the grid leaves the set and lands elsewhere unselected
-  (`store.leaveSelection`). `SetSelection` claims the set it saw and bumps
-  no version, the grid's or any tile's, so a select never refuses a text
-  save. `SelectionChanged` carries the whole set, so no view re-reads the
+  (`store.leaveSelection`). A select names what it adds and what it removes
+  (`SetSelection{grid, add, remove, clear, recurse}`) and carries no claim,
+  so a toggle lands any time: two selects of different tiles merge
+  whichever lands first, two of the same tile are the user and an agent
+  disagreeing and the last one wins, and nothing is lost that a tap cannot
+  redo; an added tile not on the grid is ignored. `clear` empties the
+  grid's set without naming it, before the adds; with `recurse` it also
+  empties every grid under the grid's wells, to any depth, within its
+  namespace, in one write, telling each grid whose set changed; `recurse`
+  without `clear` is refused. `clear` with `all` and nothing else empties
+  every set the node holds, one write per namespace (home, each plugin),
+  and goes on over each live connection to the far node, whose sets are its
+  rows; asked over its connection door, a node clears its own and forwards
+  nothing (`router.clearAllSelections`). The + circle's right-click offers
+  it as Clear selection, above Dump logs, which stays the bottom row; the
+  client empties the per-pane sets in its open pane tiles' layouts too
+  (`pane.Levels.UnselectAll`) (2026-10-17). It bumps no version, the grid's
+  or any tile's, so a select never refuses a text save. A tap adds or
+  removes one tile, a sweep adds the band, Esc removes the set the pane
+  shows (`gesture.Toggle`, `Sweep`, `Clear`). `SelectionChanged` carries the whole set, so no view re-reads the
   grid to learn it. Inside a pane tile the selection is per pane, in the
   layout blob: each grid frame of each pane's stack keeps its own set beside
   its view, and a select there writes the layout, never the grid row

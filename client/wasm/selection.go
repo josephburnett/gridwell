@@ -7,6 +7,7 @@ import (
 	"syscall/js"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gesture"
@@ -36,48 +37,50 @@ func (a *App) selectionShown(p *pane.Pane) []string {
 	return nil
 }
 
-// setSelection makes next the selection of the grid p shows, drawn at once:
-// inside a pane tile the frame's, which the layout persister writes with its
-// claim, else the grid row's through postSelection.
-func (a *App) setSelection(p *pane.Pane, how string, next []string) {
+// setSelection applies sel to the selection of the grid p shows, drawn at
+// once: inside a pane tile to the frame's set, which the layout persister
+// writes with its claim, else to the grid row's through postSelection.
+func (a *App) setSelection(p *pane.Pane, how string, sel gesture.Select) {
 	gid := a.gridIDForPane(p)
 	if g, ok := a.c.Grid(gid); ok {
-		next = gesture.OnGrid(next, func(id string) bool { _, ok := g.Tiles[id]; return ok })
+		sel = sel.OnGrid(func(id string) bool { _, ok := g.Tiles[id]; return ok })
 	}
-	a.emit(traceevent.Select(how, p.ID, gid, len(next)))
+	if sel.Empty() {
+		a.draw()
+		return
+	}
 	switch p.SelectionTarget(a.ws.Depth() > 0) {
 	case pane.SelectionLayout:
-		p.Select(next)
+		p.Select(sel.Apply(p.Selection))
 	case pane.SelectionRow:
-		a.c.Select(gid, next)
+		a.c.Select(gid, sel.Add, sel.Remove)
 		a.postSelection(gid)
 	}
+	a.emit(traceevent.Select(how, p.ID, gid, len(a.selectionShown(p))))
 	a.draw()
 }
 
-// postSelection carries a grid's drawn selection to its row, claiming the set
-// the node holds as far as this client has heard. Both are read when the write
-// is sent, on the grid's own chain, so a burst of selects lands in order, each
-// claiming the one before, and a parked retry carries the latest set. A
-// verdict against it drops what was drawn ahead; a conflict also re-reads the
-// grid with a notice, as a refused move does.
+// postSelection carries the grid's owed selects to its row on the grid's own
+// chain. What it sends is read when it is sent, every tile still owed, so a
+// parked retry carries the selects made meanwhile and a burst lands in order.
+// It claims nothing; a verdict against it (a source switched off, a grid gone)
+// takes what it carried down, and the write's own reconcile re-reads the grid.
 func (a *App) postSelection(gid string) {
-	var sent []string
+	var sent cache.SelectSent
 	var callErr error
 	a.post(write{
 		label: "SetSelection", gid: gid, id: gid, chain: "selection:" + gid, optimistic: true,
 		call: func(ctx context.Context) error {
-			sent = a.c.Selection(gid)
-			callErr = a.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{
-				GridId: gid, TileIds: sent,
-				Claim: &gridwellv1.SelectionClaim{TileIds: a.c.SelectionClaim(gid)},
-			})
+			if sent = a.c.SelectionUp(gid); sent.Empty() {
+				return nil
+			}
+			callErr = a.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: gid, Add: sent.Add, Remove: sent.Remove})
 			return callErr
 		},
 		then: func() { a.c.SelectionLanded(gid, sent) },
 		done: func() {
 			if callErr != nil && clientsync.ReactOptimistic(clientsync.Of(callErr)).DropLocal {
-				a.c.SelectionRefused(gid)
+				a.c.SelectionRefused(gid, sent)
 				a.scheduleFrame(traceevent.WhySelection)
 			}
 		},
@@ -124,13 +127,7 @@ func (a *App) finishBand(sx, sy float64) {
 		tiles = append(tiles, gesture.Placed{ID: n.Id, X: n.X, Y: n.Y, W: n.W, H: n.H})
 	}
 	band := gesture.BandOf(b.ax, b.ay, b.bx, b.by)
-	cur := a.selectionShown(p)
-	next := gesture.Sweep(cur, band, tiles)
-	if len(next) == len(cur) {
-		a.draw()
-		return
-	}
-	a.setSelection(p, "band", next)
+	a.setSelection(p, "band", gesture.Sweep(a.selectionShown(p), band, tiles))
 }
 
 // escapeIdle is what Esc reads when no gesture is armed; onCanvas says the
@@ -150,8 +147,29 @@ func (a *App) escapeIdle(onCanvas bool) gesture.Idle {
 // clearSelection is Esc with nothing in flight.
 func (a *App) clearSelection() {
 	if p := a.tree.FocusedPane(); p != nil {
-		a.setSelection(p, "clear", nil)
+		a.setSelection(p, "clear", gesture.Clear(a.selectionShown(p)))
 	}
+}
+
+// clearAllSelections is the + menu's Clear selection: the node empties every
+// grid's set it and its far nodes hold, each told back as SelectionChanged,
+// and the open pane tiles' own sets, which live in their layouts, are emptied
+// here for the layout persister to write.
+func (a *App) clearAllSelections() {
+	if a.ws.UnselectAll(a.tree) {
+		a.draw()
+	}
+	// A verdict re-reads the grid in front of the user.
+	var gid string
+	if p := a.tree.FocusedPane(); p != nil {
+		gid = a.gridIDForPane(p)
+	}
+	a.post(write{
+		label: "SetSelection", gid: gid, source: "selection", failText: "the selection was not cleared",
+		call: func(ctx context.Context) error {
+			return a.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{Clear: true, All: true})
+		},
+	})
 }
 
 // drawSelectionBorder is the yellow border inside a selected tile, inset so a

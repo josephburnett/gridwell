@@ -124,7 +124,7 @@ type GridwellClient interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
-	// SetSelection replaces a grid's selection, claiming the set it saw.
+	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
@@ -447,7 +447,7 @@ type GridwellHandler interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
-	// SetSelection replaces a grid's selection, claiming the set it saw.
+	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)

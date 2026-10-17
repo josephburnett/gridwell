@@ -64,14 +64,20 @@ func stateOf(on bool) State {
 // DumpID is the row that writes the trace to a file. It names no state.
 const DumpID = "dump"
 
+// ClearSelectionID is the row that empties every selection the node holds. It
+// names no state.
+const ClearSelectionID = "clear-selection"
+
 // PlusItems is the + menu: the palettes, the one on screen checked, then the
-// dump.
+// selection clear, then the dump, always the bottom row.
 func PlusItems(cur theme.Theme) []Item {
-	out := make([]Item, 0, len(theme.All())+1)
+	out := make([]Item, 0, len(theme.All())+2)
 	for _, t := range theme.All() {
 		out = append(out, Item{ID: t.String(), Label: t.Label(), State: stateOf(t == cur)})
 	}
-	return append(out, Item{ID: DumpID, Label: "Dump logs"})
+	return append(out,
+		Item{ID: ClearSelectionID, Label: "Clear selection"},
+		Item{ID: DumpID, Label: "Dump logs"})
 }
 
 // Action is what picking a row does.
@@ -84,6 +90,9 @@ const (
 	ActionTheme
 	// ActionDump writes the trace ring to a file.
 	ActionDump
+	// ActionClearSelection empties every selection the node holds, and every
+	// pane's own set in the open pane tiles.
+	ActionClearSelection
 )
 
 // Verdict is what a picked id stands for. Theme means nothing unless the
@@ -96,8 +105,11 @@ type Verdict struct {
 // Choose reads a row id back, so a renderer hands over a string and the shim
 // acts on a verdict.
 func Choose(id string) Verdict {
-	if id == DumpID {
+	switch id {
+	case DumpID:
 		return Verdict{Action: ActionDump}
+	case ClearSelectionID:
+		return Verdict{Action: ActionClearSelection}
 	}
 	if t, ok := theme.Parse(id); ok {
 		return Verdict{Action: ActionTheme, Theme: t}

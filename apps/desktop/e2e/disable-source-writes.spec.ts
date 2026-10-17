@@ -74,3 +74,44 @@ test('a disabled far node reads read-only and its writes are dropped, not retrie
   expect(await window.evaluate(() => (window as any).__gridwellTest.outbox()), 'no save parked').toEqual([]);
   expect((await notices()).filter((n) => n.source.includes('WriteContent') || n.source === 'textsave')).toEqual([]);
 });
+
+// A select claims nothing, so only a verdict refuses one: on a disabled far
+// grid it is drawn from the press, refused, and taken down without a notice
+// or a parked retry (cache.SelectionRefused).
+test('a select on a disabled far grid is drawn, refused and taken down', async ({ gw, window }) => {
+  await gw.enterPlugin('second');
+  const far = (await gw.plugins()).find((p) => p.label === 'second')!;
+  const f = await gw.focused();
+  const [cx, cy] = [Math.round(f.cx), Math.round(f.cy) - 1];
+  const note = await createLeafLink(gw.origin, f.gridID, '', 'pick.md', cx, cy);
+  await gw.waitClientTileAt(f.id, cx, cy, note.id);
+  await gw.waitIdle();
+
+  const reads = await gw.watchGridReads();
+  await disableSource(gw.origin, far.uuid);
+  await expect
+    .poll(() => reads.of(f.gridID), { message: 'the view showing the far home reads it again', timeout: 15_000 })
+    .toBeGreaterThan(0);
+  await reads.stop();
+  await gw.waitIdle();
+
+  let sent = 0;
+  await window.route('**/gridwell.v1.Gridwell/SetSelection', async (r) => {
+    sent++;
+    await r.continue();
+  });
+  const painted = async (): Promise<string[]> =>
+    ((await window.evaluate(() => (window as any).__gridwellTest.selectionPainted()))[f.id] ?? []) as string[];
+  const c = await gw.cellCenter(f.id, cx, cy);
+  await window.keyboard.down('Shift');
+  await window.mouse.click(c.x, c.y);
+  await window.keyboard.up('Shift');
+  await expect.poll(() => sent, { message: 'the select is posted', timeout: 10_000 }).toBeGreaterThan(0);
+  await gw.waitIdle();
+  await expect.poll(painted, { message: 'the refused select is taken down' }).toEqual([]);
+  expect(await window.evaluate(() => (window as any).__gridwellTest.outbox()), 'nothing parked').toEqual([]);
+  const notices = ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []) as {
+    source: string;
+  }[];
+  expect(notices.filter((n) => n.source.startsWith('rpc:')), 'no error notice').toEqual([]);
+});

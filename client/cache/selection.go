@@ -4,113 +4,159 @@ import (
 	"slices"
 
 	"google.golang.org/protobuf/proto"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // A grid's selection is the node's fact on its row (Grid.Meta.selection,
 // filed by a read and replaced whole by SelectionChanged). A select is
-// optimistic like a move: the set the user made is drawn from the press, and
-// the node's word replaces it when it arrives or the write is refused.
+// optimistic like a move, and names tiles, never the whole set: what is drawn
+// is the set the node told with this client's selects over it, tile by tile,
+// so another writer's select shows beside one still owed.
 
-// selHold is a grid's selection ahead of the node's word on it.
+// selHold is a grid's selects ahead of the node's word on it.
 type selHold struct {
-	// shown is the set a select put up and no write has carried yet, or one
-	// still in flight; held says there is one.
-	shown []string
-	held  bool
-	// landed is the set the node accepted last, until the stream speaks;
-	// known says there is one.
-	landed []string
-	known  bool
+	// up is each tile a select names that the node has not accepted: the
+	// latest select's word on it.
+	up map[string]tap
+	// landed is each tile's word from the selects the node accepted, until
+	// the stream tells a set.
+	landed map[string]bool
+	seq    uint64
 }
 
-// Selection is the set a grid's views draw, sorted: the one a select put up,
-// else the one the node last accepted, else the one it told.
+// tap is a select's word on one tile; seq tells a later select of it apart.
+type tap struct {
+	in  bool
+	seq uint64
+}
+
+// SelectSent is what one write carries: every tile up when it was sent.
+type SelectSent struct {
+	Add, Remove []string
+	seqs        map[string]uint64
+}
+
+// Empty says the write would name nothing.
+func (s SelectSent) Empty() bool { return len(s.Add) == 0 && len(s.Remove) == 0 }
+
+// Selection is the set a grid's views draw, sorted: the set the node told,
+// then what the node accepted since, then what is still owed.
 func (c *Cache) Selection(gridID string) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if h := c.sel[gridID]; h != nil {
-		if h.held {
-			return sorted(h.shown)
-		}
-		if h.known {
-			return sorted(h.landed)
-		}
-	}
+	var set []string
 	if g, ok := c.grids[gridID]; ok {
-		return sorted(g.Meta.GetSelection())
+		set = g.Meta.GetSelection()
 	}
-	return nil
-}
-
-// SelectionClaim is the set a write claims, sorted: the one the node holds as far as
-// this client has heard, which is the last it accepted until the stream says
-// otherwise.
-func (c *Cache) SelectionClaim(gridID string) []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if h := c.sel[gridID]; h != nil && h.known {
-		return sorted(h.landed)
-	}
-	if g, ok := c.grids[gridID]; ok {
-		return sorted(g.Meta.GetSelection())
-	}
-	return nil
-}
-
-// Select puts set up as the grid's selection ahead of the write that carries
-// it.
-func (c *Cache) Select(gridID string, set []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	h := c.selHoldLocked(gridID)
-	h.shown, h.held = slices.Clone(set), true
-}
-
-// SelectionLanded files the set a write carried as the node's. The set it put
-// up is down once that is the set, so a later select still drawn stays.
-func (c *Cache) SelectionLanded(gridID string, sent []string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	h := c.selHoldLocked(gridID)
-	h.landed, h.known = slices.Clone(sent), true
-	if h.held && sameSet(h.shown, sent) {
-		h.shown, h.held = nil, false
-	}
-}
-
-// SelectionRefused drops everything ahead of the node's word, which the
-// refusal's re-read of the grid brings.
-func (c *Cache) SelectionRefused(gridID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	delete(c.sel, gridID)
-}
-
-func (c *Cache) selHoldLocked(gridID string) *selHold {
 	h := c.sel[gridID]
 	if h == nil {
-		h = &selHold{}
+		return sorted(set)
+	}
+	var add, remove []string
+	for id, in := range h.landed {
+		if in {
+			add = append(add, id)
+		} else {
+			remove = append(remove, id)
+		}
+	}
+	set = rpc.ApplySelect(set, add, remove)
+	up := h.sent()
+	return rpc.ApplySelect(set, up.Add, up.Remove)
+}
+
+// Select puts a select up ahead of the write that carries it.
+func (c *Cache) Select(gridID string, add, remove []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	h := c.sel[gridID]
+	if h == nil {
+		h = &selHold{up: map[string]tap{}, landed: map[string]bool{}}
 		c.sel[gridID] = h
 	}
-	return h
+	each(add, remove, func(id string, in bool) {
+		h.seq++
+		h.up[id] = tap{in: in, seq: h.seq}
+	})
+}
+
+// SelectionUp is every tile still owed, what a write sent now carries. A
+// write parked and sent again reads it again, so no select waits on another's
+// write.
+func (c *Cache) SelectionUp(gridID string) SelectSent {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if h := c.sel[gridID]; h != nil {
+		return h.sent()
+	}
+	return SelectSent{}
+}
+
+func (h *selHold) sent() SelectSent {
+	s := SelectSent{seqs: make(map[string]uint64, len(h.up))}
+	for id, t := range h.up {
+		if t.in {
+			s.Add = append(s.Add, id)
+		} else {
+			s.Remove = append(s.Remove, id)
+		}
+		s.seqs[id] = t.seq
+	}
+	slices.Sort(s.Add)
+	slices.Sort(s.Remove)
+	return s
+}
+
+// SelectionLanded files a write the node accepted. A tile selected again
+// since it was sent stays up.
+func (c *Cache) SelectionLanded(gridID string, s SelectSent) { c.answered(gridID, s, true) }
+
+// SelectionRefused takes down a write the node refused, so what is drawn
+// falls back to the node's word.
+func (c *Cache) SelectionRefused(gridID string, s SelectSent) { c.answered(gridID, s, false) }
+
+func (c *Cache) answered(gridID string, s SelectSent, accepted bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	h := c.sel[gridID]
+	if h == nil {
+		return
+	}
+	each(s.Add, s.Remove, func(id string, in bool) {
+		if accepted {
+			h.landed[id] = in
+		}
+		if t, ok := h.up[id]; ok && t.seq == s.seqs[id] {
+			delete(h.up, id)
+		}
+	})
+	if len(h.up) == 0 && len(h.landed) == 0 {
+		delete(c.sel, gridID)
+	}
+}
+
+func each(add, remove []string, fn func(id string, in bool)) {
+	for _, id := range add {
+		fn(id, true)
+	}
+	for _, id := range remove {
+		fn(id, false)
+	}
 }
 
 // selectLocked replaces a cached grid's selection with the set the node told,
 // whole. The stream orders the sets and every one is whole, so it is newer
-// than any write's landing, and a set put up and not yet carried stays unless
-// this is it. Callers hold c.mu.
+// than any write's landing; a select still in flight stays over it. Callers
+// hold c.mu.
 func (c *Cache) selectLocked(gridID string, ids []string) bool {
 	changed := false
 	if h := c.sel[gridID]; h != nil {
-		before := h.held || h.known
-		h.landed, h.known = nil, false
-		if h.held && sameSet(h.shown, ids) {
-			h.shown, h.held = nil, false
-		}
-		if !h.held {
+		changed = len(h.landed) > 0
+		clear(h.landed)
+		if len(h.up) == 0 {
 			delete(c.sel, gridID)
 		}
-		changed = before
 	}
 	g, ok := c.grids[gridID]
 	if !ok {

@@ -111,12 +111,9 @@ func (c *Client) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb
 	return resp.Msg.GetTile(), nil
 }
 
-// SetSelection replaces a grid's selection, claiming the set the writer saw.
+// SetSelection adds tiles to a grid's selection and takes tiles out of it.
 // The set on disk comes back as SelectionChanged, never in the reply.
 func (c *Client) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) error {
-	if err := unclaimed(req); err != nil {
-		return err
-	}
 	_, err := c.cl.SetSelection(ctx, connect.NewRequest(req))
 	return err
 }

@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"slices"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
@@ -44,6 +46,35 @@ func SelectionEvent(gridID string, tileIDs []string) *pb.Event {
 	return &pb.Event{Payload: &pb.Event_SelectionChanged{SelectionChanged: &pb.SelectionChanged{
 		GridId: gridID, TileIds: tileIDs,
 	}}}
+}
+
+// ApplySelect is set after a select: add put in, then remove taken out, so a
+// tile in both ends out. It is sorted with each id once, nil when empty.
+func ApplySelect(set, add, remove []string) []string {
+	out := append(slices.Clone(set), add...)
+	out = slices.DeleteFunc(out, func(id string) bool { return slices.Contains(remove, id) })
+	if len(out) == 0 {
+		return nil
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// SelectRefusal is why req is not a select, "" when it is: recurse only with
+// clear, and all only with clear and nothing else. The store and the router
+// both refuse what it names.
+func SelectRefusal(req *pb.SetSelectionRequest) string {
+	switch {
+	case req.All && (!req.Clear || req.GridId != "" || len(req.Add) > 0 || len(req.Remove) > 0 || req.Recurse):
+		return "all is a clear of every grid and names nothing else"
+	case req.All:
+		return ""
+	case req.GridId == "":
+		return "a select names its grid"
+	case req.Recurse && !req.Clear:
+		return "recurse is only for a clear"
+	}
+	return ""
 }
 
 // EventKey names the entity a wire event is about, so internal/eventhub can

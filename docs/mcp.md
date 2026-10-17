@@ -45,7 +45,9 @@ A write claims what the agent read, as the app does. `read_tile` and
 `body_stamp` for a plugin's text). Pass it to a write and a change made since
 you read is refused as a conflict; read again and decide. Leave it out and the
 door reads the row and claims it as it stands now. A move claims where the
-tile sits now; a delete claims its version and where it sits.
+tile sits now; a delete claims its version and where it sits. `select` claims
+nothing: it names the tiles it adds and removes, or clears, so the user's own
+selects made meanwhile stand beside it.
 
 ## Tools
 
@@ -61,7 +63,7 @@ tile sits now; a delete claims its version and where it sits.
 | `clone` | `id`, `grid`, `at` | A deep copy, in `grid` or the tile's own, at `at` or beside the tile. Across namespaces a source that does not answer lands as a link. |
 | `link` | `id`, `grid`, `at` | A link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
 | `delete` | `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
-| `select` | `grid`, `tiles`, `claim` | Sets the grid's selection to `tiles` (empty clears it), claiming the `selection` read_grid gave. Use it to hand a set back: "I selected the five I changed". A pane inside a pane tile does not show it (see Pointing). |
+| `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's wells, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". A pane inside a pane tile does not show it (see Pointing). |
 | `sessions` | none | Every screen showing the node now: its id, label (`desktop` or `browser`), when its view last changed, the pane tiles it is inside, and each pane's place (`anchor` and `path`), the grid it shows, the content tile it is inside, the pane tile whose layout it is part of (`pane_tile`), and whether it has focus. The most recently changed first. |
 | `pointed` | `session`, optional | What the user means by "here" and "these" (see Pointing). |
 

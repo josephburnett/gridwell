@@ -30,20 +30,32 @@ func TestClassifySelect(t *testing.T) {
 	}
 }
 
-func TestToggle(t *testing.T) {
-	if got := Toggle(nil, "n/4"); !slices.Equal(got, []string{"n/4"}) {
-		t.Errorf("toggle into empty = %v", got)
+// A shift-tap names one tile: it adds the tile when the shown set lacks it
+// and removes it when the set holds it, and touches nothing else.
+func TestToggleNamesOneTile(t *testing.T) {
+	if got := Toggle(nil, "n/4"); !slices.Equal(got.Add, []string{"n/4"}) || got.Remove != nil {
+		t.Errorf("toggle into empty = %+v", got)
 	}
-	if got := Toggle([]string{"n/5", "n/4"}, "n/4"); !slices.Equal(got, []string{"n/5"}) {
-		t.Errorf("toggle out = %v", got)
+	if got := Toggle([]string{"n/5", "n/4"}, "n/4"); got.Add != nil || !slices.Equal(got.Remove, []string{"n/4"}) {
+		t.Errorf("toggle out = %+v", got)
 	}
-	if got := Toggle([]string{"n/5"}, "n/3"); !slices.Equal(got, []string{"n/3", "n/5"}) {
-		t.Errorf("toggle in keeps the set sorted: %v", got)
+	if got := Toggle([]string{"n/5"}, "n/3").Apply([]string{"n/5"}); !slices.Equal(got, []string{"n/3", "n/5"}) {
+		t.Errorf("toggle in, applied = %v", got)
 	}
-	in := []string{"n/5", "n/4"}
-	Toggle(in, "n/4")
-	if !slices.Equal(in, []string{"n/5", "n/4"}) {
-		t.Errorf("Toggle changed its argument: %v", in)
+}
+
+// Esc removes the set the pane shows, and nothing it does not show.
+func TestClearRemovesTheShownSet(t *testing.T) {
+	got := Clear([]string{"n/5", "n/4"})
+	if got.Add != nil || !slices.Equal(got.Remove, []string{"n/4", "n/5"}) {
+		t.Errorf("Clear = %+v", got)
+	}
+	if !Clear(nil).Empty() {
+		t.Error("clearing nothing named something")
+	}
+	// Another writer's tile, selected after this pane last drew, stays.
+	if got := Clear([]string{"n/4"}).Apply([]string{"n/4", "n/9"}); !slices.Equal(got, []string{"n/9"}) {
+		t.Errorf("Clear applied over a newer set = %v, want [n/9]", got)
 	}
 }
 
@@ -63,11 +75,11 @@ func TestSweepTakesOnlyTilesWhollyInside(t *testing.T) {
 		{ID: "corner", X: 3, Y: 2, W: 1, H: 2}, // reaches past the bottom
 	}
 	got := Sweep([]string{"kept"}, b, tiles)
-	if want := []string{"edge", "in", "kept"}; !slices.Equal(got, want) {
-		t.Errorf("Sweep = %v, want %v", got, want)
+	if want := []string{"edge", "in"}; !slices.Equal(got.Add, want) || got.Remove != nil {
+		t.Errorf("Sweep = %+v, want it to add %v and remove nothing", got, want)
 	}
-	if got := Sweep([]string{"in"}, b, tiles[:1]); !slices.Equal(got, []string{"in"}) {
-		t.Errorf("a sweep over a selected tile added it twice: %v", got)
+	if got := Sweep([]string{"in"}, b, tiles[:1]); !got.Empty() {
+		t.Errorf("a sweep over a selected tile named it again: %+v", got)
 	}
 	one := BandOf(5, 5, 5, 5)
 	if one != (Band{X: 5, Y: 5, W: 1, H: 1}) || !one.Holds(5, 5, 1, 1) || one.Holds(5, 5, 2, 1) {
@@ -75,10 +87,11 @@ func TestSweepTakesOnlyTilesWhollyInside(t *testing.T) {
 	}
 }
 
-func TestOnGridDropsTilesThatLeft(t *testing.T) {
+// A select adds only tiles on the grid now; a remove needs no such check.
+func TestOnGridDropsAddsThatLeft(t *testing.T) {
 	here := map[string]bool{"a": true}
-	got := OnGrid([]string{"a", "gone"}, func(id string) bool { return here[id] })
-	if !slices.Equal(got, []string{"a"}) {
-		t.Errorf("OnGrid = %v", got)
+	got := Select{Add: []string{"a", "gone"}, Remove: []string{"x"}}.OnGrid(func(id string) bool { return here[id] })
+	if !slices.Equal(got.Add, []string{"a"}) || !slices.Equal(got.Remove, []string{"x"}) {
+		t.Errorf("OnGrid = %+v", got)
 	}
 }

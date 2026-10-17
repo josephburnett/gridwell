@@ -91,7 +91,7 @@ record shapes. Everything else derives from it:
 | Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
-| Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Claims the set it saw, bumps no version; `SelectionChanged` carries the whole new set. |
+| Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its wells too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
@@ -612,7 +612,7 @@ copy:
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | what Esc lets go of, and what it puts back | `gesture.Escape` over the armed gestures, and with none armed the selection it clears; a parked live view relays the key |
-| what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`; `pane.SelectionTarget` (the grid row, or inside a pane tile the layout) |
+| what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; `pane.SelectionTarget` (the grid row, or inside a pane tile the layout) |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which face a plugin tile wears | `pluginhost.faceKey` |
@@ -668,7 +668,7 @@ pane is inside" and do not spread the word.
 | Invariant | Enforced by |
 |---|---|
 | Ids never reused | AUTOINCREMENT |
-| `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both doors refuse one that names none; framing, captures carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
+| `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both doors refuse one that names none; framing, captures and a select carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
 | Clone is an eager deep copy | `CloneTile` |
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |

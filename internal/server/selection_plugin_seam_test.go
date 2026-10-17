@@ -53,8 +53,7 @@ func TestAPluginGridsSelectionIsTheNodesFact(t *testing.T) {
 		}
 	}()
 
-	if err := cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid,
-		Claim: &gridwellv1.SelectionClaim{}, TileIds: []string{f1, f0}}); err != nil {
+	if err := cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid, Add: []string{f1, f0}}); err != nil {
 		t.Fatalf("SetSelection: %v", err)
 	}
 	want := slices.Sorted(slices.Values([]string{f0, f1}))
@@ -76,9 +75,8 @@ func TestAPluginGridsSelectionIsTheNodesFact(t *testing.T) {
 	if got := slices.Sorted(slices.Values(g.Grid.Selection)); !slices.Equal(got, want) {
 		t.Errorf("the grid reads back %v, want %v", g.Grid.Selection, want)
 	}
-	if err := cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid,
-		Claim: &gridwellv1.SelectionClaim{TileIds: []string{f0}}, TileIds: []string{f0, f1}}); err != nil {
-		t.Errorf("a write landing where the row is: %v, want nil", err)
+	if err := cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid, Add: []string{f0}}); err != nil {
+		t.Errorf("a select landing where the row is: %v, want nil", err)
 	}
 
 	if err := os.Remove(filepath.Join(fsRoot, "f0.txt")); err != nil {

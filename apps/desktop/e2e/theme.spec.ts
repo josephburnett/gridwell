@@ -79,9 +79,10 @@ test('the bar circle right-clicks to a theme menu; light survives a reload', asy
     const labels = await electronApp.evaluate(() =>
       (globalThis as any).__gwChoiceMenu.items.map((i: any) => i.label),
     );
-    expect(labels, 'both themes and the dump are offered').toEqual([
+    expect(labels, 'both themes, the selection clear and the dump are offered').toEqual([
       'Dark mode',
       'Light mode',
+      'Clear selection',
       'Dump logs',
     ]);
     const checked = await electronApp.evaluate(() =>

@@ -11,7 +11,9 @@ import (
 // carries its claim or claims nothing. Both doors refuse what it names and
 // Client never sends it; the node's own writers (a reap, a sweep) call their
 // namespace directly and never meet it. WriteContent and a rename claim by
-// shape, their version being a plain number every write carries.
+// shape, their version being a plain number every write carries. A select is
+// the decided exception: it names what it adds and removes, and claims
+// nothing.
 func UnclaimedWrite(req proto.Message) string {
 	switch r := req.(type) {
 	case *pb.PlaceTileRequest:
@@ -25,10 +27,6 @@ func UnclaimedWrite(req proto.Message) string {
 	case *pb.SetTileRequest:
 		if r.UrlFrozen != nil && r.ClaimFrozen == nil {
 			return "SetTile url_frozen names no claim_frozen: a freeze claims the freeze it saw"
-		}
-	case *pb.SetSelectionRequest:
-		if r.GetClaim() == nil {
-			return "SetSelection names no claim: a selection claims the set it saw"
 		}
 	}
 	return ""

@@ -952,7 +952,8 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 			c.reframe(ctx, fc.GetGridId(), f)
 		}
 	case *pb.Event_SelectionChanged:
-		c.reselect(ctx, p.SelectionChanged.GetGridId(), p.SelectionChanged.GetTileIds())
+		ids := p.SelectionChanged.GetTileIds()
+		c.reselect(ctx, p.SelectionChanged.GetGridId(), func([]string) []string { return ids })
 	case *pb.Event_PluginHealth:
 		// The source's supervisor says whether it can be reached. A key deeper
 		// than a connection segment is a far plugin, not the machine. No
@@ -1037,13 +1038,23 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 	return resp, err
 }
 
-// SetSelection passes through, and a write the source accepted is remembered
-// from the request: accepted, the source's row holds exactly that set.
+// SetSelection passes through, and a select the source accepted is applied to
+// the remembered set of the grid it names; the source's whole sets, told
+// after, replace it and tell the grids a recursive clear reached.
 func (c *Layer) SetSelection(ctx context.Context, in *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
 	resp, err := c.Namespace.SetSelection(ctx, in)
+	if in.All {
+		// It names no grid; each far grid's set comes back as its event.
+		return resp, err
+	}
 	c.noteReachGrid(ctx, err, in.GridId)
 	if err == nil {
-		c.reselect(ctx, in.GridId, in.TileIds)
+		c.reselect(ctx, in.GridId, func(cur []string) []string {
+			if in.Clear {
+				cur = nil
+			}
+			return rpc.ApplySelect(cur, in.Add, in.Remove)
+		})
 	}
 	return resp, err
 }
@@ -1051,7 +1062,7 @@ func (c *Layer) SetSelection(ctx context.Context, in *pb.SetSelectionRequest) (*
 // reselect is the one writer of a remembered grid's selection, from the
 // source's event and an accepted write alike, so a dark read answers with the
 // set the source last held.
-func (c *Layer) reselect(ctx context.Context, gridID string, ids []string) {
+func (c *Layer) reselect(ctx context.Context, gridID string, next func(cur []string) []string) {
 	c.order.fold([]string{gridID}, func() {
 		c.inTx(ctx, "reselect", func(tx *sql.Tx) error {
 			var gb []byte
@@ -1066,7 +1077,7 @@ func (c *Layer) reselect(ctx context.Context, gridID string, ids []string) {
 			if err := proto.Unmarshal(gb, g); err != nil {
 				return err
 			}
-			g.Selection = ids
+			g.Selection = next(g.Selection)
 			if gb, err = proto.Marshal(g); err != nil {
 				return err
 			}

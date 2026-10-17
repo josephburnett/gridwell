@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
@@ -108,7 +109,7 @@ func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
 	}
 
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "tiles": []string{b.Tile.ID}, "claim": []string{}}, &g)
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{b.Tile.ID}}, &g)
 	call(t, s, "pointed", nil, &p)
 	if p.Points != "selection" || len(p.Tiles) != 1 || p.Tiles[0].ID != b.Tile.ID || p.Tiles[0].Name != "b" {
 		t.Fatalf("pointed = %+v, want the selection [%s] as read_grid answers it", p, b.Tile.ID)
@@ -166,7 +167,7 @@ func TestMCPPointedInsideAPaneTileIsThatPanesSet(t *testing.T) {
 	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "b"}, &b)
 	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "c"}, &c)
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "tiles": []string{a.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.Tile.ID}}, &g)
 	cl, pt := paneTileView(t, f, []string{c.Tile.ID}, []string{b.Tile.ID})
 
 	var p mcpdoor.PointedOut
@@ -192,7 +193,7 @@ func TestMCPPointedInsideAPaneTileIgnoresTheRowSet(t *testing.T) {
 	var a mcpdoor.TileOut
 	call(t, s, "create_text", map[string]any{"grid": f.root, "body": "a"}, &a)
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "tiles": []string{a.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.Tile.ID}}, &g)
 	paneTileView(t, f, []string{a.Tile.ID}, nil)
 
 	var p mcpdoor.PointedOut
@@ -288,10 +289,11 @@ func TestMCPPointedFollowsTheShellTheAgentRunsIn(t *testing.T) {
 	}
 }
 
-// select sets a grid's selection claiming what read_grid gave, and read_grid
-// answers it back; a claim another writer has moved past is refused and the
-// set on disk stands.
-func TestMCPSelectRoundTripsAndRefusesAStaleClaim(t *testing.T) {
+// select adds and removes without a claim, and answers the grid as read_grid
+// does: a select made while the user's set moved merges with it, a tile off
+// the grid is ignored, a recursive clear reaches the grids inside wells, and
+// the all-clear reaches every namespace.
+func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	n := newMCPNode(t)
 	s, err := n.agent(t, bearer(testPassword))
 	if err != nil {
@@ -305,20 +307,58 @@ func TestMCPSelectRoundTripsAndRefusesAStaleClaim(t *testing.T) {
 	if g.Grid.Selection == nil || len(g.Grid.Selection) != 0 {
 		t.Fatalf("read_grid selection = %v, want an empty set", g.Grid.Selection)
 	}
-	read := g.Grid.Selection
 
-	call(t, s, "select", map[string]any{"grid": n.root, "tiles": []string{a.Tile.ID, b.Tile.ID}, "claim": read}, &g)
+	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.Tile.ID}}, &g)
+	// The user, meanwhile, selects b on their screen.
+	page := map[string]string{"Cookie": AuthCookieName + "=" + AuthToken(testPassword), "Origin": n.connectURL}
+	cl := rpc.NewClient(&http.Client{Transport: headers{h: page, base: n.web.Transport}}, n.connectURL, connect.WithProtoJSON())
+	if err := cl.SetSelection(context.Background(), &gridwellv1.SetSelectionRequest{GridId: n.root, Add: []string{b.Tile.ID}}); err != nil {
+		t.Fatal(err)
+	}
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &g)
 	if got := slices.Sorted(slices.Values(g.Grid.Selection)); !slices.Equal(got, slices.Sorted(slices.Values([]string{a.Tile.ID, b.Tile.ID}))) {
 		t.Fatalf("read_grid selection = %v, want both tiles", got)
 	}
-	refusedWith(t, callRaw(t, s, "select", map[string]any{"grid": n.root, "tiles": []string{}, "claim": read}), "conflict:")
-	call(t, s, "read_grid", map[string]any{"id": n.root}, &g)
-	if len(g.Grid.Selection) != 2 {
-		t.Fatalf("after a refused select, selection = %v, want the two kept", g.Grid.Selection)
+	call(t, s, "select", map[string]any{"grid": n.root, "remove": []string{a.Tile.ID}, "add": []string{a.Tile.ID + "999"}}, &g)
+	if !slices.Equal(g.Grid.Selection, []string{b.Tile.ID}) {
+		t.Fatalf("after removing a, selection = %v, want [%s]", g.Grid.Selection, b.Tile.ID)
 	}
-	call(t, s, "select", map[string]any{"grid": n.root, "tiles": []string{}}, &g)
+
+	// clear with recurse empties this grid and every grid inside its wells;
+	// recurse alone is refused.
+	well, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 9, Y: 9, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inner mcpdoor.TileOut
+	call(t, s, "create_text", map[string]any{"grid": well.ChildGridId, "body": "inner"}, &inner)
+	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.Tile.ID}}, &g)
+	if len(g.Grid.Selection) != 1 {
+		t.Fatalf("the inner grid's selection = %v", g.Grid.Selection)
+	}
+	refusedWith(t, callRaw(t, s, "select", map[string]any{"grid": n.root, "recurse": true}), "refused:")
+	call(t, s, "select", map[string]any{"grid": n.root, "clear": true, "recurse": true}, &g)
 	if len(g.Grid.Selection) != 0 {
-		t.Fatalf("an unclaimed clear left %v, want it to claim the set on disk", g.Grid.Selection)
+		t.Fatalf("after a recursive clear the grid holds %v", g.Grid.Selection)
+	}
+	call(t, s, "read_grid", map[string]any{"id": well.ChildGridId}, &g)
+	if len(g.Grid.Selection) != 0 {
+		t.Fatalf("after a recursive clear the inner grid holds %v", g.Grid.Selection)
+	}
+
+	// all clears every grid the node holds, the feed plugin's included.
+	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.Tile.ID}}, &g)
+	var f mcpdoor.TileOut
+	call(t, s, "create_text", map[string]any{"grid": n.feedRoot, "body": "f"}, &f)
+	call(t, s, "select", map[string]any{"grid": n.feedRoot, "add": []string{f.Tile.ID}}, &g)
+	refusedWith(t, callRaw(t, s, "select", map[string]any{"grid": n.root, "clear": true, "all": true}), "refused:")
+	call(t, s, "select", map[string]any{"clear": true, "all": true}, &g)
+	for _, id := range []string{n.root, well.ChildGridId, n.feedRoot} {
+		call(t, s, "read_grid", map[string]any{"id": id}, &g)
+		if len(g.Grid.Selection) != 0 {
+			t.Fatalf("after the all-clear grid %s holds %v", id, g.Grid.Selection)
+		}
 	}
 }

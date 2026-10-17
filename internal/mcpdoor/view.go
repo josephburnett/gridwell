@@ -42,7 +42,7 @@ type Grid struct {
 	Writable     bool     `json:"writable" jsonschema:"its text bodies take edits"`
 	AcceptsTiles bool     `json:"accepts_tiles" jsonschema:"it takes new tiles"`
 	Source       string   `json:"source,omitempty" jsonschema:"what its source calls what backs it"`
-	Selection    []string `json:"selection" jsonschema:"the tiles the user has in hand on this grid, the claim select takes"`
+	Selection    []string `json:"selection" jsonschema:"the tiles the user has in hand on this grid"`
 }
 
 // TileOut answers read_tile and every write: the row, and on a read the

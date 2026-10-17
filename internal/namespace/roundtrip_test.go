@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"slices"
 	"testing"
 	"time"
 
@@ -190,17 +191,16 @@ func TestTileRoundTripsBytesIdentical(t *testing.T) {
 	}
 }
 
-// An empty set is a claim like any other, so a claim of the empty set must
-// cross the codec as a claim and not as none.
-func TestAnEmptySelectionClaimCrossesAsAClaim(t *testing.T) {
+// A select's adds and removes cross the codec apart.
+func TestASelectCrossesWithItsAddsAndRemoves(t *testing.T) {
 	f := &fake{}
 	ns := loopback(t, f)
 	if _, err := ns.SetSelection(context.Background(), &pb.SetSelectionRequest{
-		GridId: "3", Claim: &pb.SelectionClaim{}, TileIds: []string{"7"},
+		GridId: "3", Add: []string{"7"}, Remove: []string{"8"},
 	}); err != nil {
 		t.Fatalf("SetSelection: %v", err)
 	}
-	if len(f.selected) != 1 || f.selected[0].GetClaim() == nil || f.selected[0].GetTileIds()[0] != "7" {
+	if len(f.selected) != 1 || !slices.Equal(f.selected[0].GetAdd(), []string{"7"}) || !slices.Equal(f.selected[0].GetRemove(), []string{"8"}) {
 		t.Fatalf("server saw %v", f.selected)
 	}
 }

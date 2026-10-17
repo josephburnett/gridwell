@@ -1,10 +1,15 @@
 package gesture
 
-import "slices"
+import (
+	"slices"
 
-// The selection gestures: what a left press does to the set of a grid's tiles
-// the user has in hand, and the set each one leaves. Every set comes back
-// sorted, so the same set is the same bytes wherever it is written.
+	"github.com/josephburnett/gridwell/api/rpc"
+)
+
+// The selection gestures: what a left press, a band and Esc do to the set of
+// a grid's tiles the user has in hand, each as a Select naming what it adds
+// and what it removes, never the whole set, so a select made over a set
+// another writer has moved since stands beside that writer's.
 
 // SelectPress is fixed at a left press and never changes mid-gesture.
 type SelectPress int
@@ -41,18 +46,42 @@ func ClassifySelect(in SelectInput) SelectPress {
 	return SelectBand
 }
 
-// Toggle is set with id taken out if it was in, put in if it was not.
-func Toggle(set []string, id string) []string {
-	out := slices.DeleteFunc(slices.Clone(set), func(s string) bool { return s == id })
-	if len(out) == len(set) {
-		out = append(out, id)
-	}
-	return Canonical(out)
+// Select is one select: the tiles it adds and the tiles it removes, the
+// SetSelection the grid row is sent. Each list is sorted, nil when empty.
+type Select struct{ Add, Remove []string }
+
+// Empty says the select names nothing.
+func (s Select) Empty() bool { return len(s.Add) == 0 && len(s.Remove) == 0 }
+
+// Apply is set after s, by the rule the node applies (rpc.ApplySelect).
+func (s Select) Apply(set []string) []string { return rpc.ApplySelect(set, s.Add, s.Remove) }
+
+// OnGrid is s adding only tiles on the grid now: a set names only its grid's
+// tiles, so one that left is not carried into a write.
+func (s Select) OnGrid(present func(id string) bool) Select {
+	s.Add = canonical(slices.DeleteFunc(slices.Clone(s.Add), func(id string) bool { return !present(id) }))
+	return s
 }
 
-// Canonical is set sorted with each id once.
-func Canonical(set []string) []string {
-	out := slices.Clone(set)
+// Toggle is a shift-tap on id over the shown set: it removes id when the set
+// holds it, else adds it.
+func Toggle(shown []string, id string) Select {
+	if slices.Contains(shown, id) {
+		return Select{Remove: []string{id}}
+	}
+	return Select{Add: []string{id}}
+}
+
+// Clear is Esc over the shown set: it removes what the pane shows, so a tile
+// another writer selected since stays.
+func Clear(shown []string) Select { return Select{Remove: canonical(shown)} }
+
+// canonical is ids sorted with each once, nil when empty.
+func canonical(ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := slices.Clone(ids)
 	slices.Sort(out)
 	return slices.Compact(out)
 }
@@ -78,19 +107,14 @@ type Placed struct {
 	X, Y, W, H int64
 }
 
-// Sweep is set with every tile the band holds added. A sweep only adds.
-func Sweep(set []string, b Band, tiles []Placed) []string {
-	out := slices.Clone(set)
+// Sweep adds every tile the band holds that the shown set lacks. A sweep only
+// adds.
+func Sweep(shown []string, b Band, tiles []Placed) Select {
+	var add []string
 	for _, t := range tiles {
-		if b.Holds(t.X, t.Y, t.W, t.H) {
-			out = append(out, t.ID)
+		if b.Holds(t.X, t.Y, t.W, t.H) && !slices.Contains(shown, t.ID) {
+			add = append(add, t.ID)
 		}
 	}
-	return Canonical(out)
-}
-
-// OnGrid is set without the ids that are not tiles on the grid now: a set
-// names only its grid's tiles, so one that left is not carried into a write.
-func OnGrid(set []string, present func(id string) bool) []string {
-	return slices.DeleteFunc(slices.Clone(set), func(id string) bool { return !present(id) })
+	return Select{Add: canonical(add)}
 }

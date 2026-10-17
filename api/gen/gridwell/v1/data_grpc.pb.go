@@ -92,7 +92,7 @@ type GridwellClient interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(ctx context.Context, in *SetFramingRequest, opts ...grpc.CallOption) (*SetFramingResponse, error)
-	// SetSelection replaces a grid's selection, claiming the set it saw.
+	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
@@ -399,7 +399,7 @@ type GridwellServer interface {
 	// entered through, or onto the grid row itself for a root that has no
 	// doorway. One verb, one shape, both rows.
 	SetFraming(context.Context, *SetFramingRequest) (*SetFramingResponse, error)
-	// SetSelection replaces a grid's selection, claiming the set it saw.
+	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error)
 	// ShellSessionAlive gates the client's refresh button on shell descent.
 	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
