@@ -8,6 +8,11 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
+// sel is one select's adds and removes.
+type sel struct{ add, remove []string }
+
+func (c *Cache) put(gid string, s sel) { c.Select(gid, s.add, s.remove) }
+
 // A grid's selection is on its cached row, filed by a read and replaced whole
 // by SelectionChanged, the set the node holds, with nothing read again. A
 // snapshot handed out before keeps what it held.
@@ -46,60 +51,113 @@ func grid14(c *Cache, sel ...string) {
 		[]*gridwellv1.Tile{{Id: "n/4", GridId: "n/1"}, {Id: "n/5", GridId: "n/1"}})
 }
 
-func wantSets(t *testing.T, c *Cache, why string, shown, claim []string) {
+func wantShown(t *testing.T, c *Cache, why string, shown ...string) {
 	t.Helper()
 	if got := c.Selection("n/1"); !slices.Equal(got, shown) {
 		t.Errorf("%s: drawn %v, want %v", why, got, shown)
 	}
-	if got := c.SelectionClaim("n/1"); !slices.Equal(got, claim) {
-		t.Errorf("%s: claim %v, want %v", why, got, claim)
-	}
 }
 
-// A select is drawn from the press and claims what the node holds; its
-// landing makes the sent set the claim before the echo, so the next write in
-// the chain claims what the node now holds, and the echo ends it all.
-func TestSelectIsDrawnAheadAndLandsAsTheClaim(t *testing.T) {
+// A select is drawn from the press over the set the node told. A write
+// carries every tile still owed when it is sent; its landing keeps them drawn
+// until the stream tells a set, and the echo ends it all.
+func TestSelectIsDrawnAheadAndLands(t *testing.T) {
 	c := New()
 	grid14(c)
-	c.Select("n/1", []string{"n/4"})
-	wantSets(t, c, "put up", []string{"n/4"}, nil)
+	c.put("n/1", sel{add: []string{"n/4"}})
+	wantShown(t, c, "put up", "n/4")
+	first := c.SelectionUp("n/1")
 
-	c.Select("n/1", []string{"n/4", "n/5"})
-	c.SelectionLanded("n/1", []string{"n/4"})
-	wantSets(t, c, "first write landed, second still up", []string{"n/4", "n/5"}, []string{"n/4"})
+	c.put("n/1", sel{add: []string{"n/5"}})
+	c.SelectionLanded("n/1", first)
+	wantShown(t, c, "first landed, second still up", "n/4", "n/5")
+	second := c.SelectionUp("n/1")
+	if !slices.Equal(second.Add, []string{"n/5"}) || len(second.Remove) != 0 {
+		t.Errorf("the second write carries %+v, want n/5 alone", second)
+	}
 
 	c.Apply(rpc.SelectionEvent("n/1", []string{"n/4"}))
-	wantSets(t, c, "first echo: the newer select stays drawn", []string{"n/4", "n/5"}, []string{"n/4"})
+	wantShown(t, c, "first echo: the second stays drawn", "n/4", "n/5")
 
-	c.SelectionLanded("n/1", []string{"n/4", "n/5"})
-	wantSets(t, c, "second landed", []string{"n/4", "n/5"}, []string{"n/4", "n/5"})
+	c.SelectionLanded("n/1", second)
+	wantShown(t, c, "second landed", "n/4", "n/5")
 	c.Apply(rpc.SelectionEvent("n/1", []string{"n/5", "n/4"}))
-	wantSets(t, c, "second echo", []string{"n/4", "n/5"}, []string{"n/4", "n/5"})
+	wantShown(t, c, "second echo", "n/4", "n/5")
 	if len(c.sel) != 0 {
 		t.Errorf("a hold outlived its echo: %+v", c.sel["n/1"])
 	}
 }
 
+// A write that is parked and sent again carries every select made meanwhile,
+// so a select is never lost behind another's retry.
+func TestAResentWriteCarriesEverySelectOwed(t *testing.T) {
+	c := New()
+	grid14(c, "n/5")
+	c.put("n/1", sel{add: []string{"n/4"}})
+	c.put("n/1", sel{remove: []string{"n/5"}})
+	got := c.SelectionUp("n/1")
+	if !slices.Equal(got.Add, []string{"n/4"}) || !slices.Equal(got.Remove, []string{"n/5"}) {
+		t.Fatalf("a resent write carries %+v, want add n/4 and remove n/5", got)
+	}
+	c.SelectionLanded("n/1", got)
+	if up := c.SelectionUp("n/1"); !up.Empty() {
+		t.Errorf("after it landed %+v is still owed", up)
+	}
+	wantShown(t, c, "landed", "n/4")
+}
+
+// Another writer's select lands beside one this client has up: the drawn set
+// is the node's told set with this client's select over it, so both show.
+func TestAnotherWritersSelectShowsBesideOurs(t *testing.T) {
+	c := New()
+	grid14(c)
+	c.put("n/1", sel{add: []string{"n/4"}})
+	c.Apply(rpc.SelectionEvent("n/1", []string{"n/5"}))
+	wantShown(t, c, "another writer's add while ours is up", "n/4", "n/5")
+}
+
+// A tile tapped again after a write carrying it was sent stays up, at the
+// later word, when that write lands.
+func TestTheLaterTapOnATileIsDrawn(t *testing.T) {
+	c := New()
+	grid14(c)
+	c.put("n/1", sel{add: []string{"n/4"}})
+	in := c.SelectionUp("n/1")
+	c.put("n/1", sel{remove: []string{"n/4"}})
+	c.SelectionLanded("n/1", in)
+	wantShown(t, c, "the first tap landed, the second is up")
+	out := c.SelectionUp("n/1")
+	if !slices.Equal(out.Remove, []string{"n/4"}) {
+		t.Fatalf("the second write carries %+v, want remove n/4", out)
+	}
+	c.SelectionLanded("n/1", out)
+	wantShown(t, c, "both landed")
+}
+
 // Another writer's set reaches the stream after this one's landing: it is
-// newer, so it is both what is drawn and what the next write claims.
+// newer, so it is what is drawn.
 func TestTheStreamOutranksALanding(t *testing.T) {
 	c := New()
 	grid14(c)
-	c.Select("n/1", []string{"n/4"})
-	c.SelectionLanded("n/1", []string{"n/4"})
+	c.put("n/1", sel{add: []string{"n/4"}})
+	c.SelectionLanded("n/1", c.SelectionUp("n/1"))
 	c.Apply(rpc.SelectionEvent("n/1", []string{"n/5"}))
-	wantSets(t, c, "another writer after ours", []string{"n/5"}, []string{"n/5"})
+	wantShown(t, c, "another writer after ours", "n/5")
 }
 
-// A refused select goes back to the node's word, which the refusal's re-read
-// brings.
+// A refused select (a source the user switched off, a dead grid) stops being
+// drawn; one made after the refused write was sent stays.
 func TestARefusedSelectFallsBackToTheNode(t *testing.T) {
 	c := New()
 	grid14(c, "n/5")
-	c.Select("n/1", []string{"n/4", "n/5"})
-	c.SelectionRefused("n/1")
-	wantSets(t, c, "refused", []string{"n/5"}, []string{"n/5"})
-	grid14(c, "n/4")
-	wantSets(t, c, "re-read", []string{"n/4"}, []string{"n/4"})
+	c.put("n/1", sel{add: []string{"n/4"}})
+	refused := c.SelectionUp("n/1")
+	c.put("n/1", sel{remove: []string{"n/5"}})
+	c.SelectionRefused("n/1", refused)
+	wantShown(t, c, "one refused, one up")
+	c.SelectionRefused("n/1", c.SelectionUp("n/1"))
+	wantShown(t, c, "both refused", "n/5")
+	if len(c.sel) != 0 {
+		t.Errorf("a refused hold stayed: %+v", c.sel["n/1"])
+	}
 }

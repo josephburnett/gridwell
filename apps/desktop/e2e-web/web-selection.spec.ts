@@ -5,8 +5,9 @@ import type { GridwellDriver } from '../e2e/driver';
 import type { Page } from '@playwright/test';
 
 // A select is optimistic like a move (cache.Select): the border is the
-// client's from the press, with every event held back, and a select whose
-// claim another writer made stale goes back to the set on disk and says so.
+// client's from the press, with every event held back. A select names the
+// tiles it adds and removes and claims nothing, so another writer's select of
+// another tile, made unseen, stands beside it.
 
 const painted = async (window: Page, paneID: string): Promise<string[]> =>
   (((await window.evaluate(() => (window as any).__gridwellTest.selectionPainted()))[paneID] ?? []) as string[])
@@ -37,7 +38,7 @@ async function twoTiles(gw: GridwellDriver) {
   return { f, cx, cy, a, b };
 }
 
-test('selection: a select is the client\'s before its echo, and each next one claims it', async ({ gw, window }) => {
+test('selection: a select is the client\'s before its echo, and each next one lands', async ({ gw, window }) => {
   await installEchoGate(window);
   const { f, cx, cy, a, b } = await twoTiles(gw);
 
@@ -47,27 +48,38 @@ test('selection: a select is the client\'s before its echo, and each next one cl
   await shiftClick(gw, window, f.id, cx + 2, cy);
   expect(await painted(window, f.id), 'the second select too').toEqual([a.id, b.id].sort());
   const onNode = (await gw.getGrid(f.gridID)).grid?.selection ?? [];
-  expect(onNode.slice().sort(), 'the second write claimed the first and landed').toEqual([a.id, b.id].sort());
+  expect(onNode.slice().sort(), 'both writes landed').toEqual([a.id, b.id].sort());
 
   await window.evaluate(() => ((window as any).__echoHeld = false));
   await gw.waitIdle();
   expect(await painted(window, f.id), 'the echoes change nothing').toEqual([a.id, b.id].sort());
 });
 
-test('selection: a refused select goes back to the set on disk and says so', async ({ gw, window, serve }) => {
+test('selection: the user toggles one tile while another writer toggles another, and both land', async ({ gw, window, serve }) => {
   await installEchoGate(window);
-  const { f, cx, cy, b } = await twoTiles(gw);
+  const { f, cx, cy, a, b } = await twoTiles(gw);
 
   // Another writer selects B; the client is not told.
   await holdEchoFor(window, 60_000);
   await setSelection(serve.origin, f.gridID, [b.id]);
   await shiftClick(gw, window, f.id, cx, cy);
+  expect(await painted(window, f.id), 'the press draws A over the set the client last heard').toEqual([a.id]);
+  await expect
+    .poll(async () => ((await gw.getGrid(f.gridID)).grid?.selection ?? []).slice().sort(), {
+      message: 'the node holds both selects',
+    })
+    .toEqual([a.id, b.id].sort());
 
-  await expect.poll(() => painted(window, f.id), { message: 'the set on disk is drawn' }).toEqual([b.id]);
-  expect((await gw.getGrid(f.gridID)).grid?.selection, 'the refused set was not written').toEqual([b.id]);
+  await window.evaluate(() => ((window as any).__echoHeld = false));
+  await expect.poll(() => painted(window, f.id), { message: 'the echo brings B in beside A' }).toEqual([a.id, b.id].sort());
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(
-    errs.notices.some((n: any) => /SetSelection/.test(n.source) || /SetSelection/.test(n.message)),
-    `the refusal is said: ${JSON.stringify(errs.notices)}`,
-  ).toBe(true);
+    errs.notices.filter((n: any) => /SetSelection/.test(n.source) || /SetSelection/.test(n.message)),
+    'nothing was refused',
+  ).toEqual([]);
+
+  // The other writer takes A out again, after the user put it in: the last
+  // select of a tile wins.
+  await setSelection(serve.origin, f.gridID, [], [a.id]);
+  await expect.poll(() => painted(window, f.id), { message: 'the last select of A wins' }).toEqual([b.id]);
 });

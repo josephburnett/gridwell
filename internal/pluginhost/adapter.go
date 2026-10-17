@@ -937,59 +937,63 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 }
 
 // SetSelection keeps a collection's selection on the node's row for its grid,
-// as its framing is kept; the plugin never sees it. A selected entry is
-// touched, so it gets its row.
+// as its framing is kept; the plugin never sees it. An added entry is
+// touched, so it gets its row; one not in this collection is ignored, as home
+// ignores a tile off its grid. A recursive clear walks the wells the node has
+// rows for, the ones the user touched.
 func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
 	_, ckey, err := a.resolveGrid(req.GridId)
 	if err != nil {
 		return nil, err
 	}
-	var claim []int64
-	if req.Claim != nil {
-		claim = make([]int64, 0, len(req.Claim.TileIds))
-		for _, id := range req.Claim.TileIds {
-			ref, err := a.resolveTile(id)
-			switch {
-			case gwerr.IsDeadRef(err) || err == nil && ref.id == 0:
-				// The set on the row names only live rows, so this claim
-				// cannot be what it holds; -1 is no row id.
-				claim = append(claim, -1)
-			case err != nil:
-				return nil, err
-			default:
-				claim = append(claim, ref.id)
-			}
-		}
-	}
-	set := make([]int64, 0, len(req.TileIds))
-	for _, id := range req.TileIds {
+	add := make([]int64, 0, len(req.Add))
+	for _, id := range req.Add {
 		ref, err := a.resolveTile(id)
+		if gwerr.IsDeadRef(err) || err == nil && ref.context != ckey {
+			continue
+		}
 		if err != nil {
 			return nil, err
-		}
-		if ref.context != ckey {
-			return nil, status.Errorf(codes.InvalidArgument, "plugin: %q is not on grid %q", id, req.GridId)
 		}
 		row, err := a.mint(ctx, id)
+		if status.Code(err) == codes.NotFound {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		set = append(set, row)
+		add = append(add, row)
+	}
+	remove := make([]int64, 0, len(req.Remove))
+	for _, id := range req.Remove {
+		ref, err := a.resolveTile(id)
+		// The set names only live rows, so one without a row is not in it.
+		if gwerr.IsDeadRef(err) || err == nil && ref.id == 0 {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		remove = append(remove, ref.id)
 	}
 	gid, err := a.mem.ContextID(ckey)
 	if err != nil {
 		return nil, err
 	}
-	changed, err := a.mem.SetSelection(gid, claim, set)
+	changed, err := a.mem.SetSelection(gid, store.SelectOp{Add: add, Remove: remove, Clear: req.Clear, Recurse: req.Recurse})
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
-	if changed {
-		ids, err := a.selection(ckey, gid)
+	for _, g := range changed {
+		ck, err := a.mem.ContextKey(g)
 		if err != nil {
 			return nil, err
 		}
-		a.hub.Publish(rpc.SelectionEvent(rpc.EntryGridID(ckey), ids))
+		ids, err := a.selection(ck, g)
+		if err != nil {
+			return nil, err
+		}
+		a.hub.Publish(rpc.SelectionEvent(rpc.EntryGridID(ck), ids))
 	}
 	return &gridwellv1.SetSelectionResponse{}, nil
 }

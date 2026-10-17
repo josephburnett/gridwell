@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"slices"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
@@ -44,6 +46,18 @@ func SelectionEvent(gridID string, tileIDs []string) *pb.Event {
 	return &pb.Event{Payload: &pb.Event_SelectionChanged{SelectionChanged: &pb.SelectionChanged{
 		GridId: gridID, TileIds: tileIDs,
 	}}}
+}
+
+// ApplySelect is set after a select: add put in, then remove taken out, so a
+// tile in both ends out. It is sorted with each id once, nil when empty.
+func ApplySelect(set, add, remove []string) []string {
+	out := append(slices.Clone(set), add...)
+	out = slices.DeleteFunc(out, func(id string) bool { return slices.Contains(remove, id) })
+	if len(out) == 0 {
+		return nil
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // EventKey names the entity a wire event is about, so internal/eventhub can

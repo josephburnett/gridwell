@@ -25,7 +25,8 @@ const instructions = `Gridwell is a personal space of tiles on infinite grids. E
 qualified address ("<node>/12", "<node>/<connection>/<far-node>/7"); name it
 back exactly as a tool answered it. A write claims what you read: pass the
 version read_tile or read_grid gave you and a write made since is refused as a
-version conflict, or omit it to claim the row as it stands now. Nothing here
+version conflict, or omit it to claim the row as it stands now; select claims
+nothing. Nothing here
 destroys a tile: delete moves it to the trash. Shells are not reachable here.
 When the user says "this", "here" or "these", call pointed: it answers the
 grid or the selection in front of them.`
@@ -47,7 +48,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	mcp.AddTool(s, &mcp.Tool{Name: "clone", Description: "Deep-copy a tile into a grid (its own when none is named), at the first free cell near it or at the cell named."}, d.clone)
 	mcp.AddTool(s, &mcp.Tool{Name: "link", Description: "Create a link to a tile in a grid: a dashed tile showing the same content, in this namespace or across one."}, d.link)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete a tile: it moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
-	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Set a grid's selection, the tiles the user has in hand, claiming the selection read_grid gave (or the one on disk now when none is given). An empty list clears it. A pane inside a pane tile shows its own set, which this does not write."}, d.selectTiles)
+	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Clear, add tiles to and take tiles out of a grid's selection, the tiles the user has in hand; clear with recurse also clears every grid inside its wells. It claims nothing: the user's own selects meanwhile stand, and the last select of a tile wins. A pane inside a pane tile shows its own set, which this does not write."}, d.selectTiles)
 	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List every screen showing this node now: each client session's label, when its view last changed, and its panes, each with its place, the grid it shows, the pane tile it is inside, and whether it has focus."}, d.sessions)
 	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the selection that pane shows when it has one (the grid's, or inside a pane tile the pane's own), else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last."}, d.pointed)
 	return s
@@ -290,24 +291,16 @@ func (d *door) delete(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) 
 }
 
 type selectIn struct {
-	Grid  string    `json:"grid" jsonschema:"the grid"`
-	Tiles []string  `json:"tiles" jsonschema:"the tiles to have in hand, all on this grid; empty clears the selection"`
-	Claim *[]string `json:"claim,omitempty" jsonschema:"the selection read_grid gave; omitted claims the one on disk now"`
+	Grid    string   `json:"grid" jsonschema:"the grid"`
+	Add     []string `json:"add,omitempty" jsonschema:"tiles of this grid to put in the selection; one not on the grid is ignored"`
+	Remove  []string `json:"remove,omitempty" jsonschema:"tiles to take out of the selection"`
+	Clear   bool     `json:"clear,omitempty" jsonschema:"empty the grid's selection first, without naming it"`
+	Recurse bool     `json:"recurse,omitempty" jsonschema:"with clear, also empty the selection of every grid inside this grid's wells, to any depth, within its namespace"`
 }
 
 func (d *door) selectTiles(ctx context.Context, _ *mcp.CallToolRequest, in selectIn) (*mcp.CallToolResult, GridOut, error) {
-	var claim []string
-	if in.Claim != nil {
-		claim = *in.Claim
-	} else {
-		g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: in.Grid})
-		if err != nil {
-			return nil, GridOut{}, refusal(err)
-		}
-		claim = g.GetGrid().GetSelection()
-	}
-	if _, err := d.rt.SetSelection(ctx, &pb.SetSelectionRequest{GridId: in.Grid,
-		Claim: &pb.SelectionClaim{TileIds: claim}, TileIds: in.Tiles}); err != nil {
+	if _, err := d.rt.SetSelection(ctx, &pb.SetSelectionRequest{GridId: in.Grid, Add: in.Add, Remove: in.Remove,
+		Clear: in.Clear, Recurse: in.Recurse}); err != nil {
 		return nil, GridOut{}, refusal(err)
 	}
 	out, err := d.grid(ctx, in.Grid)

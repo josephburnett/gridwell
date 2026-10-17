@@ -597,9 +597,6 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 // SetSelection routes a selection write to the namespace owning the grid,
 // every id it names peeled for that hop.
 func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
-	if err := refuseUnclaimed(req); err != nil {
-		return nil, err
-	}
 	c, _, _, transit, err := rt.route(req.GridId)
 	if err != nil {
 		return nil, err

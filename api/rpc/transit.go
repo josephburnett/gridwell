@@ -141,13 +141,11 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 		r.RootGridId = h.PeelID(r.RootGridId)
 	case *pb.SetSelectionRequest:
 		r.GridId = h.PeelID(r.GridId)
-		for i, id := range r.TileIds {
-			r.TileIds[i] = h.PeelID(id)
+		for i, id := range r.Add {
+			r.Add[i] = h.PeelID(id)
 		}
-		if r.Claim != nil {
-			for i, id := range r.Claim.TileIds {
-				r.Claim.TileIds[i] = h.PeelID(id)
-			}
+		for i, id := range r.Remove {
+			r.Remove[i] = h.PeelID(id)
 		}
 	}
 	return out

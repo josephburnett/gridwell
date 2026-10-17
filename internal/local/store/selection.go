@@ -2,7 +2,7 @@ package store
 
 // The selection: the set of a grid's tiles the user has in hand, one fact on
 // the grid row (grids.selection) for home's grids and a plugin's alike. A
-// write claims the set it saw and bumps no version.
+// select clears, adds and removes, claims nothing and bumps no version.
 
 import (
 	"context"
@@ -53,7 +53,6 @@ func idStrings(ids []int64) []string {
 	return out
 }
 
-// parseIDs is never nil, so an empty claim stays a claim.
 func parseIDs(ids []string) ([]int64, error) {
 	out := make([]int64, len(ids))
 	for i, s := range ids {
@@ -94,38 +93,109 @@ func readSelection(ctx context.Context, q gridReader, ns string, gridID int64) (
 	return parseSelection(text)
 }
 
-// setSelectionTx is the one selection write. claim is the set the writer saw,
-// nil for the node's own write; a write landing where the row already is
-// loses nothing, so only a set that moved under a writer asking to move it is
-// refused.
-func setSelectionTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64, claim, set []int64) error {
+// SelectOp is one select: Clear empties the grid's set, then Add puts tiles
+// in and Remove takes them out, by rpc.ApplySelect. Recurse, only with Clear,
+// also empties every grid nested under the grid's wells within its namespace.
+type SelectOp struct {
+	Add, Remove    []int64
+	Clear, Recurse bool
+}
+
+// setSelectionTx is the one selection write. It answers each grid whose set
+// it changed, the named grid first when it did. An added tile not live on the
+// grid is ignored.
+func setSelectionTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64, op SelectOp) ([]int64, error) {
+	if op.Recurse && !op.Clear {
+		return nil, fmt.Errorf("%w: recurse is only for a clear", ErrInvalidArgument)
+	}
 	cur, err := readSelection(ctx, tx, ns, gridID)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	have, want := selectionText(cur), selectionText(set)
-	if have == want {
-		return nil
-	}
-	if claim != nil && selectionText(claim) != have {
-		return fmt.Errorf("%w: grid %d's selection moved since the writer saw it", ErrVersionConflict, gridID)
-	}
-	for _, id := range set {
+	on := make([]int64, 0, len(op.Add))
+	for _, id := range op.Add {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tiles
 			WHERE id = ? AND grid_id = ? AND ns = ? AND tombstoned = 0`, id, gridID, ns).Scan(&n); err != nil {
-			return err
+			return nil, err
 		}
-		if n == 0 {
-			return fmt.Errorf("%w: tile %d is not on grid %d", ErrInvalidArgument, id, gridID)
+		if n > 0 {
+			on = append(on, id)
 		}
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE grids SET selection = ? WHERE id = ?`, want, gridID)
-	return err
+	from := idStrings(cur)
+	if op.Clear {
+		from = nil
+	}
+	next, err := parseIDs(rpc.ApplySelect(from, idStrings(on), idStrings(op.Remove)))
+	if err != nil {
+		return nil, err
+	}
+	var changed []int64
+	if selectionText(next) != selectionText(cur) {
+		if _, err := tx.ExecContext(ctx, `UPDATE grids SET selection = ? WHERE id = ?`, selectionText(next), gridID); err != nil {
+			return nil, err
+		}
+		changed = append(changed, gridID)
+	}
+	if !op.Recurse {
+		return changed, nil
+	}
+	nested, err := clearNestedTx(ctx, tx, ns, gridID)
+	return append(changed, nested...), err
+}
+
+// clearNestedTx empties the set of every grid under gridID's wells, to any
+// depth. A well whose child is another namespace's grid (an exit well, whose
+// child_grid_id is a qualified string) is not followed.
+func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]int64, error) {
+	var changed []int64
+	seen := map[int64]bool{gridID: true}
+	queue := []int64{gridID}
+	for len(queue) > 0 {
+		g := queue[0]
+		queue = queue[1:]
+		rows, err := tx.QueryContext(ctx, `SELECT child_grid_id FROM tiles
+			WHERE grid_id = ? AND ns = ? AND kind = 'well' AND tombstoned = 0
+			AND typeof(child_grid_id) = 'integer'`, g, ns)
+		if err != nil {
+			return nil, err
+		}
+		var kids []int64
+		for rows.Next() {
+			var k int64
+			if err := rows.Scan(&k); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			kids = append(kids, k)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		for _, k := range kids {
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			res, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE id = ? AND ns = ? AND selection != ''`, k, ns)
+			if err != nil {
+				return nil, err
+			}
+			if n, err := res.RowsAffected(); err != nil {
+				return nil, err
+			} else if n > 0 {
+				changed = append(changed, k)
+			}
+			queue = append(queue, k)
+		}
+	}
+	return changed, nil
 }
 
 // leaveSelection takes a tile that left gridID out of its selection, and is
-// how the set names only tiles on its grid: setSelectionTx admits nothing
+// how the set names only tiles on its grid: setSelectionTx adds nothing
 // else, and every way a tile leaves a grid calls this in the same transaction
 // (tileLeft for home's, Retire for a plugin's). changed is false when the tile
 // was not selected.
@@ -167,46 +237,56 @@ func (s *Store) tileLeft(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.
 	return nil
 }
 
-// SetSelection replaces home grid gridID's selection with set, claiming the
-// set the writer saw; a nil claim is the node's own write. Ids are home's
-// decimal row ids.
-func (s *Store) SetSelection(ctx context.Context, gridID string, claim *gridwellv1.SelectionClaim, set []string) error {
-	gid, err := parseID(gridID)
+// SetSelection is a select of a home grid, telling each grid whose set it
+// changed. Ids are home's decimal row ids.
+func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) error {
+	gid, err := parseID(req.GridId)
 	if err != nil {
 		return fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
 	}
-	want, err := parseIDs(set)
-	if err != nil {
+	op := SelectOp{Clear: req.Clear, Recurse: req.Recurse}
+	if op.Add, err = parseIDs(req.Add); err != nil {
 		return err
 	}
-	var saw []int64
-	if claim != nil {
-		if saw, err = parseIDs(claim.GetTileIds()); err != nil {
-			return err
-		}
+	if op.Remove, err = parseIDs(req.Remove); err != nil {
+		return err
 	}
-	_, err = s.withRowWrite(ctx, "SetSelection", "grids", gid, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		if err := setSelectionTx(ctx, tx, "", gid, saw, want); err != nil {
-			return err
-		}
-		stored, err := readSelection(ctx, tx, "", gid)
+	return s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		changed, err := setSelectionTx(ctx, tx, "", gid, op)
 		if err != nil {
 			return err
 		}
-		*events = append(*events, rpc.SelectionEvent(gridID, idStrings(stored)))
+		if len(changed) == 0 {
+			return errUnchanged
+		}
+		for _, g := range changed {
+			stored, err := readSelection(ctx, tx, "", g)
+			if err != nil {
+				return err
+			}
+			*events = append(*events, rpc.SelectionEvent(strconv.FormatInt(g, 10), idStrings(stored)))
+		}
 		return nil
 	})
-	return err
 }
 
-// SetSelection is the selection on a plugin's grid row, the write home's
-// grids take. A nil claim is the node's own write, so a made claim is non-nil
-// even when empty. The caller announces the write when changed.
-func (n *Namespace) SetSelection(gridID int64, claim, set []int64) (changed bool, err error) {
-	return n.rowWrite("SetSelection", "grids", gridID, "s/"+strconv.FormatInt(gridID, 10),
-		func(ctx context.Context, tx *sql.Tx) error {
-			return setSelectionTx(ctx, tx, n.ns, gridID, claim, set)
-		})
+// SetSelection is a select of a plugin's grid row, the write home's grids
+// take. It answers each grid whose set changed, for the caller to announce.
+func (n *Namespace) SetSelection(gridID int64, op SelectOp) (changed []int64, err error) {
+	err = n.s.withMutation(context.Background(), "SetSelection", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		var err error
+		if changed, err = setSelectionTx(context.Background(), tx, n.ns, gridID, op); err != nil {
+			return err
+		}
+		if len(changed) == 0 {
+			return errUnchanged
+		}
+		return nil
+	}, n.ns+":s/"+strconv.FormatInt(gridID, 10))
+	if err != nil {
+		return nil, err
+	}
+	return changed, nil
 }
 
 // Selection reads a plugin grid row's selection.

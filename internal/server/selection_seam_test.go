@@ -13,11 +13,11 @@ import (
 
 // The selection through the whole seam, at home and on a far node alike: the
 // client's door, the router, the transport, the far node's door and store. A
-// write claims the set it saw, lands on the grid's row there, comes back to
-// the writer as SelectionChanged in the writer's own spelling of every id,
-// reads back on the grid, moves no version, and a stale claim is refused with
-// the conflict the client reconciles from. The client's cache, folding the
-// real stream, holds each set the node told.
+// select names what it adds and removes and claims nothing: it lands on the
+// grid's row there, comes back to the writer as the whole set in
+// SelectionChanged in the writer's own spelling of every id, reads back on the
+// grid, moves no version, and two writers' selects of different tiles merge.
+// The client's cache, folding the real stream, holds each set the node told.
 func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 	m := staleMesh(t)
 	me := m.nodes[meNode]
@@ -70,11 +70,15 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 				}
 			}
 
-			if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid,
-				Claim: &gridwellv1.SelectionClaim{}, TileIds: []string{a.Id, b.Id}}); err != nil {
+			if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid, Add: []string{a.Id}}); err != nil {
 				t.Fatalf("SetSelection: %v", err)
 			}
-			awaitSet("select", a.Id, b.Id)
+			awaitSet("select", a.Id)
+			// Another window, which never saw a selected, adds b: both stand.
+			if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid, Add: []string{b.Id}}); err != nil {
+				t.Fatalf("a second writer's select: %v", err)
+			}
+			awaitSet("a second writer's select", a.Id, b.Id)
 			after, err := me.cl.GetGrid(ctx, grid)
 			if err != nil {
 				t.Fatal(err)
@@ -91,17 +95,13 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 				}
 			}
 
-			// Another window still holding the empty set.
-			wantConflict(t, "a stale selection", me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid,
-				Claim: &gridwellv1.SelectionClaim{}, TileIds: []string{a.Id}}))
-
 			// A tile that leaves the grid leaves the set, told with the rest.
 			if _, err := me.cl.DeleteTile(ctx, rpc.DeleteOf(a)); err != nil {
 				t.Fatal(err)
 			}
 			awaitSet("delete", b.Id)
-			if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid,
-				Claim: &gridwellv1.SelectionClaim{TileIds: []string{b.Id}}}); err != nil {
+			// A recursive clear crosses every hop with both its flags.
+			if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid, Clear: true, Recurse: true}); err != nil {
 				t.Fatalf("clearing: %v", err)
 			}
 			awaitSet("clear")

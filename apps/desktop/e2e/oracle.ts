@@ -161,14 +161,13 @@ export async function placeTile(
   }
 }
 
-// A foreign writer replacing a grid's selection, claiming the set it reads
-// first.
-export async function setSelection(origin: string, gridId: string, tileIds: string[]): Promise<void> {
-  const claim = { tileIds: (await getGrid(origin, gridId)).grid?.selection ?? [] };
+// A foreign writer's select: it adds and removes tiles, claiming nothing, as
+// another window or an agent would.
+export async function setSelection(origin: string, gridId: string, add: string[], remove: string[] = []): Promise<void> {
   const res = await fetch(`${origin}/${SERVICE}/SetSelection`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: JSON.stringify({ gridId, tileIds, claim }),
+    body: JSON.stringify({ gridId, add, remove }),
   });
   if (!res.ok) {
     throw new Error(`SetSelection(${gridId}) failed: ${res.status} ${await res.text()}`);

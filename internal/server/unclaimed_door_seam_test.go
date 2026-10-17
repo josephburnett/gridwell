@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +17,8 @@ import (
 // A write of something the user placed that names no claim is refused at
 // either door with the claim it lacks, and the row stands: the lock cannot be
 // bypassed by omission. A tile on a far node behaves the same as one at home.
+// A select is the decided exception: it claims nothing and lands at either
+// door.
 func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 	ctx := context.Background()
 	m := staleMesh(t)
@@ -85,13 +88,15 @@ func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 					t.Fatal("a claimless freeze landed")
 				}
 
-				refused("select", d.sel(&gridwellv1.SetSelectionRequest{GridId: grid, TileIds: []string{tile.Id}}), "claim")
+				if err := d.sel(&gridwellv1.SetSelectionRequest{GridId: grid, Add: []string{tile.Id}}); err != nil {
+					t.Fatalf("a select: %v, want it to land", err)
+				}
 				g, err := me.cl.GetGrid(ctx, grid)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if len(g.Grid.Selection) != 0 {
-					t.Fatalf("a claimless selection landed: %v", g.Grid.Selection)
+				if !slices.Contains(g.Grid.Selection, tile.Id) {
+					t.Fatalf("selection = %v, want %s in it", g.Grid.Selection, tile.Id)
 				}
 			})
 		}
