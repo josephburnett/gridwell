@@ -55,3 +55,37 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 		t.Errorf("framed row updated_at = %d, want %d", u, later.Unix())
 	}
 }
+
+// Every write to a plugin's row moves its updated_at, as every write to
+// home's does: a move, a text window, a content zoom.
+func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
+	st, ns := openExt(t)
+	at := time.Unix(1_800_000_000, 0)
+	st.SetClock(func() time.Time { return at })
+	gid, err := ns.ContextID("c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := ns.Mint(gid, &pluginv1.Entry{Key: "k", Kind: "text", Label: "k"}, 0, 0, 0, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writes := []struct {
+		name  string
+		write func() (bool, error)
+	}{
+		{"Place", func() (bool, error) { return ns.Place(id, 4, 4, 2, 2, nil) }},
+		{"SetTextView", func() (bool, error) { return ns.SetTextView(id, 10, 20, 0, 0, "rendered") }},
+		{"SetContentZoom", func() (bool, error) { return ns.SetContentZoom(id, zoomOf(1.5)) }},
+	}
+	for i, w := range writes {
+		now := at.Add(time.Duration(i+1) * time.Hour)
+		st.SetClock(func() time.Time { return now })
+		if changed, err := w.write(); err != nil || !changed {
+			t.Fatalf("%s: changed=%v err=%v", w.name, changed, err)
+		}
+		if _, u := rowTimes(t, st, id); u != now.Unix() {
+			t.Errorf("%s: updated_at = %d, want %d", w.name, u, now.Unix())
+		}
+	}
+}

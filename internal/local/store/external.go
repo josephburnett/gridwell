@@ -402,9 +402,9 @@ func (n *Namespace) rowWrite(verb, table string, id int64, row string, fn func(c
 // exec runs a single-row UPDATE on a live row of this namespace, mapping zero
 // rows to ErrNotFound: a retired row refuses mutation.
 func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed bool, err error) {
-	args = append(args, tileID, n.ns)
+	args = append(args, n.s.now().Unix(), tileID, n.ns)
 	return n.rowWrite(verb, "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+` WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
+		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+`, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
 		if err != nil {
 			return err
 		}
@@ -438,7 +438,8 @@ func (n *Namespace) Place(tileID, x, y, w, h int64, claim *gridwellv1.Placement)
 		if err := claimPlacement(cur, claim, false); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE tiles SET `+placementSet+` WHERE id = ?`, x, y, w, h, tileID)
+		_, err = tx.ExecContext(ctx, `UPDATE tiles SET `+placementSet+`, updated_at = ? WHERE id = ?`,
+			x, y, w, h, n.s.now().Unix(), tileID)
 		return err
 	})
 }
