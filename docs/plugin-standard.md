@@ -725,12 +725,45 @@ the conflict, a write the plugin cannot take parks and lands),
 `plugin-readonly`). N/A: proc, pages, gitlab,
 gmail and hey, which take no body back and declare no `writable`.
 
+## 20. Search only what you hold
+
+**Rule.** Answer `Search` from what your memory already holds, never by
+reading the source for the query. A plugin whose source is a file tree keeps
+no memory, so it answers no search: `Unimplemented`, with the reason (Joe,
+2026-10-17).
+
+**Why.** "Nothing is done for nobody: no capture, fetch or walk runs unless
+something on screen or in the store needs its result." A query names no grid
+on screen, so a walk of the disk to answer one is work done for nobody, and
+on a large tree an unbounded one. The node remembers the `Unimplemented` for
+the life of the process (`pluginhost.absentVerbs`), so the refusal costs one
+round trip, and a namespace that does not search is no skip in the result.
+
+**Example.** `fs/plugin/plugin.go`:
+
+```go
+func (p *Plugin) Search(context.Context, *pluginv1.SearchRequest) (*pluginv1.SearchResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "fs plugin: a file tree answers no search")
+}
+```
+
+**Test.** `fs/plugin/search_test.go:TestSearchIsUnimplementedByRule`: a query
+naming a file that is there answers `Unimplemented` with the plugin's own
+reason. `gmail/plugin/plugin_test.go:TestSearchReadsMemoryOnly` and
+`hey/plugin/plugin_test.go:TestSearchReadsMemoryOnly` for a plugin with
+memory. At the node,
+`internal/pluginhost/absent_verb_test.go:TestAnAbsentVerbIsAskedOncePerProcess`.
+
+**Today.** Meets: fs, which answers none; gitlab, gmail and hey, which
+search their memory only. N/A: proc and pages, which serve no `Search`.
+
 ## Checklist
 
 Tick each before you ship. At `729ba73` the shipped plugins tick every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
-hey); rules 18 and 19 were added later: 18 is met by fs, proc, gitlab and
-hey, and 19 by fs alone. The rules' Today lines say what remains.
+hey); rules 18 to 20 were added later: 18 is met by fs, proc, gitlab and
+hey, 19 by fs alone, and 20 by fs, gitlab, gmail and hey. The rules' Today
+lines say what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
 - [ ] 2. `Info` refuses a config it cannot serve with a sentence, and latches.
@@ -751,3 +784,4 @@ hey, and 19 by fs alone. The rules' Today lines say what remains.
 - [ ] 17. The README matches the code.
 - [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `ContextChanged` only for a listing that may have moved.
 - [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp; a text entry you would refuse declares `read_only` with the reason.
+- [ ] 20. `Search` reads only your memory; a file tree answers `Unimplemented` with the reason.
