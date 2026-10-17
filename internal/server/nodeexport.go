@@ -45,7 +45,7 @@ func WebDoorServer(h http.Handler) *http.Server {
 // ConnectionDoorServer.
 func (s *Server) ConnectionHandler() http.Handler {
 	g := grpc.NewServer(grpc.UnaryInterceptor(traceUnary), grpc.StreamInterceptor(traceStream))
-	pb.RegisterGridwellServer(g, namespace.Server(newRouter(s)))
+	pb.RegisterGridwellServer(g, namespace.Server(&router{srv: s, farAsked: true}))
 	return g
 }
 

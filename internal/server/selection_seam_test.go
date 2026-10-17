@@ -108,3 +108,38 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 		})
 	}
 }
+
+// The all-clear empties every set the node holds and every live far node's,
+// through the real transport, and a far node asked over its connection door
+// clears its own rows and forwards nothing, so two nodes connected both ways
+// do not echo it back and forth.
+func TestTheAllClearReachesEveryFarNodeOnce(t *testing.T) {
+	m := newMesh(t, []string{meNode, aNode}, []meshEdge{{meNode, "toa", aNode}, {aNode, "tome", meNode}})
+	me := m.nodes[meNode]
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	home, far := m.home(meNode, meNode), m.home(meNode, aNode, "toa")
+	for i, grid := range []string{home, far} {
+		tl := m.text(ctx, meNode, grid, int64(70+i), "x")
+		if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: grid, Add: []string{tl.Id}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, bad := range []*gridwellv1.SetSelectionRequest{{All: true}, {GridId: home, Clear: true, All: true}} {
+		if err := me.cl.SetSelection(ctx, bad); err == nil {
+			t.Errorf("%v was not refused", bad)
+		}
+	}
+	if err := me.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{Clear: true, All: true}); err != nil {
+		t.Fatalf("the all-clear: %v", err)
+	}
+	for _, grid := range []string{home, far} {
+		g, err := me.cl.GetGrid(ctx, grid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(g.Grid.Selection) != 0 {
+			t.Errorf("grid %s kept %v", grid, g.Grid.Selection)
+		}
+	}
+}

@@ -399,3 +399,57 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 		t.Errorf("a plugin grid's recursive clear changed %v, %v; want [%d]", changed, err, gid)
 	}
 }
+
+// The all-clear empties every grid's set in one namespace, home's or a
+// plugin's, and leaves the others' sets alone; it names nothing else.
+func TestSelectionClearAllIsOneNamespace(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	root := rootID(t, s)
+	g1, g2 := nest(t, s, root)
+	n := s.Namespace("plug1")
+	gid, err := n.ContextID("inbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := n.Mint(gid, &pluginv1.Entry{Key: "e", Kind: "text", Label: "e"}, 0, 0, 0, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.SetSelection(gid, SelectOp{Add: []int64{e}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []*gridwellv1.SetSelectionRequest{
+		{All: true},
+		{All: true, Clear: true, GridId: root},
+		{All: true, Clear: true, Add: []string{"1"}},
+	} {
+		if err := s.SetSelection(ctx, bad); !errors.Is(err, ErrInvalidArgument) {
+			t.Errorf("%v: err = %v, want ErrInvalidArgument", bad, err)
+		}
+	}
+
+	ch, cancel := s.SubscribeEvents()
+	defer cancel()
+	if err := s.SetSelection(ctx, &gridwellv1.SetSelectionRequest{Clear: true, All: true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range []string{root, g1, g2} {
+		if got := selectionOn(t, s, g); len(got) != 0 {
+			t.Errorf("home grid %s kept %v", g, got)
+		}
+	}
+	if got := len(selectionEvents(drainEvents(t, ch))); got != 3 {
+		t.Errorf("told %d grids, want 3", got)
+	}
+	if got, _ := n.Selection(gid); len(got) != 1 {
+		t.Errorf("home's all-clear reached the plugin's grid: %v", got)
+	}
+	changed, err := n.ClearAllSelections()
+	if err != nil || !slices.Equal(changed, []int64{gid}) {
+		t.Errorf("the plugin's all-clear changed %v, %v; want [%d]", changed, err, gid)
+	}
+	if changed, err := n.ClearAllSelections(); err != nil || len(changed) != 0 {
+		t.Errorf("a second all-clear changed %v, %v", changed, err)
+	}
+}

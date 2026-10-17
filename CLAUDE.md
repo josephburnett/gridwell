@@ -170,7 +170,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   grid's set without naming it, before the adds; with `recurse` it also
   empties every grid under the grid's wells, to any depth, within its
   namespace, in one write, telling each grid whose set changed; `recurse`
-  without `clear` is refused (2026-10-17). It bumps no version, the grid's
+  without `clear` is refused. `clear` with `all` and nothing else empties
+  every set the node holds, one write per namespace (home, each plugin),
+  and goes on over each live connection to the far node, whose sets are its
+  rows; asked over its connection door, a node clears its own and forwards
+  nothing (`router.clearAllSelections`). The + circle's right-click offers
+  it as Clear selection, above Dump logs, which stays the bottom row; the
+  client empties the per-pane sets in its open pane tiles' layouts too
+  (`pane.Levels.UnselectAll`) (2026-10-17). It bumps no version, the grid's
   or any tile's, so a select never refuses a text save. A tap adds or
   removes one tile, a sweep adds the band, Esc removes the set the pane
   shows (`gesture.Toggle`, `Sweep`, `Clear`). `SelectionChanged` carries the whole set, so no view re-reads the

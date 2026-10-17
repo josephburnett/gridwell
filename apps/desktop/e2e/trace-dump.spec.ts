@@ -1,6 +1,7 @@
-import { ElectronApplication, Page } from '@playwright/test';
+import { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import * as path from 'node:path';
+import { pickFromNativeMenu } from './choicemenu';
 import { readDump, joinedRequests, bootOrigins, describe as describeDump } from './trace';
 
 // The trace has two halves and only a dump puts them together: the node's own
@@ -8,41 +9,6 @@ import { readDump, joinedRequests, bootOrigins, describe as describeDump } from 
 // the gesture a user has — right-click the bar circle, pick Dump logs — and
 // reads the file off disk, because the join between the halves is kv.req and
 // nothing else in the suite can see it.
-
-// The native popup blocks under xvfb, so Menu.popup is intercepted and the
-// menu stashed; the item's own click still settles main's promise. Same trick
-// as e2e/theme.spec.ts.
-async function pickFromNativeMenu(electronApp: ElectronApplication, label: string): Promise<void> {
-  await electronApp.evaluate(({ Menu }) => {
-    const g = globalThis as any;
-    g.__gwChoiceOrigPopup = Menu.prototype.popup;
-    g.__gwChoiceMenu = null;
-    (Menu.prototype as any).popup = function (this: any) {
-      g.__gwChoiceMenu = this;
-      return undefined;
-    };
-  });
-  try {
-    await expect
-      .poll(() => electronApp.evaluate(() => Boolean((globalThis as any).__gwChoiceMenu)), {
-        timeout: 10_000,
-      })
-      .toBe(true);
-    await electronApp.evaluate((_: unknown, wanted: string) => {
-      const m = (globalThis as any).__gwChoiceMenu;
-      const row = m.items.find((i: any) => i.label === wanted);
-      if (!row) throw new Error(`no ${wanted} row; got ${m.items.map((i: any) => i.label).join(', ')}`);
-      row.click();
-    }, label);
-  } finally {
-    await electronApp.evaluate(({ Menu }) => {
-      const g = globalThis as any;
-      if (g.__gwChoiceOrigPopup) (Menu.prototype as any).popup = g.__gwChoiceOrigPopup;
-      delete g.__gwChoiceOrigPopup;
-      delete g.__gwChoiceMenu;
-    });
-  }
-}
 
 // The dump's path arrives as a notice, which is also how the user finds it.
 async function dumpNotice(window: Page): Promise<{ severity: string; message: string }> {

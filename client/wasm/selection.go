@@ -151,6 +151,27 @@ func (a *App) clearSelection() {
 	}
 }
 
+// clearAllSelections is the + menu's Clear selection: the node empties every
+// grid's set it and its far nodes hold, each told back as SelectionChanged,
+// and the open pane tiles' own sets, which live in their layouts, are emptied
+// here for the layout persister to write.
+func (a *App) clearAllSelections() {
+	if a.ws.UnselectAll(a.tree) {
+		a.draw()
+	}
+	// A verdict re-reads the grid in front of the user.
+	var gid string
+	if p := a.tree.FocusedPane(); p != nil {
+		gid = a.gridIDForPane(p)
+	}
+	a.post(write{
+		label: "SetSelection", gid: gid, source: "selection", failText: "the selection was not cleared",
+		call: func(ctx context.Context) error {
+			return a.cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{Clear: true, All: true})
+		},
+	})
+}
+
 // drawSelectionBorder is the yellow border inside a selected tile, inset so a
 // neighbour's or the focused tile's outline never covers it.
 func (a *App) drawSelectionBorder(c js.Value, x, y, w, h float64) {

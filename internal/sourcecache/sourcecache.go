@@ -1043,6 +1043,10 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 // after, replace it and tell the grids a recursive clear reached.
 func (c *Layer) SetSelection(ctx context.Context, in *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
 	resp, err := c.Namespace.SetSelection(ctx, in)
+	if in.All {
+		// It names no grid; each far grid's set comes back as its event.
+		return resp, err
+	}
 	c.noteReachGrid(ctx, err, in.GridId)
 	if err == nil {
 		c.reselect(ctx, in.GridId, func(cur []string) []string {

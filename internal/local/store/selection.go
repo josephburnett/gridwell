@@ -94,8 +94,9 @@ func readSelection(ctx context.Context, q gridReader, ns string, gridID int64) (
 }
 
 // SelectOp is one select: Clear empties the grid's set, then Add puts tiles
-// in and Remove takes them out, by rpc.ApplySelect. Recurse, only with Clear,
-// also empties every grid nested under the grid's wells within its namespace.
+// in and Remove takes them out, by rpc.ApplySelect. Recurse, only with Clear
+// (rpc.SelectRefusal), also empties every grid nested under the grid's wells
+// within its namespace.
 type SelectOp struct {
 	Add, Remove    []int64
 	Clear, Recurse bool
@@ -105,9 +106,6 @@ type SelectOp struct {
 // it changed, the named grid first when it did. An added tile not live on the
 // grid is ignored.
 func setSelectionTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64, op SelectOp) ([]int64, error) {
-	if op.Recurse && !op.Clear {
-		return nil, fmt.Errorf("%w: recurse is only for a clear", ErrInvalidArgument)
-	}
 	cur, err := readSelection(ctx, tx, ns, gridID)
 	if err != nil {
 		return nil, err
@@ -237,9 +235,27 @@ func (s *Store) tileLeft(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.
 	return nil
 }
 
-// SetSelection is a select of a home grid, telling each grid whose set it
-// changed. Ids are home's decimal row ids.
+// SetSelection is a select of a home grid, or with All of every home grid,
+// telling each grid whose set it changed. Ids are home's decimal row ids.
 func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) error {
+	if why := rpc.SelectRefusal(req); why != "" {
+		return fmt.Errorf("%w: %s", ErrInvalidArgument, why)
+	}
+	if req.All {
+		return s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+			changed, err := clearAllTx(ctx, tx, "")
+			if err != nil {
+				return err
+			}
+			if len(changed) == 0 {
+				return errUnchanged
+			}
+			for _, g := range changed {
+				*events = append(*events, rpc.SelectionEvent(strconv.FormatInt(g, 10), nil))
+			}
+			return nil
+		})
+	}
 	gid, err := parseID(req.GridId)
 	if err != nil {
 		return fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
@@ -284,6 +300,50 @@ func (n *Namespace) SetSelection(gridID int64, op SelectOp) (changed []int64, er
 		return nil
 	}, n.ns+":s/"+strconv.FormatInt(gridID, 10))
 	if err != nil {
+		return nil, err
+	}
+	return changed, nil
+}
+
+// ClearAllSelections empties every grid's set in the namespace, answering
+// each grid whose set changed, for the caller to announce.
+func (n *Namespace) ClearAllSelections() (changed []int64, err error) {
+	err = n.s.withMutation(context.Background(), "SetSelection", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
+		var err error
+		if changed, err = clearAllTx(context.Background(), tx, n.ns); err != nil {
+			return err
+		}
+		if len(changed) == 0 {
+			return errUnchanged
+		}
+		return nil
+	}, n.ns+":s/*")
+	if err != nil {
+		return nil, err
+	}
+	return changed, nil
+}
+
+// clearAllTx empties every grid's set in namespace ns.
+func clearAllTx(ctx context.Context, tx *sql.Tx, ns string) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM grids WHERE ns = ? AND selection != '' ORDER BY id`, ns)
+	if err != nil {
+		return nil, err
+	}
+	var changed []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		changed = append(changed, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE ns = ? AND selection != ''`, ns); err != nil {
 		return nil, err
 	}
 	return changed, nil

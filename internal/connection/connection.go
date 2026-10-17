@@ -675,6 +675,27 @@ func peeled[Req proto.Message](req Req) func(string, rpc.Hop) Req {
 // asIs is the qualifier for an answer carrying no id of the far node's.
 func asIs[Resp any](_ string, resp Resp) Resp { return resp }
 
+// clearAllSelections forwards the all-clear to every live far node, which
+// clears its own rows (see server's router.clearAllSelections). A connection
+// that is not live holds nothing this node can clear now. Every one is tried;
+// the first failure is the answer.
+func (s *Server) clearAllSelections(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+	s.mu.Lock()
+	hops := make([]forward, 0, len(s.live))
+	for ns, lc := range s.live {
+		hops = append(hops, forward{ns, lc.client})
+	}
+	s.mu.Unlock()
+	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
+	var first error
+	for _, hp := range hops {
+		if _, err := hp.client.SetSelection(ctx, req); err != nil && first == nil {
+			first = err
+		}
+	}
+	return &gridwellv1.SetSelectionResponse{}, first
+}
+
 // SetFraming forwards the one framing write, routed on whichever target the
 // request names.
 func (s *Server) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
@@ -688,6 +709,9 @@ func (s *Server) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 // SetSelection forwards a far grid's selection write: the selection is the far
 // node's fact.
 func (s *Server) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+	if req.All {
+		return s.clearAllSelections(ctx, req)
+	}
 	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.SetSelection, asIs)
 }
 

@@ -101,3 +101,28 @@ func TestApplySelect(t *testing.T) {
 		t.Errorf("the input changed: %v", set)
 	}
 }
+
+// A select names its grid unless it is the all-clear, and the all-clear names
+// nothing else; recurse is only for a clear.
+func TestSelectRefusal(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		req  *pb.SetSelectionRequest
+		bad  bool
+	}{
+		{"add", &pb.SetSelectionRequest{GridId: "n/1", Add: []string{"n/2"}}, false},
+		{"clear recurse", &pb.SetSelectionRequest{GridId: "n/1", Clear: true, Recurse: true}, false},
+		{"recurse alone", &pb.SetSelectionRequest{GridId: "n/1", Recurse: true}, true},
+		{"no grid", &pb.SetSelectionRequest{Clear: true}, true},
+		{"all", &pb.SetSelectionRequest{Clear: true, All: true}, false},
+		{"all without clear", &pb.SetSelectionRequest{All: true}, true},
+		{"all with a grid", &pb.SetSelectionRequest{GridId: "n/1", Clear: true, All: true}, true},
+		{"all with add", &pb.SetSelectionRequest{Clear: true, All: true, Add: []string{"n/2"}}, true},
+		{"all with remove", &pb.SetSelectionRequest{Clear: true, All: true, Remove: []string{"n/2"}}, true},
+		{"all with recurse", &pb.SetSelectionRequest{Clear: true, All: true, Recurse: true}, true},
+	} {
+		if got := SelectRefusal(c.req); (got != "") != c.bad {
+			t.Errorf("%s: SelectRefusal = %q, want refused %v", c.name, got, c.bad)
+		}
+	}
+}

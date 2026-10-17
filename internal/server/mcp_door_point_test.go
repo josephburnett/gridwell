@@ -291,7 +291,8 @@ func TestMCPPointedFollowsTheShellTheAgentRunsIn(t *testing.T) {
 
 // select adds and removes without a claim, and answers the grid as read_grid
 // does: a select made while the user's set moved merges with it, a tile off
-// the grid is ignored, and a recursive clear reaches the grids inside wells.
+// the grid is ignored, a recursive clear reaches the grids inside wells, and
+// the all-clear reaches every namespace.
 func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	n := newMCPNode(t)
 	s, err := n.agent(t, bearer(testPassword))
@@ -344,5 +345,20 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	call(t, s, "read_grid", map[string]any{"id": well.ChildGridId}, &g)
 	if len(g.Grid.Selection) != 0 {
 		t.Fatalf("after a recursive clear the inner grid holds %v", g.Grid.Selection)
+	}
+
+	// all clears every grid the node holds, the feed plugin's included.
+	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.Tile.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.Tile.ID}}, &g)
+	var f mcpdoor.TileOut
+	call(t, s, "create_text", map[string]any{"grid": n.feedRoot, "body": "f"}, &f)
+	call(t, s, "select", map[string]any{"grid": n.feedRoot, "add": []string{f.Tile.ID}}, &g)
+	refusedWith(t, callRaw(t, s, "select", map[string]any{"grid": n.root, "clear": true, "all": true}), "refused:")
+	call(t, s, "select", map[string]any{"clear": true, "all": true}, &g)
+	for _, id := range []string{n.root, well.ChildGridId, n.feedRoot} {
+		call(t, s, "read_grid", map[string]any{"id": id}, &g)
+		if len(g.Grid.Selection) != 0 {
+			t.Fatalf("after the all-clear grid %s holds %v", id, g.Grid.Selection)
+		}
 	}
 }

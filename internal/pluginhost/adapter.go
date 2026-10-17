@@ -942,6 +942,16 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 // ignores a tile off its grid. A recursive clear walks the wells the node has
 // rows for, the ones the user touched.
 func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+	if why := rpc.SelectRefusal(req); why != "" {
+		return nil, status.Error(codes.InvalidArgument, "plugin: "+why)
+	}
+	if req.All {
+		changed, err := a.mem.ClearAllSelections()
+		if err != nil {
+			return nil, gwerr.ToStatus(err)
+		}
+		return &gridwellv1.SetSelectionResponse{}, a.announceSelections(changed)
+	}
 	_, ckey, err := a.resolveGrid(req.GridId)
 	if err != nil {
 		return nil, err
@@ -984,18 +994,23 @@ func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelection
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
-	for _, g := range changed {
+	return &gridwellv1.SetSelectionResponse{}, a.announceSelections(changed)
+}
+
+// announceSelections tells each grid's set, by context key.
+func (a *Adapter) announceSelections(grids []int64) error {
+	for _, g := range grids {
 		ck, err := a.mem.ContextKey(g)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		ids, err := a.selection(ck, g)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		a.hub.Publish(rpc.SelectionEvent(rpc.EntryGridID(ck), ids))
 	}
-	return &gridwellv1.SetSelectionResponse{}, nil
+	return nil
 }
 
 // selection is a context's selection on the wire, each row named by its key

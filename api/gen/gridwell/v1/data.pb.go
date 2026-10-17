@@ -3366,8 +3366,11 @@ func (x *SetFramingResponse) GetTile() *Tile {
 // they land, and two of the same tile are the last one's. An added tile not on
 // the grid is ignored. recurse, only with clear, also empties every grid
 // nested under the grid's wells, to any depth, within the grid's namespace, in
-// one write; recurse without clear is refused. A selection is not content: no
-// version moves, the grid's or any tile's.
+// one write; recurse without clear is refused. all, only with clear and no
+// grid, add, remove or recurse, empties every grid's set the node holds: home
+// and each plugin namespace, and, asked at the web door, each live
+// connection's far node, whose sets are its rows (rpc.SelectRefusal). A
+// selection is not content: no version moves, the grid's or any tile's.
 type SetSelectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GridId        string                 `protobuf:"bytes,1,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
@@ -3375,6 +3378,7 @@ type SetSelectionRequest struct {
 	Remove        []string               `protobuf:"bytes,5,rep,name=remove,proto3" json:"remove,omitempty"`
 	Clear         bool                   `protobuf:"varint,6,opt,name=clear,proto3" json:"clear,omitempty"`
 	Recurse       bool                   `protobuf:"varint,7,opt,name=recurse,proto3" json:"recurse,omitempty"`
+	All           bool                   `protobuf:"varint,8,opt,name=all,proto3" json:"all,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3440,6 +3444,13 @@ func (x *SetSelectionRequest) GetClear() bool {
 func (x *SetSelectionRequest) GetRecurse() bool {
 	if x != nil {
 		return x.Recurse
+	}
+	return false
+}
+
+func (x *SetSelectionRequest) GetAll() bool {
+	if x != nil {
+		return x.All
 	}
 	return false
 }
@@ -4618,13 +4629,14 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x02cy\x18\x05 \x01(\x01R\x02cy\x12\x12\n" +
 	"\x04zoom\x18\x06 \x01(\x01R\x04zoomJ\x04\b\x03\x10\x04\";\n" +
 	"\x12SetFramingResponse\x12%\n" +
-	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\x94\x01\n" +
+	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"\xa6\x01\n" +
 	"\x13SetSelectionRequest\x12\x17\n" +
 	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x10\n" +
 	"\x03add\x18\x04 \x03(\tR\x03add\x12\x16\n" +
 	"\x06remove\x18\x05 \x03(\tR\x06remove\x12\x14\n" +
 	"\x05clear\x18\x06 \x01(\bR\x05clear\x12\x18\n" +
-	"\arecurse\x18\a \x01(\bR\arecurseJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\x16\n" +
+	"\arecurse\x18\a \x01(\bR\arecurse\x12\x10\n" +
+	"\x03all\x18\b \x01(\bR\x03allJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\x16\n" +
 	"\x14SetSelectionResponse\",\n" +
 	"\x10SubscribeRequest\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\"\xb2\x01\n" +

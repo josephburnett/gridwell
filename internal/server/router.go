@@ -25,6 +25,9 @@ import (
 // state; both doors (Connect and the connection export) are codecs over it.
 type router struct {
 	srv *Server
+	// farAsked is the connection door's router: a far node asking. Only the
+	// all-clear reads it (SetSelection).
+	farAsked bool
 }
 
 var _ namespace.Namespace = (*router)(nil)
@@ -594,9 +597,38 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	return &pb.SetFramingResponse{Tile: t}, nil
 }
 
+// clearAllSelections is the all-clear: every namespace this node declares
+// clears its own grids, each in its own write, and the transport forwards it
+// to each live far node. A far node's sets are its rows, so one asked over
+// the connection door clears its home and plugins and forwards nothing,
+// which is what keeps a cycle of connections from echoing it. A disabled
+// source is read-only and skipped. Every namespace is tried; the first
+// failure is the answer.
+func (rt *router) clearAllSelections(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	var first error
+	for _, n := range rt.srv.namespaces() {
+		if n.Transit && rt.farAsked {
+			continue
+		}
+		if !n.Transit && rt.srv.pluginReg.DisabledReason(n.UUID) != "" {
+			continue
+		}
+		if _, err := n.NS.SetSelection(ctx, req); err != nil && first == nil {
+			first = err
+		}
+	}
+	return &pb.SetSelectionResponse{}, first
+}
+
 // SetSelection routes a selection write to the namespace owning the grid,
 // every id it names peeled for that hop.
 func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
+	if why := rpc.SelectRefusal(req); why != "" {
+		return nil, status.Error(gcodes.InvalidArgument, why)
+	}
+	if req.All {
+		return rt.clearAllSelections(ctx, req)
+	}
 	c, _, _, transit, err := rt.route(req.GridId)
 	if err != nil {
 		return nil, err

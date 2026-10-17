@@ -30,16 +30,20 @@ func TestFor(t *testing.T) {
 }
 
 // The + menu offers every theme and checks exactly the one on screen, so a
-// renderer never has to decide what "current" means. The dump is a gesture
-// rather than a state, so it is never the checked row.
+// renderer never has to decide what "current" means. Clearing the selection
+// and the dump are gestures rather than states, so neither is ever checked,
+// and the dump stays the bottom row with the clear just above it.
 func TestPlusItems(t *testing.T) {
 	for _, cur := range theme.All() {
 		items := PlusItems(cur)
-		if len(items) != len(theme.All())+1 {
-			t.Fatalf("PlusItems(%v) has %d rows, want the themes and the dump", cur, len(items))
+		if len(items) != len(theme.All())+2 {
+			t.Fatalf("PlusItems(%v) has %d rows, want the themes, the clear and the dump", cur, len(items))
 		}
 		if last := items[len(items)-1]; last.ID != DumpID || last.Label != "Dump logs" || last.State != StateNone {
 			t.Errorf("PlusItems(%v) ends with %+v, want a dump row that names no state", cur, last)
+		}
+		if clr := items[len(items)-2]; clr.ID != ClearSelectionID || clr.Label != "Clear selection" || clr.State != StateNone {
+			t.Errorf("PlusItems(%v) has %+v above the dump, want the clear, naming no state", cur, clr)
 		}
 		checked := 0
 		seen := map[string]bool{}
@@ -57,7 +61,7 @@ func TestPlusItems(t *testing.T) {
 					t.Errorf("PlusItems(%v) checks %q", cur, it.ID)
 				}
 			}
-			if it.ID != DumpID && it.State == StateNone {
+			if it.ID != DumpID && it.ID != ClearSelectionID && it.State == StateNone {
 				t.Errorf("PlusItems(%v): theme row %q names no state, so it would draw as an action", cur, it.ID)
 			}
 		}
@@ -76,6 +80,10 @@ func TestChooseReadsEveryRowBack(t *testing.T) {
 		case it.ID == DumpID:
 			if v.Action != ActionDump {
 				t.Errorf("Choose(%q) = %+v, want the dump", it.ID, v)
+			}
+		case it.ID == ClearSelectionID:
+			if v.Action != ActionClearSelection {
+				t.Errorf("Choose(%q) = %+v, want the clear", it.ID, v)
 			}
 		default:
 			if v.Action != ActionTheme || v.Theme.String() != it.ID {
