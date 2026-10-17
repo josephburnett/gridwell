@@ -30,7 +30,7 @@ func TestSearchByID(t *testing.T) {
 	}
 
 	// At the root: one result, empty chain.
-	res, err := s.Search(ctx, "id:"+text.Id, 0)
+	res, err := s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + text.Id, Limit: 0})
 	if err != nil {
 		t.Fatalf("search at root: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestSearchByID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("move into inner: %v", err)
 	}
-	res, err = s.Search(ctx, "id:"+text.Id, 0)
+	res, err = s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + text.Id, Limit: 0})
 	if err != nil {
 		t.Fatalf("search after move: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestSearchByID(t *testing.T) {
 	}
 
 	// A missing id is EMPTY, not an error — "no results" is an answer.
-	if res, err := s.Search(ctx, "id:999999", 0); err != nil || len(res) != 0 {
+	if res, err := s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:999999", Limit: 0}); err != nil || len(res) != 0 {
 		t.Fatalf("missing tile: res=%v err=%v, want empty and nil", res, err)
 	}
 }
@@ -89,7 +89,7 @@ func TestSearchText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.Search(ctx, "gopher", 0)
+	res, err := s.Search(ctx, &gridwellv1.SearchRequest{Query: "gopher", Limit: 0})
 	if err != nil {
 		t.Fatalf("text search: %v", err)
 	}
@@ -111,10 +111,10 @@ func TestSearchText(t *testing.T) {
 	}
 
 	// Case-insensitive; no match = empty.
-	if res, _ := s.Search(ctx, "GOPHER", 0); len(res) != 2 {
+	if res, _ := s.Search(ctx, &gridwellv1.SearchRequest{Query: "GOPHER", Limit: 0}); len(res) != 2 {
 		t.Errorf("case-insensitive: %d results, want 2", len(res))
 	}
-	if res, _ := s.Search(ctx, "zebra", 0); len(res) != 0 {
+	if res, _ := s.Search(ctx, &gridwellv1.SearchRequest{Query: "zebra", Limit: 0}); len(res) != 0 {
 		t.Errorf("no-match: %+v, want empty", res)
 	}
 
@@ -126,7 +126,7 @@ func TestSearchText(t *testing.T) {
 	if _, err := s.CreateText(ctx, scratch, 0, 0, 1, 1, []byte("gopher scratchpad")); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ := s.Search(ctx, "gopher", 0); len(res) != 2 {
+	if res, _ := s.Search(ctx, &gridwellv1.SearchRequest{Query: "gopher", Limit: 0}); len(res) != 2 {
 		t.Errorf("scratch tile surfaced: %d results, want still 2", len(res))
 	}
 }

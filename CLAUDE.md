@@ -180,6 +180,19 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`gesture.ClassifySelect`). A select is drawn on the press and reconciles
   on the verdict like a move; every selected tile wears the yellow border
   (`theme.Palette.Selection`) in every open view (2026-10-15).
+- A tile row keeps three times, one owner each, in unix seconds on home's
+  rows and a plugin's alike, none on the wire (2026-10-17): `created_at`,
+  when the row was made; `updated_at`, when anything last wrote it (a move,
+  framing, a freeze, content); `content_at`, when its content last changed,
+  written only by the version bump (`bumpTileVersion`) and read as
+  `created_at` until then. Search filters on them, on a grid (`grid_id`,
+  `recurse` through owned wells, never a link) and on the selection; the
+  filters AND, an empty query with one lists what passes, newest first, and
+  they are the node's, applied to the rows it holds (`store.tileFilter`),
+  never a plugin's: the plugin answers the text, and the node keeps the hits
+  whose rows pass (`pluginhost` `filterHits`). An entry with no row has no
+  time and is in no selection, and a plugin row's times are the node's
+  (minted, touched), not the source's.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a

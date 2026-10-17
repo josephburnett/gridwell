@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -17,6 +18,10 @@ import (
 // hop cannot stall the whole search. One owner for both fan-outs: the
 // server's per-plugin loop and the connection transport's per-connection one.
 const SearchHopTimeout = 3 * time.Second
+
+// SearchDefaultLimit caps a query that brings no limit, wherever the node
+// answers from its own rows.
+const SearchDefaultLimit = 20
 
 // SearchQuery is the parsed form of a Search query, the one grammar every
 // plugin reads. Exactly one of ID and Text is set.
@@ -36,6 +41,37 @@ func ParseSearchQuery(q string) SearchQuery {
 		return SearchQuery{ID: strings.TrimSpace(rest)}
 	}
 	return SearchQuery{Text: q}
+}
+
+// SearchNeedsRow reports whether req filters on a fact only a node's row
+// holds, a time or the selection, so an entry with no row passes none.
+func SearchNeedsRow(req *pb.SearchRequest) bool {
+	return req.Selected || req.Created != nil || req.Modified != nil || req.ContentChanged != nil
+}
+
+// SearchFiltered reports whether req narrows by anything beyond its query,
+// which is what lets an empty query search.
+func SearchFiltered(req *pb.SearchRequest) bool {
+	return req.GridId != "" || SearchNeedsRow(req)
+}
+
+// CheckSearch refuses filters that cannot mean anything, with the reason.
+func CheckSearch(req *pb.SearchRequest) error {
+	if req.Recurse && req.GridId == "" {
+		return errors.New("search: recurse needs a grid_id")
+	}
+	for name, r := range map[string]*pb.TimeRange{
+		"created": req.Created, "modified": req.Modified, "content_changed": req.ContentChanged,
+	} {
+		switch {
+		case r == nil:
+		case r.From < 0 || r.To < 0:
+			return fmt.Errorf("search: %s range has a negative end", name)
+		case r.From > 0 && r.To > 0 && r.From > r.To:
+			return fmt.Errorf("search: %s range ends before it starts", name)
+		}
+	}
+	return nil
 }
 
 // Search issues one query. scope routes to the namespace owning that qualified

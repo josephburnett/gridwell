@@ -188,12 +188,17 @@ func (s *Store) ShellSessionNamers(ctx context.Context, key string) (SessionName
 	return n, err
 }
 
-// bumpTileVersion increments a tile row's version by 1.
-func bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
+// bumpTileVersion increments a tile row's version by 1 and stamps the time,
+// content_at's one writer.
+func (s *Store) bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) error {
+	now := s.now().Unix()
 	_, err := tx.ExecContext(ctx,
-		`UPDATE tiles SET version = version + 1 WHERE id = ?`, tileID)
+		`UPDATE tiles SET version = version + 1, content_at = ?, updated_at = ? WHERE id = ?`, now, now, tileID)
 	return err
 }
+
+// contentAtSQL is a tile row's content time; see the content_at column.
+const contentAtSQL = "COALESCE(t.content_at, t.created_at)"
 
 // bumpGridVersion increments a grid row's version and stamps updated_at. A
 // grid's version moves on a structural change only.

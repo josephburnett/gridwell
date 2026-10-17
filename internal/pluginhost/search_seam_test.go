@@ -10,13 +10,14 @@ package pluginhost_test
 
 import (
 	"context"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -41,6 +42,14 @@ func gitlabTodo(id int64, created, title, body string) gitlabfake.Todo {
 
 func gitlabNode(t *testing.T, gl *gitlabfake.Server) *rpc.Client {
 	t.Helper()
+	hs := gitlabServer(t, gl)
+	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+}
+
+// gitlabServer is the node gitlabNode dials, for a test that needs the raw
+// wire.
+func gitlabServer(t *testing.T, gl *gitlabfake.Server) *httptest.Server {
+	t.Helper()
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -54,8 +63,7 @@ func gitlabNode(t *testing.T, gl *gitlabfake.Server) *rpc.Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hs := servertest.Serve(t, srv)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	return servertest.Serve(t, srv)
 }
 
 // Search results are the same tiles GetGrid mints — id, grid, placement — on

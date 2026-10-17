@@ -58,7 +58,7 @@ func (n *Namespace) ContextID(key string) (int64, error) {
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
-	now := n.s.now().UnixNano()
+	now := n.s.now().Unix()
 	err = n.write("ContextID", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, ns, context_key)
 			VALUES (0, ?, ?, ?, ?)`, now, now, n.ns, key)
@@ -221,7 +221,7 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 	if childGridID != 0 {
 		child = childGridID
 	}
-	now := n.s.now().UnixNano()
+	now := n.s.now().Unix()
 	var id int64
 	err := n.write("Mint", "g/"+strconv.FormatInt(gridID, 10)+"/"+e.Key, func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
@@ -291,7 +291,7 @@ func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?, alt_text = ?, url_string = ?, serves_page = ?,
 			link_target_id = ?, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`,
-			s.kind, label, s.url, s.page, s.link, n.s.now().UnixNano(), r.ID, n.ns)
+			s.kind, label, s.url, s.page, s.link, n.s.now().Unix(), r.ID, n.ns)
 		return err
 	})
 }
@@ -402,9 +402,9 @@ func (n *Namespace) rowWrite(verb, table string, id int64, row string, fn func(c
 // exec runs a single-row UPDATE on a live row of this namespace, mapping zero
 // rows to ErrNotFound: a retired row refuses mutation.
 func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed bool, err error) {
-	args = append(args, tileID, n.ns)
+	args = append(args, n.s.now().Unix(), tileID, n.ns)
 	return n.rowWrite(verb, "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+` WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
+		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+`, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
 		if err != nil {
 			return err
 		}
@@ -438,7 +438,8 @@ func (n *Namespace) Place(tileID, x, y, w, h int64, claim *gridwellv1.Placement)
 		if err := claimPlacement(cur, claim, false); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE tiles SET `+placementSet+` WHERE id = ?`, x, y, w, h, tileID)
+		_, err = tx.ExecContext(ctx, `UPDATE tiles SET `+placementSet+`, updated_at = ? WHERE id = ?`,
+			x, y, w, h, n.s.now().Unix(), tileID)
 		return err
 	})
 }
@@ -451,7 +452,7 @@ func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed
 		table, id, row = "grids", rootGridID, "f/"+strconv.FormatInt(rootGridID, 10)
 	}
 	return n.rowWrite("SetFraming", table, id, row, func(ctx context.Context, tx *sql.Tx) error {
-		k, err := updateFraming(ctx, tx, n.ns, tileID, rootGridID, f, n.s.now().UnixNano())
+		k, err := updateFraming(ctx, tx, n.ns, tileID, rootGridID, f, n.s.now().Unix())
 		if err != nil {
 			return err
 		}

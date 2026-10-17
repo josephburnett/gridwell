@@ -466,10 +466,16 @@ message GetTileRequest {
 // merged displays.
 //
 // On the server surface, scope routes to one namespace and the plugin that owns
-// that qualified id answers, and an id: lookup routes on its id the same way;
-// otherwise an empty scope fans out to every configured plugin in config order. A transit hop forwards the query to the remote node, which
+// that qualified id answers, and an id: lookup or a grid_id routes on its id the
+// same way; otherwise an empty scope fans out to every configured plugin in
+// config order. A transit hop forwards the query to the remote node, which
 // fans out again, so an unscoped search recurses through every connected node
 // and results come back qualified like every other id.
+//
+// The filters narrow every hit and AND together. They are the node's, applied
+// to the rows it holds, never a plugin's: the plugin door has none. A query may
+// be empty when a filter is given, and then every tile passing the filters is
+// a hit, the newest first by the time filtered on (created when none is).
 message SearchRequest {
   string query = 1;
   // limit caps the results per answering plugin; 0 means the plugin's
@@ -478,6 +484,26 @@ message SearchRequest {
   // scope: server surface only (plugins receive their own namespace's
   // queries with scope already consumed).
   string scope = 3;
+  // grid_id keeps the hits on this grid.
+  string grid_id = 4;
+  // recurse, with grid_id, also keeps the hits on the grids of the wells inside
+  // it, to any depth. A link well is a path elsewhere and is not followed.
+  bool recurse = 5;
+  // created, modified and content_changed keep the hits whose row time falls
+  // in the range: when it was made, when it was last written by anything (a
+  // move, framing, a freeze), and when its content last changed (its version
+  // last moved). A tile with no row on its node has no times and passes none.
+  TimeRange created = 6;
+  TimeRange modified = 7;
+  TimeRange content_changed = 8;
+  // selected keeps the hits in their grid's selection, the node fact.
+  bool selected = 9;
+}
+
+// TimeRange is an inclusive range of unix seconds; 0 leaves that end open.
+message TimeRange {
+  int64 from = 1;
+  int64 to = 2;
 }
 message SearchResult {
   Tile tile = 1;
