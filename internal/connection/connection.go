@@ -4,6 +4,7 @@
 package connection
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -839,13 +840,12 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 	}
 }
 
-// Search forwards the one find verb. An id: query routes to its connection;
-// free text fans out to live connections only, never dialing the world.
+// Search forwards the one find verb, filters and all. A grid_id or an id:
+// query routes to its connection; free text fans out to live connections only,
+// never dialing the world.
 func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
-		return forwardVerb(ctx, s, q.ID, func(local string, _ rpc.Hop) *gridwellv1.SearchRequest {
-			return &gridwellv1.SearchRequest{Query: "id:" + local, Limit: req.Limit}
-		}, namespace.Namespace.Search, prependSearchResp)
+	if ref := cmp.Or(req.GridId, rpc.ParseSearchQuery(req.Query).ID); ref != "" {
+		return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.Search, prependSearchResp)
 	}
 	s.mu.Lock()
 	hops := make([]forward, 0, len(s.live))
@@ -859,7 +859,7 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 		// Each hop is bounded by rpc.SearchHopTimeout, shared with the
 		// node's fan-out, so one hung tunnel cannot stall the search.
 		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := hp.client.Search(hctx, &gridwellv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+		resp, err := hp.client.Search(hctx, req)
 		cancel()
 		q := prependSearchResp(hp.ns, rpc.SearchHop(resp, err))
 		out.Results = append(out.Results, q.Results...)

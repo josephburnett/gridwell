@@ -96,7 +96,7 @@ func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 func contentChangedAt(t *testing.T, s *Store, tileID string) int64 {
 	t.Helper()
 	var at int64
-	if err := s.db.QueryRow(`SELECT `+contentAtSQL+` FROM tiles WHERE id = ?`, mustParseID(t, tileID)).Scan(&at); err != nil {
+	if err := s.db.QueryRow(`SELECT `+contentAtSQL+` FROM tiles t WHERE t.id = ?`, mustParseID(t, tileID)).Scan(&at); err != nil {
 		t.Fatal(err)
 	}
 	return at

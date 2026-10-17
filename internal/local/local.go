@@ -191,7 +191,7 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 
 // Search is the one generic find verb; the store owns the semantics.
 func (p *Plugin) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	res, err := p.st.Search(ctx, req.Query, int(req.Limit))
+	res, err := p.st.Search(ctx, req)
 	if err != nil {
 		return nil, errToStatus(err)
 	}

@@ -198,10 +198,22 @@ func readCases() []readCase {
 		{"ReadContent/shell", func(ctx context.Context, s *Store, sub readSubject) {
 			s.ReadContent(ctx, sub.shell)
 		}},
-		{"Search/text", func(ctx context.Context, s *Store, _ readSubject) { ignore2(s.Search(ctx, "findable", 20)) }},
-		{"Search/name", func(ctx context.Context, s *Store, _ readSubject) { ignore2(s.Search(ctx, "a room", 20)) }},
-		{"Search/id", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.Search(ctx, "id:"+sub.text, 20)) }},
-		{"Search/nothing", func(ctx context.Context, s *Store, _ readSubject) { ignore2(s.Search(ctx, "zzzznomatch", 20)) }},
+		{"Search/text", func(ctx context.Context, s *Store, _ readSubject) {
+			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "findable", Limit: 20}))
+		}},
+		{"Search/name", func(ctx context.Context, s *Store, _ readSubject) {
+			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "a room", Limit: 20}))
+		}},
+		{"Search/id", func(ctx context.Context, s *Store, sub readSubject) {
+			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + sub.text, Limit: 20}))
+		}},
+		{"Search/filtered", func(ctx context.Context, s *Store, sub readSubject) {
+			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{GridId: sub.root, Recurse: true, Selected: true,
+				ContentChanged: &gridwellv1.TimeRange{From: 1}}))
+		}},
+		{"Search/nothing", func(ctx context.Context, s *Store, _ readSubject) {
+			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "zzzznomatch", Limit: 20}))
+		}},
 		{"ShellSessionNamers", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellSessionNamers(ctx, sub.shell)) }},
 		{"WorkspaceEphemeralRefs", func(ctx context.Context, s *Store, _ readSubject) {
 			s.WorkspaceEphemeralRefs(ctx)

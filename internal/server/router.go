@@ -272,18 +272,22 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 	return out, err
 }
 
-// Search routes a scope to its owner, and an id: lookup is its own scope; free
-// text with no scope fans out to every namespace, each bounded by
-// rpc.SearchHopTimeout, and names each it went without (rpc.SearchHop).
+// Search routes a grid_id or a scope to its owner, and an id: lookup is its
+// own scope; free text with no scope fans out to every namespace, each bounded
+// by rpc.SearchHopTimeout, and names each it went without (rpc.SearchHop).
+// Every hop carries the filters (rpc.PeelRequest).
 func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
 	m := req
-	scope := cmp.Or(m.Scope, rpc.ParseSearchQuery(m.Query).ID)
+	if err := rpc.CheckSearch(m); err != nil {
+		return nil, status.Error(gcodes.InvalidArgument, err.Error())
+	}
+	scope := cmp.Or(m.GridId, m.Scope, rpc.ParseSearchQuery(m.Query).ID)
 	if scope != "" {
 		c, _, uuid, transit, err := rt.route(scope)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.Search(ctx, &pb.SearchRequest{Query: rt.hop(scope, transit).PeelSearchQuery(m.Query), Limit: m.Limit})
+		resp, err := c.Search(ctx, rpc.PeelRequest(rt.hop(scope, transit), m))
 		if err != nil {
 			return nil, err
 		}
@@ -294,7 +298,7 @@ func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
 		// No routed id narrows a fan-out, so the hop is the namespace's own.
 		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
-		resp, err := n.NS.Search(pctx, &pb.SearchRequest{Query: hop.PeelSearchQuery(m.Query), Limit: m.Limit})
+		resp, err := n.NS.Search(pctx, rpc.PeelRequest(hop, m))
 		cancel()
 		q := qualifySearch(n.Transit, n.UUID, rpc.SearchHop(resp, err))
 		out.Results = append(out.Results, q.Results...)

@@ -139,6 +139,11 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 	case *pb.SetFramingRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.RootGridId = h.PeelID(r.RootGridId)
+	case *pb.SearchRequest:
+		// scope is consumed by the hop that routes on it.
+		r.Query = h.PeelSearchQuery(r.Query)
+		r.GridId = h.PeelID(r.GridId)
+		r.Scope = ""
 	case *pb.SetSelectionRequest:
 		r.GridId = h.PeelID(r.GridId)
 		for i, id := range r.TileIds {

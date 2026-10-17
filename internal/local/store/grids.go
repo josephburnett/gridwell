@@ -198,7 +198,7 @@ func (s *Store) bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) e
 }
 
 // contentAtSQL is a tile row's content time; see the content_at column.
-const contentAtSQL = "COALESCE(content_at, created_at)"
+const contentAtSQL = "COALESCE(t.content_at, t.created_at)"
 
 // bumpGridVersion increments a grid row's version and stamps updated_at. A
 // grid's version moves on a structural change only.
