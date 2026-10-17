@@ -43,7 +43,7 @@ func TestSearchFiltersRideToTheGridsOwner(t *testing.T) {
 		inside = append(inside, tile)
 	}
 	if err := h.localCl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: well.ChildGridId,
-		Claim: &gridwellv1.SelectionClaim{}, TileIds: []string{inside[1].Id}}); err != nil {
+		Add: []string{inside[1].Id}}); err != nil {
 		t.Fatal(err)
 	}
 

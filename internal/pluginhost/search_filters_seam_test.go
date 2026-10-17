@@ -98,7 +98,7 @@ func TestSearchFiltersReachAPluginsRows(t *testing.T) {
 	}
 	before := time.Now().Unix()
 	if err := cl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: week.ChildGridId,
-		Claim: &gridwellv1.SelectionClaim{}, TileIds: []string{second.Id}}); err != nil {
+		Add: []string{second.Id}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := search(&gridwellv1.SearchRequest{Query: "widget", Selected: true}); !has(got, "!2") {

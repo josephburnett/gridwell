@@ -127,10 +127,10 @@ func TestSearchTimeRanges(t *testing.T) {
 func TestSearchSelected(t *testing.T) {
 	w := newFilterWorld(t)
 	ctx := context.Background()
-	if err := w.s.SetSelection(ctx, w.root, &gridwellv1.SelectionClaim{}, []string{w.top.Id}); err != nil {
+	if err := w.s.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: w.root, Add: []string{w.top.Id}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.s.SetSelection(ctx, w.inner.ChildGridId, &gridwellv1.SelectionClaim{}, []string{w.deep.Id}); err != nil {
+	if err := w.s.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: w.inner.ChildGridId, Add: []string{w.deep.Id}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := w.find(t, &gridwellv1.SearchRequest{Query: "gopher", Selected: true}); !sameIDs(got, w.top.Id, w.deep.Id) {
@@ -173,7 +173,7 @@ func TestSearchEmptyQueryLists(t *testing.T) {
 func TestSearchFiltersCombine(t *testing.T) {
 	w := newFilterWorld(t)
 	ctx := context.Background()
-	if err := w.s.SetSelection(ctx, w.outer.ChildGridId, &gridwellv1.SelectionClaim{}, []string{w.middle.Id, w.inner.Id}); err != nil {
+	if err := w.s.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: w.outer.ChildGridId, Add: []string{w.middle.Id, w.inner.Id}}); err != nil {
 		t.Fatal(err)
 	}
 	req := &gridwellv1.SearchRequest{Query: "gopher", GridId: w.root, Recurse: true, Selected: true,
