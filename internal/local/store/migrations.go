@@ -23,7 +23,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 17
+const schemaVersion = 18
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -117,6 +117,23 @@ var migrations = []migration{
 	// v17: grids.selection, the grid's selection as a node fact. Additive:
 	// '' is the empty set, every existing grid's meaning.
 	{to: 17, run: addColumnDDL(`ALTER TABLE grids ADD COLUMN selection TEXT NOT NULL DEFAULT ''`)},
+	// v18: a plugin's rows were stamped in unix nanoseconds, home's in
+	// seconds. A conversion, not a drop: every time past 1e11, which no
+	// second count reaches before the year 5138, is divided to seconds.
+	{to: 18, run: migrateV18},
+}
+
+// migrateV18 brings nanosecond row times to seconds; see the chain entry.
+func migrateV18(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{"tiles", "grids"} {
+		for _, col := range []string{"created_at", "updated_at"} {
+			if _, err := tx.ExecContext(ctx, `UPDATE `+table+` SET `+col+` = `+col+` / 1000000000
+				WHERE `+col+` > 100000000000`); err != nil {
+				return fmt.Errorf("v18 %s.%s to seconds: %w", table, col, err)
+			}
+		}
+	}
+	return nil
 }
 
 // finiteSQL holds when every column named is a finite number; SQLite reads

@@ -1281,6 +1281,51 @@ func init() {
 			}
 		},
 	})
+
+	// v18: a plugin's rows stamped in nanoseconds read in seconds, to the
+	// second; home's second counts are untouched.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 18,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key)
+				VALUES (1800000000123456789, 1800000500987654321, 'p18', 'v17 context')`)
+			if err != nil {
+				t.Fatalf("seed plugin context: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
+				VALUES (?, 'text', 0, 0, 1, 1, 'v17 plugin row', 1800000000123456789, 1800000500987654321, 'p18', 'k')`,
+				mustID(t, res)); err != nil {
+				t.Fatalf("seed plugin row: %v", err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'shell', 96, 9, 1, 1, 'v17 home row', 1700000000, 1700000600)`); err != nil {
+				t.Fatalf("seed home row: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			for alt, want := range map[string][2]int64{
+				"v17 plugin row": {1800000000, 1800000500},
+				"v17 home row":   {1700000000, 1700000600},
+			} {
+				var c, u int64
+				if err := db.QueryRow(`SELECT created_at, updated_at FROM tiles WHERE alt_text = ?`, alt).Scan(&c, &u); err != nil {
+					t.Fatalf("read %s: %v", alt, err)
+				}
+				if c != want[0] || u != want[1] {
+					t.Errorf("%s: times = %d, %d, want %d, %d", alt, c, u, want[0], want[1])
+				}
+			}
+			var c, u int64
+			if err := db.QueryRow(`SELECT created_at, updated_at FROM grids WHERE ns = 'p18'`).Scan(&c, &u); err != nil {
+				t.Fatal(err)
+			}
+			if c != 1800000000 || u != 1800000500 {
+				t.Errorf("plugin context times = %d, %d, want seconds", c, u)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.
