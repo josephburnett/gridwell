@@ -23,7 +23,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 18
+const schemaVersion = 19
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -121,6 +121,20 @@ var migrations = []migration{
 	// seconds. A conversion, not a drop: every time past 1e11, which no
 	// second count reaches before the year 5138, is divided to seconds.
 	{to: 18, run: migrateV18},
+	// v19: tiles.content_at, when the row's content last changed. Additive.
+	// Every existing row is seeded from updated_at, the nearest fact there is:
+	// it is no earlier than the last content write.
+	{to: 19, run: migrateV19},
+}
+
+// migrateV19 adds and seeds content_at; see the chain entry. A rebuild earlier
+// in the chain already materialized the column, NULL, so the seed fills NULLs.
+func migrateV19(ctx context.Context, tx *sql.Tx) error {
+	if err := addColumnIfMissingDDL("tiles", "content_at", `ALTER TABLE tiles ADD COLUMN content_at INTEGER`)(ctx, tx); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE tiles SET content_at = updated_at WHERE content_at IS NULL`)
+	return err
 }
 
 // migrateV18 brings nanosecond row times to seconds; see the chain entry.

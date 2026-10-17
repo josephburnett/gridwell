@@ -205,6 +205,14 @@ tile that started it may be gone while a copy still names it. Added
 at schema v15, additive.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ShellSession} },
 	},
+	{
+		name: "content_at", ddl: "INTEGER", since: 19,
+		comment: `content_at is when the row's content last changed, unix seconds,
+stamped only where version bumps (bumpTileVersion). NULL is a row whose
+content has not changed since created_at; contentAtSQL reads the two as
+one time. Storage-only. Added at schema v19, additive.`,
+		noCopy: "a clone's content is new when the clone is: NULL reads as its created_at",
+	},
 }
 
 // gridsColumns is the grids table, in DDL order.

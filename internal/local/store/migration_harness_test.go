@@ -1326,6 +1326,28 @@ func init() {
 			}
 		},
 	})
+
+	// v19: content_at. An existing row's content time is its updated_at.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 19,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'shell', 97, 9, 1, 1, 'v18 row', 1700000000, 1700000600)`); err != nil {
+				t.Fatalf("seed v18 row: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var at sql.NullInt64
+			if err := db.QueryRow(`SELECT content_at FROM tiles WHERE alt_text = 'v18 row'`).Scan(&at); err != nil {
+				t.Fatal(err)
+			}
+			if !at.Valid || at.Int64 != 1700000600 {
+				t.Errorf("v18 row: content_at = %v, want its updated_at 1700000600", at)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.

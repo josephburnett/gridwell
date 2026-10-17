@@ -79,7 +79,7 @@ func (s *Store) emitTileChanged(ctx context.Context, tx *sql.Tx, tileID int64, e
 // per-method open-coded bump is what keeps "a content edit bumps, everything
 // else does not" from drifting; version_rule_test.go pins the table.
 func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
-	if err := bumpTileVersion(ctx, tx, tileID); err != nil {
+	if err := s.bumpTileVersion(ctx, tx, tileID); err != nil {
 		return nil, err
 	}
 	return s.emitTileChanged(ctx, tx, tileID, events)
