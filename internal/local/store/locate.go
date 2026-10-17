@@ -11,9 +11,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// searchDefaultLimit caps a query that doesn't bring its own limit.
-const searchDefaultLimit = 20
-
 // Search implements home's side of the one find verb. rpc.ParseSearchQuery
 // decides the mode: id: is the exact locate, and free text matches names and
 // text bodies case-insensitively, names ranking above bodies. The request's
@@ -24,7 +21,7 @@ const searchDefaultLimit = 20
 func (s *Store) Search(ctx context.Context, req *gridwellv1.SearchRequest) ([]*gridwellv1.SearchResult, error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
-		limit = searchDefaultLimit
+		limit = rpc.SearchDefaultLimit
 	}
 	f := tileFilter{req: req}
 	if req.GridId != "" {
@@ -275,4 +272,60 @@ func reverse(ts []*gridwellv1.Tile) {
 	for i, j := 0, len(ts)-1; i < j; i, j = i+1, j-1 {
 		ts[i], ts[j] = ts[j], ts[i]
 	}
+}
+
+// SearchRow is a plugin row a search found by its facts alone: its id, the
+// grid it sits on and its key there.
+type SearchRow struct {
+	ID, GridID int64
+	Key        string
+}
+
+// SearchPassing answers which of ids pass req's time and selection filters,
+// each with the time an empty query orders by. A plugin's grid scope is its
+// caller's, the grids being contexts the plugin names.
+func (n *Namespace) SearchPassing(ids []int64, req *gridwellv1.SearchRequest) (map[int64]int64, error) {
+	out := map[int64]int64{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	f := tileFilter{ns: n.ns, req: req}
+	where, args := f.sql()
+	in := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+	qargs := make([]any, 0, len(ids)+len(args))
+	for _, id := range ids {
+		qargs = append(qargs, id)
+	}
+	rows, err := n.s.db.Query(`SELECT t.id, `+f.newest()+` FROM tiles t WHERE t.id IN (`+in+`) AND `+where,
+		append(qargs, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	pairs, err := collect(rows, func(rows *sql.Rows) ([2]int64, error) {
+		var p [2]int64
+		err := rows.Scan(&p[0], &p[1])
+		return p, err
+	})
+	for _, p := range pairs {
+		out[p[0]] = p[1]
+	}
+	return out, err
+}
+
+// SearchRows lists this namespace's rows passing req's time and selection
+// filters, newest first, at most limit: all an empty query with no grid can
+// find, since an entry with no row has no time and is in no selection.
+func (n *Namespace) SearchRows(req *gridwellv1.SearchRequest, limit int) ([]SearchRow, error) {
+	f := tileFilter{ns: n.ns, req: req}
+	where, args := f.sql()
+	rows, err := n.s.db.Query(`SELECT t.id, t.grid_id, t.key FROM tiles t WHERE `+where+
+		` ORDER BY `+f.newest()+` DESC, t.id DESC LIMIT ?`, append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, func(rows *sql.Rows) (SearchRow, error) {
+		var r SearchRow
+		err := rows.Scan(&r.ID, &r.GridID, &r.Key)
+		return r, err
+	})
 }

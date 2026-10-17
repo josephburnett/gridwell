@@ -19,6 +19,10 @@ import (
 // server's per-plugin loop and the connection transport's per-connection one.
 const SearchHopTimeout = 3 * time.Second
 
+// SearchDefaultLimit caps a query that brings no limit, wherever the node
+// answers from its own rows.
+const SearchDefaultLimit = 20
+
 // SearchQuery is the parsed form of a Search query, the one grammar every
 // plugin reads. Exactly one of ID and Text is set.
 type SearchQuery struct {

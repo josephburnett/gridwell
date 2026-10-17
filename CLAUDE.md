@@ -189,7 +189,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   `recurse` through owned wells, never a link) and on the selection; the
   filters AND, an empty query with one lists what passes, newest first, and
   they are the node's, applied to the rows it holds (`store.tileFilter`),
-  never a plugin's.
+  never a plugin's: the plugin answers the text, and the node keeps the hits
+  whose rows pass (`pluginhost` `filterHits`). An entry with no row has no
+  time and is in no selection, and a plugin row's times are the node's
+  (minted, touched), not the source's.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a

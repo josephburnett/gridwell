@@ -702,66 +702,6 @@ func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string
 	return status.Errorf(codes.NotFound, "plugin: %q is not listed", tileID)
 }
 
-// Search turns each hit into a place (tile plus well chain) through the
-// synthesis GetGrid runs, dropping hits it cannot place. An id: locate is
-// refused: there is no parent index here.
-func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
-		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the memory DB)")
-	}
-	resp, err := ask(&a.lacks, "Search", func() (*pluginv1.SearchResponse, error) {
-		return a.cp.Search(ctx, &pluginv1.SearchRequest{Query: req.Query, Limit: req.Limit})
-	})
-	if err != nil {
-		return nil, err
-	}
-	grids := map[string]*synthesized{}
-	synth := func(key string) (*synthesized, error) {
-		if s, ok := grids[key]; ok {
-			return s, nil
-		}
-		s, err := a.synthesize(ctx, rpc.EntryGridID(key))
-		if err != nil {
-			return nil, err
-		}
-		grids[key] = s
-		return s, nil
-	}
-	out := &gridwellv1.SearchResponse{}
-	for _, r := range resp.Results {
-		if r.Entry == nil || len(r.ContextPath) == 0 {
-			continue
-		}
-		var path []*gridwellv1.Tile
-		placed := true
-		for i := 1; i < len(r.ContextPath); i++ {
-			parent, err := synth(r.ContextPath[i-1])
-			if err != nil {
-				return nil, err
-			}
-			well := parent.tileOpening(rpc.EntryGridID(r.ContextPath[i]))
-			if well == nil {
-				placed = false
-				break
-			}
-			path = append(path, well)
-		}
-		if !placed {
-			continue
-		}
-		leaf, err := synth(r.ContextPath[len(r.ContextPath)-1])
-		if err != nil {
-			return nil, err
-		}
-		tile := leaf.tileForKey(r.Entry.Key)
-		if tile == nil {
-			continue
-		}
-		out.Results = append(out.Results, &gridwellv1.SearchResult{Tile: tile, Path: path, Snippet: r.Snippet, Score: r.Score})
-	}
-	return out, nil
-}
-
 // tileForKey answers the wire tile for a plugin key, nil when there is none.
 func (s *synthesized) tileForKey(key string) *gridwellv1.Tile {
 	for i, row := range s.rows {
