@@ -595,7 +595,7 @@ app.whenReady().then(async () => {
   // ── remove() commits DOM storage before the renderer dies ───────────────
   // Chromium flushes localStorage lazily, so an abrupt close can drop a site's
   // unsubmitted draft. The claim is about bytes on disk, so this reads the
-  // partition's own leveldb before and after.
+  // browser storage's own leveldb before and after.
   const lsPage = await startPage();
   const MARKER = 'GWFLUSHMARKER12345';
   const lsDir = path.join(

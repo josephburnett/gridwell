@@ -466,7 +466,7 @@ export class WebviewRegistry {
     try {
       session.fromPartition(SESSION_PARTITION).flushStorageData();
     } catch {
-      // The durable partition flushes on quit regardless.
+      // The durable cookies and storage flush on quit regardless.
     }
 
     let jpegBase64 = '';

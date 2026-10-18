@@ -1,12 +1,12 @@
 import { test, expect } from './fixtures';
 
-// One host-local Chromium session. Every live url tile, whichever namespace owns
-// it, local or through a connection, browses on the same persistent partition, so a
-// login holds everywhere.
+// One host-local set of browser cookies and storage. Every live url tile,
+// whichever namespace owns it, local or through a connection, browses with
+// the same persistent cookies and storage, so a login holds everywhere.
 //
 // The seam: a cookie set while live in one plugin's tile is visible to a live
-// tile owned by another. Per-plugin partitions would make these different
-// sessions by construction and this spec would fail.
+// tile owned by another. Per-plugin cookies and storage would make these
+// different by construction and this spec would fail.
 
 test.use({ extraNodes: ['second'] });
 

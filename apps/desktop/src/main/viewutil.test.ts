@@ -30,7 +30,7 @@ test('SESSION_PARTITION is persistent and shared by all tiles', () => {
   // The `persist:` prefix keeps it on disk, so logins and storage survive a
   // restart.
   assert.ok(SESSION_PARTITION.startsWith('persist:'));
-  // One partition for every tile, so tiles share the session like tabs. There
+  // One partition for every tile, so tiles share cookies and storage like tabs. There
   // is no per-tile keying.
 });
 

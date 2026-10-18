@@ -104,7 +104,7 @@ scope; a fan-out carries the filters to every namespace and through every
 connection to the far node holding the rows.
 
 No request carries a descent path. The server derives location from rows it
-owns. Sessions and networks never cross the wire.
+owns. The browser's cookies and storage, and networks, never cross the wire.
 
 Wire-only fields are derived in exactly one place each. `Tile.link`
 (this tile is a link) comes from `server.qualifyTiles`. `text_presentation`
@@ -537,9 +537,8 @@ so a right-click moves focus like every other press. A view whose webContents
 ends outside `remove()` — a page that called `window.close()` — is retired at
 once (`retire`): its entry goes, every later call for the pane is a no-op, and
 the renderer hears `onViewGone` and drops its handle, so the pane shows the
-tile's frozen preview. One Chromium partition
-(`persist:gridwell`) holds every
-live url tile, local or far; live tiles browse from the host's network.
+tile's frozen preview. The browser's cookies and storage are one Electron
+partition (`persist:gridwell`), shared by every live url tile, local or far; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
 
 ## The trace

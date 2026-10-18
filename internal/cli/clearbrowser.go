@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 )
 
-// RunClearBrowserData deletes the desktop app's persist:gridwell partition,
-// the one host-local Chromium session every live url tile browses on.
+// RunClearBrowserData deletes the desktop app's persist:gridwell partition:
+// the browser's cookies and storage, which every live url tile shares.
 // Clearing it is an operator action, not an in-page gesture, and it refuses
 // while the app runs, because Chromium owns the profile then and would race
 // the delete.
@@ -45,6 +45,6 @@ func clearBrowserData(w io.Writer, userData string) int {
 		fmt.Fprintf(w, "clear failed: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(w, "cleared browser session data: %s\n", part)
+	fmt.Fprintf(w, "cleared browser cookies and storage: %s\n", part)
 	return 0
 }

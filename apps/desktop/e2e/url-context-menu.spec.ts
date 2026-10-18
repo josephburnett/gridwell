@@ -30,7 +30,7 @@ test('right-clicking a link in a live url view offers Copy Link Address', async 
       if (!reg) throw new Error('registry not exposed (GRIDWELL_E2E not set?)');
 
       // A real live url view, with the preload and context-menu handler the
-      // production code wires, at a fixed rect on the shared partition.
+      // production code wires, at a fixed rect, with the shared cookies and storage.
       await reg.place('e2e-ctx', 1, args.dataURL, { x: 0, y: 0, width: 800, height: 600 });
 
       // place() returns once loadURL is kicked off, and the view's getURL() is

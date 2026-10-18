@@ -3,8 +3,8 @@ import type { Bounds, ForwardedRightdown, ViewRightdown } from './ipc';
 // The decisions a live url view obeys, apart from webviews.ts so they run under
 // `node --test` with no Electron import.
 
-// The one Electron partition for live url tiles, so a login made in one holds
-// in all. `persist:` keeps it on disk.
+// The one Electron partition, the browser's cookies and storage, for every
+// live url tile, so a login made in one holds in all. `persist:` keeps it on disk.
 export const SESSION_PARTITION = 'persist:gridwell';
 
 

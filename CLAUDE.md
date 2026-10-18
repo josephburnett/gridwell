@@ -188,7 +188,7 @@ what each one is called.
    written through the store and reflected by an event. The exceptions are
    decided, not accidental: the session pane tree, each pane's focused tile
    outside a workspace tile, the outer frames of a pane's place, the workspace level stack,
-   Chromium's own session storage, and the theme — a client view preference, not a fact
+   the browser's own cookies and storage, and the theme — a client view preference, not a fact
    about your things, so it lives in `localStorage` (2026-09-19). Do not add
    to that list without a decision.
 8. **DRY is correctness.** If a fix in one place doesn't fix an identical
@@ -604,8 +604,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`rasterprev.Cache`). A pane's rendered overlay lays the document out at
   its raster's width, scrollbar gutter kept, so it wraps the same lines
   focused or not (`markdown.RenderedInset`, 2026-10-09).
-- The Chromium session is host-local: one partition for every live url
-  tile. Nothing about sessions or networks crosses the wire.
+- The browser's cookies and storage are host-local: one set for every live
+  url tile. Nothing about them or networks crosses the wire.
 - No parameterized plugins. Modals center on the active pane.
 - A client the node served runs the node's build: the web API refuses any call
   from another build, and the client shows one persistent notice with a

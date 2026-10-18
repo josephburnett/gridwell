@@ -10,7 +10,7 @@ here.
 |---|---|
 | **door** | A tile that leads to a grid: its own, or, as a link, another's. The only tile with a child grid. |
 | **text** | The only tile the user types into, and the only one whose `version` claims bytes. |
-| **url** | The only tile with an address of its own and a Chromium session behind it. |
+| **url** | The only tile with an address of its own and the browser's cookies and storage behind it. |
 | **shell** | The only tile whose content is a host process. It survives ascent as a tmux. |
 | **pane** | The only tile whose content is an arrangement. Descent swaps the window's pane tree, not one pane. |
 
