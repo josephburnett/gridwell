@@ -132,7 +132,7 @@ test('gitlab: the week well descends to the todo, whose content is its markdown'
   expect(doneTile!.altText).toBe(todo!.altText);
 
   // The banner draws the plugin's status before the name, where a right-edge
-  // clip never reaches it (tileface.BannerText).
+  // clip never reaches it (tilepreview.BannerText).
   await expect
     .poll(() => window.evaluate((id: string) => (window as any).__gridwellTest.bannerTexts()[id], todo!.id), { timeout: 10_000 })
     .toBe(`${doneTile!.statusDetail} ${doneTile!.altText}`);

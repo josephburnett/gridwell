@@ -8,7 +8,7 @@ import { deleteTile, tileAt } from './oracle';
 // nothing, which reads as "it just disappeared".
 //
 // Deleting once only moves the row to the trash, where it still reads, so the
-// pane follows it, keeps its faces, and stays quiet. The second delete is
+// pane follows it, keeps its previews, and stays quiet. The second delete is
 // inside the trash, which bypasses it, and that is the verdict.
 //
 // The by-id read is in the wasm shim, which `make check` compiles and never
@@ -45,7 +45,7 @@ test('a descent whose row is deleted under it says so on the strip', async ({ gw
   await window.waitForTimeout(2_000);
   expect(await notice(), 'a trashed row still reads, so nothing is said').toBeNull();
 
-  // The faces stay with it. Every text overlay gates on the one resolved row,
+  // The previews stay with it. Every text overlay gates on the one resolved row,
   // so a row the pane's own grid no longer holds cannot leave the doc showing
   // rendered with no toggle and no editor.
   await expect(window.locator('#gw-text-toggle'), 'the toggle follows the row').toBeVisible();

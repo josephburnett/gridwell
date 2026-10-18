@@ -355,7 +355,7 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	case rpc.KindWell:
 		return nil, status.Error(codes.InvalidArgument, "set: well framing rides SetFraming")
 	case rpc.KindText:
-		return tileResp(p.st.SetTextView(ctx, req.TileId, t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode))
+		return tileResp(p.st.SetTextScroll(ctx, req.TileId, t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode))
 	case rpc.KindShell:
 		return tileResp(p.st.SetShellPreview(ctx, req.TileId, req.Preview))
 	case rpc.KindURL:
@@ -430,14 +430,14 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 	if err != nil {
 		return err
 	}
-	// A session no tile has a face of was never started, so whichever tile
+	// A session no tile has a preview of was never started, so whichever tile
 	// opens it first creates it; a started one that is gone must not be
-	// fabricated behind the faces that show what was running.
+	// fabricated behind the previews that show what was running.
 	namers, err := p.st.ShellSessionNamers(sctx, key)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	session, stopOld, err := p.shell.Acquire(key, namers.Faced == 0, cols, rows)
+	session, stopOld, err := p.shell.Acquire(key, namers.Previewed == 0, cols, rows)
 	if err != nil {
 		if errors.Is(err, shellsvc.ErrSessionGone) {
 			return status.Error(codes.FailedPrecondition, err.Error())

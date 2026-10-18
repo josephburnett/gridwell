@@ -26,7 +26,7 @@ const (
 	// BuildHeader carries the calling page's BuildCommit on every call it
 	// makes, and BuildQuery the same on the two that cannot set a header: a
 	// beacon and the shell WebSocket. The web API refuses a page of another
-	// build (Server.staleBuild).
+	// build (Server.otherBuild).
 	BuildHeader = "Gridwell-Build"
 	BuildQuery  = "gridwell_build"
 

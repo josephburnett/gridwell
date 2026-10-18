@@ -88,7 +88,7 @@ func TestPagesPluginServesPageTilesAsURLRows(t *testing.T) {
 			t.Errorf("%s is kind %q; a page is served from a url row", tl.AltText, tl.Kind)
 		}
 		if tl.PreviewBlobId == 0 {
-			t.Errorf("%s serves a page but declares no face generation", tl.AltText)
+			t.Errorf("%s serves a page but declares no preview generation", tl.AltText)
 		}
 	}
 	if pages < 2 {
@@ -190,9 +190,9 @@ func TestPagesPluginMissingSubpathIs404(t *testing.T) {
 	}
 }
 
-// The face travels: a page tile's thumbnail is the plugin's, fetched through
+// The preview travels: a page tile's thumbnail is the plugin's, fetched through
 // the same tile the page is, and a tile with no page has none.
-func TestPagesPluginFaceComesFromThePlugin(t *testing.T) {
+func TestPagesPluginPreviewComesFromThePlugin(t *testing.T) {
 	cl := newPluginClient(t, "pages", nil)
 	ctx := t.Context()
 	info, err := cl.Info(ctx, &gridwellv1.InfoRequest{})
@@ -209,7 +209,7 @@ func TestPagesPluginFaceComesFromThePlugin(t *testing.T) {
 			t.Fatalf("preview of %s: %v", tl.AltText, err)
 		}
 		if tl.ServesPage && len(res.GetJpeg()) == 0 {
-			t.Errorf("%s serves a page but has no face", tl.AltText)
+			t.Errorf("%s serves a page but has no preview", tl.AltText)
 		}
 		if !tl.ServesPage && len(res.GetJpeg()) != 0 {
 			t.Errorf("%s is a text tile with a thumbnail", tl.AltText)

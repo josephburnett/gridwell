@@ -58,7 +58,7 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 }
 
 // Every write to a plugin's row moves its updated_at, as every write to
-// home's does: a move, a text window, a content zoom.
+// home's does: a move, a text scroll, a content zoom.
 func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 	st, ns := openExt(t)
 	at := time.Unix(1_800_000_000, 0)
@@ -76,7 +76,7 @@ func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 		write func() (bool, error)
 	}{
 		{"Place", func() (bool, error) { return ns.Place(id, 4, 4, 2, 2, nil) }},
-		{"SetTextView", func() (bool, error) { return ns.SetTextView(id, 10, 20, 0, 0, "rendered") }},
+		{"SetTextScroll", func() (bool, error) { return ns.SetTextScroll(id, 10, 20, 0, 0, "rendered") }},
 		{"SetContentZoom", func() (bool, error) { return ns.SetContentZoom(id, zoomOf(1.5)) }},
 	}
 	for i, w := range writes {

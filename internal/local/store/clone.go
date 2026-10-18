@@ -111,7 +111,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		}
 	case n.Kind == rpc.KindShell:
 		// The copy names its source's session, started or not, and shows the
-		// source's face until it is live itself.
+		// source's preview until it is live itself.
 		shellSession = sql.NullString{String: rpc.ShellSession(n), Valid: true}
 		if n.PreviewBlobId != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}

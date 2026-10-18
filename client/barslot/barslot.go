@@ -22,7 +22,7 @@ const (
 	// ModeURLOpenTab opens the address in a new browser tab; the tile stays
 	// frozen.
 	ModeURLOpenTab
-	// ModeFreeze is the screenshot: the face becomes the tile's preview and
+	// ModeFreeze is the screenshot: it becomes the tile's preview and
 	// the standing freeze lands on the row. Only a live shell reaches it — a
 	// live url's slot is its back button, so that freeze rides the view's own
 	// context menu instead.

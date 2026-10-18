@@ -2,7 +2,7 @@
 
 package main
 
-// The pane tile's client face. The layout memo and the geometry are
+// The pane tile's client preview. The layout memo and the geometry are
 // client/panepreview's and the codec client/pane's; this is fetch and draw
 // glue.
 
@@ -37,7 +37,7 @@ func (a *App) paneLayoutUnreadable(tileID string, err error) {
 // drawPaneTilePreview draws the stored layout small: dividers plus each
 // leaf's grid one level deep, through the same machinery well previews use.
 // One level deep, flat beyond, so a well inside a leaf draws as its flat
-// face. A never-arranged layout shows the split glyph.
+// preview. A never-arranged layout shows the split glyph.
 func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx
 	fillRectC(c, x, y, w, h, a.pal.PaneTileFill)

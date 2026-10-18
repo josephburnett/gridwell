@@ -76,7 +76,7 @@ func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SetTextView(ctx, text.Id, 0, 120, 640, 480, "rendered"); err != nil {
+	if _, err := s.SetTextScroll(ctx, text.Id, 0, 120, 640, 480, "rendered"); err != nil {
 		t.Fatal(err)
 	}
 	url, err := s.CreateURL(ctx, outer.ChildGridId, 3, 0, 2, 2, "https://example.com")

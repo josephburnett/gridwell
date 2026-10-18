@@ -254,7 +254,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	if _, err := cc.SetTile(ctx, &pb.SetTileRequest{TileId: urlT.GetTile().GetId(),
 		Version: urlT.GetTile().GetVersion(),
 		Tile:    &pb.Tile{Kind: "url"},
-		Preview: []byte("\xff\xd8jpegface")}); err != nil {
+		Preview: []byte("\xff\xd8jpegpreview")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -296,7 +296,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 		t.Error("stale stream lost the media type")
 	}
 	pv, err := cc.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: urlT.GetTile().GetId()})
-	if err != nil || string(pv.GetJpeg()) != "\xff\xd8jpegface" {
+	if err != nil || string(pv.GetJpeg()) != "\xff\xd8jpegpreview" {
 		t.Fatalf("dark preview = (%q, %v)", pv.GetJpeg(), err)
 	}
 

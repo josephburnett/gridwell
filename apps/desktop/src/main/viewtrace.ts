@@ -48,7 +48,7 @@ export function viewBounds(paneId: string, tileId: string, b: Bounds): TraceEven
 }
 
 // Hidden is parked off screen rather than destroyed, so the two read as one
-// pair of kinds and a dump shows which face the pane was wearing.
+// pair of kinds and a dump shows which preview the pane was wearing.
 export function viewShown(paneId: string, tileId: string, hidden: boolean): TraceEvent {
   return view(hidden ? 'hide' : 'show', paneId, tileId);
 }

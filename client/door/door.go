@@ -89,7 +89,7 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gri
 
 // EntryGlyph is the glyph a menu entry declares for gridID, or "". It is the
 // one override the grid cannot carry: the trash grid is an ordinary local
-// grid, and only the declaration knows its face.
+// grid, and only the declaration knows its glyph.
 func EntryGlyph(gridID string, plugins []*gridwellv1.PluginInfo) string {
 	for i := range plugins {
 		for _, e := range plugins[i].MenuEntries {
@@ -101,7 +101,7 @@ func EntryGlyph(gridID string, plugins []*gridwellv1.PluginInfo) string {
 	return ""
 }
 
-// RowGlyph is the face a + menu row wears in its swatch, its ghost and the
+// RowGlyph is the glyph a + menu row wears in its swatch, its ghost and the
 // crumb of the grid it roots, so a glyph cannot mean one thing in the menu and
 // another in the bar. A connection declares the globe at rpc.ConnectionRow, so
 // nothing here switches on a kind.
@@ -114,11 +114,11 @@ func RowGlyph(pl *gridwellv1.PluginInfo) string {
 
 // GlyphFor is a grid's identity glyph, from declarations only, most specific
 // first: a MenuEntry naming it, a row rooted exactly here, the cached grid's
-// own glyph, the mount door's face, then the plugin row's face by namespace. A
+// own glyph, the mount door's glyph, then the plugin row's glyph by namespace. A
 // row rooted here wins over the grid's own glyph because a connection's root
-// is the far node's home grid, which declares the far node's face. The mount
+// is the far node's home grid, which declares the far node's glyph. The mount
 // door is looked up by exact uuid, since the node's own id prefixes
-// "<id>/<conn>". There is always an answer, a faceless crumb being a blank
+// "<id>/<conn>". There is always an answer, a crumb with no glyph being a blank
 // square.
 func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.PluginInfo) string {
 	if g := EntryGlyph(gridID, plugins); g != "" {

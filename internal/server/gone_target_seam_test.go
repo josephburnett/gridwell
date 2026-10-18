@@ -14,7 +14,7 @@ import (
 
 // goneReads asserts every read a link on screen takes answers the dead
 // verdict: through the link's own id, and through its target's, which is the
-// id the client reads a leaf link's body and face by (rpc.ContentID).
+// id the client reads a leaf link's body and preview by (rpc.ContentID).
 func goneReads(ctx context.Context, t *testing.T, cl *rpc.Client, link *gridwellv1.Tile, why string) {
 	t.Helper()
 	if _, _, _, err := cl.ReadContent(ctx, link.Id); !gwerr.IsDeadRef(err) {

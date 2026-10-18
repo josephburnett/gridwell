@@ -22,7 +22,7 @@ import (
 // a link, an exit well for a grid or a leaf link for a leaf, and a right-drag
 // creates a real copy, bytes for a leaf and a deep copy for a solid well. The
 // left-drag arrives as a plain CreateTile carrying a qualified reference, the
-// same shape a + menu swatch drop uses, so both faces run through the real
+// same shape a + menu swatch drop uses, so both forms run through the real
 // router seam. Framing and labels ride every cross-plugin link and copy.
 
 // twoPluginServer stands up a server with two store namespaces and returns the
@@ -231,7 +231,7 @@ func uuidOfTest(id string) string {
 	return rpc.UUIDOf(id)
 }
 
-// TestLinkLeafAcrossPlugins: the leaf face of the left-drag — the destination
+// TestLinkLeafAcrossPlugins: the leaf case of the left-drag — the destination
 // gains a text tile whose content lives in the source plugin's tile
 // (link_target_id), readable through the target id, carrying provenance, and
 // deleting it only unlinks.
@@ -522,10 +522,10 @@ func TestClonePaneAcrossPluginsNeverArranged(t *testing.T) {
 	}
 }
 
-// TestCloneURLAcrossPluginsCarriesFace: the frozen preview is what a url tile
-// looks like from outside, so a copy of one wears the same face — at the top
+// TestCloneURLAcrossPluginsCarriesPreview: the frozen preview is what a url tile
+// looks like from outside, so a copy of one wears the same preview — at the top
 // level, exactly as a url one level down inside a deep-copied well does.
-func TestCloneURLAcrossPluginsCarriesFace(t *testing.T) {
+func TestCloneURLAcrossPluginsCarriesPreview(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -533,7 +533,7 @@ func TestCloneURLAcrossPluginsCarriesFace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}
-	jpeg := []byte("\xff\xd8frozen-face")
+	jpeg := []byte("\xff\xd8frozen-preview")
 	frozen, err := cl.SetTile(ctx, &gridwellv1.SetTileRequest{
 		TileId:  u.Id,
 		Tile:    &gridwellv1.Tile{Kind: rpc.KindURL, AltText: "album", UrlHistory: `["https://example.com/"]`},
@@ -553,21 +553,21 @@ func TestCloneURLAcrossPluginsCarriesFace(t *testing.T) {
 		t.Fatalf("cross-plugin url clone: %v", err)
 	}
 	if cp.PreviewBlobId == 0 {
-		t.Errorf("the clone answered faceless: %+v", cp)
+		t.Errorf("the clone answered with no preview: %+v", cp)
 	}
 	got, err := cl.GetTile(ctx, cp.Id)
 	if err != nil {
 		t.Fatalf("read the copy: %v", err)
 	}
 	if got.PreviewBlobId == 0 {
-		t.Fatalf("the copy carries no frozen face: %+v", got)
+		t.Fatalf("the copy carries no frozen preview: %+v", got)
 	}
-	face, err := cl.GetTilePreview(ctx, cp.Id)
+	preview, err := cl.GetTilePreview(ctx, cp.Id)
 	if err != nil {
 		t.Fatalf("copy preview: %v", err)
 	}
-	if string(face) != string(jpeg) {
-		t.Errorf("copied face = %q, want the source's %q", face, jpeg)
+	if string(preview) != string(jpeg) {
+		t.Errorf("copied preview = %q, want the source's %q", preview, jpeg)
 	}
 	if got.UrlHistory != frozen.UrlHistory {
 		t.Errorf("copied history = %q, want the source's %q", got.UrlHistory, frozen.UrlHistory)

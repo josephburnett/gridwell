@@ -33,7 +33,7 @@ func TestRouteTable(t *testing.T) {
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{ContentChanged: true,
 				Tile: &pb.Tile{Id: "p/~dA", GridId: "p/~Yw", Kind: rpc.KindURL, ServesPage: true}}}},
 			Plan{ClearContent: "p/~dA", Reload: "p/~dA", DropPreviews: "p/~dA"}},
-		{"a frozen one keeps its face and has no live view",
+		{"a frozen one keeps its preview and has no live view",
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{ContentChanged: true,
 				Tile: &pb.Tile{Id: "p/~dA", GridId: "p/~Yw", Kind: rpc.KindURL, ServesPage: true, PreviewBlobId: 7, UrlFrozen: true}}}},
 			Plan{ClearContent: "p/~dA"}},

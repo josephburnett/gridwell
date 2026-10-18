@@ -17,7 +17,7 @@ func TestPreviewRasterDrawScaleIsTheFrames(t *testing.T) {
 		{"exact box", 192, 192, 0},
 		{"wider box leaves a margin", 250, 192, 58},
 	} {
-		f := PreviewWindowFrame(c.w, 1.0, 1.0, 0, 0)
+		f := PreviewFrameOf(c.w, 1.0, 1.0, 0, 0)
 		d, ok := PreviewRasterDraw(f, rasterW, rasterH, 10, 20, c.w, 100, 8)
 		if !ok {
 			t.Fatalf("%s: not drawn", c.name)
@@ -36,27 +36,27 @@ func TestPreviewRasterDrawScaleIsTheFrames(t *testing.T) {
 
 	// content_zoom stays the owner of bigger letters: scale 2 shows half the
 	// raster in the same box, twice the size.
-	f := PreviewWindowFrame(150, 1.0, 2.0, 0, 0)
+	f := PreviewFrameOf(150, 1.0, 2.0, 0, 0)
 	d, _ := PreviewRasterDraw(f, rasterW, rasterH, 0, 0, 150, 100, 0)
 	if !almost(d.DW/d.SW, 2) || !almost(d.SW, 75) || !almost(d.SH, 50) {
 		t.Errorf("content zoom 2: %+v, want scale 2 over a 75x50 source", d)
 	}
 }
 
-// The stored TextX/TextY place the window on the raster, and a window
-// scrolled off it does not draw.
+// The stored TextX/TextY place the scroll on the raster, and a scroll
+// past it does not draw.
 func TestPreviewRasterDrawHonoursTheStoredScroll(t *testing.T) {
-	f := PreviewWindowFrame(100, 1.0, 1.0, 4, 30)
+	f := PreviewFrameOf(100, 1.0, 1.0, 4, 30)
 	d, ok := PreviewRasterDraw(f, 192, 120, 0, 0, 100, 200, 0)
 	if !ok || d.SX != 4 || d.SY != 30 {
 		t.Fatalf("scroll: %+v %v, want source from (4, 30)", d, ok)
 	}
 	if !almost(d.SH, 90) || !almost(d.DH, 90) {
-		t.Errorf("a window past the raster's bottom draws only what is there: %+v", d)
+		t.Errorf("a scroll near the raster's bottom draws only what is there: %+v", d)
 	}
 	for _, sy := range []int64{120, 500, -1} {
-		if _, ok := PreviewRasterDraw(PreviewWindowFrame(100, 1, 1, 0, sy), 192, 120, 0, 0, 100, 200, 0); ok {
-			t.Errorf("scrollY %d: drew a window off the raster", sy)
+		if _, ok := PreviewRasterDraw(PreviewFrameOf(100, 1, 1, 0, sy), 192, 120, 0, 0, 100, 200, 0); ok {
+			t.Errorf("scrollY %d: drew a scroll past the raster", sy)
 		}
 	}
 }

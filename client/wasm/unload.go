@@ -55,7 +55,7 @@ func (a *App) flushOnUnload() {
 // only at teardown would lose it, since the bridge's IPC reply never arrives
 // during unload. No jpeg and no history rides the beacon, because the bridge
 // holds both and is unreachable now; the store skips empty fields, so the
-// previous face and trail survive.
+// previous preview and trail survive.
 func (a *App) flushURLStateOnUnload() {
 	for _, pl := range a.locals {
 		v := pl.urlView

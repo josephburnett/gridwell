@@ -18,10 +18,10 @@ type PreviewFrame struct {
 // PreviewBodyLinePx is 14px body times 1.35 line spacing, rounded up.
 const PreviewBodyLinePx = 19.0
 
-// PreviewWindowFrame keeps the type size constant, so the font never follows
-// grid zoom and the tile is a window revealing more as it grows. content_zoom
+// PreviewFrameOf keeps the type size constant, so the font never follows
+// grid zoom and the tile reveals more of the doc as it grows. content_zoom
 // is the one owner of making text bigger.
-func PreviewWindowFrame(innerW, fixedScale, contentZoom float64, storedX, storedY int64) PreviewFrame {
+func PreviewFrameOf(innerW, fixedScale, contentZoom float64, storedX, storedY int64) PreviewFrame {
 	s := fixedScale * contentZoom
 	if s <= 0 {
 		s = fixedScale
@@ -41,11 +41,11 @@ type RasterDraw struct {
 	DX, DY, DW, DH float64
 }
 
-// PreviewRasterDraw windows a raster rasterW by rasterH logical px into the
+// PreviewRasterDraw crops a raster rasterW by rasterH logical px into the
 // box below topInset, at frame.Scale and never at the box's width over the
 // raster's, so the letters keep their size whatever width the raster was made
 // at: the box clips a wider raster and leaves a margin beside a narrower one.
-// False means the window has scrolled off the raster.
+// False means the scroll is past the raster.
 func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, x, y, w, h, topInset float64) (RasterDraw, bool) {
 	s := frame.Scale
 	sx, sy := frame.ScrollX, frame.ScrollY

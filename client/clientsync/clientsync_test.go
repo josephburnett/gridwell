@@ -48,7 +48,7 @@ func TestOf(t *testing.T) {
 	}{
 		{"nil is ok", nil, OutcomeOK},
 		{"failed precondition is conflict", connect.NewError(connect.CodeFailedPrecondition, errors.New("version")), OutcomeConflict},
-		{"the API refusing this page's build is transport", gwerr.StaleBuild("nodebuild", "pagebuild"), OutcomeTransport},
+		{"the API refusing this page's build is transport", gwerr.OtherBuild("nodebuild", "pagebuild"), OutcomeTransport},
 		{"unavailable is transport", connect.NewError(connect.CodeUnavailable, errors.New("refused")), OutcomeTransport},
 		{"deadline is transport", connect.NewError(connect.CodeDeadlineExceeded, errors.New("timeout")), OutcomeTransport},
 		{"canceled from the far side is transport", connect.NewError(connect.CodeCanceled, errors.New("canceled")), OutcomeTransport},
@@ -371,7 +371,7 @@ func TestReactPreviewTable(t *testing.T) {
 		empty bool
 		want  PreviewReaction
 	}{
-		{"bytes are the face", nil, false, PreviewReaction{Store: true}},
+		{"bytes are the preview", nil, false, PreviewReaction{Store: true}},
 		{"an empty answer settles the miss", nil, true, PreviewReaction{Settle: true}},
 		{"no previews served settles it too", unimpl, false, PreviewReaction{Settle: true}},
 		{"a dark source surfaces and latches until the backstop", down, false, PreviewReaction{Surface: true, Latch: inflight.Unreachable}},
@@ -384,7 +384,7 @@ func TestReactPreviewTable(t *testing.T) {
 	}
 }
 
-// A pane standing in a tile that is gone has no dead face: the grid draws a
+// A pane standing in a tile that is gone is not drawn dead: the grid draws a
 // dead link, but a place draws an empty box, so there the verdict is said.
 func TestAPlaceReadSaysTheDeadVerdict(t *testing.T) {
 	for v, want := range map[inflight.Verdict]bool{

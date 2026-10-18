@@ -77,7 +77,7 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 		return rpc.QualifyID(fsSymlinkNS, rpc.EntryTileID(context, key))
 	}
 
-	// A link to a file in the tree reads as a link with its target's face.
+	// A link to a file in the tree reads as a link with its target's preview.
 	file := tiles["file"]
 	if file == nil || !file.Reference || file.LinkTargetId != entry(".", "real.md") {
 		t.Fatalf("file = %+v, want a link to real.md", file)

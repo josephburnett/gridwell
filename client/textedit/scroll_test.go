@@ -36,7 +36,7 @@ func (c *settleClock) advance(ms float64) {
 
 // A scroll is a framing change like a pan. The shim mirrors it onto the pane
 // through pane.Frame.ScrollText and redraws when it moved; the redraw arms the
-// settle persister on pane.FramingFingerprint, and the flush asks Reframes of
+// settle persister on pane.FramingFingerprint, and the flush asks ScrollMoved of
 // every pane's row. This is that chain without the shim: a burst of scrolls
 // writes once, after the settle, and a row nobody scrolled writes nothing.
 func TestAScrollPersistsOnceAndStampsNoOtherRow(t *testing.T) {
@@ -50,12 +50,12 @@ func TestAScrollPersistsOnceAndStampsNoOtherRow(t *testing.T) {
 	b.Pop()
 	b.Push(pane.ContentFrame("doc-b", pane.Footprint{X: 2, W: 1, H: 1}, 1, rpc.TextModeText, 0, 0))
 
-	rows := map[string]Framing{"doc-a": {}, "doc-b": {}} // both never framed
+	rows := map[string]Scroll{"doc-a": {}, "doc-b": {}} // both never framed
 	var writes []string
 	flush := func() {
 		tree.Walk(func(p *pane.Pane) {
-			next := Framing{X: int64(p.TextScrollX + 0.5), Y: int64(p.TextScrollY + 0.5), Mode: p.TextMode}
-			if Reframes(rows[p.ContentID()], next, false) {
+			next := Scroll{X: int64(p.TextScrollX + 0.5), Y: int64(p.TextScrollY + 0.5), Mode: p.TextMode}
+			if ScrollMoved(rows[p.ContentID()], next, false) {
 				rows[p.ContentID()] = next
 				writes = append(writes, p.ContentID())
 			}
@@ -101,7 +101,7 @@ func TestAScrollPersistsOnceAndStampsNoOtherRow(t *testing.T) {
 	if len(writes) != 1 {
 		t.Errorf("a redraw after the settle wrote again: %v", writes)
 	}
-	if rows["doc-b"] != (Framing{}) {
+	if rows["doc-b"] != (Scroll{}) {
 		t.Errorf("the document nobody scrolled was stamped %+v", rows["doc-b"])
 	}
 }

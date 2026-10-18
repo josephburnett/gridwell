@@ -12,7 +12,7 @@ func gridEvent(id string) *gridwellv1.Event {
 }
 
 // TestPublishFansOutToAllSubscribers: every open Subscribe stream sees each
-// event. This is face #4 of the primary rule — a mutation is reflected to every
+// event. This is part #4 of the primary rule — a mutation is reflected to every
 // open view, so two panes on the same grid stay in step.
 func TestPublishFansOutToAllSubscribers(t *testing.T) {
 	s := newTestStore(t)

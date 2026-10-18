@@ -75,10 +75,10 @@ var writeScopes = map[string]writeScope{
 	"SetShellPreview/frozen frame": {tile: []string{"preview_blob_id"}, mints: true},
 
 	// ── Framing: how it looked. ────────────────────────────────────────
-	"SetTextView/window and mode":  {tile: []string{"text_x", "text_y", "text_w", "text_h", "text_mode"}},
-	"SetContentZoom/content scale": {tile: []string{"content_zoom"}},
-	"SetFrozen/standing freeze":    {tile: []string{"url_frozen"}},
-	"SetFraming/doorway viewport":  {tile: []string{"view_cx", "view_cy", "view_zoom"}},
+	"SetTextScroll/scroll and mode": {tile: []string{"text_x", "text_y", "text_w", "text_h", "text_mode"}},
+	"SetContentZoom/content scale":  {tile: []string{"content_zoom"}},
+	"SetFrozen/standing freeze":     {tile: []string{"url_frozen"}},
+	"SetFraming/doorway viewport":   {tile: []string{"view_cx", "view_cy", "view_zoom"}},
 
 	// ── Selection: what the user has in hand, on the grid row. ─────────
 	"SetSelection/the grid's selection": {grid: []string{"selection"}},

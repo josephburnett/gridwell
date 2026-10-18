@@ -179,7 +179,7 @@ func IsBodyKind(kind string) bool {
 // The plugin glyph vocabulary: declared by the plugin, rendered by the
 // client, an unknown name falling back to the globe so a third-party plugin
 // degrades without either side learning names. A row declaring nothing takes
-// the grid face instead (client/door.RowGlyph).
+// the grid glyph instead (client/door.RowGlyph).
 const (
 	GlyphFolder  = "folder"
 	GlyphProcess = "process"

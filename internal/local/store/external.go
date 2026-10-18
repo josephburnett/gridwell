@@ -275,7 +275,7 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 
 // convert writes a row's new snapshot. A row that becomes a link gives up
 // what the tiles CHECK lets only an owner hold, its screenshot and its text
-// mode, since a link's face is its target's.
+// mode, since a link's preview is its target's.
 func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
@@ -463,13 +463,13 @@ func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed
 	})
 }
 
-// SetTextView persists a text tile's framed window.
-func (n *Namespace) SetTextView(tileID, tx, ty, tw, th int64, mode string) (changed bool, err error) {
+// SetTextScroll persists a text tile's scroll.
+func (n *Namespace) SetTextScroll(tileID, tx, ty, tw, th int64, mode string) (changed bool, err error) {
 	var m any
 	if mode != "" {
 		m = mode
 	}
-	return n.exec("SetTextView", textViewSet+textModeSet, tileID, tx, ty, tw, th, m)
+	return n.exec("SetTextScroll", textScrollSet+textModeSet, tileID, tx, ty, tw, th, m)
 }
 
 // SetContentZoom persists the per-tile content scale.

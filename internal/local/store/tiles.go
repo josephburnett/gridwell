@@ -302,32 +302,32 @@ func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error
 	})
 }
 
-// The columns a text view write touches, here and in Namespace.SetTextView.
-// The mode rides beside the window on every row but a link.
+// The columns a text scroll write touches, here and in Namespace.SetTextScroll.
+// The mode rides beside the scroll on every row but a link.
 const (
-	textViewSet = `text_x = ?, text_y = ?, text_w = ?, text_h = ?`
-	textModeSet = `, text_mode = ?`
+	textScrollSet = `text_x = ?, text_y = ?, text_w = ?, text_h = ?`
+	textModeSet   = `, text_mode = ?`
 )
 
-// SetTextView updates a text tile's framed window and its rendered or text
+// SetTextScroll updates a text tile's scroll and its rendered or text
 // mode. Like SetFraming this is framing, not content: no claim, no bump.
-func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY, textW, textH int64, textMode string) (*gridwellv1.Tile, error) {
+func (s *Store) SetTextScroll(ctx context.Context, tileIDStr string, textX, textY, textW, textH int64, textMode string) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(tileIDStr)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "SetTextView", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withTileWrite(ctx, "SetTextScroll", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, rpc.KindText, ErrNotTextTile)
 		if err != nil {
 			return err
 		}
 		if n.LinkTargetId != "" {
-			// A link row persists the framed window only: the CHECK keeps
+			// A link row persists the scroll only: the CHECK keeps
 			// text_mode NULL on a link, because framing is per-link local and
 			// the mode is not.
 			_, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET `+textViewSet+`, updated_at = ? WHERE id = ?`,
+				`UPDATE tiles SET `+textScrollSet+`, updated_at = ? WHERE id = ?`,
 				textX, textY, textW, textH, s.now().Unix(), tileID)
 			if err != nil {
 				return err
@@ -340,7 +340,7 @@ func (s *Store) SetTextView(ctx context.Context, tileIDStr string, textX, textY,
 			textModeArg = textMode
 		}
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE tiles SET `+textViewSet+textModeSet+`, updated_at = ? WHERE id = ?`,
+			`UPDATE tiles SET `+textScrollSet+textModeSet+`, updated_at = ? WHERE id = ?`,
 			textX, textY, textW, textH, textModeArg, s.now().Unix(), tileID); err != nil {
 			return err
 		}

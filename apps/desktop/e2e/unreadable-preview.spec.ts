@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// A url tile's face is its preview, fetched on every draw until it lands. A
+// A url tile's preview is fetched on every draw until it lands. A
 // preview the server refuses is the same answer every time, so it is asked
 // for once; without a failure latch each refusal's notice paints the frame
 // that asks again. unreadable-body.spec.ts is the same rule for a body.

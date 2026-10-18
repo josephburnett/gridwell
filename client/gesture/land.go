@@ -4,7 +4,7 @@ package gesture
 type Surface int
 
 const (
-	// SurfaceFace is a frozen face: a shell or url descent with no live
+	// SurfaceFace is a frozen preview: a shell or url descent with no live
 	// surface, or a descent whose row has not landed.
 	SurfaceFace Surface = iota
 	SurfaceRawText

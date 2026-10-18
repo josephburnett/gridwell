@@ -71,7 +71,7 @@ func TestTileWritesAnnounceTheTileNotAGridChange(t *testing.T) {
 		req  *gridwellv1.SetTileRequest
 	}{
 		{"content zoom", &gridwellv1.SetTileRequest{TileId: ids[rpc.KindText], ContentZoom: &zoom}},
-		{"text view", &gridwellv1.SetTileRequest{TileId: ids[rpc.KindText],
+		{"text scroll", &gridwellv1.SetTileRequest{TileId: ids[rpc.KindText],
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText, TextX: 1, TextY: 2, TextW: 30, TextH: 40, TextMode: rpc.TextModeRendered}}},
 		{"url frozen", &gridwellv1.SetTileRequest{TileId: ids[rpc.KindURL], UrlFrozen: &frozen}},
 		{"url screenshot", &gridwellv1.SetTileRequest{TileId: ids[rpc.KindURL],

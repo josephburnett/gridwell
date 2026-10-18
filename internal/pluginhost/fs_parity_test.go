@@ -362,14 +362,14 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 	}
 }
 
-// TestFSPluginTextViewPersists: a host file's scroll position and mode are
+// TestFSPluginTextScrollPersists: a host file's scroll position and mode are
 // node facts, whoever owns its bytes, and the fs stack keeps them. This pins
 // the answer the client relies on, at the seam where it would change — the
 // real binary, the adapter, the store.
 //
 // Framing carries no version claim, so the write must not bump the tile's
 // version: what the user's bytes are has not changed.
-func TestFSPluginTextViewPersists(t *testing.T) {
+func TestFSPluginTextScrollPersists(t *testing.T) {
 	root := seedTree(t)
 	v2 := pluginNode(t, root)
 	ctx := context.Background()

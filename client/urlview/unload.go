@@ -29,7 +29,7 @@ func WriteAddress(durable, owns bool, landed, stored string) bool {
 
 // Writeback is what a closing view writes to its row as captures, false for
 // nothing. A row the node does not own writes its frame alone, and an empty
-// capture never overwrites a good face.
+// capture never overwrites a good preview.
 func Writeback(freeze, owns bool, c Capture) (Capture, bool) {
 	if !owns {
 		c = Capture{JPEG: c.JPEG}

@@ -23,7 +23,7 @@ const (
 	ChevronDown
 )
 
-// String lets a spec pin the face without reading pixels.
+// String lets a spec pin the chevron without reading pixels.
 func (c Chevron) String() string {
 	switch c {
 	case ChevronUp:

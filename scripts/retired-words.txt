@@ -34,3 +34,11 @@ interest
 mcpdoor
 webdoor
 shelldoor
+# "face" — what a tile looks like from outside is its preview; a namespace's
+# icon is its glyph.
+face
+faces
+faceless
+# "StaleBuild" — a page of another build is OtherBuild; stale is a refused
+# claim only.
+stalebuild

@@ -99,11 +99,11 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	} else {
 		g = qualifyGrid(uuid, resp.Grid)
 		if g != nil {
-			// The declared face has no other source, so a handshake that does
-			// not answer fails the read rather than present a wrong face.
+			// The declared facts have no other source, so a handshake that does
+			// not answer fails the read rather than present wrong ones.
 			info, ierr := rt.srv.pluginInfo(ctx, uuid)
 			if ierr != nil {
-				return nil, infoFaceError(req.GridId, uuid, ierr)
+				return nil, infoDeclarationError(req.GridId, uuid, ierr)
 			}
 			if info.ScratchGridId != "" {
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
@@ -112,7 +112,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 				// home's, stamped on the grid so it chains through mounts.
 				hinfo, herr := rt.srv.pluginInfo(ctx, hu)
 				if herr != nil {
-					return nil, infoFaceError(req.GridId, hu, herr)
+					return nil, infoDeclarationError(req.GridId, hu, herr)
 				}
 				if hinfo.ScratchGridId != "" {
 					g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
@@ -126,14 +126,14 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	return &pb.GetGridResponse{Grid: g, Tiles: tiles}, nil
 }
 
-// infoFaceError says which grid could not be answered and why, transport-class
+// infoDeclarationError says which grid could not be answered and why, transport-class
 // unless the plugin gave a code, so the client re-asks rather than latching.
-func infoFaceError(gridID, uuid string, err error) error {
+func infoDeclarationError(gridID, uuid string, err error) error {
 	code := status.Code(err)
 	if code == gcodes.Unknown {
 		code = gcodes.Unavailable
 	}
-	return status.Errorf(code, "grid %s: plugin %s handshake failed, so the grid's declared face is unknown: %v", gridID, uuid, err)
+	return status.Errorf(code, "grid %s: plugin %s handshake failed, so the grid's declarations are unknown: %v", gridID, uuid, err)
 }
 
 func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {

@@ -58,7 +58,7 @@ func (a *App) surfaceOf(p *pane.Pane) gesture.Surface {
 }
 
 // caretAt puts the textarea's caret on the character painted under (sx, sy).
-// The geometry is drawMarkdownInPane's, since that face is what was clicked.
+// The geometry is drawMarkdownInPane's, since that preview is what was clicked.
 func (a *App) caretAt(p *pane.Pane, r pane.Rect, sx, sy float64) {
 	if !a.hasTextarea() {
 		return

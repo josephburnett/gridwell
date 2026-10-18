@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { makeRunDir } from '../e2e/homes';
 
 // The content API on a browser host. With no Electron bridge a url tile
-// cannot go live in place, so the descent shows the frozen face and the bar
+// cannot go live in place, so the descent shows the frozen preview and the bar
 // circle opens the derived /content/ address in a new tab — the same
 // degradation, over the same code path, as a url tile at its own address. The
 // API serves the image bytes sandboxed and with no cookie.
@@ -32,7 +32,7 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   expect(cat.servesPage, 'whose page the plugin serves at the API').toBe(true);
 
   // With no bridge the tile stays frozen, through DecideAutoLive's browser arm.
-  // No dead modal and no error: the pane presents the frozen face.
+  // No dead modal and no error: the pane presents the frozen preview.
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
 

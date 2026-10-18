@@ -129,12 +129,12 @@ test('dragging a plugin swatch into the grid drops a dashed link', async ({ gw }
   expect(link.altText, 'labeled with the plugin name').toBe('second');
 });
 
-// One face per menu row, wherever it is drawn: the + menu swatch and the bar's
+// One glyph per menu row, wherever it is drawn: the + menu swatch and the bar's
 // crumb for the grid that row roots read the same owner (door.RowGlyph and
-// door.GlyphFor). A connection wears the globe; a plugin wears a grid face,
+// door.GlyphFor). A connection wears the globe; a plugin wears a grid glyph,
 // including a plugin that declares no glyph at all. A unit test on either side
 // alone cannot see the two draw paths agree.
-test('a menu row wears the same face in the bar: a globe for a connection, a grid for a plugin', async ({
+test('a menu row wears the same glyph in the bar: a globe for a connection, a grid for a plugin', async ({
   gw,
 }) => {
   await gw.enterPlugin('home');
@@ -146,20 +146,20 @@ test('a menu row wears the same face in the bar: a globe for a connection, a gri
   expect(home, 'the home plugin has a menu row').toBeTruthy();
   expect(conn, 'the second node is a connection row').toBeTruthy();
   expect(conn.glyph, 'a connection wears the globe').toBe('globe');
-  expect(home.glyph, 'a plugin wears a grid face, never the globe').not.toBe('globe');
+  expect(home.glyph, 'a plugin wears a grid glyph, never the globe').not.toBe('globe');
 
   // The innermost chain crumb is the grid the pane stands on; the leading
   // close-all crumb is not one of the pane's own.
-  const chainFace = async (): Promise<{ anchor?: string; glyph?: string }> => {
+  const chainGlyph = async (): Promise<{ anchor?: string; glyph?: string }> => {
     const chain = (await gw.bar()).segments.filter((s) => s.kind === 'chain' && !s.closeOnly);
     return chain[chain.length - 1];
   };
-  const atHome = await chainFace();
+  const atHome = await chainGlyph();
   expect(atHome.anchor).toBe(home.rootGridID);
-  expect(atHome.glyph, "the bar wears the home swatch's face").toBe(home.glyph);
+  expect(atHome.glyph, "the bar wears the home swatch's glyph").toBe(home.glyph);
 
   await gw.clickPluginSwatch('second');
-  const atConn = await chainFace();
+  const atConn = await chainGlyph();
   expect(atConn.anchor).toBe(conn.rootGridID);
-  expect(atConn.glyph, "the bar wears the connection swatch's face").toBe(conn.glyph);
+  expect(atConn.glyph, "the bar wears the connection swatch's glyph").toBe(conn.glyph);
 });

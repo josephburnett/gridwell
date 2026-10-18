@@ -16,19 +16,19 @@ func TestParkAckDrain(t *testing.T) {
 	o := New()
 	var fired []string
 	o.Park(k("SetFraming", "1"), func() { fired = append(fired, "framing1") })
-	o.Park(k("SetTextView", "2"), func() { fired = append(fired, "text2") })
+	o.Park(k("SetTextScroll", "2"), func() { fired = append(fired, "text2") })
 	o.Park(k("SetURLState", "3"), func() { fired = append(fired, "url3") })
 	if o.Len() != 3 {
 		t.Fatalf("Len = %d, want 3", o.Len())
 	}
 
 	// A completed attempt clears its key.
-	o.Ack(k("SetTextView", "2"))
+	o.Ack(k("SetTextScroll", "2"))
 	if o.Len() != 2 {
 		t.Fatalf("Len after Ack = %d, want 2", o.Len())
 	}
 	// Ack of an unknown key is a no-op.
-	o.Ack(k("SetTextView", "999"))
+	o.Ack(k("SetTextScroll", "999"))
 
 	for _, fn := range o.Drain() {
 		fn()

@@ -124,11 +124,11 @@ func TestDecideDescentTable(t *testing.T) {
 			Descent{Mode: rpc.TextModeText, Toggle: true}},
 		{"writable doc in rendered mode", doc, false, rpc.TextModeRendered,
 			Descent{Mode: rpc.TextModeRendered, Toggle: true}},
-		// The raw face never opens over content the server would refuse,
+		// Raw mode never opens over content the server would refuse,
 		// whatever mode a restored session left on the pane.
 		{"read-only doc a session left in text mode", doc, true, rpc.TextModeText,
 			Descent{Mode: rpc.TextModeRendered, Toggle: true}},
-		{"a url descent has no text face", url, false, rpc.TextModeText, Descent{}},
+		{"a url descent has no text mode", url, false, rpc.TextModeText, Descent{}},
 		// The row has not landed: the mode the descent chose stands, so the
 		// editor opens on the first frame rather than after the fetch.
 		{"row not landed", nil, false, rpc.TextModeText, Descent{Mode: rpc.TextModeText}},

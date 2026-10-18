@@ -240,7 +240,7 @@ func TestResizeAndSetFramingRPCs(t *testing.T) {
 	}
 }
 
-func TestSetTextViewRPC(t *testing.T) {
+func TestSetTextScrollRPC(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
 
@@ -252,10 +252,10 @@ func TestSetTextViewRPC(t *testing.T) {
 
 	tile, err = cl.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: id, Tile: &gridwellv1.Tile{Kind: rpc.KindText, TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: rpc.TextModeRendered}})
 	if err != nil {
-		t.Fatalf("set text view: %v", err)
+		t.Fatalf("set text scroll: %v", err)
 	}
 	if tile.TextX != 1 || tile.TextY != 2 || tile.TextW != 3 || tile.TextH != 4 {
-		t.Errorf("after set text view: %+v", tile)
+		t.Errorf("after set text scroll: %+v", tile)
 	}
 	if tile.TextMode != rpc.TextModeRendered {
 		t.Errorf("text_mode = %q, want %q", tile.TextMode, rpc.TextModeRendered)

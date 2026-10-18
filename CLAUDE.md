@@ -154,7 +154,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   without one; the ephemeral cleanup claims the row its visit held
   (2026-10-14). A select is the decided exception: it names the tiles it
   adds and removes and claims nothing (2026-10-17). Only framing (pan and
-  zoom, the text window, content zoom), captures and a select carry no claim. A pane tile's layout counted as framing
+  zoom, the text scroll, content zoom), captures and a select carry no claim. A pane tile's layout counted as framing
   until this decision.
 - The selection is a node fact (2026-10-15): the set of a grid's tiles the
   user has in hand lives on that grid's row (`grids.selection`), home's
@@ -218,16 +218,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   writes the blob on the layout's settle and never the doorway row, and the
   one-active-surface rule is the home view's only, since no row is shared
   (`pane.FramingOwner.Layout`, 2026-10-14).
-- A text tile's window is its scroll and its mode, never the box it is
-  shown in: the pane's size is the viewer's geometry, so a look from a pane
-  of another size, on another device, writes nothing (`textedit.Framing`,
-  2026-10-16). `text_w`/`text_h` are dead storage. The row's window is
+- A text tile's scroll is where its doc is scrolled and its mode, never the
+  box it is shown in: the pane's size is the viewer's geometry, so a look
+  from a pane of another size, on another device, writes nothing (`textedit.Scroll`,
+  2026-10-16). `text_w`/`text_h` are dead storage. The row's scroll is
   where the tile was left: the grid preview crops there and a descent opens
   there. Inside a pane tile the live scroll is the layout's: a scroll there
   writes the blob on the layout's settle, a settle or a focus takes only the
   mode to the row, and an ascent, which is leaving, writes the row's whole
-  window as it does anywhere; a leaf the blob has no scroll for starts at
-  the row's (`pane.FramingOwner.Layout`, `textedit.RowFraming`, 2026-10-16).
+  scroll as it does anywhere; a leaf the blob has no scroll for starts at
+  the row's (`pane.FramingOwner.Layout`, `textedit.RowScroll`, 2026-10-16).
 - Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.
@@ -402,7 +402,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   outside; entering a url reopens it, entering a shell reconnects. One
   owner decides (`shellconn.DecideAutoLive`). The freeze gesture is the
   standing exception, for url and shell alike: it is a screenshot, so the
-  tile keeps that face, the address and the tmux session keep existing, a
+  tile keeps that preview, the address and the tmux session keep existing, a
   clone taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
 - Shells ride the web API: a WebSocket at `/shell`, same cookie, same
@@ -413,8 +413,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   source named (`rpc.ShellSession`). Any number of tiles may name one
   session; at most one is live, and going live on another takes over
   (close and reopen; within one tile the terminal moves). A session no tile
-  has a face of was never started, and whichever tile opens it first starts
-  it; a started one that is gone is never recreated behind a face. The
+  has a preview of was never started, and whichever tile opens it first starts
+  it; a started one that is gone is never recreated behind a preview. The
   session dies when the last row naming it is destroyed. A shell cloned
   across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, each pane's focused tile (the keyboard
@@ -488,7 +488,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   paints an SVG image holding a control as nothing while it loads
   (`markdown.PictureXHTML`, 2026-10-16).
 - A pane shows one document whether or not it has focus. The focused pane
-  shows the cached bytes; every other face is a picture of them (a wrap, a
+  shows the cached bytes; everything else drawn from them is a picture of them (a wrap, a
   raster) keyed by `cache.BodyGen`, which every change to the bytes moves,
   an unsaved edit included, so no picture outlives the bytes it was made
   of. A slot's last picture stands in only while its successor rasterizes

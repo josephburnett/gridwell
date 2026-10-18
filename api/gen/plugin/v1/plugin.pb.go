@@ -142,7 +142,7 @@ type InfoResponse struct {
 	// The node reads it in one case, so a binary built against the older proto
 	// keeps presenting without a rebuild: a plugin that answers a root_context
 	// and no menu_entries gets one derived entry onto it, wearing the plugin's
-	// own name and face. Declare both and the entries win; there is no
+	// own name and glyph. Declare both and the entries win; there is no
 	// privileged collection.
 	RootContext string `protobuf:"bytes,4,opt,name=root_context,json=rootContext,proto3" json:"root_context,omitempty"`
 	// watch: the plugin implements Watch (live change events). It is the one
@@ -490,12 +490,12 @@ type Entry struct {
 	PlacementHint *PlacementHint `protobuf:"bytes,9,opt,name=placement_hint,json=placementHint,proto3" json:"placement_hint,omitempty"`
 	// preview_stamp is a positive generation number for the entry's GetPreview
 	// picture, such as an image file's mtime in fs, so an edited image
-	// invalidates. 0 or less means no picture. The picture is the tile's face
+	// invalidates. 0 or less means no picture. The picture is the tile's preview
 	// until the node holds a screenshot of the tile, which wins until a page you
 	// serve changes in place (EntryChanged), unless the user froze it.
 	PreviewStamp int64 `protobuf:"varint,10,opt,name=preview_stamp,json=previewStamp,proto3" json:"preview_stamp,omitempty"`
 	// link_target makes this entry a LINK to another of your entries, the one
-	// that owns the content: the node draws it dashed, reads its content, face
+	// that owns the content: the node draws it dashed, reads its content, preview
 	// and page through the target, and a copy of it is another link to the same
 	// target. The entry keeps its own key, label, status_detail and placement;
 	// its content facts (url_string, serves_page, text_presentation,

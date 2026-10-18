@@ -14,15 +14,15 @@
 # The other half of the same pair: spelling the bare text kind asks the
 # document question without the page arm, which is how three overlay guards
 # rendered a page tile as a document (#284). Only the kind FAMILY may read it:
-# the face and color switches and the content-zoom switch (tileface,
+# the preview and color switches and the content-zoom switch (tilepreview,
 # render.go, content_zoom.go), the rename rule (a text kind derives its name from its
 # first line, page or not), and the cache's content key. Every "is this the
 # document" question takes TextDocument instead. pane's border classifier is
 # one of those family switches; it is handed the kind because its caller has
 # already resolved the descended tile.
-KindText\b api/rpc/|client/cache/|client/pane/border\.go|client/tileface/|client/wasm/render\.go|client/wasm/content_zoom\.go|client/wasm/rename_overlay\.go
-# text_presentation: the faces a text tile has. textedit.ToggleVisible (which
-# faces exist) and textedit.PresentationHTML (which renderer draws one) are its
+KindText\b api/rpc/|client/cache/|client/pane/border\.go|client/tilepreview/|client/wasm/render\.go|client/wasm/content_zoom\.go|client/wasm/rename_overlay\.go
+# text_presentation: the modes a text tile has. textedit.ToggleVisible (which
+# modes exist) and textedit.PresentationHTML (which renderer draws one) are its
 # two owners, in a package `make check` executes.
 \.TextPresentation\b api/rpc/|client/textedit/
 # link_target_id: rpc.Tile.ContentID resolves it, rpc.Tile.LeafLink asks

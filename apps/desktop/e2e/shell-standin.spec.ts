@@ -67,10 +67,10 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   expect(live, 'live xterm canvas visible before the park').toBeTruthy();
 
   // Open the + menu on the grid pane: overlays park, the stand-in draws. The
-  // park takes the terminal's face before the overlay goes.
+  // park takes the terminal's preview before the overlay goes.
   const before = await gw.shellMirrors();
   await gw.openMenu();
-  await expect.poll(() => gw.shellMirrors(), { message: 'the park took the face' }).toBeGreaterThan(before);
+  await expect.poll(() => gw.shellMirrors(), { message: 'the park took the preview' }).toBeGreaterThan(before);
   const standin = await window.evaluate(
     (id: string) => (window as any).__gridwellTest.shellStandin(id),
     shellPaneId,

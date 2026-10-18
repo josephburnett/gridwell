@@ -115,7 +115,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, err = s.SetTextView(ctx, text.Id, 7, 8, 9, 10, rpc.TextModeRendered)
+	text, err = s.SetTextScroll(ctx, text.Id, 7, 8, 9, 10, rpc.TextModeRendered)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -528,7 +528,7 @@ func (c *Cache) cachedRowLocked(gridID string, t *gridwellv1.Tile) (*Grid, bool)
 // Wrote names what one write set, which is all its response may contribute:
 // the rest of the response row is a snapshot an echo may already have
 // overtaken at the same version, since framing claims none, and folding it
-// in would put back a window the user has scrolled away from.
+// in would put back a scroll the user has moved away from.
 type Wrote int
 
 const (

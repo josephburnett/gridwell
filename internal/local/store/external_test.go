@@ -230,7 +230,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	if _, err := d.SetFraming(dir.ID, 0, mkFraming(3, -1, 1.5)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.SetTextView(f.ID, 0, 120, 400, 300, "rendered"); err != nil {
+	if _, err := d.SetTextScroll(f.ID, 0, 120, 400, 300, "rendered"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.SetContentZoom(f.ID, zoomOf(1.25)); err != nil {

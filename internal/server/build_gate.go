@@ -25,11 +25,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// staleBuild answers the build a page's call named when it is not this
+// otherBuild answers the build a page's call named when it is not this
 // node's. The static files, the trace API and the content API are not
-// calls: a stale page must load the new one, and its records describe the
-// mismatch.
-func (s *Server) staleBuild(r *http.Request) (client string, stale bool) {
+// calls: a page of another build must load the new one, and its records
+// describe the mismatch.
+func (s *Server) otherBuild(r *http.Request) (client string, other bool) {
 	if s.build == "" || !isCall(r.URL.Path) || !fromThisOrigin(r) {
 		return "", false
 	}
@@ -53,11 +53,11 @@ func fromThisOrigin(r *http.Request) bool {
 	return err == nil && u.Host == r.Host
 }
 
-// refuseStaleBuild writes the one verdict in the form the caller reads: a
+// refuseOtherBuild writes the one verdict in the form the caller reads: a
 // Connect error for an RPC or a beacon, an exit frame for the shell socket,
 // whose browser end cannot read an HTTP status.
-func (s *Server) refuseStaleBuild(w http.ResponseWriter, r *http.Request, client string) {
-	verdict := gwerr.StaleBuild(s.build, client)
+func (s *Server) refuseOtherBuild(w http.ResponseWriter, r *http.Request, client string) {
+	verdict := gwerr.OtherBuild(s.build, client)
 	trace.Emit("webapi", "build", "refused: "+verdict.Message(),
 		map[string]string{"node": s.build, "client": client, "path": r.URL.Path})
 	if r.URL.Path == shellwire.Path {
@@ -65,7 +65,7 @@ func (s *Server) refuseStaleBuild(w http.ResponseWriter, r *http.Request, client
 		if err != nil {
 			return
 		}
-		writeShellExit(conn, s.shellWriteTimeout, shellwire.EncodeStaleBuild(verdict.Message(), s.build))
+		writeShellExit(conn, s.shellWriteTimeout, shellwire.EncodeOtherBuild(verdict.Message(), s.build))
 		return
 	}
 	_ = connect.NewErrorWriter().Write(w, r, verdict)

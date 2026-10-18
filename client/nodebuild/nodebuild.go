@@ -1,5 +1,5 @@
 // Package nodebuild is the client's half of "a client the node served runs
-// the node's build" (Server.staleBuild): every call names this page's build,
+// the node's build" (Server.otherBuild): every call names this page's build,
 // the API's refusal is heard on whichever carrier it arrives, and Decide
 // says what the page does about it.
 package nodebuild
@@ -20,17 +20,17 @@ import (
 )
 
 // Gate stamps this page's build on its calls and hears the refusal of it.
-// onStale runs for every refusal heard, from any goroutine.
+// onOther runs for every refusal heard, from any goroutine.
 type Gate struct {
 	build   string
-	onStale func(node string)
+	onOther func(node string)
 
 	mu       sync.Mutex
 	accepted bool
 }
 
-func New(build string, onStale func(node string)) *Gate {
-	return &Gate{build: build, onStale: onStale}
+func New(build string, onOther func(node string)) *Gate {
+	return &Gate{build: build, onOther: onOther}
 }
 
 func (g *Gate) Build() string { return g.build }
@@ -44,10 +44,10 @@ func (g *Gate) Accepted() bool {
 }
 
 // Hear takes one call's outcome; the shell socket's refusal arrives here as
-// the node's build instead (shellws.Options.OnStaleBuild calls Stale).
+// the node's build instead (shellws.Options.OnOtherBuild calls OtherBuild).
 func (g *Gate) Hear(err error) {
-	if node, ok := gwerr.StaleBuildOf(err); ok {
-		g.Stale(node)
+	if node, ok := gwerr.OtherBuildOf(err); ok {
+		g.OtherBuild(node)
 		return
 	}
 	if err == nil || errors.Is(err, io.EOF) {
@@ -57,7 +57,7 @@ func (g *Gate) Hear(err error) {
 	}
 }
 
-func (g *Gate) Stale(node string) { g.onStale(node) }
+func (g *Gate) OtherBuild(node string) { g.onOther(node) }
 
 // BeaconPath is path with this page's build in the query, because a beacon
 // cannot carry a header.
@@ -176,7 +176,7 @@ var kinds = map[string][2]string{
 	"SetFraming":      {"view change", "view changes"},
 	"SetSelection":    {"selection", "selections"},
 	"SetContentZoom":  {"view change", "view changes"},
-	"SetTextView":     {"view change", "view changes"},
+	"SetTextScroll":   {"view change", "view changes"},
 	"SetURLState":     {"page capture", "page captures"},
 	"SetFrozen":       {"page capture", "page captures"},
 	"SetShellPreview": {"shell capture", "shell captures"},

@@ -137,7 +137,7 @@ export interface MoveArgs {
   focused: boolean;
 }
 
-// The live panes whose face another pane shows, pane.Mirrored's answer, which
+// The live panes whose preview another pane shows, pane.Mirrored's answer, which
 // replaces the last set. Empty stops the mirror pump.
 export interface MirroredArgs {
   paneIds: string[];
@@ -164,7 +164,7 @@ export interface RemoveArgs {
   paneId: string;
 }
 
-// What the renderer persists as the tile's frozen face.
+// What the renderer persists as the tile's frozen preview.
 export interface FreezeResult {
   // Empty if the capture failed.
   jpegBase64: string;
@@ -221,7 +221,7 @@ export interface EscapeKeyEvent {
 
 // The live view on this pane ended on its own, a page that closed itself or a
 // renderer that died, so the renderer drops its handle and the pane shows the
-// tile's frozen face. Nothing was captured: the view was gone before anything
+// tile's frozen preview. Nothing was captured: the view was gone before anything
 // could be.
 export interface ViewGoneEvent {
   paneId: string;

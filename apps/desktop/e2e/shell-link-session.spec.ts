@@ -8,7 +8,7 @@ import { tileAt } from './oracle';
 // A link to a shell attaches the session its target names (shellconn.SessionKey),
 // so a link to a clone shares the clone's source's session like the clone does:
 // going live on the link takes the session over from the source, which pauses on
-// a face of its own, and going live on the source takes it back. The node keys
+// a preview of its own, and going live on the source takes it back. The node keys
 // its one attached client by session, so a client that keyed the link by its
 // target's id would keep the source's terminal open beside it until the node
 // evicted that socket, and the source would end on the evicted socket's exit
@@ -81,7 +81,7 @@ test('a link to a clone takes over its source session, and the source takes it b
   expect(await markerRow(), 'the link shows what was typed in the source').toBe(true);
   await expect
     .poll(async () => Number((await shellAt(cx, cy))?.previewBlobId ?? 0), {
-      message: 'the source paused on a face of its own',
+      message: 'the source paused on a preview of its own',
       timeout: 10_000,
     })
     .toBeGreaterThan(0);

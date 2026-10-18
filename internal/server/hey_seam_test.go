@@ -138,7 +138,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 			t.Errorf("%s in everything carries status %q", tl.AltText, tl.StatusDetail)
 		}
 	}
-	// A box holds links to those tiles, each with the box's own face.
+	// A box holds links to those tiles, each with the box's own preview.
 	root, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
 	if err != nil {
 		t.Fatal(err)

@@ -141,7 +141,7 @@ func (s *heyShown) reply(t *testing.T) *gridwellv1.Event {
 }
 
 // capture writes the screenshot a closing live view leaves on the thread and
-// answers its face key.
+// answers its preview key.
 func (s *heyShown) capture(t *testing.T, jpeg string) int64 {
 	t.Helper()
 	got, err := s.cl.SetTile(s.ctx, &gridwellv1.SetTileRequest{TileId: s.tile.Id,
@@ -150,7 +150,7 @@ func (s *heyShown) capture(t *testing.T, jpeg string) int64 {
 		t.Fatal(err)
 	}
 	if got.PreviewBlobId <= 0 {
-		t.Fatalf("the capture left face key %d, want the screenshot's", got.PreviewBlobId)
+		t.Fatalf("the capture left preview key %d, want the screenshot's", got.PreviewBlobId)
 	}
 	return got.PreviewBlobId
 }
@@ -167,8 +167,8 @@ func (s *heyShown) cached(t *testing.T) *cache.Cache {
 	return c
 }
 
-// faceIn is the thread's face key as client cache c holds it.
-func (s *heyShown) faceIn(t *testing.T, c *cache.Cache) int64 {
+// previewIn is the thread's preview key as client cache c holds it.
+func (s *heyShown) previewIn(t *testing.T, c *cache.Cache) int64 {
 	t.Helper()
 	g, ok := c.Grid(s.shown)
 	if !ok || g.Tiles[s.tile.Id] == nil {
@@ -186,37 +186,37 @@ func TestHeyReplyReachesTheClientAsItsThreadsChange(t *testing.T) {
 }
 
 // A reply moves the page a thread's screenshot pictures, so the screenshot
-// is no longer its face: the event carries the face key without it, the
-// client's face key moves and its own capture goes, a live view of the thread
+// is no longer its preview: the event carries the preview key without it, the
+// client's preview key moves and its own capture goes, a live view of the thread
 // reloads, and the grid serves the same until the next capture.
-func TestAHeyReplyRetiresTheThreadsScreenshotFace(t *testing.T) {
+func TestAHeyReplyRetiresTheThreadsScreenshot(t *testing.T) {
 	s := showHeyThread(t)
 	shot := s.capture(t, "\xff\xd8\xff before the reply")
 	c := s.cached(t)
-	if got := s.faceIn(t, c); got != shot {
-		t.Fatalf("the client holds face key %d before the reply, want the screenshot %d", got, shot)
+	if got := s.previewIn(t, c); got != shot {
+		t.Fatalf("the client holds preview key %d before the reply, want the screenshot %d", got, shot)
 	}
 	ev := s.reply(t)
 	if got := ev.GetTileChanged().GetTile().GetPreviewBlobId(); got > 0 {
-		t.Fatalf("the reply's event keeps face key %d, a screenshot of the page before it (%d)", got, shot)
+		t.Fatalf("the reply's event keeps preview key %d, a screenshot of the page before it (%d)", got, shot)
 	}
 	c.Apply(ev)
-	if got := s.faceIn(t, c); got > 0 {
-		t.Fatalf("the client's face key stays %d after the reply, a screenshot of the page before it", got)
+	if got := s.previewIn(t, c); got > 0 {
+		t.Fatalf("the client's preview key stays %d after the reply, a screenshot of the page before it", got)
 	}
 	if p := events.Route(ev); p.Reload != s.tile.Id || p.DropPreviews != s.tile.Id {
 		t.Fatalf("the reply routes %+v, want thread %s's live view reloaded and its capture dropped", p, s.tile.Id)
 	}
 	if got := s.thread(t).GetPreviewBlobId(); got > 0 {
-		t.Fatalf("the grid serves face key %d after the reply, a screenshot of the page before it (%d)", got, shot)
+		t.Fatalf("the grid serves preview key %d after the reply, a screenshot of the page before it (%d)", got, shot)
 	}
 	next := s.capture(t, "\xff\xd8\xff after the reply")
 	if got := s.thread(t).GetPreviewBlobId(); got != next {
-		t.Fatalf("the grid serves face key %d after the next capture, want %d", got, next)
+		t.Fatalf("the grid serves preview key %d after the next capture, want %d", got, next)
 	}
 }
 
-// A screenshot the user took with the freeze gesture stays the face through
+// A screenshot the user took with the freeze gesture stays the preview through
 // a reply, at the node and in the client: the standing freeze is the
 // exception.
 func TestAFrozenHeyThreadKeepsItsScreenshotThroughAReply(t *testing.T) {
@@ -227,12 +227,12 @@ func TestAFrozenHeyThreadKeepsItsScreenshotThroughAReply(t *testing.T) {
 	}
 	ev := s.reply(t)
 	if got := ev.GetTileChanged().GetTile().GetPreviewBlobId(); got != shot {
-		t.Fatalf("the reply's event moved a frozen thread's face key %d → %d", shot, got)
+		t.Fatalf("the reply's event moved a frozen thread's preview key %d → %d", shot, got)
 	}
 	if p := events.Route(ev); p.Reload != "" || p.DropPreviews != "" {
 		t.Fatalf("the reply routes %+v for a frozen thread, want its screenshot kept", p)
 	}
 	if got := s.thread(t).GetPreviewBlobId(); got != shot {
-		t.Fatalf("the grid serves face key %d for a frozen thread after the reply, want its screenshot %d", got, shot)
+		t.Fatalf("the grid serves preview key %d for a frozen thread after the reply, want its screenshot %d", got, shot)
 	}
 }

@@ -122,7 +122,7 @@ export class WebviewRegistry {
   // sendInputEvent lost in the input pipeline from a real relay bug.
   zoomChordRelays = 0;
   escapeRelays = 0;
-  // The e2e reads this to see that an unread face costs no capture.
+  // The e2e reads this to see that an unread preview costs no capture.
   mirrorCalls = 0;
 
   private readonly newView: NewView;
@@ -386,24 +386,24 @@ export class WebviewRegistry {
 
   // Parking rather than destroying is what lets a canvas overlay paint where
   // the native view sits. syncURLViews calls this every frame.
-  // A park is the one moment the pane reads its own face, and a parked view
-  // has nothing to capture, so the view stays up until the face is taken.
+  // A park is the one moment the pane reads its own preview, and a parked view
+  // has nothing to capture, so the view stays up until the preview is taken.
   setHidden(paneId: string, hidden: boolean, focused: boolean): void {
     const e = this.entries.get(paneId);
     if (!e || (e.hidden === hidden && e.focused === focused)) return;
     const viewChanged = e.hidden !== hidden;
     // Before the flip, because capture reads hidden before its first await.
-    const face = viewChanged && hidden ? this.mirror(paneId) : null;
+    const capture = viewChanged && hidden ? this.mirror(paneId) : null;
     e.hidden = hidden;
     e.focused = focused;
     if (!viewChanged) return;
     trace(viewShown(paneId, e.tileId, hidden));
     const gen = ++e.parkGen;
-    if (!face) {
+    if (!capture) {
       e.view.setBounds(e.bounds);
       return;
     }
-    void face.then(() => {
+    void capture.then(() => {
       if (this.entries.get(e.paneId) === e && e.parkGen === gen) {
         e.view.setBounds(parkedBounds(e.bounds.width, e.bounds.height));
       }
@@ -428,7 +428,7 @@ export class WebviewRegistry {
     this.entries.delete(fromPaneId);
     e.paneId = toPaneId;
     this.entries.set(toPaneId, e);
-    // The settle and a park waiting on its face were armed for the old pane.
+    // The settle and a park waiting on its preview were armed for the old pane.
     if (e.focusSettle) {
       clearTimeout(e.focusSettle);
       e.focusSettle = null;
@@ -652,7 +652,7 @@ export class WebviewRegistry {
   // retire is the one owner of "the view is gone" for a webContents that ended
   // outside remove(): the entry goes at once, so every later call for the pane
   // is a no-op and remove() answers an empty freeze, and the renderer is told
-  // so the pane shows the tile's frozen face instead of a blank view.
+  // so the pane shows the tile's frozen preview instead of a blank view.
   private retire(e: Entry, end: Ending): void {
     const paneId = e.paneId;
     // remove() takes the entry before it closes the view.

@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 
 // A page that calls window.close() (a sign-in flow's last page does) destroys
 // its webContents under the registry. The pane must drop back to the tile's
-// frozen face with one notice saying why, not sit blank behind a view that is
+// frozen preview with one notice saying why, not sit blank behind a view that is
 // gone, and leaving it afterwards must say nothing more.
 
 test('a page that closes itself ends the live view with one notice', async ({ electronApp, gw, window }) => {
@@ -45,7 +45,7 @@ test('a page that closes itself ends the live view with one notice', async ({ el
   expect(said.map((n) => `${n.severity}: ${n.message}`)).toEqual([
     expect.stringMatching(/^info: the page closed itself/),
   ]);
-  expect((await gw.focused()).textFocus, 'the pane stays in the tile, on its frozen face').not.toBe('');
+  expect((await gw.focused()).textFocus, 'the pane stays in the tile, on its frozen preview').not.toBe('');
 
   // Leaving has nothing left to close, so it raises nothing.
   await gw.middleClickPane();

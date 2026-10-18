@@ -299,7 +299,7 @@ func TestDescendContentPushesContentFrame(t *testing.T) {
 		t.Fatalf("text mode = %q, want the stored mode", st.TextMode)
 	}
 	if st.TextScrollX != 11 || st.TextScrollY != 13 {
-		t.Fatalf("scroll = (%v,%v), want the stored framed window",
+		t.Fatalf("scroll = (%v,%v), want the stored scroll",
 			st.TextScrollX, st.TextScrollY)
 	}
 }

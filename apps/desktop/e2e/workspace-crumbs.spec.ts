@@ -87,7 +87,7 @@ test('a workspace re-entered inside a plugin keeps every crumb down from its roo
   expect(depth, 'still inside the workspace').toBe(1);
 });
 
-test('a workspace restored by ?w= still shows a face on its close-all crumb', async ({
+test('a workspace restored by ?w= still shows a glyph on its close-all crumb', async ({
   gw,
   window,
 }) => {
@@ -104,7 +104,7 @@ test('a workspace restored by ?w= still shows a face on its close-all crumb', as
   await gw.descendCell(wx, wy);
 
   // A fresh boot straight into the workspace, so nothing parked an outer tree
-  // and the close-all crumb must find its face without one.
+  // and the close-all crumb must find its glyph without one.
   await window.evaluate(
     ([tileId]) => {
       location.href = `${location.origin}/?w=${encodeURIComponent(tileId)}&e2e=1`;
@@ -122,5 +122,5 @@ test('a workspace restored by ?w= still shows a face on its close-all crumb', as
   const root = (await gw.bar()).segments[0];
   expect(root.closeOnly, 'the leading crumb closes the levels').toBe(true);
   expect(root.anchor, 'and names the grid the pane tile sits in').toBe(rootGrid);
-  expect(root.glyph, 'so it draws a face, not a blank square').not.toBe('');
+  expect(root.glyph, 'so it draws a glyph, not a blank square').not.toBe('');
 });

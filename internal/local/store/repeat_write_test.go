@@ -17,14 +17,14 @@ import (
 // re-settle against it. The rest claim a version the first call spent, or make
 // rows.
 var repeatWritesNothing = map[string]bool{
-	"SetTextView/window and mode":  true,
-	"SetContentZoom/content scale": true,
-	"SetFrozen/standing freeze":    true,
-	"SetFraming/doorway viewport":  true,
-	"PlaceTile/move and resize":    true,
-	"SetTileAlt/automatic capture": true,
-	"SetURLState/freeze capture":   true,
-	"SetShellPreview/frozen frame": true,
+	"SetTextScroll/scroll and mode": true,
+	"SetContentZoom/content scale":  true,
+	"SetFrozen/standing freeze":     true,
+	"SetFraming/doorway viewport":   true,
+	"PlaceTile/move and resize":     true,
+	"SetTileAlt/automatic capture":  true,
+	"SetURLState/freeze capture":    true,
+	"SetShellPreview/frozen frame":  true,
 }
 
 func TestARepeatedWriteWritesNothing(t *testing.T) {
@@ -132,7 +132,7 @@ func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 		{"place", func() (bool, error) { return d.Place(text, 3, 3, 1, 1, nil) }},
 		{"tile framing", func() (bool, error) { return d.SetFraming(text, 0, f) }},
 		{"root framing", func() (bool, error) { return d.SetFraming(0, gid, f) }},
-		{"text view", func() (bool, error) { return d.SetTextView(text, 0, 0, 4, 4, rpc.TextModeRendered) }},
+		{"text scroll", func() (bool, error) { return d.SetTextScroll(text, 0, 0, 4, 4, rpc.TextModeRendered) }},
 		{"content zoom", func() (bool, error) { return d.SetContentZoom(text, zoomOf(1.25)) }},
 		{"standing freeze", func() (bool, error) { return d.SetFrozen(page, true, nil) }},
 		{"screenshot", func() (bool, error) { return d.SetURLPreview(page, []byte("shot")) }},

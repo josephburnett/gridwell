@@ -45,7 +45,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 	sub.text = text.Id
-	if _, err := s.SetTextView(ctx, text.Id, 3, 9, 300, 400, "rendered"); err != nil {
+	if _, err := s.SetTextScroll(ctx, text.Id, 3, 9, 300, 400, "rendered"); err != nil {
 		t.Fatal(err)
 	}
 

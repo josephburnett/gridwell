@@ -15,7 +15,7 @@ import (
 // substituted rather than named as custom properties, because the preview
 // raster is an SVG document of its own and inherits none from the page. The
 // task box is drawn here for the overlay's input and the picture's stand-in
-// alike (see PictureXHTML), so the two faces lay a task list out the same.
+// alike (see PictureXHTML), so the overlay and the picture lay a task list out the same.
 const renderedCSSRules = `
 @SCOPE@ { color: @FG@; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
 @SCOPE@ h1 { font-size: 1.7em; margin: 0.6em 0 0.4em; }

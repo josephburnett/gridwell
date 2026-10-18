@@ -29,7 +29,7 @@ func ToggleVisible(file *gridwellv1.Tile, readOnly bool) bool {
 
 // PresentationHTML routes a text body to its declared renderer. It is the one
 // router for both the descent overlay and the grid preview rasterizer, so the
-// two faces of a tile cannot disagree.
+// overlay and the preview of a tile cannot disagree.
 func PresentationHTML(t *gridwellv1.Tile, body []byte) string {
 	if t.TextPresentation == rpc.TextPresentationPlain {
 		return markdown.RenderPlainHTML(body)
@@ -64,7 +64,7 @@ func DecideCheckboxClick(textDocument, org, readOnly, bodyCached bool) CheckboxC
 	return CheckboxToggle
 }
 
-// Descent is what a focused text descent shows: the face, and whether the
+// Descent is what a focused text descent shows: the mode, and whether the
 // raw/rendered toggle rides with it.
 type Descent struct {
 	Mode   string // "" when nothing text-shaped is descended

@@ -18,7 +18,7 @@ func TestPageMoved(t *testing.T) {
 		want    Moved
 	}{
 		{"a served page whose screenshot the node retired", page(0, false), true, Moved{Reload: true, DropCapture: true}},
-		{"one whose face is now its plugin's picture", page(-5, false), true, Moved{Reload: true, DropCapture: true}},
+		{"one whose preview is now its plugin's picture", page(-5, false), true, Moved{Reload: true, DropCapture: true}},
 		{"a frozen one keeps the user's screenshot", page(7, true), true, Moved{}},
 		{"a frozen one with no screenshot yet", page(0, true), true, Moved{}},
 		{"a capture or framing write on the row", page(7, false), false, Moved{}},

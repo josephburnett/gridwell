@@ -10,7 +10,7 @@ import { dumpViaAPI } from '../e2e/trace';
 // under a live tab and the tab's calls are made to name another build: the
 // shape of a node rebuilt under a tab that was not reloaded, since the API
 // judges only the build a call names. Every call is refused before its verb
-// (Server.staleBuild); the tab's one answer is nodebuild.Decide's, a notice
+// (Server.otherBuild); the tab's one answer is nodebuild.Decide's, a notice
 // that offers the reload and takes it only when its button is pressed.
 
 const OLD_BUILD = 'e2e-old-build';
@@ -195,5 +195,5 @@ test('a tab holding unsaved text keeps it on screen and says to copy it first', 
   expect(await sameDocument(window), 'the page did not reload').toBe(true);
   const value = await window.evaluate(() => (document.querySelector('textarea') as HTMLTextAreaElement | null)?.value ?? '');
   expect(value, 'the unsaved text is still on screen').toContain('typed while the node was rebuilt.');
-  expect(await gw.getTileContent(created.id), 'the stale page wrote nothing').not.toContain('typed while');
+  expect(await gw.getTileContent(created.id), 'the page of another build wrote nothing').not.toContain('typed while');
 });

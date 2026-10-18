@@ -18,7 +18,7 @@ code keeps in one namespace and not another) cannot be found by reading,
 because there is nothing to read, and a confident comment beside the gap
 reads like a decision. Nine runs of this skill missed that plugin url tiles
 could not keep a screenshot, could not be frozen and could not save a zoom,
-while a comment said the plugin owned the face. Absences are found by
+while a comment said the plugin owned the preview. Absences are found by
 enumeration against a written expectation, and by watching the product run.
 Lenses 1–10 find shape. Lenses 11–13 and steps 2–4 find absence.
 
@@ -180,7 +180,7 @@ invariants from the tree alone — name anything that would mislead them.
 Rows: every tile kind (text, url, shell, well, pane) and every doorway
 (home grid, plugin collection, far home). Columns: everything a user can do
 to one — create, place, clone, link, delete, rename, descend, freeze, keep a
-screenshot, save zoom, save a text window, save framing, read content, write
+screenshot, save zoom, save a text scroll, save framing, read content, write
 content, serve a page, search, see it update when its source changes, see it
 dead when its path breaks. One cell per owner: home store, plugin adapter,
 connection transit. Each cell is "same", "decided: CLAUDE.md line N", or a

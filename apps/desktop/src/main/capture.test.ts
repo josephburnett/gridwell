@@ -114,7 +114,7 @@ test('an emptied set stops the pump', async () => {
   h.pump.setPanes([]);
   assert.equal(h.armed(), 0, 'no timer is left armed');
   await h.fire();
-  assert.equal(rounds, 1, 'nothing is captured once nobody reads a face');
+  assert.equal(rounds, 1, 'nothing is captured once nobody reads a preview');
 });
 
 test('a stop and a restart during a round leave one pump running', async () => {

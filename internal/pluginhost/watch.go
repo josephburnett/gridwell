@@ -533,7 +533,7 @@ func (a *Adapter) fresh(context string, e *pluginv1.Entry) bool {
 // entryTile is e's wire tile in context, nil when the context holds none. A
 // row keeps its own placement, so e alone builds it and refreshes its
 // snapshot as a listing would, and retires a screenshot the change left behind
-// (pageFaceStale); an untouched entry's placement flows from the whole listing
+// (pagePreviewStale); an untouched entry's placement flows from the whole listing
 // (store.Namespace.Overlay), so the context is listed.
 func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Entry) (*gridwellv1.Tile, error) {
 	if e == nil {
@@ -569,7 +569,7 @@ func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Ent
 		if r.Key != e.Key {
 			continue
 		}
-		if pageFaceStale(e, r.Tile) {
+		if pagePreviewStale(e, r.Tile) {
 			if err := a.mem.DropURLPreview(r.ID); err != nil {
 				return nil, err
 			}

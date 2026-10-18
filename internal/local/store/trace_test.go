@@ -105,7 +105,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		{"Place", "plug1:t/" + ts, func() error { _, err := d.Place(id, 3, 3, 1, 1, nil); return err }},
 		{"SetFraming", "plug1:t/" + ts, func() error { _, err := d.SetFraming(id, 0, f); return err }},
 		{"SetFraming", "plug1:f/" + gs, func() error { _, err := d.SetFraming(0, gid, f); return err }},
-		{"SetTextView", "plug1:t/" + ts, func() error { _, err := d.SetTextView(id, 0, 0, 4, 4, ""); return err }},
+		{"SetTextScroll", "plug1:t/" + ts, func() error { _, err := d.SetTextScroll(id, 0, 0, 4, 4, ""); return err }},
 		{"SetContentZoom", "plug1:t/" + ts, func() error { _, err := d.SetContentZoom(id, z); return err }},
 		{"Mint", "plug1:g/" + gs + "/b", func() error {
 			_, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)

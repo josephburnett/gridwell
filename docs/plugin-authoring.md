@@ -91,7 +91,7 @@ listed, contributes nothing to the menu, and is healthy — not an error.
 `root_context` is RETIRED. Leave it empty. The node reads it in one case, so
 a binary built against the older proto keeps presenting: a plugin that
 answers a `root_context` and no `menu_entries` gets one derived entry onto
-it, wearing your own name and face. Declare both and the entries win.
+it, wearing your own name and glyph. Declare both and the entries win.
 
 ## Listings
 
@@ -120,8 +120,8 @@ descent, sandboxed by the node: scripts run, and on the desktop a
 serving a page is what that entry's address is, and the node refuses the
 declaration on any other kind. Leave `url_string` empty — the node derives the
 address when the page is opened — and serve a document body from a `text` entry
-instead if you want one, which is a second entry, not a second face on this
-one. The page is served at a directory URL, so an ordinary relative URL inside
+instead if you want one, which is a second entry, not a second rendering of
+this one. The page is served at a directory URL, so an ordinary relative URL inside
 it comes back as `ServeContent` on the same key with that name as the
 `subpath`. Past its address, a served page is a url tile like any other: the
 node keeps its screenshot, its standing freeze and its zoom, and you store
@@ -134,7 +134,7 @@ in a list of everything — should be one tile, with the others pointing at it.
 Give it one home entry, and in every other collection list an entry with
 `link_target` naming that home by your own words: its context and key. The
 node draws such an entry as a link: dashed, with its own key, label,
-`status_detail` and placement, and its content, face and page read through
+`status_detail` and placement, and its content, preview and page read through
 the target, so it reads dead once the target's context says the target is
 gone. A copy of it, or a drag out of your grid, is another link to the
 target, so a reference survives the entry moving between collections. Keep
@@ -238,12 +238,12 @@ the stamp, so its own echo drops nothing the user typed.
 
 ## Previews
 
-A tile's face is the screenshot the node took when the user last left it
+A tile's preview is the screenshot the node took when the user last left it
 live, exactly as for a page on the Internet. Before the first visit there is
 none, and `GetPreview` is how you supply one: set a positive `preview_stamp`
 on the entry, a generation number such as a file's mtime, and the node asks
 `GetPreview` for that key, and asks again when the stamp changes. Leave the
-stamp 0 and nothing asks. Once a screenshot exists it is the face, and your
+stamp 0 and nothing asks. Once a screenshot exists it is the preview, and your
 picture is not asked for again.
 
 ## Deletes

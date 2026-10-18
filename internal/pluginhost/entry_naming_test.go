@@ -140,7 +140,7 @@ func TestATouchedEntryKeepsTheIdTheListingAnswers(t *testing.T) {
 		t.Fatalf("framing the doorway renamed it: %q, was %q — a URL segment naming it no longer resolves", got.GetId(), sub.Id)
 	}
 
-	// The read-only file, under the reader's hand: a scroll (SetTextView) and a
+	// The read-only file, under the reader's hand: a scroll (SetTextScroll) and a
 	// ctrl+wheel zoom (SetContentZoom). The pane's content id is this id.
 	setText := &gridwellv1.SetTileRequest{TileId: note.Id, Tile: &gridwellv1.Tile{
 		Kind: rpc.KindText, TextX: 0, TextY: 400, TextW: 600, TextH: 800, TextMode: "rendered",
@@ -150,7 +150,7 @@ func TestATouchedEntryKeepsTheIdTheListingAnswers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resp.GetTile().GetId() != note.Id {
-		t.Fatalf("SetTextView answered %q, want the id it was addressed at (%q)", resp.GetTile().GetId(), note.Id)
+		t.Fatalf("SetTextScroll answered %q, want the id it was addressed at (%q)", resp.GetTile().GetId(), note.Id)
 	}
 	zoom := 1.75
 	if _, err := a.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: note.Id, ContentZoom: &zoom}); err != nil {

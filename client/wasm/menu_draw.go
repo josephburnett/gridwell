@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
-	"github.com/josephburnett/gridwell/client/tileface"
+	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -176,7 +176,7 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 		// tiles do.
 		a.drawPluginHealthTint(n, x, y, w, h)
 	} else {
-		outside := tileface.Outside(n, false)
+		outside := tilepreview.Outside(n, false)
 		a.drawNode(a.cctx, n, x, y, w, h, false, outside, tileBorderPx, false)
 		if pr, ok := primitiveFor(item.primitive); ok {
 			pr.glyph(a, x, y, w, h)
@@ -216,7 +216,7 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	// guard explains on click.
 	if pluginhealth.UnrootedLink(n) {
 		// A row this node cannot classify gets the neutral dimming too,
-		// because not knowing yet is exactly the waiting face.
+		// because not knowing yet is exactly the waiting look.
 		color := a.pal.DoorwayWaitingTint
 		// The local plugin list knows more: a failure gets the alarm tint.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {

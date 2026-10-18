@@ -2,16 +2,16 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
 // A text tile's letters keep their size at every moment of a grid zoom: the
-// box is a window that reveals more as it grows (markdown.PreviewWindowFrame).
+// box reveals more of the doc as it grows (markdown.PreviewFrameOf).
 // A rendered preview is a raster made at a width bucket, so the spec zooms
-// until the box crosses into a second bucket and reads, through the textFaces
-// hook, the drawImage rects of each painted face: the drawn scale is the
+// until the box crosses into a second bucket and reads, through the textPreviews
+// hook, the drawImage rects of each painted preview: the drawn scale is the
 // same at every zoom, no frame fell back to raw source on the way, and the
 // tile's own row was never written.
 
 const WRITES = ['PlaceTile', 'CloneTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
-interface Face {
+interface Preview {
   kind: 'raster' | 'raw';
   scale?: number;
   rasterW?: number;
@@ -44,9 +44,9 @@ test('a rendered preview keeps its letter height across a grid zoom that crosses
     })
     .toBe('rendered');
 
-  const face = (): Promise<Face | undefined> =>
-    window.evaluate((id: string) => (window as any).__gridwellTest.textFaces()[id], created.id);
-  await expect.poll(async () => (await face())?.kind, { timeout: 10_000 }).toBe('raster');
+  const preview = (): Promise<Preview | undefined> =>
+    window.evaluate((id: string) => (window as any).__gridwellTest.textPreviews()[id], created.id);
+  await expect.poll(async () => (await preview())?.kind, { timeout: 10_000 }).toBe('raster');
 
   // Every write from here on is the zoom's; the tile's row is the oracle that
   // it was never stamped (see the first-look rule, 4136066a).
@@ -65,12 +65,12 @@ test('a rendered preview keeps its letter height across a grid zoom that crosses
 
   // Zoom in small steps until the box has crossed into a second bucket, and
   // past it, taking one sample per settled step.
-  const samples: Face[] = [];
+  const samples: Preview[] = [];
   const buckets = new Set<number>();
   for (let i = 0; i < 40 && (buckets.size < 2 || samples.length < 3); i++) {
     await gw.wheelAtFocusedCenter(-60);
-    await expect.poll(async () => (await face())?.kind, { timeout: 10_000 }).toBe('raster');
-    const s = (await face())!;
+    await expect.poll(async () => (await preview())?.kind, { timeout: 10_000 }).toBe('raster');
+    const s = (await preview())!;
     samples.push(s);
     buckets.add(s.rasterW!);
   }
@@ -79,7 +79,7 @@ test('a rendered preview keeps its letter height across a grid zoom that crosses
   for (const s of scales) {
     expect(s, `drawn scale at every zoom: ${JSON.stringify(samples)}`).toBeCloseTo(scales[0], 6);
   }
-  expect((await face())!.rawAfterRaster, 'a frame mid-zoom painted raw source').toBe(0);
+  expect((await preview())!.rawAfterRaster, 'a frame mid-zoom painted raw source').toBe(0);
 
   await window.waitForTimeout(c.framingSaveMs * 2);
   await window.unroute('**/gridwell.v1.Gridwell/*');

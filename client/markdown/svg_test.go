@@ -94,8 +94,8 @@ func TestPreviewSVGHoldsNoFormControl(t *testing.T) {
 }
 
 // The overlay's checkbox and the picture's stand-in are drawn by the same
-// rules, so the two faces lay a task list out alike: every rule that styles
-// one face styles the other in the same selector list.
+// rules, so the overlay and the picture lay a task list out alike: every rule that styles
+// one styles the other in the same selector list.
 func TestRenderedCSSDrawsTheCheckboxAndItsStandInAlike(t *testing.T) {
 	css := RenderedCSS("S", theme.Of(theme.Dark))
 	pairs := []struct{ input, standIn string }{
@@ -115,7 +115,7 @@ func TestRenderedCSSDrawsTheCheckboxAndItsStandInAlike(t *testing.T) {
 		}
 		for i, p := range pairs {
 			if sels[p.input] != sels[p.standIn] {
-				t.Errorf("rule %q styles one face of the task box only", strings.TrimSpace(rule[:open]))
+				t.Errorf("rule %q styles one rendering of the task box only", strings.TrimSpace(rule[:open]))
 			}
 			if sels[p.input] {
 				seen[i] = true
@@ -131,7 +131,7 @@ func TestRenderedCSSDrawsTheCheckboxAndItsStandInAlike(t *testing.T) {
 					known = known || s == p.input || s == p.standIn
 				}
 				if !known {
-					t.Errorf("selector %q styles one face of the task box only", s)
+					t.Errorf("selector %q styles one rendering of the task box only", s)
 				}
 			}
 		}

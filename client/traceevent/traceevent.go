@@ -48,9 +48,9 @@ func NodeBuild(node string) Event {
 		KV: kv("node", node)}
 }
 
-// StaleBuild is the web API refusing this page's build and what the page did
+// OtherBuild is the API refusing this page's build and what the page did
 // about it (nodebuild.Decide).
-func StaleBuild(client, node, verdict string) Event {
+func OtherBuild(client, node, verdict string) Event {
 	return Event{Src: "client", Kind: "build", Msg: "the node runs " + shortOrUnstamped(node) +
 		", this page " + shortOrUnstamped(client) + ": " + verdict,
 		KV: kv("client", client, "node", node, "verdict", verdict)}
@@ -230,7 +230,7 @@ func ShellExit(paneID, tileID, message string, sessionGone bool) Event {
 	return Event{Src: "shell", Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
 }
 
-// closeMsg: a frozen surface keeps its face and its address, a closed one is
+// closeMsg: a frozen surface keeps its preview and its address, a closed one is
 // gone, and which happened is the whole question when a tile comes back blank.
 func closeMsg(freeze bool) string {
 	if freeze {

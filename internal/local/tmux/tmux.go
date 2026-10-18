@@ -219,7 +219,7 @@ func (c *Controller) Env() []string {
 }
 
 // Mode is owned by internal/local's shell stream, which derives allowCreate
-// from whether any tile naming the session has a face.
+// from whether any tile naming the session has a preview.
 type Mode int
 
 const (

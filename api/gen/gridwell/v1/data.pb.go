@@ -122,7 +122,7 @@ type Grid struct {
 	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
 	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
-	// client falls back to the well face or the mount door's glyph). It
+	// client falls back to the well glyph or the mount door's glyph). It
 	// travels on the GRID because a plugin-list lookup cannot answer for a
 	// grid reached through a mount. Stamped by the adapter, verbatim in
 	// transit. Wire-only, never persisted.
@@ -269,7 +269,7 @@ type MenuEntry struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // entry identity within the plugin
 	Label  string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
-	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default face)
+	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default glyph)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
 	// meaning as PluginInfo.root_view_*. A doorway carries the framing of the
@@ -396,7 +396,7 @@ type Tile struct {
 	// url-only: the http(s) URL plus a pointer at the last-frozen JPEG
 	// preview (in the blobs table; hash-deduped across clones).
 	UrlString string `protobuf:"bytes,20,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
-	// preview_blob_id is the face's cache key, 0 for none, and GetTilePreview
+	// preview_blob_id is the preview's cache key, 0 for none, and GetTilePreview
 	// answers it. A plugin tile with no screenshot yet keys its plugin's
 	// picture below zero; the client only compares keys.
 	PreviewBlobId int64 `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
@@ -461,7 +461,7 @@ type Tile struct {
 	// status_detail is the owning plugin's one emoji about this tile's state,
 	// set only when there is something to notice, which nothing outside that
 	// plugin can derive. The client draws it before the name
-	// (tileface.BannerText) and never instead of it. Plugin-declared through
+	// (tilepreview.BannerText) and never instead of it. Plugin-declared through
 	// the Entry, wire-only: never a stored column, never set by clients.
 	StatusDetail string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// shell_session names the tmux session a shell tile attaches: the id of the
@@ -800,7 +800,7 @@ type InfoResponse struct {
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	// glyph is the plugin's identity glyph for the menu and ghost faces:
+	// glyph is the plugin's identity glyph for the menu and the ghost:
 	// "folder", "process", "well", or "" for the generic globe. The client reads
 	// the declaration and never switches on the kind, and an unknown value falls
 	// back to the globe, so a third-party plugin degrades politely.
@@ -2325,7 +2325,7 @@ type PluginInfo struct {
 	// present identically as root_grid_id == "". Empty when Info succeeded,
 	// whether or not it declared a root.
 	InfoError string `protobuf:"bytes,10,opt,name=info_error,json=infoError,proto3" json:"info_error,omitempty"`
-	// glyph mirrors InfoResponse.glyph for the client's plugin faces: the
+	// glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
 	// menu swatch and the drag ghost. "" is the generic globe.
 	Glyph string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	// menu_entries mirrors InfoResponse.menu_entries with grid targets
@@ -2566,7 +2566,7 @@ type HandshakeResponse struct {
 	ContentToken string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
 	// build is the commit the node was built from (tracewire.BuildCommit), ""
 	// for an unstamped build, for the client's log. Nothing depends on it: the
-	// web API refuses a page of another build on every call (StaleBuild).
+	// web API refuses a page of another build on every call (OtherBuild).
 	Build         string `protobuf:"bytes,14,opt,name=build,proto3" json:"build,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2739,12 +2739,12 @@ func (x *DeadReference) GetNamespace() string {
 	return ""
 }
 
-// StaleBuild is the detail on the FailedPrecondition the web API answers a page
-// of another build with, before the verb runs: node is the web API's build,
-// client the one the page named ("" when it named none). gwerr.StaleBuild
-// writes it and gwerr.StaleBuildOf reads it; the client's one answer is to
+// OtherBuild is the detail on the FailedPrecondition the web API answers a
+// page of another build with, before the verb runs: node is the API's build,
+// client the one the page named ("" when it named none). gwerr.OtherBuild
+// writes it and gwerr.OtherBuildOf reads it; the client's one answer is to
 // reload (client/nodebuild).
-type StaleBuild struct {
+type OtherBuild struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Node          string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
 	Client        string                 `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
@@ -2752,20 +2752,20 @@ type StaleBuild struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StaleBuild) Reset() {
-	*x = StaleBuild{}
+func (x *OtherBuild) Reset() {
+	*x = OtherBuild{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StaleBuild) String() string {
+func (x *OtherBuild) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StaleBuild) ProtoMessage() {}
+func (*OtherBuild) ProtoMessage() {}
 
-func (x *StaleBuild) ProtoReflect() protoreflect.Message {
+func (x *OtherBuild) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2777,19 +2777,19 @@ func (x *StaleBuild) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StaleBuild.ProtoReflect.Descriptor instead.
-func (*StaleBuild) Descriptor() ([]byte, []int) {
+// Deprecated: Use OtherBuild.ProtoReflect.Descriptor instead.
+func (*OtherBuild) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *StaleBuild) GetNode() string {
+func (x *OtherBuild) GetNode() string {
 	if x != nil {
 		return x.Node
 	}
 	return ""
 }
 
-func (x *StaleBuild) GetClient() string {
+func (x *OtherBuild) GetClient() string {
 	if x != nil {
 		return x.Client
 	}
@@ -4704,7 +4704,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rDeadReference\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"8\n" +
 	"\n" +
-	"StaleBuild\x12\x12\n" +
+	"OtherBuild\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\".\n" +
 	"\x0eSourceDisabled\x12\x1c\n" +
@@ -4891,7 +4891,7 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*HandshakeResponse)(nil),         // 31: gridwell.v1.HandshakeResponse
 	(*TileResponse)(nil),              // 32: gridwell.v1.TileResponse
 	(*DeadReference)(nil),             // 33: gridwell.v1.DeadReference
-	(*StaleBuild)(nil),                // 34: gridwell.v1.StaleBuild
+	(*OtherBuild)(nil),                // 34: gridwell.v1.OtherBuild
 	(*SourceDisabled)(nil),            // 35: gridwell.v1.SourceDisabled
 	(*CreateTileRequest)(nil),         // 36: gridwell.v1.CreateTileRequest
 	(*ShellSessionAliveRequest)(nil),  // 37: gridwell.v1.ShellSessionAliveRequest

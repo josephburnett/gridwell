@@ -7,7 +7,7 @@ import (
 )
 
 // The table a per-frame read runs on: which signal clears which latch. A
-// latch nothing clears is a face that never loads; a failure nothing latches
+// latch nothing clears is a preview that never loads; a failure nothing latches
 // is a read per frame.
 func TestReadsLatchTable(t *testing.T) {
 	type signal struct {

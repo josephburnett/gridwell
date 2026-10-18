@@ -45,7 +45,7 @@ test('setBounds() while hidden keeps the view parked and un-parks at the new bou
     }
     if (!found) throw new Error('live view webContents not found after place()');
 
-    // An open menu or a running gesture parks the view, once the face its
+    // An open menu or a running gesture parks the view, once the preview its
     // pane shows meanwhile is taken.
     reg.setHidden(paneId, true, true);
     const parkDeadline = Date.now() + 8_000;

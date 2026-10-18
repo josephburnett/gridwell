@@ -11,7 +11,7 @@ type FramingOwner struct {
 	// Content: the place is a content tile, so what settles is its text
 	// scroll and mode, not grid framing. With Layout the live scroll is the
 	// layout's: a settle takes only the mode to the tile row, and leaving
-	// writes its whole window (textedit.RowFraming, 2026-10-16).
+	// writes its whole scroll (textedit.RowScroll, 2026-10-16).
 	Content bool
 	// Layout: the pane is inside a pane tile, whose layout blob owns its grid
 	// views (2026-10-14), so nothing is written to the row named below. That
@@ -32,7 +32,7 @@ type FramingOwner struct {
 // in by, or the grid itself at a root. Inside a pane tile a grid place's view
 // and a text place's live scroll are the layout's, so the answer names a grid
 // place's row for reading only and a text place's row for its mode on a
-// settle and its window on leaving.
+// settle and its whole scroll on leaving.
 func (s *Stack) FramingTarget(inPaneTile bool) FramingOwner {
 	if s.Content {
 		return FramingOwner{Content: true, Layout: inPaneTile, TileID: s.Door}

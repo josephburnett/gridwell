@@ -95,7 +95,7 @@ func TestGenerationsAreNeverReused(t *testing.T) {
 // one property that makes it separate from Ident: an entry holds one
 // identity's resource and another's settled miss at once, so the caller stops
 // re-asking for the identity that will never become a picture while the tile
-// keeps the face it has.
+// keeps the preview it has.
 func TestMissLatchesBesideALoadedResource(t *testing.T) {
 	e := &Entry[int]{}
 	held := &fakeRes{}

@@ -39,7 +39,7 @@ memory is not a verdict even when it claims `authoritative`. Retirement needs a 
 authoritative listing sweeps by `mem.Sweep`, a live non-authoritative one
 sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared
-face is the plugin's own fact and nothing can supply it. A source that
+facts are the plugin's own and nothing can supply it. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
 node holds one stream per subprocess while some client's view (`SetView`)
 shows one of its grids, scoped to the contexts shown and those their link entries point into,
@@ -54,8 +54,8 @@ names stay announces nothing. An `EntryChanged` is the entry's own
 (`Adapter.applyEntry`): the listing did not move, and a plugin row has no
 version to say its bytes did. A page the plugin serves that changed this way
 is not the page its screenshot shows, so the row gives the screenshot up and
-its face is the plugin's picture until the next capture, unless the user
-froze it (`pageFaceStale`). A coded refusal is not darkness: the listings
+its preview is the plugin's picture until the next capture, unless the user
+froze it (`pagePreviewStale`). A coded refusal is not darkness: the listings
 still answer, so it rides a healthy `EventPluginHealth` as
 `live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
 re-opened stream is open. A share of the subscription the adapter cannot take leaves
@@ -164,7 +164,7 @@ cached — except while this client's own write to the tile is in flight
 tell it from a foreign change, so the body is aged once, against the row then
 held, when the write ends after its response filed the bytes — and `PutFetchedContent` to a reply whose row moved blob or stamp
 while it was in flight. Who reads the body again is whoever draws it: the cache
-only drops it. What is drawn from a body (a face's raster, a wrap, the rendered
+only drops it. What is drawn from a body (a preview's raster, a wrap, the rendered
 overlay) is keyed by `Cache.BodyGen`, which moves whenever the cached bytes
 do, an unsaved edit included, never by the row's version, which a plugin
 body's does not move and an edit moves for no one: a focused pane reads the
@@ -220,7 +220,7 @@ taken without its latch — and `App.fetchState` holds every one: grids, tiles,
 tile content, url previews, and the + menu's per-node context. A deduped read that kept a claim of its own — a bare bool
 beside its own cache — was bounded by nothing and cancelled by nothing, so a
 request the network swallowed held its key for the life of the page and the
-face it fed never loaded, never retried, and never said a word.
+preview it fed never loaded, never retried, and never said a word.
 `retry.Reconnect` marks a gap on any stream break and tells `retry.Events`,
 the loop `App.startSSE` runs, to fire `retryKick(true, cache.EverySource)` on
 the next stream that opens. A stream is open at its header, which the node
@@ -578,7 +578,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
-| A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text face show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown context whose listing moved, a context a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
+| A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown context whose listing moved, a context a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |

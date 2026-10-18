@@ -155,7 +155,7 @@ func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 	}
 }
 
-// A plugin picture keys below zero (pluginhost.faceKey), and the first
+// A plugin picture keys below zero (pluginhost.previewKey), and the first
 // screenshot replaces it with a blob id. Its entry must then miss, whatever
 // its stamp, or the picture would stand in for the screenshot forever.
 func TestAPluginPictureIsNotALocalCapture(t *testing.T) {

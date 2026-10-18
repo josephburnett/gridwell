@@ -46,7 +46,7 @@ func TestNotice(t *testing.T) {
 		{"one write", Offer, []string{"SetFraming"}, 0, Updated + " 1 view change was not saved."},
 		{"kinds that are one kind count together", Offer, []string{"PlaceTile", "PaneLayout"}, 0,
 			Updated + " 2 layout changes were not saved."},
-		{"kinds in drain order", Offer, []string{"SetFraming", "PlaceTile", "SetTextView", "SetFrozen"}, 0,
+		{"kinds in drain order", Offer, []string{"SetFraming", "PlaceTile", "SetTextScroll", "SetFrozen"}, 0,
 			Updated + " 2 view changes, 1 layout change and 1 page capture were not saved."},
 		{"a parked selection", Offer, []string{"SetSelection", "SetSelection"}, 0, Updated + " 2 selections were not saved."},
 		{"an op with no name is named by itself", Offer, []string{"SetFraming", "Mystery"}, 0,
@@ -75,7 +75,7 @@ func TestGateHears(t *testing.T) {
 	if g.Accepted() || len(heard) != 0 {
 		t.Fatalf("accepted=%v heard=%v after no answer and a plain refusal", g.Accepted(), heard)
 	}
-	g.Hear(gwerr.StaleBuild("nodebuild", "pagebuild"))
+	g.Hear(gwerr.OtherBuild("nodebuild", "pagebuild"))
 	if len(heard) != 1 || heard[0] != "nodebuild" || g.Accepted() {
 		t.Fatalf("heard=%v accepted=%v, want the node's build and no acceptance", heard, g.Accepted())
 	}

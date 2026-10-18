@@ -34,7 +34,7 @@ test('a clone reads no listing back; its event lands the copy', async ({ gw }) =
 // The flip is written as the pane leaves the text: here by closing it, since
 // an ascent reads the grid it lands on anyway and would hide a read behind its
 // own. The other pane shows the same grid, so a read back would be asked.
-test('a text view flip reads no listing back', async ({ gw, window }) => {
+test('a text mode flip reads no listing back', async ({ gw, window }) => {
   const c = await gw.cadences();
   await gw.enterPlugin('home');
   const f = await gw.focused();
