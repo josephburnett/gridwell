@@ -244,6 +244,55 @@ func TestMCPPointedChoosesTheNamedElseTheMostRecentSession(t *testing.T) {
 	}
 }
 
+// A screen whose stream closed, as a phone's does in the background, is still
+// pointed at, marked away with a note saying since when; once another screen
+// is open, the open one wins and the away one is among the others.
+func TestMCPPointedSeesAnAwayScreenUntilAnOpenOne(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	phone := rpc.NewClient(f.hs.Client(), f.hs.URL, connect.WithProtoJSON())
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, err := phone.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	say(t, phone, "browser", focusedOn(f.root))
+	s := agentAt(t, f.hs, nil)
+	var p mcpdoor.PointedOut
+	call(t, s, "pointed", nil, &p)
+	if p.Session != phone.Session() || p.AwaySince != "" {
+		t.Fatalf("pointed = %+v, want the open browser %s", p, phone.Session())
+	}
+
+	cancel()
+	_ = stream.Close()
+	deadline := time.Now().Add(3 * time.Second)
+	for call(t, s, "pointed", nil, &p); p.AwaySince == ""; call(t, s, "pointed", nil, &p) {
+		if time.Now().After(deadline) {
+			t.Fatalf("after the browser's stream closed, pointed = %+v, want it away", p)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if p.Session != phone.Session() || !strings.Contains(p.Note, "away since "+p.AwaySince) || p.Grid.ID != f.root {
+		t.Fatalf("pointed = %+v, want the away browser %s on %s, the note saying since when", p, phone.Session(), f.root)
+	}
+
+	desk := viewer(t, f.hs, "desktop", focusedOn(f.root))
+	// Its stream is counted once the node is listening; an answer leaves out
+	// what it omits, so each lands in a fresh value.
+	deadline = time.Now().Add(3 * time.Second)
+	for {
+		p = mcpdoor.PointedOut{}
+		call(t, s, "pointed", nil, &p)
+		if p.Session == desk.Session() || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if p.Session != desk.Session() || p.AwaySince != "" || len(p.Others) != 1 || p.Others[0].ID != phone.Session() || p.Others[0].AwaySince == "" {
+		t.Fatalf("pointed = %+v, want the open desktop %s, naming the away browser among the others", p, desk.Session())
+	}
+}
+
 // attach goes live on a shell tile from cl's session, as the wasm client's
 // shell stack does.
 func attach(t *testing.T, f *shellDoorFixture, cl *rpc.Client, tile string) {

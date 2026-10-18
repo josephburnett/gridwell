@@ -1,6 +1,6 @@
 package server_test
 
-// The view through the web door: what each client says it shows is held
+// The view through the web door: what each client says it shows is counted
 // while that client's event stream is open, and reaches each namespace as its
 // share of the union.
 
@@ -140,9 +140,10 @@ func TestInterestCrossesAConnection(t *testing.T) {
 }
 
 // A session's whole view crosses the Connect codec and is readable from
-// Sessions while its stream is open, with its label, panes and focus, and is
-// gone once the stream closes.
-func TestSessionsHoldEachViewWhileItsStreamIsOpen(t *testing.T) {
+// Sessions while its stream is open, with its label, panes and focus, and
+// once the stream closes, as a phone's does in the background, it is still
+// listed, away since the close and watching nothing.
+func TestSessionsHoldEachViewOpenThenAway(t *testing.T) {
 	const a = "pinta01"
 	sink := &interestSink{}
 	reg := plugin.NewRegistry()
@@ -176,8 +177,8 @@ func TestSessionsHoldEachViewWhileItsStreamIsOpen(t *testing.T) {
 		t.Fatalf("sessions = %v, want the one client", held)
 	}
 	got := held[0]
-	if got.ID == "" || got.Changed.IsZero() {
-		t.Errorf("session %q changed %v, want an id and a time", got.ID, got.Changed)
+	if got.ID == "" || got.Changed.IsZero() || !got.Open || !got.Away.IsZero() {
+		t.Errorf("session %q changed %v open %v away %v, want an id, a time, open", got.ID, got.Changed, got.Open, got.Away)
 	}
 	want := proto.CloneOf(view)
 	want.Session = got.ID
@@ -187,7 +188,8 @@ func TestSessionsHoldEachViewWhileItsStreamIsOpen(t *testing.T) {
 
 	closeSub()
 	sink.await(t, nil)
-	if held := srv.Sessions(); len(held) != 0 {
-		t.Errorf("after the stream closed, sessions = %v, want none", held)
+	held = srv.Sessions()
+	if len(held) != 1 || held[0].ID != got.ID || held[0].Open || held[0].Away.IsZero() || !proto.Equal(held[0].View, want) {
+		t.Errorf("after the stream closed, sessions = %v, want %s away with its view", held, got.ID)
 	}
 }

@@ -1,7 +1,8 @@
 // Package interest owns what the node's clients are showing: each session's
-// view (SetView), held while that session's event stream is open, and the
-// union of every held view's shown grids, which is what the node's sources are
-// asked to watch. It lives in memory only; nothing here is a node fact.
+// view (SetView), counted while that session's event stream is open and
+// listed away for AwayFor after its last stream closes, and the union of every
+// counted view's shown grids, which is what the node's sources are asked to
+// watch. It lives in memory only; nothing here is a node fact.
 package interest
 
 import (
@@ -36,6 +37,7 @@ type session struct {
 	streams int
 	view    *pb.SetViewRequest
 	changed time.Time
+	away    time.Time // when its last stream closed; zero while one is open or before any
 }
 
 // Session is one session's view as the node holds it: read-only, and its
@@ -44,7 +46,14 @@ type Session struct {
 	ID      string
 	View    *pb.SetViewRequest
 	Changed time.Time // when the view last differed from the one before
+	Open    bool      // a stream carrying the session is open
+	Away    time.Time // when its last stream closed; zero while Open
 }
+
+// AwayFor is how long a session whose last stream closed is still listed, as
+// a phone's browser closes its stream whenever it goes to the background.
+// Away, it watches nothing: only an open stream counts toward the union.
+const AwayFor = 10 * time.Minute
 
 // New builds an empty book. spread hears each new union, in order, under the
 // book's lock, so it must not block.
@@ -54,12 +63,13 @@ func New(spread func(union []string)) *Book {
 
 // Open counts one event stream under id until close. A session counts only
 // while one of its streams is open, so a client that went away cannot keep a
-// source watched nor be listed.
+// source watched.
 func (b *Book) Open(id string) (close func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	s := b.at(id)
 	s.streams++
+	s.away = time.Time{}
 	b.idle = slices.DeleteFunc(b.idle, func(x string) bool { return x == id })
 	b.recount()
 	var once sync.Once
@@ -68,6 +78,7 @@ func (b *Book) Open(id string) (close func()) {
 			b.mu.Lock()
 			defer b.mu.Unlock()
 			if s.streams--; s.streams == 0 {
+				s.away = b.now()
 				b.rest(id)
 			}
 			b.recount()
@@ -95,15 +106,19 @@ func (b *Book) Union() []string {
 	return slices.Clone(b.union)
 }
 
-// Sessions is every counted session that has said what it shows, by id.
+// Sessions is every session that has said what it shows, open or away for no
+// longer than AwayFor, by id.
 func (b *Book) Sessions() []Session {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	now := b.now()
 	var out []Session
 	for id, s := range b.sessions {
-		if s.streams > 0 && s.view != nil {
-			out = append(out, Session{ID: id, View: proto.CloneOf(s.view), Changed: s.changed})
+		open := s.streams > 0
+		if s.view == nil || !open && (s.away.IsZero() || now.Sub(s.away) > AwayFor) {
+			continue
 		}
+		out = append(out, Session{ID: id, View: proto.CloneOf(s.view), Changed: s.changed, Open: open, Away: s.away})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

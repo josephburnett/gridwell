@@ -102,6 +102,13 @@ Which screen is theirs, in this order:
    a shell live; when another takes it over, that one is the answer;
 3. the screen whose view changed last.
 
+A screen whose stream closed, as a phone's browser does whenever it goes to
+the background, is away. It is still pointed at for ten minutes
+(`interest.AwayFor`) after it went away, and marked with `away_since`, here
+and in `others`. An open screen wins over an away one under rules 2 and 3;
+when none is open, the one that went away last is the answer and `note` says
+since when. A `session` you name is answered open or away.
+
 The answer says which rule chose (`chosen_by`: `argument`, `your shell` or
 `most recent`), and `others` names every other screen so you can ask the user
 which they meant. When the shell you run in is
@@ -126,7 +133,8 @@ starts with what kind of no it is, then the node's reason:
 - `not supported here:` the namespace does not do this, such as creating a
   tile in a plugin's collection.
 - `not found:` no such tile, grid or session.
-- `no session:` no screen is showing the node, so nothing is pointed at.
+- `no session:` no screen is showing the node, nor went away from it within
+  `interest.AwayFor`, so nothing is pointed at.
 - `not loaded:` the screen has not loaded its focused pane yet. Ask again.
 
 ## Not exposed
