@@ -329,3 +329,56 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 		}
 	}
 }
+
+// read_tiles on a pane tile answers its layout as the panes it holds: each
+// one's place, the grid the blob names, its content tile and whether it is
+// the focused one, with the version the layout was read at; a link to the
+// pane tile answers the same.
+func TestMCPReadTilesOnAPaneTileAnswersItsLayout(t *testing.T) {
+	f := newShellDoorFixture(t, Config{})
+	s := agentAt(t, f.hs, nil)
+	ctx := context.Background()
+	well, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 3, Y: 3, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	note := mkText(t, s, well.ChildGridId, "note")
+	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr := pane.TreeAtPlace("", f.root, nil, rpc.ViewOf(0, 0, 1))
+	first := tr.FocusedPane()
+	second, err := tr.Split(pane.Vertical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second.Push(pane.Frame{Door: well.Id})
+	second.Push(pane.Frame{Door: note.ID, Content: true})
+	if err := tr.SetFocus(second.ID); err != nil {
+		t.Fatal(err)
+	}
+	data, _, err := pane.EncodeLayout(tr, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, data); err != nil {
+		t.Fatal(err)
+	}
+	link := landed(t, items(t, s, "copy", map[string]any{"id": pt.Id, "link": true})[0])
+
+	for _, r := range readTiles(t, s, pt.Id, link.ID) {
+		l := r.Layout
+		if r.Verdict != "ok" || l == nil || l.Version != pt.Version+1 || len(l.Panes) != 2 {
+			t.Fatalf("read_tiles = %+v (layout %+v), want two panes at version %d", r, l, pt.Version+1)
+		}
+		p1, p2 := l.Panes[0], l.Panes[1]
+		if p1.ID != first.ID || p1.Anchor != f.root || len(p1.Path) != 0 || p1.Grid != f.root || p1.Content != "" || p1.Focused {
+			t.Errorf("pane 1 = %+v, want unfocused on %s", p1, f.root)
+		}
+		if p2.ID != second.ID || p2.Anchor != f.root || !slices.Equal(p2.Path, []string{well.Id}) || p2.Grid != "" ||
+			p2.Content != note.ID || !p2.Focused {
+			t.Errorf("pane 2 = %+v, want focused inside %s through %s, its grid not named", p2, note.ID, well.Id)
+		}
+	}
+}

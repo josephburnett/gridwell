@@ -47,7 +47,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 		&mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "Every screen showing this node, the most recently changed first: its id, label, when its view last changed, when it went away (a phone's browser in the background), the pane tiles it is inside, outermost first, and each pane's place, the grid it shows, the content tile it is inside and whether it has focus. The screen showing the shell this agent runs in is marked yours. An empty list is no screen."}, d.sessions)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
-	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the session a shell names, or the grid a well holds. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
+	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the session a shell names, the grid a well holds, or a pane tile's layout: each pane's place, the grid the layout names, its content tile and whether it is focused. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
 	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its wells too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open,, selected (only tiles in their grid's selection) and kind (text, url, shell, well or pane). With a filter the query may be empty: it then lists what passes, newest first, by the time filtered on, else when made; kind pane with content_changed {} lists the workspaces by when their layout last changed."}, d.find)
 	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Write text tiles, a list of items applied in order, a verdict per item. An item with id replaces that text tile's whole body (through a link, its target's), claiming the version you read or, with none, the one on disk now. An item with grid and no id creates a 1x1 text tile there, its name the body's first line, at the first free cell or at or below the cell named in near."}, d.writeText)
 	mcp.AddTool(s, &mcp.Tool{Name: "rename", Description: "Rename url, shell, well or pane tiles, a list of items applied in order, a verdict per item. A text tile's name is its first line, so write_text renames it."}, d.rename)
@@ -151,6 +151,14 @@ func (d *door) readTile(ctx context.Context, id string) (TileOut, error) {
 		out.URL = content.GetUrlString()
 	case rpc.KindShell:
 		out.ShellSession = rpc.ShellSession(content)
+	case rpc.KindPane:
+		data, basis, err := d.readBody(ctx, content.GetId())
+		if err != nil {
+			return TileOut{}, refusal(err)
+		}
+		if out.Layout, err = layoutOf(content.GetId(), []byte(data), basis.Version); err != nil {
+			return TileOut{}, err
+		}
 	}
 	return out, nil
 }

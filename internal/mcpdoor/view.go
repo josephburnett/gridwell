@@ -53,6 +53,7 @@ type TileOut struct {
 	BodyStamp    string  `json:"body_stamp,omitempty" jsonschema:"a plugin's name for the body's bytes, its claim in place of a version"`
 	URL          string  `json:"url,omitempty"`
 	ShellSession string  `json:"shell_session,omitempty"`
+	Layout       *Layout `json:"layout,omitempty" jsonschema:"a pane tile's panes"`
 }
 
 // FindOut answers find. Skipped names every namespace that did not answer,

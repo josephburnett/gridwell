@@ -360,7 +360,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   focus, and marks yours the one holding the agent's shell live; it chooses
   none, and no screen is an empty list. What a grid holds and has selected
   is the grid's, from `read_grid`, so "here" is a focused pane's grid or
-  pane tile and "these" is that grid's selection. A new tmux session carries
+  pane tile and "these" is that grid's selection; `read_tiles` on a pane
+  tile answers the panes its layout holds, decoded by the client's own
+  decoder (`pane.DecodeLayout`). A new tmux session carries
   its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
   and the shell door, the one place a socket and its session are both in
   hand, joins the two (`Server.ShellHolder`).
