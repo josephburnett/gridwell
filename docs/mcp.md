@@ -72,26 +72,17 @@ empty list.
 | `place` | `items`: `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same namespace. |
 | `copy` | `items`: `id`, `grid`, `at`, `link` | Lands in `grid` or the tile's own, at `at` or beside the tile. `link: false` is a deep copy; across namespaces a source that does not answer lands as a link. `link: true` is a link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
 | `delete` | `items`: `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
-| `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's wells, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". A pane inside a pane tile does not show it (see Pointing). |
+| `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's wells, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". Every pane showing the grid shows it, inside a pane tile too. |
 
 ## Pointing
 
 When the user says "this", "here" or "these", they mean what is in front of
-them: in the focused pane of their screen, the tiles that pane shows selected,
-or the grid itself when it shows none. `pointed` answers which (`points_at` is
-`selection` or `grid`), with the selected tiles as `read_grid` answers them.
-
-Outside a pane tile, a pane shows the grid's own selection, the one
-`read_grid` answers and `select` writes. Inside a pane tile, each pane keeps
-its own selection in the pane tile's layout, so two panes on one grid can hold
-two sets, and the grid's selection is not what that pane shows. `pointed` then
-answers the pane's own set and names the pane tile (`pane_tile`);
-`selection_in` says which it is (`grid` or `pane tile`). A pane inside a text
-or url tile shows no selection, so it points at the grid that tile sits in.
-
-`select` cannot set a pane's own selection inside a pane tile: the open
-window holds that layout, and a write from outside would make its next change
-a conflict. Tell the user which tiles instead.
+them: in the focused pane of their screen, the grid's selection, or the grid
+itself when it has none. `pointed` answers which (`points_at` is `selection`
+or `grid`), with the selected tiles as `read_grid` answers them. Every pane
+showing a grid shows its one selection, inside a pane tile too. A pane inside
+a text or url tile shows no selection, so it points at the grid that tile
+sits in.
 
 Which screen is theirs, in this order:
 

@@ -2,9 +2,8 @@ package mcpdoor
 
 // Pointing: how an agent learns what the user means by "here" and "these".
 // The node holds each client session's view, open or away (interest.Book); a
-// session is chosen, its focused pane's grid read, and the set that pane shows, which
-// pane.SelectionTarget places on the grid row or in the pane tile's layout,
-// is what the user has in hand.
+// session is chosen, its focused pane's grid read, and that grid row's set is
+// what the user has in hand.
 
 import (
 	"context"
@@ -16,7 +15,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/interest"
 )
 
@@ -51,7 +49,7 @@ type Pane struct {
 	Focused bool     `json:"focused,omitempty"`
 	// PaneTile is the innermost pane tile of the session's level: every pane
 	// of the view is one of its layout's.
-	PaneTile string `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout this pane is part of, when the window is inside one; its selection is then the layout's, not the grid's"`
+	PaneTile string `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout this pane is part of, when the window is inside one"`
 }
 
 // PointedOut answers pointed.
@@ -71,9 +69,8 @@ type PointedOut struct {
 	Others   []Session `json:"others,omitempty" jsonschema:"every other screen showing the node, the most recently changed first"`
 	Pane     string    `json:"pane"`
 	Content  string    `json:"content,omitempty" jsonschema:"the content tile the focused pane is inside, when it is inside one"`
-	PaneTile string    `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout holds the focused pane's selection, when it is inside one"`
+	PaneTile string    `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout holds the focused pane, when it is inside one"`
 	Grid     Grid      `json:"grid"`
-	SetIn    string    `json:"selection_in,omitempty" jsonschema:"where the pane's selection is held: grid (the grid row's, which select writes) or pane tile (the pane's own in the layout, which select cannot write); empty in a content tile, which has none"`
 	Points   string    `json:"points_at" jsonschema:"selection when the pane shows one, else grid"`
 	Tiles    []Tile    `json:"tiles,omitempty" jsonschema:"the selected tiles, as read_grid answers them"`
 }
@@ -153,9 +150,10 @@ func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointed
 		return nil, PointedOut{}, err
 	}
 	out.PaneTile = innermost(s.View)
-	sel, err := d.shownSet(ctx, s, p, g.Grid.Selection, &out)
-	if err != nil {
-		return nil, PointedOut{}, err
+	// A pane inside a content tile shows no selection.
+	var sel []string
+	if p.GetContentId() == "" {
+		sel = g.Grid.Selection
 	}
 	out.Grid, out.Points = g.Grid, "grid"
 	if len(sel) > 0 {
@@ -167,37 +165,6 @@ func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointed
 		}
 	}
 	return nil, out, nil
-}
-
-// shownSet is the selection pane p of session s shows, read where
-// pane.SelectionTarget places it: the grid row's set (row), or the pane's own
-// in the pane tile's layout, found under its layout id at the place the view
-// names. A layout that has not caught up with the view is not loaded yet.
-func (d *door) shownSet(ctx context.Context, s interest.Session, p *pb.ViewPane, row []string, out *PointedOut) ([]string, error) {
-	place := pane.StackAt(p.GetAnchor(), p.GetPath(), p.GetContentId())
-	switch place.SelectionTarget(out.PaneTile != "") {
-	case pane.SelectionRow:
-		out.SetIn = "grid"
-		return row, nil
-	case pane.SelectionNone:
-		return nil, nil
-	}
-	out.SetIn = "pane tile"
-	data, _, err := d.readBody(ctx, out.PaneTile)
-	if err != nil {
-		return nil, refusal(err)
-	}
-	prefix := pane.ChainPrefix(out.PaneTile)
-	tree, err := pane.DecodeLayout([]byte(data), func(id string) string { return prefix + id }, "")
-	if err != nil {
-		return nil, fmt.Errorf("refused: pane tile %s's layout could not be read: %v", out.PaneTile, err)
-	}
-	lp := tree.FindPane(p.GetLayoutPaneId())
-	if p.GetLayoutPaneId() == "" || lp == nil || lp.Anchor() != p.GetAnchor() ||
-		!slices.Equal(lp.Path(), p.GetPath()) || lp.ContentID() != p.GetContentId() {
-		return nil, fmt.Errorf("not loaded: session %s's focused pane is not yet where pane tile %s's layout has it; ask again", s.ID, out.PaneTile)
-	}
-	return lp.Selection, nil
 }
 
 // choose is the pointing rule: the session named, open or away; else, among

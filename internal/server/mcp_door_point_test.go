@@ -121,10 +121,9 @@ func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
 }
 
 // paneTileView is a desktop session inside a pane tile whose layout holds two
-// panes on root, each with its own set: the first pane's sel1, the focused
-// second's sel2. The layout is written and the view said as the client does
-// both, through pane.EncodeLayout and pane.View.
-func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.Client, *gridwellv1.Tile) {
+// panes on root, the second focused. The layout is written and the view said
+// as the client does both, through pane.EncodeLayout and pane.View.
+func paneTileView(t *testing.T, f *shellDoorFixture) (*rpc.Client, *gridwellv1.Tile) {
 	t.Helper()
 	ctx := context.Background()
 	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
@@ -132,7 +131,6 @@ func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.
 		t.Fatal(err)
 	}
 	tr := pane.TreeAtPlace("w1:", f.root, nil, rpc.ViewOf(0, 0, 1))
-	first := tr.FocusedPane()
 	second, err := tr.Split(pane.Vertical)
 	if err != nil {
 		t.Fatal(err)
@@ -140,8 +138,6 @@ func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.
 	if err := tr.SetFocus(second.ID); err != nil {
 		t.Fatal(err)
 	}
-	first.Select(sel1)
-	second.Select(sel2)
 	data, _, err := pane.EncodeLayout(tr, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -161,60 +157,25 @@ func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.
 	return cl, pt
 }
 
-// Inside a pane tile the focused pane's set is its own in the layout, not the
-// grid row's: pointed answers that set, and names the pane tile on every pane.
-func TestMCPPointedInsideAPaneTileIsThatPanesSet(t *testing.T) {
+// Inside a pane tile the selection is the grid row's, as everywhere: a select
+// writes the row, and pointed answers it for the focused pane (2026-10-18).
+func TestMCPPointedInsideAPaneTileIsTheGridRowsSet(t *testing.T) {
 	f := newShellDoorFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
-	a := mkText(t, s, f.root, "a")
+	mkText(t, s, f.root, "a")
 	b := mkText(t, s, f.root, "b")
-	c := mkText(t, s, f.root, "c")
+	cl, pt := paneTileView(t, f)
 	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.ID}}, &g)
-	cl, pt := paneTileView(t, f, []string{c.ID}, []string{b.ID})
+	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{b.ID}}, &g)
+	if !slices.Equal(g.Grid.Selection, []string{b.ID}) {
+		t.Fatalf("select inside a pane tile left the row at %v, want [%s]", g.Grid.Selection, b.ID)
+	}
 
 	var p mcpdoor.PointedOut
 	call(t, s, "pointed", nil, &p)
-	if p.Session != cl.Session() || p.PaneTile != pt.Id || p.SetIn != "pane tile" || p.Points != "selection" ||
-		len(p.Tiles) != 1 || p.Tiles[0].ID != b.ID {
-		t.Fatalf("pointed = %+v, want the focused pane's own set [%s] in pane tile %s, not the row's [%s]", p, b.ID, pt.Id, a.ID)
+	if p.Session != cl.Session() || p.PaneTile != pt.Id || p.Points != "selection" || len(p.Tiles) != 1 || p.Tiles[0].ID != b.ID {
+		t.Fatalf("pointed = %+v, want the grid row's set [%s] in pane tile %s", p, b.ID, pt.Id)
 	}
-	for _, sp := range p.Panes {
-		if sp.PaneTile != pt.Id {
-			t.Errorf("pointed pane %+v, want it inside pane tile %s", sp, pt.Id)
-		}
-	}
-}
-
-// A pane inside a pane tile with no set of its own points at the grid, though
-// the grid row has a set: the row's set is not the one that pane shows.
-func TestMCPPointedInsideAPaneTileIgnoresTheRowSet(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
-	s := agentAt(t, f.hs, nil)
-	a := mkText(t, s, f.root, "a")
-	var g mcpdoor.GridOut
-	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.ID}}, &g)
-	paneTileView(t, f, []string{a.ID}, nil)
-
-	var p mcpdoor.PointedOut
-	call(t, s, "pointed", nil, &p)
-	if p.Points != "grid" || p.Grid.ID != f.root || len(p.Tiles) != 0 || p.SetIn != "pane tile" {
-		t.Fatalf("pointed = %+v, want the grid %s itself, the row's set not being this pane's", p, f.root)
-	}
-}
-
-// A view naming a pane the layout does not hold where the view has it is
-// ahead of the layout: not loaded, never the row's set in its place.
-func TestMCPPointedInsideAPaneTileAheadOfItsLayoutIsNotLoaded(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
-	s := agentAt(t, f.hs, nil)
-	cl, pt := paneTileView(t, f, nil, nil)
-	say := &gridwellv1.SetViewRequest{Label: "desktop", PaneTiles: []string{pt.Id},
-		Panes: []*gridwellv1.ViewPane{{Id: "w1:p9", Anchor: f.root, GridId: f.root, Focused: true, LayoutPaneId: "p9"}}}
-	if err := cl.SetView(context.Background(), say); err != nil {
-		t.Fatal(err)
-	}
-	refusedWith(t, callRaw(t, s, "pointed", nil), "not loaded:")
 }
 
 // A session named is the one answered; unnamed, the one whose view changed
