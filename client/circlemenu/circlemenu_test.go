@@ -42,7 +42,7 @@ func TestPlusItems(t *testing.T) {
 		if last := items[len(items)-1]; last.ID != DumpID || last.Label != "Dump logs" || last.State != StateNone {
 			t.Errorf("PlusItems(%v) ends with %+v, want a dump row that names no state", cur, last)
 		}
-		if clr := items[len(items)-2]; clr.ID != ClearSelectionID || clr.Label != "Clear selection" || clr.State != StateNone {
+		if clr := items[len(items)-2]; clr.ID != ClearSelectionID || clr.Label != "Clear selections" || clr.State != StateNone {
 			t.Errorf("PlusItems(%v) has %+v above the dump, want the clear, naming no state", cur, clr)
 		}
 		checked := 0

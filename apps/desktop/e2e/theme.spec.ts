@@ -82,7 +82,7 @@ test('the bar circle right-clicks to a theme menu; light survives a reload', asy
     expect(labels, 'both themes, the selection clear and the dump are offered').toEqual([
       'Dark mode',
       'Light mode',
-      'Clear selection',
+      'Clear selections',
       'Dump logs',
     ]);
     const checked = await electronApp.evaluate(() =>

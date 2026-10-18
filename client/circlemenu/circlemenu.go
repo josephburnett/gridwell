@@ -76,7 +76,7 @@ func PlusItems(cur theme.Theme) []Item {
 		out = append(out, Item{ID: t.String(), Label: t.Label(), State: stateOf(t == cur)})
 	}
 	return append(out,
-		Item{ID: ClearSelectionID, Label: "Clear selection"},
+		Item{ID: ClearSelectionID, Label: "Clear selections"},
 		Item{ID: DumpID, Label: "Dump logs"})
 }
 

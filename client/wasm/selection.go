@@ -151,7 +151,7 @@ func (a *App) clearSelection() {
 	}
 }
 
-// clearAllSelections is the + menu's Clear selection: the node empties every
+// clearAllSelections is the + menu's Clear selections: the node empties every
 // grid's set it and its far nodes hold, each told back as SelectionChanged,
 // and the open pane tiles' own sets, which live in their layouts, are emptied
 // here for the layout persister to write.

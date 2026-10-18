@@ -175,7 +175,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   and goes on over each live connection to the far node, whose sets are its
   rows; asked over its connection door, a node clears its own and forwards
   nothing (`router.clearAllSelections`). The + circle's right-click offers
-  it as Clear selection, above Dump logs, which stays the bottom row; the
+  it as Clear selections, above Dump logs, which stays the bottom row; the
   client empties the per-pane sets in its open pane tiles' layouts too
   (`pane.Levels.UnselectAll`) (2026-10-17). It bumps no version, the grid's
   or any tile's, so a select never refuses a text save. A tap adds or

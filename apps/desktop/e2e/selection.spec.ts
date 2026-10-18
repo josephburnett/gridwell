@@ -8,7 +8,7 @@ import type { GridwellDriver } from './driver';
 // the gesture to the row the node holds and back to the border every view
 // draws: shift + left-click toggles, shift + left-drag sweeps a band and takes
 // only the tiles wholly inside it, Esc with nothing in flight clears, the +
-// menu's Clear selection empties every set, and inside a pane tile the set is
+// menu's Clear selections empties every set, and inside a pane tile the set is
 // the pane's, in the layout blob.
 
 async function textTile(gw: GridwellDriver, cx: number, cy: number): Promise<Tile> {
@@ -277,9 +277,9 @@ test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and
   expect(await onNode(gw, f.gridID), 'the grid row is untouched').toEqual([]);
 });
 
-// Clear selection, the + circle's right-click row, empties every grid's set
+// Clear selections, the + circle's right-click row, empties every grid's set
 // the node holds, not only the one on screen.
-test('Clear selection empties every grid\'s set', async ({ electronApp, gw, window }) => {
+test('Clear selections empties every grid\'s set', async ({ electronApp, gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -296,7 +296,7 @@ test('Clear selection empties every grid\'s set', async ({ electronApp, gw, wind
   await expectSelection(gw, window, f.id, f.gridID, [a.id], 'selected here');
   expect(await onNode(gw, well.childGridId!), 'selected in the well').toEqual([b.id]);
 
-  const picked = pickFromNativeMenu(electronApp, 'Clear selection');
+  const picked = pickFromNativeMenu(electronApp, 'Clear selections');
   await gw.rightClickCircle();
   await picked;
   await expectSelection(gw, window, f.id, f.gridID, [], 'cleared here');
@@ -305,7 +305,7 @@ test('Clear selection empties every grid\'s set', async ({ electronApp, gw, wind
 
 // Inside a pane tile the pane's own set is the layout's, which the node's
 // clear does not reach: the client empties it, and the layout is written.
-test('Clear selection empties a pane\'s own set inside a pane tile', async ({ electronApp, gw, window }) => {
+test('Clear selections empties a pane\'s own set inside a pane tile', async ({ electronApp, gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
@@ -337,7 +337,7 @@ test('Clear selection empties a pane\'s own set inside a pane tile', async ({ el
   };
   await expect.poll(sels, { message: 'in the layout', timeout: 10_000 }).toHaveLength(1);
 
-  const picked = pickFromNativeMenu(electronApp, 'Clear selection');
+  const picked = pickFromNativeMenu(electronApp, 'Clear selections');
   await gw.rightClickCircle();
   await picked;
   await expect.poll(() => painted(window, inner.id), { message: 'cleared inside' }).toEqual([]);
