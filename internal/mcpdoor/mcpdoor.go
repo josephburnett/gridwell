@@ -35,7 +35,8 @@ the trash. Shells are not reachable here. When the user says "here", they
 mean the grid of the focused pane, or the pane tile they are in, on their
 screen: sessions lists the screens showing this node, and marks yours, the
 one showing the shell you run in. "These" is that grid's selection, from
-read_grid.`
+read_grid. A screen on another node is not listed, so the workspaces used
+lately come from find with kind pane and content_changed {}.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
 // the browser codec does. node is the node's own id, the frame dead links are
@@ -47,7 +48,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "Every screen showing this node, the most recently changed first: its id, label, when its view last changed, when it went away (a phone's browser in the background), the pane tiles it is inside, outermost first, and each pane's place, the grid it shows, the content tile it is inside and whether it has focus. The screen showing the shell this agent runs in is marked yours. An empty list is no screen."}, d.sessions)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the session a shell names, or the grid a well holds. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
-	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its wells too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open, and selected (only tiles in their grid's selection). With a filter the query may be empty: it then lists what passes, newest first."}, d.find)
+	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its wells too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open,, selected (only tiles in their grid's selection) and kind (text, url, shell, well or pane). With a filter the query may be empty: it then lists what passes, newest first, by the time filtered on, else when made; kind pane with content_changed {} lists the workspaces by when their layout last changed."}, d.find)
 	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Write text tiles, a list of items applied in order, a verdict per item. An item with id replaces that text tile's whole body (through a link, its target's), claiming the version you read or, with none, the one on disk now. An item with grid and no id creates a 1x1 text tile there, its name the body's first line, at the first free cell or at or below the cell named in near."}, d.writeText)
 	mcp.AddTool(s, &mcp.Tool{Name: "rename", Description: "Rename url, shell, well or pane tiles, a list of items applied in order, a verdict per item. A text tile's name is its first line, so write_text renames it."}, d.rename)
 	mcp.AddTool(s, &mcp.Tool{Name: "place", Description: "Move or resize tiles, within a grid or to another grid of the same namespace, a list of items applied in order, a verdict per item; each claims the placement its tile has now."}, d.place)
@@ -164,6 +165,7 @@ type findIn struct {
 	Modified       *Span  `json:"modified,omitempty" jsonschema:"keep only the tiles last written by anything (a move, a framing, content) in this range"`
 	ContentChanged *Span  `json:"content_changed,omitempty" jsonschema:"keep only the tiles whose content (a body, an address, a name) last changed in this range"`
 	Selected       bool   `json:"selected,omitempty" jsonschema:"keep only the tiles in their grid's selection"`
+	Kind           string `json:"kind,omitempty" jsonschema:"keep only the tiles of this kind: text, url, shell, well or pane"`
 }
 
 // Span is a time range, each end an RFC 3339 time; an empty end is open.
@@ -196,7 +198,7 @@ func (s *Span) rangeOf(name string) (*pb.TimeRange, error) {
 
 func (d *door) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (*mcp.CallToolResult, FindOut, error) {
 	req := &pb.SearchRequest{Query: in.Query, Scope: in.Scope, Limit: in.Limit,
-		GridId: in.Grid, Recurse: in.Recurse, Selected: in.Selected}
+		GridId: in.Grid, Recurse: in.Recurse, Selected: in.Selected, Kind: in.Kind}
 	var err error
 	if req.Created, err = in.Created.rangeOf("created"); err != nil {
 		return nil, FindOut{}, err

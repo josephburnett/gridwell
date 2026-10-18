@@ -200,12 +200,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   framing, a freeze, content); `content_at`, when its content last changed,
   written only by the version bump (`bumpTileVersion`) and read as
   `created_at` until then. Search filters on them, on a grid (`grid_id`,
-  `recurse` through owned wells, never a link) and on the selection; the
-  filters AND, an empty query with one lists what passes, newest first, and
+  `recurse` through owned wells, never a link), on the selection, and on
+  the kind (text, url, shell, well or pane, 2026-10-18; an unknown one is
+  refused); the filters AND, an empty query with one lists what passes, newest first, and
   they are the node's, applied to the rows it holds (`store.tileFilter`),
   never a plugin's: the plugin answers the text, and the node keeps the hits
   whose rows pass (`pluginhost` `filterHits`). An entry with no row has no
-  time and is in no selection, and a plugin row's times are the node's
+  time and is in no selection but has its kind, and a plugin row's times are the node's
   (minted, touched), not the source's.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One

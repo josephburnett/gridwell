@@ -183,6 +183,10 @@ func (f tileFilter) sql() (string, []any) {
 			args = append(args, r.r.GetTo())
 		}
 	}
+	if f.req.Kind != "" {
+		conds = append(conds, "t.kind = ?")
+		args = append(args, f.req.Kind)
+	}
 	if f.req.Selected {
 		conds = append(conds, `instr(',' || (SELECT g.selection FROM grids g WHERE g.id = t.grid_id) || ',',
 			',' || t.id || ',') > 0`)
@@ -281,7 +285,7 @@ type SearchRow struct {
 	Key        string
 }
 
-// SearchPassing answers which of ids pass req's time and selection filters,
+// SearchPassing answers which of ids pass req's kind, time and selection filters,
 // each with the time an empty query orders by. A plugin's grid scope is its
 // caller's, the grids being contexts the plugin names.
 func (n *Namespace) SearchPassing(ids []int64, req *gridwellv1.SearchRequest) (map[int64]int64, error) {
@@ -312,8 +316,8 @@ func (n *Namespace) SearchPassing(ids []int64, req *gridwellv1.SearchRequest) (m
 	return out, err
 }
 
-// SearchRows lists this namespace's rows passing req's time and selection
-// filters, newest first, at most limit: all an empty query with no grid can
+// SearchRows lists this namespace's rows passing req's kind, time and
+// selection filters, newest first, at most limit: all an empty query with no grid can
 // find, since an entry with no row has no time and is in no selection.
 func (n *Namespace) SearchRows(req *gridwellv1.SearchRequest, limit int) ([]SearchRow, error) {
 	f := tileFilter{ns: n.ns, req: req}

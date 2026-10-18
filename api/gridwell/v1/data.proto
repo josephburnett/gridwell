@@ -498,6 +498,9 @@ message SearchRequest {
   TimeRange content_changed = 8;
   // selected keeps the hits in their grid's selection, the node fact.
   bool selected = 9;
+  // kind keeps the hits of this kind: text, url, shell, well or pane. An
+  // entry with no row has its kind, so it passes or fails like a row.
+  string kind = 10;
 }
 
 // TimeRange is an inclusive range of unix seconds; 0 leaves that end open.
