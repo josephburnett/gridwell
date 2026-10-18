@@ -5,11 +5,11 @@ import { test, expect } from './fixtures';
 import { homeEnv } from './homes';
 import { tileAt } from './oracle';
 
-// A link to a shell attaches the session its target names (shellconn.SessionKey),
-// so a link to a copy shares the copy's source's session like the copy does:
-// going live on the link takes the session over from the source, which pauses on
+// A link to a shell attaches the tmux its target names (shellconn.TmuxKey),
+// so a link to a copy shares the copy's source's tmux like the copy does:
+// going live on the link takes the tmux over from the source, which pauses on
 // a preview of its own, and going live on the source takes it back. The node keys
-// its one attached client by session, so a client that keyed the link by its
+// its one attached client by tmux, so a client that keyed the link by its
 // target's id would keep the source's terminal open beside it until the node
 // evicted that socket, and the source would end on the evicted socket's exit
 // rather than a takeover's close.
@@ -23,9 +23,9 @@ function tmuxClients(home: string): string[] {
   return r.status === 0 ? r.stdout.split('\n').filter((l) => l.trim() !== '') : [];
 }
 
-test('a link to a copy takes over its source session, and the source takes it back', async ({ gw, home, window }) => {
+test('a link to a copy takes over the tmux of its source, and the source takes it back', async ({ gw, home, window }) => {
   // An evicted socket is the one way a terminal ends with an exit while its
-  // session lives; a takeover closes instead.
+  // tmux lives; a takeover closes instead.
   const exits: string[] = [];
   window.on('console', (msg) => {
     if (msg.text().startsWith('[shellstream] exit ')) exits.push(msg.text());
@@ -67,12 +67,12 @@ test('a link to a copy takes over its source session, and the source takes it ba
   await gw.focusPane(await pane(right.id));
   await gw.copyTileCell(cx, cy, cx + 2, cy);
   const copy = (await shellAt(cx + 2, cy))!;
-  expect(copy.shellSession, 'the copy names its source session').toBe(source.id);
+  expect(copy.shellTmux, "the copy names its source's tmux").toBe(source.id);
   await gw.linkTileCell(cx + 2, cy, cx + 4, cy);
   const link = (await shellAt(cx + 4, cy))!;
   expect(link.linkTargetId, 'the link names the copy').toBe(copy.id);
 
-  // Going live on the link takes the session over.
+  // Going live on the link takes the tmux over.
   await gw.descendCell(cx + 4, cy);
   await expect
     .poll(shellViews, { message: 'the link holds the one live terminal', timeout: 15_000 })
@@ -111,7 +111,7 @@ test('a link to a copy takes over its source session, and the source takes it ba
   expect(await shellViews()).toEqual({ [right.id]: copy.id });
   expect(exits, 'the source closed by takeover again').toEqual([]);
 
-  // End the session so tmux never hangs the harness close.
+  // End the tmux so tmux never hangs the harness close.
   await window.keyboard.type('exit');
   await window.keyboard.press('Enter');
   await expect.poll(shellViews, { timeout: 15_000 }).toEqual({});

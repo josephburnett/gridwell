@@ -287,7 +287,7 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.T
 }
 
 // CreateScratchShell is CreateScratchURL's shell twin. Unlike a placed shell
-// it is deleted on ascent, which kills the tmux session, so nothing persists.
+// it is deleted on ascent, which kills the tmux, so nothing persists.
 func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error) {
 	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {
 		res, err := tx.ExecContext(ctx, `

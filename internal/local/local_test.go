@@ -176,9 +176,9 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 	}
 }
 
-func TestShellSessionAlive_NoShellHost(t *testing.T) {
+func TestShellTmuxAlive_NoShellHost(t *testing.T) {
 	p := openPlugin(t) // shell is nil
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "1"})
+	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestShellSessionAlive_NoShellHost(t *testing.T) {
 	}
 }
 
-// fakeStreamer is a shellsvc.Streamer stub: it reports a session is alive but
+// fakeStreamer is a shellsvc.Streamer stub: it reports a tmux is alive but
 // never opens a real PTY, so the manager can be exercised without tmux. A
 // non-nil probeErr is the tmux that cannot be asked.
 type fakeStreamer struct {
@@ -195,13 +195,13 @@ type fakeStreamer struct {
 	probeErr error
 }
 
-func (f *fakeStreamer) OpenSession(string, tmux.Mode, uint16, uint16) (shellsvc.Session, error) {
+func (f *fakeStreamer) Open(string, tmux.Mode, uint16, uint16) (shellsvc.Attachment, error) {
 	return nil, nil
 }
-func (f *fakeStreamer) HasSession(string) (bool, error)     { return f.alive, f.probeErr }
-func (f *fakeStreamer) Kill(string) error                   { return nil }
-func (f *fakeStreamer) ListLiveSessions() ([]string, error) { return nil, nil }
-func (f *fakeStreamer) PaneCommand(string) (string, error)  { return "", nil }
+func (f *fakeStreamer) Has(string) (bool, error)           { return f.alive, f.probeErr }
+func (f *fakeStreamer) Kill(string) error                  { return nil }
+func (f *fakeStreamer) ListLive() ([]string, error)        { return nil, nil }
+func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
 
 // probedShell is a home hosting s, plus the id of one shell tile to probe.
 func probedShell(t *testing.T, s shellsvc.Streamer) (*local.Plugin, string) {
@@ -220,9 +220,9 @@ func probedShell(t *testing.T, s shellsvc.Streamer) (*local.Plugin, string) {
 	return p, sh.Tile.Id
 }
 
-func TestShellSessionAlive_WithShellHost(t *testing.T) {
+func TestShellTmuxAlive_WithShellHost(t *testing.T) {
 	p, id := probedShell(t, &fakeStreamer{alive: true})
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: id})
+	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: id})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,12 +231,12 @@ func TestShellSessionAlive_WithShellHost(t *testing.T) {
 	}
 }
 
-// A tmux that cannot be asked is not a dead session. Answering dead would
+// A tmux that cannot be asked is not a dead tmux. Answering dead would
 // hide the refresh affordance and say nothing; the error is the answer, and
 // the client's probe-failure notice is what reads it.
-func TestShellSessionAlive_InfrastructureErrorSurfaces(t *testing.T) {
+func TestShellTmuxAlive_InfrastructureErrorSurfaces(t *testing.T) {
 	p, id := probedShell(t, &fakeStreamer{alive: true, probeErr: errors.New("tmux: socket refused")})
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: id})
+	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: id})
 	if err == nil || !strings.Contains(err.Error(), "socket refused") {
 		t.Fatalf("resp=%v err=%v; an infrastructure failure must surface, not read as dead", resp, err)
 	}

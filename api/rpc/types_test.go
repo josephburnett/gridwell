@@ -243,7 +243,7 @@ func TestHomeRow(t *testing.T) {
 // TestContentID: the one resolution point for read-through. A leaf link's
 // content operations key by its target; an owned tile keys by itself. Every
 // client content path (body fetch, edit buffer, save routing, preview fetch,
-// shell session, pane layout) reads this, so a link and its target share one
+// shell's tmux, pane layout) reads this, so a link and its target share one
 // content fact by construction.
 func TestContentID(t *testing.T) {
 	link := &pb.Tile{Id: "b/9", Kind: KindText, LinkTargetId: "a/42"}

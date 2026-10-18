@@ -8,7 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A tmux session lives on the node that started it, so a shell copied into
+// A tmux lives on the node that started it, so a shell copied into
 // another namespace cannot share it there: what the holding node can reach,
 // you can link, and the copy is a link to its source, at the top of the
 // gesture and inside a deep-copied well alike.

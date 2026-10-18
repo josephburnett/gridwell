@@ -54,3 +54,14 @@ search .*location\.search|.*Get\("search"\)|.*searchParams|.*sort\.Search|.*goog
 # move tool). A pane's place, the noun, stays.
 placetile
 auto-place
+# "session" in the tmux sense — a shell tile names a tmux (rpc.ShellTmux,
+# ShellTmuxAlive, Tile.shell_tmux); a session is one client screen only.
+# The tiles.shell_session column keeps its name, since a column is never
+# renamed.
+shell_session internal/local/store/|ARCHITECTURE\.md:.*tiles\.shell_session
+shellsession
+shellsessionalive
+sessionkey
+session_left
+session_gone
+sessiongone

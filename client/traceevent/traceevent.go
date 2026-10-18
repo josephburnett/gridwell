@@ -222,10 +222,10 @@ func ShellClose(paneID, tileID string, freeze bool) Event {
 }
 
 // ShellExit is the far end going away, which is not this client closing the
-// stream: sessionGone says the tmux session went with it.
-func ShellExit(paneID, tileID, message string, sessionGone bool) Event {
-	if sessionGone {
-		message += " (session gone)"
+// stream: tmuxGone says the tmux went with it.
+func ShellExit(paneID, tileID, message string, tmuxGone bool) Event {
+	if tmuxGone {
+		message += " (tmux gone)"
 	}
 	return Event{Src: "shell", Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
 }

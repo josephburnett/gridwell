@@ -161,7 +161,7 @@ type App struct {
 	// band is a shift + left-drag sweep in flight; see selection.go.
 	band *bandState
 
-	// shellAlive caches the ShellSessionAlive probe by session (missing: unknown);
+	// shellAlive caches the ShellTmuxAlive probe by tmux (missing: unknown);
 	// shellAliveProbing single-flights it.
 	shellAlive        map[string]bool
 	shellAliveProbing map[string][]func(alive bool)
@@ -666,7 +666,7 @@ func main() {
 	app.shells = shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnOtherBuild: gate.OtherBuild, Session: app.cl.Session()}),
 		func(key string, data []byte) { app.onShellData(key, data) },
-		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.SessionGone) },
+		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.TmuxGone) },
 	)
 
 	app.installCanvasInput()

@@ -1,10 +1,10 @@
-// Package shellsvc owns the tmux-backed session lifecycle. It belongs to the
+// Package shellsvc owns the tmux lifecycle. It belongs to the
 // namespace that owns the shell tiles, so live bytes cross the namespace
 // interface through OpenShell and a shell in a remote namespace streams over
-// the same path. Everything here is keyed by session, never by tile: a key is
-// the namespace-local id of the tile that started the session, which any
-// number of tiles may name (rpc.ShellSession), and tmux.SessionName maps it to
-// a session name.
+// the same path. Everything here is keyed by tmux, never by tile: a key is
+// the namespace-local id of the tile that started the tmux, which any
+// number of tiles may name (rpc.ShellTmux), and tmux.Name maps it to
+// a tmux name.
 package shellsvc
 
 import (
@@ -27,14 +27,14 @@ const (
 	DefaultRows = 24
 )
 
-// ErrSessionGone is a session that was started and is no longer alive. Only
+// ErrTmuxGone is a tmux that was started and is no longer alive. Only
 // the previews remain, so the caller hides the refresh button rather than
-// fabricate a fresh session behind them.
-var ErrSessionGone = errors.New("shell session no longer alive")
+// fabricate a fresh tmux behind them.
+var ErrTmuxGone = errors.New("the shell's tmux is no longer alive")
 
-// Session's Output is a channel so a takeover or detach returns at once,
+// Attachment's Output is a channel so a takeover or detach returns at once,
 // leaving no goroutine orphaned on a PTY syscall.
-type Session interface {
+type Attachment interface {
 	Output() <-chan []byte
 	Write(p []byte) (int, error)
 	Resize(cols, rows uint16) error
@@ -44,10 +44,10 @@ type Session interface {
 
 // Streamer is the tmux and PTY backend, stubbed in tests.
 type Streamer interface {
-	OpenSession(key string, mode tmux.Mode, cols, rows uint16) (Session, error)
-	HasSession(key string) (bool, error)
+	Open(key string, mode tmux.Mode, cols, rows uint16) (Attachment, error)
+	Has(key string) (bool, error)
 	Kill(key string) error
-	ListLiveSessions() ([]string, error)
+	ListLive() ([]string, error)
 	PaneCommand(key string) (string, error)
 }
 
@@ -58,22 +58,22 @@ func NewLive(ctrl *tmux.Controller) Streamer { return &liveStreamer{ctrl: ctrl} 
 
 type liveStreamer struct{ ctrl *tmux.Controller }
 
-func (l *liveStreamer) OpenSession(key string, mode tmux.Mode, cols, rows uint16) (Session, error) {
+func (l *liveStreamer) Open(key string, mode tmux.Mode, cols, rows uint16) (Attachment, error) {
 	argv := l.ctrl.Args(key, mode, cols, rows, "")
 	if len(argv) == 0 {
-		return nil, fmt.Errorf("shellsvc: empty tmux argv for session %s mode %v", key, mode)
+		return nil, fmt.Errorf("shellsvc: empty tmux argv for tmux %s mode %v", key, mode)
 	}
 	// ctrl.Env carries the shadow-launcher PATH; see tmux.Controller.Env.
 	return shelldriver.Start(shelldriver.Config{Cols: cols, Rows: rows, BashPath: argv[0], Args: argv[1:], Env: l.ctrl.Env()})
 }
 
-func (l *liveStreamer) HasSession(key string) (bool, error)    { return l.ctrl.HasSession(key) }
-func (l *liveStreamer) Kill(key string) error                  { return l.ctrl.KillSession(key) }
-func (l *liveStreamer) ListLiveSessions() ([]string, error)    { return l.ctrl.ListSessions() }
+func (l *liveStreamer) Has(key string) (bool, error)           { return l.ctrl.Has(key) }
+func (l *liveStreamer) Kill(key string) error                  { return l.ctrl.Kill(key) }
+func (l *liveStreamer) ListLive() ([]string, error)            { return l.ctrl.List() }
 func (l *liveStreamer) PaneCommand(key string) (string, error) { return l.ctrl.PaneCommand(key) }
 
-// Manager owns the single live PTY per session and the takeover semantics, the
-// namespace-side half of OpenShell: one attached tmux client per session,
+// Manager owns the single live PTY per tmux and the takeover semantics, the
+// namespace-side half of OpenShell: one attached tmux client per tmux,
 // whichever tile, pane, window or device asks.
 type Manager struct {
 	streamer Streamer
@@ -82,7 +82,7 @@ type Manager struct {
 }
 
 type entry struct {
-	session Session
+	att     Attachment
 	stopOld chan struct{} // closed when a takeover evicts the current holder
 }
 
@@ -93,11 +93,11 @@ func NewManager(s Streamer) *Manager {
 }
 
 // Acquire takes over an active holder: signalled to exit, its PTY reused, its
-// screen repainted. With no holder a live tmux session is attached and a dead
-// one created if allowCreate, which is false for a session that was started,
+// screen repainted. With no holder a live tmux is attached and a dead
+// one created if allowCreate, which is false for a tmux that was started,
 // where fabricating state behind its previews would be wrong. The returned channel closes
 // when a later Acquire takes over.
-func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16) (Session, chan struct{}, error) {
+func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16) (Attachment, chan struct{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if e, ok := m.active[key]; ok {
@@ -107,66 +107,66 @@ func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16) (Sess
 		// new pane's terminal would stay blank until something resized it.
 		// Bounce the winsize one row taller and back, the kernel raising
 		// SIGWINCH only on a real change. Height only, so nothing rewraps.
-		_ = e.session.Resize(cols, rows+1)
-		_ = e.session.Resize(cols, rows)
-		return e.session, e.stopOld, nil
+		_ = e.att.Resize(cols, rows+1)
+		_ = e.att.Resize(cols, rows)
+		return e.att, e.stopOld, nil
 	}
 
-	alive, err := m.streamer.HasSession(key)
+	alive, err := m.streamer.Has(key)
 	if err != nil {
-		return nil, nil, fmt.Errorf("shellsvc: probe session %s: %w", key, err)
+		return nil, nil, fmt.Errorf("shellsvc: probe tmux %s: %w", key, err)
 	}
 	mode := tmux.ModeAttach
 	if !alive {
 		if !allowCreate {
-			return nil, nil, ErrSessionGone
+			return nil, nil, ErrTmuxGone
 		}
 		mode = tmux.ModeCreate
 	}
-	sess, err := m.streamer.OpenSession(key, mode, cols, rows)
+	sess, err := m.streamer.Open(key, mode, cols, rows)
 	if err != nil {
 		return nil, nil, err
 	}
-	m.active[key] = &entry{session: sess, stopOld: make(chan struct{})}
+	m.active[key] = &entry{att: sess, stopOld: make(chan struct{})}
 	return sess, m.active[key].stopOld, nil
 }
 
-// Release closes the PTY-side session if this holder still owns the entry,
+// Release closes the PTY-side tmux if this holder still owns the entry,
 // killing the gridwell-spawned tmux client but leaving the tmux server and the
 // shell running for the next refresh, then fires onDetach. After a takeover it
-// is a no-op: the new holder keeps the session.
-func (m *Manager) Release(key string, mySession Session, myStopOld chan struct{}, onDetach func()) {
+// is a no-op: the new holder keeps the tmux.
+func (m *Manager) Release(key string, mine Attachment, myStopOld chan struct{}, onDetach func()) {
 	m.mu.Lock()
 	e, ok := m.active[key]
-	matches := ok && e.session == mySession && e.stopOld == myStopOld
+	matches := ok && e.att == mine && e.stopOld == myStopOld
 	if matches {
 		delete(m.active, key)
 	}
 	m.mu.Unlock()
 	if matches {
-		log.Printf("[shellsvc] detach session=%s", key)
-		_ = mySession.Close()
+		log.Printf("[shellsvc] detach tmux=%s", key)
+		_ = mine.Close()
 		if onDetach != nil {
 			onDetach()
 		}
 	}
 }
 
-func (m *Manager) HasSession(key string) (bool, error) { return m.streamer.HasSession(key) }
+func (m *Manager) Has(key string) (bool, error) { return m.streamer.Has(key) }
 
 // Kill is idempotent.
 func (m *Manager) Kill(key string) error { return m.streamer.Kill(key) }
 
-// PaneCommand labels a frozen shell on detach, "" when the session is gone.
+// PaneCommand labels a frozen shell on detach, "" when the tmux is gone.
 func (m *Manager) PaneCommand(key string) (string, error) { return m.streamer.PaneCommand(key) }
 
-// CleanupOrphans kills tmux sessions nothing names any more, the
-// bounded leak left by a delete that raced a crash. A per-session failure does
+// CleanupOrphans kills tmuxes nothing names any more, the
+// bounded leak left by a delete that raced a crash. A per-tmux failure does
 // not abort the pass, and the count killed comes back with the first error.
 func (m *Manager) CleanupOrphans(_ context.Context, exists func(key string) (bool, error)) (int, error) {
-	live, err := m.streamer.ListLiveSessions()
+	live, err := m.streamer.ListLive()
 	if err != nil {
-		return 0, fmt.Errorf("list live sessions: %w", err)
+		return 0, fmt.Errorf("list live tmuxes: %w", err)
 	}
 	killed := 0
 	var firstErr error
@@ -174,7 +174,7 @@ func (m *Manager) CleanupOrphans(_ context.Context, exists func(key string) (boo
 		ok, err := exists(id)
 		if err != nil {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("exists session %s: %w", id, err)
+				firstErr = fmt.Errorf("exists tmux %s: %w", id, err)
 			}
 			continue
 		}
@@ -183,7 +183,7 @@ func (m *Manager) CleanupOrphans(_ context.Context, exists func(key string) (boo
 		}
 		if err := m.streamer.Kill(id); err != nil {
 			if firstErr == nil {
-				firstErr = fmt.Errorf("kill orphan session %s: %w", id, err)
+				firstErr = fmt.Errorf("kill orphan tmux %s: %w", id, err)
 			}
 			continue
 		}

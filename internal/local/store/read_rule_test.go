@@ -214,7 +214,7 @@ func readCases() []readCase {
 		{"Find/nothing", func(ctx context.Context, s *Store, _ readSubject) {
 			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "zzzznomatch", Limit: 20}))
 		}},
-		{"ShellSessionNamers", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellSessionNamers(ctx, sub.shell)) }},
+		{"ShellTmuxNamers", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellTmuxNamers(ctx, sub.shell)) }},
 		{"WorkspaceEphemeralRefs", func(ctx context.Context, s *Store, _ readSubject) {
 			s.WorkspaceEphemeralRefs(ctx)
 		}},

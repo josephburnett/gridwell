@@ -78,17 +78,17 @@ func TestQualifyTilesEmptyChildStaysEmpty(t *testing.T) {
 	if out[0].ChildGridId != "" {
 		t.Errorf("empty child became %q", out[0].ChildGridId)
 	}
-	if out[0].ShellSession != "" {
-		t.Errorf("an unset shell session became %q", out[0].ShellSession)
+	if out[0].ShellTmux != "" {
+		t.Errorf("an unset shell_tmux became %q", out[0].ShellTmux)
 	}
 }
 
-// A copy's shell session names a tile in the same namespace, so the client
+// A copy's shell_tmux names a tile in the same namespace, so the client
 // compares it against qualified ids and it must be qualified like one.
-func TestQualifyTilesQualifiesAShellSession(t *testing.T) {
-	out := qualifyTiles("uuidA", []*pb.Tile{{Id: "6", GridId: "1", Kind: "shell", ShellSession: "5"}})
-	if out[0].ShellSession != "uuidA/5" {
-		t.Errorf("shell session = %q, want uuidA/5", out[0].ShellSession)
+func TestQualifyTilesQualifiesAShellTmux(t *testing.T) {
+	out := qualifyTiles("uuidA", []*pb.Tile{{Id: "6", GridId: "1", Kind: "shell", ShellTmux: "5"}})
+	if out[0].ShellTmux != "uuidA/5" {
+		t.Errorf("shell_tmux = %q, want uuidA/5", out[0].ShellTmux)
 	}
 }
 

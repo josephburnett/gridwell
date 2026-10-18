@@ -81,7 +81,7 @@ validation, which stops the app from launching at all.
 - No live shells. A PTY is a unix facility, so `internal/local/shelldriver`
   refuses there with `ErrShellsUnavailable`, which travels the ordinary
   shell-open path and lands on the client as the reason the shell would not
-  attach — the same route a dead tmux session takes.
+  attach — the same route a dead tmux takes.
 - No serve lock. `internal/cli/servelock.go`'s flock has no Windows
   equivalent, so nothing stops a second `gridwell serve` over the same home.
 - No `proc` plugin. It reads `/proc`; the artifact ships without it rather

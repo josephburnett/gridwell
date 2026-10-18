@@ -312,11 +312,11 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 		LinkTargetId: ContentID(src), AltText: src.AltText}
 }
 
-// ShellSession names the tmux session a shell tile attaches: the session its
+// ShellTmux names the tmux a shell tile attaches: the tmux its
 // row names, which a copy shares with its source, or else its content tile's.
-func ShellSession(t *pb.Tile) string {
-	if t.ShellSession != "" {
-		return t.ShellSession
+func ShellTmux(t *pb.Tile) string {
+	if t.ShellTmux != "" {
+		return t.ShellTmux
 	}
 	return ContentID(t)
 }

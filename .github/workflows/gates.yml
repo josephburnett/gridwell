@@ -70,7 +70,7 @@ jobs:
       # build` and `make check` build the plugin binaries from there.
       - name: fetch gridwell-plugins beside this checkout
         run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
-      # Every live shell rides a tmux session (internal/local/tmux), so it
+      # Every live shell rides a tmux (internal/local/tmux), so it
       # is pinned present rather than trusted to the runner image.
       - name: system deps
         run: sudo apt-get update && sudo apt-get install -y tmux

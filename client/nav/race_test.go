@@ -135,7 +135,7 @@ func TestShellProbe(t *testing.T) {
 		m := New()
 		a, descended := probe(m)
 		if plan := m.Resume(a.Token, Result{OK: true}, descended); len(plan.Effects) != 0 {
-			t.Fatalf("a dead session opened anyway: %v", kinds(plan))
+			t.Fatalf("a dead tmux opened anyway: %v", kinds(plan))
 		}
 	})
 
@@ -194,28 +194,28 @@ func TestForgetRetiresAPaneContinuations(t *testing.T) {
 }
 
 // A copy's probe asks the node about the copy it descended into, and the
-// answer caches under the session it shares with its source.
-func TestShellProbeOfACopyKeysItsSession(t *testing.T) {
+// answer caches under the tmux it shares with its source.
+func TestShellProbeOfACopyKeysItsTmux(t *testing.T) {
 	cp := &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 3, H: 2,
-		PreviewBlobId: 7, ShellSession: "s1"}
+		PreviewBlobId: 7, ShellTmux: "s1"}
 	m := New()
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{}
 	tr := only(t, m.Do(descendGesture("pane1", cp), w), EffStartTransition)
 	a := only(t, m.Land(tr.Land, w), EffAwait)
 	if a.Request.Kind != RequestProbeShell || a.Request.ID != "s2" || a.Request.Key != "s1" {
-		t.Fatalf("await = %+v, want a probe of s2 cached under the session s1", a.Request)
+		t.Fatalf("await = %+v, want a probe of s2 cached under the tmux s1", a.Request)
 	}
 }
 
-// A link keys on the session its target names, so a link to a copy shares
-// the copy's source's session: the target row is read first, and the probe
-// and the open both carry that session.
-func TestShellLinkKeysItsTargetSession(t *testing.T) {
+// A link keys on the tmux its target names, so a link to a copy shares
+// the copy's source's tmux: the target row is read first, and the probe
+// and the open both carry that tmux.
+func TestShellLinkKeysItsTargetTmux(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "l1", Kind: rpc.KindShell, GridId: "g1", W: 3, H: 2,
 		PreviewBlobId: 7, LinkTargetId: "s2"}
 	cp := &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 3, H: 2,
-		PreviewBlobId: 7, ShellSession: "s1"}
+		PreviewBlobId: 7, ShellTmux: "s1"}
 	land := func(t *testing.T, m *Machine) Effect {
 		t.Helper()
 		w := baseWorld(gridPane("pane1", "g1"))
@@ -234,11 +234,11 @@ func TestShellLinkKeysItsTargetSession(t *testing.T) {
 		a := land(t, m)
 		p := only(t, m.Resume(a.Token, Result{OK: true, Tile: cp}, in), EffAwait)
 		if p.Request.Kind != RequestProbeShell || p.Request.ID != "s2" || p.Request.Key != "s1" {
-			t.Fatalf("await = %+v, want a probe of s2 cached under the session s1", p.Request)
+			t.Fatalf("await = %+v, want a probe of s2 cached under the tmux s1", p.Request)
 		}
 		o := only(t, m.Resume(p.Token, Result{OK: true, Alive: true}, in), EffOpenStream)
 		if o.TileID != "l1" || o.Key != "s1" {
-			t.Fatalf("open = %+v, want l1 attached under the session s1", o)
+			t.Fatalf("open = %+v, want l1 attached under the tmux s1", o)
 		}
 	})
 
@@ -249,7 +249,7 @@ func TestShellLinkKeysItsTargetSession(t *testing.T) {
 		alive.ShellAlive["s1"], alive.ShellAliveKnown["s1"] = true, true
 		o := only(t, m.Resume(a.Token, Result{OK: true, Tile: cp}, alive), EffOpenStream)
 		if o.Key != "s1" {
-			t.Fatalf("open = %+v, want the session s1", o)
+			t.Fatalf("open = %+v, want the tmux s1", o)
 		}
 	})
 

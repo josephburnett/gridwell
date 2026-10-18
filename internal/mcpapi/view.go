@@ -47,12 +47,12 @@ type Grid struct {
 
 // TileOut is a tile read: the row, and the content its kind has.
 type TileOut struct {
-	Tile         Tile    `json:"tile"`
-	Body         *string `json:"body,omitempty"`
-	BodyVersion  *int64  `json:"body_version,omitempty" jsonschema:"the version the body was read at, the claim write_text takes"`
-	BodyStamp    string  `json:"body_stamp,omitempty" jsonschema:"a plugin's name for the body's bytes, its claim in place of a version"`
-	URL          string  `json:"url,omitempty"`
-	ShellSession string  `json:"shell_session,omitempty"`
+	Tile        Tile    `json:"tile"`
+	Body        *string `json:"body,omitempty"`
+	BodyVersion *int64  `json:"body_version,omitempty" jsonschema:"the version the body was read at, the claim write_text takes"`
+	BodyStamp   string  `json:"body_stamp,omitempty" jsonschema:"a plugin's name for the body's bytes, its claim in place of a version"`
+	URL         string  `json:"url,omitempty"`
+	ShellTmux   string  `json:"shell_tmux,omitempty"`
 }
 
 // FindOut answers find. Skipped names every namespace that did not answer,
@@ -94,10 +94,10 @@ type ReadTilesOut struct {
 
 // Verdict is one write item's answer.
 type Verdict struct {
-	Verdict     string `json:"verdict" jsonschema:"ok, or the refusal: its kind (conflict:, disabled:, dead link:, ...) then the reason"`
-	Tile        *Tile  `json:"tile,omitempty" jsonschema:"the row as the write left it"`
-	Deleted     string `json:"deleted,omitempty" jsonschema:"the tile a delete moved to the trash"`
-	SessionLeft string `json:"session_left,omitempty" jsonschema:"why a shell session the delete should have ended is still running"`
+	Verdict  string `json:"verdict" jsonschema:"ok, or the refusal: its kind (conflict:, disabled:, dead link:, ...) then the reason"`
+	Tile     *Tile  `json:"tile,omitempty" jsonschema:"the row as the write left it"`
+	Deleted  string `json:"deleted,omitempty" jsonschema:"the tile a delete moved to the trash"`
+	TmuxLeft string `json:"tmux_left,omitempty" jsonschema:"why a shell's tmux the delete should have ended is still running"`
 }
 
 // WriteOut answers every bulk write: one verdict per item, in order.

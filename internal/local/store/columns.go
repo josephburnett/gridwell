@@ -16,8 +16,12 @@ import (
 // each names only the columns that kind sets.
 type column[T any] struct {
 	// name is the SQL column name. For a column that is on the wire it is
-	// also the proto field name; TestDescriptorMatchesProto pins that.
+	// also the proto field name unless field names one;
+	// TestDescriptorMatchesProto pins that.
 	name string
+	// field is the proto field name of a column whose SQL name predates it,
+	// since a column is never renamed (this package's CLAUDE.md).
+	field string
 	// ddl is the SQL that follows the name in CREATE TABLE: type, NOT NULL,
 	// DEFAULT, REFERENCES, CHECK.
 	ddl string
@@ -152,7 +156,7 @@ qualified "<uuid>/<tile-id>" link to the tile that owns the
 content, or on a plugin's row a bare entry address in that same plugin
 (rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content
 of its own, which the CHECK's link branch enforces, and readers
-resolve bytes, preview, and session through the target id. The well
+resolve bytes, preview, and tmux through the target id. The well
 kind's link variant is a qualified child_grid_id, the exit well, so
 this column is never set on wells. Added at schema v6, by rebuild:
 the CHECK gained the link branch.`,
@@ -197,13 +201,13 @@ Added at schema v14, additive.`,
 		noCopy: "a copy lands in home, where nothing serves a page",
 	},
 	{
-		name: "shell_session", ddl: "INTEGER", since: 15,
-		comment: `shell_session is the id of the tile whose tmux session a shell row
-attaches, written on a copy so every copy shares its source's
-session. NULL is the row's own id. It names a session, not a row: the
-tile that started it may be gone while a copy still names it. Added
-at schema v15, additive.`,
-		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ShellSession} },
+		name: "shell_session", field: "shell_tmux", ddl: "INTEGER", since: 15,
+		comment: `shell_session is the id of the tile whose tmux a shell row attaches,
+written on a copy so every copy shares its source's tmux. NULL is the
+row's own id. It names a tmux, not a row: the tile that started it may
+be gone while a copy still names it. On the wire it is shell_tmux.
+Added at schema v15, additive.`,
+		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ShellTmux} },
 	},
 	{
 		name: "content_at", ddl: "INTEGER", since: 19,

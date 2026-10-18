@@ -367,7 +367,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   window owns its layout, and an outside write would turn its next change
   into a conflict. The session is the one named,
   else the one holding the agent's shell live, else the one whose view
-  changed last, the others named. A new tmux session carries its key in
+  changed last, the others named. A new tmux carries its key in
   `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`, and the shell
   API, the one place a socket and its session are both in hand, joins the
   two (`Server.ShellHolder`).
@@ -403,20 +403,20 @@ These were decided deliberately. Do not reverse one without a new decision.
   outside; entering a url reopens it, entering a shell reconnects. One
   owner decides (`shellconn.DecideAutoLive`). The freeze gesture is the
   standing exception, for url and shell alike: it is a screenshot, so the
-  tile keeps that preview, the address and the tmux session keep existing, a
+  tile keeps that preview, the address and the tmux keep existing, a
   copy taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
 - Shells ride the web API: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
   shells off is the node (`disable_shells`).
-- A shell tile names a session: its own id, or for a copy the session its
-  source named (`rpc.ShellSession`). Any number of tiles may name one
-  session; at most one is live, and going live on another takes over
-  (close and reopen; within one tile the terminal moves). A session no tile
+- A shell tile names a tmux: its own id, or for a copy the tmux its
+  source named (`rpc.ShellTmux`). Any number of tiles may name one
+  tmux; at most one is live, and going live on another takes over
+  (close and reopen; within one tile the terminal moves). A tmux no tile
   has a preview of was never started, and whichever tile opens it first starts
   it; a started one that is gone is never recreated behind a preview. The
-  session dies when the last row naming it is destroyed. A shell copied
+  tmux dies when the last row naming it is destroyed. A shell copied
   across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, each pane's focused tile (the keyboard
   target a plain click lands on, `pane.SessionState.Selected`; not the

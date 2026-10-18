@@ -231,10 +231,10 @@ export async function deleteTile(origin: string, tileId: string): Promise<void> 
   }
 }
 
-// The node's verdict on the session a shell tile names, asked the way the
+// The node's verdict on the tmux a shell tile names, asked the way the
 // client's descent probe asks it.
-export async function shellSessionAlive(origin: string, tileId: string): Promise<boolean> {
-  const res = await fetch(`${origin}/${SERVICE}/ShellSessionAlive`, {
+export async function shellTmuxAlive(origin: string, tileId: string): Promise<boolean> {
+  const res = await fetch(`${origin}/${SERVICE}/ShellTmuxAlive`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -244,7 +244,7 @@ export async function shellSessionAlive(origin: string, tileId: string): Promise
     body: JSON.stringify({ tileId }),
   });
   if (!res.ok) {
-    throw new Error(`ShellSessionAlive(${tileId}) failed: ${res.status} ${await res.text()}`);
+    throw new Error(`ShellTmuxAlive(${tileId}) failed: ${res.status} ${await res.text()}`);
   }
   return Boolean(((await res.json()) as { alive?: boolean }).alive);
 }

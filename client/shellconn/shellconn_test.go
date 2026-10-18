@@ -7,7 +7,7 @@ import (
 )
 
 // TestDecideShellRefreshVisible tables the refresh button's visibility,
-// including that a tile with no preview always shows and an unknown session
+// including that a tile with no preview always shows and an unknown tmux
 // hides and probes.
 func TestDecideShellRefreshVisible(t *testing.T) {
 	cases := []struct {
@@ -73,7 +73,7 @@ func TestDecideAutoLive(t *testing.T) {
 		{"user-frozen url stays frozen", rpc.DescentURL, true, true, true, false, false, true, AutoLiveNone},
 		{"user-frozen shell stays frozen", rpc.DescentShell, true, true, true, true, true, true, AutoLiveNone},
 		// A capture that came back empty leaves a frozen tile looking never
-		// opened, and creating a second session behind the freeze would be a
+		// opened, and creating a second tmux behind the freeze would be a
 		// tmux nobody asked for.
 		{"user-frozen shell with no preview creates nothing", rpc.DescentShell, true, true, false, false, false, true, AutoLiveNone},
 		{"page tile on Electron opens", rpc.DescentURL, true, true, false, false, false, false, AutoLiveURL},
@@ -121,11 +121,11 @@ func TestDecideLinkPress(t *testing.T) {
 	}
 }
 
-// A stream end that says the session is gone leaves a known dead answer; any
+// A stream end that says the tmux is gone leaves a known dead answer; any
 // other end forgets, so the next descent probes rather than trusting either.
 func TestExitAliveFeedsTheProbe(t *testing.T) {
 	if alive, known := ExitAlive(true); alive || !known {
-		t.Fatalf("session gone: got (%v, %v), want (false, true)", alive, known)
+		t.Fatalf("tmux gone: got (%v, %v), want (false, true)", alive, known)
 	}
 	if _, known := ExitAlive(false); known {
 		t.Fatal("a plain stream end must not be remembered as a verdict")

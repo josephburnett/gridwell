@@ -235,7 +235,7 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
 });
 
 // The ephemeral cleanup is the one delete with nothing on screen to reconcile:
-// the row is off-grid and a shell's tmux session lives behind it. Ascending
+// the row is off-grid and a shell's tmux lives behind it. Ascending
 // deletes it, so the delete has to park like every other unacknowledged write.
 // One sent outside the dispatcher would be lost to an outage at that moment.
 test('an ephemeral visit left during an outage parks its delete and drains on reconnect', async ({
@@ -266,7 +266,7 @@ test('an ephemeral visit left during an outage parks its delete and drains on re
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.outbox()), { timeout: 15_000 })
     .toContain('DeleteTile:' + ephemeralID);
 
-  // The reconnect drains it with no user action, and the tmux session goes too.
+  // The reconnect drains it with no user action, and the tmux goes too.
   await outage.start();
   await expect
     .poll(async () => ((await gw.getGrid(scratchGridID)).tiles ?? []).length, { timeout: 30_000 })

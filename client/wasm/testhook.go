@@ -467,7 +467,7 @@ func (a *App) thURLViews(js.Value, []js.Value) any {
 	return out
 }
 
-// thShellViews maps each pane holding a live terminal to its session's tile.
+// thShellViews maps each pane holding a live terminal to its tmux's tile.
 func (a *App) thShellViews(js.Value, []js.Value) any {
 	out := map[string]any{}
 	for _, h := range a.shellSurfaces() {

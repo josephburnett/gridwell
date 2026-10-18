@@ -8,9 +8,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A copy names its source's session, a copy of a copy the same one, and a
+// A copy names its source's tmux, a copy of a copy the same one, and a
 // copy inside a copied well too: every copy is one more viewer of one shell.
-func TestCopySharesTheShellSession(t *testing.T) {
+func TestCopySharesTheShellTmux(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -18,8 +18,8 @@ func TestCopySharesTheShellSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if src.ShellSession != "" {
-		t.Fatalf("a fresh shell names %q, want its own id (empty)", src.ShellSession)
+	if src.ShellTmux != "" {
+		t.Fatalf("a fresh shell names %q, want its own id (empty)", src.ShellTmux)
 	}
 	b, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src.Id, DestGridId: root, X: 2})
 	if err != nil {
@@ -30,8 +30,8 @@ func TestCopySharesTheShellSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, got := range map[string]*gridwellv1.Tile{"copy": b, "copy of a copy": c} {
-		if rpc.ShellSession(got) != src.Id {
-			t.Errorf("%s names session %q, want the source's %q", name, rpc.ShellSession(got), src.Id)
+		if rpc.ShellTmux(got) != src.Id {
+			t.Errorf("%s names tmux %q, want the source's %q", name, rpc.ShellTmux(got), src.Id)
 		}
 	}
 
@@ -51,14 +51,14 @@ func TestCopySharesTheShellSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(g.Tiles) != 1 || rpc.ShellSession(g.Tiles[0]) != inner.Id {
+	if len(g.Tiles) != 1 || rpc.ShellTmux(g.Tiles[0]) != inner.Id {
 		t.Fatalf("the shell inside a copied well = %v, want one naming %q", g.Tiles, inner.Id)
 	}
 }
 
-// The count of rows naming a session covers the source and every copy, a
+// The count of rows naming a tmux covers the source and every copy, a
 // trashed one included, and only a destroy takes a row out of it.
-func TestShellSessionNamersCountsEveryCopy(t *testing.T) {
+func TestShellTmuxNamersCountsEveryCopy(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -72,11 +72,11 @@ func TestShellSessionNamersCountsEveryCopy(t *testing.T) {
 	}
 	want := func(stage string, rows, previewed int64) {
 		t.Helper()
-		got, err := s.ShellSessionNamers(ctx, src.Id)
+		got, err := s.ShellTmuxNamers(ctx, src.Id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got != (SessionNamers{Rows: rows, Previewed: previewed}) {
+		if got != (TmuxNamers{Rows: rows, Previewed: previewed}) {
 			t.Errorf("%s: namers = %+v, want {Rows:%d Previewed:%d}", stage, got, rows, previewed)
 		}
 	}

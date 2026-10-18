@@ -139,7 +139,7 @@ func TestPaneCopySharesBlobThenDiverges(t *testing.T) {
 // The plugin identity is the config id injected by SetPluginID, not the
 // bootstrap mint. Layout blobs qualify their references with the config id, so
 // the ephemeral-refs matcher must speak it too, or the boot sweep reaps
-// pane-owned shells and kills their tmux sessions. A test that builds the blob
+// pane-owned shells and kills their tmuxes. A test that builds the blob
 // from PluginUUID cannot catch this: it matches whatever PluginUUID returns.
 func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
 	s := newTestStore(t)

@@ -366,7 +366,7 @@ func TestDescendLandGoesLive(t *testing.T) {
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
-		name:  "a shell with an unknown session probes first",
+		name:  "a shell with an unknown tmux probes first",
 		tile:  &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9},
 		caps:  caps.Caps{LiveURL: true, Shells: true},
 		want:  []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay, EffAwait, EffScheduleURLUpdate},
@@ -381,10 +381,10 @@ func TestDescendLandGoesLive(t *testing.T) {
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
-		// The liveness facts key by session, so one exit marks every tile
+		// The liveness facts key by tmux, so one exit marks every tile
 		// on it: a copy reads its source's verdict, not its own id's.
-		name:  "a copy whose source's session is known dead stays frozen",
-		tile:  &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9, ShellSession: "s1"},
+		name:  "a copy whose source's tmux is known dead stays frozen",
+		tile:  &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9, ShellTmux: "s1"},
 		caps:  caps.Caps{LiveURL: true, Shells: true},
 		alive: map[string]bool{"s1": false},
 		known: map[string]bool{"s1": true},

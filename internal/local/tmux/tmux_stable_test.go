@@ -2,7 +2,7 @@ package tmux
 
 // Stable artifact paths: one directory per socket, overwritten
 // idempotently. A per-boot temp path would leak artifacts per server start
-// and let a /tmp cleaner delete a running session's shim.
+// and let a /tmp cleaner delete a running tmux's shim.
 
 import (
 	"os"

@@ -7,7 +7,7 @@ import { tileAt } from './oracle';
 // keeps that picture after the original reconnects. This drives the seam the
 // unit tests cannot: barslot.Decide's two shell arms, the capture writeback,
 // the SetTile url_frozen arm on a shell row, the stored column, copy, and
-// shellconn.DecideAutoLive. A freeze never kills the tmux session, which the
+// shellconn.DecideAutoLive. A freeze never kills the tmux, which the
 // reconnect proves by finding the shell it left.
 
 test('freezing a live shell keeps its preview; the copy keeps it after the original reconnects', async ({
@@ -72,7 +72,7 @@ test('freezing a live shell keeps its preview; the copy keeps it after the origi
   expect(Boolean(copy!.urlFrozen), 'the copy carries the freeze').toBe(true);
   expect(copy!.previewBlobId, 'and the same captured preview').toBe(frozen.previewBlobId);
 
-  // Reconnecting the original finds the session the freeze left running, and
+  // Reconnecting the original finds the tmux the freeze left running, and
   // going live is what clears the standing intent.
   await gw.descendCell(cx, cy);
   await expect.poll(slot, { timeout: 15_000 }).toBe('golive');

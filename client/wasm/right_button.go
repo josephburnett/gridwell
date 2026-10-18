@@ -444,7 +444,7 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		// is refused and its grid re-read, never deleted blind.
 		req := &gridwellv1.DeleteTileRequest{TileId: src.Id,
 			ClaimVersion: src.Version, Claim: rpc.PlacementOf(src)}
-		// The row is moving to the trash or going for good, and its session
+		// The row is moving to the trash or going for good, and its tmux
 		// goes with the last row naming it, so its cached verdict is stale
 		// either way.
 		a.forgetShellAlive(src.Id)

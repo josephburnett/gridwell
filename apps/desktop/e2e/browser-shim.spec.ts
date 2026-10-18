@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 // A terminal app that opens a browser must open an ephemeral url visit instead
-// of spawning one on the host. Every shell session carries BROWSER set to the
+// of spawning one on the host. Every shell's tmux carries BROWSER set to the
 // gridwell-open shim, which emits the url as OSC 5522 through tmux's DCS
 // passthrough. Running the real $BROWSER in the real PTY crosses env injection,
 // the shim, tmux, the /shell WebSocket, xterm's OSC handler, and the open below.
@@ -51,7 +51,7 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
 
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;
@@ -80,7 +80,7 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
 // $BROWSER alone is not enough. emacs browse-url execs xdg-open directly, and
 // under a desktop session (XDG_CURRENT_DESKTOP set) the real xdg-open resolves
 // through the desktop's mime handler and never reads $BROWSER, leaking the url
-// to the host browser. So every shell session gets a shadow-bin dir prepended
+// to the host browser. So every shell's tmux gets a shadow-bin dir prepended
 // to PATH whose xdg-open routes web urls into the same OSC 5522 descent.
 // Setting XDG_CURRENT_DESKTOP makes this spec fail without the shadow on a CI
 // box that has no desktop, where bare xdg-open would fall back to $BROWSER.
@@ -96,7 +96,7 @@ test('xdg-open under a desktop session opens an ephemeral url visit below', asyn
 
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;

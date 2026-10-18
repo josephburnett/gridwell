@@ -7,13 +7,13 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Every row a pane opens keys on the session of the content row it resolves
-// to, so a link to a copy shares the copy's source's session.
-func TestSessionKeyTable(t *testing.T) {
+// Every row a pane opens keys on the tmux of the content row it resolves
+// to, so a link to a copy shares the copy's source's tmux.
+func TestTmuxKeyTable(t *testing.T) {
 	tile := &gridwellv1.Tile{Id: "a1", Kind: rpc.KindShell}
-	cp := &gridwellv1.Tile{Id: "b1", Kind: rpc.KindShell, ShellSession: "a1"}
+	cp := &gridwellv1.Tile{Id: "b1", Kind: rpc.KindShell, ShellTmux: "a1"}
 	far := &gridwellv1.Tile{Id: "far/c1", Kind: rpc.KindShell}
-	farCopy := &gridwellv1.Tile{Id: "far/d1", Kind: rpc.KindShell, ShellSession: "far/c1"}
+	farCopy := &gridwellv1.Tile{Id: "far/d1", Kind: rpc.KindShell, ShellTmux: "far/c1"}
 	link := func(to string) *gridwellv1.Tile {
 		return &gridwellv1.Tile{Id: "l1", Kind: rpc.KindShell, LinkTargetId: to}
 	}
@@ -24,15 +24,15 @@ func TestSessionKeyTable(t *testing.T) {
 		ok          bool
 	}{
 		{"a tile keys on itself", tile, nil, "a1", true},
-		{"a copy keys on its source's session", cp, nil, "a1", true},
+		{"a copy keys on its source's tmux", cp, nil, "a1", true},
 		{"a link to a tile keys on the tile", link("a1"), tile, "a1", true},
-		{"a link to a copy keys on the source's session", link("b1"), cp, "a1", true},
+		{"a link to a copy keys on the source's tmux", link("b1"), cp, "a1", true},
 		{"a link to a far tile keys on the far tile", link("far/c1"), far, "far/c1", true},
-		{"a link to a far copy keys on the far source's session", link("far/d1"), farCopy, "far/c1", true},
+		{"a link to a far copy keys on the far source's tmux", link("far/d1"), farCopy, "far/c1", true},
 		{"a link whose target is not known keys on nothing", link("b1"), nil, "", false},
 	}
 	for _, c := range cases {
-		got, ok := SessionKey(c.row, c.target)
+		got, ok := TmuxKey(c.row, c.target)
 		if got != c.want || ok != c.ok {
 			t.Errorf("%s: = (%q, %v), want (%q, %v)", c.name, got, ok, c.want, c.ok)
 		}

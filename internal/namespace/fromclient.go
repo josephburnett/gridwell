@@ -73,8 +73,8 @@ func (f fromClient) SetSelection(ctx context.Context, req *pb.SetSelectionReques
 	return f.c.SetSelection(ctx, req)
 }
 
-func (f fromClient) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return f.c.ShellSessionAlive(ctx, req)
+func (f fromClient) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return f.c.ShellTmuxAlive(ctx, req)
 }
 
 func (f fromClient) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {

@@ -11,7 +11,7 @@ package store
 //     another.
 //   - text: a markdown blob.
 //   - url: an http(s) URL plus a frozen JPEG preview.
-//   - shell: an interactive shell in a gridwell-private tmux session. The
+//   - shell: an interactive shell in a gridwell-private tmux. The
 //     shell and its scrollback live in the tmux server and survive ascents
 //     and restarts; they are gone only when the tile is deleted or the host
 //     reboots.

@@ -88,8 +88,8 @@ func (h *connectHandler) SetSelection(ctx context.Context, req *connect.Request[
 	return unary(h.rt.SetSelection)(ctx, req)
 }
 
-func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
-	return unary(h.rt.ShellSessionAlive)(ctx, req)
+func (h *connectHandler) ShellTmuxAlive(ctx context.Context, req *connect.Request[pb.ShellTmuxAliveRequest]) (*connect.Response[pb.ShellTmuxAliveResponse], error) {
+	return unary(h.rt.ShellTmuxAlive)(ctx, req)
 }
 
 func (h *connectHandler) ReadContent(ctx context.Context, req *connect.Request[pb.ReadContentRequest], stream *connect.ServerStream[pb.ContentChunk]) error {

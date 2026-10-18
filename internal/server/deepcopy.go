@@ -36,7 +36,7 @@ import (
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;
 //   - a shell copies as a link to its source, since a copy shares its
-//     source's session and a session is namespace-local;
+//     source's tmux and a tmux is namespace-local;
 //   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
 // deepCopyWell reads the source child grid before anything is created, so an
@@ -106,7 +106,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	case q.LinkTargetId != "":
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
 	case t.Kind == rpc.KindShell:
-		// A copy shares its source's session, and a session lives on the
+		// A copy shares its source's tmux, and a tmux lives on the
 		// node that started it, so across namespaces the copy is a link.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
 	case rpc.IsBodyKind(t.Kind), t.Kind == rpc.KindURL:

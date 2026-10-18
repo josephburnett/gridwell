@@ -185,9 +185,9 @@ func (c *Client) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Til
 	return tileResp(c.cl.CopyTile(ctx, connect.NewRequest(req)))
 }
 
-// ShellSessionAlive reports whether the tile's tmux session still exists.
-func (c *Client) ShellSessionAlive(ctx context.Context, tileID string) (bool, error) {
-	r, err := c.cl.ShellSessionAlive(ctx, connect.NewRequest(&pb.ShellSessionAliveRequest{TileId: tileID}))
+// ShellTmuxAlive reports whether the tile's tmux still exists.
+func (c *Client) ShellTmuxAlive(ctx context.Context, tileID string) (bool, error) {
+	r, err := c.cl.ShellTmuxAlive(ctx, connect.NewRequest(&pb.ShellTmuxAliveRequest{TileId: tileID}))
 	if err != nil {
 		return false, err
 	}

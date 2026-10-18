@@ -23,7 +23,7 @@ var tileIDFields = []struct {
 	{func(t *pb.Tile) *string { return &t.GridId }, false, false},
 	{func(t *pb.Tile) *string { return &t.ChildGridId }, true, true},
 	{func(t *pb.Tile) *string { return &t.LinkTargetId }, true, true},
-	{func(t *pb.Tile) *string { return &t.ShellSession }, true, false},
+	{func(t *pb.Tile) *string { return &t.ShellTmux }, true, false},
 }
 
 func qualifyField(prefix string, id *string, optional bool) {

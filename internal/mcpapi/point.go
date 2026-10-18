@@ -20,8 +20,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/subscription"
 )
 
-// ShellHeader carries the shell an agent runs in, the session key a shell
-// tile's tmux session names in tmux.SessionEnv; empty from a plain terminal.
+// ShellHeader carries the shell an agent runs in, the tmux key a shell
+// tile's tmux names in tmux.KeyEnv; empty from a plain terminal.
 const ShellHeader = "X-Gridwell-Shell"
 
 // Screens is what the node knows of the clients showing it.

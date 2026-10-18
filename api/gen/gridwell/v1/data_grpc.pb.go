@@ -31,28 +31,28 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Gridwell_Info_FullMethodName              = "/gridwell.v1.Gridwell/Info"
-	Gridwell_Probe_FullMethodName             = "/gridwell.v1.Gridwell/Probe"
-	Gridwell_Handshake_FullMethodName         = "/gridwell.v1.Gridwell/Handshake"
-	Gridwell_OpenShell_FullMethodName         = "/gridwell.v1.Gridwell/OpenShell"
-	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
-	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
-	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
-	Gridwell_Find_FullMethodName              = "/gridwell.v1.Gridwell/Find"
-	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
-	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
-	Gridwell_ServeContent_FullMethodName      = "/gridwell.v1.Gridwell/ServeContent"
-	Gridwell_MoveTile_FullMethodName          = "/gridwell.v1.Gridwell/MoveTile"
-	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
-	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
-	Gridwell_CopyTile_FullMethodName          = "/gridwell.v1.Gridwell/CopyTile"
-	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
-	Gridwell_SetFraming_FullMethodName        = "/gridwell.v1.Gridwell/SetFraming"
-	Gridwell_SetSelection_FullMethodName      = "/gridwell.v1.Gridwell/SetSelection"
-	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
-	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
-	Gridwell_SetView_FullMethodName           = "/gridwell.v1.Gridwell/SetView"
-	Gridwell_DisableSource_FullMethodName     = "/gridwell.v1.Gridwell/DisableSource"
+	Gridwell_Info_FullMethodName           = "/gridwell.v1.Gridwell/Info"
+	Gridwell_Probe_FullMethodName          = "/gridwell.v1.Gridwell/Probe"
+	Gridwell_Handshake_FullMethodName      = "/gridwell.v1.Gridwell/Handshake"
+	Gridwell_OpenShell_FullMethodName      = "/gridwell.v1.Gridwell/OpenShell"
+	Gridwell_GetGrid_FullMethodName        = "/gridwell.v1.Gridwell/GetGrid"
+	Gridwell_GetTile_FullMethodName        = "/gridwell.v1.Gridwell/GetTile"
+	Gridwell_GetTilePreview_FullMethodName = "/gridwell.v1.Gridwell/GetTilePreview"
+	Gridwell_Find_FullMethodName           = "/gridwell.v1.Gridwell/Find"
+	Gridwell_ReadContent_FullMethodName    = "/gridwell.v1.Gridwell/ReadContent"
+	Gridwell_WriteContent_FullMethodName   = "/gridwell.v1.Gridwell/WriteContent"
+	Gridwell_ServeContent_FullMethodName   = "/gridwell.v1.Gridwell/ServeContent"
+	Gridwell_MoveTile_FullMethodName       = "/gridwell.v1.Gridwell/MoveTile"
+	Gridwell_CreateTile_FullMethodName     = "/gridwell.v1.Gridwell/CreateTile"
+	Gridwell_SetTile_FullMethodName        = "/gridwell.v1.Gridwell/SetTile"
+	Gridwell_CopyTile_FullMethodName       = "/gridwell.v1.Gridwell/CopyTile"
+	Gridwell_DeleteTile_FullMethodName     = "/gridwell.v1.Gridwell/DeleteTile"
+	Gridwell_SetFraming_FullMethodName     = "/gridwell.v1.Gridwell/SetFraming"
+	Gridwell_SetSelection_FullMethodName   = "/gridwell.v1.Gridwell/SetSelection"
+	Gridwell_ShellTmuxAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellTmuxAlive"
+	Gridwell_Subscribe_FullMethodName      = "/gridwell.v1.Gridwell/Subscribe"
+	Gridwell_SetView_FullMethodName        = "/gridwell.v1.Gridwell/SetView"
+	Gridwell_DisableSource_FullMethodName  = "/gridwell.v1.Gridwell/DisableSource"
 )
 
 // GridwellClient is the client API for Gridwell service.
@@ -94,8 +94,8 @@ type GridwellClient interface {
 	SetFraming(ctx context.Context, in *SetFramingRequest, opts ...grpc.CallOption) (*SetFramingResponse, error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error)
-	// ShellSessionAlive gates the client's refresh button on shell descent.
-	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
+	// ShellTmuxAlive gates the client's refresh button on shell descent.
+	ShellTmuxAlive(ctx context.Context, in *ShellTmuxAliveRequest, opts ...grpc.CallOption) (*ShellTmuxAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
 	SetView(ctx context.Context, in *SetViewRequest, opts ...grpc.CallOption) (*SetViewResponse, error)
 	DisableSource(ctx context.Context, in *DisableSourceRequest, opts ...grpc.CallOption) (*DisableSourceResponse, error)
@@ -313,10 +313,10 @@ func (c *gridwellClient) SetSelection(ctx context.Context, in *SetSelectionReque
 	return out, nil
 }
 
-func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error) {
+func (c *gridwellClient) ShellTmuxAlive(ctx context.Context, in *ShellTmuxAliveRequest, opts ...grpc.CallOption) (*ShellTmuxAliveResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ShellSessionAliveResponse)
-	err := c.cc.Invoke(ctx, Gridwell_ShellSessionAlive_FullMethodName, in, out, cOpts...)
+	out := new(ShellTmuxAliveResponse)
+	err := c.cc.Invoke(ctx, Gridwell_ShellTmuxAlive_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -401,8 +401,8 @@ type GridwellServer interface {
 	SetFraming(context.Context, *SetFramingRequest) (*SetFramingResponse, error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error)
-	// ShellSessionAlive gates the client's refresh button on shell descent.
-	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
+	// ShellTmuxAlive gates the client's refresh button on shell descent.
+	ShellTmuxAlive(context.Context, *ShellTmuxAliveRequest) (*ShellTmuxAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
 	SetView(context.Context, *SetViewRequest) (*SetViewResponse, error)
 	DisableSource(context.Context, *DisableSourceRequest) (*DisableSourceResponse, error)
@@ -470,8 +470,8 @@ func (UnimplementedGridwellServer) SetFraming(context.Context, *SetFramingReques
 func (UnimplementedGridwellServer) SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetSelection not implemented")
 }
-func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ShellSessionAlive not implemented")
+func (UnimplementedGridwellServer) ShellTmuxAlive(context.Context, *ShellTmuxAliveRequest) (*ShellTmuxAliveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ShellTmuxAlive not implemented")
 }
 func (UnimplementedGridwellServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
@@ -791,20 +791,20 @@ func _Gridwell_SetSelection_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_ShellSessionAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ShellSessionAliveRequest)
+func _Gridwell_ShellTmuxAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShellTmuxAliveRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).ShellSessionAlive(ctx, in)
+		return srv.(GridwellServer).ShellTmuxAlive(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_ShellSessionAlive_FullMethodName,
+		FullMethod: Gridwell_ShellTmuxAlive_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).ShellSessionAlive(ctx, req.(*ShellSessionAliveRequest))
+		return srv.(GridwellServer).ShellTmuxAlive(ctx, req.(*ShellTmuxAliveRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -920,8 +920,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_SetSelection_Handler,
 		},
 		{
-			MethodName: "ShellSessionAlive",
-			Handler:    _Gridwell_ShellSessionAlive_Handler,
+			MethodName: "ShellTmuxAlive",
+			Handler:    _Gridwell_ShellTmuxAlive_Handler,
 		},
 		{
 			MethodName: "SetView",

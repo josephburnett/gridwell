@@ -140,7 +140,7 @@ type Effect struct {
 	// Surface.
 	Streams StreamKind
 	Stream  StreamKind
-	// Key is the session an opened shell attaches (shellconn.SessionKey).
+	// Key is the tmux an opened shell attaches (shellconn.TmuxKey).
 	Key        string
 	Freeze     bool
 	FreezeOnto *FreezeTarget
@@ -171,7 +171,7 @@ const (
 	// into the cache: ID.
 	RequestReadLayout
 	RequestFind       // Query, Scope, Limit
-	RequestProbeShell // ID is the content id asked, Key the session the answer caches under
+	RequestProbeShell // ID is the content id asked, Key the tmux the answer caches under
 	// RequestFlushLayout writes the pane-tile layout as the tree stands now
 	// and answers OK once the node holds it.
 	RequestFlushLayout

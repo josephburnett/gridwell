@@ -74,8 +74,8 @@ func (g *grpcServer) SetSelection(ctx context.Context, req *pb.SetSelectionReque
 	return g.ns.SetSelection(ctx, req)
 }
 
-func (g *grpcServer) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return g.ns.ShellSessionAlive(ctx, req)
+func (g *grpcServer) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return g.ns.ShellTmuxAlive(ctx, req)
 }
 
 func (g *grpcServer) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {

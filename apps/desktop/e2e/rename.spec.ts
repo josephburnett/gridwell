@@ -123,7 +123,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
 
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // Rename it while inside: the tmux-pane-rename case.
@@ -145,6 +145,6 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
     'the capture must not overwrite the user name',
   ).toBe('my-work');
 
-  // Leave clean: delete the shell so its tmux session dies before teardown.
+  // Leave clean: delete the shell so its tmux dies before teardown.
   await gw.deleteTileCell(cx, cy);
 });

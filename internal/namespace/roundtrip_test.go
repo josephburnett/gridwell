@@ -108,8 +108,8 @@ func (f *fake) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetViewRe
 	f.views = append(f.views, req)
 	return &pb.SetViewResponse{}, nil
 }
-func (f *fake) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return &pb.ShellSessionAliveResponse{Alive: true}, nil
+func (f *fake) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return &pb.ShellTmuxAliveResponse{Alive: true}, nil
 }
 func (f *fake) ReadContent(_ context.Context, _ *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	for _, c := range f.chunks {

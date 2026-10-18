@@ -426,7 +426,7 @@ type Tile struct {
 	// link_target_id makes a leaf tile (text, url, shell, pane) a link: a
 	// qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
 	// content. The link row stores no blob, no url and no preview, and readers
-	// resolve bytes, preview and session through the target id, which the router
+	// resolve bytes, preview and tmux through the target id, which the router
 	// routes anywhere, including through transit chains that prepend one hop
 	// segment as they do for a well's qualified child_grid_id. Kind stays the
 	// target's kind. A well's link variant is a qualified child_grid_id instead,
@@ -464,11 +464,11 @@ type Tile struct {
 	// (tilepreview.BannerText) and never instead of it. Plugin-declared through
 	// the Entry, wire-only: never a stored column, never set by clients.
 	StatusDetail string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
-	// shell_session names the tmux session a shell tile attaches: the id of the
-	// tile that started it, set on a copy so every copy shares its source's
-	// session. Empty means the tile's own id; rpc.ShellSession reads it. Stored,
+	// shell_tmux names the tmux a shell tile attaches: the id of the tile
+	// that started it, set on a copy so every copy shares its source's tmux.
+	// Empty means the tile's own id; rpc.ShellTmux reads it. Stored,
 	// qualified and peeled like the tile's own id, and never set by clients.
-	ShellSession string `protobuf:"bytes,38,opt,name=shell_session,json=shellSession,proto3" json:"shell_session,omitempty"`
+	ShellTmux string `protobuf:"bytes,38,opt,name=shell_tmux,json=shellTmux,proto3" json:"shell_tmux,omitempty"`
 	// content_stamp is the source's name for the bytes behind a row with no
 	// version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
 	// adapter and verbatim in transit, "" when the source names none. It does
@@ -719,9 +719,9 @@ func (x *Tile) GetStatusDetail() string {
 	return ""
 }
 
-func (x *Tile) GetShellSession() string {
+func (x *Tile) GetShellTmux() string {
 	if x != nil {
-		return x.ShellSession
+		return x.ShellTmux
 	}
 	return ""
 }
@@ -2922,34 +2922,34 @@ func (x *CreateTileRequest) GetContent() []byte {
 	return nil
 }
 
-// ShellSessionAlive reports whether the tile's Gridwell-private tmux
-// session currently exists. Called on shell descent so the client can
+// ShellTmuxAlive reports whether the tile's Gridwell-private tmux
+// currently exists. Called on shell descent so the client can
 // decide whether to show the refresh button:
 //   - alive=true             → button shown; refresh attaches.
 //   - alive=false, no snap   → button shown; refresh creates fresh.
 //   - alive=false, snap set  → button hidden; the JPEG is all that
-//     remains (the session died, can't bring it back).
-type ShellSessionAliveRequest struct {
+//     remains (the tmux died, can't bring it back).
+type ShellTmuxAliveRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ShellSessionAliveRequest) Reset() {
-	*x = ShellSessionAliveRequest{}
+func (x *ShellTmuxAliveRequest) Reset() {
+	*x = ShellTmuxAliveRequest{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ShellSessionAliveRequest) String() string {
+func (x *ShellTmuxAliveRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ShellSessionAliveRequest) ProtoMessage() {}
+func (*ShellTmuxAliveRequest) ProtoMessage() {}
 
-func (x *ShellSessionAliveRequest) ProtoReflect() protoreflect.Message {
+func (x *ShellTmuxAliveRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2961,39 +2961,39 @@ func (x *ShellSessionAliveRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShellSessionAliveRequest.ProtoReflect.Descriptor instead.
-func (*ShellSessionAliveRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ShellTmuxAliveRequest.ProtoReflect.Descriptor instead.
+func (*ShellTmuxAliveRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{36}
 }
 
-func (x *ShellSessionAliveRequest) GetTileId() string {
+func (x *ShellTmuxAliveRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
 	return ""
 }
 
-type ShellSessionAliveResponse struct {
+type ShellTmuxAliveResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Alive         bool                   `protobuf:"varint,1,opt,name=alive,proto3" json:"alive,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ShellSessionAliveResponse) Reset() {
-	*x = ShellSessionAliveResponse{}
+func (x *ShellTmuxAliveResponse) Reset() {
+	*x = ShellTmuxAliveResponse{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ShellSessionAliveResponse) String() string {
+func (x *ShellTmuxAliveResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ShellSessionAliveResponse) ProtoMessage() {}
+func (*ShellTmuxAliveResponse) ProtoMessage() {}
 
-func (x *ShellSessionAliveResponse) ProtoReflect() protoreflect.Message {
+func (x *ShellTmuxAliveResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3005,12 +3005,12 @@ func (x *ShellSessionAliveResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShellSessionAliveResponse.ProtoReflect.Descriptor instead.
-func (*ShellSessionAliveResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ShellTmuxAliveResponse.ProtoReflect.Descriptor instead.
+func (*ShellTmuxAliveResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{37}
 }
 
-func (x *ShellSessionAliveResponse) GetAlive() bool {
+func (x *ShellTmuxAliveResponse) GetAlive() bool {
 	if x != nil {
 		return x.Alive
 	}
@@ -3290,13 +3290,13 @@ func (x *DeleteTileRequest) GetClaim() *Placement {
 	return nil
 }
 
-// DeleteTileResponse answers a delete that landed. session_left is why a shell
-// session the destroy should have ended is still running, the row's own or an
+// DeleteTileResponse answers a delete that landed. tmux_left is why a shell's
+// tmux the destroy should have ended is still running, the row's own or an
 // ephemeral's its pane tile's layout owned; empty when none was left. The next
 // start's orphan sweep is its net.
 type DeleteTileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionLeft   string                 `protobuf:"bytes,1,opt,name=session_left,json=sessionLeft,proto3" json:"session_left,omitempty"`
+	TmuxLeft      string                 `protobuf:"bytes,1,opt,name=tmux_left,json=tmuxLeft,proto3" json:"tmux_left,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3331,9 +3331,9 @@ func (*DeleteTileResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{41}
 }
 
-func (x *DeleteTileResponse) GetSessionLeft() string {
+func (x *DeleteTileResponse) GetTmuxLeft() string {
 	if x != nil {
-		return x.SessionLeft
+		return x.TmuxLeft
 	}
 	return ""
 }
@@ -4518,7 +4518,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xa3\a\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\x9d\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -4552,8 +4552,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
-	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12#\n" +
-	"\rshell_session\x18& \x01(\tR\fshellSession\x12#\n" +
+	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12\x1d\n" +
+	"\n" +
+	"shell_tmux\x18& \x01(\tR\tshellTmux\x12#\n" +
 	"\rcontent_stamp\x18' \x01(\tR\fcontentStamp\x12\x1b\n" +
 	"\tread_only\x18( \x01(\tR\breadOnlyJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
@@ -4712,10 +4713,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x11CreateTileRequest\x12\x17\n" +
 	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12%\n" +
 	"\x04tile\x18\x03 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12\x18\n" +
-	"\acontent\x18\x05 \x01(\fR\acontentJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"3\n" +
-	"\x18ShellSessionAliveRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileId\"1\n" +
-	"\x19ShellSessionAliveResponse\x12\x14\n" +
+	"\acontent\x18\x05 \x01(\fR\acontentJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"0\n" +
+	"\x15ShellTmuxAliveRequest\x12\x17\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\".\n" +
+	"\x16ShellTmuxAliveResponse\x12\x14\n" +
 	"\x05alive\x18\x01 \x01(\bR\x05alive\"z\n" +
 	"\x0fCopyTileRequest\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12 \n" +
@@ -4741,9 +4742,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x11DeleteTileRequest\x12\x17\n" +
 	"\atile_id\x18\x02 \x01(\tR\x06tileId\x12#\n" +
 	"\rclaim_version\x18\x04 \x01(\x03R\fclaimVersion\x12,\n" +
-	"\x05claim\x18\x05 \x01(\v2\x16.gridwell.v1.PlacementR\x05claimJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04\"7\n" +
-	"\x12DeleteTileResponse\x12!\n" +
-	"\fsession_left\x18\x01 \x01(\tR\vsessionLeft\"\x88\x01\n" +
+	"\x05claim\x18\x05 \x01(\v2\x16.gridwell.v1.PlacementR\x05claimJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04\"1\n" +
+	"\x12DeleteTileResponse\x12\x1b\n" +
+	"\ttmux_left\x18\x01 \x01(\tR\btmuxLeft\"\x88\x01\n" +
 	"\x11SetFramingRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12 \n" +
 	"\froot_grid_id\x18\x02 \x01(\tR\n" +
@@ -4813,7 +4814,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rplugin_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventPluginHealthH\x00R\fpluginHealth\x12S\n" +
 	"\x14grid_framing_changed\x18\x05 \x01(\v2\x1f.gridwell.v1.GridFramingChangedH\x00R\x12gridFramingChanged\x12L\n" +
 	"\x11selection_changed\x18\x06 \x01(\v2\x1d.gridwell.v1.SelectionChangedH\x00R\x10selectionChangedB\t\n" +
-	"\apayload2\x81\r\n" +
+	"\apayload2\xf8\f\n" +
 	"\bGridwell\x12;\n" +
 	"\x04Info\x12\x18.gridwell.v1.InfoRequest\x1a\x19.gridwell.v1.InfoResponse\x12>\n" +
 	"\x05Probe\x12\x19.gridwell.v1.ProbeRequest\x1a\x1a.gridwell.v1.ProbeResponse\x12J\n" +
@@ -4835,8 +4836,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"DeleteTile\x12\x1e.gridwell.v1.DeleteTileRequest\x1a\x1f.gridwell.v1.DeleteTileResponse\x12M\n" +
 	"\n" +
 	"SetFraming\x12\x1e.gridwell.v1.SetFramingRequest\x1a\x1f.gridwell.v1.SetFramingResponse\x12S\n" +
-	"\fSetSelection\x12 .gridwell.v1.SetSelectionRequest\x1a!.gridwell.v1.SetSelectionResponse\x12b\n" +
-	"\x11ShellSessionAlive\x12%.gridwell.v1.ShellSessionAliveRequest\x1a&.gridwell.v1.ShellSessionAliveResponse\x12@\n" +
+	"\fSetSelection\x12 .gridwell.v1.SetSelectionRequest\x1a!.gridwell.v1.SetSelectionResponse\x12Y\n" +
+	"\x0eShellTmuxAlive\x12\".gridwell.v1.ShellTmuxAliveRequest\x1a#.gridwell.v1.ShellTmuxAliveResponse\x12@\n" +
 	"\tSubscribe\x12\x1d.gridwell.v1.SubscribeRequest\x1a\x12.gridwell.v1.Event0\x01\x12D\n" +
 	"\aSetView\x12\x1b.gridwell.v1.SetViewRequest\x1a\x1c.gridwell.v1.SetViewResponse\x12V\n" +
 	"\rDisableSource\x12!.gridwell.v1.DisableSourceRequest\x1a\".gridwell.v1.DisableSourceResponseB\xab\x01\n" +
@@ -4857,66 +4858,66 @@ func file_gridwell_v1_data_proto_rawDescGZIP() []byte {
 var file_gridwell_v1_data_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_gridwell_v1_data_proto_goTypes = []any{
-	(ProbeResponse_Presence)(0),       // 0: gridwell.v1.ProbeResponse.Presence
-	(*Grid)(nil),                      // 1: gridwell.v1.Grid
-	(*MenuEntry)(nil),                 // 2: gridwell.v1.MenuEntry
-	(*Tile)(nil),                      // 3: gridwell.v1.Tile
-	(*InfoRequest)(nil),               // 4: gridwell.v1.InfoRequest
-	(*InfoResponse)(nil),              // 5: gridwell.v1.InfoResponse
-	(*ProbeRequest)(nil),              // 6: gridwell.v1.ProbeRequest
-	(*ProbeResponse)(nil),             // 7: gridwell.v1.ProbeResponse
-	(*OpenShellRequest)(nil),          // 8: gridwell.v1.OpenShellRequest
-	(*OpenShellResponse)(nil),         // 9: gridwell.v1.OpenShellResponse
-	(*PTYSize)(nil),                   // 10: gridwell.v1.PTYSize
-	(*GetGridRequest)(nil),            // 11: gridwell.v1.GetGridRequest
-	(*GetGridResponse)(nil),           // 12: gridwell.v1.GetGridResponse
-	(*GetTilePreviewRequest)(nil),     // 13: gridwell.v1.GetTilePreviewRequest
-	(*GetTilePreviewResponse)(nil),    // 14: gridwell.v1.GetTilePreviewResponse
-	(*ReadContentRequest)(nil),        // 15: gridwell.v1.ReadContentRequest
-	(*ContentChunk)(nil),              // 16: gridwell.v1.ContentChunk
-	(*WriteContentRequest)(nil),       // 17: gridwell.v1.WriteContentRequest
-	(*ServeContentRequest)(nil),       // 18: gridwell.v1.ServeContentRequest
-	(*ServeContentChunk)(nil),         // 19: gridwell.v1.ServeContentChunk
-	(*MoveTileRequest)(nil),           // 20: gridwell.v1.MoveTileRequest
-	(*Placement)(nil),                 // 21: gridwell.v1.Placement
-	(*GetTileRequest)(nil),            // 22: gridwell.v1.GetTileRequest
-	(*FindRequest)(nil),               // 23: gridwell.v1.FindRequest
-	(*TimeRange)(nil),                 // 24: gridwell.v1.TimeRange
-	(*FindResult)(nil),                // 25: gridwell.v1.FindResult
-	(*FindResponse)(nil),              // 26: gridwell.v1.FindResponse
-	(*FindSkip)(nil),                  // 27: gridwell.v1.FindSkip
-	(*HandshakeRequest)(nil),          // 28: gridwell.v1.HandshakeRequest
-	(*PluginInfo)(nil),                // 29: gridwell.v1.PluginInfo
-	(*ConnectionInfo)(nil),            // 30: gridwell.v1.ConnectionInfo
-	(*HandshakeResponse)(nil),         // 31: gridwell.v1.HandshakeResponse
-	(*TileResponse)(nil),              // 32: gridwell.v1.TileResponse
-	(*DeadReference)(nil),             // 33: gridwell.v1.DeadReference
-	(*OtherBuild)(nil),                // 34: gridwell.v1.OtherBuild
-	(*SourceDisabled)(nil),            // 35: gridwell.v1.SourceDisabled
-	(*CreateTileRequest)(nil),         // 36: gridwell.v1.CreateTileRequest
-	(*ShellSessionAliveRequest)(nil),  // 37: gridwell.v1.ShellSessionAliveRequest
-	(*ShellSessionAliveResponse)(nil), // 38: gridwell.v1.ShellSessionAliveResponse
-	(*CopyTileRequest)(nil),           // 39: gridwell.v1.CopyTileRequest
-	(*SetTileRequest)(nil),            // 40: gridwell.v1.SetTileRequest
-	(*DeleteTileRequest)(nil),         // 41: gridwell.v1.DeleteTileRequest
-	(*DeleteTileResponse)(nil),        // 42: gridwell.v1.DeleteTileResponse
-	(*SetFramingRequest)(nil),         // 43: gridwell.v1.SetFramingRequest
-	(*SetFramingResponse)(nil),        // 44: gridwell.v1.SetFramingResponse
-	(*SetSelectionRequest)(nil),       // 45: gridwell.v1.SetSelectionRequest
-	(*SetSelectionResponse)(nil),      // 46: gridwell.v1.SetSelectionResponse
-	(*SubscribeRequest)(nil),          // 47: gridwell.v1.SubscribeRequest
-	(*SetViewRequest)(nil),            // 48: gridwell.v1.SetViewRequest
-	(*SetViewResponse)(nil),           // 49: gridwell.v1.SetViewResponse
-	(*ViewPane)(nil),                  // 50: gridwell.v1.ViewPane
-	(*DisableSourceRequest)(nil),      // 51: gridwell.v1.DisableSourceRequest
-	(*DisableSourceResponse)(nil),     // 52: gridwell.v1.DisableSourceResponse
-	(*GridChanged)(nil),               // 53: gridwell.v1.GridChanged
-	(*GridFramingChanged)(nil),        // 54: gridwell.v1.GridFramingChanged
-	(*SelectionChanged)(nil),          // 55: gridwell.v1.SelectionChanged
-	(*TileChanged)(nil),               // 56: gridwell.v1.TileChanged
-	(*TileRemoved)(nil),               // 57: gridwell.v1.TileRemoved
-	(*EventPluginHealth)(nil),         // 58: gridwell.v1.EventPluginHealth
-	(*Event)(nil),                     // 59: gridwell.v1.Event
+	(ProbeResponse_Presence)(0),    // 0: gridwell.v1.ProbeResponse.Presence
+	(*Grid)(nil),                   // 1: gridwell.v1.Grid
+	(*MenuEntry)(nil),              // 2: gridwell.v1.MenuEntry
+	(*Tile)(nil),                   // 3: gridwell.v1.Tile
+	(*InfoRequest)(nil),            // 4: gridwell.v1.InfoRequest
+	(*InfoResponse)(nil),           // 5: gridwell.v1.InfoResponse
+	(*ProbeRequest)(nil),           // 6: gridwell.v1.ProbeRequest
+	(*ProbeResponse)(nil),          // 7: gridwell.v1.ProbeResponse
+	(*OpenShellRequest)(nil),       // 8: gridwell.v1.OpenShellRequest
+	(*OpenShellResponse)(nil),      // 9: gridwell.v1.OpenShellResponse
+	(*PTYSize)(nil),                // 10: gridwell.v1.PTYSize
+	(*GetGridRequest)(nil),         // 11: gridwell.v1.GetGridRequest
+	(*GetGridResponse)(nil),        // 12: gridwell.v1.GetGridResponse
+	(*GetTilePreviewRequest)(nil),  // 13: gridwell.v1.GetTilePreviewRequest
+	(*GetTilePreviewResponse)(nil), // 14: gridwell.v1.GetTilePreviewResponse
+	(*ReadContentRequest)(nil),     // 15: gridwell.v1.ReadContentRequest
+	(*ContentChunk)(nil),           // 16: gridwell.v1.ContentChunk
+	(*WriteContentRequest)(nil),    // 17: gridwell.v1.WriteContentRequest
+	(*ServeContentRequest)(nil),    // 18: gridwell.v1.ServeContentRequest
+	(*ServeContentChunk)(nil),      // 19: gridwell.v1.ServeContentChunk
+	(*MoveTileRequest)(nil),        // 20: gridwell.v1.MoveTileRequest
+	(*Placement)(nil),              // 21: gridwell.v1.Placement
+	(*GetTileRequest)(nil),         // 22: gridwell.v1.GetTileRequest
+	(*FindRequest)(nil),            // 23: gridwell.v1.FindRequest
+	(*TimeRange)(nil),              // 24: gridwell.v1.TimeRange
+	(*FindResult)(nil),             // 25: gridwell.v1.FindResult
+	(*FindResponse)(nil),           // 26: gridwell.v1.FindResponse
+	(*FindSkip)(nil),               // 27: gridwell.v1.FindSkip
+	(*HandshakeRequest)(nil),       // 28: gridwell.v1.HandshakeRequest
+	(*PluginInfo)(nil),             // 29: gridwell.v1.PluginInfo
+	(*ConnectionInfo)(nil),         // 30: gridwell.v1.ConnectionInfo
+	(*HandshakeResponse)(nil),      // 31: gridwell.v1.HandshakeResponse
+	(*TileResponse)(nil),           // 32: gridwell.v1.TileResponse
+	(*DeadReference)(nil),          // 33: gridwell.v1.DeadReference
+	(*OtherBuild)(nil),             // 34: gridwell.v1.OtherBuild
+	(*SourceDisabled)(nil),         // 35: gridwell.v1.SourceDisabled
+	(*CreateTileRequest)(nil),      // 36: gridwell.v1.CreateTileRequest
+	(*ShellTmuxAliveRequest)(nil),  // 37: gridwell.v1.ShellTmuxAliveRequest
+	(*ShellTmuxAliveResponse)(nil), // 38: gridwell.v1.ShellTmuxAliveResponse
+	(*CopyTileRequest)(nil),        // 39: gridwell.v1.CopyTileRequest
+	(*SetTileRequest)(nil),         // 40: gridwell.v1.SetTileRequest
+	(*DeleteTileRequest)(nil),      // 41: gridwell.v1.DeleteTileRequest
+	(*DeleteTileResponse)(nil),     // 42: gridwell.v1.DeleteTileResponse
+	(*SetFramingRequest)(nil),      // 43: gridwell.v1.SetFramingRequest
+	(*SetFramingResponse)(nil),     // 44: gridwell.v1.SetFramingResponse
+	(*SetSelectionRequest)(nil),    // 45: gridwell.v1.SetSelectionRequest
+	(*SetSelectionResponse)(nil),   // 46: gridwell.v1.SetSelectionResponse
+	(*SubscribeRequest)(nil),       // 47: gridwell.v1.SubscribeRequest
+	(*SetViewRequest)(nil),         // 48: gridwell.v1.SetViewRequest
+	(*SetViewResponse)(nil),        // 49: gridwell.v1.SetViewResponse
+	(*ViewPane)(nil),               // 50: gridwell.v1.ViewPane
+	(*DisableSourceRequest)(nil),   // 51: gridwell.v1.DisableSourceRequest
+	(*DisableSourceResponse)(nil),  // 52: gridwell.v1.DisableSourceResponse
+	(*GridChanged)(nil),            // 53: gridwell.v1.GridChanged
+	(*GridFramingChanged)(nil),     // 54: gridwell.v1.GridFramingChanged
+	(*SelectionChanged)(nil),       // 55: gridwell.v1.SelectionChanged
+	(*TileChanged)(nil),            // 56: gridwell.v1.TileChanged
+	(*TileRemoved)(nil),            // 57: gridwell.v1.TileRemoved
+	(*EventPluginHealth)(nil),      // 58: gridwell.v1.EventPluginHealth
+	(*Event)(nil),                  // 59: gridwell.v1.Event
 }
 var file_gridwell_v1_data_proto_depIdxs = []int32{
 	2,  // 0: gridwell.v1.Grid.menu_entries:type_name -> gridwell.v1.MenuEntry
@@ -4967,7 +4968,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	41, // 45: gridwell.v1.Gridwell.DeleteTile:input_type -> gridwell.v1.DeleteTileRequest
 	43, // 46: gridwell.v1.Gridwell.SetFraming:input_type -> gridwell.v1.SetFramingRequest
 	45, // 47: gridwell.v1.Gridwell.SetSelection:input_type -> gridwell.v1.SetSelectionRequest
-	37, // 48: gridwell.v1.Gridwell.ShellSessionAlive:input_type -> gridwell.v1.ShellSessionAliveRequest
+	37, // 48: gridwell.v1.Gridwell.ShellTmuxAlive:input_type -> gridwell.v1.ShellTmuxAliveRequest
 	47, // 49: gridwell.v1.Gridwell.Subscribe:input_type -> gridwell.v1.SubscribeRequest
 	48, // 50: gridwell.v1.Gridwell.SetView:input_type -> gridwell.v1.SetViewRequest
 	51, // 51: gridwell.v1.Gridwell.DisableSource:input_type -> gridwell.v1.DisableSourceRequest
@@ -4989,7 +4990,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	42, // 67: gridwell.v1.Gridwell.DeleteTile:output_type -> gridwell.v1.DeleteTileResponse
 	44, // 68: gridwell.v1.Gridwell.SetFraming:output_type -> gridwell.v1.SetFramingResponse
 	46, // 69: gridwell.v1.Gridwell.SetSelection:output_type -> gridwell.v1.SetSelectionResponse
-	38, // 70: gridwell.v1.Gridwell.ShellSessionAlive:output_type -> gridwell.v1.ShellSessionAliveResponse
+	38, // 70: gridwell.v1.Gridwell.ShellTmuxAlive:output_type -> gridwell.v1.ShellTmuxAliveResponse
 	59, // 71: gridwell.v1.Gridwell.Subscribe:output_type -> gridwell.v1.Event
 	49, // 72: gridwell.v1.Gridwell.SetView:output_type -> gridwell.v1.SetViewResponse
 	52, // 73: gridwell.v1.Gridwell.DisableSource:output_type -> gridwell.v1.DisableSourceResponse

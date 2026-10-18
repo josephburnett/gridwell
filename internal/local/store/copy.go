@@ -92,7 +92,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		urlStr, textMode  sql.NullString
 		urlHist           sql.NullString
 		linkTarget        sql.NullString
-		shellSession      sql.NullString
+		shellTmux         sql.NullString
 	)
 	if n.LinkTargetId != "" {
 		// A copy of a link is a link (CLAUDE.md, 2026-10-06); the CHECK's link
@@ -110,9 +110,9 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			urlHist = sql.NullString{String: n.UrlHistory, Valid: true}
 		}
 	case n.Kind == rpc.KindShell:
-		// The copy names its source's session, started or not, and shows the
+		// The copy names its source's tmux, started or not, and shows the
 		// source's preview until it is live itself.
-		shellSession = sql.NullString{String: rpc.ShellSession(n), Valid: true}
+		shellTmux = sql.NullString{String: rpc.ShellTmux(n), Valid: true}
 		if n.PreviewBlobId != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}
 		}
@@ -157,7 +157,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		"alt_text": n.AltText, "alt_user": altUser,
 		"content_zoom": n.ContentZoom, "url_history": urlHist,
 		"link_target_id": linkTarget, "url_frozen": boolToInt(n.UrlFrozen),
-		"shell_session": shellSession,
+		"shell_session": shellTmux,
 		"created_at":    now, "updated_at": now,
 	})
 	if err != nil {

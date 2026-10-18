@@ -734,10 +734,10 @@ func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 	}, namespace.Namespace.GetTilePreview, asIs)
 }
 
-func (s *Server) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.ShellSessionAliveRequest {
-		return &gridwellv1.ShellSessionAliveRequest{TileId: local}
-	}, namespace.Namespace.ShellSessionAlive, asIs)
+func (s *Server) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.ShellTmuxAliveRequest {
+		return &gridwellv1.ShellTmuxAliveRequest{TileId: local}
+	}, namespace.Namespace.ShellTmuxAlive, asIs)
 }
 
 func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {

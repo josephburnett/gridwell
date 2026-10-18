@@ -9,11 +9,11 @@ import (
 	"runtime"
 )
 
-// Session exists so both halves present the same type to shellsvc.Session.
+// PTY exists so both halves present the same type to shellsvc.Attachment.
 // Start never returns one; its channels are already closed and its writes
 // refused, so a caller that ignored Start's error terminates instead of
 // hanging.
-type Session struct{}
+type PTY struct{}
 
 var (
 	closedOutput = func() chan []byte {
@@ -29,12 +29,12 @@ var (
 )
 
 // Start refuses; see ErrShellsUnavailable.
-func Start(_ Config) (*Session, error) {
+func Start(_ Config) (*PTY, error) {
 	return nil, fmt.Errorf("shelldriver: %w (%s)", ErrShellsUnavailable, runtime.GOOS)
 }
 
-func (s *Session) Output() <-chan []byte       { return closedOutput }
-func (s *Session) Write(_ []byte) (int, error) { return 0, ErrShellsUnavailable }
-func (s *Session) Resize(_, _ uint16) error    { return ErrShellsUnavailable }
-func (s *Session) Done() <-chan struct{}       { return closedDone }
-func (s *Session) Close() error                { return nil }
+func (s *PTY) Output() <-chan []byte       { return closedOutput }
+func (s *PTY) Write(_ []byte) (int, error) { return 0, ErrShellsUnavailable }
+func (s *PTY) Resize(_, _ uint16) error    { return ErrShellsUnavailable }
+func (s *PTY) Done() <-chan struct{}       { return closedDone }
+func (s *PTY) Close() error                { return nil }

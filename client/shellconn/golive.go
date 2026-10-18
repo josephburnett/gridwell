@@ -5,7 +5,7 @@ package shellconn
 type GoLivePlan struct {
 	Unfreeze bool
 	// FollowLink hands the gesture to the link's target, which owns the
-	// address, the session, the history and the freeze writeback.
+	// address, the tmux, the history and the freeze writeback.
 	FollowLink bool
 }
 

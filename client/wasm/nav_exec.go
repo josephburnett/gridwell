@@ -276,7 +276,7 @@ func (a *App) navAwait(e nav.Effect) {
 	tok := e.Token
 	switch e.Request.Kind {
 	case nav.RequestProbeShell:
-		a.probeShellSessionAlive(e.Request.Key, e.Request.ID, func(alive bool) {
+		a.probeShellTmuxAlive(e.Request.Key, e.Request.ID, func(alive bool) {
 			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Alive: alive}, a.navWorldCommon()))
 		})
 	case nav.RequestGetTile:

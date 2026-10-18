@@ -97,7 +97,7 @@ type Palette struct {
 	PaneTileFill   string
 	PaneTileBorder string
 	// EphemeralBorder overrides the kind color, because ascending deletes the
-	// tile, a shell's tmux session included, and the border is the warning.
+	// tile, a shell's tmux included, and the border is the warning.
 	EphemeralBorder      string
 	EphemeralBorderFaded string
 	// SourceLabelBg is opaque enough that a label reads over any preview.

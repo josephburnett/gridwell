@@ -9,8 +9,8 @@ package server_test
 //     swatch from it),
 //   - CreateTile(kind=shell) is PermissionDenied while other kinds work,
 //   - OpenShell is PermissionDenied — the only PTY verb on the node,
-//   - ShellSessionAlive answers "gone", so a pre-existing shell tile's
-//     refresh affordance hides exactly like a dead tmux session's.
+//   - ShellTmuxAlive answers "gone", so a pre-existing shell tile's
+//     refresh affordance hides exactly like a dead tmux's.
 
 import (
 	"context"
@@ -64,7 +64,7 @@ func TestShellsDisabled(t *testing.T) {
 
 	// A shell tile that PRE-DATES the flag (created through the plugin
 	// directly — placement is sacred, the row stays): its PTY is
-	// closed and its session reads as gone.
+	// closed and its tmux reads as gone.
 	pre, err := direct.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: gridLocal(grid),
 		Tile:   &gridwellv1.Tile{Kind: "shell", X: 3, Y: 1, W: 1, H: 1},
@@ -87,12 +87,12 @@ func TestShellsDisabled(t *testing.T) {
 		t.Errorf("OpenShell = %v, want PermissionDenied", serr)
 	}
 
-	alive, err := c.ShellSessionAlive(ctx, &gridwellv1.ShellSessionAliveRequest{TileId: qualified})
+	alive, err := c.ShellTmuxAlive(ctx, &gridwellv1.ShellTmuxAliveRequest{TileId: qualified})
 	if err != nil {
-		t.Fatalf("ShellSessionAlive: %v", err)
+		t.Fatalf("ShellTmuxAlive: %v", err)
 	}
 	if alive.Alive {
-		t.Errorf("ShellSessionAlive = true, want false (unreachable by design)")
+		t.Errorf("ShellTmuxAlive = true, want false (unreachable by design)")
 	}
 }
 

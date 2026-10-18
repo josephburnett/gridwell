@@ -486,8 +486,8 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		// Reap only on an explicit NotFound: a missed reap is reclaimed by the
 		// boot sweep, a wrong one by nothing.
 		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
-			left := append([]string{resp.GetSessionLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
-			resp = &pb.DeleteTileResponse{SessionLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
+			left := append([]string{resp.GetTmuxLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
+			resp = &pb.DeleteTileResponse{TmuxLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
 		}
 	}
 	return resp, nil
@@ -517,7 +517,7 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 
 // reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed pane
 // tile's captured leaves, best-effort: it must not block the user's delete. It
-// answers why each shell session it should have ended is still running.
+// answers why each shell's tmux it should have ended is still running.
 func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {
 	for _, id := range candidates {
 		ec, elocal, euuid, transit, err := rt.route(id)
@@ -550,7 +550,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		case err != nil:
 			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)
 		default:
-			left = append(left, dr.GetSessionLeft())
+			left = append(left, dr.GetTmuxLeft())
 		}
 	}
 	return left
@@ -646,18 +646,18 @@ func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest)
 	return &pb.SetSelectionResponse{}, nil
 }
 
-// ShellSessionAlive routes the per-descent probe to the namespace holding the
-// PTY. With disable_shells every session is dead by design, a verdict; any
+// ShellTmuxAlive routes the per-descent probe to the namespace holding the
+// PTY. With disable_shells every tmux is dead by design, a verdict; any
 // other failure is the owner's to answer and the client's to report.
-func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
+func (rt *router) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
 	if rt.srv.cfg.DisableShells {
-		return &pb.ShellSessionAliveResponse{Alive: false}, nil
+		return &pb.ShellTmuxAliveResponse{Alive: false}, nil
 	}
 	c, local, _, _, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	return c.ShellSessionAlive(ctx, &pb.ShellSessionAliveRequest{TileId: local})
+	return c.ShellTmuxAlive(ctx, &pb.ShellTmuxAliveRequest{TileId: local})
 }
 
 // Subscribe fans every watching namespace's events (Info.watch) into the

@@ -110,7 +110,7 @@ for (const kind of ['well', 'markdown', 'url', 'shell'] as const) {
     }
 
     if (kind === 'shell') {
-      // tmux outlives the page, so the session goes with the tile.
+      // tmux outlives the page, so the tmux goes with the tile.
       await gw.deleteTileCell(cx, cy);
     }
   });

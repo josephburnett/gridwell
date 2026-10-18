@@ -77,8 +77,8 @@ func (Unimplemented) SetSelection(context.Context, *pb.SetSelectionRequest) (*pb
 	return nil, unimp("SetSelection")
 }
 
-func (Unimplemented) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return nil, unimp("ShellSessionAlive")
+func (Unimplemented) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return nil, unimp("ShellTmuxAlive")
 }
 
 func (Unimplemented) ReadContent(context.Context, *pb.ReadContentRequest, func(*pb.ContentChunk) error) error {

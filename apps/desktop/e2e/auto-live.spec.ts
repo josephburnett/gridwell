@@ -1,19 +1,19 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// A shell descent reconnects the running tmux session and a url descent
+// A shell descent reconnects the running tmux and a url descent
 // reopens the page, with no refresh click. A sibling pane's frozen preview is
 // untouched by this pane's live descent, because going live presents the
 // target without editing it: the version moves only at the ascent freeze.
 
-test('shell descent reconnects the running session with its state', async ({ gw, window }) => {
+test('shell descent reconnects the running tmux with its state', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
   // The drop lands bare, like every primitive; the first descent creates the
-  // session, through shellconn.DecideAutoLive's fresh-shell arm.
+  // tmux, through shellconn.DecideAutoLive's fresh-shell arm.
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await expect.poll(async () => tileAt(await gw.getGrid(f.gridID), 'shell', cx, cy)).toBeTruthy();
@@ -27,7 +27,7 @@ test('shell descent reconnects the running session with its state', async ({ gw,
     })
     .not.toBe('');
 
-  // The ascent freezes and detaches; tmux keeps the session.
+  // The ascent freezes and detaches; the tmux keeps running.
   await window.keyboard.type('marker=auto-live-202');
   // The marker renders only after the PTY echoes it back, so poll for that
   // round trip.
@@ -46,7 +46,7 @@ test('shell descent reconnects the running session with its state', async ({ gw,
     })
     .not.toBe('');
   // The typed, unentered command line is still on the PTY, so it is the same
-  // session. The WebGL renderer paints to canvas, so the DOM carries no
+  // tmux. The WebGL renderer paints to canvas, so the DOM carries no
   // terminal text and the buffer hook is the only way to read it.
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellText()), {

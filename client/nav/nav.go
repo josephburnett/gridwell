@@ -71,7 +71,7 @@ type cont struct {
 	PaneID string
 	TileID string
 	Tile   *gridwellv1.Tile
-	// Key is the shell session a probe answers for, or a reconcile's level
+	// Key is the shell's tmux a probe answers for, or a reconcile's level
 	// pane-id prefix.
 	Key   string
 	Stack pane.Stack
@@ -99,7 +99,7 @@ const (
 	stepLevelRecentre
 	stepLinkTarget // places a live url view on a link's target row
 	// stepShellLinkTarget re-decides a shell link's descent keyed on its
-	// target's session.
+	// target's tmux.
 	stepShellLinkTarget
 	// stepRetireVisit deletes an ended ephemeral visit once the node holds a
 	// layout that no longer names it: deleted first, a pane-tile preview of

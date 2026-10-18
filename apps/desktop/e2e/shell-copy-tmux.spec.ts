@@ -3,16 +3,16 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test, expect } from './fixtures';
 import { homeEnv } from './homes';
-import { shellSessionAlive, tileAt } from './oracle';
+import { shellTmuxAlive, tileAt } from './oracle';
 
-// A copied shell is its own tile naming its source's tmux session
-// (rpc.ShellSession). Any number of tiles may name one session and at most one
+// A copied shell is its own tile naming its source's tmux
+// (rpc.ShellTmux). Any number of tiles may name one tmux and at most one
 // is live: going live on the copy closes the source's terminal, which keeps
-// its own preview, and attaches the same session, so what was typed in one shows
+// its own preview, and attaches the same tmux, so what was typed in one shows
 // in the other, tmux sees one attached client sized to the copy's pane, and
-// one exit leaves every tile on the session dead. This drives what no unit
-// test can: the copy gesture, the stored session, the client's takeover by
-// session, the /shell API and the real tmux behind it.
+// one exit leaves every tile on the tmux dead. This drives what no unit
+// test can: the copy gesture, the stored tmux, the client's takeover by
+// tmux, the /shell API and the real tmux behind it.
 
 // The node's private tmux server (gridwell-<id>, internal/node), asked the
 // way the node asks it: through the socket dir the home's environment names.
@@ -25,7 +25,7 @@ function tmuxClients(home: string): string[] {
   return r.status === 0 ? r.stdout.split('\n').filter((l) => l.trim() !== '') : [];
 }
 
-test('a copy of a live shell attaches its session: one client, one exit for both', async ({ gw, home, window }) => {
+test('a copy of a live shell attaches its tmux: one client, one exit for both', async ({ gw, home, window }) => {
   const origin = new URL(window.url()).origin;
   const shellViews = (): Promise<Record<string, string>> =>
     window.evaluate(() => (window as any).__gridwellTest.shellViews());
@@ -58,15 +58,15 @@ test('a copy of a live shell attaches its session: one client, one exit for both
   await expect.poll(markerRow, { timeout: 10_000 }).toBe(true);
   const source = (await shellAt(cx, cy))!;
 
-  // Right-drag the live shell in the other pane: the copy names its session.
+  // Right-drag the live shell in the other pane: the copy names its tmux.
   await gw.focusPane(await pane(right.id));
   await gw.copyTileCell(cx, cy, cx + 2, cy);
   const copy = (await shellAt(cx + 2, cy))!;
   expect(copy, 'the copy landed').toBeTruthy();
   expect(copy.id, 'the copy is its own tile').not.toBe(source.id);
-  expect(copy.shellSession, 'the copy names its source session').toBe(source.id);
+  expect(copy.shellTmux, "the copy names its source's tmux").toBe(source.id);
 
-  // Going live on the copy takes the session over.
+  // Going live on the copy takes the tmux over.
   await gw.descendCell(cx + 2, cy);
   await expect
     .poll(shellViews, { message: 'the copy holds the one live terminal', timeout: 15_000 })
@@ -91,23 +91,23 @@ test('a copy of a live shell attaches its session: one client, one exit for both
     )
     .toBe(true);
 
-  // The source's refresh is on offer while the session lives.
+  // The source's refresh is on offer while the tmux lives.
   await gw.focusPane(await pane(left.id));
   await expect.poll(slot, { timeout: 15_000 }).toBe('golive');
 
-  // One exit and every tile on the session is dead.
+  // One exit and every tile on the tmux is dead.
   await gw.focusPane(await pane(right.id));
   await window.keyboard.type('exit');
   await window.keyboard.press('Enter');
   await expect.poll(shellViews, { timeout: 15_000 }).toEqual({});
-  await expect.poll(() => shellSessionAlive(origin, source.id), { timeout: 10_000 }).toBe(false);
-  expect(await shellSessionAlive(origin, copy.id), 'the copy shares the death').toBe(false);
+  await expect.poll(() => shellTmuxAlive(origin, source.id), { timeout: 10_000 }).toBe(false);
+  expect(await shellTmuxAlive(origin, copy.id), 'the copy shares the death').toBe(false);
   await gw.focusPane(await pane(left.id));
   await expect.poll(slot, { message: 'the source hides its refresh', timeout: 15_000 }).not.toBe('golive');
   expect(tmuxClients(home)).toEqual([]);
 });
 
-test('a copy of a never-opened shell starts the session its source then joins', async ({ gw, window }) => {
+test('a copy of a never-opened shell starts the tmux its source then joins', async ({ gw, window }) => {
   const shellText = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.shellText());
 
   await gw.enterPlugin('home');
@@ -122,9 +122,9 @@ test('a copy of a never-opened shell starts the session its source then joins', 
   await gw.copyTileCell(cx, cy, cx + 2, cy);
   const source = (await shellAt(cx, cy))!;
   const copy = (await shellAt(cx + 2, cy))!;
-  expect(copy.shellSession, 'the copy names the session not yet started').toBe(source.id);
+  expect(copy.shellTmux, 'the copy names the tmux not yet started').toBe(source.id);
 
-  // The copy opens first and starts the session.
+  // The copy opens first and starts the tmux.
   await gw.descendCell(cx + 2, cy);
   await gw.shellAttached();
   const marker = `gw-first-${Math.random().toString(36).slice(2, 8)}`;
@@ -135,12 +135,12 @@ test('a copy of a never-opened shell starts the session its source then joins', 
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 10_000 }).toBe('');
 
-  // The source joins the same session rather than starting its own.
+  // The source joins the same tmux rather than starting its own.
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
-  expect(await markerRow(), 'the source attached the session its copy started').toBe(true);
+  expect(await markerRow(), 'the source attached the tmux its copy started').toBe(true);
 
-  // End the session so tmux never hangs the harness close.
+  // End the tmux so tmux never hangs the harness close.
   await window.keyboard.type('exit');
   await window.keyboard.press('Enter');
   await expect.poll(shellText, { timeout: 15_000 }).toBe('');

@@ -19,7 +19,7 @@ import (
 // blob is the ONLY record of the workspace's ephemeral leaves (scratch-grid
 // tiles). Deleting the pane tile deletes only the arrangement — but must
 // terminate what the arrangement owns, exactly like closing a pane does:
-// each referenced SCRATCH tile is deleted (which kills its tmux session via
+// each referenced SCRATCH tile is deleted (which kills its tmux via
 // the existing DeleteTile→shell.Kill chain). Linkd NON-scratch tiles
 // are content the workspace merely VIEWS and must survive — deleting a
 // workspace never deletes data.
@@ -120,9 +120,9 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 }
 
-// A pane tile's destroy that reaps an ephemeral shell whose session will not
+// A pane tile's destroy that reaps an ephemeral shell whose tmux will not
 // stop says so on its answer, as a destroyed shell row's own delete does.
-func TestAReapThatLeavesASessionRunningSaysSo(t *testing.T) {
+func TestAReapThatLeavesATmuxRunningSaysSo(t *testing.T) {
 	ctx := context.Background()
 	f := newShellAPIFixture(t, Config{ID: "lnode1"})
 	g, err := f.cl.GetGrid(ctx, f.root)
@@ -152,7 +152,7 @@ func TestAReapThatLeavesASessionRunningSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("destroy = %v, want it to land", err)
 	}
-	if !strings.Contains(resp.SessionLeft, "server exited unexpectedly") {
-		t.Fatalf("session_left = %q, want the reaped shell's reason", resp.SessionLeft)
+	if !strings.Contains(resp.TmuxLeft, "server exited unexpectedly") {
+		t.Fatalf("tmux_left = %q, want the reaped shell's reason", resp.TmuxLeft)
 	}
 }

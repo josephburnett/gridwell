@@ -17,7 +17,7 @@ test('a bare LF keeps the cursor column (#211)', async ({ gw, window }) => {
 
   await gw.openMenu();
   await gw.dragCreate('shell', sx, sy);
-  await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   // tmux's attach paint erases anything written before it; one owner decides
   // when a write can land (driver.shellAttached).
@@ -39,7 +39,7 @@ test('a bare LF keeps the cursor column (#211)', async ({ gw, window }) => {
     )
     .toMatch(/^ {13}END-MARKER/);
 
-  // Delete the tile so its tmux session dies before teardown.
+  // Delete the tile so its tmux dies before teardown.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(sx, sy);

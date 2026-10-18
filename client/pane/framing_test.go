@@ -138,7 +138,7 @@ func TestTakeOver(t *testing.T) {
 // closes the source's surface, so it freezes onto its own tile, and places a
 // fresh one bound to the copy. A move would carry a socket bound to the
 // source, whose preview and title the server would keep writing.
-func TestTakeOverAcrossTilesOnOneSession(t *testing.T) {
+func TestTakeOverAcrossTilesOnOneTmux(t *testing.T) {
 	cases := []struct {
 		name    string
 		holders []Holder

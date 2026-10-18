@@ -1,9 +1,9 @@
 //go:build connections
 
-// Shell sessions across a real connection: a copy made on the far node names
-// its source's session there, and attaching the copy through this node's
-// /shell API runs that one session; a shell copied onto this node from the far
-// one cannot share a session that lives over there, so it lands as a link.
+// Shell tmuxes across a real connection: a copy made on the far node names
+// its source's tmux there, and attaching the copy through this node's
+// /shell API runs that one tmux; a shell copied onto this node from the far
+// one cannot share a tmux that lives over there, so it lands as a link.
 
 package connections_test
 
@@ -19,7 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/client/shellws"
 )
 
-func TestShellSessionsAcrossAConnection(t *testing.T) {
+func TestShellTmuxAcrossAConnection(t *testing.T) {
 	root := repoRoot(t)
 	bin := filepath.Join(root, "gridwell")
 	if _, err := os.Stat(bin); err != nil {
@@ -48,11 +48,11 @@ func TestShellSessionsAcrossAConnection(t *testing.T) {
 		"tileId": srcID, "destGridId": farRoot, "x": 2, "y": 0,
 	})["tile"].(map[string]any)
 	copyID := cp["id"].(string)
-	if got, _ := cp["shellSession"].(string); got != srcID {
-		t.Fatalf("a copy on the far node names session %q, want its source %q spelled through the hop", got, srcID)
+	if got, _ := cp["shellTmux"].(string); got != srcID {
+		t.Fatalf("a copy on the far node names tmux %q, want its source %q spelled through the hop", got, srcID)
 	}
 
-	// Attaching the copy starts the source's session on the far node.
+	// Attaching the copy starts the source's tmux on the far node.
 	out := make(chan []byte, 64)
 	exits := make(chan shellstream.Exit, 4)
 	reg := shellstream.New(
@@ -76,8 +76,8 @@ func TestShellSessionsAcrossAConnection(t *testing.T) {
 		}
 	}
 	for _, id := range []string{srcID, copyID} {
-		if alive, _ := rpc(t, localOrigin, "ShellSessionAlive", map[string]any{"tileId": id})["alive"].(bool); !alive {
-			t.Errorf("ShellSessionAlive(%s) = false: the copy's attach must have started its source's session", id)
+		if alive, _ := rpc(t, localOrigin, "ShellTmuxAlive", map[string]any{"tileId": id})["alive"].(bool); !alive {
+			t.Errorf("ShellTmuxAlive(%s) = false: the copy's attach must have started its source's tmux", id)
 		}
 	}
 
@@ -89,11 +89,11 @@ func TestShellSessionsAcrossAConnection(t *testing.T) {
 		t.Fatalf("a shell copied across nodes = %v, want a link to %q", cross, srcID)
 	}
 
-	// End the session so the far tmux server does not outlive the test.
+	// End the tmux so the far tmux server does not outlive the test.
 	reg.Write(srcID, []byte("exit\r"))
 	select {
 	case <-exits:
 	case <-time.After(20 * time.Second):
-		t.Fatal("the far session never ended")
+		t.Fatal("the far tmux never ended")
 	}
 }

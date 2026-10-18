@@ -49,7 +49,7 @@ func TestBeaconBodies(t *testing.T) {
 	}
 
 	// The ephemeral cleanup parks, so it can be drained at unload: a quit
-	// mid-ascent must still take the scratch row, and a shell's tmux session,
+	// mid-ascent must still take the scratch row, and a shell's tmux,
 	// with it.
 	path, body = DeleteTileBeacon(DeleteOf(&pb.Tile{Id: "u1/7", GridId: "u1/2", W: 1, H: 1}))
 	if path != "/gridwell.v1.Gridwell/DeleteTile" {

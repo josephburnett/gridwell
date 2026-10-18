@@ -25,7 +25,7 @@ var leafLinkKinds = map[string]bool{
 // the same contract as an exit well's child_grid_id: the qualification is what
 // makes the link unambiguous, not the crossing, so a same-namespace
 // target is an ordinary link. The row carries no content, readers resolving
-// bytes and session through the target, so deleting it only unlinks.
+// bytes and tmux through the target, so deleting it only unlinks.
 func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt string) (*gridwellv1.Tile, error) {
 	if !leafLinkKinds[kind] {
 		return nil, fmt.Errorf("%w: kind %q has no leaf-link variant", ErrInvalidArgument, kind)

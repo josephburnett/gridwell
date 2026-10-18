@@ -11,7 +11,7 @@ here.
 | **well** | The only tile with a child grid, and the only doorway that pushes a frame onto a grid. |
 | **text** | The only tile the user types into, and the only one whose `version` claims bytes. |
 | **url** | The only tile with an address of its own and a Chromium session behind it. |
-| **shell** | The only tile whose content is a host process. It survives ascent as a tmux session. |
+| **shell** | The only tile whose content is a host process. It survives ascent as a tmux. |
 | **pane** | The only tile whose content is an arrangement. Descent swaps the window's pane tree, not one pane. |
 
 ## Link shapes
@@ -81,7 +81,7 @@ class, and the word says who started the write.
 | **serves_page** | This url tile opens at the `/content/` API, where its plugin serves the page, instead of at an address of its own. It is either a text tile or a url tile: a text tile cannot serve from the plugin, so the plugin API (`acceptEntries`) refuses the declaration on every kind but url. The address, title and history are the plugin's, so the freeze writes the screenshot alone (`urlview.Writeback`); the preview, the standing freeze and the zoom are a url tile's. When its plugin says the page changed in place, a live view showing it loads it again once on screen, and an unfrozen screenshot gives way to the plugin's picture until the next capture (`urlview.PageMoved`, `pluginhost.pagePreviewStale`). |
 | **text_presentation: plain** | Verbatim preformatted text; no rendered/raw toggle. |
 | **text_presentation: both** | The tile is a document: rendered by default, with the toggle to the raw source, whether or not the tile is writable. |
-| **frozen** (`Tile.url_frozen`) | A standing user intent not to go live, on a url or a shell alike. The preview is what a frozen tile looks like; the intent is why it stays that way. Freezing is a screenshot, not a kill: the address still resolves, the tmux session still runs, and a copy taken while frozen keeps that preview. The reconnect gesture is the one thing that clears it. The field name is from before a shell could be frozen. |
+| **frozen** (`Tile.url_frozen`) | A standing user intent not to go live, on a url or a shell alike. The preview is what a frozen tile looks like; the intent is why it stays that way. Freezing is a screenshot, not a kill: the address still resolves, the tmux still runs, and a copy taken while frozen keeps that preview. The reconnect gesture is the one thing that clears it. The field name is from before a shell could be frozen. |
 | **content zoom** (`Tile.content_zoom`) | The scale of what renders inside one text, shell or url tile, stored on its row by `SetTile`'s content-zoom arm, so a document reads larger without the grid moving and stays that size wherever the tile is shown. Pane zoom is the grid's viewport; this is the tile's. `client/contentzoom` owns the chord and the range. |
 | **status_detail** | The owning plugin's one emoji about a tile's state (✅ done, ● unread, ★ starred), set only when there is something to notice and drawn before the name wherever the name is (`tilepreview.BannerText`). A note on a name, never a second name, and nothing outside the plugin can derive it. |
 | **theme** (`client/theme`) | Which palette the client draws in, dark or light. A view preference of this browser or this app, not a fact about your things: it is never written, never shared between your machines, and defaults to dark. Right-click the + menu circle on any grid to pick one. |

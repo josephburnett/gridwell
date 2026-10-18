@@ -448,8 +448,8 @@ func TestShellAPIThroughAConnection(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no PTY output from the mounted remote within 5s")
 	}
-	if h.remoteShell.SessionCount() != 1 {
-		t.Errorf("remote PTY sessions = %d, want 1", h.remoteShell.SessionCount())
+	if h.remoteShell.AttachmentCount() != 1 {
+		t.Errorf("remote PTYs = %d, want 1", h.remoteShell.AttachmentCount())
 	}
 }
 

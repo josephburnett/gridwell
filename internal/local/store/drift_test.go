@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"sort"
 	"testing"
 
@@ -92,12 +93,12 @@ func TestDescriptorMatchesProto(t *testing.T) {
 	}
 }
 
-// wireNames is the set of column names a table puts on the wire.
+// wireNames is the set of proto field names a table puts on the wire.
 func wireNames[T any](cols []column[T]) []string {
 	var out []string
 	for _, c := range cols {
 		if c.bind != nil {
-			out = append(out, c.name)
+			out = append(out, cmp.Or(c.field, c.name))
 		}
 	}
 	return out

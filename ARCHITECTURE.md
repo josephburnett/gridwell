@@ -93,7 +93,7 @@ record shapes. Everything else derives from it:
 | Framing | `SetFraming` — the one framing write |
 | Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its wells too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `MoveTile`, `CopyTile`, `DeleteTile` |
-| Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
+| Shells | `OpenShell`, `ShellTmuxAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
 
 `Find` is the one find verb: free text, or `id:` for the exact locate,
@@ -178,7 +178,7 @@ folds one in, and minting an empty store beside that content would come up as
 a home that had lost everything.
 
 **Home** (`internal/local`) owns the user's content: text, urls, wells, pane
-tiles, shells, and the event stream. Shells are tmux sessions on a private
+tiles, shells, and the event stream. Shells are tmuxes on a private
 socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
@@ -478,32 +478,32 @@ DOM focus change is a `dom-focus` trace record.
 the lifecycle). Binary frames are PTY bytes, text frames are JSON control
 (resize up, one exit verdict down). The shell API (`internal/server/shell_api.go`)
 resolves the id before accepting, so a refused upgrade never leaves a tmux
-session behind.
+tmux behind.
 
-A shell tile names a tmux session (`rpc.ShellSession`): its own id, or, for a
-copy, the session its source named, which the store writes on every copy
+A shell tile names a tmux (`rpc.ShellTmux`): its own id, or, for a
+copy, the tmux its source named, which the store writes on every copy
 (`tiles.shell_session`) and the id codec qualifies like the tile's own id. The
-home resolves a tile to its session before it touches tmux, and `shellsvc`
-holds one attached client per session, so a second tile going live evicts the
-first exactly as a second pane does. A session no row naming it has a preview of
+home resolves a tile to its tmux before it touches tmux, and `shellsvc`
+holds one attached client per tmux, so a second tile going live evicts the
+first exactly as a second pane does. A tmux no row naming it has a preview of
 was never started and is created by whichever tile opens it first; a started
 one that is gone is refused, never recreated behind a preview. It dies with the
 last row naming it, a trashed one included. A link names its target's
-session, so the client keys every shell fact by `shellconn.SessionKey`, which
-reads the target row first. Sessions live on the node that
+tmux, so the client keys every shell fact by `shellconn.TmuxKey`, which
+reads the target row first. Tmuxes live on the node that
 started them, so a shell copied across namespaces copies as a link.
 
 **Takeover.** One live surface per key: a content tile, or for a shell the
-session it names. Opening it elsewhere takes over, and `pane.TakeOver` says
+tmux it names. Opening it elsewhere takes over, and `pane.TakeOver` says
 how — keep the surface the pane already has, move the one another pane holds
-on the same tile, close one another tile holds on the same session, or place
+on the same tile, close one another tile holds on the same tmux, or place
 a fresh one. Every kind of surface moves within its tile. A url view: the
 bridge's `moveWebview` re-keys main's entry to the new pane with that pane's
 bounds, park and focus verdicts, and nothing navigates, so the page keeps its
 scroll, its script state and a half-typed field. A shell: its xterm and its
 `/shell` socket go to the new pane, and the socket never knew the pane,
-because `client/shellstream` keys each attachment by its session; nothing
-reattaches and xterm keeps every row. Another tile on the session is closed,
+because `client/shellstream` keys each attachment by its tmux; nothing
+reattaches and xterm keeps every row. Another tile on the tmux is closed,
 freezing onto its own tile, rather than moved, because the socket is bound to
 the tile whose preview and title the server writes. Leaving a
 pane-tile level hands each of its live surfaces back to the pane of the

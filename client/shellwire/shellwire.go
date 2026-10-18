@@ -53,10 +53,10 @@ type Control struct {
 	// KindResize.
 	Cols int `json:"cols,omitempty"`
 	Rows int `json:"rows,omitempty"`
-	// KindExit. SessionGone means the PTY session is gone rather than the
+	// KindExit. TmuxGone means the PTY is gone rather than the
 	// transport failing, and the client flips the refresh affordance off.
-	Message     string `json:"message,omitempty"`
-	SessionGone bool   `json:"session_gone,omitempty"`
+	Message  string `json:"message,omitempty"`
+	TmuxGone bool   `json:"tmux_gone,omitempty"`
 	// OtherBuild is the node's build when the API refused a page of another
 	// one (gwerr.OtherBuild), the socket's form of that verdict.
 	OtherBuild string `json:"other_build,omitempty"`
@@ -131,8 +131,8 @@ func EncodeResize(cols, rows int) []byte {
 	return mustJSON(Control{Kind: KindResize, Cols: cols, Rows: rows})
 }
 
-func EncodeExit(message string, sessionGone bool) []byte {
-	return mustJSON(Control{Kind: KindExit, Message: message, SessionGone: sessionGone})
+func EncodeExit(message string, tmuxGone bool) []byte {
+	return mustJSON(Control{Kind: KindExit, Message: message, TmuxGone: tmuxGone})
 }
 
 // EncodeOtherBuild is the exit the API sends a page of another build before
