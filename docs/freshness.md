@@ -13,7 +13,7 @@ and nothing the user made is dropped without a server verdict.
 Reads travel client → router → source cache → transport or plugin → what
 the plugin or connection reads. Freshness is decided on the way back.
 
-**1. What is read.** A plugin's directory, API, or process table; a far
+**1. What is read.** A plugin's directory, service, or process table; a far
 node's store. It has no freshness rule of its own, and everything else
 caches it. What it owes the node is an honest failure: a transport-shaped
 error means "not right now", any coded error is a verdict. `api/gwerr`'s
@@ -39,7 +39,7 @@ cached answer is not a verdict even when it claims `authoritative`. Retirement n
 authoritative listing sweeps by `store.Namespace.Sweep`, a live non-authoritative one
 sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared
-facts are the plugin's own and nothing can supply it. A source that
+facts are the plugin's own and nothing can supply them. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
 node holds one stream per subprocess while some client's view (`SetView`)
 shows one of its grids, scoped to the grids shown and those their link entries point into,
