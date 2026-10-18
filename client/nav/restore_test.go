@@ -174,7 +174,7 @@ func TestRestoreContentLeafMode(t *testing.T) {
 		raw:  "/99?c=3&r=4",
 		want: rpc.TextModeText,
 	}, {
-		name: "a read-only tile always restores its selectable face",
+		name: "a read-only tile always restores its selectable mode",
 		row:  RestoreTile{IsContent: true, TextDocument: true, ReadOnly: true},
 		raw:  "/99?c=3&r=4",
 		want: rpc.TextModeRendered,

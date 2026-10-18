@@ -28,7 +28,7 @@ const (
 )
 
 // ErrSessionGone is a session that was started and is no longer alive. Only
-// the faces remain, so the caller hides the refresh button rather than
+// the previews remain, so the caller hides the refresh button rather than
 // fabricate a fresh session behind them.
 var ErrSessionGone = errors.New("shell session no longer alive")
 
@@ -95,7 +95,7 @@ func NewManager(s Streamer) *Manager {
 // Acquire takes over an active holder: signalled to exit, its PTY reused, its
 // screen repainted. With no holder a live tmux session is attached and a dead
 // one created if allowCreate, which is false for a session that was started,
-// where fabricating state behind its faces would be wrong. The returned channel closes
+// where fabricating state behind its previews would be wrong. The returned channel closes
 // when a later Acquire takes over.
 func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16) (Session, chan struct{}, error) {
 	m.mu.Lock()

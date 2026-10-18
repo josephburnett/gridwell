@@ -8,7 +8,7 @@ import { shellSessionAlive, tileAt } from './oracle';
 // A cloned shell is its own tile naming its source's tmux session
 // (rpc.ShellSession). Any number of tiles may name one session and at most one
 // is live: going live on the clone closes the source's terminal, which keeps
-// its own face, and attaches the same session, so what was typed in one shows
+// its own preview, and attaches the same session, so what was typed in one shows
 // in the other, tmux sees one attached client sized to the clone's pane, and
 // one exit leaves every tile on the session dead. This drives what no unit
 // test can: the clone gesture, the stored session, the client's takeover by
@@ -74,7 +74,7 @@ test('a clone of a live shell attaches its session: one client, one exit for bot
   await gw.shellAttached();
   expect(await markerRow(), 'the clone shows what was typed in its source').toBe(true);
 
-  // The source paused on a face of its own.
+  // The source paused on a preview of its own.
   await expect
     .poll(async () => Number((await shellAt(cx, cy))?.previewBlobId ?? 0), { timeout: 10_000 })
     .toBeGreaterThan(0);

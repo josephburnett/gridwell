@@ -410,7 +410,7 @@ when worth noticing; the label stays stable and the normal state sends nothing.
 
 **Why.** "`status_detail` is one emoji about its state … a note on the name,
 never a second name" (`docs/plugin-authoring.md`). The client draws it before
-the name at every zoom the name is drawn (`tileface.BannerText`). A label that carries state
+the name at every zoom the name is drawn (`tilepreview.BannerText`). A label that carries state
 changes the tile's name as the state changes, and a word on every tile is
 noise that hides the one that matters.
 
@@ -437,7 +437,7 @@ and `hey/mail/entries_test.go:TestStatusIsTheUnseenMarkInABoxOnly`,
 `proc/plugin/plugin_test.go:TestStateIsQuietAndNeverInTheLabel`,
 `pages/plugin/plugin_test.go:TestEntriesAreQuietAndHintedByTheirDoc`,
 `fs/plugin/presentation_test.go:TestEveryTextEntryDeclaresAPresentation`. The
-client draws the status before the name (`client/tileface/banner_test.go`).
+client draws the status before the name (`client/tilepreview/banner_test.go`).
 
 **Today.** Meets: fs and pages, which send none; proc, 💀 or ⏸
 (`proc/plugin/plugin.go:220-231`); gitlab, ✅ once done
@@ -654,8 +654,8 @@ through `entryOf`, the one function `List` answers with.
 **Test.** `fs/plugin/watch_test.go:TestWatchTellsAWrittenFileItsEntry` (the
 entry equals `List`'s, and the directory is not announced) and
 `TestWatchTellsAFileSavedByRenameItsEntry`; across the seam
-`internal/server/fs_content_change_seam_test.go` (an open file, a text face
-and an image face show the new bytes) and
+`internal/server/fs_content_change_seam_test.go` (an open file, a text preview
+and an image preview show the new bytes) and
 `link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`. For a
 plugin over `memo.Changes`, `PublishEntry` is the send
 (`memo/changes_test.go`: after the listings, once per entry, never lost to

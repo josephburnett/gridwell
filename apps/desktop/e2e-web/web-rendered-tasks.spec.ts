@@ -26,12 +26,12 @@ test('an unfocused rendered task list paints a picture with no form control', as
   await gw.splitFocusedPaneVertical();
   await gw.waitIdle();
 
-  const face = async () =>
+  const preview = async () =>
     ((await window.evaluate(() => (window as any).__gridwellTest.paintedText())) as Record<string, string>)[
       'pane:' + orig.id
     ] ?? '';
-  await expect.poll(face, { timeout: 15_000 }).toMatch(/^raster:/);
-  const svg = await face();
+  await expect.poll(preview, { timeout: 15_000 }).toMatch(/^raster:/);
+  const svg = await preview();
   expect(svg).not.toContain('<input');
   expect(svg.match(/<span class="gw-task"><\/span>/g) ?? []).toHaveLength(1);
   expect(svg.match(/<span class="gw-task gw-task-done"><\/span>/g) ?? []).toHaveLength(1);

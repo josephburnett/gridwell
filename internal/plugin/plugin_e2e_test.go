@@ -60,7 +60,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info through the adapter: %v", err)
 	}
-	// The handshake carries the plugin's own declarations — fs names its face
+	// The handshake carries the plugin's own declarations — fs names its glyph
 	// and its one collection; its display name is the root directory, which
 	// here is a temp dir.
 	if info.Glyph != "folder" || len(info.MenuEntries) != 1 {

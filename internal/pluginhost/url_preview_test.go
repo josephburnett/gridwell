@@ -57,9 +57,9 @@ func pngBytes(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
-// faceNode serves an fs root holding one html page and one image, and hands
+// previewNode serves an fs root holding one html page and one image, and hands
 // back the client, the landing grid and the plugin's preview counter.
-func faceNode(t *testing.T) (*rpc.Client, string, *countingCP) {
+func previewNode(t *testing.T) (*rpc.Client, string, *countingCP) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "page.html"), []byte("<h1>hi</h1>"), 0o644); err != nil {
@@ -85,7 +85,7 @@ func faceNode(t *testing.T) (*rpc.Client, string, *countingCP) {
 	return cl, plugintest.LandingOf(t, pl.Plugins[0]), cp
 }
 
-func faceOf(t *testing.T, cl *rpc.Client, grid, label string) *gridwellv1.Tile {
+func previewOf(t *testing.T, cl *rpc.Client, grid, label string) *gridwellv1.Tile {
 	t.Helper()
 	g, err := cl.GetGrid(context.Background(), grid)
 	if err != nil {
@@ -99,14 +99,14 @@ func faceOf(t *testing.T, cl *rpc.Client, grid, label string) *gridwellv1.Tile {
 }
 
 func TestAPluginPageKeepsTheScreenshotItWasLeftWith(t *testing.T) {
-	cl, grid, cp := faceNode(t)
+	cl, grid, cp := previewNode(t)
 	ctx := context.Background()
-	page := faceOf(t, cl, grid, "page.html")
+	page := previewOf(t, cl, grid, "page.html")
 	if !rpc.PageContent(page) {
 		t.Fatalf("page.html is not a served page: %+v", page)
 	}
 	if page.PreviewBlobId != 0 {
-		t.Fatalf("an unvisited page with no plugin picture keys a face: %d", page.PreviewBlobId)
+		t.Fatalf("an unvisited page with no plugin picture keys a preview: %d", page.PreviewBlobId)
 	}
 
 	shot := []byte("\xff\xd8screenshot")
@@ -120,17 +120,17 @@ func TestAPluginPageKeepsTheScreenshotItWasLeftWith(t *testing.T) {
 		t.Fatalf("GetTilePreview = %q (%v), want the screenshot", got, err)
 	}
 	if n := cp.previews.Load() - before; n != 0 {
-		t.Fatalf("the plugin was asked for a face the node holds (%d calls)", n)
+		t.Fatalf("the plugin was asked for a preview the node holds (%d calls)", n)
 	}
-	if k := faceOf(t, cl, grid, "page.html").PreviewBlobId; k <= 0 {
+	if k := previewOf(t, cl, grid, "page.html").PreviewBlobId; k <= 0 {
 		t.Fatalf("the listing does not key the screenshot: %d", k)
 	}
 }
 
-func TestAPluginPictureIsTheFaceOnlyUntilTheFirstScreenshot(t *testing.T) {
-	cl, grid, cp := faceNode(t)
+func TestAPluginPictureIsThePreviewOnlyUntilTheFirstScreenshot(t *testing.T) {
+	cl, grid, cp := previewNode(t)
 	ctx := context.Background()
-	pic := faceOf(t, cl, grid, "pic.png")
+	pic := previewOf(t, cl, grid, "pic.png")
 	if pic.PreviewBlobId >= 0 {
 		t.Fatalf("a plugin picture keys %d, want the negated stamp", pic.PreviewBlobId)
 	}
@@ -152,15 +152,15 @@ func TestAPluginPictureIsTheFaceOnlyUntilTheFirstScreenshot(t *testing.T) {
 	if err != nil || !bytes.Equal(got, shot) {
 		t.Fatalf("GetTilePreview = %d bytes (%v), want the screenshot", len(got), err)
 	}
-	if k := faceOf(t, cl, grid, "pic.png").PreviewBlobId; k <= 0 {
-		t.Fatalf("the screenshot does not win the face key: %d", k)
+	if k := previewOf(t, cl, grid, "pic.png").PreviewBlobId; k <= 0 {
+		t.Fatalf("the screenshot does not win the preview key: %d", k)
 	}
 }
 
 func TestAPluginPagesAddressIsNotTheWritebacksToSay(t *testing.T) {
-	cl, grid, _ := faceNode(t)
+	cl, grid, _ := previewNode(t)
 	ctx := context.Background()
-	page := faceOf(t, cl, grid, "page.html")
+	page := previewOf(t, cl, grid, "page.html")
 	for name, tile := range map[string]*gridwellv1.Tile{
 		"url_string":  {Kind: rpc.KindURL, UrlString: "http://elsewhere.test/"},
 		"alt_text":    {Kind: rpc.KindURL, AltText: "a page title"},
@@ -171,20 +171,20 @@ func TestAPluginPagesAddressIsNotTheWritebacksToSay(t *testing.T) {
 			t.Errorf("a writeback carrying %s = %v, want InvalidArgument", name, err)
 		}
 	}
-	if faceOf(t, cl, grid, "page.html").PreviewBlobId != 0 {
+	if previewOf(t, cl, grid, "page.html").PreviewBlobId != 0 {
 		t.Fatal("a refused writeback still stored its screenshot")
 	}
 }
 
 func TestAPluginPageHoldsTheStandingFreeze(t *testing.T) {
-	cl, grid, _ := faceNode(t)
+	cl, grid, _ := previewNode(t)
 	ctx := context.Background()
-	page := faceOf(t, cl, grid, "page.html")
+	page := previewOf(t, cl, grid, "page.html")
 	for _, want := range []bool{true, false} {
 		if _, err := cl.SetFrozen(ctx, page.Id, want, !want); err != nil {
 			t.Fatalf("SetFrozen(%v) on a plugin page: %v", want, err)
 		}
-		if got := faceOf(t, cl, grid, "page.html").UrlFrozen; got != want {
+		if got := previewOf(t, cl, grid, "page.html").UrlFrozen; got != want {
 			t.Fatalf("url_frozen = %v, want %v", got, want)
 		}
 	}

@@ -297,9 +297,9 @@ func TestStandInTieGoesToTheNarrower(t *testing.T) {
 	}
 }
 
-// Typing moves the bytes on every keystroke, so a face rasterizes again for
+// Typing moves the bytes on every keystroke, so a preview rasterizes again for
 // each. Until the new picture lands, the slot's last picture stands in, and
-// never longer: the landing or the failure retires it. Without it, a face of a
+// never longer: the landing or the failure retires it. Without it, a preview of a
 // document being typed elsewhere would flash raw source per keystroke.
 func TestASlotsLastPictureStandsInOnlyWhileItsSuccessorIsInFlight(t *testing.T) {
 	ras := &fakeRasterizer{}
@@ -329,7 +329,7 @@ func TestASlotsLastPictureStandsInOnlyWhileItsSuccessorIsInFlight(t *testing.T) 
 		t.Error("the stand-in outlived its successor's landing")
 	}
 
-	// A failure retires the stand-in too: the face says raw, not old bytes.
+	// A failure retires the stand-in too: the preview says raw, not old bytes.
 	c.Ensure(key(4, 128), svgOK("v4"), nil)
 	ras.fail(0)
 	if r, _, ok := c.Ensure(key(4, 128), svgOK("v4"), nil); ok {

@@ -402,7 +402,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   outside; entering a url reopens it, entering a shell reconnects. One
   owner decides (`shellconn.DecideAutoLive`). The freeze gesture is the
   standing exception, for url and shell alike: it is a screenshot, so the
-  tile keeps that face, the address and the tmux session keep existing, a
+  tile keeps that preview, the address and the tmux session keep existing, a
   clone taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
 - Shells ride the web door: a WebSocket at `/shell`, same cookie, same
@@ -413,8 +413,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   source named (`rpc.ShellSession`). Any number of tiles may name one
   session; at most one is live, and going live on another takes over
   (close and reopen; within one tile the terminal moves). A session no tile
-  has a face of was never started, and whichever tile opens it first starts
-  it; a started one that is gone is never recreated behind a face. The
+  has a preview of was never started, and whichever tile opens it first starts
+  it; a started one that is gone is never recreated behind a preview. The
   session dies when the last row naming it is destroyed. A shell cloned
   across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, each pane's focused tile (the keyboard
@@ -488,7 +488,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   paints an SVG image holding a control as nothing while it loads
   (`markdown.PictureXHTML`, 2026-10-16).
 - A pane shows one document whether or not it has focus. The focused pane
-  shows the cached bytes; every other face is a picture of them (a wrap, a
+  shows the cached bytes; everything else drawn from them is a picture of them (a wrap, a
   raster) keyed by `cache.BodyGen`, which every change to the bytes moves,
   an unsaved edit included, so no picture outlives the bytes it was made
   of. A slot's last picture stands in only while its successor rasterizes

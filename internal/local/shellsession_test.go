@@ -141,22 +141,22 @@ func TestASecondTileOnOneSessionTakesItOver(t *testing.T) {
 	_ = second.detach(t)
 }
 
-// A session someone started and that is gone stays gone behind every face
+// A session someone started and that is gone stays gone behind every preview
 // naming it; one never started is created by whichever tile opens it first.
-func TestAStartedSessionIsNeverFabricatedBehindAFace(t *testing.T) {
+func TestAStartedSessionIsNeverFabricatedBehindAPreview(t *testing.T) {
 	fake := shellsvctest.New()
 	p, a := shellPluginWithTile(t, fake)
 	b := cloneShell(t, p, a, 2)
 	if _, err := p.SetTile(context.Background(), &gridwellv1.SetTileRequest{TileId: a,
-		Tile: &gridwellv1.Tile{Kind: "shell"}, Preview: []byte("face")}); err != nil {
+		Tile: &gridwellv1.Tile{Kind: "shell"}, Preview: []byte("preview")}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := attach(t, p, b)
 	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("opening a faceless clone of a started, gone session = %v, want FailedPrecondition", err)
+		t.Fatalf("opening a clone with no preview of a started, gone session = %v, want FailedPrecondition", err)
 	}
 	if n := fake.SessionCount(); n != 0 {
-		t.Errorf("opened %d sessions behind a face", n)
+		t.Errorf("opened %d sessions behind a preview", n)
 	}
 }
 

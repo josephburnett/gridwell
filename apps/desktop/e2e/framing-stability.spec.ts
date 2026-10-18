@@ -222,8 +222,8 @@ test('text scroll persists without an ascent', async ({ gw, window }) => {
 // server on the settle with no other gesture after it, so a kill after the
 // settle loses nothing. The browser scrolls the overlay; nothing repaints
 // unless the scroll asks.
-for (const face of ['text', 'rendered'] as const) {
-  test(`a ${face} overlay scroll persists on the settle alone`, async ({ gw, window }) => {
+for (const mode of ['text', 'rendered'] as const) {
+  test(`a ${mode} overlay scroll persists on the settle alone`, async ({ gw, window }) => {
     const c = await gw.cadences();
     await gw.enterPlugin('home');
     const home = await gw.focused();
@@ -236,8 +236,8 @@ for (const face of ['text', 'rendered'] as const) {
     await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
     await gw.descendCell(cx, cy);
     await expect.poll(async () => (await gw.focused()).textFocus).toBe(doc.id);
-    const el = face === 'text' ? 'gw-text-editor' : 'gw-rendered-view';
-    if (face === 'rendered') await window.locator('#gw-text-toggle').click();
+    const el = mode === 'text' ? 'gw-text-editor' : 'gw-rendered-view';
+    if (mode === 'rendered') await window.locator('#gw-text-toggle').click();
     await expect
       .poll(() => window.evaluate((id) => document.getElementById(id)!.scrollHeight, el))
       .toBeGreaterThan(2000);
@@ -290,7 +290,7 @@ test('a host file keeps its scroll, and its id, across a reload', async ({ gw, w
   await gw.descendCell(Number(doc.x ?? 0), Number(doc.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
   const standingOn = (await gw.focused()).textFocus;
-  // The rendered face is a scrolling DOM overlay. Scroll it the way the
+  // The rendered view is a scrolling DOM overlay. Scroll it the way the
   // browser does, and the app's own listener writes the position onto the
   // pane.
   await gw.toggleTextMode(); // rendered

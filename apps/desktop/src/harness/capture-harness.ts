@@ -229,8 +229,8 @@ app.whenReady().then(async () => {
   await registry.remove('pane1h');
   console.log('hidden place ok: parked at PARK_COORD, un-parked to its bounds');
 
-  // ── a park takes the pane's face before it goes ─────────────────────────
-  // A parked pane draws the tile's cached face, and a parked view has nothing
+  // ── a park takes the pane's preview before it goes ─────────────────────────
+  // A parked pane draws the tile's cached preview, and a parked view has nothing
   // to capture, so the view stays up until one frame is taken and sent.
   const parkFrames: FrameEvent[] = [];
   const regPark = new WebviewRegistry(win, { onFrame: (ev) => parkFrames.push(ev) });
@@ -238,16 +238,16 @@ app.whenReady().then(async () => {
   await regPark.place('paneP', 'u1/50', DATA_URL, parkAt);
   await waitForFirstFrame(regPark, 'paneP', 'park scenario');
   regPark.setHidden('paneP', true, false);
-  if (regPark.viewBoundsFor('paneP')?.x === PARK_COORD) fail('the view parked before its face was taken');
+  if (regPark.viewBoundsFor('paneP')?.x === PARK_COORD) fail('the view parked before its preview was taken');
   const parkDeadline = Date.now() + FRAME_BUDGET_MS;
   while (regPark.viewBoundsFor('paneP')?.x !== PARK_COORD && Date.now() < parkDeadline) {
     await new Promise((r) => setTimeout(r, 20));
   }
-  if (regPark.viewBoundsFor('paneP')?.x !== PARK_COORD) fail('the view never parked after its face was taken');
+  if (regPark.viewBoundsFor('paneP')?.x !== PARK_COORD) fail('the view never parked after its preview was taken');
   if (parkFrames.length !== 1 || parkFrames[0].tileId !== 'u1/50' || !parkFrames[0].jpegBase64.startsWith('/9j/')) {
     fail(`a park sent ${parkFrames.length} frames, want one JPEG for u1/50`);
   }
-  // A show that lands while the face is being taken wins: the view stays up.
+  // A show that lands while the preview is being taken wins: the view stays up.
   regPark.setHidden('paneP', false, false);
   regPark.setHidden('paneP', true, false);
   regPark.setHidden('paneP', false, false);
@@ -257,7 +257,7 @@ app.whenReady().then(async () => {
     fail(`a park overtaken by a show still moved the view to (${overtaken?.x},${overtaken?.y})`);
   }
   await regPark.remove('paneP');
-  console.log('park ok: the face is taken first, and a show overtakes the park');
+  console.log('park ok: the preview is taken first, and a show overtakes the park');
 
   // ── a page that closes itself ends its view, and says so once ─────────
   // A sign-in flow's last page calls window.close(), which destroys the

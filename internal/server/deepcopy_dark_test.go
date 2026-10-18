@@ -20,7 +20,7 @@ import (
 // The offline deep-copy seam: cloning a partially-reachable remote grid never
 // refuses and never leaves a silent hole. A tile whose bytes the source cannot
 // serve degrades to a link, an unreachable nested room to a well link, and a
-// url with an unreachable preview copies faceless. The degrade keys on
+// url with an unreachable preview copies with no preview. The degrade keys on
 // transport failures only: a source that answers "gone" still aborts the walk.
 // darkSource is the source cache's offline shape, metadata served and selected
 // reads Unavailable.
@@ -209,11 +209,11 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 		t.Fatalf("dark nested well should degrade to a link to %s: %+v", nested.ChildGridId, byX[4])
 	}
 
-	// Dark-preview url → a solid copy of the ADDRESS, faceless.
+	// Dark-preview url → a solid copy of the ADDRESS, with no preview.
 	if u := byX[6]; u == nil || u.Reference || u.UrlString != "https://example.com/album" {
 		t.Fatalf("dark-preview url should copy its address: %+v", byX[6])
 	} else if u.PreviewBlobId != 0 {
-		t.Error("the faceless copy must carry no preview blob")
+		t.Error("the copy with no preview must carry no preview blob")
 	}
 }
 

@@ -149,7 +149,7 @@ func (n *Namespace) Preview(tileID int64) ([]byte, error) {
 	return n.s.tilePreview(context.Background(), n.ns, tileID)
 }
 
-// tilePreview is the one frozen-face read.
+// tilePreview is the one frozen-preview read.
 func (s *Store) tilePreview(ctx context.Context, ns string, id int64) (jpeg []byte, err error) {
 	err = s.readSnapshot(ctx, func(tx *sql.Tx) error {
 		var previewBID sql.NullInt64
@@ -167,14 +167,14 @@ func (s *Store) tilePreview(ctx context.Context, ns string, id int64) (jpeg []by
 }
 
 // SessionNamers is how many shell rows name one tmux session, and how many of
-// those carry a frozen face.
+// those carry a frozen preview.
 type SessionNamers struct {
-	Rows, Faced int64
+	Rows, Previewed int64
 }
 
 // ShellSessionNamers counts the shell rows naming the session key, a trashed
 // row included: a session with no rows is an orphan, and one whose rows have
-// no face was never started.
+// no preview was never started.
 func (s *Store) ShellSessionNamers(ctx context.Context, key string) (SessionNamers, error) {
 	var n SessionNamers
 	keyInt, err := parseID(key)
@@ -184,7 +184,7 @@ func (s *Store) ShellSessionNamers(ctx context.Context, key string) (SessionName
 	err = s.db.QueryRowContext(ctx, `
 		SELECT COUNT(1), COUNT(preview_blob_id) FROM tiles
 		WHERE kind = 'shell' AND link_target_id IS NULL
-		  AND COALESCE(shell_session, id) = ?`, keyInt).Scan(&n.Rows, &n.Faced)
+		  AND COALESCE(shell_session, id) = ?`, keyInt).Scan(&n.Rows, &n.Previewed)
 	return n, err
 }
 

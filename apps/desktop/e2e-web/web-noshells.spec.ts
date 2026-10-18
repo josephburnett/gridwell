@@ -9,7 +9,7 @@ import { GridwellDriver } from '../e2e/driver';
 // server.yaml `disable_shells: true`, seen from a real client: the + palette
 // offers every primitive except shell. The flag rides the Handshake into caps,
 // the one owner of what this client can do, and the same server refuses shell
-// creates outright, so the palette gap is the face of a server-side refusal.
+// creates outright, so the palette gap is what a server-side refusal looks like.
 // The suites without the flag, web-core.spec.ts and its neighbors and
 // browser-shim.spec.ts in the Electron suite, pin the default, where the shell
 // swatch is present.

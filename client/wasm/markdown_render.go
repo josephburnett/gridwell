@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
-	"github.com/josephburnett/gridwell/client/tileface"
+	"github.com/josephburnett/gridwell/client/tilepreview"
 )
 
 // Paints text tiles on the canvas: the raw monospace source, soft-wrapped
@@ -82,7 +82,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 			if body, ok := a.tileBody(n); ok {
 				lines := a.drawMarkdownText(a.cctx, string(body), originX, originY,
 					a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
-				a.noteTextFace(n.Id, nil, 0)
+				a.noteTextPreview(n.Id, nil, 0)
 				a.paintedText["pane:"+p.ID] = strings.Join(lines, "\n")
 			}
 		} else {
@@ -106,7 +106,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 		// Content starts below the banner strip, on bannerGeom's shared
 		// formula, so the alt text never overprints the first line.
 		topInset := 0.0
-		if tileface.BannerText(n) != "" {
+		if tilepreview.BannerText(n) != "" {
 			if _, bannerH, shown := bannerGeom(h, h-2*tileBorderPx); shown {
 				topInset = bannerH
 			}
@@ -124,7 +124,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 					lines := a.drawMarkdownText(a.cctx, string(body),
 						x-scrollX*scale, y+topInset-scrollY*scale,
 						frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
-					a.noteTextFace(n.Id, nil, 0)
+					a.noteTextPreview(n.Id, nil, 0)
 					a.paintedText[n.Id] = strings.Join(lines, "\n")
 				}
 			}
@@ -164,7 +164,7 @@ func setFont(c js.Value, sizePx float64, family string, bold bool) {
 	c.Set("font", fontSpec(sizePx, family, bold))
 }
 
-// fontSpec is the one canvas font string, so a measured face and the drawn
+// fontSpec is the one canvas font string, so a measured font and the drawn
 // one cannot drift apart.
 func fontSpec(sizePx float64, family string, bold bool) string {
 	weight := "normal"
@@ -183,12 +183,12 @@ func fontSpec(sizePx float64, family string, bold bool) string {
 const rawTextLineHeight = 1.35
 
 // drawMarkdownText paints src as raw monospace text at the given scale. It
-// soft-wraps to the same columns the editing textarea shows: the face is
+// soft-wraps to the same columns the editing textarea shows: the font is
 // monospace, so the budget is a pure column count and the text cannot reflow
 // when focus moves.
 func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
 	wrap func(src string, cols int) []string) []string {
-	// One face for the whole document: the wrap measure and every line share
+	// One font for the whole document: the wrap measure and every line share
 	// it, and the bracket keeps it from outliving the paint.
 	c.Call("save")
 	defer c.Call("restore")

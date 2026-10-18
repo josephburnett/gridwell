@@ -317,7 +317,7 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 		t.Errorf("GetGrid error = %v, want it to carry the handshake failure", err)
 	}
 
-	// Not negatively cached: the same read answers the declared face once the
+	// Not negatively cached: the same read answers the declarations once the
 	// handshake works again, so the failure is an outage and not a verdict.
 	ns.fail.Store(false)
 	resp, err = cl.GetGrid(ctx, root)
@@ -326,7 +326,7 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	}
 	g := resp.GetGrid()
 	if !g.GetWritable() || g.GetScratchGridId() == "" || len(g.GetMenuEntries()) == 0 {
-		t.Errorf("recovered grid: writable=%v scratch=%q menu entries=%d, want the home namespace's full declared face",
+		t.Errorf("recovered grid: writable=%v scratch=%q menu entries=%d, want the home namespace's full declarations",
 			g.GetWritable(), g.GetScratchGridId(), len(g.GetMenuEntries()))
 	}
 }

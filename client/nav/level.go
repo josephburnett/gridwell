@@ -60,7 +60,7 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 	}
 	ld.Barrier = m.mintBarrier(p.ID, 2, ld)
 
-	// The animation arm. A never-arranged tile expands its face instead of
+	// The animation arm. A never-arranged tile expands its preview instead of
 	// zooming: its first descent captures the window layout, and a zoom over an
 	// unchanged view reads as a stutter.
 	here := p.Stack.Clone()
@@ -242,7 +242,7 @@ func (m *Machine) installLevelData(ld *levelData, pl *planner) {
 		OriginPane: ld.PaneID,
 		TileID:     ld.Tile.Id,
 		// Where the pane tile sits: the close-all landing when no tree was
-		// parked, and the face the bar's root crumb wears there.
+		// parked, and the glyph the bar's root crumb wears there.
 		GridID: ld.Tile.GridId,
 		// Raw alt text: the bar substitutes the generic label at draw time, so
 		// a crumb rename round-trips an empty name honestly.

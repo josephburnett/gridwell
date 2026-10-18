@@ -204,9 +204,9 @@ func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title,
 	ok := a.bridgeVerb("removeWebview", map[string]any{"paneId": paneID}, func(res js.Value) {
 		jpeg, ok := decodeBase64(res.Get("jpegBase64"))
 		if !ok {
-			// The tile keeps the face it had, and the user is told why the
+			// The tile keeps the preview it had, and the user is told why the
 			// page they just left is not on it.
-			a.reportErr(errsurface.Error, "electron:webview", "the final frame of "+paneID+" was unreadable — the tile keeps its old face")
+			a.reportErr(errsurface.Error, "electron:webview", "the final frame of "+paneID+" was unreadable — the tile keeps its old preview")
 		}
 		onFreeze(jpeg, jsString(res.Get("url")),
 			jsString(res.Get("title")), jsString(res.Get("history")))
@@ -262,7 +262,7 @@ func (a *App) installWebviewListeners() {
 	}{
 		{"onFrame", func(ev js.Value) {
 			// An unreadable preview frame is the same as none: the next one
-			// replaces it, and the tile keeps the face it had until then.
+			// replaces it, and the tile keeps the preview it had until then.
 			if jpeg, _ := decodeBase64(ev.Get("jpegBase64")); len(jpeg) > 0 {
 				a.views.urlPreview.PutWildcard(jsString(ev.Get("tileId")), jpeg, func() { a.draw() })
 			}

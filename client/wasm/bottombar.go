@@ -25,7 +25,7 @@ import (
 // derived per frame, never stored.
 
 // barFont is the bar's lettering: the title measures with it and every crumb
-// draws in it, so the centered span cannot be sized from a different face.
+// draws in it, so the centered span cannot be sized from a different font.
 const barFont = "12px system-ui, sans-serif"
 
 // bottomBarRect is the bar's drawn rectangle, spanning the focused pane.

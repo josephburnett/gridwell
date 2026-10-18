@@ -30,7 +30,7 @@ type menuContext struct {
 
 // paneNodeNS returns the menu-context key: the namespace chain of the node
 // serving pane p's current grid. "" for the local node and for an uncached
-// grid, where the local list is the least-wrong face.
+// grid, where the local list is the least-wrong answer.
 func (a *App) paneNodeNS(p *pane.Pane) string {
 	return a.gridNodeNS(a.gridIDForPane(p))
 }
@@ -68,7 +68,7 @@ func (a *App) menuCtx(p *pane.Pane) *menuContext {
 // fetchMenuCtx loads one remote node's menu on the claim menuCtx opened for
 // it. A failure leaves the context unfetched, surfaces, and latches, so the
 // draw of the open menu asks again only when inflight.Reads clears it. A menu
-// has no dead face, so only the client's own cancel goes unsaid.
+// is not drawn dead, so only the client's own cancel goes unsaid.
 func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 	defer done()
 	lp, err := a.cl.HandshakeNS(ctx, ns)

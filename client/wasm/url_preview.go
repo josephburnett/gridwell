@@ -34,10 +34,10 @@ func (a *App) drawImageContain(c js.Value, img js.Value, x, y, w, h float64) {
 	c.Call("drawImage", img, dx, dy, dw, dh)
 }
 
-// drawPreviewFace paints a content tile's frozen face, running fallback when
+// drawFrozenPreview paints a content tile's frozen preview, running fallback when
 // nothing is cached. One owner of "cached preview or stand-in", so no tile
 // kind drifts into its own answer.
-func (a *App) drawPreviewFace(n *gridwellv1.Tile, x, y, w, h float64, fill string, blobID int64, fallback func()) {
+func (a *App) drawFrozenPreview(n *gridwellv1.Tile, x, y, w, h float64, fill string, blobID int64, fallback func()) {
 	fillRectC(a.cctx, x, y, w, h, fill)
 	if cached, ok := a.views.urlPreview.Get(rpc.ContentID(n), blobID); ok {
 		if img, ok := previewImage(cached); ok {
@@ -60,14 +60,14 @@ func (a *App) drawPreviewPlaceholder(label string, x, y, w, h float64) {
 }
 
 // drawURLTileInPane renders the URL tile a pane is descended into, with its
-// content row's face. Mirror frames from a live view flow into the same
+// content row's preview. Mirror frames from a live view flow into the same
 // urlPreview cache, so this draw reflects them.
 func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
-	n = a.descendedFace(n)
+	n = a.descendedRow(n)
 	// The native view paints over this box, so the JPEG here shows while it
 	// is parked during a gesture. Bounds are syncURLViews'.
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
+		a.drawFrozenPreview(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
 			a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 			label := urlTileLabel(n)
 			drawLabel(a.cctx, label, x+16, y+32, labelOpts{
@@ -81,7 +81,7 @@ func (a *App) drawURLTileInPane(n *gridwellv1.Tile, x, y, w, h float64) {
 // on top of it, but painting underneath avoids a flash before the overlay is
 // positioned for the frame.
 func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h float64) {
-	n = a.descendedFace(n)
+	n = a.descendedRow(n)
 	withClip(a.cctx, x, y, w, h, func() {
 		fillRectC(a.cctx, x, y, w, h, a.pal.ShellFill)
 
@@ -104,9 +104,9 @@ func (a *App) drawShellTileInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h f
 	})
 }
 
-// descendedFace is the row whose face a descended tile shows: its content
+// descendedRow is the row whose preview a descended tile shows: its content
 // row, or the tile's own name until a link's target is read.
-func (a *App) descendedFace(n *gridwellv1.Tile) *gridwellv1.Tile {
+func (a *App) descendedRow(n *gridwellv1.Tile) *gridwellv1.Tile {
 	if row, s := a.askContentRow(n); s == contentrow.Ready {
 		return row
 	}
@@ -117,7 +117,7 @@ func (a *App) descendedFace(n *gridwellv1.Tile) *gridwellv1.Tile {
 // because bash runs outside Gridwell's data world.
 func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, a.pal.ShellFill, n.PreviewBlobId, func() {
+		a.drawFrozenPreview(n, x, y, w, h, a.pal.ShellFill, n.PreviewBlobId, func() {
 			if n.PreviewBlobId != 0 {
 				a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 			} else if w > 20 && h > 20 {
@@ -131,12 +131,12 @@ func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, da
 	})
 }
 
-// drawURLTile renders a URL tile in the parent grid view. Its face is keyed
-// by the node (see pluginhost.faceKey) and its label is urlTileLabel's,
+// drawURLTile renders a URL tile in the parent grid view. Its preview is keyed
+// by the node (see pluginhost.previewKey) and its label is urlTileLabel's,
 // whoever serves the page.
 func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawPreviewFace(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
+		a.drawFrozenPreview(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
 			a.drawPreviewPlaceholder(urlTileLabel(n), x, y, w, h)
 			a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 		})
@@ -145,7 +145,7 @@ func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dash
 	})
 }
 
-// urlTileLabel is what a url tile's face reads before its preview arrives: its
+// urlTileLabel is what a url tile reads before its preview arrives: its
 // address, or its name when the plugin serves the page and there is no address
 // to show.
 func urlTileLabel(n *gridwellv1.Tile) string {
@@ -183,7 +183,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 		return
 	}
 	// The claim is bounded and a failure latches, both inflight.Reads', so a
-	// swallowed request cannot hold this face for the life of the page and
+	// swallowed request cannot hold this preview for the life of the page and
 	// a refused one is not asked for every frame.
 	ctx, done, ok := a.fetch.previews.Ask(tileID)
 	if !ok {

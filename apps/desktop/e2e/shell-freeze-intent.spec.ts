@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
 // Freezing is a screenshot, and a shell has it too: the bar circle over a live
-// shell freezes the terminal's face onto the tile, the standing intent keeps
+// shell freezes the terminal's preview onto the tile, the standing intent keeps
 // the next descent from reattaching, and a clone taken while it is frozen
 // keeps that picture after the original reconnects. This drives the seam the
 // unit tests cannot: barslot.Decide's two shell arms, the capture writeback,
@@ -10,7 +10,7 @@ import { tileAt } from './oracle';
 // shellconn.DecideAutoLive. A freeze never kills the tmux session, which the
 // reconnect proves by finding the shell it left.
 
-test('freezing a live shell keeps its face; the clone keeps it after the original reconnects', async ({
+test('freezing a live shell keeps its preview; the clone keeps it after the original reconnects', async ({
   gw,
   window,
 }) => {
@@ -34,8 +34,8 @@ test('freezing a live shell keeps its face; the clone keeps it after the origina
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
 
-  // Something on the terminal, so the captured face has glyphs of its own.
-  await window.keyboard.type('printf gw-frozen-face');
+  // Something on the terminal, so the captured preview has glyphs of its own.
+  await window.keyboard.type('printf gw-frozen-preview');
   await window.keyboard.press('Enter');
 
   // The circle over a live shell is the freeze.
@@ -50,10 +50,10 @@ test('freezing a live shell keeps its face; the clone keeps it after the origina
   const frozen = (await shellAt(cx, cy))!;
   expect(
     Number(frozen.previewBlobId ?? 0),
-    'the freeze captured the terminal face',
+    'the freeze captured the terminal preview',
   ).toBeGreaterThan(0);
 
-  // Re-descending shows that face and reattaches nothing.
+  // Re-descending shows that preview and reattaches nothing.
   await gw.middleClickCell(cx, cy); // ascend
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.descendCell(cx, cy);
@@ -70,7 +70,7 @@ test('freezing a live shell keeps its face; the clone keeps it after the origina
   expect(copy, 'the clone landed').toBeTruthy();
   expect(copy!.id, 'the clone is its own tile').not.toBe(frozen.id);
   expect(Boolean(copy!.urlFrozen), 'the clone carries the freeze').toBe(true);
-  expect(copy!.previewBlobId, 'and the same captured face').toBe(frozen.previewBlobId);
+  expect(copy!.previewBlobId, 'and the same captured preview').toBe(frozen.previewBlobId);
 
   // Reconnecting the original finds the session the freeze left running, and
   // going live is what clears the standing intent.
@@ -85,7 +85,7 @@ test('freezing a live shell keeps its face; the clone keeps it after the origina
   // The copy kept the screenshot: nothing the original did reached it.
   const after = await shellAt(cx + 2, cy);
   expect(Boolean(after!.urlFrozen), 'the clone is still frozen').toBe(true);
-  expect(after!.previewBlobId, 'with the face it was cloned with').toBe(frozen.previewBlobId);
+  expect(after!.previewBlobId, 'with the preview it was cloned with').toBe(frozen.previewBlobId);
 
   await gw.ascendViaCrumb(); // teardown: a live shell's overlay swallows a middle click
 });

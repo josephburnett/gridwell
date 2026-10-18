@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
-// A live surface refreshes the tile's shared face only while another pane
-// shows it, and once at a park, when its own pane draws the face: pane.Mirrored
+// A live surface refreshes the tile's shared preview only while another pane
+// shows it, and once at a park, when its own pane draws the preview: pane.Mirrored
 // decides the first. A lone live pane costs no capture at all, and a second
 // pane showing the tile's grid tracks it.
 
@@ -23,7 +23,7 @@ test('a live url is captured only while another pane shows it', async ({ electro
     electronApp.evaluate(() => (globalThis as any).__gwRegistry.mirrorCalls as number);
   const liveIn = (paneId: string) =>
     electronApp.evaluate((_e, id) => (globalThis as any).__gwRegistry.has(id) as boolean, paneId);
-  // Paints the live page one flat color, so the face another pane draws of it
+  // Paints the live page one flat color, so the preview another pane draws of it
   // can be read back as a pixel.
   const paint = (paneId: string, color: string) =>
     electronApp.evaluate(
@@ -56,7 +56,7 @@ test('a live url is captured only while another pane shows it', async ({ electro
   expect(await mirrorCalls(), 'a lone live pane was captured').toBe(alone);
 
   // Back out, then open the tile live in a new pane below. The original pane
-  // stays on the grid, where the tile's face is drawn.
+  // stays on the grid, where the tile's preview is drawn.
   await gw.middleClickPane();
   await expect.poll(() => liveIn(home.id)).toBe(false);
   await gw.ctrlDescendCell(cx, cy);
@@ -67,19 +67,19 @@ test('a live url is captured only while another pane shows it', async ({ electro
   const shown = await mirrorCalls();
   await expect.poll(mirrorCalls, { message: 'the mirrored pane is being captured' }).toBeGreaterThan(shown + 2);
 
-  // The face in the grid pane follows the page.
-  const face = await gw.cellCenter(home.id, cx, cy);
+  // The preview in the grid pane follows the page.
+  const cell = await gw.cellCenter(home.id, cx, cy);
   await paint(below.id, '#ff0000');
   await expect
     .poll(async () => {
-      const [r, g, b] = await pixelAt(window, face.x, face.y);
+      const [r, g, b] = await pixelAt(window, cell.x, cell.y);
       return r > 200 && g < 60 && b < 60;
     }, { message: 'the grid pane shows the page gone red', timeout: 10_000 })
     .toBe(true);
   await paint(below.id, '#0000ff');
   await expect
     .poll(async () => {
-      const [r, g, b] = await pixelAt(window, face.x, face.y);
+      const [r, g, b] = await pixelAt(window, cell.x, cell.y);
       return r < 60 && g < 60 && b > 200;
     }, { message: 'and then blue', timeout: 10_000 })
     .toBe(true);
@@ -130,22 +130,22 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   expect(await gw.shellMirrors(), 'a lone live shell was snapshotted').toBe(alone);
 
   // The + menu on the other pane parks the overlay, and the shell's own pane
-  // then draws the face: one snapshot, taken at the park.
+  // then draws the preview: one snapshot, taken at the park.
   await gw.focusPane((await gw.panes()).find((p) => p.id === b.id)!);
   await gw.openPalette();
-  await expect.poll(() => gw.shellMirrors(), { message: 'the park took the face' }).toBe(alone + 1);
+  await expect.poll(() => gw.shellMirrors(), { message: 'the park took the preview' }).toBe(alone + 1);
   await window.waitForTimeout(c.shellMirrorMs * 4);
   expect(await gw.shellMirrors(), 'and only that one').toBe(alone + 1);
   const pal = await gw.palette();
   await window.mouse.click(pal.plusX, pal.plusY);
   await expect.poll(async () => (await gw.palette()).open).toBe(false);
 
-  // The other pane comes back to the home grid, where the shell's face is
-  // drawn: joining the mirrored set takes the face, and a repaint takes it
+  // The other pane comes back to the home grid, where the shell's preview is
+  // drawn: joining the mirrored set takes the preview, and a repaint takes it
   // again.
   const joined = await gw.shellMirrors();
   await gw.ascendViaCrumb();
-  await expect.poll(() => gw.shellMirrors(), { message: 'joining took the face' }).toBeGreaterThan(joined);
+  await expect.poll(() => gw.shellMirrors(), { message: 'joining took the preview' }).toBeGreaterThan(joined);
   const aNow = (await gw.panes()).find((p) => p.id === a.id)!;
   await window.mouse.click(aNow.x + aNow.w / 2, aNow.y + aNow.h / 2);
   await expect.poll(async () => (await gw.focused()).id).toBe(a.id);

@@ -18,7 +18,7 @@ code keeps in one namespace and not another) cannot be found by reading,
 because there is nothing to read, and a confident comment beside the gap
 reads like a decision. Nine runs of this skill missed that plugin url tiles
 could not keep a screenshot, could not be frozen and could not save a zoom,
-while a comment said the plugin owned the face. Absences are found by
+while a comment said the plugin owned the preview. Absences are found by
 enumeration against a written expectation, and by watching the product run.
 Lenses 1–10 find shape. Lenses 11–13 and steps 2–4 find absence.
 

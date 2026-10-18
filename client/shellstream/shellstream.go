@@ -20,7 +20,7 @@ type Handle interface {
 	Close()
 }
 
-// Dialer opens one attachment bound to tileID, the tile whose face and title
+// Dialer opens one attachment bound to tileID, the tile whose preview and title
 // the server writes. onEnd fires exactly once, with message "" for a clean end.
 // sessionGone is the server's verdict that the session is gone, which the
 // caller reads to hide the refresh affordance.

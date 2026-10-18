@@ -1,4 +1,4 @@
-package tileface
+package tilepreview
 
 import gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 

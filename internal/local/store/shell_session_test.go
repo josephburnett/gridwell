@@ -70,21 +70,21 @@ func TestShellSessionNamersCountsEveryCopy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := func(stage string, rows, faced int64) {
+	want := func(stage string, rows, previewed int64) {
 		t.Helper()
 		got, err := s.ShellSessionNamers(ctx, src.Id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got != (SessionNamers{Rows: rows, Faced: faced}) {
-			t.Errorf("%s: namers = %+v, want {Rows:%d Faced:%d}", stage, got, rows, faced)
+		if got != (SessionNamers{Rows: rows, Previewed: previewed}) {
+			t.Errorf("%s: namers = %+v, want {Rows:%d Previewed:%d}", stage, got, rows, previewed)
 		}
 	}
 	want("source and clone", 2, 0)
-	if _, err := s.SetShellPreview(ctx, b.Id, []byte("face")); err != nil {
+	if _, err := s.SetShellPreview(ctx, b.Id, []byte("preview")); err != nil {
 		t.Fatal(err)
 	}
-	want("the clone froze a face", 2, 1)
+	want("the clone froze a preview", 2, 1)
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: src.Id}); err != nil {
 		t.Fatal(err)
 	}

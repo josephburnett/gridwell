@@ -202,25 +202,25 @@ func (a *App) installTestHook() {
 				"y": r.Get("top").Float() + (args[1].Float()+0.5)*ch,
 			}
 		}),
-		// The last face each text tile painted: kind "raster" with the
+		// The last preview each text tile painted: kind "raster" with the
 		// drawImage rects, or "raw" source, plus the raw paints that followed
 		// a raster.
-		"textFaces": js.FuncOf(func(js.Value, []js.Value) any {
+		"textPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
-			for id, f := range a.textFaces {
-				face := map[string]any{"kind": "raw", "rawAfterRaster": f.rawAfterRaster}
+			for id, f := range a.textPreviews {
+				preview := map[string]any{"kind": "raw", "rawAfterRaster": f.rawAfterRaster}
 				if d := f.draw; d != nil {
-					face["kind"] = "raster"
-					face["scale"] = d.DH / d.SH
-					face["rasterW"] = f.rasterW
-					face["src"] = []any{d.SX, d.SY, d.SW, d.SH}
-					face["dest"] = []any{d.DX, d.DY, d.DW, d.DH}
+					preview["kind"] = "raster"
+					preview["scale"] = d.DH / d.SH
+					preview["rasterW"] = f.rasterW
+					preview["src"] = []any{d.SX, d.SY, d.SW, d.SH}
+					preview["dest"] = []any{d.DX, d.DY, d.DW, d.DH}
 				}
-				out[id] = face
+				out[id] = preview
 			}
 			return out
 		}),
-		// What each text face last painted; see App.paintedText.
+		// What each text preview last painted; see App.paintedText.
 		"paintedText": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
 			for k, v := range a.paintedText {
@@ -228,7 +228,7 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
-		// The last banner line each tile drew: tileface.BannerText as painted.
+		// The last banner line each tile drew: tilepreview.BannerText as painted.
 		"bannerTexts": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
 			for id, t := range a.bannerTexts {
@@ -575,7 +575,7 @@ func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 
 // thDeadLinks reports which of a grid's tiles the client draws dead, links
 // broken at any hop; see client/deadref. It is the
-// one observable of the state, because the face is canvas pixels and the
+// one observable of the state, because the preview is canvas pixels and the
 // absence of an RPC is an absence.
 func (a *App) thDeadLinks(_ js.Value, args []js.Value) any {
 	if len(args) != 1 {

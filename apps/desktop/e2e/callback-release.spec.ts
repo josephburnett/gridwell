@@ -48,7 +48,7 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
   await gw.dragCreate('pane', cx, cy);
   await gw.descendCell(cx, cy);
   // Split, and the shell goes live in one half while the other half's grid
-  // shows its face.
+  // shows its preview.
   await gw.splitFocusedPaneVertical();
   const inner = await gw.focused();
   const icx = Math.round(inner.cx);

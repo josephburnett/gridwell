@@ -77,9 +77,9 @@ func TestFindMissesCleanly(t *testing.T) {
 	}
 }
 
-// A + menu row wears one face in the menu and the bar alike, so an undeclared
+// A + menu row wears one glyph in the menu and the bar alike, so an undeclared
 // glyph cannot mean one thing at one call site and another at the next.
-func TestRowFaceIsTheSameInTheMenuAndInTheBar(t *testing.T) {
+func TestRowGlyphIsTheSameInTheMenuAndInTheBar(t *testing.T) {
 	conn := rpc.ConnectionRow("n2/rtb", "", "n2/rtb/rp/1", "", rpc.View{})
 	rows := []*gridwellv1.PluginInfo{
 		{Uuid: "ufs", Glyph: rpc.GlyphFolder, RootGridId: "ufs/1"},
@@ -94,10 +94,10 @@ func TestRowFaceIsTheSameInTheMenuAndInTheBar(t *testing.T) {
 	}{
 		{"declared keeps its glyph", rows[0],
 			&gridwellv1.Grid{Id: "ufs/1", Glyph: rpc.GlyphFolder, HostContent: true}, rpc.GlyphFolder},
-		{"undeclared plugin takes the grid face", rows[1],
+		{"undeclared plugin takes the grid glyph", rows[1],
 			&gridwellv1.Grid{Id: "ugl/1"}, rpc.GlyphWell},
 		// The far node's home grid declares its own well, and the
-		// connection's face still wins on its own root.
+		// connection's glyph still wins on its own root.
 		{"a connection takes the globe", conn,
 			&gridwellv1.Grid{Id: "n2/rtb/rp/1", Glyph: rpc.GlyphWell, NodeNs: "n2/rtb"}, rpc.GlyphGlobe},
 	} {
@@ -112,7 +112,7 @@ func TestRowFaceIsTheSameInTheMenuAndInTheBar(t *testing.T) {
 	}
 }
 
-// The trash grid is an ordinary local grid, so only the entry knows its face.
+// The trash grid is an ordinary local grid, so only the entry knows its glyph.
 func TestEntryGlyph(t *testing.T) {
 	if g := EntryGlyph("loc/9", plugins); g != "trash" {
 		t.Errorf("EntryGlyph(trash grid) = %q, want trash", g)
@@ -122,7 +122,7 @@ func TestEntryGlyph(t *testing.T) {
 	}
 }
 
-// The grid's face comes from what its plugin declared, never from a kind the
+// The grid's glyph comes from what its plugin declared, never from a kind the
 // client recognizes. A plugin that declares nothing takes the well.
 func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
 	plugins := []*gridwellv1.PluginInfo{

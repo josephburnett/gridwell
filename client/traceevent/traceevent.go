@@ -230,7 +230,7 @@ func ShellExit(paneID, tileID, message string, sessionGone bool) Event {
 	return Event{Src: "shell", Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
 }
 
-// closeMsg: a frozen surface keeps its face and its address, a closed one is
+// closeMsg: a frozen surface keeps its preview and its address, a closed one is
 // gone, and which happened is the whole question when a tile comes back blank.
 func closeMsg(freeze bool) string {
 	if freeze {

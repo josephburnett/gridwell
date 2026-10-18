@@ -26,3 +26,11 @@ federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg
 # nothing more. Allowed for the shadow launchers, the browser-opening scripts a
 # shell's PATH points at, which are a different thing.
 launcher internal/local/tmux/|internal/local/shellsvc/
+# "face" — what a tile looks like from outside is its preview; a namespace's
+# icon is its glyph.
+face
+faces
+faceless
+# "StaleBuild" — a page of another build is OtherBuild; stale is a refused
+# claim only.
+stalebuild

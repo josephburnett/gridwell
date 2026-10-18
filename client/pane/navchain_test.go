@@ -45,14 +45,14 @@ func TestNavChainInsideViews(t *testing.T) {
 	}
 }
 
-// The close-all root crumb wears the face of wherever its click lands, however
-// the level was entered, since a faceless crumb is a blank square.
-func TestNavChainRootCrumbAlwaysHasAFace(t *testing.T) {
+// The close-all root crumb wears the glyph of wherever its click lands, however
+// the level was entered, since a crumb with no glyph is a blank square.
+func TestNavChainRootCrumbAlwaysHasAGlyph(t *testing.T) {
 	var boot Levels
 	boot.Push(Level{TileID: "pt", GridID: "u1/0"})
 	r := boot.NavChain(nil)[0]
 	if !r.CloseOnly || r.Crumb.Anchor != "u1/0" {
-		t.Fatalf("boot-restored root crumb = %+v, want the pane tile's grid face", r)
+		t.Fatalf("boot-restored root crumb = %+v, want the pane tile's grid glyph", r)
 	}
 
 	// A descent's parked tree wins: that is the place the click restores.
@@ -70,6 +70,6 @@ func TestNavChainRootCrumbAlwaysHasAFace(t *testing.T) {
 	var bare Levels
 	bare.Push(Level{TileID: "pt"})
 	if got := bare.NavChain(nil)[0].Crumb; !reflect.DeepEqual(got, Crumb{}) {
-		t.Fatalf("faceless root crumb = %+v, want the empty crumb", got)
+		t.Fatalf("glyphless root crumb = %+v, want the empty crumb", got)
 	}
 }

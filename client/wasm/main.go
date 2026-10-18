@@ -193,9 +193,9 @@ type App struct {
 
 	// renderedPanePaints is e2e attribution: an unfocused pane paints raster.
 	renderedPanePaints map[string]int
-	textFaces          map[string]textFace
-	// paintedText is e2e attribution: what a text face last painted, by tile
-	// id for a grid face and "pane:"+id for a descent: the wrapped source
+	textPreviews       map[string]textPreview
+	// paintedText is e2e attribution: what a text preview last painted, by tile
+	// id for a grid preview and "pane:"+id for a descent: the wrapped source
 	// lines, or "raster:" and the rasterized document.
 	paintedText   map[string]string
 	lastRasterSVG string
@@ -606,7 +606,7 @@ func main() {
 		shellAliveProbing:  map[string][]func(bool){},
 		traces:             map[string]traceState{},
 		renderedPanePaints: map[string]int{},
-		textFaces:          map[string]textFace{},
+		textPreviews:       map[string]textPreview{},
 		paintedText:        map[string]string{},
 		bannerTexts:        map[string]string{},
 		selectionPainted:   map[string][]string{},

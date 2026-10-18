@@ -110,7 +110,7 @@ func TestContentConflictSurfaces(t *testing.T) {
 }
 
 // TestCaptureDuringAnEditDoesNotConflict (b): the whole point of S5. A page
-// title, a frozen face and a trail are captured onto the very tile the user
+// title, a frozen preview and a trail are captured onto the very tile the user
 // is editing; the edit's save, claiming the basis it started from, must still
 // land. Before, every capture bumped the row and turned the next keystroke's
 // save into a conflict the user had to notice.

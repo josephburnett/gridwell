@@ -92,7 +92,7 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 	if got.ID != id || got.X != 6 || got.Y != -3 || got.W != 2 {
 		t.Fatalf("conversion moved the row: %+v, want id %d at (6,-3) 2 wide", got, id)
 	}
-	// The screenshot was the row's own face; a link's face is its target's.
+	// The screenshot was the row's own preview; a link's preview is its target's.
 	verifyRefcounts(t, st)
 
 	// A link's target is the listing's to move, like every other content fact.

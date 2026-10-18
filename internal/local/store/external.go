@@ -275,7 +275,7 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 
 // convert writes a row's new snapshot. A row that becomes a link gives up
 // what the tiles CHECK lets only an owner hold, its screenshot and its text
-// mode, since a link's face is its target's.
+// mode, since a link's preview is its target's.
 func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {

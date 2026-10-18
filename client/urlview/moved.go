@@ -12,8 +12,8 @@ type Moved struct {
 	// screen, as the descent does.
 	Reload bool
 	// DropCapture: a frame this client captured no longer answers for the
-	// face, because the node retired the screenshot it would have become
-	// (pluginhost.pageFaceStale).
+	// preview, because the node retired the screenshot it would have become
+	// (pluginhost.pagePreviewStale).
 	DropCapture bool
 }
 

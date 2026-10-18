@@ -1,4 +1,4 @@
-package tileface
+package tilepreview
 
 import (
 	"testing"

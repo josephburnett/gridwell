@@ -58,7 +58,7 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 	return out, nil
 }
 
-// SetURLPreview is a plugin url tile's screenshot, the face half of home's
+// SetURLPreview is a plugin url tile's screenshot, the preview half of home's
 // SetURLState: the address, title and history are the plugin's to say, so
 // only the picture is the node's to keep.
 func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err error) {
@@ -74,8 +74,8 @@ func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err 
 	})
 }
 
-// DropURLPreview retires a plugin url row's screenshot, so the row's face is
-// its plugin's picture until the next capture; pluginhost.pageFaceStale says
+// DropURLPreview retires a plugin url row's screenshot, so the row's preview is
+// its plugin's picture until the next capture; pluginhost.pagePreviewStale says
 // when. A capture carries no claim, so neither does its retirement.
 func (n *Namespace) DropURLPreview(tileID int64) error {
 	return n.write("DropURLPreview", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {

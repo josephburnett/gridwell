@@ -194,7 +194,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 }
 
 // dropURLView takes down a handle main has no view behind, so the pane shows
-// the tile's frozen face rather than looking live over a blank.
+// the tile's frozen preview rather than looking live over a blank.
 // Identity-checked, since a later place may own the pane.
 func (a *App) dropURLView(paneID string, v *urlView) {
 	pl, ok := a.localIf(paneID)
@@ -229,7 +229,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	pl.urlView = nil
 	tileID := v.tileID
 	// The freeze-frame cache keys by ContentID: a link and its target share
-	// one face.
+	// one preview.
 	previewKey := tileID
 	if ct := a.cachedTileByID(tileID); ct != nil {
 		previewKey = rpc.ContentID(ct)

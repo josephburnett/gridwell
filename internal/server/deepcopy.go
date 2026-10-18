@@ -18,7 +18,7 @@ import (
 // destination cell, the walk inside a copied well at each source cell, so the
 // rule is written once and holds at every depth. The router reads the source
 // subtree through the namespace interface and materializes it in the
-// destination plugin: create, recurse, framing and face through the one
+// destination plugin: create, recurse, framing and preview through the one
 // writeback.
 //
 // Creation is necessarily top-down, because an interior well's child grid is
@@ -117,7 +117,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 }
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address
-// and frozen face for a url.
+// and frozen preview for a url.
 func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// Leaf bytes are read before the copy row is created, so an unreachable
 	// source degrades to a link instead of an empty copy that looks whole. A
@@ -147,8 +147,8 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 
 	switch {
 	case t.Kind == rpc.KindURL:
-		// The frozen face travels with the copy. An unreachable preview skips:
-		// the copy's own facts are present and the face re-freezes on the next
+		// The frozen preview travels with the copy. An unreachable preview skips:
+		// the copy's own facts are present and the preview re-freezes on the next
 		// live visit, so a link here would deny the copy content the walk has.
 		if t.PreviewBlobId == 0 {
 			return created, nil
@@ -173,7 +173,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	default:
 		return created, nil
 	}
-	// The face write moved the row, so the answer is a fresh read of it.
+	// The preview write moved the row, so the answer is a fresh read of it.
 	return freshCopy(ctx, dst, created), nil
 }
 
@@ -215,7 +215,7 @@ func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, t
 	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dst.hop.PeelTile(tile), Content: content})
 }
 
-// freshCopy re-reads the copy so the answer carries the version and the face
+// freshCopy re-reads the copy so the answer carries the version and the preview
 // the follow-up write left. An unreadable re-read keeps the create's row: the
 // copy landed, and failing it here would say otherwise.
 func freshCopy(ctx context.Context, dst namespace.Namespace, created *pb.TileResponse) *pb.TileResponse {

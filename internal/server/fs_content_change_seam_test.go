@@ -1,7 +1,7 @@
 package server_test
 
 // A file's bytes changed on disk reach a client that shows them: the open
-// file's body in a pane, a text tile's face in a shown grid, an image's face.
+// file's body in a pane, a text tile's preview in a shown grid, an image's preview.
 // The client half is the shim's own loop over its js-free owners: cache.Apply,
 // events.Route, a refetch of the grid the plan names, and a ReadContent for a
 // body the cache no longer holds (render.go fetchTileContent). Every shipped
@@ -216,22 +216,22 @@ func TestFsOpenFileShowsItsNewBytes(t *testing.T) {
 	}
 }
 
-// A text tile's face in a shown grid draws its new bytes once they change on
-// disk: the face is drawn from the same cached body (render.go tileBody).
-func TestFsTextFaceShowsItsNewBytes(t *testing.T) {
+// A text tile's preview in a shown grid draws its new bytes once they change on
+// disk: the preview is drawn from the same cached body (render.go tileBody).
+func TestFsTextPreviewShowsItsNewBytes(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "todo.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfsface", root)
+	k := newContentClient(t, "pfspreview", root)
 	k.fetchGrid(k.landing)
 	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
 	}
 	id := rpc.ContentID(k.tile("todo.txt"))
 	if got := k.body(id); string(got) != "one\n" {
-		t.Fatalf("face body %q", got)
+		t.Fatalf("preview body %q", got)
 	}
 	k.settle()
 	k.changed = 0
@@ -240,13 +240,13 @@ func TestFsTextFaceShowsItsNewBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !k.run(5*time.Second, func() bool { return bytes.Equal(k.body(id), []byte("one\ntwo\n")) }) {
-		t.Fatalf("the face still draws %q five seconds after its bytes changed on disk (grid changes told: %d)", k.body(id), k.changed)
+		t.Fatalf("the preview still draws %q five seconds after its bytes changed on disk (grid changes told: %d)", k.body(id), k.changed)
 	}
 }
 
-// An image's face in a shown grid is keyed by the file's mtime
+// An image's preview in a shown grid is keyed by the file's mtime
 // (Entry.preview_stamp), so an edited image is asked for its new picture.
-func TestFsImageFaceShowsItsNewPicture(t *testing.T) {
+func TestFsImagePreviewShowsItsNewPicture(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "pic.png")
 	if err := os.WriteFile(path, []byte("\x89PNG\r\n\x1a\nA"), 0o644); err != nil {
@@ -271,6 +271,6 @@ func TestFsImageFaceShowsItsNewPicture(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !k.run(5*time.Second, func() bool { return k.tile("pic.png").PreviewBlobId != before }) {
-		t.Fatalf("the image's face key is still %d five seconds after it changed on disk", before)
+		t.Fatalf("the image's preview key is still %d five seconds after it changed on disk", before)
 	}
 }

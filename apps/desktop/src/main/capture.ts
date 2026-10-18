@@ -119,8 +119,8 @@ interface PumpTimers {
   clearTimer?: (timer: Timer) => void;
 }
 
-// MirrorPump captures the live panes whose face another pane shows, on a timer,
-// so those faces stay fresh. The renderer names them (pane.Mirrored), and the
+// MirrorPump captures the live panes whose preview another pane shows, on a timer,
+// so those previews stay fresh. The renderer names them (pane.Mirrored), and the
 // pump runs only while it names any. It owns the cadence: a caller that picked
 // its own would be a second copy of a decision about how fresh a mirror is.
 export class MirrorPump {

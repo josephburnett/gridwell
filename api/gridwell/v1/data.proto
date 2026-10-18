@@ -64,7 +64,7 @@ message Grid {
   bool host_content = 13;
   // glyph is the owning plugin's declared identity glyph for this grid, from
   // the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
-  // client falls back to the well face or the mount door's glyph). It
+  // client falls back to the well glyph or the mount door's glyph). It
   // travels on the GRID because a plugin-list lookup cannot answer for a
   // grid reached through a mount. Stamped by the adapter, verbatim in
   // transit. Wire-only, never persisted.
@@ -101,7 +101,7 @@ message Grid {
 message MenuEntry {
   string id           = 1; // entry identity within the plugin
   string label        = 2; // swatch label, verbatim
-  string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default face)
+  string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default glyph)
   reserved 4, 5, 6; // color, kind, param_schema
   string grid_id      = 7; // the target grid, qualified per hop
   // view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
@@ -154,7 +154,7 @@ message Tile {
   // url-only: the http(s) URL plus a pointer at the last-frozen JPEG
   // preview (in the blobs table; hash-deduped across clones).
   string url_string = 20;
-  // preview_blob_id is the face's cache key, 0 for none, and GetTilePreview
+  // preview_blob_id is the preview's cache key, 0 for none, and GetTilePreview
   // answers it. A plugin tile with no screenshot yet keys its plugin's
   // picture below zero; the client only compares keys.
   int64 preview_blob_id = 21;
@@ -234,7 +234,7 @@ message Tile {
   // status_detail is the owning plugin's one emoji about this tile's state,
   // set only when there is something to notice, which nothing outside that
   // plugin can derive. The client draws it before the name
-  // (tileface.BannerText) and never instead of it. Plugin-declared through
+  // (tilepreview.BannerText) and never instead of it. Plugin-declared through
   // the Entry, wire-only: never a stored column, never set by clients.
   string status_detail = 35;
 
@@ -298,7 +298,7 @@ message InfoResponse {
   double root_view_zoom = 12;
   reserved 14; // instance_grid_id
   reserved 15; // transit
-  // glyph is the plugin's identity glyph for the menu and ghost faces:
+  // glyph is the plugin's identity glyph for the menu and the ghost:
   // "folder", "process", "well", or "" for the generic globe. The client reads
   // the declaration and never switches on the kind, and an unknown value falls
   // back to the globe, so a third-party plugin degrades politely.
@@ -558,7 +558,7 @@ message PluginInfo {
   // whether or not it declared a root.
   string info_error = 10;
   reserved 11; // instance_grid_id
-  // glyph mirrors InfoResponse.glyph for the client's plugin faces: the
+  // glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
   // menu swatch and the drag ghost. "" is the generic globe.
   string glyph = 12;
   // menu_entries mirrors InfoResponse.menu_entries with grid targets

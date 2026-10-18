@@ -123,28 +123,28 @@ func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFram
 		return false
 	}
 	a.cctx.Call("drawImage", img, d.SX, d.SY, d.SW, d.SH, d.DX, d.DY, d.DW, d.DH)
-	a.noteTextFace(n.Id, &d, rasterW)
+	a.noteTextPreview(n.Id, &d, rasterW)
 	return true
 }
 
-// textFace is e2e attribution, read by the textFaces testhook: the last face
+// textPreview is e2e attribution, read by the textPreviews testhook: the last preview
 // a text tile painted, and how often raw source painted after a raster had.
-type textFace struct {
+type textPreview struct {
 	draw           *markdown.RasterDraw // nil for raw source
 	rasterW        float64
 	sawRaster      bool
 	rawAfterRaster int
 }
 
-func (a *App) noteTextFace(tileID string, d *markdown.RasterDraw, rasterW float64) {
-	f := a.textFaces[tileID]
+func (a *App) noteTextPreview(tileID string, d *markdown.RasterDraw, rasterW float64) {
+	f := a.textPreviews[tileID]
 	f.draw, f.rasterW = d, rasterW
 	if d != nil {
 		f.sawRaster = true
 	} else if f.sawRaster {
 		f.rawAfterRaster++
 	}
-	a.textFaces[tileID] = f
+	a.textPreviews[tileID] = f
 }
 
 // renderedRasterFailed is rasterprev.Cache's verdict on a document that never

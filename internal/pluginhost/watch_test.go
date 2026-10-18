@@ -907,7 +907,7 @@ func TestAnEntryToldAgainUnderItsStampChangesNothing(t *testing.T) {
 		t.Errorf("the change told again under its stamp told %v, want nothing", evs)
 	}
 	if got := served(); got != next {
-		t.Errorf("the grid serves face key %d after the change was told again, want the capture since it %d", got, next)
+		t.Errorf("the grid serves preview key %d after the change was told again, want the capture since it %d", got, next)
 	}
 }
 

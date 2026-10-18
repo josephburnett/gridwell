@@ -90,7 +90,7 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	}
 
 	// Descent: answered from memory (no new calls), every tile a page
-	// with a face.
+	// with a preview.
 	wk, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: thisWeek.ChildGridId})
 	if err != nil {
 		t.Fatal(err)

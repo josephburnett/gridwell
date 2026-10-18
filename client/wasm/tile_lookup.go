@@ -64,7 +64,7 @@ func (a *App) contentRow(t *gridwellv1.Tile) (*gridwellv1.Tile, contentrow.State
 
 // askContentRow is contentRow for a descent or a gesture that needs the
 // facts: a link whose target is in no cached grid reads it through the by-id
-// read, and the frame its grid lands in decides again. A grid face never
+// read, and the frame its grid lands in decides again. A grid preview never
 // asks, or a box of links would read every target behind it.
 func (a *App) askContentRow(t *gridwellv1.Tile) (*gridwellv1.Tile, contentrow.State) {
 	row, s := a.contentRow(t)

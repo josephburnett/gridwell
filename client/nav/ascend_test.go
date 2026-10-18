@@ -333,7 +333,7 @@ func findKind(p Plan, k EffectKind) (Effect, bool) {
 
 // Inside a pane tile the layout owns a grid frame's view, so an ascent writes
 // nothing to the doorway row, at a well and at a root, and animates onto the
-// row's own framing, the face the well shows from outside.
+// row's own framing, the preview the well shows from outside.
 func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
 	door := doorRow()
 	door.ViewCx, door.ViewCy, door.ViewZoom = 99, 99, 0.5

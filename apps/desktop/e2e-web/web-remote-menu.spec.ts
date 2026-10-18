@@ -190,12 +190,12 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 
   // The bar's title is the link well's own name, never the remote's config
   // label, and renaming here renames that well. The level's crumb wears the
-  // mount's glyph, the globe, rather than a generic grid face.
+  // mount's glyph, the globe, rather than a generic grid glyph.
   await expect.poll(async () => (await gw.barName()).label).toBe('far');
   expect((await gw.barName()).editable, 'the door is a real row — renamable').toBe(true);
   const bar = await gw.bar();
   const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
-  expect(rootCrumb?.glyph, 'the crumb wears the mount door face, not a grid').toBe('globe');
+  expect(rootCrumb?.glyph, 'the crumb wears the mount door glyph, not a grid').toBe('globe');
   await gw.clickBarName('right');
   const rin = window.locator('#gw-rename-input');
   await expect(rin).toBeVisible();

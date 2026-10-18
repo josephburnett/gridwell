@@ -30,7 +30,7 @@ type shellStreamConn struct {
 	rendererKind string   // "webgl" or "dom", whichever attached
 	container    js.Value // host <div> in the DOM
 
-	// tileID is the content tile the socket is bound to, whose face and title
+	// tileID is the content tile the socket is bound to, whose preview and title
 	// the server writes; key is the session it attaches (rpc.ShellSession).
 	tileID, key string
 	paneID      string
@@ -66,7 +66,7 @@ type shellStreamConn struct {
 	mirror   *debounce.Debounce
 	onRender js.Func
 	// shown is whether the overlay was on screen last frame, so a park snapshots
-	// the face its pane is about to draw.
+	// the preview its pane is about to draw.
 	shown bool
 
 	lastCols, lastRows uint16
@@ -105,10 +105,10 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	if !ok {
 		return false
 	}
-	face, _ := a.contentRow(tile)
+	row, _ := a.contentRow(tile)
 	alive, known := a.shellAlive[key]
 	v := shellconn.DecideShellRefreshVisible(
-		tile.Kind == rpc.KindShell, face.PreviewBlobId != 0, known, alive)
+		tile.Kind == rpc.KindShell, row.PreviewBlobId != 0, known, alive)
 	if v.Probe {
 		a.probeShellSessionAlive(key, rpc.ContentID(tile), nil)
 	}
@@ -569,7 +569,7 @@ func (a *App) mirrorShell(conn *shellStreamConn) {
 	}
 }
 
-// parkShellOverlay takes the overlay off screen, snapshotting the face first.
+// parkShellOverlay takes the overlay off screen, snapshotting the preview first.
 func (a *App) parkShellOverlay(conn *shellStreamConn) {
 	if conn.shown {
 		a.mirrorShell(conn)

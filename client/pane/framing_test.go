@@ -137,7 +137,7 @@ func TestTakeOver(t *testing.T) {
 // Tiles sharing a session share its one live surface: going live on a clone
 // closes the source's surface, so it freezes onto its own tile, and places a
 // fresh one bound to the clone. A move would carry a socket bound to the
-// source, whose face and title the server would keep writing.
+// source, whose preview and title the server would keep writing.
 func TestTakeOverAcrossTilesOnOneSession(t *testing.T) {
 	cases := []struct {
 		name    string

@@ -5,7 +5,7 @@ import { makeRunDir } from './homes';
 
 // A page its plugin serves changes at its source: the live view showing it
 // loads it again, and once it is left, the screenshot of the old page gives
-// way when the page changes again (urlview.PageMoved, pluginhost.pageFaceStale).
+// way when the page changes again (urlview.PageMoved, pluginhost.pagePreviewStale).
 
 const siteDir = makeRunDir();
 const pagePath = path.join(siteDir, 'note.html');
@@ -37,14 +37,14 @@ test('a served page that changes reloads in its live view, and its screenshot gi
     .toBe('second');
 
   await gw.ascendViaCrumb();
-  const faceKey = async () =>
+  const previewKey = async () =>
     Number((await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'note.html')?.previewBlobId ?? 0);
-  await expect.poll(faceKey, { message: 'the ascent freezes the page into its face', timeout: 15_000 }).toBeGreaterThan(0);
-  const shot = await faceKey();
+  await expect.poll(previewKey, { message: 'the ascent freezes the page into its preview', timeout: 15_000 }).toBeGreaterThan(0);
+  const shot = await previewKey();
 
   fs.writeFileSync(pagePath, '<title>note</title><body>third</body>');
   await expect
-    .poll(faceKey, { message: 'the screenshot of the page before the change is no longer the face', timeout: 15_000 })
+    .poll(previewKey, { message: 'the screenshot of the page before the change is no longer the preview', timeout: 15_000 })
     .not.toBe(shot);
-  expect(await faceKey(), 'the face is the plugin\'s until the next capture').toBeLessThanOrEqual(0);
+  expect(await previewKey(), 'the preview is the plugin\'s until the next capture').toBeLessThanOrEqual(0);
 });

@@ -71,7 +71,7 @@ func TestALegacyRootContextBecomesTheOneCollection(t *testing.T) {
 		t.Errorf("derived entry = %+v, want the root context, resolved", e)
 	}
 	if e.Label != "" || e.Glyph != "" {
-		t.Errorf("derived entry = %+v, want no face of its own so it wears the plugin's", e)
+		t.Errorf("derived entry = %+v, want no glyph of its own so it wears the plugin's", e)
 	}
 	if _, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: e.GridId}); err != nil {
 		t.Errorf("the derived collection does not serve: %v", err)

@@ -44,7 +44,7 @@ func beacon(procedure string, m proto.Message) (path string, body []byte) {
 
 // SetTileBeacon drops the preview jpeg, which would exhaust the roughly 64 KB
 // beacon budget; the store skips an empty preview, so the tile keeps its old
-// face and still gets the address and title the live page navigated to.
+// preview and still gets the address and title the live page navigated to.
 func SetTileBeacon(req *pb.SetTileRequest) (path string, body []byte) {
 	r := proto.Clone(req).(*pb.SetTileRequest)
 	r.Preview = nil

@@ -273,7 +273,7 @@ func (a *App) ensureFileToggle() {
 
 // refreshFileToggle shows the toggle for a markdown descent in either mode and
 // hides it otherwise. A url tile uses a canvas back button instead, and a page
-// tile has no document body to show a second face of.
+// tile has no document body to show a second mode of.
 func (a *App) refreshFileToggle() {
 	a.ensureFileToggle()
 	style := a.overlays.textToggleBtn.Get("style")
@@ -412,7 +412,7 @@ const textSideInset = 6.0
 
 // onToggleFileMode saves the current buffer before switching to rendered.
 func (a *App) onToggleFileMode(p *pane.Pane) {
-	// A tile with one face has no mode to flip to.
+	// A tile with one mode has no other to flip to.
 	if _, _, _, d := a.focusedTextDescent(); !d.Toggle {
 		return
 	}

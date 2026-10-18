@@ -47,7 +47,7 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 		t.Fatal(err)
 	}
 	verifyRefcounts(t, st)
-	// A new capture replaces the face, and an empty one keeps it.
+	// A new capture replaces the preview, and an empty one keeps it.
 	if _, err := d.SetURLPreview(a, []byte("shot-2")); err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 	}
 	verifyRefcounts(t, st)
 
-	// Home cannot read a plugin row's face, nor a plugin a home row's.
+	// Home cannot read a plugin row's preview, nor a plugin a home row's.
 	if _, err := st.GetTilePreview(ctx, itoa(a)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("home read a plugin row's preview: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 	}
 }
 
-// A retired row keeps its id but never shows a face again, so the blob it held
+// A retired row keeps its id but never shows a preview again, so the blob it held
 // is released rather than kept alive by a tombstone.
 func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 	st, d := openExt(t)

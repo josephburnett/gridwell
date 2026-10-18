@@ -122,7 +122,7 @@ type Grid struct {
 	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
 	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
-	// client falls back to the well face or the mount door's glyph). It
+	// client falls back to the well glyph or the mount door's glyph). It
 	// travels on the GRID because a plugin-list lookup cannot answer for a
 	// grid reached through a mount. Stamped by the adapter, verbatim in
 	// transit. Wire-only, never persisted.
@@ -269,7 +269,7 @@ type MenuEntry struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // entry identity within the plugin
 	Label  string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
-	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default face)
+	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default glyph)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
 	// meaning as PluginInfo.root_view_*. A doorway carries the framing of the
@@ -396,7 +396,7 @@ type Tile struct {
 	// url-only: the http(s) URL plus a pointer at the last-frozen JPEG
 	// preview (in the blobs table; hash-deduped across clones).
 	UrlString string `protobuf:"bytes,20,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
-	// preview_blob_id is the face's cache key, 0 for none, and GetTilePreview
+	// preview_blob_id is the preview's cache key, 0 for none, and GetTilePreview
 	// answers it. A plugin tile with no screenshot yet keys its plugin's
 	// picture below zero; the client only compares keys.
 	PreviewBlobId int64 `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
@@ -461,7 +461,7 @@ type Tile struct {
 	// status_detail is the owning plugin's one emoji about this tile's state,
 	// set only when there is something to notice, which nothing outside that
 	// plugin can derive. The client draws it before the name
-	// (tileface.BannerText) and never instead of it. Plugin-declared through
+	// (tilepreview.BannerText) and never instead of it. Plugin-declared through
 	// the Entry, wire-only: never a stored column, never set by clients.
 	StatusDetail string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// shell_session names the tmux session a shell tile attaches: the id of the
@@ -800,7 +800,7 @@ type InfoResponse struct {
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	// glyph is the plugin's identity glyph for the menu and ghost faces:
+	// glyph is the plugin's identity glyph for the menu and the ghost:
 	// "folder", "process", "well", or "" for the generic globe. The client reads
 	// the declaration and never switches on the kind, and an unknown value falls
 	// back to the globe, so a third-party plugin degrades politely.
@@ -2325,7 +2325,7 @@ type PluginInfo struct {
 	// present identically as root_grid_id == "". Empty when Info succeeded,
 	// whether or not it declared a root.
 	InfoError string `protobuf:"bytes,10,opt,name=info_error,json=infoError,proto3" json:"info_error,omitempty"`
-	// glyph mirrors InfoResponse.glyph for the client's plugin faces: the
+	// glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
 	// menu swatch and the drag ghost. "" is the generic globe.
 	Glyph string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	// menu_entries mirrors InfoResponse.menu_entries with grid targets

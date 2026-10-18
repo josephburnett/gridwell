@@ -48,7 +48,7 @@ const (
 
 	EffCancelTransition // lands what a pane is animating: PaneID ("" = all)
 	// EffStartTransition animates a pane: PaneID, Segments, TraceTileID, Land.
-	// Expand, with Tile, grows the tile's face into the level outline instead.
+	// Expand, with Tile, grows the tile's preview into the level outline instead.
 	EffStartTransition
 
 	EffCloseStream // PaneID, Streams, Freeze, FreezeOnto

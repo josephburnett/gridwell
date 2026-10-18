@@ -359,7 +359,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 			pt.ReadOnly = e.ReadOnly
 			pt.ServesPage = e.ServesPage
 			pt.TextPresentation = e.TextPresentation
-			pt.PreviewBlobId = faceKey(pt.PreviewBlobId, e.PreviewStamp)
+			pt.PreviewBlobId = previewKey(pt.PreviewBlobId, e.PreviewStamp)
 			pt.StatusDetail = e.StatusDetail
 			pt.UrlString = e.UrlString
 		}
@@ -368,11 +368,11 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 	return out, nil
 }
 
-// faceKey is a plugin tile's preview key, exactly an internet tile's rule: the
+// previewKey is a plugin tile's preview key, exactly an internet tile's rule: the
 // row's screenshot once one exists, until the next visit replaces it, and the
 // plugin's own picture only before the first. The plugin's stamp is negated so
 // the two number spaces never meet in the client's (tile, key) cache.
-func faceKey(blobID, stamp int64) int64 {
+func previewKey(blobID, stamp int64) int64 {
 	switch {
 	case blobID != 0:
 		return blobID
@@ -382,11 +382,11 @@ func faceKey(blobID, stamp int64) int64 {
 	return 0
 }
 
-// pageFaceStale reports that row's screenshot no longer pictures entry e,
+// pagePreviewStale reports that row's screenshot no longer pictures entry e,
 // whose source just said its bytes moved: the page is the plugin's, so the
 // screenshot is of a page that is gone. The freeze gesture's screenshot is the
-// user's and stays, and a link has no face of its own.
-func pageFaceStale(e *pluginv1.Entry, row *gridwellv1.Tile) bool {
+// user's and stays, and a link has no preview of its own.
+func pagePreviewStale(e *pluginv1.Entry, row *gridwellv1.Tile) bool {
 	return e.ServesPage && e.LinkTarget == nil && row.PreviewBlobId != 0 && !row.UrlFrozen
 }
 
@@ -1083,7 +1083,7 @@ func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContent
 	return err
 }
 
-// GetTilePreview answers the face faceKey named.
+// GetTilePreview answers the preview previewKey named.
 func (a *Adapter) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {

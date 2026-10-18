@@ -113,7 +113,7 @@ func (c *Cache) put(tileID string, blobID int64, bytes []byte, onReady func()) {
 	}
 	c.mu.Lock()
 	// The entry keeps its image and its blob id until the new one lands, so a
-	// tile goes on showing the face it had while the next decode runs.
+	// tile goes on showing the preview it had while the next decode runs.
 	gen := c.at(tileID).Begin(blobID)
 	c.mu.Unlock()
 

@@ -252,7 +252,7 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 }
 
 // A close says whether the surface was frozen or torn down: a frozen tile
-// keeps its face and its session, a closed one does not, and a tile that came
+// keeps its preview and its session, a closed one does not, and a tile that came
 // back blank is a report about exactly that difference.
 func TestStreamClosesSayWhichKind(t *testing.T) {
 	if got := URLClose("p1", "t7abcde", true).Msg; got != "frozen" {

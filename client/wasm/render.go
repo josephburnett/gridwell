@@ -22,7 +22,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
-	"github.com/josephburnett/gridwell/client/tileface"
+	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
@@ -50,7 +50,7 @@ func fillRectC(c js.Value, x, y, w, h float64, color string) {
 	c.Call("fillRect", x, y, w, h)
 }
 
-// labelOpts is the face drawLabel wears; zero values are canvas defaults.
+// labelOpts is the style drawLabel draws in; zero values are canvas defaults.
 type labelOpts struct {
 	font     string
 	fill     string
@@ -117,9 +117,9 @@ func (a *App) strokeTileFrame(c js.Value, x, y, w, h float64, color string, dash
 	}
 }
 
-// drawDeadLinkFace paints over the tile already drawn: a dead link carries the
+// drawDeadLink paints over the tile already drawn: a dead link carries the
 // news alone.
-func (a *App) drawDeadLinkFace(n *gridwellv1.Tile, x, y, w, h float64) {
+func (a *App) drawDeadLink(n *gridwellv1.Tile, x, y, w, h float64) {
 	if !a.deadLink(n) {
 		return
 	}
@@ -360,7 +360,7 @@ func (a *App) draw() {
 			a.width-wsOutlinePx, h-wsOutlinePx)
 		a.cctx.Set("lineWidth", 1.0)
 	}
-	// The first-descent capture: the pane tile's face growing into the outline.
+	// The first-descent capture: the pane tile's preview growing into the outline.
 	if e := a.overlays.wsExpand; e != nil {
 		t := (nowMs() - e.startMs) / totalTransitionMs
 		if t > 1 {
@@ -511,11 +511,11 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					w := float64(n.W) * cellSize
 					h := float64(n.H) * cellSize
 					nn := n
-					outside := tileface.Outside(nn, inHost)
+					outside := tilepreview.Outside(nn, inHost)
 					dashed := isLinkTile(nn)
 					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(nn, left, top, w, h)
-					a.drawDeadLinkFace(nn, left, top, w, h)
+					a.drawDeadLink(nn, left, top, w, h)
 					if picked[n.Id] {
 						a.drawSelectionBorder(a.cctx, left, top, w, h)
 						painted = append(painted, n.Id)
@@ -808,7 +808,7 @@ func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outsid
 // drawTileBannerLabelIn takes the text color, so a dead link's grey label
 // shares the one banner geometry.
 func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, textColor string) {
-	text := tileface.BannerText(n)
+	text := tilepreview.BannerText(n)
 	if text == "" {
 		return
 	}
@@ -833,16 +833,16 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 }
 
 func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
-	switch tileface.BannerHue(n, outside) {
-	case tileface.HueShell:
+	switch tilepreview.BannerHue(n, outside) {
+	case tilepreview.HueShell:
 		return a.pal.ShellBorder
-	case tileface.HueWell:
+	case tilepreview.HueWell:
 		return a.pal.FocusBorder
-	case tileface.HueHost:
+	case tilepreview.HueHost:
 		return a.pal.PluginBorder
-	case tileface.HueURL:
+	case tilepreview.HueURL:
 		return a.pal.URLLine
-	case tileface.HueText:
+	case tilepreview.HueText:
 		return a.pal.MarkdownLine
 	}
 	return a.pal.Muted
@@ -882,7 +882,7 @@ func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) e
 	o := clientsync.Of(err)
 	a.fetch.contents.Settle(tileID, clientsync.ReactRead(o))
 	if err != nil {
-		// Say why, unless the dead face already does.
+		// Say why, unless drawing it dead already does.
 		if clientsync.ReadSurfaces(o) {
 			a.surfaceRPCError("ReadContent", err)
 		}
@@ -928,7 +928,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		}
 		nn := n
 		// url and shell children skip their JPEGs, so a well's interior reads uniformly.
-		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tileface.Outside(nn, childInHost), borderPx, false)
+		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tilepreview.Outside(nn, childInHost), borderPx, false)
 	}
 }
 
@@ -968,7 +968,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 // cells of parentCellSize.
 func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r pane.Rect, frag float64) {
 	w, h := float64(n.W)*parentCellSize, float64(n.H)*parentCellSize
-	outside := tileface.Outside(n, false)
+	outside := tilepreview.Outside(n, false)
 	// Dashed means this is, or becomes, a reference: it shows mid-drag which
 	// right-button mode is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)

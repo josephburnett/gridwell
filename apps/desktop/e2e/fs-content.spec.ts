@@ -32,16 +32,16 @@ test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, windo
 test('an fs grid wears the glyph its plugin declared, not a kind the client knows', async ({ gw }) => {
   // The fs plugin declares glyph "folder" and host_content in its plugin.v1
   // handshake, the adapter stamps both onto every grid it serves, and the
-  // client's crumb renders the declared face. Nothing between them knows the
+  // client's crumb renders the declared glyph. Nothing between them knows the
   // word "fs".
   await gw.enterPlugin('code');
   const bar = await gw.bar();
   const chain = bar.segments.filter((s) => s.kind === 'chain');
   const here = chain[chain.length - 1];
   expect(here, 'the fs level has a crumb').toBeTruthy();
-  expect(here.glyph, 'the crumb wears the declared folder face').toBe('folder');
+  expect(here.glyph, 'the crumb wears the declared folder glyph').toBe('folder');
   // The level the descent came from is the node's own room, which declares
-  // nothing, so it wears the well face.
+  // nothing, so it wears the well glyph.
   expect(chain[0].glyph, 'home is owned content').toBe('well');
 });
 
@@ -172,7 +172,7 @@ test('a read-only plugin document is selectable, and stays so through a reload (
 
   // The descent must reach the url through the completion write, since a
   // read-only document has no textarea events to stand in for a missing one.
-  // The reload must then restore the rendered DOM face, because the
+  // The reload must then restore the rendered DOM view, because the
   // canvas-drawn text mode has nothing to select.
   const fileSeg = String(tile.id).split('/').pop()!;
   await expect

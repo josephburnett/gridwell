@@ -18,12 +18,12 @@ type mirrorState struct {
 }
 
 // syncMirrors runs every frame, because every change that can show or hide a
-// face draws one; a frame that changes no answer says nothing.
+// preview draws one; a frame that changes no answer says nothing.
 func (a *App) syncMirrors(rects map[string]pane.Rect) {
 	urls, shells := a.urlSurfaces(), a.shellSurfaces()
-	var shown []pane.Face
+	var shown []pane.Shown
 	if len(urls)+len(shells) > 0 {
-		shown = a.shownFaces(rects)
+		shown = a.shownPreviews(rects)
 	}
 	url := pane.Mirrored(urls, shown)
 	if !a.mirrors.urlSent || !slices.Equal(url, a.mirrors.url) {
@@ -41,10 +41,10 @@ func (a *App) syncMirrors(rects map[string]pane.Rect) {
 	a.mirrors.shell = shell
 }
 
-// shownFaces is every content tile a laid-out pane draws the face of, in the
+// shownPreviews is every content tile a laid-out pane draws the preview of, in the
 // shape pane.Mirrored reads.
-func (a *App) shownFaces(rects map[string]pane.Rect) []pane.Face {
-	var out []pane.Face
+func (a *App) shownPreviews(rects map[string]pane.Rect) []pane.Shown {
+	var out []pane.Shown
 	for paneID := range rects {
 		p := a.tree.FindPane(paneID)
 		if p == nil {
@@ -52,13 +52,13 @@ func (a *App) shownFaces(rects map[string]pane.Rect) []pane.Face {
 		}
 		if p.ContentID() != "" {
 			if t, ok := a.descendedTile(p); ok {
-				out = append(out, pane.Face{PaneID: paneID, ContentID: rpc.ContentID(t)})
+				out = append(out, pane.Shown{PaneID: paneID, ContentID: rpc.ContentID(t)})
 			}
 			continue
 		}
 		if g, ok := a.c.Grid(a.gridIDForPane(p)); ok {
 			for _, n := range g.Tiles {
-				out = append(out, pane.Face{PaneID: paneID, ContentID: rpc.ContentID(n)})
+				out = append(out, pane.Shown{PaneID: paneID, ContentID: rpc.ContentID(n)})
 			}
 		}
 	}

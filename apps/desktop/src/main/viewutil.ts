@@ -221,7 +221,7 @@ export function renderProcessGoneMessage(url: string, reason: string): string {
 }
 
 // A page that closed itself ended its view, which is not a crash: the pane
-// shows the tile's frozen face again.
+// shows the tile's frozen preview again.
 export function pageClosedMessage(url: string): string {
   return url ? `the page closed itself: ${url}` : 'the page closed itself';
 }

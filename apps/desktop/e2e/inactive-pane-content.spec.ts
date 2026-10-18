@@ -82,17 +82,17 @@ test('an unsaved checkbox flip shows in the rendered pane focus left', async ({ 
   await window.unroute(WRITE);
 });
 
-test('a grid face in another pane follows unsaved typing', async ({ gw, window }) => {
+test('a grid preview in another pane follows unsaved typing', async ({ gw, window }) => {
   const { tile } = await splitOnText(gw, 'abc\n');
   // The right pane shows the grid the left is descended from, so the tile's
-  // face paints there on every keystroke.
+  // preview paints there on every keystroke.
   await expect.poll(async () => (await painted(window))[tile.id]).toBe('abc\n');
   await window.route(WRITE, (r: any) => r.abort());
   await window.keyboard.press('Control+End');
   await gw.typeText('x');
   await expect.poll(async () => (await painted(window))[tile.id]).toBe('abc\nx');
   await window.keyboard.press('Backspace');
-  await gw.typeText('y'); // a length the face has painted before, other bytes
+  await gw.typeText('y'); // a length the preview has painted before, other bytes
   await expect
     .poll(async () => (await painted(window))[tile.id], { timeout: 5_000 })
     .toBe('abc\ny');

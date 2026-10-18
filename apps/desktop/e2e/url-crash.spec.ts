@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 
 // A url view whose renderer dies is gone, as one whose page closed itself is:
 // main retires it, the renderer drops its handle, and the pane shows the tile's
-// frozen face with one notice saying why. Descending again places a new live
+// frozen preview with one notice saying why. Descending again places a new live
 // view, because a dead renderer's blank view has no Reload it could raise.
 
 test('a crashed url view retires, and the next descent is live again', async ({ electronApp, gw, window }) => {
@@ -42,7 +42,7 @@ test('a crashed url view retires, and the next descent is live again', async ({ 
   expect((await notices()).slice(before).map((n) => `${n.severity}: ${n.message}`)).toEqual([
     expect.stringMatching(/^error: page crashed .*crash=1/),
   ]);
-  expect((await gw.focused()).textFocus, 'the pane stays in the tile, on its frozen face').not.toBe('');
+  expect((await gw.focused()).textFocus, 'the pane stays in the tile, on its frozen preview').not.toBe('');
 
   await gw.middleClickPane();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');

@@ -3,7 +3,7 @@ package markdown
 // WrapRawLine reproduces the editing <textarea>'s wrapping, which the canvas
 // painter must match or the text reflows when pane focus moves. Chromium's UA
 // stylesheet gives a textarea `white-space: pre-wrap; overflow-wrap:
-// break-word`, so for a monospace face:
+// break-word`, so for a monospace font:
 //   - a soft break happens before a word whose end would pass cols;
 //   - spaces at a soft break hang past the edge, staying on the earlier row;
 //   - a word wider than a whole row is char-broken at the column limit, but

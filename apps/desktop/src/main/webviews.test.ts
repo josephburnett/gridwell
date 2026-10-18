@@ -287,11 +287,11 @@ test('a move into a hidden pane parks the view at the size it had, and one with 
   assert.deepEqual(view.bounds, BOUNDS, 'the next show put it back where it was');
 });
 
-test('a park still taking its face for the old pane does not park the view it moved', async () => {
+test('a park still taking its preview for the old pane does not park the view it moved', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
   const view = r.views[0];
-  r.reg.setHidden('p1', true, false); // waits on its face before it parks
+  r.reg.setHidden('p1', true, false); // waits on its preview before it parks
   r.reg.move('p1', 'w1:p1', BOUNDS, true, false, true);
   await settle();
   assert.deepEqual(view.bounds, BOUNDS, 'the stale park moved the view off screen');

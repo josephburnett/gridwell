@@ -114,9 +114,9 @@ and `status_detail` come from the plugin's `Entry` through
 and a plugin row also keeps it in its snapshot beside kind, label and
 `url_string` (`store.snapshotOf`), so a row its source does not list right
 now still presents as the page it was. A plugin tile's `preview_blob_id` is
-`pluginhost.faceKey`'s: the node's screenshot of the tile once one exists,
+`pluginhost.previewKey`'s: the node's screenshot of the tile once one exists,
 else the plugin's picture keyed below zero. A served page that changes in
-place retires an unfrozen screenshot (`pluginhost.pageFaceStale`). `Grid.scratch_grid_id` and
+place retires an unfrozen screenshot (`pluginhost.pagePreviewStale`). `Grid.scratch_grid_id` and
 `menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
 `Grid.accepts_tiles` (the + menu, a drop, a url's address) and
@@ -131,10 +131,10 @@ entry's, from the plugin's `Entry` through `pluginhost.buildTiles`, and
 source's name for those bytes) from the plugin's `Entry` through
 `pluginhost.buildTiles`.
 `Grid.host_content` (these rows project host state) and
-`Grid.glyph` (the grid's identity face) come from the owning plugin's
+`Grid.glyph` (the grid's icon) come from the owning plugin's
 `Info` through `pluginhost/adapter.go`; they are what the client reads
 instead of knowing a plugin's kind, which is why a dark plugin fails the
-read rather than serving a grid with a face nobody declared. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
+read rather than serving a grid with a glyph nobody declared. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
 
 ## The router
 
@@ -413,7 +413,7 @@ latches the read `inflight.Dead`, surfaces nothing, and `deadref.DeadTile`
 draws the link dead while that latch stands. A dead link is drawn grey and
 inert, is not fetched for again until its latch clears, raises no notice, and
 does not descend; it can still be selected, read, and deleted. A pane already
-standing in a place that goes dead is not a link and has no dead face, so its
+standing in a place that goes dead is not a link and is not drawn dead, so its
 by-id read says so (`clientsync.PlaceReadSurfaces`). Dead is not dark: a declared plugin
 that is down and a declared connection that will not answer are health, a
 transport-class answer, never the dead verdict. Dead is not always forever,
@@ -485,9 +485,9 @@ clone, the session its source named, which the store writes on every copy
 (`tiles.shell_session`) and the id codec qualifies like the tile's own id. The
 home resolves a tile to its session before it touches tmux, and `shellsvc`
 holds one attached client per session, so a second tile going live evicts the
-first exactly as a second pane does. A session no row naming it has a face of
+first exactly as a second pane does. A session no row naming it has a preview of
 was never started and is created by whichever tile opens it first; a started
-one that is gone is refused, never recreated behind a face. It dies with the
+one that is gone is refused, never recreated behind a preview. It dies with the
 last row naming it, a trashed one included. A link names its target's
 session, so the client keys every shell fact by `shellconn.SessionKey`, which
 reads the target row first. Sessions live on the node that
@@ -505,7 +505,7 @@ scroll, its script state and a half-typed field. A shell: its xterm and its
 because `client/shellstream` keys each attachment by its session; nothing
 reattaches and xterm keeps every row. Another tile on the session is closed,
 freezing onto its own tile, rather than moved, because the socket is bound to
-the tile whose face and title the server writes. Leaving a
+the tile whose preview and title the server writes. Leaving a
 pane-tile level hands each of its live surfaces back to the pane of the
 parked tree that shows the same tile (`pane.Heir`, run by
 `nav.EffHandBackSurfaces`) instead of closing it, so a round trip through a
@@ -513,12 +513,12 @@ level that shows the outer level's tiles rebuilds nothing. A surface closes,
 with its freeze, only when its tile leaves every pane.
 
 **Mirrors.** Every pane that shows a live tile — its grid, a link to it, or a
-frozen descent into it — draws the tile's face from the shared preview cache.
+frozen descent into it — draws the tile's preview from the shared preview cache.
 `pane.Mirrored` names the live surfaces another pane shows, counting a pane's
-whole grid, scrolled into view or not; only those refresh the face, at
+whole grid, scrolled into view or not; only those refresh the preview, at
 `cadence.ShellMirrorMs`. A url view is captured by main's `MirrorPump`, which
 the renderer hands that set (`setMirrored`); a shell is snapshotted on its own
-repaints. A lone live surface costs nothing. Its own pane reads the face only
+repaints. A lone live surface costs nothing. Its own pane reads the preview only
 while the surface is parked, so a park takes one frame first.
 
 ## The desktop
@@ -537,7 +537,7 @@ so a right-click moves focus like every other press. A view whose webContents
 ends outside `remove()` — a page that called `window.close()` — is retired at
 once (`retire`): its entry goes, every later call for the pane is a no-op, and
 the renderer hears `onViewGone` and drops its handle, so the pane shows the
-tile's frozen face. One Chromium partition
+tile's frozen preview. One Chromium partition
 (`persist:gridwell`) holds every
 live url tile, local or mounted; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
@@ -615,9 +615,9 @@ copy:
 | what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; `pane.SelectionTarget` (the grid row, or inside a pane tile the layout) |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
-| which face a plugin tile wears | `pluginhost.faceKey` |
-| what a tile's banner reads | `tileface.BannerText` (the plugin's status emoji, then the name) |
-| does a tile draw as host state, and which hue its banner wears | `tileface.Outside`, `tileface.BannerHue` |
+| which preview a plugin tile wears | `pluginhost.previewKey` |
+| what a tile's banner reads | `tilepreview.BannerText` (the plugin's status emoji, then the name) |
+| does a tile draw as host state, and which hue its banner wears | `tilepreview.Outside`, `tilepreview.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
@@ -625,7 +625,7 @@ copy:
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | does going live keep, move or place the tile's surface | `pane.TakeOver`; leaving a level, `pane.Heir` |
 | does a gesture park this pane's live surface | `pane.ParkSurface`; `pane.CanvasOwnsPointer` for its pointer |
-| does a live surface refresh its face in the cache | `pane.Mirrored`; a park takes one frame |
+| does a live surface refresh its preview in the cache | `pane.Mirrored`; a park takes one frame |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | is this pane animating, and where a displaced one lands | `transition.Set` |

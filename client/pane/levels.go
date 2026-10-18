@@ -22,7 +22,7 @@ type Level struct {
 	OriginPane string // the outer pane the descent happened in; focus returns there
 	TileID     string // the pane tile: owner of the layout blob, routing handle for its write
 	// GridID is where a close-all ascent re-anchors when this level parked no
-	// tree, and the face the bar's root crumb wears there.
+	// tree, and the glyph the bar's root crumb wears there.
 	GridID string
 	Name   string // the tile's label at descent time
 	// ReadOnly latches when the layout blob could not be decoded, so the
@@ -218,7 +218,7 @@ func (s *Levels) NavChain(p *Pane) []NavCrumb {
 	var out []NavCrumb
 	depth := s.Depth()
 	if depth > 0 {
-		// The root crumb wears the face of wherever its click lands: the
+		// The root crumb wears the glyph of wherever its click lands: the
 		// session origin's root when this level parked a tree, otherwise the
 		// grid its pane tile sits in, where the close-all ascent re-anchors.
 		root := NavCrumb{CloseOnly: true}

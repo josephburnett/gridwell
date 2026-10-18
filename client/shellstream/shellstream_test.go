@@ -202,7 +202,7 @@ func TestOutputAndExitNameTheTile(t *testing.T) {
 
 // A session holds one stream whichever tile opened it: opening a clone on the
 // session its source holds replaces the source's stream, and the new one is
-// bound to the clone, the tile whose face and title the server writes.
+// bound to the clone, the tile whose preview and title the server writes.
 func TestOpenOnASessionReplacesAnotherTilesStream(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/7", "u/7", 80, 24)

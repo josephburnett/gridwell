@@ -105,7 +105,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A plugin that holds its own content declares no host_content, so its
-	// grids render as owned content — the gitlab face is the well, exactly
+	// grids render as owned content — the gitlab glyph is the well's, exactly
 	// as it was when the client had no declaration for the kind "gitlab".
 	if len(root.Tiles) != 2 || root.Grid.HostContent || root.Grid.Glyph != "" {
 		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
@@ -141,7 +141,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	}
 
 	// The tile's content is markdown with the target link — what the
-	// rendered face shows, and what a click opens as an ephemeral visit.
+	// rendered view shows, and what a click opens as an ephemeral visit.
 	if body := readContent(t, client, one.Id); !strings.Contains(body, "> please **review**") || !strings.Contains(body, "[Open !1 in GitLab](") {
 		t.Fatalf("content = %q", body)
 	}

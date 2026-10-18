@@ -84,14 +84,14 @@ func Unheard(o Outcome) bool {
 }
 
 // ReadSurfaces reports whether a read's failure goes on the error strip: every
-// failure but the dead verdict, which the dead face carries alone, and the
+// failure but the dead verdict, which drawing the link dead carries alone, and the
 // client's own cancel, which is no failure.
 func ReadSurfaces(o Outcome) bool {
 	return o != OutcomeOK && o != OutcomeDead && o != OutcomeAbandoned
 }
 
 // PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
-// strip. A place has no dead face, so dead surfaces like any refusal; an
+// strip. A place has no dead preview, so dead surfaces like any refusal; an
 // outage is the grid read's to name.
 func PlaceReadSurfaces(v inflight.Verdict) bool {
 	return v == inflight.Refused || v == inflight.Dead
@@ -253,10 +253,10 @@ func ReactGridRead(asked, answered string, o Outcome) GridRead {
 	return r
 }
 
-// PreviewReaction is what one preview fetch's outcome calls for. A face is
+// PreviewReaction is what one preview fetch's outcome calls for. A preview is
 // asked for on every draw until something settles it.
 type PreviewReaction struct {
-	// Store keeps the bytes as the face.
+	// Store keeps the bytes as the preview.
 	Store bool
 	// Settle records that this blob has no image, so the next draw does not
 	// ask again.
