@@ -2,9 +2,9 @@ package cache
 
 import "testing"
 
-// A room is a memory when the source serving it is not answering. That is one
+// A grid is a memory when the source serving it is not answering. That is one
 // fact — the source's health — and the bar's chip is its projection onto one
-// room, so the join is the same one a resync is scoped by.
+// grid, so the join is the same one a resync is scoped by.
 func TestAGridIsAMemoryWhenItsSourceIsDark(t *testing.T) {
 	c := seedSources(t)
 	for _, id := range c.KnownGridIDs() {
@@ -58,7 +58,7 @@ func TestDarknessNamesOneSource(t *testing.T) {
 }
 
 // The empty uuid names no source. EverySource is what a cursorless gap means
-// for a resync, and reading it here would call every room in the client a
+// for a resync, and reading it here would call every grid in the client a
 // memory on one malformed event.
 func TestAnUnnamedSourceDarkensNothing(t *testing.T) {
 	c := seedSources(t)
@@ -69,7 +69,7 @@ func TestAnUnnamedSourceDarkensNothing(t *testing.T) {
 		}
 	}
 	if c.SourceDark("") {
-		t.Error("no id is no room")
+		t.Error("no id is no grid")
 	}
 }
 

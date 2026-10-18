@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Rename while descended: name the room you are in. The bottom bar's current
+// Rename while descended: name the grid you are in. The bottom bar's current
 // crumb shows the name, as part of the bar rather than floating over pane
 // content. Clicking its text opens an input, and Enter commits a user-owned name
 // through the versioned rename. The server latches ownership in alt_user, so the

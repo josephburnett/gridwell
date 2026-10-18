@@ -55,7 +55,7 @@ func (d *darkableCP) Probe(ctx context.Context, req *pluginv1.ProbeRequest, opts
 
 // A dark plugin, whose subprocess is gone, fails honestly: nothing between the
 // router and the plugin remembers what it said, because pretending it answered
-// would hand the user a room that no longer exists. What the node minted is
+// would hand the user a grid that no longer exists. What the node minted is
 // durable, so the arrangement comes back the moment the process does. It runs
 // across the whole production wiring, since a unit test on either side alone
 // would not catch the two disagreeing about what an unreachable plugin looks

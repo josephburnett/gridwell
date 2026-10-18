@@ -114,7 +114,7 @@ func TestDecide(t *testing.T) {
 }
 
 // The descent is the outer gate, so a level fact left over from the grid below
-// cannot rename the room from inside a tile.
+// cannot rename the grid from inside a tile.
 func TestDecideDescentBeatsLevel(t *testing.T) {
 	in := Input{Descent: true, Descended: true, DescendedText: true, DescendedName: "notes",
 		AtAnchor: true, Door: door.Tile, DoorName: "inbox", Parent: true, ParentName: "projects"}
@@ -133,7 +133,7 @@ func TestDecideAnchorBeatsParent(t *testing.T) {
 	}
 }
 
-// A grid's source label follows the room's name on every arm a pane stands on
+// A grid's source label follows the grid's name on every arm a pane stands on
 // a grid, and never inside a tile, where the level's facts are stale.
 func TestDecideSourceLabel(t *testing.T) {
 	cases := []struct {
@@ -147,7 +147,7 @@ func TestDecideSourceLabel(t *testing.T) {
 		{"a door row inside a plugin grid names its directory",
 			Input{Parent: true, ParentName: "src", SourceLabel: "/srv/src"},
 			"src — /srv/src"},
-		{"a nameless room still says its source",
+		{"a nameless grid still says its source",
 			Input{AtAnchor: true, SourceLabel: "/srv"},
 			"unnamed — /srv"},
 		{"a source that only repeats the name adds nothing",
@@ -190,7 +190,7 @@ func TestDecideReadOnlyReason(t *testing.T) {
 	}
 }
 
-// The source label is shown, never edited: the rename still names the room's
+// The source label is shown, never edited: the rename still names the grid's
 // own row with its own name.
 func TestDecideSourceLabelLeavesTheRenameAlone(t *testing.T) {
 	v := Decide(Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox", SourceLabel: "/srv/inbox"})

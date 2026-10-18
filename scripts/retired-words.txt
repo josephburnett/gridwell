@@ -89,3 +89,6 @@ menu_entries
 contextchanged
 root_context
 child_context
+# "room" — a plane of tiles is a grid.
+room
+rooms

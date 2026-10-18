@@ -235,7 +235,7 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 		t.Fatal(err)
 	}
 	if nTiles != 0 {
-		t.Errorf("the minted child grid holds %d tiles, want an empty room", nTiles)
+		t.Errorf("the minted child grid holds %d tiles, want an empty grid", nTiles)
 	}
 	// Both v9 columns and the index went with the migration.
 	for _, tbl := range []string{"grids", "tiles"} {

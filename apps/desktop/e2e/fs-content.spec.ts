@@ -40,14 +40,14 @@ test('an fs grid wears the glyph its plugin declared, not a kind the client know
   const here = chain[chain.length - 1];
   expect(here, 'the fs level has a crumb').toBeTruthy();
   expect(here.glyph, 'the crumb wears the declared folder glyph').toBe('folder');
-  // The level the descent came from is the node's own room, which declares
+  // The level the descent came from is the node's own grid, which declares
   // nothing, so it wears the door glyph.
   expect(chain[0].glyph, 'home is owned content').toBe('door');
 });
 
 test('the bar says which directory an fs grid lists, at its door and a level down', async ({ gw }) => {
   // The plugin's listing names its source (ListResponse.source_label), the
-  // adapter carries it on the grid, and the bar draws it after the room's name.
+  // adapter carries it on the grid, and the bar draws it after the grid's name.
   fs.mkdirSync(path.join(ROOT, 'sub'), { recursive: true });
   // The plugin may name the root as configured or with its links resolved.
   const endsIn = (d: string) => {
@@ -62,7 +62,7 @@ test('the bar says which directory an fs grid lists, at its door and a level dow
   await gw.descendCell(Number(sub.x ?? 0), Number(sub.y ?? 0));
   const label = async () => (await gw.barName()).label;
   await expect.poll(label, { timeout: 10_000 }).toMatch(endsIn(path.join(ROOT, 'sub')));
-  expect(await label(), 'the room is named before its source').toMatch(/^sub — /);
+  expect(await label(), 'the grid is named before its source').toMatch(/^sub — /);
 });
 
 test('a source file shows as plain text and refreshes each open', async ({ gw, window }) => {

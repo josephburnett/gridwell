@@ -72,7 +72,7 @@ type Hit struct {
 // RouteClick asks the zone, then the two fixed ends of the bar, then the
 // chain, because the slot and the title sit over the band and not in it. A
 // left press anywhere between the crumbs and the slot is a press on the name,
-// so the zoom handle is as wide as the room the name is centered in; rename
+// so the zoom handle is as wide as the space the name is centered in; rename
 // stays on the drawn text, so an edit is never offered off the name it edits.
 func RouteClick(in Click) Hit {
 	switch in.Zone {

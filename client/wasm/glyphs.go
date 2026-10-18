@@ -120,7 +120,7 @@ func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 	bw := half * 2.0
 	bh := half * 1.4
 	bx := cx - bw/2
-	by := cy - bh/2 + half*0.18 // room for the tab
+	by := cy - bh/2 + half*0.18 // leave space for the tab
 	tabW := bw * 0.40
 	tabH := bh * 0.22
 	c.Call("beginPath")

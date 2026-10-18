@@ -160,7 +160,7 @@ type Palette struct {
 	// CrumbIdle is a crumb that is not where you are: a workspace level you
 	// are outside, and the outline of one whose row has not arrived yet.
 	CrumbIdle string
-	// The bar chip on a pane whose room is a memory.
+	// The bar chip on a pane whose grid is a memory.
 	CachedChipBg string
 	CachedChipFg string
 

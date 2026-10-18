@@ -25,14 +25,14 @@ func TestALinkBrokenAtAnyHopReadsDead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	room := m.home(meNode, cNode, "toa", "toc")
+	farHome := m.home(meNode, cNode, "toa", "toc")
 
 	wantDead := func(t *testing.T, why string) {
 		t.Helper()
 		if _, _, _, err := me.ReadContent(ctx, link.Id); !gwerr.IsDeadRef(err) {
 			t.Fatalf("%s: read through the link = %v, want the dead verdict", why, err)
 		}
-		if _, err := me.GetGrid(ctx, room); !gwerr.IsDeadRef(err) {
+		if _, err := me.GetGrid(ctx, farHome); !gwerr.IsDeadRef(err) {
 			t.Fatalf("%s: read of the far grid = %v, want the dead verdict", why, err)
 		}
 		if _, err := me.GetTile(ctx, target.Id); !gwerr.IsDeadRef(err) {

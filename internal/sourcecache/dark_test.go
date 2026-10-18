@@ -164,10 +164,10 @@ func awaitDark(t *testing.T, cc *Layer, source string, why string) {
 	}
 }
 
-// A failed call is darkness: the room the user re-enters right after the
+// A failed call is darkness: the grid the user re-enters right after the
 // machine died is inside its freshness window, so its age says nothing. What
 // says the source is not answering is that a call through the connection
-// failed — and the remembered room still serves, which is the point of
+// failed — and the remembered grid still serves, which is the point of
 // knowing.
 func TestAFailedCallIsDarkness(t *testing.T) {
 	cc, far, farRoot, conn := connFixture(t, Options{})
@@ -191,7 +191,7 @@ func TestAFailedCallIsDarkness(t *testing.T) {
 	}
 
 	// One call through the connection fails; now the layer knows, and the
-	// remembered room still serves, whole.
+	// remembered grid still serves, whole.
 	if err := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: tileID},
 		func(*pb.ContentChunk) error { return nil }); status.Code(err) != codes.Unavailable {
 		t.Fatalf("read of an unremembered body on a dark connection = %v, want Unavailable", err)
@@ -201,7 +201,7 @@ func TestAFailedCallIsDarkness(t *testing.T) {
 	}
 	dark, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
-		t.Fatalf("a dark connection must still serve the remembered room: %v", err)
+		t.Fatalf("a dark connection must still serve the remembered grid: %v", err)
 	}
 	if len(dark.GetTiles()) != 1 || dark.GetTiles()[0].GetId() != tileID {
 		t.Fatalf("the dark serve = %v, want the remembered tile", dark.GetTiles())
@@ -254,7 +254,7 @@ func (halfOpen) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.
 }
 
 // Discovering darkness announces the grid at hand, because this layer found
-// it alone: nobody else saw the call fail, so without the event the room the
+// it alone: nobody else saw the call fail, so without the event the grid the
 // client is holding goes on being refreshed from a source that is gone, and
 // nothing ever revalidates it.
 func TestDarkDiscoveryTellsTheClientToReRead(t *testing.T) {
@@ -303,7 +303,7 @@ func TestDarkDiscoveryTellsTheClientToReRead(t *testing.T) {
 				return
 			}
 		case <-time.After(10 * time.Second):
-			t.Fatal("discovering darkness told no client to re-read the room it was looking at")
+			t.Fatal("discovering darkness told no client to re-read the grid it was looking at")
 		}
 	}
 }

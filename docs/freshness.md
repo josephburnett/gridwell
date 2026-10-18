@@ -30,7 +30,7 @@ nothing to answer from and is simply absent. The adapter publishes that
 outage as this namespace's health (`Adapter.noteSource`) — the transition
 only, on the same event and uuid the supervisor uses for the subprocess,
 because "a declared source is not answering" is one fact whichever half of
-the plugin it is — so the client marks the rooms it serves as memories with
+the plugin it is — so the client marks the grids it serves as memories with
 no call of its own having to fail. A listing the plugin answered from its
 own memory carries `ListResponse.unreachable`, the reason: its entries serve
 and refresh rows as a live listing's do, the reason is published as the
@@ -257,7 +257,7 @@ parked write is owed a verdict whatever flapped.
 
 ## Trace (a): a memory corrects itself
 
-A remembered grid past its window, the revalidation behind it, and the room
+A remembered grid past its window, the revalidation behind it, and the grid
 correcting with no user gesture.
 
 1. `client/wasm/main.go:App.fetchGrid` misses in the cache, claims the id
@@ -276,7 +276,7 @@ correcting with no user gesture.
 5. `App.loadGrid` → `cache.Cache.PutGrid`, which ages each row's cached
    body. The bar draws no chip, because the source is not dark
    (`client/wasm/bottombar.go:App.drawMemoryChip` reads
-   `cache.Cache.SourceDark`). Nothing else about the room changes: the chip
+   `cache.Cache.SourceDark`). Nothing else about the grid changes: the chip
    is bar chrome, never tile styling.
 6. In the background, `Layer.revalidateGrid`'s goroutine runs on `pf.ctx`
    (so a cancelled click never kills a refresh other readers want), loads the
@@ -328,7 +328,7 @@ fails transport-shaped: `Layer.GetTile`, `GetTilePreview`, `ReadContent`,
 `noteReach` → `setDark(source, true, announce)`. It announces, because this
 layer discovered the transition alone and nobody else watched the call fail:
 on the transition only, `emitGridChanged` names the grid at hand, so a client
-already holding that room re-reads rather than sitting on rows nothing is
+already holding that grid re-reads rather than sitting on rows nothing is
 revalidating. A call its own caller gave up on (`gwerr.IsAbandoned`) is no
 news either way, here and in the plugin adapter's listing: the refetch an
 announcement causes is cancelled by the next resync, and that cancel would be
@@ -343,7 +343,7 @@ event is relayed onward to the very client that would be told, in this same
 call, so a `GridChanged` of ours would say twice what was already delivered —
 and what the client does with it is the client's half. This is the path that
 matters in practice — the machine usually dies while nobody is calling it, and
-without it the room would look live until some call happened to fail.
+without it the grid would look live until some call happened to fail.
 
 **What the user sees while dark.** A remembered grid serves inside its
 window and revalidates behind it anyway, because `Layer.GetGrid` consults
@@ -357,7 +357,7 @@ deadness.
 
 **On the client.** `App.startSSE` routes a `PluginHealth` event to
 `App.reportPluginHealth`, which folds the event into `Cache.NoteHealth`
-— the client's one copy of which sources are not answering. Every room served
+— the client's one copy of which sources are not answering. Every grid served
 through one is a memory, and that is what the bar's chip says
 (`Cache.SourceDark`, joined by `ServedBy`, the rule a resync is scoped by).
 `events.ReactHealth` is the one table over the event. Unhealthy posts a
@@ -573,7 +573,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 |---|---|
 | The transport learns darkness from its own stream and publishes once | `internal/connection/fanin_health_test.go:TestFanInRemotePublishesHealthOnStreamDeath` |
 | A subscriber arriving after the outage is told (`darkNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
-| Direction one: a failed pass-through is darkness, the remembered room still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
+| Direction one: a failed pass-through is darkness, the remembered grid still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
 | A call its caller abandoned is neither dark nor light, in the cache and the plugin adapter alike | `dark_test.go:TestAnAbandonedCallLearnsNothing`, `internal/server/abandoned_read_seam_test.go` |
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
@@ -587,7 +587,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
-| A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the remembered room, marked stale") |
+| A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the remembered grid, marked stale") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
 | The client's health arms: `reportPluginHealth` folds the transition in and kicks in BOTH directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and the chip appears and later clears with no gesture either time |

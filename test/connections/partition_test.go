@@ -169,7 +169,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	if err != nil || string(staleBody) != "warmed words" {
 		t.Fatalf("dark warmed read = %q (%v), want the cached bytes", staleBody, err)
 	}
-	// The room itself still serves, whole, out of the cache. Nothing on the
+	// The grid itself still serves, whole, out of the cache. Nothing on the
 	// answer says it is a memory: that is the connection's health, awaited
 	// below, and the client's offline chip is drawn from there.
 	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": doorChild})

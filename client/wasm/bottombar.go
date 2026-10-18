@@ -30,7 +30,7 @@ const barFont = "12px system-ui, sans-serif"
 
 // bottomBarRect is the bar's drawn rectangle, spanning the focused pane.
 // wsbar.Rect owns the geometry. ok=false when there is no pane to sit under
-// or no room for the band, and the row is then plain background.
+// or no space for the band, and the row is then plain background.
 func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
 	p := a.tree.FocusedPane()
 	if p == nil {
@@ -118,9 +118,9 @@ func (a *App) drawBottomBar() {
 	a.drawBarSlot()
 }
 
-// drawMemoryChip marks a focused pane whose room is a memory: the source
+// drawMemoryChip marks a focused pane whose grid is a memory: the source
 // serving it is not answering, so what is on screen is the node's remembering
-// of it. Bar chrome only — darkness never moves or restyles tiles, so the room
+// of it. Bar chrome only — darkness never moves or restyles tiles, so the grid
 // renders exactly as remembered.
 func (a *App) drawMemoryChip(bx, top, bw float64) {
 	p := a.tree.FocusedPane()
@@ -539,7 +539,7 @@ func (a *App) openRenameInput() {
 		return
 	}
 	if w < 160 {
-		// Typing room: grow around the title's center but stay off the
+		// Typing space: grow around the title's center but stay off the
 		// slot.
 		grown := 160.0
 		x = x + w/2 - grown/2

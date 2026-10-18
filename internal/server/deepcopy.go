@@ -40,7 +40,7 @@ import (
 //   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
 // deepCopyDoor reads the source child grid before anything is created, so an
-// unreachable room answers with nothing created and deepCopyTile links instead
+// unreachable grid answers with nothing created and deepCopyTile links instead
 // of leaving an empty solid door pretending to be a copy.
 func (rt *router) deepCopyDoor(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	srcChild := srcLocalTile.ChildGridId

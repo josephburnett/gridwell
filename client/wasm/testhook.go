@@ -659,7 +659,7 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"textFocus": p.ContentID(),
 			"textMode":  p.TextMode,
 			// What the bar's offline chip reads: the source serving this
-			// room is dark. The key keeps the older name the specs poll.
+			// grid is dark. The key keeps the older name the specs poll.
 			"stale": a.c.SourceDark(a.gridIDForPane(p)),
 			// Viewport center in grid cells plus zoom, so a spec can drop on
 			// a cell it knows is on-screen whatever the stored framing.

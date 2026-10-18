@@ -17,7 +17,7 @@ const (
 	RenameNone Rename = iota
 	// RenameDescent is the tile the pane is descended into.
 	RenameDescent
-	// RenameDoor is the door the level was entered through: renaming the room
+	// RenameDoor is the door the level was entered through: renaming the grid
 	// names its door.
 	RenameDoor
 	// RenameParent is the door row at the tail of the pane's path.
@@ -61,7 +61,7 @@ type Input struct {
 }
 
 // Verdict is what the bar draws and what a right-click edits. Label is the
-// room's own name, the one Rename edits; Source is shown after it, never
+// grid's own name, the one Rename edits; Source is shown after it, never
 // edited.
 type Verdict struct {
 	Rename   Rename
@@ -85,7 +85,7 @@ func (v Verdict) Text() string {
 const unnamed = "unnamed"
 
 // Decide answers the descent before the level, because a pane inside a tile
-// names that tile and not the room around it. Anything with no name of its own
+// names that tile and not the grid around it. Anything with no name of its own
 // falls through to a muted "unnamed" rather than to blank chrome. A pane on a
 // grid also says what its source calls it, unless that only repeats the name,
 // and a pane inside a body its source takes no edits to says why.

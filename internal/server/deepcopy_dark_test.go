@@ -19,7 +19,7 @@ import (
 
 // The offline deep-copy seam: copying a partially-reachable remote grid never
 // refuses and never leaves a silent hole. A tile whose bytes the source cannot
-// serve degrades to a link, an unreachable nested room to a door link, and a
+// serve degrades to a link, an unreachable nested grid to a door link, and a
 // url with an unreachable preview copies with no preview. The degrade keys on
 // transport failures only: a source that answers "gone" still aborts the walk.
 // darkSource is the source cache's offline shape, metadata served and selected
@@ -238,9 +238,9 @@ func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
 		t.Fatalf("dark leaf copy should be a link to %s: %+v", txt.Id, got)
 	}
 
-	// A door whose OWN child grid is dark: the whole room degrades to an
+	// A door whose OWN child grid is dark: the whole door degrades to an
 	// door to another namespace link, framing preserved.
-	door, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: rootA, Tile: &pb.Tile{Kind: rpc.KindDoor, X: 3, Y: 0, W: 1, H: 1, AltText: "dark room"}})
+	door, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: rootA, Tile: &pb.Tile{Kind: rpc.KindDoor, X: 3, Y: 0, W: 1, H: 1, AltText: "dark door"}})
 	if err != nil {
 		t.Fatal(err)
 	}

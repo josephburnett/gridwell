@@ -394,7 +394,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 	}
 }
 
-// Dragging one tile must not rearrange the room: a minted entry keeps its slot
+// Dragging one tile must not rearrange the grid: a minted entry keeps its slot
 // in the derived flow and overrides it, so its neighbours' cells are the same
 // before and after.
 func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {

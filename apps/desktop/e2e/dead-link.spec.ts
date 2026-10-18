@@ -193,7 +193,7 @@ test.describe('a link broken beyond a declared connection', () => {
       await r.continue();
     });
 
-    await createDoorToOtherNamespace(gw.origin, f.gridID, deep, 'far room', cx, cy);
+    await createDoorToOtherNamespace(gw.origin, f.gridID, deep, 'far grid', cx, cy);
     await expect
       .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
       .toBe(1);

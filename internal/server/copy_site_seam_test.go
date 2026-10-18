@@ -91,19 +91,19 @@ func TestCopyRunsAtTheNearestNodeThatSeesBothEnds(t *testing.T) {
 	t.Run("both ends behind one far node", func(t *testing.T) {
 		aHome := m.home(meNode, aNode, "toa")
 		src := m.text(ctx, meNode, aHome, 5, "stays on a")
-		room, err := me.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: aHome,
+		door, err := me.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: aHome,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 6, Y: 0, W: 1, H: 1}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		asked := m.asks(meNode, "toa")
 		copies, creates, writes := asked.copies.Load(), asked.creates.Load(), asked.writes.Load()
-		got, err := me.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src.Id, DestGridId: room.ChildGridId, X: 0, Y: 0})
+		got, err := me.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src.Id, DestGridId: door.ChildGridId, X: 0, Y: 0})
 		if err != nil {
 			t.Fatalf("copy within a: %v", err)
 		}
-		if got.GridId != room.ChildGridId || readBody(ctx, t, me, got.Id) != "stays on a" {
-			t.Fatalf("copy = %+v, want a copy in %q", got, room.ChildGridId)
+		if got.GridId != door.ChildGridId || readBody(ctx, t, me, got.Id) != "stays on a" {
+			t.Fatalf("copy = %+v, want a copy in %q", got, door.ChildGridId)
 		}
 		if asked.copies.Load() != copies+1 || asked.creates.Load() != creates || asked.writes.Load() != writes {
 			t.Fatalf("across toa: copies %d→%d creates %d→%d writes %d→%d; want one CopyTile the far node ran and nothing copied from here",

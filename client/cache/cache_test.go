@@ -721,7 +721,7 @@ func TestPatchTileObeysTheVersionInterlock(t *testing.T) {
 }
 
 // A patch for a grid this client never fetched is dropped, like any event for
-// one: nothing asks for a room nobody is in.
+// one: nothing asks for a grid nobody is in.
 func TestPatchTileDropsAnUncachedGrid(t *testing.T) {
 	c := New()
 	if c.PatchTile(&gridwellv1.Tile{Id: "100", GridId: "9", Kind: rpc.KindDoor},

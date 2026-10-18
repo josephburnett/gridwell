@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-// The name's room in the bar, between the crumbs and the circle, is the
+// The name's space in the bar, between the crumbs and the circle, is the
 // name for a left click: pressing the empty space beside the text zooms the
 // pane like pressing the text. Rename stays on the text alone, so a right
 // click beside it opens nothing (wsbar.RouteClick).

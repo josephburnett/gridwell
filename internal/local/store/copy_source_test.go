@@ -61,9 +61,9 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	// A room with something of every kind in it, each carrying a fact the user
-	// made: a scroll, a zoom, a freeze, a viewport, a nested room.
-	outer, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "the room")
+	// A grid with something of every kind in it, each carrying a fact the user
+	// made: a scroll, a zoom, a freeze, a viewport, a nested door.
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "the door")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if _, err := s.SetShellPreview(ctx, shell.Id, []byte("shelljpeg")); err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 3, 2, 2, "a smaller room")
+	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 3, 2, 2, "a smaller door")
 	if err != nil {
 		t.Fatal(err)
 	}

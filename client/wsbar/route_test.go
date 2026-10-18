@@ -135,7 +135,7 @@ func TestRouteClickNoTitle(t *testing.T) {
 	}
 }
 
-// With no crumbs the name's room starts at the bar's left edge.
+// With no crumbs the name's space starts at the bar's left edge.
 func TestRouteClickNameAreaWithoutCrumbs(t *testing.T) {
 	in := barClick(0, 2)
 	in.Segments, in.Chain = nil, nil

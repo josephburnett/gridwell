@@ -503,7 +503,7 @@ func awaitHealth(t *testing.T, ch <-chan *gridwellv1.EventPluginHealth, healthy 
 
 // A source that stops answering is this namespace's health, published by the
 // adapter: the client hears it on the stream it already holds, with no call of
-// its own having to fail, and the rooms that source serves are memories from
+// its own having to fail, and the grids that source serves are memories from
 // then on (client/cache.SourceDark). It is the same event and the same uuid
 // the supervisor uses for the subprocess, because "a declared source is not
 // answering" is one fact whichever half of the plugin it is. Across the real

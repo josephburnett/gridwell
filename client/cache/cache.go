@@ -403,7 +403,7 @@ func Reaches(ns, source string) bool {
 
 // NoteHealth folds one health event in and reports whether the source was dark
 // before it. The empty uuid names no source and is dropped rather than read as
-// EverySource, which would call every room in the client a memory.
+// EverySource, which would call every grid in the client a memory.
 func (c *Cache) NoteHealth(uuid string, healthy bool) (wasDark bool) {
 	if uuid == EverySource {
 		return false
@@ -435,7 +435,7 @@ func (c *Cache) NoteLiveUpdates(uuid string, live bool) {
 }
 
 // SourceDark reports that the source serving gridID is not answering, so this
-// room is a memory rather than an answer. Derived, never stored.
+// grid is a memory rather than an answer. Derived, never stored.
 func (c *Cache) SourceDark(gridID string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

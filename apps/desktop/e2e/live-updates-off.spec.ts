@@ -97,7 +97,7 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     expect.soft(of(ns, live)[0]?.message).toBe(`home: live updates off — ${refused}`);
     expect.soft(of(ns, live)[0]?.count, 'told once').toBe(1);
     expect.soft(of(ns, dark), 'a source that lists is not dark').toEqual([]);
-    expect.soft((await gw.focused()).stale, 'its rooms are answers, not memories').toBeFalsy();
+    expect.soft((await gw.focused()).stale, 'its grids are answers, not memories').toBeFalsy();
     expect.soft(reads.filter((id) => id === landed.gridID), 'a refused watch alone costs no resync').toEqual([]);
     await roundTrip();
     expect.soft(reads.filter((id) => id === landed.gridID).length, 'an ascent reads the grid nothing tells').toBeGreaterThan(0);

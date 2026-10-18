@@ -25,11 +25,11 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 	}
 	localHome, farRoot := lp.HomeGridId, connectionRows(lp)[0].RootGridId
 
-	room, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 2, H: 2}})
+	door, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 2, H: 2}})
 	if err != nil {
 		t.Fatalf("create far door: %v", err)
 	}
-	farGrid := room.ChildGridId
+	farGrid := door.ChildGridId
 	body := []byte("# far target")
 	target, err := h.localCl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 4, Y: 0, W: 1, H: 1}}, body)
 	if err != nil {

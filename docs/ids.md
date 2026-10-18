@@ -70,7 +70,7 @@ That is because a client STANDS on these ids. A pane holds its anchor grid
 id and its content tile id, and the URL projects both; renaming either
 under the user's hand — which minting did, the moment a descent's own
 reframe wrote — left the pane naming something the listing does not
-contain, and the room went blank with nothing said (#297). The address
+contain, and the grid went blank with nothing said (#297). The address
 cannot do that: it names the thing by what it is.
 
 Row ids stay resolvable as addresses forever, in both directions

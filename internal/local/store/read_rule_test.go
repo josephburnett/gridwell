@@ -76,7 +76,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	door, err := s.CreateDoor(ctx, root, 0, 3, 2, 2, "a room")
+	door, err := s.CreateDoor(ctx, root, 0, 3, 2, 2, "a door")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func readCases() []readCase {
 			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "findable", Limit: 20}))
 		}},
 		{"Find/name", func(ctx context.Context, s *Store, _ readSubject) {
-			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "a room", Limit: 20}))
+			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "a door", Limit: 20}))
 		}},
 		{"Find/id", func(ctx context.Context, s *Store, sub readSubject) {
 			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "id:" + sub.text, Limit: 20}))

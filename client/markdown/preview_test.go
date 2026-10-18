@@ -55,9 +55,9 @@ func TestPreviewContentVisible(t *testing.T) {
 	if !PreviewContentVisible(PreviewBodyLinePx, 1.0) {
 		t.Error("exactly one line: content paints")
 	}
-	// The gate scales with content zoom: bigger type needs more room.
+	// The gate scales with content zoom: bigger type needs more space.
 	if PreviewContentVisible(PreviewBodyLinePx, 2.0) {
-		t.Error("zoomed type in one un-zoomed line of room: must not paint")
+		t.Error("zoomed type in one un-zoomed line of space: must not paint")
 	}
 }
 

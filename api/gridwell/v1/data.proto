@@ -40,7 +40,7 @@ message Grid {
   string scratch_grid_id = 7;
   reserved 8; // proxy_endpoint
   reserved 9; // create_schemas
-  // The client derives "this room is a memory" from the health of the source
+  // The client derives "this grid is a memory" from the health of the source
   // serving it: one fact, client/cache.SourceDark.
   reserved 12; // stale
   // node_ns is the namespace chain of the node serving this grid, from the

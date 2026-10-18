@@ -7,7 +7,7 @@ import "testing"
 func TestLayoutAndHitTestAgree(t *testing.T) {
 	segs := Layout(squares(7), 900)
 	if len(segs) != 7 {
-		t.Fatalf("segments = %d, want all 7 (room for them)", len(segs))
+		t.Fatalf("segments = %d, want all 7 (space for them)", len(segs))
 	}
 	for _, s := range segs {
 		got, ok := At(segs, s.X+s.W/2)
@@ -43,7 +43,7 @@ func TestLayoutSquares(t *testing.T) {
 // Overflow truncates from the left: the tail keeps priority, survivors keep
 // full size, and Index still addresses the caller's full crumb list.
 func TestLayoutTruncatesFromLeft(t *testing.T) {
-	width := SlotW + 3*RowH + 10 // room for exactly 3 squares
+	width := SlotW + 3*RowH + 10 // space for exactly 3 squares
 	segs := Layout(squares(10), width)
 	if len(segs) != 3 {
 		t.Fatalf("visible = %d, want 3", len(segs))
@@ -68,7 +68,7 @@ func TestLayoutDegenerate(t *testing.T) {
 		t.Errorf("no crumbs: %v, want nil", segs)
 	}
 	if segs := Layout(squares(5), SlotW+10); segs != nil {
-		t.Errorf("no room for even one square: %v, want nil", segs)
+		t.Errorf("no space for even one square: %v, want nil", segs)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestRectClampsIntoTheWindow(t *testing.T) {
 	}
 }
 
-// No pane to sit under, or no room for the band: no bar.
+// No pane to sit under, or no space for the band: no bar.
 func TestRectRefusesWithNothingToSitUnder(t *testing.T) {
 	if _, _, _, ok := Rect(1000, 800, 0, 0, 0); ok {
 		t.Error("no focused pane must yield no bar")
@@ -208,7 +208,7 @@ func TestBandRefusesAWindowTooShortToHoldIt(t *testing.T) {
 func TestTitleSpanClipsFromTheRight(t *testing.T) {
 	x, w, textX, ok := TitleSpan(100, 400, 1000)
 	if !ok {
-		t.Fatal("span refused with room for one")
+		t.Fatal("span refused with space for one")
 	}
 	if textX != x+TitleInset {
 		t.Errorf("clipped title starts at %v, want the span's start %v + inset", textX, x)
@@ -223,7 +223,7 @@ func TestTitleSpanCentersAFit(t *testing.T) {
 	const textW = 60.0
 	x, w, textX, ok := TitleSpan(100, 900, textW)
 	if !ok {
-		t.Fatal("span refused with room for one")
+		t.Fatal("span refused with space for one")
 	}
 	if left, right := textX-x, x+w-(textX+textW); left != right {
 		t.Errorf("fitted title margins %v / %v, want equal", left, right)

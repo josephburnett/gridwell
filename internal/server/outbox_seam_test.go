@@ -292,7 +292,7 @@ func TestEchoInterlockAcrossTheSeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The seed is the room BEFORE the writes: that is what a client holding
+	// The seed is the grid BEFORE the writes: that is what a client holding
 	// this grid has when the first response or echo reaches it.
 	grid, err := cl.GetGrid(ctx, root)
 	if err != nil {

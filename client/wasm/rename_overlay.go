@@ -16,7 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// Naming: name the room you are in. The focused pane's name renders as the
+// Naming: name the grid you are in. The focused pane's name renders as the
 // bottom bar's centered title, in a band that is reserved layout below every
 // pane, so the label and the inline rename input work identically over
 // canvas, shells and live url panes. An unchanged value never writes, because

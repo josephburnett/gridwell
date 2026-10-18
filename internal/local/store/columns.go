@@ -279,7 +279,7 @@ never reassigned and never held twice.`,
 	{
 		name: "remote_root", ddl: "TEXT NOT NULL DEFAULT ''", since: 13,
 		comment: `The learned landing: the far node's home grid id, remembered so a
-dark remote still has a room to show through the source cache. '' is
+dark remote still has a grid to show through the source cache. '' is
 a connection that has never answered.`,
 	},
 	{

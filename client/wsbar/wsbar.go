@@ -144,7 +144,7 @@ const titlePad = 8.0
 
 const minTitleW = 24.0
 
-// TitleInset is the room on each side of the title's text inside its span.
+// TitleInset is the space on each side of the title's text inside its span.
 const TitleInset = 12.0
 
 // TitleSpan centers the title between the crumbs' end and the circle slot, so
@@ -163,7 +163,7 @@ func TitleSpan(crumbsEnd, width, textW float64) (x, w, textX float64, ok bool) {
 	return x, w, x + TitleInset, true
 }
 
-// CrumbsEnd is where the chain stops and the title's room begins, relative to
+// CrumbsEnd is where the chain stops and the title's space begins, relative to
 // the bar's left edge.
 func CrumbsEnd(segs []Segment) float64 {
 	if n := len(segs); n > 0 {
