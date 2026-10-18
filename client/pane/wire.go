@@ -5,7 +5,7 @@
 // bytes are forever (the golden fixture in wire_test.go pins them). A leaf
 // persists its whole place and the viewport of every grid frame in it: inside
 // a workspace tile the blob owns those (2026-10-14), so two panes on one grid keep
-// two views. Ids are stored in the owning node's namespace frame, so a pane
+// two views. Ids are stored in the owning node's namespace frame, so a workspace
 // tile on a far node restores against the reader's chain.
 package pane
 

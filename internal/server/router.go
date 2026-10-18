@@ -515,7 +515,7 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 	return ids
 }
 
-// reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed pane
+// reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed workspace
 // tile's captured leaves, best-effort: it must not block the user's delete. It
 // answers why each shell's tmux it should have ended is still running.
 func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {

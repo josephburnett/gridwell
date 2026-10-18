@@ -73,7 +73,7 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
     message: 'the split arrangement must come back from the blob',
   }).toBe(2);
 
-  // Post-reload the stack has no outer tree, so the bar falls back to the pane
+  // Post-reload the stack has no outer tree, so the bar falls back to the workspace
   // tile's containing grid.
   await gw.leaveWorkspace();
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);

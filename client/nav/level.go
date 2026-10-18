@@ -334,7 +334,7 @@ func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	pl.add(Effect{Kind: EffFlushDroppedSubtree})
 	pop := Effect{Kind: EffPopLevel, TileID: top.TileID}
 	if !outer {
-		// A level with no parked tree falls back to a fresh pane at the pane
+		// A level with no parked tree falls back to a fresh pane at the workspace
 		// tile's containing grid, which is the level's own fact off the row
 		// the descent read, so the landing is right on the first draw.
 		pop.GridID = top.GridID

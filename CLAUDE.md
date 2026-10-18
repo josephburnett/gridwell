@@ -473,7 +473,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   focus, and marks yours the one holding the agent's shell live; it chooses
   none, and no screen is an empty list. What a grid holds and has selected
   is the grid's, from `read_grid`, so "here" is a focused pane's grid or
-  workspace tile and "these" is that grid's selection; `read_tiles` on a pane
+  workspace tile and "these" is that grid's selection; `read_tiles` on a workspace
   tile answers the panes its layout holds, decoded by the client's own
   decoder (`pane.DecodeLayout`). A new tmux carries
   its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
@@ -528,7 +528,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, each pane's focused tile (the keyboard
   target a plain click lands on, `pane.SessionState.Selected`; not the
-  selection, which is a node fact), the level stack, and, outside a pane
+  selection, which is a node fact), the level stack, and, outside a workspace
   tile, the outer frames' viewports. The durable home for a
   layout is the workspace tile, and inside one every frame's viewport is part of
   it (2026-10-14).

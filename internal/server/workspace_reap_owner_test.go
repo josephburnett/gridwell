@@ -15,9 +15,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// reapFixture stands a node up with a root grid, a scratch grid and a pane
-// tile, and returns a delete-the-workspace tile-for-real closure. Both phases of
-// the owner test need the same setup.
+// reapFixture stands a node up and answers a client, its root grid and its
+// scratch grid: the setup both phases of the owner test share.
 func reapFixture(t *testing.T) (cl *rpc.Client, root, scratch string) {
 	t.Helper()
 	reg := plugin.NewRegistry()
@@ -41,9 +40,9 @@ func reapFixture(t *testing.T) (cl *rpc.Client, root, scratch string) {
 	return cl, root, scratch
 }
 
-// destroyPane deletes a workspace tile twice: once into the trash, once for real,
+// destroyWorkspace deletes a workspace tile twice: once into the trash, once for real,
 // which is when the router reaps what the arrangement owned.
-func destroyPane(t *testing.T, cl *rpc.Client, tileID string) {
+func destroyWorkspace(t *testing.T, cl *rpc.Client, tileID string) {
 	t.Helper()
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
@@ -78,7 +77,7 @@ func TestReapReadsTheSameFieldTheSweepProtects(t *testing.T) {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
-	destroyPane(t, cl, pt.Id)
+	destroyWorkspace(t, cl, pt.Id)
 
 	if _, err := cl.GetTile(ctx, eph.Id); err != nil {
 		t.Errorf("the reap derived a reference the boot sweep's protection set "+
@@ -135,7 +134,7 @@ func TestReapFindsEncoderWrittenLinks(t *testing.T) {
 		t.Fatalf("SetPaneLayout: %v", err)
 	}
 
-	destroyPane(t, cl, pt.Id)
+	destroyWorkspace(t, cl, pt.Id)
 
 	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
 		t.Error("ephemeral scratch tile survived the destroy — its shell would leak until the boot sweep")

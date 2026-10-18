@@ -177,7 +177,7 @@ layout from before one database per node — a `db/<id>/` directory and no
 folds one in, and minting an empty store beside that content would come up as
 a home that had lost everything.
 
-**Home** (`internal/local`) owns the user's content: text, urls, doors, pane
+**Home** (`internal/local`) owns the user's content: text, urls, doors, workspace
 tiles, shells, and the event stream. Shells are tmuxes on a private
 socket, so they survive restarts.
 

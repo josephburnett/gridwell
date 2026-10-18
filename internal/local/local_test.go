@@ -475,7 +475,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A workspace tile-owned ephemeral shell, and a crash-leaked orphan.
+	// A workspace-owned ephemeral shell, and a crash-leaked orphan.
 	owned, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
 		Tile: &gridwellv1.Tile{Kind: "shell", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {

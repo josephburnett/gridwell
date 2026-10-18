@@ -35,7 +35,7 @@ type wsExpandState struct {
 // navInstallLevel pushes the level and installs its tree, leaving the outer
 // level running: liveness follows pane existence and no pane closed here.
 // Level-scoped pane ids keep the alive trees from colliding in the pane-keyed
-// maps. KeepOuter=false has no return tree, so ascent falls back to the pane
+// maps. KeepOuter=false has no return tree, so ascent falls back to the workspace
 // tile's grid; Capture installs the window layout as it stands.
 func (a *App) navInstallLevel(e nav.Effect) {
 	if e.Level == nil {
