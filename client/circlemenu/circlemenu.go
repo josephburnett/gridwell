@@ -68,8 +68,9 @@ const DumpID = "dump"
 // names no state.
 const ClearSelectionID = "clear-selection"
 
-// PlusItems is the + menu: the palettes, the one on screen checked, then the
-// selection clear, then the dump, always the bottom row.
+// PlusItems is the + circle's right-click menu, not the + menu: the palettes,
+// the one on screen checked, then the selection clear, then the dump, always
+// the bottom row.
 func PlusItems(cur theme.Theme) []Item {
 	out := make([]Item, 0, len(theme.All())+2)
 	for _, t := range theme.All() {
