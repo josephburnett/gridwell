@@ -285,7 +285,7 @@ no cache.
 ## 8. Work only while watched
 
 **Rule.** Walk, glance or follow a feed only to answer a call, or while the
-node holds a `Watch` whose scope includes the context.
+node holds a `Watch` whose scope includes the grid.
 
 **Why.** "Nothing is done for nobody: no capture, fetch or walk runs unless
 something on screen or in the store needs its result," and "a clock is for a

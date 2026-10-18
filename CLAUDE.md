@@ -391,7 +391,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   doors. `root_grid` is RETIRED: the field number is kept forever and the
   node reads it in one place only — a plugin that answers a root_grid and NO
   grids gets one derived grid onto it, so an old binary keeps presenting.
-  Declare both and grids wins; there is no privileged grid. A plugin that
+  Declare both and the grids win; there is no privileged grid. A plugin that
   declares none
   contributes nothing and is healthy, not broken: `pluginhealth` gives its row
   no status at all. A plugin that cannot serve the source its config declares

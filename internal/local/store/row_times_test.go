@@ -41,7 +41,7 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gc != at.Unix() || gu != at.Unix() {
-		t.Errorf("context grid times = %d, %d, want %d", gc, gu, at.Unix())
+		t.Errorf("plugin grid times = %d, %d, want %d", gc, gu, at.Unix())
 	}
 	later := at.Add(time.Hour)
 	st.SetClock(func() time.Time { return later })

@@ -121,7 +121,7 @@ func TestExtMergeIsIdempotent(t *testing.T) {
 }
 
 // Externals share the tables with home but never its reads: a plugin's
-// grid grid is invisible through home's reads, and home's grid holds
+// grid is invisible through home's reads, and home's grid holds
 // no plugin rows.
 func TestExtRowsAreInvisibleToHome(t *testing.T) {
 	st, d := openExt(t)
@@ -249,7 +249,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 		t.Fatalf("child grid re-minted: %d != %d (%v)", cgid, dir.ChildGridID, err)
 	}
 	if key, err := d.GridKey(dir.ChildGridID); err != nil || key != "root/dir" {
-		t.Fatalf("ContextKey = %q (%v)", key, err)
+		t.Fatalf("GridKey = %q (%v)", key, err)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 	d2 := st2.Namespace("plug1")
 	gid2, _ := d2.GridOf("root")
 	if gid2 != gid {
-		t.Fatalf("context re-minted across reopen: %d != %d", gid2, gid)
+		t.Fatalf("grid re-minted across reopen: %d != %d", gid2, gid)
 	}
 	tiles = mintAll(t, d2, gid2, textEntries("a"), true)
 	if a2 := extByKey(t, tiles, "a"); a2.ID != a.ID || a2.X != 2 || a2.Y != 2 {

@@ -753,10 +753,10 @@ func init() {
 			if ns != "" || key != "" || tomb != 0 {
 				t.Errorf("an old home row must carry the externals' defaults, got ns=%q key=%q tombstoned=%d", ns, key, tomb)
 			}
-			// An external's grid grid and row are accepted; a live key
+			// An external's grid and row are accepted; a live key
 			// is unique per grid; a retired key may be re-minted.
 			if _, err := db.Exec(`INSERT INTO grids (object_id, created_at, ns, context_key) VALUES ('fixt-v9-ctx', 100, 'plug1', 'root')`); err != nil {
-				t.Fatalf("insert grid grid post-migration: %v", err)
+				t.Fatalf("insert plugin grid post-migration: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
 				SELECT id, 'text', 0, 0, 1, 1, 'a', 100, 100, 'plug1', 'a' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
@@ -1017,16 +1017,16 @@ func init() {
 			if err != nil {
 				t.Fatalf("seed plugin grid: %v", err)
 			}
-			ctxGrid := mustID(t, res)
+			pluginGrid := mustID(t, res)
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
-				VALUES (?, 'text', 12, 34, 2, 3, 'v11 cached', 100, 100, 'p9', 'notes.md')`, ctxGrid); err != nil {
+				VALUES (?, 'text', 12, 34, 2, 3, 'v11 cached', 100, 100, 'p9', 'notes.md')`, pluginGrid); err != nil {
 				t.Fatalf("seed external row: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key, tombstoned)
-				VALUES (?, 'text', 13, 34, 1, 1, 'v11 gone', 100, 100, 'p9', 'gone.md', 1)`, ctxGrid); err != nil {
+				VALUES (?, 'text', 13, 34, 1, 1, 'v11 gone', 100, 100, 'p9', 'gone.md', 1)`, pluginGrid); err != nil {
 				t.Fatalf("seed retired row: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO listings (grid_id, entries, authoritative) VALUES (?, X'0a04', 1)`, ctxGrid); err != nil {
+			if _, err := db.Exec(`INSERT INTO listings (grid_id, entries, authoritative) VALUES (?, X'0a04', 1)`, pluginGrid); err != nil {
 				t.Fatalf("seed listing blob: %v", err)
 			}
 		},

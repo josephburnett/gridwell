@@ -88,7 +88,7 @@ func rowIDOf(t *testing.T, ns *store.Namespace, gridKey, key string) string {
 	t.Helper()
 	gid, ok, err := ns.LookupGrid(gridKey)
 	if err != nil || !ok {
-		t.Fatalf("context %q has no grid row (%v)", gridKey, err)
+		t.Fatalf("grid %q has no row (%v)", gridKey, err)
 	}
 	id, ok, err := ns.LiveTileID(gid, key)
 	if err != nil || !ok || id == 0 {

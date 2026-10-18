@@ -90,12 +90,12 @@ listed, contributes nothing to the menu, and is healthy — not an error.
 
 `root_grid` is RETIRED. Leave it empty. The node reads it in one case, so
 a binary built against the older proto keeps presenting: a plugin that
-answers a `root_grid` and no `grids` gets one derived entry onto
-it, wearing your own name and glyph. Declare both and the entries win.
+answers a `root_grid` and no `grids` gets one derived grid onto
+it, wearing your own name and glyph. Declare both and the grids win.
 
 ## Listings
 
-`List` enumerates one context. Say whether it is `authoritative`: a key
+`List` enumerates one grid. Say whether it is `authoritative`: a key
 absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
 answers GONE. `ProbeRequest.grid` names the grid the node is asking
@@ -155,7 +155,7 @@ sync, a new mail, a file edited elsewhere, and set `InfoResponse.watch`. The
 node holds one stream open while some client shows one of your grids, on
 this node or on any node that reaches it, so hold it open until its context
 ends. `WatchRequest.grids` is its scope: the grid keys shown right
-now, a file shown in a pane counting through its context. Watch those. When
+now, a file shown in a pane counting through its grid. Watch those. When
 the set changes the node opens a stream with the new set and ends the old one
 once the new one is open, so two may overlap; while nothing of yours is shown
 it holds none, so a source you watch by the
@@ -168,7 +168,7 @@ the node counts it open, and without it the moment is your first change.
 Once a stream is open the node lists each grid it adds, the whole scope
 after a drop, and tells the clients to list again any whose answer moved,
 because a change sent into no stream reaches nobody. So a scope change costs
-you one `List` per added context.
+you one `List` per added grid.
 Send a change when what you would answer now differs from what you last
 could have:
 

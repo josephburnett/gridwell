@@ -226,7 +226,7 @@ func readCases() []readCase {
 			}
 		}},
 		{"Namespace/GridKey", func(ctx context.Context, s *Store, sub readSubject) { ignore2(sub.ns.GridKey(sub.nsGrid)) }},
-		{"Namespace/LookupGrid", func(ctx context.Context, s *Store, sub readSubject) { sub.ns.LookupGrid("a/context") }},
+		{"Namespace/LookupGrid", func(ctx context.Context, s *Store, sub readSubject) { sub.ns.LookupGrid("a/grid") }},
 		{"Namespace/LookupGrid/absent", func(ctx context.Context, s *Store, sub readSubject) {
 			sub.ns.LookupGrid("never/touched")
 		}},
@@ -238,7 +238,7 @@ func readCases() []readCase {
 		{"Namespace/Overlay", func(ctx context.Context, s *Store, sub readSubject) {
 			ignore2(sub.ns.Overlay(sub.nsGrid, sub.entries))
 		}},
-		{"Namespace/Overlay/untouched context", func(ctx context.Context, s *Store, sub readSubject) {
+		{"Namespace/Overlay/untouched grid", func(ctx context.Context, s *Store, sub readSubject) {
 			ignore2(sub.ns.Overlay(0, sub.entries))
 		}},
 	}
