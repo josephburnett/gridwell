@@ -345,13 +345,14 @@ mac-bins: wasm
 	for k in $(PLUGIN_KINDS); do fat gridwell-plugin-$$k $(PLUGINS_DIR)/$$k ./cmd/gridwell-plugin-$$k; done
 
 # `make launch` is the one-shot dev run: build the sidecar and wasm, compile
-# the TS, and launch Electron against ~/.gridwell. A home with no server.yaml
-# is created on the first serve, and GRIDWELL_HOME points at a different one.
+# the TS, and launch Electron against ~/.gridwell. A node directory with no
+# server.yaml gets one on the first serve, and GRIDWELL_HOME points at a
+# different directory.
 # It runs with Chromium's OS sandbox on, because live url tiles load untrusted
 # web content. It needs a prior `make vendor` for node_modules.
 #
 #   make launch                                     # ~/.gridwell
-#   GRIDWELL_HOME=/path/to/home make launch         # another home
+#   GRIDWELL_HOME=/path/to/dir make launch          # another node directory
 launch: build node-modules
 	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron .
 

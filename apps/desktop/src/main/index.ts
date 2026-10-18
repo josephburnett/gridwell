@@ -133,9 +133,10 @@ async function boot(): Promise<void> {
   }
 }
 
-// One app instance per user, alongside the server's per-home flock: a second
-// launch hands off and exits. The e2e harness skips it and runs many instances
-// at once, each with its own home and user-data dir.
+// One app instance per user, alongside the server's flock on its node
+// directory: a second launch hands off and exits. The e2e harness skips it and
+// runs many instances at once, each with its own node directory and user-data
+// dir.
 if (process.env.GRIDWELL_E2E !== '1' && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {

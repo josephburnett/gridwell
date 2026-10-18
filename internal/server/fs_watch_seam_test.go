@@ -318,24 +318,24 @@ func (wideFar) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, se
 }
 
 // A directory whose listing does not move tells a client showing it nothing,
-// however busily the files in it are written. The node's own home is the case
-// a user meets: shown through fs, it holds cache.db, which the connection's
-// prefetch walk writes for as long as it runs, while every name in it, and so
-// the listing, stays as it was.
-func TestFsShowingTheNodeHomeWhileItsCacheWarmsSettles(t *testing.T) {
-	const fsUUID = "pfshome"
-	home := t.TempDir()
-	st, err := store.Open(filepath.Join(home, "gridwell.db"))
+// however busily the files in it are written. The node's own directory,
+// ~/.gridwell, is the case a user meets: shown through fs, it holds cache.db,
+// which the connection's prefetch walk writes for as long as it runs, while
+// every name in it, and so the listing, stays as it was.
+func TestFsShowingTheNodeDirectoryWhileItsCacheWarmsSettles(t *testing.T) {
+	const fsUUID = "pfsdir"
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	cache, err := sourcecache.Open(filepath.Join(home, "cache.db"))
+	cache, err := sourcecache.Open(filepath.Join(dir, "cache.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cache.Close() })
-	cp := plugintest.Spawn(t, "fs", map[string]string{"root": home})
+	cp := plugintest.Spawn(t, "fs", map[string]string{"root": dir})
 	a, stop := pluginhost.Start(cp, st.Namespace(fsUUID), nil, "plugin "+fsUUID+" watch")
 	reg := plugin.NewRegistry()
 	reg.Register(localNodeID, "home", local.New(st, nil), nil)
@@ -387,7 +387,7 @@ func TestFsShowingTheNodeHomeWhileItsCacheWarmsSettles(t *testing.T) {
 		t.Fatal(err)
 	}
 	walSize := func() int64 {
-		fi, err := os.Stat(filepath.Join(home, "cache.db-wal"))
+		fi, err := os.Stat(filepath.Join(dir, "cache.db-wal"))
 		if err != nil {
 			return 0
 		}
