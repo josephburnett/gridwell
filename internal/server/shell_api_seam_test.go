@@ -110,7 +110,7 @@ func (f *shellAPIFixture) clientStack() *clientStack {
 	return cs
 }
 
-func waitSession(t *testing.T, fake *shellsvctest.FakeStreamer) *shellsvctest.FakeAttachment {
+func waitAttachment(t *testing.T, fake *shellsvctest.FakeStreamer) *shellsvctest.FakeAttachment {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -132,13 +132,13 @@ func TestShellAPIRoundTripsBytes(t *testing.T) {
 	cs.reg.Open(tile.Id, tile.Id, 100, 40)
 	t.Cleanup(func() { cs.reg.Close(tile.Id) })
 
-	sess := waitSession(t, f.fake)
-	if sess.OpenMode != tmux.ModeCreate {
-		t.Errorf("a fresh tile opened in %v, want ModeCreate", sess.OpenMode)
+	att := waitAttachment(t, f.fake)
+	if att.OpenMode != tmux.ModeCreate {
+		t.Errorf("a fresh tile opened in %v, want ModeCreate", att.OpenMode)
 	}
 	// The bind's size rides the handshake, not a later frame.
-	if sess.InitialCols != 100 || sess.InitialRows != 40 {
-		t.Errorf("PTY opened at %dx%d, want 100x40", sess.InitialCols, sess.InitialRows)
+	if att.InitialCols != 100 || att.InitialRows != 40 {
+		t.Errorf("PTY opened at %dx%d, want 100x40", att.InitialCols, att.InitialRows)
 	}
 
 	cs.reg.Write(tile.Id, []byte("echo me"))
@@ -160,12 +160,12 @@ func TestShellAPIForwardsResize(t *testing.T) {
 	cs := f.clientStack()
 	cs.reg.Open(tile.Id, tile.Id, 80, 24)
 	t.Cleanup(func() { cs.reg.Close(tile.Id) })
-	sess := waitSession(t, f.fake)
+	att := waitAttachment(t, f.fake)
 
 	cs.reg.Resize(tile.Id, 120, 50)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if rs := sess.Resizes(); len(rs) > 0 {
+		if rs := att.Resizes(); len(rs) > 0 {
 			if rs[len(rs)-1] != [2]uint16{120, 50} {
 				t.Fatalf("resize = %v, want [120 50]", rs[len(rs)-1])
 			}
@@ -193,7 +193,7 @@ func TestShellAPIAttachesTwoTilesOnOneTmuxOnce(t *testing.T) {
 	first, second := f.clientStack(), f.clientStack()
 	first.reg.Open(a.Id, a.Id, 80, 24)
 	t.Cleanup(func() { first.reg.Close(a.Id) })
-	waitSession(t, f.fake)
+	waitAttachment(t, f.fake)
 	second.reg.Open(a.Id, b.Id, 100, 40)
 	t.Cleanup(func() { second.reg.Close(a.Id) })
 
@@ -423,7 +423,7 @@ func TestShellAPIReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
 		t.Fatalf("dial the shell API: %v", err)
 	}
 	t.Cleanup(func() { conn.CloseNow() })
-	sess := waitSession(t, f.fake)
+	att := waitAttachment(t, f.fake)
 
 	// Keystrokes the fake PTY echoes back, at a volume no socket buffer
 	// holds, to a client that never reads a frame.
@@ -435,7 +435,7 @@ func TestShellAPIReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(20 * bound)
-	for !sess.IsClosed() {
+	for !att.IsClosed() {
 		if time.Now().After(deadline) {
 			t.Fatalf("the PTY was still held %v after the viewer stopped draining; the write bound is %v", 20*bound, bound)
 		}
@@ -516,7 +516,7 @@ func TestTheShellAPITracesAnAttachment(t *testing.T) {
 	tile := f.createShell(t, 6, 6)
 	cs := f.clientStack()
 	cs.reg.Open(tile.Id, tile.Id, 20, 10)
-	waitSession(t, f.fake)
+	waitAttachment(t, f.fake)
 	cs.reg.Close(tile.Id)
 
 	deadline := time.Now().Add(3 * time.Second)

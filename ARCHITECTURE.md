@@ -178,7 +178,7 @@ folds one in, and minting an empty store beside that content would come up as
 a home that had lost everything.
 
 **Home** (`internal/local`) owns the user's content: text, urls, doors, workspace
-tiles, shells, and the event stream. Shells are tmuxes on a private
+tiles, shells, and the event stream. Shells run in tmux on a private
 socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
@@ -490,8 +490,8 @@ was never started and is created by whichever tile opens it first; a started
 one that is gone is refused, never recreated behind a preview. It dies with the
 last row naming it, a trashed one included. A link names its target's
 tmux, so the client keys every shell fact by `shellconn.TmuxKey`, which
-reads the target row first. Tmuxes live on the node that
-started them, so a shell copied across namespaces copies as a link.
+reads the target row first. A tmux lives on the node that
+started it, so a shell copied across namespaces copies as a link.
 
 **Takeover.** One live surface per key: a content tile, or for a shell the
 tmux it names. Opening it elsewhere takes over, and `pane.TakeOver` says
