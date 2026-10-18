@@ -35,7 +35,7 @@ type BorderInput struct {
 }
 
 // Family is the one classification behind the color grammar. The pane outline
-// and the bottom bar's band and buttons both derive from it, so the frame and
+// and the bottom bar's band and buttons both derive from it, so the outline and
 // the bar cannot disagree about what the pane is showing.
 type Family int
 

@@ -63,7 +63,7 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   const mine = lines.filter((r) => r.origin === 'client' && r.cid === cid);
   expect(mine.length, `no record carries this client's cid; ${describeDump(lines)}`).toBeGreaterThan(0);
 
-  // The gesture is in the file, not only the plumbing: the press, the frame
+  // The gesture is in the file, not only the plumbing: the press, the draw
   // the release asked for, and the verdict it took.
   const kinds = new Set(mine.map((r) => `${r.src}/${r.kind}`));
   for (const want of ['gesture/press', 'render/draw', 'gesture/release', 'drag/drop']) {

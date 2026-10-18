@@ -19,7 +19,7 @@ test('typing into a descended text tile persists to the server', async ({ gw, wi
   expect(created, 'markdown tile created').toBeTruthy();
 
   // The bar takes the text family's shades from the same classifier as the pane
-  // border, so the band and the frame cannot disagree.
+  // border, so the band and the outline cannot disagree.
   await gw.descendCell(cx, cy);
   const themed = await window.evaluate(() => (window as any).__gridwellTest.bar());
   expect(themed.band, 'text-family band').toBe('#1b2213');

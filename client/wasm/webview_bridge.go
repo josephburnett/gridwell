@@ -198,7 +198,7 @@ func (a *App) bridgeSetZoom(paneID string, zoom float64) {
 	a.bridgeVerb("setZoom", map[string]any{"paneId": paneID, "zoom": zoom}, nil, nil)
 }
 
-// bridgeRemove tears the view down and hands onFreeze the final frame, url
+// bridgeRemove tears the view down and hands onFreeze the final capture, url
 // and title. A missing bridge or failed capture yields empty values.
 func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title, history string)) {
 	ok := a.bridgeVerb("removeWebview", map[string]any{"paneId": paneID}, func(res js.Value) {
@@ -206,7 +206,7 @@ func (a *App) bridgeRemove(paneID string, onFreeze func(jpeg []byte, url, title,
 		if !ok {
 			// The tile keeps the preview it had, and the user is told why the
 			// page they just left is not on it.
-			a.reportErr(errsurface.Error, "electron:webview", "the final frame of "+paneID+" was unreadable — the tile keeps its old preview")
+			a.reportErr(errsurface.Error, "electron:webview", "the final capture of "+paneID+" was unreadable — the tile keeps its old preview")
 		}
 		onFreeze(jpeg, jsString(res.Get("url")),
 			jsString(res.Get("title")), jsString(res.Get("history")))

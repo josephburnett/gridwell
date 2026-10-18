@@ -42,7 +42,7 @@ export function roundBounds(b: Bounds): Bounds {
   };
 }
 
-// boundsEqual lets the registry skip a redundant setBounds each render frame.
+// boundsEqual lets the registry skip a redundant setBounds each draw.
 export function boundsEqual(a: Bounds, b: Bounds): boolean {
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }

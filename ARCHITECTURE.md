@@ -519,7 +519,7 @@ whole grid, scrolled into view or not; only those refresh the preview, at
 `cadence.ShellMirrorMs`. A url view is captured by main's `MirrorPump`, which
 the renderer hands that set (`setMirrored`); a shell is snapshotted on its own
 repaints. A lone live surface costs nothing. Its own pane reads the preview only
-while the surface is parked, so a park takes one frame first.
+while the surface is parked, so a park takes one capture first.
 
 ## The desktop
 
@@ -624,7 +624,7 @@ copy:
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | does going live keep, move or place the tile's surface | `pane.TakeOver`; leaving a level, `pane.Heir` |
 | does a gesture park this pane's live surface | `pane.ParkSurface`; `pane.CanvasOwnsPointer` for its pointer |
-| does a live surface refresh its preview in the cache | `pane.Mirrored`; a park takes one frame |
+| does a live surface refresh its preview in the cache | `pane.Mirrored`; a park takes one capture |
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | is this pane animating, and where a displaced one lands | `transition.Set` |

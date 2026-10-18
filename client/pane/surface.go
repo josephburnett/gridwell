@@ -27,7 +27,7 @@ func SurfaceOf(onScreen bool, paneContentID, descentID string) SurfaceVerdict {
 	return SurfaceShow
 }
 
-// CanvasGesture mirrors one frame's gesture and overlay state. A live surface
+// CanvasGesture mirrors one draw's gesture and overlay state. A live surface
 // paints over the canvas and swallows the mouse over its rect, so which
 // surfaces a gesture parks is decided per pane: a gesture in one pane cannot
 // blank the others.

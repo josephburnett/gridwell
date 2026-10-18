@@ -77,7 +77,7 @@ test('a boot, a descent and an ascent read each grid they show once', async ({ g
 });
 
 // A preview's bytes decode after the fetch that brought them has returned, so
-// the frames between are a decoding blob, not a missing one.
+// the draws between are a decoding blob, not a missing one.
 test('a preview is fetched once on first look', async ({ electronApp, gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
@@ -124,7 +124,7 @@ test('a preview is fetched once on first look', async ({ electronApp, gw, window
   await gw.ascendViaCrumb();
   await expect.poll(() => count(asked, tile.id), { timeout: 10_000 }).toBeGreaterThan(0);
   await gw.waitIdle();
-  // Well past the decode: a second ask would have been a later frame's.
+  // Well past the decode: a second ask would have been a later draw's.
   await window.waitForTimeout(1_000);
   expect(count(asked, tile.id), 'GetTilePreview calls on first look').toBe(1);
   await window.unroute('**/gridwell.v1.Gridwell/GetTilePreview');

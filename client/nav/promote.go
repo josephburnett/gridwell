@@ -21,7 +21,7 @@ func (m *Machine) promote(g Gesture, w World) Plan {
 		return pl.plan()
 	}
 	created := g.Created
-	// The view's final frame, title and trail freeze onto the new tile, never
+	// The view's final capture, title and trail freeze onto the new tile, never
 	// the row about to die.
 	pl.add(Effect{Kind: EffCloseStream, PaneID: op.ID, Streams: StreamURL, Freeze: true,
 		FreezeOnto: &FreezeTarget{TileID: created.Id, GridID: created.GridId}})

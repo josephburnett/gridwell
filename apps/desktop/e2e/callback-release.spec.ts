@@ -35,7 +35,7 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
 
 // The persisters are armed once per draw, and a workspace holding a busy
 // live shell that another of its panes shows draws them on the mirror's
-// cadence with nobody touching the canvas. Armed by the frame, their settle
+// cadence with nobody touching the canvas. Armed by the draw, their settle
 // window could never close, and the workspace tile's layout never reached the
 // server at all. Armed by what they would write, a repainting live tile
 // leaves neither persister pending.

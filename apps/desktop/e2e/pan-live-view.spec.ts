@@ -60,7 +60,7 @@ test('a pan in one pane never parks the live url view in another', async ({
   await window.mouse.down();
 
   // Sampled through the main process, so each read gives the renderer's IPC for
-  // the frame before it time to land.
+  // the draw before it time to land.
   const samples: (boolean | null)[] = [];
   for (let i = 1; i <= 6; i++) {
     await window.mouse.move(sx - i * 15, sy - i * 8, { steps: 3 });

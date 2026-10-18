@@ -13,7 +13,7 @@ import { settle } from './cadence';
 // server happens to store as the same bytes is still caught; the tile row is
 // the server's answer, so a write that arrived by another path is caught too. A
 // capture is deliberately not counted: an ascent out of a live url or shell
-// freezes a frame, which is what the machine observed rather than what the user
+// takes a capture, which is what the machine observed rather than what the user
 // left, and it carries no claim and no bump.
 //
 // The first trip is asserted too, and it is the one that matters: a row the
