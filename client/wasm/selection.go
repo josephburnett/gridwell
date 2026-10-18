@@ -16,7 +16,7 @@ import (
 )
 
 // The selection gestures' glue. client/gesture decides what a press, a band
-// and Esc do to the set, pane.SelectionTarget where the set lives, and
+// and Esc do to the set, which is the grid row's in every pane, and
 // client/cache holds a select ahead of the node's word.
 
 // bandState is a shift + left-drag sweep: the press's cell and the pointer's,
@@ -26,21 +26,21 @@ type bandState struct {
 	ax, ay, bx, by int64
 }
 
-// selectionShown is the set pane p draws for the grid it shows.
+// selectionShown is the set pane p draws for the grid it shows; a content
+// place shows none.
 func (a *App) selectionShown(p *pane.Pane) []string {
-	switch p.SelectionTarget(a.ws.Depth() > 0) {
-	case pane.SelectionLayout:
-		return p.Selection
-	case pane.SelectionRow:
-		return a.c.Selection(a.gridIDForPane(p))
+	if p.ContentID() != "" {
+		return nil
 	}
-	return nil
+	return a.c.Selection(a.gridIDForPane(p))
 }
 
 // setSelection applies sel to the selection of the grid p shows, drawn at
-// once: inside a pane tile to the frame's set, which the layout persister
-// writes with its claim, else to the grid row's through postSelection.
+// once and written to the grid row through postSelection.
 func (a *App) setSelection(p *pane.Pane, how string, sel gesture.Select) {
+	if p.ContentID() != "" {
+		return
+	}
 	gid := a.gridIDForPane(p)
 	if g, ok := a.c.Grid(gid); ok {
 		sel = sel.OnGrid(func(id string) bool { _, ok := g.Tiles[id]; return ok })
@@ -49,13 +49,8 @@ func (a *App) setSelection(p *pane.Pane, how string, sel gesture.Select) {
 		a.draw()
 		return
 	}
-	switch p.SelectionTarget(a.ws.Depth() > 0) {
-	case pane.SelectionLayout:
-		p.Select(sel.Apply(p.Selection))
-	case pane.SelectionRow:
-		a.c.Select(gid, sel.Add, sel.Remove)
-		a.postSelection(gid)
-	}
+	a.c.Select(gid, sel.Add, sel.Remove)
+	a.postSelection(gid)
 	a.emit(traceevent.Select(how, p.ID, gid, len(a.selectionShown(p))))
 	a.draw()
 }
@@ -152,13 +147,8 @@ func (a *App) clearSelection() {
 }
 
 // clearAllSelections is the + menu's Clear selections: the node empties every
-// grid's set it and its far nodes hold, each told back as SelectionChanged,
-// and the open pane tiles' own sets, which live in their layouts, are emptied
-// here for the layout persister to write.
+// grid's set it and its far nodes hold, each told back as SelectionChanged.
 func (a *App) clearAllSelections() {
-	if a.ws.UnselectAll(a.tree) {
-		a.draw()
-	}
 	// A verdict re-reads the grid in front of the user.
 	var gid string
 	if p := a.tree.FocusedPane(); p != nil {

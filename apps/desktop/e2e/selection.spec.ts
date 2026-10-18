@@ -9,7 +9,7 @@ import type { GridwellDriver } from './driver';
 // draws: shift + left-click toggles, shift + left-drag sweeps a band and takes
 // only the tiles wholly inside it, Esc with nothing in flight clears, the +
 // menu's Clear selections empties every set, and inside a pane tile the set is
-// the pane's, in the layout blob.
+// the grid row's too, shown in every pane on the grid (2026-10-18).
 
 async function textTile(gw: GridwellDriver, cx: number, cy: number): Promise<Tile> {
   const f = await gw.focused();
@@ -179,8 +179,9 @@ test('Esc with no drag in flight clears the selection, and with none selected wr
   expect(sent, 'Esc on an empty selection wrote nothing').toEqual([]);
 });
 
-test('inside a pane tile the selection is the pane\'s, in the layout, never the grid row', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+// descendPaneTile makes a pane tile at the focused pane's center, beside a
+// text tile, and goes in: the pane inside shows the same grid.
+async function descendPaneTile(gw: GridwellDriver, win: Page) {
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
@@ -189,46 +190,53 @@ test('inside a pane tile the selection is the pane\'s, in the layout, never the 
   const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
   expect(pt, 'pane tile').toBeTruthy();
   const a = await textTile(gw, wx + 2, wy);
-
   await gw.descendCell(wx, wy);
   await expect
-    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
+    .poll(async () => (await win.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
     .toBe(1);
   const inner = await gw.focused();
   expect(inner.gridID, 'the pane inside shows the same grid').toBe(f.gridID);
   await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  return { f, pt, a, inner, wx, wy };
+}
+
+test('inside a pane tile the selection is the grid row\'s, every pane on the grid shows it, and the layout holds none', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const { f, pt, a, inner, wx, wy } = await descendPaneTile(gw, window);
 
   await shiftClick(gw, window, wx + 2, wy);
-  await expect.poll(() => painted(window, inner.id), { message: 'the border inside' }).toEqual([a.id]);
-  await expect
-    .poll(async () => (await gw.getTileContent(pt.id)).includes(`"sel"`), {
-      message: 'the selection reached the layout blob',
-      timeout: 10_000,
-    })
-    .toBe(true);
-  expect(await onNode(gw, f.gridID), 'the grid row is untouched').toEqual([]);
+  await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'shift-click inside');
+  await gw.splitFocusedPaneVertical();
+  const panes = await gw.panes();
+  expect(panes, 'two panes inside').toHaveLength(2);
+  for (const p of panes) {
+    expect(p.gridID, `pane ${p.id} shows the grid`).toBe(f.gridID);
+    await expect.poll(() => painted(window, p.id), { message: `pane ${p.id} shows the row's set` }).toEqual([a.id]);
+  }
+  await gw.waitIdle();
+  expect(await gw.getTileContent(pt.id), 'the layout blob holds no set').not.toContain('"sel"');
 
   await gw.leaveWorkspace();
   await expect
     .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
     .toBe(0);
   const out = await gw.focused();
-  await expect.poll(() => painted(window, out.id), { message: 'outside, the row\'s empty set' }).toEqual([]);
+  await expect.poll(() => painted(window, out.id), { message: 'outside, the same set' }).toEqual([a.id]);
 
   await gw.descendCell(wx, wy);
   await expect
     .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
     .toBe(1);
   const back = await gw.focused();
-  await expect.poll(() => painted(window, back.id), { message: 'the pane kept its set' }).toEqual([a.id]);
-
   await window.keyboard.press('Escape');
   await gw.waitIdle();
-  await expect.poll(() => painted(window, back.id), { message: 'Esc inside clears the pane\'s set' }).toEqual([]);
-  expect(await onNode(gw, f.gridID), 'still nothing on the grid row').toEqual([]);
+  await expectSelection(gw, window, back.id, f.gridID, [], 'Esc inside clears the row');
 });
 
-test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and comes back unselected', async ({
+test('inside a pane tile a tile that leaves the grid leaves the set, and comes back unselected', async ({
   gw,
   window,
 }) => {
@@ -237,44 +245,20 @@ test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
-  expect(pt, 'pane tile').toBeTruthy();
-  await gw.openMenu();
   await gw.dragCreate('well', wx, wy + 2);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', wx, wy + 2)!;
   expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
-  const a = await textTile(gw, wx + 2, wy);
-
-  await gw.descendCell(wx, wy);
-  await expect
-    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
-    .toBe(1);
-  const inner = await gw.focused();
-  await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  const { a, inner: inside } = await descendPaneTile(gw, window);
   await shiftClick(gw, window, wx + 2, wy);
-  await expect.poll(() => painted(window, inner.id), { message: 'selected inside' }).toEqual([a.id]);
-  await expect
-    .poll(async () => (await gw.getTileContent(pt.id)).includes(a.id.split('/').pop()!), {
-      message: 'the set reached the layout blob',
-      timeout: 10_000,
-    })
-    .toBe(true);
+  await expectSelection(gw, window, inside.id, f.gridID, [a.id], 'selected inside');
 
   // Another window moves the tile into the well and back to its cell.
   await placeTile(gw.origin, a.id, well.childGridId!, 0, 0, Number(a.w ?? 1), Number(a.h ?? 1));
   await expect.poll(async () => (await gw.focused()).tileIds.includes(a.id), { message: 'a left' }).toBe(false);
   await placeTile(gw.origin, a.id, f.gridID, wx + 2, wy, Number(a.w ?? 1), Number(a.h ?? 1));
-  await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  await gw.waitClientTileAt(inside.id, wx + 2, wy, a.id);
   await gw.waitIdle();
-  await expect.poll(() => painted(window, inner.id), { message: 'back, unselected' }).toEqual([]);
-  await expect
-    .poll(async () => (await gw.getTileContent(pt.id)).includes(`"sel"`), {
-      message: 'the layout blob carries the cleaned set',
-      timeout: 10_000,
-    })
-    .toBe(false);
-  expect(await onNode(gw, f.gridID), 'the grid row is untouched').toEqual([]);
+  await expectSelection(gw, window, inside.id, f.gridID, [], 'back, unselected');
 });
 
 // Clear selections, the + circle's right-click row, empties every grid's set
@@ -303,43 +287,16 @@ test('Clear selections empties every grid\'s set', async ({ electronApp, gw, win
   await expect.poll(() => onNode(gw, well.childGridId!), { message: 'cleared in the well' }).toEqual([]);
 });
 
-// Inside a pane tile the pane's own set is the layout's, which the node's
-// clear does not reach: the client empties it, and the layout is written.
-test('Clear selections empties a pane\'s own set inside a pane tile', async ({ electronApp, gw, window }) => {
+// Inside a pane tile the set is the grid row's, so the node's clear reaches
+// it like any other.
+test('Clear selections empties the set a pane inside a pane tile shows', async ({ electronApp, gw, window }) => {
   await gw.enterPlugin('home');
-  const f = await gw.focused();
-  const wx = Math.round(f.cx);
-  const wy = Math.round(f.cy);
-  await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
-  expect(pt, 'pane tile').toBeTruthy();
-  const a = await textTile(gw, wx + 2, wy);
-
-  await gw.descendCell(wx, wy);
-  await expect
-    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
-    .toBe(1);
-  const inner = await gw.focused();
-  await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
+  const { f, a, inner, wx, wy } = await descendPaneTile(gw, window);
   await shiftClick(gw, window, wx + 2, wy);
-  await expect.poll(() => painted(window, inner.id), { message: 'selected inside' }).toEqual([a.id]);
-  // Every pane's sets in the blob ("sel": one list per frame), flattened.
-  const sels = async (): Promise<string[]> => {
-    const out: string[] = [];
-    const blob = await gw.getTileContent(pt.id);
-    if (!blob) return out;
-    JSON.stringify(JSON.parse(blob), (k, v) => {
-      if (k === 'sel') for (const frame of v as string[][]) out.push(...(frame ?? []));
-      return v;
-    });
-    return out;
-  };
-  await expect.poll(sels, { message: 'in the layout', timeout: 10_000 }).toHaveLength(1);
+  await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'selected inside');
 
   const picked = pickFromNativeMenu(electronApp, 'Clear selections');
   await gw.rightClickCircle();
   await picked;
-  await expect.poll(() => painted(window, inner.id), { message: 'cleared inside' }).toEqual([]);
-  await expect.poll(sels, { message: 'the layout no longer holds it', timeout: 10_000 }).toEqual([]);
+  await expectSelection(gw, window, inner.id, f.gridID, [], 'cleared inside');
 });

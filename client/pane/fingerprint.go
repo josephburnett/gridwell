@@ -65,8 +65,8 @@ func (f Fingerprint) MergeUnordered(other Fingerprint) Fingerprint {
 }
 
 // LayoutFingerprint is what the layout blob encodes: the shape, the focused
-// and zoomed pane, and each pane's chain of doorways with the view and the
-// selection each grid frame holds and a text leaf's own scroll. Focus is in
+// and zoomed pane, and each pane's chain of doorways with the view each grid
+// frame holds and a text leaf's own scroll. Focus is in
 // it by decision, so a focus change inside a pane tile is a layout write, and
 // so is a settled pan, zoom or text scroll.
 func LayoutFingerprint(t *Tree) Fingerprint { return treeFingerprint(t, false) }
@@ -107,10 +107,6 @@ func fingerprintPane(f Fingerprint, p *Pane, views bool) Fingerprint {
 		}
 		if t := encodeText(fr); t != nil {
 			f = f.Num(t.X).Num(t.Y)
-		}
-		f = f.Num(float64(len(fr.Selection)))
-		for _, id := range fr.Selection {
-			f = f.Str(id)
 		}
 	}
 	if !views {

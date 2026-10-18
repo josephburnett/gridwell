@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,13 +53,25 @@ func SearchNeedsRow(req *pb.SearchRequest) bool {
 // SearchFiltered reports whether req narrows by anything beyond its query,
 // which is what lets an empty query search.
 func SearchFiltered(req *pb.SearchRequest) bool {
-	return req.GridId != "" || SearchNeedsRow(req)
+	return req.GridId != "" || req.Kind != "" || SearchNeedsRow(req)
+}
+
+// SearchKinds are the kinds a search's kind filter names, the four
+// primitives and the pane tile.
+var SearchKinds = []string{KindText, KindURL, KindShell, KindWell, KindPane}
+
+// SearchKeepsKind reports whether a tile of kind passes req's kind filter.
+func SearchKeepsKind(req *pb.SearchRequest, kind string) bool {
+	return req.Kind == "" || req.Kind == kind
 }
 
 // CheckSearch refuses filters that cannot mean anything, with the reason.
 func CheckSearch(req *pb.SearchRequest) error {
 	if req.Recurse && req.GridId == "" {
 		return errors.New("search: recurse needs a grid_id")
+	}
+	if req.Kind != "" && !slices.Contains(SearchKinds, req.Kind) {
+		return fmt.Errorf("search: kind %q is none of %s", req.Kind, strings.Join(SearchKinds, ", "))
 	}
 	for name, r := range map[string]*pb.TimeRange{
 		"created": req.Created, "modified": req.Modified, "content_changed": req.ContentChanged,

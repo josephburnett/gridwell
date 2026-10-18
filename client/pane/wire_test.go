@@ -742,3 +742,28 @@ func TestLayoutKeepsAScrolledTextLeaf(t *testing.T) {
 		t.Errorf("a restored scroll re-encodes differently:\ngot  %s\nwant %s", again, blob)
 	}
 }
+
+// The selection is the grid row's everywhere, so a layout holds none: a blob
+// written when each pane kept its own set ("sel") decodes to the same place
+// and views, and encodes back without the sets (2026-10-18).
+func TestALayoutsOldSetsAreReadPastAndNotWritten(t *testing.T) {
+	old := `{"v":1,"root":{"pane":{"id":"p1","anchor":"n/1","path":["n/7"],"views":[{"x":1,"y":2,"z":1},{"x":3,"y":4,"z":2}],"sel":[["n/7"],["n/4","n/5"]]}},"focus":"p1"}`
+	got, err := DecodeLayout([]byte(old), nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := got.FocusedPane()
+	if p.Anchor() != "n/1" || len(p.Path()) != 1 || p.Path()[0] != "n/7" {
+		t.Fatalf("place = %s %v, want n/1 [n/7]", p.Anchor(), p.Path())
+	}
+	if v, ok := p.Live(); !ok || v.Cx() != 3 || v.Cy() != 4 {
+		t.Errorf("view = %v %v, want the top frame's 3,4", v, ok)
+	}
+	data, _, err := EncodeLayout(got, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(`"sel"`)) {
+		t.Errorf("the old sets were written back: %s", data)
+	}
+}

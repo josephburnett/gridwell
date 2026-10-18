@@ -14,9 +14,9 @@ func TestRouteTable(t *testing.T) {
 		ev   *pb.Event
 		want Plan
 	}{
-		{"a removed tile drops its previews and leaves every pane's selection",
+		{"a removed tile drops its previews",
 			&pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "n/1", TileId: "n/4"}}},
-			Plan{DropPreviews: "n/4", Unselect: "n/4"}},
+			Plan{DropPreviews: "n/4"}},
 		{"a changed grid clears its latch, refetches, and revives its namespace's dead keys",
 			&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "n/1"}}},
 			Plan{ClearLatch: "n/1", Fetch: "n/1", Revive: "n"}},

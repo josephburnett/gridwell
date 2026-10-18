@@ -186,3 +186,20 @@ func TestSearchFiltersCombine(t *testing.T) {
 		t.Errorf("the selected well made at t0 passed a from-t2 filter: %v", got)
 	}
 }
+
+// kind keeps the tiles of that kind, with a query or alone, newest first.
+func TestSearchKind(t *testing.T) {
+	w := newFilterWorld(t)
+	if got := w.find(t, &gridwellv1.SearchRequest{Kind: "well"}); !slices.Equal(got, []string{w.inner.Id, w.outer.Id}) {
+		t.Errorf("every well = %v, want inner then outer", got)
+	}
+	if got := w.find(t, &gridwellv1.SearchRequest{Query: "gopher", Kind: "text", GridId: w.outer.ChildGridId}); !sameIDs(got, w.middle.Id) {
+		t.Errorf("gopher texts on outer's grid = %v, want middle", got)
+	}
+	if got := w.find(t, &gridwellv1.SearchRequest{Query: "gopher", Kind: "pane"}); len(got) != 0 {
+		t.Errorf("gopher panes = %v, want none", got)
+	}
+	if got := w.find(t, &gridwellv1.SearchRequest{Query: "id:" + w.top.Id, Kind: "well"}); len(got) != 0 {
+		t.Errorf("a text located by id under kind well = %v, want none", got)
+	}
+}

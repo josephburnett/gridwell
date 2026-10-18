@@ -192,7 +192,7 @@ func TestTheMCPAPIListsItsTenTools(t *testing.T) {
 	for _, tl := range res.Tools {
 		got = append(got, tl.Name)
 	}
-	want := []string{"copy", "delete", "find", "place", "pointed", "read_grid", "read_tiles", "rename", "select", "write_text"}
+	want := []string{"copy", "delete", "find", "place", "read_grid", "read_tiles", "rename", "select", "sessions", "write_text"}
 	if slices.Sort(got); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
@@ -464,6 +464,24 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 		t.Fatalf("find selected = %v, want [%s]", got, still.ID)
 	}
 	refusedWith(t, callRaw(t, s, "find", map[string]any{"query": "note", "created": map[string]any{"from": "yesterday"}}), "refused:")
+
+	// kind keeps the tiles of that kind, alone or with a query; one the node
+	// does not know is refused by the router.
+	pt, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: inner,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 7, Y: 7, W: 1, H: 1, AltText: "work"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := hits(map[string]any{"kind": "pane"}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
+		t.Fatalf("find kind pane = %v, want [%s]", got, pt.GetTile().GetId())
+	}
+	if got := hits(map[string]any{"kind": "pane", "content_changed": map[string]any{}}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
+		t.Fatalf("find kind pane by content time = %v, want [%s]", got, pt.GetTile().GetId())
+	}
+	if got := hits(map[string]any{"query": "note", "kind": "well"}); len(got) != 0 {
+		t.Fatalf("find note of kind well = %v, want none", got)
+	}
+	refusedWith(t, callRaw(t, s, "find", map[string]any{"kind": "panes"}), "refused:")
 }
 
 // A write claims what the agent read: once another write has landed, the

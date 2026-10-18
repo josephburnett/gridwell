@@ -45,6 +45,8 @@ func TestCheckSearch(t *testing.T) {
 		{"one instant", &pb.SearchRequest{ContentChanged: &pb.TimeRange{From: 5, To: 5}}, true},
 		{"backwards", &pb.SearchRequest{ContentChanged: &pb.TimeRange{From: 6, To: 5}}, false},
 		{"negative", &pb.SearchRequest{Modified: &pb.TimeRange{From: -1}}, false},
+		{"a kind", &pb.SearchRequest{Kind: KindPane}, true},
+		{"an unknown kind", &pb.SearchRequest{Kind: "panes"}, false},
 	} {
 		if err := CheckSearch(c.req); (err == nil) != c.ok {
 			t.Errorf("%s: CheckSearch = %v, want ok=%v", c.name, err, c.ok)
@@ -58,11 +60,20 @@ func TestPeelRequestCarriesSearchFilters(t *testing.T) {
 	hop := Hop{Seg: "hop", Via: "hop", Transit: true}
 	in := &pb.SearchRequest{Query: "id:hop/far/7", Scope: "hop/far/1", GridId: "hop/far/1", Recurse: true,
 		Limit: 3, Selected: true, Created: &pb.TimeRange{From: 1}, Modified: &pb.TimeRange{To: 2},
-		ContentChanged: &pb.TimeRange{From: 3, To: 4}}
+		ContentChanged: &pb.TimeRange{From: 3, To: 4}, Kind: KindText}
 	want := &pb.SearchRequest{Query: "id:far/7", GridId: "far/1", Recurse: true,
 		Limit: 3, Selected: true, Created: &pb.TimeRange{From: 1}, Modified: &pb.TimeRange{To: 2},
-		ContentChanged: &pb.TimeRange{From: 3, To: 4}}
+		ContentChanged: &pb.TimeRange{From: 3, To: 4}, Kind: KindText}
 	if got := PeelRequest(hop, in); !proto.Equal(got, want) {
 		t.Errorf("peeled = %v, want %v", got, want)
+	}
+}
+
+// A kind narrows like any filter, so an empty query with a kind alone lists;
+// it needs no row, since an entry with none has its kind.
+func TestAKindIsAFilterThatNeedsNoRow(t *testing.T) {
+	req := &pb.SearchRequest{Kind: KindPane}
+	if !SearchFiltered(req) || SearchNeedsRow(req) {
+		t.Errorf("kind alone: filtered %v, needs a row %v; want filtered, no row", SearchFiltered(req), SearchNeedsRow(req))
 	}
 }

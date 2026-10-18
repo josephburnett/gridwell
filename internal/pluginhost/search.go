@@ -66,10 +66,12 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 	return a.filterHits(req, hits, listing)
 }
 
-// filterHits keeps the hits whose rows pass the filters; a listing is ordered
-// newest first and capped, as home's is.
+// filterHits keeps the hits whose rows pass the filters, and the kind a hit
+// with no row answers with; a listing is ordered newest first and capped, as
+// home's is.
 func (a *Adapter) filterHits(req *gridwellv1.SearchRequest, hits []searchHit, listing bool) (*gridwellv1.SearchResponse, error) {
 	out := &gridwellv1.SearchResponse{}
+	hits = slices.DeleteFunc(hits, func(h searchHit) bool { return !rpc.SearchKeepsKind(req, h.result.GetTile().GetKind()) })
 	if !listing && !rpc.SearchNeedsRow(req) {
 		for _, h := range hits {
 			out.Results = append(out.Results, h.result)
