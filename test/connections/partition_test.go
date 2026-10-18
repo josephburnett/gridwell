@@ -157,17 +157,17 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	// needs a beat to answer Unavailable instead of hanging on half-open
 	// sockets.
 	deadline := time.Now().Add(60 * time.Second)
-	var staleBody []byte
+	var cachedBody []byte
 	var err error
 	for time.Now().Before(deadline) {
-		staleBody, _, _, err = cl.ReadContent(ctx, warmT["id"].(string))
+		cachedBody, _, _, err = cl.ReadContent(ctx, warmT["id"].(string))
 		if err == nil {
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	if err != nil || string(staleBody) != "warmed words" {
-		t.Fatalf("dark warmed read = %q (%v), want the cached bytes", staleBody, err)
+	if err != nil || string(cachedBody) != "warmed words" {
+		t.Fatalf("dark warmed read = %q (%v), want the cached bytes", cachedBody, err)
 	}
 	// The grid itself still serves, whole, out of the cache. Nothing on the
 	// answer says it is cached: that is the connection's health, awaited
