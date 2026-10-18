@@ -8,17 +8,17 @@ import (
 )
 
 // The mint is the one config write and it writes only the ids. A second boot
-// of a home that never declared web.bind still sees none, so the desktop
+// of a node that never declared web.bind still sees none, so the desktop
 // sidecar's --bind-default keeps winning on every launch rather than the first
 // one only, and the file stays as the user left it.
 func TestBuildConfigMintsOnlyTheIDs(t *testing.T) {
-	home := t.TempDir()
-	cfgPath := filepath.Join(home, "server.yaml")
-	first, err := BuildConfig(home, cfgPath)
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "server.yaml")
+	first, err := BuildConfig(dir, cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := BuildConfig(home, cfgPath)
+	second, err := BuildConfig(dir, cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -14,13 +14,13 @@ import (
 // startCfg is a fresh node's config, bound to an ephemeral port.
 func startCfg(t *testing.T) (string, *config.ServerConfig) {
 	t.Helper()
-	home := t.TempDir()
-	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	dir := t.TempDir()
+	cfg, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	return home, cfg
+	return dir, cfg
 }
 
 func writeFile(t *testing.T, path, body string) {
@@ -34,14 +34,14 @@ func writeFile(t *testing.T, path, body string) {
 // connection whose key: is a typo can never dial, so serve refuses to start
 // and names the connection and the path.
 func TestStartRefusesAConnectionKeyThatIsNotThere(t *testing.T) {
-	home, cfg := startCfg(t)
-	key := filepath.Join(home, "keys", "id_ed25519") // never written
+	dir, cfg := startCfg(t)
+	key := filepath.Join(dir, "keys", "id_ed25519") // never written
 	cfg.Connections = []config.ConnectionConfig{{
 		Name: "geneva", Host: "far.example", User: "joe",
 		Addr: "/far/federation.sock",
-		Key:  key, KnownHosts: filepath.Join(home, "known_hosts"),
+		Key:  key, KnownHosts: filepath.Join(dir, "known_hosts"),
 	}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err == nil {
 		n.Close()
 		t.Fatal("serve started with a key path that is not there")
@@ -53,16 +53,16 @@ func TestStartRefusesAConnectionKeyThatIsNotThere(t *testing.T) {
 
 // The check covers every host-local file the dial plan names.
 func TestStartRefusesAKnownHostsThatIsNotThere(t *testing.T) {
-	home, cfg := startCfg(t)
-	key := filepath.Join(home, "id_ed25519")
+	dir, cfg := startCfg(t)
+	key := filepath.Join(dir, "id_ed25519")
 	writeFile(t, key, "not a real key, but it is readable")
-	kh := filepath.Join(home, "known_hosts") // never written
+	kh := filepath.Join(dir, "known_hosts") // never written
 	cfg.Connections = []config.ConnectionConfig{{
 		Name: "geneva", Host: "far.example", User: "joe",
 		Addr: "/far/federation.sock",
 		Key:  key, KnownHosts: kh,
 	}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err == nil {
 		n.Close()
 		t.Fatal("serve started with a known_hosts path that is not there")
@@ -77,20 +77,20 @@ func TestStartRefusesAConnectionKeyItCannotRead(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a 0000 file; the permission half of the check needs an ordinary uid")
 	}
-	home, cfg := startCfg(t)
-	key := filepath.Join(home, "id_ed25519")
+	dir, cfg := startCfg(t)
+	key := filepath.Join(dir, "id_ed25519")
 	writeFile(t, key, "secret")
 	if err := os.Chmod(key, 0); err != nil {
 		t.Fatal(err)
 	}
-	kh := filepath.Join(home, "known_hosts")
+	kh := filepath.Join(dir, "known_hosts")
 	writeFile(t, kh, "far.example ssh-ed25519 AAAA\n")
 	cfg.Connections = []config.ConnectionConfig{{
 		Name: "geneva", Host: "far.example", User: "joe",
 		Addr: "/far/federation.sock",
 		Key:  key, KnownHosts: kh,
 	}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err == nil {
 		n.Close()
 		t.Fatal("serve started with a key it cannot read")
@@ -103,9 +103,9 @@ func TestStartRefusesAConnectionKeyItCannotRead(t *testing.T) {
 // addr is required either way: only the operator knows the far node's socket
 // path, so a row without one fails the boot rather than the first read.
 func TestStartRefusesAConnectionWithNoAddr(t *testing.T) {
-	home, cfg := startCfg(t)
+	dir, cfg := startCfg(t)
 	cfg.Connections = []config.ConnectionConfig{{Name: "geneva", Label: "rtb"}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err == nil {
 		n.Close()
 		t.Fatal("serve started with a connection that declares no addr")
@@ -119,10 +119,10 @@ func TestStartRefusesAConnectionWithNoAddr(t *testing.T) {
 // path: a plugin without the binary it needs must never come up as an empty
 // grid.
 func TestStartRefusesAPluginBinaryThatIsNotThere(t *testing.T) {
-	home, cfg := startCfg(t)
-	bin := filepath.Join(home, "nowhere", "gridwell-plugin-fs")
+	dir, cfg := startCfg(t)
+	bin := filepath.Join(dir, "nowhere", "gridwell-plugin-fs")
 	cfg.Plugins = []config.PluginConfig{{ID: "aaaaaaa", Kind: "fs", Binary: bin}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err == nil {
 		n.Close()
 		t.Fatal("serve started with a plugin binary that is not there")
@@ -135,12 +135,12 @@ func TestStartRefusesAPluginBinaryThatIsNotThere(t *testing.T) {
 // A remote that does not answer is a network fact, not a config one: the node
 // serves and the connection stays dark at runtime with its reason on its row.
 func TestStartServesWhenTheRemoteIsMerelyUnreachable(t *testing.T) {
-	home, cfg := startCfg(t)
+	dir, cfg := startCfg(t)
 	cfg.Connections = []config.ConnectionConfig{{
 		Name: "geneva", Label: "rtb",
-		Addr: filepath.Join(home, "not-running", "federation.sock"),
+		Addr: filepath.Join(dir, "not-running", "federation.sock"),
 	}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatalf("an unreachable remote must not fail the boot: %v", err)
 	}
@@ -162,28 +162,28 @@ func TestStartServesWhenTheRemoteIsMerelyUnreachable(t *testing.T) {
 	}
 }
 
-// A home still in the db/<id>/ layout keeps all the user's content there, so
+// A node directory still in the db/<id>/ layout keeps all the user's content there, so
 // serve refuses it and names the release that folds it in rather than minting
 // a fresh gridwell.db beside those files.
 func TestStartRefusesTheOldPerNamespaceLayout(t *testing.T) {
-	home := t.TempDir()
-	cfgPath := filepath.Join(home, "server.yaml")
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "server.yaml")
 	writeFile(t, cfgPath, "id: nkw3zq7\n")
-	old := filepath.Join(home, "db", "nkw3zq7")
+	old := filepath.Join(dir, "db", "nkw3zq7")
 	if err := os.MkdirAll(old, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(old, "store.db"), "the user's content")
 
-	_, err := BuildConfig(home, cfgPath)
+	_, err := BuildConfig(dir, cfgPath)
 	if err == nil {
-		t.Fatal("serve accepted a home in the old layout")
+		t.Fatal("serve accepted a node directory in the old layout")
 	}
 	if !strings.Contains(err.Error(), "v0.1.0") || !strings.Contains(err.Error(), "db/") {
 		t.Fatalf("the refusal must name the old layout and the release that converts it, got: %v", err)
 	}
-	if _, err := os.Stat(config.DBFile(home)); !os.IsNotExist(err) {
-		t.Fatalf("%s was minted beside the old layout", config.DBFile(home))
+	if _, err := os.Stat(config.DBFile(dir)); !os.IsNotExist(err) {
+		t.Fatalf("%s was minted beside the old layout", config.DBFile(dir))
 	}
 }
 

@@ -35,8 +35,8 @@ func TestADisabledPluginIsStoppedAndNeverRespawned(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "notes.md"), []byte("# notes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	home := t.TempDir()
-	st, err := store.Open(config.DBFile(home))
+	dir := t.TempDir()
+	st, err := store.Open(config.DBFile(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestADisabledPluginIsStoppedAndNeverRespawned(t *testing.T) {
 		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, home, st); err != nil {
+	if err := plugin.LoadInto(reg, cfg, dir, st); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(reg.Close)

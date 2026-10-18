@@ -25,13 +25,13 @@ func TestShellTmuxAcrossAConnection(t *testing.T) {
 	if _, err := os.Stat(bin); err != nil {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
-	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: shconn\n      addr: %s\n", remoteAddr))
-	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
+	_, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, fmt.Sprintf("connections:\n    - name: shconn\n      addr: %s\n", remoteAddr))
+	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 	farRoot := awaitConnRoot(t, localOrigin, "shconn")
 	var homeRoot string
 	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["plugins"].([]any) {

@@ -21,13 +21,13 @@ import (
 // the failed open to the client's notice row.
 
 func TestAnUnopenableCacheSurfacesAsHealth(t *testing.T) {
-	home := t.TempDir()
+	dir := t.TempDir()
 	// A directory where the file belongs: the open fails for a reason the
 	// node cannot fix, without touching the node's own store.
-	if err := os.Mkdir(config.CacheFile(home), 0o700); err != nil {
+	if err := os.Mkdir(config.CacheFile(dir), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := serveNode(t, home)
+	cfg := serveNode(t, dir)
 	h := firstUnhealthy(t, cfg, 10*time.Second)
 	if h == nil {
 		t.Fatal("the node served with no source cache and said nothing; the user is owed the reason offline reading is gone")
@@ -48,15 +48,15 @@ func TestAnOpenedCacheReportsNothing(t *testing.T) {
 	}
 }
 
-// serveNode starts a real node on home and serves it until the test ends.
-func serveNode(t *testing.T, home string) *config.ServerConfig {
+// serveNode starts a real node in dir and serves it until the test ends.
+func serveNode(t *testing.T, dir string) *config.ServerConfig {
 	t.Helper()
-	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	cfg, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}

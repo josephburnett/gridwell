@@ -18,10 +18,10 @@ func VersionString() string {
 	return Version
 }
 
-// bootRecord is the node's first trace record: the build and the home it
+// bootRecord is the node's first trace record: the build and the directory it
 // serves.
-func bootRecord(home string) tracewire.Record {
-	kv := map[string]string{"version": VersionString(), "go": runtime.Version(), "home": home}
+func bootRecord(dir string) tracewire.Record {
+	kv := map[string]string{"version": VersionString(), "go": runtime.Version(), "dir": dir}
 	msg := "gridwell " + VersionString()
 	if c := tracewire.BuildCommit(); c != "" {
 		kv["commit"] = c

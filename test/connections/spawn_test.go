@@ -52,21 +52,21 @@ func repoRoot(t *testing.T) string {
 	}
 }
 
-// startServe launches `gridwell serve` for a home and returns its origin and
+// startServe launches `gridwell serve` for a node directory and returns its origin and
 // the connection API's socket path once the banner announces them. The
 // socket lives in the node directory, so two nodes on one box never collide.
-func startServe(t *testing.T, bin, home, bind string) (origin, fedSocket string) {
-	origin, fedSocket, _ = startServeProc(t, bin, home, bind)
+func startServe(t *testing.T, bin, dir, bind string) (origin, fedSocket string) {
+	origin, fedSocket, _ = startServeProc(t, bin, dir, bind)
 	return origin, fedSocket
 }
 
 // startServeProc is startServe with a stop, for a test that partitions a
 // node mid-session and brings it back on the same address. stop is idempotent
 // with the registered cleanup.
-func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket string, stop func()) {
+func startServeProc(t *testing.T, bin, dir, bind string) (origin, fedSocket string, stop func()) {
 	t.Helper()
 	cmd := exec.Command(bin, "serve", "--bind", bind, "--static", "")
-	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+home, "GRIDWELL_PLUGIN_DIR="+filepath.Dir(bin))
+	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+dir, "GRIDWELL_PLUGIN_DIR="+filepath.Dir(bin))
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +100,7 @@ func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket str
 		select {
 		case line, ok := <-lines:
 			if !ok {
-				t.Fatalf("serve for %s exited before announcing", home)
+				t.Fatalf("serve for %s exited before announcing", dir)
 			}
 			if i := strings.Index(line, "serving on "); i >= 0 {
 				addr := strings.Fields(line[i+len("serving on "):])[0]
@@ -124,7 +124,7 @@ func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket str
 				return "http://" + addr, fedSocket, stop
 			}
 		case <-deadline:
-			t.Fatalf("serve for %s never announced", home)
+			t.Fatalf("serve for %s never announced", dir)
 		}
 	}
 }
@@ -192,11 +192,11 @@ func rpc(t *testing.T, origin, method string, req any) map[string]any {
 	return out
 }
 
-// freshHome seeds a home with an empty server.yaml, so the first serve mints
+// freshDir seeds a node directory with an empty server.yaml, so the first serve mints
 // the node's id and creates its store through node.BuildConfig.
-func freshHome(t *testing.T, home string) {
+func freshDir(t *testing.T, dir string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(home, "server.yaml"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "server.yaml"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -209,9 +209,9 @@ func TestConnectionSpawn(t *testing.T) {
 	}
 
 	// The remote node gets a fresh node directory.
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
-	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
+	remoteOrigin, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
 
 	// A real ssh server fronts it, the same sshd the seam test uses, with
 	// the production binary dialing it.
@@ -219,10 +219,10 @@ func TestConnectionSpawn(t *testing.T) {
 
 	// The local node's connection is server.yaml config, declared before
 	// first serve and reconciled at boot.
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
-	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, sshConnectionYAML(t, "fedconn1", creds, remoteAddr))
+	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 
 	// 1. The connection presents as its own menu row and gains its root,
 	//    the remote's home through the declared segment.
@@ -424,17 +424,17 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	}
 
 	// The remote node, with a real sshd fronting it.
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
-	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
+	remoteOrigin, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
 	// The local node declares the connection in server.yaml before first
 	// serve.
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
-	localOrigin, _, stopLocal := startServeProc(t, bin, localHome, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, sshConnectionYAML(t, "cmconn1", creds, remoteAddr))
+	localOrigin, _, stopLocal := startServeProc(t, bin, localDir, "127.0.0.1:0")
 
 	// 1. The connection is a menu row of its own, the transport's row is
 	//    hidden behind it, and the learned root is the remote's home.
@@ -476,7 +476,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	//    namespace stops resolving forever, and the remote keeps its tile.
 	stopLocal()
 	// The node's minted id, written by the first serve, is kept.
-	cur, err := os.ReadFile(filepath.Join(localHome, "server.yaml"))
+	cur, err := os.ReadFile(filepath.Join(localDir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,11 +484,11 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	if i := strings.Index(base, "connections:"); i >= 0 {
 		base = base[:i]
 	}
-	if err := os.WriteFile(filepath.Join(localHome, "server.yaml"),
+	if err := os.WriteFile(filepath.Join(localDir, "server.yaml"),
 		[]byte(base+"connections: []\nretired_names:\n    - cmconn1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	localOrigin2, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	localOrigin2, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 	lp := rpc(t, localOrigin2, "Handshake", map[string]any{})
 	for _, p := range lp["plugins"].([]any) {
 		if uuid, _ := p.(map[string]any)["uuid"].(string); strings.HasSuffix(uuid, "/cmconn1") {
@@ -507,11 +507,11 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	fmt.Println("connections spawn gate: connections mode — yaml-declared, real tunnel, chained bytes, config-refused edits, clean retirement OK")
 }
 
-// appendConnectionsYAML writes the connections section into a home's
+// appendConnectionsYAML writes the connections section into a node directory's
 // server.yaml, before its first serve.
-func appendConnectionsYAML(t *testing.T, home, section string) {
+func appendConnectionsYAML(t *testing.T, dir, section string) {
 	t.Helper()
-	f, err := os.OpenFile(filepath.Join(home, "server.yaml"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+	f, err := os.OpenFile(filepath.Join(dir, "server.yaml"), os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,22 +583,22 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(files, "far.txt"), []byte("hello from the far side"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
-	appendConnectionsYAML(t, remoteHome, fmt.Sprintf(`plugins:
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
+	appendConnectionsYAML(t, remoteDir, fmt.Sprintf(`plugins:
     - kind: fs
       label: files
       binary: %s
       config:
         root: %s
 `, filepath.Join(root, "gridwell-plugin-fs"), files))
-	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
+	_, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
 
 	creds := dialtest.Server(t, t.TempDir())
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "fedkey1", creds, remoteAddr))
-	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, sshConnectionYAML(t, "fedkey1", creds, remoteAddr))
+	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 
 	sshRoot := awaitConnRoot(t, localOrigin, "fedkey1")
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})

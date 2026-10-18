@@ -20,7 +20,7 @@ const watchUUID = "pwatch1"
 // delay between a plugin dying and the notice row saying so.
 func TestACrashIsNoticedWithinTheWatchInterval(t *testing.T) {
 	// The plugin inherits this process's environment, so the test redirects
-	// its own home. Nothing may write into the developer's.
+	// its own node directory. Nothing may write into the developer's.
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	sup, err := Supervise(watchUUID, "fs", plugintest.Binary(t, "fs"), map[string]string{
 		"root": t.TempDir(), "uuid": watchUUID, "kind": "fs", "state_dir": t.TempDir(),

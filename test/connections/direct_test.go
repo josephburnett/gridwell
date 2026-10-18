@@ -27,20 +27,20 @@ func TestDirectConnectSpawn(t *testing.T) {
 	ctx := context.Background()
 
 	// Node A is the other server on this box.
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
 	// remoteAddr is the connection API's unix socket path, the only thing
 	// a connection can dial.
-	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
+	_, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
 
 	// Node B declares a direct connection in server.yaml before first
 	// serve: addr only, host empty, no sshd. Its root is the remote's home,
 	// where a direct client of that node boots, writable and usable at
 	// once.
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
-	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, fmt.Sprintf("connections:\n    - name: dconn1\n      addr: %s\n", remoteAddr))
+	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 	sshRoot := awaitConnRoot(t, localOrigin, "dconn1")
 
 	hg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})

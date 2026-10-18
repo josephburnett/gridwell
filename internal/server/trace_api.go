@@ -48,11 +48,11 @@ func (s *Server) traceDumpAPI() http.Handler {
 			http.Error(w, "trace: POST only", http.StatusMethodNotAllowed)
 			return
 		}
-		if s.cfg.Home == "" {
-			http.Error(w, "trace: this server was built with no home to dump into", http.StatusInternalServerError)
+		if s.cfg.Dir == "" {
+			http.Error(w, "trace: this server was built with no directory to dump into", http.StatusInternalServerError)
 			return
 		}
-		path, n, err := trace.Default().Dump(config.DumpsDir(s.cfg.Home), time.Now())
+		path, n, err := trace.Default().Dump(config.DumpsDir(s.cfg.Dir), time.Now())
 		if err != nil {
 			http.Error(w, "trace: "+err.Error(), http.StatusInternalServerError)
 			return

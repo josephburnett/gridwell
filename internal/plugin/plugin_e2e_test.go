@@ -33,8 +33,8 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "docs"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	home := t.TempDir()
-	dbPath := config.DBFile(home)
+	dir := t.TempDir()
+	dbPath := config.DBFile(dir)
 	st, err := store.Open(dbPath)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 		Config: map[string]string{"root": root},
 	}}}
 	reg := plugin.NewRegistry()
-	if err := plugin.LoadInto(reg, cfg, home, st); err != nil {
+	if err := plugin.LoadInto(reg, cfg, dir, st); err != nil {
 		t.Fatalf("LoadInto: %v", err)
 	}
 	defer reg.Close()
@@ -102,7 +102,7 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	}
 	// The plugin gets its own directory, minted by the loader in the node directory
 	// it was handed, for its cache of its source.
-	if fi, err := os.Stat(config.PluginStateDir(home, "pfsuuid")); err != nil {
+	if fi, err := os.Stat(config.PluginStateDir(dir, "pfsuuid")); err != nil {
 		t.Fatalf("state dir not minted through the loader: %v", err)
 	} else if perm := fi.Mode().Perm(); perm != 0o700 {
 		t.Errorf("state dir mode = %04o, want 0700", perm)

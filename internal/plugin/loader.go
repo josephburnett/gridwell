@@ -44,10 +44,10 @@ func bootInfo(ns namespace.Namespace) error {
 // subprocess fronted by the pluginhost adapter over the node-owned store.
 // Nothing is cached in front of it, a subprocess on this machine being a call
 // away and the node's store the durable record of what it minted.
-func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.Store) error {
+func LoadInto(reg *Registry, cfg *config.ServerConfig, dir string, st *store.Store) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]
-		ns, sup, closer, err := loadPlugin(pc, home, st)
+		ns, sup, closer, err := loadPlugin(pc, dir, st)
 		if err != nil {
 			return fmt.Errorf("plugin %q (%s): %w", pc.Kind, pc.ID, err)
 		}
@@ -69,8 +69,8 @@ func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.St
 // built over the supervisor, so a respawn swaps the process underneath it, and
 // the supervisor is also the adapter's source of health and says when the
 // plugin's Watch stream is re-opened.
-func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespace.Namespace, *Supervisor, func(), error) {
-	cfg, err := spawnConfig(pc, home)
+func loadPlugin(pc *config.PluginConfig, dir string, st *store.Store) (namespace.Namespace, *Supervisor, func(), error) {
+	cfg, err := spawnConfig(pc, dir)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -90,15 +90,15 @@ func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespac
 // spawnConfig carries the plugin's own keys, its identity, and state_dir, the
 // private 0700 directory at ~/.gridwell/plugins/<id> under cache.db's contract:
 // disposable, safe to delete, rewarmed by use. Nothing deletes one, a plugin
-// dropped from server.yaml being able to come back. An empty home is an error,
+// dropped from server.yaml being able to come back. An empty dir is an error,
 // so a plugin never writes into whatever directory the node started in.
-func spawnConfig(pc *config.PluginConfig, home string) (map[string]string, error) {
-	if home == "" {
+func spawnConfig(pc *config.PluginConfig, dir string) (map[string]string, error) {
+	if dir == "" {
 		return nil, fmt.Errorf("no node directory for the plugin's state_dir")
 	}
-	dir := config.PluginStateDir(home, pc.ID)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("state dir %s: %w", dir, err)
+	stateDir := config.PluginStateDir(dir, pc.ID)
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		return nil, fmt.Errorf("state dir %s: %w", stateDir, err)
 	}
 	cfg := make(map[string]string, len(pc.Config)+3)
 	for k, v := range pc.Config {
@@ -106,6 +106,6 @@ func spawnConfig(pc *config.PluginConfig, home string) (map[string]string, error
 	}
 	cfg["uuid"] = pc.ID
 	cfg["kind"] = pc.Kind
-	cfg["state_dir"] = dir
+	cfg["state_dir"] = stateDir
 	return cfg, nil
 }

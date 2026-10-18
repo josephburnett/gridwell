@@ -140,11 +140,11 @@ func TestMCPAddLine(t *testing.T) {
 // A missing config is a fresh node: id minted, file written, store created.
 // There is no init step.
 func TestBuildServeConfigFreshHome(t *testing.T) {
-	home := t.TempDir()
-	path := filepath.Join(home, "server.yaml")
-	cfg, err := buildServeConfig(home, path)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yaml")
+	cfg, err := buildServeConfig(dir, path)
 	if err != nil {
-		t.Fatalf("fresh home: %v", err)
+		t.Fatalf("fresh node: %v", err)
 	}
 	if cfg.ID == "" {
 		t.Fatal("the node's id must be minted")
@@ -153,10 +153,10 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 	if err != nil || back.ID != cfg.ID {
 		t.Fatalf("the minted id must be written back: %v %+v", err, back)
 	}
-	if _, err := os.Stat(config.DBFile(home)); err != nil {
-		t.Fatalf("the home store must exist after the first build: %v", err)
+	if _, err := os.Stat(config.DBFile(dir)); err != nil {
+		t.Fatalf("the node's store must exist after the first build: %v", err)
 	}
-	again, err := buildServeConfig(home, path)
+	again, err := buildServeConfig(dir, path)
 	if err != nil || again.ID != cfg.ID {
 		t.Fatalf("a second build must keep the id: %v %+v", err, again)
 	}
@@ -164,12 +164,12 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 
 // A plugin listed without an id gets one minted and written back.
 func TestBuildServeConfigMintsPluginIDs(t *testing.T) {
-	home := t.TempDir()
-	path := filepath.Join(home, "server.yaml")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yaml")
 	if err := os.WriteFile(path, []byte("plugins:\n  - kind: fs\n    config:\n      root: /tmp\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := buildServeConfig(home, path)
+	cfg, err := buildServeConfig(dir, path)
 	if err != nil {
 		t.Fatalf("buildServeConfig: %v", err)
 	}
@@ -189,15 +189,15 @@ func TestBuildServeConfigMintsPluginIDs(t *testing.T) {
 // The guard against a silently new database: an edited id must be a hard
 // error, not a fresh empty store beside the real one.
 func TestBuildServeConfigChangedID(t *testing.T) {
-	home := t.TempDir()
-	path := filepath.Join(home, "server.yaml")
-	if _, err := buildServeConfig(home, path); err != nil {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "server.yaml")
+	if _, err := buildServeConfig(dir, path); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte("id: changed1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := buildServeConfig(home, path); err == nil || !strings.Contains(err.Error(), "did `id` change") {
+	if _, err := buildServeConfig(dir, path); err == nil || !strings.Contains(err.Error(), "did `id` change") {
 		t.Fatalf("a changed id must be refused, got %v", err)
 	}
 }

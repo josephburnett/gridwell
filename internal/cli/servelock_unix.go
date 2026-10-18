@@ -17,10 +17,10 @@ type serveLock struct {
 	f *os.File
 }
 
-// acquireServeLock takes the exclusive per-home lock, or returns
+// acquireServeLock takes the exclusive per-directory lock, or returns
 // *errServeLockHeld carrying the running holder's banner.
-func acquireServeLock(home string) (*serveLock, error) {
-	path := filepath.Join(home, "serve.lock")
+func acquireServeLock(dir string) (*serveLock, error) {
+	path := filepath.Join(dir, "serve.lock")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("serve lock: %w", err)
@@ -45,11 +45,11 @@ func (l *serveLock) WriteBanner(banner string) {
 	_ = l.f.Sync()
 }
 
-// probeServeLock answers "is anyone serving this home?" with a shared
+// probeServeLock answers "is anyone serving this node directory?" with a shared
 // non-blocking flock. Taking the exclusive lock would let a read-only
 // question beat a starting serve to it and manufacture a failure.
-func probeServeLock(home string) (banner string, held bool, err error) {
-	path := filepath.Join(home, "serve.lock")
+func probeServeLock(dir string) (banner string, held bool, err error) {
+	path := filepath.Join(dir, "serve.lock")
 	f, oerr := os.Open(path)
 	if oerr != nil {
 		if os.IsNotExist(oerr) {

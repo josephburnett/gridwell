@@ -7,14 +7,14 @@ import "testing"
 // `gridwell status` says "already serving" with exit 0 exactly when the
 // serve lock is held, and never disturbs a stale banner file.
 func TestRunStatus(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("GRIDWELL_HOME", home)
+	dir := t.TempDir()
+	t.Setenv("GRIDWELL_HOME", dir)
 
 	if code := RunStatus(nil); code != 1 {
 		t.Errorf("status with no server = %d, want 1", code)
 	}
 
-	l, err := acquireServeLock(home)
+	l, err := acquireServeLock(dir)
 	if err != nil {
 		t.Fatal(err)
 	}

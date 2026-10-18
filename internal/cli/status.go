@@ -7,18 +7,18 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
-// RunStatus reports whether a `gridwell serve` holds this home's serve lock,
+// RunStatus reports whether a `gridwell serve` holds this node directory's serve lock,
 // see servelock.go, without starting anything. The holder's banner is
 // re-emitted in the "already serving" shape, so the desktop app's
 // --no-server mode discovers a separately-run server with one verb and never
-// learns what a home or a lock is. Exit 0 means running, 1 means not.
+// learns what a node directory or a lock is. Exit 0 means running, 1 means not.
 func RunStatus(_ []string) int {
-	home, err := config.Home()
+	dir, err := config.Dir()
 	if err != nil {
 		die("status", err)
 		return 2
 	}
-	banner, running, err := probeServeLock(home)
+	banner, running, err := probeServeLock(dir)
 	if err != nil {
 		die("status", err)
 		return 2

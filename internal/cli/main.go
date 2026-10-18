@@ -42,9 +42,9 @@ Usage:
     gridwell serve [--bind ADDR] [--bind-default ADDR] [--static DIR]
                                               run the node (a missing
                                               ~/.gridwell/server.yaml is a
-                                              fresh home: the id is minted)
+                                              fresh node: the id is minted)
     gridwell status                           report the running server for this
-                                              home (exit 0 + banner) or "not
+                                              ~/.gridwell (exit 0 + banner) or "not
                                               serving" (exit 1)
     gridwell backup DEST                      snapshot every DB + server.yaml
                                               (VACUUM INTO; safe while serving)

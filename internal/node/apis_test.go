@@ -15,16 +15,16 @@ import (
 // the connection API is a 0600 unix socket at `federation:` and never TCP,
 // and a fresh node is password-gated from the first serve.
 func TestStartBindsTheConnectionAPIOnASocketOnly(t *testing.T) {
-	home := t.TempDir()
-	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	dir := t.TempDir()
+	cfg, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.WebPassword == "" || cfg.Federation.Socket != filepath.Join(home, "federation.sock") {
+	if cfg.WebPassword == "" || cfg.Federation.Socket != filepath.Join(dir, "federation.sock") {
 		t.Fatalf("built config: web %+v connection API %+v", cfg.Web, cfg.Federation)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,18 +67,18 @@ func TestStartBindsTheConnectionAPIOnASocketOnly(t *testing.T) {
 		t.Errorf("socket not unlinked on close: %v", err)
 	}
 	// The password is the file beside the config, stable across serves.
-	pwFile := filepath.Join(home, "web-password")
+	pwFile := filepath.Join(dir, "web-password")
 	if st, err := os.Stat(pwFile); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf("web-password file = %v %v, want 0600", st, err)
 	}
-	same, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	same, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil || same.WebPassword != cfg.WebPassword {
 		t.Fatalf("password changed between serves: %v", err)
 	}
 	if err := os.Remove(pwFile); err != nil {
 		t.Fatal(err)
 	}
-	rotated, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	rotated, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil || rotated.WebPassword == cfg.WebPassword {
 		t.Fatal("deleting web-password must rotate on the next serve")
 	}

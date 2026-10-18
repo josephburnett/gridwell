@@ -15,16 +15,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// traceServer is a gated web API with a home to dump into.
+// traceServer is a gated web API with a directory to dump into.
 func traceServer(t *testing.T) (*http.Client, string, string) {
 	t.Helper()
-	home := t.TempDir()
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Home: home}))
-	return hs.Client(), hs.URL, home
+	dir := t.TempDir()
+	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: dir}))
+	return hs.Client(), hs.URL, dir
 }
 
 func TestTraceAPIIngestsAndDumps(t *testing.T) {
-	cl, base, home := traceServer(t)
+	cl, base, dumps := traceServer(t)
 	marker := "api-test-" + t.Name()
 	body := `{"origin":"client","src":"nav","kind":"nav","msg":"` + marker + `","kv":{"req":"k3f9x2a"},"cid":"c1","ct":7}` + "\n"
 	res, err := cl.Post(base+tracewire.Path, "application/x-ndjson", strings.NewReader(body))
@@ -51,8 +51,8 @@ func TestTraceAPIIngestsAndDumps(t *testing.T) {
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if dir := filepath.Dir(out.Path); dir != config.DumpsDir(home) {
-		t.Errorf("dump landed in %q, want %q", dir, config.DumpsDir(home))
+	if dir := filepath.Dir(out.Path); dir != config.DumpsDir(dumps) {
+		t.Errorf("dump landed in %q, want %q", dir, config.DumpsDir(dumps))
 	}
 	if !strings.HasPrefix(filepath.Base(out.Path), "trace-") || !strings.HasSuffix(out.Path, ".jsonl") {
 		t.Errorf("dump name %q is not trace-<stamp>.jsonl", filepath.Base(out.Path))
@@ -128,7 +128,7 @@ func TestTraceAPIsRefuseEverythingButPost(t *testing.T) {
 	}
 }
 
-// A home the server does not know is a refusal, not a dump beside the binary.
+// A directory the server does not know is a refusal, not a dump beside the binary.
 func TestTraceDumpRefusesWithoutAHome(t *testing.T) {
 	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{}))
 	res, err := hs.Client().Post(hs.URL+tracewire.DumpPath, "", nil)
@@ -137,7 +137,7 @@ func TestTraceDumpRefusesWithoutAHome(t *testing.T) {
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusInternalServerError {
-		t.Errorf("POST /trace/dump with no home = %d, want 500", res.StatusCode)
+		t.Errorf("POST /trace/dump with no directory = %d, want 500", res.StatusCode)
 	}
 }
 

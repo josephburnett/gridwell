@@ -11,22 +11,22 @@ import (
 	"github.com/josephburnett/gridwell/internal/node"
 )
 
-// backupTestHome builds a real home the way serve does and returns the home
+// backupTestDir builds a real node directory the way serve does and returns its
 // path and its root grid id.
-func backupTestHome(t *testing.T) (home string, rootID string) {
+func backupTestDir(t *testing.T) (dir string, rootID string) {
 	t.Helper()
-	home = t.TempDir()
-	t.Setenv("GRIDWELL_HOME", home)
-	cfgPath := filepath.Join(home, "server.yaml")
+	dir = t.TempDir()
+	t.Setenv("GRIDWELL_HOME", dir)
+	cfgPath := filepath.Join(dir, "server.yaml")
 	// A plugin that has never served has no rows; a backup must not
 	// abort on it.
 	if err := os.WriteFile(cfgPath, []byte("plugins:\n  - kind: gitlab\n    label: todos\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := node.BuildConfig(home, cfgPath); err != nil {
+	if _, err := node.BuildConfig(dir, cfgPath); err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(config.DBFile(home))
+	st, err := store.Open(config.DBFile(dir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,14 +35,14 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 		t.Fatal(err)
 	}
 	st.Close()
-	return home, rootID
+	return dir, rootID
 }
 
-// The backup mirrors the home layout and the copied database opens through
-// the full store contract with the same identity, so a restored home is
+// The backup mirrors the node directory's layout and the copied database opens through
+// the full store contract with the same identity, so a restored node is
 // byte-meaningful, not just byte-shaped.
 func TestBackupSnapshotsHome(t *testing.T) {
-	home, rootID := backupTestHome(t)
+	dir, rootID := backupTestDir(t)
 	dest := filepath.Join(t.TempDir(), "snap")
 
 	if code := RunBackup([]string{dest}); code != 0 {
@@ -71,18 +71,18 @@ func TestBackupSnapshotsHome(t *testing.T) {
 	}
 	for _, f := range config.DurableFiles(dest) {
 		if _, err := os.Stat(f); err != nil {
-			t.Errorf("backup lacks %s: %v (a restored home would rotate its password / lose its viewport)", filepath.Base(f), err)
+			t.Errorf("backup lacks %s: %v (a restored node would rotate its password / lose its viewport)", filepath.Base(f), err)
 		}
 	}
 	if len(cfg.Plugins) != 1 {
 		t.Errorf("backup config lists %d entries, want the never-served plugin kept (it must not abort the backup)", len(cfg.Plugins))
 	}
-	_ = home
+	_ = dir
 }
 
 // Overwriting a previous snapshot must be the user's explicit call.
 func TestBackupRefusesOverwrite(t *testing.T) {
-	_, _ = backupTestHome(t)
+	_, _ = backupTestDir(t)
 	dest := filepath.Join(t.TempDir(), "snap")
 	if code := RunBackup([]string{dest}); code != 0 {
 		t.Fatalf("first backup exit = %d", code)

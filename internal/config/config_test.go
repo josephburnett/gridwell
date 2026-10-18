@@ -25,15 +25,15 @@ func TestLoad_missing(t *testing.T) {
 	}
 }
 
-func TestHome(t *testing.T) {
+func TestDir(t *testing.T) {
 	t.Setenv("GRIDWELL_HOME", "/x/y")
-	if h, _ := Home(); h != "/x/y" {
+	if h, _ := Dir(); h != "/x/y" {
 		t.Errorf("GRIDWELL_HOME must win, got %q", h)
 	}
 	t.Setenv("GRIDWELL_HOME", "")
-	h, err := Home()
+	h, err := Dir()
 	if err != nil || !strings.HasSuffix(h, "/.gridwell") {
-		t.Errorf("default home = %q (%v), want ~/.gridwell", h, err)
+		t.Errorf("default dir = %q (%v), want ~/.gridwell", h, err)
 	}
 }
 
@@ -96,7 +96,7 @@ plugins:
 	}
 }
 
-// An empty file is a legal fresh home; defaults fill in.
+// An empty file is a legal fresh node; defaults fill in.
 func TestLoad_empty_and_defaults(t *testing.T) {
 	cfg, err := Load(write(t, t.TempDir(), ""))
 	if err != nil {
@@ -213,23 +213,23 @@ func TestMintAndSave(t *testing.T) {
 }
 
 func TestEnsurePasswordFile(t *testing.T) {
-	home := t.TempDir()
-	pw, err := EnsurePasswordFile(home)
+	dir := t.TempDir()
+	pw, err := EnsurePasswordFile(dir)
 	if err != nil || len(pw) != 32 {
 		t.Fatalf("minted %q (%v)", pw, err)
 	}
-	st, _ := os.Stat(PasswordFile(home))
+	st, _ := os.Stat(PasswordFile(dir))
 	if st.Mode().Perm() != 0o600 {
 		t.Errorf("mode = %v", st.Mode().Perm())
 	}
-	again, _ := EnsurePasswordFile(home)
+	again, _ := EnsurePasswordFile(dir)
 	if again != pw {
 		t.Fatal("the file IS the password: a second read must not re-mint")
 	}
-	if err := os.Remove(PasswordFile(home)); err != nil {
+	if err := os.Remove(PasswordFile(dir)); err != nil {
 		t.Fatal(err)
 	}
-	if rotated, _ := EnsurePasswordFile(home); rotated == pw {
+	if rotated, _ := EnsurePasswordFile(dir); rotated == pw {
 		t.Fatal("deleting the file must rotate")
 	}
 }

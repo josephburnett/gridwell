@@ -56,7 +56,7 @@ type ServerConfig struct {
 	// doc is the file as loaded, comments and all. Save edits the minted ids
 	// into it and writes it back, so a default Parse filled in or a path it
 	// expanded can never reach the file: the struct is what the node reads,
-	// the document is what the user wrote. nil is a home with no file yet.
+	// the document is what the user wrote. nil is a node with no file yet.
 	doc *yaml.Node
 }
 
@@ -73,9 +73,9 @@ type FederationConfig struct {
 	Socket string `yaml:"socket,omitempty"`
 }
 
-// FederationSocket is the default connection API socket path for a home.
-func FederationSocket(home string) string {
-	return filepath.Join(home, "federation.sock")
+// FederationSocket is the default connection API socket path in dir.
+func FederationSocket(dir string) string {
+	return filepath.Join(dir, "federation.sock")
 }
 
 // ConnectionConfig is one remote node. Name is an immutable id, the segment
@@ -110,8 +110,8 @@ var Defaults = ServerConfig{
 	Web: WebConfig{Bind: "127.0.0.1:8080"},
 }
 
-// Home returns GRIDWELL_HOME if set, else ~/.gridwell.
-func Home() (string, error) {
+// Dir is the node's directory: GRIDWELL_HOME if set, else ~/.gridwell.
+func Dir() (string, error) {
 	if h := os.Getenv("GRIDWELL_HOME"); h != "" {
 		return h, nil
 	}
@@ -123,42 +123,42 @@ func Home() (string, error) {
 }
 
 // DBFile is the node's database, ~/.gridwell/gridwell.db.
-func DBFile(home string) string {
-	return filepath.Join(home, "gridwell.db")
+func DBFile(dir string) string {
+	return filepath.Join(dir, "gridwell.db")
 }
 
 // CacheFile is the node's source cache, ~/.gridwell/cache.db. Disposable.
-func CacheFile(home string) string {
-	return filepath.Join(home, "cache.db")
+func CacheFile(dir string) string {
+	return filepath.Join(dir, "cache.db")
 }
 
 // PluginStateDir is one plugin's private directory, ~/.gridwell/plugins/<id>,
 // handed over at spawn as `state_dir`. What a plugin keeps there is its own
 // cache of its source, never a node fact, and disposable like cache.db.
-func PluginStateDir(home, id string) string {
-	return filepath.Join(home, "plugins", id)
+func PluginStateDir(dir, id string) string {
+	return filepath.Join(dir, "plugins", id)
 }
 
 // DumpsDir is where the node writes a trace dump, ~/.gridwell/dumps. Disposable:
 // a dump is a reading someone asked for, not a node fact.
-func DumpsDir(home string) string {
-	return filepath.Join(home, "dumps")
+func DumpsDir(dir string) string {
+	return filepath.Join(dir, "dumps")
 }
 
 // DefaultPath is ~/.gridwell/server.yaml.
 func DefaultPath() (string, error) {
-	home, err := Home()
+	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "server.yaml"), nil
+	return filepath.Join(dir, "server.yaml"), nil
 }
 
 // retiredKeys makes a stale file fail with the fix, not a decoder message.
 var retiredKeys = map[string]string{
 	"bind":     "is `web: {bind: …}`",
 	"password": "is the web-password file beside this config (delete it to rotate)",
-	"node_id":  "is the layout Gridwell used before one database per node; v0.1.0 is the last release that converts a home written that way",
+	"node_id":  "is the layout Gridwell used before one database per node; v0.1.0 is the last release that converts a node written that way",
 }
 
 // Load reads path and fills in defaults. A missing file wraps fs.ErrNotExist.
@@ -200,7 +200,7 @@ func Parse(data []byte) (*ServerConfig, error) {
 		}
 		switch cfg.Plugins[i].Kind {
 		case "home", "remote", "local", "localdb", "ssh":
-			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin: the node's id is `id:` and its connections are `connections:` — a home that still lists them here is the shape v0.1.0 was the last release to convert", i, cfg.Plugins[i].Kind)
+			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin: the node's id is `id:` and its connections are `connections:` — a server.yaml that still lists them here is the shape v0.1.0 was the last release to convert", i, cfg.Plugins[i].Kind)
 		}
 	}
 	if err := expandPaths(&cfg); err != nil {
@@ -267,7 +267,7 @@ func Save(path string, cfg *ServerConfig) error {
 	return nil
 }
 
-// mintedDocument is the loaded document with cfg's ids set on it. A home with
+// mintedDocument is the loaded document with cfg's ids set on it. A node with
 // no file gets a document holding the node id alone, which is all a fresh
 // Defaults has to mint; anything else on a nil document has no user spelling
 // to keep and is refused rather than invented.
@@ -371,8 +371,8 @@ func validateIDs(cfg *ServerConfig) error {
 }
 
 // expandPaths applies ExpandHome to every path server.yaml can spell with a
-// tilde. The home directory is asked for once, and only a path that needs it
-// fails when there is none.
+// tilde. The user's home directory is asked for once, and only a path that
+// needs it fails when there is none.
 func expandPaths(cfg *ServerConfig) error {
 	home, herr := os.UserHomeDir()
 	expand := func(p string) (string, error) {
@@ -405,20 +405,20 @@ func expandPaths(cfg *ServerConfig) error {
 }
 
 // PasswordFile is ~/.gridwell/web-password.
-func PasswordFile(home string) string { return filepath.Join(home, "web-password") }
+func PasswordFile(dir string) string { return filepath.Join(dir, "web-password") }
 
-// DurableFiles are the loose files a home is made of besides its databases:
+// DurableFiles are the loose files a node directory holds besides its databases:
 // what a backup must carry, the password included so every browser stays
 // logged in. It is the one list.
-func DurableFiles(home string) []string {
-	return []string{filepath.Join(home, "server.yaml"), PasswordFile(home)}
+func DurableFiles(dir string) []string {
+	return []string{filepath.Join(dir, "server.yaml"), PasswordFile(dir)}
 }
 
-// EnsurePasswordFile returns the home's web password, minting 128 random
+// EnsurePasswordFile returns the node's web password, minting 128 random
 // bits as hex written 0600 when absent, so the API is never open and never
 // needs a human to choose a secret. Deleting the file rotates.
-func EnsurePasswordFile(home string) (string, error) {
-	path := PasswordFile(home)
+func EnsurePasswordFile(dir string) (string, error) {
+	path := PasswordFile(dir)
 	data, err := os.ReadFile(path)
 	if err == nil {
 		if pw := strings.TrimSpace(string(data)); pw != "" {
@@ -432,8 +432,8 @@ func EnsurePasswordFile(home string) (string, error) {
 		return "", fmt.Errorf("config: mint web password: %w", err)
 	}
 	pw := hex.EncodeToString(b[:])
-	if err := os.MkdirAll(home, 0o700); err != nil {
-		return "", fmt.Errorf("config: mkdir %s: %w", home, err)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("config: mkdir %s: %w", dir, err)
 	}
 	if err := os.WriteFile(path, []byte(pw+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("config: write %s: %w", path, err)

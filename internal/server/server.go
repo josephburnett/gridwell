@@ -49,9 +49,9 @@ type Config struct {
 	// node-wide shell refusal; Handshake carries it so the client drops the
 	// shell primitive from the + menu.
 	DisableShells bool
-	// Home is the Gridwell home node.Options names; the trace API writes its
+	// Dir is the node's directory node.Options names; the trace API writes its
 	// dumps under it. Empty refuses a dump rather than guessing a directory.
-	Home string
+	Dir string
 }
 
 // Server routes every operation through the registry by the first segment of

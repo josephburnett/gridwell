@@ -26,9 +26,9 @@ import (
 // registry's switch to the transport's dialer and back out the event stream,
 // because the switch is registered where the node assembles itself.
 func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
-	home := t.TempDir()
-	cfgPath := filepath.Join(home, "server.yaml")
-	cfg, err := BuildConfig(home, cfgPath)
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "server.yaml")
+	cfg, err := BuildConfig(dir, cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,13 +126,13 @@ func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
 // Home is not a source the user can switch off, and neither is a name this
 // node does not declare.
 func TestOnlyADeclaredSourceCanBeDisabled(t *testing.T) {
-	home := t.TempDir()
-	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	dir := t.TempDir()
+	cfg, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}

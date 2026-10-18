@@ -26,7 +26,7 @@ import (
 )
 
 // serveFlags is the parsed `serve` options, split from RunServe so flag
-// parsing is unit-testable. The database path is derived from the home.
+// parsing is unit-testable. The database path is derived from the node directory.
 type serveFlags struct {
 	Bind        string
 	BindDefault string
@@ -123,8 +123,8 @@ func staticFS(dir string) fs.FS {
 
 // buildServeConfig is node.BuildConfig under the name the CLI's tests and
 // call sites use.
-func buildServeConfig(home, cfgPath string) (*config.ServerConfig, error) {
-	return node.BuildConfig(home, cfgPath)
+func buildServeConfig(dir, cfgPath string) (*config.ServerConfig, error) {
+	return node.BuildConfig(dir, cfgPath)
 }
 
 // exeSuffixFor and execBitRequiredOn are pure functions of GOOS so the
@@ -206,11 +206,11 @@ func RunServe(args []string) int {
 	// structured records. Set before anything can log.
 	log.SetOutput(io.MultiWriter(os.Stderr, trace.LogWriter(trace.Default())))
 
-	home, err := config.Home()
+	dir, err := config.Dir()
 	if err != nil {
 		return die("serve", err)
 	}
-	trace.Default().Emit(bootRecord(home))
+	trace.Default().Emit(bootRecord(dir))
 	cfgPath, err := config.DefaultPath()
 	if err != nil {
 		return die("serve", err)
@@ -218,7 +218,7 @@ func RunServe(args []string) int {
 
 	// A missing config file is a fresh node; the node mints its id and
 	// writes the file.
-	cfg, err := buildServeConfig(home, cfgPath)
+	cfg, err := buildServeConfig(dir, cfgPath)
 	if err != nil {
 		return die("serve", err)
 	}
@@ -230,10 +230,10 @@ func RunServe(args []string) int {
 	cfg.Web.Bind = resolveBind(f.Bind, cfg.Web.Bind, cfg.Web.BindSet, f.BindDefault)
 	cfg.StaticDir = f.StaticDir
 
-	// One serve per home, see servelock.go, taken before any plugin spawns.
+	// One serve per node directory, see servelock.go, taken before any plugin spawns.
 	// On conflict re-emit the holder's banner as "already serving": the
 	// desktop app parses it and connects to the existing server.
-	lock, err := acquireServeLock(home)
+	lock, err := acquireServeLock(dir)
 	if err != nil {
 		var held *errServeLockHeld
 		if errors.As(err, &held) && strings.HasPrefix(held.banner, bannerPrefix) {
@@ -250,8 +250,8 @@ func RunServe(args []string) int {
 	// The CLI's concerns wrap node.Start: the lock above, the banner below,
 	// signals.
 	n, err := node.Start(node.Options{
-		Home: home,
-		Cfg:  cfg,
+		Dir: dir,
+		Cfg: cfg,
 		// server.yaml static: and --static serve a checkout from disk.
 		StaticFS: staticFS(f.StaticDir),
 	})
@@ -270,7 +270,7 @@ func RunServe(args []string) int {
 	fmt.Println(banner)
 	// The password itself, for the human at the process.
 	fmt.Fprintf(os.Stderr, "gridwell: web password: %s  (%s — delete the file to rotate; every browser logs in again)\n",
-		cfg.WebPassword, config.PasswordFile(home))
+		cfg.WebPassword, config.PasswordFile(dir))
 	if line := mcpAddLine(n.Ln.Addr().String(), cfg.WebPassword); line != "" {
 		fmt.Fprintln(os.Stderr, line)
 	}

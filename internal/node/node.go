@@ -35,7 +35,7 @@ import (
 // BuildConfig loads server.yaml at cfgPath and prepares it for launch. A
 // missing file is a fresh node. Minting an absent id and writing the file back
 // is the one config write the node ever makes.
-func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
+func BuildConfig(dir, cfgPath string) (*config.ServerConfig, error) {
 	cfg, err := config.Load(cfgPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		fresh := config.Defaults
@@ -52,26 +52,26 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	}
 	// The web API is never open: the file is the password, and deleting it
 	// rotates.
-	if cfg.WebPassword, err = config.EnsurePasswordFile(home); err != nil {
+	if cfg.WebPassword, err = config.EnsurePasswordFile(dir); err != nil {
 		return nil, err
 	}
 	if cfg.Federation.Socket == "" {
-		cfg.Federation.Socket = config.FederationSocket(home)
+		cfg.Federation.Socket = config.FederationSocket(dir)
 	}
 	// The source cache lives beside the DB, never inside it: disposable.
-	cfg.CacheDir = home
-	if err := ensureStore(home, cfg); err != nil {
+	cfg.CacheDir = dir
+	if err := ensureStore(dir, cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
 // ensureStore makes ~/.gridwell/gridwell.db exist, stamped with this node's
-// identity. A home still in the retired db/<id>/ layout is refused: its
+// identity. A node directory still in the retired db/<id>/ layout is refused: its
 // content is in those files, and minting an empty store beside them would
-// look like a home that lost everything.
-func ensureStore(home string, cfg *config.ServerConfig) error {
-	path := config.DBFile(home)
+// look like a node that lost everything.
+func ensureStore(dir string, cfg *config.ServerConfig) error {
+	path := config.DBFile(dir)
 	if _, err := os.Stat(path); err == nil {
 		// A changed id must never silently open, or shadow, another
 		// identity's data.
@@ -82,10 +82,10 @@ func ensureStore(home string, cfg *config.ServerConfig) error {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	if _, err := os.Stat(filepath.Join(home, "db")); err == nil {
-		return fmt.Errorf("%s has a db/ directory and no %s: this home is in the layout Gridwell used before one database per node. v0.1.0 is the last release that converts it — serve this home with v0.1.0 once, then with this version", home, path)
+	if _, err := os.Stat(filepath.Join(dir, "db")); err == nil {
+		return fmt.Errorf("%s has a db/ directory and no %s: this node directory is in the layout Gridwell used before one database per node. v0.1.0 is the last release that converts it — serve this node directory with v0.1.0 once, then with this version", dir, path)
 	}
-	if err := os.MkdirAll(home, 0o700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	return pluginmeta.Create(path, cfg.ID, "home")
@@ -93,8 +93,8 @@ func ensureStore(home string, cfg *config.ServerConfig) error {
 
 // Options configures Start.
 type Options struct {
-	// Home is the Gridwell home: store, cache and plugin state hang off it.
-	Home string
+	// Dir is the node's directory: store, cache and plugin state hang off it.
+	Dir string
 	// Cfg is BuildConfig's result plus any caller adjustments.
 	Cfg *config.ServerConfig
 	// StaticFS serves the web client at /; nil disables static files.
@@ -125,7 +125,7 @@ type Node struct {
 func Start(opts Options) (*Node, error) {
 	cfg := opts.Cfg
 	// One store file, one handle, identity verified against the node's id.
-	st, err := local.OpenVerified(config.DBFile(opts.Home), cfg.ID, "home")
+	st, err := local.OpenVerified(config.DBFile(opts.Dir), cfg.ID, "home")
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func Start(opts Options) (*Node, error) {
 	// A content plugin is registered bare: its source is a subprocess here, so
 	// caching answers buys no round trip. What it needs is supervision,
 	// and internal/plugin respawns one that dies.
-	if err := plugin.LoadInto(reg, cfg, opts.Home, st); err != nil {
+	if err := plugin.LoadInto(reg, cfg, opts.Dir, st); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))
 	}
 	// The transport gets prefetch (CLAUDE.md, 2026-10-06).
@@ -162,7 +162,7 @@ func Start(opts Options) (*Node, error) {
 		StaticFS:      opts.StaticFS,
 		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
-		Home:          opts.Home,
+		Dir:           opts.Dir,
 	})
 	if err != nil {
 		return fail(err)

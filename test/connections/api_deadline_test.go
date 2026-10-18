@@ -50,14 +50,14 @@ func TestConnectionAPIHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
 
 	// A remote node behind a real sshd, reached through a declared
 	// connection, as TestConnectionSpawn stands up the tunnel.
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
-	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
+	remoteOrigin, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "holdconn1", creds, remoteAddr))
-	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, sshConnectionYAML(t, "holdconn1", creds, remoteAddr))
+	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 
 	// The connection gaining its root means the tunnel answered and the
 	// fan-in is following the remote node's events.

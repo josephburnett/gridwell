@@ -65,7 +65,7 @@ func TestAPluginSubprocessCrashSurfacesAndRespawns(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The plugin inherits this process's environment, so the test redirects
-	// its own home. Nothing may write into the developer's.
+	// its own node directory. Nothing may write into the developer's.
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {

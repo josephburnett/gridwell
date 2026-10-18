@@ -28,27 +28,27 @@ func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	farHome := t.TempDir()
-	farCfg, err := BuildConfig(farHome, filepath.Join(farHome, "server.yaml"))
+	farDir := t.TempDir()
+	farCfg, err := BuildConfig(farDir, filepath.Join(farDir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	farCfg.Web.Bind = "127.0.0.1:0"
-	far, err := Start(Options{Home: farHome, Cfg: farCfg})
+	far, err := Start(Options{Dir: farDir, Cfg: farCfg})
 	if err != nil {
 		t.Fatal(err)
 	}
 	far.ServeBackground()
 	t.Cleanup(func() { _ = far.Close() })
 
-	home := t.TempDir()
-	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
+	dir := t.TempDir()
+	cfg, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
-	cfg.Connections = []config.ConnectionConfig{{Name: "far", Label: "Far", Addr: config.FederationSocket(farHome)}}
-	n, err := Start(Options{Home: home, Cfg: cfg})
+	cfg.Connections = []config.ConnectionConfig{{Name: "far", Label: "Far", Addr: config.FederationSocket(farDir)}}
+	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}

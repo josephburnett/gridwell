@@ -16,7 +16,7 @@ Then create a home and run the app (offline from here on):
 
 ```sh
 make launch                      # against ~/.gridwell
-GRIDWELL_HOME=/path make launch  # against another home
+GRIDWELL_HOME=/path make launch  # against another node directory
 ```
 
 `make launch` builds the sidecar + wasm, compiles the TS, and runs Electron

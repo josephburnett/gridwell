@@ -24,13 +24,13 @@ func TestVersionStringIsNeverEmpty(t *testing.T) {
 }
 
 // The node's first record names the build that wrote every record after it
-// and the home it serves, so a dump says which binary it came from.
+// and the directory it serves, so a dump says which binary it came from.
 func TestTheBootRecordNamesTheBuild(t *testing.T) {
 	rec := bootRecord("/h/gridwell")
 	if rec.Origin != tracewire.OriginNode || rec.Src != "node" || rec.Kind != tracewire.KindBoot {
 		t.Errorf("the boot record is %s/%s/%s", rec.Origin, rec.Src, rec.Kind)
 	}
-	if rec.KV["version"] != VersionString() || rec.KV["go"] != runtime.Version() || rec.KV["home"] != "/h/gridwell" {
+	if rec.KV["version"] != VersionString() || rec.KV["go"] != runtime.Version() || rec.KV["dir"] != "/h/gridwell" {
 		t.Errorf("the boot record's kv is %v", rec.KV)
 	}
 	// go test stamps no commit, and an absent key is not an empty one.

@@ -52,19 +52,19 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 
 	// The revival must land on the same address the connection dials, so
 	// the remote node's address is kept.
-	remoteHome := t.TempDir()
-	freshHome(t, remoteHome)
+	remoteDir := t.TempDir()
+	freshDir(t, remoteDir)
 	// The connection API's socket lives in the node directory, so a revival on
 	// the same home lands on the same path.
-	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
+	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteDir, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())
 
 	// The local node's connection is server.yaml config, declared before
 	// first serve.
-	localHome := t.TempDir()
-	freshHome(t, localHome)
-	appendConnectionsYAML(t, localHome, sshConnectionYAML(t, "partconn1", creds, remoteAddr))
-	localOrigin, _ := startServe(t, bin, localHome, "127.0.0.1:0")
+	localDir := t.TempDir()
+	freshDir(t, localDir)
+	appendConnectionsYAML(t, localDir, sshConnectionYAML(t, "partconn1", creds, remoteAddr))
+	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 	cl := clientFor(localOrigin)
 
 	// The connection lands on the remote home, writable directly. The
@@ -146,7 +146,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	if body, _, _, err := cl.ReadContent(ctx, warmT["id"].(string)); err != nil || string(body) != "warmed words" {
 		t.Fatalf("warm read = %q (%v)", body, err)
 	}
-	if _, err := os.Stat(filepath.Join(localHome, "cache.db")); err != nil {
+	if _, err := os.Stat(filepath.Join(localDir, "cache.db")); err != nil {
 		t.Fatalf("source cache file missing (the node wiring): %v", err)
 	}
 
@@ -220,7 +220,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	// The revival. On the same address and the same DB the connection
 	// self-heals, its dial backoff capping at 10s, and the cold body reads
 	// live, so the cache answers only when the connection cannot.
-	_, _, stop2 := startServeProc(t, bin, remoteHome, strings.TrimPrefix(remoteOrigin, "http://"))
+	_, _, stop2 := startServeProc(t, bin, remoteDir, strings.TrimPrefix(remoteOrigin, "http://"))
 	if stop2 == nil {
 		t.Fatal("remote revival failed")
 	}

@@ -13,14 +13,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// RunBackup snapshots a whole Gridwell home — the database plus the loose
+// RunBackup snapshots a whole node directory — the database plus the loose
 // durable files config.DurableFiles names — into a destination directory.
 //
 //	gridwell backup <dest>
 //
 // VACUUM INTO is consistent while a live server holds the file under WAL, so
-// no downtime is needed, and the layout mirrors the home, so restore is a
-// plain copy over the home or a GRIDWELL_HOME pointed at the backup.
+// no downtime is needed, and the layout mirrors the node directory, so restore is a
+// plain copy over the node directory or a GRIDWELL_HOME pointed at the backup.
 func RunBackup(args []string) int {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
 		fmt.Fprintln(os.Stderr, "usage: gridwell backup <dest-dir>")
@@ -28,7 +28,7 @@ func RunBackup(args []string) int {
 	}
 	dest := args[0]
 
-	home, err := config.Home()
+	dir, err := config.Dir()
 	if err != nil {
 		return die("backup", err)
 	}
@@ -45,17 +45,17 @@ func RunBackup(args []string) int {
 		return die("backup", err)
 	}
 
-	if err := backupHome(home, cfgPath, cfg, dest); err != nil {
+	if err := backupDir(dir, cfgPath, cfg, dest); err != nil {
 		return die("backup", err)
 	}
 	fmt.Printf("gridwell: backed up gridwell.db + server.yaml to %s\n", dest)
 	return 0
 }
 
-// backupHome writes the snapshot, split from RunBackup so the procedure is
+// backupDir writes the snapshot, split from RunBackup so the procedure is
 // unit-testable. A destination that already holds a backup is refused:
 // overwriting one is the user's explicit call.
-func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) error {
+func backupDir(dir, cfgPath string, cfg *config.ServerConfig, dest string) error {
 	if _, err := os.Stat(filepath.Join(dest, "server.yaml")); err == nil {
 		return fmt.Errorf("destination %s already holds a backup (server.yaml exists); choose a fresh directory", dest)
 	}
@@ -78,15 +78,15 @@ func backupHome(home, cfgPath string, cfg *config.ServerConfig, dest string) err
 		return vacuumInto(src, dst)
 	}
 	if cfg.ID == "" {
-		return fmt.Errorf("%s names no id — the home has never served; nothing to back up", cfgPath)
+		return fmt.Errorf("%s names no id — the node has never served; nothing to back up", cfgPath)
 	}
 	// cache.db is disposable and stays out.
-	if err := snap(config.DBFile(home), config.DBFile(dest), true); err != nil {
+	if err := snap(config.DBFile(dir), config.DBFile(dest), true); err != nil {
 		return err
 	}
 
 	// server.yaml last: it is the completion marker.
-	files := config.DurableFiles(home)
+	files := config.DurableFiles(dir)
 	for i := len(files) - 1; i >= 0; i-- {
 		src := files[i]
 		if filepath.Base(src) == "server.yaml" {
