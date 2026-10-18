@@ -24,7 +24,7 @@ func zoomOf(z float64) rpc.ContentZoom {
 //
 //   - captures, facts the server observed rather than edits the user made, so
 //     a capture must never outrank the user's own claim;
-//   - framing, the viewport and the text window, last-writer-wins;
+//   - framing, the viewport and the text scroll, last-writer-wins;
 //   - layout: place, move, resize, clone, delete. A move claims the placement
 //     it saw rather than a version, so it never conflicts with typing; overlap
 //     is refused server-side in the same transaction.
@@ -199,9 +199,9 @@ var versionCases = []versionCase{
 
 	// ── Framing: how it looked. No bump, no claim. ─────────────────────
 	{
-		name: "SetTextView/window and mode", subject: textSubject, bumps: false,
+		name: "SetTextScroll/scroll and mode", subject: textSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetTextView(ctx, tile.Id, 10, 20, 300, 400, "rendered")
+			_, err := s.SetTextScroll(ctx, tile.Id, 10, 20, 300, 400, "rendered")
 			return err
 		},
 	},

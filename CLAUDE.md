@@ -154,7 +154,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   without one; the ephemeral cleanup claims the row its visit held
   (2026-10-14). A select is the decided exception: it names the tiles it
   adds and removes and claims nothing (2026-10-17). Only framing (pan and
-  zoom, the text window, content zoom), captures and a select carry no claim. A pane tile's layout counted as framing
+  zoom, the text scroll, content zoom), captures and a select carry no claim. A pane tile's layout counted as framing
   until this decision.
 - The selection is a node fact (2026-10-15): the set of a grid's tiles the
   user has in hand lives on that grid's row (`grids.selection`), home's
@@ -218,16 +218,16 @@ These were decided deliberately. Do not reverse one without a new decision.
   writes the blob on the layout's settle and never the doorway row, and the
   one-active-surface rule is the home view's only, since no row is shared
   (`pane.FramingOwner.Layout`, 2026-10-14).
-- A text tile's window is its scroll and its mode, never the box it is
-  shown in: the pane's size is the viewer's geometry, so a look from a pane
-  of another size, on another device, writes nothing (`textedit.Framing`,
-  2026-10-16). `text_w`/`text_h` are dead storage. The row's window is
+- A text tile's scroll is where its doc is scrolled and its mode, never the
+  box it is shown in: the pane's size is the viewer's geometry, so a look
+  from a pane of another size, on another device, writes nothing (`textedit.Scroll`,
+  2026-10-16). `text_w`/`text_h` are dead storage. The row's scroll is
   where the tile was left: the grid preview crops there and a descent opens
   there. Inside a pane tile the live scroll is the layout's: a scroll there
   writes the blob on the layout's settle, a settle or a focus takes only the
   mode to the row, and an ascent, which is leaving, writes the row's whole
-  window as it does anywhere; a leaf the blob has no scroll for starts at
-  the row's (`pane.FramingOwner.Layout`, `textedit.RowFraming`, 2026-10-16).
+  scroll as it does anywhere; a leaf the blob has no scroll for starts at
+  the row's (`pane.FramingOwner.Layout`, `textedit.RowScroll`, 2026-10-16).
 - Ids are 7-char lowercase base36 with a leading letter. Both shapes (short
   and legacy 32-hex) are valid forever. The leading letter is how a URL
   tells a namespace segment from a tile id.

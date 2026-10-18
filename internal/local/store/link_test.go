@@ -130,7 +130,7 @@ func TestContentMutationOnLeafLinkRejected(t *testing.T) {
 // Text framing on a link row persists x, y, w and h but never text_mode: the
 // CHECK requires it NULL on a link, and an unconditional write fails the whole
 // ascent framing save.
-func TestSetTextViewOnLinkKeepsModeNull(t *testing.T) {
+func TestSetTextScrollOnLinkKeepsModeNull(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -140,9 +140,9 @@ func TestSetTextViewOnLinkKeepsModeNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.SetTextView(ctx, link.Id, 3, 40, 300, 200, rpc.TextModeRendered)
+	got, err := s.SetTextScroll(ctx, link.Id, 3, 40, 300, 200, rpc.TextModeRendered)
 	if err != nil {
-		t.Fatalf("SetTextView on a link: %v", err)
+		t.Fatalf("SetTextScroll on a link: %v", err)
 	}
 	if got.TextX != 3 || got.TextY != 40 || got.TextW != 300 || got.TextH != 200 {
 		t.Errorf("framing not persisted: %+v", got)

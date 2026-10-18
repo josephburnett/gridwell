@@ -273,10 +273,10 @@ for (const face of ['text', 'rendered'] as const) {
 }
 
 // A host file scrolls like any other text tile. The body is the plugin's;
-// where the user left the window is the node's, held in the plugin's
+// where the user left the scroll is the node's, held in the plugin's
 // namespace of the store (#236, #270).
 //
-// The window is also this entry's FIRST durable fact, so it mints the entry's
+// The scroll is also this entry's FIRST durable fact, so it mints the entry's
 // row while the reader is standing on the entry's id. The pane's content id must
 // not move under them (#297): a rename would hide the rendered overlay mid-read
 // and leave the URL naming a tile the next listing does not contain, so the

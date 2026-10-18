@@ -91,13 +91,13 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 	})
 }
 
-// drawMarkdownNode renders a text tile as a grid preview: a constant-scale
-// window, so the type size never follows grid zoom, the doc wraps to the
-// tile's width, and the stored TextX/TextY place the window. The preview
+// drawMarkdownNode renders a text tile as a grid preview at constant
+// scale, so the type size never follows grid zoom, the doc wraps to the
+// tile's width, and the stored TextX/TextY are its scroll. The preview
 // follows the tile's stored text_mode, and raw source covers the async gap
 // before its first raster.
 func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
-	frame := markdown.PreviewWindowFrame(w, textFixedScale, contentzoom.Of(n.GetContentZoom()), n.TextX, n.TextY)
+	frame := markdown.PreviewFrameOf(w, textFixedScale, contentzoom.Of(n.GetContentZoom()), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
 	withClip(a.cctx, x, y, w, h, func() {

@@ -61,7 +61,7 @@ func TestARepeatedPluginWriteAnnouncesNothing(t *testing.T) {
 		write func() error
 	}{
 		{"content zoom", setTile(&gridwellv1.SetTileRequest{TileId: ids[rpc.KindText], ContentZoom: &zoom})},
-		{"text view", setTile(&gridwellv1.SetTileRequest{TileId: ids[rpc.KindText],
+		{"text scroll", setTile(&gridwellv1.SetTileRequest{TileId: ids[rpc.KindText],
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText, TextX: 1, TextY: 2, TextW: 30, TextH: 40, TextMode: rpc.TextModeRendered}})},
 		{"url frozen", setTile(&gridwellv1.SetTileRequest{TileId: ids[rpc.KindURL], UrlFrozen: &frozen})},
 		{"url screenshot", setTile(&gridwellv1.SetTileRequest{TileId: ids[rpc.KindURL],

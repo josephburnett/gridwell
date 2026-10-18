@@ -355,7 +355,7 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	case rpc.KindWell:
 		return nil, status.Error(codes.InvalidArgument, "set: well framing rides SetFraming")
 	case rpc.KindText:
-		return tileResp(p.st.SetTextView(ctx, req.TileId, t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode))
+		return tileResp(p.st.SetTextScroll(ctx, req.TileId, t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode))
 	case rpc.KindShell:
 		return tileResp(p.st.SetShellPreview(ctx, req.TileId, req.Preview))
 	case rpc.KindURL:

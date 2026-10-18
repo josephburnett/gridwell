@@ -195,7 +195,7 @@ export async function setRootFraming(
 
 // A foreign writer setting a text tile's stored window: another device that
 // framed the tile. w and h are what an older client stored beside the scroll.
-export async function setTextView(
+export async function setTextScroll(
   origin: string,
   tileId: string,
   v: { x: number; y: number; w: number; h: number; mode: string },

@@ -167,7 +167,7 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   await gw.leaveWorkspace();
 });
 
-test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetTextView, the mode reaches the row, and re-entry restores both", async ({
+test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetTextScroll, the mode reaches the row, and re-entry restores both", async ({
   gw,
   home,
   window,
@@ -209,9 +209,9 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
     .toBe(mode);
   await settle(window, settleMs);
 
-  const textViews = () =>
-    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextView ?? 0));
-  const textViewsBefore = await textViews();
+  const textScrolls = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextScroll ?? 0));
+  const textScrollsBefore = await textScrolls();
   const layoutBefore = storeWrites(await dumpViaDoor(gw.origin, token), isLayout);
   const rowBefore = Number((await row()).textY ?? 0);
 
@@ -225,8 +225,8 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
     })
     .toBeGreaterThan(layoutBefore);
   await settle(window, settleMs * 2);
-  expect(await textViews(), 'a scroll inside a pane tile posted SetTextView').toBe(textViewsBefore);
-  expect(Number((await row()).textY ?? 0), "a scroll inside a pane tile moved the row's window").toBe(rowBefore);
+  expect(await textScrolls(), 'a scroll inside a pane tile posted SetTextScroll').toBe(textScrollsBefore);
+  expect(Number((await row()).textY ?? 0), "a scroll inside a pane tile moved the row's scroll").toBe(rowBefore);
   const scrolled = await shownScroll(window);
   expect(scrolled, 'the wheel scrolled the document').toBeGreaterThan(0);
 
@@ -271,16 +271,16 @@ test('inside a pane tile a document scrolled and left reopens where it was left,
   await expect.poll(async () => (await gw.focused()).textMode).toBe('rendered');
   await settle(window, settleMs);
 
-  const textViews = () =>
-    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextView ?? 0));
-  const before = await textViews();
+  const textScrolls = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextScroll ?? 0));
+  const before = await textScrolls();
   const p = await gw.focused();
   await window.mouse.move(p.x + p.w / 2, p.y + p.h / 2);
   for (let i = 0; i < 8; i++) await window.mouse.wheel(0, 120);
   await expect.poll(() => shownScroll(window)).toBeGreaterThan(0);
   await settle(window, settleMs * 2);
   const scrolled = await shownScroll(window);
-  expect(await textViews(), 'the scroll settle posted SetTextView before any leave').toBe(before);
+  expect(await textScrolls(), 'the scroll settle posted SetTextScroll before any leave').toBe(before);
   expect(Number((await row()).textY ?? 0), 'the settle moved the row').toBe(0);
 
   await gw.ascendViaCrumb();

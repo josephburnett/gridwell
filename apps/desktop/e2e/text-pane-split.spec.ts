@@ -3,7 +3,7 @@ import { tileAt } from './oracle';
 
 // Switching between split panes that both contain text tiles must not blank a
 // pane or render its preview at the wrong size. No pane's state may decide
-// another pane's paint. markdown.PreviewWindowFrame is given stored framing and
+// another pane's paint. markdown.PreviewFrameOf is given stored framing and
 // no pane's focus at all, so a sibling's inner width can never become the
 // layout width. textedit.CanvasHiddenByOverlay is asked per pane, with that
 // pane's own focus, so a pane editing the tile suppresses only its own canvas.

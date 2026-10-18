@@ -172,7 +172,7 @@ func (a *App) navPersistFraming(e nav.Effect) {
 	a.persistFraming(p, t, e.Owner.DoorAnchor, e.Owner.DoorPath)
 }
 
-// navSaveText posts the editor buffer and framed window for the tile the pane
+// navSaveText posts the editor buffer and scroll for the tile the pane
 // is leaving. The row is re-resolved through the same cache-wide walk the
 // gatherer used, so an off-grid ephemeral visit still saves.
 func (a *App) navSaveText(e nav.Effect) {

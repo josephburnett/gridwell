@@ -330,10 +330,10 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	}
 }
 
-// TestSetTextViewPersistsWindowAndMode pins the text-tile preview-frame
-// contract: SetTextView persists text_x/y/w/h and text_mode, and GetGrid
+// TestSetTextScrollPersistsWindowAndMode pins the text-tile preview-frame
+// contract: SetTextScroll persists text_x/y/w/h and text_mode, and GetGrid
 // reads them back.
-func TestSetTextViewPersistsWindowAndMode(t *testing.T) {
+func TestSetTextScrollPersistsWindowAndMode(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -341,7 +341,7 @@ func TestSetTextViewPersistsWindowAndMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.SetTextView(ctx, f.Id, 10, 20, 640, 480, rpc.TextModeRendered)
+	got, err := s.SetTextScroll(ctx, f.Id, 10, 20, 640, 480, rpc.TextModeRendered)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestSetFramingRejectsNonWell(t *testing.T) {
 	}
 }
 
-func TestSetTextViewRejectsNonText(t *testing.T) {
+func TestSetTextScrollRejectsNonText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -392,7 +392,7 @@ func TestSetTextViewRejectsNonText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.SetTextView(ctx, w.Id, 0, 0, 0, 0, "")
+	_, err = s.SetTextScroll(ctx, w.Id, 0, 0, 0, 0, "")
 	if !errors.Is(err, ErrNotTextTile) {
 		t.Errorf("got %v, want ErrNotTextTile", err)
 	}

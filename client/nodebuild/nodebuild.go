@@ -176,7 +176,7 @@ var kinds = map[string][2]string{
 	"SetFraming":      {"view change", "view changes"},
 	"SetSelection":    {"selection", "selections"},
 	"SetContentZoom":  {"view change", "view changes"},
-	"SetTextView":     {"view change", "view changes"},
+	"SetTextScroll":   {"view change", "view changes"},
 	"SetURLState":     {"page capture", "page captures"},
 	"SetFrozen":       {"page capture", "page captures"},
 	"SetShellPreview": {"shell capture", "shell captures"},

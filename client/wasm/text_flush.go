@@ -123,10 +123,10 @@ func (a *App) contentKey(tileID string) string {
 	return tileID
 }
 
-// saveTextBeforeAscent posts the editor buffer and the window (scroll and
-// mode, textedit.Framing) when a pane leaves a text descent, through the
+// saveTextBeforeAscent posts the editor buffer and the scroll (where
+// the doc is and the mode, textedit.Scroll) when a pane leaves a text descent, through the
 // dispatcher like every other mutation. Leaving writes the row's whole
-// window, inside a pane tile too: see textedit.RowFraming.
+// scroll, inside a pane tile too: see textedit.RowScroll.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// A url or shell row carries no text framing, and the server rejects a
 	// non-text kind with InvalidArgument.
@@ -147,18 +147,18 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	editable := rpc.TextDocument(file) && !a.tileReadOnly(file)
 	hasBuf = hasBuf && textedit.DecideFlush(true, editable, false) == textedit.FlushPost
 
-	// Only when something moved: see textedit.Reframes. A pure
+	// Only when something moved: see textedit.ScrollMoved. A pure
 	// descend-and-ascent writes nothing, and leaves nothing in the cache
 	// either, since the next ascent diffs against what it finds there.
-	// A pane with no rect has no window to frame: see pane.FramingWriters.
+	// A pane with no rect has no scroll to write: see pane.FramingWriters.
 	_, sized := r.Size()
-	stored := textedit.FramingOf(file)
-	next := textedit.RowFraming(stored, textedit.Framing{X: scrollX, Y: scrollY, Mode: p.TextMode},
+	stored := textedit.ScrollOf(file)
+	next := textedit.RowScroll(stored, textedit.Scroll{X: scrollX, Y: scrollY, Mode: p.TextMode},
 		p.FramingTarget(a.ws.Depth() > 0).Layout, true)
-	reframed := sized && !p.ViewPending && textedit.Reframes(stored, next, !editable)
+	reframed := sized && !p.ViewPending && textedit.ScrollMoved(stored, next, !editable)
 	if reframed {
 		// Patched before the round trip, so the ascent transition reflects
-		// the framed window rather than the one the server still holds.
+		// the scroll it left rather than the one the server still holds.
 		a.c.PatchTile(file, func(t *gridwellv1.Tile) {
 			t.TextX, t.TextY, t.TextMode = next.X, next.Y, next.Mode
 		})
@@ -185,7 +185,7 @@ func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText,
 				TextX: next.X, TextY: next.Y, TextMode: next.Mode}}
 		a.do(write{
-			label: "SetTextView", gid: gid, id: file.Id,
+			label: "SetTextScroll", gid: gid, id: file.Id,
 			call: func(ctx context.Context) error {
 				_, err := a.cl.SetTile(ctx, req)
 				return err

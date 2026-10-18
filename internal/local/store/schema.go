@@ -19,7 +19,7 @@ package store
 //
 // A well row's one framing (view_cx, view_cy, view_zoom) is at once the
 // preview frame, the descent target and the ascent return. A text row carries
-// a doc-space window plus a rendered/text mode plus blob_id. A url row carries
+// a doc-space scroll plus a rendered/text mode plus blob_id. A url row carries
 // the address and preview_blob_id, hash-deduped like text content.
 
 // pragmas are connection-level settings applied once at Open, before any

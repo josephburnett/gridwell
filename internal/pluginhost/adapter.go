@@ -803,7 +803,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 		t := req.GetTile()
 		switch t.GetKind() {
 		case rpc.KindText:
-			changed, err = a.mem.SetTextView(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode())
+			changed, err = a.mem.SetTextScroll(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode())
 		case rpc.KindURL:
 			changed, err = a.mem.SetURLPreview(id, req.Preview)
 		default:

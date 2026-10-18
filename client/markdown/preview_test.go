@@ -8,15 +8,15 @@ import (
 func almost(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 
 // A text preview renders at a constant scale, so the type size never follows
-// grid zoom or the stored framing and the tile is a window that reveals more
-// as it grows.
-func TestPreviewWindowFrame(t *testing.T) {
+// grid zoom or the stored framing and the tile reveals more of the doc as
+// it grows.
+func TestPreviewFrameOf(t *testing.T) {
 	const fixed = 1.0
 
 	// The scale is footprint-independent: zoom changes the tile px, not the
 	// type size.
 	for _, innerW := range []float64{40, 160, 640} {
-		f := PreviewWindowFrame(innerW, fixed, 1.0, 0, 0)
+		f := PreviewFrameOf(innerW, fixed, 1.0, 0, 0)
 		if !almost(f.Scale, fixed) {
 			t.Errorf("innerW %v: Scale = %v, want the constant %v", innerW, f.Scale, fixed)
 		}
@@ -28,19 +28,19 @@ func TestPreviewWindowFrame(t *testing.T) {
 	}
 
 	// content_zoom scales the type and narrows the wrap width to match.
-	f := PreviewWindowFrame(200, fixed, 2.0, 0, 0)
+	f := PreviewFrameOf(200, fixed, 2.0, 0, 0)
 	if !almost(f.Scale, 2.0) || !almost(f.ContentW, 100) {
 		t.Errorf("contentZoom 2: frame = %+v, want scale 2 contentW 100", f)
 	}
 
-	// The stored scroll places the window.
-	f = PreviewWindowFrame(200, fixed, 1.0, 3, 47)
+	// The stored scroll places the crop.
+	f = PreviewFrameOf(200, fixed, 1.0, 3, 47)
 	if f.ScrollX != 3 || f.ScrollY != 47 {
 		t.Errorf("scroll = (%v, %v), want (3, 47)", f.ScrollX, f.ScrollY)
 	}
 
 	// A degenerate content zoom can't zero the scale.
-	f = PreviewWindowFrame(200, fixed, 0, 0, 0)
+	f = PreviewFrameOf(200, fixed, 0, 0, 0)
 	if !almost(f.Scale, fixed) {
 		t.Errorf("zero zoom: Scale = %v, want fallback %v", f.Scale, fixed)
 	}
@@ -65,8 +65,8 @@ func TestPreviewContentVisible(t *testing.T) {
 // pane's width cannot leak into a preview and re-wrap it.
 func TestPreviewFrameHasNoCrossPaneInputs(t *testing.T) {
 	// The same tile facts give the same frame.
-	a := PreviewWindowFrame(160, 1.0, 1.5, 2, 9)
-	b := PreviewWindowFrame(160, 1.0, 1.5, 2, 9)
+	a := PreviewFrameOf(160, 1.0, 1.5, 2, 9)
+	b := PreviewFrameOf(160, 1.0, 1.5, 2, 9)
 	if a != b {
 		t.Errorf("frame is not a pure function of the tile's facts: %+v vs %+v", a, b)
 	}

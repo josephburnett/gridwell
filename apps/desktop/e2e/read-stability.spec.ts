@@ -25,12 +25,12 @@ import { settle } from './cadence';
 async function framingWrites(window: any): Promise<number> {
   return window.evaluate(() => {
     const p = (window as any).__gridwellTest.persistPosts();
-    return Number(p.SetFraming ?? 0) + Number(p.SetTextView ?? 0) + Number(p.SetContentZoom ?? 0);
+    return Number(p.SetFraming ?? 0) + Number(p.SetTextScroll ?? 0) + Number(p.SetContentZoom ?? 0);
   });
 }
 
 // stable is what a look may not change: where the tile sits, how the grid
-// behind it was framed, which window of it was shown, and the version that
+// behind it was framed, where it was scrolled, and the version that
 // means its bytes.
 function stable(t: Record<string, unknown> | undefined): string {
   const n = (k: string) => Number(t?.[k] ?? 0);
@@ -171,7 +171,7 @@ for (const kind of ['well', 'markdown'] as const) {
   });
 }
 
-// A document longer than its window: the editor's bytes are written into the
+// A document longer than its pane: the editor's bytes are written into the
 // textarea on the descent, and a browser leaves the caret of written bytes at
 // their end and scrolls to it. That is a scroll no one made, so the trip must
 // land at the top and write nothing.
@@ -226,9 +226,9 @@ test("a document framed in another pane size is looked at without a write", asyn
   await gw.openPalette();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
-  const { updateText, setTextView } = await import('./oracle');
+  const { updateText, setTextScroll } = await import('./oracle');
   await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
-  await setTextView(gw.origin, doc.id, { x: 0, y: 240, w: 123, h: 45, mode: 'rendered' });
+  await setTextScroll(gw.origin, doc.id, { x: 0, y: 240, w: 123, h: 45, mode: 'rendered' });
   await expect
     .poll(async () => Number(tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)?.textH ?? 0))
     .toBe(45);
@@ -252,6 +252,6 @@ test("a document framed in another pane size is looked at without a write", asyn
   await settle(window, settleMs);
 
   const after = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
-  expect(stable(after), 'the look rewrote the window another device left').toBe(stable(before));
+  expect(stable(after), 'the look rewrote the scroll another device left').toBe(stable(before));
   expect(await framingWrites(window), 'the look dispatched a framing write').toBe(writes);
 });

@@ -110,7 +110,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 	return sr.img, madeAt, true
 }
 
-// drawRenderedPreview windows the tile's raster into the box; see
+// drawRenderedPreview crops the tile's raster into the box; see
 // markdown.PreviewRasterDraw. False means the caller paints the raw fallback.
 func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFrame,
 	x, y, w, h, topInset float64) bool {

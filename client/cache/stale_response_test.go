@@ -13,8 +13,8 @@ import (
 
 // Trace 2026-10-04 seq 966-986, tile 1552: a content save and a scroll
 // settle race. The node writes WriteContent (v2, old framing) then
-// SetTextView (v2, new framing); the client applies both echoes, then the
-// WriteContent response, a snapshot from before the SetTextView, folds in at
+// SetTextScroll (v2, new framing); the client applies both echoes, then the
+// WriteContent response, a snapshot from before the SetTextScroll, folds in at
 // the same version and puts the old framing back. The next settle diffs the
 // pane against that row and re-sends a framing the node already holds.
 func TestWriteResponseDoesNotRevertALaterSameVersionFraming(t *testing.T) {
@@ -35,8 +35,8 @@ func TestWriteResponseDoesNotRevertALaterSameVersionFraming(t *testing.T) {
 	c.PatchTile(g.Tiles["1552"], func(t *gridwellv1.Tile) { t.TextY = newY })
 	// The node's two echoes, in its write order.
 	c.Apply(echo(row(2, oldY))) // WriteContent
-	c.Apply(echo(row(2, newY))) // SetTextView
-	// postWriteContent's response, read by the node before the SetTextView.
+	c.Apply(echo(row(2, newY))) // SetTextScroll
+	// postWriteContent's response, read by the node before the SetTextScroll.
 	c.PutWriteResponse("1", row(2, oldY), WroteBody)
 
 	g, _ = c.Grid("1")
@@ -45,9 +45,9 @@ func TestWriteResponseDoesNotRevertALaterSameVersionFraming(t *testing.T) {
 		t.Errorf("cached TextY = %d after the WriteContent response, want %d: the node holds %d, "+
 			"so the cache reverted a later same-version framing write", got.TextY, newY, newY)
 	}
-	pane := textedit.Framing{Y: newY, Mode: rpc.TextModeText}
-	if textedit.Reframes(textedit.FramingOf(got), pane, false) {
-		t.Errorf("the next settle re-sends SetTextView %+v, which the node already holds", pane)
+	pane := textedit.Scroll{Y: newY, Mode: rpc.TextModeText}
+	if textedit.ScrollMoved(textedit.ScrollOf(got), pane, false) {
+		t.Errorf("the next settle re-sends SetTextScroll %+v, which the node already holds", pane)
 	}
 }
 

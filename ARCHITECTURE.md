@@ -361,7 +361,7 @@ keys the write). A pan inside a pane tile writes the blob and never a
 framing row (`pane.FramingOwner.Layout`); a frame the blob has no view for
 starts at its framing row. A text leaf's live scroll is the blob's too once
 the user moves it: a settle there takes only the mode to its tile row, and
-an ascent writes the row's whole window, where the tile was left. A
+an ascent writes the row's whole scroll, where the tile was left. A
 pane tile swaps the whole
 pane tree instead — that is the one second axis (`levels.go`), and it is
 session-only.
@@ -443,8 +443,8 @@ control; a click flips the source marker through the normal edit path. Every
 other view paints soft-wrapped source on canvas at the same columns as the
 textarea, so nothing reflows on focus. Previews render at constant scale from
 the tile's own facts alone. A rendered preview is a raster made at a width
-bucket and drawn at that scale, never stretched to the box: the box is a
-window that clips it or leaves a margin (`markdown.PreviewRasterDraw`), and
+bucket and drawn at that scale, never stretched to the box: the box clips
+it or leaves a margin (`markdown.PreviewRasterDraw`), and
 while a new bucket rasterizes, the nearest ready one of the same version
 stands in (`rasterprev.Cache`).
 
@@ -676,7 +676,7 @@ pane is inside" and do not spread the word.
 | A hop peels in exactly what it prepends out | one field list, `rpc.tileIDFields`; `TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest`, `TestIdsWrittenIntoAFarGridComeBackAsSent` |
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
-| Text preview never re-wraps | `PreviewWindowFrame` takes only the tile's facts |
+| Text preview never re-wraps | `PreviewFrameOf` takes only the tile's facts |
 | Text letters never follow grid zoom | `PreviewRasterDraw` draws at the frame's scale; `preview-letter-height.spec.ts` |
 | Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place`, `setHidden` and `move`; `url-focus-steal.spec.ts`, the capture harness |
 | Menu changes only by user action | `client/menu` |

@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
 // A text tile's letters keep their size at every moment of a grid zoom: the
-// box is a window that reveals more as it grows (markdown.PreviewWindowFrame).
+// box reveals more of the doc as it grows (markdown.PreviewFrameOf).
 // A rendered preview is a raster made at a width bucket, so the spec zooms
 // until the box crosses into a second bucket and reads, through the textFaces
 // hook, the drawImage rects of each painted face: the drawn scale is the

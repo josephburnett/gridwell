@@ -38,7 +38,7 @@ const (
 	// EffPersistFraming writes one pane's framing onto the row that owns it:
 	// PaneID, Owner, Door (true for the doorway arm).
 	EffPersistFraming
-	EffSaveText            // posts an editor buffer and framed window: PaneID, TileID
+	EffSaveText            // posts an editor buffer and scroll: PaneID, TileID
 	EffFlushDirtyText      // flushes every unsaved edit now
 	EffFlushLayout         // persists the pane-tile layout blob now
 	EffFlushDroppedSubtree // flushes the writebacks a closing subtree owes
