@@ -230,7 +230,7 @@ func TestMCPSessionsMarksTheScreenHoldingYourShell(t *testing.T) {
 	tile := f.createShell(t, 0, 0)
 	desk := viewer(t, f.hs, "desktop", focusedOn(f.root))
 	attach(t, f, desk, tile.Id)
-	waitSession(t, f.fake)
+	waitAttachment(t, f.fake)
 	phone := viewer(t, f.hs, "browser", focusedOn(f.root))
 
 	key := rpc.LocalOf(rpc.ShellTmux(tile))
