@@ -73,40 +73,40 @@ func PopEphemeralContent(t *Tree, ephemeral func(p *Pane, contentID string) bool
 
 // Levels is the window's nesting, bottom (first entered) to top (current).
 type Levels struct {
-	frames []Level
+	levels []Level
 }
 
 // Depth is how many workspace tiles deep the window is; 0 is the session tree.
-func (s *Levels) Depth() int { return len(s.frames) }
+func (s *Levels) Depth() int { return len(s.levels) }
 
-func (s *Levels) Push(f Level) { s.frames = append(s.frames, f) }
+func (s *Levels) Push(f Level) { s.levels = append(s.levels, f) }
 
 // Pop leaves the current workspace tile, returning its level.
 func (s *Levels) Pop() (Level, bool) {
-	if len(s.frames) == 0 {
+	if len(s.levels) == 0 {
 		return Level{}, false
 	}
-	f := s.frames[len(s.frames)-1]
-	s.frames = s.frames[:len(s.frames)-1]
+	f := s.levels[len(s.levels)-1]
+	s.levels = s.levels[:len(s.levels)-1]
 	return f, true
 }
 
 // Top returns the current level, mutable so the persister can update
 // savedHash in place, or nil at depth 0.
 func (s *Levels) Top() *Level {
-	if len(s.frames) == 0 {
+	if len(s.levels) == 0 {
 		return nil
 	}
-	return &s.frames[len(s.frames)-1]
+	return &s.levels[len(s.levels)-1]
 }
 
 // Claim is the version a layout write to tileID claims, read at send time
 // because the write before it on the save chain may have just landed: the
 // innermost open level's basis, or fallback once no level is open on it.
 func (s *Levels) Claim(tileID string, fallback int64) int64 {
-	for i := len(s.frames) - 1; i >= 0; i-- {
-		if s.frames[i].TileID == tileID {
-			return s.frames[i].Basis
+	for i := len(s.levels) - 1; i >= 0; i-- {
+		if s.levels[i].TileID == tileID {
+			return s.levels[i].Basis
 		}
 	}
 	return fallback
@@ -117,8 +117,8 @@ func (s *Levels) Claim(tileID string, fallback int64) int64 {
 // landed; one on any other basis was not the writer's and keeps it, so its next
 // write is refused rather than overwriting what it never read.
 func (s *Levels) Landed(tileID string, claimed, landed int64) {
-	for i := range s.frames {
-		if f := &s.frames[i]; f.TileID == tileID && f.Basis == claimed {
+	for i := range s.levels {
+		if f := &s.levels[i]; f.TileID == tileID && f.Basis == claimed {
 			f.Basis = landed
 		}
 	}
@@ -127,34 +127,34 @@ func (s *Levels) Landed(tileID string, claimed, landed int64) {
 // At returns the level at a 1-based nesting depth, mutable so the crumb
 // rename can update Name in place, or nil when out of range.
 func (s *Levels) At(level int) *Level {
-	if level < 1 || level > len(s.frames) {
+	if level < 1 || level > len(s.levels) {
 		return nil
 	}
-	return &s.frames[level-1]
+	return &s.levels[level-1]
 }
 
 // PopCountTo is how many levels to leave to be inside level k, level 0 being
 // the session outside every workspace tile. Clicking the current boundary pops
 // nothing.
 func (s *Levels) PopCountTo(level int) int {
-	if level < 0 || level >= len(s.frames) {
+	if level < 0 || level >= len(s.levels) {
 		return 0
 	}
-	return len(s.frames) - level
+	return len(s.levels) - level
 }
 
 // tileIDs is the workspace tile of each level, outermost first.
 func (s *Levels) tileIDs() []string {
 	var out []string
-	for _, f := range s.frames {
+	for _, f := range s.levels {
 		out = append(out, f.TileID)
 	}
 	return out
 }
 
 func (s *Levels) Names() []string {
-	out := make([]string, len(s.frames))
-	for i, f := range s.frames {
+	out := make([]string, len(s.levels))
+	for i, f := range s.levels {
 		out[i] = f.Name
 	}
 	return out
