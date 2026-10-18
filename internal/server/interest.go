@@ -19,8 +19,8 @@ import (
 // Session is one client's view as the node holds it; see interest.Session.
 type Session = interest.Session
 
-// Sessions is each session whose event stream is open and that has said what
-// it shows, by id.
+// Sessions is each session that has said what it shows, open or away; see
+// interest.Book.Sessions.
 func (s *Server) Sessions() []Session { return s.interest.Sessions() }
 
 // SetView books one session's view. It has no id to route: every grid it shows

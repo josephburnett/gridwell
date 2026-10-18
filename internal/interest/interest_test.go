@@ -119,10 +119,9 @@ func union(b *Book) []string {
 	return slices.Clone(b.union)
 }
 
-// A session's view is listed while a stream carrying it is open and not after,
-// with when it last changed: the same view said again after a re-open is no
-// change.
-func TestSessionsListOnlyOpenStreams(t *testing.T) {
+// A session's view is listed once a stream carrying it is open, with when it
+// last changed: the same view said again after a re-open is no change.
+func TestSessionsListOnceAStreamOpens(t *testing.T) {
 	b, _ := record()
 	clock := time.Unix(100, 0)
 	b.now = func() time.Time { return clock }
@@ -148,7 +147,45 @@ func TestSessionsListOnlyOpenStreams(t *testing.T) {
 		t.Errorf("a new view left changed at %v, want 200", c)
 	}
 	closeA()
+	if got := b.Sessions(); len(got) != 1 || got[0].Open {
+		t.Errorf("after the stream closed, sessions = %v, want a listed away", got)
+	}
+}
+
+// A session whose last stream closed is listed away, with when, for AwayFor
+// and not after; a stream opened again clears it. An away session watches
+// nothing.
+func TestAwaySessionsListedForAwayFor(t *testing.T) {
+	b, _ := record()
+	clock := time.Unix(100, 0)
+	b.now = func() time.Time { return clock }
+	view := &pb.SetViewRequest{Label: "browser", ShownGridIds: []string{"p/2"},
+		Panes: []*pb.ViewPane{{Id: "p0", Anchor: "p/1", GridId: "p/2", Focused: true}}}
+	closeA := b.Open("a")
+	b.Set("a", view)
+	if got := b.Sessions(); len(got) != 1 || !got[0].Open || !got[0].Away.IsZero() {
+		t.Fatalf("with its stream open, sessions = %v, want a open", got)
+	}
+	clock = time.Unix(150, 0)
+	closeA()
+	got := b.Sessions()
+	if len(got) != 1 || got[0].ID != "a" || got[0].Open || !got[0].Away.Equal(time.Unix(150, 0)) ||
+		got[0].View.GetLabel() != "browser" {
+		t.Fatalf("after the stream closed, sessions = %v, want a away since 150", got)
+	}
+	if u := union(b); len(u) != 0 {
+		t.Errorf("an away session counts %v, want nothing watched", u)
+	}
+	clock = time.Unix(150, 0).Add(AwayFor)
+	if got := b.Sessions(); len(got) != 1 {
+		t.Errorf("at the bound, sessions = %v, want a still listed", got)
+	}
+	clock = clock.Add(time.Second)
 	if got := b.Sessions(); len(got) != 0 {
-		t.Errorf("after the stream closed, sessions = %v, want none", got)
+		t.Errorf("past the bound, sessions = %v, want none", got)
+	}
+	b.Open("a")
+	if got := b.Sessions(); len(got) != 1 || !got[0].Open || !got[0].Away.IsZero() {
+		t.Errorf("open again, sessions = %v, want a open with no away time", got)
 	}
 }
