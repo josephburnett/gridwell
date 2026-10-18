@@ -151,7 +151,8 @@ func TestBorderColorShellTile(t *testing.T) {
 }
 
 func TestBorderColorTextInHostGridIsHost(t *testing.T) {
-	// A text tile inside a host-content grid XX	// state, so the editable color would lie. A url tile in one is still a url.
+	// A text tile inside a host-content grid is a read-only view onto host
+	// state, so the editable color would lie. A url tile in one is still a url.
 	in := BorderInput{
 		HasTextFocus: true,
 		DescentDepth: 1,
