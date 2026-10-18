@@ -284,7 +284,7 @@ func TestConnectionSpawn(t *testing.T) {
 	deepCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
-	if deepCopy["reference"] == true {
+	if deepCopy["link"] == true {
 		t.Fatal("the deep copy must be SOLID (a copy), not a link")
 	}
 	copiedGrid := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": deepCopy["childGridId"]})
@@ -310,8 +310,8 @@ func TestConnectionSpawn(t *testing.T) {
 	if link["childGridId"] != wellChild {
 		t.Fatalf("link child = %v, want the shared remote grid %s", link["childGridId"], wellChild)
 	}
-	if link["reference"] != true {
-		t.Fatal("the link must arrive as a dashed reference")
+	if link["link"] != true {
+		t.Fatal("the link must arrive as a dashed link")
 	}
 	got, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), txt["id"].(string))
 	if err != nil {

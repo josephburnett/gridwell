@@ -963,7 +963,7 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 }
 
 // MintRef passes the mint through to the source. It is a write, so there is
-// nothing to serve when the source is dark: a reference that cannot be minted
+// nothing to serve when the source is dark: a link that cannot be minted
 // must not be stored.
 func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
 	return namespace.MintRef(ctx, l.Namespace, localID)

@@ -74,7 +74,7 @@ test.describe('a page whose file is gone', () => {
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;
     await createLeafLink(gw.origin, f.gridID, entry!.id!, 'gone.png', cx, cy, 'url');
-    await expect.poll(async () => tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)?.reference).toBe(true);
+    await expect.poll(async () => tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)?.link).toBe(true);
 
     // A url link shows no preview of its own, so the click is the first read of
     // its target, and that read is what hears the target is gone.

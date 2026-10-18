@@ -271,7 +271,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	}
 	switch t.Kind {
 	case rpc.KindWell:
-		// child_grid_id set makes an exit well: the qualified reference is
+		// child_grid_id set makes an exit well: the qualified link is
 		// stored verbatim, with no interior grid.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,

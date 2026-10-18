@@ -33,7 +33,7 @@ func qualifyField(prefix string, id *string, optional bool) {
 }
 
 // TransitQualifyTiles prepends prefix to every id in a tile, an
-// already-qualified child included. The wire Reference bit rides verbatim,
+// already-qualified child included. The wire Link bit rides verbatim,
 // because the far side already decided what is a link and a remote plugin's
 // interior well stays owned though its child id contains "/".
 func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
@@ -63,7 +63,7 @@ func QualifyOwnIDs(uuid string, t *pb.Tile) {
 // hop removes, and only from an id served through the namespace chain Via; any
 // other id crosses verbatim, to be refused behind the hop rather than
 // misresolved. Transit says the namespace behind the hop fronts other nodes'
-// chains, where a reference is peeled like every id.
+// chains, where a link is peeled like every id.
 type Hop struct {
 	Seg, Via string
 	Transit  bool
@@ -71,7 +71,7 @@ type Hop struct {
 
 // InboundHop is the peel for a request routed on the qualified id routed, at
 // the node nodeID. Via is OwnerNamespaceOf's answer, so behind a node a
-// reference is peeled only when it chains through the same connection as the
+// link is peeled only when it chains through the same connection as the
 // routed id. A connection passes nodeID "": its namespace is the first segment.
 func InboundHop(routed, nodeID string, transit bool) Hop {
 	return Hop{Seg: UUIDOf(routed), Via: OwnerNamespaceOf(routed, nodeID), Transit: transit}

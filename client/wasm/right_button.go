@@ -390,7 +390,7 @@ func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 		a.cancelDragSnapBack(d)
 		return
 	case dragdrop.DropLink:
-		// Ctrl was held at the press: the destination gains a reference and the
+		// Ctrl was held at the press: the destination gains a link and the
 		// source stays put, whatever namespace it landed in. The one link commit
 		// the cross-namespace left-drag also uses.
 		a.landGhostAtCell(t, dropX, dropY)

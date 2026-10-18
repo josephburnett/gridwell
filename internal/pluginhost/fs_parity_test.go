@@ -199,7 +199,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	// thing for good — but nothing the retired row held comes back with it: the
 	// file is listed at its hint again, not at the 4,4 the user had chosen, and
 	// the retired row stays retired (TestRetiredKeyStaysRetiredWithoutIdBurn),
-	// so a reference stored against it is dead for good.
+	// so a link stored against it is dead for good.
 	if err := os.WriteFile(filepath.Join(root, "data.bin"), []byte{9}, 0o644); err != nil {
 		t.Fatal(err)
 	}

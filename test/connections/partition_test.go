@@ -193,7 +193,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	copyResp := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": well["id"], "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
-	if copyResp["reference"] == true {
+	if copyResp["link"] == true {
 		t.Fatal("the offline copy's top well must be SOLID (its grid was cached)")
 	}
 	cg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": copyResp["childGridId"]})

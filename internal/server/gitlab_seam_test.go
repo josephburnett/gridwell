@@ -205,7 +205,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 //
 // Delete here means "mark the todo done at GitLab": the tile stays and changes
 // state, so the node must keep the row it minted, which is where the placement
-// the user chose and the identity every stored reference names both live.
+// the user chose and the identity every stored link names both live.
 // Retiring it on the plugin's word would snap the tile back under a fresh id
 // and kill every link to it, which is why this journey moves the tile, links
 // to it, and then trashes it.
@@ -276,7 +276,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("link to a todo: %v", err)
 	}
-	// A reference at rest names a row, so the link's target is the id the
+	// A link at rest names a row, so the link's target is the id the
 	// delete is about to decide the fate of.
 	if link.LinkTargetId != todo.Id {
 		t.Fatalf("link target = %q, want the moved todo %q", link.LinkTargetId, todo.Id)
@@ -296,7 +296,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 	}
 	kept := after.Tiles[0]
 	if kept.Id != todo.Id {
-		t.Errorf("the todo came back under a fresh id %q, want %q: every stored reference to it is now dead", kept.Id, todo.Id)
+		t.Errorf("the todo came back under a fresh id %q, want %q: every stored link to it is now dead", kept.Id, todo.Id)
 	}
 	if kept.X != 5 || kept.Y != 5 || kept.W != 3 || kept.H != 2 {
 		t.Errorf("the todo snapped back to its hint: %+v, want the 5,5 3x2 the user left", kept)

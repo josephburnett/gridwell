@@ -425,7 +425,7 @@ func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.PluginInfo) st
 
 // TestCreateScratchURLRoutes: creating a url tile whose grid is home's
 // qualified scratch grid is an ephemeral visit — it routes path-free into the
-// scratch grid (no descent path leads there) and the tile carries reference=false
+// scratch grid (no descent path leads there) and the tile carries link=false
 // (it's owned content, just off-grid), with the typed URL. This proves the
 // whole client→server→plugin path-free path the "descend into a url" feature uses.
 func TestCreateScratchURLRoutes(t *testing.T) {
@@ -445,8 +445,8 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	if tile.Kind != rpc.KindURL || tile.UrlString != "https://example.com/ephemeral" {
 		t.Errorf("scratch tile = %+v, want a url tile with the typed URL", tile)
 	}
-	if tile.Reference {
-		t.Error("an ephemeral url tile is owned content (off-grid), not a reference")
+	if tile.Link {
+		t.Error("an ephemeral url tile is owned content (off-grid), not a link")
 	}
 	// It must be readable back from the scratch grid (descent + autocomplete).
 	g, err := cl.GetGrid(ctx, scratch)
@@ -502,11 +502,11 @@ func TestMountByCopy(t *testing.T) {
 	if !strings.HasPrefix(tile.ChildGridId, procPluginUUID+"/") {
 		t.Errorf("child_grid_id = %q, want %q prefix", tile.ChildGridId, procPluginUUID)
 	}
-	// A mount is a LINK: the server must stamp reference=true on the way back
+	// A mount is a LINK: the server must stamp link=true on the way back
 	// through the wire, so the client renders it dashed (and a delete unlinks
 	// only). This is the bit render reads instead of guessing from uuids.
-	if !tile.Reference {
-		t.Error("mounted well must arrive as a reference (dashed link), got reference=false")
+	if !tile.Link {
+		t.Error("mounted well must arrive as a link (dashed link), got link=false")
 	}
 }
 

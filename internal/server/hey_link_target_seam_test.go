@@ -27,7 +27,7 @@ func TestHeyLinkTargetReadsWithItsContextUnlisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := tileWithLabel(t, aside.Msg, "Lease renewal")
-	if link.LinkTargetId == "" || !link.Reference {
+	if link.LinkTargetId == "" || !link.Link {
 		t.Fatalf("the Set Aside row is no link: %v", link)
 	}
 	if link.ServesPage || link.UrlString != "" {

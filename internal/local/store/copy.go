@@ -58,7 +58,7 @@ func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (i
 
 // childGridForCopy returns the child_grid_id a copy of tile n should carry,
 // ready to bind into the INSERT. An interior well gets a deep copy of its
-// subtree; an exit well keeps its qualified cross-plugin reference, since
+// subtree; an exit well keeps its qualified cross-plugin link, since
 // another plugin owns that grid; everything else gets nil.
 func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile) (any, error) {
 	if n.ChildGridId == "" {
@@ -311,8 +311,8 @@ func nullToInt(n sql.NullInt64) int64 {
 
 // tileRefs is the one description of what a tile owns: an interior well's
 // child grid, and the blob it holds a refcount on. childGrid is the stored
-// child_grid_id; an exit well's is a qualified reference that does not parse
-// as a local grid id, so it owns no grid and only the reference goes.
+// child_grid_id; an exit well's is a qualified link that does not parse
+// as a local grid id, so it owns no grid and only the link goes.
 // Single-delete and grid teardown both route through it.
 func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch {

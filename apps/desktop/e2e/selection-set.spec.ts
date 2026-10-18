@@ -124,7 +124,7 @@ test('a right-drag on a selected tile copies the set in its layout', async ({ gw
   for (const [copy, src] of [[ca, a], [cb, b]] as const) {
     expect(copy, 'a copy at the offset').toBeTruthy();
     expect(copy!.id).not.toBe(src.id);
-    expect(copy!.reference ?? false, 'a copy, not a link').toBe(false);
+    expect(copy!.link ?? false, 'a copy, not a link').toBe(false);
   }
   expect(tileAt(snap, 'text', cx - 1, cy)?.id, 'the sources stay').toBe(a.id);
   expect(tileAt(snap, 'text', cx + 1, cy)?.id).toBe(b.id);
@@ -138,8 +138,8 @@ test('a ctrl + right-drag on a selected tile links the set', async ({ gw }) => {
   const lb = tileAt(snap, 'text', cx + 1, cy - 2);
   expect(la?.linkTargetId, 'a link to a').toBe(a.id);
   expect(lb?.linkTargetId, 'a link to b').toBe(b.id);
-  expect(la?.reference).toBe(true);
-  expect(lb?.reference).toBe(true);
+  expect(la?.link).toBe(true);
+  expect(lb?.link).toBe(true);
 });
 
 test('dropping a selected tile on the trashcan deletes the set', async ({ gw }) => {

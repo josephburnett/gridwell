@@ -14,7 +14,7 @@ export interface Tile {
   h?: number | string;
   childGridId?: string;
   linkTargetId?: string;
-  reference?: boolean;
+  link?: boolean;
   [k: string]: unknown;
 }
 
@@ -139,7 +139,7 @@ function placementOf(t: Tile) {
   return { gridId: t.gridId, x: Number(t.x ?? 0), y: Number(t.y ?? 0), w: Number(t.w ?? 0), h: Number(t.h ?? 0) };
 }
 
-// A foreign writer moving a tile out from under the app's stored references,
+// A foreign writer moving a tile out from under the app's stored links,
 // claiming the placement it read.
 export async function moveTile(
   origin: string,
@@ -250,7 +250,7 @@ export async function shellSessionAlive(origin: string, tileId: string): Promise
 }
 
 // A well whose child grid is a qualified id in another namespace. The node
-// stores the reference verbatim and cannot check the namespace exists, so this
+// stores the link verbatim and cannot check the namespace exists, so this
 // is also how a spec seeds a dangling link.
 export async function createExitWell(
   origin: string,

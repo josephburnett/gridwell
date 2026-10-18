@@ -50,14 +50,14 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
   // grid lives in a namespace the node has never heard of. That is what a link
   // left behind by a removed plugin looks like on disk.
   const dead = await createExitWell(gw.origin, f.gridID, `${GONE}/1`, 'old files', cx, cy);
-  expect(dead.id, 'the server accepted the dangling reference').toBeTruthy();
+  expect(dead.id, 'the server accepted the dangling link').toBeTruthy();
 
   // The client must see it as a link and as dead.
   await expect
     .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
     .toBe(1);
   const row = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
-  expect(row.reference, 'still a link — dashed, and deleting it only unlinks').toBe(true);
+  expect(row.link, 'still a link — dashed, and deleting it only unlinks').toBe(true);
   expect(row.altText, 'the label survives: you can still see what it was').toBe('old files');
 
   // Give a notice time to appear before asserting none did.
@@ -115,7 +115,7 @@ test.describe('a declared namespace is never dead', () => {
     // Wait for the tile to be drawn, so the verdict has every chance to fire
     // wrongly before asserting it did not.
     await expect
-      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)?.reference)
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)?.link)
       .toBe(true);
     await window.waitForTimeout(1_000);
     expect(await deadLinks(window, f.gridID), 'a declared plugin is alive').toEqual([]);
@@ -144,7 +144,7 @@ test.describe('a declared namespace is never dead', () => {
       .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
       .toBe(1);
     const row = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
-    expect(row.reference, 'still a link').toBe(true);
+    expect(row.link, 'still a link').toBe(true);
     expect(row.altText, 'the label survives').toBe('gone.md');
     await window.waitForTimeout(1_500);
     const e = await errors(window);

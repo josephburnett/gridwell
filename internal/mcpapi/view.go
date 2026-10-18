@@ -121,7 +121,7 @@ func tileOf(t *pb.Tile, roster []*pb.PluginInfo, node string) Tile {
 	out := Tile{ID: t.GetId(), Kind: t.GetKind(), Name: t.GetAltText(), Grid: t.GetGridId(),
 		X: t.GetX(), Y: t.GetY(), W: t.GetW(), H: t.GetH(), Version: t.GetVersion(),
 		Link: deadref.TargetID(t), ReadOnly: t.GetReadOnly()}
-	if rpc.IsWellKind(t.GetKind()) && !t.GetReference() {
+	if rpc.IsWellKind(t.GetKind()) && !t.GetLink() {
 		out.ChildGrid = t.GetChildGridId()
 	}
 	out.Dead = roster != nil && deadref.DeadTile(t, roster, node, nil)

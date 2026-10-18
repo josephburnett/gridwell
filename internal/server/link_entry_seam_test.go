@@ -195,8 +195,8 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 	ctx := context.Background()
 
 	link := boxLink(t, cl)
-	if !link.Reference || link.LinkTargetId != threadID() {
-		t.Fatalf("box tile = reference %v target %q, want a link to %q", link.Reference, link.LinkTargetId, threadID())
+	if !link.Link || link.LinkTargetId != threadID() {
+		t.Fatalf("box tile = link %v target %q, want a link to %q", link.Link, link.LinkTargetId, threadID())
 	}
 	if link.Kind != rpc.KindText || link.AltText != "● Lunch" || link.StatusDetail != "unseen" {
 		t.Fatalf("box tile = kind %q label %q status %q, want the box's own label on the target's kind",
@@ -253,7 +253,7 @@ func TestATouchedEntryThatBecomesALinkKeepsItsPlace(t *testing.T) {
 	ctx := context.Background()
 
 	before := boxLink(t, cl)
-	if before.Reference {
+	if before.Link {
 		t.Fatal("an entry with no link_target drew as a link")
 	}
 	if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: before.Id, X: 7, Y: -2, W: 2, H: 1})); err != nil {
@@ -264,8 +264,8 @@ func TestATouchedEntryThatBecomesALinkKeepsItsPlace(t *testing.T) {
 	if after.Id != before.Id || after.X != 7 || after.Y != -2 || after.W != 2 {
 		t.Fatalf("after = %s at (%d,%d) w%d, want %s where the user put it", after.Id, after.X, after.Y, after.W, before.Id)
 	}
-	if !after.Reference || after.LinkTargetId != threadID() {
-		t.Fatalf("after = reference %v target %q, want a link to the thread", after.Reference, after.LinkTargetId)
+	if !after.Link || after.LinkTargetId != threadID() {
+		t.Fatalf("after = link %v target %q, want a link to the thread", after.Link, after.LinkTargetId)
 	}
 }
 

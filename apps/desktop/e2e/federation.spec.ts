@@ -61,7 +61,7 @@ test('left-drag links a well across nodes; the source stays; deleting the link n
   const link = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(link, 'link created in home').toBeTruthy();
   expect(link.childGridId, 'the grid is SHARED, not copied').toBe(src.childGridId);
-  expect(link.reference, 'the link renders dashed').toBe(true);
+  expect(link.link, 'the link renders dashed').toBe(true);
 
   const srcStill = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
   expect(srcStill, 'source well stayed put — a cross-node left-drag is a link, not a move').toBeTruthy();
@@ -94,7 +94,7 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
   await gw.copyDragAcrossPanes(b.id, tx, ty, a.id, cx, cy);
   const copied = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(copied, 'the deep copy landed in home').toBeTruthy();
-  expect(copied.reference ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
+  expect(copied.link ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
   expect(copied.childGridId, 'an independent subtree, not the shared grid').not.toBe(srcWell.childGridId);
   expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'source well untouched').toBeTruthy();
 
@@ -102,7 +102,7 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
   await gw.leftDragAcrossPanes(b.id, tx - 1, ty, a.id, cx - 1, cy);
   const link = tileAt(await gw.getGrid(a.gridID), 'text', cx - 1, cy)!;
   expect(link, 'leaf link created in home').toBeTruthy();
-  expect(link.reference, 'the leaf link renders dashed').toBe(true);
+  expect(link.link, 'the leaf link renders dashed').toBe(true);
   expect(link.linkTargetId, 'the link names the source tile as content owner').toBe(srcText.id);
   expect(tileAt(await gw.getGrid(b.gridID), 'text', tx - 1, ty), 'source text stayed put').toBeTruthy();
 
@@ -130,7 +130,7 @@ test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }
   const mount = tileAt(await gw.getGrid(f.gridID), 'well', tx, ty)!;
   expect(mount, 'mount link created in the destination grid').toBeTruthy();
   expect(mount.childGridId, "the link points at the plugin's root").toBe(second.rootGridID);
-  expect(mount.reference, 'mounts are links — deletes will not propagate').toBe(true);
+  expect(mount.link, 'mounts are links — deletes will not propagate').toBe(true);
   expect(mount.altText, 'the mount carries the plugin label').toBe('second');
 
   await gw.descendCell(tx, ty);

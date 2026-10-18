@@ -288,7 +288,7 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 	placed := map[string]*gridwellv1.Tile{}
 	for i, grid := range []string{n.inbox, n.starred} {
 		before := n.tile(t, grid, "Invoice 41")
-		if before.Reference {
+		if before.Link {
 			t.Fatalf("%s drew a link from an entry with no link_target", grid)
 		}
 		if _, err := n.cl.MoveTile(ctx, claimtest.Claimed(t, n.cl, &gridwellv1.MoveTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1})); err != nil {
@@ -304,8 +304,8 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 		if after.Id != placed[grid].Id || after.X != 7 || after.Y != int64(-2-i) || after.W != 2 {
 			t.Errorf("%s: after = %s at (%d,%d) w%d, want %s where the user put it", grid, after.Id, after.X, after.Y, after.W, placed[grid].Id)
 		}
-		if !after.Reference || after.LinkTargetId != target.Id {
-			t.Errorf("%s: after = reference %v target %q, want a link to %s", grid, after.Reference, after.LinkTargetId, target.Id)
+		if !after.Link || after.LinkTargetId != target.Id {
+			t.Errorf("%s: after = link %v target %q, want a link to %s", grid, after.Link, after.LinkTargetId, target.Id)
 		}
 	}
 }

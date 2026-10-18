@@ -30,7 +30,7 @@ import (
 // What copies as what:
 //   - a solid well becomes a new well plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
-//   - an exit well or leaf link copies as a reference (CLAUDE.md, 2026-10-06);
+//   - an exit well or leaf link copies as a link (CLAUDE.md, 2026-10-06);
 //   - text and pane bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
@@ -86,11 +86,11 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 // answers nil.
 func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, t *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// The qualification every wire response gets decides whether this tile is
-	// a reference, so the copy and a fresh read cannot disagree.
+	// a link, so the copy and a fresh read cannot disagree.
 	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
 
 	switch {
-	case rpc.IsWellKind(q.Kind) && q.Reference:
+	case rpc.IsWellKind(q.Kind) && q.Link:
 		// The link names the shared child, qualified.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 	case rpc.IsWellKind(q.Kind):
@@ -177,7 +177,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	return freshCopy(ctx, dst, created), nil
 }
 
-// linkCopy is the copy a reference becomes and the copy a dark source degrades
+// linkCopy is the copy a link becomes and the copy a dark source degrades
 // to: exactly the exit well or leaf link a left-drag would have made. A well
 // links by the grid it opens and carries the framing the source was left at; a
 // leaf links by its target.
@@ -194,7 +194,7 @@ func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *
 
 // copyDst is where a deep copy writes: the destination namespace, the peel into
 // its frame, and holder, the grid the gesture named in this node's frame, whose
-// node holds every reference the copy writes.
+// node holds every link the copy writes.
 type copyDst struct {
 	namespace.Namespace
 	hop    rpc.Hop
@@ -203,13 +203,13 @@ type copyDst struct {
 
 // createCopy stores one copy row with the bytes it is born with. The create
 // goes straight to the destination namespace rather than back through
-// CreateTile, so the reference it may carry is canonicalized, spelled for its
+// CreateTile, so the link it may carry is canonicalized, spelled for its
 // holder and peeled into dst's frame here instead; see router.CreateTile.
 func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, tile *pb.Tile, content []byte) (*pb.TileResponse, error) {
-	if err := rt.mintReferences(ctx, tile); err != nil {
+	if err := rt.mintLinks(ctx, tile); err != nil {
 		return nil, err
 	}
-	if err := rt.spellReferences(ctx, dst.holder, tile); err != nil {
+	if err := rt.spellLinks(ctx, dst.holder, tile); err != nil {
 		return nil, err
 	}
 	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dst.hop.PeelTile(tile), Content: content})

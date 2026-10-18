@@ -28,9 +28,10 @@ KindText\b api/rpc/|client/cache/|client/pane/border\.go|client/tilepreview/|cli
 # link_target_id: rpc.Tile.ContentID resolves it, rpc.Tile.LeafLink asks
 # whether there is one, deadref reads it to name a dead namespace.
 \.LinkTargetID\b api/rpc/|client/deadref/
-# reference: isLinkTile draws it, deadref classifies it, pluginhealth's
-# UnrootedLink is the doorway precondition.
-\.Reference\b api/rpc/|client/deadref/|client/pluginhealth/|client/wasm/render\.go
+# link: isLinkTile draws it, deadref classifies it, pluginhealth's
+# UnrootedLink is the doorway precondition. A drop plan's Link is the
+# gesture's, not the tile's.
+\.Link\b api/rpc/|client/deadref/|client/pluginhealth/|client/wasm/render\.go|.*plan\.Link\b
 # The two grid-wide declarations. cache.Grid owns both, nil-safe.
 Meta\.HostContent\b client/cache/
 Meta\.Stale\b client/cache/

@@ -21,7 +21,7 @@ import (
 // Cross-plugin gesture semantics: a left-drag across a plugin boundary creates
 // a link, an exit well for a grid or a leaf link for a leaf, and a right-drag
 // creates a real copy, bytes for a leaf and a deep copy for a solid well. The
-// left-drag arrives as a plain CreateTile carrying a qualified reference, the
+// left-drag arrives as a plain CreateTile carrying a qualified link, the
 // same shape a + menu swatch drop uses, so both forms run through the real
 // router seam. Framing and labels ride every cross-plugin link and copy.
 
@@ -104,8 +104,8 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	if link.ChildGridId != well.ChildGridId {
 		t.Errorf("link child = %q, want the SOURCE well's grid %q (shared, not copied)", link.ChildGridId, well.ChildGridId)
 	}
-	if !link.Reference {
-		t.Error("cross-plugin link must be marked Reference (dashed border, unlink-only delete)")
+	if !link.Link {
+		t.Error("cross-plugin link must be marked Link (dashed border, unlink-only delete)")
 	}
 	if link.AltText != "recipes" {
 		t.Errorf("link label = %q, want the source's name", link.AltText)
@@ -135,7 +135,7 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 // TestCopyWellAcrossPluginsDeepCopies: a solid well right-dragged across
 // a plugin boundary DEEP-COPIES — the destination gains an independent
 // subtree, byte-identical bodies, framing preserved, provenance carried,
-// references inside copied as references — and editing the copy never
+// links inside copied as links — and editing the copy never
 // touches the source (no structural sharing across the boundary).
 func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
@@ -146,7 +146,7 @@ func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Fatalf("CreateWell: %v", err)
 	}
 	// Contents: a text body, a NESTED well with its own text, and a leaf
-	// LINK (which must copy as a reference, not as bytes).
+	// LINK (which must copy as a link, not as bytes).
 	inner, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# soup"))
 	if err != nil {
 		t.Fatal(err)
@@ -180,11 +180,11 @@ func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 	if copyTop.ViewCx != 7 || copyTop.ViewCy != 8 || copyTop.ViewZoom != 2.5 {
 		t.Errorf("framing lost: %+v", copyTop)
 	}
-	if copyTop.Reference {
+	if copyTop.Link {
 		t.Fatal("the copy must be a SOLID well (a copy, not a link)")
 	}
 
-	// The copied child grid: text bytes, the nested subtree, the reference.
+	// The copied child grid: text bytes, the nested subtree, the link.
 	cg, err := cl.GetGrid(ctx, copyTop.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +208,7 @@ func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Fatalf("copied body = %q (%v)", body, err)
 	}
 	if copiedLink.LinkTargetId != inner.Id {
-		t.Errorf("the leaf link must copy as a reference to the ORIGINAL target: %q", copiedLink.LinkTargetId)
+		t.Errorf("the leaf link must copy as a link to the ORIGINAL target: %q", copiedLink.LinkTargetId)
 	}
 	ng, err := cl.GetGrid(ctx, copiedNested.ChildGridId)
 	if err != nil || len(ng.Tiles) != 1 {
@@ -253,8 +253,8 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	if link.Kind != rpc.KindText || link.LinkTargetId != txt.Id {
 		t.Errorf("link shape: kind=%q target=%q, want text → %q", link.Kind, link.LinkTargetId, txt.Id)
 	}
-	if !link.Reference {
-		t.Error("leaf link must be marked Reference (dashed border, unlink-only delete)")
+	if !link.Link {
+		t.Error("leaf link must be marked Link (dashed border, unlink-only delete)")
 	}
 	// One copy: content is read THROUGH the target id the link carries.
 	body, _, _, err := cl.ReadContent(ctx, link.LinkTargetId)
@@ -467,7 +467,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cross-plugin link from fs: %v", err)
 	}
-	// A reference at rest holds the address the client dragged, which is the
+	// A link at rest holds the address the client dragged, which is the
 	// one name that grid answers to, and it must open exactly the same grid —
 	// shared, not copied.
 	if link.ChildGridId == "" || !strings.HasPrefix(link.ChildGridId, fsUUID+"/") {
@@ -485,8 +485,8 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 		t.Errorf("the link opens %q, the dragged tile opens %q: not the same grid",
 			viaLink.Grid.Id, viaSource.Grid.Id)
 	}
-	if !link.Reference {
-		t.Error("cross-plugin link must be marked Reference (dashed border)")
+	if !link.Link {
+		t.Error("cross-plugin link must be marked Link (dashed border)")
 	}
 	if link.AltText != "sub" {
 		t.Errorf("link label = %q, want the directory's name", link.AltText)

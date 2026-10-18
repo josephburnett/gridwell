@@ -45,7 +45,7 @@ func Classify(pl *gridwellv1.PluginInfo) (Status, bool) {
 // alone, so it holds for a remote node's doorway rows too, which the local
 // plugin list cannot classify.
 func UnrootedLink(t *gridwellv1.Tile) bool {
-	return t.Reference && rpc.IsWellKind(t.Kind) && t.ChildGridId == ""
+	return t.Link && rpc.IsWellKind(t.Kind) && t.ChildGridId == ""
 }
 
 // BrokenReason is what the server recorded. Only the click report reads it;

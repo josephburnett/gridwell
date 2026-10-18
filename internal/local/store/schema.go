@@ -4,7 +4,7 @@ package store
 // the schema version lives in the SQLite header, not here. A plugin's memory
 // lives in the same tables under its own namespace, and a well pointing at one
 // is an ordinary `well` row whose child_grid_id is a qualified
-// "<plugin-uuid>/<grid-id>" reference.
+// "<plugin-uuid>/<grid-id>" link.
 //
 // The five tile kinds:
 //   - well: points at a child grid, in this namespace or, as an exit well,

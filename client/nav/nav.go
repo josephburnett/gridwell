@@ -255,7 +255,7 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		}
 		m.autoLiveOnDescent(c.PaneID, c.Tile, r.Tile, w, &pl)
 	case stepReEngage:
-		// A leaf whose reference no longer resolves stays frozen.
+		// A leaf whose link no longer resolves stays frozen.
 		if !r.OK || r.Tile == nil {
 			break
 		}

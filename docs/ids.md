@@ -31,9 +31,9 @@ letter segment → that connection; any other letter segment → that plugin.
 - `child_grid_id` (a well or link's target grid) and `link_target_id` (a
   leaf link's target): full chains. A key names the entry; whether it
   stands for the entry's tile or its grid is positional, same as digits.
-- `Reference` (dashed = link) is derived from the target arriving already
+- `Link` (dashed = link) is derived from the target arriving already
   qualified — never stored. A link inside one namespace is still a
-  reference: a ctrl + right-drag makes one, and so does a same-namespace
+  link: a ctrl + right-drag makes one, and so does a same-namespace
   mount. A uuid comparison would miss both.
 
 ## What is inside a `~`
@@ -74,11 +74,11 @@ contain, and the room went blank with nothing said (#297). The address
 cannot do that: it names the thing by what it is.
 
 Row ids stay resolvable as addresses forever, in both directions
-(`Adapter.resolveTile`, `Adapter.resolveGrid`), so a reference stored under
+(`Adapter.resolveTile`, `Adapter.resolveGrid`), so a link stored under
 the older rule keeps naming the thing it named; re-storing one canonicalizes
 it forward (`namespace.Minter`). What a retirement burns is the ROW: a
 recreated key comes back at the same address with a fresh row, holding none
-of the arrangement the retired one held, and every reference stored against
+of the arrangement the retired one held, and every link stored against
 that row stays dead.
 
 A connection name in `retired_names:` never returns; a name the config merely

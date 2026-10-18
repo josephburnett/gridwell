@@ -79,7 +79,7 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 
 	// A link to a file in the tree reads as a link with its target's preview.
 	file := tiles["file"]
-	if file == nil || !file.Reference || file.LinkTargetId != entry(".", "real.md") {
+	if file == nil || !file.Link || file.LinkTargetId != entry(".", "real.md") {
 		t.Fatalf("file = %+v, want a link to real.md", file)
 	}
 	if file.Kind != rpc.KindText {
@@ -103,7 +103,7 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 	// A link out of the root, or to nothing, reads dead at every verb.
 	for _, name := range []string{"out.md", "out.html", "broken"} {
 		tl := tiles[name]
-		if tl == nil || !tl.Reference {
+		if tl == nil || !tl.Link {
 			t.Fatalf("%s = %+v, want a link", name, tl)
 		}
 		if _, _, _, err := cl.ReadContent(ctx, tl.Id); !gwerr.IsDeadRef(err) {

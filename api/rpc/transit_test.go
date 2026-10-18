@@ -106,7 +106,7 @@ func isIDField(fd protoreflect.FieldDescriptor) bool {
 		(name == "id" || strings.HasSuffix(name, "_id") || name == "shell_session")
 }
 
-// shell_session is optional like a reference, empty meaning the tile's own id,
+// shell_session is optional like a link, empty meaning the tile's own id,
 // but names a tile in the tile's own namespace: it qualifies only when set and
 // peels at every hop, as Id does.
 func TestShellSessionQualifiesOnlyWhenSet(t *testing.T) {
@@ -211,7 +211,7 @@ func TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest(t *testing.T) {
 
 // Via is OwnerNamespaceOf's answer, so behind a node an id is peeled only when
 // it chains through the same connection as the routed one, and behind a leaf a
-// reference stays qualified, which is what makes it a link.
+// link stays qualified, which is what makes it a link.
 func TestHopPeelsOnlyWhatChainsThroughIt(t *testing.T) {
 	transit := InboundHop("n1/rtb/far/1", "n1", true)
 	for id, want := range map[string]string{

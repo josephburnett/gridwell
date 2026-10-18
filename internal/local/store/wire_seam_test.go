@@ -38,7 +38,7 @@ func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
 	// Wire-only fields: derived by the server or the owning plugin, never a
 	// stored column, so no store row can exercise them here.
 	derived := map[string]string{
-		"Reference":        "derived by the router from child_grid_id's shape",
+		"Link":             "derived by the router from child_grid_id's shape",
 		"TextPresentation": "declared by the owning plugin from its content",
 		"StatusDetail":     "the owning plugin's current trouble with the tile",
 		"ContentStamp":     "the owning plugin's name for a claimless row's bytes",

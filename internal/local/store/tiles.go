@@ -146,7 +146,7 @@ func (s *Store) CreateWell(ctx context.Context, gridID string, x, y, w, h int64,
 // CreateExitWell creates a well that is a doorway onto an existing grid rather
 // than the owner of one. It allocates no child grid and holds no refcount: the
 // child is owned by whoever created it and named by a qualified "<uuid>/<id>"
-// string, so deleting the well removes only the reference. view carries the
+// string, so deleting the well removes only the link. view carries the
 // source's framing when the well is a cross-plugin copy of a framed one, so
 // the link previews and descends where the source did.
 func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.View) (*gridwellv1.Tile, error) {

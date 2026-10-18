@@ -41,10 +41,10 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
 
 The remainder passes through untouched, so any depth of mounting routes the
 same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
-prefixes and derives `Tile.reference`; transit prepends one segment and
+prefixes and derives `Tile.link`; transit prepends one segment and
 trusts the wire bits (`rpc.TransitQualifyTiles`). Ids coming in are peeled
 once per hop (`rpc.PeelRequest`), every one a request carries, but only
-when it chains through the routed id's namespace, and a reference only at a
+when it chains through the routed id's namespace, and a link only at a
 transit hop: at a leaf, arriving qualified is what makes it a link.
 Qualification copies, and that copy is what keeps a message shared by
 pointer from being changed under another reader.
@@ -62,7 +62,7 @@ A link is such a path stored on a tile (`link_target_id` for a leaf, a
 qualified `child_grid_id` for a well). The node holding it resolves only the
 first segment, one of its own plugins or connections, and forwards the rest,
 so a link reaches anything a chain of one-way connections from the HOLDING
-node reaches, at any depth, and never against an arrow. A reference written
+node reaches, at any depth, and never against an arrow. A link written
 into another node's grid is therefore spelled from that node: behind the same
 connection it is forwarded as sent and the node there decides; where it parts
 (`rpc.HeldAcross`), the router walks the handshakes it can see into a
@@ -106,7 +106,7 @@ connection to the far node holding the rows.
 No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
 
-Wire-only fields are derived in exactly one place each. `Tile.reference`
+Wire-only fields are derived in exactly one place each. `Tile.link`
 (this tile is a link) comes from `server.qualifyTiles`. `text_presentation`
 and `status_detail` come from the plugin's `Entry` through
 `pluginhost/adapter.go`. `Tile.serves_page` (this url tile opens at the
@@ -604,7 +604,7 @@ copy:
 |---|---|
 | what a record is | `api/gridwell/v1/data.proto` → generated `api/gen/gridwell/v1` |
 | how a row is stored | `store/columns.go` |
-| this tile is a link | `server.qualifyTiles` → `Tile.reference` |
+| this tile is a link | `server.qualifyTiles` → `Tile.link` |
 | may this write claim a version | `claimContentVersion` vs `loadForWrite` |
 | does this write bump `version` | `finishContentEdit` vs `emitTileChanged` |
 | where is this pane | `pane.Stack` |
@@ -634,7 +634,7 @@ copy:
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
 | which node runs a copy | `rpc.SharedOwner` |
-| how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellReferences` |
+| how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellLinks` |
 | is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | does this page run the node's build, and what it does when not | `Server.otherBuild`; `gwerr.OtherBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
@@ -682,7 +682,7 @@ pane is inside" and do not spread the word.
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
 | User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |
-| A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored references |
+| A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored links |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 
 ## Module boundaries

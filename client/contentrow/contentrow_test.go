@@ -11,7 +11,7 @@ func TestOf(t *testing.T) {
 	// A hey box's link to a thread in everything: the link row carries the
 	// kind and the name, the target the page.
 	link := &gridwellv1.Tile{Id: "uh1/~box", Kind: rpc.KindURL, AltText: "Wren: Kite day",
-		Reference: true, LinkTargetId: "uh1/~thread"}
+		Link: true, LinkTargetId: "uh1/~thread"}
 	target := &gridwellv1.Tile{Id: "uh1/~thread", Kind: rpc.KindURL, ServesPage: true}
 	home := &gridwellv1.Tile{Id: "5", Kind: rpc.KindURL, UrlString: "https://example.com"}
 	none := func(string) *gridwellv1.Tile { return nil }

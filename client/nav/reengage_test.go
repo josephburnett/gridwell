@@ -57,7 +57,7 @@ func TestReEngageAfterTheRowLands(t *testing.T) {
 		world:  func() World { return baseWorld(engagedPane("pane1")) },
 		want:   []EffectKind{EffOpenStream},
 	}, {
-		name:   "the reference no longer resolves: stay frozen",
+		name:   "the link no longer resolves: stay frozen",
 		result: Result{},
 		world:  func() World { return baseWorld(engagedPane("pane1")) },
 		want:   nil,

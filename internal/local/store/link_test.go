@@ -10,9 +10,9 @@ import (
 )
 
 // A leaf link is the exit well's leaf twin: the content lives in another
-// tile, and the local row is a reference plus local framing. The store never
+// tile, and the local row is a link plus local framing. The store never
 // treats the target as something it owns, so there is no blob, no content
-// mutation, delete unlinks, and copy copies the reference.
+// mutation, delete unlinks, and copy copies the link.
 
 const remoteTarget = "remote-uuid/42"
 
@@ -25,7 +25,7 @@ func blobRowCount(t *testing.T, s *Store) int {
 	return n
 }
 
-func TestCreateLeafLinkStoresQualifiedReference(t *testing.T) {
+func TestCreateLeafLinkStoresQualifiedLink(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -80,7 +80,7 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-func TestCopyLeafLinkCopiesReference(t *testing.T) {
+func TestCopyLeafLinkCopiesLink(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -100,7 +100,7 @@ func TestCopyLeafLinkCopiesReference(t *testing.T) {
 		t.Error("copy reused the source row id")
 	}
 	if cp.LinkTargetId != remoteTarget {
-		t.Errorf("copy target = %q, want the shared reference %q", cp.LinkTargetId, remoteTarget)
+		t.Errorf("copy target = %q, want the shared link %q", cp.LinkTargetId, remoteTarget)
 	}
 	verifyRefcounts(t, s)
 }

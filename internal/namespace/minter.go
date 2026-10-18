@@ -7,7 +7,7 @@ package namespace
 
 import "context"
 
-// Minter turns a local id into the canonical local id a stored reference must
+// Minter turns a local id into the canonical local id a stored link must
 // hold. An id that is already canonical answers itself.
 type Minter interface {
 	MintRef(ctx context.Context, localID string) (string, error)

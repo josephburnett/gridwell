@@ -20,12 +20,12 @@ func gridRowCount(t *testing.T, s *Store) int {
 }
 
 // An exit well points at another plugin's grid through a qualified
-// child_grid_id, and the store treats that child as a shared reference, never
-// a thing it owns: copy copies the reference, delete drops only the
-// reference, move preserves it.
+// child_grid_id, and the store treats that child as a shared link, never
+// a thing it owns: copy copies the link, delete drops only the
+// link, move preserves it.
 const remoteChild = "remote-uuid/9"
 
-func TestCopyExitWellSharesReferenceNoNewGrid(t *testing.T) {
+func TestCopyExitWellSharesLinkNoNewGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -49,7 +49,7 @@ func TestCopyExitWellSharesReferenceNoNewGrid(t *testing.T) {
 		t.Error("copy reused the source row id")
 	}
 	if cp.ChildGridId != remoteChild {
-		t.Errorf("copy child = %q, want the shared reference %q", cp.ChildGridId, remoteChild)
+		t.Errorf("copy child = %q, want the shared link %q", cp.ChildGridId, remoteChild)
 	}
 	if after := gridRowCount(t, s); after != before {
 		t.Errorf("copy of an exit well created %d local grid(s); the far grid is shared, not copied", after-before)
@@ -57,7 +57,7 @@ func TestCopyExitWellSharesReferenceNoNewGrid(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-func TestDeleteExitWellDropsReferenceOnly(t *testing.T) {
+func TestDeleteExitWellDropsLinkOnly(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -88,7 +88,7 @@ func TestDeleteExitWellDropsReferenceOnly(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-func TestMoveExitWellPreservesReference(t *testing.T) {
+func TestMoveExitWellPreservesLink(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()

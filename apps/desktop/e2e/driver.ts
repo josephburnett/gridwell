@@ -563,7 +563,7 @@ export class GridwellDriver {
   }
 
   // The link gesture: ctrl flips the right button from copy to link, so a
-  // reference lands at the destination. Ctrl is held across the press, which is
+  // link lands at the destination. Ctrl is held across the press, which is
   // where the gesture classifies.
   async linkTileCell(fromCx: number, fromCy: number, toCx: number, toCy: number): Promise<void> {
     await this.dragCell(fromCx, fromCy, toCx, toCy, 'right', true);

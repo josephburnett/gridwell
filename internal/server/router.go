@@ -316,8 +316,8 @@ func qualifyFind(transit bool, uuid string, resp *pb.FindResponse) *pb.FindRespo
 	})
 }
 
-// CreateTile forwards to the destination grid's owner, references spelled for
-// that node (spellReferences).
+// CreateTile forwards to the destination grid's owner, links spelled for
+// that node (spellLinks).
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal is the authority; the menu only hides.
@@ -332,19 +332,19 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	if err := rt.refuseDisabled(m.GridId); err != nil {
 		return nil, err
 	}
-	if err := rt.mintReferences(ctx, m.Tile); err != nil {
+	if err := rt.mintLinks(ctx, m.Tile); err != nil {
 		return nil, err
 	}
-	if err := rt.spellReferences(ctx, m.GridId, m.Tile); err != nil {
+	if err := rt.spellLinks(ctx, m.GridId, m.Tile); err != nil {
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// mintReferences canonicalizes the ids a tile is about to store, so a document
+// mintLinks canonicalizes the ids a tile is about to store, so a document
 // reached through a link never wears a second name.
-func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
+func (rt *router) mintLinks(ctx context.Context, t *pb.Tile) error {
 	if t == nil {
 		return nil
 	}
@@ -360,7 +360,7 @@ func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
 	return nil
 }
 
-// mintRef canonicalizes one qualified reference; an id nothing derives
+// mintRef canonicalizes one qualified link; an id nothing derives
 // answers itself.
 func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	if id == "" {
@@ -412,7 +412,7 @@ func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, 
 	if err != nil {
 		return nil, err
 	}
-	if rpc.IsWellKind(st.Kind) && !st.Reference {
+	if rpc.IsWellKind(st.Kind) && !st.Link {
 		// Host content is refused before anything is created: its rows are
 		// metadata stubs, not the files.
 		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetHostContent() {

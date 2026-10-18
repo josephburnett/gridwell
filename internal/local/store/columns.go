@@ -80,7 +80,7 @@ integer origin view_x/view_y, which v11 converted.`,
 	{
 		name: "child_grid_id", ddl: "INTEGER", since: 1,
 		comment: `No FK on child_grid_id: an exit well's child grid lives in another
-plugin (a qualified "<uuid>/<id>" reference), so the link is a soft
+plugin (a qualified "<uuid>/<id>" link), so the link is a soft
 pointer. Interior well integrity rests on the refcount machinery +
 property test.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ChildGridId} },
@@ -148,7 +148,7 @@ writeback and never bumps version. Added at schema v4, additive.`,
 	{
 		name: "link_target_id", ddl: "TEXT", since: 6,
 		comment: `link_target_id makes a leaf tile (text, url, shell, pane) a link: a
-qualified "<uuid>/<tile-id>" reference to the tile that owns the
+qualified "<uuid>/<tile-id>" link to the tile that owns the
 content, or on a plugin's row a bare entry address in that same plugin
 (rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content
 of its own, which the CHECK's link branch enforces, and readers
@@ -269,7 +269,7 @@ var connectionsColumns = []column[struct{}]{
 	{
 		name: "name", ddl: "TEXT PRIMARY KEY", since: 13,
 		comment: `The connection's immutable name, as server.yaml declares it. It is
-the namespace segment stored references are written through, so it is
+the namespace segment stored links are written through, so it is
 never reassigned and never held twice.`,
 	},
 	{

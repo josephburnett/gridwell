@@ -404,14 +404,14 @@ type Tile struct {
 	// client. Stamped at insert time (for plugin-owned tiles, the entry name;
 	// for an exit well, the mounted plugin's label).
 	AltText string `protobuf:"bytes,25,opt,name=alt_text,json=altText,proto3" json:"alt_text,omitempty"`
-	// reference reports that this well is a link: its child_grid_id is a
-	// qualified cross-plugin reference rather than a bare local child grid. It
+	// link reports that this well is a link: its child_grid_id is a
+	// qualified cross-plugin link rather than a bare local child grid. It
 	// is the one signal for that. The client renders a dashed border from it,
 	// and delete and copy treat a qualified child_grid_id as unlink-only and
 	// share, never cascade. The server sets it in qualifyTiles, from a child
 	// that arrived already qualified, so render and the store cannot disagree
 	// on what a link is. Wire-only, derived, never a stored column.
-	Reference bool `protobuf:"varint,26,opt,name=reference,proto3" json:"reference,omitempty"`
+	Link bool `protobuf:"varint,26,opt,name=link,proto3" json:"link,omitempty"`
 	// content_zoom scales the content rendered inside a text, shell or url tile:
 	// the text font, the terminal font, the page zoom. It is framing, persisted
 	// per tile, and it never bumps version. 0 means unset and renders at 1.0.
@@ -424,13 +424,13 @@ type Tile struct {
 	// partial capture cannot clobber it, mirroring the preview-JPEG rule.
 	UrlHistory string `protobuf:"bytes,28,opt,name=url_history,json=urlHistory,proto3" json:"url_history,omitempty"`
 	// link_target_id makes a leaf tile (text, url, shell, pane) a link: a
-	// qualified "<plugin-uuid>/<tile-id>" reference to the tile that owns the
+	// qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
 	// content. The link row stores no blob, no url and no preview, and readers
 	// resolve bytes, preview and session through the target id, which the router
 	// routes anywhere, including through transit chains that prepend one hop
 	// segment as they do for a well's qualified child_grid_id. Kind stays the
 	// target's kind. A well's link variant is a qualified child_grid_id instead,
-	// and reference is the derived bit over both shapes. Deleting a link only
+	// and link is the derived bit over both shapes. Deleting a link only
 	// unlinks.
 	LinkTargetId string `protobuf:"bytes,29,opt,name=link_target_id,json=linkTargetId,proto3" json:"link_target_id,omitempty"`
 	// url_frozen is the user's standing freeze on a tile that can go live, url
@@ -663,9 +663,9 @@ func (x *Tile) GetAltText() string {
 	return ""
 }
 
-func (x *Tile) GetReference() bool {
+func (x *Tile) GetLink() bool {
 	if x != nil {
-		return x.Reference
+		return x.Link
 	}
 	return false
 }
@@ -4518,7 +4518,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xad\a\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xa3\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -4541,8 +4541,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"url_string\x18\x14 \x01(\tR\turlString\x12&\n" +
 	"\x0fpreview_blob_id\x18\x15 \x01(\x03R\rpreviewBlobId\x12\x19\n" +
-	"\balt_text\x18\x19 \x01(\tR\aaltText\x12\x1c\n" +
-	"\treference\x18\x1a \x01(\bR\treference\x12!\n" +
+	"\balt_text\x18\x19 \x01(\tR\aaltText\x12\x12\n" +
+	"\x04link\x18\x1a \x01(\bR\x04link\x12!\n" +
 	"\fcontent_zoom\x18\x1b \x01(\x01R\vcontentZoom\x12\x1f\n" +
 	"\vurl_history\x18\x1c \x01(\tR\n" +
 	"urlHistory\x12$\n" +

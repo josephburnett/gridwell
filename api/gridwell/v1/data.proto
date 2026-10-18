@@ -166,14 +166,14 @@ message Tile {
   // for an exit well, the mounted plugin's label).
   string alt_text = 25;
 
-  // reference reports that this well is a link: its child_grid_id is a
-  // qualified cross-plugin reference rather than a bare local child grid. It
+  // link reports that this well is a link: its child_grid_id is a
+  // qualified cross-plugin link rather than a bare local child grid. It
   // is the one signal for that. The client renders a dashed border from it,
   // and delete and copy treat a qualified child_grid_id as unlink-only and
   // share, never cascade. The server sets it in qualifyTiles, from a child
   // that arrived already qualified, so render and the store cannot disagree
   // on what a link is. Wire-only, derived, never a stored column.
-  bool reference = 26;
+  bool link = 26;
 
   // content_zoom scales the content rendered inside a text, shell or url tile:
   // the text font, the terminal font, the page zoom. It is framing, persisted
@@ -189,13 +189,13 @@ message Tile {
   string url_history = 28;
 
   // link_target_id makes a leaf tile (text, url, shell, pane) a link: a
-  // qualified "<plugin-uuid>/<tile-id>" reference to the tile that owns the
+  // qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
   // content. The link row stores no blob, no url and no preview, and readers
   // resolve bytes, preview and session through the target id, which the router
   // routes anywhere, including through transit chains that prepend one hop
   // segment as they do for a well's qualified child_grid_id. Kind stays the
   // target's kind. A well's link variant is a qualified child_grid_id instead,
-  // and reference is the derived bit over both shapes. Deleting a link only
+  // and link is the derived bit over both shapes. Deleting a link only
   // unlinks.
   string link_target_id = 29;
 

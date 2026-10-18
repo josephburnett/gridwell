@@ -772,10 +772,10 @@ func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 	return textedit.ReadOnly(row, writable)
 }
 
-// isLinkTile reports a reference: trashing one unlinks it. Reference is the
+// isLinkTile reports a link: trashing one unlinks it. Link is the
 // one signal; a uuid comparison would miss a same-plugin mount.
 func isLinkTile(n *gridwellv1.Tile) bool {
-	return n.Reference
+	return n.Link
 }
 
 func setTileDash(c js.Value)   { c.Call("setLineDash", jsArray(5, 3)) }
@@ -969,7 +969,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r pane.Rect, frag float64) {
 	w, h := float64(n.W)*parentCellSize, float64(n.H)*parentCellSize
 	outside := tilepreview.Outside(n, false)
-	// Dashed means this is, or becomes, a reference: it shows mid-drag which
+	// Dashed means this is, or becomes, a link: it shows mid-drag which
 	// right-button mode is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {

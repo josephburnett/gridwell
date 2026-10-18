@@ -88,7 +88,7 @@ type connState struct {
 	up     bool
 	detail string // why it is down; "" when up
 	// mismatch is the landing refusal: the far end answered a home other than
-	// the one this connection's stored references were written against.
+	// the one this connection's stored links were written against.
 	mismatch bool
 }
 
@@ -264,7 +264,7 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 		switch {
 		case st.mismatch:
 			// The landing verdict outranks the learned root: the row keeps the
-			// landing its references name, and says why nothing answers.
+			// landing its links name, and says why nothing answers.
 			rootGridID = rpc.QualifyID(name, root)
 		case root != "":
 			rootGridID, status = rpc.QualifyID(name, root), ""
@@ -440,7 +440,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 // learnRoot dials the transport and asks the far node where this connection
 // lands, once per live transport. Every later answer is checked against the
 // stored landing, not trusted: a name is bound to the node every stored
-// reference through it was written against.
+// link through it was written against.
 func (s *Server) learnRoot(c *Conn) (string, error) {
 	name := c.Cfg.Name
 	lc, err := s.ensureLive(c)
@@ -492,7 +492,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 // read through the connection gets. It is deliberately not marked verified, so
 // the connection keeps asking and restoring the target needs no restart.
 func (s *Server) noteLandingMismatch(name, stored, answered string) error {
-	msg := fmt.Sprintf("connection %q now lands on a different node; stored references name the old one — retire the name or restore the target", name)
+	msg := fmt.Sprintf("connection %q now lands on a different node; stored links name the old one — retire the name or restore the target", name)
 	if s.note(name, connState{detail: msg, mismatch: true}) {
 		log.Printf("gridwell: %s (stored landing %s, the far node answered %s)", msg, stored, answered)
 	}

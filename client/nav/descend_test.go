@@ -84,7 +84,7 @@ func TestDescendPlans(t *testing.T) {
 	well := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "g2"}
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Reference: true}
+		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	text := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
 	url := &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
 		UrlString: "https://example.test/"}
@@ -195,7 +195,7 @@ func TestDescendWellPushesGridFrame(t *testing.T) {
 
 func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Reference: true}
+		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{IsLink: true}
 	w.MenuOpenOn = "pane1"
@@ -221,7 +221,7 @@ func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
 
 func TestDescendLinkLeavesAnUnopenedMenuAlone(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Reference: true}
+		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{IsLink: true}
 	w.MenuOpenOn = "other"
@@ -234,7 +234,7 @@ func TestDescendLinkLeavesAnUnopenedMenuAlone(t *testing.T) {
 
 func TestDescendLinkWithNoChildGrid(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		W: 2, H: 2, Reference: true, AltText: "files"}
+		W: 2, H: 2, Link: true, AltText: "files"}
 
 	t.Run("health notice", func(t *testing.T) {
 		w := baseWorld(gridPane("pane1", "g1"))

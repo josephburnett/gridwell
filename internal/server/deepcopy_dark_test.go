@@ -177,7 +177,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("offline deep copy must not refuse: %v", err)
 	}
-	if copyTop.Reference {
+	if copyTop.Link {
 		t.Fatal("the top copy must be SOLID (its own grid was reachable)")
 	}
 
@@ -191,7 +191,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	}
 
 	// Cached text → a real copy with the bytes.
-	if c := byX[0]; c == nil || c.Reference || c.LinkTargetId != "" {
+	if c := byX[0]; c == nil || c.Link || c.LinkTargetId != "" {
 		t.Fatalf("cached text should be a solid copy: %+v", byX[0])
 	} else if body, _, _, err := cl.ReadContent(ctx, c.Id); err != nil || string(body) != "cached notes" {
 		t.Fatalf("cached copy body = %q (%v)", body, err)
@@ -200,17 +200,17 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	// Dark-content text → a LINK to the original (dashed says "elsewhere").
 	if l := byX[2]; l == nil || l.LinkTargetId != uncached.Id {
 		t.Fatalf("dark text should degrade to a link to %s: %+v", uncached.Id, byX[2])
-	} else if !l.Reference {
-		t.Error("the degraded link must derive Reference=true")
+	} else if !l.Link {
+		t.Error("the degraded link must derive Link=true")
 	}
 
 	// Dark-grid nested well → a well LINK sharing the original child.
-	if w := byX[4]; w == nil || !w.Reference || w.ChildGridId != nested.ChildGridId {
+	if w := byX[4]; w == nil || !w.Link || w.ChildGridId != nested.ChildGridId {
 		t.Fatalf("dark nested well should degrade to a link to %s: %+v", nested.ChildGridId, byX[4])
 	}
 
 	// Dark-preview url → a solid copy of the ADDRESS, with no preview.
-	if u := byX[6]; u == nil || u.Reference || u.UrlString != "https://example.com/album" {
+	if u := byX[6]; u == nil || u.Link || u.UrlString != "https://example.com/album" {
 		t.Fatalf("dark-preview url should copy its address: %+v", byX[6])
 	} else if u.PreviewBlobId != 0 {
 		t.Error("the copy with no preview must carry no preview blob")
@@ -234,7 +234,7 @@ func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dark leaf copy must degrade, not fail: %v", err)
 	}
-	if got.LinkTargetId != txt.Id || !got.Reference {
+	if got.LinkTargetId != txt.Id || !got.Link {
 		t.Fatalf("dark leaf copy should be a link to %s: %+v", txt.Id, got)
 	}
 
@@ -256,7 +256,7 @@ func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dark well copy must degrade, not fail: %v", err)
 	}
-	if !gotWell.Reference || gotWell.ChildGridId != well.ChildGridId {
+	if !gotWell.Link || gotWell.ChildGridId != well.ChildGridId {
 		t.Fatalf("dark well copy should be a link sharing %s: %+v", well.ChildGridId, gotWell)
 	}
 	if gotWell.ViewCx != 5 || gotWell.ViewCy != 6 || gotWell.ViewZoom != 1.5 {
@@ -267,7 +267,7 @@ func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
 // TestGoneIsNeverALink pins the gate: a source that ANSWERS — NotFound, any
 // verdict — still aborts the walk with the visible-partial contract. Only
 // the-server-never-spoke degrades. Turning a verdict into a link would
-// resurrect deleted content as a dangling reference that looks deliberate.
+// resurrect deleted content as a dangling link that looks deliberate.
 func TestGoneIsNeverALink(t *testing.T) {
 	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
 	ctx := context.Background()

@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A reference written into another node's grid is spelled here, from that
+// A link written into another node's grid is spelled here, from that
 // node, over the connection graph this node can see (rpc.Reach), or refused.
 
 // maxReachHops bounds both the graph walk and a spelled route, so a cycle of
@@ -22,11 +22,11 @@ const (
 	maxReachNodes = 64
 )
 
-// spellReferences rewrites t's references into the frame of the node holding
+// spellLinks rewrites t's links into the frame of the node holding
 // grid, where rpc.HeldAcross says they part from it; the graph is fetched only
-// then. A reference the holder has no route to is refused, and nothing is
+// then. A link the holder has no route to is refused, and nothing is
 // written.
-func (rt *router) spellReferences(ctx context.Context, grid string, t *pb.Tile) error {
+func (rt *router) spellLinks(ctx context.Context, grid string, t *pb.Tile) error {
 	if t == nil {
 		return nil
 	}

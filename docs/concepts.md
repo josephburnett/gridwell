@@ -14,14 +14,14 @@ here.
 | **shell** | The only tile whose content is a host process. It survives ascent as a tmux session. |
 | **pane** | The only tile whose content is an arrangement. Descent swaps the window's pane tree, not one pane. |
 
-## Reference shapes
+## Link shapes
 
 | Concept | What it does |
 |---|---|
 | **exit well** | A doorway onto a grid in another namespace — a mount, a plugin, a file tree. Derived from the ids alone (`rpc.IsExitWell`), never stored. |
 | **leaf link** | One content tile shown in two places: `link_target_id` plus one owning row. The same document, over there, without a copy. |
 | **dead link** | A link whose path ends in nothing: a namespace some hop no longer declares, or a target its namespace says is gone. Grey, inert, no notice, still deletable. Separates "gone" from "not answering". |
-| **childless reference** | A link that names no namespace yet — the + menu row and the drag ghost, drawn before there is a grid to point at. |
+| **childless link** | A link that names no namespace yet — the + menu row and the drag ghost, drawn before there is a grid to point at. |
 
 ## Places
 

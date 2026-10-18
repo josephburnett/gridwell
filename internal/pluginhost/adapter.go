@@ -646,7 +646,7 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 }
 
 // MintRef is the router's canonicalizer. A plugin's canonical id is its
-// derived address, so this mints nothing; a row id (an older reference) is
+// derived address, so this mints nothing; a row id (an older link) is
 // tried as a tile row, then as a grid row.
 func (a *Adapter) MintRef(_ context.Context, localID string) (string, error) {
 	switch rpc.ShapeOf(localID) {

@@ -33,9 +33,9 @@ test('ctrl+right-drag links inside one namespace; plain right-drag still copies'
   expect(link, 'ctrl+right-drag left a tile at the drop cell').toBeTruthy();
   expect(link!.id, 'the link is its own row, not the source').not.toBe(before.id);
   expect(link!.linkTargetId, 'the link names the source tile').toBe(before.id);
-  // reference is the one authoritative "is a link" signal, the same bit the
+  // link is the one authoritative "is a link" signal, the same bit the
   // renderer dashes the border from and the store keys unlink on.
-  expect(link!.reference, 'the link is marked a reference (dashed)').toBe(true);
+  expect(link!.link, 'the link is marked dashed').toBe(true);
 
   // The rule: everything the user did not touch is byte-for-byte the same.
   const after = tileAt(snap, 'text', cx, cy)!;
@@ -61,7 +61,7 @@ test('ctrl+right-drag links inside one namespace; plain right-drag still copies'
   expect(copy, 'right-drag landed a tile').toBeTruthy();
   expect(copy!.id, 'the copy is its own row').not.toBe(before.id);
   expect(copy!.linkTargetId ?? '', 'a copy names no link target').toBe('');
-  expect(copy!.reference ?? false, 'a copy is not a reference').toBeFalsy();
+  expect(copy!.link ?? false, 'a copy is not a link').toBeFalsy();
   expect(await gw.getTileContent(copy!.id), 'the copy copied the bytes')
     .toBe('the original bytes');
 
@@ -97,11 +97,11 @@ test('ctrl+right-drag on a well links the same child grid, not a copy of it', as
   // would have deep-copied the subtree into a fresh grid.
   expect(String(linkWell!.childGridId), 'the link opens the source well\'s own child grid')
     .toBe(childGrid);
-  expect(linkWell!.reference, 'the link well is a reference (dashed)').toBe(true);
+  expect(linkWell!.link, 'the link well is dashed').toBe(true);
 
   const srcAfter = tileAt(snap, 'well', cx, cy)!;
   expect(String(srcAfter.childGridId), 'the source well still owns its child grid')
     .toBe(childGrid);
-  expect(srcAfter.reference ?? false, 'the source is still owned content, not a link')
+  expect(srcAfter.link ?? false, 'the source is still owned content, not a link')
     .toBeFalsy();
 });

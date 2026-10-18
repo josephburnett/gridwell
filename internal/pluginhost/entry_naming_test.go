@@ -82,7 +82,7 @@ func treeNode(t *testing.T, p *treePlugin) (*pluginhost.Adapter, string, *store.
 	return a, info.MenuEntries[0].GridId, ns
 }
 
-// rowIDOf is the minted row behind one entry, as a reference stored under the
+// rowIDOf is the minted row behind one entry, as a link stored under the
 // older rule holds it.
 func rowIDOf(t *testing.T, ns *store.Namespace, context, key string) string {
 	t.Helper()
@@ -177,7 +177,7 @@ func TestATouchedEntryKeepsTheIdTheListingAnswers(t *testing.T) {
 // Back-compat: an id minted before this rule — and stored, in a link target or
 // a saved layout — still names its entry. Only what the LISTING advertises
 // changed; the row is still an address the adapter reads on the way in, so
-// every reference made under the old rule resolves to the thing it named.
+// every link made under the old rule resolves to the thing it named.
 func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 	a, rootGrid, ns := treeNode(t, &treePlugin{authoritative: true})
 	ctx := context.Background()
@@ -209,7 +209,7 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 		t.Fatalf("the write through the row id did not reach the entry: %+v", after)
 	}
 
-	// A doorway held by a stored reference descends: the well's child grid is
+	// A doorway held by a stored link descends: the well's child grid is
 	// the same grid the listing names.
 	sub := listed(t, a, rootGrid, "sub")
 	if _, err := a.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: sub.Id, Zoom: 2}); err != nil {
@@ -227,7 +227,7 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 		t.Fatalf("the descent from a stored doorway failed: %v", err)
 	}
 
-	// And a reference RE-STORED from an old row id canonicalizes forward, so
+	// And a link RE-STORED from an old row id canonicalizes forward, so
 	// the copy and the listing name one thing. MintRef is the router's one
 	// way to do that, and it mints nothing: the address is already canonical.
 	fwd, err := a.MintRef(ctx, rowID)

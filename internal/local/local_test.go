@@ -243,7 +243,7 @@ func TestShellSessionAlive_InfrastructureErrorSurfaces(t *testing.T) {
 }
 
 // A well CreateTile with no child_grid_id allocates an interior child grid;
-// with a qualified one it stores an exit well holding the reference verbatim.
+// with a qualified one it stores an exit well holding the link verbatim.
 func TestCreateWell_InteriorVsExit(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()

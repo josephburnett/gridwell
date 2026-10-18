@@ -145,7 +145,7 @@ func TestCopyTileThroughPlugin(t *testing.T) {
 
 // TestDeleteExitWellThroughPluginNoCascade: deleting an exit well via the plugin
 // removes the tile but does not touch the remote grid it referenced — the
-// plugin's delete honors the shared-reference semantics end to end.
+// plugin's delete honors the shared-link semantics end to end.
 func TestDeleteExitWellThroughPluginNoCascade(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)

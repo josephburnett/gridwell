@@ -236,7 +236,7 @@ const (
 	DropRejected // snaps back
 	DropMove
 	DropCopy
-	// DropLink creates a reference, an exit well for a grid and a leaf link
+	// DropLink creates a link, an exit well for a grid and a leaf link
 	// otherwise. The source is untouched and identity never migrates.
 	DropLink
 )

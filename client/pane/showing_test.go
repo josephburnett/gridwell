@@ -103,7 +103,7 @@ func TestShowingWellPreviews(t *testing.T) {
 	grids := map[string]map[string]*gridwellv1.Tile{
 		"p/1": {
 			"w1":   well("w1", 1, 1, "c/1"),
-			"link": {Id: "link", Kind: rpc.KindWell, Reference: true, X: -3, Y: -3, W: 2, H: 2, ChildGridId: "far/c"},
+			"link": {Id: "link", Kind: rpc.KindWell, Link: true, X: -3, Y: -3, W: 2, H: 2, ChildGridId: "far/c"},
 			"far":  well("far", 100, 100, "c/off"),
 			"text": {Id: "text", Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1},
 		},

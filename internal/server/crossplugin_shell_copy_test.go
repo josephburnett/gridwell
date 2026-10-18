@@ -25,9 +25,9 @@ func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cross-plugin shell copy: %v", err)
 	}
-	if top.Kind != rpc.KindShell || top.LinkTargetId != sh.Id || !top.Reference {
-		t.Errorf("top-level copy = kind %q target %q reference %v, want a shell link to %q",
-			top.Kind, top.LinkTargetId, top.Reference, sh.Id)
+	if top.Kind != rpc.KindShell || top.LinkTargetId != sh.Id || !top.Link {
+		t.Errorf("top-level copy = kind %q target %q link %v, want a shell link to %q",
+			top.Kind, top.LinkTargetId, top.Link, sh.Id)
 	}
 
 	well, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA,
@@ -51,7 +51,7 @@ func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
 	if n := len(g.Tiles); n != 1 {
 		t.Fatalf("copied well holds %d tiles, want 1", n)
 	}
-	if got := g.Tiles[0]; got.LinkTargetId != inner.Id || !got.Reference {
-		t.Errorf("nested copy = target %q reference %v, want a shell link to %q", got.LinkTargetId, got.Reference, inner.Id)
+	if got := g.Tiles[0]; got.LinkTargetId != inner.Id || !got.Link {
+		t.Errorf("nested copy = target %q link %v, want a shell link to %q", got.LinkTargetId, got.Link, inner.Id)
 	}
 }

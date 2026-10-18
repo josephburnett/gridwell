@@ -11,7 +11,7 @@
 //
 // Key stability is the plugin's one hard contract. A key names the same logical
 // thing forever, such as a path relative to the configured root, a message-id
-// or "pid:1234". Changing the key scheme orphans every stored reference, as
+// or "pid:1234". Changing the key scheme orphans every stored link, as
 // re-minting ids would.
 //
 // Unimplemented is always polite: Find means no results, ServeContent a 404,

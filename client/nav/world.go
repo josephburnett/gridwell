@@ -43,7 +43,7 @@ type Notice struct {
 // DoorWorld is what only the shim can resolve about the doorway row.
 type DoorWorld struct {
 	DeadLink bool // deadref.DeadTile
-	IsLink   bool // isLinkTile, the row's reference declaration
+	IsLink   bool // isLinkTile, the row's link declaration
 	// Health is pluginhealth.ClickNotice for a link with no child grid, nil
 	// when there is none or the question does not arise.
 	Health   *Notice

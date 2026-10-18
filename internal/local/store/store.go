@@ -209,7 +209,7 @@ func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 
 // SetPluginID injects the config id the binary verified against its DB at
 // spawn. The system.plugin_uuid row is a second, independently minted identity
-// nothing outside this store sees: qualified references carry the config id,
+// nothing outside this store sees: qualified links carry the config id,
 // so a comparison against the mint could never match. The mint survives only
 // as the fallback for bare test stores that never had a config.
 func (s *Store) SetPluginID(id string) { s.pluginID = id }

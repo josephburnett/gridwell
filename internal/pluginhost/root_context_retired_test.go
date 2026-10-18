@@ -140,7 +140,7 @@ func TestALandingMintedUnderRootContextStillResolvesAsACollection(t *testing.T) 
 	}
 	e := after.MenuEntries[0]
 	if e.GridId != landing {
-		t.Fatalf("the collection's grid id moved: %q, was %q — every reference to it is now dead", e.GridId, landing)
+		t.Fatalf("the collection's grid id moved: %q, was %q — every link to it is now dead", e.GridId, landing)
 	}
 	if e.ViewCx != 2 || e.ViewCy != 3 || e.ViewZoom != 1.25 {
 		t.Errorf("the framing the user left is gone: %+v", e)

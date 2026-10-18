@@ -20,7 +20,7 @@ import (
 // tiles). Deleting the pane tile deletes only the arrangement — but must
 // terminate what the arrangement owns, exactly like closing a pane does:
 // each referenced SCRATCH tile is deleted (which kills its tmux session via
-// the existing DeleteTile→shell.Kill chain). Referenced NON-scratch tiles
+// the existing DeleteTile→shell.Kill chain). Linkd NON-scratch tiles
 // are content the workspace merely VIEWS and must survive — deleting a
 // workspace never deletes data.
 func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {

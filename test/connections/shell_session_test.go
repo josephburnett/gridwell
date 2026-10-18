@@ -85,7 +85,7 @@ func TestShellSessionsAcrossAConnection(t *testing.T) {
 	cross := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": srcID, "destGridId": homeRoot, "x": 4, "y": 4,
 	})["tile"].(map[string]any)
-	if got, _ := cross["linkTargetId"].(string); got != srcID || cross["reference"] != true {
+	if got, _ := cross["linkTargetId"].(string); got != srcID || cross["link"] != true {
 		t.Fatalf("a shell copied across nodes = %v, want a link to %q", cross, srcID)
 	}
 

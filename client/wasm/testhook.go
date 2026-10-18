@@ -606,7 +606,7 @@ func tileSig(t *gridwellv1.Tile) string {
 		t.Version, t.Kind, t.X, t.Y, t.W, t.H,
 		t.ViewCx, t.ViewCy, t.ViewZoom,
 		t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode,
-		t.BlobId, t.PreviewBlobId, t.UrlString, t.AltText, t.Reference)
+		t.BlobId, t.PreviewBlobId, t.UrlString, t.AltText, t.Link)
 }
 
 // childSig digests a well's cached child grid, one level, sorted for

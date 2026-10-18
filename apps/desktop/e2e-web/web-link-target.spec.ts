@@ -64,7 +64,7 @@ test("a box's link opens its thread's page in a new tab", async ({ gw, window })
     .poll(async () => ((await gw.getGrid(f.gridID)).tiles ?? []).length, { timeout: 30_000 })
     .toBe(1);
   let link = ((await gw.getGrid(f.gridID)).tiles ?? [])[0] as any;
-  expect(link.reference, 'the Set Aside row is a link').toBe(true);
+  expect(link.link, 'the Set Aside row is a link').toBe(true);
   expect(link.linkTargetId, 'to the thread in everything').toBeTruthy();
   expect(link.servesPage ?? false, 'and carries none of its content facts').toBe(false);
 

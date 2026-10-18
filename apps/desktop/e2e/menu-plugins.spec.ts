@@ -125,7 +125,7 @@ test('dragging a plugin swatch into the grid drops a dashed link', async ({ gw }
   const link = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
   expect(link, 'exit-well link created at the drop cell').toBeTruthy();
   expect(link.childGridId, "child is the plugin's qualified root").toBe(second.rootGridID);
-  expect(link.reference, 'renders dashed (a link, delete only unlinks)').toBe(true);
+  expect(link.link, 'renders dashed (a link, delete only unlinks)').toBe(true);
   expect(link.altText, 'labeled with the plugin name').toBe('second');
 });
 

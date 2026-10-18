@@ -109,7 +109,7 @@ func PluginWellTile(pl *pb.PluginInfo) *pb.Tile {
 		H:           1,
 		AltText:     pl.Label,
 		ChildGridId: pl.RootGridId,
-		Reference:   true,
+		Link:        true,
 		ViewCx:      pl.RootViewCx,
 		ViewCy:      pl.RootViewCy,
 		ViewZoom:    pl.RootViewZoom,

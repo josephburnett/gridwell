@@ -12,7 +12,7 @@ import (
 )
 
 // Every id a write carries into a far grid crosses the router and the
-// connection, and each hop peels its own segment (rpc.Hop). A reference that
+// connection, and each hop peels its own segment (rpc.Hop). A link that
 // kept a segment would be stored on the far node as a foreign id and read back
 // with the chain doubled, naming a namespace nobody declares.
 func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
@@ -57,8 +57,8 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 		t.Fatalf("create well with a qualified child: %v", err)
 	}
 	for _, tl := range []*gridwellv1.Tile{mount, inFarGrid("well", mount)} {
-		if tl.ChildGridId != farRoot || !tl.Reference {
-			t.Fatalf("well child = %q reference=%v, want %q as a reference", tl.ChildGridId, tl.Reference, farRoot)
+		if tl.ChildGridId != farRoot || !tl.Link {
+			t.Fatalf("well child = %q link=%v, want %q as a link", tl.ChildGridId, tl.Link, farRoot)
 		}
 	}
 	if _, err := h.localCl.GetGrid(ctx, mount.ChildGridId); err != nil {
@@ -70,8 +70,8 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 		t.Fatalf("create leaf link: %v", err)
 	}
 	for _, tl := range []*gridwellv1.Tile{link, inFarGrid("link", link)} {
-		if tl.LinkTargetId != target.Id || !tl.Reference {
-			t.Fatalf("link target = %q reference=%v, want %q as a reference", tl.LinkTargetId, tl.Reference, target.Id)
+		if tl.LinkTargetId != target.Id || !tl.Link {
+			t.Fatalf("link target = %q link=%v, want %q as a link", tl.LinkTargetId, tl.Link, target.Id)
 		}
 	}
 	if data, _, _, err := h.localCl.ReadContent(ctx, link.Id); err != nil || string(data) != string(body) {
@@ -88,8 +88,8 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 		t.Fatalf("copy a home link into the far grid: %v", err)
 	}
 	for _, tl := range []*gridwellv1.Tile{copied, inFarGrid("copied link", copied)} {
-		if tl.LinkTargetId != target.Id || !tl.Reference {
-			t.Fatalf("copied link target = %q reference=%v, want %q", tl.LinkTargetId, tl.Reference, target.Id)
+		if tl.LinkTargetId != target.Id || !tl.Link {
+			t.Fatalf("copied link target = %q link=%v, want %q", tl.LinkTargetId, tl.Link, target.Id)
 		}
 	}
 

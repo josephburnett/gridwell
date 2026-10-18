@@ -8,7 +8,7 @@ import (
 )
 
 // A link is an id held on one node, and that node resolves only its first
-// segment. So a reference written into another node's grid must be spelled
+// segment. So a link written into another node's grid must be spelled
 // from that node, along connections it declares; connections are one-way, and
 // a node with no chain of them to the target cannot hold the link at all.
 
@@ -170,7 +170,7 @@ func (r Reach) Respell(nodeID, grid, ref string, maxHops int) (string, error) {
 	return b.String(), nil
 }
 
-// HeldAcross reports that a reference written into grid must be spelled for
+// HeldAcross reports that a link written into grid must be spelled for
 // another node: grid is behind a connection of nodeID's and ref is not.
 // Behind the same connection it is forwarded as sent and the node there
 // decides; a grid of nodeID's own holds any id of nodeID's frame as it is.
