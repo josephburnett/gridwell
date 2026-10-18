@@ -54,7 +54,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	// the remote node's address is kept.
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
-	// The connection API's socket lives under the home, so a revival on
+	// The connection API's socket lives in the node directory, so a revival on
 	// the same home lands on the same path.
 	remoteOrigin, remoteAddr, stopRemote := startServeProc(t, bin, remoteHome, "127.0.0.1:0")
 	creds := dialtest.Server(t, t.TempDir())

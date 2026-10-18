@@ -4,7 +4,7 @@ import { test, expect } from './fixtures';
 // dies mid-body leaves its live tiles attached, and a live shell wedges
 // electronApp.close(): the app process exits while the Playwright-side promise
 // never settles. The worker is then SIGKILLed at the test timeout, tmux servers
-// and the temp home leak, and the report gains an unattributed teardown error
+// and the temp node directory leak, and the report gains an unattributed teardown error
 // that reads as a flake. These specs end deliberately dirty, and the assertion
 // is the teardown itself: each passes only if the fixture cleans up inside the
 // test timeout and the leak checks, the sidecar assert and the tmux kill, run.

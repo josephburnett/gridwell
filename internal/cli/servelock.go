@@ -3,7 +3,7 @@ package cli
 // The per-home serve lock: one `gridwell serve` per Gridwell home, since two
 // servers over one database would each cache and write independently and
 // SQLite's WAL locking would not stop them. An exclusive flock on
-// <home>/serve.lock dies with its holder, so there is no stale-pidfile
+// ~/.gridwell/serve.lock dies with its holder, so there is no stale-pidfile
 // protocol; its banner is what a second serve reports, so the desktop app
 // joins the running server instead of starting one.
 

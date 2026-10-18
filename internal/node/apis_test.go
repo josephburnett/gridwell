@@ -13,7 +13,7 @@ import (
 
 // The socket seam of the two APIs: the web API binds where config says,
 // the connection API is a 0600 unix socket at `federation:` and never TCP,
-// and a fresh home is password-gated from the first serve.
+// and a fresh node is password-gated from the first serve.
 func TestStartBindsTheConnectionAPIOnASocketOnly(t *testing.T) {
 	home := t.TempDir()
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))

@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
-// The private directory is minted 0700 at <home>/plugins/<id> and named to the
+// The private directory is minted 0700 at ~/.gridwell/plugins/<id> and named to the
 // plugin as state_dir, beside uuid and kind, with the plugin's own keys left
 // alone.
 func TestSpawnConfig_StateDir(t *testing.T) {

@@ -12,7 +12,7 @@ The API is `/mcp` on the web API (`web.bind` in `server.yaml`), over
 Streamable HTTP. It takes the web password as a bearer token:
 
 ```
-Authorization: Bearer <the contents of <home>/web-password>
+Authorization: Bearer <the contents of ~/.gridwell/web-password>
 ```
 
 The browser's login cookie works too. `gridwell serve` prints the line that

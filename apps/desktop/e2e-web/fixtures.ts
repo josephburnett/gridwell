@@ -128,7 +128,7 @@ export async function authenticate(page: Page, served: Served): Promise<void> {
 export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
 
-  // A throwaway home, as the Electron suite seeds one, on an ephemeral port.
+  // A throwaway node directory, as the Electron suite seeds one, on an ephemeral port.
   serve: async ({ extraPlugins }, use) => {
     const home = seedHome(extraPlugins);
     const served = await spawnServe(home, await freePort());

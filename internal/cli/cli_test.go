@@ -137,7 +137,7 @@ func TestMCPAddLine(t *testing.T) {
 	}
 }
 
-// A missing config is a fresh home: id minted, file written, store created.
+// A missing config is a fresh node: id minted, file written, store created.
 // There is no init step.
 func TestBuildServeConfigFreshHome(t *testing.T) {
 	home := t.TempDir()

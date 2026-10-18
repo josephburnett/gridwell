@@ -16,7 +16,7 @@ export function makeRunDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `gridwell-e2e-p${process.pid}-`));
 }
 
-// A throwaway home, for one test's node.
+// A throwaway node directory, for one test's node.
 export function makeHome(): string {
   return makeRunDir();
 }

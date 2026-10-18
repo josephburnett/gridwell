@@ -140,7 +140,7 @@ func singletonGrid(ctx context.Context, q gridReader, key string) (int64, error)
 }
 
 // bootstrap mints, in one transaction, every singleton grid the file lacks,
-// keyed by the same system row a read finds it by, so an existing home keeps
+// keyed by the same system row a read finds it by, so an existing gridwell.db keeps
 // its ids. The plugin_uuid mint rides with the root's, never alone: see
 // PluginUUID. Framing is not seeded: NULL already means never visited.
 func (s *Store) bootstrap(ctx context.Context) error {

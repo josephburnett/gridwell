@@ -10,7 +10,7 @@ const alive = (pid: number) => pid === LIVE;
 
 test('abandoned: only a gridwell-e2e- directory whose owner is gone, or is the finished runner', () => {
   assert.equal(abandoned(`gridwell-e2e-p${DEAD}-abc`, alive), true);
-  assert.equal(abandoned(`gridwell-e2e-p${LIVE}-abc`, alive), false, "another run's live home");
+  assert.equal(abandoned(`gridwell-e2e-p${LIVE}-abc`, alive), false, "another run's live node directory");
   assert.equal(abandoned(`gridwell-e2e-p${LIVE}-abc`, alive, LIVE), true, "the runner's own, at its teardown");
   assert.equal(abandoned('gridwell-e2e-abc', alive), true, 'no owner in the name');
   assert.equal(abandoned('gridwell-tmux-gridwell-k3x9m2q', alive), false);

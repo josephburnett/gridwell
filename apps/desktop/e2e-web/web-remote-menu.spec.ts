@@ -336,7 +336,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
     })
     .toContain('live updates stopped');
   // A source going down changes what its grids ARE: the grid is the node's
-  // the cache of it from here on, and the chip says so with no gesture.
+  // cache of it from here on, and the chip says so with no gesture.
   await expect
     .poll(focusedStale, {
       message: 'the chip appears with no gesture',

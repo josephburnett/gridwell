@@ -15,8 +15,8 @@ viewX
 viewY
 # "federation" — two words for the edge is one too many: a node connects to a
 # node over a connection, through the connection API. The word survives only
-# where a home already has it written down — the server.yaml `federation:`
-# key, the <home>/federation.sock socket file, the serving banner's
+# where a `~/.gridwell` already has it written down — the server.yaml `federation:`
+# key, the ~/.gridwell/federation.sock socket file, the serving banner's
 # federation= field, and the e2e spec file already named for it — so it is
 # allowed in internal/config, which owns the key, and on any line that spells
 # one of those names.

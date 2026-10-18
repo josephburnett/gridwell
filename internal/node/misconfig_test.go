@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
-// startCfg is a fresh home's config, bound to an ephemeral port.
+// startCfg is a fresh node's config, bound to an ephemeral port.
 func startCfg(t *testing.T) (string, *config.ServerConfig) {
 	t.Helper()
 	home := t.TempDir()

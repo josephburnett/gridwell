@@ -117,7 +117,7 @@ func TestACacheAnswerKeepsEveryRowAndReportsTheReason(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The thread the cache does not hold is one the user arranged, so a
-	// the cache taken for a verdict would retire the user's own row.
+	// cached answer taken for a verdict would retire the user's own row.
 	var t3 *gridwellv1.Tile
 	for _, tile := range before.Tiles {
 		if tile.AltText == "t3" {

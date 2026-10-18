@@ -50,7 +50,7 @@ type ServerConfig struct {
 
 	// WebPassword is not a yaml fact: BuildConfig reads it from the file.
 	WebPassword string `yaml:"-"`
-	// CacheDir is derived by serve, <home>/cache; empty disables caching.
+	// CacheDir is derived by serve, ~/.gridwell/cache; empty disables caching.
 	CacheDir string `yaml:"-"`
 
 	// doc is the file as loaded, comments and all. Save edits the minted ids
@@ -122,30 +122,30 @@ func Home() (string, error) {
 	return filepath.Join(home, ".gridwell"), nil
 }
 
-// DBFile is the node's database, <home>/gridwell.db.
+// DBFile is the node's database, ~/.gridwell/gridwell.db.
 func DBFile(home string) string {
 	return filepath.Join(home, "gridwell.db")
 }
 
-// CacheFile is the node's source cache, <home>/cache.db. Disposable.
+// CacheFile is the node's source cache, ~/.gridwell/cache.db. Disposable.
 func CacheFile(home string) string {
 	return filepath.Join(home, "cache.db")
 }
 
-// PluginStateDir is one plugin's private directory, <home>/plugins/<id>,
+// PluginStateDir is one plugin's private directory, ~/.gridwell/plugins/<id>,
 // handed over at spawn as `state_dir`. What a plugin keeps there is its own
-// the cache of its source, never a node fact, and disposable like cache.db.
+// cache of its source, never a node fact, and disposable like cache.db.
 func PluginStateDir(home, id string) string {
 	return filepath.Join(home, "plugins", id)
 }
 
-// DumpsDir is where the node writes a trace dump, <home>/dumps. Disposable:
+// DumpsDir is where the node writes a trace dump, ~/.gridwell/dumps. Disposable:
 // a dump is a reading someone asked for, not a node fact.
 func DumpsDir(home string) string {
 	return filepath.Join(home, "dumps")
 }
 
-// DefaultPath is <home>/server.yaml.
+// DefaultPath is ~/.gridwell/server.yaml.
 func DefaultPath() (string, error) {
 	home, err := Home()
 	if err != nil {
@@ -404,7 +404,7 @@ func expandPaths(cfg *ServerConfig) error {
 	return nil
 }
 
-// PasswordFile is <home>/web-password.
+// PasswordFile is ~/.gridwell/web-password.
 func PasswordFile(home string) string { return filepath.Join(home, "web-password") }
 
 // DurableFiles are the loose files a home is made of besides its databases:

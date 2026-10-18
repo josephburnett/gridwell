@@ -2,7 +2,7 @@ package server
 
 // The /trace API: the node's diagnostic ring, on the gated browser mux
 // beside /shell. A client posts its own records as JSON lines and a dump
-// writes the whole ring to <home>/dumps. Nothing here is a node fact — the
+// writes the whole ring to ~/.gridwell/dumps. Nothing here is a node fact — the
 // ring answers no read, survives no restart, and dumping does not clear it.
 
 import (

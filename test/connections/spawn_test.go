@@ -54,7 +54,7 @@ func repoRoot(t *testing.T) string {
 
 // startServe launches `gridwell serve` for a home and returns its origin and
 // the connection API's socket path once the banner announces them. The
-// socket lives under the home, so two nodes on one box never collide.
+// socket lives in the node directory, so two nodes on one box never collide.
 func startServe(t *testing.T, bin, home, bind string) (origin, fedSocket string) {
 	origin, fedSocket, _ = startServeProc(t, bin, home, bind)
 	return origin, fedSocket
@@ -208,7 +208,7 @@ func TestConnectionSpawn(t *testing.T) {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
 
-	// The remote node gets a fresh home.
+	// The remote node gets a fresh node directory.
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
 	remoteOrigin, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")

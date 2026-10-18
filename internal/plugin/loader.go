@@ -88,13 +88,13 @@ func loadPlugin(pc *config.PluginConfig, home string, st *store.Store) (namespac
 }
 
 // spawnConfig carries the plugin's own keys, its identity, and state_dir, the
-// private 0700 directory at <home>/plugins/<id> under cache.db's contract:
+// private 0700 directory at ~/.gridwell/plugins/<id> under cache.db's contract:
 // disposable, safe to delete, rewarmed by use. Nothing deletes one, a plugin
 // dropped from server.yaml being able to come back. An empty home is an error,
 // so a plugin never writes into whatever directory the node started in.
 func spawnConfig(pc *config.PluginConfig, home string) (map[string]string, error) {
 	if home == "" {
-		return nil, fmt.Errorf("no home directory for the plugin's state_dir")
+		return nil, fmt.Errorf("no node directory for the plugin's state_dir")
 	}
 	dir := config.PluginStateDir(home, pc.ID)
 	if err := os.MkdirAll(dir, 0o700); err != nil {

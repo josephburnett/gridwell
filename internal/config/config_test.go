@@ -21,7 +21,7 @@ func write(t *testing.T, dir, yml string) string {
 func TestLoad_missing(t *testing.T) {
 	_, err := Load(filepath.Join(t.TempDir(), "server.yaml"))
 	if !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("missing file must surface fs.ErrNotExist (serve treats it as a fresh home), got %v", err)
+		t.Fatalf("missing file must surface fs.ErrNotExist (serve treats it as a fresh node), got %v", err)
 	}
 }
 
@@ -282,7 +282,7 @@ func TestSaveWritesOnlyTheMintedIDs(t *testing.T) {
 	}
 }
 
-// A fresh home has no file to edit, so the mint writes the id and only the id.
+// A fresh node has no file to edit, so the mint writes the id and only the id.
 func TestSaveFreshHomeWritesOnlyTheID(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "server.yaml")
 	fresh := Defaults

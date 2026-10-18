@@ -100,8 +100,8 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("node database missing: %v", err)
 	}
-	// The plugin gets its own directory, minted by the loader under the home
-	// it was threaded, for its cache of its source.
+	// The plugin gets its own directory, minted by the loader in the node directory
+	// it was handed, for its cache of its source.
 	if fi, err := os.Stat(config.PluginStateDir(home, "pfsuuid")); err != nil {
 		t.Fatalf("state dir not minted through the loader: %v", err)
 	} else if perm := fi.Mode().Perm(); perm != 0o700 {

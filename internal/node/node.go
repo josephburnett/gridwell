@@ -33,7 +33,7 @@ import (
 )
 
 // BuildConfig loads server.yaml at cfgPath and prepares it for launch. A
-// missing file is a fresh home. Minting an absent id and writing the file back
+// missing file is a fresh node. Minting an absent id and writing the file back
 // is the one config write the node ever makes.
 func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	cfg, err := config.Load(cfgPath)
@@ -66,7 +66,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 	return cfg, nil
 }
 
-// ensureStore makes <home>/gridwell.db exist, stamped with this node's
+// ensureStore makes ~/.gridwell/gridwell.db exist, stamped with this node's
 // identity. A home still in the retired db/<id>/ layout is refused: its
 // content is in those files, and minting an empty store beside them would
 // look like a home that lost everything.
@@ -200,7 +200,7 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 	return nil
 }
 
-// openCache opens <home>/cache.db. A cache that cannot open degrades to the
+// openCache opens ~/.gridwell/cache.db. A cache that cannot open degrades to the
 // uncached node, never fatally: refusing to serve because an availability
 // layer broke would invert its purpose. It is not silent either — the node
 // still answers every read, so the lost serve-first and offline reading would

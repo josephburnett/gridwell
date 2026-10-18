@@ -106,7 +106,7 @@ func TestRootFramingRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	if v, err := s.RootFraming(ctx); err != nil || !v.SameAs(rpc.View{}) {
-		t.Fatalf("a fresh home claims a root framing: %+v err=%v", v, err)
+		t.Fatalf("a fresh node claims a root framing: %+v err=%v", v, err)
 	}
 	root, err := s.RootGridID(ctx)
 	if err != nil {

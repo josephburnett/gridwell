@@ -227,7 +227,7 @@ check-electron: node-modules
 
 # check-e2e drives the real Electron app end to end. Playwright launches the
 # same `electron .` as `make launch`, which spawns the Go sidecar against a
-# fresh throwaway home, and drives the wasm canvas with synthetic mouse input,
+# fresh throwaway node directory, and drives the wasm canvas with synthetic mouse input,
 # asserting outcomes against the live server over Connect-RPC. It is the only
 # test that exercises the whole renderer, wasm, RPC, server and SQLite
 # composition, and it builds the binaries and boots Electron, so it is a
@@ -256,7 +256,7 @@ check-connections: build
 
 # serve runs the backend on its own, for poking at the RPC surface or loading
 # the wasm client in a plain browser, where live url tiles need the Electron
-# app. A missing ~/.gridwell/server.yaml is a fresh home, and the first serve
+# app. A missing ~/.gridwell/server.yaml is a fresh node, and the first serve
 # mints the node's id and writes the file.
 serve: build
 	$(BIN) serve $(SERVE_FLAGS)

@@ -163,12 +163,12 @@ makes, before the verb runs; the page offers a reload (`client/nodebuild`). An
 agent's MCP call is no page's, so the gate never judges it. The
 connection API is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
 `server.yaml` key is `federation:` and its file is `federation.sock`, kept
-because an existing home already has them written down.
+because an existing `~/.gridwell` already has them written down.
 
 ## The node
 
 `server.yaml` names the node: `id`, `web`, `federation`, `connections`,
-`plugins`. A missing file is a fresh home. The node builds its own home and
+`plugins`. A missing file is a fresh node. The node builds its own home and
 transport. `plugins:` lists content plugins only.
 
 Serve mints what is absent, and that is the only config write. A home in the
@@ -204,7 +204,7 @@ per stamp: a second tell under the stamp last told is no change
 (`Adapter.fresh`). A
 plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
-a database. It does get a private directory, `<home>/plugins/<id>`, named to
+a database. It does get a private directory, `~/.gridwell/plugins/<id>`, named to
 it as `state_dir` at spawn: its own cache of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by
 the node. The node mints ids against those keys and
@@ -564,7 +564,7 @@ puts a batch after everything that happened while it waited to be sent.
 The trace API is on the gated web mux beside `/shell`. `POST /trace` takes JSON
 lines and answers 204; a send clock it cannot read is a 400; a malformed line is a 400 naming its number, and the
 good lines before it stay. `POST /trace/dump` writes the ring in seq order to
-`<home>/dumps/trace-<UTC yyyymmdd-hhmmss>.jsonl`, 0600 in a 0700 directory,
+`~/.gridwell/dumps/trace-<UTC yyyymmdd-hhmmss>.jsonl`, 0600 in a 0700 directory,
 and answers the path and the count. A dump is a reading: it clears nothing.
 
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a

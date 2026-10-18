@@ -5,7 +5,7 @@ A plugin is a separate program that serves the `plugin.v1` gRPC service
 that is the only way a node reaches one. It answers in its
 own stable string keys — a path, a message id, a todo id — and never sees
 ids, layout, or a database. It keeps no node fact; what it may keep is its own
-the cache of its source, in the directory the node hands it (`state_dir`). The node mints ids against your keys, stores
+cache of its source, in the directory the node hands it (`state_dir`). The node mints ids against your keys, stores
 placement and framing, and serves the full Gridwell surface on your behalf.
 The host never switches on which plugin you are; every behavior you get
 comes from something you declared on the wire.
@@ -39,7 +39,7 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
 - **Main**: `guest.Main(YourFromConfig)`, or `guest.Serve(yourImpl)`. Config
   arrives as a JSON map in `GRIDWELL_PLUGIN_CONFIG` (`guest.Config()`): your
   keys plus `uuid`, `kind` and `state_dir`.
-- **State**: `state_dir` is a directory of your own, `<home>/plugins/<id>`,
+- **State**: `state_dir` is a directory of your own, `~/.gridwell/plugins/<id>`,
   minted 0700 before you start. Hold no node facts — no ids, no layout, no
   database. Your own cache of your source is welcome there, under `cache.db`'s
   contract: disposable, safe for the user to delete, rewarmed by use. Nothing

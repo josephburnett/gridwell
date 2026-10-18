@@ -225,9 +225,9 @@ These were decided deliberately. Do not reverse one without a new decision.
 
 **Data**
 
-- The node is its home. One id, one `server.yaml` (`id`, `web`,
-  `federation`, `connections`, `plugins`), one `gridwell.db`. `cache.db` is
-  disposable. Serve mints what is absent, and that is the only config write.
+- The node is one process with one directory, `~/.gridwell`: one id, one
+  `server.yaml` (`id`, `web`, `federation`, `connections`, `plugins`), one
+  `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
 - The store mints the node's singleton grids (root, scratch, trash) when it
   opens, never on a read; reading never mutates has no exception
   (2026-09-30).
@@ -375,7 +375,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   check out the plugins repo beside this one.
 - A plugin serves keys and content; the node owns ids and layout. A plugin
   holds no node fact, and keeps its own cache of its source in the private
-  directory the node hands it at spawn (`<home>/plugins/<id>`, as
+  directory the node hands it at spawn (`~/.gridwell/plugins/<id>`, as
   `state_dir`), under `cache.db`'s contract: disposable, safe to delete,
   rewarmed by use. Nothing deletes one automatically. A connection is
   config: an immutable name, a label, how to dial. Retiring a name is
@@ -492,7 +492,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 - The web API always has a password (the minted 0600 `web-password` file;
   delete it to rotate). The connection API is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays
-  `federation.sock`: an existing home already has them written down.
+  `federation.sock`: an existing `~/.gridwell` already has them written down.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
   interchangeable with the cookie. It is either a text tile or a url tile: a

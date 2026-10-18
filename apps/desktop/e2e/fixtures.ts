@@ -14,14 +14,14 @@ import { freePort } from '../src/main/freeport';
 // (runtree.ts).
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 
-// One content plugin to declare in the seeded home's server.yaml.
+// One content plugin to declare in the seeded node directory's server.yaml.
 export interface PluginSpec {
   kind: string;
   name: string;
   config?: Record<string, string>;
 }
 
-// A throwaway home: a server.yaml declaring the given plugins, whose first
+// A throwaway node directory: a server.yaml declaring the given plugins, whose first
 // serve mints the ids and creates the store, as a real user's first run does.
 // `extraYaml` appends raw sections such as a connections: list. Callers remove
 // the returned dir on teardown.
@@ -93,7 +93,7 @@ async function stopFarNode(n: FarNode): Promise<void> {
 }
 
 
-// The web password serve minted into the home. The file exists only once a
+// The web password serve minted into the node directory. The file exists only once a
 // serve has started there.
 export function homePassword(home: string): string {
   return fs.readFileSync(path.join(home, 'web-password'), 'utf8').trim();
@@ -138,7 +138,7 @@ async function assertSidecarExited(pid: number | null): Promise<void> {
 }
 
 type Fixtures = {
-  // The seeded temp home the app launches on; the gw fixture reads its minted
+  // The seeded temp node directory the app launches on; the gw fixture reads its minted
   // web-password to authenticate the oracle.
   home: string;
   electronApp: ElectronApplication;
@@ -155,8 +155,8 @@ type Fixtures = {
 
 // The fixture launches the same `electron .` entry `make launch` uses, so the
 // whole stack runs: renderer, wasm, Connect-RPC, server, SQLite. Each test gets
-// a fresh temp home, and GRIDWELL_E2E=1 turns on the renderer's read-only
-// introspection hook. Electron's userData is set to <home>/electron both by the
+// a fresh temp node directory, and GRIDWELL_E2E=1 turns on the renderer's read-only
+// introspection hook. Electron's userData is set to ~/.gridwell/electron both by the
 // --user-data-dir flag and by applyUserDataOverride, so no test instance shares
 // ~/.config/gridwell-desktop with the live app or a concurrent instance.
 export const test = base.extend<Fixtures>({

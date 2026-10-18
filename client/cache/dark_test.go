@@ -58,8 +58,8 @@ func TestDarknessNamesOneSource(t *testing.T) {
 }
 
 // The empty uuid names no source. EverySource is what a cursorless gap means
-// for a resync, and reading it here would call every grid in the client a
-// the cache on one malformed event.
+// for a resync, and reading it here would call every grid in the client
+// cached on one malformed event.
 func TestAnUnnamedSourceDarkensNothing(t *testing.T) {
 	c := seedSources(t)
 	c.NoteHealth(EverySource, false)

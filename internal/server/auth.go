@@ -1,7 +1,7 @@
 package server
 
 // Password auth for the browser surface. Single-tenant by design: one
-// plaintext password, the minted <home>/web-password file, one derived cookie
+// plaintext password, the minted ~/.gridwell/web-password file, one derived cookie
 // (or the password as a bearer), no accounts and no sessions table. AuthToken(password) is both the cookie a
 // login sets and the value every request is checked against, so changing the
 // password invalidates every outstanding cookie with no revocation state.

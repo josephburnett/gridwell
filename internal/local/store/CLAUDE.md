@@ -1,6 +1,6 @@
 # internal/local/store — the format contract
 
-This package is the node's one database, `<home>/gridwell.db`: home's
+This package is the node's one database, `~/.gridwell/gridwell.db`: home's
 content (`ns = ''`), every plugin's rows under its namespace in the same
 tables, and the transport's connections. It holds node facts only: minted
 ids (`ns`, `key` → id), layout, framing, the user's bytes, connections,

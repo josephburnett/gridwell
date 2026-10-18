@@ -216,7 +216,7 @@ func RunServe(args []string) int {
 		return die("serve", err)
 	}
 
-	// A missing config file is a fresh home; the node mints its id and
+	// A missing config file is a fresh node; the node mints its id and
 	// writes the file.
 	cfg, err := buildServeConfig(home, cfgPath)
 	if err != nil {

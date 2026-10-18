@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 
 // The Electron userData path derives from GRIDWELL_HOME and nothing else. A
 // normal launch keeps the default profile; an e2e run gets a private
-// <home>/electron one and never touches the live app's profile or lock.
+// ~/.gridwell/electron one and never touches the live app's profile or lock.
 function e2eUserDataDir(env: Record<string, string | undefined>): string | null {
   const home = env['GRIDWELL_HOME'];
   if (!home) return null;

@@ -5,7 +5,7 @@ import { seedHome } from '../e2e/fixtures';
 import { removeHome } from '../e2e/homes';
 import { spawnServe, stopServe, freePort } from './fixtures';
 
-// The web password gate, held in the minted <home>/web-password file, from a
+// The web password gate, held in the minted ~/.gridwell/web-password file, from a
 // real browser against the real server: the login page fronts everything, the
 // right password sets the cookie, and the cookie keeps working across a reload
 // until the password changes. Every suite's server is gated; the others start

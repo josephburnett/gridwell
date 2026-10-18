@@ -1,5 +1,5 @@
 // Package sourcecache is the node's one cache of what a connection last
-// answered: a read-through layer over <home>/cache.db in front of the
+// answered: a read-through layer over ~/.gridwell/cache.db in front of the
 // transport, holding marshaled protos keyed by id. A grid read serves first
 // and refreshes behind (GetGrid); every other read falls back to the
 // cached answer on a transport failure only, so an answered "gone" is
