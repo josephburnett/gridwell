@@ -2,7 +2,7 @@ package store
 
 // The one automatic placement: where a tile lands when nobody chose a cell. A
 // plugin entry with no placement hint takes the next free slot of its
-// collection's overlay, a deleted tile takes the next free slot of its trash
+// grid's overlay, a deleted tile takes the next free slot of its trash
 // month, and a tile the MCP API creates or copies takes FreeSlot. All read
 // this rule, so touching one cannot move another. It is layout only; the user
 // rearranges afterwards and it stays as left.

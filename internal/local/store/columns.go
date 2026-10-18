@@ -241,7 +241,7 @@ never shares a grid), so only blobs are reference-counted.`,
 		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
 		comment: `ns names the grid's owner: '' is home, a plugin id is that plugin's
 memory. One table serves every namespace. context_key is the plugin's
-stable key for the context this grid projects, and is '' for home
+stable key for the grid this grid projects, and is '' for home
 grids. Added at schema v9, additive.`,
 	},
 	{name: "context_key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9},
@@ -250,7 +250,7 @@ grids. Added at schema v9, additive.`,
 		comment: `root_cx/cy/zoom is the framing of a root grid — one with no door
 tile to carry it — in exactly the shape a door's view_cx/cy/zoom
 uses, NULL when never visited. Home's root is this
-row with ns = ''; a plugin context's is its own. It reaches the client
+row with ns = ''; a plugin grid's is its own. It reaches the client
 through the Info handshake's root_view_* fields, never as a Grid
 field, which is why it is storage-only here.`,
 	},

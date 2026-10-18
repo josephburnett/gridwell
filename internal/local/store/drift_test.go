@@ -31,7 +31,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"accepts_tiles":   "stamped by the owning namespace: it takes new tiles — a per-grid capability, never persisted",
 				"scratch_grid_id": "stamped by the serving node, qualified per hop",
 				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",
-				"menu_entries":    "stamped by the serving node from the owning plugin's Info",
+				"plugin_grids":    "stamped by the serving node from the owning plugin's Info",
 				"host_content":    "declared by the owning plugin (these rows project host state); stamped by the adapter that serves the grid",
 				"glyph":           "likewise — the owning plugin's declared identity glyph for the grid",
 				"source_label":    "the owning plugin's listing's name for its source, a memory of the source like the rows; stamped by the adapter",

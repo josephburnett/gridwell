@@ -32,14 +32,14 @@ func (a *Adapter) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridw
 	if q := rpc.ParseFindQuery(req.Query); q.ID != "" {
 		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the memory DB)")
 	}
-	g := &findGrids{a: a, ctx: ctx, byContext: map[string]*synthesized{}}
+	g := &findGrids{a: a, ctx: ctx, byGrid: map[string]*synthesized{}}
 	scope := ""
 	if req.GridId != "" {
-		_, ckey, err := a.resolveGrid(req.GridId)
+		_, gkey, err := a.resolveGrid(req.GridId)
 		if err != nil {
 			return nil, err
 		}
-		scope = ckey
+		scope = gkey
 	}
 	listing := strings.TrimSpace(req.Query) == ""
 	var (
@@ -112,26 +112,26 @@ func (a *Adapter) filterHits(req *gridwellv1.FindRequest, hits []findHit, listin
 
 // findGrids synthesizes each grid a find reads once.
 type findGrids struct {
-	a         *Adapter
-	ctx       context.Context
-	byContext map[string]*synthesized
+	a      *Adapter
+	ctx    context.Context
+	byGrid map[string]*synthesized
 }
 
-func (g *findGrids) grid(ckey string) (*synthesized, error) {
-	if s, ok := g.byContext[ckey]; ok {
+func (g *findGrids) grid(gkey string) (*synthesized, error) {
+	if s, ok := g.byGrid[gkey]; ok {
 		return s, nil
 	}
-	s, err := g.a.synthesize(g.ctx, rpc.EntryGridID(ckey))
+	s, err := g.a.synthesize(g.ctx, rpc.EntryGridID(gkey))
 	if err != nil {
 		return nil, err
 	}
-	g.byContext[ckey] = s
+	g.byGrid[gkey] = s
 	return s, nil
 }
 
-// hit is key's tile on the grid of ckey, nil when the grid has none.
-func (g *findGrids) hit(ckey, key string, path []*gridwellv1.Tile, snippet string, score float64) (*findHit, error) {
-	s, err := g.grid(ckey)
+// hit is key's tile on the grid of gkey, nil when the grid has none.
+func (g *findGrids) hit(gkey, key string, path []*gridwellv1.Tile, snippet string, score float64) (*findHit, error) {
+	s, err := g.grid(gkey)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (g *findGrids) hit(ckey, key string, path []*gridwellv1.Tile, snippet strin
 }
 
 // text is the plugin's answer to the query, placed, and kept when it sits on
-// the scope (or under it, with recurse): a hit's context path names every grid
+// the scope (or under it, with recurse): a hit's grid path names every grid
 // above it.
 func (g *findGrids) text(req *gridwellv1.FindRequest, scope string) ([]findHit, error) {
 	resp, err := ask(&g.a.lacks, "Find", func() (*pluginv1.FindResponse, error) {
@@ -156,22 +156,22 @@ func (g *findGrids) text(req *gridwellv1.FindRequest, scope string) ([]findHit, 
 	}
 	var out []findHit
 	for _, r := range resp.Results {
-		n := len(r.ContextPath)
+		n := len(r.GridPath)
 		if r.Entry == nil || n == 0 {
 			continue
 		}
-		leaf := r.ContextPath[n-1]
-		if scope != "" && leaf != scope && !(req.Recurse && slices.Contains(r.ContextPath, scope)) {
+		leaf := r.GridPath[n-1]
+		if scope != "" && leaf != scope && !(req.Recurse && slices.Contains(r.GridPath, scope)) {
 			continue
 		}
 		var path []*gridwellv1.Tile
 		placed := true
 		for i := 1; i < n; i++ {
-			parent, err := g.grid(r.ContextPath[i-1])
+			parent, err := g.grid(r.GridPath[i-1])
 			if err != nil {
 				return nil, err
 			}
-			door := parent.tileOpening(rpc.EntryGridID(r.ContextPath[i]))
+			door := parent.tileOpening(rpc.EntryGridID(r.GridPath[i]))
 			if door == nil {
 				placed = false
 				break
@@ -192,12 +192,12 @@ func (g *findGrids) text(req *gridwellv1.FindRequest, scope string) ([]findHit, 
 	return out, nil
 }
 
-// walk lists the grid of ckey and, with recurse, every grid its doors open,
+// walk lists the grid of gkey and, with recurse, every grid its doors open,
 // each tile placed under the doors that reached it; path is the chain above
-// ckey.
-func (g *findGrids) walk(ckey string, path []*gridwellv1.Tile, recurse bool, seen map[string]bool) ([]findHit, error) {
-	seen[ckey] = true
-	s, err := g.grid(ckey)
+// gkey.
+func (g *findGrids) walk(gkey string, path []*gridwellv1.Tile, recurse bool, seen map[string]bool) ([]findHit, error) {
+	seen[gkey] = true
+	s, err := g.grid(gkey)
 	if err != nil {
 		return nil, err
 	}
@@ -235,18 +235,18 @@ func (g *findGrids) rows(req *gridwellv1.FindRequest) ([]findHit, error) {
 	}
 	var out []findHit
 	for _, r := range found {
-		ckey, err := g.a.mem.ContextKey(r.GridID)
+		gkey, err := g.a.mem.GridKey(r.GridID)
 		if err != nil {
 			return nil, err
 		}
-		path, ok, err := g.chain(ckey)
+		path, ok, err := g.chain(gkey)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
 			continue
 		}
-		h, err := g.hit(ckey, r.Key, path, "", 1)
+		h, err := g.hit(gkey, r.Key, path, "", 1)
 		if err != nil {
 			return nil, err
 		}
@@ -257,8 +257,8 @@ func (g *findGrids) rows(req *gridwellv1.FindRequest) ([]findHit, error) {
 	return out, nil
 }
 
-// chain is the doors from a collection down to the grid of target, found by
-// listing down from each collection the plugin declares through the grids the
+// chain is the doors from a grid down to the grid of target, found by
+// listing down from each grid the plugin declares through the grids the
 // node holds rows for, which are the ones the user has touched: the find
 // never walks the source. ok is false when no such way down reaches it.
 func (g *findGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err error) {
@@ -267,24 +267,24 @@ func (g *findGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err 
 		return nil, false, err
 	}
 	type step struct {
-		ckey string
+		gkey string
 		path []*gridwellv1.Tile
 	}
 	var queue []step
 	seen := map[string]bool{}
-	for _, m := range declaredEntries(ci) {
-		if m.Context != "" && !seen[m.Context] {
-			seen[m.Context] = true
-			queue = append(queue, step{ckey: m.Context})
+	for _, m := range declaredGrids(ci) {
+		if m.Grid != "" && !seen[m.Grid] {
+			seen[m.Grid] = true
+			queue = append(queue, step{gkey: m.Grid})
 		}
 	}
 	for len(queue) > 0 {
 		at := queue[0]
 		queue = queue[1:]
-		if at.ckey == target {
+		if at.gkey == target {
 			return at.path, true, nil
 		}
-		s, err := g.grid(at.ckey)
+		s, err := g.grid(at.gkey)
 		if err != nil {
 			return nil, false, err
 		}
@@ -294,7 +294,7 @@ func (g *findGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err 
 				continue
 			}
 			if child != target {
-				if _, held, err := g.a.mem.LookupContext(child); err != nil || !held {
+				if _, held, err := g.a.mem.LookupGrid(child); err != nil || !held {
 					if err != nil {
 						return nil, false, err
 					}
@@ -302,7 +302,7 @@ func (g *findGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err 
 				}
 			}
 			seen[child] = true
-			queue = append(queue, step{ckey: child, path: append(slices.Clone(at.path), t)})
+			queue = append(queue, step{gkey: child, path: append(slices.Clone(at.path), t)})
 		}
 	}
 	return nil, false, nil

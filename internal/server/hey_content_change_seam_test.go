@@ -55,7 +55,7 @@ func showHeyThread(t *testing.T) *heyShown {
 		t.Fatal(err)
 	}
 	for _, p := range lp.Plugins {
-		for _, m := range p.MenuEntries {
+		for _, m := range p.PluginGrids {
 			if p.Uuid == heyNS && m.Label == "everything" {
 				s.shown = m.GridId
 			}

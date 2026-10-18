@@ -98,8 +98,8 @@ func newGmailNodeOf(t *testing.T, refresh string, setup func(*gmailClient)) *gma
 		t.Fatal(err)
 	}
 	for _, p := range lp.Plugins {
-		if p.Uuid == gmailNS && len(p.MenuEntries) == 3 {
-			n.inbox, n.starred, n.all = p.MenuEntries[0].GridId, p.MenuEntries[1].GridId, p.MenuEntries[2].GridId
+		if p.Uuid == gmailNS && len(p.PluginGrids) == 3 {
+			n.inbox, n.starred, n.all = p.PluginGrids[0].GridId, p.PluginGrids[1].GridId, p.PluginGrids[2].GridId
 		}
 	}
 	if n.inbox == "" {
@@ -134,7 +134,7 @@ func TestGmailWatchSendsItsHeaderOnAccept(t *testing.T) {
 	cp := plugintest.Spawn(t, "gmail", cfg)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	stream, err := cp.Watch(ctx, &pluginv1.WatchRequest{Contexts: []string{"inbox"}})
+	stream, err := cp.Watch(ctx, &pluginv1.WatchRequest{Grids: []string{"inbox"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,11 +199,11 @@ func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
 }
 
 // Probe is how the node arbitrates a listing and how a far node asks whether
-// a tile is still there, and the plugin answers for the context the tile's id
+// a tile is still there, and the plugin answers for the grid the tile's id
 // names, through the router the connection API serves: the inbox's message
 // is present in the inbox and in all mail, and gone from the starred grid,
 // whose whole read did not list it. Leaving a label is not being gone.
-func TestGmailProbeAnswersForTheContextAsked(t *testing.T) {
+func TestGmailProbeAnswersForTheGridAsked(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	n.tile(t, n.starred, "Invoice 41") // the starred grid has been read
 	link := n.message(t, "Lunch plans")
@@ -256,7 +256,7 @@ func TestGmailWarmGridSurvivesGmailGoingAway(t *testing.T) {
 	n.g.Stop()
 	deadline := time.Now().Add(15 * time.Second)
 	for {
-		resp, err := n.cards.PluginClient.List(ctx, &pluginv1.ListRequest{Context: "label:INBOX"})
+		resp, err := n.cards.PluginClient.List(ctx, &pluginv1.ListRequest{Grid: "label:INBOX"})
 		if err != nil {
 			t.Fatalf("a warm list with Gmail gone = %v, want memory's answer", err)
 		}

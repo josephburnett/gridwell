@@ -156,7 +156,7 @@ func TestLinkFsPluginBySwatch(t *testing.T) {
 // the child (a door to another namespace LINK), labeled with the swatch's label
 // (client/wasm createPluginLinkAtCell). Which swatches a row contributes is
 // door.PlacesOf, the client's own rule, so this drags what the user drags.
-// Every plugin under test here declares one collection, so there is one.
+// Every plugin under test here declares one grid, so there is one.
 func linkBySwatch(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
 	ctx := context.Background()

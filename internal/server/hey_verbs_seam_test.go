@@ -25,21 +25,21 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest/heyfake"
 )
 
-// heyGrids is the plugin's collections by menu label, everything included.
+// heyGrids is the plugin's grids by menu label, everything included.
 func heyGrids(t *testing.T, info *gridwellv1.InfoResponse) map[string]string {
 	t.Helper()
 	out := map[string]string{}
-	for _, m := range info.MenuEntries {
+	for _, m := range info.PluginGrids {
 		out[m.Label] = m.GridId
 	}
 	if len(out) != 4 {
-		t.Fatalf("menu entries = %v", info.MenuEntries)
+		t.Fatalf("declared grids = %v", info.PluginGrids)
 	}
 	return out
 }
 
-// contextOf is the plugin context a grid id addresses.
-func contextOf(t *testing.T, gridID string) string {
+// gridKeyOf is the plugin grid a grid id addresses.
+func gridKeyOf(t *testing.T, gridID string) string {
 	t.Helper()
 	c, _, isTile, ok := rpc.SplitEntryID(gridID)
 	if !ok || isTile {
@@ -69,11 +69,11 @@ func walked(t *testing.T, cl namespace.Namespace, grids map[string]string) *grid
 	return g
 }
 
-// Probe answers for the context the tile id names: a thread that is in Set
+// Probe answers for the grid the tile id names: a thread that is in Set
 // Aside is there, is not in the Imbox, and is in everything. Answering for
 // the plugin as a whole would retire a box's link to a thread that only moved
 // to another box, or keep one that left.
-func TestHeyProbeAnswersForTheContextAsked(t *testing.T) {
+func TestHeyProbeAnswersForTheGridAsked(t *testing.T) {
 	_, cl, info := heyStack(t, heyAccount(t))
 	grids := heyGrids(t, info)
 	walked(t, cl, grids)
@@ -91,7 +91,7 @@ func TestHeyProbeAnswersForTheContextAsked(t *testing.T) {
 		{"imbox", gridwellv1.ProbeResponse_PRESENCE_GONE},
 		{"everything", gridwellv1.ProbeResponse_PRESENCE_PRESENT},
 	} {
-		id := rpc.EntryTileID(contextOf(t, grids[c.grid]), key)
+		id := rpc.EntryTileID(gridKeyOf(t, grids[c.grid]), key)
 		pr, err := cl.Probe(t.Context(), &gridwellv1.ProbeRequest{TileId: id})
 		if err != nil {
 			t.Fatalf("Probe in %s: %v", c.grid, err)
@@ -137,7 +137,7 @@ func TestHeyDeleteIsRefusedWithTheReason(t *testing.T) {
 	tileWithLabel(t, walked(t, cl, grids), "Lunch plans")
 }
 
-// Showing a collection opens the plugin's Watch, and the stream counts open at
+// Showing a grid opens the plugin's Watch, and the stream counts open at
 // its header: the node then checks the shown grid and tells the client it
 // moved since the client read it. With the feed silent, the header is the
 // only thing the plugin sends, so a stream that waits for its first change
@@ -165,7 +165,7 @@ func TestHeyWatchHeaderArrivesWhenAStreamOpens(t *testing.T) {
 	}
 	var shown string
 	for _, p := range lp.Plugins {
-		for _, m := range p.MenuEntries {
+		for _, m := range p.PluginGrids {
 			if p.Uuid == heyNS && m.Label == "imbox" {
 				shown = m.GridId
 			}

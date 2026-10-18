@@ -27,7 +27,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **collection** | One grid a plugin serves, declared as a + menu entry (`door.PlacesOf`). A plugin has no place of its own, so a collection is the only way in, and it is named label first, then its instance — "Feed (hey)" (`door.EntryName`). |
+| **a plugin's grid** | One grid a plugin serves, declared as a + menu row (`door.PlacesOf`). A plugin has no place of its own, so a grid is the only way in, and it is named label first, then its instance — "Feed (hey)" (`door.GridName`). |
 | **menu fold** | The + menu's door row is an open set, so it opens folded behind a chevron over the primitives, and every opening starts folded. The fold is the menu's live state, and what a folded or open menu shows is decided in the same package (`client/menu`). |
 | **frame** | One step through a door (`pane.Frame`), into a grid or into a tile, with where you left it. The whole of where a pane is, and a descent into a document is the same step as a descent into a grid, ascended out of the same way. Text scroll, text mode and content zoom belong to the tile's row, written by `SetTile`; the frame carries the working copy while you are inside it, as it carries the viewport `SetFraming` writes back to the door's row. Inside a workspace tile that viewport and the live text scroll are the pane's own, kept in the layout blob: a settle there writes the row only the text mode, and leaving the text writes the row's whole scroll. |
 | **level** | A workspace tile descent (`pane.Level`), session-only: a frame moves one pane, a level parks the window's whole pane tree. One workspace tile can hold a whole arrangement without the frame stack encoding a tree. |
@@ -52,7 +52,7 @@ here.
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For`, `a.gridWritable` and `a.gridAcceptsTiles` all return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
 
 `pluginhealth.Classify` answers only for a row that can be a door: a node's
-home, a connection, a plugin's collection swatch. A plugin's own row is none of
+home, a connection, a plugin's grid swatch. A plugin's own row is none of
 those, so it has no status at all — nothing draws it, and no click reaches it.
 
 ## Write classes

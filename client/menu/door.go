@@ -2,8 +2,8 @@ package menu
 
 // Which swatches the + menu's top section shows: one per declared door. A
 // node is a place, so its home and a connection's far home each get a swatch.
-// A plugin is not a place; it contributes one swatch per collection, and none
-// with no collections. A row that declares no door is a swatch only when it
+// A plugin is not a place; it contributes one swatch per grid, and none
+// with no grids. A row that declares no door is a swatch only when it
 // is broken or still waiting on an answer. client/door decides what a door
 // is and what it is called.
 

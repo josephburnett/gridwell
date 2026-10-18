@@ -17,7 +17,7 @@ import (
 )
 
 // The filters are the node's, never the plugin's: through the real gitlab
-// binary, a grid scope reads the plugin's context path, and a time or the
+// binary, a grid scope reads the plugin's grid path, and a time or the
 // selection reads the node's row for the entry, so an entry the user never
 // touched, having no row, passes neither.
 func TestFindFiltersReachAPluginsRows(t *testing.T) {
@@ -109,7 +109,7 @@ func TestFindFiltersReachAPluginsRows(t *testing.T) {
 		t.Errorf("selected, no query = %v, want !2", got)
 	}
 	// Found by its row alone, it is still a place: the path down to it is
-	// listed from the collection through the grids the node holds.
+	// listed from the grid through the grids the node holds.
 	r, err := raw.Find(ctx, connect.NewRequest(&gridwellv1.FindRequest{Selected: true}))
 	if err != nil {
 		t.Fatal(err)

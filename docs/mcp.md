@@ -117,7 +117,7 @@ starts with what kind of no it is, then the node's reason:
 - `refused:` the request itself is wrong, such as renaming a text tile, whose
   name is its first line.
 - `not supported here:` the namespace does not do this, such as creating a
-  tile in a plugin's collection.
+  tile in a plugin's grid.
 - `not found:` no such tile or grid.
 
 ## Not exposed

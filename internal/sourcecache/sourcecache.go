@@ -436,7 +436,7 @@ func doorGrids(l *pb.HandshakeResponse) []string {
 	var ids []string
 	for _, pl := range l.GetPlugins() {
 		ids = append(ids, pl.GetRootGridId())
-		for _, e := range pl.GetMenuEntries() {
+		for _, e := range pl.GetPluginGrids() {
 			ids = append(ids, e.GetGridId())
 		}
 	}
@@ -454,7 +454,7 @@ func keepFraming(fresh, old *pb.HandshakeResponse) {
 	}
 	for _, pl := range old.GetPlugins() {
 		remember(pl.GetRootGridId(), rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()))
-		for _, e := range pl.GetMenuEntries() {
+		for _, e := range pl.GetPluginGrids() {
 			remember(e.GetGridId(), rpc.ViewOf(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()))
 		}
 	}
@@ -463,7 +463,7 @@ func keepFraming(fresh, old *pb.HandshakeResponse) {
 		if v, ok := known[pl.GetRootGridId()]; ok && unset(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()) {
 			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = v.Wire()
 		}
-		for _, e := range pl.GetMenuEntries() {
+		for _, e := range pl.GetPluginGrids() {
 			if v, ok := known[e.GetGridId()]; ok && unset(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()) {
 				e.ViewCx, e.ViewCy, e.ViewZoom = v.Wire()
 			}

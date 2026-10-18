@@ -14,7 +14,7 @@ import (
 
 func mintOne(t *testing.T, d *Namespace, e *pluginv1.Entry) int64 {
 	t.Helper()
-	gid, err := d.ContextID("root")
+	gid, err := d.GridOf("root")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestAPluginScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
 
 func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	id := mintOne(t, d, pageEntry("a.html"))
 	for _, want := range []bool{true, false} {
 		if _, err := d.SetFrozen(id, want, nil); err != nil {
@@ -160,7 +160,7 @@ func TestDroppingAPluginScreenshotReleasesItsBlob(t *testing.T) {
 // can only ask the user to fill in.
 func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	mintOne(t, d, pageEntry("a.html"))
 	other := &pluginv1.Entry{Key: "b.md", Kind: rpc.KindText, Label: "b.md"}
 	if err := d.Refresh(gid, []*pluginv1.Entry{other}); err != nil {

@@ -121,7 +121,7 @@ Ask the merge question of every concept, wire fields included: state what
 decided behavior would be lost if this concept collapsed into its neighbor,
 and if the answer is nothing, it is a useless abstraction — name it. A
 default that privileges one member of a uniform set is the tell
-(`root_context` privileged one collection over the menu entries that already
+(`root_grid` privileged one grid over the declared grids that already
 expressed all of them, and a plugin had to fake a root to work around it; it
 was retired for that reason).
 CLEAN when no two concepts could merge without losing a decided behavior AND
@@ -178,7 +178,7 @@ invariants from the tree alone — name anything that would mislead them.
 
 **11. Parity: a tile is a tile wherever it comes from.** Fill the matrix.
 Rows: every tile kind (text, url, shell, door, workspace) and every door
-(home grid, plugin collection, far home). Columns: everything a user can do
+(home grid, plugin grid, far home). Columns: everything a user can do
 to one — create, move, copy, link, delete, rename, descend, freeze, keep a
 screenshot, save zoom, save a text scroll, save framing, read content, write
 content, serve a page, find, see it update when its source changes, see it

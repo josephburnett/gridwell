@@ -29,8 +29,8 @@ import (
 
 const watchUUID = "pwatch1"
 
-// pokedWatch declares Watch and one collection, and on every poke adds an
-// entry to it and sends its ContextChanged.
+// pokedWatch declares Watch and one grid, and on every poke adds an
+// entry to it and sends its GridChanged.
 type pokedWatch struct {
 	pluginv1.UnimplementedPluginServer
 	poke    chan struct{}
@@ -39,7 +39,7 @@ type pokedWatch struct {
 
 func (pokedWatch) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{Kind: "feed", DisplayName: "feed", Watch: true,
-		MenuEntries: []*pluginv1.MenuEntry{{Id: "all", Label: "All", Context: "all"}}}, nil
+		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}}}, nil
 }
 
 func (p pokedWatch) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
@@ -59,8 +59,8 @@ func (p pokedWatch) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer
 		select {
 		case <-p.poke:
 			p.entries.Add(1)
-			if err := s.Send(&pluginv1.Change{Payload: &pluginv1.Change_ContextChanged{
-				ContextChanged: &pluginv1.ContextChanged{Context: "all"}}}); err != nil {
+			if err := s.Send(&pluginv1.Change{Payload: &pluginv1.Change_GridChanged{
+				GridChanged: &pluginv1.GridChanged{Grid: "all"}}}); err != nil {
 				return err
 			}
 		case <-s.Context().Done():
@@ -132,7 +132,7 @@ func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, shown 
 	}
 }
 
-// A plugin that says a context changed reaches a client on its own node as the
+// A plugin that says a grid changed reaches a client on its own node as the
 // GridChanged a write would have published, under the qualified grid id the
 // client holds.
 func TestPluginWatchReachesTheWebAPI(t *testing.T) {
@@ -155,12 +155,12 @@ func TestPluginWatchReachesTheWebAPI(t *testing.T) {
 	}
 	var grid string
 	for _, p := range lp.Plugins {
-		if p.Uuid == watchUUID && len(p.MenuEntries) == 1 {
-			grid = p.MenuEntries[0].GridId
+		if p.Uuid == watchUUID && len(p.PluginGrids) == 1 {
+			grid = p.PluginGrids[0].GridId
 		}
 	}
 	if want := rpc.QualifyID(watchUUID, rpc.KeyTileID("all")); grid != want {
-		t.Fatalf("the collection's door is %q, want %q", grid, want)
+		t.Fatalf("the grid's door is %q, want %q", grid, want)
 	}
 	awaitGridChanged(t, cl, poke, []string{grid}, grid)
 }
@@ -175,7 +175,7 @@ func TestPluginWatchCrossesAConnection(t *testing.T) {
 	awaitGridChanged(t, h.localCl, poke, []string{want}, want)
 }
 
-// A collection seen only as a door's preview in home is shown by the child
+// A grid seen only as a door's preview in home is shown by the child
 // grid id the client reads off that door (pane.Showing), and a change in it
 // reaches the client under that same id.
 func TestPluginWatchReachesAWellPreview(t *testing.T) {
@@ -212,12 +212,12 @@ func TestPluginWatchReachesAWellPreview(t *testing.T) {
 		}
 	}
 	if preview == "" {
-		t.Fatal("home holds no door onto the collection")
+		t.Fatal("home holds no door onto the grid")
 	}
 	awaitGridChanged(t, cl, poke, []string{home, preview}, preview)
 }
 
-// scopedWatch reports each Watch it is asked for: its contexts when opened,
+// scopedWatch reports each Watch it is asked for: its grids when opened,
 // and its end.
 type scopedWatch struct {
 	pokedWatch
@@ -226,14 +226,14 @@ type scopedWatch struct {
 }
 
 func (p scopedWatch) Watch(req *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
-	p.opened <- req.Contexts
+	p.opened <- req.Grids
 	<-s.Context().Done()
 	p.ended <- struct{}{}
 	return nil
 }
 
 // What a client at the web API shows is what the plugin is asked to watch,
-// as its own context key, and the stream ends when that client goes away.
+// as its own grid key, and the stream ends when that client goes away.
 func TestPluginWatchIsScopedToWhatAClientShows(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/gridwell.db")
 	if err != nil {
@@ -261,7 +261,7 @@ func TestPluginWatchIsScopedToWhatAClientShows(t *testing.T) {
 			t.Fatalf("Watch opened with %v, want [all]", got)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("showing the collection opened no Watch")
+		t.Fatal("showing the grid opened no Watch")
 	}
 	closeSub()
 	select {

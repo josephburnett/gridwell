@@ -63,7 +63,7 @@ export interface MenuItem {
   // The same selector the bar's crumb for this row's root grid wears, so a
   // spec can pin that the two agree.
   glyph?: string;
-  // The declared menu entry this swatch came from, such as the home's "trash".
+  // The declared grid this swatch came from, such as the home's "trash".
   // Empty on a row's own place.
   entry?: string;
   x: number;
@@ -80,9 +80,9 @@ export interface PluginDescriptor {
   label: string;
   uuid: string;
   // The row's own grid. A plugin names none of its own, so this is empty for
-  // one and its grids are in menuEntries.
+  // one and its grids are in pluginGrids.
   rootGridID: string;
-  menuEntries: PluginCollection[];
+  pluginGrids: PluginGrid[];
   // The scratch grid stamped on rootGridID, where ephemeral visits from it
   // land: empty until that grid is cached, so read it through scratchGridID().
   scratchGridID: string;
@@ -97,9 +97,9 @@ export interface PluginDescriptor {
   rootViewZoom: number;
 }
 
-// One declared menu entry: a grid the row is a door onto. label is instance
-// and collection joined (door.EntryName), as "Feed (hey)".
-export interface PluginCollection {
+// One declared grid: a grid the row is a door onto. label is instance
+// and grid joined (door.GridName), as "Feed (hey)".
+export interface PluginGrid {
   id: string;
   label: string;
   gridID: string;

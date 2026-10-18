@@ -41,7 +41,7 @@ func (p *lackingPlugin) count(verb string) int {
 }
 
 func (p *lackingPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "lacking", MenuEntries: []*pluginv1.MenuEntry{{Id: "c", Context: "c"}}}, nil
+	return &pluginv1.InfoResponse{Kind: "lacking", Grids: []*pluginv1.PluginGrid{{Id: "c", Grid: "c"}}}, nil
 }
 
 func (p *lackingPlugin) GetPreview(context.Context, *pluginv1.GetPreviewRequest) (*pluginv1.GetPreviewResponse, error) {

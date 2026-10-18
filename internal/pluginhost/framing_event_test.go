@@ -15,14 +15,14 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// oneEntryPlugin declares one collection and lists one text entry in it.
+// oneEntryPlugin declares one grid and lists one text entry in it.
 type oneEntryPlugin struct {
 	pluginv1.UnimplementedPluginServer
 }
 
 func (oneEntryPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{Kind: "notes", DisplayName: "notes",
-		MenuEntries: []*pluginv1.MenuEntry{{Id: "all", Label: "All", Context: "all"}}}, nil
+		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}}}, nil
 }
 
 func (oneEntryPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
@@ -30,18 +30,18 @@ func (oneEntryPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.Li
 		Entries: []*pluginv1.Entry{{Key: "a", Kind: "text", Label: "a"}}}, nil
 }
 
-// doorPlugin lists one door in its collection, opening onto a second context.
+// doorPlugin lists one door in its grid, opening onto a second grid.
 type doorPlugin struct{ oneEntryPlugin }
 
 func (doorPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
-	if req.Context != "all" {
+	if req.Grid != "all" {
 		return &pluginv1.ListResponse{Authoritative: true}, nil
 	}
 	return &pluginv1.ListResponse{Authoritative: true,
-		Entries: []*pluginv1.Entry{{Key: "w", Kind: rpc.KindDoor, Label: "w", ChildContext: "inner"}}}, nil
+		Entries: []*pluginv1.Entry{{Key: "w", Kind: rpc.KindDoor, Label: "w", ChildGrid: "inner"}}}, nil
 }
 
-// A collection's framing changes no listing, so framing its grid announces the
+// A grid's framing changes no listing, so framing its grid announces the
 // three numbers and never GridChanged, which costs every client a refetch per
 // pan. A layout write on the same grid still announces GridChanged. Both run
 // over the adapter's own stream, the one the router relays.
@@ -64,7 +64,7 @@ func TestRootFramingAnnouncesItsFramingNotAGridChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	grid := info.MenuEntries[0].GridId
+	grid := info.PluginGrids[0].GridId
 	listing, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: grid})
 	if err != nil || len(listing.Tiles) != 1 {
 		t.Fatalf("listing = %v, %v; want the one entry", listing, err)
@@ -87,7 +87,7 @@ func TestRootFramingAnnouncesItsFramingNotAGridChange(t *testing.T) {
 	evs := collect(seen)
 	want := &gridwellv1.GridFramingChanged{GridId: grid, ViewCx: 3.5, ViewCy: -2.25, ViewZoom: 1.75}
 	if len(evs) != 1 || !proto.Equal(evs[0].GetGridFramingChanged(), want) {
-		t.Errorf("framing a collection announced %v, want exactly %v", evs, want)
+		t.Errorf("framing a grid announced %v, want exactly %v", evs, want)
 	}
 
 	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{
@@ -123,7 +123,7 @@ func TestDoorFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	grid := info.MenuEntries[0].GridId
+	grid := info.PluginGrids[0].GridId
 	listing, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: grid})
 	if err != nil || len(listing.Tiles) != 1 {
 		t.Fatalf("listing = %v, %v; want the one door", listing, err)

@@ -26,7 +26,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 		HostContent:   true,
 		Glyph:         "folder",
 		SourceLabel:   "/srv/docs",
-		MenuEntries:   []*pb.MenuEntry{{Id: "find", GridId: "far/7"}},
+		PluginGrids:   []*pb.PluginGrid{{Id: "find", GridId: "far/7"}},
 	}
 	out := TransitQualifyGrid("hop", in)
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
@@ -35,10 +35,10 @@ func TestTransitQualifyGrid(t *testing.T) {
 	if !out.Writable || out.GetAcceptsTiles() || !out.HostContent || out.Glyph != "folder" || out.SourceLabel != "/srv/docs" {
 		t.Fatalf("stamped facts must ride verbatim: %+v", out)
 	}
-	if len(out.MenuEntries) != 1 || out.MenuEntries[0].GridId != "hop/far/7" {
-		t.Fatalf("menu entry roots not prepended: %+v", out.MenuEntries)
+	if len(out.PluginGrids) != 1 || out.PluginGrids[0].GridId != "hop/far/7" {
+		t.Fatalf("declared grid roots not prepended: %+v", out.PluginGrids)
 	}
-	if in.Id != "far/7" || in.MenuEntries[0].GridId != "far/7" {
+	if in.Id != "far/7" || in.PluginGrids[0].GridId != "far/7" {
 		t.Fatalf("input mutated: %+v", in)
 	}
 	if TransitQualifyGrid("hop", nil) != nil {
@@ -98,7 +98,7 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 }
 
 // isIDField is the wire's naming for a qualified id within a request or a
-// Tile, plus shell_tmux, a tile id by another name. MenuEntry's "id" is not
+// Tile, plus shell_tmux, a tile id by another name. PluginGrid's "id" is not
 // one, so the rule is not read wire-wide.
 func isIDField(fd protoreflect.FieldDescriptor) bool {
 	name := string(fd.Name())

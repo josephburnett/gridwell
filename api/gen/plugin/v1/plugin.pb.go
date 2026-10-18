@@ -134,17 +134,16 @@ type InfoResponse struct {
 	Kind        string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // e.g. "fs", "proc", "mail"
 	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Glyph       string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"` // declared glyph vocabulary; "" = the generic globe
-	// root_context is retired and its field number is kept rather than reused.
-	// A plugin contributes doors, one menu_entries row per collection, and
-	// the node has no landing to choose among them. Leave it empty and declare
-	// your collections.
+	// root_grid is retired and its field number is kept rather than reused.
+	// A plugin contributes doors, one + menu row per grid it declares in
+	// grids, and the node has no landing to choose among them. Leave it empty
+	// and declare your grids.
 	//
 	// The node reads it in one case, so a binary built against the older proto
-	// keeps presenting without a rebuild: a plugin that answers a root_context
-	// and no menu_entries gets one derived entry onto it, wearing the plugin's
-	// own name and glyph. Declare both and the entries win; there is no
-	// privileged collection.
-	RootContext string `protobuf:"bytes,4,opt,name=root_context,json=rootContext,proto3" json:"root_context,omitempty"`
+	// keeps presenting without a rebuild: a plugin that answers a root_grid and
+	// no grids gets one derived grid onto it, wearing the plugin's own name and
+	// glyph. Declare both and grids wins; there is no privileged grid.
+	RootGrid string `protobuf:"bytes,4,opt,name=root_grid,json=rootGrid,proto3" json:"root_grid,omitempty"`
 	// watch: the plugin implements Watch (live change events). It is the one
 	// owner: the node opens Watch only when this is set. A plugin that sets it
 	// and answers Unimplemented has live updates off, said once on a healthy
@@ -156,15 +155,15 @@ type InfoResponse struct {
 	// without it they are read-only. Presentation writes never reach a plugin,
 	// so this is a content capability only.
 	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
-	// menu_entries: the plugin's collections, one row each, and the way a plugin
-	// is reached. Each becomes a (+) menu swatch, and the node stamps them onto
-	// every grid it serves for this plugin. Keyed by context instead of grid id.
-	// Declaring none is legal and means the plugin contributes nothing to the
-	// menu.
-	MenuEntries []*MenuEntry `protobuf:"bytes,7,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
-	// host_content: this plugin's contexts project host state, such as a
+	// grids: the grids the plugin declares, one + menu row each, and the way a
+	// plugin is reached. Each becomes a (+) menu swatch, and the node stamps
+	// them onto every grid it serves for this plugin. Keyed by the plugin's own
+	// grid key instead of a grid id. Declaring none is legal and means the
+	// plugin contributes nothing to the menu.
+	Grids []*PluginGrid `protobuf:"bytes,7,rep,name=grids,proto3" json:"grids,omitempty"`
+	// host_content: this plugin's grids project host state, such as a
 	// directory tree or the process table, rather than holding content of their
-	// own. Their rows are summaries the node cannot re-arrange across contexts,
+	// own. Their rows are summaries the node cannot re-arrange across grids,
 	// and the client renders them with the host treatment: the outside tint on
 	// every tile and the border family of a door to another namespace on a descent. The node has no list of
 	// which kinds are host-backed, so a third-party plugin gets the same
@@ -226,9 +225,9 @@ func (x *InfoResponse) GetGlyph() string {
 	return ""
 }
 
-func (x *InfoResponse) GetRootContext() string {
+func (x *InfoResponse) GetRootGrid() string {
 	if x != nil {
-		return x.RootContext
+		return x.RootGrid
 	}
 	return ""
 }
@@ -247,9 +246,9 @@ func (x *InfoResponse) GetWritable() bool {
 	return false
 }
 
-func (x *InfoResponse) GetMenuEntries() []*MenuEntry {
+func (x *InfoResponse) GetGrids() []*PluginGrid {
 	if x != nil {
-		return x.MenuEntries
+		return x.Grids
 	}
 	return nil
 }
@@ -261,33 +260,33 @@ func (x *InfoResponse) GetHostContent() bool {
 	return false
 }
 
-// MenuEntry mirrors the gridwell.v1 shape with contexts for targets: one of the
-// plugin's collections, which the node stamps onto every grid it serves for
+// PluginGrid mirrors the gridwell.v1 shape with grid keys for targets: one of
+// the plugin's grids, which the node stamps onto every grid it serves for
 // this plugin.
-type MenuEntry struct {
+type PluginGrid struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
 	Glyph         string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	Context       string                 `protobuf:"bytes,7,opt,name=context,proto3" json:"context,omitempty"` // the target context key
+	Grid          string                 `protobuf:"bytes,7,opt,name=grid,proto3" json:"grid,omitempty"` // the target grid's key
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MenuEntry) Reset() {
-	*x = MenuEntry{}
+func (x *PluginGrid) Reset() {
+	*x = PluginGrid{}
 	mi := &file_plugin_v1_plugin_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MenuEntry) String() string {
+func (x *PluginGrid) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MenuEntry) ProtoMessage() {}
+func (*PluginGrid) ProtoMessage() {}
 
-func (x *MenuEntry) ProtoReflect() protoreflect.Message {
+func (x *PluginGrid) ProtoReflect() protoreflect.Message {
 	mi := &file_plugin_v1_plugin_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -299,45 +298,45 @@ func (x *MenuEntry) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MenuEntry.ProtoReflect.Descriptor instead.
-func (*MenuEntry) Descriptor() ([]byte, []int) {
+// Deprecated: Use PluginGrid.ProtoReflect.Descriptor instead.
+func (*PluginGrid) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *MenuEntry) GetId() string {
+func (x *PluginGrid) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetLabel() string {
+func (x *PluginGrid) GetLabel() string {
 	if x != nil {
 		return x.Label
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetGlyph() string {
+func (x *PluginGrid) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetContext() string {
+func (x *PluginGrid) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
 
-// List enumerates one context, carrying no presentation facts. A context is the
-// plugin's word for a grid, and the node maps context keys to grid ids in the
+// List enumerates one grid, carrying no presentation facts. The plugin names a
+// grid by its own key, and the node maps grid keys to grid ids in the
 // plugin's namespace of its store.
 type ListRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Grid          string                 `protobuf:"bytes,1,opt,name=grid,proto3" json:"grid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -372,9 +371,9 @@ func (*ListRequest) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListRequest) GetContext() string {
+func (x *ListRequest) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
@@ -382,7 +381,7 @@ func (x *ListRequest) GetContext() string {
 type ListResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Entries []*Entry               `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
-	// authoritative: this listing enumerates the context definitively, so a key
+	// authoritative: this listing enumerates the grid definitively, so a key
 	// absent from it is gone, as for a readable directory. When false, absence
 	// only means not seen this pass, as with the process table, and the node
 	// keeps serving remembered entries until Probe answers GONE. It is the one
@@ -466,8 +465,8 @@ type Entry struct {
 	// serve a page.
 	Kind  string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
-	// child_context: doors only — the context this entry opens into.
-	ChildContext string `protobuf:"bytes,4,opt,name=child_context,json=childContext,proto3" json:"child_context,omitempty"`
+	// child_grid: doors only — the grid this entry opens into.
+	ChildGrid string `protobuf:"bytes,4,opt,name=child_grid,json=childGrid,proto3" json:"child_grid,omitempty"`
 	// serves_page: this entry's web content is the plugin's, served through
 	// ServeContent. It is a url entry's address in place of url_string — the
 	// node derives one at its /content/ API — so it rides kind "url" alone and
@@ -503,8 +502,8 @@ type Entry struct {
 	// Keep kind as the target's kind, and the content facts too if an older
 	// node must still present it, since a node that predates this field shows
 	// the entry as content of its own. The node mints nothing for the target
-	// until the user touches it, and a target its context no longer holds
-	// reads as a dead link. A door has no link variant here: its child_context
+	// until the user touches it, and a target its grid no longer holds
+	// reads as a dead link. A door has no link variant here: its child_grid
 	// already names where it opens.
 	LinkTarget *EntryRef `protobuf:"bytes,11,opt,name=link_target,json=linkTarget,proto3" json:"link_target,omitempty"`
 	// content_stamp names the bytes a text entry's ReadContent answers right
@@ -578,9 +577,9 @@ func (x *Entry) GetLabel() string {
 	return ""
 }
 
-func (x *Entry) GetChildContext() string {
+func (x *Entry) GetChildGrid() string {
 	if x != nil {
-		return x.ChildContext
+		return x.ChildGrid
 	}
 	return ""
 }
@@ -648,11 +647,11 @@ func (x *Entry) GetReadOnly() string {
 	return ""
 }
 
-// EntryRef names one entry by the plugin's own words: the context that lists
+// EntryRef names one entry by the plugin's own words: the grid that lists
 // it and its key there.
 type EntryRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Grid          string                 `protobuf:"bytes,1,opt,name=grid,proto3" json:"grid,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -688,9 +687,9 @@ func (*EntryRef) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *EntryRef) GetContext() string {
+func (x *EntryRef) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
@@ -1203,12 +1202,12 @@ func (x *GetPreviewResponse) GetJpeg() []byte {
 type ProbeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// context is the context the node is asking about: GONE means the key has
-	// left that context, which for a key listed in several contexts (a mail
-	// thread in a box and in everything) is not the same as gone everywhere.
-	// Empty means the node names none (a node from before contexts): answer
-	// for the plugin as a whole.
-	Context       string `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	// grid is the grid the node is asking about: GONE means the key has left
+	// that grid, which for a key listed in several grids (a mail thread in a
+	// box and in everything) is not the same as gone everywhere. Empty means
+	// the node names none (a node from before this field): answer for the
+	// plugin as a whole.
+	Grid          string `protobuf:"bytes,2,opt,name=grid,proto3" json:"grid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1250,9 +1249,9 @@ func (x *ProbeRequest) GetKey() string {
 	return ""
 }
 
-func (x *ProbeRequest) GetContext() string {
+func (x *ProbeRequest) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
@@ -1439,9 +1438,9 @@ func (x *FindRequest) GetLimit() int32 {
 type FindResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Entry *Entry                 `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
-	// context_path is the containing-context chain from the root, outermost first.
-	// The node resolves it to a navigable tile path.
-	ContextPath   []string `protobuf:"bytes,2,rep,name=context_path,json=contextPath,proto3" json:"context_path,omitempty"`
+	// grid_path is the chain of grids containing the entry, from the root,
+	// outermost first. The node resolves it to a navigable tile path.
+	GridPath      []string `protobuf:"bytes,2,rep,name=grid_path,json=gridPath,proto3" json:"grid_path,omitempty"`
 	Snippet       string   `protobuf:"bytes,3,opt,name=snippet,proto3" json:"snippet,omitempty"`
 	Score         float64  `protobuf:"fixed64,4,opt,name=score,proto3" json:"score,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1485,9 +1484,9 @@ func (x *FindResult) GetEntry() *Entry {
 	return nil
 }
 
-func (x *FindResult) GetContextPath() []string {
+func (x *FindResult) GetGridPath() []string {
 	if x != nil {
-		return x.ContextPath
+		return x.GridPath
 	}
 	return nil
 }
@@ -1550,17 +1549,17 @@ func (x *FindResponse) GetResults() []*FindResult {
 	return nil
 }
 
-// WatchRequest's contexts are your own context keys the node wants watched:
-// the ones some client shows, on this node or any node that reaches it. A
-// file shown in a pane counts through its context. When the set changes the
-// node opens a stream with the new set and ends the old one only once the new
-// one has sent its header, so a context in both is watched throughout; while
-// nothing of yours is shown it holds none open. Empty means the node names no
-// scope (a node from before scopes): watch what you judge cheap. A feed that
-// is account-wide rather than per context may ignore the set.
+// WatchRequest's grids are your own grid keys the node wants watched: the
+// ones some client shows, on this node or any node that reaches it. A file
+// shown in a pane counts through its grid. When the set changes the node
+// opens a stream with the new set and ends the old one only once the new one
+// has sent its header, so a grid in both is watched throughout; while nothing
+// of yours is shown it holds none open. Empty means the node names no scope
+// (a node from before scopes): watch what you judge cheap. A feed that is
+// account-wide rather than per grid may ignore the set.
 type WatchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Contexts      []string               `protobuf:"bytes,1,rep,name=contexts,proto3" json:"contexts,omitempty"`
+	Grids         []string               `protobuf:"bytes,1,rep,name=grids,proto3" json:"grids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1595,38 +1594,38 @@ func (*WatchRequest) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *WatchRequest) GetContexts() []string {
+func (x *WatchRequest) GetGrids() []string {
 	if x != nil {
-		return x.Contexts
+		return x.Grids
 	}
 	return nil
 }
 
-// ContextChanged says context's listing may have moved: an entry added,
-// removed, renamed or re-described. The node lists it and tells clients only
-// if the answer moved, so a ContextChanged that moves nothing costs one List
-// and no client anything.
-type ContextChanged struct {
+// GridChanged says grid's listing may have moved: an entry added, removed,
+// renamed or re-described. The node lists it and tells clients only if the
+// answer moved, so a GridChanged that moves nothing costs one List and no
+// client anything.
+type GridChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Grid          string                 `protobuf:"bytes,1,opt,name=grid,proto3" json:"grid,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ContextChanged) Reset() {
-	*x = ContextChanged{}
+func (x *GridChanged) Reset() {
+	*x = GridChanged{}
 	mi := &file_plugin_v1_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ContextChanged) String() string {
+func (x *GridChanged) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ContextChanged) ProtoMessage() {}
+func (*GridChanged) ProtoMessage() {}
 
-func (x *ContextChanged) ProtoReflect() protoreflect.Message {
+func (x *GridChanged) ProtoReflect() protoreflect.Message {
 	mi := &file_plugin_v1_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1638,14 +1637,14 @@ func (x *ContextChanged) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ContextChanged.ProtoReflect.Descriptor instead.
-func (*ContextChanged) Descriptor() ([]byte, []int) {
+// Deprecated: Use GridChanged.ProtoReflect.Descriptor instead.
+func (*GridChanged) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *ContextChanged) GetContext() string {
+func (x *GridChanged) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
@@ -1657,7 +1656,7 @@ func (x *ContextChanged) GetContext() string {
 // this is the only way its bytes reach a body a client already holds.
 type EntryChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Grid          string                 `protobuf:"bytes,1,opt,name=grid,proto3" json:"grid,omitempty"`
 	Entry         *Entry                 `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1693,9 +1692,9 @@ func (*EntryChanged) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
 }
 
-func (x *EntryChanged) GetContext() string {
+func (x *EntryChanged) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
@@ -1708,12 +1707,12 @@ func (x *EntryChanged) GetEntry() *Entry {
 }
 
 // EntryRemoved is RETIRED and its arm number is kept rather than reused: a
-// removal is a listing that moved, which ContextChanged says. The node reads
-// it in one place, as a ContextChanged for its context, so an older binary
-// keeps working. Do not send it.
+// removal is a listing that moved, which GridChanged says. The node reads
+// it in one place, as a GridChanged for its grid, so an older binary keeps
+// working. Do not send it.
 type EntryRemoved struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	Grid          string                 `protobuf:"bytes,1,opt,name=grid,proto3" json:"grid,omitempty"`
 	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1749,9 +1748,9 @@ func (*EntryRemoved) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *EntryRemoved) GetContext() string {
+func (x *EntryRemoved) GetGrid() string {
 	if x != nil {
-		return x.Context
+		return x.Grid
 	}
 	return ""
 }
@@ -1767,7 +1766,7 @@ type Change struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
 	//
-	//	*Change_ContextChanged
+	//	*Change_GridChanged
 	//	*Change_EntryRemoved
 	//	*Change_EntryChanged
 	Payload       isChange_Payload `protobuf_oneof:"payload"`
@@ -1812,10 +1811,10 @@ func (x *Change) GetPayload() isChange_Payload {
 	return nil
 }
 
-func (x *Change) GetContextChanged() *ContextChanged {
+func (x *Change) GetGridChanged() *GridChanged {
 	if x != nil {
-		if x, ok := x.Payload.(*Change_ContextChanged); ok {
-			return x.ContextChanged
+		if x, ok := x.Payload.(*Change_GridChanged); ok {
+			return x.GridChanged
 		}
 	}
 	return nil
@@ -1843,8 +1842,8 @@ type isChange_Payload interface {
 	isChange_Payload()
 }
 
-type Change_ContextChanged struct {
-	ContextChanged *ContextChanged `protobuf:"bytes,1,opt,name=context_changed,json=contextChanged,proto3,oneof"`
+type Change_GridChanged struct {
+	GridChanged *GridChanged `protobuf:"bytes,1,opt,name=grid_changed,json=gridChanged,proto3,oneof"`
 }
 
 type Change_EntryRemoved struct {
@@ -1855,7 +1854,7 @@ type Change_EntryChanged struct {
 	EntryChanged *EntryChanged `protobuf:"bytes,3,opt,name=entry_changed,json=entryChanged,proto3,oneof"`
 }
 
-func (*Change_ContextChanged) isChange_Payload() {}
+func (*Change_GridChanged) isChange_Payload() {}
 
 func (*Change_EntryRemoved) isChange_Payload() {}
 
@@ -1866,33 +1865,35 @@ var File_plugin_v1_plugin_proto protoreflect.FileDescriptor
 const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\x16plugin/v1/plugin.proto\x12\tplugin.v1\"\r\n" +
-	"\vInfoRequest\"\x8c\x02\n" +
+	"\vInfoRequest\"\xfa\x01\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x14\n" +
-	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12!\n" +
-	"\froot_context\x18\x04 \x01(\tR\vrootContext\x12\x14\n" +
+	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x1b\n" +
+	"\troot_grid\x18\x04 \x01(\tR\brootGrid\x12\x14\n" +
 	"\x05watch\x18\x05 \x01(\bR\x05watch\x12\x1a\n" +
-	"\bwritable\x18\x06 \x01(\bR\bwritable\x127\n" +
-	"\fmenu_entries\x18\a \x03(\v2\x14.plugin.v1.MenuEntryR\vmenuEntries\x12!\n" +
-	"\fhost_content\x18\b \x01(\bR\vhostContent\"s\n" +
-	"\tMenuEntry\x12\x0e\n" +
+	"\bwritable\x18\x06 \x01(\bR\bwritable\x12+\n" +
+	"\x05grids\x18\a \x03(\v2\x15.plugin.v1.PluginGridR\x05grids\x12!\n" +
+	"\fhost_content\x18\b \x01(\bR\vhostContent\"n\n" +
+	"\n" +
+	"PluginGrid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
-	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x18\n" +
-	"\acontext\x18\a \x01(\tR\acontextJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"'\n" +
-	"\vListRequest\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\"\xa5\x01\n" +
+	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x12\n" +
+	"\x04grid\x18\a \x01(\tR\x04gridJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"!\n" +
+	"\vListRequest\x12\x12\n" +
+	"\x04grid\x18\x01 \x01(\tR\x04grid\"\xa5\x01\n" +
 	"\fListResponse\x12*\n" +
 	"\aentries\x18\x01 \x03(\v2\x10.plugin.v1.EntryR\aentries\x12$\n" +
 	"\rauthoritative\x18\x02 \x01(\bR\rauthoritative\x12!\n" +
 	"\fsource_label\x18\x03 \x01(\tR\vsourceLabel\x12 \n" +
-	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\xd8\x03\n" +
+	"\vunreachable\x18\x04 \x01(\tR\vunreachable\"\xd2\x03\n" +
 	"\x05Entry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\x12#\n" +
-	"\rchild_context\x18\x04 \x01(\tR\fchildContext\x12\x1f\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
+	"\n" +
+	"child_grid\x18\x04 \x01(\tR\tchildGrid\x12\x1f\n" +
 	"\vserves_page\x18\x05 \x01(\bR\n" +
 	"servesPage\x12+\n" +
 	"\x11text_presentation\x18\x06 \x01(\tR\x10textPresentation\x12#\n" +
@@ -1905,9 +1906,9 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\vlink_target\x18\v \x01(\v2\x13.plugin.v1.EntryRefR\n" +
 	"linkTarget\x12#\n" +
 	"\rcontent_stamp\x18\f \x01(\tR\fcontentStamp\x12\x1b\n" +
-	"\tread_only\x18\r \x01(\tR\breadOnly\"6\n" +
-	"\bEntryRef\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\x12\x10\n" +
+	"\tread_only\x18\r \x01(\tR\breadOnly\"0\n" +
+	"\bEntryRef\x12\x12\n" +
+	"\x04grid\x18\x01 \x01(\tR\x04grid\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\"G\n" +
 	"\rPlacementHint\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x03R\x01x\x12\f\n" +
@@ -1938,10 +1939,10 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x11GetPreviewRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"(\n" +
 	"\x12GetPreviewResponse\x12\x12\n" +
-	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\":\n" +
+	"\x04jpeg\x18\x01 \x01(\fR\x04jpeg\"4\n" +
 	"\fProbeRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x18\n" +
-	"\acontext\x18\x02 \x01(\tR\acontext\"\x9d\x01\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
+	"\x04grid\x18\x02 \x01(\tR\x04grid\"\x9d\x01\n" +
 	"\rProbeResponse\x12=\n" +
 	"\bpresence\x18\x01 \x01(\x0e2!.plugin.v1.ProbeResponse.PresenceR\bpresence\"M\n" +
 	"\bPresence\x12\x18\n" +
@@ -1953,27 +1954,27 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x0eDeleteResponse\"9\n" +
 	"\vFindRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\x87\x01\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\x81\x01\n" +
 	"\n" +
 	"FindResult\x12&\n" +
-	"\x05entry\x18\x01 \x01(\v2\x10.plugin.v1.EntryR\x05entry\x12!\n" +
-	"\fcontext_path\x18\x02 \x03(\tR\vcontextPath\x12\x18\n" +
+	"\x05entry\x18\x01 \x01(\v2\x10.plugin.v1.EntryR\x05entry\x12\x1b\n" +
+	"\tgrid_path\x18\x02 \x03(\tR\bgridPath\x12\x18\n" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\"?\n" +
 	"\fFindResponse\x12/\n" +
-	"\aresults\x18\x01 \x03(\v2\x15.plugin.v1.FindResultR\aresults\"*\n" +
-	"\fWatchRequest\x12\x1a\n" +
-	"\bcontexts\x18\x01 \x03(\tR\bcontexts\"*\n" +
-	"\x0eContextChanged\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\"P\n" +
-	"\fEntryChanged\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\x12&\n" +
-	"\x05entry\x18\x02 \x01(\v2\x10.plugin.v1.EntryR\x05entry\":\n" +
-	"\fEntryRemoved\x12\x18\n" +
-	"\acontext\x18\x01 \x01(\tR\acontext\x12\x10\n" +
-	"\x03key\x18\x02 \x01(\tR\x03key\"\xd9\x01\n" +
-	"\x06Change\x12D\n" +
-	"\x0fcontext_changed\x18\x01 \x01(\v2\x19.plugin.v1.ContextChangedH\x00R\x0econtextChanged\x12>\n" +
+	"\aresults\x18\x01 \x03(\v2\x15.plugin.v1.FindResultR\aresults\"$\n" +
+	"\fWatchRequest\x12\x14\n" +
+	"\x05grids\x18\x01 \x03(\tR\x05grids\"!\n" +
+	"\vGridChanged\x12\x12\n" +
+	"\x04grid\x18\x01 \x01(\tR\x04grid\"J\n" +
+	"\fEntryChanged\x12\x12\n" +
+	"\x04grid\x18\x01 \x01(\tR\x04grid\x12&\n" +
+	"\x05entry\x18\x02 \x01(\v2\x10.plugin.v1.EntryR\x05entry\"4\n" +
+	"\fEntryRemoved\x12\x12\n" +
+	"\x04grid\x18\x01 \x01(\tR\x04grid\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\"\xd0\x01\n" +
+	"\x06Change\x12;\n" +
+	"\fgrid_changed\x18\x01 \x01(\v2\x16.plugin.v1.GridChangedH\x00R\vgridChanged\x12>\n" +
 	"\rentry_removed\x18\x02 \x01(\v2\x17.plugin.v1.EntryRemovedH\x00R\fentryRemoved\x12>\n" +
 	"\rentry_changed\x18\x03 \x01(\v2\x17.plugin.v1.EntryChangedH\x00R\fentryChangedB\t\n" +
 	"\apayload2\x9c\x05\n" +
@@ -2010,7 +2011,7 @@ var file_plugin_v1_plugin_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),  // 0: plugin.v1.ProbeResponse.Presence
 	(*InfoRequest)(nil),          // 1: plugin.v1.InfoRequest
 	(*InfoResponse)(nil),         // 2: plugin.v1.InfoResponse
-	(*MenuEntry)(nil),            // 3: plugin.v1.MenuEntry
+	(*PluginGrid)(nil),           // 3: plugin.v1.PluginGrid
 	(*ListRequest)(nil),          // 4: plugin.v1.ListRequest
 	(*ListResponse)(nil),         // 5: plugin.v1.ListResponse
 	(*Entry)(nil),                // 6: plugin.v1.Entry
@@ -2032,13 +2033,13 @@ var file_plugin_v1_plugin_proto_goTypes = []any{
 	(*FindResult)(nil),           // 22: plugin.v1.FindResult
 	(*FindResponse)(nil),         // 23: plugin.v1.FindResponse
 	(*WatchRequest)(nil),         // 24: plugin.v1.WatchRequest
-	(*ContextChanged)(nil),       // 25: plugin.v1.ContextChanged
+	(*GridChanged)(nil),          // 25: plugin.v1.GridChanged
 	(*EntryChanged)(nil),         // 26: plugin.v1.EntryChanged
 	(*EntryRemoved)(nil),         // 27: plugin.v1.EntryRemoved
 	(*Change)(nil),               // 28: plugin.v1.Change
 }
 var file_plugin_v1_plugin_proto_depIdxs = []int32{
-	3,  // 0: plugin.v1.InfoResponse.menu_entries:type_name -> plugin.v1.MenuEntry
+	3,  // 0: plugin.v1.InfoResponse.grids:type_name -> plugin.v1.PluginGrid
 	6,  // 1: plugin.v1.ListResponse.entries:type_name -> plugin.v1.Entry
 	8,  // 2: plugin.v1.Entry.placement_hint:type_name -> plugin.v1.PlacementHint
 	7,  // 3: plugin.v1.Entry.link_target:type_name -> plugin.v1.EntryRef
@@ -2046,7 +2047,7 @@ var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	6,  // 5: plugin.v1.FindResult.entry:type_name -> plugin.v1.Entry
 	22, // 6: plugin.v1.FindResponse.results:type_name -> plugin.v1.FindResult
 	6,  // 7: plugin.v1.EntryChanged.entry:type_name -> plugin.v1.Entry
-	25, // 8: plugin.v1.Change.context_changed:type_name -> plugin.v1.ContextChanged
+	25, // 8: plugin.v1.Change.grid_changed:type_name -> plugin.v1.GridChanged
 	27, // 9: plugin.v1.Change.entry_removed:type_name -> plugin.v1.EntryRemoved
 	26, // 10: plugin.v1.Change.entry_changed:type_name -> plugin.v1.EntryChanged
 	1,  // 11: plugin.v1.Plugin.Info:input_type -> plugin.v1.InfoRequest
@@ -2082,7 +2083,7 @@ func file_plugin_v1_plugin_proto_init() {
 		return
 	}
 	file_plugin_v1_plugin_proto_msgTypes[27].OneofWrappers = []any{
-		(*Change_ContextChanged)(nil),
+		(*Change_GridChanged)(nil),
 		(*Change_EntryRemoved)(nil),
 		(*Change_EntryChanged)(nil),
 	}

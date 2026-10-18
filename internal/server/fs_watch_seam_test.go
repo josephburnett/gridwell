@@ -422,7 +422,7 @@ func TestFsShowingTheNodeHomeWhileItsCacheWarmsSettles(t *testing.T) {
 }
 
 // A node that boots while a client shows grids tells it nothing while the
-// disk is quiet: the client re-reads what it shows itself, and a context the
+// disk is quiet: the client re-reads what it shows itself, and a grid the
 // scope adds only because a shown grid links into it was read by nobody, so
 // it is noted, not announced. A file then written is one GridChanged for its
 // directory and one for each grid linking into it, however many links each

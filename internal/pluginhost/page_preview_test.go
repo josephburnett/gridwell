@@ -12,7 +12,7 @@ import (
 func TestPagePreviewStale(t *testing.T) {
 	page := &pluginv1.Entry{Key: "t", Kind: "url", ServesPage: true}
 	web := &pluginv1.Entry{Key: "t", Kind: "url", UrlString: "https://example.com/"}
-	link := &pluginv1.Entry{Key: "t", Kind: "url", ServesPage: true, LinkTarget: &pluginv1.EntryRef{Context: "c", Key: "t"}}
+	link := &pluginv1.Entry{Key: "t", Kind: "url", ServesPage: true, LinkTarget: &pluginv1.EntryRef{Grid: "c", Key: "t"}}
 	for _, c := range []struct {
 		name string
 		e    *pluginv1.Entry

@@ -73,7 +73,7 @@ var migrations = []migration{
 	{to: 10, run: migrateV10},
 	// v11 folds three framing representations into one: a door's integer
 	// window origin (tiles.view_x/view_y) plus an intrinsic ratio, home's
-	// root in the `system` KV table, and a plugin context's root on its grid
+	// root in the `system` KV table, and a plugin grid's root on its grid
 	// row. The one shape is a float center plus the intrinsic zoom, on the
 	// door tile (tiles.view_cx/cy/zoom) or, for a root with no door, on
 	// the grid row (grids.root_cx/cy/zoom). Nothing user-visible changes:
@@ -82,7 +82,7 @@ var migrations = []migration{
 	// view_x and view_y retire. tiles is a rebuild; grids and system are
 	// updated in place.
 	{to: 11, run: migrateV11},
-	// v12 retires the `listings` table, one blob per plugin context holding
+	// v12 retires the `listings` table, one blob per plugin grid holding
 	// the last ListResponse so a dark source could be served the remembered
 	// listing. That is cache, and cache lives in cache.db. A plain drop, not
 	// a conversion: every user-visible fact a listing row carried was already
@@ -331,7 +331,7 @@ func rebuildSelect(ctx context.Context, tx *sql.Tx, columns string) (string, err
 // migrateV11 folds the three framing representations into one; see the chain
 // entry. Order matters:
 //
-//  1. A plugin context's root (grids.root_cx/cy, non-empty ns) converts by
+//  1. A plugin grid's root (grids.root_cx/cy, non-empty ns) converts by
 //     + 0.5. First, while home's root row is still empty; otherwise step 2's
 //     already-converted value would be shifted a second time.
 //  2. Home's root moves out of the `system` KV table onto its root grid row
@@ -342,7 +342,7 @@ func migrateV11(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE grids SET root_cx = root_cx + 0.5, root_cy = root_cy + 0.5
 		 WHERE ns != '' AND root_zoom IS NOT NULL`); err != nil {
-		return fmt.Errorf("convert context root framing: %w", err)
+		return fmt.Errorf("convert plugin grid root framing: %w", err)
 	}
 	if err := moveHomeRootFraming(ctx, tx); err != nil {
 		return err

@@ -4,9 +4,9 @@ package server
 // production loader, the pluginhost adapter, the router, and the /content/
 // API as a browser reaches it.
 //
-// Three things can only be wrong here: the adapter turns each declared context
-// into a grid id the node can serve, so a menu entry with no grid id opens
-// nothing; every collection lists through that mapping; and an email is a url
+// Three things can only be wrong here: the adapter turns each declared grid
+// into a grid id the node can serve, so a declared grid with no grid id opens
+// nothing; every grid lists through that mapping; and an email is a url
 // tile carrying serves_page in everything, which every box links to, so the
 // plugin never sees a URL and the API never sees the email.
 //
@@ -77,13 +77,13 @@ func heyStack(t *testing.T, hey *heyfake.CLI) (*httptest.Server, namespace.Names
 	return hs, cl, info
 }
 
-// The plugin's four doors are four (+) menu entries — imbox, reply later,
+// The plugin's four doors are four (+) declared grids — imbox, reply later,
 // set aside and everything, no landing grid, no privileged one — and every one
-// of them lists its own emails. The mapping from a declared context to a
+// of them lists its own emails. The mapping from a declared grid to a
 // servable grid id is the adapter's, so a plugin unit test cannot see it: it
 // would find the entries declared and never learn whether any of them opens
 // anything.
-func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
+func TestHeyPluginDeclaresAndListsEveryGrid(t *testing.T) {
 	_, cl, info := heyStack(t, heyAccount(t))
 	ctx := t.Context()
 
@@ -91,25 +91,25 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 		t.Fatalf("a plugin is not a place; it named a grid of its own: %q", info.RootGridId)
 	}
 	want := []string{"imbox", "reply later", "set aside", "everything"}
-	if len(info.MenuEntries) != len(want) {
-		t.Fatalf("menu entries = %v, want %q", info.MenuEntries, want)
+	if len(info.PluginGrids) != len(want) {
+		t.Fatalf("declared grids = %v, want %q", info.PluginGrids, want)
 	}
-	for i, m := range info.MenuEntries {
+	for i, m := range info.PluginGrids {
 		if m.GridId == "" {
-			t.Errorf("menu entry %q opens no grid", m.Label)
+			t.Errorf("declared grid %q opens no grid", m.Label)
 		}
 		if m.Label != want[i] {
-			t.Errorf("menu entry %d = %q, want %q", i, m.Label, want[i])
+			t.Errorf("declared grid %d = %q, want %q", i, m.Label, want[i])
 		}
 	}
 
-	// Every collection lists, each through its mapped id.
+	// Every grid lists, each through its mapped id.
 	for _, c := range []struct{ grid, holds string }{
-		{info.MenuEntries[0].GridId, "Lunch plans"},
-		{info.MenuEntries[1].GridId, "Conference talk"},
-		{info.MenuEntries[2].GridId, "Lease renewal"},
+		{info.PluginGrids[0].GridId, "Lunch plans"},
+		{info.PluginGrids[1].GridId, "Conference talk"},
+		{info.PluginGrids[2].GridId, "Lease renewal"},
 		// The Feed is no door, but it is walked into everything.
-		{info.MenuEntries[3].GridId, "Weekly digest"},
+		{info.PluginGrids[3].GridId, "Weekly digest"},
 	} {
 		g, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: c.grid})
 		if err != nil {
@@ -122,7 +122,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 	// serves. That is the shape the whole client rests on: the address is the
 	// node's to derive at its /content/ API, so the email declares none of
 	// its own, and a text tile could not serve one at all.
-	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[3].GridId})
+	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.PluginGrids[3].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 		}
 	}
 	// A box holds links to those tiles, each with the box's own preview.
-	root, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
+	root, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.PluginGrids[0].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,8 +171,8 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 func TestHeyPluginServesAnEmailThroughTheContentAPI(t *testing.T) {
 	hs, cl, info := heyStack(t, heyAccount(t))
 	for _, via := range []struct{ name, grid string }{
-		{"a box's link", info.MenuEntries[0].GridId},
-		{"everything's tile", info.MenuEntries[3].GridId},
+		{"a box's link", info.PluginGrids[0].GridId},
+		{"everything's tile", info.PluginGrids[3].GridId},
 	} {
 		g, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: via.grid})
 		if err != nil {

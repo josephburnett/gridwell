@@ -33,7 +33,7 @@ func claimAdapter(t *testing.T) (*Adapter, map[string]*gridwellv1.Tile) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	listing, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
+	listing, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: info.PluginGrids[0].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}

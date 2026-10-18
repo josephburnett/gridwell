@@ -4,7 +4,7 @@ import * as path from 'path';
 import { test, expect } from './fixtures';
 
 // A plugin whose Info succeeds and declares no grid of its own, an fs plugin
-// with no config.root, is healthy: a plugin contributes menu entries and is not
+// with no config.root, is healthy: a plugin contributes declared grids and is not
 // itself a place, so having nothing to enter is not a failure. A plugin that
 // cannot serve the source its config declares refuses Info with the reason, and
 // is broken with that sentence until the source is fixed, without a restart.
@@ -54,7 +54,7 @@ test.describe('a plugin that cannot serve its source', () => {
     expect(broken.infoError, "the row carries the plugin's own sentence").toBe(
       `root "${missingRoot}" does not exist`,
     );
-    expect(broken.menuEntries, 'and none of its entries').toHaveLength(0);
+    expect(broken.pluginGrids, 'and none of its entries').toHaveLength(0);
 
     await gw.openMenu();
     await gw.expandPlugins();
@@ -76,6 +76,6 @@ test.describe('a plugin that cannot serve its source', () => {
       .toBe('');
     const fixed = await typo();
     expect(fixed.infoError).toBe('');
-    expect(fixed.menuEntries, 'its one collection is back').toHaveLength(1);
+    expect(fixed.pluginGrids, 'its one grid is back').toHaveLength(1);
   });
 });

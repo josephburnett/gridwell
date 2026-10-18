@@ -64,8 +64,8 @@ test.describe('a page whose file is gone', () => {
     const file = path.join(siteDir, 'gone.png');
     fs.writeFileSync(file, PNG);
     const site = (await gw.plugins()).find((p) => p.label === 'site')!;
-    const collection = site.menuEntries[0]!.gridID;
-    const entry = ((await gw.getGrid(collection)).tiles ?? []).find((t) => t.altText === 'gone.png');
+    const grid = site.pluginGrids[0]!.gridID;
+    const entry = ((await gw.getGrid(grid)).tiles ?? []).find((t) => t.altText === 'gone.png');
     expect(entry?.servesPage, 'the image is listed as a page').toBe(true);
     fs.rmSync(file);
 

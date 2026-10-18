@@ -13,10 +13,10 @@ import (
 
 // A box's link carries none of its thread's content facts, so a client that
 // has only the box reads the thread by the link's target, the one hop
-// contentrow.Ask names. The node must answer that read from a context nobody
+// contentrow.Ask names. The node must answer that read from a grid nobody
 // has listed yet, through the web API, with the row the content API
 // then serves at the target's address.
-func TestHeyLinkTargetReadsWithItsContextUnlisted(t *testing.T) {
+func TestHeyLinkTargetReadsWithItsGridUnlisted(t *testing.T) {
 	hs, _, info := heyStack(t, heyAccount(t))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	ctx := t.Context()

@@ -108,10 +108,10 @@ type Grid struct {
 	// which node a pane is inside: the client keys its per-pane + menu context
 	// by it and routes Handshake with it. Wire-only, never persisted.
 	NodeNs string `protobuf:"bytes,10,opt,name=node_ns,json=nodeNs,proto3" json:"node_ns,omitempty"`
-	// menu_entries is the owning plugin's declared (+) menu additions for
-	// this grid. Stamped from Info by the serving node, and verbatim through
-	// transit with grid_id prefixed per hop. Wire-only.
-	MenuEntries []*MenuEntry `protobuf:"bytes,11,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	// plugin_grids is the grids the owning plugin declares as (+) menu rows,
+	// stamped on this grid. Stamped from Info by the serving node, and verbatim
+	// through transit with grid_id prefixed per hop. Wire-only.
+	PluginGrids []*PluginGrid `protobuf:"bytes,11,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
 	// host_content says this grid projects host state, such as a directory or
 	// the process table, instead of holding content of its own, and the client
 	// renders its rows with the host treatment: the outside tint and the
@@ -218,9 +218,9 @@ func (x *Grid) GetNodeNs() string {
 	return ""
 }
 
-func (x *Grid) GetMenuEntries() []*MenuEntry {
+func (x *Grid) GetPluginGrids() []*PluginGrid {
 	if x != nil {
-		return x.MenuEntries
+		return x.PluginGrids
 	}
 	return nil
 }
@@ -260,21 +260,21 @@ func (x *Grid) GetSelection() []string {
 	return nil
 }
 
-// MenuEntry is one declared (+) menu entry: a door onto one collection,
-// such as the home's trashcan or a mail plugin's Feed. Declared in Info,
+// PluginGrid is one declared (+) menu row: a door onto one grid a namespace
+// declares, such as the home's trashcan or a mail plugin's Feed. Declared in Info,
 // stamped per grid by the serving node, and passed verbatim
 // through transit hops, where grid_id gains the hop prefix like every id. The
 // swatch behaves like a menu row's over grid_id: click descends, drag drops an
 // door to another namespace link.
-type MenuEntry struct {
+type PluginGrid struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // entry identity within the plugin
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // identity within the plugin
 	Label  string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
 	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default glyph)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
 	// meaning as PluginInfo.root_view_*. A door carries the framing of the
-	// grid behind it, so re-entering a collection lands where it was left. All
+	// grid behind it, so re-entering the grid lands where it was left. All
 	// three are absent when never visited (rpc.ViewOf), and the client
 	// substitutes its calibrated default.
 	ViewCx        float64 `protobuf:"fixed64,8,opt,name=view_cx,json=viewCx,proto3" json:"view_cx,omitempty"`
@@ -284,20 +284,20 @@ type MenuEntry struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MenuEntry) Reset() {
-	*x = MenuEntry{}
+func (x *PluginGrid) Reset() {
+	*x = PluginGrid{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MenuEntry) String() string {
+func (x *PluginGrid) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MenuEntry) ProtoMessage() {}
+func (*PluginGrid) ProtoMessage() {}
 
-func (x *MenuEntry) ProtoReflect() protoreflect.Message {
+func (x *PluginGrid) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -309,54 +309,54 @@ func (x *MenuEntry) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MenuEntry.ProtoReflect.Descriptor instead.
-func (*MenuEntry) Descriptor() ([]byte, []int) {
+// Deprecated: Use PluginGrid.ProtoReflect.Descriptor instead.
+func (*PluginGrid) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *MenuEntry) GetId() string {
+func (x *PluginGrid) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetLabel() string {
+func (x *PluginGrid) GetLabel() string {
 	if x != nil {
 		return x.Label
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetGlyph() string {
+func (x *PluginGrid) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetGridId() string {
+func (x *PluginGrid) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
 	return ""
 }
 
-func (x *MenuEntry) GetViewCx() float64 {
+func (x *PluginGrid) GetViewCx() float64 {
 	if x != nil {
 		return x.ViewCx
 	}
 	return 0
 }
 
-func (x *MenuEntry) GetViewCy() float64 {
+func (x *PluginGrid) GetViewCy() float64 {
 	if x != nil {
 		return x.ViewCy
 	}
 	return 0
 }
 
-func (x *MenuEntry) GetViewZoom() float64 {
+func (x *PluginGrid) GetViewZoom() float64 {
 	if x != nil {
 		return x.ViewZoom
 	}
@@ -806,10 +806,10 @@ type InfoResponse struct {
 	// the declaration and never switches on the kind, and an unknown value falls
 	// back to the globe, so a third-party plugin degrades politely.
 	Glyph string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	// menu_entries is the plugin's declared (+) menu additions; see
-	// MenuEntry. The serving node stamps them onto every grid the plugin
+	// plugin_grids is the grids the plugin declares as (+) menu rows; see
+	// PluginGrid. The serving node stamps them onto every grid the plugin
 	// serves.
-	MenuEntries   []*MenuEntry `protobuf:"bytes,17,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	PluginGrids   []*PluginGrid `protobuf:"bytes,17,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -893,9 +893,9 @@ func (x *InfoResponse) GetGlyph() string {
 	return ""
 }
 
-func (x *InfoResponse) GetMenuEntries() []*MenuEntry {
+func (x *InfoResponse) GetPluginGrids() []*PluginGrid {
 	if x != nil {
-		return x.MenuEntries
+		return x.PluginGrids
 	}
 	return nil
 }
@@ -2339,10 +2339,9 @@ type PluginInfo struct {
 	// glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
 	// menu swatch and the drag ghost. "" is the generic globe.
 	Glyph string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	// menu_entries mirrors InfoResponse.menu_entries with grid targets
-	// qualified for the receiver: root entries join the plugin's row in the
-	// (+) menu.
-	MenuEntries   []*MenuEntry `protobuf:"bytes,13,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
+	// plugin_grids mirrors InfoResponse.plugin_grids with grid targets
+	// qualified for the receiver: they join the plugin's row in the (+) menu.
+	PluginGrids   []*PluginGrid `protobuf:"bytes,13,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2440,9 +2439,9 @@ func (x *PluginInfo) GetGlyph() string {
 	return ""
 }
 
-func (x *PluginInfo) GetMenuEntries() []*MenuEntry {
+func (x *PluginInfo) GetPluginGrids() []*PluginGrid {
 	if x != nil {
-		return x.MenuEntries
+		return x.PluginGrids
 	}
 	return nil
 }
@@ -4018,7 +4017,7 @@ func (x *GridChanged) GetGridId() string {
 }
 
 // GridFramingChanged carries a root grid's new framing, the three numbers
-// SetFraming wrote to its row, in MenuEntry's field names. It is apart from
+// SetFraming wrote to its row, in PluginGrid's field names. It is apart from
 // GridChanged because a framing write changes no listing: the client applies
 // it to the doors rooted at grid_id and fetches nothing. A door's framing
 // lives on its tile and rides TileChanged.
@@ -4492,23 +4491,24 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xa2\x03\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xa3\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12&\n" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x17\n" +
 	"\anode_ns\x18\n" +
-	" \x01(\tR\x06nodeNs\x129\n" +
-	"\fmenu_entries\x18\v \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntries\x12!\n" +
+	" \x01(\tR\x06nodeNs\x12:\n" +
+	"\fplugin_grids\x18\v \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12!\n" +
 	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12!\n" +
 	"\fsource_label\x18\x0f \x01(\tR\vsourceLabel\x12(\n" +
 	"\raccepts_tiles\x18\x10 \x01(\bH\x00R\facceptsTiles\x88\x01\x01\x12\x1c\n" +
 	"\tselection\x18\x11 \x03(\tR\tselectionB\x10\n" +
 	"\x0e_accepts_tilesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"J\x04\b\f\x10\r\"\xc1\x01\n" +
-	"\tMenuEntry\x12\x0e\n" +
+	"J\x04\b\f\x10\r\"\xc2\x01\n" +
+	"\n" +
+	"PluginGrid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x17\n" +
@@ -4556,7 +4556,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rcontent_stamp\x18' \x01(\tR\fcontentStamp\x12\x1b\n" +
 	"\tread_only\x18( \x01(\tR\breadOnlyJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
-	"\vInfoRequest\"\xec\x02\n" +
+	"\vInfoRequest\"\xed\x02\n" +
 	"\fInfoResponse\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
@@ -4568,8 +4568,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\froot_view_cy\x18\v \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
-	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\x11 \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
+	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x12:\n" +
+	"\fplugin_grids\x18\x11 \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGridsJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
 	"J\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
@@ -4662,7 +4662,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xd8\x02\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xd9\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
@@ -4678,8 +4678,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12\x14\n" +
-	"\x05glyph\x18\f \x01(\tR\x05glyph\x129\n" +
-	"\fmenu_entries\x18\r \x03(\v2\x16.gridwell.v1.MenuEntryR\vmenuEntriesJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\x05glyph\x18\f \x01(\tR\x05glyph\x12:\n" +
+	"\fplugin_grids\x18\r \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGridsJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
 	"\x0eConnectionInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
@@ -4858,7 +4858,7 @@ var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 59)
 var file_gridwell_v1_data_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),    // 0: gridwell.v1.ProbeResponse.Presence
 	(*Grid)(nil),                   // 1: gridwell.v1.Grid
-	(*MenuEntry)(nil),              // 2: gridwell.v1.MenuEntry
+	(*PluginGrid)(nil),             // 2: gridwell.v1.PluginGrid
 	(*Tile)(nil),                   // 3: gridwell.v1.Tile
 	(*InfoRequest)(nil),            // 4: gridwell.v1.InfoRequest
 	(*InfoResponse)(nil),           // 5: gridwell.v1.InfoResponse
@@ -4918,8 +4918,8 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*Event)(nil),                  // 59: gridwell.v1.Event
 }
 var file_gridwell_v1_data_proto_depIdxs = []int32{
-	2,  // 0: gridwell.v1.Grid.menu_entries:type_name -> gridwell.v1.MenuEntry
-	2,  // 1: gridwell.v1.InfoResponse.menu_entries:type_name -> gridwell.v1.MenuEntry
+	2,  // 0: gridwell.v1.Grid.plugin_grids:type_name -> gridwell.v1.PluginGrid
+	2,  // 1: gridwell.v1.InfoResponse.plugin_grids:type_name -> gridwell.v1.PluginGrid
 	0,  // 2: gridwell.v1.ProbeResponse.presence:type_name -> gridwell.v1.ProbeResponse.Presence
 	10, // 3: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
 	1,  // 4: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
@@ -4932,7 +4932,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	3,  // 11: gridwell.v1.FindResult.path:type_name -> gridwell.v1.Tile
 	25, // 12: gridwell.v1.FindResponse.results:type_name -> gridwell.v1.FindResult
 	27, // 13: gridwell.v1.FindResponse.skipped:type_name -> gridwell.v1.FindSkip
-	2,  // 14: gridwell.v1.PluginInfo.menu_entries:type_name -> gridwell.v1.MenuEntry
+	2,  // 14: gridwell.v1.PluginInfo.plugin_grids:type_name -> gridwell.v1.PluginGrid
 	29, // 15: gridwell.v1.HandshakeResponse.plugins:type_name -> gridwell.v1.PluginInfo
 	30, // 16: gridwell.v1.HandshakeResponse.connections:type_name -> gridwell.v1.ConnectionInfo
 	3,  // 17: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile

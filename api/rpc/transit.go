@@ -157,7 +157,7 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 }
 
 // TransitQualifyGrid prepends prefix to a Grid's own id, its scratch grid,
-// node_ns and its menu entries' targets; everything else rides verbatim,
+// node_ns and its declared grids' targets; everything else rides verbatim,
 // because the far node already stamped its plugin's facts. A grid with no
 // accepts_tiles is from a node whose one writable bit said both facts, and
 // this is where that bit is read for it.
@@ -175,7 +175,7 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 		out.ScratchGridId = QualifyID(prefix, g.ScratchGridId)
 	}
 	out.NodeNs = QualifyNS(prefix, g.NodeNs)
-	out.MenuEntries = QualifyMenuEntries(prefix, g.MenuEntries)
+	out.PluginGrids = QualifyPluginGrids(prefix, g.PluginGrids)
 	return out
 }
 
@@ -275,7 +275,7 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 		if p.RootGridId != "" {
 			q.RootGridId = QualifyID(prefix, p.RootGridId)
 		}
-		q.MenuEntries = QualifyMenuEntries(prefix, p.MenuEntries)
+		q.PluginGrids = QualifyPluginGrids(prefix, p.PluginGrids)
 		out.Plugins = append(out.Plugins, q)
 	}
 	for _, c := range resp.Connections {
@@ -289,15 +289,15 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 	return out
 }
 
-// QualifyMenuEntries prepends one hop segment to a plugin's menu entry
+// QualifyPluginGrids prepends one hop segment to a plugin's declared grid
 // targets, returning fresh values so a hop never mutates what it forwards.
-func QualifyMenuEntries(prefix string, in []*pb.MenuEntry) []*pb.MenuEntry {
+func QualifyPluginGrids(prefix string, in []*pb.PluginGrid) []*pb.PluginGrid {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]*pb.MenuEntry, len(in))
+	out := make([]*pb.PluginGrid, len(in))
 	for i, e := range in {
-		q := proto.Clone(e).(*pb.MenuEntry)
+		q := proto.Clone(e).(*pb.PluginGrid)
 		if q.GridId != "" {
 			q.GridId = QualifyID(prefix, q.GridId)
 		}

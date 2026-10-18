@@ -12,38 +12,38 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// collectionsPlugin declares its collections the way a plugin does: one menu
-// entry each, and no landing grid of its own.
-type collectionsPlugin struct {
+// gridsPlugin declares its grids the way a plugin does: one + menu
+// row each, and no landing grid of its own.
+type gridsPlugin struct {
 	pluginv1.UnimplementedPluginServer
 }
 
-func (collectionsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+func (gridsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{
 		Kind: "mail", DisplayName: "mail",
-		MenuEntries: []*pluginv1.MenuEntry{
-			{Id: "imbox", Label: "Imbox", Context: "imbox"},
-			{Id: "feed", Label: "Feed", Context: "feed"},
+		Grids: []*pluginv1.PluginGrid{
+			{Id: "imbox", Label: "Imbox", Grid: "imbox"},
+			{Id: "feed", Label: "Feed", Grid: "feed"},
 		},
 	}, nil
 }
 
-func (collectionsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+func (gridsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	return &pluginv1.ListResponse{Authoritative: true}, nil
 }
 
-// A collection is a door, and a door remembers the view it was left at.
+// A grid is a door, and a door remembers the view it was left at.
 // The framing write and the handshake read are two sides of one fact, and
 // nothing between them knows which door a grid was declared by, so this
-// crosses the adapter/store seam: frame one collection's grid, hand back a
+// crosses the adapter/store seam: frame one grid, hand back a
 // fresh handshake, and read it off that entry — and only that entry.
-func TestAMenuEntryRemembersItsFraming(t *testing.T) {
+func TestAPluginGridRemembersItsFraming(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, closer, err := plugintest.Loopback(collectionsPlugin{})
+	cp, closer, err := plugintest.Loopback(gridsPlugin{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,13 +55,13 @@ func TestAMenuEntryRemembersItsFraming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(before.MenuEntries) != 2 {
-		t.Fatalf("entries = %+v, want the two collections", before.MenuEntries)
+	if len(before.PluginGrids) != 2 {
+		t.Fatalf("entries = %+v, want the two grids", before.PluginGrids)
 	}
 	if before.RootGridId != "" {
 		t.Fatalf("a plugin that declares no landing must name no grid of its own, got %q", before.RootGridId)
 	}
-	for _, e := range before.MenuEntries {
+	for _, e := range before.PluginGrids {
 		if e.GridId == "" {
 			t.Fatalf("entry %q resolved no grid", e.Id)
 		}
@@ -70,7 +70,7 @@ func TestAMenuEntryRemembersItsFraming(t *testing.T) {
 		}
 	}
 
-	feed := before.MenuEntries[1]
+	feed := before.PluginGrids[1]
 	if _, err := a.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		RootGridId: feed.GridId, Cx: 3.5, Cy: -2.25, Zoom: 1.75,
 	}); err != nil {
@@ -81,12 +81,12 @@ func TestAMenuEntryRemembersItsFraming(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := after.MenuEntries[1]
+	got := after.PluginGrids[1]
 	if got.ViewCx != 3.5 || got.ViewCy != -2.25 || got.ViewZoom != 1.75 {
 		t.Errorf("Feed's entry = %+v, want the framing it was left at", got)
 	}
-	if other := after.MenuEntries[0]; other.ViewZoom != 0 {
-		t.Errorf("framing one collection moved another: %+v", other)
+	if other := after.PluginGrids[0]; other.ViewZoom != 0 {
+		t.Errorf("framing one grid moved another: %+v", other)
 	}
 	if got.GridId != feed.GridId {
 		t.Errorf("grid id = %q, want the same grid the framing was written to (%q)", got.GridId, feed.GridId)
@@ -94,13 +94,13 @@ func TestAMenuEntryRemembersItsFraming(t *testing.T) {
 }
 
 // A store the handshake cannot read is an error on the handshake, not a
-// collection reopening at zero framing with nothing said.
+// grid reopening at zero framing with nothing said.
 func TestAnUnreadableStoreFailsTheHandshake(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp, closer, err := plugintest.Loopback(collectionsPlugin{})
+	cp, closer, err := plugintest.Loopback(gridsPlugin{})
 	if err != nil {
 		t.Fatal(err)
 	}

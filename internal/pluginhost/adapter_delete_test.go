@@ -35,7 +35,7 @@ type deletePlugin struct {
 }
 
 func (p *deletePlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "deleteish", DisplayName: "deleteish", RootContext: "r"}, nil
+	return &pluginv1.InfoResponse{Kind: "deleteish", DisplayName: "deleteish", RootGrid: "r"}, nil
 }
 
 func (p *deletePlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

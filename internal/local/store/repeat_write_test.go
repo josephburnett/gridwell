@@ -109,7 +109,7 @@ func TestARepeatedRootFramingWritesNothing(t *testing.T) {
 // side of the seam).
 func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 	s, d := openExt(t)
-	gid, err := d.ContextID("inbox")
+	gid, err := d.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
 	}

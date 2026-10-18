@@ -105,7 +105,7 @@ func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {
 			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.cx, f.cy, f.zoom
 			changed = true
 		}
-		for _, e := range pl.MenuEntries {
+		for _, e := range pl.PluginGrids {
 			if e.GridId == gridID && !Saved(f).SameAs(ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)) {
 				e.ViewCx, e.ViewCy, e.ViewZoom = f.cx, f.cy, f.zoom
 				changed = true

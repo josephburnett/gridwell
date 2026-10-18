@@ -80,7 +80,7 @@ func TestARefusedStoreWriteSaysSo(t *testing.T) {
 // the row itself, qualified by its namespace.
 func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 	_, d := openExt(t)
-	gid, err := d.ContextID("inbox")
+	gid, err := d.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 			_, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)
 			return err
 		}},
-		{"ContextID", "plug1:c/sent", func() error { _, err := d.ContextID("sent"); return err }},
+		{"GridOf", "plug1:c/sent", func() error { _, err := d.GridOf("sent"); return err }},
 	} {
 		if err := w.write(); err != nil {
 			t.Fatalf("%s: %v", w.verb, err)

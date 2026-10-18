@@ -46,7 +46,7 @@ func TestHeyFeedRunsOnlyWhileAGridIsShown(t *testing.T) {
 	}
 	var shown string
 	for _, p := range lp.Plugins {
-		for _, m := range p.MenuEntries {
+		for _, m := range p.PluginGrids {
 			if p.Uuid == heyNS && m.Label == "imbox" {
 				shown = m.GridId
 			}

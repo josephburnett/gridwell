@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// listingPlugin answers Info from one root context and List with whatever
+// listingPlugin answers Info from one root grid and List with whatever
 // entries the test hands it, so a test can present any entry shape the wire
 // permits — including one the node must refuse.
 type listingPlugin struct {
@@ -26,7 +26,7 @@ type listingPlugin struct {
 }
 
 func (listingPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "shapes", DisplayName: "shapes", RootContext: "r"}, nil
+	return &pluginv1.InfoResponse{Kind: "shapes", DisplayName: "shapes", RootGrid: "r"}, nil
 }
 
 func (p listingPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

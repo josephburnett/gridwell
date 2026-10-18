@@ -117,7 +117,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 		DisplayName:   "home",
 		RootGridId:    id,
 		ScratchGridId: scratch,
-		MenuEntries: []*gridwellv1.MenuEntry{{
+		PluginGrids: []*gridwellv1.PluginGrid{{
 			Id:     "trash",
 			Label:  "trash",
 			Glyph:  rpc.GlyphTrash,

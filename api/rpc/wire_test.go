@@ -100,7 +100,7 @@ func TestTileWireRoundTrip(t *testing.T) {
 	}
 }
 
-// TestGridWireRoundTrip: the same for a grid (menu entries included).
+// TestGridWireRoundTrip: the same for a grid (declared grids included).
 func TestGridWireRoundTrip(t *testing.T) {
 	in := exhaustiveGrid(t)
 	if got := throughJSON(t, in); !proto.Equal(in, got) {

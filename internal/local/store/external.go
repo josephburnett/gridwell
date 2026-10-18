@@ -48,8 +48,8 @@ type ExtTile struct {
 	*gridwellv1.Tile
 }
 
-// ContextID resolves a context key to its grid id, minting on first sight.
-func (n *Namespace) ContextID(key string) (int64, error) {
+// GridOf resolves a grid key to its grid id, minting on first sight.
+func (n *Namespace) GridOf(key string) (int64, error) {
 	var id int64
 	err := n.s.db.QueryRow(`SELECT id FROM grids WHERE ns = ? AND context_key = ?`, n.ns, key).Scan(&id)
 	if err == nil {
@@ -59,7 +59,7 @@ func (n *Namespace) ContextID(key string) (int64, error) {
 		return 0, err
 	}
 	now := n.s.now().Unix()
-	err = n.write("ContextID", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
+	err = n.write("GridOf", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, ns, context_key)
 			VALUES (0, ?, ?, ?, ?)`, now, now, n.ns, key)
 		if err != nil {
@@ -71,8 +71,8 @@ func (n *Namespace) ContextID(key string) (int64, error) {
 	return id, err
 }
 
-// ContextKey resolves a minted grid id back to the plugin's context key.
-func (n *Namespace) ContextKey(gridID int64) (string, error) {
+// GridKey resolves a minted grid id back to the plugin's grid key.
+func (n *Namespace) GridKey(gridID int64) (string, error) {
 	var key string
 	err := n.s.db.QueryRow(`SELECT context_key FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).Scan(&key)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -98,7 +98,7 @@ func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned 
 // nothing. Rows contribute id, placement and framing; the listing contributes
 // every content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
-// gridID 0 means an untouched context: every entry is derived.
+// gridID 0 means an untouched grid: every entry is derived.
 func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile, error) {
 	rows := map[string]ExtTile{}
 	var stored []ExtTile
@@ -164,7 +164,7 @@ func entryKind(e *pluginv1.Entry) string {
 // content.
 func linkTargetOf(e *pluginv1.Entry) string {
 	if lt := e.GetLinkTarget(); lt != nil {
-		return rpc.EntryTileID(lt.Context, lt.Key)
+		return rpc.EntryTileID(lt.Grid, lt.Key)
 	}
 	return ""
 }
@@ -315,9 +315,9 @@ func (n *Namespace) Sweep(gridID int64, present map[string]bool) error {
 	return nil
 }
 
-// LookupContext is ContextID without the mint, for the join, which must not
+// LookupGrid is GridOf without the mint, for the join, which must not
 // write.
-func (n *Namespace) LookupContext(key string) (int64, bool, error) {
+func (n *Namespace) LookupGrid(key string) (int64, bool, error) {
 	var id int64
 	err := n.s.db.QueryRow(`SELECT id FROM grids WHERE ns = ? AND context_key = ?`, n.ns, key).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {

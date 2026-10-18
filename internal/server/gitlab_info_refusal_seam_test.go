@@ -2,7 +2,7 @@ package server_test
 
 // The shipped gitlab binary over a token GitLab refuses: the node lists it
 // broken with the plugin's own sentence, and the same process is healthy with
-// its one collection once a working token is written to its token file.
+// its one grid once a working token is written to its token file.
 
 import (
 	"context"
@@ -62,8 +62,8 @@ func TestGitLabOnARefusedTokenIsBrokenAndHealsWithoutARespawn(t *testing.T) {
 	if !strings.HasPrefix(row.InfoError, "GitLab refused the token in "+tokenFile) || !strings.Contains(row.InfoError, "read_api") {
 		t.Errorf("InfoError = %q, want the plugin's sentence naming the token file and the scope", row.InfoError)
 	}
-	if len(row.MenuEntries) != 0 {
-		t.Errorf("a refusing gitlab presents entries: %v", row.MenuEntries)
+	if len(row.PluginGrids) != 0 {
+		t.Errorf("a refusing gitlab presents entries: %v", row.PluginGrids)
 	}
 	if down := recvHealthOf(t, stream, glUUID); down.Healthy {
 		t.Fatalf("first health event = %+v, want the refusal as down", down)
@@ -76,7 +76,7 @@ func TestGitLabOnARefusedTokenIsBrokenAndHealsWithoutARespawn(t *testing.T) {
 		t.Fatalf("after the token is fixed, health event = %+v, want up", up)
 	}
 	row = pluginRow(t, cl, glUUID)
-	if row.InfoError != "" || len(row.MenuEntries) != 1 {
-		t.Errorf("after the token is fixed the row is %v, want its one collection and no error", row)
+	if row.InfoError != "" || len(row.PluginGrids) != 1 {
+		t.Errorf("after the token is fixed the row is %v, want its one grid and no error", row)
 	}
 }

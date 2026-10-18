@@ -18,11 +18,11 @@ func names(sw []door.Place) []string {
 }
 
 // One swatch per declared door: a row that names a grid of its own, plus
-// every menu entry it declares. A plugin names no grid of its own, so only
-// its collections appear, and a plugin that declares nothing shows nothing.
+// every declared grid it declares. A plugin names no grid of its own, so only
+// its grids appear, and a plugin that declares nothing shows nothing.
 func TestDoorsTable(t *testing.T) {
-	entry := func(id, label, grid string) *gridwellv1.MenuEntry {
-		return &gridwellv1.MenuEntry{Id: id, Label: label, GridId: grid}
+	entry := func(id, label, grid string) *gridwellv1.PluginGrid {
+		return &gridwellv1.PluginGrid{Id: id, Label: label, GridId: grid}
 	}
 	cases := []struct {
 		name string
@@ -31,20 +31,20 @@ func TestDoorsTable(t *testing.T) {
 	}{{
 		name: "a node's home is a place: its own swatch, then its entries",
 		rows: []*gridwellv1.PluginInfo{{Uuid: "n1", Label: "home", RootGridId: "n1/1",
-			MenuEntries: []*gridwellv1.MenuEntry{entry("trash", "trash", "n1/9")}}},
+			PluginGrids: []*gridwellv1.PluginGrid{entry("trash", "trash", "n1/9")}}},
 		want: []string{"home", "trash (home)"},
 	}, {
-		name: "a plugin with three collections is three swatches and no row",
-		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Kind: "mail", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{
+		name: "a plugin with three grids is three swatches and no row",
+		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Kind: "mail", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{
 			entry("imbox", "Imbox", "hey/1"),
 			entry("feed", "Feed", "hey/2"),
 			entry("paper_trail", "Paper Trail", "hey/3"),
 		}}},
 		want: []string{"Imbox (hey)", "Feed (hey)", "Paper Trail (hey)"},
 	}, {
-		name: "a single-collection plugin declares no entry label and reads as itself",
+		name: "a single-grid plugin declares no entry label and reads as itself",
 		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Kind: "fs", Label: "files",
-			MenuEntries: []*gridwellv1.MenuEntry{entry(".", "", "fs/1")}}},
+			PluginGrids: []*gridwellv1.PluginGrid{entry(".", "", "fs/1")}}},
 		want: []string{"files"},
 	}, {
 		name: "a plugin that declares nothing contributes nothing",
@@ -64,7 +64,7 @@ func TestDoorsTable(t *testing.T) {
 		want: []string{"rtb", "far"},
 	}, {
 		name: "an entry with no grid is not a door",
-		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{
+		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{
 			entry("imbox", "Imbox", "hey/1"), entry("feed", "Feed", ""),
 		}}},
 		want: []string{"Imbox (hey)"},
@@ -72,8 +72,8 @@ func TestDoorsTable(t *testing.T) {
 		name: "rows keep handshake order, each row's entries directly after it",
 		rows: []*gridwellv1.PluginInfo{
 			{Uuid: "n1", Label: "home", RootGridId: "n1/1",
-				MenuEntries: []*gridwellv1.MenuEntry{entry("trash", "trash", "n1/9")}},
-			{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{entry("feed", "Feed", "hey/2")}},
+				PluginGrids: []*gridwellv1.PluginGrid{entry("trash", "trash", "n1/9")}},
+			{Uuid: "hey", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{entry("feed", "Feed", "hey/2")}},
 			rpc.ConnectionRow("n1/rtb", "rtb", "n1/rtb/1", "", rpc.View{}),
 		},
 		want: []string{"home", "trash (home)", "Feed (hey)", "rtb"},
@@ -98,8 +98,8 @@ func TestDoorsTable(t *testing.T) {
 func TestEverySwatchNamesADoorOrAFailure(t *testing.T) {
 	rows := []*gridwellv1.PluginInfo{
 		{Uuid: "n1", Label: "home", RootGridId: "n1/1",
-			MenuEntries: []*gridwellv1.MenuEntry{{Id: "trash", Label: "trash", GridId: "n1/9"}}},
-		{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "hey/2"}}},
+			PluginGrids: []*gridwellv1.PluginGrid{{Id: "trash", Label: "trash", GridId: "n1/9"}}},
+		{Uuid: "hey", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{{Id: "feed", Label: "Feed", GridId: "hey/2"}}},
 	}
 	for _, s := range Doors(rows) {
 		if s.Plugin.RootGridId == "" {
@@ -109,21 +109,21 @@ func TestEverySwatchNamesADoorOrAFailure(t *testing.T) {
 }
 
 // An entry's pseudo-row carries no entries of its own, so a second pass over
-// them cannot show every collection twice.
+// them cannot show every grid twice.
 func TestEntrySwatchDoesNotCarryTheRowsEntries(t *testing.T) {
-	rows := []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{
+	rows := []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{
 		{Id: "imbox", Label: "Imbox", GridId: "hey/1"},
 		{Id: "feed", Label: "Feed", GridId: "hey/2"},
 	}}}
 	sw := Doors(rows)
 	if len(sw) != 2 {
-		t.Fatalf("swatches = %q, want the two collections", names(sw))
+		t.Fatalf("swatches = %q, want the two grids", names(sw))
 	}
 	for _, s := range sw {
-		if len(s.Plugin.MenuEntries) != 0 {
-			t.Errorf("%q carries %d entries of its own", s.Plugin.Label, len(s.Plugin.MenuEntries))
+		if len(s.Plugin.PluginGrids) != 0 {
+			t.Errorf("%q carries %d entries of its own", s.Plugin.Label, len(s.Plugin.PluginGrids))
 		}
-		if s.Entry == nil {
+		if s.Grid == nil {
 			t.Errorf("%q must name the entry it came from", s.Plugin.Label)
 		}
 	}

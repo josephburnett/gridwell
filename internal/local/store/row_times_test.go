@@ -25,7 +25,7 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 	st, ns := openExt(t)
 	at := time.Unix(1_800_000_000, 123)
 	st.SetClock(func() time.Time { return at })
-	gid, err := ns.ContextID("c")
+	gid, err := ns.GridOf("c")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 	st, ns := openExt(t)
 	at := time.Unix(1_800_000_000, 0)
 	st.SetClock(func() time.Time { return at })
-	gid, err := ns.ContextID("c")
+	gid, err := ns.GridOf("c")
 	if err != nil {
 		t.Fatal(err)
 	}

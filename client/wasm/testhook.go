@@ -700,9 +700,9 @@ func (a *App) paneSelection(p *pane.Pane) []any {
 }
 
 // thPlugins returns the configured menu rows: identity, the row's own grid
-// where it has one, declared collections, pluginhealth class. Empty until
+// where it has one, declared grids, pluginhealth class. Empty until
 // Handshake lands; the driver polls. A plugin names no grid of its own, so
-// rootGridID is empty for one and its collections are where a spec finds a
+// rootGridID is empty for one and its grids are where a spec finds a
 // grid. scratchGridID is the root grid's stamp, empty until that grid is
 // cached, as scratch.For reads it.
 func (a *App) thPlugins(js.Value, []js.Value) any {
@@ -712,11 +712,11 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 		if g, ok := a.c.Grid(pl.RootGridId); ok {
 			scratchGridID = g.Meta.ScratchGridId
 		}
-		entries := make([]any, 0, len(pl.MenuEntries))
-		for _, e := range pl.MenuEntries {
+		entries := make([]any, 0, len(pl.PluginGrids))
+		for _, e := range pl.PluginGrids {
 			entries = append(entries, map[string]any{
 				"id":       e.Id,
-				"label":    door.EntryName(pl.Label, e.Label),
+				"label":    door.GridName(pl.Label, e.Label),
 				"gridID":   e.GridId,
 				"viewCx":   e.ViewCx,
 				"viewCy":   e.ViewCy,
@@ -729,7 +729,7 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 			"label":         pl.Label,
 			"uuid":          pl.Uuid,
 			"rootGridID":    pl.RootGridId,
-			"menuEntries":   entries,
+			"pluginGrids":   entries,
 			"scratchGridID": scratchGridID,
 			"infoError":     pl.InfoError,
 			"status":        pluginStatusName(pl),
@@ -790,8 +790,8 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		} else {
 			e["kind"] = templateKindName(item.primitive)
 		}
-		// A declared menu entry reports its identity, but the label stays
-		// door.EntryName's, the one the banner draws: a second name for
+		// A declared grid reports its identity, but the label stays
+		// door.GridName's, the one the banner draws: a second name for
 		// one door would let a spec pin the wrong one.
 		if item.entry != nil {
 			e["entry"] = item.entry.Id

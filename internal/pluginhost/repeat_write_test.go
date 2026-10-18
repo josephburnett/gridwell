@@ -33,7 +33,7 @@ func TestARepeatedPluginWriteAnnouncesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	grid := info.MenuEntries[0].GridId
+	grid := info.PluginGrids[0].GridId
 	listing, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: grid})
 	if err != nil || len(listing.Tiles) != 2 {
 		t.Fatalf("listing = %v, %v; want the two entries", listing, err)

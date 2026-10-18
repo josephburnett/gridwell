@@ -45,13 +45,13 @@ only reader, and it writes two forms (`address.go`):
 
 | Position | Payload | Example |
 |---|---|---|
-| grid | the plugin's context key (its name for good) | `~` + b64(`/home/joe`) |
-| tile | the context key, NUL, the entry key | `~` + b64(`/home` NUL `/home/joe`) |
+| grid | the plugin's grid key (its name for good) | `~` + b64(`/home/joe`) |
+| tile | the grid key, NUL, the entry key | `~` + b64(`/home` NUL `/home/joe`) |
 
-A tile carries its context because a tile must be answerable on its own. The
-node keeps no key→context index, because such an index would be exactly the
+A tile carries its grid because a tile must be answerable on its own. The
+node keeps no key→grid index, because such an index would be exactly the
 row lazy minting exists to avoid, and `plugin.v1` has no verb that describes
-one entry — so `GetTile` on an entry with no row is one `List` of the context
+one entry — so `GetTile` on an entry with no row is one `List` of the grid
 that names it.
 
 ## Stability

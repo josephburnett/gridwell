@@ -5,10 +5,10 @@ import { makeRunDir } from './homes';
 import { tileAt } from './oracle';
 import { dumpViaAPI, TraceLine } from './trace';
 
-// A plugin collection seen only as a door's preview is on screen, so its
+// A plugin grid seen only as a door's preview is on screen, so its
 // plugin watches it and a change on disk redraws the preview with no gesture.
 // What is shown is pane.Showing, the doors' child grids included; the fs
-// plugin opens a Watch only for the contexts the node's subscription names.
+// plugin opens a Watch only for the grids the node's subscription names.
 
 const ROOT = makeRunDir();
 test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
@@ -19,7 +19,7 @@ function lastUnion(lines: TraceLine[]): string[] {
   return msg === '' ? [] : msg.split(' ');
 }
 
-test('a collection shown as a door preview redraws when its source changes', async ({ gw, home, window }) => {
+test('a grid shown as a door preview redraws when its source changes', async ({ gw, home, window }) => {
   for (const f of fs.readdirSync(ROOT)) fs.rmSync(path.join(ROOT, f), { recursive: true });
   fs.writeFileSync(path.join(ROOT, 'one.txt'), 'one\n');
   const token = await loginToken(gw.origin, homePassword(home));
@@ -31,7 +31,7 @@ test('a collection shown as a door preview redraws when its source changes', asy
   await gw.openMenu();
   await gw.dragPluginLink('code', wx, wy);
   const door = tileAt(await gw.getGrid(f.gridID), 'door', wx, wy)!;
-  expect(door, 'the door onto the collection persisted').toBeTruthy();
+  expect(door, 'the door onto the grid persisted').toBeTruthy();
   const child = door.childGridId!;
 
   const previewed = () =>

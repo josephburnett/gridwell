@@ -101,16 +101,16 @@ test.describe('a declared namespace is never dead', () => {
   test('a link into a declared plugin stays alive', async ({ gw, window }) => {
     const pls = await gw.plugins();
     const files = pls.find((p) => p.label === 'files')!;
-    // A plugin names no grid of its own, so the link goes to a collection it
+    // A plugin names no grid of its own, so the link goes to a grid it
     // declares.
-    const collection = files.menuEntries[0]?.gridID;
-    expect(collection, 'the fs plugin is declared and serves a collection').toBeTruthy();
+    const grid = files.pluginGrids[0]?.gridID;
+    expect(grid, 'the fs plugin is declared and serves a grid').toBeTruthy();
 
     await gw.enterPlugin('home');
     const f = await gw.focused();
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;
-    await createDoorToOtherNamespace(gw.origin, f.gridID, collection!, 'files', cx, cy);
+    await createDoorToOtherNamespace(gw.origin, f.gridID, grid!, 'files', cx, cy);
 
     // Wait for the tile to be drawn, so the verdict has every chance to fire
     // wrongly before asserting it did not.
@@ -129,8 +129,8 @@ test.describe('a declared namespace is never dead', () => {
     const file = path.join(FS_ROOT, 'gone.md');
     fs.writeFileSync(file, '# gone\nsoon\n');
     const files = (await gw.plugins()).find((p) => p.label === 'files')!;
-    const collection = files.menuEntries[0]!.gridID;
-    const entry = ((await gw.getGrid(collection)).tiles ?? []).find((t) => t.altText === 'gone.md');
+    const grid = files.pluginGrids[0]!.gridID;
+    const entry = ((await gw.getGrid(grid)).tiles ?? []).find((t) => t.altText === 'gone.md');
     expect(entry, 'the file is listed').toBeTruthy();
     fs.rmSync(file);
 
@@ -154,7 +154,7 @@ test.describe('a declared namespace is never dead', () => {
     // The file comes back, and a write into its grid is the namespace saying
     // its listing changed.
     fs.writeFileSync(file, '# gone\nback\n');
-    await moveTile(gw.origin, entry!.id, collection, 9, 9, 1, 1);
+    await moveTile(gw.origin, entry!.id, grid, 9, 9, 1, 1);
     await expect
       .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
       .toBe(0);

@@ -604,7 +604,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	nodeNS, _ := ng["grid"].(map[string]any)["nodeNs"].(string)
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
-	// The fs plugin's declared collection is the door, since a plugin
+	// The fs plugin's declared grid is the door, since a plugin
 	// names no grid of its own, and the entry's grid id chains through the
 	// hop like every other id.
 	var fsRoot string
@@ -613,13 +613,13 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 		if pm["label"] != "files" {
 			continue
 		}
-		entries, _ := pm["menuEntries"].([]any)
+		entries, _ := pm["pluginGrids"].([]any)
 		if len(entries) == 1 {
 			fsRoot, _ = entries[0].(map[string]any)["gridId"].(string)
 		}
 	}
 	if fsRoot == "" {
-		t.Fatalf("the remote's fs collection is not on the routed menu: %v", menu["plugins"])
+		t.Fatalf("the remote's fs grid is not on the routed menu: %v", menu["plugins"])
 	}
 
 	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": fsRoot})

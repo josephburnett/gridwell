@@ -4,7 +4,7 @@ package server
 // production loader, the pluginhost adapter, the router, and the /content/
 // API as a browser reaches it.
 //
-// What the seam has to hold: the adapter turns each declared context into a
+// What the seam has to hold: the adapter turns each declared grid into a
 // grid id the node can serve, every grid lists through that mapping, a
 // message is one url tile in all mail carrying serves_page whose page the
 // API serves, and a label's row is a link to that tile. The
@@ -258,32 +258,32 @@ func gmailStack(t *testing.T, refresh string) (hs *httptest.Server, cl namespace
 	return hs, cl, info, g, stateDir
 }
 
-// The plugin's contexts are three (+) menu entries — no landing grid, no
+// The plugin's grids are three (+) declared grids — no landing grid, no
 // privileged one — and each lists: all mail holds each message once, and a
-// label holds a link to it. The mapping from a declared context to a servable
+// label holds a link to it. The mapping from a declared grid to a servable
 // grid id, and from a link_target to a tile id, are the adapter's, so a plugin
 // unit test cannot see them: it would find the entries declared and never
 // learn whether a link resolves to the tile all mail lists.
-func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
+func TestGmailPluginDeclaresAndListsEveryGrid(t *testing.T) {
 	_, cl, info, _, _ := gmailStack(t, "1h")
 	ctx := t.Context()
 
 	if info.RootGridId != "" {
 		t.Fatalf("a plugin is not a place; it named a grid of its own: %q", info.RootGridId)
 	}
-	if len(info.MenuEntries) != 3 || info.MenuEntries[0].Label != "inbox" ||
-		info.MenuEntries[1].Label != "starred" || info.MenuEntries[2].Label != "all mail" {
-		t.Fatalf("menu entries = %v, want inbox, starred and all mail", info.MenuEntries)
+	if len(info.PluginGrids) != 3 || info.PluginGrids[0].Label != "inbox" ||
+		info.PluginGrids[1].Label != "starred" || info.PluginGrids[2].Label != "all mail" {
+		t.Fatalf("declared grids = %v, want inbox, starred and all mail", info.PluginGrids)
 	}
 	grids := map[string]bool{}
-	for _, m := range info.MenuEntries {
+	for _, m := range info.PluginGrids {
 		grids[m.GridId] = true
 	}
 	if len(grids) != 3 || grids[""] {
-		t.Fatalf("the three contexts must open three grids: %v", info.MenuEntries)
+		t.Fatalf("the three grids must open three grids: %v", info.PluginGrids)
 	}
 
-	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[2].GridId})
+	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.PluginGrids[2].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,20 +318,20 @@ func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 	// A label lists links, each to the tile all mail lists for the message:
 	// the inbox's two, and the starred grid's one, not a copy of the inbox.
 	for i, want := range [][]string{{"Lunch plans", "Invoice 41"}, {"Invoice 41"}} {
-		label, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[i].GridId})
+		label, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.PluginGrids[i].GridId})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(label.Tiles) != len(want) {
-			t.Fatalf("%s = %v, want %v", info.MenuEntries[i].Label, label.Tiles, want)
+			t.Fatalf("%s = %v, want %v", info.PluginGrids[i].Label, label.Tiles, want)
 		}
 		for _, subject := range want {
 			link := tileWithLabel(t, label, subject)
 			if link.LinkTargetId != tileWithLabel(t, all, subject).Id {
-				t.Errorf("%s's %q links to %q, want all mail's tile", info.MenuEntries[i].Label, subject, link.LinkTargetId)
+				t.Errorf("%s's %q links to %q, want all mail's tile", info.PluginGrids[i].Label, subject, link.LinkTargetId)
 			}
-			if want := status[info.MenuEntries[i].Label][subject]; link.AltText != subject || link.StatusDetail != want {
-				t.Errorf("%s's %q = label %q status %q, want status %q", info.MenuEntries[i].Label, subject, link.AltText, link.StatusDetail, want)
+			if want := status[info.PluginGrids[i].Label][subject]; link.AltText != subject || link.StatusDetail != want {
+				t.Errorf("%s's %q = label %q status %q, want status %q", info.PluginGrids[i].Label, subject, link.AltText, link.StatusDetail, want)
 			}
 		}
 	}
@@ -364,7 +364,7 @@ func TestGmailRefusesATokenGoogleRefuses(t *testing.T) {
 // tile and never sees the email.
 func TestGmailPluginServesAMessageThroughTheContentAPI(t *testing.T) {
 	hs, cl, info, _, _ := gmailStack(t, "1h")
-	inbox, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
+	inbox, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.PluginGrids[0].GridId})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestGmailPluginServesAMessageThroughTheContentAPI(t *testing.T) {
 // node's, the reading and the caching are the plugin's.
 func TestGmailPluginReadsItsCredentialPathsAndCachesNoSecret(t *testing.T) {
 	_, cl, info, g, stateDir := gmailStack(t, "1h")
-	if _, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId}); err != nil {
+	if _, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.PluginGrids[0].GridId}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -429,15 +429,15 @@ func TestGmailPluginReadsItsCredentialPathsAndCachesNoSecret(t *testing.T) {
 	}
 }
 
-// After the first refresh walks every collection, the next one reads Gmail's
+// After the first refresh walks every grid, the next one reads Gmail's
 // history since the id the walk was current to and applies exactly what it
 // names: the new inbox message is read and listed, the message that arrived
-// with no watched label is not read, and no collection is listed again. The
+// with no watched label is not read, and no grid is listed again. The
 // history id is the plugin's and the listing the node's, so only the seam sees
 // the catch-up reach a grid.
 func TestGmailPluginCatchesUpFromHistoryWithoutAWalk(t *testing.T) {
 	_, cl, info, g, _ := gmailStack(t, "200ms")
-	inboxID := info.MenuEntries[0].GridId
+	inboxID := info.PluginGrids[0].GridId
 	inbox, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: inboxID})
 	if err != nil {
 		t.Fatal(err)

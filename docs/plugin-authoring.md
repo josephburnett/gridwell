@@ -62,8 +62,8 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
 ## Info
 
 `InfoResponse` is your one handshake: `kind`, `display_name`, `glyph`
-(`folder`/`process`/`door`/empty), `watch`, `writable`, and `menu_entries`
-(your collections).
+(`folder`/`process`/`door`/empty), `watch`, `writable`, and `grids`
+(your grids).
 
 **Refuse a config you cannot serve.** If the source your config names is not
 there — no such directory, no CLI, a token that does not load — answer `Info`
@@ -74,23 +74,23 @@ answered, a source that goes away is weather — a token revoked or a CLI
 signed out included — and your reads answer `Unavailable`, or from memory
 with `unreachable` set (see Listings), never a verdict.
 
-**Declare one `menu_entries` row per collection**, each naming its context
+**Declare one `grids` row per grid**, each naming its grid
 key. That is how your plugin is reached: each entry becomes a + menu swatch,
 and the node stamps them onto every grid it serves for you. You have no
-landing grid and no primary collection — a plugin is not a place, it
+landing grid and no primary grid — a plugin is not a place, it
 contributes doors — so a mail plugin declares "inbox", "reply later" and
-"set aside", all three the same way. Do not invent a wrapper context whose
+"set aside", all three the same way. Do not invent a wrapper grid whose
 entries are doors onto the others: that is a grid the user did not make and
 cannot arrange.
 
-An entry's `label` is optional. Leave it empty when you serve one collection
+An entry's `label` is optional. Leave it empty when you serve one grid
 and the swatch reads as the configured instance; set it and the swatch reads
 "<label> (<instance>)". Declaring no entries at all is legal: your plugin is
 listed, contributes nothing to the menu, and is healthy — not an error.
 
-`root_context` is RETIRED. Leave it empty. The node reads it in one case, so
+`root_grid` is RETIRED. Leave it empty. The node reads it in one case, so
 a binary built against the older proto keeps presenting: a plugin that
-answers a `root_context` and no `menu_entries` gets one derived entry onto
+answers a `root_grid` and no `grids` gets one derived entry onto
 it, wearing your own name and glyph. Declare both and the entries win.
 
 ## Listings
@@ -98,10 +98,10 @@ it, wearing your own name and glyph. Declare both and the entries win.
 `List` enumerates one context. Say whether it is `authoritative`: a key
 absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
-answers GONE. `ProbeRequest.context` names the context the node is asking
-about: answer whether the key is still in THAT context, since a key listed in
+answers GONE. `ProbeRequest.grid` names the grid the node is asking
+about: answer whether the key is still in THAT grid, since a key listed in
 several (a mail thread in a box and in everything) can leave one and stay in
-another. An empty context is a node from before contexts: answer for the
+another. An empty grid is a node from before grids: answer for the
 plugin as a whole. When a refresh fails but your memory can answer, answer
 from memory and set `unreachable` to why, in a plain sentence ("the mail
 server is not answering"); leave it empty when the listing is live. The node
@@ -129,24 +129,24 @@ none of them.
 
 ## Links
 
-One thing listed in several of your collections — a mail thread in a box and
+One thing listed in several of your grids — a mail thread in a box and
 in a list of everything — should be one tile, with the others pointing at it.
-Give it one home entry, and in every other collection list an entry with
-`link_target` naming that home by your own words: its context and key. The
+Give it one home entry, and in every other grid list an entry with
+`link_target` naming that home by your own words: its grid and key. The
 node draws such an entry as a link: dashed, with its own key, label,
 `status_detail` and placement, and its content, preview and page read through
-the target, so it reads dead once the target's context says the target is
+the target, so it reads dead once the target's grid says the target is
 gone. A copy of it, or a drag out of your grid, is another link to the
-target, so a link survives the entry moving between collections. Keep
+target, so a link survives the entry moving between grids. Keep
 `kind` the target's kind, and keep the content facts too if a node older than
 the field must still present it; a new node reads none of them on a link. The
 node mints nothing for the target until the user touches it. A door has no
-link variant (its `child_context` already says where it opens), and an entry
+link variant (its `child_grid` already says where it opens), and an entry
 may not link to itself.
 
-When the target changes, announce the target's context on `Watch`: the node
-passes the change on to every context whose listing links into it, and it
-adds those target contexts to your watch scope while a linking grid is shown.
+When the target changes, announce the target's grid on `Watch`: the node
+passes the change on to every grid whose listing links into it, and it
+adds those target grids to your watch scope while a linking grid is shown.
 
 ## Changes
 
@@ -154,31 +154,31 @@ Implement `Watch` if your source changes without the user: a background
 sync, a new mail, a file edited elsewhere, and set `InfoResponse.watch`. The
 node holds one stream open while some client shows one of your grids, on
 this node or on any node that reaches it, so hold it open until its context
-ends. `WatchRequest.contexts` is its scope: the context keys shown right
+ends. `WatchRequest.grids` is its scope: the grid keys shown right
 now, a file shown in a pane counting through its context. Watch those. When
 the set changes the node opens a stream with the new set and ends the old one
 once the new one is open, so two may overlap; while nothing of yours is shown
 it holds none, so a source you watch by the
 path, such as a directory under OS change notifications, costs only what is
-on screen. Empty contexts means a node from before scopes: watch what you
-judge cheap. A feed that is account-wide rather than per context (a mailbox,
+on screen. Empty grids means a node from before scopes: watch what you
+judge cheap. A feed that is account-wide rather than per grid (a mailbox,
 a to-do list) may ignore the scope and watch as it always would. Send the header
 (`stream.SendHeader`) as soon as you accept the stream: that is the moment
 the node counts it open, and without it the moment is your first change.
-Once a stream is open the node lists each context it adds, the whole scope
+Once a stream is open the node lists each grid it adds, the whole scope
 after a drop, and tells the clients to list again any whose answer moved,
 because a change sent into no stream reaches nobody. So a scope change costs
 you one `List` per added context.
 Send a change when what you would answer now differs from what you last
 could have:
 
-- `ContextChanged{context}`: that context's `List` would answer
+- `GridChanged{grid}`: that grid's `List` would answer
   differently — an entry arrived, left, moved, or changed its label, status
-  or picture stamp. The node lists the context and tells the clients showing it only
-  if the answer moved, so a `ContextChanged` that moves nothing costs you one
+  or picture stamp. The node lists the grid and tells the clients showing it only
+  if the answer moved, so a `GridChanged` that moves nothing costs you one
   `List` and the user nothing; the listing that follows retires a gone key by
   the usual rule, so list honestly.
-- `EntryChanged{context, entry}`: one entry's content changed in place — a
+- `EntryChanged{grid, entry}`: one entry's content changed in place — a
   file's bytes written, a picture redrawn — with the entry re-read, exactly
   as `List` would answer it now, its `content_stamp` moved with the bytes. A
   plugin row carries no version, so this is the only way new bytes reach a
@@ -187,12 +187,12 @@ could have:
   for the entry that owns the content; a link to it reads through it. A
   content stamp alone moving is not a listing that moved, and a second tell
   under the stamp already told is no change: the node drops it.
-- `EntryRemoved` is retired: send `ContextChanged`. The node still reads it
+- `EntryRemoved` is retired: send `GridChanged`. The node still reads it
   as one, for a binary built before.
 
 Send one when something changed, never one per poll, and collapse a burst
-into one per context and one per entry. A change nobody is looking at costs
-no listing, and naming a context the node has never listed is harmless.
+into one per grid and one per entry. A change nobody is looking at costs
+no listing, and naming a grid the node has never listed is harmless.
 
 `InfoResponse.watch` is the declaration. Leave it unset and the node never
 asks, which is healthy. Set it and answer Unimplemented and the node tells

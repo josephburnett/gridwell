@@ -117,7 +117,7 @@ now still presents as the page it was. A plugin tile's `preview_blob_id` is
 `pluginhost.previewKey`'s: the node's screenshot of the tile once one exists,
 else the plugin's picture keyed below zero. A served page that changes in
 place retires an unfrozen screenshot (`pluginhost.pagePreviewStale`). `Grid.scratch_grid_id` and
-`menu_entries` come from the router's `GetGrid` (or `TransitQualifyGrid` for
+`plugin_grids` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
 `Grid.accepts_tiles` (the + menu, a drop, a url's address) and
 `Grid.writable` (its bodies take edits) are the owning namespace's stamp on
@@ -195,10 +195,10 @@ other. While it is up, and only if its
 `InfoResponse.watch` declares one and some client shows one of its grids (a
 pane's grid, or a door's preview on screen: `pane.Showing`), the node holds
 one `Watch` stream to it (`pluginhost.Start`), scoped to the
-contexts shown (`WatchRequest.contexts`, the plugin's share of
+grids shown (`WatchRequest.grids`, the plugin's share of
 `subscription.Book`'s union, re-opened with the new set when it changes), and
-publishes a `ContextChanged` the plugin sends as the `GridChanged` a write
-would have, once the node has listed the context and found it moved, and an
+publishes the plugin's `GridChanged` as the gridwell `GridChanged` a
+write would have, once the node has listed the grid and found it moved, and an
 `EntryChanged` as that entry's `TileChanged` flagged `content_changed`, once
 per stamp: a second tell under the stamp last told is no change
 (`Adapter.fresh`). A
@@ -210,18 +210,18 @@ contract — disposable, safe to delete, rewarmed by use, and never deleted by
 the node. The node mints ids against those keys and
 keeps the arrangement as a namespace of its own store
 (`internal/pluginhost/adapter.go`). An entry may be a link to another of the
-plugin's entries (`Entry.link_target`, the target's context and key): the
+plugin's entries (`Entry.link_target`, the target's grid and key): the
 store keeps it as a link row whose `link_target_id` is the target's bare
 entry address (`rpc.EntryTileID`), the leaf spells that in its own namespace
 on the way out (`rpc.QualifyLinkTarget`), and every read through it resolves
 the target as any link does, with nothing minted for the target until it is
 touched. A content row whose entry becomes a link is converted in place. The
-Watch scope also holds the contexts a shown grid's links point into, and a
-change to one is announced on every context linking into it. `Probe` names
-the context it asks about. A plugin is not a place: it declares its
-collections as `menu_entries`, one per collection, and each becomes a + menu
-swatch onto that grid. It has no landing of its own — `root_context` is
-retired, read only to derive the single entry an older binary implies. The
+Watch scope also holds the grids a shown grid's links point into, and a
+change to one is announced on every grid linking into it. `Probe` names
+the grid it asks about. A plugin is not a place: it declares its grids in
+`InfoResponse.grids`, and each becomes a + menu swatch onto that grid. It
+has no landing of its own — `root_grid` is retired, read only to derive the
+single grid an older binary implies. The
 host never imports a plugin and never switches on its kind; every plugin
 behavior rides a wire declaration. `docs/plugin-authoring.md` is the contract
 from the plugin's side.

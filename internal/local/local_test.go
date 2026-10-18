@@ -549,7 +549,7 @@ func scratchGrid(t *testing.T, p *local.Plugin) string {
 	return info.ScratchGridId
 }
 
-// The trashcan is a declared menu entry, and an entry is a door, so it
+// The trashcan is a declared grid, and an entry is a door, so it
 // remembers the view it was left at exactly as home's own root does: frame the
 // trash grid, ask again, and the entry carries it while the root stays put.
 func TestTheTrashcanEntryRemembersItsFraming(t *testing.T) {
@@ -559,12 +559,12 @@ func TestTheTrashcanEntryRemembersItsFraming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	if len(before.MenuEntries) != 1 || before.MenuEntries[0].GridId == "" {
-		t.Fatalf("entries = %+v, want the trashcan", before.MenuEntries)
+	if len(before.PluginGrids) != 1 || before.PluginGrids[0].GridId == "" {
+		t.Fatalf("entries = %+v, want the trashcan", before.PluginGrids)
 	}
-	trash := before.MenuEntries[0].GridId
-	if before.MenuEntries[0].ViewZoom != 0 {
-		t.Fatalf("a fresh trash grid was never visited: %+v", before.MenuEntries[0])
+	trash := before.PluginGrids[0].GridId
+	if before.PluginGrids[0].ViewZoom != 0 {
+		t.Fatalf("a fresh trash grid was never visited: %+v", before.PluginGrids[0])
 	}
 	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		RootGridId: trash, Cx: 4, Cy: -1.5, Zoom: 2,
@@ -575,7 +575,7 @@ func TestTheTrashcanEntryRemembersItsFraming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	e := after.MenuEntries[0]
+	e := after.PluginGrids[0]
 	if e.ViewCx != 4 || e.ViewCy != -1.5 || e.ViewZoom != 2 {
 		t.Errorf("trash entry = %+v, want the framing it was left at", e)
 	}

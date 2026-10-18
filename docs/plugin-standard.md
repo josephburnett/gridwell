@@ -28,9 +28,9 @@ grids go stale while the code that would have told the node sits unused.
 **Example.** `fs/plugin/plugin.go:178-181`:
 
 ```go
-// The one collection this plugin serves: the configured tree. It
+// The one grid this plugin serves: the configured tree. It
 // declares no label, so the swatch reads as the configured instance.
-resp.MenuEntries = []*pluginv1.MenuEntry{{Id: ".", Context: "."}}
+resp.Grids = []*pluginv1.PluginGrid{{Id: ".", Grid: "."}}
 resp.Watch = true
 ```
 
@@ -38,7 +38,7 @@ resp.Watch = true
 `watch` set. Every plugin with a `Watch` method carries one
 (`TestInfoDeclaresWatch` in proc and gitlab, the `Info` tests in gmail and
 hey); pages pins that it declares none
-(`pages/plugin/plugin_test.go:TestInfoDeclaresTheCollectionAndNotHostContent`).
+(`pages/plugin/plugin_test.go:TestInfoDeclaresTheGridAndNotHostContent`).
 
 **Today.** Meets: fs (`fs/plugin/plugin.go:181`), proc
 (`proc/plugin/plugin.go:136`), gitlab (`gitlab/plugin/plugin.go:286`), gmail
@@ -123,12 +123,12 @@ a cold read, one memory has no answer for, whose walk fails still fails with
 the walk's own code (`memo/flights.go:119`, pinned by `memo/flights_test.go`,
 "a cold read whose walk failed answers the failure";
 `gitlab/plugin/plugin.go:301-304`, `gmail/plugin/plugin.go:470-472`). So a
-token revoked after `Info` reads `PermissionDenied` on a context neither has
+token revoked after `Info` reads `PermissionDenied` on a grid neither has
 read yet. N/A: pages, whose site is its own code and is never unreachable.
 
 ## 4. Authoritative when definitive
 
-**Rule.** A listing is authoritative when it enumerates the context
+**Rule.** A listing is authoritative when it enumerates the grid
 definitively: a whole directory read, or a whole walk of a box while its live
 feed is connected. It is not authoritative when the read was capped or the
 feed is down or resyncing, because absence is never inferred from silence,
@@ -143,16 +143,16 @@ authoritative one retires a row the user placed.
 
 ```go
 // List enumerates the site. It is authoritative — the site is fixed, so a key
-// absent from this listing is gone rather than unseen — and every context
+// absent from this listing is gone rather than unseen — and every grid
 // other than the root answers an empty listing, because there is only one.
 func (p *Plugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	resp := &pluginv1.ListResponse{Authoritative: true, SourceLabel: displayName}
-	if req.Context != site.RootContext {
+	if req.Grid != site.RootGrid {
 		return resp, nil
 	}
 ```
 
-**Test.** `pages/plugin/plugin_test.go:TestAnyOtherContextIsEmptyAndAuthoritative`.
+**Test.** `pages/plugin/plugin_test.go:TestAnyOtherGridIsEmptyAndAuthoritative`.
 For a source that is sometimes definitive, the test shape is a table: a whole
 read with the feed connected answers authoritative; a capped read, and a whole
 read while the feed is down or resyncing, do not.
@@ -169,25 +169,25 @@ and never claim it.
 
 ## 5. One home per thing
 
-**Rule.** A key lives in one context; every other context that shows it
+**Rule.** A key lives in one grid; every other grid that shows it
 lists a link to it.
 
 **Why.** "A plugin entry may be a link to another of its entries" and "one
-thing listed in many collections is one tile" (2026-10-02). Two entries with
+thing listed in many grids is one tile" (2026-10-02). Two entries with
 one key are two tiles: placement, a copy and a link each attach to one of
 them, and the user sees one thing twice.
 
 **Example.** `hey/mail/entries.go:33-44`:
 
 ```go
-// BoxEntries derives one box's grid: CollectionEntries, each a link to the
+// BoxEntries derives one box's grid: GridEntries, each a link to the
 // same thread in everything carrying its seen state in this box. The content
 // facts stay, so a node that predates link_target still shows the box as
 // pages of its own.
 func BoxEntries(threads []Thread) []*pluginv1.Entry {
-	out := CollectionEntries(threads)
+	out := GridEntries(threads)
 	for i, e := range out {
-		e.LinkTarget = &pluginv1.EntryRef{Context: EverythingContext, Key: e.Key}
+		e.LinkTarget = &pluginv1.EntryRef{Grid: EverythingGrid, Key: e.Key}
 		e.StatusDetail = threads[i].StatusDetail()
 	}
 	return out
@@ -199,16 +199,16 @@ func BoxEntries(threads []Thread) []*pluginv1.Entry {
 and `fs/plugin/symlink_test.go:TestSymlinksListAsLinksToTheOneKey` on the
 plugin side; `internal/server/link_entry_seam_test.go` across the seam.
 
-**Today.** Meets: gitlab, pages, proc (each key in one context); fs, whose
+**Today.** Meets: gitlab, pages, proc (each key in one grid); fs, whose
 symlinks are links to the one key (`fs/plugin/plugin.go:299-318`); gmail,
 whose labels link into all mail (`gmail/mailbox/entries.go:27-33`); hey.
 
-## 6. Probe answers for the context asked
+## 6. Probe answers for the grid asked
 
-**Rule.** Answer `Probe` for the key in the context the request names
-(`ProbeRequest.context`), and for the plugin as a whole when it names none.
+**Rule.** Answer `Probe` for the key in the grid the request names
+(`ProbeRequest.grid`), and for the plugin as a whole when it names none.
 
-**Why.** "`Probe` answers for the context it names, so leaving one collection
+**Why.** "`Probe` answers for the grid it names, so leaving one grid
 is not being gone" (2026-10-02). A thread that left the Imbox is usually in
 Reply Later; GONE for the plugin would retire its tile everywhere.
 
@@ -216,10 +216,10 @@ Reply Later; GONE for the plugin would retire its tile everywhere.
 
 ```go
 default:
-	if _, ok := mail.LookupCollection(req.Context); !ok {
-		return presence(pluginv1.ProbeResponse_PRESENCE_GONE), nil // a context this plugin never lists
+	if _, ok := mail.LookupGrid(req.Grid); !ok {
+		return presence(pluginv1.ProbeResponse_PRESENCE_GONE), nil // a grid this plugin never lists
 	}
-	switch p.mem.InBox(req.Context, id) {
+	switch p.mem.InBox(req.Grid, id) {
 	case mail.Present:
 		return presence(pluginv1.ProbeResponse_PRESENCE_PRESENT), nil
 	case mail.Gone:
@@ -227,15 +227,15 @@ default:
 	}
 ```
 
-**Test.** `hey/plugin/everything_test.go:TestProbeAnswersForTheContextAsked`;
-`internal/server/link_entry_seam_test.go:TestTheSweepProbesTheContextItSweeps`
+**Test.** `hey/plugin/everything_test.go:TestProbeAnswersForTheGridAsked`;
+`internal/server/link_entry_seam_test.go:TestTheSweepProbesTheGridItSweeps`
 across the seam.
 
 **Today.** Meets: hey; gmail (`gmail/plugin/plugin.go:564-601`); pages
 (`pages/plugin/plugin.go:165-170`) and proc (`proc/plugin/plugin.go:259-283`),
-which answer for the context named too; fs and gitlab, whose keys live in one
-context each, so the plugin-wide answer is the context's. Every plugin but fs
-and gitlab has a `TestProbeAnswersForTheContextAsked`.
+which answer for the grid named too; fs and gitlab, whose keys live in one
+grid each, so the plugin-wide answer is the grid's. Every plugin but fs
+and gitlab has a `TestProbeAnswersForTheGridAsked`.
 
 ## 7. Memory answers when a refresh fails
 
@@ -253,14 +253,14 @@ which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
 **Example.** `gitlab/plugin/plugin.go:300-308`, over `memo.Flights.Read`:
 
 ```go
-start := since(req.Context)
-unreachable, err := p.flights.Read(ctx, req.Context, p.mem.Shows(start))
+start := since(req.Grid)
+unreachable, err := p.flights.Read(ctx, req.Grid, p.mem.Shows(start))
 if err != nil {
 	return nil, err
 }
-if req.Context != todos.RootContext {
+if req.Grid != todos.RootGrid {
 	return &pluginv1.ListResponse{Entries: todos.WeekEntries(start, p.mem.Week(start)),
-		SourceLabel: req.Context, Unreachable: unreachable}, nil
+		SourceLabel: req.Grid, Unreachable: unreachable}, nil
 }
 ```
 
@@ -315,7 +315,7 @@ fake source saw no request; open a stream and assert it did:
 `memo/changes_test.go:TestPollOnlyWhileWatched`,
 `proc/plugin/watch_test.go:TestNoStreamNoReads`,
 `gitlab/plugin/plugin_test.go:TestTheRefresherRunsOnlyWhileWatched`,
-`gmail/plugin/watch_test.go:TestHistoryPollsOnlyWhileAContextIsInScope`,
+`gmail/plugin/watch_test.go:TestHistoryPollsOnlyWhileAGridIsInScope`,
 `hey/plugin/watch_test.go:TestTheFeedRunsOnlyWhileWatched`, and across the
 seam `internal/server/hey_watch_seam_test.go:TestHeyFeedRunsOnlyWhileAGridIsShown`.
 
@@ -329,7 +329,7 @@ no background work.
 ## 9. Watch: header, collapse, overflow
 
 **Rule.** Send the header when you accept the stream, collapse a burst into
-one change per context, and announce the whole scope when you lose track.
+one change per grid, and announce the whole scope when you lose track.
 
 **Why.** "The node learns of a change by being told." The node counts the
 stream open at the header and lists what it adds only then
@@ -360,7 +360,7 @@ whole scope (rule 18).
 
 **Test.** `fs/plugin/watch_test.go:TestWatchAnnouncesABurstOnceForItsDirectory`
 and `TestWatchOverflowAnnouncesTheWholeScope`; `memo/changes_test.go:TestChangesFanOut`
-(the header on accept, a burst once per context, a stream that falls behind
+(the header on accept, a burst once per grid, a stream that falls behind
 told its whole scope); `TestWatchSendsItsHeaderOnAccept` in proc, gitlab,
 gmail and hey.
 
@@ -374,7 +374,7 @@ N/A: pages.
 facts, never of the entry's position in a listing.
 
 **Why.** "Things stay as you left them." A hint that depends on what else is
-listed moves when a neighbor arrives late, and differs between two contexts
+listed moves when a neighbor arrives late, and differs between two grids
 that list the same thing, so first placement depends on the order things
 were read.
 
@@ -484,7 +484,7 @@ the plugin's lifetime context, not `context.Background()`.
 **Example.** `hey/plugin/plugin.go:555-559`:
 
 ```go
-case mail.EverythingContext:
+case mail.EverythingGrid:
 	if p.mem.Member(id) {
 		return presence(pluginv1.ProbeResponse_PRESENCE_PRESENT), nil
 	}
@@ -553,7 +553,7 @@ one package in the plugins repository, not a copy per plugin.
 
 **Why.** "DRY is correctness" (CLAUDE.md, How to work). Three copies drift:
 gitlab's fan-out collapses an overflow to the root, hey's to every
-collection; a fix to one (rule 7, rule 9) must be made three times.
+grid; a fix to one (rule 7, rule 9) must be made three times.
 
 **Example.** `github.com/josephburnett/gridwell-plugins/memo`, a module beside
 `guest` (`memo/README.md`), as hey holds it, `hey/plugin/plugin.go:86-89`:
@@ -635,12 +635,12 @@ newest at the top" (`hey/README.md:210-211`), while its hint is
 
 **Rule.** When an entry's content changes in place, its bytes or its
 picture, send `EntryChanged` with the entry re-read exactly as `List` would
-answer it; send `ContextChanged` only when the listing may have moved. Never
+answer it; send `GridChanged` only when the listing may have moved. Never
 send `EntryRemoved`, which is retired.
 
 **Why.** "An open grid shows what its source knows" (CLAUDE.md, promises). A
 plugin row carries no version, so nothing on a listing says a body moved, and
-a client holding the old body keeps it: the node checks a `ContextChanged`
+a client holding the old body keeps it: the node checks a `GridChanged`
 against what it served and, the listing unchanged, tells no one. The
 `EntryChanged` is the only news a body has moved (`docs/freshness.md`, layer
 6), and it costs the node no listing for an entry with a row.
@@ -769,8 +769,8 @@ lines say what remains.
 - [ ] 2. `Info` refuses a config it cannot serve with a sentence, and latches.
 - [ ] 3. After `Info` passed, an unreachable source answers `Unavailable`.
 - [ ] 4. A definitive listing (whole read, feed connected) is authoritative; a capped read or a down feed is not.
-- [ ] 5. Each key lives in one context; other contexts list links to it.
-- [ ] 6. `Probe` answers for the context it names.
+- [ ] 5. Each key lives in one grid; other grids list links to it.
+- [ ] 6. `Probe` answers for the grid it names.
 - [ ] 7. A failed refresh answers from memory with `ListResponse.unreachable` set.
 - [ ] 8. No walk, glance or feed runs except for a call or a `Watch` in scope.
 - [ ] 9. `Watch` sends its header on accept, collapses bursts, re-announces the scope on overflow.
@@ -782,6 +782,6 @@ lines say what remains.
 - [ ] 15. Cache file, flights and fan-out come from the shared package.
 - [ ] 16. A real-binary seam test per verb, and one for `Watch` if declared.
 - [ ] 17. The README matches the code.
-- [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `ContextChanged` only for a listing that may have moved.
+- [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `GridChanged` only for a listing that may have moved.
 - [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp; a text entry you would refuse declares `read_only` with the reason.
 - [ ] 20. `Find` reads only your memory; a file tree answers `Unimplemented` with the reason.

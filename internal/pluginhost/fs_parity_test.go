@@ -424,11 +424,11 @@ func TestFSPluginTextScrollPersists(t *testing.T) {
 }
 
 // The shipped fs binary, through the adapter and a full server: it declares
-// its collection and no place of its own, and that declaration is what opens.
-// Only the seam sees this — the plugin declares a context key and never learns
+// its grid and no place of its own, and that declaration is what opens.
+// Only the seam sees this — the plugin declares a grid key and never learns
 // whether it resolves, and the node resolves an id and never learns what the
 // plugin meant by it. It is also the whole of issue #281: a plugin with
-// collections and no root is healthy, and the collection is the door.
+// grids and no root is healthy, and the grid is the door.
 func TestAnEntriesOnlyPluginPresentsAndServes(t *testing.T) {
 	root := seedTree(t)
 	cl := pluginNode(t, root)
@@ -444,15 +444,15 @@ func TestAnEntriesOnlyPluginPresentsAndServes(t *testing.T) {
 	if row.InfoError != "" {
 		t.Errorf("declaring no place of its own is not a failure: %q", row.InfoError)
 	}
-	if len(row.MenuEntries) != 1 || row.MenuEntries[0].GridId == "" {
-		t.Fatalf("row = %+v, want its one collection, resolved to a grid", row)
+	if len(row.PluginGrids) != 1 || row.PluginGrids[0].GridId == "" {
+		t.Fatalf("row = %+v, want its one grid, resolved to a grid", row)
 	}
-	g, err := cl.GetGrid(ctx, row.MenuEntries[0].GridId)
+	g, err := cl.GetGrid(ctx, row.PluginGrids[0].GridId)
 	if err != nil {
-		t.Fatalf("the declared collection does not serve: %v", err)
+		t.Fatalf("the declared grid does not serve: %v", err)
 	}
 	if len(g.Tiles) == 0 {
-		t.Errorf("the collection listed nothing; the tree has files in it")
+		t.Errorf("the grid listed nothing; the tree has files in it")
 	}
 }
 

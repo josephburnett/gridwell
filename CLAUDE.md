@@ -272,27 +272,27 @@ These were decided deliberately. Do not reverse one without a new decision.
   because the config stopped declaring it — the row and its landing stay,
   its links go dead by the roster, and the stanza brings them back.
   Secrets stay host-local file paths.
-- A plugin is not a place (2026-09-06, reversing the `root_context`
-  decision). Nodes have homes; a plugin contributes doors. Its
-  collections are + menu entries, one per collection
-  (`InfoResponse.menu_entries`, each naming a context key), and it never
-  wraps them in a synthetic root grid of doors. `root_context` is RETIRED:
-  the field number is kept forever and the node reads it in one place only —
-  a plugin that answers a root_context and NO entries gets one derived entry
-  onto it, so an old binary keeps presenting. Declare both and the entries
-  win; there is no privileged collection. A plugin that declares none
+- A plugin is not a place (2026-09-06, reversing the `root_grid`
+  decision). Nodes have homes; a plugin contributes doors. Its grids are
+  + menu rows, one per grid it declares (`InfoResponse.grids`, each naming
+  the grid's key), and it never wraps them in a synthetic root grid of
+  doors. `root_grid` is RETIRED: the field number is kept forever and the
+  node reads it in one place only — a plugin that answers a root_grid and NO
+  grids gets one derived grid onto it, so an old binary keeps presenting.
+  Declare both and grids wins; there is no privileged grid. A plugin that
+  declares none
   contributes nothing and is healthy, not broken: `pluginhealth` gives its row
   no status at all. A plugin that cannot serve the source its config declares
   refuses `Info` with the reason, and is broken with that sentence and no
-  entries until the fix lands, which needs no restart (2026-09-30).
+  grids until the fix lands, which needs no restart (2026-09-30).
 - A plugin entry may be a link to another of its entries (2026-10-02):
-  `Entry.link_target` names the target by context and key, and the node
+  `Entry.link_target` names the target by grid and key, and the node
   draws the entry as a link to the target's key-form address, reads through
   it, and mints nothing for the target until it is touched. A listing is
-  authoritative only when it enumerates the context definitively (a whole
+  authoritative only when it enumerates the grid definitively (a whole
   read, or a whole box walk while the live feed is connected), and `Probe`
-  answers for the context it names, so leaving one collection is not being
-  gone. One thing listed in many collections is
+  answers for the grid it names, so leaving one grid is not being
+  gone. One thing listed in many grids is
   one tile (hey: a thread in everything, its boxes holding links).
 - A source that lists but cannot watch is not dark: its listings stay live
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
@@ -305,7 +305,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   serves first, and that it is a memory is the source's health — one hop
   further (2026-10-02, `docs/plugin-standard.md` rule 7).
 - A plugin does work only to answer a call or for a `Watch` the node holds
-  with that context in scope: no walk, glance or feed runs for the process's
+  with that grid in scope: no walk, glance or feed runs for the process's
   life. The node holds a stream only while something shows the plugin's
   grids, so this is "nothing is done for nobody" one hop further (2026-10-02,
   `docs/plugin-standard.md` rule 8).
@@ -332,13 +332,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   phone that went to the background, marked away in `sessions` (2026-10-18).
 - A node has no grid of its own. A connection lands on the far node's home.
   The + menu's top row is one swatch per declared door: a node's home and
-  a connection's far home are places and get a row; a plugin's collections
+  a connection's far home are places and get a row; a plugin's grids
   are the swatches, one each, and the plugin has none of its own
-  (`client/door.PlacesOf` enumerates, `client/menu.Doors` composes). An
-  entry is named most specific first, then its instance — "Feed (hey)",
-  `door.EntryName`, uniformly, with no privileged one, because a clipped
-  swatch must still tell entries apart (2026-09-30) — and it carries its grid's framing, so a
-  collection reopens where it was left. That row is an open set, so it is
+  (`client/door.PlacesOf` enumerates, `client/menu.Doors` composes). A
+  declared grid is named most specific first, then its instance — "Feed
+  (hey)", `door.GridName`, uniformly, with no privileged one, because a
+  clipped swatch must still tell them apart (2026-09-30) — and it carries
+  its framing, so a plugin's grid reopens where it was left. That row is an open set, so it is
   folded: a menu opens on the primitives with a chevron strip for the section
   above it, and every opening starts folded — the fold is the menu's live
   state and dies with it (`client/menu` decides what a state shows and owns

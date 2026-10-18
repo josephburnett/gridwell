@@ -74,7 +74,7 @@ test("a box's link opens its thread's page in a new tab", async ({ gw, window })
   await gw.waitClientTileAt(f.id, cx, cy, link.id);
   link = ((await gw.getGrid(f.gridID)).tiles ?? [])[0] as any;
 
-  // Opening the + menu read every collection, everything included, for its
+  // Opening the + menu read every grid, everything included, for its
   // swatch. A reload comes back to the box with nothing else read, as a phone
   // returning to the tab does. It reloads what the address bar says, so it
   // waits for the box to be written there.

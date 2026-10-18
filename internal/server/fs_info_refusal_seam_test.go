@@ -2,7 +2,7 @@ package server_test
 
 // The shipped fs binary over a root that is not there: the node lists it
 // broken with the plugin's own sentence, and the same process is healthy with
-// its one collection once the directory exists.
+// its one grid once the directory exists.
 
 import (
 	"context"
@@ -55,8 +55,8 @@ func TestFsOnAMissingRootIsBrokenAndHealsWithoutARespawn(t *testing.T) {
 	if want := `root "` + root + `" does not exist`; row.InfoError != want {
 		t.Errorf("InfoError = %q, want the plugin's sentence %q", row.InfoError, want)
 	}
-	if len(row.MenuEntries) != 0 {
-		t.Errorf("a refusing fs presents entries: %v", row.MenuEntries)
+	if len(row.PluginGrids) != 0 {
+		t.Errorf("a refusing fs presents entries: %v", row.PluginGrids)
 	}
 	if down := recvHealthOf(t, stream, fsUUID); down.Healthy {
 		t.Fatalf("first health event = %+v, want the refusal as down", down)
@@ -69,7 +69,7 @@ func TestFsOnAMissingRootIsBrokenAndHealsWithoutARespawn(t *testing.T) {
 		t.Fatalf("after the root exists, health event = %+v, want up", up)
 	}
 	row = pluginRow(t, cl, fsUUID)
-	if row.InfoError != "" || len(row.MenuEntries) != 1 {
-		t.Errorf("after the root exists the row is %v, want its one collection and no error", row)
+	if row.InfoError != "" || len(row.PluginGrids) != 1 {
+		t.Errorf("after the root exists the row is %v, want its one grid and no error", row)
 	}
 }

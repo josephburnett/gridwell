@@ -77,3 +77,15 @@ doorways
 pane-tile
 panetile
 kindpane
+# "collection" and "context" (the plugin API's word) — a plugin's grid has no
+# word of its own: it is a grid (PluginGrid, InfoResponse.grids). Go's
+# context.Context keeps its word; the grids.context_key column keeps its name,
+# since a column is never renamed.
+collection
+collections
+menuentry
+menuentries
+menu_entries
+contextchanged
+root_context
+child_context

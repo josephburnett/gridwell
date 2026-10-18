@@ -278,7 +278,7 @@ func (p *infoFlakePlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.In
 
 // TestGetGridFailsWhenOwnerInfoFails crosses the read seam a buildPluginInfo
 // unit test cannot reach: server -> Connect wire -> rpc.Client.GetGrid. Grid
-// scratch_grid_id and menu_entries come from the owning namespace's Info and
+// scratch_grid_id and plugin_grids come from the owning namespace's Info and
 // from nowhere else, so a failed handshake must fail the read. The
 // alternative — answering the grid with the fields unset — is a room with no
 // doors and no ephemeral visits, and that flips back on the next read,
@@ -310,8 +310,8 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	resp, err := cl.GetGrid(ctx, root)
 	if err == nil {
 		g := resp.GetGrid()
-		t.Fatalf("GetGrid answered while the owner's Info was failing: writable=%v scratch=%q menu entries=%d",
-			g.GetWritable(), g.GetScratchGridId(), len(g.GetMenuEntries()))
+		t.Fatalf("GetGrid answered while the owner's Info was failing: writable=%v scratch=%q declared grids=%d",
+			g.GetWritable(), g.GetScratchGridId(), len(g.GetPluginGrids()))
 	}
 	if !strings.Contains(err.Error(), "plugin not responding") {
 		t.Errorf("GetGrid error = %v, want it to carry the handshake failure", err)
@@ -325,9 +325,9 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 		t.Fatalf("GetGrid after recovery: %v", err)
 	}
 	g := resp.GetGrid()
-	if !g.GetWritable() || g.GetScratchGridId() == "" || len(g.GetMenuEntries()) == 0 {
-		t.Errorf("recovered grid: writable=%v scratch=%q menu entries=%d, want the home namespace's full declarations",
-			g.GetWritable(), g.GetScratchGridId(), len(g.GetMenuEntries()))
+	if !g.GetWritable() || g.GetScratchGridId() == "" || len(g.GetPluginGrids()) == 0 {
+		t.Errorf("recovered grid: writable=%v scratch=%q declared grids=%d, want the home namespace's full declarations",
+			g.GetWritable(), g.GetScratchGridId(), len(g.GetPluginGrids()))
 	}
 }
 

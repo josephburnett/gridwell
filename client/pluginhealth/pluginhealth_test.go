@@ -11,10 +11,10 @@ import (
 )
 
 func TestClassifyTable(t *testing.T) {
-	// The one shape a plugin's collection swatch takes, rooted at the
-	// collection rather than at the plugin.
-	collection := door.EntryPlugin(&gridwellv1.PluginInfo{Label: "Mail"},
-		&gridwellv1.MenuEntry{Id: "feed", Label: "Feed", GridId: "u/2"})
+	// The one shape a plugin's grid swatch takes, rooted at the
+	// grid rather than at the plugin.
+	grid := door.GridPlugin(&gridwellv1.PluginInfo{Label: "Mail"},
+		&gridwellv1.PluginGrid{Id: "feed", Label: "Feed", GridId: "u/2"})
 	cases := []struct {
 		name   string
 		pl     *gridwellv1.PluginInfo
@@ -23,12 +23,12 @@ func TestClassifyTable(t *testing.T) {
 	}{
 		{"home", &gridwellv1.PluginInfo{Label: "Home", RootGridId: "u/1"}, Enterable, true},
 		{"rooted connection", rpc.ConnectionRow("c1", "", "c1/1", "", rpc.View{}), Enterable, true},
-		{"a plugin's collection swatch", collection, Enterable, true},
+		{"a plugin's grid swatch", grid, Enterable, true},
 		{"info failed", &gridwellv1.PluginInfo{Label: "Files", InfoError: "plugin not responding: connection refused"}, Broken, true},
 		// A plugin contributes doors rather than being one, so a rootless
 		// plugin row is not a health state and gets no status at all.
 		{"answered, entries and no root", &gridwellv1.PluginInfo{Label: "Mail",
-			MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "u/2"}}}, 0, false},
+			PluginGrids: []*gridwellv1.PluginGrid{{Id: "feed", Label: "Feed", GridId: "u/2"}}}, 0, false},
 		{"answered, nothing declared", &gridwellv1.PluginInfo{Label: "Files"}, 0, false},
 		{"connection not answered yet", rpc.ConnectionRow("c1", "rtb", "", "", rpc.View{}), Waiting, true},
 		{"connection that failed to dial", rpc.ConnectionRow("c1", "rtb", "",
@@ -83,7 +83,7 @@ func TestBrokenIsOneStatusWithTheReasonInTheText(t *testing.T) {
 // nothing.
 func TestClickNotice_UnclassifiedRow_NotOk(t *testing.T) {
 	pl := &gridwellv1.PluginInfo{Uuid: "u1", Label: "Mail",
-		MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "u1/2"}}}
+		PluginGrids: []*gridwellv1.PluginGrid{{Id: "feed", Label: "Feed", GridId: "u1/2"}}}
 	if _, _, _, ok := ClickNotice(pl); ok {
 		t.Error("a plugin with no door of its own must report nothing")
 	}

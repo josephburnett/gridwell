@@ -3,7 +3,8 @@
   "glyph": "Glyph-357",
   "hostContent": true,
   "id": "Id-771",
-  "menuEntries": [
+  "nodeNs": "NodeNs-650",
+  "pluginGrids": [
     {
       "glyph": "Glyph-357",
       "gridId": "GridId-289",
@@ -14,7 +15,6 @@
       "viewZoom": 63.5
     }
   ],
-  "nodeNs": "NodeNs-650",
   "scratchGridId": "ScratchGridId-474",
   "selection": [
     "Selection-813"

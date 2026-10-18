@@ -61,8 +61,8 @@ func TestDecide(t *testing.T) {
 			Verdict{Rename: RenameDoor, Label: unnamed, Editable: true, Muted: true},
 		},
 		{
-			"a declared menu entry is config-owned, so it is read-only",
-			Input{AtAnchor: true, Door: door.Entry, DoorName: "Feed (hey)"},
+			"a declared grid is config-owned, so it is read-only",
+			Input{AtAnchor: true, Door: door.Declared, DoorName: "Feed (hey)"},
 			Verdict{Label: "Feed (hey)", Muted: true},
 		},
 		{
@@ -72,7 +72,7 @@ func TestDecide(t *testing.T) {
 		},
 		{
 			"a nameless declaration reads unnamed",
-			Input{AtAnchor: true, Door: door.Entry},
+			Input{AtAnchor: true, Door: door.Declared},
 			Verdict{Label: unnamed, Muted: true},
 		},
 		{
@@ -126,7 +126,7 @@ func TestDecideDescentBeatsLevel(t *testing.T) {
 // A pane standing on the level's own grid has no path tail, so the door
 // answers even where a stale parent fact is set.
 func TestDecideAnchorBeatsParent(t *testing.T) {
-	in := Input{AtAnchor: true, Door: door.Entry, DoorName: "Feed (hey)",
+	in := Input{AtAnchor: true, Door: door.Declared, DoorName: "Feed (hey)",
 		Parent: true, ParentName: "projects"}
 	if got := Decide(in); got != (Verdict{Label: "Feed (hey)", Muted: true}) {
 		t.Fatalf("Decide(anchor over parent) = %+v, want the door's label", got)
@@ -141,8 +141,8 @@ func TestDecideSourceLabel(t *testing.T) {
 		in   Input
 		want string
 	}{
-		{"a collection names its source after its door",
-			Input{AtAnchor: true, Door: door.Entry, DoorName: "Inbox (hey)", SourceLabel: "Inbox · 12 unread"},
+		{"a grid names its source after its door",
+			Input{AtAnchor: true, Door: door.Declared, DoorName: "Inbox (hey)", SourceLabel: "Inbox · 12 unread"},
 			"Inbox (hey) — Inbox · 12 unread"},
 		{"a door row inside a plugin grid names its directory",
 			Input{Parent: true, ParentName: "src", SourceLabel: "/srv/src"},
@@ -151,10 +151,10 @@ func TestDecideSourceLabel(t *testing.T) {
 			Input{AtAnchor: true, SourceLabel: "/srv"},
 			"unnamed — /srv"},
 		{"a source that only repeats the name adds nothing",
-			Input{AtAnchor: true, Door: door.Entry, DoorName: "pages", SourceLabel: "pages"},
+			Input{AtAnchor: true, Door: door.Declared, DoorName: "pages", SourceLabel: "pages"},
 			"pages"},
 		{"a grid whose source says nothing shows the name alone",
-			Input{AtAnchor: true, Door: door.Entry, DoorName: "Feed (hey)"},
+			Input{AtAnchor: true, Door: door.Declared, DoorName: "Feed (hey)"},
 			"Feed (hey)"},
 		{"inside a tile the source does not show",
 			Input{Descent: true, Descended: true, DescendedName: "notes", SourceLabel: "/srv"},

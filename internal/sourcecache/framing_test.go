@@ -96,7 +96,7 @@ func framingFixture(t *testing.T) (*Layer, *framingSource) {
 			"": {Plugins: []*pb.PluginInfo{rpc.ConnectionRow("conn", "Far", farHome, "", rpc.View{})}},
 			"conn": {HomeGridId: farHome, Plugins: []*pb.PluginInfo{
 				{Uuid: "conn/r", RootGridId: farHome},
-				{Uuid: "conn/p", MenuEntries: []*pb.MenuEntry{
+				{Uuid: "conn/p", PluginGrids: []*pb.PluginGrid{
 					{Id: "feed", GridId: farFeed}, {Id: "other", GridId: farOther},
 				}},
 			}},
@@ -134,7 +134,7 @@ func rowFraming(pl *pb.PluginInfo) rpc.View {
 	return rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom)
 }
 
-func entryFraming(e *pb.MenuEntry) rpc.View {
+func entryFraming(e *pb.PluginGrid) rpc.View {
 	return rpc.ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)
 }
 
@@ -159,9 +159,9 @@ func TestAFramingEventReframesTheRememberedDoors(t *testing.T) {
 	if got := rowFraming(rpc.HomeRow(far)); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the far home row = %+v, want %+v", got, f)
 	}
-	entries := far.GetPlugins()[1].GetMenuEntries()
+	entries := far.GetPlugins()[1].GetPluginGrids()
 	if got := entryFraming(entries[0]); !got.SameAs(rpc.Saved(g)) {
-		t.Errorf("the collection entry = %+v, want %+v", got, g)
+		t.Errorf("the grid entry = %+v, want %+v", got, g)
 	}
 	if got := entryFraming(entries[1]); !got.SameAs(rpc.View{}) {
 		t.Errorf("an entry rooted elsewhere moved: %+v", got)

@@ -95,7 +95,7 @@ test('proc: the root grid lists the served node as a child of this worker', asyn
   expect(child, `pid ${serve.child.pid} (gridwell serve) is a child door of ${process.pid}`).toBeTruthy();
   expect(child!.kind).toBe('door');
 
-  // The child process has its own @info tile, so the child context round-trips
+  // The child process has its own @info tile, so the child grid round-trips
   // through the node's id space.
   await gw.descendCell(Number(child!.x ?? 0), Number(child!.y ?? 0));
   const inner = await gw.focused();

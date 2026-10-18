@@ -92,7 +92,7 @@ func TestHeyIsAskedForPreviewsOncePerProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	var imbox string
-	for _, m := range info.MenuEntries {
+	for _, m := range info.PluginGrids {
 		if m.Label == "imbox" {
 			imbox = m.GridId
 		}

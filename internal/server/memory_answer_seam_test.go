@@ -38,7 +38,7 @@ type memoryMail struct {
 
 func (memoryMail) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{Kind: "mail", DisplayName: "mail",
-		MenuEntries: []*pluginv1.MenuEntry{{Id: "inbox", Context: "inbox"}}}, nil
+		Grids: []*pluginv1.PluginGrid{{Id: "inbox", Grid: "inbox"}}}, nil
 }
 
 func (p memoryMail) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

@@ -33,17 +33,16 @@ message InfoResponse {
   string kind         = 1; // e.g. "fs", "proc", "mail"
   string display_name = 2;
   string glyph        = 3; // declared glyph vocabulary; "" = the generic globe
-  // root_context is retired and its field number is kept rather than reused.
-  // A plugin contributes doors, one menu_entries row per collection, and
-  // the node has no landing to choose among them. Leave it empty and declare
-  // your collections.
+  // root_grid is retired and its field number is kept rather than reused.
+  // A plugin contributes doors, one + menu row per grid it declares in
+  // grids, and the node has no landing to choose among them. Leave it empty
+  // and declare your grids.
   //
   // The node reads it in one case, so a binary built against the older proto
-  // keeps presenting without a rebuild: a plugin that answers a root_context
-  // and no menu_entries gets one derived entry onto it, wearing the plugin's
-  // own name and glyph. Declare both and the entries win; there is no
-  // privileged collection.
-  string root_context = 4;
+  // keeps presenting without a rebuild: a plugin that answers a root_grid and
+  // no grids gets one derived grid onto it, wearing the plugin's own name and
+  // glyph. Declare both and grids wins; there is no privileged grid.
+  string root_grid = 4;
   // watch: the plugin implements Watch (live change events). It is the one
   // owner: the node opens Watch only when this is set. A plugin that sets it
   // and answers Unimplemented has live updates off, said once on a healthy
@@ -55,15 +54,15 @@ message InfoResponse {
   // without it they are read-only. Presentation writes never reach a plugin,
   // so this is a content capability only.
   bool writable = 6;
-  // menu_entries: the plugin's collections, one row each, and the way a plugin
-  // is reached. Each becomes a (+) menu swatch, and the node stamps them onto
-  // every grid it serves for this plugin. Keyed by context instead of grid id.
-  // Declaring none is legal and means the plugin contributes nothing to the
-  // menu.
-  repeated MenuEntry menu_entries = 7;
-  // host_content: this plugin's contexts project host state, such as a
+  // grids: the grids the plugin declares, one + menu row each, and the way a
+  // plugin is reached. Each becomes a (+) menu swatch, and the node stamps
+  // them onto every grid it serves for this plugin. Keyed by the plugin's own
+  // grid key instead of a grid id. Declaring none is legal and means the
+  // plugin contributes nothing to the menu.
+  repeated PluginGrid grids = 7;
+  // host_content: this plugin's grids project host state, such as a
   // directory tree or the process table, rather than holding content of their
-  // own. Their rows are summaries the node cannot re-arrange across contexts,
+  // own. Their rows are summaries the node cannot re-arrange across grids,
   // and the client renders them with the host treatment: the outside tint on
   // every tile and the border family of a door to another namespace on a descent. The node has no list of
   // which kinds are host-backed, so a third-party plugin gets the same
@@ -72,28 +71,28 @@ message InfoResponse {
   bool host_content = 8;
 }
 
-// MenuEntry mirrors the gridwell.v1 shape with contexts for targets: one of the
-// plugin's collections, which the node stamps onto every grid it serves for
+// PluginGrid mirrors the gridwell.v1 shape with grid keys for targets: one of
+// the plugin's grids, which the node stamps onto every grid it serves for
 // this plugin.
-message MenuEntry {
+message PluginGrid {
   string id           = 1;
   string label        = 2;
   string glyph        = 3;
   reserved 4, 5, 6; // color, kind, param_schema
-  string context      = 7; // the target context key
+  string grid         = 7; // the target grid's key
 }
 
 // ─── Listing ───────────────────────────────────────────────────────────────
 
-// List enumerates one context, carrying no presentation facts. A context is the
-// plugin's word for a grid, and the node maps context keys to grid ids in the
+// List enumerates one grid, carrying no presentation facts. The plugin names a
+// grid by its own key, and the node maps grid keys to grid ids in the
 // plugin's namespace of its store.
 message ListRequest {
-  string context = 1;
+  string grid = 1;
 }
 message ListResponse {
   repeated Entry entries = 1;
-  // authoritative: this listing enumerates the context definitively, so a key
+  // authoritative: this listing enumerates the grid definitively, so a key
   // absent from it is gone, as for a readable directory. When false, absence
   // only means not seen this pass, as with the process table, and the node
   // keeps serving remembered entries until Probe answers GONE. It is the one
@@ -116,8 +115,8 @@ message Entry {
   // serve a page.
   string kind  = 2;
   string label = 3;
-  // child_context: doors only — the context this entry opens into.
-  string child_context = 4;
+  // child_grid: doors only — the grid this entry opens into.
+  string child_grid = 4;
   // serves_page: this entry's web content is the plugin's, served through
   // ServeContent. It is a url entry's address in place of url_string — the
   // node derives one at its /content/ API — so it rides kind "url" alone and
@@ -153,8 +152,8 @@ message Entry {
   // Keep kind as the target's kind, and the content facts too if an older
   // node must still present it, since a node that predates this field shows
   // the entry as content of its own. The node mints nothing for the target
-  // until the user touches it, and a target its context no longer holds
-  // reads as a dead link. A door has no link variant here: its child_context
+  // until the user touches it, and a target its grid no longer holds
+  // reads as a dead link. A door has no link variant here: its child_grid
   // already names where it opens.
   EntryRef link_target = 11;
   // content_stamp names the bytes a text entry's ReadContent answers right
@@ -175,10 +174,10 @@ message Entry {
   string read_only = 13;
 }
 
-// EntryRef names one entry by the plugin's own words: the context that lists
+// EntryRef names one entry by the plugin's own words: the grid that lists
 // it and its key there.
 message EntryRef {
-  string context = 1;
+  string grid    = 1;
   string key     = 2;
 }
 
@@ -252,12 +251,12 @@ message GetPreviewResponse {
 // read must never read as GONE.
 message ProbeRequest {
   string key = 1;
-  // context is the context the node is asking about: GONE means the key has
-  // left that context, which for a key listed in several contexts (a mail
-  // thread in a box and in everything) is not the same as gone everywhere.
-  // Empty means the node names none (a node from before contexts): answer
-  // for the plugin as a whole.
-  string context = 2;
+  // grid is the grid the node is asking about: GONE means the key has left
+  // that grid, which for a key listed in several grids (a mail thread in a
+  // box and in everything) is not the same as gone everywhere. Empty means
+  // the node names none (a node from before this field): answer for the
+  // plugin as a whole.
+  string grid = 2;
 }
 message ProbeResponse {
   enum Presence {
@@ -284,9 +283,9 @@ message FindRequest {
 }
 message FindResult {
   Entry entry = 1;
-  // context_path is the containing-context chain from the root, outermost first.
-  // The node resolves it to a navigable tile path.
-  repeated string context_path = 2;
+  // grid_path is the chain of grids containing the entry, from the root,
+  // outermost first. The node resolves it to a navigable tile path.
+  repeated string grid_path = 2;
   string snippet = 3;
   double score   = 4;
 }
@@ -296,23 +295,23 @@ message FindResponse {
 
 // ─── Events ────────────────────────────────────────────────────────────────
 
-// WatchRequest's contexts are your own context keys the node wants watched:
-// the ones some client shows, on this node or any node that reaches it. A
-// file shown in a pane counts through its context. When the set changes the
-// node opens a stream with the new set and ends the old one only once the new
-// one has sent its header, so a context in both is watched throughout; while
-// nothing of yours is shown it holds none open. Empty means the node names no
-// scope (a node from before scopes): watch what you judge cheap. A feed that
-// is account-wide rather than per context may ignore the set.
+// WatchRequest's grids are your own grid keys the node wants watched: the
+// ones some client shows, on this node or any node that reaches it. A file
+// shown in a pane counts through its grid. When the set changes the node
+// opens a stream with the new set and ends the old one only once the new one
+// has sent its header, so a grid in both is watched throughout; while nothing
+// of yours is shown it holds none open. Empty means the node names no scope
+// (a node from before scopes): watch what you judge cheap. A feed that is
+// account-wide rather than per grid may ignore the set.
 message WatchRequest {
-  repeated string contexts = 1;
+  repeated string grids = 1;
 }
-// ContextChanged says context's listing may have moved: an entry added,
-// removed, renamed or re-described. The node lists it and tells clients only
-// if the answer moved, so a ContextChanged that moves nothing costs one List
-// and no client anything.
-message ContextChanged {
-  string context = 1;
+// GridChanged says grid's listing may have moved: an entry added, removed,
+// renamed or re-described. The node lists it and tells clients only if the
+// answer moved, so a GridChanged that moves nothing costs one List and no
+// client anything.
+message GridChanged {
+  string grid = 1;
 }
 // EntryChanged says one entry changed in place, its bytes or its picture,
 // with the listing otherwise as it was: a file written. entry is the entry
@@ -320,20 +319,20 @@ message ContextChanged {
 // else to tell every client showing it. A plugin row carries no version, so
 // this is the only way its bytes reach a body a client already holds.
 message EntryChanged {
-  string context = 1;
+  string grid    = 1;
   Entry  entry   = 2;
 }
 // EntryRemoved is RETIRED and its arm number is kept rather than reused: a
-// removal is a listing that moved, which ContextChanged says. The node reads
-// it in one place, as a ContextChanged for its context, so an older binary
-// keeps working. Do not send it.
+// removal is a listing that moved, which GridChanged says. The node reads
+// it in one place, as a GridChanged for its grid, so an older binary keeps
+// working. Do not send it.
 message EntryRemoved {
-  string context = 1;
+  string grid    = 1;
   string key     = 2;
 }
 message Change {
   oneof payload {
-    ContextChanged context_changed = 1;
+    GridChanged    grid_changed    = 1;
     EntryRemoved   entry_removed   = 2;
     EntryChanged   entry_changed   = 3;
   }

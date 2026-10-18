@@ -46,7 +46,7 @@ func (p *goneSource) set(edit func(*goneSource)) {
 
 func (p *goneSource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{Kind: "goneish", DisplayName: "goneish",
-		MenuEntries: []*pluginv1.MenuEntry{{Id: "r", Context: "r"}}}, nil
+		Grids: []*pluginv1.PluginGrid{{Id: "r", Grid: "r"}}}, nil
 }
 
 func (p *goneSource) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

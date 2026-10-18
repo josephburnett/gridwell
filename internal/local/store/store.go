@@ -231,7 +231,7 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 }
 
 // RootFraming returns home's root framing, in the same three columns a plugin
-// context's root keeps.
+// grid's root keeps.
 func (s *Store) RootFraming(ctx context.Context) (rpc.View, error) {
 	rootID, err := rootGridID(ctx, s.db)
 	if err != nil {
@@ -241,7 +241,7 @@ func (s *Store) RootFraming(ctx context.Context) (rpc.View, error) {
 }
 
 // GridFraming is the same fact for any grid of home, by its decimal id. Home
-// declares its trashcan as a menu entry, and an entry carries the framing of
+// declares its trashcan as a declared grid, and an entry carries the framing of
 // the grid behind it exactly as a root does, so the two read one column set.
 func (s *Store) GridFraming(gridID string) (rpc.View, error) {
 	id, err := parseID(gridID)

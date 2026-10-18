@@ -33,7 +33,7 @@ const refusingUUID = "prefuse"
 const refusal = `root "/srv/missing" does not exist`
 
 // refusingInfo refuses Info while fixed is false, as fs does for a root that
-// is not there, and declares one collection once it answers.
+// is not there, and declares one grid once it answers.
 type refusingInfo struct {
 	pluginv1.UnimplementedPluginServer
 	fixed *atomic.Bool
@@ -44,7 +44,7 @@ func (p refusingInfo) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.In
 		return nil, status.Error(codes.FailedPrecondition, refusal)
 	}
 	return &pluginv1.InfoResponse{Kind: "fs", DisplayName: "missing",
-		MenuEntries: []*pluginv1.MenuEntry{{Id: ".", Context: "."}}}, nil
+		Grids: []*pluginv1.PluginGrid{{Id: ".", Grid: "."}}}, nil
 }
 
 func pluginRow(t *testing.T, cl *rpc.Client, uuid string) *gridwellv1.PluginInfo {
@@ -88,8 +88,8 @@ func TestARefusedInfoIsBrokenWithItsReasonAndComesBack(t *testing.T) {
 	if row.InfoError != refusal {
 		t.Errorf("InfoError = %q, want the plugin's own sentence %q", row.InfoError, refusal)
 	}
-	if len(row.MenuEntries) != 0 {
-		t.Errorf("a refusing plugin presents entries: %v", row.MenuEntries)
+	if len(row.PluginGrids) != 0 {
+		t.Errorf("a refusing plugin presents entries: %v", row.PluginGrids)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -109,7 +109,7 @@ func TestARefusedInfoIsBrokenWithItsReasonAndComesBack(t *testing.T) {
 		t.Fatalf("after the fix, health event = %+v, want up", up)
 	}
 	row = pluginRow(t, cl, refusingUUID)
-	if row.InfoError != "" || len(row.MenuEntries) != 1 {
+	if row.InfoError != "" || len(row.PluginGrids) != 1 {
 		t.Errorf("after the fix the row is %v, want its one entry and no error", row)
 	}
 }

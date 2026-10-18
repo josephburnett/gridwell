@@ -129,8 +129,8 @@ func withStateDir(t *testing.T, cfg map[string]string) map[string]string {
 	return out
 }
 
-// Landing is the grid a plugin's single declared collection serves. A plugin
-// declares no root of its own, only one menu entry per collection, so there is
+// Landing is the grid a plugin's single declared grid serves. A plugin
+// declares no root of its own, only one declared grid per grid, so there is
 // no RootGridId to read; a plugin with several has no single landing, which is
 // why this fails rather than picking one.
 func Landing(t *testing.T, info *gridwellv1.InfoResponse) string {
@@ -138,10 +138,10 @@ func Landing(t *testing.T, info *gridwellv1.InfoResponse) string {
 	if info.RootGridId != "" {
 		t.Fatalf("this row names a grid of its own (%q) — it is a node, not a plugin", info.RootGridId)
 	}
-	if len(info.MenuEntries) != 1 {
-		t.Fatalf("%d collections declared, want exactly one to land in: %+v", len(info.MenuEntries), info.MenuEntries)
+	if len(info.PluginGrids) != 1 {
+		t.Fatalf("%d grids declared, want exactly one to land in: %+v", len(info.PluginGrids), info.PluginGrids)
 	}
-	return info.MenuEntries[0].GridId
+	return info.PluginGrids[0].GridId
 }
 
 // LandingOf is Landing over a handshake's menu row.
@@ -150,8 +150,8 @@ func LandingOf(t *testing.T, pl *gridwellv1.PluginInfo) string {
 	if pl.RootGridId != "" {
 		t.Fatalf("row %q names a grid of its own (%q) — it is a node, not a plugin", pl.Label, pl.RootGridId)
 	}
-	if len(pl.MenuEntries) != 1 {
-		t.Fatalf("row %q declares %d collections, want exactly one to land in", pl.Label, len(pl.MenuEntries))
+	if len(pl.PluginGrids) != 1 {
+		t.Fatalf("row %q declares %d grids, want exactly one to land in", pl.Label, len(pl.PluginGrids))
 	}
-	return pl.MenuEntries[0].GridId
+	return pl.PluginGrids[0].GridId
 }

@@ -57,10 +57,10 @@ func TestHeyPageThroughTheContentAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	tileID := ""
-	for _, e := range info.MenuEntries {
+	for _, e := range info.PluginGrids {
 		g, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: e.GridId})
 		if err != nil {
-			t.Fatalf("collection %q: %v", e.Label, err)
+			t.Fatalf("grid %q: %v", e.Label, err)
 		}
 		for _, tl := range g.Tiles {
 			if tl.ServesPage {

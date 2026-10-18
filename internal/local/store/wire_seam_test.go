@@ -127,7 +127,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 
 	// serves_page is stored only on a plugin's row.
 	ns := s.Namespace("p1")
-	pgid, err := ns.ContextID("root")
+	pgid, err := ns.GridOf("root")
 	if err != nil {
 		t.Fatal(err)
 	}

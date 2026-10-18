@@ -234,8 +234,8 @@ func TestPagesPluginTextTileIsMarkdown(t *testing.T) {
 	}
 }
 
-// The node's Probe of a listed tile asks the plugin in the context the tile
-// was listed in, and the plugin answers PRESENT there: a context either side
+// The node's Probe of a listed tile asks the plugin in the grid the tile
+// was listed in, and the plugin answers PRESENT there: a grid either side
 // gets wrong reads as GONE, and GONE retires a live tile.
 func TestPagesPluginProbesAListedTilePresent(t *testing.T) {
 	cl := newPluginClient(t, "pages", nil)

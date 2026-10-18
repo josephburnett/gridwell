@@ -71,8 +71,8 @@ func mintAll(t *testing.T, d *Namespace, gid int64, entries []*pluginv1.Entry, a
 		}
 		e := byKey[tl.Key]
 		var child int64
-		if e.ChildContext != "" {
-			if child, err = d.ContextID(e.ChildContext); err != nil {
+		if e.ChildGrid != "" {
+			if child, err = d.GridOf(e.ChildGrid); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -98,7 +98,7 @@ func extByKey(t *testing.T, tiles []ExtTile, key string) ExtTile {
 
 func TestExtMergeIsIdempotent(t *testing.T) {
 	_, d := openExt(t)
-	gid, err := d.ContextID("root")
+	gid, err := d.GridOf("root")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,14 +121,14 @@ func TestExtMergeIsIdempotent(t *testing.T) {
 }
 
 // Externals share the tables with home but never its reads: a plugin's
-// context grid is invisible through home's reads, and home's grid holds
+// grid grid is invisible through home's reads, and home's grid holds
 // no plugin rows.
 func TestExtRowsAreInvisibleToHome(t *testing.T) {
 	st, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	mintAll(t, d, gid, textEntries("a"), true)
 	if _, err := st.GetGrid(t.Context(), itoa(gid)); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("home GetGrid of a plugin context = %v, want ErrNotFound", err)
+		t.Fatalf("home GetGrid of a plugin grid = %v, want ErrNotFound", err)
 	}
 	root, _ := st.RootGridID(t.Context())
 	g, err := st.GetGrid(t.Context(), root)
@@ -144,7 +144,7 @@ func TestExtRowsAreInvisibleToHome(t *testing.T) {
 
 func TestExtUserPlacementSurvivesMerges(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a", "b"), true)
 	a := extByKey(t, tiles, "a")
 	if _, err := d.Move(a.ID, 5, 3, 2, 2, nil); err != nil {
@@ -165,7 +165,7 @@ func TestExtUserPlacementSurvivesMerges(t *testing.T) {
 
 func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("cal")
+	gid, _ := d.GridOf("cal")
 	ev := []*pluginv1.Entry{{Key: "event1", Kind: "text", Label: "e", PlacementHint: &pluginv1.PlacementHint{X: 10, Y: 2, W: 2, H: 1}}}
 	tiles := mintAll(t, d, gid, ev, true)
 	e := extByKey(t, tiles, "event1")
@@ -184,7 +184,7 @@ func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 
 func TestExtAuthoritativeAbsenceRetiresAndRecreationMintsFresh(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a", "b"), true)
 	oldA := extByKey(t, tiles, "a")
 	tiles = mintAll(t, d, gid, textEntries("b"), true)
@@ -206,7 +206,7 @@ func TestExtAuthoritativeAbsenceRetiresAndRecreationMintsFresh(t *testing.T) {
 
 func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("procroot")
+	gid, _ := d.GridOf("procroot")
 	tiles := mintAll(t, d, gid, textEntries("pid:1", "pid:2"), false)
 	p2 := extByKey(t, tiles, "pid:2")
 	if _, err := d.Move(p2.ID, 4, 4, 1, 1, nil); err != nil {
@@ -220,8 +220,8 @@ func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 
 func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
-	listing := []*pluginv1.Entry{{Key: "dir", Kind: "door", Label: "dir", ChildContext: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}}
+	gid, _ := d.GridOf("root")
+	listing := []*pluginv1.Entry{{Key: "dir", Kind: "door", Label: "dir", ChildGrid: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}}
 	tiles := mintAll(t, d, gid, listing, true)
 	dir, f := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
 	if dir.ChildGridID == 0 {
@@ -245,17 +245,17 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	if f2.TextY != 120 || f2.TextW != 400 || f2.TextMode != "rendered" || f2.ContentZoom != 1.25 || f2.AltText != "f renamed" {
 		t.Fatalf("text framing/facts lost: %+v", f2)
 	}
-	if cgid, err := d.ContextID("root/dir"); err != nil || cgid != dir.ChildGridID {
-		t.Fatalf("child context re-minted: %d != %d (%v)", cgid, dir.ChildGridID, err)
+	if cgid, err := d.GridOf("root/dir"); err != nil || cgid != dir.ChildGridID {
+		t.Fatalf("child grid re-minted: %d != %d (%v)", cgid, dir.ChildGridID, err)
 	}
-	if key, err := d.ContextKey(dir.ChildGridID); err != nil || key != "root/dir" {
+	if key, err := d.GridKey(dir.ChildGridID); err != nil || key != "root/dir" {
 		t.Fatalf("ContextKey = %q (%v)", key, err)
 	}
 }
 
 func TestExtRetireIsTheDeleteGesture(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a"), true)
 	a := extByKey(t, tiles, "a")
 	if err := d.Retire(a.ID); err != nil {
@@ -268,9 +268,9 @@ func TestExtRetireIsTheDeleteGesture(t *testing.T) {
 
 func TestExtRootFraming(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	if v, err := d.RootFraming(gid); err != nil || !v.SameAs(rpc.View{}) {
-		t.Fatalf("fresh context claims a root view: %+v err=%v", v, err)
+		t.Fatalf("fresh grid claims a root view: %+v err=%v", v, err)
 	}
 	if _, err := d.SetFraming(0, gid, mkFraming(1.5, -2.25, 0.8)); err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := st.Namespace("plug1")
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a"), true)
 	a := extByKey(t, tiles, "a")
 	if _, err := d.Move(a.ID, 2, 2, 1, 1, nil); err != nil {
@@ -303,7 +303,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 	}
 	defer st2.Close()
 	d2 := st2.Namespace("plug1")
-	gid2, _ := d2.ContextID("root")
+	gid2, _ := d2.GridOf("root")
 	if gid2 != gid {
 		t.Fatalf("context re-minted across reopen: %d != %d", gid2, gid)
 	}
@@ -331,7 +331,7 @@ func rowCount(t *testing.T, st *Store) int {
 // the tile a user finally touches does not move under the touch.
 func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 	st, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	keys := make([]string, 100)
 	for i := range keys {
 		keys[i] = "f" + itoa(int64(i))
@@ -399,7 +399,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 // before and after.
 func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	entries := textEntries("a", "b", "c", "d", "e")
 	before, err := d.Overlay(gid, entries)
 	if err != nil {
@@ -438,7 +438,7 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 // an obstacle.
 func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("root")
+	gid, _ := d.GridOf("root")
 	entries := textEntries("a", "b", "c", "d", "e")
 	before, err := d.Overlay(gid, entries)
 	if err != nil {
@@ -486,7 +486,7 @@ func overlapping(tiles []ExtTile) string {
 // first free rect of its size below the hint, instead of landing on the row.
 func TestHintOntoAStoredRowStacksBelowIt(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("week")
+	gid, _ := d.GridOf("week")
 	mintAll(t, d, gid, []*pluginv1.Entry{hinted("old", 0, 0, 2, 1)}, false)
 	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("new", 0, 0, 2, 1), hinted("old", 0, 1, 2, 1)})
 	if err != nil {
@@ -505,7 +505,7 @@ func TestHintOntoAStoredRowStacksBelowIt(t *testing.T) {
 
 func TestTwoEntriesWithOneHintGetTwoRects(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("week")
+	gid, _ := d.GridOf("week")
 	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("a", 3, 2, 1, 1), hinted("b", 3, 2, 1, 1)})
 	if err != nil {
 		t.Fatal(err)
@@ -525,7 +525,7 @@ func TestTwoEntriesWithOneHintGetTwoRects(t *testing.T) {
 // 2-wide hint whose second cell is a stored row stacks below it.
 func TestTwoWideHintBesideAOneWideRowStacksBelowIt(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("week")
+	gid, _ := d.GridOf("week")
 	mintAll(t, d, gid, []*pluginv1.Entry{hinted("tue", 1, 0, 1, 1)}, false)
 	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("mon", 0, 0, 2, 1), hinted("tue", 2, 0, 2, 1)})
 	if err != nil {
@@ -541,7 +541,7 @@ func TestTwoWideHintBesideAOneWideRowStacksBelowIt(t *testing.T) {
 
 func TestUnhintedEntriesStillFlowFromTheCursor(t *testing.T) {
 	_, d := openExt(t)
-	gid, _ := d.ContextID("mixed")
+	gid, _ := d.GridOf("mixed")
 	entries := append(textEntries("a"), hinted("h", 0, 0, 1, 1), hinted("h2", 0, 0, 1, 1))
 	entries = append(entries, textEntries("b")...)
 	tiles, err := d.Overlay(gid, entries)

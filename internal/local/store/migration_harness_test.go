@@ -753,10 +753,10 @@ func init() {
 			if ns != "" || key != "" || tomb != 0 {
 				t.Errorf("an old home row must carry the externals' defaults, got ns=%q key=%q tombstoned=%d", ns, key, tomb)
 			}
-			// An external's context grid and row are accepted; a live key
-			// is unique per context; a retired key may be re-minted.
+			// An external's grid grid and row are accepted; a live key
+			// is unique per grid; a retired key may be re-minted.
 			if _, err := db.Exec(`INSERT INTO grids (object_id, created_at, ns, context_key) VALUES ('fixt-v9-ctx', 100, 'plug1', 'root')`); err != nil {
-				t.Fatalf("insert context grid post-migration: %v", err)
+				t.Fatalf("insert grid grid post-migration: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
 				SELECT id, 'text', 0, 0, 1, 1, 'a', 100, 100, 'plug1', 'a' FROM grids WHERE object_id = 'fixt-v9-ctx'`); err != nil {
@@ -889,7 +889,7 @@ func init() {
 
 // v11: one framing shape. A chain-built v10 file already carries the v11 tiles
 // columns, so what this fixture reaches is the other three halves: a door's
-// framing survives the rebuild untouched, a plugin context's root converts
+// framing survives the rebuild untouched, a plugin grid's root converts
 // from origin to center, and home's root moves onto its grid row. The view_x
 // conversion needs a genuine v10 file, in
 // TestMigrateV11OverAGenuineV10File.
@@ -908,11 +908,11 @@ func init() {
 				VALUES (`+rootID+`, 'door', 80, 8, 2, 2, 4.25, -6.5, 0.375, ?, 'v10 framed door', 100, 100)`, child); err != nil {
 				t.Fatalf("seed framed door: %v", err)
 			}
-			// A plugin context's root, stored the old way: the origin of the
+			// A plugin grid's root, stored the old way: the origin of the
 			// 1×1 synthetic door the client framed it through.
 			if _, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key, root_cx, root_cy, root_zoom)
 				VALUES (100, 100, 'p1', 'root', 3, -2, 0.5)`); err != nil {
-				t.Fatalf("seed plugin context root: %v", err)
+				t.Fatalf("seed plugin grid root: %v", err)
 			}
 			// Home's root framing, in the KV table v11 retires.
 			for _, kv := range [][2]string{{"root_view_cx", "10"}, {"root_view_cy", "-4"}, {"root_zoom", "0.25"}} {
@@ -947,10 +947,10 @@ func init() {
 			if cx != 4.25 || cy != -6.5 || zoom != 0.375 {
 				t.Errorf("door framing changed across the rebuild: (%v, %v, %v)", cx, cy, zoom)
 			}
-			// The plugin context's root converted origin → center.
+			// The plugin grid's root converted origin → center.
 			if err := db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE ns = 'p1' AND context_key = 'root'`).
 				Scan(&cx, &cy, &zoom); err != nil {
-				t.Fatalf("read the plugin context root: %v", err)
+				t.Fatalf("read the plugin grid root: %v", err)
 			}
 			if cx != 3.5 || cy != -1.5 || zoom != 0.5 {
 				t.Errorf("plugin root framing = (%v, %v, %v), want the center (3.5, -1.5, 0.5)", cx, cy, zoom)
@@ -1015,7 +1015,7 @@ func init() {
 			t.Helper()
 			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key) VALUES (100, 100, 'p9', 'root')`)
 			if err != nil {
-				t.Fatalf("seed plugin context: %v", err)
+				t.Fatalf("seed plugin grid: %v", err)
 			}
 			ctxGrid := mustID(t, res)
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
@@ -1252,15 +1252,15 @@ func init() {
 			}
 		},
 	})
-	// v17: grids.selection. Every grid, home's and a plugin context's, comes
+	// v17: grids.selection. Every grid, home's and a plugin grid's, comes
 	// through holding the empty set, and a written set reads back as written.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 17,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
 			if _, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key)
-				VALUES (100, 100, 'p17', 'v16 context')`); err != nil {
-				t.Fatalf("seed plugin context: %v", err)
+				VALUES (100, 100, 'p17', 'v16 grid')`); err != nil {
+				t.Fatalf("seed plugin grid: %v", err)
 			}
 		},
 		verify: func(t *testing.T, db *sql.DB) {
@@ -1272,7 +1272,7 @@ func init() {
 			if n != 0 {
 				t.Errorf("%d grids came through v17 holding a selection, want none", n)
 			}
-			if _, err := db.Exec(`UPDATE grids SET selection = '3,12' WHERE ns = 'p17' AND context_key = 'v16 context'`); err != nil {
+			if _, err := db.Exec(`UPDATE grids SET selection = '3,12' WHERE ns = 'p17' AND context_key = 'v16 grid'`); err != nil {
 				t.Fatalf("write a selection after v17: %v", err)
 			}
 			var got string
@@ -1289,9 +1289,9 @@ func init() {
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
 			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key)
-				VALUES (1800000000123456789, 1800000500987654321, 'p18', 'v17 context')`)
+				VALUES (1800000000123456789, 1800000500987654321, 'p18', 'v17 grid')`)
 			if err != nil {
-				t.Fatalf("seed plugin context: %v", err)
+				t.Fatalf("seed plugin grid: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
 				VALUES (?, 'text', 0, 0, 1, 1, 'v17 plugin row', 1800000000123456789, 1800000500987654321, 'p18', 'k')`,
@@ -1322,7 +1322,7 @@ func init() {
 				t.Fatal(err)
 			}
 			if c != 1800000000 || u != 1800000500 {
-				t.Errorf("plugin context times = %d, %d, want seconds", c, u)
+				t.Errorf("plugin grid times = %d, %d, want seconds", c, u)
 			}
 		},
 	})

@@ -11,7 +11,7 @@ import (
 )
 
 // Status classifies a door's interactivity: a door onto a node's home,
-// a connection's far home, or a plugin's collection.
+// a connection's far home, or a plugin's grid.
 type Status int
 
 const (

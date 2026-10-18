@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt, getGrid } from '../e2e/oracle';
 
 // A delete parks the tile, keeping its id, under a dated month door in the trash
-// grid. The trash grid is a declared root menu entry whose swatch rides the +
+// grid. The trash grid is a declared root declared grid whose swatch rides the +
 // menu's top row beside its plugin. A delete inside the trash tree destroys for
 // real. Everything crosses the standard API, and the host and client know only
 // that this is another root grid with a glyph.
@@ -21,7 +21,7 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   await gw.deleteTileCell(cx, cy);
   expect(tileAt(await gw.getGrid(f.gridID), 'text', cx, cy), 'gone from the source grid').toBeUndefined();
 
-  // The trashcan swatch is a declared menu entry on the + menu's top row, and
+  // The trashcan swatch is a declared grid on the + menu's top row, and
   // clicking it descends like any other swatch.
   await gw.openMenu();
   await gw.expandPlugins();
@@ -31,7 +31,7 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   await gw.clickPluginSwatch('trash (home)');
   const troot = await gw.focused();
 
-  // The title is the entry's name, the instance and the collection, the same
+  // The title is the entry's name, the instance and the grid, the same
   // name its swatch wears. That name is config-owned, so it is not renamable,
   // and the level's crumb wears the entry's declared glyph.
   await expect.poll(async () => (await gw.barName()).label).toBe('trash (home)');

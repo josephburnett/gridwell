@@ -21,7 +21,7 @@ type capsPlugin struct {
 }
 
 func (p capsPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootContext: "r", Watch: true, Writable: p.writable}, nil
+	return &pluginv1.InfoResponse{Kind: "caps", DisplayName: "caps", RootGrid: "r", Watch: true, Writable: p.writable}, nil
 }
 
 func (capsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
@@ -59,7 +59,7 @@ func TestAdapterStampsTheWriteFactsThePluginDeclares(t *testing.T) {
 		if g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() {
 			t.Errorf("accepts_tiles = %v, want a stamped false: a plugin creates no tiles", g.Grid.AcceptsTiles)
 		}
-		// The stream lives as long as its context, so the context ending is
+		// The stream lives as long as its grid, so the grid ending is
 		// how it ends — never Unimplemented.
 		subCtx, subCancel := context.WithCancel(ctx)
 		subCancel()
@@ -100,11 +100,11 @@ func TestGridWearsThePluginsDeclarations(t *testing.T) {
 		info *pluginv1.InfoResponse
 	}{
 		{"host projection", &pluginv1.InfoResponse{
-			Kind: "fsish", DisplayName: "files", RootContext: "r",
+			Kind: "fsish", DisplayName: "files", RootGrid: "r",
 			Glyph: "folder", HostContent: true,
 		}},
 		{"owned content", &pluginv1.InfoResponse{
-			Kind: "todoish", DisplayName: "todos", RootContext: "r",
+			Kind: "todoish", DisplayName: "todos", RootGrid: "r",
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// treePlugin is a two-context source: a root with a directory-shaped door and
+// treePlugin is a two-grid source: a root with a directory-shaped door and
 // a read-only document beside it, and the directory's own listing. Whether the
 // root's listing is authoritative, and whether the document is still in it, are
 // knobs the naming tests turn.
@@ -27,15 +27,15 @@ type treePlugin struct {
 func (p *treePlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{
 		Kind: "tree", DisplayName: "tree", HostContent: true,
-		MenuEntries: []*pluginv1.MenuEntry{{Id: "root", Label: "Tree", Context: "/"}},
+		Grids: []*pluginv1.PluginGrid{{Id: "root", Label: "Tree", Grid: "/"}},
 	}, nil
 }
 
 func (p *treePlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
-	switch req.Context {
+	switch req.Grid {
 	case "/":
 		entries := []*pluginv1.Entry{
-			{Key: "/sub", Kind: rpc.KindDoor, Label: "sub", ChildContext: "/sub"},
+			{Key: "/sub", Kind: rpc.KindDoor, Label: "sub", ChildGrid: "/sub"},
 		}
 		if !p.hideDoc {
 			entries = append(entries, &pluginv1.Entry{Key: "/note.md", Kind: rpc.KindText, Label: "note.md"})
@@ -76,19 +76,19 @@ func treeNode(t *testing.T, p *treePlugin) (*pluginhost.Adapter, string, *store.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(info.MenuEntries) != 1 || info.MenuEntries[0].GridId == "" {
-		t.Fatalf("handshake = %+v, want the one collection with a grid", info.MenuEntries)
+	if len(info.PluginGrids) != 1 || info.PluginGrids[0].GridId == "" {
+		t.Fatalf("handshake = %+v, want the one grid with a grid", info.PluginGrids)
 	}
-	return a, info.MenuEntries[0].GridId, ns
+	return a, info.PluginGrids[0].GridId, ns
 }
 
 // rowIDOf is the minted row behind one entry, as a link stored under the
 // older rule holds it.
-func rowIDOf(t *testing.T, ns *store.Namespace, context, key string) string {
+func rowIDOf(t *testing.T, ns *store.Namespace, gridKey, key string) string {
 	t.Helper()
-	gid, ok, err := ns.LookupContext(context)
+	gid, ok, err := ns.LookupGrid(gridKey)
 	if err != nil || !ok {
-		t.Fatalf("context %q has no grid row (%v)", context, err)
+		t.Fatalf("context %q has no grid row (%v)", gridKey, err)
 	}
 	id, ok, err := ns.LiveTileID(gid, key)
 	if err != nil || !ok || id == 0 {
@@ -243,7 +243,7 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 	// A GRID row id re-stored canonicalizes forward too. Digits do not say
 	// which table they came from, so this is the arm that would silently pass
 	// a grid row through as if it were a tile's.
-	gid, _, err := ns.LookupContext("/sub")
+	gid, _, err := ns.LookupGrid("/sub")
 	if err != nil {
 		t.Fatal(err)
 	}

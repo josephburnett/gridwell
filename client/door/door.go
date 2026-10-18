@@ -10,11 +10,11 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// EntryName is what a row's menu entry is called everywhere it is shown. An
+// GridName is what a row's declared grid is called everywhere it is shown. An
 // entry stands alone with no plugin row above it, so it says whose it is,
 // most specific first so a clipped name still tells entries apart:
 // "Feed (hey)". Every entry of every row is named this way.
-func EntryName(row, entry string) string {
+func GridName(row, entry string) string {
 	switch {
 	case entry == "":
 		return row
@@ -24,17 +24,17 @@ func EntryName(row, entry string) string {
 	return entry + " (" + row + ")"
 }
 
-// EntryPlugin shapes one of a row's MenuEntries as a pseudo-row, so every
+// GridPlugin shapes one of a row's PluginGrids as a pseudo-row, so every
 // downstream flow takes the ordinary row path. It is a door and not a
 // declarer, so it carries none of the row's entries, which would show every
-// collection twice; its framing is the entry's, so a collection reopens where
+// grid twice; its framing is the entry's, so a grid reopens where
 // it was left.
-func EntryPlugin(pl *gridwellv1.PluginInfo, e *gridwellv1.MenuEntry) *gridwellv1.PluginInfo {
+func GridPlugin(pl *gridwellv1.PluginInfo, e *gridwellv1.PluginGrid) *gridwellv1.PluginInfo {
 	pseudo := proto.Clone(pl).(*gridwellv1.PluginInfo)
 	pseudo.RootGridId = e.GridId
 	pseudo.RootViewCx, pseudo.RootViewCy, pseudo.RootViewZoom = e.ViewCx, e.ViewCy, e.ViewZoom
-	pseudo.MenuEntries = nil
-	pseudo.Label = EntryName(pl.Label, e.Label)
+	pseudo.PluginGrids = nil
+	pseudo.Label = GridName(pl.Label, e.Label)
 	if e.Glyph != "" {
 		pseudo.Glyph = e.Glyph
 	}
@@ -46,10 +46,10 @@ func EntryPlugin(pl *gridwellv1.PluginInfo, e *gridwellv1.MenuEntry) *gridwellv1
 type Kind int
 
 const (
-	None  Kind = iota
-	Tile       // a real tile row, renamable where you stand
-	Entry      // a declared MenuEntry's pseudo swatch
-	Root       // a row's own swatch, for a row that is a place. A plugin has none.
+	None     Kind = iota
+	Tile          // a real tile row, renamable where you stand
+	Declared      // a declared PluginGrid's pseudo swatch
+	Root          // a row's own swatch, for a row that is a place. A plugin has none.
 )
 
 // DoorInto finds the door tile whose child grid is anchor.
@@ -63,7 +63,7 @@ func DoorInto(anchor string, tiles map[string]*gridwellv1.Tile) (*gridwellv1.Til
 }
 
 // Find resolves the door into the level rooted at anchor, most specific
-// first: the parent level's door whose child is anchor, a MenuEntry declaring
+// first: the parent level's door whose child is anchor, a PluginGrid declaring
 // it, then the row rooted at it. None leaves callers their fallback.
 func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gridwellv1.PluginInfo) (*gridwellv1.Tile, Kind) {
 	if anchor == "" {
@@ -73,9 +73,9 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gri
 		return t, Tile
 	}
 	for _, pl := range plugins {
-		for _, e := range pl.MenuEntries {
+		for _, e := range pl.PluginGrids {
 			if e.GridId == anchor {
-				return rpc.PluginDoorTile(EntryPlugin(pl, e)), Entry
+				return rpc.PluginDoorTile(GridPlugin(pl, e)), Declared
 			}
 		}
 	}
@@ -87,12 +87,12 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gri
 	return nil, None
 }
 
-// EntryGlyph is the glyph a menu entry declares for gridID, or "". It is the
+// GridGlyph is the glyph a declared grid declares for gridID, or "". It is the
 // one override the grid cannot carry: the trash grid is an ordinary local
 // grid, and only the declaration knows its glyph.
-func EntryGlyph(gridID string, plugins []*gridwellv1.PluginInfo) string {
+func GridGlyph(gridID string, plugins []*gridwellv1.PluginInfo) string {
 	for i := range plugins {
-		for _, e := range plugins[i].MenuEntries {
+		for _, e := range plugins[i].PluginGrids {
 			if e.GridId == gridID && e.Glyph != "" {
 				return e.Glyph
 			}
@@ -113,7 +113,7 @@ func RowGlyph(pl *gridwellv1.PluginInfo) string {
 }
 
 // GlyphFor is a grid's identity glyph, from declarations only, most specific
-// first: a MenuEntry naming it, a row rooted exactly here, the cached grid's
+// first: a PluginGrid naming it, a row rooted exactly here, the cached grid's
 // own glyph, the glyph of the door to another namespace, then the plugin row's
 // glyph by namespace. A
 // row rooted here wins over the grid's own glyph because a connection's root
@@ -122,7 +122,7 @@ func RowGlyph(pl *gridwellv1.PluginInfo) string {
 // "<id>/<conn>". There is always an answer, a crumb with no glyph being a blank
 // square.
 func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.PluginInfo) string {
-	if g := EntryGlyph(gridID, plugins); g != "" {
+	if g := GridGlyph(gridID, plugins); g != "" {
 		return g
 	}
 	if pl, ok := ByRoot(gridID, plugins); ok {
@@ -151,22 +151,22 @@ func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.Plugin
 // row's own grid.
 type Place struct {
 	Plugin *gridwellv1.PluginInfo
-	Entry  *gridwellv1.MenuEntry
+	Grid   *gridwellv1.PluginGrid
 }
 
 // PlacesOf enumerates the doors one menu row declares, in declaration
 // order. It is the one enumeration, read by client/menu, ByRoot and the
 // framing restore, so what a door is cannot be answered three ways.
 func PlacesOf(pl *gridwellv1.PluginInfo) []Place {
-	out := make([]Place, 0, 1+len(pl.MenuEntries))
+	out := make([]Place, 0, 1+len(pl.PluginGrids))
 	if pl.RootGridId != "" {
 		out = append(out, Place{Plugin: pl})
 	}
-	for _, e := range pl.MenuEntries {
+	for _, e := range pl.PluginGrids {
 		if e.GridId == "" {
 			continue
 		}
-		out = append(out, Place{Plugin: EntryPlugin(pl, e), Entry: e})
+		out = append(out, Place{Plugin: GridPlugin(pl, e), Grid: e})
 	}
 	return out
 }

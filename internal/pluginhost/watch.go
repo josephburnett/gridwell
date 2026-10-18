@@ -3,8 +3,8 @@ package pluginhost
 // The plugin's Watch stream is how a source that changes on its own reaches a
 // grid open on screen: a moved listing becomes the GridChanged a write through
 // this adapter would have published, and an entry changed in place the
-// TileChanged that carries its bytes' news. Its scope is the contexts some
-// client shows (SetView) and the contexts their link entries point into
+// TileChanged that carries its bytes' news. Its scope is the grids some
+// client shows (SetView) and the grids their link entries point into
 // (noteLinks).
 
 import (
@@ -132,11 +132,11 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 }
 
 // followScope follows the scope until a stream ends, re-opening as it moves.
-// A stream replaces the one before only once it is open, so a context in both
-// scopes is watched throughout; each context the open adds is then checked
+// A stream replaces the one before only once it is open, so a grid in both
+// scopes is watched throughout; each grid the open adds is then checked
 // (check), since a change between the client's listing and the open is
 // otherwise announced by nothing. An attempt's first open adds its whole
-// scope, which is what catches up after a drop. A context the scope dropped
+// scope, which is what catches up after a drop. A grid the scope dropped
 // is shown by no one, so it is not checked.
 func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	var cur *watchStream
@@ -188,13 +188,13 @@ func (a *Adapter) followScope(ctx context.Context, established func()) error {
 	}
 }
 
-// check lists contexts together and announces, in one batch, those whose
+// check lists grids together and announces, in one batch, those whose
 // listing moved (settle).
-func (a *Adapter) check(ctx context.Context, contexts []string) {
+func (a *Adapter) check(ctx context.Context, gridKeys []string) {
 	var mu sync.Mutex
 	var moved []string
 	var wg sync.WaitGroup
-	for _, c := range contexts {
+	for _, c := range gridKeys {
 		wg.Go(func() {
 			if a.listingMoved(ctx, c) {
 				mu.Lock()
@@ -207,23 +207,23 @@ func (a *Adapter) check(ctx context.Context, contexts []string) {
 	a.announce(moved)
 }
 
-// listingMoved lists context once and settles it. A context the source
+// listingMoved lists grid once and settles it. A grid the source
 // refuses to list right now has moved, because what a client holds of it is
 // unknown. The listing runs through synthesize, so it writes rows as any read
 // does.
-func (a *Adapter) listingMoved(ctx context.Context, context string) bool {
-	s, err := a.synthesize(ctx, rpc.EntryGridID(context))
+func (a *Adapter) listingMoved(ctx context.Context, gridKey string) bool {
+	s, err := a.synthesize(ctx, rpc.EntryGridID(gridKey))
 	if ctx.Err() != nil {
 		return false
 	}
 	return err != nil || a.settle(s, true)
 }
 
-// announce publishes each context's grid and every grid whose links read into
+// announce publishes each grid and every grid whose links read into
 // one, each grid once however many of its links moved.
-func (a *Adapter) announce(contexts []string) {
+func (a *Adapter) announce(gridKeys []string) {
 	var grids []string
-	for _, c := range contexts {
+	for _, c := range gridKeys {
 		grids = append(grids, rpc.EntryGridID(c))
 		for _, holder := range a.linkedFrom(c) {
 			grids = append(grids, rpc.EntryGridID(holder))
@@ -354,7 +354,7 @@ func (s *watchStream) stop() {
 // A change is applied under apply, which outlives the stream, so a swap that
 // ends the stream does not abandon a change it already took.
 func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func() error) error {
-	stream, err := a.cp.Watch(ctx, &pluginv1.WatchRequest{Contexts: scope})
+	stream, err := a.cp.Watch(ctx, &pluginv1.WatchRequest{Grids: scope})
 	if err != nil {
 		return err
 	}
@@ -376,7 +376,7 @@ func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func
 }
 
 // SetView takes this plugin's share of the node's subscription, grids the
-// node serves for it, as the contexts shown. A grid that no longer resolves
+// node serves for it, as the grids shown. A grid that no longer resolves
 // is not watched. A share it cannot take leaves the scope where it was, so
 // live updates are off for what is shown until one lands.
 func (a *Adapter) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
@@ -403,35 +403,35 @@ func (a *Adapter) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*g
 	return &gridwellv1.SetViewResponse{}, nil
 }
 
-// noteLinks records the contexts one live listing's link entries point into.
+// noteLinks records the grids one live listing's link entries point into.
 // A shown grid's links read their targets' content, so a change there is a
-// change to what it shows: the targets' contexts join the scope.
-func (a *Adapter) noteLinks(context string, entries []*pluginv1.Entry) {
+// change to what it shows: the targets' grids join the scope.
+func (a *Adapter) noteLinks(gridKey string, entries []*pluginv1.Entry) {
 	var into []string
 	for _, e := range entries {
-		if lt := e.GetLinkTarget(); lt != nil && lt.Context != context {
-			into = append(into, lt.Context)
+		if lt := e.GetLinkTarget(); lt != nil && lt.Grid != gridKey {
+			into = append(into, lt.Grid)
 		}
 	}
 	slices.Sort(into)
 	into = slices.Compact(into)
 	a.scopeMu.Lock()
 	defer a.scopeMu.Unlock()
-	if slices.Equal(into, a.links[context]) {
+	if slices.Equal(into, a.links[gridKey]) {
 		return
 	}
 	if a.links == nil {
 		a.links = map[string][]string{}
 	}
 	if len(into) == 0 {
-		delete(a.links, context)
+		delete(a.links, gridKey)
 	} else {
-		a.links[context] = into
+		a.links[gridKey] = into
 	}
 	a.rescopeLocked()
 }
 
-// rescopeLocked derives the Watch scope, the contexts shown and those they
+// rescopeLocked derives the Watch scope, the grids shown and those they
 // link into, and closes moved when it changes. The caller holds scopeMu.
 func (a *Adapter) rescopeLocked() {
 	scope := slices.Clone(a.shown)
@@ -447,13 +447,13 @@ func (a *Adapter) rescopeLocked() {
 	}
 }
 
-// linkedFrom lists the contexts whose last live listing links into context.
-func (a *Adapter) linkedFrom(context string) []string {
+// linkedFrom lists the grids whose last live listing links into grid.
+func (a *Adapter) linkedFrom(gridKey string) []string {
 	a.scopeMu.Lock()
 	defer a.scopeMu.Unlock()
 	var out []string
 	for holder, into := range a.links {
-		if slices.Contains(into, context) {
+		if slices.Contains(into, gridKey) {
 			out = append(out, holder)
 		}
 	}
@@ -468,36 +468,36 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	return slices.Clone(a.scope), a.moved
 }
 
-// applyChange announces a context whose listing moved (check) and an
+// applyChange announces a grid whose listing moved (check) and an
 // entry changed in place (applyEntry). A removal is announced as DeleteTile
 // announces one: the refetch it causes runs the listing's own sweep, so the
 // row retires by the one path that retires rows.
 func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
 	switch p := ch.GetPayload().(type) {
-	case *pluginv1.Change_ContextChanged:
-		a.check(ctx, []string{p.ContextChanged.GetContext()})
+	case *pluginv1.Change_GridChanged:
+		a.check(ctx, []string{p.GridChanged.GetGrid()})
 	case *pluginv1.Change_EntryChanged:
-		a.applyEntry(ctx, p.EntryChanged.GetContext(), p.EntryChanged.GetEntry())
+		a.applyEntry(ctx, p.EntryChanged.GetGrid(), p.EntryChanged.GetEntry())
 	case *pluginv1.Change_EntryRemoved:
-		// The one reading of the retired arm: a ContextChanged for its context.
-		a.check(ctx, []string{p.EntryRemoved.GetContext()})
+		// The one reading of the retired arm: a GridChanged for its grid.
+		a.check(ctx, []string{p.EntryRemoved.GetGrid()})
 	}
 }
 
 // applyEntry tells every client that one entry changed in place: its row as
 // GetGrid serves it, flagged content_changed, because a plugin row carries no
 // version that could say its bytes moved. An entry the node will not accept
-// or cannot find is the listing's to answer, so it is a ContextChanged.
-func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.Entry) {
-	if !a.fresh(context, e) {
+// or cannot find is the listing's to answer, so it is a GridChanged.
+func (a *Adapter) applyEntry(ctx context.Context, gridKey string, e *pluginv1.Entry) {
+	if !a.fresh(gridKey, e) {
 		return
 	}
-	t, err := a.entryTile(ctx, context, e)
+	t, err := a.entryTile(ctx, gridKey, e)
 	if ctx.Err() != nil {
 		return
 	}
 	if err != nil || t == nil {
-		a.check(ctx, []string{context})
+		a.check(ctx, []string{gridKey})
 		return
 	}
 	a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
@@ -505,19 +505,19 @@ func (a *Adapter) applyEntry(ctx context.Context, context string, e *pluginv1.En
 	}})
 }
 
-type entryRef struct{ context, key string }
+type entryRef struct{ gridKey, key string }
 
 // fresh notes the stamp e is told under and reports whether it moved. A source
 // may tell one change twice (two streams across a scope swap, a walk replaying
 // a feed line), and a second tell would retire the screenshot a view took of
 // the page since the first. An entry with no stamp is always fresh: nothing
 // tells its tells apart.
-func (a *Adapter) fresh(context string, e *pluginv1.Entry) bool {
+func (a *Adapter) fresh(gridKey string, e *pluginv1.Entry) bool {
 	stamp := e.GetContentStamp()
 	if stamp == "" {
 		return true
 	}
-	ref := entryRef{context, e.GetKey()}
+	ref := entryRef{gridKey, e.GetKey()}
 	a.toldMu.Lock()
 	defer a.toldMu.Unlock()
 	if a.told[ref] == stamp {
@@ -530,20 +530,20 @@ func (a *Adapter) fresh(context string, e *pluginv1.Entry) bool {
 	return true
 }
 
-// entryTile is e's wire tile in context, nil when the context holds none. A
+// entryTile is e's wire tile in grid, nil when the grid holds none. A
 // row keeps its own placement, so e alone builds it and refreshes its
 // snapshot as a listing would, and retires a screenshot the change left behind
 // (pagePreviewStale); an untouched entry's placement flows from the whole listing
-// (store.Namespace.Overlay), so the context is listed.
-func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Entry) (*gridwellv1.Tile, error) {
+// (store.Namespace.Overlay), so the grid is listed.
+func (a *Adapter) entryTile(ctx context.Context, gridKey string, e *pluginv1.Entry) (*gridwellv1.Tile, error) {
 	if e == nil {
 		return nil, nil
 	}
 	entries := []*pluginv1.Entry{e}
-	if err := acceptEntries(context, entries); err != nil {
+	if err := acceptEntries(gridKey, entries); err != nil {
 		return nil, err
 	}
-	gid, _, err := a.mem.LookupContext(context)
+	gid, _, err := a.mem.LookupGrid(gridKey)
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +552,7 @@ func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Ent
 		return nil, err
 	}
 	if !minted {
-		s, err := a.synthesize(ctx, rpc.EntryGridID(context))
+		s, err := a.synthesize(ctx, rpc.EntryGridID(gridKey))
 		if err != nil {
 			return nil, err
 		}
@@ -575,7 +575,7 @@ func (a *Adapter) entryTile(ctx context.Context, context string, e *pluginv1.Ent
 			}
 			r.PreviewBlobId = 0
 		}
-		tiles, err := buildTiles(rpc.EntryGridID(context), context, []store.ExtTile{r}, entries, a.mem.ContextKey)
+		tiles, err := buildTiles(rpc.EntryGridID(gridKey), gridKey, []store.ExtTile{r}, entries, a.mem.GridKey)
 		if err != nil {
 			return nil, err
 		}

@@ -44,7 +44,7 @@ type stallFirstList struct {
 
 func (*stallFirstList) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{Kind: "feed", DisplayName: "feed",
-		MenuEntries: []*pluginv1.MenuEntry{{Id: "all", Label: "All", Context: "all"}}}, nil
+		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}}}, nil
 }
 
 func (p *stallFirstList) List(ctx context.Context, _ *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

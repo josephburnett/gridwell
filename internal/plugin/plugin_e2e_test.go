@@ -61,9 +61,9 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 		t.Fatalf("Info through the adapter: %v", err)
 	}
 	// The handshake carries the plugin's own declarations — fs names its glyph
-	// and its one collection; its display name is the root directory, which
+	// and its one grid; its display name is the root directory, which
 	// here is a temp dir.
-	if info.Glyph != "folder" || len(info.MenuEntries) != 1 {
+	if info.Glyph != "folder" || len(info.PluginGrids) != 1 {
 		t.Fatalf("bad Info: %+v", info)
 	}
 	landing := plugintest.Landing(t, info)

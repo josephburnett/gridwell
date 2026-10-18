@@ -244,7 +244,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 func TestPluginGridSelection(t *testing.T) {
 	s := newTestStore(t)
 	n := s.Namespace("plug1")
-	gid, err := n.ContextID("inbox")
+	gid, err := n.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	n := s.Namespace("plug1")
-	gid, err := n.ContextID("inbox")
+	gid, err := n.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,7 +408,7 @@ func TestSelectionClearAllIsOneNamespace(t *testing.T) {
 	root := rootID(t, s)
 	g1, g2 := nest(t, s, root)
 	n := s.Namespace("plug1")
-	gid, err := n.ContextID("inbox")
+	gid, err := n.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
 	}

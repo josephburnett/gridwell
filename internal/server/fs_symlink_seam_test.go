@@ -73,8 +73,8 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 	for _, tl := range g.Tiles {
 		tiles[tl.AltText] = tl
 	}
-	entry := func(context, key string) string {
-		return rpc.QualifyID(fsSymlinkNS, rpc.EntryTileID(context, key))
+	entry := func(grid, key string) string {
+		return rpc.QualifyID(fsSymlinkNS, rpc.EntryTileID(grid, key))
 	}
 
 	// A link to a file in the tree reads as a link with its target's preview.

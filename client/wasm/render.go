@@ -231,12 +231,12 @@ type menuItem struct {
 	isPlugin  bool
 	plugin    *gridwellv1.PluginInfo // when isPlugin (also set for a root ENTRY's owner)
 	primitive templateKind           // when !isPlugin
-	entry     *gridwellv1.MenuEntry
+	entry     *gridwellv1.PluginGrid
 	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
 	promotePane string
 }
 
-// menuItems returns pane p's menu entries in display order. Every
+// menuItems returns pane p's declared grids in display order. Every
 // consumer reads this one list, so a swatch not shown cannot be clicked.
 func (a *App) menuItems(p *pane.Pane) []menuItem {
 	items, _ := a.menuView(p)
@@ -267,7 +267,7 @@ func (a *App) menuGroups(p *pane.Pane) (plugins, primitives []menuItem) {
 	sw := menu.Doors(ctx.plugins)
 	items := make([]menuItem, 0, len(sw))
 	for _, s := range sw {
-		items = append(items, menuItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
+		items = append(items, menuItem{isPlugin: true, plugin: s.Plugin, entry: s.Grid})
 	}
 	prims := make([]menuItem, 0, len(primitiveKinds))
 	acceptsTiles, _ := a.gridAcceptsTiles(a.gridIDForPane(p))

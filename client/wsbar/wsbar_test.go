@@ -204,7 +204,7 @@ func TestBandRefusesAWindowTooShortToHoldIt(t *testing.T) {
 }
 
 // A title too wide for its span is clipped from the right, so the start of
-// the name, the most specific part (door.EntryName), stays on screen.
+// the name, the most specific part (door.GridName), stays on screen.
 func TestTitleSpanClipsFromTheRight(t *testing.T) {
 	x, w, textX, ok := TitleSpan(100, 400, 1000)
 	if !ok {

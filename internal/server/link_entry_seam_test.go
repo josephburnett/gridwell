@@ -63,15 +63,15 @@ func (m *mailSource) set(edit func(*mailSource)) {
 }
 
 func (m *mailSource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "mailish", DisplayName: "mail", Watch: true, MenuEntries: []*pluginv1.MenuEntry{
-		{Id: "box", Label: "box", Context: "box"}, {Id: "everything", Label: "everything", Context: "everything"}}}, nil
+	return &pluginv1.InfoResponse{Kind: "mailish", DisplayName: "mail", Watch: true, Grids: []*pluginv1.PluginGrid{
+		{Id: "box", Label: "box", Grid: "box"}, {Id: "everything", Label: "everything", Grid: "everything"}}}, nil
 }
 
 func (m *mailSource) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	resp := &pluginv1.ListResponse{}
-	switch req.Context {
+	switch req.Grid {
 	case "everything":
 		if !m.gone {
 			resp.Entries = append(resp.Entries, &pluginv1.Entry{Key: "t1", Kind: rpc.KindText, Label: m.subject})
@@ -80,12 +80,12 @@ func (m *mailSource) List(_ context.Context, req *pluginv1.ListRequest) (*plugin
 		if m.inBox {
 			e := &pluginv1.Entry{Key: "box:t1", Kind: rpc.KindText, Label: "● Lunch", StatusDetail: "unseen"}
 			if m.asLink {
-				e.LinkTarget = &pluginv1.EntryRef{Context: "everything", Key: "t1"}
+				e.LinkTarget = &pluginv1.EntryRef{Grid: "everything", Key: "t1"}
 			}
 			resp.Entries = append(resp.Entries, e)
 		}
 	default:
-		return nil, status.Errorf(codes.InvalidArgument, "no context %q", req.Context)
+		return nil, status.Errorf(codes.InvalidArgument, "no grid %q", req.Grid)
 	}
 	return resp, nil
 }
@@ -93,8 +93,8 @@ func (m *mailSource) List(_ context.Context, req *pluginv1.ListRequest) (*plugin
 func (m *mailSource) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.probes = append(m.probes, req.Context+"/"+req.Key)
-	if req.Context == "everything" && m.gone || req.Context == "box" && !m.inBox {
+	m.probes = append(m.probes, req.Grid+"/"+req.Key)
+	if req.Grid == "everything" && m.gone || req.Grid == "box" && !m.inBox {
 		return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
 	return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_PRESENT}, nil
@@ -121,7 +121,7 @@ func (m *mailSource) GetPreview(context.Context, *pluginv1.GetPreviewRequest) (*
 }
 
 func (m *mailSource) Watch(req *pluginv1.WatchRequest, s pluginv1.Plugin_WatchServer) error {
-	m.watches <- slices.Clone(req.Contexts)
+	m.watches <- slices.Clone(req.Grids)
 	if err := s.SendHeader(nil); err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 		}
 	}
 	if !slices.Contains(src.probed(), "everything/t1") {
-		t.Fatalf("probes = %v, want the target asked about in its own context", src.probed())
+		t.Fatalf("probes = %v, want the target asked about in its own grid", src.probed())
 	}
 
 	src.set(func(m *mailSource) { m.gone = false })
@@ -271,7 +271,7 @@ func TestATouchedEntryThatBecomesALinkKeepsItsPlace(t *testing.T) {
 
 // A touched box row its box stops listing is asked about in the box: a
 // thread that left the box is not a thread that is gone.
-func TestTheSweepProbesTheContextItSweeps(t *testing.T) {
+func TestTheSweepProbesTheGridItSweeps(t *testing.T) {
 	src := newMailSource()
 	cl, _, _ := linkStack(t, src)
 	ctx := context.Background()
@@ -298,9 +298,9 @@ func TestTheSweepProbesTheContextItSweeps(t *testing.T) {
 // An entry the node cannot draw as a link is refused with the reason.
 func TestALinkTheNodeCannotDrawIsRefused(t *testing.T) {
 	for name, e := range map[string]*pluginv1.Entry{
-		"no key":    {Key: "a", Kind: rpc.KindText, LinkTarget: &pluginv1.EntryRef{Context: "everything"}},
-		"a door":    {Key: "a", Kind: rpc.KindDoor, ChildContext: "c", LinkTarget: &pluginv1.EntryRef{Context: "everything", Key: "t1"}},
-		"to itself": {Key: "a", Kind: rpc.KindText, LinkTarget: &pluginv1.EntryRef{Context: "box", Key: "a"}},
+		"no key":    {Key: "a", Kind: rpc.KindText, LinkTarget: &pluginv1.EntryRef{Grid: "everything"}},
+		"a door":    {Key: "a", Kind: rpc.KindDoor, ChildGrid: "c", LinkTarget: &pluginv1.EntryRef{Grid: "everything", Key: "t1"}},
+		"to itself": {Key: "a", Kind: rpc.KindText, LinkTarget: &pluginv1.EntryRef{Grid: "box", Key: "a"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			src := &oneEntrySource{entry: e}
@@ -329,7 +329,7 @@ type oneEntrySource struct {
 }
 
 func (o *oneEntrySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "one", MenuEntries: []*pluginv1.MenuEntry{{Id: "box", Context: "box"}}}, nil
+	return &pluginv1.InfoResponse{Kind: "one", Grids: []*pluginv1.PluginGrid{{Id: "box", Grid: "box"}}}, nil
 }
 
 func (o *oneEntrySource) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
@@ -346,7 +346,7 @@ func (l lateAttach) Subscribe(ctx context.Context, req *gridwellv1.SubscribeRequ
 }
 
 // A client showing only the box is told when a thread its links point at
-// changes, though nobody shows everything: the node watches the contexts a
+// changes, though nobody shows everything: the node watches the grids a
 // shown grid links into, and announces the holder when one's listing moves.
 // Its next read through the link is the new card. The source is watched for the
 // client's stream only once that stream hears the source, so a change told
@@ -388,13 +388,13 @@ func TestATargetsChangeReachesAGridThatOnlyLinksToIt(t *testing.T) {
 		case scope := <-src.watches:
 			watched = slices.Contains(scope, "everything")
 		case <-ctx.Done():
-			t.Fatal("the Watch scope never named the context the box links into")
+			t.Fatal("the Watch scope never named the grid the box links into")
 		}
 	}
 
 	src.set(func(m *mailSource) { m.card, m.subject = "card of t1, read", "Lunch (2)" })
-	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_ContextChanged{
-		ContextChanged: &pluginv1.ContextChanged{Context: "everything"}}}
+	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_GridChanged{
+		GridChanged: &pluginv1.GridChanged{Grid: "everything"}}}
 	for told := false; !told; {
 		select {
 		case ev := <-events:
@@ -455,13 +455,13 @@ func TestATargetsNewBytesReachTheBodyALinkShows(t *testing.T) {
 		case scope := <-src.watches:
 			watched = slices.Contains(scope, "everything")
 		case <-ctx.Done():
-			t.Fatal("the Watch scope never named the context the box links into")
+			t.Fatal("the Watch scope never named the grid the box links into")
 		}
 	}
 
 	src.set(func(m *mailSource) { m.card = "card of t1, read" })
 	src.changes <- &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{
-		Context: "everything", Entry: &pluginv1.Entry{Key: "t1", Kind: rpc.KindText, Label: "Lunch"}}}}
+		Grid: "everything", Entry: &pluginv1.Entry{Key: "t1", Kind: rpc.KindText, Label: "Lunch"}}}}
 	for {
 		if _, held := c.TileContent(cid); !held {
 			break

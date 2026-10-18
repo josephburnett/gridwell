@@ -145,7 +145,7 @@ test('reframing a root grid refetches nothing, and a foreign reframe arrives as 
   expect(listings(), "the pane's own framing write refetches no listing").toEqual([]);
 
   const door = async () =>
-    (await gw.plugins()).flatMap((pl) => pl.menuEntries).find((e) => e.gridID === p.gridID)!;
+    (await gw.plugins()).flatMap((pl) => pl.pluginGrids).find((e) => e.gridID === p.gridID)!;
   const rested = await gw.focused();
   await setRootFraming(gw.origin, p.gridID, 7, -3, 2.5);
   await expect

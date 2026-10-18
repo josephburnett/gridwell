@@ -287,7 +287,7 @@ type FindRow struct {
 
 // FindPassing answers which of ids pass req's kind, time and selection filters,
 // each with the time an empty query orders by. A plugin's grid scope is its
-// caller's, the grids being contexts the plugin names.
+// caller's, the grids being grids the plugin names.
 func (n *Namespace) FindPassing(ids []int64, req *gridwellv1.FindRequest) (map[int64]int64, error) {
 	out := map[int64]int64{}
 	if len(ids) == 0 {

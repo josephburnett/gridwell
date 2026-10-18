@@ -11,7 +11,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// A plugin collection's selection is the node's fact, on the node's row for
+// A plugin grid's selection is the node's fact, on the node's row for
 // that grid, as its framing is: a real spawned fs plugin never hears of it.
 // Selecting an entry touches it, so it gets its row; the set reads back in the
 // grid's own spelling of each tile; and an entry the source stops listing

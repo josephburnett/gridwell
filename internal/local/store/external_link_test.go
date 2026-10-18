@@ -11,9 +11,9 @@ import (
 // memory: derived as one, minted as one, converted to one in place when an
 // existing content row's entry becomes a link, and back.
 
-func linkEntry(key, targetContext, targetKey string) *pluginv1.Entry {
+func linkEntry(key, targetGrid, targetKey string) *pluginv1.Entry {
 	return &pluginv1.Entry{Key: key, Kind: rpc.KindURL, Label: "link " + key, StatusDetail: "seen",
-		ServesPage: true, LinkTarget: &pluginv1.EntryRef{Context: targetContext, Key: targetKey}}
+		ServesPage: true, LinkTarget: &pluginv1.EntryRef{Grid: targetGrid, Key: targetKey}}
 }
 
 // isLinkTo checks the content facts a link row holds: the target and none of
@@ -40,7 +40,7 @@ func TestALinkEntryIsDerivedAndMintedAsALinkRow(t *testing.T) {
 		t.Fatalf("the join wrote %d rows", n)
 	}
 
-	gid, err := d.ContextID("box")
+	gid, err := d.GridOf("box")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestALinkEntryIsDerivedAndMintedAsALinkRow(t *testing.T) {
 
 func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 	st, d := openExt(t)
-	gid, err := d.ContextID("box")
+	gid, err := d.GridOf("box")
 	if err != nil {
 		t.Fatal(err)
 	}

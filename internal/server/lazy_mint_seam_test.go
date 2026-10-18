@@ -284,7 +284,7 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 	}
 
 	// What is at rest: the id the user dragged, unchanged. Tile and grid alike
-	// answer to their key-form address for good, and the context key and the
+	// answer to their key-form address for good, and the grid key and the
 	// entry key are as permanent as the plugin's keys, so there is nothing a
 	// row would make safer — and a second name is what a row would cost.
 	ns, local, ok := rpc.SplitID(link.LinkTargetId)

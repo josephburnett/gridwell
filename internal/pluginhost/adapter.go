@@ -5,8 +5,8 @@
 // derived address (rpc.EntryTileID) and a row appears only at Adapter.mint.
 // The row is bookkeeping, resolved on the way in (Adapter.resolveTile) and
 // never handed out, since a mint that renamed the entry would take the id out
-// from under whoever stood on it; and GetTile is one List of the context
-// named, since a key→context index would copy the plugin's structure. A dark
+// from under whoever stood on it; and GetTile is one List of the grid
+// named, since a key→grid index would copy the plugin's structure. A dark
 // source, or a listing the plugin answered from memory, is published as this
 // namespace's health and minted rows still read; a dark plugin fails the read,
 // since a local subprocess has no remembered answers to serve.
@@ -66,8 +66,8 @@ type Adapter struct {
 	liveOff         string
 	subscriptionOff string
 
-	// shown is this plugin's share of the node's subscription, as contexts, and
-	// links is, per context, the contexts its last live listing links into.
+	// shown is this plugin's share of the node's subscription, as grids, and
+	// links is, per grid, the grids its last live listing links into.
 	// The Watch stream's scope derives from both (scopeLocked); moved closes
 	// when it changes. SetView writes shown, synthesize writes links.
 	scopeMu sync.Mutex
@@ -101,7 +101,7 @@ func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapte
 	return a
 }
 
-// Info translates the plugin handshake, resolving each declared collection to
+// Info translates the plugin handshake, resolving each declared grid to
 // a grid id and its persisted framing. It declares no root: a plugin is not a
 // place.
 func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
@@ -110,37 +110,37 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		return nil, err
 	}
 	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph}
-	for _, m := range declaredEntries(ci) {
-		out := &gridwellv1.MenuEntry{
+	for _, m := range declaredGrids(ci) {
+		out := &gridwellv1.PluginGrid{
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
 		}
-		if m.Context != "" {
-			out.GridId = rpc.EntryGridID(m.Context)
-			v, err := a.contextFraming(m.Context)
+		if m.Grid != "" {
+			out.GridId = rpc.EntryGridID(m.Grid)
+			v, err := a.gridFraming(m.Grid)
 			if err != nil {
 				return nil, err
 			}
 			out.ViewCx, out.ViewCy, out.ViewZoom = v.Wire()
 		}
-		resp.MenuEntries = append(resp.MenuEntries, out)
+		resp.PluginGrids = append(resp.PluginGrids, out)
 	}
 	return resp, nil
 }
 
-// declaredEntries is the one place root_context is still read: a plugin that
-// declares no entries gets one derived from it, so an old binary keeps
-// presenting; declared entries always win.
-func declaredEntries(ci *pluginv1.InfoResponse) []*pluginv1.MenuEntry {
-	if len(ci.MenuEntries) > 0 || ci.RootContext == "" {
-		return ci.MenuEntries
+// declaredGrids is the one place root_grid is still read: a plugin that
+// declares no grids gets one derived from it, so an old binary keeps
+// presenting; declared grids always win.
+func declaredGrids(ci *pluginv1.InfoResponse) []*pluginv1.PluginGrid {
+	if len(ci.Grids) > 0 || ci.RootGrid == "" {
+		return ci.Grids
 	}
-	return []*pluginv1.MenuEntry{{Id: ci.RootContext, Context: ci.RootContext}}
+	return []*pluginv1.PluginGrid{{Id: ci.RootGrid, Grid: ci.RootGrid}}
 }
 
-// contextFraming is the framing remembered for one context's grid. An
+// gridFraming is the framing remembered for one grid. An
 // unreadable store is an error, not a silent none.
-func (a *Adapter) contextFraming(ckey string) (rpc.View, error) {
-	gid, ok, err := a.mem.LookupContext(ckey)
+func (a *Adapter) gridFraming(gkey string) (rpc.View, error) {
+	gid, ok, err := a.mem.LookupGrid(gkey)
 	if err != nil || !ok {
 		return rpc.View{}, err
 	}
@@ -291,18 +291,18 @@ const retiredPresentationRendered = "rendered"
 // acceptEntries is the one way a plugin's entries come in: it refuses a shape
 // the node cannot present (serves_page off a url entry, an unknown
 // text_presentation, a link it cannot draw) and maps a retired declaration
-// onto the live vocabulary. context is the context listed.
-func acceptEntries(context string, entries []*pluginv1.Entry) error {
+// onto the live vocabulary. grid is the grid listed.
+func acceptEntries(gridKey string, entries []*pluginv1.Entry) error {
 	for _, e := range entries {
 		if lt := e.GetLinkTarget(); lt != nil {
 			switch {
-			case lt.Context == "" || lt.Key == "":
+			case lt.Grid == "" || lt.Key == "":
 				return status.Errorf(codes.InvalidArgument,
-					"plugin: entry %q links to context %q key %q; a link_target names both", e.Key, lt.Context, lt.Key)
+					"plugin: entry %q links to gridKey %q key %q; a link_target names both", e.Key, lt.Grid, lt.Key)
 			case e.Kind == rpc.KindDoor:
 				return status.Errorf(codes.InvalidArgument,
-					"plugin: entry %q is a door with a link_target; a door opens its child_context and has no link variant", e.Key)
-			case lt.Context == context && lt.Key == e.Key:
+					"plugin: entry %q is a door with a link_target; a door opens its child_grid and has no link variant", e.Key)
+			case lt.Grid == gridKey && lt.Key == e.Key:
 				return status.Errorf(codes.InvalidArgument, "plugin: entry %q links to itself", e.Key)
 			}
 		}
@@ -327,7 +327,7 @@ func acceptEntries(context string, entries []*pluginv1.Entry) error {
 // buildTiles joins the overlay's rows with the listing's content facts, naming
 // each by its derived address, a door's child grid included: the id a door
 // hands the client must be the id GetGrid answers under.
-func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*pluginv1.Entry, rowContext func(int64) (string, error)) ([]*gridwellv1.Tile, error) {
+func buildTiles(gridID, gridKey string, tiles []store.ExtTile, entries []*pluginv1.Entry, rowGrid func(int64) (string, error)) ([]*gridwellv1.Tile, error) {
 	byKey := map[string]*pluginv1.Entry{}
 	for _, e := range entries {
 		byKey[e.Key] = e
@@ -335,21 +335,21 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 	out := make([]*gridwellv1.Tile, 0, len(tiles))
 	for _, t := range tiles {
 		pt := proto.Clone(t.Tile).(*gridwellv1.Tile)
-		pt.Id = rpc.EntryTileID(context, t.Key)
+		pt.Id = rpc.EntryTileID(gridKey, t.Key)
 		pt.GridId = gridID
 		pt.ChildGridId = ""
 		e, listed := byKey[t.Key]
 		switch {
-		case listed && e.ChildContext != "":
-			pt.ChildGridId = rpc.EntryGridID(e.ChildContext)
+		case listed && e.ChildGrid != "":
+			pt.ChildGridId = rpc.EntryGridID(e.ChildGrid)
 		case t.ChildGridID != 0:
-			// A minted door the listing does not carry: its context is read
+			// A minted door the listing does not carry: its grid is read
 			// back so the name handed out is still the address.
-			ck, err := rowContext(t.ChildGridID)
+			gk, err := rowGrid(t.ChildGridID)
 			if err != nil {
 				return nil, err
 			}
-			pt.ChildGridId = rpc.EntryGridID(ck)
+			pt.ChildGridId = rpc.EntryGridID(gk)
 		}
 		switch {
 		case listed && pt.LinkTargetId != "":
@@ -394,8 +394,8 @@ func pagePreviewStale(e *pluginv1.Entry, row *gridwellv1.Tile) bool {
 // synthesized is one grid as the adapter derives it; rows[i] matches tiles[i].
 type synthesized struct {
 	grid    *gridwellv1.Grid
-	context string
-	gid     int64 // the grid's row, 0 when the context is untouched
+	gridKey string
+	gid     int64 // the grid's row, 0 when the grid is untouched
 	rows    []store.ExtTile
 	tiles   []*gridwellv1.Tile
 	entries []*pluginv1.Entry
@@ -405,24 +405,24 @@ type synthesized struct {
 	since uint64
 }
 
-// resolveGrid reads a wire grid id as the context it names plus the grid row
-// backing it, 0 when nobody has touched the context. Both shapes resolve.
-func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err error) {
+// resolveGrid reads a wire grid id as the grid it names plus the grid row
+// backing it, 0 when nobody has touched the grid. Both shapes resolve.
+func (a *Adapter) resolveGrid(gridID string) (gid int64, gridKey string, err error) {
 	switch rpc.ShapeOf(gridID) {
 	case rpc.ShapeRow:
 		gid, _ = strconv.ParseInt(gridID, 10, 64)
-		context, err = a.mem.ContextKey(gid)
+		gridKey, err = a.mem.GridKey(gid)
 		if errors.Is(err, store.ErrNotFound) {
 			return 0, "", status.Errorf(codes.NotFound, "plugin: no grid %d", gid)
 		}
-		return gid, context, err
+		return gid, gridKey, err
 	case rpc.ShapeKey:
-		context, _, isTile, _ := rpc.SplitEntryID(gridID)
+		gridKey, _, isTile, _ := rpc.SplitEntryID(gridID)
 		if isTile {
 			return 0, "", status.Errorf(codes.InvalidArgument, "plugin: %q names a tile, not a grid", gridID)
 		}
-		gid, _, err = a.mem.LookupContext(context)
-		return gid, context, err
+		gid, _, err = a.mem.LookupGrid(gridKey)
+		return gid, gridKey, err
 	default:
 		return 0, "", status.Errorf(codes.InvalidArgument, "plugin: invalid grid_id %q", gridID)
 	}
@@ -431,14 +431,14 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err err
 // synthesize is one grid with its join kept, so GetGrid, Find's key lookup
 // and the mint's derived placement read the same tiles.
 func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, error) {
-	gid, ckey, err := a.resolveGrid(gridID)
+	gid, gkey, err := a.resolveGrid(gridID)
 	if err != nil {
 		return nil, err
 	}
-	since := a.servedGen(rpc.EntryGridID(ckey))
+	since := a.servedGen(rpc.EntryGridID(gkey))
 	// A transport failure is "not right now", not a verdict: nothing retires.
 	dark := false
-	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Context: ckey})
+	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Grid: gkey})
 	if err != nil {
 		if gwerr.IsAbandoned(ctx, err) || !gwerr.IsTransport(err) {
 			return nil, err
@@ -454,11 +454,11 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		outage, resp.Authoritative = resp.Unreachable, false
 	}
 	a.noteSource(outage != "", outage)
-	if err := acceptEntries(ckey, resp.Entries); err != nil {
+	if err := acceptEntries(gkey, resp.Entries); err != nil {
 		return nil, err
 	}
 	if !dark {
-		a.noteLinks(ckey, resp.Entries)
+		a.noteLinks(gkey, resp.Entries)
 	}
 	// An authoritative listing is a verdict on every key, so rows it does not
 	// mention retire. An untouched entry has nothing to retire.
@@ -493,7 +493,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 				kept = append(kept, t)
 				continue
 			}
-			pr, perr := a.probe(ctx, t.Key, ckey)
+			pr, perr := a.probe(ctx, t.Key, gkey)
 			if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 				if rerr := a.mem.Retire(t.ID); rerr != nil && !errors.Is(rerr, store.ErrNotFound) {
 					return nil, rerr
@@ -511,8 +511,8 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if err != nil {
 		return nil, err
 	}
-	addr := rpc.EntryGridID(ckey)
-	selection, err := a.selection(ckey, gid)
+	addr := rpc.EntryGridID(gkey)
+	selection, err := a.selection(gkey, gid)
 	if err != nil {
 		return nil, err
 	}
@@ -525,11 +525,11 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		SourceLabel:  resp.SourceLabel,
 		Selection:    selection,
 	}
-	wire, err := buildTiles(addr, ckey, tiles, resp.Entries, a.mem.ContextKey)
+	wire, err := buildTiles(addr, gkey, tiles, resp.Entries, a.mem.GridKey)
 	if err != nil {
 		return nil, err
 	}
-	return &synthesized{grid: g, context: ckey, gid: gid, rows: tiles, tiles: wire, entries: resp.Entries,
+	return &synthesized{grid: g, gridKey: gkey, gid: gid, rows: tiles, tiles: wire, entries: resp.Entries,
 		dark: dark, authoritative: resp.Authoritative, since: since}, nil
 }
 
@@ -539,7 +539,7 @@ func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (
 		return nil, err
 	}
 	if a.settle(s, false) {
-		a.announce([]string{s.context})
+		a.announce([]string{s.gridKey})
 	}
 	return &gridwellv1.GetGridResponse{Grid: s.grid, Tiles: s.tiles}, nil
 }
@@ -548,7 +548,7 @@ func (a *Adapter) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (
 type tileRef struct {
 	id      int64
 	gid     int64
-	context string
+	gridKey string
 	key     string
 }
 
@@ -565,17 +565,17 @@ func (a *Adapter) resolveTile(tileID string) (tileRef, error) {
 		if err != nil {
 			return tileRef{}, err
 		}
-		ckey, err := a.mem.ContextKey(gid)
+		gkey, err := a.mem.GridKey(gid)
 		if err != nil {
 			return tileRef{}, err
 		}
-		return tileRef{id: id, gid: gid, context: ckey, key: key}, nil
+		return tileRef{id: id, gid: gid, gridKey: gkey, key: key}, nil
 	case rpc.ShapeKey:
-		ckey, key, isTile, _ := rpc.SplitEntryID(tileID)
+		gkey, key, isTile, _ := rpc.SplitEntryID(tileID)
 		if !isTile {
 			return tileRef{}, status.Errorf(codes.InvalidArgument, "plugin: %q names a grid, not a tile", tileID)
 		}
-		gid, _, err := a.mem.LookupContext(ckey)
+		gid, _, err := a.mem.LookupGrid(gkey)
 		if err != nil {
 			return tileRef{}, err
 		}
@@ -583,7 +583,7 @@ func (a *Adapter) resolveTile(tileID string) (tileRef, error) {
 		if err != nil {
 			return tileRef{}, err
 		}
-		return tileRef{id: id, gid: gid, context: ckey, key: key}, nil
+		return tileRef{id: id, gid: gid, gridKey: gkey, key: key}, nil
 	default:
 		return tileRef{}, status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", tileID)
 	}
@@ -608,7 +608,7 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 	if ref.id != 0 {
 		return ref.id, nil
 	}
-	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.context))
+	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.gridKey))
 	if err != nil {
 		return 0, err
 	}
@@ -620,7 +620,7 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 		}
 	}
 	if row == nil {
-		return 0, status.Errorf(codes.NotFound, "plugin: no entry %q in context %q", ref.key, ref.context)
+		return 0, status.Errorf(codes.NotFound, "plugin: no entry %q in gridKey %q", ref.key, ref.gridKey)
 	}
 	var entry *pluginv1.Entry
 	for _, e := range s.entries {
@@ -630,15 +630,15 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 		}
 	}
 	if entry == nil {
-		return 0, status.Errorf(codes.NotFound, "plugin: no entry %q in context %q", ref.key, ref.context)
+		return 0, status.Errorf(codes.NotFound, "plugin: no entry %q in gridKey %q", ref.key, ref.gridKey)
 	}
-	gid, err := a.mem.ContextID(ref.context)
+	gid, err := a.mem.GridOf(ref.gridKey)
 	if err != nil {
 		return 0, err
 	}
 	var child int64
-	if entry.ChildContext != "" {
-		if child, err = a.mem.ContextID(entry.ChildContext); err != nil {
+	if entry.ChildGrid != "" {
+		if child, err = a.mem.GridOf(entry.ChildGrid); err != nil {
 			return 0, err
 		}
 	}
@@ -652,10 +652,10 @@ func (a *Adapter) MintRef(_ context.Context, localID string) (string, error) {
 	switch rpc.ShapeOf(localID) {
 	case rpc.ShapeRow:
 		if ref, err := a.resolveTile(localID); err == nil {
-			return rpc.EntryTileID(ref.context, ref.key), nil
+			return rpc.EntryTileID(ref.gridKey, ref.key), nil
 		}
-		if _, ckey, err := a.resolveGrid(localID); err == nil {
-			return rpc.EntryGridID(ckey), nil
+		if _, gkey, err := a.resolveGrid(localID); err == nil {
+			return rpc.EntryGridID(gkey), nil
 		}
 		// A row nothing here answers to, retired or never this namespace's,
 		// answers itself: what it names is not this call's verdict to make.
@@ -673,7 +673,7 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 	if err != nil {
 		return nil, err
 	}
-	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.context))
+	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.gridKey))
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +693,7 @@ func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string
 	if s.authoritative {
 		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
 	}
-	pr, err := a.probe(ctx, key, s.context)
+	pr, err := a.probe(ctx, key, s.gridKey)
 	if err != nil {
 		return err
 	}
@@ -743,7 +743,7 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 		if err != nil {
 			return nil, err
 		}
-		if want != ref.context {
+		if want != ref.gridKey {
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: cross-grid placement not supported")
 		}
 	}
@@ -836,20 +836,20 @@ func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool) (*gri
 	return resp.GetTile(), nil
 }
 
-// SetFraming persists framing on a door tile row or a context's grid row.
+// SetFraming persists framing on a door tile row or a plugin grid's row.
 func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	f, err := rpc.FramingOf(req)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if req.RootGridId != "" {
-		_, ckey, err := a.resolveGrid(req.RootGridId)
+		_, gkey, err := a.resolveGrid(req.RootGridId)
 		if err != nil {
 			return nil, err
 		}
 		// Framing a root grid is a durable fact about it, so the grid gets its
 		// row here.
-		gid, err := a.mem.ContextID(ckey)
+		gid, err := a.mem.GridOf(gkey)
 		if err != nil {
 			return nil, err
 		}
@@ -858,7 +858,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 			return nil, err
 		}
 		if changed {
-			a.hub.Publish(rpc.FramingEvent(rpc.EntryGridID(ckey), f))
+			a.hub.Publish(rpc.FramingEvent(rpc.EntryGridID(gkey), f))
 		}
 		return &gridwellv1.SetFramingResponse{}, nil
 	}
@@ -877,9 +877,9 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	return &gridwellv1.SetFramingResponse{Tile: t}, nil
 }
 
-// SetSelection keeps a collection's selection on the node's row for its grid,
+// SetSelection keeps a grid's selection on the node's row for its grid,
 // as its framing is kept; the plugin never sees it. An added entry is
-// touched, so it gets its row; one not in this collection is ignored, as home
+// touched, so it gets its row; one not in this grid is ignored, as home
 // ignores a tile off its grid. A recursive clear walks the doors the node has
 // rows for, the ones the user touched.
 func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
@@ -893,14 +893,14 @@ func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelection
 		}
 		return &gridwellv1.SetSelectionResponse{}, a.announceSelections(changed)
 	}
-	_, ckey, err := a.resolveGrid(req.GridId)
+	_, gkey, err := a.resolveGrid(req.GridId)
 	if err != nil {
 		return nil, err
 	}
 	add := make([]int64, 0, len(req.Add))
 	for _, id := range req.Add {
 		ref, err := a.resolveTile(id)
-		if gwerr.IsDeadRef(err) || err == nil && ref.context != ckey {
+		if gwerr.IsDeadRef(err) || err == nil && ref.gridKey != gkey {
 			continue
 		}
 		if err != nil {
@@ -927,7 +927,7 @@ func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelection
 		}
 		remove = append(remove, ref.id)
 	}
-	gid, err := a.mem.ContextID(ckey)
+	gid, err := a.mem.GridOf(gkey)
 	if err != nil {
 		return nil, err
 	}
@@ -938,26 +938,26 @@ func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelection
 	return &gridwellv1.SetSelectionResponse{}, a.announceSelections(changed)
 }
 
-// announceSelections tells each grid's set, by context key.
+// announceSelections tells each grid's set, by grid key.
 func (a *Adapter) announceSelections(grids []int64) error {
 	for _, g := range grids {
-		ck, err := a.mem.ContextKey(g)
+		gk, err := a.mem.GridKey(g)
 		if err != nil {
 			return err
 		}
-		ids, err := a.selection(ck, g)
+		ids, err := a.selection(gk, g)
 		if err != nil {
 			return err
 		}
-		a.hub.Publish(rpc.SelectionEvent(rpc.EntryGridID(ck), ids))
+		a.hub.Publish(rpc.SelectionEvent(rpc.EntryGridID(gk), ids))
 	}
 	return nil
 }
 
-// selection is a context's selection on the wire, each row named by its key
-// as every tile of the grid is; gid 0 is an untouched context, which holds
+// selection is a grid's selection on the wire, each row named by its key
+// as every tile of the grid is; gid 0 is an untouched grid, which holds
 // none.
-func (a *Adapter) selection(ckey string, gid int64) ([]string, error) {
+func (a *Adapter) selection(gkey string, gid int64) ([]string, error) {
 	if gid == 0 {
 		return nil, nil
 	}
@@ -971,7 +971,7 @@ func (a *Adapter) selection(ckey string, gid int64) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, rpc.EntryTileID(ckey, key))
+		out = append(out, rpc.EntryTileID(gkey, key))
 	}
 	return out, nil
 }
@@ -1110,9 +1110,9 @@ func (a *Adapter) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePre
 
 // probe is every Probe the adapter sends, the listing's sweep and the delete's
 // arbitration included.
-func (a *Adapter) probe(ctx context.Context, key, context string) (*pluginv1.ProbeResponse, error) {
+func (a *Adapter) probe(ctx context.Context, key, gridKey string) (*pluginv1.ProbeResponse, error) {
 	return ask(&a.lacks, "Probe", func() (*pluginv1.ProbeResponse, error) {
-		return a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key, Context: context})
+		return a.cp.Probe(ctx, &pluginv1.ProbeRequest{Key: key, Grid: gridKey})
 	})
 }
 
@@ -1123,7 +1123,7 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 	if err != nil {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
-	resp, err := a.probe(ctx, ref.key, ref.context)
+	resp, err := a.probe(ctx, ref.key, ref.gridKey)
 	if err != nil {
 		if gwerr.IsTransport(err) {
 			return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_UNSPECIFIED}, nil
@@ -1173,7 +1173,7 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	// Only a row can be retired. Deleting an untouched entry leaves no id to
 	// retire, and the next listing simply does not name it.
 	if ref.id != 0 {
-		pr, perr := a.probe(ctx, ref.key, ref.context)
+		pr, perr := a.probe(ctx, ref.key, ref.gridKey)
 		if perr == nil && pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
 			if err := a.mem.Retire(ref.id); err != nil && !errors.Is(err, store.ErrNotFound) {
 				return nil, fmt.Errorf("plugin: source deleted but row not retired: %w", err)
@@ -1181,6 +1181,6 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 		}
 	}
 	// Either way the source changed and the client must look again.
-	a.emitGridChanged(rpc.EntryGridID(ref.context))
+	a.emitGridChanged(rpc.EntryGridID(ref.gridKey))
 	return &gridwellv1.DeleteTileResponse{}, nil
 }

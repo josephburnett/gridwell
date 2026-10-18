@@ -50,10 +50,10 @@ message Grid {
   // which node a pane is inside: the client keys its per-pane + menu context
   // by it and routes Handshake with it. Wire-only, never persisted.
   string node_ns = 10;
-  // menu_entries is the owning plugin's declared (+) menu additions for
-  // this grid. Stamped from Info by the serving node, and verbatim through
-  // transit with grid_id prefixed per hop. Wire-only.
-  repeated MenuEntry menu_entries = 11;
+  // plugin_grids is the grids the owning plugin declares as (+) menu rows,
+  // stamped on this grid. Stamped from Info by the serving node, and verbatim
+  // through transit with grid_id prefixed per hop. Wire-only.
+  repeated PluginGrid plugin_grids = 11;
   // host_content says this grid projects host state, such as a directory or
   // the process table, instead of holding content of its own, and the client
   // renders its rows with the host treatment: the outside tint and the
@@ -93,21 +93,21 @@ message Grid {
   repeated string selection = 17;
 }
 
-// MenuEntry is one declared (+) menu entry: a door onto one collection,
-// such as the home's trashcan or a mail plugin's Feed. Declared in Info,
+// PluginGrid is one declared (+) menu row: a door onto one grid a namespace
+// declares, such as the home's trashcan or a mail plugin's Feed. Declared in Info,
 // stamped per grid by the serving node, and passed verbatim
 // through transit hops, where grid_id gains the hop prefix like every id. The
 // swatch behaves like a menu row's over grid_id: click descends, drag drops an
 // door to another namespace link.
-message MenuEntry {
-  string id           = 1; // entry identity within the plugin
+message PluginGrid {
+  string id           = 1; // identity within the plugin
   string label        = 2; // swatch label, verbatim
   string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default glyph)
   reserved 4, 5, 6; // color, kind, param_schema
   string grid_id      = 7; // the target grid, qualified per hop
   // view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
   // meaning as PluginInfo.root_view_*. A door carries the framing of the
-  // grid behind it, so re-entering a collection lands where it was left. All
+  // grid behind it, so re-entering the grid lands where it was left. All
   // three are absent when never visited (rpc.ViewOf), and the client
   // substitutes its calibrated default.
   double view_cx      = 8;
@@ -304,10 +304,10 @@ message InfoResponse {
   // the declaration and never switches on the kind, and an unknown value falls
   // back to the globe, so a third-party plugin degrades politely.
   string glyph = 16;
-  // menu_entries is the plugin's declared (+) menu additions; see
-  // MenuEntry. The serving node stamps them onto every grid the plugin
+  // plugin_grids is the grids the plugin declares as (+) menu rows; see
+  // PluginGrid. The serving node stamps them onto every grid the plugin
   // serves.
-  repeated MenuEntry menu_entries = 17;
+  repeated PluginGrid plugin_grids = 17;
 }
 
 // Probe reports the definitive presence of one tile, for non-authoritative
@@ -565,10 +565,9 @@ message PluginInfo {
   // glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
   // menu swatch and the drag ghost. "" is the generic globe.
   string glyph = 12;
-  // menu_entries mirrors InfoResponse.menu_entries with grid targets
-  // qualified for the receiver: root entries join the plugin's row in the
-  // (+) menu.
-  repeated MenuEntry menu_entries = 13;
+  // plugin_grids mirrors InfoResponse.plugin_grids with grid targets
+  // qualified for the receiver: they join the plugin's row in the (+) menu.
+  repeated PluginGrid plugin_grids = 13;
 }
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
 // kind "connection", rpc.ConnectionRow's shape, because the + menu is one
@@ -904,7 +903,7 @@ message GridChanged {
 }
 
 // GridFramingChanged carries a root grid's new framing, the three numbers
-// SetFraming wrote to its row, in MenuEntry's field names. It is apart from
+// SetFraming wrote to its row, in PluginGrid's field names. It is apart from
 // GridChanged because a framing write changes no listing: the client applies
 // it to the doors rooted at grid_id and fetches nothing. A door's framing
 // lives on its tile and rides TileChanged.

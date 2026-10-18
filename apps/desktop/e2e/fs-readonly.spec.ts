@@ -73,7 +73,7 @@ test('a home link to it opens read-only too', async ({ gw, window }) => {
   fs.chmodSync(file, 0o444);
 
   const code = (await gw.plugins()).find((p) => p.label === 'code')!;
-  const dir = await getGrid(gw.origin, code.menuEntries[0].gridID);
+  const dir = await getGrid(gw.origin, code.pluginGrids[0].gridID);
   const target = (dir.tiles ?? []).find((t: any) => t.altText === 'linked.txt')!;
   expect(target, 'linked.txt listed').toBeTruthy();
   const f = await gw.focused();

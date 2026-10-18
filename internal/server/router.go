@@ -91,7 +91,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	if err != nil {
 		return nil, err
 	}
-	// scratch_grid_id and menu_entries are the owning plugin's facts, from
+	// scratch_grid_id and plugin_grids are the owning plugin's facts, from
 	// its Info or, in transit, the remote node's stamp.
 	var g *pb.Grid
 	if transit {
@@ -118,7 +118,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 					g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
 				}
 			}
-			g.MenuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
+			g.PluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
 		}
 	}
 	tiles := qualifyTilesFor(transit, uuid, resp.Tiles)
@@ -214,7 +214,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	label := configLabel
 	var rootGridID, infoError string
 	var glyph string
-	var menuEntries []*pb.MenuEntry
+	var pluginGrids []*pb.PluginGrid
 	var rootViewCx, rootViewCy, rootViewZoom float64
 	if info != nil {
 		if info.RootGridId != "" {
@@ -224,7 +224,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 			label = info.DisplayName
 		}
 		glyph = info.Glyph
-		menuEntries = rpc.QualifyMenuEntries(uuid, info.MenuEntries)
+		pluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
 		rootViewCx = info.RootViewCx
 		rootViewCy = info.RootViewCy
 		rootViewZoom = info.RootViewZoom
@@ -248,7 +248,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		RootViewZoom: rootViewZoom,
 		InfoError:    infoError,
 		Glyph:        glyph,
-		MenuEntries:  menuEntries,
+		PluginGrids:  pluginGrids,
 	}
 }
 

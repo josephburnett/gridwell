@@ -348,8 +348,8 @@ func TestDescentOf(t *testing.T) {
 func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 	menu := []*pb.PluginInfo{
 		{Uuid: "loc", RootGridId: "loc/1",
-			MenuEntries: []*pb.MenuEntry{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
-		{Uuid: "p", MenuEntries: []*pb.MenuEntry{{Id: "feed", GridId: "p/~ZmVlZA"}}},
+			PluginGrids: []*pb.PluginGrid{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
+		{Uuid: "p", PluginGrids: []*pb.PluginGrid{{Id: "feed", GridId: "p/~ZmVlZA"}}},
 	}
 	f, _ := NewFraming(1.5, -2, 0.75)
 	if !Reframe("loc/1", f, menu) {
@@ -358,17 +358,17 @@ func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 	if pl := menu[0]; pl.RootViewCx != 1.5 || pl.RootViewCy != -2 || pl.RootViewZoom != 0.75 {
 		t.Errorf("the row rooted at the grid = %+v", pl)
 	}
-	if e := menu[0].MenuEntries[1]; e.ViewCx != 1.5 || e.ViewCy != -2 || e.ViewZoom != 0.75 {
+	if e := menu[0].PluginGrids[1]; e.ViewCx != 1.5 || e.ViewCy != -2 || e.ViewZoom != 0.75 {
 		t.Errorf("the entry declaring the grid = %+v", e)
 	}
-	if e := menu[0].MenuEntries[0]; e.ViewZoom != 0 {
+	if e := menu[0].PluginGrids[0]; e.ViewZoom != 0 {
 		t.Errorf("another grid's entry moved: %+v", e)
 	}
 	if Reframe("loc/1", f, menu) {
 		t.Error("an equal framing reported a change")
 	}
-	if !Reframe("p/~ZmVlZA", f, menu) || menu[1].MenuEntries[0].ViewZoom != 0.75 {
-		t.Errorf("a plugin collection's entry = %+v", menu[1].MenuEntries[0])
+	if !Reframe("p/~ZmVlZA", f, menu) || menu[1].PluginGrids[0].ViewZoom != 0.75 {
+		t.Errorf("a plugin grid's entry = %+v", menu[1].PluginGrids[0])
 	}
 	if Reframe("x/1", f, menu) || Reframe("", f, menu) {
 		t.Error("a grid no door roots reported a change")

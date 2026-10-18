@@ -5,7 +5,7 @@ package store
 // grid, so ids and versions continue and links keep resolving; on a tile
 // already inside the trash tree it destroys for real, through the ordinary
 // cascade. The trash grid is a system-keyed singleton like the scratch grid,
-// surfaced as a declared root menu entry, so nothing special-cases it. Scratch
+// surfaced as a declared root declared grid, so nothing special-cases it. Scratch
 // tiles bypass the trash: they are system-made ephemerals, while the trash is
 // a net for what the user placed in space and asked to remove.
 
@@ -22,7 +22,7 @@ import (
 const systemKeyTrashGridID = "trash_grid_id"
 
 // TrashGridID returns the trash grid, a singleton like ScratchGridID. Info
-// declares it as a root menu entry.
+// declares it as a root declared grid.
 func (s *Store) TrashGridID(ctx context.Context) (string, error) {
 	id, err := singletonGrid(ctx, s.db, systemKeyTrashGridID)
 	if err != nil {

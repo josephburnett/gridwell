@@ -128,7 +128,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 	}
 
 	sub.ns = s.Namespace("plug1")
-	gid, err := sub.ns.ContextID("a/context")
+	gid, err := sub.ns.GridOf("a/grid")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,10 +225,10 @@ func readCases() []readCase {
 				ignore2(s.GetBlob(ctx, t.BlobId))
 			}
 		}},
-		{"Namespace/ContextKey", func(ctx context.Context, s *Store, sub readSubject) { ignore2(sub.ns.ContextKey(sub.nsGrid)) }},
-		{"Namespace/LookupContext", func(ctx context.Context, s *Store, sub readSubject) { sub.ns.LookupContext("a/context") }},
-		{"Namespace/LookupContext/absent", func(ctx context.Context, s *Store, sub readSubject) {
-			sub.ns.LookupContext("never/touched")
+		{"Namespace/GridKey", func(ctx context.Context, s *Store, sub readSubject) { ignore2(sub.ns.GridKey(sub.nsGrid)) }},
+		{"Namespace/LookupGrid", func(ctx context.Context, s *Store, sub readSubject) { sub.ns.LookupGrid("a/context") }},
+		{"Namespace/LookupGrid/absent", func(ctx context.Context, s *Store, sub readSubject) {
+			sub.ns.LookupGrid("never/touched")
 		}},
 		{"Namespace/TileKey", func(ctx context.Context, s *Store, sub readSubject) { sub.ns.TileKey(sub.nsTile) }},
 		{"Namespace/LiveTileID", func(ctx context.Context, s *Store, sub readSubject) {
