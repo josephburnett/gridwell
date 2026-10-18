@@ -614,7 +614,7 @@ message HandshakeResponse {
   string content_token = 5;
   // build is the commit the node was built from (tracewire.BuildCommit), ""
   // for an unstamped build, for the client's log. Nothing depends on it: the
-  // web door refuses a page of another build on every call (StaleBuild).
+  // web door refuses a page of another build on every call (OtherBuild).
   string build = 14;
 }
 
@@ -634,12 +634,12 @@ message DeadReference {
   string namespace = 1;
 }
 
-// StaleBuild is the detail on the FailedPrecondition the web door answers a
+// OtherBuild is the detail on the FailedPrecondition the web door answers a
 // page of another build with, before the verb runs: node is the door's build,
-// client the one the page named ("" when it named none). gwerr.StaleBuild
-// writes it and gwerr.StaleBuildOf reads it; the client's one answer is to
+// client the one the page named ("" when it named none). gwerr.OtherBuild
+// writes it and gwerr.OtherBuildOf reads it; the client's one answer is to
 // reload (client/nodebuild).
-message StaleBuild {
+message OtherBuild {
   string node   = 1;
   string client = 2;
 }

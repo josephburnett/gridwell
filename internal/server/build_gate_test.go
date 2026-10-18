@@ -153,7 +153,7 @@ func TestBuildGateRefusesABeaconOfAnotherBuild(t *testing.T) {
 		}
 		got, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if res.StatusCode != tc.want || bytes.Contains(got, []byte("gridwell.v1.StaleBuild")) != tc.other {
+		if res.StatusCode != tc.want || bytes.Contains(got, []byte("gridwell.v1.OtherBuild")) != tc.other {
 			t.Errorf("beacon of %q = %d %s, want %d other=%v", tc.build, res.StatusCode, got, tc.want, tc.other)
 		}
 	}

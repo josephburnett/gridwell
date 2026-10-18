@@ -2566,7 +2566,7 @@ type HandshakeResponse struct {
 	ContentToken string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
 	// build is the commit the node was built from (tracewire.BuildCommit), ""
 	// for an unstamped build, for the client's log. Nothing depends on it: the
-	// web door refuses a page of another build on every call (StaleBuild).
+	// web door refuses a page of another build on every call (OtherBuild).
 	Build         string `protobuf:"bytes,14,opt,name=build,proto3" json:"build,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2739,12 +2739,12 @@ func (x *DeadReference) GetNamespace() string {
 	return ""
 }
 
-// StaleBuild is the detail on the FailedPrecondition the web door answers a
+// OtherBuild is the detail on the FailedPrecondition the web door answers a
 // page of another build with, before the verb runs: node is the door's build,
-// client the one the page named ("" when it named none). gwerr.StaleBuild
-// writes it and gwerr.StaleBuildOf reads it; the client's one answer is to
+// client the one the page named ("" when it named none). gwerr.OtherBuild
+// writes it and gwerr.OtherBuildOf reads it; the client's one answer is to
 // reload (client/nodebuild).
-type StaleBuild struct {
+type OtherBuild struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Node          string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
 	Client        string                 `protobuf:"bytes,2,opt,name=client,proto3" json:"client,omitempty"`
@@ -2752,20 +2752,20 @@ type StaleBuild struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StaleBuild) Reset() {
-	*x = StaleBuild{}
+func (x *OtherBuild) Reset() {
+	*x = OtherBuild{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StaleBuild) String() string {
+func (x *OtherBuild) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StaleBuild) ProtoMessage() {}
+func (*OtherBuild) ProtoMessage() {}
 
-func (x *StaleBuild) ProtoReflect() protoreflect.Message {
+func (x *OtherBuild) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2777,19 +2777,19 @@ func (x *StaleBuild) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StaleBuild.ProtoReflect.Descriptor instead.
-func (*StaleBuild) Descriptor() ([]byte, []int) {
+// Deprecated: Use OtherBuild.ProtoReflect.Descriptor instead.
+func (*OtherBuild) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{33}
 }
 
-func (x *StaleBuild) GetNode() string {
+func (x *OtherBuild) GetNode() string {
 	if x != nil {
 		return x.Node
 	}
 	return ""
 }
 
-func (x *StaleBuild) GetClient() string {
+func (x *OtherBuild) GetClient() string {
 	if x != nil {
 		return x.Client
 	}
@@ -4705,7 +4705,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rDeadReference\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"8\n" +
 	"\n" +
-	"StaleBuild\x12\x12\n" +
+	"OtherBuild\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\".\n" +
 	"\x0eSourceDisabled\x12\x1c\n" +
@@ -4892,7 +4892,7 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*HandshakeResponse)(nil),         // 31: gridwell.v1.HandshakeResponse
 	(*TileResponse)(nil),              // 32: gridwell.v1.TileResponse
 	(*DeadReference)(nil),             // 33: gridwell.v1.DeadReference
-	(*StaleBuild)(nil),                // 34: gridwell.v1.StaleBuild
+	(*OtherBuild)(nil),                // 34: gridwell.v1.OtherBuild
 	(*SourceDisabled)(nil),            // 35: gridwell.v1.SourceDisabled
 	(*CreateTileRequest)(nil),         // 36: gridwell.v1.CreateTileRequest
 	(*ShellSessionAliveRequest)(nil),  // 37: gridwell.v1.ShellSessionAliveRequest

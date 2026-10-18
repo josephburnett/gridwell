@@ -133,8 +133,8 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 				return
 			}
 			if ctl.Kind == shellwire.KindExit {
-				if ctl.StaleBuild != "" && o.OnOtherBuild != nil {
-					o.OnOtherBuild(ctl.StaleBuild)
+				if ctl.OtherBuild != "" && o.OnOtherBuild != nil {
+					o.OnOtherBuild(ctl.OtherBuild)
 				}
 				c.end(ctl.Message, ctl.SessionGone)
 				return

@@ -57,9 +57,9 @@ type Control struct {
 	// transport failing, and the client flips the refresh affordance off.
 	Message     string `json:"message,omitempty"`
 	SessionGone bool   `json:"session_gone,omitempty"`
-	// StaleBuild is the node's build when the door refused a page of another
+	// OtherBuild is the node's build when the door refused a page of another
 	// one (gwerr.OtherBuild), the socket's form of that verdict.
-	StaleBuild string `json:"stale_build,omitempty"`
+	OtherBuild string `json:"other_build,omitempty"`
 }
 
 // AttachURL is the address a client dials to attach to tileID's PTY. origin is
@@ -138,7 +138,7 @@ func EncodeExit(message string, sessionGone bool) []byte {
 // EncodeOtherBuild is the exit the door sends a page of another build before
 // any PTY is touched.
 func EncodeOtherBuild(message, node string) []byte {
-	return mustJSON(Control{Kind: KindExit, Message: message, StaleBuild: node})
+	return mustJSON(Control{Kind: KindExit, Message: message, OtherBuild: node})
 }
 
 // DecodeControl is used by both ends, so an unreadable frame is a failure at
