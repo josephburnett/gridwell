@@ -34,25 +34,39 @@ interest
 mcpdoor
 webdoor
 shelldoor
+webdoorserver
+connectiondoorserver
+listenconnectiondoor
 # "face" — what a tile looks like from outside is its preview; a namespace's
 # icon is its glyph.
 face
 faces
 faceless
+tileface
+facekey
+pagefacestale
 # "StaleBuild" — a page of another build is OtherBuild; stale is a refused
 # claim only.
 stalebuild
+# "text window" — a text tile's scroll and mode is its scroll (textedit.Scroll).
+textwindow
+text_window
 # "clone" — what right-drag makes is a copy (CopyTile). Allowed: Go's own
 # Clone methods (slices, maps, proto, an http request or header) and git's.
 clone .*(slices|maps|bytes|proto|header|Header\(\)|r)\.Clone\(|.*git clone
 clones
 cloned
+clonetile
+clonetilerequest
 # "search" — the one query verb is Find. Allowed: the browser's location
 # search and URLSearchParams, and Go's sort.Search.
 search .*location\.search|.*Get\("search"\)|.*searchParams|.*sort\.Search|.*google\.com/search
+searchrequest
+searchresponse
 # "place" as the write — writing a placement is a move (MoveTile, the MCP
 # move tool). A pane's place, the noun, stays.
 placetile
+placetilerequest
 auto-place
 # "session" in the tmux sense — a shell tile names a tmux (rpc.ShellTmux,
 # ShellTmuxAlive, Tile.shell_tmux); a session is one client screen only.
@@ -72,6 +86,10 @@ well .*as well|.*well-formed|.*[Ww]ell (past|within|below|under)|internal/local/
 wells
 doorway
 doorways
+kindwell
+glyphwell
+exitwell
+isexitwell
 # "pane tile" — a tile holding a pane layout is a workspace tile
 # (rpc.KindWorkspace); a pane is one panel of the window.
 pane-tile
@@ -89,6 +107,11 @@ menu_entries
 contextchanged
 root_context
 child_context
+rootcontext
+childcontext
+# "palette" for the + menu — the + menu is client/menu; a palette is the
+# colour set (theme.Palette) only.
+client/palette
 # "room" — a plane of tiles is a grid.
 room
 rooms
