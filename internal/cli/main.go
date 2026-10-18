@@ -49,9 +49,9 @@ Usage:
     gridwell backup DEST                      snapshot every DB + server.yaml
                                               (VACUUM INTO; safe while serving)
     gridwell clear-browser-data [--user-data DIR]
-                                              delete the desktop app's Chromium
-                                              session (cookies, storage, caches
-                                              of every live url tile); the app
+                                              delete the desktop app's browser
+                                              cookies, storage and caches (every
+                                              live url tile's); the app
                                               must not be running
     gridwell version                          print the release version this
                                               binary was built from, or "dev"

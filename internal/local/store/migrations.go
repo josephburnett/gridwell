@@ -63,11 +63,12 @@ var migrations = []migration{
 	// default and home rows are the defaults.
 	{to: 9, run: migrateV9},
 	// v10 retires three pieces of dead storage, none carrying a user-visible
-	// meaning any binary read: the `session` table, now that the Chromium
-	// session is host-local; tiles.configure_plugin_id and the door CHECK's
-	// childless branch, which nothing can mint any more, with existing rows
-	// preserved as ordinary doors each given a fresh empty child grid; and
-	// object_id on tiles and grids, a provenance mint no reader decided on.
+	// meaning any binary read: the `session` table, now that the browser's
+	// cookies and storage are host-local; tiles.configure_plugin_id and the
+	// door CHECK's childless branch, which nothing can mint any more, with
+	// existing rows preserved as ordinary doors each given a fresh empty child
+	// grid; and object_id on tiles and grids, a provenance mint no reader
+	// decided on.
 	// tiles is a rebuild, because the CHECK must change; grids is a DROP
 	// COLUMN. Both preserve every row and the AUTOINCREMENT seeds.
 	{to: 10, run: migrateV10},

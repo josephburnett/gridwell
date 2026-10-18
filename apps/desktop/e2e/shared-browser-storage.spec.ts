@@ -52,7 +52,7 @@ test('live tiles in different plugins share one set of cookies and storage', asy
     if (!wc) throw new Error('second live view not found');
     return (await wc.executeJavaScript(`document.cookie`)) as string;
   });
-  expect(cookie, 'the cookie crossed the plugin boundary — one host-local session').toContain(
+  expect(cookie, 'the cookie crossed the plugin boundary — one host-local set of cookies and storage').toContain(
     'gwshared=yes',
   );
 });

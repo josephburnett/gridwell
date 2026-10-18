@@ -16,7 +16,7 @@ import (
 
 // themeKey is where the preference lives. It is a client view preference and
 // not a fact about the user's things, so it never reaches the store or the
-// wire; Chromium's own storage is its decided home (CLAUDE.md rule 7). A
+// wire; the browser's own storage is its decided home (CLAUDE.md rule 7). A
 // browser that refuses storage still switches, for this session only.
 const themeKey = "gridwell.theme"
 

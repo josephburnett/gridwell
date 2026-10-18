@@ -1,6 +1,6 @@
 //go:build connections
 
-// The mid-session partition gate: a connection that dies under a live session. It
+// The partition gate: a connection that dies while it is in use. It
 // warms internal/sourcecache through a real tunnel, SIGKILLs the remote node,
 // and asserts the offline story end to end: a warmed read serves the cache,
 // never-read bytes fail honestly, the offline deep copy copies what is cached
