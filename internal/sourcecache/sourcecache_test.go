@@ -47,7 +47,7 @@ func writeOne(t *testing.T, c namespace.Namespace, tileID string, version int64,
 // home store behind a switchable dark proxy, the shape of a connection whose
 // tunnel dropped.
 
-// darkable wraps the upstream client: a machine that can go away. Dark, every
+// darkable wraps the far node's client: a machine that can go away. Dark, every
 // read fails the way a dead tunnel does AND the event stream it was serving
 // ends, which is both halves of a machine going away and the second is how a
 // connection's own supervisor learns of the first. Writes are not
@@ -156,14 +156,14 @@ func (d *darkable) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send 
 
 // openLayer is the production wiring in one line: one cache file, one
 // layer in front of one namespace, under the given policy.
-func openLayer(t *testing.T, upstream namespace.Namespace, dbPath string, opts Options) *Layer {
+func openLayer(t *testing.T, far namespace.Namespace, dbPath string, opts Options) *Layer {
 	t.Helper()
 	s, err := Open(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	return s.front(upstream, opts)
+	return s.front(far, opts)
 }
 
 // awaitSubscriber waits for a Subscribe riding a goroutine to attach, and
@@ -201,7 +201,7 @@ func awaitSubscriber(t *testing.T, cc *Layer, seen <-chan *pb.Event) {
 
 // fixture is the TRANSPORT's shape: the cache in front of a namespace
 // whose absence is a machine going dark, so the prefetch policy is on.
-func fixture(t *testing.T) (cc *Layer, upstream *darkable, root string, dbPath string) {
+func fixture(t *testing.T) (cc *Layer, far *darkable, root string, dbPath string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -212,9 +212,9 @@ func fixture(t *testing.T) (cc *Layer, upstream *darkable, root string, dbPath s
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream = newDarkable(local.New(st, nil))
+	far = newDarkable(local.New(st, nil))
 	dbPath = filepath.Join(t.TempDir(), "cache.db")
-	return openLayer(t, upstream, dbPath, Options{Prefetch: true}), upstream, root, dbPath
+	return openLayer(t, far, dbPath, Options{Prefetch: true}), far, root, dbPath
 }
 
 func readContent(t *testing.T, c namespace.Namespace, tileID string) (mediaType string, version int64, data []byte) {
@@ -236,7 +236,7 @@ func readContent(t *testing.T, c namespace.Namespace, tileID string) (mediaType 
 }
 
 func TestServesStaleWhenDark(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -244,7 +244,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Body via the upstream write path (writes pass through the cache).
+	// Body via the far write path (writes pass through the cache).
 	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("cached words"))
 	urlT, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "url", X: 2, Y: 0, W: 1, H: 1, UrlString: "https://example.com"}})
@@ -272,7 +272,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	}
 
 	// THE TUNNEL DROPS.
-	upstream.goDark()
+	far.goDark()
 
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
@@ -343,8 +343,8 @@ func TestHalfDeliveredStreamIsNeverSpliced(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := &halfDark{Namespace: local.New(st, nil)}
-	cc := openLayer(t, upstream, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
+	far := &halfDark{Namespace: local.New(st, nil)}
+	cc := openLayer(t, far, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
 	ctx := context.Background()
 
 	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -355,7 +355,7 @@ func TestHalfDeliveredStreamIsNeverSpliced(t *testing.T) {
 	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("first-frame words"))
 	readContent(t, cc, txt.GetTile().GetId()) // warm
 
-	upstream.dark = true
+	far.dark = true
 	var got []byte
 	rerr := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: txt.GetTile().GetId()},
 		func(ch *pb.ContentChunk) error { got = append(got, ch.GetData()...); return nil })
@@ -367,7 +367,7 @@ func TestHalfDeliveredStreamIsNeverSpliced(t *testing.T) {
 	}
 }
 
-// TestVerdictNeverMasked pins the gate: an upstream that ANSWERS overrides
+// TestVerdictNeverMasked pins the gate: a far node that ANSWERS overrides
 // any cached row. A tile read once and then deleted on the remote answers
 // NotFound — serving the cached row instead would resurrect deleted
 // content ("gone is never a link", cache edition).
@@ -404,7 +404,7 @@ func TestVerdictNeverMasked(t *testing.T) {
 // through the wrapper keeps the cache current — a framing change upserts,
 // a delete evicts — so going dark right after serves the LATEST state.
 func TestEventTeeTracksMutations(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	door, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -487,7 +487,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 		}
 	}
 
-	upstream.goDark()
+	far.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -510,15 +510,15 @@ func TestEventTeeTracksMutations(t *testing.T) {
 // node restarts (or the wrapper reopens) and the cached answers are
 // still there for a connection that is STILL dark.
 func TestPersistsAcrossRestart(t *testing.T) {
-	cc, upstream, root, dbPath := fixture(t)
+	cc, far, root, dbPath := fixture(t)
 	ctx := context.Background()
 
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
 
-	reopened := openLayer(t, upstream, dbPath, Options{Prefetch: true})
-	upstream.goDark()
+	reopened := openLayer(t, far, dbPath, Options{Prefetch: true})
+	far.goDark()
 	if _, err := reopened.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatalf("reopened cache should serve the cached grid: %v", err)
 	}
@@ -529,7 +529,7 @@ func TestPersistsAcrossRestart(t *testing.T) {
 // out-of-window read kicks — the response IS the complete tile set, so a
 // delete-while-blind vanishes from the cache too.
 func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	doomed, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -540,9 +540,9 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
-	// Deleted UPSTREAM directly — the cache never sees an event, and the
+	// Deleted on the FAR NODE directly — the cache never sees an event, and the
 	// write never passes through this layer.
-	if _, err := upstream.Namespace.DeleteTile(ctx, &pb.DeleteTileRequest{
+	if _, err := far.Namespace.DeleteTile(ctx, &pb.DeleteTileRequest{
 		TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
@@ -554,7 +554,7 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitFresh(t, cc, root)
-	upstream.goDark()
+	far.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -676,7 +676,7 @@ func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
 // streaming is the transport's shape: a namespace that HAS an event stream of
 // its own, which every connection does. The layer's own stream must reach the
 // subscriber ALONGSIDE it — a revalidation's GridChanged and the cache's
-// health are facts only the layer knows, and an upstream with a stream must
+// health are facts only the layer knows, and a far node with a stream must
 // not bury them.
 type streaming struct {
 	namespace.Namespace
@@ -820,7 +820,7 @@ func TestRevalidationVerdictEvicts(t *testing.T) {
 // cached rows — a moved tile reads back where the user put it, and a
 // deleted one is gone, straight from the cached answer.
 func TestWriteResponsesUpdateTheCachedRows(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	moved, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -845,7 +845,7 @@ func TestWriteResponsesUpdateTheCachedRows(t *testing.T) {
 	}
 	// Dark, within the window: the cached answer is all there is, and it must
 	// already say what the user did.
-	upstream.goDark()
+	far.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
@@ -873,14 +873,14 @@ func TestWriteResponsesUpdateTheCachedRows(t *testing.T) {
 // succeeded, and every refresh retried and logged forever (seen live after
 // the lazy-ids upgrade).
 func TestStoreGridSurvivesAGridKeyRename(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	if _, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}}); err != nil {
 		t.Fatal(err)
 	}
-	live, err := upstream.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	live, err := far.Namespace.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -969,7 +969,7 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 // owner. What the age and the darkness change is the revalidation the read
 // kicks behind it.
 func TestAPastWindowServeIsTheCachedAnswer(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 	live, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
@@ -977,7 +977,7 @@ func TestAPastWindowServeIsTheCachedAnswer(t *testing.T) {
 	}
 	// The machine is gone and the answer is old: the serve is from cache in
 	// every sense the node has, and it is the cached answer itself.
-	upstream.goDark()
+	far.goDark()
 	ageGrid(t, cc, root)
 	served, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
@@ -988,7 +988,7 @@ func TestAPastWindowServeIsTheCachedAnswer(t *testing.T) {
 	}
 	// Back alive: the revalidation the read kicks lands and re-stores, which
 	// is what the age was ever for.
-	upstream.goLive()
+	far.goLive()
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
@@ -1006,7 +1006,7 @@ func TestAPastWindowServeIsTheCachedAnswer(t *testing.T) {
 // the WHOLE cache to "cannot store answers" on the user's strip for a tile
 // that simply had nothing in it yet.
 func TestAnEmptyBodyIsCached(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -1030,7 +1030,7 @@ func TestAnEmptyBodyIsCached(t *testing.T) {
 	}
 
 	// And the point of caching it: dark, it still answers.
-	upstream.goDark()
+	far.goDark()
 	if _, _, data := readContent(t, cc, id); len(data) != 0 {
 		t.Fatalf("the dark read of a cached empty body = %q, want empty", data)
 	}
@@ -1056,7 +1056,7 @@ func chunkShape(t *testing.T, c namespace.Namespace, tileID string) []int {
 // the source's ReadContent and this layer's replay — hold that only by reading
 // the one chunk size, rpc.ContentChunkBytes.
 func TestCachedStreamHasTheLiveChunkShape(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -1078,7 +1078,7 @@ func TestCachedStreamHasTheLiveChunkShape(t *testing.T) {
 		t.Fatalf("live chunk shape %v, want %v", live, want)
 	}
 
-	upstream.goDark()
+	far.goDark()
 	cached := chunkShape(t, cc, id)
 	if !slices.Equal(cached, live) {
 		t.Errorf("cached chunk shape %v, live %v", cached, live)
@@ -1094,7 +1094,7 @@ func TestCachedStreamHasTheLiveChunkShape(t *testing.T) {
 // back the same tiles has nothing to announce. Announcing it costs every open
 // view a full grid read for a change it has already applied.
 func TestAFoldedTileChangedIsNotAChange(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	subCtx, subCancel := context.WithCancel(ctx)
@@ -1113,7 +1113,7 @@ func TestAFoldedTileChangedIsNotAChange(t *testing.T) {
 	// with a write whose event must come back before the grid is cached.
 	primed := false
 	for x := int64(0); x < 50 && !primed; x++ {
-		if _, err := upstream.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		if _, err := far.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 			Tile: &pb.Tile{Kind: "text", X: x, Y: 9, W: 1, H: 1}}); err != nil {
 			t.Fatal(err)
 		}
@@ -1131,7 +1131,7 @@ func TestAFoldedTileChangedIsNotAChange(t *testing.T) {
 	}
 
 	// A write straight to the source: only its TileChanged reaches the layer.
-	made, err := upstream.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+	made, err := far.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)

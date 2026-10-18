@@ -901,7 +901,7 @@ func (a *App) frame() {
 	if a.ghost != nil {
 		if landing, done := a.ghost.Step(now); done {
 			// The render hides live on the ghost and die with it, so the cache
-			// is the source of truth again.
+			// is what draws again.
 			a.ghost = nil
 		} else if landing {
 			a.scheduleFrame(traceevent.WhyAnimation)

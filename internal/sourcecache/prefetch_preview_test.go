@@ -12,9 +12,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// previewUpstream is one connection whose landing holds the tiles a case names,
+// previewFar is one connection whose landing holds the tiles a case names,
 // and which records every preview it is asked for.
-type previewUpstream struct {
+type previewFar struct {
 	namespace.Namespace
 	tiles []*pb.Tile
 
@@ -22,15 +22,15 @@ type previewUpstream struct {
 	asked []string
 }
 
-func (u *previewUpstream) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+func (u *previewFar) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.View{})}}, nil
 }
 
-func (u *previewUpstream) GetGrid(context.Context, *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+func (u *previewFar) GetGrid(context.Context, *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	return &pb.GetGridResponse{Grid: &pb.Grid{Id: "u1/g1"}, Tiles: u.tiles}, nil
 }
 
-func (u *previewUpstream) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
+func (u *previewFar) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.asked = append(u.asked, req.TileId)
@@ -51,7 +51,7 @@ func TestPrefetchAsksOnlyForAPreviewTheKeyNames(t *testing.T) {
 		{"no preview", 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			up := &previewUpstream{tiles: []*pb.Tile{{
+			up := &previewFar{tiles: []*pb.Tile{{
 				Id: "u1/1", GridId: "u1/g1", Kind: "url", PreviewBlobId: tc.key, W: 1, H: 1,
 			}}}
 			cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})

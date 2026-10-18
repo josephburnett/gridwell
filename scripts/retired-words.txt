@@ -101,3 +101,6 @@ remember
 remembers
 remembered
 remembering
+# "upstream" — what a plugin or connection reads has no word: name the thing
+# (the directory, GitLab, the mailbox, the far node).
+upstream

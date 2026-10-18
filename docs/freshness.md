@@ -10,12 +10,12 @@ and nothing the user made is dropped without a server verdict.
 
 ## The layers
 
-Reads travel client → router → source cache → transport or plugin → source.
-Freshness is decided on the way back.
+Reads travel client → router → source cache → transport or plugin → what
+the plugin or connection reads. Freshness is decided on the way back.
 
-**1. The source.** A plugin's directory, API, or process table; a far node's
-store. It has no freshness rule of its own — it is the truth everything else
-is a cache of. What it owes the node is an honest failure: a transport-shaped
+**1. What is read.** A plugin's directory, API, or process table; a far
+node's store. It has no freshness rule of its own, and everything else
+caches it. What it owes the node is an honest failure: a transport-shaped
 error means "not right now", any coded error is a verdict. `api/gwerr`'s
 `IsTransport` is the one classifier that separates them, and every layer
 below branches on it.
@@ -198,8 +198,8 @@ the answer resolves it — a transport failure leaves it parked, any verdict
 acks. One live entry per key, last-writer-wins, order preserved. Parking on
 the answer instead was #298: an answer is exactly what a swallowed request
 never produces, so the one write the outbox could not hear about was the one
-it exists for. While a write is in flight its key is parked, which is the
-truth about it; a drain that races the flight re-sends it, and that is safe
+it exists for. While a write is in flight its key is parked, which is all
+that is known about it; a drain that races the flight re-sends it, and that is safe
 because every write that parks is a last-writer-wins overwrite of one key
 (the writes that would replay unsafely — a create, a copy, a placement —
 carry no id and park nothing; they reconcile visibly instead).
@@ -288,8 +288,8 @@ correcting with no user gesture.
    verdict instead (`err != nil && !gwerr.IsTransport(err)`) → `evictGrid` and
    the same event, so the next read passes through and the verdict surfaces
    rather than a ghost answering forever.
-8. `Layer.Subscribe` is serving that channel alongside the teed upstream
-   stream. Its subscriber is `router.go:fanInEvents`, started by `watchPlugin`
+8. `Layer.Subscribe` is serving that channel alongside the teed stream of
+   the connection behind it. Its subscriber is `router.go:fanInEvents`, started by `watchPlugin`
    for the transport with `transit=true`.
 9. `qualifyEvent` prepends the node id. The connection segment is already on
    the id, because the cache's own ids are `<conn>/<remote-id>`.
@@ -387,7 +387,7 @@ the revalidation has re-stored by then.
 
 The recovery also re-kicks the prefetch walk, for that one source
 (`Layer.kickPrefetch`, from `setDark`'s transition out of darkness). The
-`Layer.Subscribe` trigger cannot cover this: the layer's upstream
+`Layer.Subscribe` trigger cannot cover this: the layer's own
 subscription is the transport's hub stream, which survives one connection's
 outage, so nothing else here notices the machine came back. The client's
 `retryKick` refetches the grids it holds; the walk is for the grids nobody

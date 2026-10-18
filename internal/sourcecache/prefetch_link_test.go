@@ -14,29 +14,29 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// linkUpstream is a fake transport, with qualified ids, the shape a
+// linkFar is a fake transport, with qualified ids, the shape a
 // connection really serves: one connection whose landing is a root grid
 // holding one leaf link whose target lives in a grid no door references. The
 // link arm is the target's only warm path, which is the case the walker
 // promises to cover. The walker's mechanics are what this pins, so the
-// upstream is a stub; the walk against the real transport is the seam test.
-type linkUpstream struct {
+// the far node is a stub; the walk against the real transport is the seam test.
+type linkFar struct {
 	namespace.Namespace
 	dark bool
 }
 
-func (u *linkUpstream) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
+func (u *linkFar) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
 
 // Handshake is where the walk's roots come from: what this namespace answers
 // for itself is its connection and the landing it learned.
-func (u *linkUpstream) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
+func (u *linkFar) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
 	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.View{})}}, nil
 }
 
-func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+func (u *linkFar) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
@@ -53,7 +53,7 @@ func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.G
 	}, nil
 }
 
-func (u *linkUpstream) GetTile(_ context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {
+func (u *linkFar) GetTile(_ context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
@@ -66,14 +66,14 @@ func (u *linkUpstream) GetTile(_ context.Context, req *pb.GetTileRequest) (*pb.T
 	return nil, status.Error(codes.NotFound, "no tile")
 }
 
-func (u *linkUpstream) GetTilePreview(_ context.Context, _ *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
+func (u *linkFar) GetTilePreview(_ context.Context, _ *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	if u.dark {
 		return nil, u.offline()
 	}
 	return &pb.GetTilePreviewResponse{}, nil
 }
 
-func (u *linkUpstream) ReadContent(_ context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
+func (u *linkFar) ReadContent(_ context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	if u.dark {
 		return u.offline()
 	}
@@ -89,7 +89,7 @@ func (u *linkUpstream) ReadContent(_ context.Context, req *pb.ReadContentRequest
 // the target's body offline-unreadable after a whole-source prefetch whenever
 // the link was its only path.
 func TestPrefetchWarmsLinkTargetBody(t *testing.T) {
-	up := &linkUpstream{}
+	up := &linkFar{}
 	cc := openLayer(t, up, filepath.Join(t.TempDir(), "cache.db"), Options{Prefetch: true})
 
 	ctx := context.Background()

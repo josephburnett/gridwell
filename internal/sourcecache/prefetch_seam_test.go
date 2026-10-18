@@ -331,7 +331,7 @@ func awaitHealth(t *testing.T, events <-chan *pb.Event, conn string, want bool) 
 	}
 }
 
-// The second trigger across the real seam. The layer's upstream subscription is
+// The second trigger across the real seam. The layer's own subscription is
 // the transport's hub stream, one for every connection, which survives any one
 // of them dying, so a single connection's recovery never reaches the walk that
 // way. What reaches it is the health-up transition applyEvent sees, which kicks

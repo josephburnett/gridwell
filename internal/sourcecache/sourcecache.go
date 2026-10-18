@@ -279,15 +279,15 @@ func Open(dbPath string) (*Store, error) {
 // Front puts the cache in front of one namespace under the given policy: a
 // Layer over an open file, and the pass-through below over a store with none.
 // The store owns what it returns and shuts it down before the file goes away.
-func (s *Store) Front(upstream namespace.Namespace, opts Options) namespace.Namespace {
+func (s *Store) Front(far namespace.Namespace, opts Options) namespace.Namespace {
 	if s.down != "" {
-		return &missing{Namespace: upstream, detail: s.down}
+		return &missing{Namespace: far, detail: s.down}
 	}
-	return s.front(upstream, opts)
+	return s.front(far, opts)
 }
 
 // missing is the front over a store with no file. Every call passes through;
-// the stream tells the health once per subscriber, right after the upstream's
+// the stream tells the health once per subscriber, right after the far node's
 // header, because a cache that never opened has no transition to announce and
 // an event ahead of the header would establish a stream not yet listening.
 type missing struct {
@@ -316,8 +316,8 @@ func (m *missing) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send f
 	})
 }
 
-func (s *Store) front(upstream namespace.Namespace, opts Options) *Layer {
-	c := &Layer{Namespace: upstream, db: s.db, opts: opts,
+func (s *Store) front(far namespace.Namespace, opts Options) *Layer {
+	c := &Layer{Namespace: far, db: s.db, opts: opts,
 		revalInflight: map[string]bool{}, hub: eventhub.New(rpc.EventKey), dark: map[string]bool{}}
 	c.pf.running = map[string]bool{}
 	c.pf.ctx, c.pf.cancel = context.WithCancel(context.Background())
@@ -893,7 +893,7 @@ func blob(b []byte) []byte {
 	return b
 }
 
-// Subscribe serves the upstream's stream, teed into the cache, and the
+// Subscribe serves the far node's stream, teed into the cache, and the
 // layer's own, which closes the serve-first loop.
 func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	// Every (re)subscription warms every source; one connection coming back
@@ -931,7 +931,7 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 			}
 		}
 	}()
-	// The upstream's header is ours: this layer's own stream is attached.
+	// The far node's header is ours: this layer's own stream is attached.
 	err := c.Namespace.Subscribe(ctx, in, func(ev *pb.Event) error {
 		if ev != nil {
 			c.applyEvent(ctx, ev)
@@ -939,7 +939,7 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 		return emit(ev)
 	})
 	if status.Code(err) == codes.Unimplemented {
-		// An upstream with no stream of its own: ours stands alone until the
+		// A far node with no stream of its own: ours stands alone until the
 		// subscriber goes away.
 		if err = emit(nil); err == nil {
 			<-ctx.Done()
@@ -991,7 +991,7 @@ func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
 }
 
 // Writes pass through untouched, so the source stays the one owner of its
-// truth, and a successful response updates the cached rows by the same
+// rows, and a successful response updates the cached rows by the same
 // fold the event tee applies, which keeps a moved tile from snapping back.
 
 // foldWrite folds one in-place write's answer into the cached rows,

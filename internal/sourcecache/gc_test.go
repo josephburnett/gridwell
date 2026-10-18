@@ -11,7 +11,7 @@ import (
 // the revalidation replaces the grid's tile set, no row names the tile, so a
 // body left in content is bytes nothing can read and nothing will free.
 func TestATileGoneWhileBlindTakesItsBodyWithIt(t *testing.T) {
-	cc, upstream, root, _ := fixture(t)
+	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
 	doomed, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
@@ -29,8 +29,8 @@ func TestATileGoneWhileBlindTakesItsBodyWithIt(t *testing.T) {
 	if err := cc.db.QueryRow(`SELECT COUNT(1) FROM content WHERE tile_id = ?`, id).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("setup: cached bodies = %d (%v), want 1", n, err)
 	}
-	// Deleted UPSTREAM directly, as on a far machine while this one is blind.
-	if _, err := upstream.Namespace.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id}); err != nil {
+	// Deleted on the FAR NODE directly, as on a far machine while this one is blind.
+	if _, err := far.Namespace.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: id}); err != nil {
 		t.Fatal(err)
 	}
 	ageGrid(t, cc, root)

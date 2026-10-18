@@ -37,7 +37,7 @@ const (
 
 // Supervisor owns one plugin's subprocess. It is a grpc.ClientConnInterface,
 // so one plugin.v1 client is built over it for the plugin's life and every
-// call routes to whichever process is up. Nothing upstream holds a handle to a
+// call routes to whichever process is up. No caller holds a handle to a
 // dead one.
 type Supervisor struct {
 	uuid   string

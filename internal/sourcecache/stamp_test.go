@@ -41,8 +41,8 @@ func TestACachedBodyKeepsItsStamp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upstream := newDarkable(&stamping{Namespace: local.New(st, nil), stamp: "mtime-1"})
-	cc := openLayer(t, upstream, filepath.Join(t.TempDir(), "cache.db"), Options{})
+	far := newDarkable(&stamping{Namespace: local.New(st, nil), stamp: "mtime-1"})
+	cc := openLayer(t, far, filepath.Join(t.TempDir(), "cache.db"), Options{})
 
 	txt, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "text", W: 1, H: 1}, Content: []byte("words")})
@@ -53,7 +53,7 @@ func TestACachedBodyKeepsItsStamp(t *testing.T) {
 	if got := readStamp(t, cc, id); got != "mtime-1" {
 		t.Fatalf("live stamp %q, want the source's", got)
 	}
-	upstream.goDark()
+	far.goDark()
 	if got := readStamp(t, cc, id); got != "mtime-1" {
 		t.Errorf("cached stamp %q, want the one the bytes were read under", got)
 	}

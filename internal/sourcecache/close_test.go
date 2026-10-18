@@ -18,7 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
-// gated is an upstream whose GetGrid parks the caller until release is closed:
+// gated is a far node whose GetGrid parks the caller until release is closed:
 // the walk held mid-flight, deterministically, ignoring ctx the way a slow
 // network read does.
 type gated struct {

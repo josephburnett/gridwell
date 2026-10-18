@@ -20,7 +20,7 @@ import (
 //
 //   - status off: a status bar would duplicate Gridwell's pane chrome.
 //   - history-limit: the default 2000 is too small for a working shell.
-//   - default-terminal: what xterm.js claims upstream.
+//   - default-terminal: what xterm.js itself claims.
 //   - escape-time 0: the 500ms meta delay interferes with apps reading raw
 //     escape sequences.
 //   - allow-passthrough on: the shim's OSC 5522 rides tmux's DCS passthrough.
