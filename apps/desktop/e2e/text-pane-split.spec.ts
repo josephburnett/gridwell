@@ -11,14 +11,14 @@ import { tileAt } from './oracle';
 // descended pane, that tiles survive each pane's rendered cache through focus
 // switches, and that typed content reaches the server.
 //
-// Geometry: splitFocusedPaneVertical clones the focused pane's grid view, so
+// Geometry: splitFocusedPaneVertical copies the focused pane's grid view, so
 // both panes show the same grid at once. A vertical split halves pane width, so
 // the tiles here are offset vertically; a horizontal offset can land outside the
 // half-width pane and the click hits the sibling. focusPane clicks the
 // pane-center pixel, so the offset cells keep that pixel clear and a focus click
 // never descends.
 
-// splitWithBothPanesOnGrid splits the focused grid pane. The new pane is a clone
+// splitWithBothPanesOnGrid splits the focused grid pane. The new pane is a copy
 // of the same grid view, so both panes sit on the root grid immediately. Returns
 // the left and right pane infos.
 async function splitWithBothPanesOnGrid(gw: any): Promise<[any, any]> {

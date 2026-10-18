@@ -324,7 +324,7 @@ func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 }
 
 // A message has no text body, and nothing the node does for a url entry asks
-// for one: listing, serving the email, and a cross-plugin clone all read
+// for one: listing, serving the email, and a cross-plugin copy all read
 // zero. Every reader of a body gates on a body kind (rpc.IsBodyKind: the deep
 // copy, the cache's prefetch; rpc.TextDocument: the client's descent), and a
 // message is a url, so the plugin serves no ReadContent at all.
@@ -335,10 +335,10 @@ func TestGmailURLEntryNeedsNoTextBody(t *testing.T) {
 		t.Fatalf("a message is kind %q; this test's premise is a url", msg.Kind)
 	}
 
-	if _, err := n.cl.CloneTile(t.Context(), &gridwellv1.CloneTileRequest{
+	if _, err := n.cl.CopyTile(t.Context(), &gridwellv1.CopyTileRequest{
 		TileId: msg.Id, DestGridId: n.home, X: 3, Y: 3,
 	}); err != nil {
-		t.Fatalf("clone the message home: %v", err)
+		t.Fatalf("copy the message home: %v", err)
 	}
 	if got := n.cards.n.Load(); got != 0 {
 		t.Fatalf("the node read %d text bodies for a url entry", got)

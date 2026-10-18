@@ -88,9 +88,9 @@ func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		copied, err := me.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: homeLink.Id, DestGridId: aHome, X: 4, Y: 2})
+		copied, err := me.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: homeLink.Id, DestGridId: aHome, X: 4, Y: 2})
 		if err != nil {
-			t.Fatalf("clone a home link into a: %v", err)
+			t.Fatalf("copy a home link into a: %v", err)
 		}
 		wantLink(t, copied, aHome, spelled, "on b")
 	})
@@ -99,7 +99,7 @@ func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 		before := m.count(ctx, meNode, bHome)
 		_, err := link(bHome, 1, aText.Id)
 		wantRefused(t, err, bHome, before)
-		_, err = me.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: mustLink(ctx, t, me, m, aText.Id).Id, DestGridId: bHome, X: 1, Y: 2})
+		_, err = me.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: mustLink(ctx, t, me, m, aText.Id).Id, DestGridId: bHome, X: 1, Y: 2})
 		wantRefused(t, err, bHome, before)
 	})
 

@@ -953,7 +953,7 @@ func (a *App) enterSegment(paneID string, seg transition.Segment) {
 		return
 	}
 	if seg.Place != nil {
-		p.Stack = seg.Place.Clone()
+		p.Stack = seg.Place.Copy()
 	}
 	p.SetView(seg.FromCx, seg.FromCy, seg.FromZoom)
 }

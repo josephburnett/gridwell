@@ -200,18 +200,18 @@ func TestOutputAndExitNameTheTile(t *testing.T) {
 	}
 }
 
-// A session holds one stream whichever tile opened it: opening a clone on the
+// A session holds one stream whichever tile opened it: opening a copy on the
 // session its source holds replaces the source's stream, and the new one is
-// bound to the clone, the tile whose preview and title the server writes.
+// bound to the copy, the tile whose preview and title the server writes.
 func TestOpenOnASessionReplacesAnotherTilesStream(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/7", "u/7", 80, 24)
 	h.reg.Open("u/7", "u/8", 80, 24)
 	if !h.dialed[0].closed {
-		t.Fatal("the source's stream must close when its clone opens the session")
+		t.Fatal("the source's stream must close when its copy opens the session")
 	}
 	if h.dialed[1].tileID != "u/8" {
-		t.Fatalf("dialed %q, want the clone u/8 bound", h.dialed[1].tileID)
+		t.Fatalf("dialed %q, want the copy u/8 bound", h.dialed[1].tileID)
 	}
 	h.dialed[1].onData([]byte{1})
 	h.dialed[1].onEnd("", false)

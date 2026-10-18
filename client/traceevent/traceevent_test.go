@@ -132,7 +132,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		dragdrop.DropDelete:         "delete",
 		dragdrop.DropRejected:       "rejected",
 		dragdrop.DropMove:           "move",
-		dragdrop.DropClone:          "clone",
+		dragdrop.DropCopy:           "copy",
 		dragdrop.DropLink:           "link",
 	}
 	if len(want) != int(dragdrop.DropLink)+1 {

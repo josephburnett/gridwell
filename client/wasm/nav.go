@@ -177,7 +177,7 @@ func (a *App) navWorldCommon() nav.World {
 		gid := a.gridIDForPane(p)
 		w.Panes = append(w.Panes, nav.PaneView{
 			ID:      p.ID,
-			Stack:   p.Stack.Clone(),
+			Stack:   p.Stack.Copy(),
 			View:    p.View,
 			Rect:    r,
 			GridID:  gid,

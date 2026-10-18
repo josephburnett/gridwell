@@ -19,9 +19,9 @@ func blobExists(t *testing.T, s *Store, id int64) bool {
 	return n > 0
 }
 
-// A PTY cannot be forked, so cloning a shell with a frozen preview carries the
-// preview blob to the clone and bumps that blob's refcount.
-func TestCloneShellCarriesScreenshot(t *testing.T) {
+// A PTY cannot be forked, so copying a shell with a frozen preview carries the
+// preview blob to the copy and bumps that blob's refcount.
+func TestCopyShellCarriesScreenshot(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -38,27 +38,27 @@ func TestCloneShellCarriesScreenshot(t *testing.T) {
 		t.Fatal("shell has no preview blob after SetShellPreview")
 	}
 
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     framed.Id,
 		DestGridId: root, X: 50, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.Kind != rpc.KindShell {
-		t.Errorf("clone kind = %q, want shell", clone.Kind)
+	if cp.Kind != rpc.KindShell {
+		t.Errorf("copy kind = %q, want shell", cp.Kind)
 	}
-	if clone.PreviewBlobId != framed.PreviewBlobId {
-		t.Errorf("clone preview blob = %d, want %d (screenshot must be carried)",
-			clone.PreviewBlobId, framed.PreviewBlobId)
+	if cp.PreviewBlobId != framed.PreviewBlobId {
+		t.Errorf("copy preview blob = %d, want %d (screenshot must be carried)",
+			cp.PreviewBlobId, framed.PreviewBlobId)
 	}
 	// Two tiles now reference the one preview blob.
 	verifyRefcounts(t, s)
 }
 
-// cloneSubtree bumps the preview blob for every copied tile that holds one, so
+// copySubtree bumps the preview blob for every copied tile that holds one, so
 // a deep copy of a shell-with-preview leaves that blob at refcount 2.
-func TestCloneCopiesShellPreviewBlob(t *testing.T) {
+func TestCopyCopiesShellPreviewBlob(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -75,10 +75,10 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Clone the well: copy-on-clone deep-copies its child grid, re-rowing the
+	// Copy the well: the copy deep-copies its child grid, re-rowing the
 	// shell-with-preview. The copy shares the immutable preview blob, so its
-	// refcount must rise to 2 — the case cloneSubtree must get right.
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	// refcount must rise to 2 — the case copySubtree must get right.
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     well.Id,
 		DestGridId: root, X: 50, Y: 0,
 	})
@@ -87,16 +87,16 @@ func TestCloneCopiesShellPreviewBlob(t *testing.T) {
 	}
 
 	// Two shell rows (original + copy) now share one preview blob.
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridId)
+	copyChild, err := s.GetGrid(ctx, cp.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cloneChild.Tiles) != 1 || cloneChild.Tiles[0].Kind != rpc.KindShell {
-		t.Fatalf("clone child = %+v, want one shell tile", cloneChild.Tiles)
+	if len(copyChild.Tiles) != 1 || copyChild.Tiles[0].Kind != rpc.KindShell {
+		t.Fatalf("copy child = %+v, want one shell tile", copyChild.Tiles)
 	}
-	previewBlob := cloneChild.Tiles[0].PreviewBlobId
+	previewBlob := copyChild.Tiles[0].PreviewBlobId
 	if previewBlob == 0 {
-		t.Fatal("cloned shell lost its preview blob")
+		t.Fatal("copied shell lost its preview blob")
 	}
 	if rc := refcount(t, s, "blobs", previewBlob); rc != 2 {
 		t.Errorf("preview blob refcount = %d, want 2", rc)

@@ -10,11 +10,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// Clone is an eager, complete copy, so everything the user set on the source
+// A copy is eager and complete, so everything the user set on the source
 // must be on the copy. An INSERT that omits content_zoom, url_history or
 // alt_user silently loses a content zoom, a back-stack, or the latch that
 // keeps the next title capture off a name the user chose.
-func TestClonePreservesAllContentColumns(t *testing.T) {
+func TestCopyPreservesAllContentColumns(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -38,36 +38,36 @@ func TestClonePreservesAllContentColumns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     tile.Id,
 		DestGridId: root, X: 5, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone: %v", err)
+		t.Fatalf("copy: %v", err)
 	}
 
-	if clone.ContentZoom != 1.5 {
-		t.Errorf("clone content_zoom = %v, want 1.5 (the source's zoom)", clone.ContentZoom)
+	if cp.ContentZoom != 1.5 {
+		t.Errorf("copy content_zoom = %v, want 1.5 (the source's zoom)", cp.ContentZoom)
 	}
-	if clone.UrlHistory != history {
-		t.Errorf("clone url_history = %q, want the source's back-stack", clone.UrlHistory)
+	if cp.UrlHistory != history {
+		t.Errorf("copy url_history = %q, want the source's back-stack", cp.UrlHistory)
 	}
-	if clone.AltText != "my page" {
-		t.Errorf("clone alt_text = %q, want %q", clone.AltText, "my page")
+	if cp.AltText != "my page" {
+		t.Errorf("copy alt_text = %q, want %q", cp.AltText, "my page")
 	}
 
 	// The behavioral half of alt_user: an automatic (non-user) title capture
-	// on the CLONE must defer to the copied user-owned name, exactly as it
+	// on the COPY must defer to the copied user-owned name, exactly as it
 	// would on the source.
-	if err := s.SetTileAlt(ctx, clone.Id, "Captured Page Title", false); err != nil {
+	if err := s.SetTileAlt(ctx, cp.Id, "Captured Page Title", false); err != nil {
 		t.Fatal(err)
 	}
-	after, err := s.GetTile(ctx, clone.Id)
+	after, err := s.GetTile(ctx, cp.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if after.AltText != "my page" {
-		t.Errorf("automatic capture clobbered the clone's user-owned name: alt = %q (alt_user latch was not copied)", after.AltText)
+		t.Errorf("automatic capture clobbered the copy's user-owned name: alt = %q (alt_user latch was not copied)", after.AltText)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestEveryTileColumnIsCopiedOrExcused(t *testing.T) {
 	// the safe direction.
 	want := map[string]bool{"id": true, "ns": true, "key": true, "tombstoned": true, "serves_page": true, "content_at": true}
 	if !reflect.DeepEqual(excused, want) {
-		t.Errorf("clone exclusions = %v, want %v — a column left out of a clone needs a reason on its descriptor entry", excused, want)
+		t.Errorf("copy exclusions = %v, want %v — a column left out of a copy needs a reason on its descriptor entry", excused, want)
 	}
 }
 

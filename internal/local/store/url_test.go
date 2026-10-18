@@ -19,9 +19,9 @@ func createURLTileForTest(t *testing.T, s *Store, root string, x int64, url stri
 	return tile
 }
 
-// TestCloneURLTile verifies that CloneTile of a URL tile carries the URL
+// TestCopyURLTile verifies that CopyTile of a URL tile carries the URL
 // and preview JPEG onto a fresh row.
-func TestCloneURLTile(t *testing.T) {
+func TestCopyURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -32,32 +32,32 @@ func TestCloneURLTile(t *testing.T) {
 		t.Fatalf("seed preview: %v", err)
 	}
 
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     src.Id,
 		DestGridId: root, X: 2, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone: %v", err)
+		t.Fatalf("copy: %v", err)
 	}
-	if clone.Kind != rpc.KindURL {
-		t.Errorf("clone kind = %q, want %q", clone.Kind, rpc.KindURL)
+	if cp.Kind != rpc.KindURL {
+		t.Errorf("copy kind = %q, want %q", cp.Kind, rpc.KindURL)
 	}
-	if clone.UrlString != src.UrlString {
-		t.Errorf("clone URLString = %q, want %q", clone.UrlString, src.UrlString)
+	if cp.UrlString != src.UrlString {
+		t.Errorf("copy URLString = %q, want %q", cp.UrlString, src.UrlString)
 	}
-	if clone.Id == src.Id {
-		t.Error("clone has same row id as source")
+	if cp.Id == src.Id {
+		t.Error("copy has same row id as source")
 	}
-	if clone.Version != src.Version {
-		t.Errorf("clone version = %d, want %d (shared until divergence)", clone.Version, src.Version)
+	if cp.Version != src.Version {
+		t.Errorf("copy version = %d, want %d (shared until divergence)", cp.Version, src.Version)
 	}
 	// Preview bytes should have copied.
-	jpeg, err := s.GetTilePreview(ctx, clone.Id)
+	jpeg, err := s.GetTilePreview(ctx, cp.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(jpeg) != "jpegbytes" {
-		t.Errorf("clone preview = %q, want \"jpegbytes\"", string(jpeg))
+		t.Errorf("copy preview = %q, want \"jpegbytes\"", string(jpeg))
 	}
 }
 
@@ -175,8 +175,8 @@ func TestSetURLStateRefusesNonURLTile(t *testing.T) {
 	}
 }
 
-// Navigating and freezing a url tile in a cloned grid lands the new address
-// and preview in this clone's row only, never leaking navigation into every clone.
+// Navigating and freezing a url tile in a copied grid lands the new address
+// and preview in this copy's row only, never leaking navigation into every copy.
 func TestSetURLStateForksSharedGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -191,9 +191,9 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Clone the well: copy-on-clone deep-copies the child grid, so wellB gets
+	// Copy the well: the copy deep-copies the child grid, so wellB gets
 	// its own independent URL tile (a re-rowed copy of wellA's).
-	wellB, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	wellB, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     wellA.Id,
 		DestGridId: root, X: 50, Y: 0,
 	})
@@ -248,7 +248,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	a := urlIn(wellA)
 	b := urlIn(wellB)
 	if a.UrlString != "https://a.example" {
-		t.Errorf("wellA URL = %q, want https://a.example (must NOT see the clone's nav)", a.UrlString)
+		t.Errorf("wellA URL = %q, want https://a.example (must NOT see the copy's nav)", a.UrlString)
 	}
 	if a.PreviewBlobId != 0 {
 		t.Errorf("wellA preview = %d, want 0 (the freeze leaked into the original)", a.PreviewBlobId)

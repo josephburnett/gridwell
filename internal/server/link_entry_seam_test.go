@@ -217,16 +217,16 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 	}
 
 	// A copy of a link is another link to the same target.
-	clone, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: link.Id, DestGridId: home, X: 3, Y: 3})
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: link.Id, DestGridId: home, X: 3, Y: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.LinkTargetId != threadID() {
-		t.Fatalf("the clone links to %q, want the thread %q", clone.LinkTargetId, threadID())
+	if cp.LinkTargetId != threadID() {
+		t.Fatalf("the copy links to %q, want the thread %q", cp.LinkTargetId, threadID())
 	}
 
 	src.set(func(m *mailSource) { m.gone = true })
-	for _, id := range []string{link.Id, clone.Id} {
+	for _, id := range []string{link.Id, cp.Id} {
 		if _, _, _, err := cl.ReadContent(ctx, id); !gwerr.IsDeadRef(err) {
 			t.Errorf("ReadContent(%s) once the thread is gone = %v, want the dead verdict", id, err)
 		}
@@ -239,8 +239,8 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 	}
 
 	src.set(func(m *mailSource) { m.gone = false })
-	if body, _, _, err := cl.ReadContent(ctx, clone.Id); err != nil || string(body) != "card of t1" {
-		t.Fatalf("the thread is back and the clone reads %q, %v", body, err)
+	if body, _, _, err := cl.ReadContent(ctx, cp.Id); err != nil || string(body) != "card of t1" {
+		t.Fatalf("the thread is back and the copy reads %q, %v", body, err)
 	}
 }
 

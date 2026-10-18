@@ -35,9 +35,9 @@ func TestPutAndGet(t *testing.T) {
 	}
 }
 
-// Tile-id keying makes this hold by construction: two clones have distinct
+// Tile-id keying makes this hold by construction: two copies have distinct
 // ids, so an edit to one leaves the sibling's body alone.
-func TestTileContentEditDoesNotLeakToClone(t *testing.T) {
+func TestTileContentEditDoesNotLeakToCopy(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText}})
 	c.PutGrid(&gridwellv1.Grid{Id: "2"}, []*gridwellv1.Tile{&gridwellv1.Tile{Id: "20", GridId: "2", Kind: rpc.KindText}})
@@ -640,7 +640,7 @@ func TestGridDeclarationsAreNilSafe(t *testing.T) {
 }
 
 // Grid hands out the cached rows themselves, so a gesture that shapes one
-// into something of its own clones first: the bar's promote drag carries the
+// into something of its own copies first: the bar's promote drag carries the
 // visited row at 1x1, and writing that through the handed-out pointer would
 // resize the row the crumb is standing on. A gesture is a read, and a read
 // leaves the cache byte-identical.
@@ -663,8 +663,8 @@ func TestShapingAHandedOutRowLeavesTheCachedRowAlone(t *testing.T) {
 }
 
 // The other half of the same contract: a caller that means the change hands
-// the clone back, and only then does the cached row move.
-func TestAClonedRowLandsThroughUpdateTile(t *testing.T) {
+// the copy back, and only then does the cached row move.
+func TestACopiedRowLandsThroughUpdateTile(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		{Id: "100", GridId: "1", Kind: rpc.KindURL, X: 4, Y: 7, W: 3, H: 2, Version: 9},
@@ -675,14 +675,14 @@ func TestAClonedRowLandsThroughUpdateTile(t *testing.T) {
 	c.UpdateTile("1", patched)
 
 	if got := mustRow(t, c, "1", "100"); got.UrlString != "https://example.com/" {
-		t.Errorf("url_string = %q, want the handed-back clone's", got.UrlString)
+		t.Errorf("url_string = %q, want the handed-back copy's", got.UrlString)
 	}
 }
 
 // PatchTile is the one optimistic patch: the caller's row stays as it was
 // handed out, and the change lands on the cached row through the same arm a
 // TileChanged event takes.
-func TestPatchTileEditsACloneAndLands(t *testing.T) {
+func TestPatchTileEditsACopyAndLands(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
 		{Id: "100", GridId: "1", Kind: rpc.KindWell, W: 1, H: 1, Version: 9},

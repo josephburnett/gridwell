@@ -37,7 +37,7 @@ func TestClassifyPriority(t *testing.T) {
 		want Kind
 	}{
 		{
-			name: "tile center is the clone handle",
+			name: "tile center is the copy handle",
 			in: Input{
 				InGridView: true, OverTile: true, InTileCenter: true,
 				Region: swap,

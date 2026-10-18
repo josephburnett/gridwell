@@ -8,9 +8,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A clone names its source's session, a clone of a clone the same one, and a
-// copy inside a cloned well too: every copy is one more viewer of one shell.
-func TestCloneSharesTheShellSession(t *testing.T) {
+// A copy names its source's session, a copy of a copy the same one, and a
+// copy inside a copied well too: every copy is one more viewer of one shell.
+func TestCopySharesTheShellSession(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -21,15 +21,15 @@ func TestCloneSharesTheShellSession(t *testing.T) {
 	if src.ShellSession != "" {
 		t.Fatalf("a fresh shell names %q, want its own id (empty)", src.ShellSession)
 	}
-	b, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: src.Id, DestGridId: root, X: 2})
+	b, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src.Id, DestGridId: root, X: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: b.Id, DestGridId: root, X: 4})
+	c, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: b.Id, DestGridId: root, X: 4})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, got := range map[string]*gridwellv1.Tile{"clone": b, "clone of a clone": c} {
+	for name, got := range map[string]*gridwellv1.Tile{"copy": b, "copy of a copy": c} {
 		if rpc.ShellSession(got) != src.Id {
 			t.Errorf("%s names session %q, want the source's %q", name, rpc.ShellSession(got), src.Id)
 		}
@@ -43,7 +43,7 @@ func TestCloneSharesTheShellSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wc, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: w.Id, DestGridId: root, X: 8})
+	wc, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: w.Id, DestGridId: root, X: 8})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestCloneSharesTheShellSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(g.Tiles) != 1 || rpc.ShellSession(g.Tiles[0]) != inner.Id {
-		t.Fatalf("the shell inside a cloned well = %v, want one naming %q", g.Tiles, inner.Id)
+		t.Fatalf("the shell inside a copied well = %v, want one naming %q", g.Tiles, inner.Id)
 	}
 }
 
@@ -66,7 +66,7 @@ func TestShellSessionNamersCountsEveryCopy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: src.Id, DestGridId: root, X: 2})
+	b, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src.Id, DestGridId: root, X: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,11 +80,11 @@ func TestShellSessionNamersCountsEveryCopy(t *testing.T) {
 			t.Errorf("%s: namers = %+v, want {Rows:%d Previewed:%d}", stage, got, rows, previewed)
 		}
 	}
-	want("source and clone", 2, 0)
+	want("source and copy", 2, 0)
 	if _, err := s.SetShellPreview(ctx, b.Id, []byte("preview")); err != nil {
 		t.Fatal(err)
 	}
-	want("the clone froze a preview", 2, 1)
+	want("the copy froze a preview", 2, 1)
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: src.Id}); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestShellSessionNamersCountsEveryCopy(t *testing.T) {
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: src.Id}); err != nil {
 		t.Fatal(err)
 	}
-	want("the source destroyed, the clone remains", 1, 1)
+	want("the source destroyed, the copy remains", 1, 1)
 	hardDelete(t, s, b.Id)
 	want("the last row destroyed", 0, 0)
 }

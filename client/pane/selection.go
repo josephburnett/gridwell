@@ -30,7 +30,7 @@ func (s *Stack) SelectionTarget(inPaneTile bool) SelectionOwner {
 }
 
 // Select sets the frame's selection, reporting whether it changed. The slice
-// is replaced whole, never written in place, because a cloned stack shares it.
+// is replaced whole, never written in place, because a copied stack shares it.
 func (f *Frame) Select(ids []string) bool {
 	next := slices.Clone(ids)
 	slices.Sort(next)

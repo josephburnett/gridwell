@@ -1009,8 +1009,8 @@ func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.Til
 	return resp, err
 }
 
-func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	resp, err := c.Namespace.CloneTile(ctx, in)
+func (c *Layer) CopyTile(ctx context.Context, in *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.CopyTile(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.foldTile(ctx, resp.GetTile()) // the request names the source, which stays

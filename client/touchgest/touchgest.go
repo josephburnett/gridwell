@@ -4,7 +4,7 @@
 //	tap                → left click        (focus / descend / select)
 //	drag past slop     → left drag         (pan / move tile / menu drag)
 //	long-press (hold)  → right button      (the whole right-drag vocabulary:
-//	                                        ascend circle, clone, resize,
+//	                                        ascend circle, copy, resize,
 //	                                        split, swap)
 //	long-press, lifted → shift + left click (select toggle)
 //	  without moving

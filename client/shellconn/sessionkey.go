@@ -7,7 +7,7 @@ import (
 
 // SessionKey is the session a pane opening row attaches, the key every
 // client-side shell fact uses: rpc.ShellSession of the content row it resolves
-// to, so a link keys on its target's session as a clone does. target is that
+// to, so a link keys on its target's session as a copy does. target is that
 // row for a link and unread for anything else; ok is false while a link's
 // target is not known, because the link's own spelling names a tile, not a
 // session.

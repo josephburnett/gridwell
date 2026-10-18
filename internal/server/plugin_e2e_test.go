@@ -30,10 +30,10 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 1. Mount the fs plugin (rooted at dir) by cloning its node-grid tile —
+	// 1. Mount the fs plugin (rooted at dir) by copying its node-grid tile —
 	//    the UI's right-drag gesture. It is a plain well in the local store
 	//    whose child grid lives in the fs plugin.
-	well := mountByClone(t, cl, fsPluginUUID, root, 0, 0)
+	well := mountByCopy(t, cl, fsPluginUUID, root, 0, 0)
 	child := well.ChildGridId
 	if !strings.HasPrefix(child, fsPluginUUID+"/") {
 		t.Fatalf("child_grid_id = %q, want %q prefix", child, fsPluginUUID)

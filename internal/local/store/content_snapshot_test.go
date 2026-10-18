@@ -57,7 +57,7 @@ func calledFromDriver() bool {
 
 // A tile that is visible is readable: a ReadContent that overlaps a content
 // write answers the bytes before or the bytes after, never NotFound. The
-// trace that found it: a cross-node clone creates an empty text tile, its
+// trace that found it: a cross-node copy creates an empty text tile, its
 // event reaches a view, the view reads, and the copy's WriteContent lands
 // between the read's row and its blob, so the read fetches the empty blob the
 // write just released.

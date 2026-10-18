@@ -6,7 +6,7 @@ import { homeEnv } from './homes';
 import { tileAt } from './oracle';
 
 // A link to a shell attaches the session its target names (shellconn.SessionKey),
-// so a link to a clone shares the clone's source's session like the clone does:
+// so a link to a copy shares the copy's source's session like the copy does:
 // going live on the link takes the session over from the source, which pauses on
 // a preview of its own, and going live on the source takes it back. The node keys
 // its one attached client by session, so a client that keyed the link by its
@@ -23,7 +23,7 @@ function tmuxClients(home: string): string[] {
   return r.status === 0 ? r.stdout.split('\n').filter((l) => l.trim() !== '') : [];
 }
 
-test('a link to a clone takes over its source session, and the source takes it back', async ({ gw, home, window }) => {
+test('a link to a copy takes over its source session, and the source takes it back', async ({ gw, home, window }) => {
   // An evicted socket is the one way a terminal ends with an exit while its
   // session lives; a takeover closes instead.
   const exits: string[] = [];
@@ -63,20 +63,20 @@ test('a link to a clone takes over its source session, and the source takes it b
   await expect.poll(markerRow, { timeout: 10_000 }).toBe(true);
   const source = (await shellAt(cx, cy))!;
 
-  // A clone of it, and a link to the clone, from the right pane.
+  // A copy of it, and a link to the copy, from the right pane.
   await gw.focusPane(await pane(right.id));
-  await gw.cloneTileCell(cx, cy, cx + 2, cy);
-  const clone = (await shellAt(cx + 2, cy))!;
-  expect(clone.shellSession, 'the clone names its source session').toBe(source.id);
+  await gw.copyTileCell(cx, cy, cx + 2, cy);
+  const copy = (await shellAt(cx + 2, cy))!;
+  expect(copy.shellSession, 'the copy names its source session').toBe(source.id);
   await gw.linkTileCell(cx + 2, cy, cx + 4, cy);
   const link = (await shellAt(cx + 4, cy))!;
-  expect(link.linkTargetId, 'the link names the clone').toBe(clone.id);
+  expect(link.linkTargetId, 'the link names the copy').toBe(copy.id);
 
   // Going live on the link takes the session over.
   await gw.descendCell(cx + 4, cy);
   await expect
     .poll(shellViews, { message: 'the link holds the one live terminal', timeout: 15_000 })
-    .toEqual({ [right.id]: clone.id });
+    .toEqual({ [right.id]: copy.id });
   await gw.shellAttached();
   expect(await markerRow(), 'the link shows what was typed in the source').toBe(true);
   await expect
@@ -86,7 +86,7 @@ test('a link to a clone takes over its source session, and the source takes it b
     })
     .toBeGreaterThan(0);
   await expect.poll(() => tmuxClients(home).length, { timeout: 10_000 }).toBe(1);
-  expect(await shellViews(), 'one holder, never the source beside it').toEqual({ [right.id]: clone.id });
+  expect(await shellViews(), 'one holder, never the source beside it').toEqual({ [right.id]: copy.id });
   expect(exits, 'the source closed by takeover, not by an evicted socket').toEqual([]);
 
   // Going live on the source takes it back.
@@ -106,9 +106,9 @@ test('a link to a clone takes over its source session, and the source takes it b
   await clickSlot();
   await expect
     .poll(shellViews, { message: 'the link holds the one live terminal again', timeout: 15_000 })
-    .toEqual({ [right.id]: clone.id });
+    .toEqual({ [right.id]: copy.id });
   await gw.shellAttached();
-  expect(await shellViews()).toEqual({ [right.id]: clone.id });
+  expect(await shellViews()).toEqual({ [right.id]: copy.id });
   expect(exits, 'the source closed by takeover again').toEqual([]);
 
   // End the session so tmux never hangs the harness close.

@@ -1143,7 +1143,7 @@ func init() {
 		},
 	})
 
-	// v15: shell_session. An existing shell, and an existing clone of one
+	// v15: shell_session. An existing shell, and an existing copy of one
 	// that never shared, keep naming their own sessions: NULL.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 15,

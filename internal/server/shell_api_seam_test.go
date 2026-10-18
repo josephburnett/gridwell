@@ -176,19 +176,19 @@ func TestShellAPIForwardsResize(t *testing.T) {
 	t.Fatal("resize never reached the PTY")
 }
 
-// Two tiles naming one session, a shell and its clone, attached from two
+// Two tiles naming one session, a shell and its copy, attached from two
 // clients: the second takes the session over, so the first viewer's stream
 // ends clean, and the one PTY is reused rather than a second tmux client
 // attached.
 func TestShellAPIAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
 	a := f.createShell(t, 0, 0)
-	b, err := f.cl.CloneTile(context.Background(), &gridwellv1.CloneTileRequest{TileId: a.Id, DestGridId: f.root, X: 2})
+	b, err := f.cl.CopyTile(context.Background(), &gridwellv1.CopyTileRequest{TileId: a.Id, DestGridId: f.root, X: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rpc.ShellSession(b) != a.Id {
-		t.Fatalf("the clone names session %q, want %q", rpc.ShellSession(b), a.Id)
+		t.Fatalf("the copy names session %q, want %q", rpc.ShellSession(b), a.Id)
 	}
 	first, second := f.clientStack(), f.clientStack()
 	first.reg.Open(a.Id, a.Id, 80, 24)

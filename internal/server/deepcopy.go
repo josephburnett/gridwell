@@ -14,7 +14,7 @@ import (
 )
 
 // Cross-plugin copy. deepCopyTile is the one owner of what a copy of a tile
-// into another namespace is: the top-level clone enters through it at the
+// into another namespace is: the top-level copy enters through it at the
 // destination cell, the walk inside a copied well at each source cell, so the
 // rule is written once and holds at every depth. The router reads the source
 // subtree through the namespace interface and materializes it in the
@@ -35,7 +35,7 @@ import (
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;
-//   - a shell copies as a link to its source, since a clone shares its
+//   - a shell copies as a link to its source, since a copy shares its
 //     source's session and a session is namespace-local;
 //   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
@@ -106,14 +106,14 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	case q.LinkTargetId != "":
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
 	case t.Kind == rpc.KindShell:
-		// A clone shares its source's session, and a session lives on the
+		// A copy shares its source's session, and a session lives on the
 		// node that started it, so across namespaces the copy is a link.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
 	case rpc.IsBodyKind(t.Kind), t.Kind == rpc.KindURL:
 		return rt.copyLeaf(ctx, src, t, q, dst, dstGrid, x, y)
 	}
 	return nil, status.Errorf(gcodes.InvalidArgument,
-		"cross-plugin clone: unsupported tile kind %q", t.Kind)
+		"cross-plugin copy: unsupported tile kind %q", t.Kind)
 }
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address

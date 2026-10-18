@@ -154,9 +154,9 @@ func TestResetClearsEveryFrame(t *testing.T) {
 	}
 }
 
-// Frames/At/Clone are read-only views: mutating what they hand back must
+// Frames/At/Copy are read-only views: mutating what they hand back must
 // never reach the live stack.
-func TestFramesAndCloneDoNotAlias(t *testing.T) {
+func TestFramesAndCopyDoNotAlias(t *testing.T) {
 	s := StackAt("home/1", []string{"4", "9"}, "")
 	fr := s.Frames()
 	if len(fr) != 3 {
@@ -166,10 +166,10 @@ func TestFramesAndCloneDoNotAlias(t *testing.T) {
 	if s.Anchor() != "home/1" {
 		t.Fatal("Frames aliased the live stack")
 	}
-	c := s.Clone()
+	c := s.Copy()
 	c.Pop()
 	if s.Depth() != 3 {
-		t.Fatal("Clone aliased the live stack")
+		t.Fatal("Copy aliased the live stack")
 	}
 }
 
@@ -203,7 +203,7 @@ func TestARestoredFrameAdoptsItsOwnersViewOnce(t *testing.T) {
 		t.Fatalf("the placeholder must still draw: %+v", p.View)
 	}
 
-	// Split before the row answers: the clone waits for the same row.
+	// Split before the row answers: the copy waits for the same row.
 	np, err := tr.Split(Vertical)
 	if err != nil {
 		t.Fatal(err)

@@ -380,8 +380,8 @@ func dropName(v dragdrop.DropAction) string {
 		return "rejected"
 	case dragdrop.DropMove:
 		return "move"
-	case dragdrop.DropClone:
-		return "clone"
+	case dragdrop.DropCopy:
+		return "copy"
 	case dragdrop.DropLink:
 		return "link"
 	}

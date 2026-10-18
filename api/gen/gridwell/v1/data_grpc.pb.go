@@ -45,7 +45,7 @@ const (
 	Gridwell_PlaceTile_FullMethodName         = "/gridwell.v1.Gridwell/PlaceTile"
 	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
 	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
-	Gridwell_CloneTile_FullMethodName         = "/gridwell.v1.Gridwell/CloneTile"
+	Gridwell_CopyTile_FullMethodName          = "/gridwell.v1.Gridwell/CopyTile"
 	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
 	Gridwell_SetFraming_FullMethodName        = "/gridwell.v1.Gridwell/SetFraming"
 	Gridwell_SetSelection_FullMethodName      = "/gridwell.v1.Gridwell/SetSelection"
@@ -86,7 +86,7 @@ type GridwellClient interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	CopyTile(ctx context.Context, in *CopyTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -273,10 +273,10 @@ func (c *gridwellClient) SetTile(ctx context.Context, in *SetTileRequest, opts .
 	return out, nil
 }
 
-func (c *gridwellClient) CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+func (c *gridwellClient) CopyTile(ctx context.Context, in *CopyTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CloneTile_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Gridwell_CopyTile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +393,7 @@ type GridwellServer interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error)
 	SetTile(context.Context, *SetTileRequest) (*TileResponse, error)
-	CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error)
+	CopyTile(context.Context, *CopyTileRequest) (*TileResponse, error)
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -458,8 +458,8 @@ func (UnimplementedGridwellServer) CreateTile(context.Context, *CreateTileReques
 func (UnimplementedGridwellServer) SetTile(context.Context, *SetTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTile not implemented")
 }
-func (UnimplementedGridwellServer) CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CloneTile not implemented")
+func (UnimplementedGridwellServer) CopyTile(context.Context, *CopyTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CopyTile not implemented")
 }
 func (UnimplementedGridwellServer) DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteTile not implemented")
@@ -719,20 +719,20 @@ func _Gridwell_SetTile_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_CloneTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CloneTileRequest)
+func _Gridwell_CopyTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CopyTileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).CloneTile(ctx, in)
+		return srv.(GridwellServer).CopyTile(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_CloneTile_FullMethodName,
+		FullMethod: Gridwell_CopyTile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CloneTile(ctx, req.(*CloneTileRequest))
+		return srv.(GridwellServer).CopyTile(ctx, req.(*CopyTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -904,8 +904,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_SetTile_Handler,
 		},
 		{
-			MethodName: "CloneTile",
-			Handler:    _Gridwell_CloneTile_Handler,
+			MethodName: "CopyTile",
+			Handler:    _Gridwell_CopyTile_Handler,
 		},
 		{
 			MethodName: "DeleteTile",

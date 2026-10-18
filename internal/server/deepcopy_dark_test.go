@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The offline deep-copy seam: cloning a partially-reachable remote grid never
+// The offline deep-copy seam: copying a partially-reachable remote grid never
 // refuses and never leaves a silent hole. A tile whose bytes the source cannot
 // serve degrades to a link, an unreachable nested room to a well link, and a
 // url with an unreachable preview copies with no preview. The degrade keys on
@@ -171,7 +171,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	dark.darkGrids[localID(t, nested.ChildGridId)] = true
 	dark.darkPreviews[localID(t, urlTile.Id)] = true
 
-	copyTop, err := cl.CloneTile(ctx, &pb.CloneTileRequest{
+	copyTop, err := cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: well.Id, DestGridId: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
@@ -217,7 +217,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 	}
 }
 
-func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
+func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
 	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
 	ctx := context.Background()
 
@@ -228,14 +228,14 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	dark.darkContent[localID(t, txt.Id)] = true
-	got, err := cl.CloneTile(ctx, &pb.CloneTileRequest{
+	got, err := cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: txt.Id, DestGridId: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("dark leaf clone must degrade, not fail: %v", err)
+		t.Fatalf("dark leaf copy must degrade, not fail: %v", err)
 	}
 	if got.LinkTargetId != txt.Id || !got.Reference {
-		t.Fatalf("dark leaf clone should be a link to %s: %+v", txt.Id, got)
+		t.Fatalf("dark leaf copy should be a link to %s: %+v", txt.Id, got)
 	}
 
 	// A well whose OWN child grid is dark: the whole room degrades to an
@@ -250,14 +250,14 @@ func TestTopLevelCloneDegradesWhenSourceDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	dark.darkGrids[localID(t, well.ChildGridId)] = true
-	gotWell, err := cl.CloneTile(ctx, &pb.CloneTileRequest{
+	gotWell, err := cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: well.Id, DestGridId: rootB, X: 3, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("dark well clone must degrade, not fail: %v", err)
+		t.Fatalf("dark well copy must degrade, not fail: %v", err)
 	}
 	if !gotWell.Reference || gotWell.ChildGridId != well.ChildGridId {
-		t.Fatalf("dark well clone should be a link sharing %s: %+v", well.ChildGridId, gotWell)
+		t.Fatalf("dark well copy should be a link sharing %s: %+v", well.ChildGridId, gotWell)
 	}
 	if gotWell.ViewCx != 5 || gotWell.ViewCy != 6 || gotWell.ViewZoom != 1.5 {
 		t.Errorf("degraded well link lost the framing: %+v", gotWell)
@@ -282,7 +282,7 @@ func TestGoneIsNeverALink(t *testing.T) {
 	}
 	dark.verdict[localID(t, txt.Id)] = status.Error(codes.NotFound, "no such tile")
 
-	_, err = cl.CloneTile(ctx, &pb.CloneTileRequest{
+	_, err = cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: well.Id, DestGridId: rootB, X: 0, Y: 0,
 	})
 	if err == nil || !strings.Contains(err.Error(), "deep copy incomplete") {
@@ -295,7 +295,7 @@ func TestGoneIsNeverALink(t *testing.T) {
 // dark on the framing writeback) must surface as that failure — never fire
 // the dark-SOURCE degrade, which would stack a link well on the very cell
 // the partial copy already occupies (the user then saw an "overlap" refusal
-// pointing at a grid they never touched). Same guard the top-level clone
+// pointing at a grid they never touched). Same guard the top-level copy
 // already has (out != nil before sourceUnreachable); the child arm lacked it.
 func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
 	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
@@ -307,7 +307,7 @@ func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A NESTED well, so the failing copy runs through the child arm (the
-	// top-level clone has its own, correct, guard).
+	// top-level copy has its own, correct, guard).
 	inner, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: well.ChildGridId, Tile: &pb.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, AltText: "inner"}})
 	if err != nil {
 		t.Fatal(err)
@@ -325,7 +325,7 @@ func TestMidCopyFailureNeverDoublesTheWell(t *testing.T) {
 	// up through the child arm with the inner copy already created.
 	dark.darkFramingFrom = 2
 
-	_, cerr := cl.CloneTile(ctx, &pb.CloneTileRequest{
+	_, cerr := cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: well.Id, DestGridId: rootA, X: 0, Y: 0,
 	})
 	if cerr == nil {

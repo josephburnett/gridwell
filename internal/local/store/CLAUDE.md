@@ -43,8 +43,8 @@ intact.
 - `columns.go` (`tilesColumns`, `gridsColumns`, `connectionsColumns`) is the
   one description of a column: name, SQL type and constraints, comment, the
   version whose data it carries (`since`), the `gridwellv1.Tile`/`gridwellv1.Grid` field it
-  binds to when on the wire, and a `noCopy` reason when a clone skips it. The
-  DDL, the SELECT, the scan, the clone INSERT, and every rebuild copy list
+  binds to when on the wire, and a `noCopy` reason when a copy skips it. The
+  DDL, the SELECT, the scan, the copy INSERT, and every rebuild copy list
   derive from it. Only the tiles kind `CHECK` (`tilesCheck`) is literal text.
 - `connections` is in the chain like everything else, adopted by v13. The
   store owns its shape and its queries (`connections.go`), and writes its
@@ -72,7 +72,7 @@ intact.
 
 An on-wire column also needs its proto field (same snake_case name);
 `TestDescriptorMatchesProto` fails until they agree. A derived proto field
-goes on that test's `wireOnly` list with its reason. If a clone must supply
+goes on that test's `wireOnly` list with its reason. If a copy must supply
 a value, `insertTileCopy`'s value map is where; `copyBinding` errors by name
 until it does.
 

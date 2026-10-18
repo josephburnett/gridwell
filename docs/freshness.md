@@ -201,7 +201,7 @@ never produces, so the one write the outbox could not hear about was the one
 it exists for. While a write is in flight its key is parked, which is the
 truth about it; a drain that races the flight re-sends it, and that is safe
 because every write that parks is a last-writer-wins overwrite of one key
-(the writes that would replay unsafely — a create, a clone, a placement —
+(the writes that would replay unsafely — a create, a copy, a placement —
 carry no id and park nothing; they reconcile visibly instead).
 
 `inflight.Deadline` is the bound on every client RPC, read and write, and

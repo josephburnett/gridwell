@@ -4,13 +4,13 @@ import { placeTile, setSelection, tileAt, Tile } from './oracle';
 import type { GridwellDriver } from './driver';
 
 // A gesture on a selected tile acts on its grid's whole selection
-// (dragdrop.CarryOf): a left-drag moves the set, a right-drag clones it, ctrl
+// (dragdrop.CarryOf): a left-drag moves the set, a right-drag copies it, ctrl
 // + right-drag links it, the trashcan deletes it, each tile its own write and
 // claim. The selection is made through the node (SetSelection, as another
 // window would), not a gesture, so these pin what the set does and nothing
 // about how it is made. The server's rows are the oracle.
 
-const WRITES = ['PlaceTile', 'CloneTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
+const WRITES = ['PlaceTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
 async function watchWrites(win: Page): Promise<() => string[]> {
   const seen: string[] = [];
@@ -113,10 +113,10 @@ test('a set move onto a cell the set does not vacate is refused whole', async ({
   expect(tileAt(snap, 'text', cx - 1, cy + 3)?.id).toBe(c.id);
 });
 
-test('a right-drag on a selected tile clones the set in its layout', async ({ gw }) => {
+test('a right-drag on a selected tile copies the set in its layout', async ({ gw }) => {
   const { f, cx, cy, a, b } = await selectedPair(gw);
   const n = texts(await gw.getGrid(f.gridID)).length;
-  await gw.cloneTileCell(cx - 1, cy, cx - 1, cy - 2);
+  await gw.copyTileCell(cx - 1, cy, cx - 1, cy - 2);
   const snap = await gw.getGrid(f.gridID);
   expect(texts(snap).length, 'two copies').toBe(n + 2);
   const ca = tileAt(snap, 'text', cx - 1, cy - 2);
@@ -206,11 +206,11 @@ test('a refused set move flies every refused tile home', async ({ gw, window }) 
   expect(tileAt(snap, 'text', cx + 4, cy + 1)?.id, "b stays where the other window put it").toBe(b.id);
 });
 
-test('a refused clone of one tile of the set flies that tile home alone', async ({ gw, window }) => {
+test('a refused copy of one tile of the set flies that tile home alone', async ({ gw, window }) => {
   const { f, cx, cy, a, b } = await selectedPair(gw);
   const { snapBackMs } = await gw.cadences();
   await holdLanding(window, 4 * snapBackMs);
-  await window.route('**/gridwell.v1.Gridwell/CloneTile', async (r) => {
+  await window.route('**/gridwell.v1.Gridwell/CopyTile', async (r) => {
     if ((r.request().postDataBuffer()?.toString('latin1') ?? '').includes(b.id)) {
       await r.fulfill({
         status: 400,
@@ -222,7 +222,7 @@ test('a refused clone of one tile of the set flies that tile home alone', async 
     await r.continue();
   });
   const n = texts(await gw.getGrid(f.gridID)).length;
-  await gw.cloneTileCell(cx - 1, cy, cx - 1, cy - 2);
+  await gw.copyTileCell(cx - 1, cy, cx - 1, cy - 2);
   await expect
     .poll(async () => (await ghost(window)).returning, { message: 'the refused copy flies home' })
     .toEqual([b.id]);

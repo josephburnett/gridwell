@@ -166,19 +166,19 @@ func TestFloorCellAtCoversWholeCell(t *testing.T) {
 	}
 }
 
-// A match on anything a clone shares with its source would suppress every
-// clone of the dragged tile.
+// A match on anything a copy shares with its source would suppress every
+// copy of the dragged tile.
 func TestHiddenMatchByTileIDNotLineage(t *testing.T) {
 	const sourceID = "5"
-	const cloneID = "7" // a different row showing the same content
+	const copyID = "7" // a different row showing the same content
 	const otherID = "9"
 
 	src := Carry{{ID: sourceID}}
 	if !HiddenMatch(src, "p1", "p1", sourceID) {
 		t.Error("dragged source tile should be hidden in its pane")
 	}
-	if HiddenMatch(src, "p1", "p1", cloneID) {
-		t.Error("a clone (different row id) must NOT be hidden")
+	if HiddenMatch(src, "p1", "p1", copyID) {
+		t.Error("a copy (different row id) must NOT be hidden")
 	}
 	if HiddenMatch(src, "p1", "p1", otherID) {
 		t.Error("an unrelated tile must NOT be hidden")
@@ -322,10 +322,10 @@ func TestDecideDropTargetRefusesTiles(t *testing.T) {
 	if got := DecideDrop(base); got != DropRejected {
 		t.Errorf("move onto read-only grid = %v, want DropRejected", got)
 	}
-	clone := base
-	clone.Intent = IntentCopy
-	if got := DecideDrop(clone); got != DropRejected {
-		t.Errorf("clone onto read-only grid = %v, want DropRejected", got)
+	cp := base
+	cp.Intent = IntentCopy
+	if got := DecideDrop(cp); got != DropRejected {
+		t.Errorf("copy onto read-only grid = %v, want DropRejected", got)
 	}
 	ok := base
 	ok.TargetRefusesTiles = false
@@ -342,10 +342,10 @@ func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	if got := DecideDrop(rearrange); got != DropMove {
 		t.Errorf("same-grid move on read-only grid = %v, want DropMove", got)
 	}
-	clone := rearrange
-	clone.Intent = IntentCopy
-	if got := DecideDrop(clone); got != DropRejected {
-		t.Errorf("same-grid clone on read-only grid = %v, want DropRejected (creation)", got)
+	cp := rearrange
+	cp.Intent = IntentCopy
+	if got := DecideDrop(cp); got != DropRejected {
+		t.Errorf("same-grid copy on read-only grid = %v, want DropRejected (creation)", got)
 	}
 }
 
@@ -412,8 +412,8 @@ func TestDecideDrop(t *testing.T) {
 	}{
 		// The happy paths.
 		{"clean left drag -> move", base, DropMove},
-		{"clean right drag -> clone",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropClone},
+		{"clean right drag -> copy",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropCopy},
 
 		// Early branches beat everything.
 		{"bare click -> navigate (beats all)",
@@ -452,16 +452,16 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, Occupied: true}, DropRejected},
 
 		// The copy intent.
-		{"clone with a clean target -> clone",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropClone},
-		// SameCell and Occupied still reject a clone.
-		{"clone onto occupied -> rejected",
+		{"copy with a clean target -> copy",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy}, DropCopy},
+		// SameCell and Occupied still reject a copy.
+		{"copy onto occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, Occupied: true}, DropRejected},
-		{"clone onto same cell -> rejected",
+		{"copy onto same cell -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, SameCell: true}, DropRejected},
 		// Forbidden is a per-gesture input, and the verdict treats a
-		// forbidden clone like a forbidden move.
-		{"forbidden clone -> rejected",
+		// forbidden copy like a forbidden move.
+		{"forbidden copy -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, Forbidden: true}, DropRejected},
 
 		// The link intent, ctrl with a right-drag. The gesture asks for a
@@ -488,8 +488,8 @@ func TestDecideDrop(t *testing.T) {
 		// A cross-namespace left-drag is a link.
 		{"cross-plugin left drag -> link",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true}, DropLink},
-		{"cross-plugin right drag -> clone (copy, not link)",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy}, DropClone},
+		{"cross-plugin right drag -> copy (copy, not link)",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy}, DropCopy},
 		{"cross-plugin link onto occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Occupied: true}, DropRejected},
 		{"cross-plugin link onto read-only target -> rejected",
@@ -526,7 +526,7 @@ func TestGhostPlanForDrop(t *testing.T) {
 			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
 		{"move snaps to target cell", DropMove, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
-		{"clone snaps to target cell", DropClone, false,
+		{"copy snaps to target cell", DropCopy, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
 		// A cross-namespace left-drag previews as a link, or the source's
 		// survival after the drop would read as a surprise duplicate.

@@ -119,13 +119,13 @@ func TestShellSessionQualifiesOnlyWhenSet(t *testing.T) {
 	if leafOwn.ShellSession != "" || leafOwn.Id != "n1/7" || leafOwn.GridId != "n1/1" {
 		t.Errorf("QualifyOwnIDs = %+v, want ids qualified and no session", leafOwn)
 	}
-	clone := &pb.Tile{Id: "8", GridId: "1", ShellSession: "7"}
-	QualifyOwnIDs("n1", clone)
-	if clone.ShellSession != "n1/7" {
-		t.Errorf("a clone's session qualified to %q, want n1/7", clone.ShellSession)
+	cp := &pb.Tile{Id: "8", GridId: "1", ShellSession: "7"}
+	QualifyOwnIDs("n1", cp)
+	if cp.ShellSession != "n1/7" {
+		t.Errorf("a copy's session qualified to %q, want n1/7", cp.ShellSession)
 	}
 	leaf := InboundHop("n1/1", "n1", false)
-	if got := leaf.PeelTile(clone).ShellSession; got != "7" {
+	if got := leaf.PeelTile(cp).ShellSession; got != "7" {
 		t.Errorf("a leaf hop peeled the session to %q, want 7", got)
 	}
 }

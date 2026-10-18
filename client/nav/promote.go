@@ -38,7 +38,7 @@ func (m *Machine) promote(g Gesture, w World) Plan {
 	pl.add(Effect{Kind: EffScaleContent, PaneID: op.ID})
 	pl.add(Effect{Kind: EffPlaceURLView, PaneID: op.ID, TileID: created.Id, Tile: created})
 	// The row dies only if known ephemeral and no sibling pane still shows
-	// the visit; a split clone deletes it on its own ascent. The same rule
+	// the visit; a split copy deletes it on its own ascent. The same rule
 	// the ascent applies, retired after the relocate so the layout flushed
 	// first names the new tile.
 	if old := w.Promote.old(); old != nil {

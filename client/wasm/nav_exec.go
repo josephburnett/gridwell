@@ -142,7 +142,7 @@ func (a *App) navInstallPlace(e nav.Effect) {
 		return
 	}
 	if e.Stack != nil {
-		p.Stack = e.Stack.Clone()
+		p.Stack = e.Stack.Copy()
 	}
 	if e.Viewport != nil {
 		p.View = rpc.Saved(*e.Viewport)

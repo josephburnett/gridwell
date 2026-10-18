@@ -27,7 +27,7 @@ test('workspace descent keeps the outer live url running, parked; ascent shows i
   expect(pt).toBeTruthy();
 
   // A swatch click is the ephemeral visit. Ephemeral visits are stripped from
-  // the layout capture, so the fresh workspace will not clone this pane, no
+  // the layout capture, so the fresh workspace will not copy this pane, no
   // one-surface takeover applies, and the outer view must keep running hidden.
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
   await gw.clickMenuSwatch('url');

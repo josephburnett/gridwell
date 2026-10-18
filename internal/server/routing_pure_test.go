@@ -42,7 +42,7 @@ func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
 
 // TestQualifyTilesReference: the authoritative link signal. A child that
 // arrived ALREADY qualified is a reference (a mount / exit well / cross-plugin
-// clone) — Reference must be set; render draws it dashed. A bare interior child
+// copy) — Reference must be set; render draws it dashed. A bare interior child
 // is owned content — Reference stays false (solid). This is the exact bug the
 // fix closes: a same-plugin mount (child uuid == grid uuid) is still a
 // reference, which a bare uuid comparison would call owned and render solid.
@@ -83,7 +83,7 @@ func TestQualifyTilesEmptyChildStaysEmpty(t *testing.T) {
 	}
 }
 
-// A clone's shell session names a tile in the same namespace, so the client
+// A copy's shell session names a tile in the same namespace, so the client
 // compares it against qualified ids and it must be qualified like one.
 func TestQualifyTilesQualifiesAShellSession(t *testing.T) {
 	out := qualifyTiles("uuidA", []*pb.Tile{{Id: "6", GridId: "1", Kind: "shell", ShellSession: "5"}})

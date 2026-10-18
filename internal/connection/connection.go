@@ -752,8 +752,8 @@ func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest
 	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.PlaceTile, prependTileResp)
 }
 
-func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CloneTile, prependTileResp)
+func (s *Server) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CopyTile, prependTileResp)
 }
 
 func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
@@ -792,7 +792,7 @@ func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	if err != nil {
 		return nil, err
 	}
-	// Clone before rewriting: with no wire between the caller and this hop,
+	// Copy before rewriting: with no wire between the caller and this hop,
 	// the request is the caller's own message (namespace.Namespace).
 	rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
 	rewritten.TileId = local
@@ -819,7 +819,7 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 	if err != nil {
 		return err
 	}
-	// Clone before rewriting the bind: the caller still owns `first`.
+	// Copy before rewriting the bind: the caller still owns `first`.
 	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
 	sentBind := false
@@ -854,7 +854,7 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 				return nil
 			}
 			// The hub hands the same event to every subscriber and nobody
-			// mutates it; the router's qualification clones.
+			// mutates it; the router's qualification copies.
 			if err := send(ev); err != nil {
 				return err
 			}

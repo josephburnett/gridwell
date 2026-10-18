@@ -65,14 +65,14 @@ func TestSplitHorizontalCreatesSibling(t *testing.T) {
 	if newP.ID == first.ID {
 		t.Error("new pane has same id as old")
 	}
-	// Clone preserves state.
+	// Copy preserves state.
 	if !viewIs(newP.View, 10, 20, 2.0) {
-		t.Errorf("new pane state not cloned: %+v", newP)
+		t.Errorf("new pane state not copied: %+v", newP)
 	}
 	if len(newP.Path()) != 3 {
-		t.Errorf("path not cloned: %+v", newP.Path())
+		t.Errorf("path not copied: %+v", newP.Path())
 	}
-	// Mutating the original should not affect the clone (deep copy).
+	// Mutating the original should not affect the copy (deep copy).
 	first.Pop()
 	if len(newP.Path()) != 3 {
 		t.Error("place was shallow-copied")
@@ -87,22 +87,22 @@ func TestSetFocusUnknown(t *testing.T) {
 	}
 }
 
-func TestCloneCarriesTextFields(t *testing.T) {
+func TestCopyCarriesTextFields(t *testing.T) {
 	src := &Pane{ID: "p1", Stack: StackAt("u/1", []string{"1", "2"}, "42")}
 	src.SetView(3, 4, 5)
 	src.TextMode = "text"
 	src.TextScrollX, src.TextScrollY, src.TextZoom = 1.5, 7.25, 1.1
-	dst := src.Clone("p2")
+	dst := src.Copy("p2")
 	if dst.ContentID() != "42" || dst.TextMode != "text" {
-		t.Errorf("content focus/mode not cloned: %+v", dst)
+		t.Errorf("content focus/mode not copied: %+v", dst)
 	}
 	if dst.TextScrollX != 1.5 || dst.TextScrollY != 7.25 || dst.TextZoom != 1.1 {
-		t.Errorf("text scroll/zoom not cloned: %+v", dst)
+		t.Errorf("text scroll/zoom not copied: %+v", dst)
 	}
-	// And changing the source post-clone shouldn't bleed through.
+	// And changing the source post-copy shouldn't bleed through.
 	src.Pop()
 	if dst.ContentID() != "42" {
-		t.Error("clone shares its place with the source")
+		t.Error("copy shares its place with the source")
 	}
 }
 
@@ -169,15 +169,15 @@ func TestPoppedDoesNotTouchTheLiveStack(t *testing.T) {
 	}
 }
 
-// TestCloneDeepCopiesTheStack: a clone must not share its frames with the
+// TestCopyDeepCopiesTheStack: a copy must not share its frames with the
 // source, else editing one pane's nav history mutates the other's.
-func TestCloneDeepCopiesTheStack(t *testing.T) {
+func TestCopyDeepCopiesTheStack(t *testing.T) {
 	src := &Pane{ID: "p1", Stack: StackAt("db-uuid/1", []string{"3", "4"}, "")}
-	dst := src.Clone("p2")
+	dst := src.Copy("p2")
 	src.Pop()
 	src.Pop()
 	if dst.Depth() != 3 {
-		t.Errorf("clone shares its frames with the source: depth %d", dst.Depth())
+		t.Errorf("copy shares its frames with the source: depth %d", dst.Depth())
 	}
 }
 
@@ -436,7 +436,7 @@ func TestGridNotice(t *testing.T) {
 
 // A link out of a live tile and a ctrl-click descent open in the same place:
 // a new pane below the focused one, or the focused pane itself when it is too
-// short to split. A clone of a content descent reports that it must leave it.
+// short to split. A copy of a content descent reports that it must leave it.
 func TestSplitBelowForOpen(t *testing.T) {
 	tr := NewTree()
 	first := tr.FocusedPane()
@@ -451,13 +451,13 @@ func TestSplitBelowForOpen(t *testing.T) {
 		t.Fatalf("tall grid pane: (%v, %v, %v) focus=%s panes=%d", p.ID, split, shed, tr.Focus, tr.Count())
 	}
 	if p.Anchor() != "u/1" || len(p.Path()) != 1 {
-		t.Fatalf("the new pane is not a clone of the place: %+v", p.Stack)
+		t.Fatalf("the new pane is not a copy of the place: %+v", p.Stack)
 	}
-	// A content descent is cloned too, and the clone must shed it.
+	// A content descent is copied too, and the copy must shed it.
 	p.Push(viewed(Frame{Door: "77", Content: true}, 0, 0, 1))
 	q, split, shed := tr.SplitBelowForOpen(tall)
 	if !split || !shed || q.ContentID() != "77" {
-		t.Fatalf("content clone: (%v, %v, %v) content=%q", q.ID, split, shed, q.ContentID())
+		t.Fatalf("content copy: (%v, %v, %v) content=%q", q.ID, split, shed, q.ContentID())
 	}
 }
 

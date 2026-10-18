@@ -7,10 +7,10 @@ import { tileAt, updateText } from './oracle';
 // for what landed and for what did not change about the source. These cross the
 // seam from gesture to verdict to wire verb: the canvas classifies the press
 // (client/dragdrop.Intent), DecideDrop verdicts DropLink, and the commit fires
-// CreateLeafLink or CreateTile-with-a-child-grid instead of CloneTile. A unit
+// CreateLeafLink or CreateTile-with-a-child-grid instead of CopyTile. A unit
 // test on either side alone would not catch a gesture wired to the wrong verb.
 
-test('ctrl+right-drag links inside one namespace; plain right-drag still clones', async ({ gw }) => {
+test('ctrl+right-drag links inside one namespace; plain right-drag still copies', async ({ gw }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const grid = f.gridID;
@@ -52,17 +52,17 @@ test('ctrl+right-drag links inside one namespace; plain right-drag still clones'
   expect(await gw.getTileContent(link!.id), 'the link reads the source bytes')
     .toBe('the original bytes');
 
-  // ── PLAIN RIGHT-DRAG STILL CLONES ───────────────────────────────────────
+  // ── PLAIN RIGHT-DRAG STILL COPIES ───────────────────────────────────────
   // Without ctrl the same gesture copies: a new row owning its own bytes and
   // naming no target.
-  await gw.cloneTileCell(cx, cy, cx + 2, cy);
+  await gw.copyTileCell(cx, cy, cx + 2, cy);
   snap = await gw.getGrid(grid);
   const copy = tileAt(snap, 'text', cx + 2, cy);
   expect(copy, 'right-drag landed a tile').toBeTruthy();
   expect(copy!.id, 'the copy is its own row').not.toBe(before.id);
-  expect(copy!.linkTargetId ?? '', 'a clone names no link target').toBe('');
-  expect(copy!.reference ?? false, 'a clone is not a reference').toBeFalsy();
-  expect(await gw.getTileContent(copy!.id), 'the clone copied the bytes')
+  expect(copy!.linkTargetId ?? '', 'a copy names no link target').toBe('');
+  expect(copy!.reference ?? false, 'a copy is not a reference').toBeFalsy();
+  expect(await gw.getTileContent(copy!.id), 'the copy copied the bytes')
     .toBe('the original bytes');
 
   // ── DELETING A LINK UNLINKS ─────────────────────────────────────────────
@@ -93,7 +93,7 @@ test('ctrl+right-drag on a well links the same child grid, not a copy of it', as
   const linkWell = tileAt(snap, 'well', cx, cy + 2);
   expect(linkWell, 'ctrl+right-drag left a well at the drop cell').toBeTruthy();
   expect(linkWell!.id).not.toBe(well!.id);
-  // The doorway leads to the SAME grid, a second way in. A right-drag clone
+  // The doorway leads to the SAME grid, a second way in. A right-drag copy
   // would have deep-copied the subtree into a fresh grid.
   expect(String(linkWell!.childGridId), 'the link opens the source well\'s own child grid')
     .toBe(childGrid);

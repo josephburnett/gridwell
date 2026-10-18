@@ -190,7 +190,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// The offline deep copy: right-drag the remote well into the local
 	// plugin while the mount is dark. Cached text becomes a real copy and
 	// never-read text becomes a link to the original.
-	copyResp := rpc(t, localOrigin, "CloneTile", map[string]any{
+	copyResp := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": well["id"], "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
 	if copyResp["reference"] == true {

@@ -302,8 +302,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	}
 }
 
-func (p *Plugin) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CloneTile(ctx, req))
+func (p *Plugin) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.CopyTile(ctx, req))
 }
 
 // PlaceTile is the single placement writeback; the store derives the
@@ -561,7 +561,7 @@ func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 				return nil
 			}
 			// Nothing downstream writes into the shared event:
-			// server.qualifyTiles clones.
+			// server.qualifyTiles copies.
 			if err := send(ev); err != nil {
 				return err
 			}

@@ -252,7 +252,7 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	})
 }
 
-func TestEventCloneTileEmitsTileChanged(t *testing.T) {
+func TestEventCopyTileEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -262,14 +262,14 @@ func TestEventCloneTileEmitsTileChanged(t *testing.T) {
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	if _, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     w.Id,
 		DestGridId: root, X: 5, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "CloneTile", got, map[string]int{"tile_changed": 1})
+	assertCounts(t, "CopyTile", got, map[string]int{"tile_changed": 1})
 }
 
 func TestEventUpdateTextEmitsTileChanged(t *testing.T) {
@@ -289,27 +289,27 @@ func TestEventUpdateTextEmitsTileChanged(t *testing.T) {
 	assertCounts(t, "UpdateText", got, map[string]int{"tile_changed": 1})
 }
 
-func TestEventCloneURLEmitsTileChanged(t *testing.T) {
+func TestEventCopyURLEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 	src := createURLTileForTest(t, s, root, 0, "https://example.com")
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	if _, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     src.Id,
 		DestGridId: root, X: 5, Y: 0,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "CloneURL", got, map[string]int{"tile_changed": 1})
+	assertCounts(t, "CopyURL", got, map[string]int{"tile_changed": 1})
 }
 
-// TestEventCloneEditEmitsOnlyTileChanged: a clone is an independent copy, so
+// TestEventCopyEditEmitsOnlyTileChanged: a copy is an independent copy, so
 // editing inside it is a plain in-place mutation — just a TileChanged, no fork
-// machinery (there is no fork under copy-on-clone).
-func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
+// machinery (there is no fork under eager copy).
+func TestEventCopyEditEmitsOnlyTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -320,18 +320,18 @@ func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 	if _, err := s.CreateWell(ctx, w.ChildGridId, 0, 0, 1, 1, ""); err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     w.Id,
 		DestGridId: root, X: 5, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridId)
+	copyChild, err := s.GetGrid(ctx, cp.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cInner := cloneChild.Tiles[0]
+	cInner := copyChild.Tiles[0]
 
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
@@ -342,7 +342,7 @@ func TestEventCloneEditEmitsOnlyTileChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
-	assertCounts(t, "ResizeTile-in-clone", got, map[string]int{
+	assertCounts(t, "ResizeTile-in-copy", got, map[string]int{
 		"tile_changed": 1,
 	})
 }

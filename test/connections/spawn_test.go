@@ -281,7 +281,7 @@ func TestConnectionSpawn(t *testing.T) {
 	//    gesture, and read the content back through the link. A right-drag
 	//    deep-copies through the chain, so the local home gains an
 	//    independent solid well whose text body matches the remote's.
-	deepCopy := rpc(t, localOrigin, "CloneTile", map[string]any{
+	deepCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
 	if deepCopy["reference"] == true {

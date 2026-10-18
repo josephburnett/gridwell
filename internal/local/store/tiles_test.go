@@ -285,9 +285,9 @@ func TestSetFraming(t *testing.T) {
 	}
 }
 
-// Re-framing one clone of a well must not bump the version, so the clones
+// Re-framing one copy of a well must not bump the version, so the copies
 // still share a version even though their stored framing has diverged.
-func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
+func TestFramingKeepsCopysAtSharedVersion(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -295,26 +295,26 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     w.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.Version != w.Version {
-		t.Fatalf("clone starts at version %d, want %d", clone.Version, w.Version)
+	if cp.Version != w.Version {
+		t.Fatalf("copy starts at version %d, want %d", cp.Version, w.Version)
 	}
-	// Frame only the clone.
+	// Frame only the copy.
 	framed, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: clone.Id,
+		TileId: cp.Id,
 		Cx:     3, Cy: 4, Zoom: 2.0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if framed.Version != w.Version {
-		t.Errorf("framed clone version = %d, want %d (still shared)", framed.Version, w.Version)
+		t.Errorf("framed copy version = %d, want %d (still shared)", framed.Version, w.Version)
 	}
 	// The original is untouched and at the same version.
 	wIDInt, _ := parseID(w.Id)
@@ -326,7 +326,7 @@ func TestFramingKeepsClonesAtSharedVersion(t *testing.T) {
 		t.Errorf("original drifted: version=%d, want %d", orig.Version, w.Version)
 	}
 	if orig.ViewCx == framed.ViewCx && orig.ViewCy == framed.ViewCy {
-		t.Error("framing did not diverge between clones")
+		t.Error("framing did not diverge between copies")
 	}
 }
 

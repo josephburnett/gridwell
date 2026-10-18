@@ -370,6 +370,6 @@ func (p *planner) fetchPaneGrid(w World, paneID, gridID string) {
 // install installs a pane's place on the plan's own copy of the stack, so what
 // the caller does with its own afterwards reaches nobody.
 func (p *planner) install(paneID string, st pane.Stack, vp *rpc.Framing) {
-	c := st.Clone()
+	c := st.Copy()
 	p.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &c, Viewport: vp})
 }

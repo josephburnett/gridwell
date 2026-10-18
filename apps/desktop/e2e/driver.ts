@@ -556,9 +556,9 @@ export class GridwellDriver {
     await this.dragCell(fromCx, fromCy, toCx, toCy, 'left');
   }
 
-  // The clone gesture, a right-drag from a tile's inner third. A new
+  // The copy gesture, a right-drag from a tile's inner third. A new
   // independent tile lands at the destination cell.
-  async cloneTileCell(fromCx: number, fromCy: number, toCx: number, toCy: number): Promise<void> {
+  async copyTileCell(fromCx: number, fromCy: number, toCx: number, toCy: number): Promise<void> {
     await this.dragCell(fromCx, fromCy, toCx, toCy, 'right');
   }
 
@@ -591,7 +591,7 @@ export class GridwellDriver {
 
   // A right-drag always copies. Across a plugin boundary a leaf copies its
   // bytes, a solid well is refused, and a link tile copies as another link.
-  async cloneDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
+  async copyDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
     await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'right');
   }
 
@@ -614,7 +614,7 @@ export class GridwellDriver {
   }
 
   // A right-drag from outside the tile's center third, so the gesture is a
-  // resize rather than a clone.
+  // resize rather than a copy.
   async resizeTileCell(cx: number, cy: number, toCx: number, toCy: number): Promise<void> {
     const f = await this.focused();
     // 0.35 cells past center: outside the inner-third zone of about +/-0.17.

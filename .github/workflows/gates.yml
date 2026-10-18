@@ -23,7 +23,7 @@ jobs:
       # The plugins are their own repository. The Makefile's PLUGINS_DIR
       # defaults to ../gridwell-plugins, beside this checkout, and `make
       # build` and `make check` build the plugin binaries from there.
-      - name: clone gridwell-plugins beside this checkout
+      - name: fetch gridwell-plugins beside this checkout
         run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       - uses: actions/setup-go@v5
         with:
@@ -68,7 +68,7 @@ jobs:
       # The plugins are their own repository. The Makefile's PLUGINS_DIR
       # defaults to ../gridwell-plugins, beside this checkout, and `make
       # build` and `make check` build the plugin binaries from there.
-      - name: clone gridwell-plugins beside this checkout
+      - name: fetch gridwell-plugins beside this checkout
         run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       # Every live shell rides a tmux session (internal/local/tmux), so it
       # is pinned present rather than trusted to the runner image.

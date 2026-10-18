@@ -25,10 +25,10 @@
 // there is no copy layer:
 //
 //   - a Namespace must not retain or mutate a request after it returns; one
-//     that rewrites ids clones first, as internal/connection does;
+//     that rewrites ids copies first, as internal/connection does;
 //   - a Namespace must not mutate a response after returning it;
 //   - a caller must not mutate a response in place. The qualification layer
-//     clones so two subscribers of one event never see each other's prefix.
+//     copies so two subscribers of one event never see each other's prefix.
 package namespace
 
 import (
@@ -54,7 +54,7 @@ type Namespace interface {
 	CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error)
 	SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error)
 	PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error)
-	CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error)
+	CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error)
 	DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error)
 	SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error)
 	SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error)

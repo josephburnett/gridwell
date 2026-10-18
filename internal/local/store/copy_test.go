@@ -82,10 +82,10 @@ func TestSwapTileBlob(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestCloneCopiesChildGrid: cloning a well deep-copies its child subtree into
+// TestCopyCopiesChildGrid: copying a well deep-copies its child subtree into
 // fresh, independent rows — a new child grid id and re-rowed inner tiles.
 // Nothing is shared.
-func TestCloneCopiesChildGrid(t *testing.T) {
+func TestCopyCopiesChildGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -99,37 +99,37 @@ func TestCloneCopiesChildGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     w.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone: %v", err)
+		t.Fatalf("copy: %v", err)
 	}
-	if clone.Id == w.Id {
-		t.Errorf("clone has same row id as original")
+	if cp.Id == w.Id {
+		t.Errorf("copy has same row id as original")
 	}
-	if clone.ChildGridId == w.ChildGridId {
-		t.Errorf("clone child grid = %s == original (expected an independent copy)", clone.ChildGridId)
+	if cp.ChildGridId == w.ChildGridId {
+		t.Errorf("copy child grid = %s == original (expected an independent copy)", cp.ChildGridId)
 	}
 
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridId)
+	copyChild, err := s.GetGrid(ctx, cp.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cloneChild.Tiles) != 1 {
-		t.Fatalf("clone child has %d tiles, want 1", len(cloneChild.Tiles))
+	if len(copyChild.Tiles) != 1 {
+		t.Fatalf("copy child has %d tiles, want 1", len(copyChild.Tiles))
 	}
-	ct := cloneChild.Tiles[0]
+	ct := copyChild.Tiles[0]
 	if ct.Id == inner.Id {
 		t.Errorf("inner tile should be re-rowed in the copy, still has id %s", inner.Id)
 	}
 	verifyRefcounts(t, s)
 }
 
-// TestCloneIndependentEdit: after cloning a well, editing inside the clone
+// TestCopyIndependentEdit: after copying a well, editing inside the copy
 // writes in place (id stable) and the original subtree is byte-identical.
-func TestCloneIndependentEdit(t *testing.T) {
+func TestCopyIndependentEdit(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -142,7 +142,7 @@ func TestCloneIndependentEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     w.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
@@ -150,20 +150,20 @@ func TestCloneIndependentEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridId)
+	copyChild, err := s.GetGrid(ctx, cp.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cInner := cloneChild.Tiles[0]
+	cInner := copyChild.Tiles[0]
 	resized, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
 		TileId: cInner.Id,
 		GridId: cInner.GridId, X: 0, Y: 0, W: 3, H: 3,
 	})
 	if err != nil {
-		t.Fatalf("resize through clone: %v", err)
+		t.Fatalf("resize through copy: %v", err)
 	}
 	if resized.Id != cInner.Id {
-		t.Error("edit re-rowed the tile; copy-on-clone edits must be in place")
+		t.Error("edit re-rowed the tile; an edit after a copy must be in place")
 	}
 	if resized.W != 3 || resized.H != 3 {
 		t.Errorf("resize did not apply: %+v", resized)
@@ -185,9 +185,9 @@ func TestCloneIndependentEdit(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestCloneOneLevelByteIdentity: editing a cloned text tile leaves the
-// original byte-identical, and the clone's tile keeps its row id.
-func TestCloneOneLevelByteIdentity(t *testing.T) {
+// TestCopyOneLevelByteIdentity: editing a copied text tile leaves the
+// original byte-identical, and the copy's tile keeps its row id.
+func TestCopyOneLevelByteIdentity(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -221,39 +221,39 @@ func TestCloneOneLevelByteIdentity(t *testing.T) {
 		return data
 	}
 
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     outer.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone: %v", err)
+		t.Fatalf("copy: %v", err)
 	}
 
-	cloneChild, err := s.GetGrid(ctx, clone.ChildGridId)
+	copyChild, err := s.GetGrid(ctx, cp.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cText := cloneChild.Tiles[0]
+	cText := copyChild.Tiles[0]
 	updated, err := s.WriteContent(ctx, cText.Id, cText.Version, []byte("# mutated"))
 	if err != nil {
-		t.Fatalf("update through clone: %v", err)
+		t.Fatalf("update through copy: %v", err)
 	}
 	if updated.Id != cText.Id {
-		t.Error("update re-rowed the clone's text; edits must be in place")
+		t.Error("update re-rowed the copy's text; edits must be in place")
 	}
 
 	if got := snap(outer.Id); string(got) != string(original) {
 		t.Errorf("original path = %q, want %q (mutation leaked)", got, original)
 	}
-	if got := snap(clone.Id); string(got) != "# mutated" {
-		t.Errorf("clone path = %q, want # mutated", got)
+	if got := snap(cp.Id); string(got) != "# mutated" {
+		t.Errorf("copy path = %q, want # mutated", got)
 	}
 	verifyRefcounts(t, s)
 }
 
-// TestCloneTwoLevelByteIdentity: a two-level clone is fully independent —
-// editing the original's deep leaf doesn't touch the clone.
-func TestCloneTwoLevelByteIdentity(t *testing.T) {
+// TestCopyTwoLevelByteIdentity: a two-level copy is fully independent —
+// editing the original's deep leaf doesn't touch the copy.
+func TestCopyTwoLevelByteIdentity(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -299,15 +299,15 @@ func TestCloneTwoLevelByteIdentity(t *testing.T) {
 		return data
 	}
 
-	a2, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	a2, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     a.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone A: %v", err)
+		t.Fatalf("copy A: %v", err)
 	}
 	if a2.ChildGridId == a.ChildGridId {
-		t.Fatalf("clone should deep-copy the child grid; got shared %s", a2.ChildGridId)
+		t.Fatalf("copy should deep-copy the child grid; got shared %s", a2.ChildGridId)
 	}
 
 	mutated := []byte("# mutated")
@@ -328,9 +328,9 @@ func TestCloneTwoLevelByteIdentity(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestCloneThreeIndependentCopies: clone twice, edit the original; both copies
+// TestCopyThreeIndependentCopies: copy twice, edit the original; both copies
 // keep the original content (independent rows).
-func TestCloneThreeIndependentCopies(t *testing.T) {
+func TestCopyThreeIndependentCopies(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -365,19 +365,19 @@ func TestCloneThreeIndependentCopies(t *testing.T) {
 		return data
 	}
 
-	a2, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	a2, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     a.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone A -> A2: %v", err)
+		t.Fatalf("copy A -> A2: %v", err)
 	}
-	a3, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	a3, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     a2.Id,
 		DestGridId: root, X: 20, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone A2 -> A3: %v", err)
+		t.Fatalf("copy A2 -> A3: %v", err)
 	}
 
 	mutated := []byte("# mutated")
@@ -397,7 +397,7 @@ func TestCloneThreeIndependentCopies(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestRefcountGCBlobOnTileDelete pins blob refcount/GC end-to-end: a cloned
+// TestRefcountGCBlobOnTileDelete pins blob refcount/GC end-to-end: a copied
 // text shares the blob (refcount 2), GC'd only when the last reference goes.
 func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	s := newTestStore(t)
@@ -408,21 +408,21 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     a.Id,
 		DestGridId: root, X: 5, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.BlobId != a.BlobId {
-		t.Fatalf("clone blob id = %d, want %d (shared)", clone.BlobId, a.BlobId)
+	if cp.BlobId != a.BlobId {
+		t.Fatalf("copy blob id = %d, want %d (shared)", cp.BlobId, a.BlobId)
 	}
 	if rc := refcount(t, s, "blobs", a.BlobId); rc != 2 {
-		t.Fatalf("blob refcount after clone = %d, want 2", rc)
+		t.Fatalf("blob refcount after copy = %d, want 2", rc)
 	}
 
-	hardDelete(t, s, clone.Id)
+	hardDelete(t, s, cp.Id)
 	if rc := refcount(t, s, "blobs", a.BlobId); rc != 1 {
 		t.Errorf("blob refcount after first destroy = %d, want 1", rc)
 	}

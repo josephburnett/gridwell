@@ -91,7 +91,7 @@ func (f *fake) SetTile(context.Context, *pb.SetTileRequest) (*pb.TileResponse, e
 func (f *fake) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
-func (f *fake) CloneTile(context.Context, *pb.CloneTileRequest) (*pb.TileResponse, error) {
+func (f *fake) CopyTile(context.Context, *pb.CopyTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
 func (f *fake) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {

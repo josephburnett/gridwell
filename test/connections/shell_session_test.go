@@ -1,8 +1,8 @@
 //go:build connections
 
-// Shell sessions across a real connection: a clone made on the far node names
-// its source's session there, and attaching the clone through this node's
-// /shell API runs that one session; a shell cloned onto this node from the far
+// Shell sessions across a real connection: a copy made on the far node names
+// its source's session there, and attaching the copy through this node's
+// /shell API runs that one session; a shell copied onto this node from the far
 // one cannot share a session that lives over there, so it lands as a link.
 
 package connections_test
@@ -44,22 +44,22 @@ func TestShellSessionsAcrossAConnection(t *testing.T) {
 		"gridId": farRoot, "tile": map[string]any{"kind": "shell", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	srcID := src["id"].(string)
-	clone := rpc(t, localOrigin, "CloneTile", map[string]any{
+	cp := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": srcID, "destGridId": farRoot, "x": 2, "y": 0,
 	})["tile"].(map[string]any)
-	cloneID := clone["id"].(string)
-	if got, _ := clone["shellSession"].(string); got != srcID {
-		t.Fatalf("a clone on the far node names session %q, want its source %q spelled through the hop", got, srcID)
+	copyID := cp["id"].(string)
+	if got, _ := cp["shellSession"].(string); got != srcID {
+		t.Fatalf("a copy on the far node names session %q, want its source %q spelled through the hop", got, srcID)
 	}
 
-	// Attaching the clone starts the source's session on the far node.
+	// Attaching the copy starts the source's session on the far node.
 	out := make(chan []byte, 64)
 	exits := make(chan shellstream.Exit, 4)
 	reg := shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: localOrigin, HTTPClient: httpFor(localOrigin)}),
 		func(_ string, b []byte) { out <- append([]byte(nil), b...) },
 		func(e shellstream.Exit) { exits <- e })
-	reg.Open(srcID, cloneID, 80, 24)
+	reg.Open(srcID, copyID, 80, 24)
 	t.Cleanup(func() { reg.Close(srcID) })
 	marker := "gw-far-shared"
 	reg.Write(srcID, []byte("printf '%s\\n' "+marker+"\r"))
@@ -70,23 +70,23 @@ func TestShellSessionsAcrossAConnection(t *testing.T) {
 		case b := <-out:
 			seen.Write(b)
 		case e := <-exits:
-			t.Fatalf("the clone's attachment ended: %+v", e)
+			t.Fatalf("the copy's attachment ended: %+v", e)
 		case <-deadline:
-			t.Fatalf("no output through the far clone within 20s: %q", seen.String())
+			t.Fatalf("no output through the far copy within 20s: %q", seen.String())
 		}
 	}
-	for _, id := range []string{srcID, cloneID} {
+	for _, id := range []string{srcID, copyID} {
 		if alive, _ := rpc(t, localOrigin, "ShellSessionAlive", map[string]any{"tileId": id})["alive"].(bool); !alive {
-			t.Errorf("ShellSessionAlive(%s) = false: the clone's attach must have started its source's session", id)
+			t.Errorf("ShellSessionAlive(%s) = false: the copy's attach must have started its source's session", id)
 		}
 	}
 
 	// Across nodes the copy is a link to its source.
-	cross := rpc(t, localOrigin, "CloneTile", map[string]any{
+	cross := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": srcID, "destGridId": homeRoot, "x": 4, "y": 4,
 	})["tile"].(map[string]any)
 	if got, _ := cross["linkTargetId"].(string); got != srcID || cross["reference"] != true {
-		t.Fatalf("a shell cloned across nodes = %v, want a link to %q", cross, srcID)
+		t.Fatalf("a shell copied across nodes = %v, want a link to %q", cross, srcID)
 	}
 
 	// End the session so the far tmux server does not outlive the test.

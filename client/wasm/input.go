@@ -45,7 +45,7 @@ func (a *App) installCanvasInput() {
 		}
 		return a.onMouseUp(this, args)
 	}), captureOpts)
-	// Right-click is the clone/resize gesture stem, not a menu.
+	// Right-click is the copy/resize gesture stem, not a menu.
 	a.canvas.Call("addEventListener", "contextmenu", js.FuncOf(func(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		return nil
@@ -584,7 +584,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		return nil
 	}
 	d := a.dragging
-	// The one threshold, shared with the right-button clone drag.
+	// The one threshold, shared with the right-button copy drag.
 	if !a.advanceDragGhost(d, sx, sy) {
 		return nil
 	}
@@ -611,7 +611,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 
 // advanceDragGhost promotes an armed drag past the threshold and materializes
 // its ghost, once, for both buttons. A move hides the original by row id,
-// because a by-lineage hide would vanish every clone; a creating drag shows
+// because a by-lineage hide would vanish every copy; a creating drag shows
 // both, since what lands is new.
 func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 	if d.started {
@@ -629,7 +629,7 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 	size := d.srcCellSize
 	if size <= 0 {
 		// A template drag has no srcCellSize: the menu's lives in screen px,
-		// not cells. A right-drag clone keeps the bare cellPx fallback.
+		// not cells. A right-drag copy keeps the bare cellPx fallback.
 		size = cellPx
 		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.intent.Creates() {
 			if v, ok := src.Live(); ok {

@@ -17,7 +17,7 @@ import (
 // PaneView is one pane as navigation reads it.
 type PaneView struct {
 	ID string
-	// Stack is a clone: the machine reads it and returns a new one, holding no
+	// Stack is a copy: the machine reads it and returns a new one, holding no
 	// place of its own between calls.
 	Stack pane.Stack
 	// View is the live viewport, the transition's scratch values
@@ -214,8 +214,8 @@ func (w World) current(gridID string) bool {
 }
 
 // otherPaneShows reports that another pane is descended into tileID, so
-// leaving does not delete it: splitting an ephemeral visit clones the descent,
-// and the clone's ascent must not delete the row the source pane still shows.
+// leaving does not delete it: splitting an ephemeral visit copies the descent,
+// and the copy's ascent must not delete the row the source pane still shows.
 func (w World) otherPaneShows(paneID, tileID string) bool {
 	for _, p := range w.Panes {
 		if p.ID != paneID && p.Stack.ContentID() == tileID {

@@ -25,7 +25,7 @@ func zoomOf(z float64) rpc.ContentZoom {
 //   - captures, facts the server observed rather than edits the user made, so
 //     a capture must never outrank the user's own claim;
 //   - framing, the viewport and the text scroll, last-writer-wins;
-//   - layout: place, move, resize, clone, delete. A move claims the placement
+//   - layout: place, move, resize, copy, delete. A move claims the placement
 //     it saw rather than a version, so it never conflicts with typing; overlap
 //     is refused server-side in the same transaction.
 //
@@ -282,9 +282,9 @@ var versionCases = []versionCase{
 	{
 		// The source row is untouched; the copy carries its version, so the
 		// two are the same content until one diverges.
-		name: "CloneTile/source row", subject: textSubject, bumps: false,
+		name: "CopyTile/source row", subject: textSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+			_, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 				TileId: tile.Id, DestGridId: tile.GridId, X: 6, Y: 6,
 			})
 			return err

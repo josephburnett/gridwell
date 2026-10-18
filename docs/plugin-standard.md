@@ -174,7 +174,7 @@ lists a link to it.
 
 **Why.** "A plugin entry may be a link to another of its entries" and "one
 thing listed in many collections is one tile" (2026-10-02). Two entries with
-one key are two tiles: placement, a clone and a link each attach to one of
+one key are two tiles: placement, a copy and a link each attach to one of
 them, and the user sees one thing twice.
 
 **Example.** `hey/mail/entries.go:33-44`:

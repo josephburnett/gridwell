@@ -10,7 +10,7 @@ function countKind(snap: GridSnapshot, kind: string): number {
   return (snap.tiles ?? []).filter((t) => t.kind === kind).length;
 }
 
-test('tile gestures (move, clone, resize, delete) mutate server state', async ({ gw }) => {
+test('tile gestures (move, copy, resize, delete) mutate server state', async ({ gw }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const grid = f.gridID;
@@ -28,12 +28,12 @@ test('tile gestures (move, clone, resize, delete) mutate server state', async ({
   expect(tileAt(snap, 'text', cx - 2, cy), 'tile moved to the new cell').toBeTruthy();
   expect(tileAt(snap, 'text', cx, cy), 'old cell vacated').toBeFalsy();
 
-  // ── CLONE ───────────────────────────────────────────────────────────────
+  // ── COPY ───────────────────────────────────────────────────────────────
   const before = countKind(await gw.getGrid(grid), 'text');
-  await gw.cloneTileCell(cx - 2, cy, cx - 2, cy - 2);
+  await gw.copyTileCell(cx - 2, cy, cx - 2, cy - 2);
   snap = await gw.getGrid(grid);
-  expect(countKind(snap, 'text'), 'clone added one text tile').toBe(before + 1);
-  expect(tileAt(snap, 'text', cx - 2, cy - 2), 'clone at the drop cell').toBeTruthy();
+  expect(countKind(snap, 'text'), 'copy added one text tile').toBe(before + 1);
+  expect(tileAt(snap, 'text', cx - 2, cy - 2), 'copy at the drop cell').toBeTruthy();
   expect(tileAt(snap, 'text', cx - 2, cy), 'original still in place (eager copy)').toBeTruthy();
 
   // ── RESIZE ──────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ test('tile gestures (move, clone, resize, delete) mutate server state', async ({
   expect(Number(resized.h), 'tile grew taller').toBeGreaterThan(1);
 
   // ── DELETE ──────────────────────────────────────────────────────────────
-  // The resized clone now spans where the moved original sits, so trash a fresh
+  // The resized copy now spans where the moved original sits, so trash a fresh
   // 1x1 tile instead and keep the target unambiguous.
   await gw.openMenu();
   await gw.dragCreate('markdown', cx + 1, cy + 1);

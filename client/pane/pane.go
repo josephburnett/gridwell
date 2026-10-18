@@ -44,10 +44,10 @@ type Pane struct {
 	Stack
 }
 
-func (p *Pane) Clone(newID string) *Pane {
+func (p *Pane) Copy(newID string) *Pane {
 	c := *p
 	c.ID = newID
-	c.Stack = p.Stack.Clone()
+	c.Stack = p.Stack.Copy()
 	return &c
 }
 
@@ -186,7 +186,7 @@ func findParentSplit(n *TreeNode, targetID string) *Split {
 }
 
 // Split splits the focused pane along dir at ratio 0.5. The new pane is a
-// clone, place and views included, holding no selection: the set is what one
+// copy, place and views included, holding no selection: the set is what one
 // pane has in hand (2026-10-15).
 func (t *Tree) Split(dir Direction) (*Pane, error) {
 	t.Zoomed = "" // structural edits unzoom first
@@ -195,7 +195,7 @@ func (t *Tree) Split(dir Direction) (*Pane, error) {
 		return nil, errors.New("no focused pane")
 	}
 	t.nextID++
-	newPane := focused.Clone(fmt.Sprintf("%sp%d", t.IDPrefix, t.nextID))
+	newPane := focused.Copy(fmt.Sprintf("%sp%d", t.IDPrefix, t.nextID))
 	newPane.unselectAll()
 
 	var replaced bool
@@ -310,8 +310,8 @@ func (t *Tree) Recency() []string {
 // live tile and a ctrl-click descent both land in a new pane below the
 // focused one, at half its height. target is that pane, or the focused pane
 // itself when it is too short for two minimum panes, so an open never lands
-// nowhere. shedContent reports that the new pane cloned a content level: one
-// live surface per tile means the clone cannot keep the descent, so the
+// nowhere. shedContent reports that the new pane copied a content level: one
+// live surface per tile means the copy cannot keep the descent, so the
 // caller ascends it before opening.
 func (t *Tree) SplitBelowForOpen(r Rect) (target *Pane, split, shedContent bool) {
 	focused := t.FocusedPane()
@@ -336,7 +336,7 @@ func StillDescended(p *Pane, tileID string) bool {
 // the nav chain and the next ascent read the new place. The frame comes from
 // ContentFrame, so a promoted pane is in every way a descended pane.
 func (p *Pane) RelocateTo(dest *Pane, tileID string, foot Footprint, zoom float64) {
-	p.Stack = dest.Stack.Clone()
+	p.Stack = dest.Stack.Copy()
 	if p.Content {
 		// A destination already in a content descent is replaced rather than
 		// stacked on: the pane follows its content, one level deep.

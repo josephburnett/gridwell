@@ -377,10 +377,10 @@ func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	return rpc.QualifyID(uuid, minted), nil
 }
 
-// CloneTile runs at the nearest node that sees both ends (rpc.SharedOwner);
+// CopyTile runs at the nearest node that sees both ends (rpc.SharedOwner);
 // where the ends part, the copy is made here (deepcopy.go). The link gesture
-// is a plain CreateTile, never a clone.
-func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
+// is a plain CreateTile, never a copy.
+func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
 	if err != nil {
@@ -391,23 +391,23 @@ func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.
 		return nil, err
 	}
 	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
-		return rt.cloneAcrossPlugins(ctx, m, c, local, uuid, transit)
+		return rt.copyAcrossPlugins(ctx, m, c, local, uuid, transit)
 	}
-	resp, err := c.CloneTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
+	resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// cloneAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
+// copyAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
 // deepCopyTile's, and this level owns the host-content refusal and the
 // partial-copy wording.
-func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
+func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
 	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
 	if err != nil {
 		return nil, err
 	}
 	srcLocalTile := resp.GetTile()
 	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{srcLocalTile})[0]
-	// No version claim: a clone is layout and the source row is untouched.
+	// No version claim: a copy is layout and the source row is untouched.
 	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
 	if err != nil {
 		return nil, err

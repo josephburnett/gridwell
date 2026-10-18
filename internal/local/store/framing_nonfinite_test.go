@@ -67,7 +67,7 @@ func TestSetFramingRefusesNonFinite(t *testing.T) {
 }
 
 // Never visited is NULL in storage on every path that makes a doorway — a
-// fresh well, an exit well with no view, a clone of either — and reads back
+// fresh well, an exit well with no view, a copy of either — and reads back
 // as an rpc.View without a framing; nothing writes a zero for it.
 func TestNeverVisitedRoundTripsAsNone(t *testing.T) {
 	s := newTestStore(t)
@@ -86,7 +86,7 @@ func TestNeverVisitedRoundTripsAsNone(t *testing.T) {
 	}
 	ids := []string{fresh.Id, exit.Id}
 	for i, src := range []string{fresh.Id, exit.Id} {
-		c, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: src, DestGridId: root, X: int64(10 + 3*i), Y: 10})
+		c, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src, DestGridId: root, X: int64(10 + 3*i), Y: 10})
 		if err != nil {
 			t.Fatal(err)
 		}

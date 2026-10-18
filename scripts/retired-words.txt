@@ -42,3 +42,8 @@ faceless
 # "StaleBuild" — a page of another build is OtherBuild; stale is a refused
 # claim only.
 stalebuild
+# "clone" — what right-drag makes is a copy (CopyTile). Allowed: Go's own
+# Clone methods (slices, maps, proto, an http request or header) and git's.
+clone .*(slices|maps|bytes|proto|header|Header\(\)|r)\.Clone\(|.*git clone
+clones
+cloned

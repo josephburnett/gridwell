@@ -420,7 +420,7 @@ func (a *App) canvasGesture() pane.CanvasGesture {
 		case rightDragTileResize:
 			g.TileResize = true
 		case rightDragTileCenter:
-			// The clone drag it becomes is a.dragging; until the ghost, it has
+			// The copy drag it becomes is a.dragging; until the ghost, it has
 			// grabbed a handle in one pane.
 			g.DragPane = rd.tilePaneID
 		}

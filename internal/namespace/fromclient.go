@@ -57,8 +57,8 @@ func (f fromClient) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*p
 	return f.c.PlaceTile(ctx, req)
 }
 
-func (f fromClient) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	return f.c.CloneTile(ctx, req)
+func (f fromClient) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	return f.c.CopyTile(ctx, req)
 }
 
 func (f fromClient) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {

@@ -10,13 +10,13 @@ import (
 	"github.com/josephburnett/gridwell/internal/doctype"
 )
 
-// CloneTile duplicates a tile into a destination grid as an eager, independent
+// CopyTile duplicates a tile into a destination grid as an eager, independent
 // copy: a fresh row id, the source's version, and the source row untouched, so
-// a clone is layout, not content. An interior well's whole subtree is
+// a copy is layout, not content. An interior well's whole subtree is
 // deep-copied; an exit well keeps its qualified child_grid_id, another plugin
 // owning that grid; a leaf shares its blob with the refcount bumped. Nothing
 // else is shared, so editing one can never touch the other.
-func (s *Store) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.Tile, error) {
+func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(req.TileId)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
@@ -26,7 +26,7 @@ func (s *Store) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest)
 		return nil, fmt.Errorf("%w: invalid dest_grid_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "CloneTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withMutation(ctx, "CopyTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
@@ -46,7 +46,7 @@ func (s *Store) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest)
 		}
 
 		now := s.now().Unix()
-		child, err := s.childGridForClone(ctx, tx, n)
+		child, err := s.childGridForCopy(ctx, tx, n)
 		if err != nil {
 			return err
 		}

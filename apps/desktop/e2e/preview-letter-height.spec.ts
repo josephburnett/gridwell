@@ -9,7 +9,7 @@ import { tileAt } from './oracle';
 // same at every zoom, no frame fell back to raw source on the way, and the
 // tile's own row was never written.
 
-const WRITES = ['PlaceTile', 'CloneTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
+const WRITES = ['PlaceTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
 interface Preview {
   kind: 'raster' | 'raw';

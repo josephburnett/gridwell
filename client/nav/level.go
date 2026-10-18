@@ -54,7 +54,7 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 	pt := g.Door
 	ld := &levelData{
 		PaneID:   p.ID,
-		Origin:   p.Stack.Clone(),
+		Origin:   p.Stack.Copy(),
 		TileID:   pt.Id,
 		IDPrefix: levelIDPrefix(w.LevelDepth + 1),
 	}
@@ -63,7 +63,7 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 	// The animation arm. A never-arranged tile expands its preview instead of
 	// zooming: its first descent captures the window layout, and a zoom over an
 	// unchanged view reads as a stutter.
-	here := p.Stack.Clone()
+	here := p.Stack.Copy()
 	live, viewed := p.View.Framing()
 	if !viewed {
 		live = zoomtrans.Origin
@@ -396,7 +396,7 @@ func (m *Machine) animateLevelReturn(g Gesture, w World, pl *planner) {
 	if overtake < live.Zoom() {
 		overtake = live.Zoom()
 	}
-	here := p.Stack.Clone()
+	here := p.Stack.Copy()
 	pl.add(Effect{Kind: EffStartTransition, PaneID: p.ID, Segments: []transition.Segment{{
 		Place:  &here,
 		FromCx: cx, FromCy: cy, FromZoom: overtake,

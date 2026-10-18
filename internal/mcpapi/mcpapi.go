@@ -368,7 +368,7 @@ func (d *toolset) copy(ctx context.Context, _ *mcp.CallToolRequest, in copyIn) (
 		if it.Link {
 			return d.landed(d.rt.CreateTile(ctx, &pb.CreateTileRequest{GridId: grid, Tile: rpc.LinkOf(src, x, y)}))
 		}
-		return d.landed(d.rt.CloneTile(ctx, &pb.CloneTileRequest{TileId: src.GetId(), DestGridId: grid, X: x, Y: y}))
+		return d.landed(d.rt.CopyTile(ctx, &pb.CopyTileRequest{TileId: src.GetId(), DestGridId: grid, X: x, Y: y}))
 	})
 }
 

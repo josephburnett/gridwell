@@ -313,7 +313,7 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 }
 
 // ShellSession names the tmux session a shell tile attaches: the session its
-// row names, which a clone shares with its source, or else its content tile's.
+// row names, which a copy shares with its source, or else its content tile's.
 func ShellSession(t *pb.Tile) string {
 	if t.ShellSession != "" {
 		return t.ShellSession

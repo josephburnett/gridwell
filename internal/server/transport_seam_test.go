@@ -455,7 +455,7 @@ func TestShellAPIThroughAConnection(t *testing.T) {
 
 // The message-ownership seam: with no wire between the router and its
 // namespaces, one *pb.Event travels to every subscriber by pointer, so
-// qualification has to clone. A hop that rewrote ids in place would give the
+// qualification has to copy. A hop that rewrote ids in place would give the
 // second subscriber "lnode1/lnode1/geneva/…", and a single-subscriber test
 // could not see it.
 func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {

@@ -73,8 +73,8 @@ const (
 	GridwellCreateTileProcedure = "/gridwell.v1.Gridwell/CreateTile"
 	// GridwellSetTileProcedure is the fully-qualified name of the Gridwell's SetTile RPC.
 	GridwellSetTileProcedure = "/gridwell.v1.Gridwell/SetTile"
-	// GridwellCloneTileProcedure is the fully-qualified name of the Gridwell's CloneTile RPC.
-	GridwellCloneTileProcedure = "/gridwell.v1.Gridwell/CloneTile"
+	// GridwellCopyTileProcedure is the fully-qualified name of the Gridwell's CopyTile RPC.
+	GridwellCopyTileProcedure = "/gridwell.v1.Gridwell/CopyTile"
 	// GridwellDeleteTileProcedure is the fully-qualified name of the Gridwell's DeleteTile RPC.
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
 	// GridwellSetFramingProcedure is the fully-qualified name of the Gridwell's SetFraming RPC.
@@ -118,7 +118,7 @@ type GridwellClient interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
+	CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -228,10 +228,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetTile")),
 			connect.WithClientOptions(opts...),
 		),
-		cloneTile: connect.NewClient[v1.CloneTileRequest, v1.TileResponse](
+		copyTile: connect.NewClient[v1.CopyTileRequest, v1.TileResponse](
 			httpClient,
-			baseURL+GridwellCloneTileProcedure,
-			connect.WithSchema(gridwellMethods.ByName("CloneTile")),
+			baseURL+GridwellCopyTileProcedure,
+			connect.WithSchema(gridwellMethods.ByName("CopyTile")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteTile: connect.NewClient[v1.DeleteTileRequest, v1.DeleteTileResponse](
@@ -295,7 +295,7 @@ type gridwellClient struct {
 	placeTile         *connect.Client[v1.PlaceTileRequest, v1.TileResponse]
 	createTile        *connect.Client[v1.CreateTileRequest, v1.TileResponse]
 	setTile           *connect.Client[v1.SetTileRequest, v1.TileResponse]
-	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
+	copyTile          *connect.Client[v1.CopyTileRequest, v1.TileResponse]
 	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
 	setFraming        *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
 	setSelection      *connect.Client[v1.SetSelectionRequest, v1.SetSelectionResponse]
@@ -375,9 +375,9 @@ func (c *gridwellClient) SetTile(ctx context.Context, req *connect.Request[v1.Se
 	return c.setTile.CallUnary(ctx, req)
 }
 
-// CloneTile calls gridwell.v1.Gridwell.CloneTile.
-func (c *gridwellClient) CloneTile(ctx context.Context, req *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.cloneTile.CallUnary(ctx, req)
+// CopyTile calls gridwell.v1.Gridwell.CopyTile.
+func (c *gridwellClient) CopyTile(ctx context.Context, req *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.copyTile.CallUnary(ctx, req)
 }
 
 // DeleteTile calls gridwell.v1.Gridwell.DeleteTile.
@@ -441,7 +441,7 @@ type GridwellHandler interface {
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
+	CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -547,10 +547,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetTile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellCloneTileHandler := connect.NewUnaryHandler(
-		GridwellCloneTileProcedure,
-		svc.CloneTile,
-		connect.WithSchema(gridwellMethods.ByName("CloneTile")),
+	gridwellCopyTileHandler := connect.NewUnaryHandler(
+		GridwellCopyTileProcedure,
+		svc.CopyTile,
+		connect.WithSchema(gridwellMethods.ByName("CopyTile")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellDeleteTileHandler := connect.NewUnaryHandler(
@@ -625,8 +625,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellCreateTileHandler.ServeHTTP(w, r)
 		case GridwellSetTileProcedure:
 			gridwellSetTileHandler.ServeHTTP(w, r)
-		case GridwellCloneTileProcedure:
-			gridwellCloneTileHandler.ServeHTTP(w, r)
+		case GridwellCopyTileProcedure:
+			gridwellCopyTileHandler.ServeHTTP(w, r)
 		case GridwellDeleteTileProcedure:
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
 		case GridwellSetFramingProcedure:
@@ -706,8 +706,8 @@ func (UnimplementedGridwellHandler) SetTile(context.Context, *connect.Request[v1
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTile is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CloneTile is not implemented"))
+func (UnimplementedGridwellHandler) CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CopyTile is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error) {

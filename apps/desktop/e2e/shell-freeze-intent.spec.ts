@@ -3,14 +3,14 @@ import { tileAt } from './oracle';
 
 // Freezing is a screenshot, and a shell has it too: the bar circle over a live
 // shell freezes the terminal's preview onto the tile, the standing intent keeps
-// the next descent from reattaching, and a clone taken while it is frozen
+// the next descent from reattaching, and a copy taken while it is frozen
 // keeps that picture after the original reconnects. This drives the seam the
 // unit tests cannot: barslot.Decide's two shell arms, the capture writeback,
-// the SetTile url_frozen arm on a shell row, the stored column, clone, and
+// the SetTile url_frozen arm on a shell row, the stored column, copy, and
 // shellconn.DecideAutoLive. A freeze never kills the tmux session, which the
 // reconnect proves by finding the shell it left.
 
-test('freezing a live shell keeps its preview; the clone keeps it after the original reconnects', async ({
+test('freezing a live shell keeps its preview; the copy keeps it after the original reconnects', async ({
   gw,
   window,
 }) => {
@@ -62,14 +62,14 @@ test('freezing a live shell keeps its preview; the clone keeps it after the orig
   expect(await shellText(), 'a frozen shell does not reattach on descent').toBe('');
   expect(Boolean((await shellAt(cx, cy))?.urlFrozen), 'and it stays frozen').toBe(true);
 
-  // A clone taken while frozen is the screenshot copy.
+  // A copy taken while frozen is the screenshot copy.
   await gw.middleClickCell(cx, cy); // ascend to the grid to drag
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
-  await gw.cloneTileCell(cx, cy, cx + 2, cy);
+  await gw.copyTileCell(cx, cy, cx + 2, cy);
   const copy = await shellAt(cx + 2, cy);
-  expect(copy, 'the clone landed').toBeTruthy();
-  expect(copy!.id, 'the clone is its own tile').not.toBe(frozen.id);
-  expect(Boolean(copy!.urlFrozen), 'the clone carries the freeze').toBe(true);
+  expect(copy, 'the copy landed').toBeTruthy();
+  expect(copy!.id, 'the copy is its own tile').not.toBe(frozen.id);
+  expect(Boolean(copy!.urlFrozen), 'the copy carries the freeze').toBe(true);
   expect(copy!.previewBlobId, 'and the same captured preview').toBe(frozen.previewBlobId);
 
   // Reconnecting the original finds the session the freeze left running, and
@@ -84,8 +84,8 @@ test('freezing a live shell keeps its preview; the clone keeps it after the orig
 
   // The copy kept the screenshot: nothing the original did reached it.
   const after = await shellAt(cx + 2, cy);
-  expect(Boolean(after!.urlFrozen), 'the clone is still frozen').toBe(true);
-  expect(after!.previewBlobId, 'with the preview it was cloned with').toBe(frozen.previewBlobId);
+  expect(Boolean(after!.urlFrozen), 'the copy is still frozen').toBe(true);
+  expect(after!.previewBlobId, 'with the preview it was copied with').toBe(frozen.previewBlobId);
 
   await gw.ascendViaCrumb(); // teardown: a live shell's overlay swallows a middle click
 });

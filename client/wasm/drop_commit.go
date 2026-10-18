@@ -15,7 +15,7 @@ import (
 // Commits a left-button drag and animates the ghost. finishLeftDrag is the
 // one commit path, so the mouseup the handler saw and the release
 // recoverLostRelease infers cannot land two ways. The verdict is
-// dragdrop.DecideDrop's; commitRightClone is the right button's twin and
+// dragdrop.DecideDrop's; commitRightCopy is the right button's twin and
 // shares the landing and snap-back below.
 
 // Animation durations in milliseconds. snapMs is a var so a spec can hold a
@@ -222,7 +222,7 @@ func (a *App) occupiedForDrop(gridID string, c dragdrop.Carry, x, y int64, vacat
 }
 
 // landGhostAtCell lands the ghost on the drop target's cell. Move, link and
-// clone all use it, so the three cannot place the same drop differently.
+// copy all use it, so the three cannot place the same drop differently.
 func (a *App) landGhostAtCell(t *dropTarget, dropX, dropY int64) {
 	a.landGhost(t.pane.ID, t.cellSize,
 		t.originX+float64(dropX)*t.cellSize, t.originY+float64(dropY)*t.cellSize)

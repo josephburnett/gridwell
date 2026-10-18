@@ -181,8 +181,8 @@ func (c *Client) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.T
 	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(req)))
 }
 
-func (c *Client) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.Tile, error) {
-	return tileResp(c.cl.CloneTile(ctx, connect.NewRequest(req)))
+func (c *Client) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Tile, error) {
+	return tileResp(c.cl.CopyTile(ctx, connect.NewRequest(req)))
 }
 
 // ShellSessionAlive reports whether the tile's tmux session still exists.

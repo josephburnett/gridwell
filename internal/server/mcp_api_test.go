@@ -255,10 +255,10 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 	copies := items(t, s, "copy",
 		map[string]any{"id": plan.ID, "link": false},
 		map[string]any{"id": plan.ID, "link": true, "at": map[string]any{"x": 0, "y": 9}})
-	clone, link := landed(t, copies[0]), landed(t, copies[1])
-	qualified("copy", clone.ID)
-	if clone.ID == plan.ID || clone.Link != "" || clone.X != 8 || clone.Y != 4 {
-		t.Fatalf("copy = %+v, want a new tile, no link, beside the source at (8,4)", clone)
+	cp, link := landed(t, copies[0]), landed(t, copies[1])
+	qualified("copy", cp.ID)
+	if cp.ID == plan.ID || cp.Link != "" || cp.X != 8 || cp.Y != 4 {
+		t.Fatalf("copy = %+v, want a new tile, no link, beside the source at (8,4)", cp)
 	}
 	if link.Link != plan.ID || link.X != 0 || link.Y != 9 {
 		t.Fatalf("copy with link = %+v, want a link to %s at (0,9)", link, plan.ID)
@@ -288,13 +288,13 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("find(third) = %+v, want the text", found)
 	}
 
-	if gone := items(t, s, "delete", map[string]any{"id": clone.ID})[0]; gone.Verdict != "ok" || gone.Deleted != clone.ID {
+	if gone := items(t, s, "delete", map[string]any{"id": cp.ID})[0]; gone.Verdict != "ok" || gone.Deleted != cp.ID {
 		t.Fatalf("delete = %+v", gone)
 	}
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &grid)
 	for _, tl := range grid.Tiles {
-		if tl.ID == clone.ID {
-			t.Fatalf("the deleted clone is still on its grid: %+v", tl)
+		if tl.ID == cp.ID {
+			t.Fatalf("the deleted copy is still on its grid: %+v", tl)
 		}
 	}
 }

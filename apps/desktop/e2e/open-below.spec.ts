@@ -69,7 +69,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     }, { timeout: 10_000 })
     .toBe(1);
 
-  // The clone's file-level ascent must not delete the source pane's tile.
+  // The copy's file-level ascent must not delete the source pane's tile.
   const sc = await gw.getGrid(scratchGridID);
   expect(
     (sc.tiles ?? []).filter((t) => String(t.urlString ?? '').includes('src=page')),
@@ -112,7 +112,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
     .toBe(0);
 });
 
-// splitBelowForOpen clones the source pane, so the clone inherits a content
+// splitBelowForOpen copies the source pane, so the copy inherits a content
 // frame it must shed before the visit lands. It sheds it synchronously: there
 // is no footprint to zoom out of and the user made no ascent gesture, so
 // animating it would be a second transition for one gesture and would leave

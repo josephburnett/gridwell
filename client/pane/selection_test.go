@@ -31,7 +31,7 @@ func TestSelectionTarget(t *testing.T) {
 	}
 }
 
-// Select is sorted, empty is nil, and a clone keeps the set it held.
+// Select is sorted, empty is nil, and a copy keeps the set it held.
 func TestSelectReplacesTheSetWhole(t *testing.T) {
 	s := NewStack("g")
 	if !s.Select([]string{"b", "a", "b"}) || !slices.Equal(s.Selection, []string{"a", "b"}) {
@@ -40,10 +40,10 @@ func TestSelectReplacesTheSetWhole(t *testing.T) {
 	if s.Select([]string{"a", "b"}) {
 		t.Error("the same set reported a change")
 	}
-	c := s.Clone()
+	c := s.Copy()
 	s.Select(nil)
 	if s.Selection != nil || !slices.Equal(c.Selection, []string{"a", "b"}) {
-		t.Errorf("after clearing: %v, clone %v", s.Selection, c.Selection)
+		t.Errorf("after clearing: %v, copy %v", s.Selection, c.Selection)
 	}
 }
 

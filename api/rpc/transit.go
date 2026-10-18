@@ -130,7 +130,7 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 		if r.Claim != nil {
 			r.Claim.GridId = h.PeelID(r.Claim.GridId)
 		}
-	case *pb.CloneTileRequest:
+	case *pb.CopyTileRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.DestGridId = h.PeelID(r.DestGridId)
 	case *pb.SetTileRequest:

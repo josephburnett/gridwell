@@ -58,8 +58,8 @@ func (g *grpcServer) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*
 	return g.ns.PlaceTile(ctx, req)
 }
 
-func (g *grpcServer) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	return g.ns.CloneTile(ctx, req)
+func (g *grpcServer) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	return g.ns.CopyTile(ctx, req)
 }
 
 func (g *grpcServer) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {

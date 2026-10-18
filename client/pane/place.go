@@ -201,7 +201,7 @@ func (s *Stack) Frames() []Frame {
 	return append(out, s.Frame)
 }
 
-func (s *Stack) Clone() Stack {
+func (s *Stack) Copy() Stack {
 	c := *s
 	if len(s.below) > 0 {
 		c.below = slices.Clone(s.below)
@@ -230,7 +230,7 @@ func (s *Stack) Pop() bool {
 // and computed without touching the live pane, so an animation can drive the
 // landing.
 func (s *Stack) Popped(n int) Stack {
-	c := s.Clone()
+	c := s.Copy()
 	for i := 0; i < n && c.Pop(); i++ {
 	}
 	return c

@@ -78,7 +78,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 	if !ok {
 		return
 	}
-	base := p.Stack.Clone()
+	base := p.Stack.Copy()
 	if w.Door.IsLink {
 		// A link crosses into another id space, so the frame carries the target
 		// grid id and every path id below stays in one namespace.
@@ -92,7 +92,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 	}
 	pl.fetchGrid(w, well.ChildGridId)
 
-	child := base.Clone()
+	child := base.Copy()
 	child.Push(next)
 
 	parentDist := zoomtrans.PanDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom, w.CellPx) +
@@ -146,14 +146,14 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 		pl.add(Effect{Kind: EffFetchTileContent, TileID: file.Id})
 	}
 
-	base := p.Stack.Clone()
+	base := p.Stack.Copy()
 	// Stacking a visit over a live descent animates in the grid behind the
 	// current content and leaves the frame on the stack.
-	animBase := base.Clone()
+	animBase := base.Copy()
 	if animBase.Content {
 		animBase.Pop()
 	}
-	landing := base.Clone()
+	landing := base.Copy()
 	landing.Push(pane.ContentFrame(file.Id, foot, target,
 		descentTextMode(file, w.Door.ReadOnly),
 		float64(file.TextX), float64(file.TextY)))

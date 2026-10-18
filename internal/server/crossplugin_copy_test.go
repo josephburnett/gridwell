@@ -132,12 +132,12 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	_ = uuidA
 }
 
-// TestCloneWellAcrossPluginsDeepCopies: a solid well right-dragged across
+// TestCopyWellAcrossPluginsDeepCopies: a solid well right-dragged across
 // a plugin boundary DEEP-COPIES — the destination gains an independent
 // subtree, byte-identical bodies, framing preserved, provenance carried,
 // references inside copied as references — and editing the copy never
 // touches the source (no structural sharing across the boundary).
-func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
+func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -168,7 +168,7 @@ func TestCloneWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	copyTop, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	copyTop, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: well.Id, DestGridId: rootB, X: 3, Y: 3,
 	})
 	if err != nil {
@@ -274,7 +274,7 @@ func TestLinkLeafAcrossPlugins(t *testing.T) {
 	}
 }
 
-func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
+func TestCopyLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -282,12 +282,12 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateText: %v", err)
 	}
-	copyT, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	copyT, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     txt.Id,
 		DestGridId: rootB, X: 1, Y: 1,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin text clone: %v", err)
+		t.Fatalf("cross-plugin text copy: %v", err)
 	}
 	if u, _, _ := rpc.SplitID(copyT.Id); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
@@ -313,7 +313,7 @@ func TestCloneLeafAcrossPluginsCopiesBytes(t *testing.T) {
 	}
 }
 
-func TestCloneURLAcrossPluginsCopiesAddress(t *testing.T) {
+func TestCopyURLAcrossPluginsCopiesAddress(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -321,23 +321,23 @@ func TestCloneURLAcrossPluginsCopiesAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}
-	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: u.Id, DestGridId: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin url clone: %v", err)
+		t.Fatalf("cross-plugin url copy: %v", err)
 	}
 	if cp.UrlString != "https://example.com/" {
 		t.Errorf("copied url = %q", cp.UrlString)
 	}
 }
 
-// TestCloneAcrossPluginsCopiesCurrentContent: a clone carries no version
+// TestCopyAcrossPluginsCopiesCurrentContent: a copy carries no version
 // claim (the SOURCE row is untouched, so a copy is
 // layout), and the handler's own hand-rolled re-derivation of the store's
 // claim went with it. What the copy must carry is what the source says NOW,
 // even though the source's version moved after it was created.
-func TestCloneAcrossPluginsCopiesCurrentContent(t *testing.T) {
+func TestCopyAcrossPluginsCopiesCurrentContent(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -345,16 +345,16 @@ func TestCloneAcrossPluginsCopiesCurrentContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A real content edit: the source's version is now past what the clone
+	// A real content edit: the source's version is now past what the copy
 	// caller last saw.
 	if _, err := cl.WriteContent(ctx, txt.Id, rpc.ContentBasis{Version: txt.Version}, []byte("v1")); err != nil {
 		t.Fatalf("WriteContent: %v", err)
 	}
-	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: txt.Id, DestGridId: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin clone after a content edit: %v", err)
+		t.Fatalf("cross-plugin copy after a content edit: %v", err)
 	}
 	body, _, _, err := cl.ReadContent(ctx, cp.Id)
 	if err != nil {
@@ -365,12 +365,12 @@ func TestCloneAcrossPluginsCopiesCurrentContent(t *testing.T) {
 	}
 }
 
-// TestClonePaneAcrossPluginsCopiesLayout: a workspace crosses a plugin
+// TestCopyPaneAcrossPluginsCopiesLayout: a workspace crosses a plugin
 // boundary as a BYTE COPY of its layout blob (like text) — and because the
 // layout's ids are owner-frame-relative by the codec's rule, the copy's panes
 // keep naming the ORIGINAL places: arrangement copies, referenced content is
 // shared. The copies then diverge independently (content addressing).
-func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
+func TestCopyPaneAcrossPluginsCopiesLayout(t *testing.T) {
 	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -379,11 +379,11 @@ func TestClonePaneAcrossPluginsCopiesLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePane: %v", err)
 	}
-	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: pt.Id, DestGridId: rootB, X: 1, Y: 1,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin pane clone: %v", err)
+		t.Fatalf("cross-plugin pane copy: %v", err)
 	}
 	if u, _, _ := rpc.SplitID(cp.Id); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
@@ -492,18 +492,18 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 		t.Errorf("link label = %q, want the directory's name", link.AltText)
 	}
 
-	// The right-drag (clone) of a dir well is refused loudly — deep copy of a
+	// The right-drag (copy) of a dir well is refused loudly — deep copy of a
 	// host directory is unimplemented.
-	if _, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	if _, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: sub.Id, DestGridId: dstRoot, X: 3, Y: 3,
 	}); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Errorf("clone of an fs dir well: err=%v, want unimplemented refusal", err)
+		t.Errorf("copy of an fs dir well: err=%v, want unimplemented refusal", err)
 	}
 }
 
-// TestClonePaneAcrossPluginsNeverArranged: a pane tile with no layout blob
-// clones as an empty workspace (no Data round trip to fail on).
-func TestClonePaneAcrossPluginsNeverArranged(t *testing.T) {
+// TestCopyPaneAcrossPluginsNeverArranged: a pane tile with no layout blob
+// copies as an empty workspace (no Data round trip to fail on).
+func TestCopyPaneAcrossPluginsNeverArranged(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -511,21 +511,21 @@ func TestClonePaneAcrossPluginsNeverArranged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePane: %v", err)
 	}
-	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: pt.Id, DestGridId: rootB, X: 0, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin clone of never-arranged pane: %v", err)
+		t.Fatalf("cross-plugin copy of never-arranged pane: %v", err)
 	}
 	if cp.BlobId != 0 {
 		t.Errorf("never-arranged copy grew a blob: %+v", cp)
 	}
 }
 
-// TestCloneURLAcrossPluginsCarriesPreview: the frozen preview is what a url tile
+// TestCopyURLAcrossPluginsCarriesPreview: the frozen preview is what a url tile
 // looks like from outside, so a copy of one wears the same preview — at the top
 // level, exactly as a url one level down inside a deep-copied well does.
-func TestCloneURLAcrossPluginsCarriesPreview(t *testing.T) {
+func TestCopyURLAcrossPluginsCarriesPreview(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
@@ -546,14 +546,14 @@ func TestCloneURLAcrossPluginsCarriesPreview(t *testing.T) {
 		t.Fatalf("the source never froze: %+v", frozen)
 	}
 
-	cp, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: u.Id, DestGridId: rootB, X: 2, Y: 2,
 	})
 	if err != nil {
-		t.Fatalf("cross-plugin url clone: %v", err)
+		t.Fatalf("cross-plugin url copy: %v", err)
 	}
 	if cp.PreviewBlobId == 0 {
-		t.Errorf("the clone answered with no preview: %+v", cp)
+		t.Errorf("the copy answered with no preview: %+v", cp)
 	}
 	got, err := cl.GetTile(ctx, cp.Id)
 	if err != nil {

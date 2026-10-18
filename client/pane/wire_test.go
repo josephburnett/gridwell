@@ -379,7 +379,7 @@ func TestLayoutKeepsEveryLevelFromTheRoot(t *testing.T) {
 func TestLayoutRestoresTheWholePlace(t *testing.T) {
 	tr := NewTree()
 	src := chainPane()
-	tr.FocusedPane().Stack = src.Stack.Clone()
+	tr.FocusedPane().Stack = src.Stack.Copy()
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
