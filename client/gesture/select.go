@@ -1,10 +1,6 @@
 package gesture
 
-import (
-	"slices"
-
-	"github.com/josephburnett/gridwell/api/rpc"
-)
+import "slices"
 
 // The selection gestures: what a left press, a band and Esc do to the set of
 // a grid's tiles the user has in hand, each as a Select naming what it adds
@@ -52,9 +48,6 @@ type Select struct{ Add, Remove []string }
 
 // Empty says the select names nothing.
 func (s Select) Empty() bool { return len(s.Add) == 0 && len(s.Remove) == 0 }
-
-// Apply is set after s, by the rule the node applies (rpc.ApplySelect).
-func (s Select) Apply(set []string) []string { return rpc.ApplySelect(set, s.Add, s.Remove) }
 
 // OnGrid is s adding only tiles on the grid now: a set names only its grid's
 // tiles, so one that left is not carried into a write.

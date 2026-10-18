@@ -38,10 +38,6 @@ type Frame struct {
 	// back restores it.
 	MenuOpen bool
 
-	// Selection is the grid's selection as this pane holds it, inside a pane
-	// tile only (SelectionTarget); Select is its one writer.
-	Selection []string
-
 	// ViewPending marks a top frame a layout blob restored with no view: until
 	// Adopt, its view is a placeholder that must never be written to its owner row.
 	ViewPending bool

@@ -59,10 +59,9 @@ type LayoutFrame struct {
 // per frame, null where a frame has none; absent when no frame has one. Text
 // is the live scroll of a text descent on top, absent until the user moves it
 // off the row's; its mode, and its window once left, are its tile row's
-// (2026-10-16). Sels is each grid
-// frame's selection the same way: inside a pane tile a pane's selection is
-// the layout's, not the grid row's (2026-10-15). Retired keys, never reused:
-// cx, cy, zoom, text_mode, text_scroll_x, text_scroll_y, text_zoom.
+// (2026-10-16). A selection is the grid row's, never the layout's
+// (2026-10-18). Retired keys, never reused, and read past: cx, cy, zoom,
+// text_mode, text_scroll_x, text_scroll_y, text_zoom, sel.
 type LayoutPane struct {
 	ID        string        `json:"id"`
 	Anchor    string        `json:"anchor,omitempty"`
@@ -70,7 +69,6 @@ type LayoutPane struct {
 	TextFocus string        `json:"text_focus,omitempty"`
 	Place     []LayoutFrame `json:"place,omitempty"`
 	Views     []*LayoutView `json:"views,omitempty"`
-	Sels      [][]string    `json:"sel,omitempty"`
 	Text      *LayoutText   `json:"text,omitempty"`
 }
 

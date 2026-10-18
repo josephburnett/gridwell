@@ -27,7 +27,6 @@ func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 		{"a text scroll", false, true, func(tr *Tree) { tr.FocusedPane().TextScrollY = 40 }},
 		{"a text mode toggle", false, true, func(tr *Tree) { tr.FocusedPane().TextMode = "rendered" }},
 		{"a content zoom", false, true, func(tr *Tree) { tr.FocusedPane().TextZoom = 1.5 }},
-		{"a select inside a pane tile", true, true, func(tr *Tree) { tr.FocusedPane().Select([]string{"t7abcde"}) }},
 		{"a split", true, true, func(tr *Tree) {
 			if _, err := tr.Split(Vertical); err != nil {
 				t.Fatal(err)

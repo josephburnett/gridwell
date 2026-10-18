@@ -41,8 +41,8 @@ func TestView(t *testing.T) {
 		PaneTiles:    []string{"home/4", "p/9"},
 		ShownGridIds: []string{"c/1", "g-w2", "g-w5"},
 		Panes: []*gridwellv1.ViewPane{
-			{Id: first.ID, Anchor: "p/1", Path: []string{"w5"}, GridId: "g-w5", LayoutPaneId: "p1"},
-			{Id: second.ID, Anchor: "n/1", Path: []string{"w2"}, ContentId: "t3", GridId: "g-w2", Focused: true, LayoutPaneId: "p2"},
+			{Id: first.ID, Anchor: "p/1", Path: []string{"w5"}, GridId: "g-w5"},
+			{Id: second.ID, Anchor: "n/1", Path: []string{"w2"}, ContentId: "t3", GridId: "g-w2", Focused: true},
 		},
 	}
 	if !proto.Equal(got, want) {

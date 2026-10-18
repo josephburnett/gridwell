@@ -99,7 +99,7 @@ record shapes. Everything else derives from it:
 `Search` is the one find verb: free text, or `id:` for the exact locate,
 narrowed by filters the node applies to the rows it holds — a grid and
 everything under it, a range on each of a row's three times (made, last
-written, content last changed), and the selection. A `grid_id` routes like a
+written, content last changed), the selection, and the kind. A `grid_id` routes like a
 scope; a fan-out carries the filters to every namespace and through every
 connection to the far node holding the rows.
 
@@ -612,7 +612,7 @@ copy:
 | the bytes, their version, edited or not | one cache entry per tile id |
 | which dividers a press grabs | `pane.GrabDividers` (one per axis) |
 | what Esc lets go of, and what it puts back | `gesture.Escape` over the armed gestures, and with none armed the selection it clears; a parked live view relays the key |
-| what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; `pane.SelectionTarget` (the grid row, or inside a pane tile the layout) |
+| what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; the grid row, in every pane (`Grid.selection`) |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which face a plugin tile wears | `pluginhost.faceKey` |

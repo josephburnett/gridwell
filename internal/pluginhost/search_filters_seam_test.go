@@ -2,6 +2,7 @@ package pluginhost_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -121,6 +122,17 @@ func TestSearchFiltersReachAPluginsRows(t *testing.T) {
 	}
 	if got := search(&gridwellv1.SearchRequest{Selected: true, GridId: rootID}); len(got) != 0 {
 		t.Errorf("selected on the root alone = %v, want none", got)
+	}
+	// A kind is the node's filter too, and an entry with no row has its kind:
+	// both todos pass their own, and none passes another.
+	if got := search(&gridwellv1.SearchRequest{Query: "widget", Kind: second.Kind}); len(got) != 2 {
+		t.Errorf("widget of kind %s = %v, want both todos, one with no row", second.Kind, got)
+	}
+	if got := search(&gridwellv1.SearchRequest{Query: "widget", Kind: rpc.KindPane}); len(got) != 0 {
+		t.Errorf("widget of kind pane = %v, want none", got)
+	}
+	if got := search(&gridwellv1.SearchRequest{GridId: rootID, Recurse: true, Kind: rpc.KindWell}); len(got) == 0 || slices.ContainsFunc(got, func(a string) bool { return strings.Contains(a, "widget") }) {
+		t.Errorf("the wells under the root = %v, want the week wells and no todo", got)
 	}
 	got := search(&gridwellv1.SearchRequest{GridId: week.ChildGridId})
 	if len(got) != 2 || !strings.Contains(got[0], "!2") {

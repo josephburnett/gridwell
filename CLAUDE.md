@@ -175,20 +175,17 @@ These were decided deliberately. Do not reverse one without a new decision.
   and goes on over each live connection to the far node, whose sets are its
   rows; asked over its connection door, a node clears its own and forwards
   nothing (`router.clearAllSelections`). The + circle's right-click offers
-  it as Clear selections, above Dump logs, which stays the bottom row; the
-  client empties the per-pane sets in its open pane tiles' layouts too
-  (`pane.Levels.UnselectAll`) (2026-10-17). It bumps no version, the grid's
+  it as Clear selections, above Dump logs, which stays the bottom row
+  (2026-10-17). It bumps no version, the grid's
   or any tile's, so a select never refuses a text save. A tap adds or
   removes one tile, a sweep adds the band, Esc removes the set the pane
   shows (`gesture.Toggle`, `Sweep`, `Clear`). `SelectionChanged` carries the whole set, so no view re-reads the
-  grid to learn it. Inside a pane tile the selection is per pane, in the
-  layout blob: each grid frame of each pane's stack keeps its own set beside
-  its view, and a select there writes the layout, never the grid row
-  (`pane.SelectionTarget`); the node's `TileRemoved` takes the tile out of
-  every pane's set in the open layouts too (`pane.Levels.Unselect`). A split
-  copies the pane's view and starts the new pane with an empty set, because
-  the set is what one hand holds and two holding it would carry it twice
-  (`pane.Tree.Split`). It is not a pane's focused tile, which a plain
+  grid to learn it. Inside a pane tile the selection is the grid row's too,
+  as everywhere (2026-10-18): a fact about a grid comes from the grid, two
+  panes on one grid show one set, a select in either writes the row, and an
+  agent reads and sets what the user sees. A layout holds no set; one a blob
+  stored before then carries (`sel`) is read past and not written again,
+  since a set is redone with a tap. It is not a pane's focused tile, which a plain
   click moves. Shift + left-click toggles a tile; shift + left-drag on the
   background sweeps a cell-snapped band and adds the tiles wholly inside it,
   never one it only touches; Esc with no drag in flight clears the focused
@@ -203,12 +200,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   framing, a freeze, content); `content_at`, when its content last changed,
   written only by the version bump (`bumpTileVersion`) and read as
   `created_at` until then. Search filters on them, on a grid (`grid_id`,
-  `recurse` through owned wells, never a link) and on the selection; the
-  filters AND, an empty query with one lists what passes, newest first, and
+  `recurse` through owned wells, never a link), on the selection, and on
+  the kind (text, url, shell, well or pane, 2026-10-18; an unknown one is
+  refused); the filters AND, an empty query with one lists what passes, newest first, and
   they are the node's, applied to the rows it holds (`store.tileFilter`),
   never a plugin's: the plugin answers the text, and the node keeps the hits
   whose rows pass (`pluginhost` `filterHits`). An entry with no row has no
-  time and is in no selection, and a plugin row's times are the node's
+  time and is in no selection but has its kind, and a plugin row's times are the node's
   (minted, touched), not the source's.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the doorway; a root keeps the same shape on its grid row. One
@@ -331,8 +329,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   session-ephemeral (`interest.Book`, `Server.Sessions`, 2026-10-15). The
   node keeps an away session's view for `interest.AwayFor` after its last
   stream closes, listed as away and watching nothing, so an agent sees a
-  phone that went to the background, and `pointed` chooses an open session
-  before an away one (2026-10-18).
+  phone that went to the background, marked away in `sessions` (2026-10-18).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections
@@ -353,23 +350,22 @@ These were decided deliberately. Do not reverse one without a new decision.
   read, every refusal is a tool error with the router's reason, and a tile it
   places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
-  `docs/mcp.md` is the contract. It has ten tools (2026-10-17): `pointed`,
+  `docs/mcp.md` is the contract. It has ten tools (2026-10-18): `sessions`,
   `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `place`, `copy`,
   `delete` and `select`, and every write takes a list and answers a verdict
   per item in order, each item its own write with its own claim, a refused
-  one stopping none after it. An agent points as the user does
-  (2026-10-15): `pointed` is the focused pane's grid of one session, the
-  selection that pane shows when non-empty, else the grid: inside a pane
-  tile the pane's own, read from the layout under the id the view names
-  (`ViewPane.layout_pane_id`, `pane.SelectionTarget`), never the row's. The
-  door writes no layout, so `select` sets only a grid row's set: the open
-  window owns its layout, and an outside write would turn its next change
-  into a conflict. The session is the one named,
-  else the one holding the agent's shell live, else the one whose view
-  changed last, the others named. A new tmux session carries its key in
-  `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`, and the shell
-  door, the one place a socket and its session are both in hand, joins the
-  two (`Server.ShellHolder`).
+  one stopping none after it. A session answers only where the user is
+  (2026-10-18): `sessions` lists every screen showing the node, newest
+  change first, each with its pane tiles and its panes' places, grids and
+  focus, and marks yours the one holding the agent's shell live; it chooses
+  none, and no screen is an empty list. What a grid holds and has selected
+  is the grid's, from `read_grid`, so "here" is a focused pane's grid or
+  pane tile and "these" is that grid's selection; `read_tiles` on a pane
+  tile answers the panes its layout holds, decoded by the client's own
+  decoder (`pane.DecodeLayout`). A new tmux session carries
+  its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
+  and the shell door, the one place a socket and its session are both in
+  hand, joins the two (`Server.ShellHolder`).
 - A plugin or connection the user disables, from the Disable button on its
   health notice, stays disabled until the node restarts. It is held in the
   node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or

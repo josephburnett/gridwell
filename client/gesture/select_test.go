@@ -3,6 +3,8 @@ package gesture
 import (
 	"slices"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // Shift is the select key and the only one: shift + ctrl or shift + cmd is the
@@ -39,8 +41,8 @@ func TestToggleNamesOneTile(t *testing.T) {
 	if got := Toggle([]string{"n/5", "n/4"}, "n/4"); got.Add != nil || !slices.Equal(got.Remove, []string{"n/4"}) {
 		t.Errorf("toggle out = %+v", got)
 	}
-	if got := Toggle([]string{"n/5"}, "n/3").Apply([]string{"n/5"}); !slices.Equal(got, []string{"n/3", "n/5"}) {
-		t.Errorf("toggle in, applied = %v", got)
+	if s := Toggle([]string{"n/5"}, "n/3"); !slices.Equal(rpc.ApplySelect([]string{"n/5"}, s.Add, s.Remove), []string{"n/3", "n/5"}) {
+		t.Errorf("toggle in, applied = %+v", s)
 	}
 }
 
@@ -54,7 +56,8 @@ func TestClearRemovesTheShownSet(t *testing.T) {
 		t.Error("clearing nothing named something")
 	}
 	// Another writer's tile, selected after this pane last drew, stays.
-	if got := Clear([]string{"n/4"}).Apply([]string{"n/4", "n/9"}); !slices.Equal(got, []string{"n/9"}) {
+	s := Clear([]string{"n/4"})
+	if got := rpc.ApplySelect([]string{"n/4", "n/9"}, s.Add, s.Remove); !slices.Equal(got, []string{"n/9"}) {
 		t.Errorf("Clear applied over a newer set = %v, want [n/9]", got)
 	}
 }

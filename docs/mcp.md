@@ -23,7 +23,7 @@ claude mcp add --transport http gridwell http://127.0.0.1:<port>/mcp -H "Authori
 ```
 
 The second header tells the door which shell tile the agent runs in (see
-Pointing). Keep it in single quotes: Claude Code, not the shell you paste the
+Here and these). Keep it in single quotes: Claude Code, not the shell you paste the
 line into, fills in `${GRIDWELL_SHELL:-}` each time it starts. Inside a shell
 tile it is that shell's name; in any other terminal it is empty.
 
@@ -63,58 +63,44 @@ empty list.
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `pointed` | `session`, optional | What the user means by "here" and "these" (see Pointing), with the chosen screen's panes, and in `others` every other screen showing the node: its id, label (`desktop` or `browser`), when its view last changed, the pane tiles it is inside, and each pane's place (`anchor` and `path`), the grid it shows, the content tile it is inside, the pane tile whose layout it is part of (`pane_tile`), and whether it has focus. The most recently changed first. |
+| `sessions` | none | Every screen showing the node, the most recently changed first (see Here and these): its `id`, `label` (`desktop` or `browser`), when its view last `changed`, `away_since` when its stream has closed, the `pane_tiles` it is inside, outermost first, and its `panes`: each one's `id`, place (`anchor` and `path`), the `grid` it shows, the `content` tile it is inside, and whether it is `focused`. The screen showing the shell you run in is marked `yours`. No screen is an empty list. |
 | `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles; `selection`: the tiles the user has in hand) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid. |
-| `read_tiles` | `ids` | One answer per id, in order: the row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux session a shell names, the grid a well holds. A link answers its target's content, or `dead` when the target is gone. An id that cannot be read gets its refusal as its verdict. |
-| `find` | `query`, `scope`, `limit`, `grid`, `recurse`, `created`, `modified`, `content_changed`, `selected` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. The filters narrow it and combine: `grid` keeps the tiles on that grid, and with `recurse` the grids inside its wells, to any depth (a link well is not followed); `created`, `modified` (any write: a move, a framing, content) and `content_changed` keep the tiles whose time falls in the range, `{from, to}`, each an RFC 3339 time such as `2026-10-17T09:00:00Z`, inclusive, either left out for open; `selected` keeps the tiles in their grid's selection. With a filter the query may be empty, and the answer is what passes, newest first. Each hit names the wells it sits inside; `skipped` names every namespace that did not answer. |
+| `read_tiles` | `ids` | One answer per id, in order: the row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux session a shell names, the grid a well holds, and for a pane tile its `layout`: the `version` it was read at and each pane's `id`, place (`anchor` and `path`), the `grid` when the layout names it (a pane with no path is on its anchor), the `content` tile it is inside, and whether it is `focused`, the pane the pane tile reopens on. A link answers its target's content, or `dead` when the target is gone. An id that cannot be read gets its refusal as its verdict. |
+| `find` | `query`, `scope`, `limit`, `grid`, `recurse`, `created`, `modified`, `content_changed`, `selected`, `kind` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. The filters narrow it and combine: `grid` keeps the tiles on that grid, and with `recurse` the grids inside its wells, to any depth (a link well is not followed); `created`, `modified` (any write: a move, a framing, content) and `content_changed` keep the tiles whose time falls in the range, `{from, to}`, each an RFC 3339 time such as `2026-10-17T09:00:00Z`, inclusive, either left out for open; `selected` keeps the tiles in their grid's selection; `kind` keeps the tiles of one kind, `text`, `url`, `shell`, `well` or `pane`, and any other is refused. With a filter the query may be empty, and the answer is what passes, newest first, by the time it filters on, else by when each was made. Each hit names the wells it sits inside; `skipped` names every namespace that did not answer. |
 | `write_text` | `items`: `id`, `grid`, `body`, `version` or `stamp`, `near` | An item with `id` replaces that text tile's whole body; through a link it writes the target. An item with `grid` and no `id` creates a 1×1 text tile born with the body, its name the body's first line, at the first free cell in reading order, or at `near` (`{x, y}`), or below it in its column when that cell is taken. A new tile claims nothing. |
 | `rename` | `items`: `id`, `name`, `version` | Renames a url, shell, well or pane tile. |
 | `place` | `items`: `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same namespace. |
 | `copy` | `items`: `id`, `grid`, `at`, `link` | Lands in `grid` or the tile's own, at `at` or beside the tile. `link: false` is a deep copy; across namespaces a source that does not answer lands as a link. `link: true` is a link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
 | `delete` | `items`: `id`, `version` | Moves the tile to the trash. Deleting a link only unlinks. |
-| `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's wells, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". A pane inside a pane tile does not show it (see Pointing). |
+| `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's wells, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". Every pane showing the grid shows it, inside a pane tile too. |
 
-## Pointing
+## Here and these
 
-When the user says "this", "here" or "these", they mean what is in front of
-them: in the focused pane of their screen, the tiles that pane shows selected,
-or the grid itself when it shows none. `pointed` answers which (`points_at` is
-`selection` or `grid`), with the selected tiles as `read_grid` answers them.
+When the user says "here", they mean the grid in the focused pane of their
+screen, or the pane tile they are in. `sessions` lists the screens and says
+where each one is; it does not choose one. "These" is that grid's selection,
+the `selection` `read_grid` answers: every pane showing a grid shows its one
+selection, inside a pane tile too, and `select` sets it.
 
-Outside a pane tile, a pane shows the grid's own selection, the one
-`read_grid` answers and `select` writes. Inside a pane tile, each pane keeps
-its own selection in the pane tile's layout, so two panes on one grid can hold
-two sets, and the grid's selection is not what that pane shows. `pointed` then
-answers the pane's own set and names the pane tile (`pane_tile`);
-`selection_in` says which it is (`grid` or `pane tile`). A pane inside a text
-or url tile shows no selection, so it points at the grid that tile sits in.
-
-`select` cannot set a pane's own selection inside a pane tile: the open
-window holds that layout, and a write from outside would make its next change
-a conflict. Tell the user which tiles instead.
-
-Which screen is theirs, in this order:
-
-1. the `session` you name, an id from an earlier answer's `others`;
-2. the screen showing the shell you run in, live, right now. Every shell tile
-   starts with `GRIDWELL_SHELL` set to its name, and the registration line
-   sends it as the `X-Gridwell-Shell` header. Only one screen at a time shows
-   a shell live; when another takes it over, that one is the answer;
-3. the screen whose view changed last.
+Which screen is theirs: the one marked `yours`, which shows the shell you run
+in, live, right now. Every shell tile starts with `GRIDWELL_SHELL` set to its
+name, and the registration line sends it as the `X-Gridwell-Shell` header.
+Only one screen at a time shows a shell live; when another takes it over,
+that one is marked. When none is marked, `note` says why: the shell is live
+on no screen, or the node could not tell. A shell started before this door
+existed has no `GRIDWELL_SHELL` until it is started again. With no screen
+marked, the first is the one whose view changed last; ask the user when more
+than one could be theirs.
 
 A screen whose stream closed, as a phone's browser does whenever it goes to
-the background, is away. It is still pointed at for ten minutes
-(`interest.AwayFor`) after it went away, and marked with `away_since`, here
-and in `others`. An open screen wins over an away one under rules 2 and 3;
-when none is open, the one that went away last is the answer and `note` says
-since when. A `session` you name is answered open or away.
+the background, is away. It is still listed for ten minutes
+(`interest.AwayFor`) after it went away, with `away_since`.
 
-The answer says which rule chose (`chosen_by`: `argument`, `your shell` or
-`most recent`), and `others` names every other screen so you can ask the user
-which they meant. When the shell you run in is
-live on no screen, the answer falls to the third rule and `note` says so. A
-shell started before this door existed has no `GRIDWELL_SHELL` until it is
-started again.
+Only screens showing this node are listed: a screen on another node that
+reaches here through a connection is that node's. The workspaces the user
+has used lately are pane tiles: `find` with `kind` `pane` and
+`content_changed` `{}` (both ends open) lists them by when their layout last
+changed, newest first.
 
 ## Refusals
 
@@ -132,10 +118,7 @@ starts with what kind of no it is, then the node's reason:
   name is its first line.
 - `not supported here:` the namespace does not do this, such as creating a
   tile in a plugin's collection.
-- `not found:` no such tile, grid or session.
-- `no session:` no screen is showing the node, nor went away from it within
-  `interest.AwayFor`, so nothing is pointed at.
-- `not loaded:` the screen has not loaded its focused pane yet. Ask again.
+- `not found:` no such tile or grid.
 
 ## Not exposed
 

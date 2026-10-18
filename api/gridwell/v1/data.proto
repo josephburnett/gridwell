@@ -498,6 +498,9 @@ message SearchRequest {
   TimeRange content_changed = 8;
   // selected keeps the hits in their grid's selection, the node fact.
   bool selected = 9;
+  // kind keeps the hits of this kind: text, url, shell, well or pane. An
+  // entry with no row has its kind, so it passes or fails like a row.
+  string kind = 10;
 }
 
 // TimeRange is an inclusive range of unix seconds; 0 leaves that end open.
@@ -883,12 +886,7 @@ message ViewPane {
   // derived on the client as shown_grid_ids is; "" while it is not cached.
   string          grid_id    = 5;
   bool            focused    = 6;
-  // layout_pane_id is the pane's id inside the layout blob of the innermost
-  // pane tile, "" outside every pane tile. id is namespaced per level on the
-  // client (pane.Tree.IDPrefix), and the blob keeps each pane's own view and
-  // selection under the bare id, so this is how the node finds the set the
-  // pane shows (pane.SelectionTarget).
-  string          layout_pane_id = 7;
+  reserved 7; // layout_pane_id
 }
 
 // DisableSource switches off a plugin or connection this node declares,
