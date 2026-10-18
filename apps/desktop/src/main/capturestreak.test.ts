@@ -13,7 +13,7 @@ function live(failures = 0): StreakState {
 
 const TABLE: { name: string; prev: StreakState; kind: AttemptKind; want: StreakDecision }[] = [
   {
-    name: '1. the first frame a pane ever produces says nothing',
+    name: '1. the first capture a pane ever produces says nothing',
     prev: FRESH,
     kind: 'ok',
     want: { state: live(0), report: null },
@@ -41,7 +41,7 @@ const TABLE: { name: string; prev: StreakState; kind: AttemptKind; want: StreakD
   })),
   {
     name: '11. a third failure counts but does not report again',
-    // The pump captures a mirrored pane on a timer; reporting per frame would
+    // The pump captures a mirrored pane on a timer; reporting per draw would
     // bury the log.
     prev: live(2),
     kind: 'timeout',
@@ -91,7 +91,7 @@ const TABLE: { name: string; prev: StreakState; kind: AttemptKind; want: StreakD
   },
   {
     name: '18. a view that has never painted is not a frozen mirror',
-    // Chromium answers capturePage with an empty image for the first frames
+    // Chromium answers capturePage with an empty image for the first captures
     // after a place, while the pane still shows its stored preview, so there is
     // nothing frozen to report.
     prev: FRESH,

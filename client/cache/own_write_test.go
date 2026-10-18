@@ -31,7 +31,7 @@ func TestAnOwnWriteEchoLeadingItsResponseKeepsTheBody(t *testing.T) {
 	end := c.BeginWrite("10")
 	c.Apply(changedEvent(paneRow(8)))
 	if _, ok := c.TileContent("10"); !ok {
-		t.Fatal("the write's own echo dropped the body, so the next frame reads back what this client just wrote")
+		t.Fatal("the write's own echo dropped the body, so the next draw reads back what this client just wrote")
 	}
 	c.PutSavedContent(paneRow(8), []byte("B"))
 	c.PutWriteResponse("1", paneRow(8), WroteBody)

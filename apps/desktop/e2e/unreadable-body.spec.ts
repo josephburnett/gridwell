@@ -5,8 +5,8 @@ import { dumpNow } from './trace';
 // A body the server refuses is the same answer every time it is asked, so a
 // tile on screen whose ReadContent fails asks once and says so once, until
 // something changes the body. The renderer asks for a missing body on every
-// draw and a notice draws a frame, so without a failure latch each refusal
-// paints the frame that asks again.
+// draw and a notice asks for a draw, so without a failure latch each refusal
+// paints the draw that asks again.
 
 // endStream is a Connect server stream ending in an error before any message:
 // not_found as the node answers for a link whose fs file is gone, unavailable
@@ -56,7 +56,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
   await window.waitForTimeout(2_000);
   const asked = refused;
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  // Let reads through before the dump, because a client asking every frame
+  // Let reads through before the dump, because a client asking every draw
   // never drains its trace backlog.
   refuse = false;
   const { cid, lines } = await dumpNow(window, gw.origin, await loginToken(gw.origin, homePassword(home)));
@@ -86,8 +86,8 @@ test('a body the server refuses is asked for once, reported once, and asked agai
 
 // An unreachable source is not a verdict, so its latch does not stand until a
 // change: the backstop re-asks once per interval. Without a latch at all the
-// renderer re-asks every frame.
-test('a body whose source is unreachable is asked for once per backstop, not per frame', async ({
+// renderer re-asks every draw.
+test('a body whose source is unreachable is asked for once per backstop, not per draw', async ({
   gw,
   window,
 }) => {

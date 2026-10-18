@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 import { settle } from './cadence';
 
-// A draw asks for what it shows on every frame until it lands, and a read in
+// A draw asks for what it shows on every draw until it lands, and a read in
 // flight answers every one of those asks. So a look reads each thing it shows
 // once: a second read of the same grid is an ask that owed nothing, and a
 // 60 fps transition makes one for everything in flight. Coming back to what the
@@ -106,7 +106,7 @@ test('a preview is fetched once on first look', async ({ electronApp, gw, window
   const tile = tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)!;
   await gw.waitIdle();
 
-  // The first look happens during an ascent, so frames are drawing while the
+  // The first look happens during an ascent, so draws are running while the
   // bytes decode: a reload inside a door empties the preview cache without
   // showing the tile, and the ascent out is stretched.
   await gw.openMenu();

@@ -66,7 +66,7 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   // The gesture is in the file, not only the plumbing: the press, the frame
   // the release asked for, and the verdict it took.
   const kinds = new Set(mine.map((r) => `${r.src}/${r.kind}`));
-  for (const want of ['gesture/press', 'frame/draw', 'gesture/release', 'drag/drop']) {
+  for (const want of ['gesture/press', 'render/draw', 'gesture/release', 'drag/drop']) {
     expect([...kinds], `the dump holds a ${want} record`).toContain(want);
   }
 
@@ -75,22 +75,22 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   // frames asked for under it cannot outnumber the notices in the same dump: a
   // read or write that simply worked, resolving a source that had no notice,
   // is not a reason to repaint.
-  const noticeFrames = mine.filter(
-    (r) => r.src === 'frame' && r.kind === 'draw' && r.msg === 'notice row',
+  const noticeDraws = mine.filter(
+    (r) => r.src === 'render' && r.kind === 'draw' && r.msg === 'notice row',
   );
   const notices = mine.filter((r) => r.kind === 'notice');
   expect(
-    noticeFrames.length,
-    `${noticeFrames.length} frames asked for by the notice row, against ${notices.length} notices`,
+    noticeDraws.length,
+    `${noticeDraws.length} frames asked for by the notice row, against ${notices.length} notices`,
   ).toBeLessThanOrEqual(notices.length);
 
   // The pane is the shim's to supply, and it is what joins the release to the
-  // frames and writes around it.
-  // A drawn frame is one record, and it says how long the draw took.
-  const frame = mine.find((r) => r.src === 'frame' && r.kind === 'draw');
-  expect(Number(frame?.kv?.ms), `the frame record carries its duration: ${JSON.stringify(frame)}`)
+  // draws and writes around it.
+  // A draw is one record, and it says how long the draw took.
+  const draw = mine.find((r) => r.src === 'render' && r.kind === 'draw');
+  expect(Number(draw?.kv?.ms), `the draw record carries its duration: ${JSON.stringify(draw)}`)
     .toBeGreaterThanOrEqual(0);
-  expect(mine.some((r) => r.src === 'frame' && r.kind === 'schedule'), 'no frame is recorded twice')
+  expect(mine.some((r) => r.src === 'render' && r.kind === 'schedule'), 'no draw is recorded twice')
     .toBe(false);
 
   const drop = mine.find((r) => r.src === 'drag' && r.kind === 'drop');

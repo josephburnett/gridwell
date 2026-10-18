@@ -336,7 +336,7 @@ func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	if !outer {
 		// A level with no parked tree falls back to a fresh pane at the pane
 		// tile's containing grid, which is the level's own fact off the row
-		// the descent read, so the landing is right on the first frame.
+		// the descent read, so the landing is right on the first draw.
 		pop.GridID = top.GridID
 		if pop.GridID == "" {
 			pop.GridID = w.Home

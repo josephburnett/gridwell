@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// The table a per-frame read runs on: which signal clears which latch. A
+// The table a per-draw read runs on: which signal clears which latch. A
 // latch nothing clears is a preview that never loads; a failure nothing latches
-// is a read per frame.
+// is a read per draw.
 func TestReadsLatchTable(t *testing.T) {
 	type signal struct {
 		name  string
@@ -164,7 +164,7 @@ func TestAChangeInFlightIsOwedToTheHolder(t *testing.T) {
 	}
 }
 
-// A draw asks every frame while a read is in flight. Its ask carries nothing
+// A draw asks every draw while a read is in flight. Its ask carries nothing
 // the read in flight does not already answer, so it owes no second read.
 func TestARepeatedAskOwesNothing(t *testing.T) {
 	r := NewReads()
@@ -178,7 +178,7 @@ func TestARepeatedAskOwesNothing(t *testing.T) {
 		}
 	}
 	if done() {
-		t.Error("a frame's repeated ask owed a re-read: every grid in flight is read twice")
+		t.Error("a draw's repeated ask owed a re-read: every grid in flight is read twice")
 	}
 }
 

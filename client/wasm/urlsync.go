@@ -36,8 +36,8 @@ func (a *App) scheduleFramingSave(fp pane.Fingerprint) {
 // flushFramingSave persists every pane's settled grid framing. The wait is a
 // settle re-armed by every change, so the flush comes once the view stops
 // moving: after the gesture, and after any animation it started, since an
-// animating pane's viewport changes on every frame of it. persistFraming still
-// owns the mid-transition refusal, for the frame an event lands in.
+// animating pane's viewport changes on every draw of it. persistFraming still
+// owns the mid-transition refusal, for the draw an event lands in.
 func (a *App) flushFramingSave() {
 	a.persist.framingFlushes++
 	// One active surface per grid: among panes showing the same grid only
@@ -189,7 +189,7 @@ func (a *App) adoptPendingViews() {
 // see zoomtrans.ShownDoorFraming.
 func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor string, doorPath []string) {
 	// Never a mid-animation viewport: a pane's centre and zoom are then the
-	// transition's scratch values, and storing one would make a frame of an
+	// transition's scratch values, and storing one would make a draw of an
 	// animation the framing the user comes back to. Nor a pending
 	// placeholder. Every writer asks here.
 	// A cancelled transition retires before its landing runs, so a write from

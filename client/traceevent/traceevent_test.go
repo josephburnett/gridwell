@@ -44,41 +44,41 @@ func TestAnEmptyValueIsNoKey(t *testing.T) {
 
 // One reason per site, no two sharing a spelling: the reason is the only
 // thing that says which site asked for the paint.
-func TestFrameReasonsAreDistinct(t *testing.T) {
+func TestDrawReasonsAreDistinct(t *testing.T) {
 	seen := map[string]bool{}
 	for _, why := range []string{WhyAnimation, WhyTransition, WhyGhost, WhyTraceFade,
 		WhyNotice, WhyGridLoaded, WhyContent, WhyPreview, WhyDrag, WhyReask} {
 		if why == "" {
-			t.Fatal("a frame reason is empty")
+			t.Fatal("a draw reason is empty")
 		}
 		if seen[why] {
-			t.Errorf("two frame reasons read %q", why)
+			t.Errorf("two draw reasons read %q", why)
 		}
 		seen[why] = true
 	}
 }
 
-// One record per drawn frame, under the first reason asked: a later ask in the
+// One record per draw, under the first reason asked: a later ask in the
 // same window is counted, not named, and an ask made during the draw belongs
-// to the next frame.
-func TestAFrameIsOneRecordUnderItsFirstReason(t *testing.T) {
-	var f FrameAsks
+// to the next draw.
+func TestADrawIsOneRecordUnderItsFirstReason(t *testing.T) {
+	var f DrawAsks
 	if !f.Ask(WhyGhost) {
-		t.Fatal("the first ask did not request a frame")
+		t.Fatal("the first ask did not request a draw")
 	}
 	if f.Ask(WhyNotice) || f.Ask(WhyDrag) {
-		t.Fatal("a later ask requested a second frame")
+		t.Fatal("a later ask requested a second draw")
 	}
 	asks := f.Take()
 	if !f.Ask(WhyTransition) {
-		t.Error("an ask after the take did not request the next frame")
+		t.Error("an ask after the take did not request the next draw")
 	}
 	e := asks.Drawn(3.25)
-	if e.Src != "frame" || e.Kind != "draw" || e.Msg != WhyGhost {
-		t.Errorf("the frame reads %+v, want frame/draw under %q", e, WhyGhost)
+	if e.Src != "render" || e.Kind != "draw" || e.Msg != WhyGhost {
+		t.Errorf("the draw reads %+v, want render/draw under %q", e, WhyGhost)
 	}
 	if e.KV["asks"] != "3" || e.KV["ms"] != "3.2" && e.KV["ms"] != "3.3" {
-		t.Errorf("the frame's kv is %v, want 3 asks and the draw's duration", e.KV)
+		t.Errorf("the draw's kv is %v, want 3 asks and the draw's duration", e.KV)
 	}
 }
 
@@ -143,7 +143,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		if e.Src != "drag" || e.Kind != "drop" || e.Msg != name {
 			t.Errorf("verdict %d is %+v, want msg %q", v, e, name)
 		}
-		// The pane the gesture is in, so the frames and writes around the
+		// The pane the gesture is in, so the draws and writes around the
 		// release join to it without reading the verdict back.
 		if e.KV["pane"] != "p1" || e.KV["tile"] != "t7abcde" || e.KV["grid"] != "g7abcde" {
 			t.Errorf("verdict %d names %v", v, e.KV)

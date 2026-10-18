@@ -16,7 +16,7 @@ const (
 // SurfaceOf answers it for one surface. descentID is the pane frame the
 // surface was opened for, not always the tile it shows: a live link's surface
 // belongs to the link's target while the frame carries the link row, so
-// passing the target's id would orphan it every frame.
+// passing the target's id would orphan it every draw.
 func SurfaceOf(onScreen bool, paneContentID, descentID string) SurfaceVerdict {
 	if !onScreen {
 		return SurfacePark

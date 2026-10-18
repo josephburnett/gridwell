@@ -318,10 +318,10 @@ func oneShot(fn func()) js.Func {
 	return cb
 }
 
-// oneShotsArmed, oneShotsLive and framesArmed are the e2e evidence that no
-// js.Func outlives its call; framesArmed separates frames, whose count is
+// oneShotsArmed, oneShotsLive and drawsArmed are the e2e evidence that no
+// js.Func outlives its call; drawsArmed separates draws, whose count is
 // the host's to decide.
-var oneShotsArmed, oneShotsLive, framesArmed int
+var oneShotsArmed, oneShotsLive, drawsArmed int
 
 // listen adds a DOM listener and returns the remover, which also releases the
 // js.Func: a surface opened and closed repeatedly must not leak one per open.
@@ -379,7 +379,7 @@ func newPersistState(a *App) persistState {
 }
 
 type scheduler struct {
-	frameAsks traceevent.FrameAsks
+	drawAsks traceevent.DrawAsks
 
 	wsSave *debounce.Debounce
 
@@ -413,7 +413,7 @@ func newScheduler(a *App) scheduler {
 		// out on every new notice.
 		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
 			if a.errs.Expire(time.Now()) {
-				a.scheduleFrame(traceevent.WhyNotice) // notice row shrank; panes reclaim the height on redraw
+				a.scheduleDraw(traceevent.WhyNotice) // notice row shrank; panes reclaim the height on redraw
 			}
 			a.scheduleErrExpiry()
 		}),
@@ -768,7 +768,7 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 }
 
 // fetchGrid loads a grid in the background, deduped per id, since the
-// renderer fires it every frame on a miss. It returns the end of the read
+// renderer fires it every draw on a miss. It returns the end of the read
 // that answers id, or nil when id is not asked for.
 func (a *App) fetchGrid(id string) <-chan struct{} {
 	if id == "" {
@@ -791,7 +791,7 @@ func (a *App) fetchGrid(id string) <-chan struct{} {
 			a.draw()
 		} else {
 			// Coalesced: completions land in bursts.
-			a.scheduleFrame(traceevent.WhyGridLoaded)
+			a.scheduleDraw(traceevent.WhyGridLoaded)
 		}
 		if owed {
 			a.fetchGrid(id)
@@ -881,22 +881,22 @@ func taggedLog(tag string) func(format string, args ...any) {
 	}
 }
 
-// scheduleFrame asks for one paint under why; see traceevent.FrameAsks.
-func (a *App) scheduleFrame(why string) {
-	if !a.persist.sched.frameAsks.Ask(why) {
+// scheduleDraw asks for one paint under why; see traceevent.DrawAsks.
+func (a *App) scheduleDraw(why string) {
+	if !a.persist.sched.drawAsks.Ask(why) {
 		return
 	}
-	framesArmed++
+	drawsArmed++
 	js.Global().Call("requestAnimationFrame", oneShot(func() {
-		asks := a.persist.sched.frameAsks.Take()
+		asks := a.persist.sched.drawAsks.Take()
 		perf := js.Global().Get("performance")
 		start := perf.Call("now").Float()
-		a.frame()
+		a.onDraw()
 		a.emit(asks.Drawn(perf.Call("now").Float() - start))
 	}))
 }
 
-func (a *App) frame() {
+func (a *App) onDraw() {
 	now := nowMs()
 	if a.ghost != nil {
 		if landing, done := a.ghost.Step(now); done {
@@ -904,7 +904,7 @@ func (a *App) frame() {
 			// is what draws again.
 			a.ghost = nil
 		} else if landing {
-			a.scheduleFrame(traceevent.WhyAnimation)
+			a.scheduleDraw(traceevent.WhyAnimation)
 		}
 	}
 	for _, tr := range a.trans.List() {
@@ -919,11 +919,11 @@ func (a *App) frame() {
 			a.trans.Advance(tr.PaneID, now)
 		}
 		if a.trans.Active(tr.PaneID) {
-			a.scheduleFrame(traceevent.WhyTransition)
+			a.scheduleDraw(traceevent.WhyTransition)
 		}
 	}
 	if a.pruneTraces(now) {
-		a.scheduleFrame(traceevent.WhyTraceFade)
+		a.scheduleDraw(traceevent.WhyTraceFade)
 	}
 	a.draw()
 }
@@ -943,7 +943,7 @@ func (a *App) pruneTraces(now float64) bool {
 // startTransition lands, rather than voids, whatever that pane was animating.
 func (a *App) startTransition(t *transition.Transition) {
 	a.trans.Start(t, nowMs())
-	a.scheduleFrame(traceevent.WhyTransition)
+	a.scheduleDraw(traceevent.WhyTransition)
 }
 
 // enterSegment is the one writer of the scratch viewport an animation drives.
@@ -977,7 +977,7 @@ func (a *App) landTransition(tr *transition.Transition) {
 	}
 	if tr.TraceTileID != "" {
 		a.traces[p.ID] = traceState{tileID: tr.TraceTileID, startMs: nowMs()}
-		a.scheduleFrame(traceevent.WhyTraceFade)
+		a.scheduleDraw(traceevent.WhyTraceFade)
 	}
 	if tr.OnComplete != nil {
 		tr.OnComplete()
@@ -1131,7 +1131,7 @@ func (a *App) retryKick(resync bool, source string) {
 func (a *App) reask(grids, tiles, contents []string, drawn ...[]string) {
 	for _, keys := range drawn {
 		if len(keys) > 0 {
-			a.scheduleFrame(traceevent.WhyReask)
+			a.scheduleDraw(traceevent.WhyReask)
 			break
 		}
 	}
@@ -1164,7 +1164,7 @@ func (a *App) drainOutbox() {
 func (a *App) retryBackstop() {
 	for {
 		a.backstop.Wait()
-		// An unreachable source is asked again once per tick, never per frame.
+		// An unreachable source is asked again once per tick, never per draw.
 		a.reask(a.fetch.grids.Backstop(), a.fetch.tiles.Backstop(),
 			a.fetch.contents.Backstop(), a.fetch.previews.Backstop(), a.fetch.menus.Backstop())
 		a.syncContentOutbox()
@@ -1233,7 +1233,7 @@ func (a *App) logNotice(sev errsurface.Severity, source, message string) {
 // noticed arms the expiry and the repaint a changed notice row owes.
 func (a *App) noticed() {
 	a.scheduleErrExpiry()
-	a.scheduleFrame(traceevent.WhyNotice)
+	a.scheduleDraw(traceevent.WhyNotice)
 }
 
 // scheduleErrExpiry arms one timer for the soonest deadline.
@@ -1256,7 +1256,7 @@ func (a *App) scheduleErrExpiry() {
 // rides the surface's verdict.
 func (a *App) resolveErr(source string) {
 	if a.errs.Resolve(source) {
-		a.scheduleFrame(traceevent.WhyNotice)
+		a.scheduleDraw(traceevent.WhyNotice)
 	}
 }
 

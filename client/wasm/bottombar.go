@@ -22,7 +22,7 @@ import (
 // the complete nav chain, the centered title and the circle slot. Geometry
 // comes from wsbar, so the hit-test reads the identical layout, and the band
 // is reserved layout so no pane can paint over it. What the bar shows is
-// derived per frame, never stored.
+// derived per draw, never stored.
 
 // barFont is the bar's lettering: the title measures with it and every crumb
 // draws in it, so the centered span cannot be sized from a different font.

@@ -59,7 +59,7 @@ func TestAPreviewNeverDrawsAnOlderBlobsLeaves(t *testing.T) {
 
 // This client's own layout write: its echo overtakes its response, the cache
 // holds the last bytes until the response files the new ones
-// (cache.BeginWrite), and a frame drawn in between decodes those last bytes.
+// (cache.BeginWrite), and a draw in between decodes those last bytes.
 // Once the new bytes are filed the preview must draw them, never the tree it
 // decoded while the write was in flight.
 func TestAPreviewRedrawsWhenItsOwnWriteFilesTheBytes(t *testing.T) {

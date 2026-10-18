@@ -649,7 +649,7 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 
 // forwardVerb is the shape every non-streaming verb takes: route the id, build
 // the far node's request around the local half, call it, and qualify the answer
-// back into this frame.
+// back into this node's ids.
 func forwardVerb[Req, Resp any](ctx context.Context, s *Server, ref string,
 	build func(local string, hop rpc.Hop) Req,
 	call func(namespace.Namespace, context.Context, Req) (Resp, error),

@@ -1,7 +1,7 @@
 // Package inflight bounds every client RPC and owns, per key, whether a read
 // is outstanding or has failed. Reads is the only way to hold a claim: the
 // claim set and the failure latches are unexported, so no caller can take a
-// claim without the latch that stops a failure being asked every frame. A
+// claim without the latch that stops a failure being asked every draw. A
 // claim ends when its fetch returns or CancelIf declares its link gone. Only
 // the event Subscribe and the shell WebSocket are unbounded.
 package inflight
@@ -38,7 +38,7 @@ type claim struct {
 	cancel context.CancelFunc
 	// owed records that the key changed while this claim was held: the
 	// answer in flight was taken before the change, so it is not the answer.
-	// A refused ask owes nothing, because a draw asks every frame and its ask
+	// A refused ask owes nothing, because a draw asks every draw and its ask
 	// carries no news the read in flight does not already answer.
 	owed bool
 	// end closes when the fetch returns.

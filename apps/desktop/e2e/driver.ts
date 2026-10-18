@@ -178,7 +178,7 @@ export class GridwellDriver {
 
   // Host callbacks the shim armed since boot and those still unfired; see
   // client/wasm's oneShot.
-  oneShots(): Promise<{ armed: number; live: number; frames: number }> {
+  oneShots(): Promise<{ armed: number; live: number; draws: number }> {
     return this.win.evaluate(() => (window as any).__gridwellTest.oneShots());
   }
 

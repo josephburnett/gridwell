@@ -337,8 +337,8 @@ func (a *App) closeAllURLStreams() {
 	}
 }
 
-// syncURLViews tracks every live view to its pane's content box each frame,
-// parking the ones this frame's gesture is in the way of.
+// syncURLViews tracks every live view to its pane's content box each draw,
+// parking the ones this draw's gesture is in the way of.
 func (a *App) syncURLViews() {
 	rects := a.layoutPanes()
 	g := a.canvasGesture()
@@ -401,7 +401,7 @@ func (a *App) reloadURLView(paneID string, v *urlView) {
 	a.bridgeReload(paneID, addr)
 }
 
-// canvasGesture mirrors this frame's gesture and overlay state for
+// canvasGesture mirrors this draw's gesture and overlay state for
 // pane.ParkSurface and pane.CanvasOwnsPointer.
 func (a *App) canvasGesture() pane.CanvasGesture {
 	g := pane.CanvasGesture{

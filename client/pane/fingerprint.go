@@ -2,7 +2,7 @@ package pane
 
 import "math"
 
-// The settle persisters are armed once per frame from draw(), and a frame is
+// The settle persisters are armed once per draw, from draw(), and a draw is
 // not a change: a live url or shell tile repaints on the mirror's cadence for
 // as long as it is open, an ascent trace fades for two seconds, a transition
 // runs for its duration. A settle keyed on frames stopping never comes due

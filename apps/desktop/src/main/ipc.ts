@@ -103,7 +103,7 @@ export interface ChoiceMenuArgs {
 export interface PlaceArgs {
   paneId: string;
   tileId: string;
-  // The renderer's per-frame gesture-hide verdict at placement, so a view
+  // The renderer's per-draw gesture-hide verdict at placement, so a view
   // placed under an open menu starts parked. The registry must not infer it
   // from whichever setHidden arrived last.
   hidden?: boolean;

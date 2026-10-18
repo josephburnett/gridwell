@@ -77,7 +77,7 @@ func Log(tag, message string) Event {
 	return Event{Src: strings.Trim(tag, "[]"), Kind: "log", Msg: message}
 }
 
-// The reasons a frame is asked for, each naming the site that asks. A paint
+// The reasons a draw is asked for, each naming the site that asks. A paint
 // that came from nowhere is the twitch, so the reason is the record.
 const (
 	WhyAnimation  = "ghost animation"
@@ -93,16 +93,16 @@ const (
 	WhySelection  = "selection reconciled"
 )
 
-// FrameAsks is the paint asked for and not yet drawn. Asks coalesce, so the
-// first reason is the frame's and the count says how many sites wanted it.
-type FrameAsks struct {
+// DrawAsks is the paint asked for and not yet drawn. Asks coalesce, so the
+// first reason is the draw's and the count says how many sites wanted it.
+type DrawAsks struct {
 	why string
 	n   int
 }
 
 // Ask records one ask and reports whether it is the first, the one that must
-// request the frame.
-func (f *FrameAsks) Ask(why string) bool {
+// request the draw.
+func (f *DrawAsks) Ask(why string) bool {
 	f.n++
 	if f.n > 1 {
 		return false
@@ -111,16 +111,16 @@ func (f *FrameAsks) Ask(why string) bool {
 	return true
 }
 
-// Take clears the asks, so an ask made during the draw arms the next frame.
-func (f *FrameAsks) Take() FrameAsks {
+// Take clears the asks, so an ask made during the draw arms the next draw.
+func (f *DrawAsks) Take() DrawAsks {
 	t := *f
-	*f = FrameAsks{}
+	*f = DrawAsks{}
 	return t
 }
 
-// Drawn is the one record of a drawn frame.
-func (f FrameAsks) Drawn(ms float64) Event {
-	return Event{Src: "frame", Kind: "draw", Msg: f.why,
+// Drawn is the one record of a draw.
+func (f DrawAsks) Drawn(ms float64) Event {
+	return Event{Src: "render", Kind: "draw", Msg: f.why,
 		KV: kv("asks", strconv.Itoa(f.n), "ms", strconv.FormatFloat(ms, 'f', 1, 64))}
 }
 

@@ -6,7 +6,7 @@ package urlview
 import "github.com/josephburnett/gridwell/api/rpc"
 
 // Capture is what a closing view reports about its page besides the address:
-// the last frame, its title and its navigation trail. None of it is content.
+// the last draw, its title and its navigation trail. None of it is content.
 type Capture struct {
 	JPEG    []byte
 	Title   string

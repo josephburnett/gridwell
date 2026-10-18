@@ -184,7 +184,7 @@ func TestContentBoxIsTheFallbackBox(t *testing.T) {
 	live := ContentBox(r, 2)
 	dx, dy, dw, dh, ok := preview.ContainDstRect(live.W, live.H, live.X, live.Y, live.W, live.H)
 	if !ok || dx != live.X || dy != live.Y || dw != live.W || dh != live.H {
-		t.Fatalf("frame drawn into its own box moved: (%v,%v,%v,%v)", dx, dy, dw, dh)
+		t.Fatalf("a capture drawn into its own box moved: (%v,%v,%v,%v)", dx, dy, dw, dh)
 	}
 	// The box runs to the pane's bottom border, because a live view fills the
 	// pane and no band is reserved out of it.
@@ -231,7 +231,7 @@ func TestLiveViewOwnsPoint(t *testing.T) {
 	}
 
 	// The owned region is PointInContent's. One box and one hit-test keep the
-	// parked frame the canvas draws and the live view it replaces from
+	// parked capture the canvas draws and the live view it replaces from
 	// disagreeing about which points are theirs.
 	for _, p := range [][2]float64{{inX, inY}, {outX, outY}, {100, 40}, {700, 440}, {702, 240}} {
 		if got, want := LiveViewOwnsPoint(false, true, r, border, p[0], p[1]), PointInContent(r, border, p[0], p[1]); got != want {

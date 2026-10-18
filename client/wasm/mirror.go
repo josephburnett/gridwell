@@ -17,8 +17,8 @@ type mirrorState struct {
 	shell   []string
 }
 
-// syncMirrors runs every frame, because every change that can show or hide a
-// preview draws one; a frame that changes no answer says nothing.
+// syncMirrors runs every draw, because every change that can show or hide a
+// preview draws one; a draw that changes no answer says nothing.
 func (a *App) syncMirrors(rects map[string]pane.Rect) {
 	urls, shells := a.urlSurfaces(), a.shellSurfaces()
 	var shown []pane.Shown

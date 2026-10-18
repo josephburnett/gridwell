@@ -14,7 +14,7 @@ import (
 
 // Tracker is the one sender's state. A view that failed to send is not retried
 // until it changes or the stream re-opens, so a refusal cannot become a call
-// per frame.
+// per draw.
 type Tracker struct {
 	mu   sync.Mutex
 	want *gridwellv1.SetViewRequest

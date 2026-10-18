@@ -37,7 +37,7 @@ func TestLayoutsTree(t *testing.T) {
 		t.Fatal("bytes in flight and nothing older: no tree")
 	}
 	if _, ok := l.Tree("n1/7", 3, 0, inflight.body); ok || inflight.asked != 2 {
-		t.Fatal("a miss memoizes nothing: the next frame asks again")
+		t.Fatal("a miss memoizes nothing: the next draw asks again")
 	}
 
 	tree, ok := l.Tree("n1/7", 3, 1, good.body)

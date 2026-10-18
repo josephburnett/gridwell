@@ -65,13 +65,13 @@ type shellStreamConn struct {
 	// this terminal; see syncMirrors.
 	mirror   *debounce.Debounce
 	onRender js.Func
-	// shown is whether the overlay was on screen last frame, so a park snapshots
+	// shown is whether the overlay was on screen last draw, so a park snapshots
 	// the preview its pane is about to draw.
 	shown bool
 
 	lastCols, lastRows uint16
 
-	// lastFit* are the last fit()'s inputs, box and font size: fitting every frame
+	// lastFit* are the last fit()'s inputs, box and font size: fitting every draw
 	// lets box wobble churn resizes, each a SIGWINCH.
 	lastFitW, lastFitH float64
 	lastFitFont        int

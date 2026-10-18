@@ -7,7 +7,7 @@ import "github.com/josephburnett/gridwell/client/pane"
 // Which bytes may stand for the row is the cache's: it drops bytes a foreign
 // row moved past, because an older arrangement names panes and tiles the row
 // no longer does and drawing one resolves them. A corrupt body is reported
-// once rather than per frame. It is not safe for concurrent use, the wasm
+// once rather than per draw. It is not safe for concurrent use, the wasm
 // client being single-threaded.
 type Layouts struct {
 	onErr   func(tileID string, err error)

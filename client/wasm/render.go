@@ -301,7 +301,7 @@ func (a *App) draw() {
 		ts := a.ghost.targetCellSize
 		if ts > 0 && math.Abs(ts-ds) > 0.5 {
 			a.ghost.displayedCellSize = ds + (ts-ds)*ghostSizeLerpAlpha
-			a.scheduleFrame(traceevent.WhyGhost)
+			a.scheduleDraw(traceevent.WhyGhost)
 		} else if ts > 0 {
 			a.ghost.displayedCellSize = ts
 		}
@@ -309,7 +309,7 @@ func (a *App) draw() {
 		tf := a.ghost.targetFragmentation
 		if math.Abs(tf-df) > 0.01 {
 			a.ghost.displayedFragmentation = df + (tf-df)*ghostSizeLerpAlpha
-			a.scheduleFrame(traceevent.WhyGhost)
+			a.scheduleDraw(traceevent.WhyGhost)
 		} else {
 			a.ghost.displayedFragmentation = tf
 		}
@@ -378,7 +378,7 @@ func (a *App) draw() {
 	}
 
 	// Both persisters derive from the live tree, armed by a fingerprint of what
-	// each would write: a frame is not a change, and a live tile repaints on the
+	// each would write: a draw is not a change, and a live tile repaints on the
 	// mirror's cadence.
 	a.scheduleWorkspaceSave(pane.LayoutFingerprint(a.tree))
 	a.scheduleFramingSave(pane.FramingFingerprint(a.tree))
@@ -869,7 +869,7 @@ func (a *App) fetchTileContent(tileID string) {
 	go func() {
 		defer done()
 		// Coalesced: body fetches land in bursts.
-		_ = a.loadTileContent(ctx, tileID, func() { a.scheduleFrame(traceevent.WhyContent) })
+		_ = a.loadTileContent(ctx, tileID, func() { a.scheduleDraw(traceevent.WhyContent) })
 	}()
 }
 

@@ -16,7 +16,7 @@ import (
 )
 
 // The read-only rendered view: one DOM overlay div positioned over the
-// focused rendered text descent each frame, whose innerHTML is
+// focused rendered text descent each draw, whose innerHTML is
 // markdown.RenderHTML's sanitized output. Every other rendered view is drawn
 // on canvas from its raster (rendered_preview.go), laid out at the same width.
 

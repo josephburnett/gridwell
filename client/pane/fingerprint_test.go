@@ -86,7 +86,7 @@ func TestWhatMovesEachPersistersFingerprint(t *testing.T) {
 
 // The hover-wheel's drift lives in a map, and the caller folds each entry in.
 // Map order is not a fact about the drift, so folding the same entries in
-// either order is the same fingerprint — otherwise every frame would look like
+// either order is the same fingerprint — otherwise every draw would look like
 // a change and the settle would never come due.
 func TestUnorderedFoldingIgnoresOrder(t *testing.T) {
 	a := NewFingerprint().Str("t7abcde").Num(1)

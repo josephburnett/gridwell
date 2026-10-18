@@ -185,7 +185,7 @@ func (a *App) placementWrite(gid string, req *gridwellv1.MoveTileRequest, snapBa
 			if snapBack != nil {
 				snapBack()
 			}
-			a.scheduleFrame(traceevent.WhyDrag)
+			a.scheduleDraw(traceevent.WhyDrag)
 		},
 	}
 }
@@ -246,7 +246,7 @@ func (a *App) startSnap(toX, toY, duration float64) {
 		return
 	}
 	a.ghost.Land(toX, toY, nowMs(), duration)
-	a.scheduleFrame(traceevent.WhyDrag)
+	a.scheduleDraw(traceevent.WhyDrag)
 }
 
 // cancelDragSnapBack runs the snap-back when a drop is abandoned.
@@ -276,11 +276,11 @@ func (a *App) snapBackMember(gh *ghost, d *dragState, i int) {
 	gh.Return(i, gh.X+float64(dx)*cell, gh.Y+float64(dy)*cell, cell,
 		d.originScreenX+float64(dx)*home, d.originScreenY+float64(dy)*home, home,
 		nowMs(), snapBackMs)
-	a.scheduleFrame(traceevent.WhyDrag)
+	a.scheduleDraw(traceevent.WhyDrag)
 }
 
 // snapBackToOrigin animates the ghost back to the dragged tile's original
-// location. Size returns separately: each frame lerps displayedCellSize
+// location. Size returns separately: each draw lerps displayedCellSize
 // toward srcCellSize.
 func (a *App) snapBackToOrigin(d *dragState) {
 	if a.ghost == nil {
@@ -291,5 +291,5 @@ func (a *App) snapBackToOrigin(d *dragState) {
 		a.ghost.targetCellSize = d.srcCellSize
 	}
 	a.ghost.Land(d.originScreenX, d.originScreenY, nowMs(), snapBackMs)
-	a.scheduleFrame(traceevent.WhyDrag)
+	a.scheduleDraw(traceevent.WhyDrag)
 }

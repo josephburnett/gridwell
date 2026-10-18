@@ -130,7 +130,7 @@ func TestDecideDescentTable(t *testing.T) {
 			Descent{Mode: rpc.TextModeRendered, Toggle: true}},
 		{"a url descent has no text mode", url, false, rpc.TextModeText, Descent{}},
 		// The row has not landed: the mode the descent chose stands, so the
-		// editor opens on the first frame rather than after the fetch.
+		// editor opens on the first draw rather than after the fetch.
 		{"row not landed", nil, false, rpc.TextModeText, Descent{Mode: rpc.TextModeText}},
 		{"row not landed, no mode", nil, false, "", Descent{Mode: rpc.TextModeRendered}},
 	}

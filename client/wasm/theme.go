@@ -11,7 +11,7 @@ import (
 
 // The shim's half of client/theme: the palette reaches the DOM as --gw-
 // custom properties, and the surfaces that hold a color of their own rather
-// than reading one per frame — the rendered-document stylesheet and a live
+// than reading one per draw — the rendered-document stylesheet and a live
 // terminal — are restyled. The canvas needs nothing but a redraw.
 
 // themeKey is where the preference lives. It is a client view preference and
@@ -86,7 +86,7 @@ func (a *App) applyTheme(t theme.Theme) {
 }
 
 // refreshRenderedOverlayBg restyles the one DOM surface whose background is
-// set at creation rather than per frame.
+// set at creation rather than per draw.
 func (a *App) refreshRenderedOverlayBg() {
 	if a.overlays.renderedView.Truthy() {
 		a.overlays.renderedView.Get("style").Set("background", a.pal.FileInnerBg)

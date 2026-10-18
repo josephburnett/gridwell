@@ -12,7 +12,7 @@ func TestLatchHoldsUntilCleared(t *testing.T) {
 	}
 	l.set("g1")
 	if !l.has("g1") {
-		t.Error("a verdict must hold, or the renderer re-asks it every frame")
+		t.Error("a verdict must hold, or the renderer re-asks it every draw")
 	}
 	if l.has("g2") {
 		t.Error("one key's verdict says nothing about another's")

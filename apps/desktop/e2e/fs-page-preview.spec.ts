@@ -52,7 +52,7 @@ test('a served page with no picture is not asked for one, and its screenshot bec
     );
   await gw.descendCell(Number(page.x ?? 0), Number(page.y ?? 0));
   await expect.poll(live, { message: 'the descent opens the page live', timeout: 15_000 }).toBe(true);
-  // Let the page paint, so the freeze has a frame to take.
+  // Let the page paint, so the freeze has a paint to take.
   await window.waitForTimeout(500);
   await gw.ascendViaCrumb();
   await expect.poll(live, { timeout: 15_000 }).toBe(false);

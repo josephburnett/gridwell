@@ -15,7 +15,7 @@ import (
 // A pane layout write's own echo, off the real Subscribe stream, applied
 // before its real response the way the client sees it whenever the stream
 // beats the reply: the body this client just wrote must stay cached, because
-// a missing body is what makes the next frame ReadContent the tile.
+// a missing body is what makes the next draw ReadContent the tile.
 func TestALayoutWriteEchoLeadingItsResponseIsNotReadBack(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -79,7 +79,7 @@ func TestALayoutWriteEchoLeadingItsResponseIsNotReadBack(t *testing.T) {
 
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: echo}}})
 	if _, ok := c.TileContent(pt.Id); !ok {
-		t.Fatal("the write's own echo dropped the body: the next frame reads back the layout this client just wrote")
+		t.Fatal("the write's own echo dropped the body: the next draw reads back the layout this client just wrote")
 	}
 	c.PutSavedContent(resp, after)
 	c.PutWriteResponse(resp.GridId, resp, cache.WroteBody)

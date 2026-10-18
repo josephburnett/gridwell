@@ -221,7 +221,7 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 }
 
 // memoWrap caches the wrap, because re-wrapping every visible document each
-// frame costs O(doc x tiles). Keyed by content id, the bytes' generation
+// draw costs O(doc x tiles). Keyed by content id, the bytes' generation
 // (cache.BodyGen) and columns. Bounded by wholesale reset, since it is
 // derived and never a fact.
 func (a *App) memoWrap(n *gridwellv1.Tile) func(string, int) []string {

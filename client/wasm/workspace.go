@@ -250,8 +250,8 @@ func (a *App) postPaneLayout(tileID string, data []byte, held func(ok bool)) {
 			a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 			a.resolveErr("rpc:PaneLayout")
 			landed = true
-			// A frame the echo drew skipped the body while it was in flight.
-			a.scheduleFrame(traceevent.WhyContent)
+			// A draw of the echo skipped the body while it was in flight.
+			a.scheduleDraw(traceevent.WhyContent)
 		},
 		done: func() {
 			end()

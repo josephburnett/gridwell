@@ -232,9 +232,9 @@ the failure latches, cancel every fetch set, refetch every named and
 known grid, then `syncContentOutbox` and drain. `retryBackstop` runs
 `retryKick(false, …)` every `retry.Backstop` while anything is parked, and
 re-asks every read latched Unreachable on the same tick: a grid, tile or body
-read the renderer re-asks every frame is an `inflight.Reads`, whose failure
+read the renderer re-asks every draw is an `inflight.Reads`, whose failure
 latches until a change (a verdict) or the next tick (an outage), never the
-next frame.
+next draw.
 `client/retry` owns that cadence, the two reconnect waits and the gap they
 pace, and the boot handshake's backoff.
 

@@ -136,7 +136,7 @@ func TestPendingNeverOutrunsTheSchedule(t *testing.T) {
 	}
 }
 
-// A pan arms the framing persister on every frame it draws. Under a throttle
+// A pan arms the framing persister on every draw. Under a throttle
 // the run came a fixed window after the first of those arms and the gesture
 // was written four times; a settle has nothing to say until the arms stop,
 // which is what "persists only its resting state" means.
@@ -202,7 +202,7 @@ func TestASettleHoldsOneTimerAtATime(t *testing.T) {
 
 // The arm-on-change table. A live url or shell tile repaints on the mirror's
 // own cadence for as long as it is open, and every one of those paints reaches
-// the persisters; keyed on the fact instead of the frame, they arm nothing and
+// the persisters; keyed on the fact instead of the draw, they arm nothing and
 // the window the gesture opened closes on time. Without this, the workspace tile
 // layout of a workspace holding a live shell never reached the server at all.
 func TestArmOnChangeIgnoresARepaintThatPersistsNothingNew(t *testing.T) {
@@ -211,7 +211,7 @@ func TestArmOnChangeIgnoresARepaintThatPersistsNothingNew(t *testing.T) {
 	d := New(q.schedule, q.clock, Settle, func() { ran++ })
 	const window, mirror = 600, 250
 
-	// The gesture: the fact moves on every frame, and each arm moves the
+	// The gesture: the fact moves on every draw, and each arm moves the
 	// window with it.
 	for i := 0; i < 5; i++ {
 		d.ArmOnChange(window, uint64(i))

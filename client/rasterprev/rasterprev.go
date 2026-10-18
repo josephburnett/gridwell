@@ -12,7 +12,7 @@ import (
 )
 
 // buckets quantize the layout width so continuous grid zoom re-rasterizes at
-// steps, not per frame. They are geometric, each 1/8 wider than the last, so
+// steps, not per draw. They are geometric, each 1/8 wider than the last, so
 // the margin a bucket leaves is under a ninth of the box at every width.
 var buckets = func() []float64 {
 	out := []float64{64}
@@ -92,7 +92,7 @@ func onlyBytesDiffer(a, b Key) bool {
 }
 
 // slot is the map key: a tile at one width bucket. Two consumers at different
-// widths would otherwise replace one entry every frame, each revoking the
+// widths would otherwise replace one entry every draw, each revoking the
 // other's loading raster.
 type slot struct {
 	tileID string

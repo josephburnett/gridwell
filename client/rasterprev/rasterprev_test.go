@@ -84,14 +84,14 @@ func TestFailureReportsOncePerKeyAndNeverRetries(t *testing.T) {
 	if len(reports) != 1 {
 		t.Fatalf("reports after failure = %v, want one", reports)
 	}
-	// Later frames re-ask for the same key.
+	// Later draws re-ask for the same key.
 	for i := 0; i < 5; i++ {
 		if _, _, ok := c.Ensure(key(1, 64), svgOK("<svg/>"), nil); ok {
 			t.Fatal("a failed key must stay not-ready")
 		}
 	}
 	if len(reports) != 1 {
-		t.Errorf("reports after 5 more frames = %v, want the one", reports)
+		t.Errorf("reports after 5 more draws = %v, want the one", reports)
 	}
 	if ras.calls != 1 {
 		t.Errorf("Rasterize calls = %d, want 1: a failed key must not retry-loop", ras.calls)
@@ -244,7 +244,7 @@ func TestStandInAcrossBucketsNeverAcrossBytes(t *testing.T) {
 		t.Fatalf("in flight at 192: %v %v %v, want the nearest ready bucket, 128", r, w, ok)
 	}
 	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w != 128 || r.(*fakeRaster).svg != "v1@128" {
-		t.Fatalf("second frame in flight: %v %v %v, want the stand-in again", r, w, ok)
+		t.Fatalf("second draw in flight: %v %v %v, want the stand-in again", r, w, ok)
 	}
 	if ras.calls != 3 {
 		t.Errorf("Rasterize calls = %d, want 3: a stand-in does not re-ask", ras.calls)

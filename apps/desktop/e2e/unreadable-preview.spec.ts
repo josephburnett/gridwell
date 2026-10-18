@@ -3,7 +3,7 @@ import { tileAt } from './oracle';
 
 // A url tile's preview is fetched on every draw until it lands. A
 // preview the server refuses is the same answer every time, so it is asked
-// for once; without a failure latch each refusal's notice paints the frame
+// for once; without a failure latch each refusal's notice asks for the draw
 // that asks again. unreadable-body.spec.ts is the same rule for a body.
 
 test('a preview the server refuses is asked for once', async ({ electronApp, gw, window }) => {

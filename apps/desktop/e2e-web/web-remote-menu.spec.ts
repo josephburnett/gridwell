@@ -434,9 +434,9 @@ test('a menu read the network swallows does not latch the remote menu empty', as
 
 // The remote menu is read on every draw of the open menu until it lands, so a
 // read that fails must latch like every other per-frame read, or its notice
-// paints the frame that asks again. A dark far node is Unreachable: asked
-// again on the backstop tick, not the next frame.
-test('a menu read that fails is not asked again every frame', async ({ gw, window, world }) => {
+// paints the draw that asks again. A dark far node is Unreachable: asked
+// again on the backstop tick, not the next draw.
+test('a menu read that fails is not asked again every draw', async ({ gw, window, world }) => {
   await enterFarRoom(gw, world);
 
   let failed = 0;

@@ -5,7 +5,7 @@ import { BrowserWindow } from 'electron';
 // The display compositor lives in the GPU process, which on a host with no GPU
 // first loads Mesa's llvmpipe to probe GL; from a cold disk that takes
 // seconds, and until it is up no view yields a frame. Its arrival is an event,
-// ready-to-show, so a scenario's frame budget never pays for it.
+// ready-to-show, so a scenario's paint budget never pays for it.
 const COMPOSITED_BUDGET_MS = 30_000;
 
 export async function hostWindow(): Promise<BrowserWindow> {

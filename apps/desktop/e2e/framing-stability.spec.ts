@@ -74,7 +74,7 @@ test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw
   expect(Math.abs(back.cx - left.cx), 'fs root cx restored').toBeLessThan(0.51);
 });
 
-// One pan, one write. Every frame a drag draws arms the framing persister, so a
+// One pan, one write. Every draw of a drag arms the framing persister, so a
 // window fixed at the first of those arms writes the middle of the gesture
 // instead of its end: a 21-minute trace held four SetFraming writes on one grid
 // inside two seconds of a single pan, and each of those is a store write, an
@@ -531,7 +531,7 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
   ).toBe(true);
   expect(
     await rootView(),
-    'a frame of the descent animation became the durable root framing',
+    'a draw of the descent animation became the durable root framing',
   ).toEqual(settled);
 
   await window.evaluate(`(window).__gridwellTest.setTransitionMs(350)`);

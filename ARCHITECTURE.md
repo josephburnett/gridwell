@@ -525,9 +525,9 @@ while the surface is parked, so a park takes one frame first.
 
 `apps/desktop/src/main` does one thing: it places native `WebContentsView`s
 over the canvas for live url tiles. `WebviewRegistry` (`webviews.ts`) owns
-one entry per pane. `syncURLViews` runs every frame: the renderer sends CSS-px
+one entry per pane. `syncURLViews` runs every draw: the renderer sends CSS-px
 bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
-`pane.ParkSurface` says, per pane, whether this frame's gesture needs that
+`pane.ParkSurface` says, per pane, whether this draw's gesture needs that
 view's pixels — a pan in one pane leaves the others alone. The focus guard keeps OS keyboard focus in the focused
 pane's view only. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
@@ -587,7 +587,7 @@ go version and user agent; Electron main its app, Electron and Chrome
 versions. The commit is the go toolchain's stamp (`tracewire.BuildCommit`),
 absent from a build with none — a `go test`, or a build in a git worktree.
 
-On the client, a drawn frame is one record, `frame/draw`: its msg is the
+On the client, a draw is one record, `render/draw`: its msg is the
 first reason asked (`traceevent.Why*`), `kv.asks` counts the asks it
 absorbed, and `kv.ms` is how long the draw took. Every mouse press and
 release is a `gesture/press` or `gesture/release` record naming the pane
@@ -650,7 +650,7 @@ copy:
 
 Remaining seams with more than one writer, ranked by risk:
 
-1. Native view bounds vs. canvas pane rect — reconciled every frame in
+1. Native view bounds vs. canvas pane rect — reconciled every draw in
    `syncURLViews`; the math is extracted to `viewutil.ts`.
 2. The drag threshold — `dragThreshold` in Go plus forced copies in
    `viewutil.ts` and the sandboxed `urlview-preload.ts`; drift-linted.

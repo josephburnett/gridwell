@@ -263,7 +263,7 @@ export class WebviewRegistry {
         preload: urlViewPreload,
       },
     });
-    // hidden and focused start from the renderer's verdict for this frame,
+    // hidden and focused start from the renderer's verdict for this draw,
     // because it owns both. hidden keeps a view placed under an open menu
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
@@ -385,7 +385,7 @@ export class WebviewRegistry {
   }
 
   // Parking rather than destroying is what lets a canvas overlay paint where
-  // the native view sits. syncURLViews calls this every frame.
+  // the native view sits. syncURLViews calls this every draw.
   // A park is the one moment the pane reads its own preview, and a parked view
   // has nothing to capture, so the view stays up until the preview is taken.
   setHidden(paneId: string, hidden: boolean, focused: boolean): void {

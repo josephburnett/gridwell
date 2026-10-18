@@ -104,7 +104,7 @@ func TestCancelIfLeavesTheFetchesThatKeptTheirLink(t *testing.T) {
 func TestZombieReleaseKeepsTheFreshClaim(t *testing.T) {
 	// The reconnect cancels the fetch, the caller re-asks at once, and
 	// only then does the cancelled fetch return and release. Freeing the
-	// key there would dogpile the fresh fetch on every frame that draws.
+	// key there would dogpile the fresh fetch on every draw.
 	s := newClaimSet(time.Minute)
 	_, zombieDone, _ := s.begin("g1")
 	s.cancelIf(everyKey)

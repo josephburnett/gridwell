@@ -52,7 +52,7 @@ function fail(msg: string): never {
 // A load is an event, so waiting for it costs a cold machine nothing. A frame
 // is a budget, because Chromium announces no first paint. Keeping them apart,
 // and the compositor's start apart from both (see host.ts), is what stops a
-// cold runner from spending the frame budget on its first renderer.
+// cold runner from spending the paint budget on its first renderer.
 const LOAD_BUDGET_MS = 30_000;
 const FRAME_BUDGET_MS = 6_000;
 
@@ -72,7 +72,7 @@ function loadFinished(wc: WebContents, what: string): Promise<void> {
   });
 }
 
-// The first frame a freshly placed view paints. The load is awaited as an
+// The first paint of a freshly placed view. The load is awaited as an
 // event first, so FRAME_BUDGET_MS bounds rendering alone, and a failure says
 // which half ran out.
 async function waitForFirstFrame(
@@ -86,7 +86,7 @@ async function waitForFirstFrame(
   await loadFinished(wc, what);
   const loadMs = Date.now() - loadStart;
   const frameStart = Date.now();
-  // Every miss is tallied by kind, so a slow first frame on a runner says
+  // Every miss is tallied by kind, so a slow first paint on a runner says
   // whether the surface was absent, empty, or wedged.
   const misses = new Map<string, number>();
   const view = { webContents: wc } as unknown as WebContentsView;
@@ -95,7 +95,7 @@ async function waitForFirstFrame(
     if (attempt.kind === 'ok') {
       const jpeg = await registry.capture(paneId);
       if (jpeg.length === 0) fail(`${what}: the view has a frame, but the registry's capture returned none`);
-      console.log(`${what}: loaded in ${loadMs}ms, first frame ${Date.now() - frameStart}ms after${tally(misses)}${gpuStatus()}`);
+      console.log(`${what}: loaded in ${loadMs}ms, first paint ${Date.now() - frameStart}ms after${tally(misses)}${gpuStatus()}`);
       return jpeg;
     }
     const key = describeAttempt(attempt);
@@ -538,7 +538,7 @@ app.whenReady().then(async () => {
   console.log('restore refusal ok: reported once, with its reason, by nothing else');
 
   // ── setBounds returns early when nothing moved ──────────────────────────
-  // syncURLViews calls setBounds every frame, so the equal-bounds early return
+  // syncURLViews calls setBounds every draw, so the equal-bounds early return
   // is the difference between a no-op and re-applying the composed zoom sixty
   // times a second. Zoom makes it observable, because applyMinWidthZoom is the
   // only thing in the registry that touches zoomFactor.
@@ -559,7 +559,7 @@ app.whenReady().then(async () => {
 
   // ── setHidden carries a focus change with no view change ────────────────
   // Focus and visibility ride the same call because syncURLViews reports both
-  // every frame. A focus-only change must be recorded and must not move the
+  // every draw. A focus-only change must be recorded and must not move the
   // view, or a focus move would blank live content.
   const regFo = new WebviewRegistry(win, {});
   const foBounds = { x: 5, y: 6, width: 400, height: 300 };
@@ -751,7 +751,7 @@ app.whenReady().then(async () => {
   // Between the old document's surface going away and the new one's first
   // frame there is nothing to read, and capturePage rejects there
   // (UnknownVizError on the Linux dev box). That is a page loading, not a
-  // frozen mirror, so the tick is skipped: the mirror keeps its last frame and
+  // frozen mirror, so the tick is skipped: the mirror keeps its last capture and
   // nothing is reported.
   const navPage2 = await startPage();
   const gapErrs: string[] = [];

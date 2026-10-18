@@ -87,7 +87,7 @@ func TestGetEmptyReturnsNotOK(t *testing.T) {
 }
 
 // TestPutEmptySettlesTheMiss pins that a completed no-preview answer is no
-// longer Owed for that blob id, so the caller stops re-asking every frame. A
+// longer Owed for that blob id, so the caller stops re-asking every draw. A
 // changed blob id invalidates it, and a real image is never downgraded to a
 // miss.
 func TestPutEmptySettlesTheMiss(t *testing.T) {
@@ -345,7 +345,7 @@ func TestRevokedImageReportsNotTruthyAndGetMisses(t *testing.T) {
 // TestPutDecodeErrorSettlesTheMiss pins that a decode failure on a tile with
 // no prior image is a settled answer for that blob id, reported once. Left
 // unsettled, the blob is Owed forever, so the caller's fetch
-// guard re-asks the server on every draw, one RPC per frame, silently.
+// guard re-asks the server on every draw, one RPC per draw, silently.
 func TestPutDecodeErrorSettlesTheMiss(t *testing.T) {
 	d := &fakeDecoder{}
 	var reported []string
@@ -401,7 +401,7 @@ func TestPutDecodeErrorFromSupersededPutIsIgnored(t *testing.T) {
 }
 
 // A decode runs after the fetch that brought its bytes has returned, so a
-// blob whose bytes are decoding is answered: asking again on the next frame
+// blob whose bytes are decoding is answered: asking again on the next draw
 // fetches the same bytes twice.
 func TestADecodingBlobIsNotOwed(t *testing.T) {
 	d := &fakeDecoder{}

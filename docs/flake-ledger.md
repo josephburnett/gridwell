@@ -76,7 +76,7 @@ None is open.
   The error name is shared, the mechanism is not. `capturePage` also
   rejects with `UnknownVizError` inside a main-frame navigation, where the
   old document's surface is gone and the new one has not painted; that one
-  heals on the next frame and is fixed — a tick there is not an attempt
+  heals on the next draw and is fixed — a tick there is not an attempt
   (`capture.capturable`). This row is only the permanent per-surface
   collapse after `forcefullyCrashRenderer` + `reload`, which no navigation
   gate can reach.

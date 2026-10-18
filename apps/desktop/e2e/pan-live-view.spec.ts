@@ -73,7 +73,7 @@ test('a pan in one pane never parks the live url view in another', async ({
   await gw.waitIdle();
 
   expect(draggingMidPan, 'the pan was armed while the samples were taken').toBe(true);
-  expect(samples, 'the live view stayed on screen for every frame of the pan').toEqual([
+  expect(samples, 'the live view stayed on screen for every draw of the pan').toEqual([
     false,
     false,
     false,

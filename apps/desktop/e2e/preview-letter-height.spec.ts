@@ -79,7 +79,7 @@ test('a rendered preview keeps its letter height across a grid zoom that crosses
   for (const s of scales) {
     expect(s, `drawn scale at every zoom: ${JSON.stringify(samples)}`).toBeCloseTo(scales[0], 6);
   }
-  expect((await preview())!.rawAfterRaster, 'a frame mid-zoom painted raw source').toBe(0);
+  expect((await preview())!.rawAfterRaster, 'a draw mid-zoom painted raw source').toBe(0);
 
   await window.waitForTimeout(c.framingSaveMs * 2);
   await window.unroute('**/gridwell.v1.Gridwell/*');

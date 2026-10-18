@@ -24,7 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
-// NodeCapacity is about 40 minutes of a busy session, one record per frame.
+// NodeCapacity is about 40 minutes of a busy session, one record per draw.
 // The slots are 5.6 MB from boot; each points at a msg capped at MaxMsg and a
 // small kv, typically a few hundred bytes, so a full ring is tens of MB and
 // at most about 75 MB.

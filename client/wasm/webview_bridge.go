@@ -148,13 +148,13 @@ func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b 
 		"contentZoom": contentZoom,
 		"history":     history,
 		"gen":         float64(gen),
-		// This frame's gesture-hide verdict, so a view placed mid-drag or
+		// This draw's gesture-hide verdict, so a view placed mid-drag or
 		// under the + menu starts parked. The registry never guesses.
 		"hidden": hidden,
 		// The renderer owns focus, and a view goes live on paths that are not
 		// a gesture on the focused pane, so this cannot be inferred. Chromium
 		// focuses the new widget as it attaches, so a wrong guess leaks a
-		// frame of keystrokes into it.
+		// draw's worth of keystrokes into it.
 		"focused": focused,
 		// durable gates the context menu's Freeze Page, since an ephemeral
 		// visit has nothing to re-descend into.

@@ -49,7 +49,7 @@ func textInnerBox(r pane.Rect) (x, y, w, h float64) {
 }
 
 // paneContentBox returns the rectangle a live surface, and its parked fallback
-// frame, occupies in pane rect r: the pane minus the outline. The one bar sits
+// capture, occupies in pane rect r: the pane minus the outline. The one bar sits
 // below every pane, so web content fills this edge to edge.
 func paneContentBox(r pane.Rect) (x, y, w, h float64) {
 	b := panebox.ContentBox(r, paneBorderPx)

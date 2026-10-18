@@ -10,7 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// syncView runs every frame, like syncMirrors: every change to what the panes
+// syncView runs every draw, like syncMirrors: every change to what the panes
 // show draws one. pane.View is the view; subscription.Tracker decides when it is
 // owed.
 func (a *App) syncView(rects map[string]pane.Rect) {

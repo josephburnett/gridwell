@@ -394,7 +394,7 @@ func (a *App) drawLeftResizePreview(lr *leftResizeState) {
 }
 
 func (a *App) drawResizeAxisPreview(ax *leftResizeAxis) {
-	// Live geometry every frame, because the cascade moves ancestor ratios.
+	// Live geometry every draw, because the cascade moves ancestor ratios.
 	// An arm-time copy goes stale mid-drag and closes panes on a legal
 	// mid-corridor release.
 	root := a.tree.Root

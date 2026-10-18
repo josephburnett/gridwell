@@ -1,6 +1,6 @@
 // Whether a pane's mirror capture is failing and whether anyone has been told.
 // A frozen preview must leave evidence, and the pump captures on a timer, so
-// the report fires on the transition, not per frame. webviews.ts runs the
+// the report fires on the transition, not per draw. webviews.ts runs the
 // capture and keeps the state on the entry.
 
 import type { NoticeSeverity } from './ipc';
@@ -12,7 +12,7 @@ export type AttemptKind = 'ok' | 'empty' | 'timeout' | 'rejected' | 'view-gone';
 
 export interface StreakState {
   // Separates a mirror that froze from one that has not started: Chromium
-  // answers capturePage with an empty image for the first frames after a view
+  // answers capturePage with an empty image for the first captures after a view
   // is placed, and those empties say nothing.
   everCaptured: boolean;
   // Consecutive failed attempts; REPORT_AFTER_FAILURES of them is a frozen

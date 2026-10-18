@@ -111,7 +111,7 @@ app.whenReady().then(async () => {
     if (message === 'BRIDGE_PLACED') {
       placedWC = registry.webContentsFor('p1')?.id ?? -1;
       // The entry must carry the renderer's verdict, because the steal guard
-      // reads it from the first frame, before the next setHidden could correct
+      // reads it from the first draw, before the next setHidden could correct
       // it and before addChildView and loadURL hand the widget OS focus.
       if (JSON.stringify(mirrored) !== JSON.stringify([['p1', 'p2'], []])) {
         fail(`setMirrored did not reach main as sent: ${JSON.stringify(mirrored)}`);

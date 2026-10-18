@@ -313,7 +313,7 @@ func (a *App) postWriteContent(gid, tileID string, claim rpc.ContentBasis, newCo
 				a.refetchGrid(gid)
 			}
 			a.refreshFileOverlay()
-			a.scheduleFrame(traceevent.WhyContent)
+			a.scheduleDraw(traceevent.WhyContent)
 		} else {
 			// The server never spoke, so the entry stays dirty and the
 			// flush sweep re-posts it. It is the only copy of the user's

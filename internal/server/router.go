@@ -505,7 +505,7 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 	if err != nil || len(body) == 0 {
 		return nil
 	}
-	// Blob ids are already in this node's frame: the encoder strips the
+	// Blob ids are already in this node's terms: the encoder strips the
 	// reader's transit prefix, empty for a locally-owned workspace tile.
 	ids, err := panelayout.TextFocusIDs(body)
 	if err != nil {

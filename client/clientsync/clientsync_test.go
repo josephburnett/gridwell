@@ -298,8 +298,8 @@ func TestNoticesFor(t *testing.T) {
 	}
 }
 
-// A read the renderer re-asks every frame must latch on every failure, or the
-// failure's own notice draws the frame that asks again. Only a verdict
+// A read the renderer re-asks every draw must latch on every failure, or the
+// failure's own notice asks for the draw that asks again. Only a verdict
 // stands until a change; an unreachable source is re-asked by the backstop.
 func TestReactRead(t *testing.T) {
 	for o, want := range map[Outcome]inflight.Verdict{

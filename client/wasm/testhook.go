@@ -161,10 +161,10 @@ func (a *App) installTestHook() {
 			return out
 		}),
 		// Host callbacks armed since boot and those still unfired. An
-		// animation arms one per frame, so "armed grew and live came back to
+		// animation arms one per draw, so "armed grew and live came back to
 		// zero" is the assertion; see oneShot.
 		"oneShots": js.FuncOf(func(js.Value, []js.Value) any {
-			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive, "frames": framesArmed}
+			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive, "draws": drawsArmed}
 		}),
 		// The two layout persisters' settle windows, pending or not. A live
 		// mirror arms timers of its own, so oneShots cannot single them out.

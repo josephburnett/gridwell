@@ -184,7 +184,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	}
 	// The claim is bounded and a failure latches, both inflight.Reads', so a
 	// swallowed request cannot hold this preview for the life of the page and
-	// a refused one is not asked for every frame.
+	// a refused one is not asked for every draw.
 	ctx, done, ok := a.fetch.previews.Ask(tileID)
 	if !ok {
 		return
@@ -202,7 +202,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 			a.views.urlPreview.PutEmpty(tileID, blobID)
 		}
 		if r.Store {
-			a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleFrame(traceevent.WhyPreview) })
+			a.views.urlPreview.Put(tileID, blobID, jpeg, func() { a.scheduleDraw(traceevent.WhyPreview) })
 		}
 	}()
 }
@@ -219,7 +219,7 @@ func (a *App) shellStandinRect(img js.Value, x, y float64) (dx, dy, dw, dh float
 
 // previewDecodeFailed is preview.Cache's verdict on bytes that never became a
 // picture. The cache settles that blob id, so this fires once per failed blob
-// rather than once per frame.
+// rather than once per draw.
 func (a *App) previewDecodeFailed(tileID string) {
 	a.reportErr(errsurface.Error, "preview:"+tileID, "preview image could not be decoded")
 }

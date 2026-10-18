@@ -98,7 +98,7 @@ test('a new view placed with hidden=true starts parked (new-view-path fix)', asy
     const bounds = { x: 100, y: 100, width: 400, height: 300 };
 
     // The last argument is PlaceArgs.hidden: the renderer's overlay-is-open
-    // verdict for this frame.
+    // verdict for this draw.
     await reg.place(paneId, 2, args.dataURL, bounds, 0, '', false, true);
     const boundsAfterPlace = reg.viewBoundsFor(paneId);
     const dLoad = Date.now() + 8_000;

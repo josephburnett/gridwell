@@ -55,7 +55,7 @@ func (d *Debounce) Arm(ms int) bool {
 }
 
 // ArmOnChange arms only when sig differs from the one the last arm carried,
-// so a live tile repainting every frame does not hold a settle open forever.
+// so a live tile repainting every draw does not hold a settle open forever.
 func (d *Debounce) ArmOnChange(ms int, sig uint64) bool {
 	if d.hasSig && d.sig == sig {
 		return false

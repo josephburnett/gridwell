@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 
 // Every host callback the shim arms once releases its js.Func when it fires.
 // syscall/js holds an unreleased one in its funcs map for the life of the
-// page, and motion arms one per animation frame, so the leak grows with the
+// page, and motion arms one per draw, so the leak grows with the
 // gesture. Neither side of the boundary shows it, which is why the count is
 // the assertion.
 
@@ -21,19 +21,19 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
   await gw.ascendViaCrumb();
   const after = await gw.oneShots();
 
-  // The frames really go through the self-releasing form: every frame the
-  // gesture drew armed one. How many frames that is belongs to the host (a
+  // The draws really go through the self-releasing form: every draw the
+  // gesture drew armed one. How many draws that is belongs to the host (a
   // CI display draws a handful where a desktop draws sixty), so the count is
-  // compared to the frames, not to a number.
-  const frames = after.frames - before.frames;
-  expect(frames, 'the gesture drew frames').toBeGreaterThan(0);
-  expect(after.armed - before.armed, 'frames armed one-shot callbacks').toBeGreaterThanOrEqual(frames);
+  // compared to the draws, not to a number.
+  const draws = after.draws - before.draws;
+  expect(draws, 'the gesture drew').toBeGreaterThan(0);
+  expect(after.armed - before.armed, 'draws armed one-shot callbacks').toBeGreaterThanOrEqual(draws);
   // Settle timers armed by the gesture are one-shots too, so the count falls
   // to zero only once they have fired.
   await expect.poll(async () => (await gw.oneShots()).live, { timeout: 15_000 }).toBe(0);
 });
 
-// The persisters are armed once per frame, and a workspace holding a busy
+// The persisters are armed once per draw, and a workspace holding a busy
 // live shell that another of its panes shows draws them on the mirror's
 // cadence with nobody touching the canvas. Armed by the frame, their settle
 // window could never close, and the workspace tile's layout never reached the
@@ -69,7 +69,7 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
 
   // The premise: the mirror is passing over the busy terminal, which is what
   // repaints the canvas with nobody touching it. The repaint is a direct draw
-  // and not a scheduled frame, so the pass is what can be seen from here;
+  // and not a scheduled draw, so the pass is what can be seen from here;
   // without it the check below would mean nothing.
   const passes = await gw.shellMirrors();
   await expect

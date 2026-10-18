@@ -30,7 +30,7 @@ const (
 
 // Reads is one kind of read the renderer asks for on every draw: its claims
 // and its two failure latches in one value, so a failure cannot be left to
-// re-ask on the next frame. A read Settles what it heard; Ask refuses while
+// re-ask on the next draw. A read Settles what it heard; Ask refuses while
 // the key is in flight or latched.
 type Reads struct {
 	claims      *claimSet
@@ -119,7 +119,7 @@ func (r *Reads) Change(key string) {
 }
 
 // Backstop clears every Unreachable latch and returns those keys, sorted, so
-// the caller re-asks each once per tick rather than once per frame.
+// the caller re-asks each once per tick rather than once per draw.
 func (r *Reads) Backstop() []string {
 	keys := r.unreachable.keys()
 	r.unreachable.reset()

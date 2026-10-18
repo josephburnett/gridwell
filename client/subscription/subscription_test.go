@@ -31,7 +31,7 @@ func TestTracker(t *testing.T) {
 		wantNext *gridwellv1.SetViewRequest
 		wantOwed bool
 	}{
-		{"first frame, nothing shown", func() bool { return tr.Show(shown()) }, shown(), true},
+		{"first draw, nothing shown", func() bool { return tr.Show(shown()) }, shown(), true},
 		{"the same again", func() bool { return tr.Show(shown()) }, nil, false},
 		{"a grid opens", func() bool { return tr.Show(shown("p/1")) }, shown("p/1"), true},
 		{"it stays open", func() bool { return tr.Show(shown("p/1")) }, nil, false},
@@ -56,7 +56,7 @@ func TestTracker(t *testing.T) {
 }
 
 // A view whose send failed is not owed again on its own: only a change or a
-// re-open asks again, so a refusal is one call, not one per frame.
+// re-open asks again, so a refusal is one call, not one per draw.
 func TestFailedSendWaitsForAChangeOrReopen(t *testing.T) {
 	var tr Tracker
 	tr.Show(shown("p/1"))
@@ -64,7 +64,7 @@ func TestFailedSendWaitsForAChangeOrReopen(t *testing.T) {
 		t.Fatal("the first view was not owed")
 	}
 	if tr.Show(shown("p/1")) {
-		t.Error("the failed view is owed again on the next frame")
+		t.Error("the failed view is owed again on the next draw")
 	}
 	tr.Reopened()
 	if !tr.Show(shown("p/1")) {

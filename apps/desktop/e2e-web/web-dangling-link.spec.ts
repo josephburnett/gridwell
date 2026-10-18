@@ -89,7 +89,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
       .toEqual([linkID]);
 
     // Let the render loop run with the dangling door on screen. Nothing is
-    // asked and nothing is said, not once per frame and not once at all.
+    // asked and nothing is said, not once per draw and not once at all.
     await page.waitForTimeout(3_000);
     expect(unavailable, 'a dead link raises no verdict').toEqual([]);
     expect(

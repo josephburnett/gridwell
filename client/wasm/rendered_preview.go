@@ -149,7 +149,7 @@ func (a *App) noteTextPreview(tileID string, d *markdown.RasterDraw, rasterW flo
 
 // renderedRasterFailed is rasterprev.Cache's verdict on a document that never
 // became a picture. The cache settles that key, so this fires once per
-// (tile, version, width bucket) rather than once per frame.
+// (tile, version, width bucket) rather than once per draw.
 func (a *App) renderedRasterFailed(tileID string) {
 	a.reportErr(errsurface.Error, "rendered-preview:"+tileID,
 		"rendered preview could not be drawn — showing source")
