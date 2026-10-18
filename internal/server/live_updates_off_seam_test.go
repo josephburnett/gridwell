@@ -89,7 +89,7 @@ func TestARefusedWatchIsANoticeNotDarkness(t *testing.T) {
 					return hv
 				}
 			case <-ctx.Done():
-				t.Fatal("no health event for the refusing plugin reached the door")
+				t.Fatal("no health event for the refusing plugin reached the API")
 			}
 		}
 	}

@@ -10,9 +10,9 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
-// StaleBuild is the web door's answer to a page of another build: a
+// StaleBuild is the web API's answer to a page of another build: a
 // FailedPrecondition carrying a pb.StaleBuild detail naming both builds. It
-// exists only at that door, so it is a Connect error and never crosses a gRPC
+// exists only at that API, so it is a Connect error and never crosses a gRPC
 // hop.
 func StaleBuild(node, client string) *connect.Error {
 	named := "no build"

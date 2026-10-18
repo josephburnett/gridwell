@@ -211,11 +211,11 @@ message Tile {
   reserved 31; // configure_plugin_id
 
   // serves_page: this url tile opens at the address the node derives for its
-  // /content/ door, /content/<content-token>/<tile-id>/, where the owning
+  // /content/ API, /content/<content-token>/<tile-id>/, where the owning
   // plugin answers ServeContent. It stands in place of a url_string of its
   // own, and it is built at render time from the current origin and never
   // persisted, because ports are ephemeral. Url tiles only: the plugin entry
-  // door refuses the declaration on every other kind, so a text tile never
+  // API refuses the declaration on every other kind, so a text tile never
   // serves one. Plugin-declared, derived from the content itself, such as the
   // filename's media type in fs. Never a stored column.
   bool serves_page = 32;
@@ -403,10 +403,10 @@ message WriteContentRequest {
 // never act on the user's Gridwell.
 //
 // GET-only. subpath "" is the tile's root page; a non-empty subpath is a
-// page-relative resource such as "img/cat.png" whose meaning the plugin defines.
-// Chunk 1 carries status and media_type; later chunks carry data only. A plugin
-// that does not serve web content leaves the RPC unimplemented and the door
-// answers 404.
+// page-relative resource such as "img/cat.png" whose meaning the plugin
+// defines. Chunk 1 carries status and media_type; later chunks carry data only.
+// A plugin that does not serve web content leaves the RPC unimplemented and the
+// content API answers 404.
 message ServeContentRequest {
   string tile_id = 1;
   string subpath = 2;
@@ -425,7 +425,7 @@ message ServeContentChunk {
 // a plugin boundary; there is no cross-plugin move, only link or clone.
 //
 // claim is the placement the writer saw. A tile no longer there is refused
-// with the version conflict, the placement on disk standing. The doors refuse
+// with the version conflict, the placement on disk standing. The APIs refuse
 // a request with no claim (rpc.UnclaimedWrite); only the node's own writers
 // reach a namespace without one.
 message PlaceTileRequest {
@@ -473,7 +473,7 @@ message GetTileRequest {
 // and results come back qualified like every other id.
 //
 // The filters narrow every hit and AND together. They are the node's, applied
-// to the rows it holds, never a plugin's: the plugin door has none. A query may
+// to the rows it holds, never a plugin's: the plugin API has none. A query may
 // be empty when a filter is given, and then every tile passing the filters is
 // a hit, the newest first by the time filtered on (created when none is).
 message SearchRequest {
@@ -601,7 +601,7 @@ message HandshakeResponse {
   // a node-level operator fact, so it rides the node handshake rather than any
   // per-plugin Info.
   bool shells_disabled = 4;
-  // content_token gates the HTTP /content/ door, the ServeContent carrier.
+  // content_token gates the HTTP /content/ API, the ServeContent carrier.
   // Pages served there run sandboxed with an opaque origin, so neither their
   // subresource requests nor the desktop's native views carry the auth cookie.
   // The token rides in the path instead, as
@@ -610,11 +610,11 @@ message HandshakeResponse {
   // the auth cookie; it is handed out only on this authenticated handshake and
   // checked against the current password as the cookie is. It is a node-level
   // fact of the local origin: content URLs are always built against the serving
-  // node, and a connection is followed behind the door, over the RPC.
+  // node, and a connection is followed behind the web API, over the RPC.
   string content_token = 5;
   // build is the commit the node was built from (tracewire.BuildCommit), ""
   // for an unstamped build, for the client's log. Nothing depends on it: the
-  // web door refuses a page of another build on every call (StaleBuild).
+  // web API refuses a page of another build on every call (StaleBuild).
   string build = 14;
 }
 
@@ -634,8 +634,8 @@ message DeadReference {
   string namespace = 1;
 }
 
-// StaleBuild is the detail on the FailedPrecondition the web door answers a
-// page of another build with, before the verb runs: node is the door's build,
+// StaleBuild is the detail on the FailedPrecondition the web API answers a page
+// of another build with, before the verb runs: node is the web API's build,
 // client the one the page named ("" when it named none). gwerr.StaleBuild
 // writes it and gwerr.StaleBuildOf reads it; the client's one answer is to
 // reload (client/nodebuild).
@@ -694,7 +694,7 @@ message ShellSessionAliveResponse {
 // read at, one claim per fact: WriteContent and SetTile's rename claim the
 // version (a row with no version, its stamp), PlaceTile the placement,
 // url_frozen the freeze, DeleteTile the version and placement. A stale claim
-// is the version conflict, and the doors refuse a missing one. Framing and
+// is the version conflict, and the APIs refuse a missing one. Framing and
 // capture writes carry no claim.
 
 message CloneTileRequest {
@@ -754,14 +754,14 @@ message SetTileRequest {
   // distinct from absent.
   optional bool url_frozen = 8;
   reserved 9; // adopt_child_grid
-  // claim_frozen is url_frozen's claim; the doors refuse url_frozen without
+  // claim_frozen is url_frozen's claim; the APIs refuse url_frozen without
   // it, so absent is only the node's own write.
   optional bool claim_frozen = 10;
 }
 
 // DeleteTileRequest claims what the writer saw: the content version and the
 // placement. A tile whose content or place moved meanwhile is refused with the
-// version conflict and stands. The doors refuse a request with no claim; only
+// version conflict and stands. The APIs refuse a request with no claim; only
 // the node's own writers (a reap) reach a namespace without one.
 message DeleteTileRequest {
   reserved 1; // path
@@ -815,7 +815,7 @@ message SetFramingResponse {
 // nested under the grid's wells, to any depth, within the grid's namespace, in
 // one write; recurse without clear is refused. all, only with clear and no
 // grid, add, remove or recurse, empties every grid's set the node holds: home
-// and each plugin namespace, and, asked at the web door, each live
+// and each plugin namespace, and, asked at the web API, each live
 // connection's far node, whose sets are its rows (rpc.SelectRefusal). A
 // selection is not content: no version moves, the grid's or any tile's.
 message SetSelectionRequest {
@@ -995,7 +995,7 @@ service Gridwell {
   rpc ReadContent(ReadContentRequest)        returns (stream ContentChunk);
   rpc WriteContent(stream WriteContentRequest) returns (TileResponse);
 
-  // ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+  // ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
   rpc ServeContent(ServeContentRequest) returns (stream ServeContentChunk);
 
   // PlaceTile is the single placement writeback.

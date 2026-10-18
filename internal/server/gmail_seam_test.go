@@ -2,18 +2,18 @@ package server
 
 // The gmail plugin through the whole shipped stack: the binary spawned by the
 // production loader, the pluginhost adapter, the router, and the /content/
-// door as a browser reaches it.
+// API as a browser reaches it.
 //
 // What the seam has to hold: the adapter turns each declared context into a
 // grid id the node can serve, every grid lists through that mapping, a
 // message is one url tile in all mail carrying serves_page whose page the
-// door serves, and a label's row is a link to that tile. The
+// API serves, and a label's row is a link to that tile. The
 // config crosses it too — the node hands over paths to the user's credential
 // and token, never their contents, plus a private state directory, and nothing
 // cached there carries a secret.
 //
 // Nothing is injected. The plugin lives in another repository, so the
-// subprocess is its only door, and testdata/gmail holds the JSON shapes Gmail
+// subprocess is its only way in, and testdata/gmail holds the JSON shapes Gmail
 // answers with, served at the address the `endpoint` config key names, so the
 // real generated client does the real parse.
 
@@ -238,7 +238,7 @@ func gmailConfig(t *testing.T, g *fakeGmail, refresh string) (cfg map[string]str
 }
 
 // gmailStack spawns the plugin against the recorded Gmail and stands it up
-// behind the real browser door, refreshing no more often than refresh.
+// behind the real web API, refreshing no more often than refresh.
 // stateDir is the private directory the node hands the plugin, returned so a
 // test can look at what landed in it.
 func gmailStack(t *testing.T, refresh string) (hs *httptest.Server, cl namespace.Namespace, info *gridwellv1.InfoResponse, g *fakeGmail, stateDir string) {
@@ -292,7 +292,7 @@ func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 	}
 	// Every message arrives as a url tile whose page the plugin serves. That
 	// is the shape the whole client rests on: the address is the node's to
-	// derive at its /content/ door, so the message declares none of its own,
+	// derive at its /content/ API, so the message declares none of its own,
 	// and a text tile could not serve one at all.
 	for _, tl := range all.Tiles {
 		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" || tl.Reference {
@@ -359,10 +359,10 @@ func TestGmailRefusesATokenGoogleRefuses(t *testing.T) {
 }
 
 // Descending into a message opens the email itself, as Gmail's own HTML,
-// through the door a browser reaches. Neither side of the seam can check this:
-// the plugin answers a key and never sees the URL, and the door addresses a
+// through the API a browser reaches. Neither side of the seam can check this:
+// the plugin answers a key and never sees the URL, and the API addresses a
 // tile and never sees the email.
-func TestGmailPluginServesAMessageThroughTheContentDoor(t *testing.T) {
+func TestGmailPluginServesAMessageThroughTheContentAPI(t *testing.T) {
 	hs, cl, info, _, _ := gmailStack(t, "1h")
 	inbox, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: info.MenuEntries[0].GridId})
 	if err != nil {
@@ -380,7 +380,7 @@ func TestGmailPluginServesAMessageThroughTheContentDoor(t *testing.T) {
 	if !strings.Contains(body, "<b>friday</b>") {
 		t.Errorf("the email did not arrive: %.200q", body)
 	}
-	// The door's invariant rides an email like any other page.
+	// The content API's invariant rides an email like any other page.
 	if csp := res.Header.Get("Content-Security-Policy"); csp != contentSandbox {
 		t.Errorf("CSP = %q", csp)
 	}

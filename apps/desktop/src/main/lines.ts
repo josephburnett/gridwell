@@ -15,7 +15,7 @@ interface ServingAddr {
 // parseServingLine extracts the bound address from the serve banner, or null.
 // servingBanner in internal/cli/serve.go owns the banner's shape:
 //   "gridwell: serving on <host>:<port> (static=... plugins=N auth=<hex> federation=<socket path>)"
-// federation= is not read: the desktop app reaches everything over the web door.
+// federation= is not read: the desktop app reaches everything over the web API.
 // "already serving on" is the same banner re-emitted by a serve that found the
 // lock held, and its address and auth belong to the running holder.
 export function parseServingLine(line: string): ServingAddr | null {

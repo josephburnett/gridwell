@@ -101,7 +101,7 @@ func TestQualifyTilesQualifiesAShellSession(t *testing.T) {
 // the wire Reference bit verbatim: a remote plugin's interior well is OWNED
 // content and renders solid, even though its child id contains "/".
 func TestQualifyTilesTransit(t *testing.T) {
-	// A remote home's interior well, as the remote front door emits it.
+	// A remote home's interior well, as the remote connection API emits it.
 	interior := qualifyTilesTransit("ssh1", []*pb.Tile{{
 		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Reference: false,
 	}})[0]

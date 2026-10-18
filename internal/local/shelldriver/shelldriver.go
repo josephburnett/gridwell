@@ -6,7 +6,7 @@ package shelldriver
 
 import "errors"
 
-// ErrShellsUnavailable is a state the client is told about: the shell door
+// ErrShellsUnavailable is a state the client is told about: the shell API
 // turns it into an exit message, like a node that sets disable_shells.
 var ErrShellsUnavailable = errors.New("shell tiles are unavailable on this node: no PTY on this platform")
 

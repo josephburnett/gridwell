@@ -11,15 +11,15 @@ import (
 	"github.com/josephburnett/gridwell/api/gwerr"
 )
 
-// TestStatusCodesSurviveTheConnectCodec crosses the browser codec's
+// TestStatusCodesSurviveTheWebAPI crosses the web API's
 // translation — the namespace's gRPC status to Connect, through
 // asConnectError, and back through gwerr's inverse — for every status code,
 // asserting that the code the owning namespace answered with is the code the
 // client classifies on. A code that collapses to Internal turns a transport
 // failure two hops away into a verdict, and clientsync then drops a parked
-// write. The connection door's half of this is
-// namespace.TestStatusCodesSurviveBothCodecs.
-func TestStatusCodesSurviveTheConnectCodec(t *testing.T) {
+// write. The connection API's half of this is
+// namespace.TestStatusCodesSurviveTheConnectionAPI.
+func TestStatusCodesSurviveTheWebAPI(t *testing.T) {
 	for c := codes.Canceled; c <= codes.Unauthenticated; c++ {
 		in := status.Error(c, "far side says "+c.String())
 		mid := asConnectError(in)
@@ -35,7 +35,7 @@ func TestStatusCodesSurviveTheConnectCodec(t *testing.T) {
 			t.Errorf("%v → connect %v → grpc %v; the code must survive", c, ce.Code(), got)
 		}
 		if gwerr.IsTransport(in) != gwerr.IsTransport(out) {
-			t.Errorf("%v: IsTransport changed across the codec (in=%v out=%v)",
+			t.Errorf("%v: IsTransport changed across the web API (in=%v out=%v)",
 				c, gwerr.IsTransport(in), gwerr.IsTransport(out))
 		}
 		if status.Convert(out).Message() != "far side says "+c.String() {

@@ -2,7 +2,7 @@ package pluginhost
 
 // Search on a plugin's namespace. The plugin answers text; the filters are
 // the node's, applied to the rows the answer maps to (store.tileFilter), so
-// the plugin door carries none.
+// the plugin API carries none.
 
 import (
 	"context"

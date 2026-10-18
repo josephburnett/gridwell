@@ -1,7 +1,7 @@
 package server_test
 
 // The shipped gitlab plugin through a GitLab outage, spawned against a fake
-// GitLab and reached at the web door: a grid the plugin has walked keeps
+// GitLab and reached at the web API: a grid the plugin has walked keeps
 // every tile while GitLab is down, the plugin's health says why, and the
 // health comes back when GitLab does.
 
@@ -26,9 +26,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
-// gitlabAtTheDoor serves the gitlab binary, spawned over cfg, at a web door,
+// gitlabAtTheWebAPI serves the gitlab binary, spawned over cfg, at a web API,
 // and answers a client, the plugin's landing grid, and its health events.
-func gitlabAtTheDoor(t *testing.T, ctx context.Context, uuid string, cfg map[string]string) (*rpc.Client, string, <-chan *gridwellv1.EventPluginHealth) {
+func gitlabAtTheWebAPI(t *testing.T, ctx context.Context, uuid string, cfg map[string]string) (*rpc.Client, string, <-chan *gridwellv1.EventPluginHealth) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
@@ -117,7 +117,7 @@ func TestAGitLabOutageKeepsTheGridAndSaysWhy(t *testing.T) {
 	defer cancel()
 	// A full-walk window of a nanosecond: every read walks GitLab, so each
 	// read after the outage begins has a failed walk behind it.
-	cl, grid, health := gitlabAtTheDoor(t, ctx, "pgloutage", gl.Config(t, map[string]string{"full_refresh": "1ns"}))
+	cl, grid, health := gitlabAtTheWebAPI(t, ctx, "pgloutage", gl.Config(t, map[string]string{"full_refresh": "1ns"}))
 
 	before, err := cl.GetGrid(ctx, grid)
 	if err != nil {

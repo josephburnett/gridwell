@@ -1,4 +1,4 @@
-// Package shellws dials the web door's /shell WebSocket and presents it as a
+// Package shellws dials the web API's /shell WebSocket and presents it as a
 // shellstream.Dialer. It is the one client implementation of
 // client/shellwire's grammar, used by the wasm client and by the server's seam
 // tests off-browser. A unit test here would assert against a second spelling
@@ -23,11 +23,11 @@ import (
 const DefaultWriteTimeout = 30 * time.Second
 
 type Options struct {
-	// Origin is the page's own http(s) origin; the door is same-origin by
+	// Origin is the page's own http(s) origin; the API is same-origin by
 	// construction.
 	Origin string
 	// Build is the page's tracewire.BuildCommit, and OnStaleBuild hears the
-	// door's refusal of it, the one answer every call shares
+	// API's refusal of it, the one answer every call shares
 	// (client/nodebuild). Nil hears nothing.
 	Build        string
 	OnStaleBuild func(node string)

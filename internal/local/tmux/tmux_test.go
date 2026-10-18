@@ -593,7 +593,7 @@ func TestConfigAllowsPassthrough(t *testing.T) {
 }
 
 // TestArgsCreateNamesTheSession: a new session carries GRIDWELL_SHELL, its
-// key, so a program inside it (Claude Code) can tell the MCP door which shell
+// key, so a program inside it (Claude Code) can tell the MCP API which shell
 // it runs in; an attach starts nothing and carries nothing.
 func TestArgsCreateNamesTheSession(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "bash"}

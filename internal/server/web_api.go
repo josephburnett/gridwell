@@ -1,10 +1,10 @@
 package server
 
-// The browser codec: gridwellv1connect.GridwellHandler over the one in-process
-// router. It routes nothing and decides nothing, and the connection door's
-// codec is namespace.Server over the same router value, so there is no second
+// The web API: gridwellv1connect.GridwellHandler over the one in-process
+// router. It routes nothing and decides nothing, and the connection API is
+// namespace.Server over the same router value, so there is no second
 // implementation to drift from. It is deliberately not total: Info, Probe and
-// OpenShell are connection-door verbs, so unimplemented here means "not a
+// OpenShell are connection API verbs, so unimplemented here means "not a
 // browser verb", not "missing".
 
 import (

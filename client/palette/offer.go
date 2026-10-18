@@ -1,7 +1,7 @@
 package palette
 
 // Which primitives the + menu offers on a grid. Both facts are the serving
-// node's: the PTY rides that node's web door, so the client's own caps would
+// node's: the PTY rides that node's web API, so the client's own caps would
 // be a second, wrong owner of the shells policy.
 
 // Offer is what the grid and its node declare.

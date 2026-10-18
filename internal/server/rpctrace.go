@@ -1,10 +1,10 @@
 package server
 
-// Every rpc says it started and how it ended. The two doors are codecs over
-// one router, so the record is made in each codec, where the procedure name
-// and the error code are already spelled, and both call the one rpcSpan.
-// kv["req"] is the client's own request id off tracewire.RequestHeader: it is what
-// joins a gesture to the calls it caused, and it is empty when nobody sent one.
+// Every rpc says it started and how it ended. The two APIs decode onto one
+// router, so the record is made in each API, where the procedure name and the
+// error code are already spelled, and both call the one rpcSpan. kv["req"] is
+// the client's own request id off tracewire.RequestHeader: it is what joins a
+// gesture to the calls it caused, and it is empty when nobody sent one.
 // kv["id"] is the entity the request is about; see entityOf.
 
 import (
@@ -59,7 +59,7 @@ func (s *span) open() {
 	}
 }
 
-// end emits the exit record, under the codec's own spelling of the error code.
+// end emits the exit record, under the API's own spelling of the error code.
 func (s *span) end(err error, code string) {
 	s.open()
 	kv := s.kv()
@@ -102,7 +102,7 @@ func entityOf(msg any) string {
 	return ""
 }
 
-// traceInterceptor traces the browser codec. Streaming verbs get the same
+// traceInterceptor traces the web API. Streaming verbs get the same
 // pair, around the whole stream.
 type traceInterceptor struct{}
 
@@ -115,7 +115,7 @@ func (traceInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	}
 }
 
-// The client half of the chain is not a door; nothing here traces it.
+// The client half of the chain is not an API; nothing here traces it.
 func (traceInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return next
 }
@@ -170,7 +170,7 @@ func grpcCode(err error) string {
 	return status.Code(err).String()
 }
 
-// traceUnary and traceStream are the connection door's half.
+// traceUnary and traceStream are the connection API's half.
 func traceUnary(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	s := rpcSpan(requestIDOf(ctx), info.FullMethod, req)
 	resp, err := handler(ctx, req)

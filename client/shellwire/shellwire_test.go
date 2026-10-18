@@ -72,7 +72,7 @@ func TestAttachURLRejectsNonHTTPOrigin(t *testing.T) {
 	}
 }
 
-// The door refuses rather than opening a socket bound to nothing.
+// The API refuses rather than opening a socket bound to nothing.
 func TestParseAttachRequiresTileID(t *testing.T) {
 	if _, err := ParseAttach(url.Values{QueryCols: {"80"}}); err == nil {
 		t.Fatal("a bind with no tile_id must be an error")

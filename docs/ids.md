@@ -39,7 +39,7 @@ letter segment → that connection; any other letter segment → that plugin.
 ## What is inside a `~`
 
 The payload is the owning namespace's own address for the thing, and no one
-else opens it: to the URL grammar, the router, the /content/ door and the
+else opens it: to the URL grammar, the router, the /content/ API and the
 client, a `~` segment is one opaque tile segment. `internal/pluginhost` is the
 only reader, and it writes two forms (`address.go`):
 

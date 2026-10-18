@@ -1,4 +1,4 @@
-package mcpdoor
+package mcpapi
 
 import (
 	"errors"

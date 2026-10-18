@@ -100,7 +100,7 @@ func (c *Layer) stopWalks() {
 func (c *Layer) prefetch(ctx context.Context, source string) {
 	w := &walker{c: c, ctx: ctx, seenGrids: map[string]bool{}, seenTiles: map[string]bool{}, seenNs: map[string]bool{}}
 	// The roots are what the fronted namespace declares about itself, through
-	// the door every namespace answers on: the handshake with no namespace.
+	// the call every namespace answers: the handshake with no namespace.
 	hs, err := c.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return // dark, or refused, at the doorstep: nothing to walk
@@ -156,7 +156,7 @@ func (w *walker) walkGrid(gridID string) bool {
 	if !w.pause() {
 		return false
 	}
-	// The live read, never the serve-first door: a remembered answer would
+	// The live read, never the serve-first path: a remembered answer would
 	// warm nothing.
 	resp, _, err := w.c.getGridLive(w.ctx, gridID)
 	if err != nil {
@@ -219,8 +219,8 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		w.spent += n
 	}
-	// A served page's body is the door page at the root subpath, rpc.PageURL's
-	// target, bounded like every other body.
+	// A served page's body is the served page at the root subpath,
+	// rpc.PageURL's target, bounded like every other body.
 	if rpc.PageContent(t) && w.spent < prefetchContentBudget {
 		if !w.pause() {
 			return false

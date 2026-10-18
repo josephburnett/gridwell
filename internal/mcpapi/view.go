@@ -1,4 +1,4 @@
-package mcpdoor
+package mcpapi
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/deadref"
 )
 
-// Tile is a row as the door answers it. ID is the qualified address the
+// Tile is a row as the API answers it. ID is the qualified address the
 // agent names it back by.
 type Tile struct {
 	ID        string `json:"id"`
@@ -113,7 +113,7 @@ func verdictOf(err error) string {
 	return "ok"
 }
 
-// tileOf is t as the door answers it. With the handshake roster, a link whose
+// tileOf is t as the API answers it. With the handshake roster, a link whose
 // first hop this node does not declare reads dead, the verdict the client
 // draws (deadref.DeadTile); a deeper break is the far node's to answer when
 // the link is read.

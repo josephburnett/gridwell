@@ -5,7 +5,7 @@ import { tileAt, writeContent } from './oracle';
 // layout write reaches this client's preview state: a layout is the user's
 // bytes, so the write claims version 0 and its echo arrives one version on.
 
-// The layout write rides the one content door, WriteContent.
+// The layout write rides the one content verb, WriteContent.
 async function setPaneLayout(origin: string, tileId: string, version: number, layout: unknown): Promise<void> {
   await writeContent(origin, tileId, version, Buffer.from(JSON.stringify(layout)));
 }

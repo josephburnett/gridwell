@@ -122,7 +122,7 @@ type App struct {
 	pal       theme.Palette
 	themeName theme.Theme
 
-	// origin is the serving origin and contentToken the /content/ door's path
+	// origin is the serving origin and contentToken the /content/ API's path
 	// capability; a served page's address is derived at use, never persisted.
 	origin       string
 	contentToken string
@@ -130,7 +130,7 @@ type App struct {
 	// unloading switches framing writes to sendBeacon; see unload.go.
 	unloading bool
 
-	// gate names this page's build on every call and hears the door refuse
+	// gate names this page's build on every call and hears the API refuse
 	// it; stale is the verdict last acted on (build.go).
 	gate  *nodebuild.Gate
 	stale *nodebuild.Verdict

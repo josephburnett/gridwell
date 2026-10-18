@@ -67,7 +67,7 @@ func TestABurstPostsBeforeTheWindowCloses(t *testing.T) {
 }
 
 // The failure record must not be what starts the next post, or an unreachable
-// node with a full ring is posted to as fast as the door can refuse.
+// node with a full ring is posted to as fast as the API can refuse.
 func TestAFailedPostWaitsForTheClockHoweverFullTheRingIs(t *testing.T) {
 	c, p := New(4096, "cid7abc"), NewPump(t0)
 	pending(c, FlushBatch, t0)

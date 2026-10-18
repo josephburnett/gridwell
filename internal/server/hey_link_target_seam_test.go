@@ -14,7 +14,7 @@ import (
 // A box's link carries none of its thread's content facts, so a client that
 // has only the box reads the thread by the link's target, the one hop
 // contentrow.Ask names. The node must answer that read from a context nobody
-// has listed yet, through the browser door, with the row the content door
+// has listed yet, through the web API, with the row the content API
 // then serves at the target's address.
 func TestHeyLinkTargetReadsWithItsContextUnlisted(t *testing.T) {
 	hs, _, info := heyStack(t, heyAccount(t))

@@ -22,7 +22,7 @@ import (
 )
 
 // A connection the user disables stays off until the node restarts, and only
-// in memory: the whole seam is the test, from the web door's verb through the
+// in memory: the whole seam is the test, from the web API's verb through the
 // registry's switch to the transport's dialer and back out the event stream,
 // because the switch is registered where the node assembles itself.
 func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
@@ -90,7 +90,7 @@ func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
 
 	// The far end comes back, and nothing knocks: no redial, no fan-in retry,
 	// through two of the fan-in's backoff steps.
-	ln, err := server.ListenConnectionDoor(sock)
+	ln, err := server.ListenConnectionAPI(sock)
 	if err != nil {
 		t.Fatal(err)
 	}

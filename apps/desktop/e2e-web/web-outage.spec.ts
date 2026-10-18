@@ -248,7 +248,7 @@ test('an ephemeral visit left during an outage parks its delete and drains on re
 
   await gw.enterPlugin('home');
 
-  // Shells ride the web door, so this is the browser's own visit.
+  // Shells ride the web API, so this is the browser's own visit.
   await gw.clickPaletteSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const ephemeralID = (await gw.focused()).textFocus;

@@ -297,7 +297,7 @@ test('openBelowUrl forwards web urls and drops everything else', () => {
   assert.equal(openBelowUrl(''), null);
 });
 
-// The revive tie-break. url_string is user-editable through the content door
+// The revive tie-break. url_string is user-editable through WriteContent
 // while url_history is written only by the freeze, so they can disagree.
 // Restoring the stack would navigate to the page the user just typed over, so
 // the address wins.

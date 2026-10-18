@@ -105,7 +105,7 @@ export function registerWebviewIpc(
 
   // A menu of choices the renderer declared. The answer is the chosen id, or
   // null when the menu closes untouched, so the renderer changes nothing on a
-  // dismissal. Both doors settle the same promise once, because a click and
+  // dismissal. Both paths settle the same promise once, because a click and
   // the close callback can both fire.
   ipcMain.handle(CH.choiceMenu, (_e, a: ChoiceMenuArgs): Promise<string | null> => {
     return new Promise((resolve) => {

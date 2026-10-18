@@ -226,7 +226,7 @@ func (c *Client) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb
 	return resp.Msg, nil
 }
 
-// unclaimed refuses here what the door would: see UnclaimedWrite.
+// unclaimed refuses here what the API would: see UnclaimedWrite.
 func unclaimed(req proto.Message) error {
 	if why := UnclaimedWrite(req); why != "" {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New(why))

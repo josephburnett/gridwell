@@ -1,17 +1,17 @@
 //go:build connections
 
-// The connection door's deadline rule at the real-binary seam: a Subscribe
+// The connection API's deadline rule at the real-binary seam: a Subscribe
 // held through a real ssh tunnel for longer than any deadline
-// ConnectionDoorServer declares, then proven live by a remote edit's event.
-// internal/server/door_deadline_test.go holds a stream through the door shape;
+// ConnectionAPIServer declares, then proven live by a remote edit's event.
+// internal/server/api_deadline_test.go holds a stream through the API shape;
 // this holds one through the production binaries and a real sshd, where a Go
 // change to the ssh or h2 path lands first.
 //
 // The symptom is a flap rather than the client's stream ending, because the
 // local node's fanInRemote re-dials with backoff and publishes an
-// EventPluginHealth with Healthy false when the door cuts its tunneled stream.
-// The hold is derived from server.ConnectionDoorServer, so it tracks a
-// re-added deadline on its own; the door declares none today, so it is the
+// EventPluginHealth with Healthy false when the API cuts its tunneled stream.
+// The hold is derived from server.ConnectionAPIServer, so it tracks a
+// re-added deadline on its own; the API declares none today, so it is the
 // one-second floor.
 
 package connections_test
@@ -32,11 +32,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
-func TestConnectionDoorHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
-	// Derived from the production door shape, so a re-added deadline
+func TestConnectionAPIHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
+	// Derived from the production API shape, so a re-added deadline
 	// lengthens the hold to catch itself. Only the deadlines are read, so
 	// NotFoundHandler stands in for the handler.
-	shape := server.ConnectionDoorServer(http.NotFoundHandler())
+	shape := server.ConnectionAPIServer(http.NotFoundHandler())
 	hold := max(shape.ReadHeaderTimeout, shape.ReadTimeout, shape.WriteTimeout) + 500*time.Millisecond
 	if hold < time.Second {
 		hold = time.Second
@@ -158,7 +158,7 @@ func TestConnectionDoorHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
 	// can race stream establishment. Edit until one arrives.
 	awaitTileEvent("establish", 500*time.Millisecond)
 
-	// Hold the stream past every deadline the door declares. A deadline
+	// Hold the stream past every deadline the API declares. A deadline
 	// would cut the fan-in's tunneled stream mid-hold and fanInRemote would
 	// publish a health-down before retrying. With no deadline the connection
 	// stays up and nothing arrives.
@@ -172,7 +172,7 @@ holdLoop:
 				t.Fatalf("the mounter's stream channel closed during the %s hold", hold)
 			}
 			if h := ev.GetPluginHealth(); h != nil && !h.Healthy {
-				t.Fatalf("the connection door cut the fan-in stream %s into the hold: health-down for %q: %s",
+				t.Fatalf("the connection API cut the fan-in stream %s into the hold: health-down for %q: %s",
 					time.Since(start).Round(100*time.Millisecond), h.PluginUuid, h.Detail)
 			}
 		case err := <-ended:
@@ -186,5 +186,5 @@ holdLoop:
 	// stream.
 	awaitTileEvent("after the hold", time.Second)
 
-	fmt.Printf("connections deadline gate: a tunneled Subscribe held %s past the connection door's deadlines stayed live OK\n", hold)
+	fmt.Printf("connections deadline gate: a tunneled Subscribe held %s past the connection API's deadlines stayed live OK\n", hold)
 }

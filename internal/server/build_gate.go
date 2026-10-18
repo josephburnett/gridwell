@@ -6,7 +6,7 @@ package server
 // before the verb runs, so an old client never writes to a new node. It runs
 // inside the cookie gate and judges only a page's calls, which need no flag:
 // a page the node served is same-origin, so its calls carry an Origin naming
-// this door, and a cross-origin call never gets past the cookie. A caller
+// this API, and a cross-origin call never gets past the cookie. A caller
 // with no Origin is a tool or a harness, not a page. An unstamped node names
 // no build and judges nothing.
 
@@ -26,11 +26,11 @@ import (
 )
 
 // staleBuild answers the build a page's call named when it is not this
-// node's. The static files, the trace door and the content door are not
+// node's. The static files, the trace API and the content API are not
 // calls: a stale page must load the new one, and its records describe the
 // mismatch.
 func (s *Server) staleBuild(r *http.Request) (client string, stale bool) {
-	if s.build == "" || !isCall(r.URL.Path) || !fromThisDoor(r) {
+	if s.build == "" || !isCall(r.URL.Path) || !fromThisOrigin(r) {
 		return "", false
 	}
 	client = r.Header.Get(tracewire.BuildHeader)
@@ -44,7 +44,7 @@ func isCall(path string) bool {
 	return strings.HasPrefix(path, "/"+gridwellv1connect.GridwellName+"/") || path == shellwire.Path
 }
 
-func fromThisDoor(r *http.Request) bool {
+func fromThisOrigin(r *http.Request) bool {
 	o := r.Header.Get("Origin")
 	if o == "" {
 		return false
@@ -58,7 +58,7 @@ func fromThisDoor(r *http.Request) bool {
 // whose browser end cannot read an HTTP status.
 func (s *Server) refuseStaleBuild(w http.ResponseWriter, r *http.Request, client string) {
 	verdict := gwerr.StaleBuild(s.build, client)
-	trace.Emit("webdoor", "build", "refused: "+verdict.Message(),
+	trace.Emit("webapi", "build", "refused: "+verdict.Message(),
 		map[string]string{"node": s.build, "client": client, "path": r.URL.Path})
 	if r.URL.Path == shellwire.Path {
 		conn, err := websocket.Accept(w, r, nil)

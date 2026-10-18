@@ -470,14 +470,14 @@ type Entry struct {
 	ChildContext string `protobuf:"bytes,4,opt,name=child_context,json=childContext,proto3" json:"child_context,omitempty"`
 	// serves_page: this entry's web content is the plugin's, served through
 	// ServeContent. It is a url entry's address in place of url_string — the
-	// node derives one at its /content/ door — so it rides kind "url" alone and
-	// the door refuses it on any other kind.
+	// node derives one at its /content/ API — so it rides kind "url" alone and
+	// the node refuses it on any other kind.
 	ServesPage bool `protobuf:"varint,5,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
 	// text_presentation says how a text entry's body presents: "plain" for
 	// verbatim monospace, "both" for the document renderer with a toggle to the
 	// raw source, "" for no declaration. "rendered" is RETIRED — it hid the
 	// source bytes, which the app never allows, and the node reads it as "both".
-	// Any other value is refused at the door.
+	// Any other value is refused by the node.
 	TextPresentation string `protobuf:"bytes,6,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
 	StatusDetail     string `protobuf:"bytes,7,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// url entries: the address itself.
@@ -995,7 +995,7 @@ func (x *WriteContentResponse) GetContentStamp() string {
 	return ""
 }
 
-// ServeContent is the web-content door's plugin half. GET-only, and subpath ""
+// ServeContent is the content API's plugin half. GET-only, and subpath ""
 // is the entry's root page. Sandboxing happens at the node.
 type ServeContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`

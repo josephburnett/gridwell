@@ -30,7 +30,7 @@ let pump: MirrorPump | null = null;
 let quitting = false;
 
 async function boot(): Promise<void> {
-  // Pending until the door is armed below, so it rides the first batch.
+  // Pending until the API is armed below, so it rides the first batch.
   trace(bootEvent({ app: app.getVersion(), electron: process.versions.electron, chrome: process.versions.chrome }));
   // Before any view loads, so every url tile presents as plain Chrome.
   app.userAgentFallback = sanitizeUserAgent(app.userAgentFallback, app.getName());
@@ -73,7 +73,7 @@ async function boot(): Promise<void> {
       sameSite: 'lax',
     });
   }
-  // Main's records ride the door and the cookie every other request uses:
+  // Main's records ride the API and the cookie every other request uses:
   // net.fetch issues from the default session, which is where the banner's
   // token was just written, so there is no second auth path.
   const origin = sidecar.origin;

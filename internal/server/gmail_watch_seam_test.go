@@ -2,7 +2,7 @@ package server
 
 // The gmail plugin's live and lookup verbs through the shipped stack: the
 // binary spawned against the recorded Gmail (gmail_seam_test.go), started as
-// the loader starts it with its Watch followed, behind the real browser door.
+// the loader starts it with its Watch followed, behind the real web API.
 // Each verb is answered by the plugin and read by the node, so only here does
 // one side's answer meet the other side's reading of it.
 
@@ -200,7 +200,7 @@ func TestGmailHistoryDeltaAnnouncesTheInbox(t *testing.T) {
 
 // Probe is how the node arbitrates a listing and how a far node asks whether
 // a tile is still there, and the plugin answers for the context the tile's id
-// names, through the router the connection door serves: the inbox's message
+// names, through the router the connection API serves: the inbox's message
 // is present in the inbox and in all mail, and gone from the starred grid,
 // whose whole read did not list it. Leaving a label is not being gone.
 func TestGmailProbeAnswersForTheContextAsked(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/urlview"
 )
 
-// The wasm-side door to the Electron main process's native URL-tile
+// The wasm-side way to the Electron main process's native URL-tile
 // machinery, exposed by the preload as window.gridwell. In a plain browser it
 // is absent and URL tiles show their frozen preview.
 
@@ -27,7 +27,7 @@ func bridge() js.Value {
 
 // bridgeCaps reads the host's own declaration of which bridge halves it
 // implements. A missing bridge, or one declaring nothing, is a plain browser.
-// Shells are not on the list: the PTY rides the web door.
+// Shells are not on the list: the PTY rides the web API.
 func bridgeCaps() caps.Bridge {
 	g := bridge()
 	if !g.Truthy() {

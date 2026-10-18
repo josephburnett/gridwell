@@ -1,6 +1,6 @@
 package server
 
-// The shell door, crossed for real: the client stack the wasm client runs
+// The shell API, crossed for real: the client stack the wasm client runs
 // (client/shellstream, client/shellws) dials WebHandler behind the auth cookie
 // and the bytes come back through the whole chain to the PTY. Everything that
 // could drift — the address, the frame kinds, the exit verdict — has one owner
@@ -36,9 +36,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// shellDoorFixture stands up the real browser door over a home namespace
+// shellAPIFixture stands up the real web API over a home namespace
 // whose PTY backend is the fake echoing streamer.
-type shellDoorFixture struct {
+type shellAPIFixture struct {
 	hs   *httptest.Server
 	cl   *rpc.Client
 	fake *shellsvctest.FakeStreamer
@@ -46,7 +46,7 @@ type shellDoorFixture struct {
 	uuid string
 }
 
-func newShellDoorFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shellDoorFixture {
+func newShellAPIFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shellAPIFixture {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -70,7 +70,7 @@ func newShellDoorFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shel
 		fn(srv)
 	}
 	hs := serveWeb(t, srv)
-	return &shellDoorFixture{
+	return &shellAPIFixture{
 		hs:   hs,
 		cl:   rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()),
 		fake: fake,
@@ -79,7 +79,7 @@ func newShellDoorFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shel
 	}
 }
 
-func (f *shellDoorFixture) createShell(t *testing.T, x, y int64) *gridwellv1.Tile {
+func (f *shellAPIFixture) createShell(t *testing.T, x, y int64) *gridwellv1.Tile {
 	t.Helper()
 	tile, err := f.cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: x, Y: y, W: 1, H: 1}})
 	if err != nil {
@@ -96,7 +96,7 @@ type clientStack struct {
 	exit chan shellstream.Exit
 }
 
-func (f *shellDoorFixture) clientStack() *clientStack {
+func (f *shellAPIFixture) clientStack() *clientStack {
 	cs := &clientStack{out: make(chan []byte, 64), exit: make(chan shellstream.Exit, 4)}
 	dial := shellws.Dialer(shellws.Options{
 		Origin: f.hs.URL,
@@ -125,8 +125,8 @@ func waitSession(t *testing.T, fake *shellsvctest.FakeStreamer) *shellsvctest.Fa
 
 // The end-to-end proof: a keystroke typed into the client stack reaches the
 // PTY and its echo comes back as terminal output.
-func TestShellDoorRoundTripsBytes(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPIRoundTripsBytes(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
 	cs.reg.Open(tile.Id, tile.Id, 100, 40)
@@ -153,9 +153,9 @@ func TestShellDoorRoundTripsBytes(t *testing.T) {
 }
 
 // A resize is a TEXT control frame in one direction only; it must reach the
-// PTY unclamped by the door (shellsvc.ClampSize owns the bounds).
-func TestShellDoorForwardsResize(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+// PTY unclamped by the API (shellsvc.ClampSize owns the bounds).
+func TestShellAPIForwardsResize(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
 	cs.reg.Open(tile.Id, tile.Id, 80, 24)
@@ -180,8 +180,8 @@ func TestShellDoorForwardsResize(t *testing.T) {
 // clients: the second takes the session over, so the first viewer's stream
 // ends clean, and the one PTY is reused rather than a second tmux client
 // attached.
-func TestShellDoorAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPIAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	a := f.createShell(t, 0, 0)
 	b, err := f.cl.CloneTile(context.Background(), &gridwellv1.CloneTileRequest{TileId: a.Id, DestGridId: f.root, X: 2})
 	if err != nil {
@@ -221,10 +221,10 @@ func TestShellDoorAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
 
 // The verdict crosses the seam: a snapshotted tile whose tmux session is gone
 // must reach the client as sessionGone, the fact the refresh affordance reads
-// through shellconn.DecideShellRefreshVisible. It rides the door's exit frame,
+// through shellconn.DecideShellRefreshVisible. It rides the API's exit frame,
 // and shellEndVerdict is the one owner of the classification.
-func TestShellDoorReportsSessionGone(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPIReportsSessionGone(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	// A frozen snapshot means "do not fabricate a new bash behind the
 	// JPEG"; with no live session, the attach is refused.
@@ -251,12 +251,12 @@ func TestShellDoorReportsSessionGone(t *testing.T) {
 
 // A platform with no PTY refuses at the driver, and that refusal reaches the
 // user as an exit frame carrying the reason: shelldriver returns
-// ErrShellsUnavailable, shellsvc hands it up, and the door turns it into the
+// ErrShellsUnavailable, shellsvc hands it up, and the API turns it into the
 // client's exit message. A refusal that only logged would look like the shell
 // silently vanished. Not SessionGone: nothing went away, the node simply
 // cannot host one.
-func TestShellDoorSurfacesADriverThatCannotOpen(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPISurfacesADriverThatCannotOpen(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	f.fake.OpenErr = shelldriver.ErrShellsUnavailable
 	tile := f.createShell(t, 0, 0)
 	cs := f.clientStack()
@@ -279,8 +279,8 @@ func TestShellDoorSurfacesADriverThatCannotOpen(t *testing.T) {
 
 // An attach to an id no namespace owns fails on the HANDSHAKE — the client
 // sees a failed dial, not a socket that opens and dies.
-func TestShellDoorRefusesUnknownTile(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPIRefusesUnknownTile(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	cs := f.clientStack()
 	cs.reg.Open("nosuch1/9", "nosuch1/9", 80, 24)
 	select {
@@ -293,11 +293,11 @@ func TestShellDoorRefusesUnknownTile(t *testing.T) {
 	}
 }
 
-// The door is the SAME gate as every other page request: no cookie, no PTY.
-// (The /content/ door is the one cookie-exempt path; the shell door is not
+// The API is the SAME gate as every other page request: no cookie, no PTY.
+// (The /content/ API is the one cookie-exempt path; the shell API is not
 // it — a leaked content token must never reach a shell.)
-func TestShellDoorRequiresTheAuthCookie(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPIRequiresTheAuthCookie(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	addr, err := shellwire.AttachURL(f.hs.URL, "", "", tile.Id, 80, 24)
 	if err != nil {
@@ -309,7 +309,7 @@ func TestShellDoorRequiresTheAuthCookie(t *testing.T) {
 	conn, resp, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: &http.Client{}})
 	if err == nil {
 		conn.Close(websocket.StatusNormalClosure, "")
-		t.Fatal("the shell door opened without the auth cookie")
+		t.Fatal("the shell API opened without the auth cookie")
 	}
 	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated dial: want 401, got %v", resp)
@@ -321,8 +321,8 @@ func TestShellDoorRequiresTheAuthCookie(t *testing.T) {
 
 // Same-origin: another page on the machine must not be able to open a
 // socket to the user's shell on the strength of the browser's cookie.
-func TestShellDoorRefusesCrossOrigin(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestShellAPIRefusesCrossOrigin(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	addr, err := shellwire.AttachURL(f.hs.URL, "", "", tile.Id, 80, 24)
 	if err != nil {
@@ -336,17 +336,17 @@ func TestShellDoorRefusesCrossOrigin(t *testing.T) {
 	})
 	if err == nil {
 		conn.Close(websocket.StatusNormalClosure, "")
-		t.Fatal("a cross-origin page opened the shell door")
+		t.Fatal("a cross-origin page opened the shell API")
 	}
 	if f.fake.SessionCount() != 0 {
 		t.Error("a cross-origin dial must not touch the PTY")
 	}
 }
 
-// disable_shells closes THIS door too — the node-wide refusal lives on the
-// one shared shell route, so neither door can be the exception.
-func TestShellDoorRefusedWhenShellsDisabled(t *testing.T) {
-	off := newShellDoorFixture(t, Config{DisableShells: true})
+// disable_shells closes THIS API too — the node-wide refusal lives on the
+// one shared shell route, so neither API can be the exception.
+func TestShellAPIRefusedWhenShellsDisabled(t *testing.T) {
+	off := newShellAPIFixture(t, Config{DisableShells: true})
 	// Any shell id at all: the refusal precedes resolution, exactly as it
 	// does on the node export, so it cannot depend on the tile existing.
 	addr, err := shellwire.AttachURL(off.hs.URL, "", "", off.uuid+"/1", 80, 24)
@@ -358,7 +358,7 @@ func TestShellDoorRefusedWhenShellsDisabled(t *testing.T) {
 	conn, resp, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: off.hs.Client()})
 	if err == nil {
 		conn.Close(websocket.StatusNormalClosure, "")
-		t.Fatal("the shell door opened on a shells-disabled node")
+		t.Fatal("the shell API opened on a shells-disabled node")
 	}
 	if resp == nil || resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("shells-disabled dial: want 403, got %v", resp)
@@ -403,14 +403,14 @@ func (l deafListener) Accept() (net.Conn, error) {
 }
 
 // A viewer that stops draining its socket must not pin the PTY reader: the
-// door bounds one output frame by the server's shell write timeout and the
+// API bounds one output frame by the server's shell write timeout and the
 // attachment ends with the PTY released. Without the bound the writer parks
 // forever and the tile stays held by a viewer that is no longer listening.
 // The bound is the server's own, because 30 seconds is not a test and a
-// package-wide one would be lowered under doors already serving.
-func TestShellDoorReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
+// package-wide one would be lowered under APIs already serving.
+func TestShellAPIReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
 	const bound = 250 * time.Millisecond
-	f := newShellDoorFixture(t, Config{}, func(s *Server) { s.shellWriteTimeout = bound })
+	f := newShellAPIFixture(t, Config{}, func(s *Server) { s.shellWriteTimeout = bound })
 	tile := f.createShell(t, 0, 0)
 	addr, err := shellwire.AttachURL(f.hs.URL, "", "", tile.Id, 80, 24)
 	if err != nil {
@@ -420,7 +420,7 @@ func TestShellDoorReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, addr, &websocket.DialOptions{HTTPClient: deafClient(f.hs)})
 	if err != nil {
-		t.Fatalf("dial the shell door: %v", err)
+		t.Fatalf("dial the shell API: %v", err)
 	}
 	t.Cleanup(func() { conn.CloseNow() })
 	sess := waitSession(t, f.fake)
@@ -447,7 +447,7 @@ func TestShellDoorReleasesThePTYWhenTheViewerStopsDraining(t *testing.T) {
 // socket. client/shellws has no tests of its own, so its write bound is bound
 // here, where the client stack is already dialed for real. The far end is a
 // socket that accepts the upgrade and reads nothing — the shape a hung host
-// presents; the door itself never stops reading, so it cannot play that part.
+// presents; the API itself never stops reading, so it cannot play that part.
 func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 	const bound = 250 * time.Millisecond
 
@@ -491,13 +491,13 @@ func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 }
 
 // Both wedge tests above run at a bound of their own, so neither would notice
-// the declared values drifting, and the door reads the Server's field rather
+// the declared values drifting, and the API reads the Server's field rather
 // than the constant. Thirty seconds is the budget a briefly stalled peer gets
 // before its socket counts as gone: long enough that a paused viewer or a slow
 // hop is not killed, short enough that nothing holds a PTY for a minute.
 func TestShellWriteBoundsAreTheDeclaredOnes(t *testing.T) {
 	if defaultShellWriteTimeout != 30*time.Second {
-		t.Errorf("the door bounds a PTY-output frame write at %v, want 30s", defaultShellWriteTimeout)
+		t.Errorf("the API bounds a PTY-output frame write at %v, want 30s", defaultShellWriteTimeout)
 	}
 	if shellws.DefaultWriteTimeout != 30*time.Second {
 		t.Errorf("the client bounds a keystroke frame write at %v, want 30s", shellws.DefaultWriteTimeout)
@@ -511,8 +511,8 @@ func TestShellWriteBoundsAreTheDeclaredOnes(t *testing.T) {
 // A shell attachment that opens and closes is a PTY's whole life on this
 // node, and the ring is where it is written down: the tile, the open, and how
 // the attachment ended.
-func TestTheShellDoorTracesAnAttachment(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+func TestTheShellAPITracesAnAttachment(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 6, 6)
 	cs := f.clientStack()
 	cs.reg.Open(tile.Id, tile.Id, 20, 10)
@@ -523,7 +523,7 @@ func TestTheShellDoorTracesAnAttachment(t *testing.T) {
 	for time.Now().Before(deadline) {
 		var opened, closed bool
 		for _, rec := range trace.Default().Snapshot() {
-			if rec.Src != "shelldoor" || rec.KV["tile"] != tile.Id {
+			if rec.Src != "shellapi" || rec.KV["tile"] != tile.Id {
 				continue
 			}
 			opened = opened || rec.Msg == "open"
@@ -538,15 +538,15 @@ func TestTheShellDoorTracesAnAttachment(t *testing.T) {
 }
 
 // A refused attach never touches a PTY, and that refusal is the record.
-func TestTheShellDoorTracesARefusal(t *testing.T) {
-	f := newShellDoorFixture(t, Config{DisableShells: true})
+func TestTheShellAPITracesARefusal(t *testing.T) {
+	f := newShellAPIFixture(t, Config{DisableShells: true})
 	res, err := f.hs.Client().Get(f.hs.URL + shellwire.Path + "?" + shellwire.QueryTileID + "=" + f.uuid + "/1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	res.Body.Close()
 	for _, rec := range trace.Default().Snapshot() {
-		if rec.Src == "shelldoor" && rec.KV["tile"] == f.uuid+"/1" && strings.HasPrefix(rec.Msg, "refused:") {
+		if rec.Src == "shellapi" && rec.KV["tile"] == f.uuid+"/1" && strings.HasPrefix(rec.Msg, "refused:") {
 			return
 		}
 	}
@@ -554,10 +554,10 @@ func TestTheShellDoorTracesARefusal(t *testing.T) {
 }
 
 // A delete the user asked for lands even when the session it ends will not
-// stop, and the answer at the door says so instead of a log line.
+// stop, and the answer at the API says so instead of a log line.
 func TestADeleteThatLeavesTheSessionRunningSaysSo(t *testing.T) {
 	ctx := context.Background()
-	f := newShellDoorFixture(t, Config{ID: "lnode1"})
+	f := newShellAPIFixture(t, Config{ID: "lnode1"})
 	sh := f.createShell(t, 0, 0)
 	f.fake.KillErr = errors.New("tmux: server exited unexpectedly")
 	if resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: sh.Id})); err != nil || resp.SessionLeft != "" {

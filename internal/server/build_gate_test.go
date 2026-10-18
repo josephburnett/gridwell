@@ -2,7 +2,7 @@ package server
 
 // The build gate, crossed for real: the wasm client's own carriers (the
 // nodebuild interceptor on the Connect client, the beacon path, shellws) as a
-// page of the door's origin, against WebHandler with a stamped build.
+// page of the API's origin, against WebHandler with a stamped build.
 
 import (
 	"bytes"
@@ -24,7 +24,7 @@ import (
 
 const gateNodeBuild = "node-b"
 
-// asPage is the header a page's own calls carry: its origin is the door's.
+// asPage is the header a page's own calls carry: its origin is the API's.
 type asPage struct{ origin string }
 
 func (a asPage) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -46,12 +46,12 @@ func (a asPage) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.
 	return next
 }
 
-func gateFixture(t *testing.T, nodeBuild string) *shellDoorFixture {
-	return newShellDoorFixture(t, Config{}, func(s *Server) { s.build = nodeBuild })
+func gateFixture(t *testing.T, nodeBuild string) *shellAPIFixture {
+	return newShellAPIFixture(t, Config{}, func(s *Server) { s.build = nodeBuild })
 }
 
 // page is a client of the given build, and what its gate heard.
-func (f *shellDoorFixture) page(build string) (*rpc.Client, *nodebuild.Gate, *[]string) {
+func (f *shellAPIFixture) page(build string) (*rpc.Client, *nodebuild.Gate, *[]string) {
 	heard := &[]string{}
 	g := nodebuild.New(build, func(node string) { *heard = append(*heard, node) })
 	cl := rpc.NewClient(f.hs.Client(), f.hs.URL, connect.WithProtoJSON(),
@@ -59,7 +59,7 @@ func (f *shellDoorFixture) page(build string) (*rpc.Client, *nodebuild.Gate, *[]
 	return cl, g, heard
 }
 
-func (f *shellDoorFixture) tileCount(t *testing.T) int {
+func (f *shellAPIFixture) tileCount(t *testing.T) int {
 	t.Helper()
 	g, err := f.cl.GetGrid(context.Background(), f.root)
 	if err != nil {

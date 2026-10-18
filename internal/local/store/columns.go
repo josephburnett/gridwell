@@ -189,7 +189,7 @@ schema v9, additive.`,
 	{
 		name: "serves_page", ddl: "INTEGER NOT NULL DEFAULT 0", since: 14,
 		comment: `serves_page=1 is a plugin url row whose page the plugin serves, the
-address derived at the /content/ door. Like kind and alt_text it is a
+address derived at the /content/ API. Like kind and alt_text it is a
 snapshot of the listing, so a row its source does not list right now
 still presents as a page rather than as a url tile with no address.
 Added at schema v14, additive.`,

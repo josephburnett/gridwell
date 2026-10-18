@@ -2,7 +2,7 @@ package server_test
 
 // The connection seam, end to end in-process: a remote node behind a real
 // h2c export ⇐ the node's TRANSPORT (declared connections, a fake dialer
-// landing on that export) ⇐ the local node's front door. Every id crosses
+// landing on that export) ⇐ the local node's web API. Every id crosses
 // "<id>/<conn>/…": the handshake lists the connection,
 // its landing is the remote's HOME, reads and writes route through, events
 // arrive prefixed, and a dial failure rides the row as its status.
@@ -39,11 +39,11 @@ import (
 const localNodeID = "lnode1"
 
 type transportHarness struct {
-	localCl   *rpc.Client         // the local node's front door
-	remoteCl  *rpc.Client         // the remote node's own front door
+	localCl   *rpc.Client         // the local node's web API
+	remoteCl  *rpc.Client         // the remote node's own web API
 	tClient   namespace.Namespace // the transport, in process
 	rootBare  string              // the remote home's bare root grid id
-	localURL  string              // the local node's web door origin
+	localURL  string              // the local node's web API origin
 	localHTTP *httptest.Server    // …and the server behind it
 	// remoteShell is the REMOTE home's PTY backend — the fake echoing
 	// streamer, so a shell attach through the chain can be asserted
@@ -54,8 +54,8 @@ type transportHarness struct {
 	// dialed namespace is otherwise untouched, so the reads keep working —
 	// darkness here is exactly a dropped stream, not a dead node.
 	cut chan struct{}
-	// farDoor is the remote node's connection door; stopFarNode takes it away.
-	farDoor *httptest.Server
+	// farAPI is the remote node's connection API; stopFarNode takes it away.
+	farAPI *httptest.Server
 
 	mu      sync.Mutex
 	dialErr error
@@ -66,12 +66,12 @@ type transportHarness struct {
 // fanInRemote sees namespace.Follow return and publishes one health event.
 func (h *transportHarness) cutFarStream() { close(h.cut) }
 
-// stopFarNode is the far machine going away: its door refuses new
+// stopFarNode is the far machine going away: its API refuses new
 // connections and drops the open ones, so every call and the event stream
 // through the connection fail as a dead tunnel's do.
 func (h *transportHarness) stopFarNode() {
-	_ = h.farDoor.Listener.Close()
-	h.farDoor.CloseClientConnections()
+	_ = h.farAPI.Listener.Close()
+	h.farAPI.CloseClientConnections()
 }
 
 // farLink is the dialed far namespace with a cuttable event stream. Every
@@ -127,10 +127,10 @@ func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, d
 	}
 	remoteSrv := servertest.New(t, remoteReg, server.Config{ID: "rnode1"})
 	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config = server.ConnectionDoorServer(remoteSrv.ConnectionHandler())
+	remoteHTTP.Config = server.ConnectionAPIServer(remoteSrv.ConnectionHandler())
 	remoteHTTP.Start()
 	t.Cleanup(remoteHTTP.Close)
-	h.farDoor = remoteHTTP
+	h.farAPI = remoteHTTP
 	grpcConn, err := dial.ClientConn(strings.TrimPrefix(remoteHTTP.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestConnectionThroughTheChain(t *testing.T) {
 		t.Fatalf("landing grid = %+v, want node_ns %s/geneva, writable and accepting tiles", g.Grid, localNodeID)
 	}
 
-	// Write through the chain, read back on the remote's own door.
+	// Write through the chain, read back on the remote's own API.
 	txt, err := h.localCl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: wantRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 1, Y: 1, W: 1, H: 1}}, []byte("# via geneva"))
 	if err != nil {
 		t.Fatal(err)
@@ -279,9 +279,9 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("hop 1 (transport stream) never said it is listening")
 	}
-	// Hop 2: the local door's stream carries them under the node's id.
-	doorEvents := make(chan *gridwellv1.Event, 16)
-	doorErr := make(chan error, 1)
+	// Hop 2: the local API's stream carries them under the node's id.
+	apiEvents := make(chan *gridwellv1.Event, 16)
+	apiErr := make(chan error, 1)
 	es, err := h.localCl.Subscribe(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -291,10 +291,10 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 		for {
 			ev, ok, err := es.Recv()
 			if err != nil || !ok {
-				doorErr <- err
+				apiErr <- err
 				return
 			}
-			doorEvents <- ev
+			apiEvents <- ev
 		}
 	}()
 	if _, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}); err != nil {
@@ -315,17 +315,17 @@ func TestConnectionEventsArrivePrefixed(t *testing.T) {
 	}
 	for {
 		select {
-		case ev := <-doorEvents:
+		case ev := <-apiEvents:
 			if c := ev.GetTileChanged(); c != nil {
 				if !strings.HasPrefix(c.GetTile().GetId(), localNodeID+"/geneva/rnode1/") {
 					t.Fatalf("event id = %q, want the chain", c.GetTile().GetId())
 				}
 				return
 			}
-		case err := <-doorErr:
-			t.Fatalf("hop 2 (the local door): %v", err)
+		case err := <-apiErr:
+			t.Fatalf("hop 2 (the local API): %v", err)
 		case <-ctx.Done():
-			t.Fatal("hop 2 (the local door): no event")
+			t.Fatal("hop 2 (the local API): no event")
 		}
 	}
 }
@@ -340,7 +340,7 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
 
 	health := make(chan *gridwellv1.EventPluginHealth, 8)
-	doorErr := make(chan error, 1)
+	apiErr := make(chan error, 1)
 	// The down transition is published once, so be listening before causing it.
 	es, err := h.localCl.Subscribe(ctx)
 	if err != nil {
@@ -351,7 +351,7 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 		for {
 			ev, ok, err := es.Recv()
 			if err != nil || !ok {
-				doorErr <- err
+				apiErr <- err
 				return
 			}
 			if h := ev.GetPluginHealth(); h != nil {
@@ -375,8 +375,8 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 				t.Error("a health-down with no detail tells the user nothing about why")
 			}
 			return
-		case err := <-doorErr:
-			t.Fatalf("the local door's stream: %v", err)
+		case err := <-apiErr:
+			t.Fatalf("the local API's stream: %v", err)
 		case <-ctx.Done():
 			t.Fatal("the connection's darkness never reached the client stream")
 		}
@@ -402,13 +402,13 @@ func TestDialFailureRidesTheRow(t *testing.T) {
 	}
 }
 
-// A shell on a MOUNTED remote attaches through the /shell door: the web
-// door's WebSocket → this node's shell route → the transport → the remote
+// A shell on a MOUNTED remote attaches through the /shell API: the web
+// API's WebSocket → this node's shell route → the transport → the remote
 // node's export → the remote home's PTY. The transport is just another
-// namespace to the door — which is the whole point of the id chain — but
-// the Electron relay it replaced dialed the CONNECTION DOOR instead, so
-// nothing pinned that the browser door forwards a PTY. This does.
-func TestShellDoorThroughAConnection(t *testing.T) {
+// namespace to the API — which is the whole point of the id chain — but
+// the Electron relay it replaced dialed the CONNECTION API instead, so
+// nothing pinned that the web API forwards a PTY. This does.
+func TestShellAPIThroughAConnection(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Label: "Geneva", Addr: "/far/federation.sock"}}, nil)
 
@@ -520,7 +520,7 @@ func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {
 // the target through the same routing lookup the rest of the node uses: a
 // connection-chained target is owned by the transport, not by home, so a follow
 // that peels only the first segment answers home and the read 404s. Both
-// content doors that resolve a link cross the seam here.
+// content routes that resolve a link cross the seam here.
 func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -560,7 +560,7 @@ func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 		t.Errorf("link content version = %d, want the target's %d", version.Version, src.Version)
 	}
 
-	// The preview door resolves the same link the same way.
+	// The preview read resolves the same link the same way.
 	jpeg := []byte("\xff\xd8fake-jpeg-bytes")
 	url, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: remoteRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 4, W: 2, H: 2, UrlString: "https://example.com"}})
 	if err != nil {

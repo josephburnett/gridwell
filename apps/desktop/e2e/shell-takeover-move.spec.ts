@@ -1,13 +1,13 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
-import { dumpViaDoor } from './trace';
+import { dumpViaAPI } from './trace';
 
 // One live surface per content tile, and taking it over moves it, for a shell
 // as for a url: the terminal and its /shell socket go to the pane that takes
 // it, so nothing reattaches and xterm keeps what it held. Entering a pane tile
 // whose layout shows the shell moves it in, leaving hands it back, entering
 // again moves it in again, and opening the tile in a split pane moves it
-// there. Through all of it the node's shell door opens no second attachment.
+// there. Through all of it the node's shell API opens no second attachment.
 
 test('a shell taken over moves with its terminal and socket, never reattaching', async ({
   gw,
@@ -27,8 +27,8 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
       Array.from(document.querySelectorAll('.gw-shell-host')).map((h) => (h as HTMLElement).dataset.gwMark ?? ''),
     );
   const attaches = async (): Promise<number> =>
-    (await dumpViaDoor(origin, token)).filter(
-      (l) => l.src === 'shelldoor' && l.kind === 'pty' && l.msg === 'open',
+    (await dumpViaAPI(origin, token)).filter(
+      (l) => l.src === 'shellapi' && l.kind === 'pty' && l.msg === 'open',
     ).length;
   const shellText = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.shellText());
 

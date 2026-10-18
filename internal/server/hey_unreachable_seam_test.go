@@ -12,7 +12,7 @@ import (
 
 // One HEY box the CLI cannot read costs nothing else (docs/plugin-standard.md
 // rule 7). Every email is a tile in everything, so everything refused for one
-// box was a 404 for every email the content door served, in every box; now
+// box was a 404 for every email the content API served, in every box; now
 // everything lists what the plugin remembers of every box, every email's page
 // serves, and the plugin's health carries the box's reason.
 func TestHeyOneFailingBoxLeavesEveryEmailServing(t *testing.T) {

@@ -1,14 +1,14 @@
 package server_test
 
 // The disable_shells contract, pinned over the real wire: the gRPC node export
-// behind ConnectionHandler. The browser door's half is shell_door_seam_test.go,
+// behind ConnectionHandler. The web API's half is shell_api_seam_test.go,
 // and both enter through the one shell route. The refusal lives at the router,
 // before plugin resolution, so no plugin can serve a shell while the flag is
 // set:
 //   - Handshake carries shells_disabled (the client drops the palette
 //     swatch from it),
 //   - CreateTile(kind=shell) is PermissionDenied while other kinds work,
-//   - OpenShell is PermissionDenied — the only PTY door on the node,
+//   - OpenShell is PermissionDenied — the only PTY verb on the node,
 //   - ShellSessionAlive answers "gone", so a pre-existing shell tile's
 //     refresh affordance hides exactly like a dead tmux session's.
 
@@ -63,7 +63,7 @@ func TestShellsDisabled(t *testing.T) {
 	}
 
 	// A shell tile that PRE-DATES the flag (created through the plugin
-	// directly — placement is sacred, the row stays): its PTY door is
+	// directly — placement is sacred, the row stays): its PTY is
 	// closed and its session reads as gone.
 	pre, err := direct.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: gridLocal(grid),

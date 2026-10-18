@@ -229,7 +229,7 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 
 	// And a reference RE-STORED from an old row id canonicalizes forward, so
 	// the copy and the listing name one thing. MintRef is the router's one
-	// door for that, and it mints nothing: the address is already canonical.
+	// way to do that, and it mints nothing: the address is already canonical.
 	fwd, err := a.MintRef(ctx, rowID)
 	if err != nil {
 		t.Fatal(err)

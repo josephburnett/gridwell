@@ -254,9 +254,9 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	if nIdx != 0 {
 		t.Error("idx_tiles_object_id survived v10 on a genuine v9 file")
 	}
-	// And the file opens through the production door, reading the adopted well
-	// back as an ordinary tile: a file a released binary wrote still opens and
-	// still holds what the user put in it.
+	// And the file opens through the production opener, reading the adopted
+	// well back as an ordinary tile: a file a released binary wrote still opens
+	// and still holds what the user put in it.
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -369,7 +369,8 @@ func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 		t.Errorf("home root framing = (%v, zoom %v), want (12.5, 0.5)", cx, zoom)
 	}
 
-	// And the file opens through the production door with the framing preserved.
+	// And the file opens through the production opener with the framing
+	// preserved.
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -401,7 +402,7 @@ func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 // the genuine v12 shape is put back by hand and v13 run over it. The rows are
 // node facts the user cannot retype, so every one must come through unchanged,
 // the shape must equal a fresh Open's, and the file must still open through
-// the production door.
+// the production opener.
 func TestMigrateV13OverAGenuineV12File(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "genuinev12.db")
@@ -438,7 +439,7 @@ func TestMigrateV13OverAGenuineV12File(t *testing.T) {
 		t.Errorf("the adopted connections shape differs from a fresh one:\n fresh   = %+v\n adopted = %+v", want, got)
 	}
 
-	// And the file opens through the production door with the rows intact.
+	// And the file opens through the production opener with the rows intact.
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}

@@ -89,7 +89,7 @@ func TestASavedBodyAnswersForItsResponseRow(t *testing.T) {
 	}
 }
 
-// Unsaved words survive a foreign row on every door, the grid-less ones
+// Unsaved words survive a foreign row on every path, the grid-less ones
 // included.
 func TestDirtyTextSurvivesAForeignRowAnywhere(t *testing.T) {
 	c := New()

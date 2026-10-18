@@ -1,6 +1,6 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 
 // One live surface per content tile, and taking it over moves it: entering a
 // pane tile whose layout shows a url tile the outer level shows hands the
@@ -42,7 +42,7 @@ test('a url taken over by a pane tile moves there and back without a reload', as
   const urlViews = () =>
     window.evaluate(() => (window as any).__gridwellTest.urlViews() as Record<string, string>);
   const views = async (): Promise<TraceLine[]> =>
-    (await dumpViaDoor(origin, token)).filter((l) => l.origin === 'electron' && l.src === 'webviews');
+    (await dumpViaAPI(origin, token)).filter((l) => l.origin === 'electron' && l.src === 'webviews');
 
   await gw.enterPlugin('home');
   const f = await gw.focused();
@@ -86,7 +86,7 @@ test('a url taken over by a pane tile moves there and back without a reload', as
     .poll(async () => (await views()).some((l) => l.kind === 'nav-done' && l.kv?.tile === tile), { timeout: 20_000 })
     .toBe(true);
   await window.waitForTimeout(1_500);
-  const baseline = Math.max(0, ...(await dumpViaDoor(origin, token)).map((l) => l.seq ?? 0));
+  const baseline = Math.max(0, ...(await dumpViaAPI(origin, token)).map((l) => l.seq ?? 0));
 
   // A pane tile from the right pane captures the layout with the url pane in
   // it, so the captured copy of that pane takes the tile's surface over.

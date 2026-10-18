@@ -1,6 +1,6 @@
 // Package nodebuild is the client's half of "a client the node served runs
 // the node's build" (Server.staleBuild): every call names this page's build,
-// the door's refusal is heard on whichever carrier it arrives, and Decide
+// the API's refusal is heard on whichever carrier it arrives, and Decide
 // says what the page does about it.
 package nodebuild
 
@@ -111,7 +111,7 @@ func (h *heardConn) Receive(msg any) error {
 	return err
 }
 
-// Verdict is what a page does when the door refuses its build. It never
+// Verdict is what a page does when the API refuses its build. It never
 // reloads itself: only the user's press on the notice's button does
 // (errsurface.Reload).
 type Verdict int
@@ -133,7 +133,7 @@ func (v Verdict) String() string {
 	return "offer"
 }
 
-// Decide is the one answer to the door's refusal. reloaded is whether a
+// Decide is the one answer to the API's refusal. reloaded is whether a
 // reload loaded this page, accepted whether the node has answered any of its
 // calls.
 func Decide(reloaded, accepted bool) Verdict {
@@ -147,7 +147,7 @@ func Decide(reloaded, accepted bool) Verdict {
 const Updated = "Gridwell was updated — reload to continue."
 
 // Notice is what the strip says for a verdict. Offer's names what reloading
-// will cost: the parked writes the door refused, given their outbox ops in
+// will cost: the parked writes the API refused, given their outbox ops in
 // drain order (Unsaved), and, when unsavedText tiles hold text the node never
 // saved, that it should be copied first.
 func Notice(v Verdict, node string, ops []string, unsavedText int) string {
@@ -182,8 +182,8 @@ var kinds = map[string][2]string{
 	"SetShellPreview": {"shell capture", "shell captures"},
 }
 
-// Unsaved names the parked writes the door refused, by kind and count, "" for
-// none. They cannot be sent again: they are this build's, and the door takes
+// Unsaved names the parked writes the API refused, by kind and count, "" for
+// none. They cannot be sent again: they are this build's, and the API takes
 // only the node's.
 func Unsaved(ops []string) string {
 	var order [][2]string

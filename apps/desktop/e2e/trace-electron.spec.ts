@@ -1,11 +1,11 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 
 // The main process's trace crosses three seams the Electron gates cannot see
 // together: a WebContentsView event becomes a record, the record is posted to
-// the web door on the app's own cookie, and the node's ring keeps it under the
+// the web API on the app's own cookie, and the node's ring keeps it under the
 // one origin a sender may claim. A unit test on either side would pass with the
-// door unreachable and the app none the wiser, because a trace that fails says
+// API unreachable and the app none the wiser, because a trace that fails says
 // nothing by design.
 
 test('a live url tile puts the main process into the node trace', async ({
@@ -38,7 +38,7 @@ test('a live url tile puts the main process into the node trace', async ({
   await expect
     .poll(
       async () => {
-        views = (await dumpViaDoor(origin, token)).filter(
+        views = (await dumpViaAPI(origin, token)).filter(
           (l) => l.origin === 'electron' && l.src === 'webviews',
         );
         return views.length;
@@ -57,7 +57,7 @@ test('a live url tile puts the main process into the node trace', async ({
   expect(create!.ct).toBeGreaterThan(0);
 
   // The sidecar's own lifecycle rides the same ring, under its own src.
-  const all = await dumpViaDoor(origin, token);
+  const all = await dumpViaAPI(origin, token);
   expect(
     all.filter((l) => l.origin === 'electron' && l.src === 'sidecar' && l.kind === 'ready'),
   ).not.toHaveLength(0);

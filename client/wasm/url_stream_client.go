@@ -65,8 +65,8 @@ func contentViewBounds(r pane.Rect) viewBounds {
 
 // webAddress resolves the address a url tile presents at (urlview.Address),
 // read off its content row: "" while a link's target is not read, or dead. A
-// served page's door address is never persisted, because the desktop origin
-// is an ephemeral port.
+// served page's content API address is never persisted, because the desktop
+// origin is an ephemeral port.
 func (a *App) webAddress(t *gridwellv1.Tile) string {
 	row, s := a.askContentRow(t)
 	if s != contentrow.Ready || !rpc.WebContent(row) {

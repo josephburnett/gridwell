@@ -12,7 +12,7 @@ import (
 var t0 = time.UnixMilli(1727000000123)
 
 // The batch a node reads is pinned to its bytes: JSON lines, one record each,
-// newline-terminated, with the fields the door's contract names.
+// newline-terminated, with the fields the API's contract names.
 func TestPendingBatchIsJSONLines(t *testing.T) {
 	c := New(8, "cid7abc")
 	c.Emit("nav", "push", "descend a1b2c3d", map[string]string{"req": "k3f9x2a"}, t0)
@@ -52,7 +52,7 @@ func TestPendingIsEmptyWhenNothingIsOwed(t *testing.T) {
 	}
 }
 
-// A post that never lands must not lose the records it carried: the door is
+// A post that never lands must not lose the records it carried: the API is
 // unreliable and the trace is what explains the failure.
 func TestAFailedPostIsResentWithTheNextBatch(t *testing.T) {
 	c := New(8, "cid7abc")

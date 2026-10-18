@@ -2,7 +2,7 @@ package server
 
 // A plugin whose content IS web pages, through the whole stack: the shipped
 // binary spawned by the production loader, the pluginhost adapter, the router,
-// and the /content/ door as a browser reaches it. fs proves the door over
+// and the /content/ API as a browser reaches it. fs proves the API over
 // files on disk; this proves the other half — bytes a plugin generates, with
 // no file behind them — and it proves the part only the seam can be wrong
 // about: a page names its resources with ordinary relative URLs, and what a
@@ -29,7 +29,7 @@ import (
 // pagesNS is the registry key for the pages plugin in these tests.
 const pagesNS = "up1"
 
-// pagesServer stands the pages plugin up behind the real browser door and
+// pagesServer stands the pages plugin up behind the real web API and
 // returns the server plus its root grid.
 func pagesServer(t *testing.T) (*httptest.Server, *gridwellv1.GetGridResponse) {
 	t.Helper()
@@ -39,7 +39,7 @@ func pagesServer(t *testing.T) (*httptest.Server, *gridwellv1.GetGridResponse) {
 	cl := newPluginClient(t, "pages", nil)
 	reg := plugin.NewRegistry()
 	reg.Register(pagesNS, "pages", cl, nil)
-	hs := webDoorTest(t, mustNew(t, reg, Config{}).WebHandler())
+	hs := webAPITest(t, mustNew(t, reg, Config{}).WebHandler())
 
 	ctx := t.Context()
 	info, err := cl.Info(ctx, &gridwellv1.InfoRequest{})
@@ -69,8 +69,8 @@ func tileByLabel(t *testing.T, grid *gridwellv1.GetGridResponse, label string) *
 }
 
 // A page tile arrives as a URL tile carrying serves_page, with no url of its
-// own: the address is the node's to derive at the /content/ door. The entry
-// door refuses that declaration on every other kind, and this is where the
+// own: the address is the node's to derive at the /content/ API. The entry
+// API refuses that declaration on every other kind, and this is where the
 // shipped plugin's side of it is pinned.
 func TestPagesPluginServesPageTilesAsURLRows(t *testing.T) {
 	_, grid := pagesServer(t)
@@ -105,18 +105,18 @@ func TestPagesPluginServesPageTilesAsURLRows(t *testing.T) {
 // hrefRe finds the page's relative references, the way a browser would.
 var hrefRe = regexp.MustCompile(`(?:src|href)="([^"]+)"`)
 
-// The seam the plugin cannot test alone: the page arrives through the door as
+// The seam the plugin cannot test alone: the page arrives through the API as
 // a whole HTML document, and each relative URL inside it — resolved against
 // the tile's address exactly as a browser resolves it — comes back as the
 // same tile's ServeContent with that name as the subpath. Nothing on either
-// side of the seam can check this: the plugin never sees a URL, and the door
+// side of the seam can check this: the plugin never sees a URL, and the API
 // never sees the HTML.
 func TestPagesPluginSubpathsResolveLikeABrowser(t *testing.T) {
 	hs, grid := pagesServer(t)
 	styled := tileByLabel(t, grid, "styled")
 	token := ContentToken(testPassword)
 
-	// Start where the client sends a browser, and let the door's redirect to
+	// Start where the client sends a browser, and let the API's redirect to
 	// the trailing slash happen: without it every relative URL below would
 	// resolve one level too high.
 	start := rpc.PageURL(hs.URL, token, pagesNS+"/"+styled.Id)
@@ -128,9 +128,9 @@ func TestPagesPluginSubpathsResolveLikeABrowser(t *testing.T) {
 		t.Errorf("page Content-Type = %q", ct)
 	}
 	if !strings.HasPrefix(body, "<!doctype html>") || !strings.Contains(body, "</html>") {
-		t.Errorf("the door did not deliver a whole document: %.60q", body)
+		t.Errorf("the API did not deliver a whole document: %.60q", body)
 	}
-	// The door's invariant rides a generated page like any other.
+	// The content API's invariant rides a generated page like any other.
 	if csp := res.Header.Get("Content-Security-Policy"); csp != contentSandbox {
 		t.Errorf("CSP = %q", csp)
 	}
@@ -151,7 +151,7 @@ func TestPagesPluginSubpathsResolveLikeABrowser(t *testing.T) {
 		}
 		got := base.ResolveReference(u).String()
 		// A browser's resolution must land inside this tile's own space, or
-		// the request escapes to another tile — or off the door entirely.
+		// the request escapes to another tile — or off the API entirely.
 		if want := start + ref; got != want {
 			t.Errorf("%q resolved to %s, want %s", ref, got, want)
 		}
@@ -175,7 +175,7 @@ func TestPagesPluginSubpathsResolveLikeABrowser(t *testing.T) {
 
 // A subpath the page does not name is an ordinary 404 with a body, not a
 // gateway failure: the plugin answers the miss itself, so the status is one
-// the plugin chose rather than one the door inferred from an RPC error.
+// the plugin chose rather than one the API inferred from an RPC error.
 func TestPagesPluginMissingSubpathIs404(t *testing.T) {
 	hs, grid := pagesServer(t)
 	styled := tileByLabel(t, grid, "styled")
@@ -257,7 +257,7 @@ func TestPagesPluginProbesAListedTilePresent(t *testing.T) {
 }
 
 // A delete of a fixed page is refused, and the refusal reaches the caller of
-// the web door with its code and its reason; the tile stays listed under the
+// the web API with its code and its reason; the tile stays listed under the
 // same id, because nothing was deleted.
 func TestPagesPluginDeleteIsRefusedWithItsReason(t *testing.T) {
 	hs, grid := pagesServer(t)
@@ -278,7 +278,7 @@ func TestPagesPluginDeleteIsRefusedWithItsReason(t *testing.T) {
 	}
 }
 
-// pagesRPC is a logged-in connect client on the pages server's web door.
+// pagesRPC is a logged-in connect client on the pages server's web API.
 func pagesRPC(t *testing.T, hs *httptest.Server) *rpc.Client {
 	t.Helper()
 	return rpc.NewClient(withCookie(t, hs, testPassword).Client(), hs.URL, connect.WithProtoJSON())

@@ -1,7 +1,7 @@
 package server_test
 
 // A plugin's Watch stream, through pluginhost.Start as the loader runs it,
-// reaching a client subscribed at the web door: on the node that hosts the
+// reaching a client subscribed at the web API: on the node that hosts the
 // plugin, and on a node that reaches it through a connection.
 
 import (
@@ -84,7 +84,7 @@ func registerWatching(t *testing.T, reg *plugin.Registry, st *store.Store) chan<
 	return p.poke
 }
 
-// awaitGridChanged subscribes at cl's door, shows shown, and pokes until a
+// awaitGridChanged subscribes at cl's API, shows shown, and pokes until a
 // GridChanged for want arrives. Poking again covers the subscription
 // attaching after an earlier poke, which is nobody's.
 func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, shown []string, want string) {
@@ -127,7 +127,7 @@ func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, shown 
 			default:
 			}
 		case <-ctx.Done():
-			t.Fatalf("no GridChanged(%s) reached the door; saw %v", want, seen)
+			t.Fatalf("no GridChanged(%s) reached the API; saw %v", want, seen)
 		}
 	}
 }
@@ -135,7 +135,7 @@ func awaitGridChanged(t *testing.T, cl *rpc.Client, poke chan<- struct{}, shown 
 // A plugin that says a context changed reaches a client on its own node as the
 // GridChanged a write would have published, under the qualified grid id the
 // client holds.
-func TestPluginWatchReachesTheDoor(t *testing.T) {
+func TestPluginWatchReachesTheWebAPI(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/gridwell.db")
 	if err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func (p scopedWatch) Watch(req *pluginv1.WatchRequest, s grpc.ServerStreamingSer
 	return nil
 }
 
-// What a client at the web door shows is what the plugin is asked to watch,
+// What a client at the web API shows is what the plugin is asked to watch,
 // as its own context key, and the stream ends when that client goes away.
 func TestPluginWatchIsScopedToWhatAClientShows(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/gridwell.db")

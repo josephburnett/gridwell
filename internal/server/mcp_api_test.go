@@ -16,11 +16,11 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/mcpdoor"
+	"github.com/josephburnett/gridwell/internal/mcpapi"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// mcpNode is a real Server behind the real web door, with a home and a
+// mcpNode is a real Server behind the real web API, with a home and a
 // second namespace, "feed", the user can switch off.
 type mcpNode struct {
 	srv        *Server
@@ -53,8 +53,8 @@ func newMCPNode(t *testing.T) *mcpNode {
 		t.Fatal(err)
 	}
 	srv := mustNew(t, reg, Config{})
-	hs := webDoorTest(t, srv.WebHandler())
-	return &mcpNode{srv: srv, url: hs.URL + mcpdoor.Path, root: root, feedRoot: "feed/" + feedRoot, reg: reg, connectURL: hs.URL, web: hs.Client()}
+	hs := webAPITest(t, srv.WebHandler())
+	return &mcpNode{srv: srv, url: hs.URL + mcpapi.Path, root: root, feedRoot: "feed/" + feedRoot, reg: reg, connectURL: hs.URL, web: hs.Client()}
 }
 
 // headers adds a fixed set of headers to every request an MCP client makes.
@@ -71,7 +71,7 @@ func (h headers) RoundTrip(r *http.Request) (*http.Response, error) {
 	return h.base.RoundTrip(r)
 }
 
-// agent connects an MCP client to the door, sending hdr on every request.
+// agent connects an MCP client to the API, sending hdr on every request.
 func (n *mcpNode) agent(t *testing.T, hdr map[string]string) (*mcp.ClientSession, error) {
 	t.Helper()
 	hc := &http.Client{Transport: headers{h: hdr, base: n.web.Transport}}
@@ -131,9 +131,9 @@ func refusedWith(t *testing.T, res *mcp.CallToolResult, lead string) {
 }
 
 // items is a bulk write's answer, failing on a whole-call refusal.
-func items(t *testing.T, s *mcp.ClientSession, tool string, args ...map[string]any) []mcpdoor.Verdict {
+func items(t *testing.T, s *mcp.ClientSession, tool string, args ...map[string]any) []mcpapi.Verdict {
 	t.Helper()
-	var out mcpdoor.WriteOut
+	var out mcpapi.WriteOut
 	call(t, s, tool, map[string]any{"items": args}, &out)
 	if len(out.Items) != len(args) {
 		t.Fatalf("%s answered %d verdicts for %d items: %+v", tool, len(out.Items), len(args), out.Items)
@@ -142,7 +142,7 @@ func items(t *testing.T, s *mcp.ClientSession, tool string, args ...map[string]a
 }
 
 // landed is the tile one bulk item wrote, failing on its refusal.
-func landed(t *testing.T, v mcpdoor.Verdict) mcpdoor.Tile {
+func landed(t *testing.T, v mcpapi.Verdict) mcpapi.Tile {
 	t.Helper()
 	if v.Verdict != "ok" || v.Tile == nil {
 		t.Fatalf("verdict %+v, want ok with the tile", v)
@@ -151,15 +151,15 @@ func landed(t *testing.T, v mcpdoor.Verdict) mcpdoor.Tile {
 }
 
 // mkText creates a text tile on grid through write_text.
-func mkText(t *testing.T, s *mcp.ClientSession, grid, body string) mcpdoor.Tile {
+func mkText(t *testing.T, s *mcp.ClientSession, grid, body string) mcpapi.Tile {
 	t.Helper()
 	return landed(t, items(t, s, "write_text", map[string]any{"grid": grid, "body": body})[0])
 }
 
 // readTiles reads ids through read_tiles, one answer per id in order.
-func readTiles(t *testing.T, s *mcp.ClientSession, ids ...string) []mcpdoor.TileRead {
+func readTiles(t *testing.T, s *mcp.ClientSession, ids ...string) []mcpapi.TileRead {
 	t.Helper()
-	var out mcpdoor.ReadTilesOut
+	var out mcpapi.ReadTilesOut
 	call(t, s, "read_tiles", map[string]any{"ids": ids}, &out)
 	if len(out.Tiles) != len(ids) {
 		t.Fatalf("read_tiles answered %d for %d ids: %+v", len(out.Tiles), len(ids), out.Tiles)
@@ -168,7 +168,7 @@ func readTiles(t *testing.T, s *mcp.ClientSession, ids ...string) []mcpdoor.Tile
 }
 
 // readOne is read_tiles of one id that must answer.
-func readOne(t *testing.T, s *mcp.ClientSession, id string) mcpdoor.TileRead {
+func readOne(t *testing.T, s *mcp.ClientSession, id string) mcpapi.TileRead {
 	t.Helper()
 	r := readTiles(t, s, id)[0]
 	if r.Verdict != "ok" {
@@ -177,8 +177,8 @@ func readOne(t *testing.T, s *mcp.ClientSession, id string) mcpdoor.TileRead {
 	return r
 }
 
-// The door lists its ten tools and nothing else (docs/mcp.md).
-func TestTheMCPDoorListsItsTenTools(t *testing.T) {
+// The API lists its ten tools and nothing else (docs/mcp.md).
+func TestTheMCPAPIListsItsTenTools(t *testing.T) {
 	n := newMCPNode(t)
 	s, err := n.agent(t, bearer(testPassword))
 	if err != nil {
@@ -198,7 +198,7 @@ func TestTheMCPDoorListsItsTenTools(t *testing.T) {
 	}
 }
 
-// Every tool crosses the real web door and the router, and every answer
+// Every tool crosses the real web API and the router, and every answer
 // names the tile by the qualified address the agent names it back with.
 func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 	n := newMCPNode(t)
@@ -214,7 +214,7 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		}
 	}
 
-	var grid mcpdoor.GridOut
+	var grid mcpapi.GridOut
 	call(t, s, "read_grid", nil, &grid)
 	if grid.Grid.ID != n.root || !grid.Grid.AcceptsTiles || len(grid.Tiles) != 0 {
 		t.Fatalf("read_grid() = %+v, want the empty home grid %s", grid, n.root)
@@ -282,7 +282,7 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("renaming a text tile = %q, want refused", renamed[1].Verdict)
 	}
 
-	var found mcpdoor.FindOut
+	var found mcpapi.FindOut
 	call(t, s, "find", map[string]any{"query": "third"}, &found)
 	if len(found.Hits) == 0 || found.Hits[0].Tile.ID == "" {
 		t.Fatalf("find(third) = %+v, want the text", found)
@@ -300,7 +300,7 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 }
 
 // verdicts asserts a bulk answer item by item: "ok", or the refusal's lead.
-func verdicts(t *testing.T, tool string, got []mcpdoor.Verdict, want ...string) {
+func verdicts(t *testing.T, tool string, got []mcpapi.Verdict, want ...string) {
 	t.Helper()
 	for i, v := range got {
 		if want[i] == "ok" && v.Verdict != "ok" || want[i] != "ok" && !strings.HasPrefix(v.Verdict, want[i]) {
@@ -357,7 +357,7 @@ func TestAnMCPBulkWriteRefusesOneItemAndLandsTheRest(t *testing.T) {
 		map[string]any{"id": b.ID, "version": *stale.BodyVersion},
 		map[string]any{"id": c.ID}),
 		"ok", "conflict:", "ok")
-	var grid mcpdoor.GridOut
+	var grid mcpapi.GridOut
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &grid)
 	on := map[string]bool{}
 	for _, tl := range grid.Tiles {
@@ -429,7 +429,7 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 
 	hits := func(args map[string]any) []string {
 		t.Helper()
-		var found mcpdoor.FindOut
+		var found mcpapi.FindOut
 		call(t, s, "find", args, &found)
 		var ids []string
 		for _, h := range found.Hits {
@@ -458,7 +458,7 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 	if got := hits(map[string]any{"query": "note", "modified": map[string]any{"from": since}, "grid": inner}); !slices.Equal(got, []string{kept.ID}) {
 		t.Fatalf("find modified since %s in the well = %v, want [%s]", since, got, kept.ID)
 	}
-	var g mcpdoor.GridOut
+	var g mcpapi.GridOut
 	call(t, s, "select", map[string]any{"grid": inner, "add": []string{still.ID}}, &g)
 	if got := hits(map[string]any{"query": "note", "selected": true}); !slices.Equal(got, []string{still.ID}) {
 		t.Fatalf("find selected = %v, want [%s]", got, still.ID)
@@ -486,7 +486,7 @@ func TestAStaleMCPClaimIsRefusedWithTheReason(t *testing.T) {
 	}
 }
 
-// A source the user switched off is read-only: the door's write is refused
+// A source the user switched off is read-only: the API's write is refused
 // with the verdict and its sentence, as the browser's is.
 func TestAnMCPWriteToADisabledSourceIsRefused(t *testing.T) {
 	n := newMCPNode(t)
@@ -513,8 +513,8 @@ func TestAnMCPWriteToADisabledSourceIsRefused(t *testing.T) {
 }
 
 // The web password admits an agent as a bearer, a wrong one is refused, and
-// the browser's cookie still opens the same door.
-func TestTheMCPDoorAdmitsTheWebPasswordAsABearer(t *testing.T) {
+// the browser's cookie still opens the same API.
+func TestTheMCPAPIAdmitsTheWebPasswordAsABearer(t *testing.T) {
 	n := newMCPNode(t)
 	if _, err := n.agent(t, bearer(testPassword)); err != nil {
 		t.Fatalf("the web password as a bearer: %v", err)
@@ -535,9 +535,9 @@ func TestTheMCPDoorAdmitsTheWebPasswordAsABearer(t *testing.T) {
 }
 
 // The build gate judges a page's calls. An agent is no page of this node's
-// build, so the gate never refuses it, even from this door's own origin,
+// build, so the gate never refuses it, even from this API's own origin,
 // where it does refuse a Connect call naming no build.
-func TestTheBuildGateDoesNotApplyToTheMCPDoor(t *testing.T) {
+func TestTheBuildGateDoesNotApplyToTheMCPAPI(t *testing.T) {
 	n := newMCPNode(t)
 	n.srv.build = "node-build"
 	page := map[string]string{"Cookie": AuthCookieName + "=" + AuthToken(testPassword), "Origin": n.connectURL}
@@ -550,9 +550,9 @@ func TestTheBuildGateDoesNotApplyToTheMCPDoor(t *testing.T) {
 	hdr["Origin"] = n.connectURL
 	s, err := n.agent(t, hdr)
 	if err != nil {
-		t.Fatalf("the build gate refused the MCP door: %v", err)
+		t.Fatalf("the build gate refused the MCP API: %v", err)
 	}
-	var grid mcpdoor.GridOut
+	var grid mcpapi.GridOut
 	call(t, s, "read_grid", nil, &grid)
 }
 

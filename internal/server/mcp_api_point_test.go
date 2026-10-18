@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
-	"github.com/josephburnett/gridwell/internal/mcpdoor"
+	"github.com/josephburnett/gridwell/internal/mcpapi"
 )
 
 // viewer is a client session showing the node: its event stream open and its
@@ -54,7 +54,7 @@ func agentAt(t *testing.T, hs *httptest.Server, hdr map[string]string) *mcp.Clie
 	for k, v := range hdr {
 		h[k] = v
 	}
-	s, err := (&mcpNode{url: hs.URL + mcpdoor.Path, web: hs.Client()}).agent(t, h)
+	s, err := (&mcpNode{url: hs.URL + mcpapi.Path, web: hs.Client()}).agent(t, h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func agentAt(t *testing.T, hs *httptest.Server, hdr map[string]string) *mcp.Clie
 // node with each pane's place, and leaves out another node telling its
 // share, which shows no screen.
 func TestMCPPointedNamesEveryOtherScreenWithItsPanes(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	cl := viewer(t, f.hs, "desktop", focusedOn(f.root),
 		&gridwellv1.ViewPane{Id: "p2", Anchor: f.root, Path: []string{"k1"}, ContentId: "c1", GridId: f.root})
 	far := viewer(t, f.hs, "node")
@@ -74,7 +74,7 @@ func TestMCPPointedNamesEveryOtherScreenWithItsPanes(t *testing.T) {
 	}
 	phone := viewer(t, f.hs, "browser", focusedOn(f.root))
 
-	var p mcpdoor.PointedOut
+	var p mcpapi.PointedOut
 	call(t, agentAt(t, f.hs, nil), "pointed", nil, &p)
 	if p.Session != phone.Session() || len(p.Panes) != 1 || !p.Panes[0].Focused || p.Changed == "" {
 		t.Fatalf("pointed = %+v, want the browser %s with its one focused pane", p, phone.Session())
@@ -97,7 +97,7 @@ func TestMCPPointedNamesEveryOtherScreenWithItsPanes(t *testing.T) {
 // pointed answers the focused pane's grid's selection when it has one, the
 // tiles as read_grid answers them, and the grid itself when it has none.
 func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	if res := callRaw(t, s, "pointed", nil); !res.IsError || !strings.HasPrefix(toolText(res), "no session:") {
 		t.Fatalf("with no screen open, pointed = %q, want a plain no session", toolText(res))
@@ -106,13 +106,13 @@ func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
 	mkText(t, s, f.root, "a")
 	b := mkText(t, s, f.root, "b")
 
-	var p mcpdoor.PointedOut
+	var p mcpapi.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Session != cl.Session() || p.ChosenBy != "most recent" || p.Points != "grid" || p.Grid.ID != f.root || len(p.Tiles) != 0 {
 		t.Fatalf("pointed = %+v, want the grid %s itself", p, f.root)
 	}
 
-	var g mcpdoor.GridOut
+	var g mcpapi.GridOut
 	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{b.ID}}, &g)
 	call(t, s, "pointed", nil, &p)
 	if p.Points != "selection" || len(p.Tiles) != 1 || p.Tiles[0].ID != b.ID || p.Tiles[0].Name != "b" {
@@ -124,7 +124,7 @@ func TestMCPPointedIsTheSelectionElseTheGrid(t *testing.T) {
 // panes on root, each with its own set: the first pane's sel1, the focused
 // second's sel2. The layout is written and the view said as the client does
 // both, through pane.EncodeLayout and pane.View.
-func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.Client, *gridwellv1.Tile) {
+func paneTileView(t *testing.T, f *shellAPIFixture, sel1, sel2 []string) (*rpc.Client, *gridwellv1.Tile) {
 	t.Helper()
 	ctx := context.Background()
 	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
@@ -164,16 +164,16 @@ func paneTileView(t *testing.T, f *shellDoorFixture, sel1, sel2 []string) (*rpc.
 // Inside a pane tile the focused pane's set is its own in the layout, not the
 // grid row's: pointed answers that set, and names the pane tile on every pane.
 func TestMCPPointedInsideAPaneTileIsThatPanesSet(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	a := mkText(t, s, f.root, "a")
 	b := mkText(t, s, f.root, "b")
 	c := mkText(t, s, f.root, "c")
-	var g mcpdoor.GridOut
+	var g mcpapi.GridOut
 	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.ID}}, &g)
 	cl, pt := paneTileView(t, f, []string{c.ID}, []string{b.ID})
 
-	var p mcpdoor.PointedOut
+	var p mcpapi.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Session != cl.Session() || p.PaneTile != pt.Id || p.SetIn != "pane tile" || p.Points != "selection" ||
 		len(p.Tiles) != 1 || p.Tiles[0].ID != b.ID {
@@ -189,14 +189,14 @@ func TestMCPPointedInsideAPaneTileIsThatPanesSet(t *testing.T) {
 // A pane inside a pane tile with no set of its own points at the grid, though
 // the grid row has a set: the row's set is not the one that pane shows.
 func TestMCPPointedInsideAPaneTileIgnoresTheRowSet(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	a := mkText(t, s, f.root, "a")
-	var g mcpdoor.GridOut
+	var g mcpapi.GridOut
 	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{a.ID}}, &g)
 	paneTileView(t, f, []string{a.ID}, nil)
 
-	var p mcpdoor.PointedOut
+	var p mcpapi.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Points != "grid" || p.Grid.ID != f.root || len(p.Tiles) != 0 || p.SetIn != "pane tile" {
 		t.Fatalf("pointed = %+v, want the grid %s itself, the row's set not being this pane's", p, f.root)
@@ -206,7 +206,7 @@ func TestMCPPointedInsideAPaneTileIgnoresTheRowSet(t *testing.T) {
 // A view naming a pane the layout does not hold where the view has it is
 // ahead of the layout: not loaded, never the row's set in its place.
 func TestMCPPointedInsideAPaneTileAheadOfItsLayoutIsNotLoaded(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	cl, pt := paneTileView(t, f, nil, nil)
 	say := &gridwellv1.SetViewRequest{Label: "desktop", PaneTiles: []string{pt.Id},
@@ -220,12 +220,12 @@ func TestMCPPointedInsideAPaneTileAheadOfItsLayoutIsNotLoaded(t *testing.T) {
 // A session named is the one answered; unnamed, the one whose view changed
 // last, with the others named so the agent can ask.
 func TestMCPPointedChoosesTheNamedElseTheMostRecentSession(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	older := viewer(t, f.hs, "desktop", focusedOn(f.root))
 	newer := viewer(t, f.hs, "browser", focusedOn(f.root))
 	s := agentAt(t, f.hs, nil)
 
-	var p mcpdoor.PointedOut
+	var p mcpapi.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Session != newer.Session() || p.ChosenBy != "most recent" || len(p.Others) != 1 || p.Others[0].ID != older.Session() {
 		t.Fatalf("pointed = %+v, want %s, naming %s as the other", p, newer.Session(), older.Session())
@@ -248,7 +248,7 @@ func TestMCPPointedChoosesTheNamedElseTheMostRecentSession(t *testing.T) {
 // pointed at, marked away with a note saying since when; once another screen
 // is open, the open one wins and the away one is among the others.
 func TestMCPPointedSeesAnAwayScreenUntilAnOpenOne(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	phone := rpc.NewClient(f.hs.Client(), f.hs.URL, connect.WithProtoJSON())
 	ctx, cancel := context.WithCancel(context.Background())
 	stream, err := phone.Subscribe(ctx)
@@ -257,7 +257,7 @@ func TestMCPPointedSeesAnAwayScreenUntilAnOpenOne(t *testing.T) {
 	}
 	say(t, phone, "browser", focusedOn(f.root))
 	s := agentAt(t, f.hs, nil)
-	var p mcpdoor.PointedOut
+	var p mcpapi.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Session != phone.Session() || p.AwaySince != "" {
 		t.Fatalf("pointed = %+v, want the open browser %s", p, phone.Session())
@@ -281,7 +281,7 @@ func TestMCPPointedSeesAnAwayScreenUntilAnOpenOne(t *testing.T) {
 	// what it omits, so each lands in a fresh value.
 	deadline = time.Now().Add(3 * time.Second)
 	for {
-		p = mcpdoor.PointedOut{}
+		p = mcpapi.PointedOut{}
 		call(t, s, "pointed", nil, &p)
 		if p.Session == desk.Session() || time.Now().After(deadline) {
 			break
@@ -295,7 +295,7 @@ func TestMCPPointedSeesAnAwayScreenUntilAnOpenOne(t *testing.T) {
 
 // attach goes live on a shell tile from cl's session, as the wasm client's
 // shell stack does.
-func attach(t *testing.T, f *shellDoorFixture, cl *rpc.Client, tile string) {
+func attach(t *testing.T, f *shellAPIFixture, cl *rpc.Client, tile string) {
 	t.Helper()
 	reg := shellstream.New(shellws.Dialer(shellws.Options{Origin: f.hs.URL, HTTPClient: f.hs.Client(), Session: cl.Session()}),
 		func(string, []byte) {}, func(shellstream.Exit) {})
@@ -307,7 +307,7 @@ func attach(t *testing.T, f *shellDoorFixture, cl *rpc.Client, tile string) {
 // the session holding it live now, the newest attachment after a takeover. A
 // shell live nowhere falls back to the most recent session and says so.
 func TestMCPPointedFollowsTheShellTheAgentRunsIn(t *testing.T) {
-	f := newShellDoorFixture(t, Config{})
+	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	desk := viewer(t, f.hs, "desktop", focusedOn(f.root))
 	attach(t, f, desk, tile.Id)
@@ -315,8 +315,8 @@ func TestMCPPointedFollowsTheShellTheAgentRunsIn(t *testing.T) {
 	phone := viewer(t, f.hs, "browser", focusedOn(f.root))
 
 	key := rpc.LocalOf(rpc.ShellSession(tile))
-	s := agentAt(t, f.hs, map[string]string{mcpdoor.ShellHeader: key})
-	var p mcpdoor.PointedOut
+	s := agentAt(t, f.hs, map[string]string{mcpapi.ShellHeader: key})
+	var p mcpapi.PointedOut
 	call(t, s, "pointed", nil, &p)
 	if p.Session != desk.Session() || p.ChosenBy != "your shell" {
 		t.Fatalf("pointed = %+v, want %s, whose pane holds shell %s, over the more recent %s", p, desk.Session(), key, phone.Session())
@@ -331,7 +331,7 @@ func TestMCPPointedFollowsTheShellTheAgentRunsIn(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	dead := agentAt(t, f.hs, map[string]string{mcpdoor.ShellHeader: "zzzzzzz"})
+	dead := agentAt(t, f.hs, map[string]string{mcpapi.ShellHeader: "zzzzzzz"})
 	call(t, dead, "pointed", nil, &p)
 	if p.Session != phone.Session() || p.ChosenBy != "most recent" || !strings.Contains(p.Note, "zzzzzzz") {
 		t.Fatalf("pointed with a shell live nowhere = %+v, want the most recent session and a note naming the shell", p)
@@ -350,7 +350,7 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	}
 	a := mkText(t, s, n.root, "a")
 	b := mkText(t, s, n.root, "b")
-	var g mcpdoor.GridOut
+	var g mcpapi.GridOut
 	call(t, s, "read_grid", map[string]any{"id": n.root}, &g)
 	if g.Grid.Selection == nil || len(g.Grid.Selection) != 0 {
 		t.Fatalf("read_grid selection = %v, want an empty set", g.Grid.Selection)

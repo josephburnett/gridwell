@@ -23,7 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// The /content/ door crosses every seam at once: HTTP URL grammar → token
+// The /content/ API crosses every seam at once: HTTP URL grammar → token
 // gate → router (with link resolution and transit forwarding) → plugin
 // ServeContent stream → HTTP response with the sandbox header. These tests
 // drive the REAL WebHandler with real plugins behind it — the exact
@@ -42,7 +42,7 @@ func TestParseContentPath(t *testing.T) {
 		{"/content/tok/uf1/5", "tok", "uf1/5", "", true, true},
 		{"/content/tok/uf1/5/img/cat.png", "tok", "uf1/5", "img/cat.png", false, true},
 		// A tile the plugin has never minted a row for is named by its key,
-		// and the door reads that shape as the end of the id exactly as it
+		// and the API reads that shape as the end of the id exactly as it
 		// reads digits — otherwise an untouched page would 404.
 		{"/content/tok/uf1/~L2hvbWU/", "tok", "uf1/~L2hvbWU", "", false, true},
 		{"/content/tok/uf1/~L2hvbWU/a.css", "tok", "uf1/~L2hvbWU", "a.css", false, true},
@@ -63,12 +63,12 @@ func TestParseContentPath(t *testing.T) {
 	}
 }
 
-// TestPageURLMatchesDoorGrammar pins the two sides of the URL contract to
+// TestPageURLMatchesContentAPIGrammar pins the two sides of the URL contract to
 // each other: rpc.PageURL (what the client builds) must parse back through
-// parseContentPath (what the door accepts) with nothing lost — the same
+// parseContentPath (what the API accepts) with nothing lost — the same
 // derive-once discipline as every other seam, so the grammar can never
 // drift apart silently.
-func TestPageURLMatchesDoorGrammar(t *testing.T) {
+func TestPageURLMatchesContentAPIGrammar(t *testing.T) {
 	for _, id := range []string{"uf1/5", "ssh1/conn/uf1/5", "1b467bbd65466256f8a64c538cabdac8/12"} {
 		u := rpc.PageURL("https://host:1234", ContentToken("pw"), id)
 		path := strings.TrimPrefix(u, "https://host:1234")
@@ -80,10 +80,10 @@ func TestPageURLMatchesDoorGrammar(t *testing.T) {
 	}
 }
 
-// contentDoorServer stands up a WebHandler with an fs plugin over a temp
+// contentAPIServer stands up a WebHandler with an fs plugin over a temp
 // dir holding one image, and returns the base URL plus the image tile's
 // qualified id and the raw bytes.
-func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tileID string, img []byte) {
+func contentAPIServer(t *testing.T, password string) (hs *httptest.Server, tileID string, img []byte) {
 	t.Helper()
 	dir := t.TempDir()
 	var buf bytes.Buffer
@@ -100,7 +100,7 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 	reg := plugin.NewRegistry()
 	reg.Register("uf1", "fs", fsClient, nil)
 	srv := mustNew(t, reg, Config{Password: password})
-	hs = webDoorTest(t, srv.WebHandler())
+	hs = webAPITest(t, srv.WebHandler())
 
 	ctx := context.Background()
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
@@ -120,12 +120,12 @@ func contentDoorServer(t *testing.T, password string) (hs *httptest.Server, tile
 	return nil, "", nil
 }
 
-// TestContentDoorServesImage: the happy path end to end, WITHOUT any auth
-// cookie — the door's own token is the whole credential, because sandboxed
+// TestContentAPIServesImage: the happy path end to end, WITHOUT any auth
+// cookie — the API's own token is the whole credential, because sandboxed
 // subresource requests and the desktop's native views can never present the
 // cookie.
-func TestContentDoorServesImage(t *testing.T) {
-	hs, tileID, img := contentDoorServer(t, "pw")
+func TestContentAPIServesImage(t *testing.T) {
+	hs, tileID, img := contentAPIServer(t, "pw")
 	token := ContentToken("pw")
 
 	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID+"/", "")
@@ -138,7 +138,7 @@ func TestContentDoorServesImage(t *testing.T) {
 	if ct := res.Header.Get("Content-Type"); ct != "image/png" {
 		t.Errorf("Content-Type = %q, want image/png", ct)
 	}
-	// The sandbox header is the door's INVARIANT: opaque origin, scripts
+	// The sandbox header is the API's INVARIANT: opaque origin, scripts
 	// allowed, no credentials, no reach back into Gridwell. Popups pass, so a
 	// target=_blank link opens below like one out of any live page.
 	if csp := res.Header.Get("Content-Security-Policy"); csp != "sandbox allow-scripts allow-popups" {
@@ -156,11 +156,11 @@ func TestContentDoorServesImage(t *testing.T) {
 	}
 }
 
-// TestContentDoorTokenGate: the wrong token — including the AUTH token — is
+// TestContentAPITokenGate: the wrong token — including the AUTH token — is
 // a 401; the content token replayed as an auth cookie opens nothing. The
 // two derivations live in different domains on purpose.
-func TestContentDoorTokenGate(t *testing.T) {
-	hs, tileID, _ := contentDoorServer(t, "pw")
+func TestContentAPITokenGate(t *testing.T) {
+	hs, tileID, _ := contentAPIServer(t, "pw")
 
 	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("wrong")+"/"+tileID+"/", ""); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("wrong token = %d, want 401", res.StatusCode)
@@ -183,10 +183,10 @@ func TestContentDoorTokenGate(t *testing.T) {
 	}
 }
 
-// TestContentDoorResolvesLeafLink: a home link to an fs image serves the
-// TARGET's bytes — the door inherits contentRoute, the one resolution
+// TestContentAPIResolvesLeafLink: a home link to an fs image serves the
+// TARGET's bytes — the API inherits contentRoute, the one resolution
 // point, like every other content read.
-func TestContentDoorResolvesLeafLink(t *testing.T) {
+func TestContentAPIResolvesLeafLink(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
@@ -236,14 +236,14 @@ func TestContentDoorResolvesLeafLink(t *testing.T) {
 	}
 }
 
-// TestContentDoorThroughAConnection: the id "<node>/<conn>/<tile>"
+// TestContentAPIThroughAConnection: the id "<node>/<conn>/<tile>"
 // forwards through the node's TRANSPORT — the only transit namespace there
 // is — and streams back, so a connection carries pages as it does
 // everything else: the
 // same one-hop-per-segment composition as every content read. The dialer
 // lands the connection on an in-process namespace; there is no proxy stand-in
 // any more, because the transport itself is a Go value now.
-func TestContentDoorThroughAConnection(t *testing.T) {
+func TestContentAPIThroughAConnection(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
@@ -296,9 +296,9 @@ func TestContentDoorThroughAConnection(t *testing.T) {
 	}
 }
 
-// TestContentDoorUnimplemented: a plugin that serves no web content answers
+// TestContentAPIUnimplemented: a plugin that serves no web content answers
 // 404, never a 500 — no pages is a normal property of a plugin.
-func TestContentDoorUnimplemented(t *testing.T) {
+func TestContentAPIUnimplemented(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +327,7 @@ func TestContentDoorUnimplemented(t *testing.T) {
 // flush uses (application/json unary, no Connect header), so the
 // last-pan-survives-quit path rests on a tested seam.
 func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
-	hs, _, _ := contentDoorServer(t, testPassword)
+	hs, _, _ := contentAPIServer(t, testPassword)
 	withCookie(t, hs, testPassword) // Handshake and the beacon ride the gated mux
 	cl := rpc.NewClient(hs.Client(), hs.URL)
 	ctx := context.Background()

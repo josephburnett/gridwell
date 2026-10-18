@@ -109,7 +109,7 @@ func TestIngestStampsTheNodesOrderAndForcesTheOrigin(t *testing.T) {
 	wantOrigins := []string{tracewire.OriginClient, tracewire.OriginElectron, tracewire.OriginClient, tracewire.OriginClient}
 	for i, rec := range got {
 		if rec.Origin != wantOrigins[i] {
-			t.Errorf("record %d origin = %q, want %q: a record that came through the door is never the node's", i, rec.Origin, wantOrigins[i])
+			t.Errorf("record %d origin = %q, want %q: a record that came through the API is never the node's", i, rec.Origin, wantOrigins[i])
 		}
 		if rec.Seq != uint64(i+1) || rec.T == 0 {
 			t.Errorf("record %d = seq %d t %d, want the node's stamp", i, rec.Seq, rec.T)

@@ -22,9 +22,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// The whole seam in one file: the client's own records come in the door, an
-// rpc crosses the codec carrying the same request id, and the dump holds all
-// three in one seq order. A unit test on either side of that door would pass
+// The whole seam in one file: the client's own records come in the API, an
+// rpc crosses the router carrying the same request id, and the dump holds all
+// three in one seq order. A unit test on either side of that API would pass
 // with the request id dropped in the middle.
 func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 	home := t.TempDir()
@@ -149,15 +149,16 @@ func TestAStreamingRPCGetsBothRecords(t *testing.T) {
 	}
 }
 
-// The connection door is the other codec over the same router, and it traces
-// too: a node debugging a federated gesture has the far hop in its own ring.
-func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
+// The connection API is the other API that decodes onto the same router, and it
+// traces too: a node debugging a federated gesture has the far hop in its own
+// ring.
+func TestTheConnectionAPITracesItsRPCs(t *testing.T) {
 	srv := mustNew(t, plugin.NewRegistry(), Config{Home: t.TempDir()})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	hs := ConnectionDoorServer(srv.ConnectionHandler())
+	hs := ConnectionAPIServer(srv.ConnectionHandler())
 	go hs.Serve(ln)
 	t.Cleanup(func() { hs.Close() })
 
@@ -166,10 +167,10 @@ func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	const reqID = "conn-door-req"
+	const reqID = "conn-api-req"
 	ctx := metadata.AppendToOutgoingContext(context.Background(), tracewire.RequestHeader, reqID)
 	if _, err := pb.NewGridwellClient(conn).Info(ctx, &pb.InfoRequest{}); err != nil {
-		t.Fatalf("Info on the connection door: %v", err)
+		t.Fatalf("Info on the connection API: %v", err)
 	}
 	var started, ended bool
 	for _, rec := range trace.Default().Snapshot() {
@@ -180,13 +181,13 @@ func TestTheConnectionDoorTracesItsRPCs(t *testing.T) {
 		ended = ended || rec.Msg == "Info ok"
 	}
 	if !started || !ended {
-		t.Errorf("the connection door left start=%v end=%v under req %q", started, ended, reqID)
+		t.Errorf("the connection API left start=%v end=%v under req %q", started, ended, reqID)
 	}
 }
 
 // A span names the entity its request is about, at its start and its end, so
 // a dump joins the node's work on a grid to the client's records about that
-// grid without the request id. Unary and streaming, on both doors.
+// grid without the request id. Unary and streaming, on both APIs.
 func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Home: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
@@ -206,9 +207,9 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	door := ConnectionDoorServer(srv.ConnectionHandler())
-	go door.Serve(ln)
-	t.Cleanup(func() { door.Close() })
+	connAPI := ConnectionAPIServer(srv.ConnectionHandler())
+	go connAPI.Serve(ln)
+	t.Cleanup(func() { connAPI.Close() })
 	conn, err := dial.ClientConn(ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)

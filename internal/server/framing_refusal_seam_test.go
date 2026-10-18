@@ -13,7 +13,7 @@ import (
 )
 
 // A framing that is not a view is refused across the whole seam — client,
-// web door, router, store — as InvalidArgument with the reason, on both rows
+// web API, router, store — as InvalidArgument with the reason, on both rows
 // framing can live on, and what was stored before stays. The 2026-10-04 trace
 // stored NaN on the root as NULL and failed the tile arm with an internal
 // NOT NULL error the client showed verbatim.

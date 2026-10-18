@@ -120,14 +120,14 @@ message Entry {
   string child_context = 4;
   // serves_page: this entry's web content is the plugin's, served through
   // ServeContent. It is a url entry's address in place of url_string — the
-  // node derives one at its /content/ door — so it rides kind "url" alone and
-  // the door refuses it on any other kind.
+  // node derives one at its /content/ API — so it rides kind "url" alone and
+  // the node refuses it on any other kind.
   bool   serves_page       = 5;
   // text_presentation says how a text entry's body presents: "plain" for
   // verbatim monospace, "both" for the document renderer with a toggle to the
   // raw source, "" for no declaration. "rendered" is RETIRED — it hid the
   // source bytes, which the app never allows, and the node reads it as "both".
-  // Any other value is refused at the door.
+  // Any other value is refused by the node.
   string text_presentation = 6;
   string status_detail     = 7;
   // url entries: the address itself.
@@ -226,7 +226,7 @@ message WriteContentResponse {
   string content_stamp = 1;
 }
 
-// ServeContent is the web-content door's plugin half. GET-only, and subpath ""
+// ServeContent is the content API's plugin half. GET-only, and subpath ""
 // is the entry's root page. Sandboxing happens at the node.
 message ServeContentRequest {
   string key     = 1;

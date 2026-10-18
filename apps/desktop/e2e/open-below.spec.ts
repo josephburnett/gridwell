@@ -128,7 +128,7 @@ test('a link-open split lands without animating an ascent nobody made', async ({
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
   const source = await gw.focused();
 
-  // The same door a url clicked in a live shell goes through.
+  // The same path a url clicked in a live shell goes through.
   await window.evaluate(
     (u: string) => (window as any).__gridwellTest.shellVisitURL(u),
     `${gw.origin}/wasm_exec.js?split-open=1`,

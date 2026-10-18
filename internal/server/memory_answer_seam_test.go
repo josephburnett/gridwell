@@ -2,7 +2,7 @@ package server_test
 
 // A plugin whose refresh fails answers from memory and says why in
 // ListResponse.unreachable. Across the plugin.v1 wire, the adapter, the router
-// and the web door, a subscribed client reads every row through the outage and
+// and the web API, a subscribed client reads every row through the outage and
 // is told the source is down with the plugin's sentence, then up again.
 
 import (
@@ -107,7 +107,7 @@ func TestAMemoryAnswerKeepsEveryRowAndReportsTheReason(t *testing.T) {
 		case h := <-health:
 			return h
 		case <-ctx.Done():
-			t.Fatal("no health event for the remembering plugin reached the door")
+			t.Fatal("no health event for the remembering plugin reached the API")
 			return nil
 		}
 	}

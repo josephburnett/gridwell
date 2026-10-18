@@ -279,7 +279,7 @@ func (a *App) flushContent(cid string) func() {
 	return func() { a.flushTileContent(cid) }
 }
 
-// putEditedContent is the one door for an optimistic local edit. Splitting
+// putEditedContent is the one way in for an optimistic local edit. Splitting
 // the store from the outbox record would give an edit typed during an outage
 // its own retry rule.
 func (a *App) putEditedContent(cid string, data []byte) {

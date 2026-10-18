@@ -6,7 +6,7 @@ import (
 )
 
 // codePairs is the one gRPC-to-Connect status-code table. Gridwell answers
-// in gRPC codes everywhere; the Connect codec in server.asConnectError is
+// in gRPC codes everywhere; the web API, in server.asConnectError, is
 // the one hop that translates. TestCodeTableIsTotal keeps the table total
 // and injective over the gRPC enum.
 var codePairs = []struct {

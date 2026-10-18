@@ -284,10 +284,11 @@ func (a *Adapter) publishGridChanged(gridID string) {
 }
 
 // retiredPresentationRendered meant document only, with no way back to the
-// source bytes. A plugin never hides those, so the door reads it as "both".
+// source bytes. A plugin never hides those, so acceptEntries reads it as
+// "both".
 const retiredPresentationRendered = "rendered"
 
-// acceptEntries is the one door a plugin's entries enter by: it refuses a shape
+// acceptEntries is the one way a plugin's entries come in: it refuses a shape
 // the node cannot present (serves_page off a url entry, an unknown
 // text_presentation, a link it cannot draw) and maps a retired declaration
 // onto the live vocabulary. context is the context listed.

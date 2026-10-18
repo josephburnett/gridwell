@@ -80,7 +80,7 @@ exec "$(basename "$0")" "$@"
 `
 
 // SessionEnv names the session key inside every session ModeCreate starts, so
-// a program running in a shell tile can say which shell it is in; the MCP door
+// a program running in a shell tile can say which shell it is in; the MCP API
 // reads it back as a header (docs/mcp.md).
 const SessionEnv = "GRIDWELL_SHELL"
 

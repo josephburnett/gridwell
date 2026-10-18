@@ -1,8 +1,8 @@
 package server_test
 
-// The connection door's server shape, at the seam a mounter lives on: one gRPC
-// Subscribe held open through the door for longer than any deadline the door
-// declares, then proven live by an event. Any deadline on this door is a
+// The connection API's server shape, at the seam a mounter lives on: one gRPC
+// Subscribe held open through the API for longer than any deadline the API
+// declares, then proven live by an event. Any deadline on this API is a
 // ticking close on every stream through it, so the hold is derived from the
 // shape under test and a deadline that returns makes this test wait it out and
 // fail.
@@ -18,8 +18,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
-func TestConnectionDoorHoldsAStreamPastAnyDeadline(t *testing.T) {
-	shape := server.ConnectionDoorServer(http.NotFoundHandler())
+func TestConnectionAPIHoldsAStreamPastAnyDeadline(t *testing.T) {
+	shape := server.ConnectionAPIServer(http.NotFoundHandler())
 	hold := max(shape.ReadHeaderTimeout, shape.ReadTimeout, shape.WriteTimeout) + 500*time.Millisecond
 	if hold < time.Second {
 		hold = time.Second
@@ -53,7 +53,7 @@ func TestConnectionDoorHoldsAStreamPastAnyDeadline(t *testing.T) {
 	start := time.Now()
 	select {
 	case err := <-ended:
-		t.Fatalf("the door closed a stream %s old: %v", time.Since(start).Round(100*time.Millisecond), err)
+		t.Fatalf("the API closed a stream %s old: %v", time.Since(start).Round(100*time.Millisecond), err)
 	case <-time.After(hold):
 	}
 

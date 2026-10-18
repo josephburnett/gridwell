@@ -1,5 +1,5 @@
 // Package node is the embeddable Gridwell node: everything `gridwell serve`
-// does between config in hand and listener up. The CLI is a wrapper that adds
+// does between config in hand and sockets up. The CLI is a wrapper that adds
 // flags, the serve lock, the banner and signal handling, and reimplements none
 // of the middle. The store and the transport are constructed here from the
 // node's own config, so they never appear in `plugins:`.
@@ -50,7 +50,7 @@ func BuildConfig(home, cfgPath string) (*config.ServerConfig, error) {
 			return nil, err
 		}
 	}
-	// The web door is never open: the file is the password, and deleting it
+	// The web API is never open: the file is the password, and deleting it
 	// rotates.
 	if cfg.WebPassword, err = config.EnsurePasswordFile(home); err != nil {
 		return nil, err
@@ -104,8 +104,8 @@ type Options struct {
 // Node is a running (or listen-ready) Gridwell node.
 type Node struct {
 	Reg *plugin.Registry
-	// Ln is the web door's listener. ConnLn is the connection door's socket,
-	// nil when the door is closed.
+	// Ln is the web API's socket. ConnLn is the connection API's socket,
+	// nil when the API is closed.
 	Ln     net.Listener
 	ConnLn net.Listener
 
@@ -168,12 +168,12 @@ func Start(opts Options) (*Node, error) {
 		return fail(err)
 	}
 	requestCtx, cancel := context.WithCancel(context.Background())
-	// The web door binds where config says; a tailnet address is fine because
-	// it is password-gated. The connection door is a 0600 unix socket or
+	// The web API binds where config says; a tailnet address is fine because
+	// it is password-gated. The connection API is a 0600 unix socket or
 	// closed, never TCP, so no config can expose the ungated gRPC export.
-	webSrv := server.WebDoorServer(srv.WebHandler())
+	webSrv := server.WebAPIServer(srv.WebHandler())
 	webSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
-	connSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
+	connSrv := server.ConnectionAPIServer(srv.ConnectionHandler())
 	connSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	ln, err := net.Listen("tcp", cfg.Web.Bind)
 	if err != nil {
@@ -182,7 +182,7 @@ func Start(opts Options) (*Node, error) {
 	}
 	var connLn net.Listener
 	if sock := cfg.Federation.Socket; sock != "" {
-		connLn, err = server.ListenConnectionDoor(sock)
+		connLn, err = server.ListenConnectionAPI(sock)
 		if err != nil {
 			ln.Close()
 			cancel()

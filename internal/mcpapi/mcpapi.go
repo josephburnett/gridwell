@@ -1,9 +1,9 @@
-// Package mcpdoor is the MCP door's tool set: each tool a translation of one
+// Package mcpapi is the MCP API's tool set: each tool a translation of one
 // gesture into the router calls the client makes for it, every write reading
 // first and claiming what it read, and every refusal the router answers
 // handed back as a tool error with its reason. It decides nothing the router
 // does not; docs/mcp.md is the contract.
-package mcpdoor
+package mcpapi
 
 import (
 	"cmp"
@@ -21,7 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// Path is where the web door serves the MCP door.
+// Path is where the web API serves the MCP API.
 const Path = "/mcp"
 
 const instructions = `Gridwell is a personal space of tiles on infinite grids. Every id is a
@@ -36,10 +36,10 @@ or "these", call pointed: it answers the grid or the selection in front of
 them, and names every other screen.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
-// the browser codec does. node is the node's own id, the frame dead links are
+// the web API does. node is the node's own id, the frame dead links are
 // judged in, and screens is what the node knows of the clients showing it.
 func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Server {
-	d := &door{rt: rt, node: node, screens: screens}
+	d := &toolset{rt: rt, node: node, screens: screens}
 	s := mcp.NewServer(&mcp.Implementation{Name: "gridwell", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, the selection that pane shows when it has one (the grid's, or inside a pane tile the pane's own), else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last. It answers that session's panes and every other screen showing the node, with theirs."}, d.pointed)
@@ -55,7 +55,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	return s
 }
 
-type door struct {
+type toolset struct {
 	rt      namespace.Namespace
 	node    string
 	screens Screens
@@ -78,13 +78,13 @@ type gridIn struct {
 	ID string `json:"id,omitempty" jsonschema:"the grid's id; empty is the node's home grid"`
 }
 
-func (d *door) readGrid(ctx context.Context, _ *mcp.CallToolRequest, in gridIn) (*mcp.CallToolResult, GridOut, error) {
+func (d *toolset) readGrid(ctx context.Context, _ *mcp.CallToolRequest, in gridIn) (*mcp.CallToolResult, GridOut, error) {
 	out, err := d.grid(ctx, in.ID)
 	return nil, out, err
 }
 
 // grid is read_grid's answer for id, the home grid when id is empty.
-func (d *door) grid(ctx context.Context, id string) (GridOut, error) {
+func (d *toolset) grid(ctx context.Context, id string) (GridOut, error) {
 	hs, err := d.rt.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return GridOut{}, refusal(err)
@@ -104,7 +104,7 @@ type readTilesIn struct {
 	IDs []string `json:"ids" jsonschema:"the tiles to read"`
 }
 
-func (d *door) readTiles(ctx context.Context, _ *mcp.CallToolRequest, in readTilesIn) (*mcp.CallToolResult, ReadTilesOut, error) {
+func (d *toolset) readTiles(ctx context.Context, _ *mcp.CallToolRequest, in readTilesIn) (*mcp.CallToolResult, ReadTilesOut, error) {
 	if len(in.IDs) == 0 {
 		return nil, ReadTilesOut{}, errNoItems
 	}
@@ -117,7 +117,7 @@ func (d *door) readTiles(ctx context.Context, _ *mcp.CallToolRequest, in readTil
 }
 
 // readTile is one read_tiles answer.
-func (d *door) readTile(ctx context.Context, id string) (TileOut, error) {
+func (d *toolset) readTile(ctx context.Context, id string) (TileOut, error) {
 	row, err := d.tile(ctx, id)
 	if err != nil {
 		return TileOut{}, err
@@ -192,7 +192,7 @@ func (s *Span) rangeOf(name string) (*pb.TimeRange, error) {
 	return &r, nil
 }
 
-func (d *door) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (*mcp.CallToolResult, FindOut, error) {
+func (d *toolset) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (*mcp.CallToolResult, FindOut, error) {
 	req := &pb.SearchRequest{Query: in.Query, Scope: in.Scope, Limit: in.Limit,
 		GridId: in.Grid, Recurse: in.Recurse, Selected: in.Selected}
 	var err error
@@ -257,7 +257,7 @@ type writeTextIn struct {
 	Items []writeTextItem `json:"items" jsonschema:"the bodies to write, applied in order"`
 }
 
-func (d *door) writeText(ctx context.Context, _ *mcp.CallToolRequest, in writeTextIn) (*mcp.CallToolResult, WriteOut, error) {
+func (d *toolset) writeText(ctx context.Context, _ *mcp.CallToolRequest, in writeTextIn) (*mcp.CallToolResult, WriteOut, error) {
 	return each(in.Items, func(it writeTextItem) (Verdict, error) {
 		if it.ID == "" {
 			return d.createText(ctx, it)
@@ -284,7 +284,7 @@ func (d *door) writeText(ctx context.Context, _ *mcp.CallToolRequest, in writeTe
 	})
 }
 
-func (d *door) createText(ctx context.Context, it writeTextItem) (Verdict, error) {
+func (d *toolset) createText(ctx context.Context, it writeTextItem) (Verdict, error) {
 	if it.Grid == "" {
 		return Verdict{}, errors.New("refused: an item names id, to replace a body, or grid, to create a tile")
 	}
@@ -309,7 +309,7 @@ type renameIn struct {
 	Items []renameItem `json:"items" jsonschema:"the renames, applied in order"`
 }
 
-func (d *door) rename(ctx context.Context, _ *mcp.CallToolRequest, in renameIn) (*mcp.CallToolResult, WriteOut, error) {
+func (d *toolset) rename(ctx context.Context, _ *mcp.CallToolRequest, in renameIn) (*mcp.CallToolResult, WriteOut, error) {
 	return each(in.Items, func(it renameItem) (Verdict, error) {
 		row, err := d.tile(ctx, it.ID)
 		if err != nil {
@@ -336,7 +336,7 @@ type placeIn struct {
 	Items []placeItem `json:"items" jsonschema:"the moves, applied in order"`
 }
 
-func (d *door) place(ctx context.Context, _ *mcp.CallToolRequest, in placeIn) (*mcp.CallToolResult, WriteOut, error) {
+func (d *toolset) place(ctx context.Context, _ *mcp.CallToolRequest, in placeIn) (*mcp.CallToolResult, WriteOut, error) {
 	return each(in.Items, func(it placeItem) (Verdict, error) {
 		row, err := d.tile(ctx, it.ID)
 		if err != nil {
@@ -359,7 +359,7 @@ type copyIn struct {
 	Items []copyItem `json:"items" jsonschema:"the copies, applied in order"`
 }
 
-func (d *door) copy(ctx context.Context, _ *mcp.CallToolRequest, in copyIn) (*mcp.CallToolResult, WriteOut, error) {
+func (d *toolset) copy(ctx context.Context, _ *mcp.CallToolRequest, in copyIn) (*mcp.CallToolResult, WriteOut, error) {
 	return each(in.Items, func(it copyItem) (Verdict, error) {
 		src, grid, x, y, err := d.landing(ctx, it)
 		if err != nil {
@@ -381,7 +381,7 @@ type deleteIn struct {
 	Items []deleteItem `json:"items" jsonschema:"the tiles to delete, in order"`
 }
 
-func (d *door) delete(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) (*mcp.CallToolResult, WriteOut, error) {
+func (d *toolset) delete(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) (*mcp.CallToolResult, WriteOut, error) {
 	return each(in.Items, func(it deleteItem) (Verdict, error) {
 		row, err := d.tile(ctx, it.ID)
 		if err != nil {
@@ -408,7 +408,7 @@ type selectIn struct {
 	All     bool     `json:"all,omitempty" jsonschema:"with clear and no grid, empty every selection the node holds, and each connected far node's"`
 }
 
-func (d *door) selectTiles(ctx context.Context, _ *mcp.CallToolRequest, in selectIn) (*mcp.CallToolResult, GridOut, error) {
+func (d *toolset) selectTiles(ctx context.Context, _ *mcp.CallToolRequest, in selectIn) (*mcp.CallToolResult, GridOut, error) {
 	if _, err := d.rt.SetSelection(ctx, &pb.SetSelectionRequest{GridId: in.Grid, Add: in.Add, Remove: in.Remove,
 		Clear: in.Clear, Recurse: in.Recurse, All: in.All}); err != nil {
 		return nil, GridOut{}, refusal(err)
@@ -418,7 +418,7 @@ func (d *door) selectTiles(ctx context.Context, _ *mcp.CallToolRequest, in selec
 }
 
 // tile is the row a write reads first, the claim's source.
-func (d *door) tile(ctx context.Context, id string) (*pb.Tile, error) {
+func (d *toolset) tile(ctx context.Context, id string) (*pb.Tile, error) {
 	resp, err := d.rt.GetTile(ctx, &pb.GetTileRequest{TileId: id})
 	if err != nil {
 		return nil, refusal(err)
@@ -429,7 +429,7 @@ func (d *door) tile(ctx context.Context, id string) (*pb.Tile, error) {
 // landing is where a copy or link of in.ID lands: the named grid or the
 // tile's own, at the named cell or, unnamed, beside the tile in its own grid
 // and at the first free cell of another.
-func (d *door) landing(ctx context.Context, in copyItem) (src *pb.Tile, grid string, x, y int64, err error) {
+func (d *toolset) landing(ctx context.Context, in copyItem) (src *pb.Tile, grid string, x, y int64, err error) {
 	if src, err = d.tile(ctx, in.ID); err != nil {
 		return nil, "", 0, 0, err
 	}
@@ -444,7 +444,7 @@ func (d *door) landing(ctx context.Context, in copyItem) (src *pb.Tile, grid str
 
 // slot reads the grid and asks the one auto-place rule (store.FreeSlot)
 // where a w×h tile lands in it.
-func (d *door) slot(ctx context.Context, grid string, near *[2]int64, w, h int64) (x, y int64, err error) {
+func (d *toolset) slot(ctx context.Context, grid string, near *[2]int64, w, h int64) (x, y int64, err error) {
 	g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: grid})
 	if err != nil {
 		return 0, 0, refusal(err)
@@ -454,7 +454,7 @@ func (d *door) slot(ctx context.Context, grid string, near *[2]int64, w, h int64
 }
 
 // readBody drains a body and the basis it was read under.
-func (d *door) readBody(ctx context.Context, id string) (string, rpc.ContentBasis, error) {
+func (d *toolset) readBody(ctx context.Context, id string) (string, rpc.ContentBasis, error) {
 	var data []byte
 	var basis rpc.ContentBasis
 	first := true
@@ -487,7 +487,7 @@ func chunks(id string, claim rpc.ContentBasis, data []byte) func() (*pb.WriteCon
 }
 
 // landed is one write's verdict: the row it wrote, or its refusal.
-func (d *door) landed(resp *pb.TileResponse, err error) (Verdict, error) {
+func (d *toolset) landed(resp *pb.TileResponse, err error) (Verdict, error) {
 	if err != nil {
 		return Verdict{}, refusal(err)
 	}

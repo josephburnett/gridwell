@@ -66,7 +66,7 @@ func (p *Pump) Wait(c *Client, now time.Time) (time.Duration, bool) {
 // due is NeedFlush plus the one rule the count alone gets wrong: after a post
 // the node did not keep, the next one waits for the clock. The failure is
 // itself a record, so a full ring would otherwise post, fail, grow by the
-// failure, and post again as fast as the door can refuse.
+// failure, and post again as fast as the API can refuse.
 func (p *Pump) due(pending int, now time.Time) bool {
 	since := now.Sub(p.last)
 	if p.failed && since < cadence.TraceFlushMs*time.Millisecond {

@@ -95,10 +95,10 @@ verdict function; forced copies at the native seam are pinned by drift tests.
 The production/test boundary does not exempt a copy: a shape the node runs
 (a server, a dialer, a spawn) that a harness re-spells instead of calling the
 owner is a duplicate fact, and the harness copy is the one that lets a seam
-test pass against a door the node does not run — the 2026-09-06 connection
-door outage was exactly this. For each owned construction, grep the whole tree,
+test pass against an API the node does not run — the 2026-09-06 connection
+API outage was exactly this. For each owned construction, grep the whole tree,
 tests included, for re-spellings; where an enforcement exists (the
-`test/boundary` door-server check), confirm it covers the shape. CLEAN when
+`test/boundary` API-server check), confirm it covers the shape. CLEAN when
 no unpinned duplicate fact is found.
 
 **3. Decisions live in pure packages.** A policy decision — any branching on
@@ -161,7 +161,7 @@ declared duration remains.
 
 **9. Inherited behavior.** The toolchain and dependencies are a seam: a
 point release can change what unchanged code means (Go 1.26.6 turned a
-header timeout into a stream-killing deadline on the connection door). The
+header timeout into a stream-killing deadline on the connection API). The
 bar is not predicting such changes; it is that each one has somewhere to
 land: seam tests exercise the production shapes over real transports with
 holds bound to declared values, the gate table names which gates a
@@ -194,7 +194,7 @@ node, client, desktop and every plugin). Each is one of: a debounce or
 throttle over a user gesture; a reconnect or respawn backoff; a poll of a
 source that has no way to tell (named, with the source and the reason); or a
 hole. A poll of a source that CAN tell — a CLI with a watch command, an API
-with a history call, a stream the door declares but nobody opens — is a
+with a history call, a stream the API declares but nobody opens — is a
 hole. A capture, fetch or walk that runs when nothing needs its result is a
 hole ("nothing is done for nobody"). CLEAN when every timer is one of the
 first three and every declared stream has a producer and a consumer.

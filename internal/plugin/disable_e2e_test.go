@@ -2,7 +2,7 @@ package plugin_test
 
 // A plugin the user disables is stopped for the node's life: a real fs
 // subprocess loaded the way serve loads it, so the switch the loader
-// registers is the one the web door's verb reaches, and the health the
+// registers is the one the web API's verb reaches, and the health the
 // client hears is the router's.
 
 import (

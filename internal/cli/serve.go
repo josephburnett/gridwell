@@ -18,7 +18,7 @@ import (
 
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/tmux"
-	"github.com/josephburnett/gridwell/internal/mcpdoor"
+	"github.com/josephburnett/gridwell/internal/mcpapi"
 	"github.com/josephburnett/gridwell/internal/node"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -82,7 +82,7 @@ func resolveBind(flagBind, configBind string, configBindSet bool, bindDefault st
 const bannerPrefix = "gridwell: serving on "
 
 // servingBanner is the one-line boot contract with the desktop sidecar,
-// parsed by apps/desktop/src/main/lines.ts. The web door's bound address
+// parsed by apps/desktop/src/main/lines.ts. The web API's bound address
 // leads. auth= is the cookie value, so the sidecar authenticates its own
 // window without prompting; local stdout is the same trust level as the
 // web-password file. federation= is last and runs to the closing paren,
@@ -95,8 +95,8 @@ func servingBanner(addr, fedSocket, staticDir string, plugins int, password stri
 		addr, staticDir, plugins, server.AuthToken(password), fedSocket)
 }
 
-// mcpAddLine is the command that registers this node's MCP door with Claude
-// Code, for the human at the process. A door bound to every interface is
+// mcpAddLine is the command that registers this node's MCP API with Claude
+// Code, for the human at the process. An API bound to every interface is
 // reached on loopback from this machine. The shell header is single-quoted so
 // the shell it is pasted into leaves it for Claude Code, which expands it when
 // it starts: inside a shell tile it names that shell, elsewhere it is empty.
@@ -109,7 +109,7 @@ func mcpAddLine(addr, password string) string {
 		host = "127.0.0.1"
 	}
 	return fmt.Sprintf(`gridwell: agents: claude mcp add --transport http gridwell http://%s%s -H "Authorization: Bearer %s" -H '%s: ${%s:-}'`,
-		net.JoinHostPort(host, port), mcpdoor.Path, password, mcpdoor.ShellHeader, tmux.SessionEnv)
+		net.JoinHostPort(host, port), mcpapi.Path, password, mcpapi.ShellHeader, tmux.SessionEnv)
 }
 
 // staticFS resolves the static override: "" is the embedded web client, so

@@ -29,7 +29,7 @@ const BeaconJSONType = "application/json"
 // body.
 const BeaconStreamType = "application/connect+json"
 
-// beacon answers no body for a write the door would refuse (UnclaimedWrite),
+// beacon answers no body for a write the API would refuse (UnclaimedWrite),
 // so the caller posts it instead and the refusal surfaces.
 func beacon(procedure string, m proto.Message) (path string, body []byte) {
 	if UnclaimedWrite(m) != "" {

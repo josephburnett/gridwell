@@ -124,7 +124,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 // stop says so on its answer, as a destroyed shell row's own delete does.
 func TestAReapThatLeavesASessionRunningSaysSo(t *testing.T) {
 	ctx := context.Background()
-	f := newShellDoorFixture(t, Config{ID: "lnode1"})
+	f := newShellAPIFixture(t, Config{ID: "lnode1"})
 	g, err := f.cl.GetGrid(ctx, f.root)
 	if err != nil {
 		t.Fatal(err)

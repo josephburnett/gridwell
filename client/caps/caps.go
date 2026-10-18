@@ -25,7 +25,7 @@ type Caps struct {
 // Bridge is what the native host declares it can do, window.gridwell's caps
 // field. Each half is declared on its own, so a host can place live url views
 // without the rest of the desktop and a bridge that declares nothing is a
-// plain browser. Shells are not on the list: the PTY rides the web door.
+// plain browser. Shells are not on the list: the PTY rides the web API.
 type Bridge struct {
 	// LiveURL is whether the host implements placeWebview and setBounds.
 	LiveURL bool

@@ -226,7 +226,7 @@ func TestPrefetchAbortsQuietlyWhenDark(t *testing.T) {
 
 // TestSubscribeDoesNotCrawlWithoutThePolicy: the walk is a per-seam policy
 // over the one engine, not part of the engine, and the default is off. The
-// seam is the Subscribe trigger, so this drives the same door the transport
+// seam is the Subscribe trigger, so this drives the same path the transport
 // does — over the same real transport, so a green result means the walk
 // could have run and did not — and asserts nothing was warmed. A whole-source
 // crawl is what unreachability costs a NETWORK seam; a layer fronted without

@@ -72,13 +72,13 @@ func TestAnInterestTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
 					return hv
 				}
 			case <-ctx.Done():
-				t.Fatal("no health event for the plugin reached the door")
+				t.Fatal("no health event for the plugin reached the API")
 			}
 		}
 	}
 	grid := func(c string) string { return watchUUID + "/" + rpc.KeyTileID(c) }
 
-	// The stream is open and the share taken once a poke reaches the door;
+	// The stream is open and the share taken once a poke reaches the API;
 	// only then is the store broken, so nothing but the next share hits it.
 	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{grid("all")}}); err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestAnInterestTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
 			default:
 			}
 		case <-ctx.Done():
-			t.Fatal("the plugin's watch never reached the door")
+			t.Fatal("the plugin's watch never reached the API")
 		}
 	}
 

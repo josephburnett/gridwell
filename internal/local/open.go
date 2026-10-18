@@ -5,7 +5,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
-// OpenVerified is the one door the home's store is opened through: verify the
+// OpenVerified is the one way the home's store is opened: verify the
 // DB's stored identity against the configured id and kind, open the store, and
 // inject the verified config id, so every identity read speaks the id that
 // qualified references carry. Fusing the three makes the forgotten-injection

@@ -12,7 +12,7 @@ import (
 
 // SourceDisabled is a node's answer to a write whose target's source the
 // user disabled: a FailedPrecondition carrying a pb.SourceDisabled detail,
-// which survives every gRPC hop and the Connect codec (ConnectDetails).
+// which survives every gRPC hop and the web API (ConnectDetails).
 func SourceDisabled(namespace, reason string) error {
 	st, err := status.New(codes.FailedPrecondition, reason).
 		WithDetails(&pb.SourceDisabled{Namespace: namespace})

@@ -7,7 +7,7 @@ import { test, expect } from './fixtures';
 // (events.Resyncs), and a read the client cancelled itself says nothing
 // (clientsync.OutcomeAbandoned).
 //
-// The node's event door is the lever: the page's Subscribe is answered with
+// The node's Subscribe is the lever: the page's Subscribe is answered with
 // twenty transitions of the home namespace and a clean end, and the reconnect
 // after it is held, so no stream-gap resync muddies the count.
 

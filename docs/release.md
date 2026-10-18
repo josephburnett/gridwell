@@ -86,8 +86,8 @@ validation, which stops the app from launching at all.
   equivalent, so nothing stops a second `gridwell serve` over the same home.
 - No `proc` plugin. It reads `/proc`; the artifact ships without it rather
   than with one that can never answer.
-- No connection door, so `federation:` in `server.yaml` stays unset. That
-  door is a 0600 unix socket, and the model does not hold on Windows.
+- No connection API, so `federation:` in `server.yaml` stays unset. That
+  API is a 0600 unix socket, and the model does not hold on Windows.
 
 ## Adding a binary to the bundle
 

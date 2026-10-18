@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS previews (
     jpeg       BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
 );
--- The /content/ door's bounded body cache. Added without a version bump:
+-- The /content/ API's bounded body cache. Added without a version bump:
 -- schemaDDL runs at every Open and the table is additive, which is the
 -- liberty the disposable, non-frozen format buys.
 CREATE TABLE IF NOT EXISTS servecontent (

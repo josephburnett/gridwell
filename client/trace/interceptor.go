@@ -14,7 +14,7 @@ import (
 )
 
 // Interceptor stamps every call with a fresh request id and records the pair
-// of lines that brackets it. The node's own doors record the same id off
+// of lines that brackets it. The node's own APIs record the same id off
 // tracewire.RequestHeader, so one dump reads from the client's gesture
 // through the server's work and back.
 func Interceptor(c *Client, now func() time.Time) connect.Interceptor {
@@ -27,7 +27,7 @@ type interceptor struct {
 }
 
 // span emits the entry record and returns the exit emitter. It is the client
-// half of server.rpcSpan, which the two doors share: the msg and kv spellings
+// half of server.rpcSpan, which the two APIs share: the msg and kv spellings
 // must match for a dump to read as one story.
 func (i interceptor) span(req, procedure string) func(err error) {
 	verb := procedure[strings.LastIndex(procedure, "/")+1:]
@@ -77,7 +77,7 @@ func (i interceptor) WrapStreamingClient(next connect.StreamingClientFunc) conne
 	}
 }
 
-// The handler half is the node's; nothing here is a door.
+// The handler half is the node's; nothing here is an API.
 func (i interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return next
 }

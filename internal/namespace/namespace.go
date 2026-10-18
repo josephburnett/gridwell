@@ -1,8 +1,8 @@
 // Package namespace is the node's in-process interface. One namespace, home
-// store, plugin adapter or connection, is a Go value the router calls
-// directly, and the two codecs here carry the same method set onto the two
-// wires that remain. The four gRPC stream shapes become Go control flow,
-// decided once so no implementation invents its own:
+// store, plugin adapter or connection, is a Go value the router calls directly,
+// and Server and FromClient here carry the same method set across the
+// connection API, one side each. The four gRPC stream shapes become Go control
+// flow, decided once so no implementation invents its own:
 //
 //   - unary:            (ctx, *Request) (*Response, error)
 //   - server-streaming: (ctx, *Request, send func(*Chunk) error) error
@@ -16,7 +16,7 @@
 // # Errors
 //
 // Errors are gRPC status errors, always. The client classifies by code, so the
-// code must read the same from a Go call, the Connect codec, or two connection
+// code must read the same from a Go call, the web API, or two connection
 // hops away.
 //
 // # Message ownership
@@ -63,7 +63,7 @@ type Namespace interface {
 
 	// ReadContent's first chunk carries media_type and the row version.
 	ReadContent(ctx context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error
-	// ServeContent is the /content/ door; the first chunk carries status
+	// ServeContent is the /content/ API; the first chunk carries status
 	// and media_type.
 	ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error
 	// WriteContent commits once, at a clean io.EOF, so a recv that fails
@@ -79,10 +79,10 @@ type Namespace interface {
 	// Subscribe streams this namespace's change events until ctx ends. A
 	// send(nil) is the stream's header, carrying no event: the namespace is
 	// listening, so a read after it misses no change. Every namespace sends it
-	// once attached, a codec writes it as its transport's header, and Follow
+	// once attached, an API writes it as its transport's header, and Follow
 	// takes it as established; a stream that never sends it never is.
 	Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error
-	// SetView says what someone is showing. At the node's door it is one
+	// SetView says what someone is showing. At the node's API it is one
 	// session's whole view (interest.Book); from the node to one of its
 	// namespaces it is that namespace's whole share of the union as
 	// shown_grid_ids, with no session, and one it cannot take it tells on its

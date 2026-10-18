@@ -65,7 +65,7 @@ func TestFollowNeverEstablishesAStreamThatFailsFirst(t *testing.T) {
 	}
 }
 
-// A first event establishes: a codec whose header rides its first message
+// A first event establishes: an API whose header rides its first message
 // sends no separate one.
 func TestFollowEstablishesOnTheFirstEvent(t *testing.T) {
 	est, _ := follow(t, followNS{run: func(ctx context.Context, send func(*pb.Event) error) error {

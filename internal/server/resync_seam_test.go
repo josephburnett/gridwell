@@ -20,7 +20,7 @@ import (
 // A change made while the client's event stream is broken reaches an open
 // grid without another event: the stream re-opens on its own and the resync
 // it owes re-reads what the client shows. The client runs its own loop
-// (retry.Events) over the real web door, and the break is the network's.
+// (retry.Events) over the real web API, and the break is the network's.
 func TestAChangeDuringAStreamBreakReachesTheClientWithoutAnotherEvent(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/gridwell.db")
 	if err != nil {

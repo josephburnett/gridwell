@@ -124,7 +124,7 @@ export async function writeContent(
 }
 
 // The row as the node holds it now. A foreign writer reads it before it
-// writes, because the door refuses a move or delete that names no claim.
+// writes, because the API refuses a move or delete that names no claim.
 export async function getTile(origin: string, tileId: string): Promise<Tile> {
   const res = await fetch(`${origin}/${SERVICE}/GetTile`, {
     method: 'POST',

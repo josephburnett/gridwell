@@ -44,7 +44,7 @@ func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hs := webDoorTest(t, srv.WebHandler())
+	hs := webAPITest(t, srv.WebHandler())
 	return hs, root
 }
 
@@ -71,14 +71,14 @@ func get(t *testing.T, c *http.Client, url string, cookie string) (*http.Respons
 	return res, string(body)
 }
 
-// The browser door has no open mode: New
+// The web API has no open mode: New
 // refuses an empty password. Before this, authWrap had a no-password
 // arm that production could never reach (BuildConfig always mints one)
 // — dead in the binary, but a standing shortcut for every test that
 // mounted the mux without a cookie.
 func TestNewRequiresAPassword(t *testing.T) {
 	if _, err := New(plugin.NewRegistry(), Config{}); err == nil {
-		t.Fatal("New accepted an empty password — the web door must never be open")
+		t.Fatal("New accepted an empty password — the web API must never be open")
 	}
 }
 
@@ -96,7 +96,7 @@ func TestAuthGatesBrowserSurface(t *testing.T) {
 		t.Fatalf("unauthenticated GET / must serve the login form, not the SPA; got %q", body)
 	}
 
-	// Static assets are gated too — the SPA is entirely behind the door.
+	// Static assets are gated too — the SPA is entirely behind the API.
 	if res, _ := get(t, c, hs.URL+"/gridwell.wasm", ""); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated GET /gridwell.wasm = %d, want 401", res.StatusCode)
 	}

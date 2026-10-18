@@ -2,7 +2,7 @@ package server_test
 
 // The shipped gitlab plugin's Watch, spawned as the loader spawns it against
 // a fake GitLab and started through pluginhost.Start, reaching a client at the
-// web door: GitLab cannot tell, so the plugin polls, and only while a client
+// web API: GitLab cannot tell, so the plugin polls, and only while a client
 // shows one of its grids, and the linger after.
 
 import (

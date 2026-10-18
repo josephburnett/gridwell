@@ -2,7 +2,7 @@
 
 Every shipped plugin is brought to this standard (Joe, 2026-10-02), and a
 third-party plugin should meet it too. `docs/plugin-authoring.md` says how the
-door works; this says what a good plugin does at it.
+plugin API works; this says what a good plugin does at it.
 
 A plugin serves keys and content; the node owns ids and layout. It holds no
 node fact. It answers in its own stable keys, keeps its own memory of its

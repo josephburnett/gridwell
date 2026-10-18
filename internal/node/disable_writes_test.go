@@ -21,7 +21,7 @@ import (
 // A disabled connection's remembered grids read as read-only and its writes
 // are a verdict, never a transport failure: a far node answers once, is
 // cached, and is switched off with its grid on screen. Across the whole seam,
-// from the web door through the router and the source cache to a real far
+// from the web API through the router and the source cache to a real far
 // node, because the verdict and the stamp are the router's and the memory is
 // the cache's.
 func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {

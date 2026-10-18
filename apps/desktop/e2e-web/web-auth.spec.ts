@@ -21,7 +21,7 @@ type Fixtures = {
 const test = base.extend<Fixtures>({
   serve: async ({}, use) => {
     const home = seedHome();
-    // serve mints a password when the file is absent, so the door is never
+    // serve mints a password when the file is absent, so the API is never
     // open; a user who wants a memorable one writes the file, as here.
     fs.writeFileSync(path.join(home, 'web-password'), PASSWORD + '\n', { mode: 0o600 });
     const served = await spawnServe(home, await freePort());

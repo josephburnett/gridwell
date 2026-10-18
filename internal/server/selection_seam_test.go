@@ -12,7 +12,7 @@ import (
 )
 
 // The selection through the whole seam, at home and on a far node alike: the
-// client's door, the router, the transport, the far node's door and store. A
+// client's API, the router, the transport, the far node's API and store. A
 // select names what it adds and removes and claims nothing: it lands on the
 // grid's row there, comes back to the writer as the whole set in
 // SelectionChanged in the writer's own spelling of every id, reads back on the
@@ -110,7 +110,7 @@ func TestTheSelectionIsTheOwningNodesFact(t *testing.T) {
 }
 
 // The all-clear empties every set the node holds and every live far node's,
-// through the real transport, and a far node asked over its connection door
+// through the real transport, and a far node asked over its connection API
 // clears its own rows and forwards nothing, so two nodes connected both ways
 // do not echo it back and forth.
 func TestTheAllClearReachesEveryFarNodeOnce(t *testing.T) {

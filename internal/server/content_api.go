@@ -1,22 +1,22 @@
 package server
 
-// The HTTP /content/ door: plugins serving web content. A GET of
+// The HTTP /content/ API: plugins serving web content. A GET of
 //
 //	/content/<content-token>/<qualified-tile-id>/<subpath>
 //
 // becomes one ServeContent RPC routed through contentRoute, so links resolve
-// and transit hops forward exactly like ReadContent. The door owns the URL
+// and transit hops forward exactly like ReadContent. The API owns the URL
 // grammar, the token gate and the sandbox header; the plugin owns what the
 // bytes mean.
 //
-// Every response carries the contentSandbox CSP, so the page runs with an opaque origin: no cookies, no storage, no reach into
-// the RPC surface. The server stamps the header, and plugins never write HTTP
-// headers at all.
+// Every response carries the contentSandbox CSP, so the page runs with an
+// opaque origin: no cookies, no storage, no reach into the RPC surface. The
+// server stamps the header, and plugins never write HTTP headers at all.
 //
 // A sandboxed page and the desktop's native views cannot present the auth
-// cookie, so the door is exempt from that gate and carries its own capability
+// cookie, so the API is exempt from that gate and carries its own capability
 // in the path, where relative subresource URLs inherit it. Leaked, that token
-// opens only this read-only door; changed, every old content URL dies with it.
+// opens only this read-only API; changed, every old content URL dies with it.
 
 import (
 	"crypto/sha256"
@@ -34,13 +34,13 @@ import (
 
 const contentPathPrefix = "/content/"
 
-// contentSandbox is the CSP every door response carries. allow-popups lets a
+// contentSandbox is the CSP every API response carries. allow-popups lets a
 // target=_blank link reach the desktop's window-open handler, which denies the
 // popup and opens the address below as a fresh view; no sandboxed window is
 // ever created, so nothing needs allow-popups-to-escape-sandbox.
 const contentSandbox = "sandbox allow-scripts allow-popups"
 
-// ContentToken is the one derivation of the door's path capability. Its domain
+// ContentToken is the one derivation of the API's path capability. Its domain
 // prefix differs from AuthToken's, so neither token replays as the other.
 func ContentToken(password string) string {
 	sum := sha256.Sum256([]byte("gridwell-content-v1\n" + password))
@@ -49,7 +49,7 @@ func ContentToken(password string) string {
 
 // parseContentPath leans on the id shape: the first tile segment terminates the
 // qualified id and everything after it is the page-relative subpath, so a tile
-// named by its key serves through the same door as a minted one. needSlash
+// named by its key serves through the same API as a minted one. needSlash
 // reports a root-page request missing its trailing slash, which the caller
 // redirects, because relative URLs resolve against the directory.
 func parseContentPath(path string) (token, tileID, subpath string, needSlash, ok bool) {
@@ -88,8 +88,8 @@ func parseContentPath(path string) (token, tileID, subpath string, needSlash, ok
 	return token, tileID, subpath, false, true
 }
 
-// contentDoor is the handler mounted at /content/.
-func (s *Server) contentDoor() http.Handler {
+// contentAPI is the handler mounted at /content/.
+func (s *Server) contentAPI() http.Handler {
 	want := []byte(ContentToken(s.cfg.Password))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -145,7 +145,7 @@ func (s *Server) contentDoor() http.Handler {
 	})
 }
 
-// httpStatusError maps a routing or RPC failure onto the door's HTTP surface.
+// httpStatusError maps a routing or RPC failure onto the API's HTTP surface.
 // Unimplemented is deliberately 404: a plugin that serves no web content has
 // no pages.
 func httpStatusError(w http.ResponseWriter, err error) {
@@ -156,6 +156,6 @@ func httpStatusError(w http.ResponseWriter, err error) {
 	case gcodes.PermissionDenied:
 		http.Error(w, "forbidden", http.StatusForbidden)
 	default:
-		http.Error(w, "content door: "+st.Message(), http.StatusBadGateway)
+		http.Error(w, "content API: "+st.Message(), http.StatusBadGateway)
 	}
 }

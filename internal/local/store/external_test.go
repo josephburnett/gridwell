@@ -121,7 +121,7 @@ func TestExtMergeIsIdempotent(t *testing.T) {
 }
 
 // Externals share the tables with home but never its reads: a plugin's
-// context grid is invisible through the home door, and home's grid holds
+// context grid is invisible through home's reads, and home's grid holds
 // no plugin rows.
 func TestExtRowsAreInvisibleToHome(t *testing.T) {
 	st, d := openExt(t)

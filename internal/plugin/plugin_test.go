@@ -6,9 +6,9 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// Everything here is the registry, which holds Go values. The gridwell.v1 codec
+// Everything here is the registry, which holds Go values. The connection API
 // round trip lives in internal/namespace, the one place a real gRPC loopback
-// belongs, and the loader is crossed over the real subprocess door in
+// belongs, and the loader is crossed over the real plugin API in
 // plugin_e2e_test.go.
 
 func TestRegistry_GetMissing(t *testing.T) {

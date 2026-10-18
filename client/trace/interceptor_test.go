@@ -47,7 +47,7 @@ func TestEveryCallCarriesAFreshRequestIdItAlsoRecords(t *testing.T) {
 		}
 	}
 	if len(sent) != 2 {
-		t.Fatalf("%d calls reached the door, want 2", len(sent))
+		t.Fatalf("%d calls reached the API, want 2", len(sent))
 	}
 	if sent[0] == sent[1] {
 		t.Errorf("two calls shared the request id %q", sent[0])
@@ -78,7 +78,7 @@ func TestEveryCallCarriesAFreshRequestIdItAlsoRecords(t *testing.T) {
 }
 
 // The end record says how long the call took and, on a failure, what the
-// door said: the two questions a dump is opened for.
+// API said: the two questions a dump is opened for.
 func TestTheEndRecordCarriesTheDurationAndTheCode(t *testing.T) {
 	c := New(64, "cid7abc")
 	var ms int64

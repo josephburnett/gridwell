@@ -1,6 +1,6 @@
 // Package trace is the node's always-on diagnostic sink: a fixed ring of
 // records in memory, one total order, written out on request. The record and
-// the door's shape are api/tracewire, which both ends read.
+// the API's shape are api/tracewire, which both ends read.
 //
 // It holds no node fact — nothing reads it back, deleting it loses nothing the
 // user owns — which is why Default is a package-level ring the way log's
@@ -56,7 +56,7 @@ func Emit(src, kind, msg string, kv map[string]string) {
 	def.Emit(tracewire.Record{Origin: tracewire.OriginNode, Src: src, Kind: kind, Msg: msg, KV: kv})
 }
 
-// Default is the node's one ring: what the door dumps and every Emit above
+// Default is the node's one ring: what the API dumps and every Emit above
 // lands in.
 func Default() *Ring { return def }
 
@@ -133,7 +133,7 @@ func (r *Ring) Ingest(in io.Reader, sent int64) (n int, err error) {
 }
 
 // senderOrigin is what a sender may call itself. Anything else, "node"
-// included, reads as the client: a record that came through the door did not
+// included, reads as the client: a record that came through the API did not
 // come from the node.
 func senderOrigin(origin string) string {
 	if origin == tracewire.OriginElectron {

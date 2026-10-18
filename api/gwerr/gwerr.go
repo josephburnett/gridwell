@@ -60,7 +60,7 @@ var sentinelClasses = []struct {
 }
 
 // classCodes is the one class-to-status-code table: what a namespace answers a
-// store sentinel with, and what the Connect codec answers a raw sentinel with
+// store sentinel with, and what the web API answers a raw sentinel with
 // through ConnectCode. Total over ErrorClass; TestStatusCodeIsTotal pins it.
 var classCodes = map[ErrorClass]codes.Code{
 	ClassInternal:        codes.Internal,

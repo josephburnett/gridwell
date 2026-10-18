@@ -1,7 +1,7 @@
 package server_test
 
 // A plugin that cannot serve its declared source refuses Info with the
-// reason. Across the plugin.v1 wire, the adapter and the web door, the node
+// reason. Across the plugin.v1 wire, the adapter and the web API, the node
 // lists it broken with that sentence and none of its entries, tells a
 // subscribed client so, and asks again until the plugin answers, when the
 // entries come back without a restart.

@@ -179,7 +179,7 @@ MODULES := api internal/doctype apps/gridwell
 # check depends on wasm because web/embed.go embeds the built gridwell.wasm,
 # so a fresh checkout cannot `go build ./...` before one exists. It depends on
 # plugins because the seam tests spawn the real binaries, which is the only
-# door a plugin has into this repo. `go vet ./...` runs at the host GOOS and
+# way a plugin reaches this repo. `go vet ./...` runs at the host GOOS and
 # so sees none of the js/wasm-tagged files, which is why they are vetted
 # again under GOOS=js: this is the only gate that looks at them at all.
 check: fmt-check proto-check wasm plugins
@@ -219,7 +219,7 @@ FLAKY_REPORT := node scripts/flaky-report.mjs
 
 # check-electron runs the live-tile harnesses under a virtual display,
 # exercising the real Electron WebContentsView. Shells ride a WebSocket on the
-# web door, so check-web owns that path; CLAUDE.md's Gates table says when to
+# web API, so check-web owns that path; CLAUDE.md's Gates table says when to
 # run either. It needs xvfb and a prior `make vendor` for node_modules. The
 # npm scripts wrap xvfb-run themselves, so do not wrap them again.
 check-electron: node-modules
@@ -315,7 +315,7 @@ dist-mac: mac-bins wasm node-modules stamp-version
 
 # dist-win produces the portable Gridwell-<ver>.exe. Its accepted
 # degradations are in docs/release.md: no live shells, no serve lock, no proc
-# plugin, and no connection door, whose 0600 unix socket has no Windows
+# plugin, and no connection API, whose 0600 unix socket has no Windows
 # equivalent.
 dist-win: build node-modules stamp-version
 	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron-builder --win portable

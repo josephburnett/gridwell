@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// The web-content door, desktop side: an fs image file is a url tile whose page
-// the plugin serves, and descending it goes live as a native WebContentsView at
-// the derived /content/<token>/<tile-id>/ address — the url-tile semantics, on a
+// The content API, desktop side: an fs image file is a url tile whose page the
+// plugin serves, and descending it goes live as a native WebContentsView at the
+// derived /content/<token>/<tile-id>/ address — the url-tile semantics, on a
 // url tile. Ascending closes the view and freezes it the way it freezes any url
 // tile: the screenshot becomes the face, replacing the plugin's thumbnail, and
 // nothing that means the tile's bytes or its address changes.
@@ -21,7 +21,7 @@ fs.writeFileSync(path.join(picsDir, 'cat.png'), PNG_1X1);
 
 test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: picsDir } }] });
 
-test('descending an fs image opens it live through the /content/ door', async ({
+test('descending an fs image opens it live through the /content/ API', async ({
   electronApp,
   gw,
 }) => {
@@ -31,11 +31,11 @@ test('descending an fs image opens it live through the /content/ door', async ({
   const cat = (snap.tiles ?? []).find((t) => t.altText === 'cat.png')!;
   expect(cat, 'the fs root grid lists cat.png').toBeTruthy();
   expect(cat.kind, 'an image file is a url tile').toBe('url');
-  expect(cat.servesPage, 'whose page the plugin serves at the door').toBe(true);
+  expect(cat.servesPage, 'whose page the plugin serves at the API').toBe(true);
   expect(cat.urlString ?? '', 'and which carries no address of its own').toBe('');
   const versionBefore = Number(cat.version ?? 0);
 
-  // A url descent goes live, so a native view opens at the derived door
+  // A url descent goes live, so a native view opens at the derived API
   // address: token, qualified tile id, and the trailing slash that relative
   // URLs inside the page depend on.
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));

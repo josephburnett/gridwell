@@ -99,7 +99,7 @@ the client derives it from there (`client/cache.SourceDark`). Darkness is
 connection segment (`sourceOf`), learned from two directions that are the
 same fact — `noteReach`, from any pass-through call that failed
 transport-shaped, and `applyEvent`'s health arm, from the connection's own
-health on the stream this layer relays — and written through one door,
+health on the stream this layer relays — and written through one function,
 `setDark`, whose transition back to light is also what re-warms that source.
 Every other read passes through and remembers, falling back to the remembered
 answer on a transport-class failure only. Writes always pass through and fold
@@ -114,7 +114,7 @@ so a far grid reopens dark where it was last left. `SelectionChanged` and an
 accepted `SetSelection` land the whole set on the remembered grid
 (`Layer.reselect`). A write the source did not accept is remembered nowhere. `prefetch.go` warms
 every source on Subscribe and one source when it comes back;
-`servecontent.go` gives the `/content/` door the same treatment under its own
+`servecontent.go` gives the `/content/` API the same treatment under its own
 caps.
 
 **5. The server fan-in** — `internal/server/router.go`. `Subscribe` starts
@@ -205,7 +205,7 @@ because every write that parks is a last-writer-wins overwrite of one key
 carry no id and park nothing; they reconcile visibly instead).
 
 `inflight.Deadline` is the bound on every client RPC, read and write, and
-`inflight.Bounded` is the one door to it for a call with no dedupe claim of
+`inflight.Bounded` is the one way to it for a call with no dedupe claim of
 its own — a write, a nav walk's read, the shell-alive probe, the boot
 handshake. Only the two long-lived streams are unbounded. A call that never
 returns is what park-at-send survives and what the bound then ends: the
@@ -348,7 +348,7 @@ without it the room would look live until some call happened to fail.
 **What the user sees while dark.** A remembered grid serves inside its
 window and revalidates behind it anyway, because `Layer.GetGrid` consults
 `isDark` alongside the age; the bar shows the "cached" chip, which the client
-draws from the same health the node learned. Bodies, previews, and door pages
+draws from the same health the node learned. Bodies, previews, and served pages
 fall back to remembered entries where there are any; where there are none the
 transport error stands and the read fails honestly. Links through the
 connection are NOT dead — `client/deadref` answers from the node's
@@ -395,7 +395,7 @@ re-opened, which is where "a recent copy of what you did not happen to read"
 has gone most stale. It is transport-only — reads, no version claims — and
 revalidates through the ordinary window rules.
 
-The trigger is the door's, not either direction's, because either can notice
+The trigger is `setDark`'s, not either direction's, because either can notice
 first: in practice the client's refetch answers before the fan-in publishes
 health, so a kick hung off the health arm alone did nothing at all, which is
 what `test/connections` caught. Only the transition to light kicks, only for
@@ -411,7 +411,7 @@ The version interlock, the outbox park, and the drain.
    `cache.PutEditedContent` marks the entry dirty and leaves `Base` alone —
    the edit is based on the bytes already there — and `App.recordContent`
    parks `Key{Op: "Content", ID: tileID}` with `flushTileContent` as the
-   thunk. Storing the bytes and recording the debt are one door, so an edit
+   thunk. Storing the bytes and recording the debt are one call, so an edit
    typed during an outage cannot stay out of the outbox.
 2. The debounce sweep or an ascent flush calls `App.enqueueTextSave`, which
    goes through `contentSaves` (`outbox.SaveQueue`), the per-key serial
@@ -454,13 +454,13 @@ The version interlock, the outbox park, and the drain.
    never reads back the bytes it just sent, and a foreign row that landed
    meanwhile ages the body when the hold ends.
 
-   There is one door into a grid's tile map, `Cache.putTileLocked`, and both
+   There is one way into a grid's tile map, `Cache.putTileLocked`, and both
    `Apply` and `UpdateTile` are it: the interlock and content aging
    belong to the map, not to the path a row arrived on. So a write RESPONSE
    that is the older row is refused on the same rule as an older echo. (The
    one difference is insertion: an event may add a tile the cache has not
    seen; `UpdateTile` only updates a row already held.)
-6. Content aging runs on whichever row does apply, whichever door it
+6. Content aging runs on whichever row does apply, whichever path it
    came in by. Clean entry the row has moved past (`contentEntry.behind`)
    → drop the body, so the next render refetches and the
    foreign edit becomes visible. Dirty entry → keep it; its save claims the
@@ -563,7 +563,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A verdict evicts and announces | `sourcecache_test.go:TestRevalidationVerdictEvicts` |
 | The event crosses layer stream → fan-in → qualification → client, and the next read serves the correction | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient` |
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
-| A tile row that leaves the cache, by refresh, eviction or `TileRemoved`, takes the body, stamp, preview and door bodies kept under its id, unless another row still names it | `sourcecache/gc_test.go` |
+| A tile row that leaves the cache, by refresh, eviction or `TileRemoved`, takes the body, stamp, preview and served bodies kept under its id, unless another row still names it | `sourcecache/gc_test.go` |
 | The client's own arm: `GridChanged` clears `fetch.grids`' latches and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
 | Navigation asks for a grid or a row only when the cache does not hold it current (`cache.Current`): a descent, an ascent, a level change and a re-engagement onto a held grid read nothing, unless its source is dark or has live updates off | `client/nav/current_test.go`, `client/cache/dark_test.go:TestAGridIsCurrentWhenHeldFromAnAnsweringSource`, `TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent`, `apps/desktop/e2e/read-once.spec.ts`, `apps/desktop/e2e/live-updates-off.spec.ts` |
 
@@ -578,7 +578,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
-| A plugin's `Watch` change is a `GridChanged` at the door, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text face show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown context whose listing moved, a context a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/interest_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/interest_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
+| A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text face show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown context whose listing moved, a context a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/interest_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/interest_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |
@@ -616,7 +616,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A fetch never clobbers dirty bytes; a stale reply never regresses the basis | `cache_test.go:TestFetchNeverClobbersDirtyContent`, `TestStaleFetchNeverRegressesContent` |
 | A save response keeps mid-flight typing and only advances the basis | `cache_test.go:TestSavedContentKeepsMidFlightTyping` |
 | A plugin body is aged by its source's stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a remembered body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/fs_stamp_seam_test.go` |
-| A body answers only for the blob it was filed under, whichever door the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
+| A body answers only for the blob it was filed under, whichever path the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |
 | Live: typing survives a server outage and saves itself after restart; settled framing lands too; a swallowed grid read un-latches | `apps/desktop/e2e-web/web-outage.spec.ts` |
@@ -624,6 +624,6 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A foreign edit becomes visible, and opening/closing never stomps it | `apps/desktop/e2e/foreign-writer.spec.ts` |
 | A write's own echo overtaking its response keeps the body, so the client never reads back what it just wrote; a foreign row during the write still ages it when the write ends | `internal/server/own_echo_seam_test.go:TestALayoutWriteEchoLeadingItsResponseIsNotReadBack` (seam), `client/cache/own_write_test.go` (unit) |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
-| An older write RESPONSE is refused by the same interlock an older echo is: one door into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneDoor`, `TestUpdateTileAgesTheBodyToo` (unit) |
+| An older write RESPONSE is refused by the same interlock an older echo is: one way into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneWayIn`, `TestUpdateTileAgesTheBodyToo` (unit) |
 | A plugin body saves as a home one does: a clean save lands on disk and its own echoes keep the typed text; bytes changed on disk under a dirty edit refuse the save as a conflict and show the file; a write the plugin cannot take parks under its key-form id and lands when it is back; a verdict never parks | `internal/server/fs_write_seam_test.go`, `internal/pluginhost/adapter_caps_test.go:TestAdapterStampsTheWriteFactsThePluginDeclares`, the fs plugin's `fs/plugin/write_test.go`; live, `apps/desktop/e2e/fs-edit.spec.ts` |
 | `syncContentOutbox`'s derivation: dirty→park, clean→ack, and the pre-drain sweep over the dirty set | `client/outbox/outbox_test.go:TestRecordContentIsTheDirtinessFork`, `TestSyncContentParksTheDirtySetInOrder` (`Outbox.RecordContent`/`SyncContent`; `mutate.go` is glue) |

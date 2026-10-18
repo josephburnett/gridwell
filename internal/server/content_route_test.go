@@ -15,12 +15,12 @@ import (
 
 // The link-resolution seam: ReadContent and
 // GetTilePreview on a LEAF LINK resolve to the target at the SERVING NODE,
-// through the one contentRoute door — across two real plugins and the real
+// through the one contentRoute — across two real plugins and the real
 // router. Before this, resolution lived only in the wasm client
 // (rpc.ContentID): any other caller reading a link got an empty row.
 
 // twoPluginHTTPServer is twoPluginServer plus the raw HTTP base URL, for the
-// /preview/tile/ door.
+// /preview/tile/ route.
 func twoPluginHTTPServer(t *testing.T) (cl *rpc.Client, baseURL, rootA, rootB string) {
 	t.Helper()
 	ctx := context.Background()
@@ -93,7 +93,7 @@ func TestReadContentResolvesLeafLinkAtServer(t *testing.T) {
 	}
 }
 
-func TestPreviewDoorResolvesLeafLink(t *testing.T) {
+func TestPreviewReadResolvesLeafLink(t *testing.T) {
 	cl, _, rootA, rootB := twoPluginHTTPServer(t)
 	ctx := context.Background()
 
@@ -112,7 +112,7 @@ func TestPreviewDoorResolvesLeafLink(t *testing.T) {
 		t.Fatalf("create link: %v", err)
 	}
 
-	// The RPC door: the link's preview is the target's frozen JPEG.
+	// The RPC route: the link's preview is the target's frozen JPEG.
 	got, err := cl.GetTilePreview(ctx, link.Id)
 	if err != nil {
 		t.Fatalf("preview through link: %v", err)

@@ -442,11 +442,11 @@ type Tile struct {
 	// url_frozen arm only, and it never bumps version.
 	UrlFrozen bool `protobuf:"varint,30,opt,name=url_frozen,json=urlFrozen,proto3" json:"url_frozen,omitempty"`
 	// serves_page: this url tile opens at the address the node derives for its
-	// /content/ door, /content/<content-token>/<tile-id>/, where the owning
+	// /content/ API, /content/<content-token>/<tile-id>/, where the owning
 	// plugin answers ServeContent. It stands in place of a url_string of its
 	// own, and it is built at render time from the current origin and never
 	// persisted, because ports are ephemeral. Url tiles only: the plugin entry
-	// door refuses the declaration on every other kind, so a text tile never
+	// API refuses the declaration on every other kind, so a text tile never
 	// serves one. Plugin-declared, derived from the content itself, such as the
 	// filename's media type in fs. Never a stored column.
 	ServesPage bool `protobuf:"varint,32,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
@@ -1540,10 +1540,10 @@ func (x *WriteContentRequest) GetContentStamp() string {
 // never act on the user's Gridwell.
 //
 // GET-only. subpath "" is the tile's root page; a non-empty subpath is a
-// page-relative resource such as "img/cat.png" whose meaning the plugin defines.
-// Chunk 1 carries status and media_type; later chunks carry data only. A plugin
-// that does not serve web content leaves the RPC unimplemented and the door
-// answers 404.
+// page-relative resource such as "img/cat.png" whose meaning the plugin
+// defines. Chunk 1 carries status and media_type; later chunks carry data only.
+// A plugin that does not serve web content leaves the RPC unimplemented and the
+// content API answers 404.
 type ServeContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
@@ -1664,7 +1664,7 @@ func (x *ServeContentChunk) GetData() []byte {
 // a plugin boundary; there is no cross-plugin move, only link or clone.
 //
 // claim is the placement the writer saw. A tile no longer there is refused
-// with the version conflict, the placement on disk standing. The doors refuse
+// with the version conflict, the placement on disk standing. The APIs refuse
 // a request with no claim (rpc.UnclaimedWrite); only the node's own writers
 // reach a namespace without one.
 type PlaceTileRequest struct {
@@ -1901,7 +1901,7 @@ func (x *GetTileRequest) GetTileId() string {
 // and results come back qualified like every other id.
 //
 // The filters narrow every hit and AND together. They are the node's, applied
-// to the rows it holds, never a plugin's: the plugin door has none. A query may
+// to the rows it holds, never a plugin's: the plugin API has none. A query may
 // be empty when a filter is given, and then every tile passing the filters is
 // a hit, the newest first by the time filtered on (created when none is).
 type SearchRequest struct {
@@ -2553,7 +2553,7 @@ type HandshakeResponse struct {
 	// a node-level operator fact, so it rides the node handshake rather than any
 	// per-plugin Info.
 	ShellsDisabled bool `protobuf:"varint,4,opt,name=shells_disabled,json=shellsDisabled,proto3" json:"shells_disabled,omitempty"`
-	// content_token gates the HTTP /content/ door, the ServeContent carrier.
+	// content_token gates the HTTP /content/ API, the ServeContent carrier.
 	// Pages served there run sandboxed with an opaque origin, so neither their
 	// subresource requests nor the desktop's native views carry the auth cookie.
 	// The token rides in the path instead, as
@@ -2562,11 +2562,11 @@ type HandshakeResponse struct {
 	// the auth cookie; it is handed out only on this authenticated handshake and
 	// checked against the current password as the cookie is. It is a node-level
 	// fact of the local origin: content URLs are always built against the serving
-	// node, and a connection is followed behind the door, over the RPC.
+	// node, and a connection is followed behind the web API, over the RPC.
 	ContentToken string `protobuf:"bytes,5,opt,name=content_token,json=contentToken,proto3" json:"content_token,omitempty"`
 	// build is the commit the node was built from (tracewire.BuildCommit), ""
 	// for an unstamped build, for the client's log. Nothing depends on it: the
-	// web door refuses a page of another build on every call (StaleBuild).
+	// web API refuses a page of another build on every call (StaleBuild).
 	Build         string `protobuf:"bytes,14,opt,name=build,proto3" json:"build,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2739,8 +2739,8 @@ func (x *DeadReference) GetNamespace() string {
 	return ""
 }
 
-// StaleBuild is the detail on the FailedPrecondition the web door answers a
-// page of another build with, before the verb runs: node is the door's build,
+// StaleBuild is the detail on the FailedPrecondition the web API answers a page
+// of another build with, before the verb runs: node is the web API's build,
 // client the one the page named ("" when it named none). gwerr.StaleBuild
 // writes it and gwerr.StaleBuildOf reads it; the client's one answer is to
 // reload (client/nodebuild).
@@ -3133,7 +3133,7 @@ type SetTileRequest struct {
 	// Refused for a kind that cannot go live. optional so clearing (false) is
 	// distinct from absent.
 	UrlFrozen *bool `protobuf:"varint,8,opt,name=url_frozen,json=urlFrozen,proto3,oneof" json:"url_frozen,omitempty"`
-	// claim_frozen is url_frozen's claim; the doors refuse url_frozen without
+	// claim_frozen is url_frozen's claim; the APIs refuse url_frozen without
 	// it, so absent is only the node's own write.
 	ClaimFrozen   *bool `protobuf:"varint,10,opt,name=claim_frozen,json=claimFrozen,proto3,oneof" json:"claim_frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3228,7 +3228,7 @@ func (x *SetTileRequest) GetClaimFrozen() bool {
 
 // DeleteTileRequest claims what the writer saw: the content version and the
 // placement. A tile whose content or place moved meanwhile is refused with the
-// version conflict and stands. The doors refuse a request with no claim; only
+// version conflict and stands. The APIs refuse a request with no claim; only
 // the node's own writers (a reap) reach a namespace without one.
 type DeleteTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3483,7 +3483,7 @@ func (x *SetFramingResponse) GetTile() *Tile {
 // nested under the grid's wells, to any depth, within the grid's namespace, in
 // one write; recurse without clear is refused. all, only with clear and no
 // grid, add, remove or recurse, empties every grid's set the node holds: home
-// and each plugin namespace, and, asked at the web door, each live
+// and each plugin namespace, and, asked at the web API, each live
 // connection's far node, whose sets are its rows (rpc.SelectRefusal). A
 // selection is not content: no version moves, the grid's or any tile's.
 type SetSelectionRequest struct {

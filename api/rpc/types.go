@@ -25,7 +25,7 @@ const (
 // every producer of a content stream.
 const ContentChunkBytes = 256 * 1024
 
-// MaxContentBytes is the largest content body the door carries, either way;
+// MaxContentBytes is the largest content body an API carries, either way;
 // store.MaxBlobBytes matches it.
 const MaxContentBytes = 16 * 1024 * 1024
 
@@ -195,14 +195,14 @@ const (
 )
 
 // WebContent is a url tile: at the address it carries, or at the /content/
-// door when its plugin serves the page.
+// API when its plugin serves the page.
 func WebContent(t *pb.Tile) bool {
 	return t.Kind == KindURL
 }
 
 // TextDocument is a tile whose content is its own document body. Every text
 // tile has one: a served page is a url tile, serves_page on another kind being
-// refused at the entry door (pluginhost.acceptEntries).
+// refused by pluginhost.acceptEntries.
 func TextDocument(t *pb.Tile) bool {
 	return t.Kind == KindText
 }

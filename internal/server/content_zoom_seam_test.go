@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A content zoom crosses the client, the web door and the router to one of
+// A content zoom crosses the client, the web API and the router to one of
 // two writers: the store's own for a home tile, the plugin adapter's for a
 // plugin tile. Both must refuse what the column cannot mean, and write a
 // valid value exactly.
