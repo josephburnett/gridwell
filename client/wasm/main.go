@@ -413,7 +413,7 @@ func newScheduler(a *App) scheduler {
 		// out on every new notice.
 		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
 			if a.errs.Expire(time.Now()) {
-				a.scheduleFrame(traceevent.WhyNotice) // strip shrank; panes reclaim the height on redraw
+				a.scheduleFrame(traceevent.WhyNotice) // notice row shrank; panes reclaim the height on redraw
 			}
 			a.scheduleErrExpiry()
 		}),
@@ -1230,7 +1230,7 @@ func (a *App) logNotice(sev errsurface.Severity, source, message string) {
 	a.emit(traceevent.Notice(sev, source, message))
 }
 
-// noticed arms the expiry and the repaint a changed strip owes.
+// noticed arms the expiry and the repaint a changed notice row owes.
 func (a *App) noticed() {
 	a.scheduleErrExpiry()
 	a.scheduleFrame(traceevent.WhyNotice)

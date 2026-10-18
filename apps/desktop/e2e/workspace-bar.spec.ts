@@ -49,7 +49,7 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 
-  // The teal workspace outline is reserved layout, like the notice strip: panes
+  // The teal workspace outline is reserved layout, like the notice row: panes
   // inset by its width on every side, so the line never paints over the panes'
   // own kind-colored borders.
   const winW = await window.evaluate(() => globalThis.innerWidth);

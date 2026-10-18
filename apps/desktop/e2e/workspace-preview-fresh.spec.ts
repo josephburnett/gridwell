@@ -6,7 +6,7 @@ import { dumpViaAPI, TraceLine } from './trace';
 // visit inside a workspace ends and its tile is deleted, the layout is saved
 // without it, and the next look at the workspace from outside must not draw
 // the arrangement from before: drawing it resolves the gone leaf, which asks
-// GetTile for it and puts "tile unavailable" on the strip. The layout memo and
+// GetTile for it and puts "tile unavailable" on the notice row. The layout memo and
 // the content cache are js-free (client/panepreview, client/cache); the seam
 // crossed here is the shim's save glue feeding them in the real app.
 

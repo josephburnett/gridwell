@@ -8,7 +8,7 @@ import type { GridwellDriver } from './driver';
 // screen throughout. The delete and the layout that stops naming the visit are
 // one gesture: the node must never hold the layout naming a deleted tile, or
 // the preview drawn from it resolves the gone leaf, asks GetTile for it and
-// puts "tile unavailable" on the strip. client/nav orders the two writes; the
+// puts "tile unavailable" on the notice row. client/nav orders the two writes; the
 // seam crossed here is the shim running that order against the real node.
 
 const sameTile = (a: string, b: string) => a === b || a.endsWith('/' + b) || b.endsWith('/' + a);

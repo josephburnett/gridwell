@@ -64,7 +64,7 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
   await window.waitForTimeout(1_500);
   const e = await errors(window);
   expect(e.notices, 'a dead link raises no notice').toEqual([]);
-  expect(e.stripH, 'and reserves no strip height').toBe(0);
+  expect(e.noticesH, 'and reserves no notice row height').toBe(0);
 
   expect(
     asked.filter((body) => body.includes(GONE)),
@@ -149,7 +149,7 @@ test.describe('a declared namespace is never dead', () => {
     await window.waitForTimeout(1_500);
     const e = await errors(window);
     expect(e.notices, 'a gone target raises no notice').toEqual([]);
-    expect(e.stripH, 'and reserves no strip height').toBe(0);
+    expect(e.noticesH, 'and reserves no notice row height').toBe(0);
 
     // The file comes back, and a write into its grid is the namespace saying
     // its listing changed.

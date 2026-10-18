@@ -4,7 +4,7 @@ import { deleteTile, tileAt } from './oracle';
 // A descent whose row is gone is a verdict, not a dead namespace: the id still
 // routes, the node still answers, and what it answers is "no such tile"
 // (client/deadref owns the other case, which is silent by decision). Without a
-// notice the pane draws an empty content box named "unnamed" and the strip says
+// notice the pane draws an empty content box named "unnamed" and the notice row says
 // nothing, which reads as "it just disappeared".
 //
 // Deleting once only moves the row to the trash, where it still reads, so the
@@ -12,9 +12,9 @@ import { deleteTile, tileAt } from './oracle';
 // inside the trash, which bypasses it, and that is the verdict.
 //
 // The by-id read is in the wasm shim, which `make check` compiles and never
-// runs; the seam crossed here is a real GetTile verdict reaching the real strip.
+// runs; the seam crossed here is a real GetTile verdict reaching the real notice row.
 
-test('a descent whose row is deleted under it says so on the strip', async ({ gw, window }) => {
+test('a descent whose row is deleted under it says so on the notice row', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -56,7 +56,7 @@ test('a descent whose row is deleted under it says so on the strip', async ({ gw
   await deleteTile(gw.origin, doc.id);
   await expect
     .poll(async () => (await notice())?.severity ?? null, {
-      message: 'the verdict on the vanished row reaches the strip',
+      message: 'the verdict on the vanished row reaches the notice row',
       timeout: 15_000,
     })
     .toBe('error');

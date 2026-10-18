@@ -37,7 +37,7 @@ async function readsOf(window: any): Promise<Map<string, number>> {
   return reads;
 }
 
-// watchNotices samples the notice strip for ms, returning every message seen.
+// watchNotices samples the notice row for ms, returning every message seen.
 async function watchNotices(window: any, ms: number): Promise<string[]> {
   const seen = new Set<string>();
   const end = Date.now() + ms;
@@ -100,7 +100,7 @@ test('a directory of many directories reads each once and stays quiet', async ({
   }
 
   // settledAfter holds the source to the end of its news: the client goes idle,
-  // the health strip clears, and then nothing reads it at all.
+  // the notice row clears, and then nothing reads it at all.
   const settledAfter = async (what: string) => {
     await expect.poll(status, { timeout: 30_000, message: `${what}: the plugin is healthy again` }).toBe('');
     await gw.waitIdle();
@@ -111,7 +111,7 @@ test('a directory of many directories reads each once and stays quiet', async ({
     reads.clear();
     const quiet = await watchNotices(window, 3_000);
     expect(total(), `${what}: once the source is back, nothing keeps re-reading it`).toBe(0);
-    expect(quiet, `${what}: and the strip is clear`).toEqual([]);
+    expect(quiet, `${what}: and the notice row is clear`).toEqual([]);
   };
 
   // Reads abandoned in flight: a reload while the boot is reading the doors'

@@ -220,7 +220,7 @@ func TestServeContentCachesAnEmptyBody(t *testing.T) {
 	down := cc.cacheDown
 	cc.healthMu.Unlock()
 	if down {
-		t.Fatal("caching an empty served body broke the cache: the strip now says it cannot store answers")
+		t.Fatal("caching an empty served body broke the cache: the notice row now says it cannot store answers")
 	}
 
 	fake.dark = true

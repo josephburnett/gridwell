@@ -68,7 +68,7 @@ export function streakNotice(paneId: string, report: StreakReport, detail: strin
   }
   const n = report.afterFailures;
   // A mirror that is live again is information. Reported as an error it would
-  // paint the strip's red row a second time, at the moment it stopped being
+  // paint the red notice a second time, at the moment it stopped being
   // true.
   return {
     severity: 'info',

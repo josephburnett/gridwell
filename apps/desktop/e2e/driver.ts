@@ -108,7 +108,7 @@ export interface PluginGrid {
   viewZoom: number;
 }
 
-// The plugin section's disclosure strip. chevron is "up" collapsed, "down"
+// The plugin section's chevron strip. chevron is "up" collapsed, "down"
 // expanded, "none" when there is no control.
 export interface MenuToggle {
   present: boolean;

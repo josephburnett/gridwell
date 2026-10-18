@@ -182,7 +182,7 @@ func TestClassifyRegionMinimumPaneSize(t *testing.T) {
 }
 
 func TestClassifyRegionRazorThin(t *testing.T) {
-	// A 20x100 pane is all resize zones: the middle strip is degenerate.
+	// A 20x100 pane is all resize zones: the middle band is degenerate.
 	r := Rect{X: 0, Y: 0, W: 100, H: 20}
 	band := 10.0
 	for _, c := range []struct {

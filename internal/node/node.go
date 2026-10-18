@@ -205,7 +205,7 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 // layer broke would invert its purpose. It is not silent either — the node
 // still answers every read, so the lost serve-first and offline reading would
 // show nowhere, and sourcecache.Unavailable puts the reason on the client's
-// strip as the transport's health.
+// notice row as the transport's health.
 func openCache(cfg *config.ServerConfig) *sourcecache.Store {
 	cache, err := openCacheFile(cfg)
 	if err == nil {

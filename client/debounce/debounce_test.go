@@ -90,7 +90,7 @@ func TestArmAgainAfterTheRun(t *testing.T) {
 	}
 }
 
-// The error-strip expiry arms itself from inside its own run. Clearing pending
+// The notice expiry arms itself from inside its own run. Clearing pending
 // before the body is what lets that schedule a fresh window instead of being
 // swallowed as a coalesce.
 func TestBodyMayArmFromInsideItsOwnRun(t *testing.T) {

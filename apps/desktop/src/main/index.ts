@@ -51,7 +51,7 @@ async function boot(): Promise<void> {
     const noServer = process.argv.includes('--no-server') || process.env.GRIDWELL_NO_SERVER === '1';
     sidecar = await startSidecar({ noServer });
   } catch (err) {
-    // No renderer exists yet to draw a notice strip, and without a dialog the
+    // No renderer exists yet to draw a notice row, and without a dialog the
     // app would vanish with no explanation.
     const message = err instanceof Error ? err.message : String(err);
     logLine('error', `[gridwell] sidecar failed to start: ${message}`);

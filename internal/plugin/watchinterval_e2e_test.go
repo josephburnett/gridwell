@@ -17,7 +17,7 @@ const watchUUID = "pwatch1"
 
 // A process that exits is reported down within a few watch ticks. The watch
 // polls because go-plugin offers no exit signal, so this is the whole of the
-// delay between a plugin dying and the strip saying so.
+// delay between a plugin dying and the notice row saying so.
 func TestACrashIsNoticedWithinTheWatchInterval(t *testing.T) {
 	// The plugin inherits this process's environment, so the test redirects
 	// its own home. Nothing may write into the developer's.

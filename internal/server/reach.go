@@ -50,7 +50,7 @@ func (rt *router) spellLinks(ctx context.Context, grid string, t *pb.Tile) error
 		case errors.As(err, &u):
 			// InvalidArgument, not FailedPrecondition: the client reads the
 			// latter as a version race and refetches silently, and this
-			// refusal must reach the strip.
+			// refusal must reach the notice row.
 			target := reachLabel(reach, u.Target)
 			if u.Target == "" {
 				target = *ref

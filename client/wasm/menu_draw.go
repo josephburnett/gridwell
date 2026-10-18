@@ -26,7 +26,7 @@ func (a *App) menuLayoutFor(p *pane.Pane) menu.Layout {
 }
 
 // menuLayoutAndShow builds the layout together with the section decision
-// behind it, for the two callers that draw or hit-test the disclosure strip.
+// behind it, for the two callers that draw or hit-test the chevron strip.
 func (a *App) menuLayoutAndShow(p *pane.Pane) (menu.Layout, menu.Shown) {
 	cx, cy := a.plusButtonCenter()
 	items, show := a.menuView(p)
@@ -136,7 +136,7 @@ func (a *App) drawMenu(p *pane.Pane) {
 	}
 }
 
-// drawMenuToggle paints the plugin section's disclosure strip, its chevron
+// drawMenuToggle paints the plugin section's chevron strip, its chevron
 // pointing the way the press moves the section. A band and never a swatch, so
 // nothing invites the drag a template tile takes.
 func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {

@@ -104,7 +104,7 @@ func TestCapacityDropsOldest(t *testing.T) {
 	}
 }
 
-func TestStripHeight(t *testing.T) {
+func TestNoticesHeight(t *testing.T) {
 	cases := []struct {
 		count int
 		want  float64
@@ -113,8 +113,8 @@ func TestStripHeight(t *testing.T) {
 		{MaxRows + 5, MaxRows * RowH}, // the display is capped, so the height cannot grow unbounded
 	}
 	for _, c := range cases {
-		if got := StripHeight(c.count); got != c.want {
-			t.Errorf("StripHeight(%d) = %v, want %v", c.count, got, c.want)
+		if got := NoticesHeight(c.count); got != c.want {
+			t.Errorf("NoticesHeight(%d) = %v, want %v", c.count, got, c.want)
 		}
 	}
 }
@@ -374,9 +374,9 @@ func findSource(s *Surface, source string) (Notice, bool) {
 
 // Every read path that succeeds resolves its own source, and most of them
 // never raised a notice, so the verdict is the only thing that separates a
-// strip that changed from a healthy call saying so again. Without it the
+// notice row that changed from a healthy call saying so again. Without it the
 // caller repaints on every successful fetch and write.
-func TestResolveAndDismissReportWhetherTheStripChanged(t *testing.T) {
+func TestResolveAndDismissReportWhetherTheNoticesChanged(t *testing.T) {
 	s := New()
 	if s.Resolve("grid:g7abcde") {
 		t.Error("resolving a source with no notice reports a change")

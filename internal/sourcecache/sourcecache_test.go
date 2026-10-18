@@ -1003,7 +1003,7 @@ func TestAPastWindowServeIsTheCachedAnswer(t *testing.T) {
 // ordinary read there is, and the cache owes it the same answer while dark.
 // It could not: a nil []byte binds as SQL NULL and `content.data` is NOT NULL,
 // so the store failed, the body was never cached, and noteCache flipped
-// the WHOLE cache to "cannot store answers" on the user's strip for a tile
+// the WHOLE cache to "cannot store answers" on the user's notice row for a tile
 // that simply had nothing in it yet.
 func TestAnEmptyBodyIsCached(t *testing.T) {
 	cc, far, root, _ := fixture(t)
@@ -1023,7 +1023,7 @@ func TestAnEmptyBodyIsCached(t *testing.T) {
 	down := cc.cacheDown
 	cc.healthMu.Unlock()
 	if down {
-		t.Fatal("caching an empty body broke the cache: the strip now says it cannot store answers")
+		t.Fatal("caching an empty body broke the cache: the notice row now says it cannot store answers")
 	}
 	if _, _, _, _, ok := cc.loadContent(ctx, id); !ok {
 		t.Fatal("an empty body was not cached")

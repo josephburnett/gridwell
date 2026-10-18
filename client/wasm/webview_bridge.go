@@ -123,7 +123,7 @@ func (a *App) bridgeVerb(method string, fields map[string]any,
 	return true
 }
 
-// rejectionText renders a promise rejection reason for the strip.
+// rejectionText renders a promise rejection reason for the notice row.
 func rejectionText(v js.Value) string {
 	if v.Type() == js.TypeObject {
 		if m := v.Get("message"); m.Type() == js.TypeString {

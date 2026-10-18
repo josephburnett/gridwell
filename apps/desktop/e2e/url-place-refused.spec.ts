@@ -48,7 +48,7 @@ test('a refused place surfaces and leaves the pane retryable, not falsely live',
       webContents.getAllWebContents().some((w) => w.getURL().includes('refused=1')),
     );
 
-  // The refusal reaches the strip under the same source main's own webview
+  // The refusal reaches the notice row under the same source main's own webview
   // failures report on.
   await expect
     .poll(async () => (await notices(window)).join('\n'), {

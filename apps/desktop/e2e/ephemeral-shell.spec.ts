@@ -63,7 +63,7 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
     tileCount(homeBefore),
   );
 
-  // Nothing on the error strip.
+  // Nothing on the notice row.
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no error notices from the ephemeral shell round trip').toHaveLength(0);
 });

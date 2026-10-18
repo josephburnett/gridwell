@@ -730,7 +730,7 @@ app.whenReady().then(async () => {
 
   // ── a view destroyed behind the registry is not a frozen mirror ────────
   // Its end is the one notice; the pump's ticks that follow find no entry and
-  // say nothing, so the strip does not read "mirror capture failing" for a
+  // say nothing, so the notice row does not read "mirror capture failing" for a
   // page that closed itself.
   const capErrs: ErrorEvent[] = [];
   const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev) });

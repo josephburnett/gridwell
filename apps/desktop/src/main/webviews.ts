@@ -250,7 +250,7 @@ export class WebviewRegistry {
       // means a view was replaced without it, so this freeze has no caller.
       this.reportErr(`pane ${paneId}: live view replaced (${stale.tileId} → ${tileId}) without a close; its final frame is lost`);
       // remove() reports its own failures and the lost frame is already on
-      // the strip, so a rejection here must not stop the replacement view.
+      // the notice row, so a rejection here must not stop the replacement view.
       await this.remove(paneId).catch(() => {});
     }
     const view = this.newView({
@@ -631,7 +631,7 @@ export class WebviewRegistry {
         e.navigating = false;
         const message = failLoadMessage(validatedURL, errorDescription, errorCode);
         // Traced even when it is not surfaced: an aborted navigation is noise
-        // on the strip and evidence in a dump.
+        // on the notice row and evidence in a dump.
         trace(viewFailed(e.paneId, e.tileId, message));
         if (!shouldSurfaceFailLoad(errorCode, isMainFrame)) return;
         this.reportErr(message);

@@ -46,7 +46,7 @@ export function createRootWindow(origin: string): RootWindow {
   void win.loadURL(origin + '/' + query);
 
   // Forwarding keeps a failure in the app's log after the notice expires off
-  // the strip.
+  // the notice row.
   win.webContents.on('console-message', (_e, level, message) => {
     const line = rendererLogLine(level, message);
     if (line) logLine('error', line, 'renderer');

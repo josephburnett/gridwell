@@ -146,7 +146,7 @@ func Decide(reloaded, accepted bool) Verdict {
 // Updated opens the notice that offers the reload.
 const Updated = "Gridwell was updated — reload to continue."
 
-// Notice is what the strip says for a verdict. Offer's names what reloading
+// Notice is what the notice row says for a verdict. Offer's names what reloading
 // will cost: the parked writes the API refused, given their outbox ops in
 // drain order (Unsaved), and, when unsavedText tiles hold text the node never
 // saved, that it should be copied first.

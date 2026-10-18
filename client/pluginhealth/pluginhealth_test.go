@@ -109,7 +109,7 @@ func TestClickNotice_KeyedByUUID(t *testing.T) {
 }
 
 // Repeated clicks on one plugin share a source key, so errsurface updates one
-// row rather than scrolling the strip.
+// row rather than scrolling the notice row.
 func TestClickNotice_SourceKeyedByLabelCoalesces(t *testing.T) {
 	pl := &gridwellv1.PluginInfo{Label: "Files", InfoError: "boom"}
 	_, s1, _, _ := ClickNotice(pl)

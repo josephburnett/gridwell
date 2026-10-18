@@ -83,7 +83,7 @@ func Unheard(o Outcome) bool {
 	return o == OutcomeTransport || o == OutcomeAbandoned
 }
 
-// ReadSurfaces reports whether a read's failure goes on the error strip: every
+// ReadSurfaces reports whether a read's failure goes on the notice row: every
 // failure but the dead verdict, which drawing the link dead carries alone, and the
 // client's own cancel, which is no failure.
 func ReadSurfaces(o Outcome) bool {
@@ -91,7 +91,7 @@ func ReadSurfaces(o Outcome) bool {
 }
 
 // PlaceReadSurfaces reports whether a by-id tile read's latch goes on the
-// strip. A place has no dead preview, so dead surfaces like any refusal; an
+// notice row. A place has no dead preview, so dead surfaces like any refusal; an
 // outage is the grid read's to name.
 func PlaceReadSurfaces(v inflight.Verdict) bool {
 	return v == inflight.Refused || v == inflight.Dead
@@ -237,7 +237,7 @@ type GridRead struct {
 	Store bool
 	// Renamed is the answered-under-another-id case, which the notice names.
 	Renamed bool
-	// Surface puts the failure on the strip (ReadSurfaces); Resolve takes the
+	// Surface puts the failure on the notice row (ReadSurfaces); Resolve takes the
 	// grid's notice down. An abandoned read does neither.
 	Surface bool
 	Resolve bool

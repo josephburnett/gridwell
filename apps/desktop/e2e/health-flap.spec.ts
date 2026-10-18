@@ -78,7 +78,7 @@ test('twenty health flips in a second resync once and say nothing about grids', 
     await gw.waitIdle();
 
     expect.soft(reads.filter((id) => id === landed.gridID).length, 'one resync for the whole burst').toBe(1);
-    expect.soft(said, 'no cancelled read reached the strip').toEqual([]);
+    expect.soft(said, 'no cancelled read reached the notice row').toEqual([]);
     const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
     const sources: string[] = errs.notices.map((n: any) => n.source);
     expect(sources.filter((s) => s.startsWith('grid:')), 'no grid notice stands').toEqual([]);

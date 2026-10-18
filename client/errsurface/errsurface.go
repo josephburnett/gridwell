@@ -25,7 +25,7 @@ type Notice struct {
 	ID int
 	// Source is the stable key of the failure site, such as "rpc:MoveTile".
 	// One notice exists per source, so a retry loop updates its row in place
-	// rather than scrolling the strip.
+	// rather than scrolling the notice row.
 	Source   string
 	Message  string
 	Severity Severity
@@ -239,8 +239,8 @@ func (s *Surface) remove(match func(Notice) bool) bool {
 	return false
 }
 
-// The strip is reserved layout, not an overlay: the pane tree is laid out into
-// the canvas height minus StripHeight, so a WebContentsView tracking pane
+// The notice row is reserved layout, not an overlay: the pane tree is laid out into
+// the canvas height minus NoticesHeight, so a WebContentsView tracking pane
 // rects can never cover it.
 
 // RowH is one row's height in CSS pixels.
@@ -250,7 +250,7 @@ const RowH = 24.0
 // rest.
 const MaxRows = 3
 
-func StripHeight(count int) float64 {
+func NoticesHeight(count int) float64 {
 	if count <= 0 {
 		return 0
 	}
@@ -268,7 +268,7 @@ type Row struct {
 
 // Rows lays out top down, notices with a button first, then newest first.
 // Render and hit-testing both read it, so they cannot disagree.
-func Rows(notices []Notice, stripTop float64) []Row {
+func Rows(notices []Notice, noticesTop float64) []Row {
 	n := len(notices)
 	if n == 0 {
 		return nil
@@ -288,7 +288,7 @@ func Rows(notices []Notice, stripTop float64) []Row {
 	}
 	rows := make([]Row, vis)
 	for i := 0; i < vis; i++ {
-		rows[i] = Row{Notice: notices[i], Y: stripTop + float64(i)*RowH}
+		rows[i] = Row{Notice: notices[i], Y: noticesTop + float64(i)*RowH}
 	}
 	rows[vis-1].OverflowCount = n - vis
 	return rows
@@ -303,7 +303,7 @@ func Label(n Notice) string {
 	return n.Message
 }
 
-// Button geometry: inset from the row's right end, the strip spanning width.
+// Button geometry: inset from the row's right end, the notice row spanning width.
 const (
 	ButtonW     = 64.0
 	ButtonInset = 3.0
@@ -318,7 +318,7 @@ func ButtonRect(r Row, width float64) (x, y, w, h float64, ok bool) {
 	return width - ButtonW - ButtonInset, r.Y + ButtonInset, ButtonW, RowH - 2*ButtonInset, true
 }
 
-// Press is what a press in the strip did: dismissed a notice, or pressed a
+// Press is what a press in the notice row did: dismissed a notice, or pressed a
 // button whose Action the caller runs on the notice of Source.
 type Press struct {
 	Dismissed bool
@@ -326,11 +326,11 @@ type Press struct {
 	Source    string
 }
 
-// PressAt takes a press at (x, y) in a strip of the given width. A row press
+// PressAt takes a press at (x, y) in the notice row, of the given width. A row press
 // dismisses its notice unless the notice has a button, which is then the only
-// target. The caller has already established that y is at or below stripTop.
-func (s *Surface) PressAt(x, y, stripTop, width float64) Press {
-	for _, r := range Rows(s.notices, stripTop) {
+// target. The caller has already established that y is at or below noticesTop.
+func (s *Surface) PressAt(x, y, noticesTop, width float64) Press {
+	for _, r := range Rows(s.notices, noticesTop) {
 		if y < r.Y || y >= r.Y+RowH {
 			continue
 		}

@@ -1,7 +1,7 @@
 package menu
 
 // The + menu's geometry. One swatch per declared door sits on the top row
-// (Doors), the tile primitives on a row below, and a disclosure strip folds
+// (Doors), the tile primitives on a row below, and a chevron strip folds
 // the top row away (Show). Layout depends only on the + button's center and
 // the tile counts; the wasm renderer paints into the rects.
 
@@ -16,7 +16,7 @@ type Config struct {
 	TileMinPx, TileMaxPx float64
 	GapPx                float64
 	CellPx               float64
-	// ToggleH is the disclosure strip's height. The strip is a control the
+	// ToggleH is the chevron strip's height. The strip is a control the
 	// user presses, not a swatch, so it is not sized as one.
 	ToggleH float64
 }

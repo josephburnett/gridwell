@@ -107,7 +107,7 @@ func TestOvertakeZoomDegenerate(t *testing.T) {
 }
 
 // TestLiveViewInsetPinned pins the grab-gutter width. A WebContentsView eats
-// all mouse input over its bounds, so the 2×LiveViewInsetPx canvas strip
+// all mouse input over its bounds, so the 2×LiveViewInsetPx canvas gap
 // between two adjacent live panes is the only place a divider can be grabbed,
 // and below roughly 10px total it is hard to hit.
 func TestLiveViewInsetPinned(t *testing.T) {

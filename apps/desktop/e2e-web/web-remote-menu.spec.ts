@@ -331,7 +331,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
   await world.killFar();
   await expect
     .poll(async () => (await health()).map((n) => n.message).join('|'), {
-      message: 'the down transition reaches the strip',
+      message: 'the down transition reaches the notice row',
       timeout: 60_000,
     })
     .toContain('live updates stopped');
@@ -367,7 +367,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
 // menu once per node namespace and holds a claim on that namespace while the
 // read is out; a request the network swallows, never fulfilled and never
 // aborted, would hold it for the life of the page, leaving the remote pane's +
-// menu with no plugin section at all and nothing on the error strip.
+// menu with no plugin section at all and nothing on the notice row.
 //
 // The read is bounded, and its expiry latches the namespace Unreachable, so
 // the menu fills itself in on the next backstop tick with the link in exactly
@@ -405,7 +405,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
   expect(menu.toggle.present, 'the swallowed read leaves no plugin section to unfold').toBe(false);
 
   // No user action beyond keeping the menu open: the bounded read gives up,
-  // says so on the strip, and the draw of the menu after the backstop tick
+  // says so on the notice row, and the draw of the menu after the backstop tick
   // asks again over a link that works. Unfolding the section is part of reading it, and it cannot be
   // unfolded until there is something to unfold.
   let sawNotice = false;
@@ -452,8 +452,8 @@ test('a menu read that fails is not asked again every frame', async ({ gw, windo
     await route.continue();
   });
 
-  // Reading the menu asks for it, and the failure's notice raises the strip
-  // and moves the + circle, so the menu is opened only once the strip is up.
+  // Reading the menu asks for it, and the failure's notice raises the notice row
+  // and moves the + circle, so the menu is opened only once the notice row is up.
   const menu = () => window.evaluate(() => (window as any).__gridwellTest.menu());
   await menu();
   await expect

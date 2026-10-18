@@ -178,7 +178,7 @@ func (a *App) fetchURLPreview(tileID string, blobID int64) {
 	}
 	// tileID is the content id, a leaf link's target, which may live in a
 	// namespace this node no longer declares. Asking would put its verdict
-	// on the error strip.
+	// on the notice row.
 	if a.deadNamespace(tileID) {
 		return
 	}

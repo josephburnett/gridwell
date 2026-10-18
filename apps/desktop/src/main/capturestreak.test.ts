@@ -25,7 +25,7 @@ const TABLE: { name: string; prev: StreakState; kind: AttemptKind; want: StreakD
     want: { state: live(0), report: null },
   },
   // 3-6: one lost frame is a quarter second of a stale mirror, which nobody
-  // can see. Only a mirror that stays frozen is worth a row on the strip.
+  // can see. Only a mirror that stays frozen is worth a notice.
   ...FAILURES.map((kind, i) => ({
     name: `${i + 3}. a single ${kind} is not yet a frozen mirror`,
     prev: live(0),
@@ -140,7 +140,7 @@ test('decideStreak: a placed pane warms up quietly, then reports one freeze and 
   assert.deepEqual(state, { everCaptured: true, failures: 0 });
 });
 
-// What each report says and how loudly. The strip groups by source, so a
+// What each report says and how loudly. The notice row groups by source, so a
 // recovery reported as an error paints the same red row the failure did, at
 // the moment the mirror came back.
 

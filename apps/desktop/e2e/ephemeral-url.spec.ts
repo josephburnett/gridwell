@@ -51,7 +51,7 @@ test('clicking the menu url swatch descends into an off-grid ephemeral visit', a
     }, { timeout: 10_000 })
     .toBe(0);
 
-  // Neither the delete nor a stray freeze surfaced on the error strip.
+  // Neither the delete nor a stray freeze surfaced on the notice row.
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no error notices from the ephemeral round trip').toHaveLength(0);
 });

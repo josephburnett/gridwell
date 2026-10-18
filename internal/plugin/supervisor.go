@@ -24,7 +24,7 @@ import (
 // capped and reset only after a process has proved it can stay up.
 
 const (
-	// watchInterval is the whole latency between a crash and the strip
+	// watchInterval is the whole latency between a crash and the notice row
 	// saying so.
 	watchInterval = 250 * time.Millisecond
 	// firstBackoff is the pause before the first respawn, maxBackoff the cap.
@@ -207,7 +207,7 @@ func (s *Supervisor) watch() {
 			s.mu.Unlock()
 			proc.Kill() // reap go-plugin's own bookkeeping before replacing it
 			// The pid rides the detail, so an operator can find the process
-			// in a log once the strip says a plugin went down.
+			// in a log once the notice row says a plugin went down.
 			s.setHealth(false, "the plugin subprocess (pid "+id+") exited")
 		}
 		if !s.sleep(backoff) {
@@ -245,7 +245,7 @@ func (s *Supervisor) sleep(d time.Duration) bool {
 }
 
 // setHealth tells the listeners only when the state changed, never once per
-// retry, so a flapping plugin does not spam the strip. The detail always takes
+// retry, so a flapping plugin does not spam the notice row. The detail always takes
 // the latest reason.
 func (s *Supervisor) setHealth(healthy bool, detail string) {
 	s.mu.Lock()

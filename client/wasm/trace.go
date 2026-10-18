@@ -98,7 +98,7 @@ func (a *App) bridgeHandOverTrace() string {
 	return <-lost
 }
 
-// traceSource is the notice strip's name for the trace itself, so a second
+// traceSource is the notice row's name for the trace itself, so a second
 // dump replaces the first notice instead of stacking one.
 const traceSource = "trace"
 

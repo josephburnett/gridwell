@@ -6,8 +6,8 @@ import { tileAt } from './oracle';
 // descent path's leaf grid, so a shell in a sub-grid needs the pane's path sent
 // with SetShellPreview; without it the save fails with "descent path is invalid"
 // and surfaces as an error notice. This spec runs the seam end to end: create in
-// a sub-grid, live PTY, ascend, preview on the server, nothing on the error
-// strip.
+// a sub-grid, live PTY, ascend, preview on the server, nothing on the notice
+// notice row.
 
 async function errors(window: any) {
   return window.evaluate(() => (window as any).__gridwellTest.errors());

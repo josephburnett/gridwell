@@ -62,12 +62,12 @@ type Palette struct {
 	FileInnerBg string
 	// Error rows read as alarm; Info rows, an expected reconciliation, take the
 	// focus-blue family so they read as a note.
-	ErrStripBg    string
-	ErrStripText  string
-	InfoStripBg   string
-	InfoStripText string
-	PaneBorder    string
-	FocusBorder   string
+	ErrNoticeBg    string
+	ErrNoticeText  string
+	InfoNoticeBg   string
+	InfoNoticeText string
+	PaneBorder     string
+	FocusBorder    string
 	// FocusBorderFaded outlines a descended but unfocused pane.
 	FocusBorderFaded string
 	// PluginBorder reads as a boundary, not a grid you can place in.
@@ -194,10 +194,10 @@ var dark = Palette{
 	Bg:          "#0c0d11",
 	FileInnerBg: "#1c1f26",
 
-	ErrStripBg:    "#3a1216",
-	ErrStripText:  "#ff9a9a",
-	InfoStripBg:   "#16203a",
-	InfoStripText: "#9ab0ff",
+	ErrNoticeBg:    "#3a1216",
+	ErrNoticeText:  "#ff9a9a",
+	InfoNoticeBg:   "#16203a",
+	InfoNoticeText: "#9ab0ff",
 
 	PaneBorder:       "#1f2229",
 	FocusBorder:      "#4a6fff",
@@ -293,10 +293,10 @@ var light = Palette{
 	Bg:          "#f6f7fa",
 	FileInnerBg: "#ffffff",
 
-	ErrStripBg:    "#fbe0e2",
-	ErrStripText:  "#9c1620",
-	InfoStripBg:   "#e5eaff",
-	InfoStripText: "#25407e",
+	ErrNoticeBg:    "#fbe0e2",
+	ErrNoticeText:  "#9c1620",
+	InfoNoticeBg:   "#e5eaff",
+	InfoNoticeText: "#25407e",
 
 	PaneBorder:       "#d5d8de",
 	FocusBorder:      "#4a6fff",

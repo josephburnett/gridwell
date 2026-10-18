@@ -77,7 +77,7 @@ test('typing survives a server outage and saves itself after the restart', async
     )
     .toContain('typed while the server was dead.');
 
-  // Some notice is on the strip; which one is not pinned here.
+  // Some notice is on the notice row; which one is not pinned here.
   await expect
     .poll(async () => {
       const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());

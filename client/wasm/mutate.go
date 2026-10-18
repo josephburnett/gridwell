@@ -33,7 +33,7 @@ type tileCall func(ctx context.Context) (*gridwellv1.Tile, error)
 // write is one non-content mutation. Policy lives in `do`; `then` and `undo`
 // are the caller's.
 type write struct {
-	// label names the op in the notice strip and the outbox key.
+	// label names the op in the notice row and the outbox key.
 	label string
 	// gid is the grid whose cache reconciles on a server verdict.
 	gid string
@@ -70,7 +70,7 @@ type write struct {
 // capability property, never a failure to surface.
 func isUnimplemented(err error) bool { return clientsync.IsUnimplemented(err) }
 
-// surfaceRPCError puts a failed RPC on the errsurface strip. clientsync's
+// surfaceRPCError puts a failed RPC on the notice row. clientsync's
 // tables never route a conflict here.
 func (a *App) surfaceRPCError(label string, err error) {
 	if err == nil {

@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/nav"
 )
 
-// Every notice the strip shows is in the trace, under the source that raised
+// Every notice shown is in the trace, under the source that raised
 // it, so a dump answers "what did the user see" without a second list.
 func TestNoticeCarriesItsSourceAndSeverity(t *testing.T) {
 	e := Notice(errsurface.Error, "grid:g7abcde", "grid unavailable")

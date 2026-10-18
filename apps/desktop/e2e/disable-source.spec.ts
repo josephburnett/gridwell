@@ -3,7 +3,7 @@ import { getGrid } from './oracle';
 
 // A connection that will not answer can be switched off from its health
 // notice until the node restarts (plugin.Registry.Disable). The seam runs from
-// the button the strip draws (errsurface.Offer), through the verb, to the
+// the button the notice row draws (errsurface.Offer), through the verb, to the
 // node's health event, which is what takes the notice down; the press itself
 // clears nothing. Nobody answers at 127.0.0.1:1, so the connection is down
 // from boot.

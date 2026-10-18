@@ -71,7 +71,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
   expect(reads[0].kv?.code).toBe('not_found');
   expect(
     e.notices.filter((n: any) => n.source === 'rpc:ReadContent').length,
-    'the strip holds one notice for it',
+    'the notice row holds one notice for it',
   ).toBe(1);
 
   // The latch is not a verdict forever: another writer changing the body is

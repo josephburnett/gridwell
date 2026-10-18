@@ -18,7 +18,7 @@ import (
 // test — the node started over a cache path that will not open, the transport
 // the cache fronts, the router's fan-in, and a real subscriber on the
 // connection API — because every layer of it is what carries the fact from
-// the failed open to the client's strip.
+// the failed open to the client's notice row.
 
 func TestAnUnopenableCacheSurfacesAsHealth(t *testing.T) {
 	home := t.TempDir()

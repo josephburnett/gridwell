@@ -103,7 +103,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 	withClip(a.cctx, x, y, w, h, func() {
 		fillRectC(a.cctx, x, y, w, h, a.pal.FileInnerBg)
 
-		// Content starts below the banner strip, on bannerGeom's shared
+		// Content starts below the banner band, on bannerGeom's shared
 		// formula, so the alt text never overprints the first line.
 		topInset := 0.0
 		if tilepreview.BannerText(n) != "" {

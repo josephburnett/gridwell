@@ -56,7 +56,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
   fs.writeFileSync(path.join(home, 'server.yaml'), idLine + '\n');
 
   // Boot 2: the door is a dangling door. Count everything it could say: the
-  // strip's verdict on the console, and every grid the client asks for.
+  // notice row's verdict on the console, and every grid the client asks for.
   const unavailable: string[] = [];
   page.on('console', (m) => {
     if (m.text().includes('grid unavailable')) unavailable.push(m.text());

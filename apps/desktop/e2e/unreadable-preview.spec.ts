@@ -60,6 +60,6 @@ test('a preview the server refuses is asked for once', async ({ electronApp, gw,
   expect(asked, 'GetTilePreview calls for the refused preview').toBe(1);
   expect(
     e.notices.filter((n: any) => n.source === 'rpc:GetTilePreview').length,
-    'the strip holds one notice for it',
+    'the notice row holds one notice for it',
   ).toBe(1);
 });

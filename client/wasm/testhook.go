@@ -401,14 +401,14 @@ func (a *App) thTextareaInfo(js.Value, []js.Value) any {
 }
 
 // thErrors returns the errsurface notice queue, newest first, plus the
-// strip's screen geometry and each button's, so a spec can click a row to
+// notice row's screen geometry and each button's, so a spec can click a row to
 // dismiss it or press its button. It is what makes "and no errors surfaced"
 // assertable.
 func (a *App) thErrors(js.Value, []js.Value) any {
 	notices := a.errs.Notices()
-	stripH := errsurface.StripHeight(len(notices))
+	noticesH := errsurface.NoticesHeight(len(notices))
 	buttons := map[int]any{}
-	for _, r := range errsurface.Rows(notices, a.height-stripH) {
+	for _, r := range errsurface.Rows(notices, a.height-noticesH) {
 		if x, y, w, h, ok := errsurface.ButtonRect(r, a.width); ok {
 			buttons[r.Notice.ID] = map[string]any{"x": x, "y": y, "w": w, "h": h}
 		}
@@ -428,9 +428,9 @@ func (a *App) thErrors(js.Value, []js.Value) any {
 		})
 	}
 	return map[string]any{
-		"notices":  rows,
-		"stripTop": a.height - stripH,
-		"stripH":   stripH,
+		"notices":    rows,
+		"noticesTop": a.height - noticesH,
+		"noticesH":   noticesH,
 	}
 }
 
@@ -804,7 +804,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		"plusX": px,
 		"plusY": py,
 		"items": entries,
-		// The plugin section's disclosure strip. The rect is the one
+		// The plugin section's chevron strip. The rect is the one
 		// pointInMenuToggle hit-tests, so a click at its center works the
 		// control.
 		"toggle": map[string]any{

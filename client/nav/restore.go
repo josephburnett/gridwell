@@ -83,7 +83,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 	if d.State.Anchor == "" {
 		d.State.Anchor = w.Home
 		if d.State.Anchor == "" {
-			// Bootstrap learned no home; the error is already on the strip.
+			// Bootstrap learned no home; the error is already on the notice row.
 			pl.add(Effect{Kind: EffScheduleURLUpdate})
 			return m.endRestore(d, &pl)
 		}

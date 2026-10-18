@@ -37,7 +37,7 @@ func (a *App) bottomBarRect() (x, top, w float64, ok bool) {
 		return 0, 0, 0, false
 	}
 	r := a.paneRectByID(p.ID)
-	return wsbar.Rect(a.width, a.height, errsurface.StripHeight(a.errs.Len()), r.X, r.W)
+	return wsbar.Rect(a.width, a.height, errsurface.NoticesHeight(a.errs.Len()), r.X, r.W)
 }
 
 // barTheme returns the band and button shades for the focused pane, from the

@@ -150,7 +150,7 @@ func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
 }
 
 // paneIDAt is the pane a press or release record names: the one under the
-// pointer, or none over the bar and the strip.
+// pointer, or none over the bar and the notice row.
 func (a *App) paneIDAt(sx, sy float64) string {
 	if p, _, ok := a.paneAtScreen(sx, sy); ok && p != nil {
 		return p.ID
@@ -381,11 +381,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if a.ghost != nil && a.dragging == nil && a.rightDrag == nil {
 		a.ghost = nil
 	}
-	// The notice strip occupies the band layoutPanes reserved below every pane,
+	// The notice row occupies the band layoutPanes reserved below every pane,
 	// so a click there cannot be meant for a pane; errsurface owns the geometry
 	// and says what the press did. A button answers the left button only.
-	if stripH := errsurface.StripHeight(a.errs.Len()); stripH > 0 && sy >= a.height-stripH {
-		press := a.errs.PressAt(sx, sy, a.height-stripH, a.width)
+	if noticesH := errsurface.NoticesHeight(a.errs.Len()); noticesH > 0 && sy >= a.height-noticesH {
+		press := a.errs.PressAt(sx, sy, a.height-noticesH, a.width)
 		if args[0].Get("button").Int() == 0 {
 			switch press.Action {
 			case errsurface.Reload:

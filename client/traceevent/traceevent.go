@@ -84,7 +84,7 @@ const (
 	WhyTransition = "pane transition"
 	WhyGhost      = "ghost lerp"
 	WhyTraceFade  = "ascent trace fade"
-	WhyNotice     = "notice strip"
+	WhyNotice     = "notice row"
 	WhyGridLoaded = "grid loaded"
 	WhyContent    = "content loaded"
 	WhyPreview    = "preview decoded"

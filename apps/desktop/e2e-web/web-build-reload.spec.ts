@@ -62,7 +62,7 @@ async function nameAnotherBuild(window: Page): Promise<() => void> {
 const navigationType = (window: Page) =>
   window.evaluate(() => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).type);
 
-// The build notice as the strip holds it, with its button's screen rect.
+// The build notice as the notice row holds it, with its button's screen rect.
 async function buildNotice(window: Page): Promise<{ message: string; severity: string; button: any } | undefined> {
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
   return errs.notices.find((n: any) => n.source === 'build');

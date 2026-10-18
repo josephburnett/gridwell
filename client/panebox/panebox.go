@@ -9,7 +9,7 @@ import (
 
 // LiveViewInsetPx is the one owner of the grab-gutter value. A
 // WebContentsView eats all mouse input over its bounds, so the gap between two
-// adjacent live panes, twice this inset, is the only canvas strip a user can
+// adjacent live panes, twice this inset, is the only canvas gap a user can
 // click to grab a divider. At 5px per side that gap is about 10px, close to
 // pane's resizeBandPx.
 const LiveViewInsetPx = 5.0

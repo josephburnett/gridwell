@@ -64,7 +64,7 @@ export function viewNav(paneId: string, tileId: string, done: boolean, url: stri
 }
 
 // message is viewutil.failLoadMessage, the same sentence the user's notice
-// carries, so the trace and the strip cannot disagree.
+// carries, so the trace and the notice row cannot disagree.
 export function viewFailed(paneId: string, tileId: string, message: string): TraceEvent {
   return view('fail', paneId, message, { tile: tileId });
 }

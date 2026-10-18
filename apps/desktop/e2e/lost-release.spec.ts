@@ -43,7 +43,7 @@ test('a left drag whose release is never seen still commits and unhides its tile
   // emits on its own between two evaluates carries buttons 0 and would end the
   // drag early. The cell centres are resolved in that same turn: a notice
   // raised between a separate read and the press moves every pane rect by half
-  // the strip (errsurface.StripHeight), and the press would land on a layout
+  // the notice row (errsurface.NoticesHeight), and the press would land on a layout
   // the read never saw.
   //
   // flake, 2026-09-04, closed: hiddenTileID stayed "" from the first poll in
@@ -70,8 +70,8 @@ test('a left drag whose release is never seen still commits and unhides its tile
         menuOpen: t.menu().open,
         from,
         to,
-        // The strip is layout: a notice up at the press moved every pane.
-        stripH: t.errors().stripH,
+        // The notice row is layout: a notice up at the press moved every pane.
+        noticesH: t.errors().noticesH,
         panes: t.panes().map((p: any) => ({
           id: p.id,
           gridID: p.gridID,

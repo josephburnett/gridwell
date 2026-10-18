@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	// paneBorderPx is load-bearing: the strip between two live-tile panes is the
+	// paneBorderPx is load-bearing: the gap between two live-tile panes is the
 	// only surface that can grab the divider, since a WebContentsView eats input.
 	paneBorderPx = panebox.LiveViewInsetPx
 	// tileBorderPx sits inside the tile rect, clear of the banner and neighbour.
@@ -350,7 +350,7 @@ func (a *App) draw() {
 	a.syncMirrors(rects)
 	a.syncView(rects)
 	a.drawBottomBar()
-	a.drawErrStrip()
+	a.drawNotices()
 	// Inside a workspace tile, a teal line wraps the window in a reserved gutter.
 	if a.ws.Depth() > 0 {
 		h := a.paneAreaH()
@@ -384,7 +384,7 @@ func (a *App) draw() {
 	a.scheduleFramingSave(pane.FramingFingerprint(a.tree))
 }
 
-// layoutPanes reserves the notice strip, shared with input hit-testing.
+// layoutPanes reserves the notice row, shared with input hit-testing.
 func (a *App) layoutPanes() map[string]pane.Rect {
 	return pane.Layout(a.tree, a.rootLayoutRect())
 }
@@ -394,7 +394,7 @@ const wsOutlinePx = 3.0
 
 // paneAreaH is the pane tree's height and the bar band's top edge.
 func (a *App) paneAreaH() float64 {
-	h, _ := wsbar.Band(a.height, errsurface.StripHeight(a.errs.Len()))
+	h, _ := wsbar.Band(a.height, errsurface.NoticesHeight(a.errs.Len()))
 	return h
 }
 
@@ -410,18 +410,18 @@ func (a *App) rootLayoutRect() pane.Rect {
 	return r
 }
 
-// drawErrStrip takes its geometry from errsurface, shared with the hit test.
-func (a *App) drawErrStrip() {
+// drawNotices takes its geometry from errsurface, shared with the hit test.
+func (a *App) drawNotices() {
 	notices := a.errs.Notices()
-	stripH := errsurface.StripHeight(len(notices))
-	if stripH == 0 {
+	noticesH := errsurface.NoticesHeight(len(notices))
+	if noticesH == 0 {
 		return
 	}
-	top := a.height - stripH
+	top := a.height - noticesH
 	for _, row := range errsurface.Rows(notices, top) {
-		bg, fg := a.pal.ErrStripBg, a.pal.ErrStripText
+		bg, fg := a.pal.ErrNoticeBg, a.pal.ErrNoticeText
 		if row.Notice.Severity == errsurface.Info {
-			bg, fg = a.pal.InfoStripBg, a.pal.InfoStripText
+			bg, fg = a.pal.InfoNoticeBg, a.pal.InfoNoticeText
 		}
 		fillRectC(a.cctx, 0, row.Y, a.width, errsurface.RowH, bg)
 		label := errsurface.Label(row.Notice)

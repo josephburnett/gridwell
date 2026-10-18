@@ -14,7 +14,7 @@ import (
 )
 
 // A connection that will not answer is a runtime state, and the record is
-// where the reason and the moment are kept: the strip shows the transition,
+// where the reason and the moment are kept: the notice row shows the transition,
 // nothing shows the attempt.
 func TestADialAndItsFailureAreBothTraced(t *testing.T) {
 	st := openStore(t)

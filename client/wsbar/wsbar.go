@@ -10,8 +10,8 @@ import "github.com/josephburnett/gridwell/client/pane"
 // Band returns paneH as both the pane tree's height and the band's top edge,
 // so layout and bar cannot disagree about where they meet. ok=false when what
 // is left cannot hold the band.
-func Band(winH, stripH float64) (paneH float64, ok bool) {
-	avail := winH - stripH
+func Band(winH, noticesH float64) (paneH float64, ok bool) {
+	avail := winH - noticesH
 	if avail < 0 {
 		avail = 0
 	}
@@ -25,8 +25,8 @@ func Band(winH, stripH float64) (paneH float64, ok bool) {
 // inputs all read it. It is the band's row whichever pane has focus, so panes
 // never resize as focus moves, and the focused pane's span across, clamped
 // whole into the window. ok=false leaves the band plain background.
-func Rect(winW, winH, stripH, paneX, paneW float64) (x, top, w float64, ok bool) {
-	top, ok = Band(winH, stripH)
+func Rect(winW, winH, noticesH, paneX, paneW float64) (x, top, w float64, ok bool) {
+	top, ok = Band(winH, noticesH)
 	if !ok || winW <= 0 || paneW <= 0 {
 		return 0, 0, 0, false
 	}
@@ -47,7 +47,7 @@ func Rect(winW, winH, stripH, paneX, paneW float64) (x, top, w float64, ok bool)
 type Zone int
 
 const (
-	// ZoneOutside belongs to a pane or to the notice strip below.
+	// ZoneOutside belongs to a pane or to the notice row below.
 	ZoneOutside Zone = iota
 	// ZoneBand is the band's row off the bar. No pane is in the band, so a
 	// point here is never passed to one; a left press focuses the column

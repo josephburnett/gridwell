@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
 // A real RPC failing at the real transport must produce a visible notice, and
-// the strip must be reserved layout no pane or native view can cover. Failures
+// the notice row must be reserved layout no pane or native view can cover. Failures
 // are injected by aborting the Connect route, so the path from RPC error
 // through reportErr and errsurface runs against the live stack.
 
@@ -10,7 +10,7 @@ async function errors(window: any) {
   return window.evaluate(() => (window as any).__gridwellTest.errors());
 }
 
-test('a failed mutation RPC surfaces a dismissible notice on the strip', async ({ gw, window }) => {
+test('a failed mutation RPC surfaces a dismissible notice on the notice row', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -31,14 +31,14 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
     }, { timeout: 10_000 })
     .toBe('error');
 
-  // Every pane ends at or above the strip's top edge, so no WebContentsView
+  // Every pane ends at or above the notice row's top edge, so no WebContentsView
   // bound to a pane rect can cover a notice.
   const e = await errors(window);
-  expect(e.stripH).toBeGreaterThan(0);
+  expect(e.noticesH).toBeGreaterThan(0);
   const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
   for (const p of panes) {
-    expect(p.y + p.h, `pane ${p.id} must end above the notice strip`)
-      .toBeLessThanOrEqual(e.stripTop + 0.5);
+    expect(p.y + p.h, `pane ${p.id} must end above the notice row`)
+      .toBeLessThanOrEqual(e.noticesTop + 0.5);
   }
 
   // Server state never moved: the optimistic ghost snapped back.
@@ -47,16 +47,16 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
   await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
 
   // Clicking the row dismisses it, and the layout returns to full height.
-  await gw.clickScreen(200, e.stripTop + 5);
+  await gw.clickScreen(200, e.noticesTop + 5);
   await expect
-    .poll(async () => (await errors(window)).stripH)
+    .poll(async () => (await errors(window)).noticesH)
     .toBe(0);
 });
 
-// A one-shot failure must leave the strip on its own once its source goes quiet
+// A one-shot failure must leave the notice row on its own once its source goes quiet
 // for errsurface.ExpireAfter, with no user gesture. The sticky exemption is
 // pinned by the errsurface unit tests; this proves the live wiring fires.
-test('a one-shot notice expires off the strip once its source goes quiet', async ({ gw, window }) => {
+test('a one-shot notice expires off the notice row once its source goes quiet', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -76,15 +76,15 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
 
   // No click and no dismiss. ExpireAfter is 10s, so poll well past it.
   await expect
-    .poll(async () => (await errors(window)).stripH, { timeout: 20_000, intervals: [1_000] })
+    .poll(async () => (await errors(window)).noticesH, { timeout: 20_000, intervals: [1_000] })
     .toBe(0);
   const panes = await window.evaluate(() => (window as any).__gridwellTest.panes());
   const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
   const winH = await window.evaluate(() => globalThis.innerHeight);
   const bottom = Math.max(...panes.map((p: any) => p.y + p.h));
-  // Panes reclaim the strip's height and nothing more: the bar's band stays
+  // Panes reclaim the notice row's height and nothing more: the bar's band stays
   // reserved below them.
-  expect(bottom, 'panes reclaim the reserved strip height').toBe(bar.top);
+  expect(bottom, 'panes reclaim the reserved notice row height').toBe(bar.top);
   expect(bar.top + bar.height, 'the band now reaches the window bottom').toBe(winH);
 });
 

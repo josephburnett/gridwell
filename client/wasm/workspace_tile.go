@@ -29,7 +29,7 @@ func (a *App) workspaceLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
 
 // paneLayoutUnreadable is panepreview.Layouts' verdict on a blob that will
 // not decode: once per (tile, blob), so a corrupt layout cannot spam the
-// strip.
+// notice row.
 func (a *App) paneLayoutUnreadable(tileID string, err error) {
 	a.reportErr(errsurface.Error, "layout:"+tileID, "workspace layout unreadable: "+err.Error())
 }
