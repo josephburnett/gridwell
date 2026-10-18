@@ -75,7 +75,7 @@ func TestGateHears(t *testing.T) {
 	if g.Accepted() || len(heard) != 0 {
 		t.Fatalf("accepted=%v heard=%v after no answer and a plain refusal", g.Accepted(), heard)
 	}
-	g.Hear(gwerr.StaleBuild("nodebuild", "pagebuild"))
+	g.Hear(gwerr.OtherBuild("nodebuild", "pagebuild"))
 	if len(heard) != 1 || heard[0] != "nodebuild" || g.Accepted() {
 		t.Fatalf("heard=%v accepted=%v, want the node's build and no acceptance", heard, g.Accepted())
 	}

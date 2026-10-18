@@ -16,17 +16,17 @@ import (
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
-// staleBuild runs for every refused call. Each refused write may add to what
+// otherBuild runs for every refused call. Each refused write may add to what
 // reloading will cost, so the notice is restated whenever its words change.
-func (a *App) staleBuild(node string) {
+func (a *App) otherBuild(node string) {
 	v := nodebuild.Decide(pageReloaded(), a.gate.Accepted())
 	source, other, sev := errsurface.BuildSource, errsurface.BuildStuckSource, errsurface.Info
 	if v == nodebuild.Stuck {
 		source, other, sev = other, source, errsurface.Error
 	}
-	if a.stale == nil || *a.stale != v {
-		a.stale = &v
-		a.emit(traceevent.StaleBuild(a.gate.Build(), node, v.String()))
+	if a.buildVerdict == nil || *a.buildVerdict != v {
+		a.buildVerdict = &v
+		a.emit(traceevent.OtherBuild(a.gate.Build(), node, v.String()))
 		a.errs.Resolve(other)
 	}
 	keys := a.persist.out.Keys()

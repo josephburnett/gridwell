@@ -58,7 +58,7 @@ type Control struct {
 	Message     string `json:"message,omitempty"`
 	SessionGone bool   `json:"session_gone,omitempty"`
 	// StaleBuild is the node's build when the door refused a page of another
-	// one (gwerr.StaleBuild), the socket's form of that verdict.
+	// one (gwerr.OtherBuild), the socket's form of that verdict.
 	StaleBuild string `json:"stale_build,omitempty"`
 }
 
@@ -135,9 +135,9 @@ func EncodeExit(message string, sessionGone bool) []byte {
 	return mustJSON(Control{Kind: KindExit, Message: message, SessionGone: sessionGone})
 }
 
-// EncodeStaleBuild is the exit the door sends a page of another build before
+// EncodeOtherBuild is the exit the door sends a page of another build before
 // any PTY is touched.
-func EncodeStaleBuild(message, node string) []byte {
+func EncodeOtherBuild(message, node string) []byte {
 	return mustJSON(Control{Kind: KindExit, Message: message, StaleBuild: node})
 }
 

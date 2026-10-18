@@ -48,9 +48,9 @@ func NodeBuild(node string) Event {
 		KV: kv("node", node)}
 }
 
-// StaleBuild is the door refusing this page's build and what the page did
+// OtherBuild is the door refusing this page's build and what the page did
 // about it (nodebuild.Decide).
-func StaleBuild(client, node, verdict string) Event {
+func OtherBuild(client, node, verdict string) Event {
 	return Event{Src: "client", Kind: "build", Msg: "the node runs " + shortOrUnstamped(node) +
 		", this page " + shortOrUnstamped(client) + ": " + verdict,
 		KV: kv("client", client, "node", node, "verdict", verdict)}

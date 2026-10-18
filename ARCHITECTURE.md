@@ -158,7 +158,7 @@ the shell door and the MCP door (`/mcp`) behind a password cookie, or the
 password itself as a bearer, which is how an agent authenticates; serve mints
 the 0600 `web-password` file and prints it with the `claude mcp add` line,
 delete it to rotate. Behind the cookie the
-build gate (`Server.staleBuild`) refuses any call a page of another build
+build gate (`Server.otherBuild`) refuses any call a page of another build
 makes, before the verb runs; the page offers a reload (`client/nodebuild`). An
 agent's MCP call is no page's, so the gate never judges it. The
 connection door is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
@@ -637,7 +637,7 @@ copy:
 | how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellReferences` |
 | is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
-| does this page run the node's build, and what it does when not | `Server.staleBuild`; `gwerr.StaleBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
+| does this page run the node's build, and what it does when not | `Server.otherBuild`; `gwerr.OtherBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
 | where a tile lands when nobody chose a cell | `store.FreeSlot` over the one auto-place rule (`autoplace.go`) |
 | what a link to a tile is | `rpc.LinkOf` |

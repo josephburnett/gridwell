@@ -10,11 +10,11 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
-// StaleBuild is the web door's answer to a page of another build: a
+// OtherBuild is the web door's answer to a page of another build: a
 // FailedPrecondition carrying a pb.StaleBuild detail naming both builds. It
 // exists only at that door, so it is a Connect error and never crosses a gRPC
 // hop.
-func StaleBuild(node, client string) *connect.Error {
+func OtherBuild(node, client string) *connect.Error {
 	named := "no build"
 	if client != "" {
 		named = tracewire.ShortCommit(client)
@@ -27,9 +27,9 @@ func StaleBuild(node, client string) *connect.Error {
 	return ce
 }
 
-// StaleBuildOf answers the node's build when err is StaleBuild's answer. A
+// OtherBuildOf answers the node's build when err is OtherBuild's answer. A
 // plain FailedPrecondition (a stale save) carries no detail and is not one.
-func StaleBuildOf(err error) (node string, ok bool) {
+func OtherBuildOf(err error) (node string, ok bool) {
 	var ce *connect.Error
 	if !errors.As(err, &ce) {
 		return "", false

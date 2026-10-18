@@ -74,8 +74,8 @@ func TestBuildGateRefusesAPageOfAnotherBuildBeforeTheVerb(t *testing.T) {
 		cl, g, heard := f.page(pageBuild)
 		_, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: f.root,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}})
-		if node, ok := gwerr.StaleBuildOf(err); !ok || node != gateNodeBuild {
-			t.Fatalf("page %q: CreateTile err = %v, want the stale-build verdict naming %q", pageBuild, err, gateNodeBuild)
+		if node, ok := gwerr.OtherBuildOf(err); !ok || node != gateNodeBuild {
+			t.Fatalf("page %q: CreateTile err = %v, want the another-build verdict naming %q", pageBuild, err, gateNodeBuild)
 		}
 		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 			t.Errorf("page %q: code %v, want FailedPrecondition", pageBuild, connect.CodeOf(err))
@@ -123,22 +123,22 @@ func TestBuildGateRefusesTheStream(t *testing.T) {
 		defer stream.Close()
 		_, _, err = stream.Recv()
 	}
-	if node, ok := gwerr.StaleBuildOf(err); !ok || node != gateNodeBuild {
-		t.Fatalf("Subscribe err = %v, want the stale-build verdict", err)
+	if node, ok := gwerr.OtherBuildOf(err); !ok || node != gateNodeBuild {
+		t.Fatalf("Subscribe err = %v, want the another-build verdict", err)
 	}
 	if len(*heard) != 1 {
 		t.Errorf("gate heard %v", *heard)
 	}
 }
 
-// A beacon names its build in the query; a stale one is refused like a call,
+// A beacon names its build in the query; one of another build is refused like a call,
 // in the Connect form a beacon's unary JSON post reads.
-func TestBuildGateRefusesAStaleBeacon(t *testing.T) {
+func TestBuildGateRefusesABeaconOfAnotherBuild(t *testing.T) {
 	f := gateFixture(t, gateNodeBuild)
 	for _, tc := range []struct {
 		build string
 		want  int
-		stale bool
+		other bool
 	}{{"page-a", http.StatusBadRequest, true}, {gateNodeBuild, http.StatusOK, false}} {
 		path, body := rpc.SetFramingBeacon(&gridwellv1.SetFramingRequest{RootGridId: f.root, Cx: 1, Cy: 2, Zoom: 0.5})
 		req, err := http.NewRequest(http.MethodPost, f.hs.URL+nodebuild.New(tc.build, nil).BeaconPath(path), bytes.NewReader(body))
@@ -153,8 +153,8 @@ func TestBuildGateRefusesAStaleBeacon(t *testing.T) {
 		}
 		got, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if res.StatusCode != tc.want || bytes.Contains(got, []byte("gridwell.v1.StaleBuild")) != tc.stale {
-			t.Errorf("beacon of %q = %d %s, want %d stale=%v", tc.build, res.StatusCode, got, tc.want, tc.stale)
+		if res.StatusCode != tc.want || bytes.Contains(got, []byte("gridwell.v1.StaleBuild")) != tc.other {
+			t.Errorf("beacon of %q = %d %s, want %d other=%v", tc.build, res.StatusCode, got, tc.want, tc.other)
 		}
 	}
 }
@@ -164,31 +164,31 @@ func TestBuildGateRefusesAStaleBeacon(t *testing.T) {
 func TestBuildGateRefusesTheShellSocket(t *testing.T) {
 	f := gateFixture(t, gateNodeBuild)
 	tile := f.createShell(t, 0, 0)
-	stale := make(chan string, 1)
+	other := make(chan string, 1)
 	exit := make(chan shellstream.Exit, 1)
 	dial := shellws.Dialer(shellws.Options{
 		Origin:       f.hs.URL,
 		HTTPClient:   f.hs.Client(),
 		Header:       http.Header{"Origin": {f.hs.URL}},
 		Build:        "page-a",
-		OnStaleBuild: func(node string) { stale <- node },
+		OnOtherBuild: func(node string) { other <- node },
 	})
 	reg := shellstream.New(dial, func(string, []byte) {}, func(e shellstream.Exit) { exit <- e })
 	reg.Open("k", tile.Id, 80, 24)
 	select {
-	case node := <-stale:
+	case node := <-other:
 		if node != gateNodeBuild {
 			t.Errorf("socket verdict names %q, want the node's build", node)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("the stale socket never heard the verdict")
+		t.Fatal("the socket of another build never heard the verdict")
 	}
 	select {
 	case <-exit:
 	case <-time.After(5 * time.Second):
-		t.Fatal("the stale socket never ended")
+		t.Fatal("the socket of another build never ended")
 	}
 	if f.fake.SessionCount() != 0 {
-		t.Error("a stale page's socket touched the PTY")
+		t.Error("a page of another build's socket touched the PTY")
 	}
 }

@@ -131,9 +131,9 @@ type App struct {
 	unloading bool
 
 	// gate names this page's build on every call and hears the door refuse
-	// it; stale is the verdict last acted on (build.go).
-	gate  *nodebuild.Gate
-	stale *nodebuild.Verdict
+	// it; buildVerdict is the verdict last acted on (build.go).
+	gate         *nodebuild.Gate
+	buildVerdict *nodebuild.Verdict
 
 	// touchDownTarget is where synthetic MouseDowns route; owned by touch.go.
 	touch           *touchgest.Machine
@@ -587,7 +587,7 @@ func main() {
 	origin := js.Global().Get("location").Get("origin").String()
 	// Before the App: the rpc client's interceptor records into it.
 	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
-	gate := nodebuild.New(tracewire.BuildCommit(), func(node string) { app.staleBuild(node) })
+	gate := nodebuild.New(tracewire.BuildCommit(), func(node string) { app.otherBuild(node) })
 	app = &App{
 		doc:                js.Global().Get("document"),
 		win:                js.Global().Get("window"),
@@ -664,7 +664,7 @@ func main() {
 
 	// PTY bytes ride the /shell WebSocket on this page's origin and cookie.
 	app.shells = shellstream.New(
-		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnStaleBuild: gate.Stale, Session: app.cl.Session()}),
+		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnOtherBuild: gate.OtherBuild, Session: app.cl.Session()}),
 		func(key string, data []byte) { app.onShellData(key, data) },
 		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.SessionGone) },
 	)

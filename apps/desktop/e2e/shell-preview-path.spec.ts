@@ -76,7 +76,7 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
       headers: {
         'Content-Type': 'application/json',
         'Connect-Protocol-Version': '1',
-        // The door refuses a page's call that names no build (Server.staleBuild).
+        // The door refuses a page's call that names no build (Server.otherBuild).
         'Gridwell-Build': (window as any).__gridwellTest.build(),
       },
       body: JSON.stringify({ tileId }),

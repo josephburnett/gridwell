@@ -84,7 +84,7 @@ type Server struct {
 	switchedOff *eventhub.Hub[*pb.Event]
 
 	// build is tracewire.BuildCommit, read once: the handshake names it and
-	// staleBuild judges every page's call against it.
+	// otherBuild judges every page's call against it.
 	build string
 }
 

@@ -46,7 +46,7 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
         headers: {
           'Content-Type': 'application/json',
           'Connect-Protocol-Version': '1',
-          // The door refuses a page's call that names no build (Server.staleBuild).
+          // The door refuses a page's call that names no build (Server.otherBuild).
           'Gridwell-Build': (window as any).__gridwellTest.build(),
         },
         body: JSON.stringify({
@@ -105,7 +105,7 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
           headers: {
             'Content-Type': 'application/json',
             'Connect-Protocol-Version': '1',
-            // The door refuses a page's call that names no build (Server.staleBuild).
+            // The door refuses a page's call that names no build (Server.otherBuild).
             'Gridwell-Build': (window as any).__gridwellTest.build(),
           },
           body,

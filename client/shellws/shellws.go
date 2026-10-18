@@ -26,11 +26,11 @@ type Options struct {
 	// Origin is the page's own http(s) origin; the door is same-origin by
 	// construction.
 	Origin string
-	// Build is the page's tracewire.BuildCommit, and OnStaleBuild hears the
+	// Build is the page's tracewire.BuildCommit, and OnOtherBuild hears the
 	// door's refusal of it, the one answer every call shares
 	// (client/nodebuild). Nil hears nothing.
 	Build        string
-	OnStaleBuild func(node string)
+	OnOtherBuild func(node string)
 	// Session is the client session every attachment rides under
 	// (rpc.Client.Session), which the node joins to the shell it holds.
 	Session string
@@ -133,8 +133,8 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 				return
 			}
 			if ctl.Kind == shellwire.KindExit {
-				if ctl.StaleBuild != "" && o.OnStaleBuild != nil {
-					o.OnStaleBuild(ctl.StaleBuild)
+				if ctl.StaleBuild != "" && o.OnOtherBuild != nil {
+					o.OnOtherBuild(ctl.StaleBuild)
 				}
 				c.end(ctl.Message, ctl.SessionGone)
 				return
