@@ -132,7 +132,7 @@ export class TraceClient {
   async tick(force = false): Promise<void> {
     if (this.flight || !this.post || !(force || this.needFlush())) return;
     // A failure leaves the records pending, and the ring is the bound on that
-    // memory; only a hand-over has someone to tell.
+    // backlog; only a hand-over has someone to tell.
     await this.send();
   }
 

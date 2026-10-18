@@ -34,7 +34,7 @@ func (a *App) runNavEffects(plan nav.Plan) {
 		a.runNavEffect(e)
 	}
 	// The machine owns "a level descent is pending", so the install and a
-	// failed descent both end the capture animation without remembering to.
+	// failed descent both end the capture animation without being told to.
 	if !a.nav.LevelPending() {
 		a.overlays.wsExpand = nil
 	}

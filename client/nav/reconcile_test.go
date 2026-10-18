@@ -6,7 +6,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// A workspace tile's layout is the user's bytes: the level remembers the version
+// A workspace tile's layout is the user's bytes: the level keeps the version
 // its tree derives from, and a refused write puts the arrangement on disk in
 // place of the open tree, whole.
 

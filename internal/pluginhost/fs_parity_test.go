@@ -128,7 +128,7 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	lighten := darken(t, root)
 	after, err := v2.GetGrid(ctx, rootGrid)
 	if err != nil {
-		t.Fatalf("dark source surfaced as an error instead of the remembered answer: %v", err)
+		t.Fatalf("dark source surfaced as an error instead of the cached answer: %v", err)
 	}
 	if len(after.Tiles) != 1 {
 		t.Fatalf("dark source answered %d tiles, want only the touched one: %+v", len(after.Tiles), after.Tiles)
@@ -503,7 +503,7 @@ func awaitHealth(t *testing.T, ch <-chan *gridwellv1.EventPluginHealth, healthy 
 
 // A source that stops answering is this namespace's health, published by the
 // adapter: the client hears it on the stream it already holds, with no call of
-// its own having to fail, and the grids that source serves are memories from
+// its own having to fail, and the grids that source serves are cached from
 // then on (client/cache.SourceDark). It is the same event and the same uuid
 // the supervisor uses for the subprocess, because "a declared source is not
 // answering" is one fact whichever half of the plugin it is. Across the real

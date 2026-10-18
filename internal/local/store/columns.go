@@ -173,7 +173,7 @@ Framing; it never bumps version. Added at schema v7, additive.`,
 	},
 	{
 		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
-		comment: `ns/key/tombstoned describe a plugin-memory row. ns is the owning
+		comment: `ns/key/tombstoned describe a plugin's row. ns is the owning
 plugin id ('' is home); key is the plugin's stable key for the entry;
 tombstoned=1 retires the key forever, so the id is never reused and a
 recreated key mints fresh. Home rows carry the defaults. Added at
@@ -240,7 +240,7 @@ never shares a grid), so only blobs are reference-counted.`,
 	{
 		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
 		comment: `ns names the grid's owner: '' is home, a plugin id is that plugin's
-memory. One table serves every namespace. context_key is the plugin's
+rows. One table serves every namespace. context_key is the plugin's
 stable key for the grid this grid projects, and is '' for home
 grids. Added at schema v9, additive.`,
 	},
@@ -267,7 +267,7 @@ leaveSelection). Not content: writing it bumps no version.`,
 }
 
 // connectionsColumns is the connections table, in DDL order: what the node
-// remembers about a connection beyond what server.yaml declares. No column is
+// keeps about a connection beyond what server.yaml declares. No column is
 // on the wire; the table evolves through the one migration chain.
 var connectionsColumns = []column[struct{}]{
 	{
@@ -278,7 +278,7 @@ never reassigned and never held twice.`,
 	},
 	{
 		name: "remote_root", ddl: "TEXT NOT NULL DEFAULT ''", since: 13,
-		comment: `The learned landing: the far node's home grid id, remembered so a
+		comment: `The learned landing: the far node's home grid id, kept so a
 dark remote still has a grid to show through the source cache. '' is
 a connection that has never answered.`,
 	},

@@ -5,7 +5,7 @@ import "sync"
 // Writes tallies mutations between dispatch and settle. The client's write
 // dispatcher is its only caller, which is what makes "no write is in flight"
 // a fact about every gesture rather than about the ones whose call site
-// remembered to count.
+// did not forget to count.
 type Writes struct {
 	mu         sync.Mutex
 	dispatched int

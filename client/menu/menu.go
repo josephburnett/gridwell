@@ -54,7 +54,7 @@ func (s *State) Open(paneID string) {
 	s.expanded = false
 }
 
-// Close clears the remembered pane, so nothing downstream reads a stale id.
+// Close clears the pane it holds, so nothing downstream reads a stale id.
 func (s *State) Close() {
 	s.open = false
 	s.paneID = ""

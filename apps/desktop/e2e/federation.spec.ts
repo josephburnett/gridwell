@@ -139,7 +139,7 @@ test('drag a plugin swatch out of the + menu links it as a door', async ({ gw })
 });
 
 // The far node announces the copy it made and the connection relays that
-// TileChanged, so the copy reads neither grid back. A remembered far grid
+// TileChanged, so the copy reads neither grid back. A cached far grid
 // revalidated afterward finds nothing new either (see
 // sourcecache.TestAFoldedTileChangedIsNotAChange).
 test('a cross-node copy reads no listing back; the relayed event lands the copy', async ({ gw }) => {

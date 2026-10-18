@@ -129,7 +129,7 @@ func twoConnFixture(t *testing.T, opts Options) (cc *Layer, a, b *farNode, roots
 }
 
 // qualify names a far id the way the transport does, and the way the cache
-// therefore remembers it.
+// therefore caches it.
 func qualify(conn, id string) string { return conn + "/" + id }
 
 // seedNested builds root → door → (text "deep note", inner door) on the far
@@ -216,7 +216,7 @@ func TestSubscribeKicksPrefetch(t *testing.T) {
 }
 
 // A connection that is gone when the walk starts aborts it quietly: the
-// roots are still declared (the landing is remembered config), and the first
+// roots are still declared (the landing is cached config), and the first
 // read through the dead tunnel ends the walk.
 func TestPrefetchAbortsQuietlyWhenDark(t *testing.T) {
 	cc, far, _, _ := connFixture(t, Options{Prefetch: true})
@@ -230,7 +230,7 @@ func TestPrefetchAbortsQuietlyWhenDark(t *testing.T) {
 // does — over the same real transport, so a green result means the walk
 // could have run and did not — and asserts nothing was warmed. A whole-source
 // crawl is what unreachability costs a NETWORK seam; a layer fronted without
-// asking for one must read through and remember, nothing more.
+// asking for one must read through and cache, nothing more.
 func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 	cc, far, farRoot, conn := connFixture(t, Options{})
 	ctx := context.Background()
@@ -253,7 +253,7 @@ func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, _, ok := cc.loadGrid(ctx, qualify(conn, nested)); !ok {
-		t.Fatal("a read-through answer was not remembered")
+		t.Fatal("a read-through answer was not cached")
 	}
 }
 
@@ -399,7 +399,7 @@ func TestARecoveryNoticedByAReadWalksTheSourceToo(t *testing.T) {
 
 	far.goDark()
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: qualify(conn, farRoot)}); err == nil {
-		t.Fatal("a read through a dark connection must fail: nothing is remembered yet")
+		t.Fatal("a read through a dark connection must fail: nothing is cached yet")
 	}
 	far.goLive()
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: qualify(conn, farRoot)}); err != nil {

@@ -32,12 +32,12 @@ func (gridsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListR
 	return &pluginv1.ListResponse{Authoritative: true}, nil
 }
 
-// A grid is a door, and a door remembers the view it was left at.
+// A grid is a door, and a door keeps the view it was left at.
 // The framing write and the handshake read are two sides of one fact, and
 // nothing between them knows which door a grid was declared by, so this
 // crosses the adapter/store seam: frame one grid, hand back a
 // fresh handshake, and read it off that entry — and only that entry.
-func TestAPluginGridRemembersItsFraming(t *testing.T) {
+func TestAPluginGridKeepsItsFraming(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)

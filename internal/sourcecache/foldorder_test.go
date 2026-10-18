@@ -69,7 +69,7 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 		cc.applyEvent(ctx, rpc.FramingEvent(farHome, theirs))
 		close(held.release)
 		<-done
-		if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(theirs)) {
+		if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(theirs)) {
 			t.Errorf("the connection row = %+v, want the folded %+v", got, theirs)
 		}
 	})
@@ -86,8 +86,8 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 		cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: door}}})
 		close(held.release)
 		cc.revalWG.Wait()
-		if got := rememberedGrid(t, cc, src).GetTiles()[0]; got.ViewZoom != door.ViewZoom {
-			t.Errorf("the remembered door = %+v, want the folded framing", got)
+		if got := cachedGrid(t, cc, src).GetTiles()[0]; got.ViewZoom != door.ViewZoom {
+			t.Errorf("the cached door = %+v, want the folded framing", got)
 		}
 	})
 
@@ -101,15 +101,15 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 		cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: farDoor}}})
 		close(held.release)
 		cc.revalWG.Wait()
-		if n := len(rememberedGrid(t, cc, src).GetTiles()); n != 0 {
-			t.Errorf("the removed door came back: %d tiles remembered", n)
+		if n := len(cachedGrid(t, cc, src).GetTiles()); n != 0 {
+			t.Errorf("the removed door came back: %d tiles cached", n)
 		}
 	})
 }
 
-// rememberedGrid reads what the layer serves for the far home with the source
+// cachedGrid reads what the layer serves for the far home with the source
 // gone.
-func rememberedGrid(t *testing.T, cc *Layer, src *framingSource) *pb.GetGridResponse {
+func cachedGrid(t *testing.T, cc *Layer, src *framingSource) *pb.GetGridResponse {
 	t.Helper()
 	src.setDown(true)
 	defer src.setDown(false)

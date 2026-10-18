@@ -62,7 +62,7 @@ func (f *farConnection) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, s
 }
 
 // The serve-first loop across the whole seam it spans: the router's fan-in,
-// the cache layer's own event stream, and a connection behind it. A remembered
+// the cache layer's own event stream, and a connection behind it. A cached
 // grid answers from the cache, the revalidation the read kicks finds the far
 // side changed, the GridChanged reaches the client's Subscribe stream
 // qualified with the node's id and the connection segment — the event a client
@@ -87,7 +87,7 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = cache.Close() })
 	// The production transport wiring, with a millisecond window: every hit is
-	// past it, so every read serves the remembering and revalidates — the
+	// past it, so every read serves the cached answer and revalidates — the
 	// aged-cache shape without the wait.
 	front := cache.Front(far, sourcecache.Options{Prefetch: true, FreshWindow: time.Millisecond})
 	root := farRoot

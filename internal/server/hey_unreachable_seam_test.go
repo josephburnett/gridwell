@@ -13,7 +13,7 @@ import (
 // One HEY box the CLI cannot read costs nothing else (docs/plugin-standard.md
 // rule 7). Every email is a tile in everything, so everything refused for one
 // box was a 404 for every email the content API served, in every box; now
-// everything lists what the plugin remembers of every box, every email's page
+// everything lists what the plugin caches of every box, every email's page
 // serves, and the plugin's health carries the box's reason.
 func TestHeyOneFailingBoxLeavesEveryEmailServing(t *testing.T) {
 	hey := heyAccount(t)
@@ -36,7 +36,7 @@ func TestHeyOneFailingBoxLeavesEveryEmailServing(t *testing.T) {
 }
 
 // A CLI signed out after Info is no verdict that blanks a grid (decision 3,
-// 2026-10-03): the Imbox keeps every row it remembers and the health says
+// 2026-10-03): the Imbox keeps every row it caches and the health says
 // why, and signing back in clears it.
 func TestHeySignedOutKeepsTheGridAndSaysWhy(t *testing.T) {
 	hey := heyAccount(t)
@@ -62,7 +62,7 @@ func TestHeySignedOutKeepsTheGridAndSaysWhy(t *testing.T) {
 		t.Errorf("health = %+v, want the CLI's reason", h)
 	}
 	if len(out.Tiles) != 2 {
-		t.Errorf("signed out, the imbox = %v, want both remembered rows", out.Tiles)
+		t.Errorf("signed out, the imbox = %v, want both cached rows", out.Tiles)
 	}
 
 	for _, box := range []string{"imbox", "laterbox", "asidebox", "feedbox", "trailbox", "bubblebox"} {

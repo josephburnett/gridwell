@@ -47,7 +47,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 
 	// liveVersion reads the current version of a tile id, returning 0 and
 	// reporting not-found if the row is gone.
-	// stillLive reports whether a tile the harness remembers is still in the
+	// stillLive reports whether a tile the harness holds is still in the
 	// store; a cascading delete may have taken it.
 	stillLive := func(id string) bool {
 		idInt, _ := parseID(id)

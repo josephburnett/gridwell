@@ -237,9 +237,9 @@ func TestGmailFindLandsOnTheAllMailTile(t *testing.T) {
 	}
 }
 
-// A grid the plugin remembers survives Gmail going away: the plugin answers
-// its memory with the reason in unreachable, and the node keeps serving every
-// row. The memory is the plugin's and the rows the node's, so only the seam
+// A grid the plugin caches survives Gmail going away: the plugin answers
+// its cache with the reason in unreachable, and the node keeps serving every
+// row. The cache is the plugin's and the rows the node's, so only the seam
 // shows an outage costing the user nothing on screen.
 func TestGmailWarmGridSurvivesGmailGoingAway(t *testing.T) {
 	n := newGmailNode(t, "200ms")
@@ -258,7 +258,7 @@ func TestGmailWarmGridSurvivesGmailGoingAway(t *testing.T) {
 	for {
 		resp, err := n.cards.PluginClient.List(ctx, &pluginv1.ListRequest{Grid: "label:INBOX"})
 		if err != nil {
-			t.Fatalf("a warm list with Gmail gone = %v, want memory's answer", err)
+			t.Fatalf("a warm list with Gmail gone = %v, want the cache's answer", err)
 		}
 		if resp.Unreachable != "" {
 			break

@@ -54,7 +54,7 @@ func (d *darkableCP) Probe(ctx context.Context, req *pluginv1.ProbeRequest, opts
 }
 
 // A dark plugin, whose subprocess is gone, fails honestly: nothing between the
-// router and the plugin remembers what it said, because pretending it answered
+// router and the plugin keeps what it said, because pretending it answered
 // would hand the user a grid that no longer exists. What the node minted is
 // durable, so the arrangement comes back the moment the process does. It runs
 // across the whole production wiring, since a unit test on either side alone
@@ -106,7 +106,7 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 
 	dc.dark.Store(true)
 	if g, err := cl.GetGrid(ctx, rootGrid); err == nil {
-		t.Fatalf("a dark plugin answered %+v; with no memory of the source there is nothing to serve", g.Grid)
+		t.Fatalf("a dark plugin answered %+v; with no cache of the source there is nothing to serve", g.Grid)
 	}
 
 	dc.dark.Store(false)

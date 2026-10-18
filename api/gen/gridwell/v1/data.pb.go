@@ -131,7 +131,7 @@ type Grid struct {
 	// source_label is the owning plugin's name for what backs this grid, as
 	// its listing answered it (plugin.v1 ListResponse.source_label: a
 	// directory path, "Inbox · 12 unread"); the bar shows it while a pane
-	// stands on the grid. Like the rows, it is a memory of the source, not a
+	// stands on the grid. Like the rows, it is a cache of the source, not a
 	// node fact, so gridwell.db never holds it. Stamped by the adapter,
 	// verbatim in transit. Wire-only.
 	SourceLabel string `protobuf:"bytes,15,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`

@@ -17,29 +17,29 @@ import (
 
 const outage = "hey cannot reach app.hey.com, so this is the mailbox as last seen."
 
-// rememberingSource lists "doc" and "other" live. Told to remember, it answers
-// only "other" from memory with unreachable set and claims authority anyway,
+// cachingSource lists "doc" and "other" live. Told to answer from its cache, it answers
+// only "other" from the cache with unreachable set and claims authority anyway,
 // and its probe calls every key gone: a node that took either for a verdict
 // would retire "doc".
-type rememberingSource struct {
+type cachingSource struct {
 	pluginv1.UnimplementedPluginServer
 
 	mu          sync.Mutex
 	unreachable string
 }
 
-func (p *rememberingSource) remember(why string) {
+func (p *cachingSource) fromCache(why string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.unreachable = why
 }
 
-func (p *rememberingSource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+func (p *cachingSource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	return &pluginv1.InfoResponse{Kind: "mem", DisplayName: "mem",
 		Grids: []*pluginv1.PluginGrid{{Id: "r", Grid: "r"}}}, nil
 }
 
-func (p *rememberingSource) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+func (p *cachingSource) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	resp := &pluginv1.ListResponse{Authoritative: true, Unreachable: p.unreachable,
@@ -50,20 +50,20 @@ func (p *rememberingSource) List(context.Context, *pluginv1.ListRequest) (*plugi
 	return resp, nil
 }
 
-func (p *rememberingSource) Probe(context.Context, *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
+func (p *cachingSource) Probe(context.Context, *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
 	return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_GONE}, nil
 }
 
-// A listing answered from memory is served as a live one and its reason is
-// the source's health: the rows read, nothing retires even when the memory
+// A listing answered from the cache is served as a live one and its reason is
+// the source's health: the rows read, nothing retires even when the cache
 // claims authority, and the next live answer brings the source back up.
-func TestAMemoryAnswerServesItsRowsAndReportsTheSourceDown(t *testing.T) {
+func TestACacheAnswerServesItsRowsAndReportsTheSourceDown(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	src := &rememberingSource{}
+	src := &cachingSource{}
 	cp, closer, err := plugintest.Loopback(src)
 	if err != nil {
 		t.Fatal(err)
@@ -99,26 +99,26 @@ func TestAMemoryAnswerServesItsRowsAndReportsTheSourceDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	src.remember(outage)
+	src.fromCache(outage)
 	g, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: grid})
 	if err != nil {
-		t.Fatalf("a memory answer failed the read: %v", err)
+		t.Fatalf("a cache answer failed the read: %v", err)
 	}
 	labels := map[string]bool{}
 	for _, tile := range g.Tiles {
 		labels[tile.AltText] = true
 	}
 	if !labels["other"] || !labels["doc"] {
-		t.Fatalf("memory answer served %v, want the remembered entry and the minted row", g.Tiles)
+		t.Fatalf("the cache answer served %v, want the cached entry and the minted row", g.Tiles)
 	}
 	if h := next(); h.Healthy || h.Detail != outage {
 		t.Fatalf("health = %+v, want down with the plugin's sentence", h)
 	}
 	if _, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: doc}); err != nil {
-		t.Fatalf("a memory answer retired the minted row: %v", err)
+		t.Fatalf("a cache answer retired the minted row: %v", err)
 	}
 
-	src.remember("")
+	src.fromCache("")
 	if _, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: grid}); err != nil {
 		t.Fatal(err)
 	}

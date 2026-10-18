@@ -1,6 +1,6 @@
 package store
 
-// The connections table: what the node remembers about a connection beyond
+// The connections table: what the node keeps about a connection beyond
 // server.yaml (see connectionsColumns). internal/connection decides what to
 // write; each write goes through withMutation and names its row "conn/<name>".
 
@@ -12,7 +12,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// ConnectionRow is one remembered connection.
+// ConnectionRow is one stored connection.
 type ConnectionRow struct {
 	Name       string
 	RemoteRoot string

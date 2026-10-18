@@ -1,6 +1,6 @@
 package sourcecache
 
-// Whole-source prefetch: the cache remembers what you touched, and this walker
+// Whole-source prefetch: the cache keeps what you touched, and this walker
 // warms what you did not (CLAUDE.md, 2026-10-06). It is a per-namespace policy
 // (Options.Prefetch), and the data is small by construction, so the walk is a
 // full traversal and the caps are emergency valves. It goes through the
@@ -156,7 +156,7 @@ func (w *walker) walkGrid(gridID string) bool {
 	if !w.pause() {
 		return false
 	}
-	// The live read, never the serve-first path: a remembered answer would
+	// The live read, never the serve-first path: a cached answer would
 	// warm nothing.
 	resp, _, err := w.c.getGridLive(w.ctx, gridID)
 	if err != nil {

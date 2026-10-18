@@ -1,8 +1,8 @@
-// Package sourcecache is the node's one memory of what a connection last
+// Package sourcecache is the node's one cache of what a connection last
 // answered: a read-through layer over <home>/cache.db in front of the
 // transport, holding marshaled protos keyed by id. A grid read serves first
 // and refreshes behind (GetGrid); every other read falls back to the
-// remembered answer on a transport failure only, so an answered "gone" is
+// cached answer on a transport failure only, so an answered "gone" is
 // never masked.
 package sourcecache
 
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS content (
     data       BLOB NOT NULL,
     fetched_at INTEGER NOT NULL
 );
--- A remembered body's source stamp (ContentChunk.content_stamp), beside
+-- A cached body's source stamp (ContentChunk.content_stamp), beside
 -- its row in content. Additive, like servecontent.
 CREATE TABLE IF NOT EXISTS contentstamps (
     tile_id TEXT PRIMARY KEY,
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS servecontent (
 );
 `
 
-// freshWindow is how long a remembered grid answers without a revalidation. It
+// freshWindow is how long a cached grid answers without a revalidation. It
 // also keeps refresh from feeding on itself: the client's refetch lands inside
 // the window of the revalidation that caused it.
 const freshWindow = 30 * time.Second
@@ -148,7 +148,7 @@ type Layer struct {
 	// or evicted a grid and by cache-store health transitions.
 	hub *eventhub.Hub[*pb.Event]
 
-	// cacheDown remembers that stores are failing, so the transition, not
+	// cacheDown records that stores are failing, so the transition, not
 	// every failure, surfaces as this namespace's health.
 	healthMu  sync.Mutex
 	cacheDown bool
@@ -228,7 +228,7 @@ func (c *Layer) noteReachTile(ctx context.Context, err error, tileID string) {
 	c.noteReach(ctx, err, sourceOf(tileID), func() string {
 		var gridID string
 		if qerr := c.db.QueryRowContext(ctx, `SELECT grid_id FROM tiles WHERE id = ?`, tileID).Scan(&gridID); qerr != nil {
-			return "" // nothing remembered names this tile: no grid to re-read
+			return "" // nothing cached names this tile: no grid to re-read
 		}
 		return gridID
 	})
@@ -354,10 +354,10 @@ func (s *Store) Close() error {
 
 // logErr is the log line for a cache-side failure. A broken cache never fails
 // a live request, but under serve-first it is the read path, so failing to
-// remember is user-visible degradation; noteCache surfaces it.
+// cache is user-visible degradation; noteCache surfaces it.
 func logErr(op string, err error) {
 	if err != nil {
-		log.Printf("gridwell: sourcecache %s: %v (answers are not being remembered)", op, err)
+		log.Printf("gridwell: sourcecache %s: %v (answers are not being cached)", op, err)
 	}
 }
 
@@ -374,7 +374,7 @@ func (c *Layer) noteCache(op string, err error) {
 		return
 	}
 	if err != nil {
-		c.emitHealth(false, "the cache cannot remember answers ("+op+": "+err.Error()+"); every read now pays the source's full latency")
+		c.emitHealth(false, "the cache cannot store answers ("+op+": "+err.Error()+"); every read now pays the source's full latency")
 		return
 	}
 	c.emitHealth(true, "")
@@ -388,8 +388,8 @@ func (c *Layer) emitHealth(healthy bool, detail string) {
 
 func now() int64 { return time.Now().Unix() }
 
-// Handshake forwards the routed plugin list and remembers it per namespace. A
-// door answered with no framing keeps the remembered one (keepFraming).
+// Handshake forwards the routed plugin list and caches it per namespace. A
+// door answered with no framing keeps the cached one (keepFraming).
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	r := c.order.begin()
 	defer r.end()
@@ -444,18 +444,18 @@ func doorGrids(l *pb.HandshakeResponse) []string {
 }
 
 // keepFraming gives every door of fresh that answers no framing (an
-// rpc.View with none) the framing old remembers for the same grid.
+// rpc.View with none) the framing old holds for the same grid.
 func keepFraming(fresh, old *pb.HandshakeResponse) {
 	known := map[string]rpc.View{}
-	remember := func(gridID string, v rpc.View) {
+	keep := func(gridID string, v rpc.View) {
 		if _, ok := v.Framing(); ok {
 			known[gridID] = v
 		}
 	}
 	for _, pl := range old.GetPlugins() {
-		remember(pl.GetRootGridId(), rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()))
+		keep(pl.GetRootGridId(), rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()))
 		for _, e := range pl.GetPluginGrids() {
-			remember(e.GetGridId(), rpc.ViewOf(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()))
+			keep(e.GetGridId(), rpc.ViewOf(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()))
 		}
 	}
 	unset := func(cx, cy, zoom float64) bool { return rpc.ViewOf(cx, cy, zoom).SameAs(rpc.View{}) }
@@ -486,7 +486,7 @@ func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGrid
 	return resp, err
 }
 
-// getGridLive reads one grid from the source and remembers the answer unless a
+// getGridLive reads one grid from the source and caches the answer unless a
 // fold overtook it (foldOrder); installed says which. It is the miss path, the
 // revalidation, and the prefetch walk, which must never be answered by the
 // rows it is warming.
@@ -506,7 +506,7 @@ func (c *Layer) getGridLive(ctx context.Context, gridID string) (resp *pb.GetGri
 	return resp, installed, nil
 }
 
-// revalidateGrid refreshes one remembered grid in the background, single-flight
+// revalidateGrid refreshes one cached grid in the background, single-flight
 // per grid id on the layer's context. A change is stored and announced; an
 // answer a fold overtook, or a transport failure, changes nothing; a verdict
 // evicts.
@@ -535,7 +535,7 @@ func (c *Layer) revalidateGrid(gridID string) {
 				c.emitGridChanged(gridID)
 			}
 		case !gwerr.IsAbandoned(ctx, err) && !gwerr.IsTransport(err):
-			// An answered error is an answer: the remembered grid must not
+			// An answered error is an answer: the cached grid must not
 			// outlive the source's verdict.
 			c.evictGrid(ctx, gridID)
 			c.emitGridChanged(gridID)
@@ -789,7 +789,7 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 }
 
 // ReadContent tees the live stream, storing only at a clean end. A transport
-// failure falls back to the remembered body only before any chunk has flowed.
+// failure falls back to the cached body only before any chunk has flowed.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	var mediaType, stamp string
 	var version int64
@@ -839,8 +839,8 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 	return err
 }
 
-// sendChunked replays a remembered body in the live chunk shape, so a caller
-// cannot tell a remembered answer from a live one by its framing. One empty
+// sendChunked replays a cached body in the live chunk shape, so a caller
+// cannot tell a cached answer from a live one by its framing. One empty
 // first chunk still goes out for an empty body, carrying the metadata.
 func sendChunked(data []byte, emit func(b []byte, first bool) error) error {
 	first := true
@@ -884,7 +884,7 @@ func (c *Layer) dropContent(ctx context.Context, tileID, what string) {
 }
 
 // blob binds a body for one of the NOT NULL blob columns. A nil []byte would
-// bind as SQL NULL, and an empty answer is an answer the cache must remember.
+// bind as SQL NULL, and an empty answer is an answer the cache must keep.
 // Both body writers go through here, because the fault is the binding.
 func blob(b []byte) []byte {
 	if b == nil {
@@ -991,10 +991,10 @@ func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
 }
 
 // Writes pass through untouched, so the source stays the one owner of its
-// truth, and a successful response updates the remembered rows by the same
+// truth, and a successful response updates the cached rows by the same
 // fold the event tee applies, which keeps a moved tile from snapping back.
 
-// foldWrite folds one in-place write's answer into the remembered rows,
+// foldWrite folds one in-place write's answer into the cached rows,
 // dropping the row under the requested id when the answer renamed it.
 func (c *Layer) foldWrite(ctx context.Context, reqTileID string, t *pb.Tile) {
 	if t.GetId() != "" && reqTileID != "" && reqTileID != t.GetId() {
@@ -1060,7 +1060,7 @@ func (c *Layer) SetFraming(ctx context.Context, in *pb.SetFramingRequest) (*pb.S
 }
 
 // SetSelection passes through, and a select the source accepted is applied to
-// the remembered set of the grid it names; the source's whole sets, told
+// the cached set of the grid it names; the source's whole sets, told
 // after, replace it and tell the grids a recursive clear reached.
 func (c *Layer) SetSelection(ctx context.Context, in *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
 	resp, err := c.Namespace.SetSelection(ctx, in)
@@ -1080,7 +1080,7 @@ func (c *Layer) SetSelection(ctx context.Context, in *pb.SetSelectionRequest) (*
 	return resp, err
 }
 
-// reselect is the one writer of a remembered grid's selection, from the
+// reselect is the one writer of a cached grid's selection, from the
 // source's event and an accepted write alike, so a dark read answers with the
 // set the source last held.
 func (c *Layer) reselect(ctx context.Context, gridID string, next func(cur []string) []string) {
@@ -1108,8 +1108,8 @@ func (c *Layer) reselect(ctx context.Context, gridID string, next func(cur []str
 	})
 }
 
-// reframe is the one writer of a root grid's remembered framing: it lands on
-// every remembered door rooted there (rpc.Reframe), from the source's event
+// reframe is the one writer of a root grid's cached framing: it lands on
+// every cached door rooted there (rpc.Reframe), from the source's event
 // and from a write the source accepted alike, which carry the same numbers.
 func (c *Layer) reframe(ctx context.Context, gridID string, f rpc.Framing) {
 	c.order.fold([]string{gridID}, func() { c.reframeRows(ctx, gridID, f) })
@@ -1154,8 +1154,8 @@ func (c *Layer) DeleteTile(ctx context.Context, in *pb.DeleteTileRequest) (*pb.D
 	return resp, err
 }
 
-// WriteContent forwards the stream and, on the commit, drops the remembered
-// body rather than guessing at it: a remembered body must be one the source
+// WriteContent forwards the stream and, on the commit, drops the cached
+// body rather than guessing at it: a cached body must be one the source
 // vouched for whole. The tile row is updated because the version moved.
 func (c *Layer) WriteContent(ctx context.Context, recv func() (*pb.WriteContentRequest, error)) (*pb.TileResponse, error) {
 	var tileID string

@@ -88,7 +88,7 @@ func (i *Interval) Wait() {
 	}
 }
 
-// Reconnect paces the client's event stream and remembers whether a gap
+// Reconnect paces the client's event stream and records whether a gap
 // swallowed events: Subscribe carries no cursor, so the next stream after any
 // break owes one resync kick. See docs/freshness.md layer 7.
 type Reconnect struct {

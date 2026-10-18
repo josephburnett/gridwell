@@ -499,10 +499,10 @@ func TestFollowLinkTarget(t *testing.T) {
 	})
 }
 
-// A workspace tile remembers which pane was focused and which was zoomed, so a
+// A workspace tile keeps which pane was focused and which was zoomed, so a
 // descent and a reload both open on the pane it was left on; see
 // pane.LayoutFingerprint.
-func TestLevelOpensOnRememberedFocus(t *testing.T) {
+func TestLevelOpensOnItsKeptFocus(t *testing.T) {
 	left := pane.TreeAtPlace("w1:", "g2", nil, rpc.ViewOf(1, 2, 1))
 	second, err := left.Split(pane.Vertical)
 	if err != nil {

@@ -17,7 +17,7 @@ import (
 
 // framingSource is a far node reduced to what a door's framing touches: a
 // handshake per namespace, one grid, and a framing write that lands or does
-// not. Its event stream is silent, so whatever the layer remembers of a write
+// not. Its event stream is silent, so whatever the layer caches of a write
 // it learned from the write itself.
 type framingSource struct {
 	namespace.Unimplemented
@@ -86,7 +86,7 @@ const (
 	farDoor  = "conn/r/t1"
 )
 
-// framingFixture remembers both handshakes a far root's framing rides — the
+// framingFixture caches both handshakes a far root's framing rides — the
 // transport's own row list and the far node's plugin list — and one grid
 // holding a door, all with nothing framed yet.
 func framingFixture(t *testing.T) (*Layer, *framingSource) {
@@ -118,8 +118,8 @@ func framingFixture(t *testing.T) (*Layer, *framingSource) {
 	return cc, src
 }
 
-// remembered reads what the layer answers for ns with the source gone.
-func remembered(t *testing.T, cc *Layer, src *framingSource, ns string) *pb.HandshakeResponse {
+// cached reads what the layer answers for ns with the source gone.
+func cached(t *testing.T, cc *Layer, src *framingSource, ns string) *pb.HandshakeResponse {
 	t.Helper()
 	src.setDown(true)
 	defer src.setDown(false)
@@ -138,10 +138,10 @@ func entryFraming(e *pb.PluginGrid) rpc.View {
 	return rpc.ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)
 }
 
-// A far root's framing event lands on every remembered door rooted at that
-// grid, in every remembered handshake, and on nothing else; the duplicate the
+// A far root's framing event lands on every cached door rooted at that
+// grid, in every cached handshake, and on nothing else; the duplicate the
 // write's own echo makes changes nothing.
-func TestAFramingEventReframesTheRememberedDoors(t *testing.T) {
+func TestAFramingEventReframesTheCachedDoors(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
 	f := mkFraming(3, -4, 0.5)
@@ -151,11 +151,11 @@ func TestAFramingEventReframesTheRememberedDoors(t *testing.T) {
 		cc.applyEvent(ctx, rpc.FramingEvent(farFeed, g))
 	}
 
-	rows := remembered(t, cc, src, "").GetPlugins()
+	rows := cached(t, cc, src, "").GetPlugins()
 	if got := rowFraming(rows[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the connection row = %+v, want %+v", got, f)
 	}
-	far := remembered(t, cc, src, "conn")
+	far := cached(t, cc, src, "conn")
 	if got := rowFraming(rpc.HomeRow(far)); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the far home row = %+v, want %+v", got, f)
 	}
@@ -168,27 +168,27 @@ func TestAFramingEventReframesTheRememberedDoors(t *testing.T) {
 	}
 }
 
-// A framing write the source accepted is remembered from its answer, whether
+// A framing write the source accepted is cached from its answer, whether
 // or not its event ever arrives: the source is silent here.
-func TestAnAcceptedRootFramingIsRemembered(t *testing.T) {
+func TestAnAcceptedRootFramingIsCached(t *testing.T) {
 	cc, src := framingFixture(t)
 	f := mkFraming(1, 2, 1.5)
 	if _, err := cc.SetFraming(context.Background(), &pb.SetFramingRequest{
 		RootGridId: farHome, Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}); err != nil {
 		t.Fatalf("SetFraming: %v", err)
 	}
-	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
+	if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the connection row = %+v, want %+v", got, f)
 	}
-	if got := rowFraming(rpc.HomeRow(remembered(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(f)) {
+	if got := rowFraming(rpc.HomeRow(cached(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the far home row = %+v, want %+v", got, f)
 	}
 }
 
 // A framing write the source never heard is refused as every dark write is,
-// and the memory keeps the source's last word: the client's outbox owns the
+// and the cache keeps the source's last word: the client's outbox owns the
 // retry, not this layer.
-func TestADarkFramingWriteIsRefusedAndNotRemembered(t *testing.T) {
+func TestADarkFramingWriteIsRefusedAndNotCached(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
 	was := mkFraming(1, 1, 1)
@@ -203,14 +203,14 @@ func TestADarkFramingWriteIsRefusedAndNotRemembered(t *testing.T) {
 		t.Errorf("dark SetFraming answers %v, another dark write %v: one refusal", status.Code(err), status.Code(werr))
 	}
 	src.setDown(false)
-	if got := rowFraming(rpc.HomeRow(remembered(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(was)) {
+	if got := rowFraming(rpc.HomeRow(cached(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(was)) {
 		t.Errorf("the far home row = %+v, want the last accepted %+v", got, was)
 	}
 }
 
-// A door's framing rides its tile, so the tile event keeps the remembered
+// A door's framing rides its tile, so the tile event keeps the cached
 // listing current.
-func TestATileEventReframesTheRememberedDoor(t *testing.T) {
+func TestATileEventReframesTheCachedDoor(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
 	door := proto.Clone(src.grid.GetTiles()[0]).(*pb.Tile)
@@ -222,14 +222,14 @@ func TestATileEventReframesTheRememberedDoor(t *testing.T) {
 		t.Fatalf("GetGrid while dark: %v", err)
 	}
 	if got := resp.GetTiles()[0]; got.ViewCx != 5 || got.ViewCy != 6 || got.ViewZoom != 0.25 {
-		t.Errorf("the remembered door = %+v, want the event's framing", got)
+		t.Errorf("the cached door = %+v, want the event's framing", got)
 	}
 }
 
 // A live answer that says nothing about a door's framing — the transport's
-// row for a connection it cannot reach — keeps the remembered one, and a live
+// row for a connection it cannot reach — keeps the cached one, and a live
 // answer that says something replaces it: coming back is the source's word.
-func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {
+func TestSilenceKeepsTheCachedFramingAndAnAnswerReplacesIt(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
 	f := mkFraming(3, -4, 0.5)
@@ -239,10 +239,10 @@ func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
-		t.Errorf("a row answering no framing = %+v, want the remembered %+v", got, f)
+		t.Errorf("a row answering no framing = %+v, want the cached %+v", got, f)
 	}
-	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
-		t.Errorf("the silence was remembered over the framing: %+v", got)
+	if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
+		t.Errorf("the silence was cached over the framing: %+v", got)
 	}
 
 	g := mkFraming(1, 1, 2)
@@ -255,8 +255,8 @@ func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {
 	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("the source's answer = %+v, want %+v", got, g)
 	}
-	if got := rowFraming(remembered(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
-		t.Errorf("remembered after the answer = %+v, want %+v", got, g)
+	if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
+		t.Errorf("cached after the answer = %+v, want %+v", got, g)
 	}
 }
 

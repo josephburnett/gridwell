@@ -18,11 +18,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// A disabled connection's remembered grids read as read-only and its writes
+// A disabled connection's cached grids read as read-only and its writes
 // are a verdict, never a transport failure: a far node answers once, is
 // cached, and is switched off with its grid on screen. Across the whole seam,
 // from the web API through the router and the source cache to a real far
-// node, because the verdict and the stamp are the router's and the memory is
+// node, because the verdict and the stamp are the router's and the rows served are
 // the cache's.
 func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -106,13 +106,13 @@ func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 	want := rpc.DisabledReason("Far")
 	g, err := cl.GetGrid(ctx, root)
 	if err != nil {
-		t.Fatalf("a disabled connection's remembered grid did not serve: %v", err)
+		t.Fatalf("a disabled connection's cached grid did not serve: %v", err)
 	}
 	if g.GetGrid().GetWritable() || g.GetGrid().GetAcceptsTiles() {
-		t.Errorf("the remembered grid is writable=%v accepts_tiles=%v, want neither", g.GetGrid().GetWritable(), g.GetGrid().GetAcceptsTiles())
+		t.Errorf("the cached grid is writable=%v accepts_tiles=%v, want neither", g.GetGrid().GetWritable(), g.GetGrid().GetAcceptsTiles())
 	}
 	if len(g.GetTiles()) == 0 {
-		t.Fatal("the remembered grid served no rows")
+		t.Fatal("the cached grid served no rows")
 	}
 	for _, tl := range g.GetTiles() {
 		if tl.GetReadOnly() != want {

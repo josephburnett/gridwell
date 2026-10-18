@@ -136,7 +136,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	s3.ConnectAll(ctx)
 	rows := s3.Rows(ctx)
 	if len(rows) != 1 || rows[0].RootGridId != "rtb/rnode1/7" {
-		t.Fatalf("boot 3 rows = %+v, want rtb on its remembered landing", rows)
+		t.Fatalf("boot 3 rows = %+v, want rtb on its stored landing", rows)
 	}
 	if deadref.DeadTile(ref, roster(s3), nodeID, nil) {
 		t.Fatal("boot 3: the link must resolve again")

@@ -201,7 +201,7 @@ func TestPlacesOf(t *testing.T) {
 	}
 }
 
-// A grid's framing is remembered against the door the menu descends
+// A grid's framing is kept against the door the menu descends
 // through, so ByRoot must resolve an entry's grid as well as a row's own.
 func TestByRootResolvesADeclaredEntry(t *testing.T) {
 	got, ok := ByRoot("loc/9", plugins)

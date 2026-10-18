@@ -1019,7 +1019,7 @@ func init() {
 			}
 			ctxGrid := mustID(t, res)
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
-				VALUES (?, 'text', 12, 34, 2, 3, 'v11 remembered', 100, 100, 'p9', 'notes.md')`, ctxGrid); err != nil {
+				VALUES (?, 'text', 12, 34, 2, 3, 'v11 cached', 100, 100, 'p9', 'notes.md')`, ctxGrid); err != nil {
 				t.Fatalf("seed external row: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key, tombstoned)
@@ -1039,14 +1039,14 @@ func init() {
 			if n != 0 {
 				t.Error("the listings table survived v12")
 			}
-			// The dark-source answer comes from the node's own memory now.
+			// The dark-source answer comes from the node's own rows now.
 			var x, y, w, h, tomb int64
 			var label string
 			if err := db.QueryRow(`SELECT x, y, w, h, alt_text, tombstoned FROM tiles WHERE ns = 'p9' AND key = 'notes.md'`).
 				Scan(&x, &y, &w, &h, &label, &tomb); err != nil {
 				t.Fatalf("read the external row: %v", err)
 			}
-			if x != 12 || y != 34 || w != 2 || h != 3 || label != "v11 remembered" || tomb != 0 {
+			if x != 12 || y != 34 || w != 2 || h != 3 || label != "v11 cached" || tomb != 0 {
 				t.Errorf("the external row changed across v12: %d,%d %dx%d %q tomb=%d", x, y, w, h, label, tomb)
 			}
 			if err := db.QueryRow(`SELECT tombstoned FROM tiles WHERE ns = 'p9' AND key = 'gone.md'`).Scan(&tomb); err != nil {

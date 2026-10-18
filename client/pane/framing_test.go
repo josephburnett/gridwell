@@ -24,7 +24,7 @@ func TestFramingTargetPicksTheDoor(t *testing.T) {
 	}
 
 	// The link tile is the door and lives in the level below. The frame
-	// remembers it, so nothing looks through the parent grid for it.
+	// keeps it, so nothing looks through the parent grid for it.
 	s.Push(Frame{GridID: "k3x9m2q/1", Door: "lnk"})
 	got = s.FramingTarget(false)
 	if got.TileID != "lnk" || got.DoorAnchor != "home/1" ||

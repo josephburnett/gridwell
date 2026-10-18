@@ -40,8 +40,8 @@ func writeOne(t *testing.T, c namespace.Namespace, tileID string, version int64,
 	}
 }
 
-// The cache contract: every successful read is remembered; a transport-dark
-// source serves the remembered answer; an answered error — NotFound, anything
+// The cache contract: every successful read is cached; a transport-dark
+// source serves the cached answer; an answered error — NotFound, anything
 // coded — is never masked by a cached row; the cache survives a restart; and a
 // successful re-read reconciles what changed while dark. The fixture is a real
 // home store behind a switchable dark proxy, the shape of a connection whose
@@ -245,7 +245,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Body via the upstream write path (writes pass through the cache).
-	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("remembered words"))
+	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("cached words"))
 	urlT, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "url", X: 2, Y: 0, W: 1, H: 1, UrlString: "https://example.com"}})
 	if err != nil {
@@ -286,7 +286,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 		t.Fatalf("dark GetTile = (%v, %v)", tr, err)
 	}
 	mt, ver, body := readContent(t, cc, txt.GetTile().GetId())
-	if string(body) != "remembered words" || string(body) != string(liveBody) {
+	if string(body) != "cached words" || string(body) != string(liveBody) {
 		t.Fatalf("stale body = %q, want the live bytes", body)
 	}
 	if ver != liveVer {
@@ -307,7 +307,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 }
 
 // halfDark fails a ReadContent AFTER letting one chunk through — the
-// tunnel dropping mid-body. The cache must NOT splice its remembered bytes
+// tunnel dropping mid-body. The cache must NOT splice its cached bytes
 // onto the half-delivered stream: that would hand the caller a body nobody
 // ever had. (Before S2 this shape was "the open succeeded but the first
 // Recv failed", because a chained read opened only as far as the local
@@ -330,7 +330,7 @@ func (d *halfDark) ReadContent(ctx context.Context, in *pb.ReadContentRequest, s
 }
 
 // TestHalfDeliveredStreamIsNeverSpliced: once a chunk has flowed, a
-// failure passes through as itself. Serving the remembered body from
+// failure passes through as itself. Serving the cached body from
 // halfway would fabricate a value the caller never saw whole — silent
 // corruption, the one thing a cache must never do.
 func TestHalfDeliveredStreamIsNeverSpliced(t *testing.T) {
@@ -507,7 +507,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 }
 
 // TestPersistsAcrossRestart: the whole point of SQLite over memory — the
-// node restarts (or the wrapper reopens) and the remembered answers are
+// node restarts (or the wrapper reopens) and the cached answers are
 // still there for a connection that is STILL dark.
 func TestPersistsAcrossRestart(t *testing.T) {
 	cc, upstream, root, dbPath := fixture(t)
@@ -520,7 +520,7 @@ func TestPersistsAcrossRestart(t *testing.T) {
 	reopened := openLayer(t, upstream, dbPath, Options{Prefetch: true})
 	upstream.goDark()
 	if _, err := reopened.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
-		t.Fatalf("reopened cache should serve the remembered grid: %v", err)
+		t.Fatalf("reopened cache should serve the cached grid: %v", err)
 	}
 }
 
@@ -546,8 +546,8 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 		TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
-	// An out-of-window read serves the remembered answer — doomed included:
-	// that is the remembering — and kicks the revalidation that replaces the
+	// An out-of-window read serves the cached answer — doomed included:
+	// that is the cached answer — and kicks the revalidation that replaces the
 	// grid's whole tile set.
 	ageGrid(t, cc, root)
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
@@ -568,8 +568,8 @@ func TestRefreshReconcilesWhatChangedWhileBlind(t *testing.T) {
 
 // ── serve-first ─────────────────────────────────────────────────────────
 
-// ageGrid pushes a remembered grid past the freshness window, the test's
-// stand-in for waiting the window out: the next read serves the remembering
+// ageGrid pushes a cached grid past the freshness window, the test's
+// stand-in for waiting the window out: the next read serves the cached answer
 // and kicks a revalidation.
 func ageGrid(t *testing.T, cc *Layer, gridID string) {
 	t.Helper()
@@ -580,7 +580,7 @@ func ageGrid(t *testing.T, cc *Layer, gridID string) {
 }
 
 // awaitFresh polls until a revalidation has re-stored the grid — its
-// fetched_at is back inside the window — and returns the remembered answer.
+// fetched_at is back inside the window — and returns the cached answer.
 func awaitFresh(t *testing.T, cc *Layer, gridID string) *pb.GetGridResponse {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -614,7 +614,7 @@ func (g *midwalk) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGr
 	return g.Namespace.GetGrid(ctx, in)
 }
 
-// TestServeFirstNeverWaitsOnTheSource is the feature: a remembered grid
+// TestServeFirstNeverWaitsOnTheSource is the feature: a cached grid
 // answers immediately while the source is mid-walk, and the walk lands behind
 // as the revalidation.
 func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
@@ -660,16 +660,16 @@ func TestServeFirstNeverWaitsOnTheSource(t *testing.T) {
 			t.FailNow()
 		}
 		if len(g.GetTiles()) != 0 {
-			t.Errorf("served %d tiles, want the remembered 0 (the walk has not landed)", len(g.GetTiles()))
+			t.Errorf("served %d tiles, want the cached 0 (the walk has not landed)", len(g.GetTiles()))
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("the read waited on the source: serve-first must answer from the remembering")
+		t.Fatal("the read waited on the source: serve-first must answer from the cached answer")
 	}
 
 	close(gate) // the walk lands
 	fresh := awaitFresh(t, cc, root)
 	if len(fresh.GetTiles()) != 1 || fresh.GetTiles()[0].GetId() != txt.GetTile().GetId() {
-		t.Fatalf("revalidation remembered %v, want the new tile", fresh.GetTiles())
+		t.Fatalf("revalidation cached %v, want the new tile", fresh.GetTiles())
 	}
 }
 
@@ -695,7 +695,7 @@ func (streaming) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error
 }
 
 // TestRevalidationEmitsGridChanged closes the serve-first loop for a
-// namespace the node never watched: the remembering served, refresh lands a
+// namespace the node never watched: the cached answer served, refresh lands a
 // different answer, GridChanged fires on the layer's own stream, and the next read
 // serves the correction.
 func TestRevalidationEmitsGridChanged(t *testing.T) {
@@ -728,19 +728,19 @@ func TestRevalidationEmitsGridChanged(t *testing.T) {
 	awaitSubscriber(t, cc, evs)
 
 	// The source changes while nobody is looking; an out-of-window read
-	// serves the remembering and kicks the refresh that finds the change.
+	// serves the cached answer and kicks the refresh that finds the change.
 	txt, err := up.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ageGrid(t, cc, root)
-	remembered, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
+	cached, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(remembered.GetTiles()) != 0 {
-		t.Fatalf("the served answer already has %d tiles; it must be the remembering", len(remembered.GetTiles()))
+	if len(cached.GetTiles()) != 0 {
+		t.Fatalf("the served answer already has %d tiles; it must be the cached answer", len(cached.GetTiles()))
 	}
 	select {
 	case ev := <-evs:
@@ -775,7 +775,7 @@ func (v *verdicted) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.Get
 }
 
 // TestRevalidationVerdictEvicts: an answered error is an answer. The one read
-// that catches the transition still serves the remembering, but the
+// that catches the transition still serves the cached answer, but the
 // revalidation evicts it, and from then on the verdict surfaces instead of a
 // ghost.
 func TestRevalidationVerdictEvicts(t *testing.T) {
@@ -798,7 +798,7 @@ func TestRevalidationVerdictEvicts(t *testing.T) {
 	up.gone = true
 	ageGrid(t, cc, root)
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
-		t.Fatal(err) // the catching read still serves the remembering
+		t.Fatal(err) // the catching read still serves the cached answer
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -806,7 +806,7 @@ func TestRevalidationVerdictEvicts(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the verdict never evicted the remembered grid")
+			t.Fatal("the verdict never evicted the cached grid")
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -815,11 +815,11 @@ func TestRevalidationVerdictEvicts(t *testing.T) {
 	}
 }
 
-// TestWriteResponsesUpdateTheRememberedRows: under serve-first "the next read
+// TestWriteResponsesUpdateTheCachedRows: under serve-first "the next read
 // refreshes" no longer holds, so a write's response must fold into the
-// remembered rows — a moved tile reads back where the user put it, and a
-// deleted one is gone, straight from the remembering.
-func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
+// cached rows — a moved tile reads back where the user put it, and a
+// deleted one is gone, straight from the cached answer.
+func TestWriteResponsesUpdateTheCachedRows(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 
@@ -843,7 +843,7 @@ func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
 	if _, err := cc.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: doomed.GetTile().GetId()}); err != nil {
 		t.Fatal(err)
 	}
-	// Dark, within the window: the remembering is all there is, and it must
+	// Dark, within the window: the cached answer is all there is, and it must
 	// already say what the user did.
 	upstream.goDark()
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
@@ -853,14 +853,14 @@ func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
 	var gotMoved *pb.Tile
 	for _, tl := range g.GetTiles() {
 		if tl.GetId() == doomed.GetTile().GetId() {
-			t.Fatal("the deleted tile must be gone from the remembering")
+			t.Fatal("the deleted tile must be gone from the cached answer")
 		}
 		if tl.GetId() == moved.GetTile().GetId() {
 			gotMoved = tl
 		}
 	}
 	if gotMoved.GetX() != 5 || gotMoved.GetY() != 6 || gotMoved.GetW() != 2 {
-		t.Fatalf("moved tile remembered at (%d,%d,%d), want (5,6,2)",
+		t.Fatalf("moved tile cached at (%d,%d,%d), want (5,6,2)",
 			gotMoved.GetX(), gotMoved.GetY(), gotMoved.GetW())
 	}
 }
@@ -884,16 +884,16 @@ func TestStoreGridSurvivesAGridKeyRename(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The same answer remembered under two keys, the migration shape.
+	// The same answer cached under two keys, the migration shape.
 	cc.storeGrid(ctx, "old-key", live)
 	cc.storeGrid(ctx, "new-key", live)
 	got, _, ok := cc.loadGrid(ctx, "new-key")
 	if !ok || len(got.GetTiles()) != len(live.GetTiles()) {
-		t.Fatalf("new-key remembered %v (ok=%v), want the full tile set: the rename must upsert, not collide", got.GetTiles(), ok)
+		t.Fatalf("new-key cached %v (ok=%v), want the full tile set: the rename must upsert, not collide", got.GetTiles(), ok)
 	}
 }
 
-// TestCacheStoreFailureSurfacesAsHealth: a cache that cannot remember is not
+// TestCacheStoreFailureSurfacesAsHealth: a cache that cannot store is not
 // a shrug in a server log — under serve-first it means every read pays the
 // source's full latency, and the user deserves the error. The transition
 // rides the layer's own event stream as this namespace's health: down on the
@@ -948,7 +948,7 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 	if down.GetPluginUuid() != "" {
 		t.Errorf("uuid = %q, want empty (the fan-in fills the namespace)", down.GetPluginUuid())
 	}
-	if !strings.Contains(down.GetDetail(), "cannot remember") {
+	if !strings.Contains(down.GetDetail(), "cannot store") {
 		t.Errorf("detail = %q, want the cache failure named", down.GetDetail())
 	}
 
@@ -963,20 +963,20 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 	waitHealth(true, "the healed store never cleared the health")
 }
 
-// A remembered answer is served as it was remembered, past its window and
-// with the source dark alike: the wire carries no "this is a memory" bit,
+// A cached answer is served as it was cached, past its window and
+// with the source dark alike: the wire carries no "this is cached" bit,
 // because whether a source is answering is its health and that fact has one
 // owner. What the age and the darkness change is the revalidation the read
 // kicks behind it.
-func TestAPastWindowServeIsTheRememberedAnswer(t *testing.T) {
+func TestAPastWindowServeIsTheCachedAnswer(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 	live, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The machine is gone and the answer is old: the serve is a memory in
-	// every sense the node has, and it is the remembered answer itself.
+	// The machine is gone and the answer is old: the serve is from cache in
+	// every sense the node has, and it is the cached answer itself.
 	upstream.goDark()
 	ageGrid(t, cc, root)
 	served, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
@@ -984,7 +984,7 @@ func TestAPastWindowServeIsTheRememberedAnswer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !proto.Equal(live, served) {
-		t.Errorf("past-window serve = %v, want the remembered answer unchanged: %v", served, live)
+		t.Errorf("past-window serve = %v, want the cached answer unchanged: %v", served, live)
 	}
 	// Back alive: the revalidation the read kicks lands and re-stores, which
 	// is what the age was ever for.
@@ -998,14 +998,14 @@ func TestAPastWindowServeIsTheRememberedAnswer(t *testing.T) {
 	}
 }
 
-// TestAnEmptyBodyIsRemembered: a tile created and never typed into has an
-// empty body, and remembering one is not a special case — it is the most
+// TestAnEmptyBodyIsCached: a tile created and never typed into has an
+// empty body, and caching one is not a special case — it is the most
 // ordinary read there is, and the cache owes it the same answer while dark.
 // It could not: a nil []byte binds as SQL NULL and `content.data` is NOT NULL,
-// so the store failed, the body was never remembered, and noteCache flipped
-// the WHOLE cache to "cannot remember answers" on the user's strip for a tile
+// so the store failed, the body was never cached, and noteCache flipped
+// the WHOLE cache to "cannot store answers" on the user's strip for a tile
 // that simply had nothing in it yet.
-func TestAnEmptyBodyIsRemembered(t *testing.T) {
+func TestAnEmptyBodyIsCached(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 
@@ -1023,16 +1023,16 @@ func TestAnEmptyBodyIsRemembered(t *testing.T) {
 	down := cc.cacheDown
 	cc.healthMu.Unlock()
 	if down {
-		t.Fatal("remembering an empty body broke the cache: the strip now says it cannot remember answers")
+		t.Fatal("caching an empty body broke the cache: the strip now says it cannot store answers")
 	}
 	if _, _, _, _, ok := cc.loadContent(ctx, id); !ok {
-		t.Fatal("an empty body was not remembered")
+		t.Fatal("an empty body was not cached")
 	}
 
-	// And the point of remembering it: dark, it still answers.
+	// And the point of caching it: dark, it still answers.
 	upstream.goDark()
 	if _, _, data := readContent(t, cc, id); len(data) != 0 {
-		t.Fatalf("the dark read of a remembered empty body = %q, want empty", data)
+		t.Fatalf("the dark read of a cached empty body = %q, want empty", data)
 	}
 }
 
@@ -1051,11 +1051,11 @@ func chunkShape(t *testing.T, c namespace.Namespace, tileID string) []int {
 	return shape
 }
 
-// A remembered body comes back framed like the live one, so no caller can tell
-// a memory from a live answer by the shape of the stream. The two producers —
+// A cached body comes back framed like the live one, so no caller can tell
+// a cache from a live answer by the shape of the stream. The two producers —
 // the source's ReadContent and this layer's replay — hold that only by reading
 // the one chunk size, rpc.ContentChunkBytes.
-func TestRememberedStreamHasTheLiveChunkShape(t *testing.T) {
+func TestCachedStreamHasTheLiveChunkShape(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 
@@ -1079,18 +1079,18 @@ func TestRememberedStreamHasTheLiveChunkShape(t *testing.T) {
 	}
 
 	upstream.goDark()
-	remembered := chunkShape(t, cc, id)
-	if !slices.Equal(remembered, live) {
-		t.Errorf("remembered chunk shape %v, live %v", remembered, live)
+	cached := chunkShape(t, cc, id)
+	if !slices.Equal(cached, live) {
+		t.Errorf("cached chunk shape %v, live %v", cached, live)
 	}
 	_, _, got := readContent(t, cc, id)
 	if !bytes.Equal(got, body) {
-		t.Errorf("remembered body differs from what was written")
+		t.Errorf("cached body differs from what was written")
 	}
 }
 
 // TestAFoldedTileChangedIsNotAChange: a write the source announced as a
-// TileChanged is already in the remembered rows, so a revalidation that reads
+// TileChanged is already in the cached rows, so a revalidation that reads
 // back the same tiles has nothing to announce. Announcing it costs every open
 // view a full grid read for a change it has already applied.
 func TestAFoldedTileChangedIsNotAChange(t *testing.T) {
@@ -1110,7 +1110,7 @@ func TestAFoldedTileChangedIsNotAChange(t *testing.T) {
 		})
 	}()
 	// The tee attaches to the source's stream asynchronously, so prime it
-	// with a write whose event must come back before the grid is remembered.
+	// with a write whose event must come back before the grid is cached.
 	primed := false
 	for x := int64(0); x < 50 && !primed; x++ {
 		if _, err := upstream.Namespace.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,

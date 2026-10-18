@@ -205,7 +205,7 @@ per stamp: a second tell under the stamp last told is no change
 plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
 a database. It does get a private directory, `<home>/plugins/<id>`, named to
-it as `state_dir` at spawn: its own memory of its source, under cache.db's
+it as `state_dir` at spawn: its own cache of its source, under cache.db's
 contract — disposable, safe to delete, rewarmed by use, and never deleted by
 the node. The node mints ids against those keys and
 keeps the arrangement as a namespace of its own store
@@ -228,7 +228,7 @@ from the plugin's side.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a
 label, how to dial. The transport dials each at boot, lands on the far node's
-home, and remembers that landing and nothing else. Retirement is EXPLICIT:
+home, and keeps that landing and nothing else. Retirement is EXPLICIT:
 `retired_names:` is its one owner, a retired name never returns, and the
 stored `deleted` flag is only that list mirrored onto the rows. Dropping a
 connection's stanza retires nothing — the row and its landing stay, the
@@ -241,11 +241,11 @@ carries the reason, and every read through the name fails loudly until the
 operator retires the name or restores the target.
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
-name, and the same transit rule applies at both hops. The fan-in remembers
+name, and the same transit rule applies at both hops. The fan-in keeps
 each connection's reachability rather than only publishing the transition:
 the transport's event stream opens with every connection that is dark right now, so a client that
 subscribes after the machine died is told, and the cache in front of it
-stamps what it remembers. The transport is also one client of each far node:
+stamps what it caches. The transport is also one client of each far node:
 its share of the subscription is cut by connection and told to that node
 as a `SetView` of grids alone, labelled `node`, under the session of the
 connection's own event stream (`connection.tellFar`), so a far plugin watches what is on screen here.
@@ -278,10 +278,10 @@ answering for it.
 of the one seam that crosses a network — the transport — in one disposable
 file (`cache.db`). A cache is worth its cost only across a network: home is
 the durable store, and a plugin is a subprocess on this machine, so both are
-read live. A remembered grid serves first, exactly as it was remembered, with
+read live. A cached grid serves first, exactly as it was cached, with
 one background revalidation kicked past the freshness window or once the
 connection is known dark — so a remote round trip never sits on the read
-path. Nothing on the answer says it is a memory: that is the source's health,
+path. Nothing on the answer says it is cached: that is the source's health,
 and the client derives it there (`client/cache.SourceDark`). Darkness is
 learned from any pass-through call that fails transport-shaped and from the
 connection's own health on the stream the layer relays, cleared by the next
@@ -289,10 +289,10 @@ answer; the discovery announces the grid at hand, and the client re-reads
 what it is showing when a source's health changes either way. A
 revalidation that finds drift emits a `GridChanged` on the layer's own
 event stream, served alongside the connection's own, and the client's
-refetch serves the correction; a verdict evicts the remembered grid so it
-surfaces on the next read. Other reads pass through and remember, and on a
-transport-class failure serve the remembered answer. Writes always pass
-through, and their responses fold into the remembered rows.
+refetch serves the correction; a verdict evicts the cached grid so it
+surfaces on the next read. Other reads pass through and cache, and on a
+transport-class failure serve the cached answer. Writes always pass
+through, and their responses fold into the cached rows.
 Prefetch is a per-seam option only the transport takes, rooted at the
 connections the fronted namespace's own handshake declares. A dark node is
 answered by the cache. A dark *source* (the plugin answers, its directory

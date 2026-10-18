@@ -374,7 +374,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into the repo root, so
   check out the plugins repo beside this one.
 - A plugin serves keys and content; the node owns ids and layout. A plugin
-  holds no node fact, and keeps its own memory of its source in the private
+  holds no node fact, and keeps its own cache of its source in the private
   directory the node hands it at spawn (`<home>/plugins/<id>`, as
   `state_dir`), under `cache.db`'s contract: disposable, safe to delete,
   rewarmed by use. Nothing deletes one automatically. A connection is
@@ -410,11 +410,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller
   abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
-- A plugin's memory answers when a refresh fails: the read succeeds from
-  what it remembers and says so in `ListResponse.unreachable` (the reason,
+- A plugin's cache answers when a refresh fails: the read succeeds from
+  what it caches and says so in `ListResponse.unreachable` (the reason,
   empty when live), which the node reports as the source's health while it
-  keeps serving the rows, never a failed read the memory could answer. It is the node's own rule — a remembered grid
-  serves first, and that it is a memory is the source's health — one hop
+  keeps serving the rows, never a failed read the cache could answer. It is the node's own rule — a cached grid
+  serves first, and that it is cached is the source's health — one hop
   further (2026-10-02, `docs/plugin-standard.md` rule 7).
 - A plugin does work only to answer a call or for a `Watch` the node holds
   with that grid in scope: no walk, glance or feed runs for the process's
@@ -533,7 +533,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   layout is the workspace tile, and inside one every frame's viewport is part of
   it (2026-10-14).
   Inside a workspace tile the focused pane and the zoomed pane are part of the
-  layout the tile remembers, written with it on every change, so a workspace
+  layout the tile keeps, written with it on every change, so a workspace
   reopens on the pane it was left on; the focused tile is
   session-ephemeral only outside a workspace tile (2026-10-14,
   `pane.LayoutFingerprint`).

@@ -20,7 +20,7 @@ import (
 // browser that refuses storage still switches, for this session only.
 const themeKey = "gridwell.theme"
 
-// setTheme is the user's pick: apply it and remember it.
+// setTheme is the user's pick: apply it and store it.
 func (a *App) setTheme(t theme.Theme) {
 	a.applyTheme(t)
 	a.storeTheme(t)
@@ -42,7 +42,7 @@ func (a *App) storedTheme() theme.Theme {
 	return t
 }
 
-// storeTheme remembers the pick. A browser with storage blocked throws here,
+// storeTheme stores the pick. A browser with storage blocked throws here,
 // and that is not a failure the user can do anything about: the theme is on
 // screen either way, and it is back to the default next load.
 func (a *App) storeTheme(t theme.Theme) {

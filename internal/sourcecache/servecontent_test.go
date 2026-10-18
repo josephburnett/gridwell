@@ -16,7 +16,7 @@ import (
 )
 
 // The content API's bounded cache, pinned: a 200 body re-serves byte-identical
-// while dark, a non-200 verdict is never remembered, an oversized body streams
+// while dark, a non-200 verdict is never cached, an oversized body streams
 // live but stays uncached, and the cap evicts oldest-first.
 
 // contentFake is a namespace whose only living method is ServeContent.
@@ -82,7 +82,7 @@ func TestServeContentServesStaleWhenDark(t *testing.T) {
 	fake.dark = true
 	st, mt, data, err := serveContentAPI(cc, "7", "photo.jpg")
 	if err != nil {
-		t.Fatalf("a dark source must serve the remembered body: %v", err)
+		t.Fatalf("a dark source must serve the cached body: %v", err)
 	}
 	if st != 200 || mt != "image/jpeg" || !bytes.Equal(data, body) {
 		t.Errorf("stale serve = (%d, %s, %d bytes), want the exact live answer", st, mt, len(data))
@@ -104,7 +104,7 @@ func TestServeContentNeverCachesVerdicts(t *testing.T) {
 	if st != 404 {
 		t.Fatalf("live 404 = %d", st)
 	}
-	// …and is not remembered: dark yields the transport error, never a stale
+	// …and is not cached: dark yields the transport error, never a stale
 	// error page.
 	fake.dark = true
 	if _, _, _, err := serveContentAPI(cc, "9", "gone.png"); status.Code(err) != codes.Unavailable {
@@ -205,11 +205,11 @@ func TestPrefetchWalksServesPageBodies(t *testing.T) {
 	}
 }
 
-// TestServeContentRemembersAnEmptyBody: a 200 with no bytes — an empty file, a
+// TestServeContentCachesAnEmptyBody: a 200 with no bytes — an empty file, a
 // 200 with only headers — is an answer like any other. The same nil-binds-as-
 // NULL fault that hit tile content hit the content API's cache too: the write
-// failed, nothing was remembered, and the cache announced itself broken.
-func TestServeContentRemembersAnEmptyBody(t *testing.T) {
+// failed, nothing was cached, and the cache announced itself broken.
+func TestServeContentCachesAnEmptyBody(t *testing.T) {
 	cc, fake := contentFixture(t)
 	fake.bodies["7|empty.txt"] = contentBody{status: 200, mediaType: "text/plain", data: nil}
 
@@ -220,13 +220,13 @@ func TestServeContentRemembersAnEmptyBody(t *testing.T) {
 	down := cc.cacheDown
 	cc.healthMu.Unlock()
 	if down {
-		t.Fatal("remembering an empty served body broke the cache: the strip now says it cannot remember answers")
+		t.Fatal("caching an empty served body broke the cache: the strip now says it cannot store answers")
 	}
 
 	fake.dark = true
 	st, mt, data, err := serveContentAPI(cc, "7", "empty.txt")
 	if err != nil {
-		t.Fatalf("dark serve of a remembered empty body: %v", err)
+		t.Fatalf("dark serve of a cached empty body: %v", err)
 	}
 	if st != 200 || mt != "text/plain" || len(data) != 0 {
 		t.Fatalf("dark serve = %d %q %q, want 200 text/plain and no bytes", st, mt, data)

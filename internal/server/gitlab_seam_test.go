@@ -52,7 +52,7 @@ func gitlabTodo(id int64, created string) gitlabfake.Todo {
 	return t
 }
 
-// gitlabStackAt spawns the plugin over an EXISTING memory DB path (a restart
+// gitlabStackAt spawns the plugin over an EXISTING cache DB path (a restart
 // reuses it) and returns the adapter client plus a closer that stops both.
 func gitlabStackAt(t *testing.T, memPath string, cfg map[string]string) (namespace.Namespace, pluginv1.PluginClient, func()) {
 	t.Helper()
@@ -174,8 +174,8 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	}
 
 	// Plugin restart: a fresh process has never seen todo 1, and GitLab does
-	// not list it. The node remembers — same tile, same id, same placement,
-	// label — and its content says it is not in memory.
+	// not list it. The node caches — same tile, same id, same placement,
+	// label — and its content says it is not in the cache.
 	closeStack()
 	client2, _, closeStack2 := gitlabStackAt(t, memPath, cfg)
 	t.Cleanup(closeStack2)

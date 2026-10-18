@@ -18,7 +18,7 @@ func backupTestHome(t *testing.T) (home string, rootID string) {
 	home = t.TempDir()
 	t.Setenv("GRIDWELL_HOME", home)
 	cfgPath := filepath.Join(home, "server.yaml")
-	// A plugin that has never served has no memory rows; a backup must not
+	// A plugin that has never served has no rows; a backup must not
 	// abort on it.
 	if err := os.WriteFile(cfgPath, []byte("plugins:\n  - kind: gitlab\n    label: todos\n"), 0o600); err != nil {
 		t.Fatal(err)

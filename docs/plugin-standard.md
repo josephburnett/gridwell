@@ -5,7 +5,7 @@ third-party plugin should meet it too. `docs/plugin-authoring.md` says how the
 plugin API works; this says what a good plugin does at it.
 
 A plugin serves keys and content; the node owns ids and layout. It holds no
-node fact. It answers in its own stable keys, keeps its own memory of its
+node fact. It answers in its own stable keys, keeps its own cache of its
 source in `state_dir` under `cache.db`'s contract, and everything else it
 gets from the node comes from what it declared on the wire. The rules below
 apply the promises in `CLAUDE.md` one hop further, inside the plugin.
@@ -104,7 +104,7 @@ if readErr != nil {
 ```
 
 **Test.** Per plugin: pass `Info`, then make the source unreachable and assert
-the read answers `codes.Unavailable` (or memory, rule 7), not an empty listing
+the read answers `codes.Unavailable` (or from the cache, rule 7), not an empty listing
 and not `FailedPrecondition`:
 `fs/plugin/plugin_test.go:TestReadContentOfAnUnreadableFileIsUnavailable`,
 `proc/plugin/plugin_test.go:TestListOfAnUnreadableTableIsUnavailable`,
@@ -115,11 +115,11 @@ and `gitlab_outage_seam_test.go`.
 
 **Today.** Meets: fs; proc answers a table it cannot read `Unavailable`
 (`proc/plugin/plugin.go:192-195`, `207-209`); hey turns every failed walk,
-a cold one included, into memory with its reason (`hey/plugin/plugin.go:406-420`),
+a cold one included, into the cache with its reason (`hey/plugin/plugin.go:406-420`),
 and a CLI it cannot run is `Unavailable` (`hey/heycli/heycli.go:357`).
 Partial: gitlab and gmail map a network failure to `Unavailable`
 (`gitlab/gitlabapi/client.go:105-110`, `142`; `gmail/gmailapi/client.go`), but
-a cold read, one memory has no answer for, whose walk fails still fails with
+a cold read, one the cache has no answer for, whose walk fails still fails with
 the walk's own code (`memo/flights.go:119`, pinned by `memo/flights_test.go`,
 "a cold read whose walk failed answers the failure";
 `gitlab/plugin/plugin.go:301-304`, `gmail/plugin/plugin.go:470-472`). So a
@@ -161,7 +161,7 @@ Per plugin: `gmail/plugin/allmail_test.go:TestALabelListingIsAuthoritativeOnlyWh
 `hey/plugin/watch_test.go:TestAuthoritativeOnlyWhenDefinitive`.
 
 **Today.** Meets: fs (`fs/plugin/plugin.go:255`), pages; gmail, a label read
-whole with memory current to Gmail's history (`gmail/plugin/plugin.go:503`);
+whole with the cache current to Gmail's history (`gmail/plugin/plugin.go:503`);
 hey, a box whose catch-up walk read it whole with the feed live
 (`hey/plugin/plugin.go:295-299`, `450`). All mail and everything are never
 authoritative, by decision. proc and gitlab are never definitive by design
@@ -219,7 +219,7 @@ default:
 	if _, ok := mail.LookupGrid(req.Grid); !ok {
 		return presence(pluginv1.ProbeResponse_PRESENCE_GONE), nil // a grid this plugin never lists
 	}
-	switch p.mem.InBox(req.Grid, id) {
+	switch p.cache.InBox(req.Grid, id) {
 	case mail.Present:
 		return presence(pluginv1.ProbeResponse_PRESENCE_PRESENT), nil
 	case mail.Gone:
@@ -237,15 +237,15 @@ which answer for the grid named too; fs and gitlab, whose keys live in one
 grid each, so the plugin-wide answer is the grid's. Every plugin but fs
 and gitlab has a `TestProbeAnswersForTheGridAsked`.
 
-## 7. Memory answers when a refresh fails
+## 7. The cache answers when a refresh fails
 
-**Rule.** When a refresh fails but memory can answer, answer from memory and
+**Rule.** When a refresh fails but the cache can answer, answer from the cache and
 say so: `ListResponse.unreachable` (an additive string, empty when live, the
-reason when served from memory); the node reports it as the source's health,
+reason when served from the cache); the node reports it as the source's health,
 as it does a failed read, and keeps serving the rows.
 
-**Why.** "Nothing is done for nobody" has a twin at the node: "A remembered
-grid serves FIRST … Nothing on the answer says it is a memory — that is the
+**Why.** "Nothing is done for nobody" has a twin at the node: "A cached
+grid serves FIRST … Nothing on the answer says it is cached — that is the
 source's health" (`docs/freshness.md`, layer 4, `internal/sourcecache/`).
 A failed `List` costs the user every entry the node has not minted a row for,
 which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
@@ -254,24 +254,24 @@ which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
 
 ```go
 start := since(req.Grid)
-unreachable, err := p.flights.Read(ctx, req.Grid, p.mem.Shows(start))
+unreachable, err := p.flights.Read(ctx, req.Grid, p.cache.Shows(start))
 if err != nil {
 	return nil, err
 }
 if req.Grid != todos.RootGrid {
-	return &pluginv1.ListResponse{Entries: todos.WeekEntries(start, p.mem.Week(start)),
+	return &pluginv1.ListResponse{Entries: todos.WeekEntries(start, p.cache.Week(start)),
 		SourceLabel: req.Grid, Unreachable: unreachable}, nil
 }
 ```
 
 **Test.** The field is `ListResponse.unreachable`, in api v0.5.0; the node
 side is pinned by
-`internal/server/memory_answer_seam_test.go:TestAMemoryAnswerKeepsEveryRowAndReportsTheReason`.
-Per plugin: warm the memory with one walk, make the next walk fail, and assert
-`List` answers the remembered entries with no error and `unreachable` set:
-`gitlab/plugin/plugin_test.go:TestAWarmReadAnswersMemoryWithTheLastWalksFailure`,
-`gmail/plugin/plugin_test.go:TestAWarmReadAnswersMemoryAndSaysWhyTheWalkFailed`,
-`hey/plugin/plugin_test.go:TestAWarmReadAnswersMemoryAndTheLastFailure`; across
+`internal/server/cache_answer_seam_test.go:TestACacheAnswerKeepsEveryRowAndReportsTheReason`.
+Per plugin: warm the cache with one walk, make the next walk fail, and assert
+`List` answers the cached entries with no error and `unreachable` set:
+`gitlab/plugin/plugin_test.go:TestAWarmReadAnswersCacheWithTheLastWalksFailure`,
+`gmail/plugin/plugin_test.go:TestAWarmReadAnswersCacheAndSaysWhyTheWalkFailed`,
+`hey/plugin/plugin_test.go:TestAWarmReadAnswersCacheAndTheLastFailure`; across
 the seam `internal/server/gitlab_outage_seam_test.go`,
 `gmail_watch_seam_test.go:TestGmailWarmGridSurvivesGmailGoingAway` and
 `hey_unreachable_seam_test.go:TestHeySignedOutKeepsTheGridAndSaysWhy`.
@@ -279,8 +279,8 @@ the seam `internal/server/gitlab_outage_seam_test.go`,
 **Today.** Meets: gitlab (`gitlab/plugin/plugin.go:294-319`), gmail
 (`gmail/plugin/plugin.go:469-475`), hey (`hey/plugin/plugin.go:406-420`),
 all through `memo.Flights.Read` (`memo/flights.go:102-125`). A cold read has
-no memory to answer from, and is rule 3's. N/A: fs, proc and pages, which keep
-no memory.
+no cache to answer from, and is rule 3's. N/A: fs, proc and pages, which keep
+no cache.
 
 ## 8. Work only while watched
 
@@ -485,7 +485,7 @@ the plugin's lifetime context, not `context.Background()`.
 
 ```go
 case mail.EverythingGrid:
-	if p.mem.Member(id) {
+	if p.cache.Member(id) {
 		return presence(pluginv1.ProbeResponse_PRESENCE_PRESENT), nil
 	}
 	_, err := p.src.ThreadHTML(ctx, id)
@@ -546,7 +546,7 @@ Partial: gmail logs its walk and message failures once per episode
 access-token refresh for as long as the write keeps failing
 (`gmail/plugin/config.go:93`).
 
-## 15. Share the memory code once
+## 15. Share the cache code once
 
 **Rule.** The cache file, the single-flight walk and the change fan-out are
 one package in the plugins repository, not a copy per plugin.
@@ -569,7 +569,7 @@ Each plugin keeps only its snapshot's shape (`gitlab/todos/store.go`,
 `hey/mail/store.go`, `cache` in `gmail/plugin/plugin.go`).
 
 **Test.** The package's own tests (`memo/file_test.go`, `flights_test.go`,
-`changes_test.go`); each plugin keeps one test that its memory survives a
+`changes_test.go`); each plugin keeps one test that its cache survives a
 restart through it: `gitlab/plugin/plugin_test.go:TestRestartAnswersFromTheCacheFileWithoutWalking`,
 `gmail/plugin/plugin_test.go:TestTheCacheSurvivesARestart`,
 `hey/plugin/plugin_test.go:TestTheCacheSurvivesARestart`.
@@ -577,7 +577,7 @@ restart through it: `gitlab/plugin/plugin_test.go:TestRestartAnswersFromTheCache
 **Today.** Meets: gitlab, gmail and hey, which take `File`, `Flights`,
 `Changes` and `Life` from memo; proc, which takes `Changes` and `Poll`
 (`proc/plugin/plugin.go:99-103`). N/A: fs, whose OS watch is its own
-(`fs/plugin/watch.go`), and pages, neither of which keeps a memory.
+(`fs/plugin/watch.go`), and pages, neither of which keeps a cache.
 
 ## 16. Seam tests with the real binary
 
@@ -626,7 +626,7 @@ is the mechanical check to write.
 
 **Today.** Meets: fs, proc, gmail; pages has none and takes no config.
 Partial: gitlab says "a token GitLab stops taking is treated like GitLab being
-down" (`gitlab/README.md:25-26`), which holds for a grid memory can answer and
+down" (`gitlab/README.md:25-26`), which holds for a grid the cache can answer and
 not for a cold one (rule 3); hey says everything is laid out "a row per day,
 newest at the top" (`hey/README.md:210-211`), while its hint is
 `calendar.Cell`: a column per day, newest to the right, a row per hour.
@@ -727,15 +727,15 @@ gmail and hey, which take no body back and declare no `writable`.
 
 ## 20. Find only what you hold
 
-**Rule.** Answer `Find` from what your memory already holds, never by
+**Rule.** Answer `Find` from what your cache already holds, never by
 reading the source for the query. A plugin whose source is a file tree keeps
-no memory, so it finds nothing: `Unimplemented`, with the reason (Joe,
+no cache, so it finds nothing: `Unimplemented`, with the reason (Joe,
 2026-10-17).
 
 **Why.** "Nothing is done for nobody: no capture, fetch or walk runs unless
 something on screen or in the store needs its result." A query names no grid
 on screen, so a walk of the disk to answer one is work done for nobody, and
-on a large tree an unbounded one. The node remembers the `Unimplemented` for
+on a large tree an unbounded one. The node records the `Unimplemented` for
 the life of the process (`pluginhost.absentVerbs`), so the refusal costs one
 round trip, and a namespace that does not find is no skip in the result.
 
@@ -749,13 +749,13 @@ func (p *Plugin) Find(context.Context, *pluginv1.FindRequest) (*pluginv1.FindRes
 
 **Test.** `fs/plugin/find_test.go:TestFindIsUnimplementedByRule`: a query
 naming a file that is there answers `Unimplemented` with the plugin's own
-reason. `gmail/plugin/plugin_test.go:TestFindReadsMemoryOnly` and
-`hey/plugin/plugin_test.go:TestFindReadsMemoryOnly` for a plugin with
-memory. At the node,
+reason. `gmail/plugin/plugin_test.go:TestFindReadsCacheOnly` and
+`hey/plugin/plugin_test.go:TestFindReadsCacheOnly` for a plugin with
+a cache. At the node,
 `internal/pluginhost/absent_verb_test.go:TestAnAbsentVerbIsAskedOncePerProcess`.
 
 **Today.** Meets: fs, which answers none; gitlab, gmail and hey, which
-find their memory only. N/A: proc and pages, which serve no `Find`.
+find their cache only. N/A: proc and pages, which serve no `Find`.
 
 ## Checklist
 
@@ -771,7 +771,7 @@ lines say what remains.
 - [ ] 4. A definitive listing (whole read, feed connected) is authoritative; a capped read or a down feed is not.
 - [ ] 5. Each key lives in one grid; other grids list links to it.
 - [ ] 6. `Probe` answers for the grid it names.
-- [ ] 7. A failed refresh answers from memory with `ListResponse.unreachable` set.
+- [ ] 7. A failed refresh answers from the cache with `ListResponse.unreachable` set.
 - [ ] 8. No walk, glance or feed runs except for a call or a `Watch` in scope.
 - [ ] 9. `Watch` sends its header on accept, collapses bursts, re-announces the scope on overflow.
 - [ ] 10. Placement hints depend on the key, not on list position.
@@ -784,4 +784,4 @@ lines say what remains.
 - [ ] 17. The README matches the code.
 - [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `GridChanged` only for a listing that may have moved.
 - [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp; a text entry you would refuse declares `read_only` with the reason.
-- [ ] 20. `Find` reads only your memory; a file tree answers `Unimplemented` with the reason.
+- [ ] 20. `Find` reads only your cache; a file tree answers `Unimplemented` with the reason.

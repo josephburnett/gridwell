@@ -6,7 +6,7 @@ import { settle, timeToLand } from './cadence';
 // workspace is the place and its interior is server-owned, so a fresh boot
 // restores the arrangement from the layout blob. The workspace stack is
 // session-only by design, like portal frames, so after the reload the bar's
-// ascent falls back to the workspace tile's containing grid rather than a remembered
+// ascent falls back to the workspace tile's containing grid rather than a cached
 // outer tree.
 
 async function workspaceState(window: any): Promise<{ depth: number; tileID?: string }> {

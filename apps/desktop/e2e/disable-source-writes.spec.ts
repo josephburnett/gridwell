@@ -3,7 +3,7 @@ import { createLeafLink, disableSource, updateText } from './oracle';
 
 // A disabled source is read-only until the node restarts, and that is a
 // verdict, not an outage (gwerr.SourceDisabled): a far node that answered once
-// and is remembered is switched off with its home on screen. Panning it posts
+// and is cached here is switched off with its home on screen. Panning it posts
 // a framing write the node refuses, which the client drops without a notice
 // and never parks for the backstop to re-post; its text opens with no editor
 // and the bar says why, from the node's stamp (Tile.read_only).

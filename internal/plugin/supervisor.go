@@ -18,7 +18,7 @@ import (
 )
 
 // A plugin's subprocess is spawned, watched and respawned here. While the
-// process is gone every call fails rather than being answered from a memory of
+// process is gone every call fails rather than being answered from a cache of
 // what the plugin used to say. go-plugin offers no exit signal to select on,
 // only Exited(), so the watch looks on a tick, and the respawn is backed off,
 // capped and reset only after a process has proved it can stay up.

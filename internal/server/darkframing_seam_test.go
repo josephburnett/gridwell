@@ -15,7 +15,7 @@ import (
 )
 
 // A far grid reopens where it was last left while its machine is gone: the
-// source cache in front of the real transport remembers the latest framing of
+// source cache in front of the real transport caches the latest framing of
 // a far root, from this node's own accepted write and from the far node's
 // event alike, and a door's from its tile. Across the whole seam, because the
 // framing a dark handshake answers is assembled from three layers' copies.
@@ -118,7 +118,7 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 		}
 	}
 
-	// A pan while dark is refused as every dark write is, and remembered
+	// A pan while dark is refused as every dark write is, and cached
 	// nowhere: the far node never took it.
 	_, ferr := h.localCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: root, Cx: 9, Cy: 9, Zoom: 3})
 	_, cerr := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,

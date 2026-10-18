@@ -1,6 +1,6 @@
 package store
 
-// The node's memory of a plugin's entries: rows in the same grids and tiles
+// The node's rows for a plugin's entries: rows in the same grids and tiles
 // tables as home, under ns = the plugin id (home is ns = ''). The plugin
 // answers in stable string keys; the node mints the ids, keeps arrangement and
 // framing, and retires keys as tombstones. Ids are AUTOINCREMENT and never
@@ -32,7 +32,7 @@ type Namespace struct {
 	ns string
 }
 
-// Namespace returns the external memory under ns (a plugin id).
+// Namespace returns the rows under ns (a plugin id).
 func (s *Store) Namespace(ns string) *Namespace {
 	return &Namespace{s: s, ns: ns}
 }
@@ -444,7 +444,7 @@ func (n *Namespace) Move(tileID, x, y, w, h int64, claim *gridwellv1.Placement) 
 	})
 }
 
-// SetFraming persists framing into this namespace's memory, the one writer of
+// SetFraming persists framing into this namespace's rows, the one writer of
 // the one shape (framing.go). Exactly one of tileID and rootGridID is set.
 func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed bool, err error) {
 	table, id, row := "tiles", tileID, tileRow(tileID)

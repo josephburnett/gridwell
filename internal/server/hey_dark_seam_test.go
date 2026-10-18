@@ -13,7 +13,7 @@ import (
 
 // A hey CLI that goes missing after the plugin's Info passed is a source gone
 // dark, not a verdict (docs/plugin-standard.md rules 3 and 7): the Imbox keeps
-// every row it remembers, the placed one where the user left it, and the
+// every row it caches, the placed one where the user left it, and the
 // source's health says why, and putting the CLI back clears it with no
 // restart. A verdict here would refuse the grid outright, and a placed email
 // would vanish until the CLI returned.
@@ -47,7 +47,7 @@ func TestHeyCLIGoneAfterInfoReadsDark(t *testing.T) {
 		t.Errorf("health = %+v, want the reason the CLI could not be read", h)
 	}
 	if len(dark.Tiles) != 2 {
-		t.Fatalf("the dark imbox = %v, want every remembered row", dark.Tiles)
+		t.Fatalf("the dark imbox = %v, want every cached row", dark.Tiles)
 	}
 	got := tileWithLabel(t, dark, "Lunch plans")
 	if got.Id != placed.Tile.Id || got.X != 7 || got.Y != 3 {

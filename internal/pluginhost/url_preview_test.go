@@ -1,7 +1,7 @@
 package pluginhost_test
 
 // A plugin url tile against a home one: the screenshot, the standing freeze
-// and the zoom are the node's memory of how the user left the tile, whoever
+// and the zoom are the node's record of how the user left the tile, whoever
 // serves the page, so each rides the same SetTile arms home's does. The one
 // difference is the address, which is the plugin's: a writeback naming one is
 // refused. The shipped fs binary serves the pages, through a full server.

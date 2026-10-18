@@ -30,7 +30,7 @@ type findHit struct {
 // pass. An id: locate is refused: there is no parent index here.
 func (a *Adapter) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
 	if q := rpc.ParseFindQuery(req.Query); q.ID != "" {
-		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the memory DB)")
+		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the store)")
 	}
 	g := &findGrids{a: a, ctx: ctx, byGrid: map[string]*synthesized{}}
 	scope := ""

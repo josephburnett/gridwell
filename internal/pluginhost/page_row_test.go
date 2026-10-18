@@ -65,7 +65,7 @@ func TestAnUnlistedPageRowStaysAPage(t *testing.T) {
 				return
 			}
 			if terr != nil {
-				t.Fatalf("GetTile = %v, want the remembered page", terr)
+				t.Fatalf("GetTile = %v, want the cached page", terr)
 			}
 			if row == nil {
 				t.Fatalf("the touched page row is missing from its grid: %v", g.Tiles)

@@ -5,7 +5,7 @@
 // of its own store, and serves the full Gridwell surface to clients, so a
 // plugin is invisible to a connection.
 //
-// A plugin may keep its own memory of its source, in the private directory the
+// A plugin may keep its own cache of its source, in the private directory the
 // node hands it at spawn (`state_dir`), under cache.db's contract: disposable,
 // safe to delete, rewarmed by use.
 //
@@ -384,7 +384,7 @@ type ListResponse struct {
 	// authoritative: this listing enumerates the grid definitively, so a key
 	// absent from it is gone, as for a readable directory. When false, absence
 	// only means not seen this pass, as with the process table, and the node
-	// keeps serving remembered entries until Probe answers GONE. It is the one
+	// keeps serving cached entries until Probe answers GONE. It is the one
 	// sweep fact only the plugin knows.
 	Authoritative bool `protobuf:"varint,2,opt,name=authoritative,proto3" json:"authoritative,omitempty"`
 	// source_label is the name of the backing source, such as the directory path
@@ -392,7 +392,7 @@ type ListResponse struct {
 	// and the client's bar shows it.
 	SourceLabel string `protobuf:"bytes,3,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
 	// unreachable is empty when the listing is live. Otherwise the plugin
-	// answered from memory and this is why, in a plain sentence; the node shows
+	// answered from the cache and this is why, in a plain sentence; the node shows
 	// it as the source's health and keeps serving the entries.
 	Unreachable   string `protobuf:"bytes,4,opt,name=unreachable,proto3" json:"unreachable,omitempty"`
 	unknownFields protoimpl.UnknownFields

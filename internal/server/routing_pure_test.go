@@ -235,7 +235,7 @@ func TestQualifyEvent(t *testing.T) {
 	// and the fan-in's prefix is exactly that uuid. A bare prepend would
 	// mint "u/" — a name that resolves to nothing.
 	own := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		Healthy: false, Detail: "cache cannot remember",
+		Healthy: false, Detail: "cache cannot store",
 	}}})
 	if got := own.GetPluginHealth().GetPluginUuid(); got != "u" {
 		t.Errorf("self PluginHealth uuid = %q, want the fan-in's own %q", got, "u")

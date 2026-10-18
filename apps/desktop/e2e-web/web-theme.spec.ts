@@ -17,7 +17,7 @@ async function groundPixel(window: any, x: number, y: number): Promise<number> {
   );
 }
 
-test('the circle popover switches the theme and the browser remembers it', async ({
+test('the circle popover switches the theme and the browser keeps it', async ({
   gw,
   window,
 }) => {

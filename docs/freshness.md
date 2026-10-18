@@ -5,7 +5,7 @@ own a rule each; no layer knows the next one's. This traces a fact through
 all of them, so "why is this stale" can be looked up instead of dug out of
 the code.
 
-The one rule underneath: a memory may be served, but it is always labelled,
+The one rule underneath: a cache may be served, but it is always labelled,
 and nothing the user made is dropped without a server verdict.
 
 ## The layers
@@ -15,7 +15,7 @@ Freshness is decided on the way back.
 
 **1. The source.** A plugin's directory, API, or process table; a far node's
 store. It has no freshness rule of its own — it is the truth everything else
-is a memory of. What it owes the node is an honest failure: a transport-shaped
+is a cache of. What it owes the node is an honest failure: a transport-shaped
 error means "not right now", any coded error is a verdict. `api/gwerr`'s
 `IsTransport` is the one classifier that separates them, and every layer
 below branches on it.
@@ -30,13 +30,13 @@ nothing to answer from and is simply absent. The adapter publishes that
 outage as this namespace's health (`Adapter.noteSource`) — the transition
 only, on the same event and uuid the supervisor uses for the subprocess,
 because "a declared source is not answering" is one fact whichever half of
-the plugin it is — so the client marks the grids it serves as memories with
+the plugin it is — so the client marks the grids it serves as cached with
 no call of its own having to fail. A listing the plugin answered from its
-own memory carries `ListResponse.unreachable`, the reason: its entries serve
+own cache carries `ListResponse.unreachable`, the reason: its entries serve
 and refresh rows as a live listing's do, the reason is published as the
 source's health by the same `noteSource`, and it retires nothing, since a
-memory is not a verdict even when it claims `authoritative`. Retirement needs a verdict — an
-authoritative listing sweeps by `mem.Sweep`, a live non-authoritative one
+cached answer is not a verdict even when it claims `authoritative`. Retirement needs a verdict — an
+authoritative listing sweeps by `store.Namespace.Sweep`, a live non-authoritative one
 sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
 itself gone — fails the read outright at `cp.Info`, because the declared
 facts are the plugin's own and nothing can supply it. A source that
@@ -77,7 +77,7 @@ and answers Unimplemented has a broken declaration, and that turns live
 updates off too.
 
 **3. The transport** — `internal/connection/connection.go`. Reachability is
-remembered, not only announced when it changes, and every way a connection
+cached, not only announced when it changes, and every way a connection
 fails is the same record: a refused dial, a failed learn, a dead stream
 (`fanInRemote`, looping `namespace.Follow`) and a moved landing all go
 through `note`, the one writer of `s.health`, which publishes one
@@ -89,11 +89,11 @@ whose far node answers a home other than the stored one
 read, never a staleness.
 
 **4. The source cache** — `internal/sourcecache/`. In front of the
-transport only, over the disposable `cache.db`. A remembered grid serves
-FIRST (`Layer.GetGrid`), exactly as it was remembered: past `freshWindow`
+transport only, over the disposable `cache.db`. A cached grid serves
+FIRST (`Layer.GetGrid`), exactly as it was cached: past `freshWindow`
 (30s) or with the source known dark, one background `revalidateGrid` is
 kicked behind it, single-flight per grid id. Only a miss waits on the source.
-Nothing on the answer says it is a memory — that is the source's health, and
+Nothing on the answer says it is cached — that is the source's health, and
 the client derives it from there (`client/cache.SourceDark`). Darkness is
 `Layer.dark`, keyed by
 connection segment (`sourceOf`), learned from two directions that are the
@@ -101,18 +101,18 @@ same fact — `noteReach`, from any pass-through call that failed
 transport-shaped, and `applyEvent`'s health arm, from the connection's own
 health on the stream this layer relays — and written through one function,
 `setDark`, whose transition back to light is also what re-warms that source.
-Every other read passes through and remembers, falling back to the remembered
+Every other read passes through and caches, falling back to the cached
 answer on a transport-class failure only. Writes always pass through and fold
-their responses into the remembered rows (`foldWrite`), except to a source
+their responses into the cached rows (`foldWrite`), except to a source
 the user disabled, whose writes the router refuses before they reach this
 layer (`gwerr.SourceDisabled`, `server/disabled.go`). The relayed stream
 folds in the same way (`applyEvent`): `TileChanged` and `TileRemoved` into
 the tile rows, a door's framing riding its tile, and `GridFramingChanged` into
-every remembered handshake's doors rooted at that grid (`Layer.reframe`,
+every cached handshake's doors rooted at that grid (`Layer.reframe`,
 over `rpc.Reframe`), which is also where an accepted root `SetFraming` lands,
 so a far grid reopens dark where it was last left. `SelectionChanged` and an
-accepted `SetSelection` land the whole set on the remembered grid
-(`Layer.reselect`). A write the source did not accept is remembered nowhere. `prefetch.go` warms
+accepted `SetSelection` land the whole set on the cached grid
+(`Layer.reselect`). A write the source did not accept is cached nowhere. `prefetch.go` warms
 every source on Subscribe and one source when it comes back;
 `servecontent.go` gives the `/content/` API the same treatment under its own
 caps.
@@ -255,9 +255,9 @@ their link and are still owed an answer. A stream gap passes
 says whose events it swallowed. The outbox drain is scoped by neither: a
 parked write is owed a verdict whatever flapped.
 
-## Trace (a): a memory corrects itself
+## Trace (a): a cached grid corrects itself
 
-A remembered grid past its window, the revalidation behind it, and the grid
+A cached grid past its window, the revalidation behind it, and the grid
 correcting with no user gesture.
 
 1. `client/wasm/main.go:App.fetchGrid` misses in the cache, claims the id
@@ -266,16 +266,16 @@ correcting with no user gesture.
    connection segment (`Server.resolve`) and lands on the cache layer, which
    is what the registry holds as the transport.
 3. `sourcecache.Layer.GetGrid` hits `loadGrid`. `time.Since(fetchedAt)` is
-   past `c.window()`, so `revalidateGrid` is kicked. The remembered rows
+   past `c.window()`, so `revalidateGrid` is kicked. The cached rows
    return immediately, unchanged — the far round trip never sits on the read
    path.
 4. The router qualifies the answer (`qualifyTilesFor`,
    `rpc.TransitQualifyGrid`). An age is not a fact about the grid, so the
-   answer carries none: with the source still answering, a memory this fresh
+   answer carries none: with the source still answering, a cache this fresh
    is what every serve is.
 5. `App.loadGrid` → `cache.Cache.PutGrid`, which ages each row's cached
    body. The bar draws no chip, because the source is not dark
-   (`client/wasm/bottombar.go:App.drawMemoryChip` reads
+   (`client/wasm/bottombar.go:App.drawCachedChip` reads
    `cache.Cache.SourceDark`). Nothing else about the grid changes: the chip
    is bar chrome, never tile styling.
 6. In the background, `Layer.revalidateGrid`'s goroutine runs on `pf.ctx`
@@ -345,11 +345,11 @@ and what the client does with it is the client's half. This is the path that
 matters in practice — the machine usually dies while nobody is calling it, and
 without it the grid would look live until some call happened to fail.
 
-**What the user sees while dark.** A remembered grid serves inside its
+**What the user sees while dark.** A cached grid serves inside its
 window and revalidates behind it anyway, because `Layer.GetGrid` consults
 `isDark` alongside the age; the bar shows the "cached" chip, which the client
 draws from the same health the node learned. Bodies, previews, and served pages
-fall back to remembered entries where there are any; where there are none the
+fall back to cached entries where there are any; where there are none the
 transport error stands and the read fails honestly. Links through the
 connection are NOT dead — `client/deadref` answers from the node's
 declaration, and a declared connection that will not answer is health, not
@@ -358,7 +358,7 @@ deadness.
 **On the client.** `App.startSSE` routes a `PluginHealth` event to
 `App.reportPluginHealth`, which folds the event into `Cache.NoteHealth`
 — the client's one copy of which sources are not answering. Every grid served
-through one is a memory, and that is what the bar's chip says
+through one is served from cache, and that is what the bar's chip says
 (`Cache.SourceDark`, joined by `ServedBy`, the rule a resync is scoped by).
 `events.ReactHealth` is the one table over the event. Unhealthy posts a
 sticky notice keyed `plugin:<node>/<conn>` ("live updates stopped — …");
@@ -514,7 +514,7 @@ revalidation or a write. Every event on those streams is a cue to look
 again, never a fact only it carries; the rows are already stored and the
 next read serves them.
 
-**Serve-first can show a memory.** Inside `freshWindow`, with the source not
+**Serve-first can show a cached answer.** Inside `freshWindow`, with the source not
 known dark, `Layer.GetGrid` does not even revalidate. A change made on the
 far node in the last 30 seconds whose event did not arrive is not on screen
 and nothing says so. Only a grid the cache has never seen waits on the
@@ -533,12 +533,12 @@ be resolved answers NOT gone (`connection.Server.Probe`). A row kept on
 doubt costs nothing durable; a row retired on doubt loses a placement and
 every link to it. Framing is the same: a door answered with no framing
 (the transport's row for a dark connection) keeps the one the cache
-remembers (`sourcecache.keepFraming`), because a visited grid never becomes
+caches (`sourcecache.keepFraming`), because a visited grid never becomes
 unvisited.
 
 **The cache is disposable.** `cache.db` may be deleted at any moment. Every
 guarantee here degrades to "the first read pays the source's full latency",
-and a cache that cannot remember surfaces as this namespace's health, because
+and a cache that cannot store surfaces as this namespace's health, because
 a silently broken cache runs unnoticed for hours. Two shapes, one report:
 `noteCache` announces the transitions of an open file whose writes fail, and a
 file that never opened at all is `sourcecache.Unavailable` — the store
@@ -558,7 +558,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 
 | Behaviour | Pinned by |
 |---|---|
-| A past-window hit serves the remembering unchanged and kicks one revalidation | `sourcecache_test.go:TestAPastWindowServeIsTheRememberedAnswer`, `TestServeFirstNeverWaitsOnTheSource` |
+| A past-window hit serves the cached answer unchanged and kicks one revalidation | `sourcecache_test.go:TestAPastWindowServeIsTheCachedAnswer`, `TestServeFirstNeverWaitsOnTheSource` |
 | Revalidation that finds drift emits `GridChanged` | `sourcecache_test.go:TestRevalidationEmitsGridChanged` |
 | A verdict evicts and announces | `sourcecache_test.go:TestRevalidationVerdictEvicts` |
 | The event crosses layer stream → fan-in → qualification → client, and the next read serves the correction | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient` |
@@ -573,21 +573,21 @@ Each cross-layer behaviour in the three traces, and what pins it.
 |---|---|
 | The transport learns darkness from its own stream and publishes once | `internal/connection/fanin_health_test.go:TestFanInRemotePublishesHealthOnStreamDeath` |
 | A subscriber arriving after the outage is told (`darkNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
-| Direction one: a failed pass-through is darkness, the remembered grid still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
+| Direction one: a failed pass-through is darkness, the cached grid still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
 | A call its caller abandoned is neither dark nor light, in the cache and the plugin adapter alike | `dark_test.go:TestAnAbandonedCallLearnsNothing`, `internal/server/abandoned_read_seam_test.go` |
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
 | A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown grid whose listing moved, a grid a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their grids, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a door's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/door-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
-| Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
-| A far root's framing event and an accepted root write land on every remembered door rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a door's framing | `sourcecache/framing_test.go` |
-| A door answered with no framing keeps the remembered one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt` |
+| Serve the cached answer when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
+| A far root's framing event and an accepted root write land on every cached door rooted there; a dark framing write is refused as other dark writes are and cached nowhere; a tile event keeps a door's framing | `sourcecache/framing_test.go` |
+| A door answered with no framing keeps the cached one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheCachedFramingAndAnAnswerReplacesIt` |
 | Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its doors | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
 | A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
-| Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
-| A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the remembered grid, marked stale") |
+| Real binaries, real ssh: warmed reads serve the cached answer, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
+| A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the cached grid, marked stale") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
 | The client's health arms: `reportPluginHealth` folds the transition in and kicks in BOTH directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and the chip appears and later clears with no gesture either time |
@@ -615,7 +615,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The echo interlock drops an older `TileChanged` | `client/cache/cache_test.go:TestApplyStaleEchoDropped` (unit) |
 | A fetch never clobbers dirty bytes; a stale reply never regresses the basis | `cache_test.go:TestFetchNeverClobbersDirtyContent`, `TestStaleFetchNeverRegressesContent` |
 | A save response keeps mid-flight typing and only advances the basis | `cache_test.go:TestSavedContentKeepsMidFlightTyping` |
-| A plugin body is aged by its source's stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a remembered body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/fs_stamp_seam_test.go` |
+| A plugin body is aged by its source's stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a cached body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/fs_stamp_seam_test.go` |
 | A body answers only for the blob it was filed under, whichever path the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |

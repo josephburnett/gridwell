@@ -20,7 +20,7 @@ import (
 
 // Of's transport set is gwerr.IsTransport's, read across the one gRPC-to-Connect
 // table: for every code the server can answer, the client says Transport
-// exactly when the server side would degrade to a memory. The two spellings
+// exactly when the server side would degrade to a cache. The two spellings
 // cannot share a value, since the client sees Connect codes and the node gRPC
 // ones, so this is the pin. Abandoned is no wire code: a Canceled the far side
 // sent is a hop that never spoke, on both sides; only the client's own

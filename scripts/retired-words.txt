@@ -92,3 +92,12 @@ child_context
 # "room" — a plane of tiles is a grid.
 room
 rooms
+# "memory" and "remember" for what a source last answered — that is the
+# cache (cached). memory stays for RAM: held in memory, an in-memory store,
+# SQLite's :memory:.
+memory .*(in memory|in-memory|:memory:|memory only|journal_mode=memory|muscle memory|over memory|memTransport)
+memories
+remember
+remembers
+remembered
+remembering

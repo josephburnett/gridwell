@@ -16,9 +16,9 @@ func (f *framingSource) SetSelection(context.Context, *pb.SetSelectionRequest) (
 	return &pb.SetSelectionResponse{}, nil
 }
 
-// rememberedSelection is the far grid's selection as the layer answers it
+// cachedSelection is the far grid's selection as the layer answers it
 // with the source gone.
-func rememberedSelection(t *testing.T, cc *Layer, src *framingSource) []string {
+func cachedSelection(t *testing.T, cc *Layer, src *framingSource) []string {
 	t.Helper()
 	src.setDown(true)
 	defer src.setDown(false)
@@ -32,30 +32,30 @@ func rememberedSelection(t *testing.T, cc *Layer, src *framingSource) []string {
 // A far grid's selection reads while its machine is gone as the source last
 // held it: from the source's event, and from a write it accepted whose event
 // never came.
-func TestAFarGridsSelectionIsRemembered(t *testing.T) {
+func TestAFarGridsSelectionIsCached(t *testing.T) {
 	cc, src := framingFixture(t)
 	cc.applyEvent(context.Background(), rpc.SelectionEvent(farHome, []string{farDoor}))
-	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farDoor}) {
-		t.Errorf("after the event the remembered selection = %v, want [%s]", got, farDoor)
+	if got := cachedSelection(t, cc, src); !slices.Equal(got, []string{farDoor}) {
+		t.Errorf("after the event the cached selection = %v, want [%s]", got, farDoor)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome,
 		Remove: []string{farDoor}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rememberedSelection(t, cc, src); len(got) != 0 {
-		t.Errorf("after an accepted remove the remembered selection = %v, want none", got)
+	if got := cachedSelection(t, cc, src); len(got) != 0 {
+		t.Errorf("after an accepted remove the cached selection = %v, want none", got)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome,
 		Add: []string{farDoor}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farDoor}) {
-		t.Errorf("after an accepted add the remembered selection = %v, want [%s]", got, farDoor)
+	if got := cachedSelection(t, cc, src); !slices.Equal(got, []string{farDoor}) {
+		t.Errorf("after an accepted add the cached selection = %v, want [%s]", got, farDoor)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome, Clear: true}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rememberedSelection(t, cc, src); len(got) != 0 {
-		t.Errorf("after an accepted clear the remembered selection = %v, want none", got)
+	if got := cachedSelection(t, cc, src); len(got) != 0 {
+		t.Errorf("after an accepted clear the cached selection = %v, want none", got)
 	}
 }

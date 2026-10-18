@@ -5,7 +5,7 @@
 // of its own store, and serves the full Gridwell surface to clients, so a
 // plugin is invisible to a connection.
 //
-// A plugin may keep its own memory of its source, in the private directory the
+// A plugin may keep its own cache of its source, in the private directory the
 // node hands it at spawn (`state_dir`), under cache.db's contract: disposable,
 // safe to delete, rewarmed by use.
 //

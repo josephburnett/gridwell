@@ -10,7 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// The externals' memory engine: the join writes nothing, the user's placement
+// The plugin rows' engine: the join writes nothing, the user's placement
 // wins, hints seed first sight only, authoritative absence retires and
 // recreation mints fresh, and everything survives reopen.
 

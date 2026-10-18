@@ -79,7 +79,7 @@ func TestRetirementIsExplicitAndAbsenceIsNot(t *testing.T) {
 	}
 	rows = s2.Rows(ctx)
 	if len(rows) != 2 || rows[1].Uuid != "rtb" || rows[1].RootGridId != "rtb/rnode1/3" {
-		t.Fatalf("rows = %+v, want rtb back on its remembered landing", rows)
+		t.Fatalf("rows = %+v, want rtb back on its stored landing", rows)
 	}
 }
 

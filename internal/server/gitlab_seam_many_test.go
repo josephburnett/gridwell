@@ -19,11 +19,11 @@ import (
 // the newest pending. Pins: the outset walk is one pass per state plus
 // the pages it takes; every week is named by its Monday; the root is a
 // calendar (a row per month, weeks left to right); a week descent is
-// answered from memory; and each todo tile reads as markdown.
+// answered from the cache; and each todo tile reads as markdown.
 func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	// The todos' own created_at spreads them over the weeks; the clock is
 	// nobody's business but the refresh window's, which the default leaves
-	// wide, so the descent below is answered from memory.
+	// wide, so the descent below is answered from the cache.
 	base := time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 	var all []gitlabfake.Todo
 	for i := 0; i < 260; i++ {
@@ -89,7 +89,7 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 		t.Fatalf("this week = %+v, want the fourth Monday of the epoch month at (3,0)", thisWeek)
 	}
 
-	// Descent: answered from memory (no new calls), every tile a page
+	// Descent: answered from the cache (no new calls), every tile a page
 	// with a preview.
 	wk, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: thisWeek.ChildGridId})
 	if err != nil {

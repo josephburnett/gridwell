@@ -99,7 +99,7 @@ func TestGitLabPluginServesFromItsStateDirAfterARestart(t *testing.T) {
 }
 
 // A plugin handed no state_dir — an older node, a hand-launched binary — must
-// still serve. It then keeps its memory for its process lifetime and walks
+// still serve. It then keeps its cache for its process lifetime and walks
 // GitLab at every start, which is what it always did.
 func TestGitLabPluginWithoutAStateDirStillServes(t *testing.T) {
 	gl := gitlabfake.New(t, gitlabTodo(1, "2026-08-18T10:00:00Z"))

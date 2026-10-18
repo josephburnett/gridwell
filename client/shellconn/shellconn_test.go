@@ -128,7 +128,7 @@ func TestExitAliveFeedsTheProbe(t *testing.T) {
 		t.Fatalf("tmux gone: got (%v, %v), want (false, true)", alive, known)
 	}
 	if _, known := ExitAlive(false); known {
-		t.Fatal("a plain stream end must not be remembered as a verdict")
+		t.Fatal("a plain stream end must not be recorded as a verdict")
 	}
 	// The forgotten answer routes a snapshotted tile back through the probe.
 	_, known := ExitAlive(false)

@@ -18,7 +18,7 @@ import (
 )
 
 // Darkness is the layer's own fact about a source: while it holds, a
-// remembered grid serves without ever asking the source, and every read
+// cached grid serves without ever asking the source, and every read
 // revalidates behind. It is learned two ways, and both are tested across the
 // real transport seam, because both are facts that cross it: a pass-through
 // call that fails, and the connection's own health on the stream this layer
@@ -167,7 +167,7 @@ func awaitDark(t *testing.T, cc *Layer, source string, why string) {
 // A failed call is darkness: the grid the user re-enters right after the
 // machine died is inside its freshness window, so its age says nothing. What
 // says the source is not answering is that a call through the connection
-// failed — and the remembered grid still serves, which is the point of
+// failed — and the cached grid still serves, which is the point of
 // knowing.
 func TestAFailedCallIsDarkness(t *testing.T) {
 	cc, far, farRoot, conn := connFixture(t, Options{})
@@ -191,20 +191,20 @@ func TestAFailedCallIsDarkness(t *testing.T) {
 	}
 
 	// One call through the connection fails; now the layer knows, and the
-	// remembered grid still serves, whole.
+	// cached grid still serves, whole.
 	if err := cc.ReadContent(ctx, &pb.ReadContentRequest{TileId: tileID},
 		func(*pb.ContentChunk) error { return nil }); status.Code(err) != codes.Unavailable {
-		t.Fatalf("read of an unremembered body on a dark connection = %v, want Unavailable", err)
+		t.Fatalf("read of an uncached body on a dark connection = %v, want Unavailable", err)
 	}
 	if !cc.isDark(conn) {
 		t.Fatal("a call that failed transport-shaped is how this layer learns (#256)")
 	}
 	dark, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
-		t.Fatalf("a dark connection must still serve the remembered grid: %v", err)
+		t.Fatalf("a dark connection must still serve the cached grid: %v", err)
 	}
 	if len(dark.GetTiles()) != 1 || dark.GetTiles()[0].GetId() != tileID {
-		t.Fatalf("the dark serve = %v, want the remembered tile", dark.GetTiles())
+		t.Fatalf("the dark serve = %v, want the cached tile", dark.GetTiles())
 	}
 
 	// The machine is back and answers: the next answer clears it.

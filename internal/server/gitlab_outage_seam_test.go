@@ -84,7 +84,7 @@ func pluginRows(t *testing.T, ctx context.Context, cl *rpc.Client) []*gridwellv1
 }
 
 // readUntilHealth reads grid until a health event matches want, asserting
-// every read answers all of tiles: memory answers, and no read fails.
+// every read answers all of tiles: the cache answers, and no read fails.
 func readUntilHealth(t *testing.T, ctx context.Context, cl *rpc.Client, grid string, tiles int,
 	health <-chan *gridwellv1.EventPluginHealth, want func(*gridwellv1.EventPluginHealth) bool) *gridwellv1.EventPluginHealth {
 	t.Helper()

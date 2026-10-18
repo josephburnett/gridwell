@@ -43,7 +43,7 @@ func bootInfo(ns namespace.Namespace) error {
 // LoadInto registers every content plugin in reg, keyed by its ID: a
 // subprocess fronted by the pluginhost adapter over the node-owned store.
 // Nothing is cached in front of it, a subprocess on this machine being a call
-// away and the node's store the durable memory of what it minted.
+// away and the node's store the durable record of what it minted.
 func LoadInto(reg *Registry, cfg *config.ServerConfig, home string, st *store.Store) error {
 	for i := range cfg.Plugins {
 		pc := &cfg.Plugins[i]

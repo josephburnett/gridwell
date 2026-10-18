@@ -8,7 +8,7 @@ import (
 )
 
 // A plugin entry that names a link_target is a link row in the node's
-// memory: derived as one, minted as one, converted to one in place when an
+// rows: derived as one, minted as one, converted to one in place when an
 // existing content row's entry becomes a link, and back.
 
 func linkEntry(key, targetGrid, targetKey string) *pluginv1.Entry {

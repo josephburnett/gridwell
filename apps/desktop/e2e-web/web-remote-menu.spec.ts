@@ -94,10 +94,10 @@ const test = base.extend<Fixtures>({
 // arrive live. It returns the far grid's qualified grid id and the cell the
 // link door sits on.
 //
-// The node serves a remembered grid immediately and revalidates behind it, and
+// The node serves a cached grid immediately and revalidates behind it, and
 // the client's own Subscribe prefetched this connection at boot, before the far
 // node grew the tile, so the first answers for this grid are a legitimately
-// empty memory inside its freshness window. A single read races the correction
+// empty cache inside its freshness window. A single read races the correction
 // the revalidation's GridChanged brings, hence the poll.
 async function enterFarRoom(
   gw: GridwellDriver,
@@ -133,7 +133,7 @@ async function enterFarRoom(
   await gw.descendCell(cx, cy);
   const inside = (await gw.panes()).find((p) => p.focused)!;
   expect(inside.gridID).toBe(farHomeGrid);
-  expect(inside.stale, 'a live remote grid is not a memory').toBeFalsy();
+  expect(inside.stale, 'a live remote grid is not served from cache').toBeFalsy();
   let liveTiles = 0;
   await expect
     .poll(
@@ -141,7 +141,7 @@ async function enterFarRoom(
         liveTiles = ((await gw.getGrid(farHomeGrid)).tiles ?? []).length;
         return liveTiles;
       },
-      { message: 'the live grid arrives, remembered-empty first or not', timeout: 20_000 },
+      { message: 'the live grid arrives, cached-empty first or not', timeout: 20_000 },
     )
     .toBeGreaterThan(0);
   return { farHomeGrid, cx, cy, localGrid: f.gridID, liveTiles };
@@ -270,14 +270,14 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 });
 
 // A far node going dark degrades the remote pane to a cache-served
-// memory: the tiles render exactly as remembered, and the bar shows its quiet
+// grid: the tiles render exactly as cached, and the bar shows its quiet
 // offline chip, read here through the panes() hook. Nothing moves and nothing
 // blanks.
-test('a dark connection serves the remembered grid, marked stale', async ({ gw, window, world }) => {
+test('a dark connection serves the cached grid, marked stale', async ({ gw, window, world }) => {
   const { farHomeGrid, cx, cy, liveTiles } = await enterFarRoom(gw, world);
 
   // Leave and re-enter: the grid re-reads through the source cache and arrives
-  // whole. What says it is a memory is the connection's health, which the node
+  // whole. What says it is cached is the connection's health, which the node
   // publishes when the far node's stream ends and the client folds in per
   // source. Hence the poll: the chip lands a beat after the machine does.
   await world.killFar();
@@ -287,10 +287,10 @@ test('a dark connection serves the remembered grid, marked stale', async ({ gw, 
     .poll(async () => {
       const p = (await gw.panes()).find((q) => q.focused);
       return p?.gridID === farHomeGrid && p.stale === true;
-    }, { message: 'the re-entered grid says it is a memory (#256)', timeout: 60_000 })
+    }, { message: 'the re-entered grid says it is cached (#256)', timeout: 60_000 })
     .toBe(true);
   const staleTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
-  expect(staleTiles.length, 'the memory renders every remembered tile').toBe(liveTiles);
+  expect(staleTiles.length, 'the cache renders every cached tile').toBe(liveTiles);
   void window;
 });
 
@@ -336,7 +336,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
     })
     .toContain('live updates stopped');
   // A source going down changes what its grids ARE: the grid is the node's
-  // memory of it from here on, and the chip says so with no gesture.
+  // the cache of it from here on, and the chip says so with no gesture.
   await expect
     .poll(focusedStale, {
       message: 'the chip appears with no gesture',

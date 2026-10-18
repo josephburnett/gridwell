@@ -1,5 +1,5 @@
 // Package preview holds the preview-image cache shared by URL and shell tiles,
-// keyed by tile id and remembering which preview_blob_id each image came
+// keyed by tile id and recording which preview_blob_id each image came
 // from, so the caller's expected blob id invalidates a stale entry.
 package preview
 

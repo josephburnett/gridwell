@@ -27,10 +27,10 @@ func (s *stamping) ReadContent(ctx context.Context, in *pb.ReadContentRequest, s
 	})
 }
 
-// A remembered body serves with the stamp it was read under, as it does with
+// A cached body serves with the stamp it was read under, as it does with
 // its version: a save made against a dark source's body claims that stamp
 // when it lands, and a stampless replay would claim bytes nobody named.
-func TestARememberedBodyKeepsItsStamp(t *testing.T) {
+func TestACachedBodyKeepsItsStamp(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -55,7 +55,7 @@ func TestARememberedBodyKeepsItsStamp(t *testing.T) {
 	}
 	upstream.goDark()
 	if got := readStamp(t, cc, id); got != "mtime-1" {
-		t.Errorf("remembered stamp %q, want the one the bytes were read under", got)
+		t.Errorf("cached stamp %q, want the one the bytes were read under", got)
 	}
 }
 

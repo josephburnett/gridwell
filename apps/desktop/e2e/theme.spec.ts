@@ -107,7 +107,7 @@ test('the bar circle right-clicks to a theme menu; light survives a reload', asy
     expect(brightness(await groundPixel(window, px, py))).toBeGreaterThan(180);
 
     // And back. The menu now checks light, so the check follows the palette
-    // rather than a remembered first answer.
+    // rather than a cached first answer.
     await electronApp.evaluate(() => {
       (globalThis as any).__gwChoiceMenu = null;
     });

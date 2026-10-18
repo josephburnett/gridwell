@@ -57,7 +57,7 @@ var migrations = []migration{
 	// v8: configure_plugin_id, marking a childless door. The door CHECK gains
 	// that variant, so this is a rebuild; old rows copy through unchanged.
 	{to: 8, run: rebuildTilesReading(7)},
-	// v9: every plugin's memory joins the home tables — ns, key and
+	// v9: every plugin's rows join the home tables — ns, key and
 	// tombstoned on tiles; ns, context_key and a root viewport on grids; the
 	// listings table; two partial unique indexes. Every column carries a
 	// default and home rows are the defaults.
@@ -83,7 +83,7 @@ var migrations = []migration{
 	// updated in place.
 	{to: 11, run: migrateV11},
 	// v12 retires the `listings` table, one blob per plugin grid holding
-	// the last ListResponse so a dark source could be served the remembered
+	// the last ListResponse so a dark source could be served the cached
 	// listing. That is cache, and cache lives in cache.db. A plain drop, not
 	// a conversion: every user-visible fact a listing row carried was already
 	// a durable row beside it, and the rest re-warms on the next List. The
@@ -404,7 +404,7 @@ func addColumnDDL(ddl string) func(ctx context.Context, tx *sql.Tx) error {
 	}
 }
 
-// migrateV9 adds the plugin-memory columns and tables; see the chain entry.
+// migrateV9 adds the plugin-row columns and tables; see the chain entry.
 func migrateV9(ctx context.Context, tx *sql.Tx) error {
 	steps := []func(context.Context, *sql.Tx) error{
 		addColumnIfMissingDDL("grids", "ns", `ALTER TABLE grids ADD COLUMN ns TEXT NOT NULL DEFAULT ''`),

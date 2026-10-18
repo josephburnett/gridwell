@@ -92,7 +92,7 @@ type connState struct {
 	mismatch bool
 }
 
-// Conn is one declared connection with what the store remembers about it.
+// Conn is one declared connection with what the store keeps about it.
 type Conn struct {
 	Cfg        config.ConnectionConfig
 	RemoteRoot string // the learned landing (the far node's home grid, in ITS frame); "" until learned
@@ -500,7 +500,7 @@ func (s *Server) noteLandingMismatch(name, stored, answered string) error {
 }
 
 // kickRootFetch learns and verifies a connection's landing in the background,
-// single-flight, until this transport has answered; a remembered landing on an
+// single-flight, until this transport has answered; a stored landing on an
 // unasked transport is unchecked.
 func (s *Server) kickRootFetch(c *Conn) {
 	lc, err := s.ensureLive(c)

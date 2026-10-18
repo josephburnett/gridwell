@@ -114,15 +114,15 @@ func (a *App) drawBottomBar() {
 		}
 	}
 	a.drawBarTitle(top)
-	a.drawMemoryChip(bx, top, bw)
+	a.drawCachedChip(bx, top, bw)
 	a.drawBarSlot()
 }
 
-// drawMemoryChip marks a focused pane whose grid is a memory: the source
-// serving it is not answering, so what is on screen is the node's remembering
+// drawCachedChip marks a focused pane whose grid is served from cache: the source
+// serving it is not answering, so what is on screen is the node's cache
 // of it. Bar chrome only — darkness never moves or restyles tiles, so the grid
-// renders exactly as remembered.
-func (a *App) drawMemoryChip(bx, top, bw float64) {
+// renders exactly as cached.
+func (a *App) drawCachedChip(bx, top, bw float64) {
 	p := a.tree.FocusedPane()
 	if p == nil {
 		return

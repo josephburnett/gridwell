@@ -550,9 +550,9 @@ func scratchGrid(t *testing.T, p *local.Plugin) string {
 }
 
 // The trashcan is a declared grid, and an entry is a door, so it
-// remembers the view it was left at exactly as home's own root does: frame the
+// keeps the view it was left at exactly as home's own root does: frame the
 // trash grid, ask again, and the entry carries it while the root stays put.
-func TestTheTrashcanEntryRemembersItsFraming(t *testing.T) {
+func TestTheTrashcanEntryKeepsItsFraming(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	before, err := p.Info(ctx, &gridwellv1.InfoRequest{})

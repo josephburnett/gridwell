@@ -11,7 +11,7 @@ import (
 // Unimplemented, each with that answer, so a verb it lacks costs one round
 // trip per process rather than one per tile. Leaving a verb out is legal and
 // undeclared (docs/plugin-authoring.md), and a process cannot gain a method,
-// so the memory lives exactly as long as one: forget runs on every supervisor
+// so what it learns lives exactly as long as one: forget runs on every supervisor
 // transition.
 type absentVerbs struct {
 	mu     sync.Mutex
@@ -26,8 +26,8 @@ func (v *absentVerbs) forget() {
 	v.absent = nil
 }
 
-// ask answers the remembered refusal, reason included, or runs call and
-// remembers an Unimplemented it answers, unless the process changed while it
+// ask answers the recorded refusal, reason included, or runs call and
+// records an Unimplemented it answers, unless the process changed while it
 // ran.
 func ask[T any](v *absentVerbs, verb string, call func() (T, error)) (T, error) {
 	v.mu.Lock()

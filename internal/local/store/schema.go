@@ -1,8 +1,8 @@
 package store
 
 // The canonical SQLite schema. The `system` KV table holds singleton state;
-// the schema version lives in the SQLite header, not here. A plugin's memory
-// lives in the same tables under its own namespace, and a door pointing at one
+// the schema version lives in the SQLite header, not here. A plugin's rows
+// live in the same tables under its own namespace, and a door pointing at one
 // is an ordinary `door` row whose child_grid_id is a qualified
 // "<plugin-uuid>/<grid-id>" link.
 //
@@ -122,7 +122,7 @@ CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
 `
 
 // externalsIndexDDL is the v9 pair of partial unique indexes over the
-// plugin-memory columns. They name columns v9 adds, so they cannot ride
+// plugin-row columns. They name columns v9 adds, so they cannot ride
 // tablesDDL, which Open applies before migrating an old file; Open creates
 // them after the chain instead.
 const externalsIndexDDL = `

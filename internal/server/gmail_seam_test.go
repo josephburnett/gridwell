@@ -55,7 +55,7 @@ const (
 )
 
 // fakeGmail is the recorded Gmail: the five calls the plugin makes, answered
-// from testdata/gmail. It remembers the last Authorization header, which is
+// from testdata/gmail. It records the last Authorization header, which is
 // how a test sees that the token file was read and sent, and counts the label
 // listings and metadata reads, which is how a test tells a full walk from a
 // history catch-up. history.list answers one recorded delta since the

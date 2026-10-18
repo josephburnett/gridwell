@@ -129,7 +129,7 @@ func Start(opts Options) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	// One disposable file remembering what a connection last said, put in
+	// One disposable file caching what a connection last said, put in
 	// front of the transport below and nowhere else: a cache earns its keep
 	// across a network, and home and a plugin are both on this machine.
 	cache := openCache(cfg)
@@ -146,7 +146,7 @@ func Start(opts Options) (*Node, error) {
 		return fail(fmt.Errorf("home: %w", err))
 	}
 	// A content plugin is registered bare: its source is a subprocess here, so
-	// remembering answers buys no round trip. What it needs is supervision,
+	// caching answers buys no round trip. What it needs is supervision,
 	// and internal/plugin respawns one that dies.
 	if err := plugin.LoadInto(reg, cfg, opts.Home, st); err != nil {
 		return fail(fmt.Errorf("load plugins: %w", err))
@@ -213,7 +213,7 @@ func openCache(cfg *config.ServerConfig) *sourcecache.Store {
 	}
 	log.Printf("gridwell: source cache: %v (connections run uncached)", err)
 	return sourcecache.Unavailable("the source cache could not be opened (" + err.Error() +
-		"): what a connection answers is not remembered, so every read waits on the far machine and nothing reads while it is unreachable")
+		"): what a connection answers is not cached, so every read waits on the far machine and nothing reads while it is unreachable")
 }
 
 // openCacheFile is the cache file, or why there is none.

@@ -39,7 +39,7 @@ func TestRegistry_CloseForgetsEveryFact(t *testing.T) {
 	reg.SetLabel("p1", "files")
 	reg.Close()
 	if reg.Label("p1") != "" {
-		t.Fatalf("after Close: label=%q, want nothing remembered", reg.Label("p1"))
+		t.Fatalf("after Close: label=%q, want nothing kept", reg.Label("p1"))
 	}
 	if _, ok := reg.Get("p1"); ok {
 		t.Fatal("after Close: the namespace is still registered")

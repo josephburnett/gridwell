@@ -7,9 +7,9 @@
 // never handed out, since a mint that renamed the entry would take the id out
 // from under whoever stood on it; and GetTile is one List of the grid
 // named, since a key→grid index would copy the plugin's structure. A dark
-// source, or a listing the plugin answered from memory, is published as this
+// source, or a listing the plugin answered from the cache, is published as this
 // namespace's health and minted rows still read; a dark plugin fails the read,
-// since a local subprocess has no remembered answers to serve.
+// since a local subprocess has no cached answers to serve.
 package pluginhost
 
 import (
@@ -137,7 +137,7 @@ func declaredGrids(ci *pluginv1.InfoResponse) []*pluginv1.PluginGrid {
 	return []*pluginv1.PluginGrid{{Id: ci.RootGrid, Grid: ci.RootGrid}}
 }
 
-// gridFraming is the framing remembered for one grid. An
+// gridFraming is the framing kept for one grid. An
 // unreadable store is an error, not a silent none.
 func (a *Adapter) gridFraming(gkey string) (rpc.View, error) {
 	gid, ok, err := a.mem.LookupGrid(gkey)
@@ -446,11 +446,11 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		dark, resp = true, &pluginv1.ListResponse{}
 	}
 	outage := sourceDetail(err)
-	// A memory answer serves and refreshes rows like a live one, but a memory
+	// A cache answer serves and refreshes rows like a live one, but a cache
 	// is never a verdict, whatever it claims: nothing retires, and its reason
 	// is the source's health as a transport failure's is.
-	memory := resp.Unreachable != ""
-	if memory {
+	cached := resp.Unreachable != ""
+	if cached {
 		outage, resp.Authoritative = resp.Unreachable, false
 	}
 	a.noteSource(outage != "", outage)
@@ -482,7 +482,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	}
 	// A non-authoritative listing sweeps by arbitration: only a definitive
 	// GONE from Probe retires an unlisted row.
-	if !dark && !memory && !resp.Authoritative {
+	if !dark && !cached && !resp.Authoritative {
 		live := map[string]bool{}
 		for _, e := range resp.Entries {
 			live[e.Key] = true
@@ -688,7 +688,7 @@ func (a *Adapter) tileByID(ctx context.Context, tileID string) (*gridwellv1.Tile
 // definitive probe; a dark source is never dead.
 func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string) error {
 	if s.dark {
-		return status.Errorf(codes.Unavailable, "plugin: source dark and %q not remembered", tileID)
+		return status.Errorf(codes.Unavailable, "plugin: source dark and %q not cached", tileID)
 	}
 	if s.authoritative {
 		return gwerr.DeadRef("", "plugin: %q is gone", tileID)

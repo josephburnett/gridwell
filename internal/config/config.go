@@ -134,7 +134,7 @@ func CacheFile(home string) string {
 
 // PluginStateDir is one plugin's private directory, <home>/plugins/<id>,
 // handed over at spawn as `state_dir`. What a plugin keeps there is its own
-// memory of its source, never a node fact, and disposable like cache.db.
+// the cache of its source, never a node fact, and disposable like cache.db.
 func PluginStateDir(home, id string) string {
 	return filepath.Join(home, "plugins", id)
 }

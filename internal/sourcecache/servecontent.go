@@ -25,7 +25,7 @@ var (
 )
 
 // ServeContent tees the served body the way ReadContent tees a tile's. Only
-// status-200 answers are remembered: an error page is a verdict, and verdicts
+// status-200 answers are cached: an error page is a verdict, and verdicts
 // are never served stale.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	var status int64

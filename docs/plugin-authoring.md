@@ -5,7 +5,7 @@ A plugin is a separate program that serves the `plugin.v1` gRPC service
 that is the only way a node reaches one. It answers in its
 own stable string keys — a path, a message id, a todo id — and never sees
 ids, layout, or a database. It keeps no node fact; what it may keep is its own
-memory of its source, in the directory the node hands it (`state_dir`). The node mints ids against your keys, stores
+the cache of its source, in the directory the node hands it (`state_dir`). The node mints ids against your keys, stores
 placement and framing, and serves the full Gridwell surface on your behalf.
 The host never switches on which plugin you are; every behavior you get
 comes from something you declared on the wire.
@@ -28,7 +28,7 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
   handshake, and how a node loads you), `gwerr` (the error vocabulary). The
   guest-side helper for your main is a second small module in the plugins
   repository, `github.com/josephburnett/gridwell-plugins/guest`. A plugin that
-  remembers its source takes the cache file, the shared walks, the `Watch`
+  caches its source takes the cache file, the shared walks, the `Watch`
   fan-out and the calendar placement from a third,
   `github.com/josephburnett/gridwell-plugins/memo`. Not Go? The service is
   plain gRPC behind hashicorp go-plugin's handshake.
@@ -41,7 +41,7 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
   keys plus `uuid`, `kind` and `state_dir`.
 - **State**: `state_dir` is a directory of your own, `<home>/plugins/<id>`,
   minted 0700 before you start. Hold no node facts — no ids, no layout, no
-  database. Your own memory of your source is welcome there, under `cache.db`'s
+  database. Your own cache of your source is welcome there, under `cache.db`'s
   contract: disposable, safe for the user to delete, rewarmed by use. Nothing
   deletes it for you, not even removing your entry from `server.yaml`. Write
   atomically (temp file, rename), and come up correctly when it is empty.
@@ -52,7 +52,7 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
   node learns of changes only when it next lists, WriteContent =
   read-only (leave `writable` unset), GetPreview = no thumbnail,
   Delete = refused. Unimplemented means the verb, not the key: the node
-  remembers it, with your reason, for the life of your process and does
+  records it, with your reason, for the life of your process and does
   not ask that verb again until a respawn (`pluginhost.absentVerbs`).
 - **Errors**: transport-shaped failures (Unavailable, DeadlineExceeded)
   mean "not right now" and the node serves what it has.
@@ -71,7 +71,7 @@ with an error whose message is one plain sentence saying why. The node shows
 your plugin broken with that sentence and no entries, and asks again until
 the fix lands, with no restart. Latch the first pass: once `Info` has
 answered, a source that goes away is weather — a token revoked or a CLI
-signed out included — and your reads answer `Unavailable`, or from memory
+signed out included — and your reads answer `Unavailable`, or from the cache
 with `unreachable` set (see Listings), never a verdict.
 
 **Declare one `grids` row per grid**, each naming its grid
@@ -102,11 +102,11 @@ answers GONE. `ProbeRequest.grid` names the grid the node is asking
 about: answer whether the key is still in THAT grid, since a key listed in
 several (a mail thread in a box and in everything) can leave one and stay in
 another. An empty grid is a node from before grids: answer for the
-plugin as a whole. When a refresh fails but your memory can answer, answer
-from memory and set `unreachable` to why, in a plain sentence ("the mail
+plugin as a whole. When a refresh fails but your cache can answer, answer
+from the cache and set `unreachable` to why, in a plain sentence ("the mail
 server is not answering"); leave it empty when the listing is live. The node
 serves the entries, shows the sentence as the source's health, and retires
-nothing on a memory answer, so `authoritative` is ignored while it is set.
+nothing on a cache answer, so `authoritative` is ignored while it is set.
 The next answer with it empty brings the source back up. A `placement_hint` is a preference for an entry's first
 placement only: a hint onto an occupied cell takes the first free rect of its
 size below it in the same column. An

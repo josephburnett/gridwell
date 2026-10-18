@@ -57,7 +57,7 @@ func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 // Darkness is a state, not a moment. A client that opens while the machine is
 // already gone gets no transition — that fired before it existed — so the
 // stream has to tell it what the transport currently knows, or the source
-// cache in front of it serves a remembered grid as if it were live and the
+// cache in front of it serves a cached grid as if it were live and the
 // client's tint says the connection is fine.
 func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
 	s := newTestServer(t, openStore(t))
@@ -118,7 +118,7 @@ func refusingDialer(detail string) Dialer {
 
 // A dial that never connects is the same outage as a stream that died: the
 // connection is unreachable. A client subscribing mid-outage has to be told,
-// or the source cache in front serves a remembered grid as if it were live —
+// or the source cache in front serves a cached grid as if it were live —
 // the dial failure never reached the fan-in, so nothing ever published it.
 func TestASubscriberIsToldOfAConnectionThatCannotDial(t *testing.T) {
 	ctx := context.Background()

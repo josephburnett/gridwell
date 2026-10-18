@@ -91,7 +91,7 @@ func rpcErrText(err error) string {
 // do runs one non-content mutation and blocks; `post` is the goroutine form.
 // Both count the write in flight before they hand it on, so a spec's idle
 // wait covers every gesture's write and not only the ones whose call site
-// remembered.
+// did not forget to.
 func (a *App) do(w write) error {
 	a.writes.Start()
 	return a.dispatch(w)

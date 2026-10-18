@@ -40,7 +40,7 @@ message Grid {
   string scratch_grid_id = 7;
   reserved 8; // proxy_endpoint
   reserved 9; // create_schemas
-  // The client derives "this grid is a memory" from the health of the source
+  // The client derives "this grid is served from cache" from the health of the source
   // serving it: one fact, client/cache.SourceDark.
   reserved 12; // stale
   // node_ns is the namespace chain of the node serving this grid, from the
@@ -73,7 +73,7 @@ message Grid {
   // source_label is the owning plugin's name for what backs this grid, as
   // its listing answered it (plugin.v1 ListResponse.source_label: a
   // directory path, "Inbox · 12 unread"); the bar shows it while a pane
-  // stands on the grid. Like the rows, it is a memory of the source, not a
+  // stands on the grid. Like the rows, it is a cache of the source, not a
   // node fact, so gridwell.db never holds it. Stamped by the adapter,
   // verbatim in transit. Wire-only.
   string source_label = 15;

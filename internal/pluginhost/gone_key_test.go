@@ -141,7 +141,7 @@ func TestAGoneKeyReadsDeadAndComesBack(t *testing.T) {
 						}
 					case live:
 						if err != nil {
-							t.Errorf("%s = %v, want the remembered tile", verb, err)
+							t.Errorf("%s = %v, want the cached tile", verb, err)
 						}
 					default:
 						if err == nil || gwerr.IsDeadRef(err) {
@@ -151,7 +151,7 @@ func TestAGoneKeyReadsDeadAndComesBack(t *testing.T) {
 				}
 				if tc.dark && want != live {
 					if _, err := cl.GetTile(ctx, target); connect.CodeOf(err) != connect.CodeUnavailable {
-						t.Errorf("an unremembered key under a dark source = %v, want the transport-class answer", err)
+						t.Errorf("an uncached key under a dark source = %v, want the transport-class answer", err)
 					}
 				}
 

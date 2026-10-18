@@ -2,7 +2,7 @@
 
 // The mid-session partition gate: a connection that dies under a live session. It
 // warms internal/sourcecache through a real tunnel, SIGKILLs the remote node,
-// and asserts the offline story end to end: a warmed read serves the memory,
+// and asserts the offline story end to end: a warmed read serves the cache,
 // never-read bytes fail honestly, the offline deep copy copies what is cached
 // and links what is not, and a revived remote answers live and re-kicks the
 // prefetch walk.
@@ -153,7 +153,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	// The partition.
 	stopRemote()
 
-	// Warmed reads serve the remembering. This polls, because the dial layer
+	// Warmed reads serve the cached answer. This polls, because the dial layer
 	// needs a beat to answer Unavailable instead of hanging on half-open
 	// sockets.
 	deadline := time.Now().Add(60 * time.Second)
@@ -170,7 +170,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 		t.Fatalf("dark warmed read = %q (%v), want the cached bytes", staleBody, err)
 	}
 	// The grid itself still serves, whole, out of the cache. Nothing on the
-	// answer says it is a memory: that is the connection's health, awaited
+	// answer says it is cached: that is the connection's health, awaited
 	// below, and the client's offline chip is drawn from there.
 	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": doorChild})
 	if len(g["tiles"].([]any)) != 3 {

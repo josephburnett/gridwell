@@ -115,7 +115,7 @@ func SpawnCloser(t *testing.T, kind string, cfg map[string]string) (pluginv1.Plu
 }
 
 // withStateDir gives a per-test temp directory, so no test writes into a real
-// home. A test that keeps a plugin's memory across a restart passes its own and
+// home. A test that keeps a plugin's cache across a restart passes its own and
 // this leaves it alone. The copy keeps the caller's map its own.
 func withStateDir(t *testing.T, cfg map[string]string) map[string]string {
 	t.Helper()

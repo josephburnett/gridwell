@@ -212,7 +212,7 @@ func writeShellExit(conn *websocket.Conn, bound time.Duration, exit []byte) {
 func pumpShell(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, bound time.Duration,
 	attach func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error) (message string, tmuxGone bool) {
 	// A write failure is the viewer's socket breaking, not the PTY ending, and
-	// is remembered separately so it is reported as itself.
+	// is kept separately so it is reported as itself.
 	var writeErr error
 	err := attach(
 		func() (*pb.OpenShellRequest, error) { return shellReadFrame(ctx, cancel, conn) },
