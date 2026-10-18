@@ -328,7 +328,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   view is the interest set's one owner: the union the sources watch derives
   from it, and the node holds it in memory per session while a stream
   carrying that session is open, never stored, so the pane tree stays
-  session-ephemeral (`interest.Book`, `Server.Sessions`, 2026-10-15).
+  session-ephemeral (`interest.Book`, `Server.Sessions`, 2026-10-15). The
+  node keeps an away session's view for `interest.AwayFor` after its last
+  stream closes, listed as away and watching nothing, so an agent sees a
+  phone that went to the background, and `pointed` chooses an open session
+  before an away one (2026-10-18).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections

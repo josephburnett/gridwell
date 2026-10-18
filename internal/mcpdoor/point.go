@@ -1,8 +1,8 @@
 package mcpdoor
 
 // Pointing: how an agent learns what the user means by "here" and "these".
-// The node holds each open client session's view (interest.Book); a session
-// is chosen, its focused pane's grid read, and the set that pane shows, which
+// The node holds each client session's view, open or away (interest.Book); a
+// session is chosen, its focused pane's grid read, and the set that pane shows, which
 // pane.SelectionTarget places on the grid row or in the pane tile's layout,
 // is what the user has in hand.
 
@@ -36,6 +36,7 @@ type Session struct {
 	ID        string   `json:"id"`
 	Label     string   `json:"label" jsonschema:"the kind of client: desktop or browser"`
 	Changed   string   `json:"changed" jsonschema:"when its view last changed, RFC 3339"`
+	AwaySince string   `json:"away_since,omitempty" jsonschema:"when its stream closed, RFC 3339, as a phone's does in the background; absent while it is open"`
 	PaneTiles []string `json:"pane_tiles,omitempty" jsonschema:"the pane tiles the window is inside, outermost first"`
 	Panes     []Pane   `json:"panes"`
 }
@@ -59,7 +60,9 @@ type PointedOut struct {
 	Label    string `json:"label"`
 	ChosenBy string `json:"chosen_by" jsonschema:"argument, your shell, or most recent"`
 	Changed  string `json:"changed" jsonschema:"when its view last changed, RFC 3339"`
-	Note     string `json:"note,omitempty" jsonschema:"why the session was chosen, when it was not the one asked for"`
+	// AwaySince is as Session.AwaySince.
+	AwaySince string `json:"away_since,omitempty" jsonschema:"when its stream closed, RFC 3339; absent while it is open"`
+	Note      string `json:"note,omitempty" jsonschema:"why the session was chosen, when it was not the one asked for"`
 	// Panes is every pane of the chosen session, the focused one among them.
 	Panes     []Pane   `json:"panes"`
 	PaneTiles []string `json:"pane_tiles,omitempty" jsonschema:"the pane tiles the window is inside, outermost first"`
@@ -94,6 +97,9 @@ func (d *door) screensNow() []interest.Session {
 func sessionOf(s interest.Session) Session {
 	v := s.View
 	out := Session{ID: s.ID, Label: v.GetLabel(), Changed: stamp(s.Changed), PaneTiles: v.GetPaneTiles(), Panes: []Pane{}}
+	if !s.Open {
+		out.AwaySince = stamp(s.Away)
+	}
 	for _, p := range v.GetPanes() {
 		out.Panes = append(out.Panes, Pane{ID: p.GetId(), Anchor: p.GetAnchor(), Path: p.GetPath(),
 			Content: p.GetContentId(), Grid: p.GetGridId(), Focused: p.GetFocused(), PaneTile: innermost(v)})
@@ -119,14 +125,15 @@ type pointedIn struct {
 func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointedIn) (*mcp.CallToolResult, PointedOut, error) {
 	all := d.screensNow()
 	if len(all) == 0 {
-		return nil, PointedOut{}, errors.New("no session: no screen is showing this node now, so nothing is pointed at; open Gridwell and ask again")
+		return nil, PointedOut{}, errors.New("no session: no screen is showing this node now or was in the last " + interest.AwayFor.String() + ", so nothing is pointed at; open Gridwell and ask again")
 	}
 	s, by, note, err := d.choose(ctx, all, in.Session, shellOf(req))
 	if err != nil {
 		return nil, PointedOut{}, err
 	}
 	chosen := sessionOf(s)
-	out := PointedOut{Session: s.ID, Label: chosen.Label, ChosenBy: by, Changed: chosen.Changed, Note: note, Panes: chosen.Panes, PaneTiles: chosen.PaneTiles}
+	out := PointedOut{Session: s.ID, Label: chosen.Label, ChosenBy: by, Changed: chosen.Changed, AwaySince: chosen.AwaySince,
+		Note: note, Panes: chosen.Panes, PaneTiles: chosen.PaneTiles}
 	for _, o := range all {
 		if o.ID != s.ID {
 			out.Others = append(out.Others, sessionOf(o))
@@ -193,15 +200,22 @@ func (d *door) shownSet(ctx context.Context, s interest.Session, p *pb.ViewPane,
 	return lp.Selection, nil
 }
 
-// choose is the pointing rule: the session named; else the one holding the
-// agent's shell live; else the one whose view changed last.
+// choose is the pointing rule: the session named, open or away; else, among
+// the open ones, the one holding the agent's shell live, else the one whose
+// view changed last; else, none being open, the one that went away last.
 func (d *door) choose(ctx context.Context, all []interest.Session, named, shell string) (interest.Session, string, string, error) {
 	if named != "" {
 		if i := slices.IndexFunc(all, func(s interest.Session) bool { return s.ID == named }); i >= 0 {
 			return all[i], byArgument, "", nil
 		}
-		return interest.Session{}, "", "", fmt.Errorf("not found: no open session %s; pointed with no session names them all", named)
+		return interest.Session{}, "", "", fmt.Errorf("not found: no session %s; pointed with no session names them all", named)
 	}
+	open := slices.DeleteFunc(slices.Clone(all), func(s interest.Session) bool { return !s.Open })
+	if len(open) == 0 {
+		last := slices.MaxFunc(all, func(a, b interest.Session) int { return a.Away.Compare(b.Away) })
+		return last, byMostRecent, fmt.Sprintf("no screen is open; chose the one that went away last, away since %s", stamp(last.Away)), nil
+	}
+	all = open
 	if shell == "" {
 		return all[0], byMostRecent, "", nil
 	}
