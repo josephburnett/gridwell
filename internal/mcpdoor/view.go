@@ -45,8 +45,7 @@ type Grid struct {
 	Selection    []string `json:"selection" jsonschema:"the tiles the user has in hand on this grid"`
 }
 
-// TileOut answers read_tile and every write: the row, and on a read the
-// content its kind has.
+// TileOut is a tile read: the row, and the content its kind has.
 type TileOut struct {
 	Tile         Tile    `json:"tile"`
 	Body         *string `json:"body,omitempty"`
@@ -82,10 +81,36 @@ type Skip struct {
 	Reason    string `json:"reason"`
 }
 
-// DeleteOut answers delete.
-type DeleteOut struct {
-	Deleted     string `json:"deleted"`
+// TileRead is one read_tiles answer.
+type TileRead struct {
+	Verdict string `json:"verdict" jsonschema:"ok, or why this id could not be read"`
+	TileOut
+}
+
+// ReadTilesOut answers read_tiles, one answer per id in the order named.
+type ReadTilesOut struct {
+	Tiles []TileRead `json:"tiles"`
+}
+
+// Verdict is one write item's answer.
+type Verdict struct {
+	Verdict     string `json:"verdict" jsonschema:"ok, or the refusal: its kind (conflict:, disabled:, dead link:, ...) then the reason"`
+	Tile        *Tile  `json:"tile,omitempty" jsonschema:"the row as the write left it"`
+	Deleted     string `json:"deleted,omitempty" jsonschema:"the tile a delete moved to the trash"`
 	SessionLeft string `json:"session_left,omitempty" jsonschema:"why a shell session the delete should have ended is still running"`
+}
+
+// WriteOut answers every bulk write: one verdict per item, in order.
+type WriteOut struct {
+	Items []Verdict `json:"items"`
+}
+
+// verdictOf is an item's verdict: ok, or the refusal's text.
+func verdictOf(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return "ok"
 }
 
 // tileOf is t as the door answers it. With the handshake roster, a link whose

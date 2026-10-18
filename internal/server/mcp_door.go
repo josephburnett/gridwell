@@ -6,6 +6,7 @@ package server
 // of this node's build is behind it; the tool list is its contract.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -33,12 +34,7 @@ func traceTools(next mcp.MethodHandler) mcp.MethodHandler {
 			return next(ctx, method, req)
 		}
 		sp := rpcSpan("", "mcp/"+call.Params.Name, nil)
-		var args struct{ ID, Grid string }
-		_ = json.Unmarshal(call.Params.Arguments, &args)
-		sp.id = args.ID
-		if sp.id == "" {
-			sp.id = args.Grid
-		}
+		sp.id = tracedID(call.Params.Arguments)
 		res, err := next(ctx, method, req)
 		traced, code := err, "protocol"
 		if r, ok := res.(*mcp.CallToolResult); ok && err == nil && r.IsError {
@@ -47,6 +43,25 @@ func traceTools(next mcp.MethodHandler) mcp.MethodHandler {
 		sp.end(traced, code)
 		return res, err
 	}
+}
+
+// tracedID is the tile or grid a call's arguments name first: its own, or
+// the first item's or id's of a list.
+func tracedID(raw json.RawMessage) string {
+	type named struct{ ID, Grid string }
+	var args struct {
+		named
+		IDs   []string
+		Items []named
+	}
+	_ = json.Unmarshal(raw, &args)
+	if len(args.Items) > 0 {
+		args.named = args.Items[0]
+	}
+	if len(args.IDs) > 0 {
+		args.ID = args.IDs[0]
+	}
+	return cmp.Or(args.ID, args.Grid)
 }
 
 type toolErr string

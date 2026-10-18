@@ -53,33 +53,26 @@ type Pane struct {
 	PaneTile string `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout this pane is part of, when the window is inside one; its selection is then the layout's, not the grid's"`
 }
 
-// SessionsOut answers sessions, the most recently changed first.
-type SessionsOut struct {
-	Sessions []Session `json:"sessions"`
-}
-
 // PointedOut answers pointed.
 type PointedOut struct {
 	Session  string `json:"session"`
 	Label    string `json:"label"`
 	ChosenBy string `json:"chosen_by" jsonschema:"argument, your shell, or most recent"`
+	Changed  string `json:"changed" jsonschema:"when its view last changed, RFC 3339"`
 	Note     string `json:"note,omitempty" jsonschema:"why the session was chosen, when it was not the one asked for"`
-	// Others names every other open session, so the agent can ask which.
-	Others   []SessionRef `json:"others,omitempty"`
-	Pane     string       `json:"pane"`
-	Content  string       `json:"content,omitempty" jsonschema:"the content tile the focused pane is inside, when it is inside one"`
-	PaneTile string       `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout holds the focused pane's selection, when it is inside one"`
-	Grid     Grid         `json:"grid"`
-	SetIn    string       `json:"selection_in,omitempty" jsonschema:"where the pane's selection is held: grid (the grid row's, which select writes) or pane tile (the pane's own in the layout, which select cannot write); empty in a content tile, which has none"`
-	Points   string       `json:"points_at" jsonschema:"selection when the pane shows one, else grid"`
-	Tiles    []Tile       `json:"tiles,omitempty" jsonschema:"the selected tiles, as read_grid answers them"`
-}
-
-// SessionRef names a session.
-type SessionRef struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
-	Changed string `json:"changed"`
+	// Panes is every pane of the chosen session, the focused one among them.
+	Panes     []Pane   `json:"panes"`
+	PaneTiles []string `json:"pane_tiles,omitempty" jsonschema:"the pane tiles the window is inside, outermost first"`
+	// Others is every other screen showing the node, so the agent can ask
+	// which the user meant.
+	Others   []Session `json:"others,omitempty" jsonschema:"every other screen showing the node, the most recently changed first"`
+	Pane     string    `json:"pane"`
+	Content  string    `json:"content,omitempty" jsonschema:"the content tile the focused pane is inside, when it is inside one"`
+	PaneTile string    `json:"pane_tile,omitempty" jsonschema:"the pane tile whose layout holds the focused pane's selection, when it is inside one"`
+	Grid     Grid      `json:"grid"`
+	SetIn    string    `json:"selection_in,omitempty" jsonschema:"where the pane's selection is held: grid (the grid row's, which select writes) or pane tile (the pane's own in the layout, which select cannot write); empty in a content tile, which has none"`
+	Points   string    `json:"points_at" jsonschema:"selection when the pane shows one, else grid"`
+	Tiles    []Tile    `json:"tiles,omitempty" jsonschema:"the selected tiles, as read_grid answers them"`
 }
 
 // Choice spellings.
@@ -96,14 +89,6 @@ func (d *door) screensNow() []interest.Session {
 	all := slices.DeleteFunc(d.screens.Sessions(), func(s interest.Session) bool { return len(s.View.GetPanes()) == 0 })
 	slices.SortStableFunc(all, func(a, b interest.Session) int { return b.Changed.Compare(a.Changed) })
 	return all
-}
-
-func (d *door) sessions(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, SessionsOut, error) {
-	out := SessionsOut{Sessions: []Session{}}
-	for _, s := range d.screensNow() {
-		out.Sessions = append(out.Sessions, sessionOf(s))
-	}
-	return nil, out, nil
 }
 
 func sessionOf(s interest.Session) Session {
@@ -128,7 +113,7 @@ func innermost(v *pb.SetViewRequest) string {
 func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 
 type pointedIn struct {
-	Session string `json:"session,omitempty" jsonschema:"a session id from sessions; empty chooses by the shell this agent runs in, then the most recent"`
+	Session string `json:"session,omitempty" jsonschema:"a session id from an earlier answer's others; empty chooses by the shell this agent runs in, then the most recent"`
 }
 
 func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointedIn) (*mcp.CallToolResult, PointedOut, error) {
@@ -140,10 +125,11 @@ func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointed
 	if err != nil {
 		return nil, PointedOut{}, err
 	}
-	out := PointedOut{Session: s.ID, Label: s.View.GetLabel(), ChosenBy: by, Note: note}
+	chosen := sessionOf(s)
+	out := PointedOut{Session: s.ID, Label: chosen.Label, ChosenBy: by, Changed: chosen.Changed, Note: note, Panes: chosen.Panes, PaneTiles: chosen.PaneTiles}
 	for _, o := range all {
 		if o.ID != s.ID {
-			out.Others = append(out.Others, SessionRef{ID: o.ID, Label: o.View.GetLabel(), Changed: stamp(o.Changed)})
+			out.Others = append(out.Others, sessionOf(o))
 		}
 	}
 	i := slices.IndexFunc(s.View.GetPanes(), (*pb.ViewPane).GetFocused)
@@ -214,7 +200,7 @@ func (d *door) choose(ctx context.Context, all []interest.Session, named, shell 
 		if i := slices.IndexFunc(all, func(s interest.Session) bool { return s.ID == named }); i >= 0 {
 			return all[i], byArgument, "", nil
 		}
-		return interest.Session{}, "", "", fmt.Errorf("not found: no open session %s; sessions lists them", named)
+		return interest.Session{}, "", "", fmt.Errorf("not found: no open session %s; pointed with no session names them all", named)
 	}
 	if shell == "" {
 		return all[0], byMostRecent, "", nil
