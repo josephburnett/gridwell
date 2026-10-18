@@ -124,7 +124,7 @@ what each one is called.
 
 | Word | What it names | What it is not |
 |---|---|---|
-| dead | A link whose namespace is not declared, or whose key its namespace says is gone (`gwerr.DeadRef`). Nothing is said and nothing is asked until the declaration or that namespace's listing changes. | An error; dark. |
+| dead | A link whose namespace is not declared, or whose key its namespace says is gone (`gwerr.DeadLink`). Nothing is said and nothing is asked until the declaration or that namespace's listing changes. | An error; dark. |
 | dark | A source declared but not answering right now: a connection that will not dial, or a plugin whose directory or service stopped answering while its process still does. Its grids serve from cache, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
 | disabled | A plugin or connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
@@ -561,13 +561,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   does not declare, one a node further along the chain does not declare, or
   a target its namespace says is gone — is DEAD: greyed, inert, still
   labelled, still deletable. It is a state, not an error — nothing is asked
-  for it and nothing is said about it (`gwerr.DeadRef` is the answer,
-  `client/deadref` the verdict). A gone key listed again is live again under
+  for it and nothing is said about it (`gwerr.DeadLink` is the answer,
+  `client/deadlink` the verdict). A gone key listed again is live again under
   the same id. Dead is not dark: a declared
   plugin that is down and a declared connection that will not answer are
   health, and they come back. Nor is dead always forever: a retired
   connection name never returns, but a namespace merely undeclared is live
-  again the moment it is declared again. `client/deadref`.
+  again the moment it is declared again. `client/deadlink`.
 - One bar, at the bottom of the window, always visible, riding the focused
   pane: it spans that pane and slides under it as focus moves, inside a
   full-width row reserved once, so no pane ever resizes. Panes end at that

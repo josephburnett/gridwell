@@ -402,14 +402,14 @@ authoritative listing that omits it, or a probe that says GONE, never a dark
 source or a probe that cannot say), or a home tile destroyed out of the
 trash. `contentRoute` checks a link's target with `GetTile` as it checks a
 directly read id, so the owner's verdict is the answer whichever id the read
-named. The first hop is judged here: `client/deadref` reads the
+named. The first hop is judged here: `client/deadlink` reads the
 handshake roster the + menu is built from, asks the router's own peel
 (`rpc.OwnerNamespaceOf`) which namespace the id names, and answers from the
 node's declaration without asking. A deeper hop is the far node's to judge,
-and its router or transport answers the dead verdict, `gwerr.DeadRef`: a
-NotFound carrying a `DeadReference` detail, which survives every hop and the
-web API (`gwerr.IsDeadRef`). The client reads it as `OutcomeDead`,
-latches the read `inflight.Dead`, surfaces nothing, and `deadref.DeadTile`
+and its router or transport answers the dead verdict, `gwerr.DeadLink`: a
+NotFound carrying a `DeadLink` detail, which survives every hop and the
+web API (`gwerr.IsDeadLink`). The client reads it as `OutcomeDead`,
+latches the read `inflight.Dead`, surfaces nothing, and `deadlink.DeadTile`
 draws the link dead while that latch stands. A dead link is drawn grey and
 inert, is not fetched for again until its latch clears, raises no notice, and
 does not descend; it can still be selected, read, and deleted. A pane already
@@ -634,8 +634,8 @@ copy:
 | who owns this qualified id | `Server.resolve` + `server.router` |
 | which node runs a copy | `rpc.SharedOwner` |
 | how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellLinks` |
-| is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
-| is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
+| is this link dead | `deadlink.DeadTile` over the handshake roster and the dead verdicts heard |
+| is this answer the dead verdict | `gwerr.DeadLink` / `gwerr.IsDeadLink` |
 | does this page run the node's build, and what it does when not | `Server.otherBuild`; `gwerr.OtherBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
 | where a tile lands when nobody chose a cell | `store.FreeSlot`: the first free cell (`freeslot.go`) |

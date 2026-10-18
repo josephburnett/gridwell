@@ -9,7 +9,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/deadref"
+	"github.com/josephburnett/gridwell/client/deadlink"
 )
 
 // Tile is a row as the API answers it. ID is the qualified address the
@@ -116,16 +116,16 @@ func verdictOf(err error) string {
 
 // tileOf is t as the API answers it. With the handshake roster, a link whose
 // first hop this node does not declare reads dead, the verdict the client
-// draws (deadref.DeadTile); a deeper break is the far node's to answer when
+// draws (deadlink.DeadTile); a deeper break is the far node's to answer when
 // the link is read.
 func tileOf(t *pb.Tile, roster []*pb.PluginInfo, node string) Tile {
 	out := Tile{ID: t.GetId(), Kind: t.GetKind(), Name: t.GetAltText(), Grid: t.GetGridId(),
 		X: t.GetX(), Y: t.GetY(), W: t.GetW(), H: t.GetH(), Version: t.GetVersion(),
-		Link: deadref.TargetID(t), ReadOnly: t.GetReadOnly()}
+		Link: deadlink.TargetID(t), ReadOnly: t.GetReadOnly()}
 	if rpc.IsDoorKind(t.GetKind()) && !t.GetLink() {
 		out.ChildGrid = t.GetChildGridId()
 	}
-	out.Dead = roster != nil && deadref.DeadTile(t, roster, node, nil)
+	out.Dead = roster != nil && deadlink.DeadTile(t, roster, node, nil)
 	return out
 }
 
@@ -134,7 +134,7 @@ func gridOf(g *pb.Grid) Grid {
 		Selection: append([]string{}, g.GetSelection()...)}
 }
 
-func dead(err error) bool { return gwerr.IsDeadRef(err) }
+func dead(err error) bool { return gwerr.IsDeadLink(err) }
 
 // refusal is a router answer as a tool error: what kind of no it is, then the
 // router's own reason. The kinds are the verdicts the client tells apart
@@ -145,7 +145,7 @@ func refusal(err error) error {
 	switch {
 	case gwerr.IsSourceDisabled(err):
 		return errors.New("disabled: " + why)
-	case gwerr.IsDeadRef(err):
+	case gwerr.IsDeadLink(err):
 		return errors.New("dead link: " + why)
 	case st.Code() == gcodes.FailedPrecondition:
 		return errors.New("conflict: " + why + " (read it again)")

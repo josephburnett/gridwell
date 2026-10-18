@@ -39,7 +39,7 @@ type ClickInput struct {
 	// LeafLink is rpc.LeafLink: the address lives on the target, so a link
 	// never prompts for one.
 	LeafLink bool
-	// DeadLink is client/deadref: it descends nowhere, so it births no pane.
+	// DeadLink is client/deadlink: it descends nowhere, so it births no pane.
 	DeadLink bool
 	// SplitNav is the press's SplitNav verdict; see dragdrop.DropInput.SplitNav.
 	SplitNav bool

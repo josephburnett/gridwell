@@ -1,4 +1,4 @@
-package deadref
+package deadlink
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"

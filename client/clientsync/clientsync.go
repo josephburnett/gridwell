@@ -24,7 +24,7 @@ const (
 	OutcomeRejected
 	// OutcomeTransport is the server never speaking.
 	OutcomeTransport
-	// OutcomeDead is a dead link (gwerr.IsDeadRef), a state rather than an
+	// OutcomeDead is a dead link (gwerr.IsDeadLink), a state rather than an
 	// error.
 	OutcomeDead
 	// OutcomeAbandoned is a call whose context the client cancelled itself,
@@ -71,7 +71,7 @@ func Of(err error) Outcome {
 	case connect.CodeUnavailable, connect.CodeDeadlineExceeded, connect.CodeCanceled:
 		return OutcomeTransport
 	}
-	if gwerr.IsDeadRef(ce) {
+	if gwerr.IsDeadLink(ce) {
 		return OutcomeDead
 	}
 	return OutcomeRejected

@@ -25,7 +25,7 @@ const (
 )
 
 // Of is the row whose content facts t presents. cached looks a row up by id
-// without fetching; dead is deadref's verdict on t.
+// without fetching; dead is deadlink's verdict on t.
 func Of(t *gridwellv1.Tile, cached func(id string) *gridwellv1.Tile, dead bool) (*gridwellv1.Tile, State) {
 	switch {
 	case t == nil:

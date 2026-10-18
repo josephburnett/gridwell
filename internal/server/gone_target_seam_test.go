@@ -17,19 +17,19 @@ import (
 // id the client reads a leaf link's body and preview by (rpc.ContentID).
 func goneReads(ctx context.Context, t *testing.T, cl *rpc.Client, link *gridwellv1.Tile, why string) {
 	t.Helper()
-	if _, _, _, err := cl.ReadContent(ctx, link.Id); !gwerr.IsDeadRef(err) {
+	if _, _, _, err := cl.ReadContent(ctx, link.Id); !gwerr.IsDeadLink(err) {
 		t.Errorf("%s: ReadContent through the link = %v, want the dead verdict", why, err)
 	}
-	if _, err := cl.GetTilePreview(ctx, link.Id); !gwerr.IsDeadRef(err) {
+	if _, err := cl.GetTilePreview(ctx, link.Id); !gwerr.IsDeadLink(err) {
 		t.Errorf("%s: GetTilePreview through the link = %v, want the dead verdict", why, err)
 	}
-	if _, _, _, err := cl.ReadContent(ctx, link.LinkTargetId); !gwerr.IsDeadRef(err) {
+	if _, _, _, err := cl.ReadContent(ctx, link.LinkTargetId); !gwerr.IsDeadLink(err) {
 		t.Errorf("%s: ReadContent of the target = %v, want the dead verdict", why, err)
 	}
-	if _, err := cl.GetTilePreview(ctx, link.LinkTargetId); !gwerr.IsDeadRef(err) {
+	if _, err := cl.GetTilePreview(ctx, link.LinkTargetId); !gwerr.IsDeadLink(err) {
 		t.Errorf("%s: GetTilePreview of the target = %v, want the dead verdict", why, err)
 	}
-	if _, err := cl.GetTile(ctx, link.LinkTargetId); !gwerr.IsDeadRef(err) {
+	if _, err := cl.GetTile(ctx, link.LinkTargetId); !gwerr.IsDeadLink(err) {
 		t.Errorf("%s: GetTile of the target = %v, want the dead verdict", why, err)
 	}
 }

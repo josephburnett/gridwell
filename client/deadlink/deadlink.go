@@ -1,11 +1,11 @@
-// Package deadref decides whether a link is dead: its path ends in nothing,
+// Package deadlink decides whether a link is dead: its path ends in nothing,
 // at a hop that does not declare the next namespace or at a target its
 // namespace says is gone. Such a link is greyed, nothing said about it. The
 // first hop's declaration is judged from the handshake roster, read fresh;
 // everything else only the owning node can judge, and its answer is the dead
 // verdict a read heard. A declared namespace that is down is not dead, but
 // pluginhealth's and cache.SourceDark's.
-package deadref
+package deadlink
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -48,7 +48,7 @@ func Dead(id string, rows []*gridwellv1.PluginInfo, nodeID string) bool {
 
 // DeadTile reports that a link is dead: its target's namespace is undeclared
 // here, or answered is true for its target, meaning a read heard the dead
-// verdict from whichever hop broke (gwerr.IsDeadRef). answered may be nil.
+// verdict from whichever hop broke (gwerr.IsDeadLink). answered may be nil.
 func DeadTile(t *gridwellv1.Tile, rows []*gridwellv1.PluginInfo, nodeID string, answered func(id string) bool) bool {
 	id := TargetID(t)
 	if id != "" && answered != nil && answered(id) {

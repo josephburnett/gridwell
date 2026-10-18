@@ -75,7 +75,7 @@ func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
 		if err == nil {
 			t.Fatal("a disabled connection answered a read")
 		}
-		if connect.CodeOf(err) != connect.CodeUnavailable || gwerr.IsDeadRef(err) {
+		if connect.CodeOf(err) != connect.CodeUnavailable || gwerr.IsDeadLink(err) {
 			t.Fatalf("read through a disabled connection = %v, want unavailable (dark), never dead", err)
 		}
 	}

@@ -310,9 +310,9 @@ func (s *Server) route(ctx context.Context, id string) (*forward, string, error)
 		// Only the tombstone's wording says forever; a name merely no
 		// longer declared comes back with its stanza.
 		if row, err := s.st.Connection(ctx, first); err == nil && row.Deleted {
-			return nil, "", gwerr.DeadRef(first, "connection: connection %q was retired", first)
+			return nil, "", gwerr.DeadLink(first, "connection: connection %q was retired", first)
 		}
-		return nil, "", gwerr.DeadRef(first, "connection: no connection %q", first)
+		return nil, "", gwerr.DeadLink(first, "connection: no connection %q", first)
 	}
 	// A connection whose landing contradicts the stored one serves nothing:
 	// these ids were written against the node that is no longer there.

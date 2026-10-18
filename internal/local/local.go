@@ -183,7 +183,7 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
 	t, err := p.st.GetTile(ctx, req.TileId)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, gwerr.DeadRef("", "home: no tile %q", req.TileId)
+		return nil, gwerr.DeadLink("", "home: no tile %q", req.TileId)
 	}
 	return tileResp(t, err)
 }

@@ -351,7 +351,7 @@ window and revalidates behind it anyway, because `Layer.GetGrid` consults
 draws from the same health the node learned. Bodies, previews, and served pages
 fall back to cached entries where there are any; where there are none the
 transport error stands and the read fails honestly. Links through the
-connection are NOT dead — `client/deadref` answers from the node's
+connection are NOT dead — `client/deadlink` answers from the node's
 declaration, and a declared connection that will not answer is health, not
 deadness.
 
@@ -547,7 +547,7 @@ every subscriber's stream with the reason (`missing.Subscribe`), so the node
 has one cache path and no branch.
 
 **Dark is not dead.** Darkness comes back; a namespace the node does not
-declare is `client/deadref`'s business, is never fetched for, and raises no
+declare is `client/deadlink`'s business, is never fetched for, and raises no
 notice at all.
 
 ## Seam-test gaps

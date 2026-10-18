@@ -139,7 +139,7 @@ type Palette struct {
 	// takes neutral grey, because nothing has gone wrong yet.
 	DoorBrokenTint  string
 	DoorWaitingTint string
-	// A dead link (client/deadref) is a state, not a failure, so it gets no
+	// A dead link (client/deadlink) is a state, not a failure, so it gets no
 	// alarm color: the veil fades it and the outline and label go muted.
 	DeadLinkVeil string
 	DeadLink     string

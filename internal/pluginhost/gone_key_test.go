@@ -136,7 +136,7 @@ func TestAGoneKeyReadsDeadAndComesBack(t *testing.T) {
 				for verb, err := range reads {
 					switch want {
 					case dead:
-						if !gwerr.IsDeadRef(err) {
+						if !gwerr.IsDeadLink(err) {
 							t.Errorf("%s = %v, want the dead verdict", verb, err)
 						}
 					case live:
@@ -144,7 +144,7 @@ func TestAGoneKeyReadsDeadAndComesBack(t *testing.T) {
 							t.Errorf("%s = %v, want the cached tile", verb, err)
 						}
 					default:
-						if err == nil || gwerr.IsDeadRef(err) {
+						if err == nil || gwerr.IsDeadLink(err) {
 							t.Errorf("%s = %v, want %s", verb, err, other)
 						}
 					}
@@ -207,7 +207,7 @@ func TestARetiredRowReadsDead(t *testing.T) {
 	if _, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: landing}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: row}); !gwerr.IsDeadRef(err) {
+	if _, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: row}); !gwerr.IsDeadLink(err) {
 		t.Fatalf("GetTile on the retired row = %v, want the dead verdict", err)
 	}
 }

@@ -12,23 +12,23 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// DeadRef is the answer for an id whose path ends in nothing: a namespace this
+// DeadLink is the answer for an id whose path ends in nothing: a namespace this
 // node does not declare, or, with namespace empty, a key its declared
 // namespace says is gone. NotFound, so every reader of the code is unchanged,
-// carrying a pb.DeadReference detail that survives every gRPC hop and the
+// carrying a pb.DeadLink detail that survives every gRPC hop and the
 // web API.
-func DeadRef(namespace, format string, args ...any) error {
+func DeadLink(namespace, format string, args ...any) error {
 	st, err := status.New(codes.NotFound, fmt.Sprintf(format, args...)).
-		WithDetails(&pb.DeadReference{Namespace: namespace})
+		WithDetails(&pb.DeadLink{Namespace: namespace})
 	if err != nil {
 		return status.Errorf(codes.NotFound, format, args...)
 	}
 	return st.Err()
 }
 
-// IsDeadRef reports that err is DeadRef's answer, read off a gRPC status or a
+// IsDeadLink reports that err is DeadLink's answer, read off a gRPC status or a
 // Connect error alike, so the node and the browser share one reading.
-func IsDeadRef(err error) bool {
+func IsDeadLink(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -36,7 +36,7 @@ func IsDeadRef(err error) bool {
 	if errors.As(err, &ce) {
 		for _, d := range ce.Details() {
 			if v, derr := d.Value(); derr == nil {
-				if _, ok := v.(*pb.DeadReference); ok {
+				if _, ok := v.(*pb.DeadLink); ok {
 					return true
 				}
 			}
@@ -48,14 +48,14 @@ func IsDeadRef(err error) bool {
 		return false
 	}
 	for _, d := range st.Details() {
-		if _, ok := d.(*pb.DeadReference); ok {
+		if _, ok := d.(*pb.DeadLink); ok {
 			return true
 		}
 	}
 	return false
 }
 
-// ConnectDetails carries a status's verdict details (DeadReference,
+// ConnectDetails carries a status's verdict details (DeadLink,
 // SourceDisabled) onto a Connect error; the web API is the one hop that
 // rebuilds an error and would drop them.
 func ConnectDetails(err error, ce *connect.Error) *connect.Error {
@@ -65,7 +65,7 @@ func ConnectDetails(err error, ce *connect.Error) *connect.Error {
 	}
 	for _, d := range st.Details() {
 		switch v := d.(type) {
-		case *pb.DeadReference, *pb.SourceDisabled:
+		case *pb.DeadLink, *pb.SourceDisabled:
 			if cd, derr := connect.NewErrorDetail(v.(proto.Message)); derr == nil {
 				ce.AddDetail(cd)
 			}

@@ -574,7 +574,7 @@ func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 }
 
 // thDeadLinks reports which of a grid's tiles the client draws dead, links
-// broken at any hop; see client/deadref. It is the
+// broken at any hop; see client/deadlink. It is the
 // one observable of the state, because the preview is canvas pixels and the
 // absence of an RPC is an absence.
 func (a *App) thDeadLinks(_ js.Value, args []js.Value) any {

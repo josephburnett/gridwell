@@ -227,10 +227,10 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 
 	src.set(func(m *mailSource) { m.gone = true })
 	for _, id := range []string{link.Id, cp.Id} {
-		if _, _, _, err := cl.ReadContent(ctx, id); !gwerr.IsDeadRef(err) {
+		if _, _, _, err := cl.ReadContent(ctx, id); !gwerr.IsDeadLink(err) {
 			t.Errorf("ReadContent(%s) once the thread is gone = %v, want the dead verdict", id, err)
 		}
-		if _, err := cl.GetTilePreview(ctx, id); !gwerr.IsDeadRef(err) {
+		if _, err := cl.GetTilePreview(ctx, id); !gwerr.IsDeadLink(err) {
 			t.Errorf("GetTilePreview(%s) once the thread is gone = %v, want the dead verdict", id, err)
 		}
 	}

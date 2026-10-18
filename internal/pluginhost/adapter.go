@@ -560,7 +560,7 @@ func (a *Adapter) resolveTile(tileID string) (tileRef, error) {
 		gid, key, tomb, err := a.mem.TileKey(id)
 		// Ids are never reassigned, so a retired or unknown row is dead.
 		if errors.Is(err, store.ErrNotFound) || tomb {
-			return tileRef{}, gwerr.DeadRef("", "plugin: no tile %d", id)
+			return tileRef{}, gwerr.DeadLink("", "plugin: no tile %d", id)
 		}
 		if err != nil {
 			return tileRef{}, err
@@ -691,14 +691,14 @@ func (a *Adapter) absent(ctx context.Context, s *synthesized, key, tileID string
 		return status.Errorf(codes.Unavailable, "plugin: source dark and %q not cached", tileID)
 	}
 	if s.authoritative {
-		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
+		return gwerr.DeadLink("", "plugin: %q is gone", tileID)
 	}
 	pr, err := a.probe(ctx, key, s.gridKey)
 	if err != nil {
 		return err
 	}
 	if pr.Presence == pluginv1.ProbeResponse_PRESENCE_GONE {
-		return gwerr.DeadRef("", "plugin: %q is gone", tileID)
+		return gwerr.DeadLink("", "plugin: %q is gone", tileID)
 	}
 	return status.Errorf(codes.NotFound, "plugin: %q is not listed", tileID)
 }
@@ -900,7 +900,7 @@ func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelection
 	add := make([]int64, 0, len(req.Add))
 	for _, id := range req.Add {
 		ref, err := a.resolveTile(id)
-		if gwerr.IsDeadRef(err) || err == nil && ref.gridKey != gkey {
+		if gwerr.IsDeadLink(err) || err == nil && ref.gridKey != gkey {
 			continue
 		}
 		if err != nil {
@@ -919,7 +919,7 @@ func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelection
 	for _, id := range req.Remove {
 		ref, err := a.resolveTile(id)
 		// The set names only live rows, so one without a row is not in it.
-		if gwerr.IsDeadRef(err) || err == nil && ref.id == 0 {
+		if gwerr.IsDeadLink(err) || err == nil && ref.id == 0 {
 			continue
 		}
 		if err != nil {
@@ -1156,7 +1156,7 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 		// its delete is what retires the row.
 		t, err := a.tileByID(ctx, req.TileId)
 		switch {
-		case gwerr.IsDeadRef(err):
+		case gwerr.IsDeadLink(err):
 		case err != nil:
 			return nil, err
 		default:

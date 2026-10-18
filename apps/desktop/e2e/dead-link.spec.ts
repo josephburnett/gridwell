@@ -10,7 +10,7 @@ import { makeRunDir } from './homes';
 // nothing: the user sees what there is to throw away.
 //
 // The seam runs from server.yaml, through the handshake roster, into the
-// client's verdict (client/deadref) and out to the tile. Its two halves, the
+// client's verdict (client/deadlink) and out to the tile. Its two halves, the
 // tile draws itself dead and NOTHING is asked about it, are only observable
 // together against a live server.
 //

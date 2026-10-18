@@ -9,7 +9,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/deadref"
+	"github.com/josephburnett/gridwell/client/deadlink"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -67,7 +67,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 			out = append(out, &gridwellv1.PluginInfo{Uuid: rpc.QualifyID(nodeID, r.Uuid), RootGridId: r.RootGridId})
 		}
 		// A node always declares its own home, so the roster is never empty
-		// and deadref always has a declaration to answer from.
+		// and deadlink always has a declaration to answer from.
 		return append(out, &gridwellv1.PluginInfo{Uuid: nodeID})
 	}
 
@@ -80,7 +80,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if r, _ := st.Connection(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
 		t.Fatalf("boot 1 remote_root = %q, want the learned landing", r.RemoteRoot)
 	}
-	if deadref.DeadTile(ref, roster(s1), nodeID, nil) {
+	if deadlink.DeadTile(ref, roster(s1), nodeID, nil) {
 		t.Fatal("boot 1: a declared connection's link must be live")
 	}
 	if _, err := s1.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {
@@ -120,7 +120,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if err == nil && pr.GetPresence() == gridwellv1.ProbeResponse_PRESENCE_GONE {
 		t.Fatal("boot 2 Probe said GONE for a name that was never retired")
 	}
-	if !deadref.DeadTile(ref, roster(s2), nodeID, nil) {
+	if !deadlink.DeadTile(ref, roster(s2), nodeID, nil) {
 		t.Fatal("boot 2: a link into a namespace the node no longer declares is dead")
 	}
 	if err := s2.Close(); err != nil {
@@ -138,7 +138,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if len(rows) != 1 || rows[0].RootGridId != "rtb/rnode1/7" {
 		t.Fatalf("boot 3 rows = %+v, want rtb on its stored landing", rows)
 	}
-	if deadref.DeadTile(ref, roster(s3), nodeID, nil) {
+	if deadlink.DeadTile(ref, roster(s3), nodeID, nil) {
 		t.Fatal("boot 3: the link must resolve again")
 	}
 	if _, err := s3.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {

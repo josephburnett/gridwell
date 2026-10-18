@@ -163,7 +163,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			c, found = rt.srv.pluginReg.Transport()
 		}
 		if !found {
-			return nil, gwerr.DeadRef(hop, "no plugin %q", hop)
+			return nil, gwerr.DeadLink(hop, "no plugin %q", hop)
 		}
 		resp, err := c.Handshake(ctx, &pb.HandshakeRequest{Namespace: rest})
 		if err != nil {

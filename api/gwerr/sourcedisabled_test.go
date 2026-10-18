@@ -24,7 +24,7 @@ func TestSourceDisabledIsRecognizableOnBothWires(t *testing.T) {
 	if !IsSourceDisabled(carried) {
 		t.Fatal("the web API dropped the disabled verdict")
 	}
-	if IsDeadRef(carried) {
+	if IsDeadLink(carried) {
 		t.Fatal("the disabled verdict read as dead")
 	}
 }

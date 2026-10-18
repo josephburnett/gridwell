@@ -29,13 +29,13 @@ func TestALinkBrokenAtAnyHopReadsDead(t *testing.T) {
 
 	wantDead := func(t *testing.T, why string) {
 		t.Helper()
-		if _, _, _, err := me.ReadContent(ctx, link.Id); !gwerr.IsDeadRef(err) {
+		if _, _, _, err := me.ReadContent(ctx, link.Id); !gwerr.IsDeadLink(err) {
 			t.Fatalf("%s: read through the link = %v, want the dead verdict", why, err)
 		}
-		if _, err := me.GetGrid(ctx, farHome); !gwerr.IsDeadRef(err) {
+		if _, err := me.GetGrid(ctx, farHome); !gwerr.IsDeadLink(err) {
 			t.Fatalf("%s: read of the far grid = %v, want the dead verdict", why, err)
 		}
-		if _, err := me.GetTile(ctx, target.Id); !gwerr.IsDeadRef(err) {
+		if _, err := me.GetTile(ctx, target.Id); !gwerr.IsDeadLink(err) {
 			t.Fatalf("%s: read of the far tile = %v, want the dead verdict", why, err)
 		}
 	}
@@ -55,7 +55,7 @@ func TestALinkBrokenAtAnyHopReadsDead(t *testing.T) {
 	wantDead(t, "middle hop undeclared")
 
 	m.redeclare(aNode, []meshEdge{{aNode, "toc", "nowhere"}}, nil)
-	if _, _, _, err := me.ReadContent(ctx, link.Id); err == nil || gwerr.IsDeadRef(err) {
+	if _, _, _, err := me.ReadContent(ctx, link.Id); err == nil || gwerr.IsDeadLink(err) {
 		t.Fatalf("a declared hop that does not answer = %v, want an error that is not the dead verdict", err)
 	}
 

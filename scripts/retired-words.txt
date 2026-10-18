@@ -127,3 +127,8 @@ remembering
 # "upstream" — what a plugin or connection reads has no word: name the thing
 # (the directory, GitLab, the mailbox, the far node).
 upstream
+# A link broken at any hop is a dead link: gwerr.DeadLink, pb.DeadLink and
+# client/deadlink.
+deadref
+isdeadref
+deadreference

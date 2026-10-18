@@ -2699,33 +2699,33 @@ func (x *TileResponse) GetTile() *Tile {
 	return nil
 }
 
-// DeadReference is the detail on a NotFound that means the path an id names
+// DeadLink is the detail on a NotFound that means the path an id names
 // ends in nothing: a namespace the answering node does not declare, at
 // whatever hop that node sits, or a key its declared namespace says is gone.
-// The link is dead, a state and not an error. gwerr.DeadRef writes it and
-// gwerr.IsDeadRef reads it; namespace is the undeclared segment in the
+// The link is dead, a state and not an error. gwerr.DeadLink writes it and
+// gwerr.IsDeadLink reads it; namespace is the undeclared segment in the
 // answering node's frame, empty when the namespace answered for a gone key.
-type DeadReference struct {
+type DeadLink struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *DeadReference) Reset() {
-	*x = DeadReference{}
+func (x *DeadLink) Reset() {
+	*x = DeadLink{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DeadReference) String() string {
+func (x *DeadLink) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DeadReference) ProtoMessage() {}
+func (*DeadLink) ProtoMessage() {}
 
-func (x *DeadReference) ProtoReflect() protoreflect.Message {
+func (x *DeadLink) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2737,12 +2737,12 @@ func (x *DeadReference) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DeadReference.ProtoReflect.Descriptor instead.
-func (*DeadReference) Descriptor() ([]byte, []int) {
+// Deprecated: Use DeadLink.ProtoReflect.Descriptor instead.
+func (*DeadLink) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{32}
 }
 
-func (x *DeadReference) GetNamespace() string {
+func (x *DeadLink) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
@@ -4701,8 +4701,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05build\x18\x0e \x01(\tR\x05buildJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\r\"5\n" +
 	"\fTileResponse\x12%\n" +
-	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"-\n" +
-	"\rDeadReference\x12\x1c\n" +
+	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"(\n" +
+	"\bDeadLink\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"8\n" +
 	"\n" +
 	"OtherBuild\x12\x12\n" +
@@ -4889,7 +4889,7 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*ConnectionInfo)(nil),         // 30: gridwell.v1.ConnectionInfo
 	(*HandshakeResponse)(nil),      // 31: gridwell.v1.HandshakeResponse
 	(*TileResponse)(nil),           // 32: gridwell.v1.TileResponse
-	(*DeadReference)(nil),          // 33: gridwell.v1.DeadReference
+	(*DeadLink)(nil),               // 33: gridwell.v1.DeadLink
 	(*OtherBuild)(nil),             // 34: gridwell.v1.OtherBuild
 	(*SourceDisabled)(nil),         // 35: gridwell.v1.SourceDisabled
 	(*CreateTileRequest)(nil),      // 36: gridwell.v1.CreateTileRequest

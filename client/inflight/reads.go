@@ -20,7 +20,7 @@ const (
 	// signals, or the next Backstop tick, whichever is first.
 	Unreachable
 	// Dead is a Refused whose verdict is that the key's path ends in nothing
-	// (gwerr.IsDeadRef). It stands and clears as Refused does, and ReviveIf
+	// (gwerr.IsDeadLink). It stands and clears as Refused does, and ReviveIf
 	// clears it alone; Reads.Dead is what tells it apart.
 	Dead
 	// Abandoned is a read the client cancelled itself (CancelIf). Nothing

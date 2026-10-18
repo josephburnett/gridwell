@@ -26,12 +26,12 @@ KindText\b api/rpc/|client/cache/|client/pane/border\.go|client/tilepreview/|cli
 # two owners, in a package `make check` executes.
 \.TextPresentation\b api/rpc/|client/textedit/
 # link_target_id: rpc.Tile.ContentID resolves it, rpc.Tile.LeafLink asks
-# whether there is one, deadref reads it to name a dead namespace.
-\.LinkTargetID\b api/rpc/|client/deadref/
-# link: isLinkTile draws it, deadref classifies it, pluginhealth's
+# whether there is one, deadlink reads it to name a dead namespace.
+\.LinkTargetID\b api/rpc/|client/deadlink/
+# link: isLinkTile draws it, deadlink classifies it, pluginhealth's
 # UnrootedLink is the door precondition. A drop plan's Link is the
 # gesture's, not the tile's.
-\.Link\b api/rpc/|client/deadref/|client/pluginhealth/|client/wasm/render\.go|.*plan\.Link\b
+\.Link\b api/rpc/|client/deadlink/|client/pluginhealth/|client/wasm/render\.go|.*plan\.Link\b
 # The grid-wide declaration. cache.Grid owns it, nil-safe.
 Meta\.HostContent\b client/cache/
 # writable: a.gridWritable / a.gridKnownReadOnly, the two safe defaults for

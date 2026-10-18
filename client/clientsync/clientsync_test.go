@@ -326,9 +326,9 @@ func TestReactRead(t *testing.T) {
 }
 
 // deadAnswer is what the browser receives for a link broken at any hop: the
-// node's gwerr.DeadRef through the web API.
+// node's gwerr.DeadLink through the web API.
 func deadAnswer() error {
-	dead := gwerr.DeadRef("toc", "connection: no connection %q", "toc")
+	dead := gwerr.DeadLink("toc", "connection: no connection %q", "toc")
 	return gwerr.ConnectDetails(dead, connect.NewError(connect.CodeNotFound, errors.New(status.Convert(dead).Message())))
 }
 

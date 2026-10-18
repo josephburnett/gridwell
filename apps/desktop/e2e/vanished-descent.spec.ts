@@ -3,7 +3,7 @@ import { deleteTile, tileAt } from './oracle';
 
 // A descent whose row is gone is a verdict, not a dead namespace: the id still
 // routes, the node still answers, and what it answers is "no such tile"
-// (client/deadref owns the other case, which is silent by decision). Without a
+// (client/deadlink owns the other case, which is silent by decision). Without a
 // notice the pane draws an empty content box named "unnamed" and the notice row says
 // nothing, which reads as "it just disappeared".
 //

@@ -59,7 +59,7 @@ func TestAnUnlistedPageRowStaysAPage(t *testing.T) {
 				if row != nil {
 					t.Errorf("a gone key still sits in its grid: %+v", row)
 				}
-				if !gwerr.IsDeadRef(terr) {
+				if !gwerr.IsDeadLink(terr) {
 					t.Errorf("GetTile on a gone page = %v, want the dead verdict", terr)
 				}
 				return

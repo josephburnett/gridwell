@@ -5,7 +5,7 @@ package main
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/deadref"
+	"github.com/josephburnett/gridwell/client/deadlink"
 	"github.com/josephburnett/gridwell/client/door"
 )
 
@@ -21,16 +21,16 @@ func (a *App) nodeID() string { return rpc.UUIDOf(a.home) }
 
 // deadNamespace reports that a qualified id names a namespace this node does
 // not declare. The rule, and the boundary against a merely dark namespace, is
-// deadref's. Every fetch path consults it first, so a dead link costs no RPC,
+// deadlink's. Every fetch path consults it first, so a dead link costs no RPC,
 // raises no verdict, and surfaces no error.
 func (a *App) deadNamespace(id string) bool {
-	return deadref.Dead(id, a.plugins, a.nodeID())
+	return deadlink.Dead(id, a.plugins, a.nodeID())
 }
 
-// deadLink reports that a tile's link is dead at some hop (deadref.DeadTile):
+// deadLink reports that a tile's link is dead at some hop (deadlink.DeadTile):
 // the one thing the renderer, the descent guard and the fetch paths all read.
 func (a *App) deadLink(n *gridwellv1.Tile) bool {
-	return deadref.DeadTile(n, a.plugins, a.nodeID(), a.answeredDead)
+	return deadlink.DeadTile(n, a.plugins, a.nodeID(), a.answeredDead)
 }
 
 // answeredDead reports that a read of id heard the dead verdict and that it

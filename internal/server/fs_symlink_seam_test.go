@@ -106,10 +106,10 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 		if tl == nil || !tl.Link {
 			t.Fatalf("%s = %+v, want a link", name, tl)
 		}
-		if _, _, _, err := cl.ReadContent(ctx, tl.Id); !gwerr.IsDeadRef(err) {
+		if _, _, _, err := cl.ReadContent(ctx, tl.Id); !gwerr.IsDeadLink(err) {
 			t.Errorf("ReadContent(%s) = %v, want dead", name, err)
 		}
-		if _, err := cl.GetTilePreview(ctx, tl.Id); !gwerr.IsDeadRef(err) {
+		if _, err := cl.GetTilePreview(ctx, tl.Id); !gwerr.IsDeadLink(err) {
 			t.Errorf("GetTilePreview(%s) = %v, want dead", name, err)
 		}
 	}
