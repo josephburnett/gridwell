@@ -1,8 +1,8 @@
-// Package interest decides when this client tells the node what it shows
+// Package subscription decides when this client tells the node what it shows
 // (pane.View is what): once per change to any of it, and again after every
 // event stream re-open, because the node forgets a session whose stream
 // closed.
-package interest
+package subscription
 
 import (
 	"sync"

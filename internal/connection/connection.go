@@ -78,9 +78,9 @@ type Server struct {
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 
-	// far is each connection's share of the interest (interest.go, farOf),
+	// far is each connection's share of the subscription (subscription.go, farOf),
 	// its grids guarded by mu.
-	far map[string]*farInterest
+	far map[string]*farSubscription
 }
 
 // connState is a connection's reachability as of the last answer.
@@ -594,7 +594,7 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 		Down:  func(detail string) { s.note(ns, connState{detail: detail}) },
 		Up:    func() { s.note(ns, connState{up: true}) },
 		Attempt: func(ctx context.Context, established func()) error {
-			// The far node forgot this session's interest when the last
+			// The far node forgot this session's subscription when the last
 			// stream closed; see tellFar.
 			s.farOf(ns).poke()
 			return namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{Session: s.farOf(ns).session},

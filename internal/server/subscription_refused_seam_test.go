@@ -20,7 +20,7 @@ import (
 // A plugin that cannot take what a client shows is not scoped to it, so the
 // grid on screen stops updating: the client is told on a healthy event that
 // live updates are off, and told again, cleared, once a share lands.
-func TestAnInterestTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
+func TestAnSubscriptionTheNamespaceCannotTakeTurnsLiveUpdatesOff(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	path := filepath.Join(t.TempDir(), "gridwell.db")

@@ -1,4 +1,4 @@
-package interest
+package subscription
 
 import (
 	"slices"

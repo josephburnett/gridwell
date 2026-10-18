@@ -26,10 +26,10 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/eventhub"
-	"github.com/josephburnett/gridwell/internal/interest"
 	"github.com/josephburnett/gridwell/internal/mcpdoor"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/subscription"
 	"strconv"
 )
 
@@ -74,7 +74,7 @@ type Server struct {
 	infoMu    sync.Mutex
 	infoCache map[string]*pb.InfoResponse
 
-	interest *interest.Book
+	subscription *subscription.Book
 
 	// shells is every open /shell attachment and the session it rides under.
 	shells liveShells
@@ -102,7 +102,7 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 		build:             tracewire.BuildCommit(),
 		switchedOff:       eventhub.New(rpc.EventKey),
 	}
-	srv.interest = interest.New(srv.spreadInterest)
+	srv.subscription = subscription.New(srv.spreadSubscription)
 	srv.routes()
 	return srv, nil
 }

@@ -8,7 +8,7 @@ import { dumpViaDoor, TraceLine } from './trace';
 // A plugin collection seen only as a well's preview is on screen, so its
 // plugin watches it and a change on disk redraws the preview with no gesture.
 // What is shown is pane.Showing, the wells' child grids included; the fs
-// plugin opens a Watch only for the contexts the node's interest names.
+// plugin opens a Watch only for the contexts the node's subscription names.
 
 const ROOT = makeRunDir();
 test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });

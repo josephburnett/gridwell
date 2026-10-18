@@ -26,3 +26,6 @@ federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg
 # nothing more. Allowed for the shadow launchers, the browser-opening scripts a
 # shell's PATH points at, which are a different thing.
 launcher internal/local/tmux/|internal/local/shellsvc/
+# "interest" — what the clients show and the sources watch is the subscription
+# (internal/subscription, client/subscription).
+interest

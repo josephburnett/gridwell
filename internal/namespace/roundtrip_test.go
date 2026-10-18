@@ -314,7 +314,7 @@ func TestSubscribeStreamRoundTrips(t *testing.T) {
 }
 
 // A session and its view cross the connection door whole, since the far node
-// books what it hears (interest.Book).
+// books what it hears (subscription.Book).
 func TestSetViewRoundTrips(t *testing.T) {
 	f := &fake{}
 	ns := loopback(t, f)

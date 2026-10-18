@@ -7,29 +7,29 @@ import (
 	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/interest"
+	"github.com/josephburnett/gridwell/internal/subscription"
 )
 
-type screens []interest.Session
+type screens []subscription.Session
 
-func (s screens) Sessions() []interest.Session { return s }
+func (s screens) Sessions() []subscription.Session { return s }
 func (screens) ShellHolder(context.Context, string) (string, bool, error) {
 	return "", false, nil
 }
 
-func open(id string, changed int64) interest.Session {
-	return interest.Session{ID: id, Open: true, Changed: time.Unix(changed, 0), View: shows()}
+func open(id string, changed int64) subscription.Session {
+	return subscription.Session{ID: id, Open: true, Changed: time.Unix(changed, 0), View: shows()}
 }
 
-func away(id string, changed, since int64) interest.Session {
-	return interest.Session{ID: id, Changed: time.Unix(changed, 0), Away: time.Unix(since, 0), View: shows()}
+func away(id string, changed, since int64) subscription.Session {
+	return subscription.Session{ID: id, Changed: time.Unix(changed, 0), Away: time.Unix(since, 0), View: shows()}
 }
 
 func shows() *pb.SetViewRequest {
 	return &pb.SetViewRequest{Panes: []*pb.ViewPane{{Id: "p0", Anchor: "n/1", GridId: "n/1", Focused: true}}}
 }
 
-func chosen(t *testing.T, d *door, named, shell string) (interest.Session, string, string) {
+func chosen(t *testing.T, d *door, named, shell string) (subscription.Session, string, string) {
 	t.Helper()
 	s, by, note, err := d.choose(context.Background(), d.screensNow(), named, shell)
 	if err != nil {

@@ -83,7 +83,7 @@ type Namespace interface {
 	// takes it as established; a stream that never sends it never is.
 	Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error
 	// SetView says what someone is showing. At the node's door it is one
-	// session's whole view (interest.Book); from the node to one of its
+	// session's whole view (subscription.Book); from the node to one of its
 	// namespaces it is that namespace's whole share of the union as
 	// shown_grid_ids, with no session, and one it cannot take it tells on its
 	// own stream as EventPluginHealth.live_updates_off.

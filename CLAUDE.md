@@ -325,11 +325,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`SetView`): its panes, each pane's place and whether it has focus, the
   window's pane-tile level, a label ("desktop", "browser"), and the grids on
   screen, which the client derives because the layout rects are its own. The
-  view is the interest set's one owner: the union the sources watch derives
+  view is the subscription's one owner: the union the sources watch derives
   from it, and the node holds it in memory per session while a stream
   carrying that session is open, never stored, so the pane tree stays
-  session-ephemeral (`interest.Book`, `Server.Sessions`, 2026-10-15). The
-  node keeps an away session's view for `interest.AwayFor` after its last
+  session-ephemeral (`subscription.Book`, `Server.Sessions`, 2026-10-15). The
+  node keeps an away session's view for `subscription.AwayFor` after its last
   stream closes, listed as away and watching nothing, so an agent sees a
   phone that went to the background, and `pointed` chooses an open session
   before an away one (2026-10-18).

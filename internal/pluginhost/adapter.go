@@ -58,15 +58,15 @@ type Adapter struct {
 
 	// The source's state as the listings and the Watch stream found it, held
 	// only to announce its transitions; setSource is the one writer. liveOff
-	// is the Watch stream's verdict and interestOff SetView's, neither of
+	// is the Watch stream's verdict and subscriptionOff SetView's, neither of
 	// them darkness: a source that lists but cannot watch still answers live.
-	srcMu       sync.Mutex
-	srcDark     bool
-	srcDetail   string
-	liveOff     string
-	interestOff string
+	srcMu           sync.Mutex
+	srcDark         bool
+	srcDetail       string
+	liveOff         string
+	subscriptionOff string
 
-	// shown is this plugin's share of the node's interest, as contexts, and
+	// shown is this plugin's share of the node's subscription, as contexts, and
 	// links is, per context, the contexts its last live listing links into.
 	// The Watch stream's scope derives from both (scopeLocked); moved closes
 	// when it changes. SetView writes shown, synthesize writes links.
@@ -249,7 +249,7 @@ func (a *Adapter) source() sourceState {
 }
 
 func (a *Adapter) sourceLocked() sourceState {
-	s := sourceState{dark: a.srcDark, liveOff: cmp.Or(a.liveOff, a.interestOff)}
+	s := sourceState{dark: a.srcDark, liveOff: cmp.Or(a.liveOff, a.subscriptionOff)}
 	if s.dark {
 		s.detail = a.srcDetail
 	}

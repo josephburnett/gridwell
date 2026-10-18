@@ -18,7 +18,7 @@ import (
 type Client struct {
 	cl gridwellv1connect.GridwellClient
 	// session names this client to the node, minted here so its event
-	// stream and its interest cannot name two different clients.
+	// stream and its subscription cannot name two different clients.
 	session string
 }
 

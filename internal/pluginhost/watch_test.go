@@ -81,7 +81,7 @@ func watching(t *testing.T, p pluginv1.PluginServer, sup Supervisor) (*Adapter, 
 	return a, seen
 }
 
-// show makes the given contexts' grids the adapter's whole share of interest.
+// show makes the given contexts' grids the adapter's whole share of subscription.
 func show(t *testing.T, a *Adapter, contexts ...string) {
 	t.Helper()
 	var grids []string

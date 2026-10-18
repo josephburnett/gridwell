@@ -28,16 +28,16 @@ const farLabel = "node"
 // answering cannot hold a newer set behind it.
 var tellFarWait = 10 * time.Second
 
-// farInterest is one connection's share and the session it rides, which is
+// farSubscription is one connection's share and the session it rides, which is
 // also the session of the connection's event stream (fanInRemote): the far
 // node counts the share while that stream is open.
-type farInterest struct {
+type farSubscription struct {
 	session string
 	grids   []string // the far node's own ids; guarded by Server.mu
 	kick    chan struct{}
 }
 
-func (f *farInterest) poke() {
+func (f *farSubscription) poke() {
 	select {
 	case f.kick <- struct{}{}:
 	default:
@@ -45,19 +45,19 @@ func (f *farInterest) poke() {
 }
 
 // farOf is name's share, made on first use.
-func (s *Server) farOf(name string) *farInterest {
+func (s *Server) farOf(name string) *farSubscription {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.farLocked(name)
 }
 
-func (s *Server) farLocked(name string) *farInterest {
+func (s *Server) farLocked(name string) *farSubscription {
 	if s.far == nil {
-		s.far = map[string]*farInterest{}
+		s.far = map[string]*farSubscription{}
 	}
 	f, ok := s.far[name]
 	if !ok {
-		f = &farInterest{session: rand.Text(), kick: make(chan struct{}, 1)}
+		f = &farSubscription{session: rand.Text(), kick: make(chan struct{}, 1)}
 		s.far[name] = f
 	}
 	return f
@@ -105,7 +105,7 @@ func (s *Server) tellFar(ctx context.Context, name string, client namespace.Name
 			cancel()
 			told = len(grids) > 0
 			if err != nil && ctx.Err() == nil && status.Code(err) != codes.Unimplemented && !gwerr.IsTransport(err) {
-				log.Printf("gridwell: connection %s: interest refused: %v", name, err)
+				log.Printf("gridwell: connection %s: subscription refused: %v", name, err)
 			}
 		}
 		select {

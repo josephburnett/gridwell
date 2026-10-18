@@ -89,7 +89,7 @@ func TestADisabledConnectionRefusesWritesAndReadsReadOnly(t *testing.T) {
 	if err := cl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{root}}); err != nil {
 		t.Fatal(err)
 	}
-	awaitInterest(ctx, t, root)
+	awaitSubscription(ctx, t, root)
 
 	if err := cl.DisableSource(ctx, ns); err != nil {
 		t.Fatal(err)
@@ -159,9 +159,9 @@ func farRoot(ctx context.Context, t *testing.T, cl *rpc.Client, ns string) strin
 	return ""
 }
 
-// awaitInterest waits until the node counts root as on screen (its union
+// awaitSubscription waits until the node counts root as on screen (its union
 // trace names it); the set and the stream reach it as two calls.
-func awaitInterest(ctx context.Context, t *testing.T, root string) {
+func awaitSubscription(ctx context.Context, t *testing.T, root string) {
 	t.Helper()
 	for ctx.Err() == nil {
 		for _, rec := range trace.Default().Snapshot() {

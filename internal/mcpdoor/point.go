@@ -1,7 +1,7 @@
 package mcpdoor
 
 // Pointing: how an agent learns what the user means by "here" and "these".
-// The node holds each client session's view, open or away (interest.Book); a
+// The node holds each client session's view, open or away (subscription.Book); a
 // session is chosen, its focused pane's grid read, and the set that pane shows, which
 // pane.SelectionTarget places on the grid row or in the pane tile's layout,
 // is what the user has in hand.
@@ -17,7 +17,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/internal/interest"
+	"github.com/josephburnett/gridwell/internal/subscription"
 )
 
 // ShellHeader carries the shell an agent runs in, the session key a shell
@@ -26,7 +26,7 @@ const ShellHeader = "X-Gridwell-Shell"
 
 // Screens is what the node knows of the clients showing it.
 type Screens interface {
-	Sessions() []interest.Session
+	Sessions() []subscription.Session
 	// ShellHolder is the session holding the home's shell key live now.
 	ShellHolder(ctx context.Context, key string) (session string, ok bool, err error)
 }
@@ -88,13 +88,13 @@ const (
 // screensNow is every session showing a screen, the most recently changed first.
 // A view with no panes shows none: it is another node telling its share
 // through a connection.
-func (d *door) screensNow() []interest.Session {
-	all := slices.DeleteFunc(d.screens.Sessions(), func(s interest.Session) bool { return len(s.View.GetPanes()) == 0 })
-	slices.SortStableFunc(all, func(a, b interest.Session) int { return b.Changed.Compare(a.Changed) })
+func (d *door) screensNow() []subscription.Session {
+	all := slices.DeleteFunc(d.screens.Sessions(), func(s subscription.Session) bool { return len(s.View.GetPanes()) == 0 })
+	slices.SortStableFunc(all, func(a, b subscription.Session) int { return b.Changed.Compare(a.Changed) })
 	return all
 }
 
-func sessionOf(s interest.Session) Session {
+func sessionOf(s subscription.Session) Session {
 	v := s.View
 	out := Session{ID: s.ID, Label: v.GetLabel(), Changed: stamp(s.Changed), PaneTiles: v.GetPaneTiles(), Panes: []Pane{}}
 	if !s.Open {
@@ -125,7 +125,7 @@ type pointedIn struct {
 func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointedIn) (*mcp.CallToolResult, PointedOut, error) {
 	all := d.screensNow()
 	if len(all) == 0 {
-		return nil, PointedOut{}, errors.New("no session: no screen is showing this node now or was in the last " + interest.AwayFor.String() + ", so nothing is pointed at; open Gridwell and ask again")
+		return nil, PointedOut{}, errors.New("no session: no screen is showing this node now or was in the last " + subscription.AwayFor.String() + ", so nothing is pointed at; open Gridwell and ask again")
 	}
 	s, by, note, err := d.choose(ctx, all, in.Session, shellOf(req))
 	if err != nil {
@@ -173,7 +173,7 @@ func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointed
 // pane.SelectionTarget places it: the grid row's set (row), or the pane's own
 // in the pane tile's layout, found under its layout id at the place the view
 // names. A layout that has not caught up with the view is not loaded yet.
-func (d *door) shownSet(ctx context.Context, s interest.Session, p *pb.ViewPane, row []string, out *PointedOut) ([]string, error) {
+func (d *door) shownSet(ctx context.Context, s subscription.Session, p *pb.ViewPane, row []string, out *PointedOut) ([]string, error) {
 	place := pane.StackAt(p.GetAnchor(), p.GetPath(), p.GetContentId())
 	switch place.SelectionTarget(out.PaneTile != "") {
 	case pane.SelectionRow:
@@ -203,16 +203,16 @@ func (d *door) shownSet(ctx context.Context, s interest.Session, p *pb.ViewPane,
 // choose is the pointing rule: the session named, open or away; else, among
 // the open ones, the one holding the agent's shell live, else the one whose
 // view changed last; else, none being open, the one that went away last.
-func (d *door) choose(ctx context.Context, all []interest.Session, named, shell string) (interest.Session, string, string, error) {
+func (d *door) choose(ctx context.Context, all []subscription.Session, named, shell string) (subscription.Session, string, string, error) {
 	if named != "" {
-		if i := slices.IndexFunc(all, func(s interest.Session) bool { return s.ID == named }); i >= 0 {
+		if i := slices.IndexFunc(all, func(s subscription.Session) bool { return s.ID == named }); i >= 0 {
 			return all[i], byArgument, "", nil
 		}
-		return interest.Session{}, "", "", fmt.Errorf("not found: no session %s; pointed with no session names them all", named)
+		return subscription.Session{}, "", "", fmt.Errorf("not found: no session %s; pointed with no session names them all", named)
 	}
-	open := slices.DeleteFunc(slices.Clone(all), func(s interest.Session) bool { return !s.Open })
+	open := slices.DeleteFunc(slices.Clone(all), func(s subscription.Session) bool { return !s.Open })
 	if len(open) == 0 {
-		last := slices.MaxFunc(all, func(a, b interest.Session) int { return a.Away.Compare(b.Away) })
+		last := slices.MaxFunc(all, func(a, b subscription.Session) int { return a.Away.Compare(b.Away) })
 		return last, byMostRecent, fmt.Sprintf("no screen is open; chose the one that went away last, away since %s", stamp(last.Away)), nil
 	}
 	all = open
@@ -224,7 +224,7 @@ func (d *door) choose(ctx context.Context, all []interest.Session, named, shell 
 		return all[0], byMostRecent, fmt.Sprintf("could not tell which screen holds shell %s (%v); chose the session whose view changed last", shell, err), nil
 	}
 	if ok {
-		if i := slices.IndexFunc(all, func(s interest.Session) bool { return s.ID == held }); i >= 0 {
+		if i := slices.IndexFunc(all, func(s subscription.Session) bool { return s.ID == held }); i >= 0 {
 			return all[i], byShell, "", nil
 		}
 	}

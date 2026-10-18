@@ -196,7 +196,7 @@ other. While it is up, and only if its
 pane's grid, or a well's preview on screen: `pane.Showing`), the node holds
 one `Watch` stream to it (`pluginhost.Start`), scoped to the
 contexts shown (`WatchRequest.contexts`, the plugin's share of
-`interest.Book`'s union, re-opened with the new set when it changes), and
+`subscription.Book`'s union, re-opened with the new set when it changes), and
 publishes a `ContextChanged` the plugin sends as the `GridChanged` a write
 would have, once the node has listed the context and found it moved, and an
 `EntryChanged` as that entry's `TileChanged` flagged `content_changed`, once
@@ -246,7 +246,7 @@ each connection's reachability rather than only publishing the transition:
 the transport's event stream opens with every connection that is dark right now, so a client that
 subscribes after the machine died is told, and the cache in front of it
 stamps what it remembers. The transport is also one client of each far node:
-its share of the interest union is cut by connection and told to that node
+its share of the subscription is cut by connection and told to that node
 as a `SetView` of grids alone, labelled `node`, under the session of the
 connection's own event stream (`connection.tellFar`), so a far plugin watches what is on screen here.
 
@@ -642,8 +642,8 @@ copy:
 | where a tile lands when nobody chose a cell | `store.FreeSlot` over the one auto-place rule (`autoplace.go`) |
 | what a link to a tile is | `rpc.LinkOf` |
 | this event stream is established | `namespace.Follow` |
-| what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/interest.Tracker` |
-| what each session shows, and which grids the clients are showing | `interest.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
+| what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/subscription.Tracker` |
+| what each session shows, and which grids the clients are showing | `subscription.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
 | how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
 | the trace line, its door and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |

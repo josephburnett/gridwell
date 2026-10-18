@@ -1,7 +1,7 @@
 package server
 
 // A view crosses the router in two halves: a client's view arrives under its
-// session and is booked (interest.Book owns the views and the union), and each
+// session and is booked (subscription.Book owns the views and the union), and each
 // new union is cut by owner and handed to every namespace as its whole share.
 
 import (
@@ -12,16 +12,16 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/interest"
+	"github.com/josephburnett/gridwell/internal/subscription"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// Session is one client's view as the node holds it; see interest.Session.
-type Session = interest.Session
+// Session is one client's view as the node holds it; see subscription.Session.
+type Session = subscription.Session
 
 // Sessions is each session that has said what it shows, open or away; see
-// interest.Book.Sessions.
-func (s *Server) Sessions() []Session { return s.interest.Sessions() }
+// subscription.Book.Sessions.
+func (s *Server) Sessions() []Session { return s.subscription.Sessions() }
 
 // SetView books one session's view. It has no id to route: every grid it shows
 // is cut to its owner when the union moves.
@@ -32,7 +32,7 @@ func (rt *router) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetVie
 	trace.Emit("view", "set", viewLine(req), map[string]string{
 		"session": req.GetSession(), "label": req.GetLabel(), "levels": strings.Join(req.GetPaneTiles(), " "),
 	})
-	rt.srv.interest.Set(req.GetSession(), req)
+	rt.srv.subscription.Set(req.GetSession(), req)
 	return &pb.SetViewResponse{}, nil
 }
 
@@ -53,10 +53,10 @@ func viewLine(v *pb.SetViewRequest) string {
 	return strings.Join(words, " ")
 }
 
-// spreadInterest hands every namespace its share of union, an empty one
+// spreadSubscription hands every namespace its share of union, an empty one
 // included, since a share that emptied must stop being watched. A grid whose
 // namespace this node does not declare is nobody's to watch.
-func (s *Server) spreadInterest(union []string) {
+func (s *Server) spreadSubscription(union []string) {
 	trace.Emit("view", "union", strings.Join(union, " "), nil)
 	type owner struct {
 		uuid    string

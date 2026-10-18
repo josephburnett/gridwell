@@ -666,8 +666,8 @@ func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAli
 // after (asSwitched). Once every namespace's stream has settled the node is
 // listening, and only then: the header goes out, which is what a client's
 // Subscribe returns on and its resync waits for (retry.Events), and its
-// session's interest is counted (interest.Book.Open), since interest is what
-// starts a source watching and a change it reports before this stream hears
+// session's view is counted (subscription.Book.Open), since the subscription
+// is what starts a source watching and a change it reports before this stream hears
 // it would reach no one.
 func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	subCtx, cancel := context.WithCancel(ctx)
@@ -704,7 +704,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 				counted <- func() {}
 				return
 			}
-			counted <- rt.srv.interest.Open(s)
+			counted <- rt.srv.subscription.Open(s)
 		}()
 		defer func() { cancel(); (<-counted)() }()
 	}

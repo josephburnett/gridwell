@@ -375,7 +375,7 @@ func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func
 	}
 }
 
-// SetView takes this plugin's share of the node's interest, grids the
+// SetView takes this plugin's share of the node's subscription, grids the
 // node serves for it, as the contexts shown. A grid that no longer resolves
 // is not watched. A share it cannot take leaves the scope where it was, so
 // live updates are off for what is shown until one lands.
@@ -388,14 +388,14 @@ func (a *Adapter) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*g
 		case codes.NotFound, codes.InvalidArgument:
 			continue
 		default:
-			a.setSource(func() { a.interestOff = "what is shown could not be watched: " + err.Error() })
+			a.setSource(func() { a.subscriptionOff = "what is shown could not be watched: " + err.Error() })
 			return nil, err
 		}
 		if c != "" {
 			shown = append(shown, c)
 		}
 	}
-	a.setSource(func() { a.interestOff = "" })
+	a.setSource(func() { a.subscriptionOff = "" })
 	a.scopeMu.Lock()
 	defer a.scopeMu.Unlock()
 	a.shown = shown

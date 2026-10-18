@@ -525,7 +525,7 @@ func TestFsBootingWhileShownAnnouncesOnlyWhatMoves(t *testing.T) {
 		}
 	}
 
-	// The client's own re-read of what it shows, then its interest; d2 and d3
+	// The client's own re-read of what it shows, then its subscription; d2 and d3
 	// join the scope through the root's links, read by nobody.
 	readGrid(dirs["d0"])
 	readGrid(dirs["d1"])

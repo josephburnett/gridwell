@@ -1,9 +1,9 @@
-// Package interest owns what the node's clients are showing: each session's
+// Package subscription owns what the node's clients are showing: each session's
 // view (SetView), counted while that session's event stream is open and
 // listed away for AwayFor after its last stream closes, and the union of every
 // counted view's shown grids, which is what the node's sources are asked to
 // watch. It lives in memory only; nothing here is a node fact.
-package interest
+package subscription
 
 import (
 	"slices"

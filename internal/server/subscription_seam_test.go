@@ -24,19 +24,19 @@ import (
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
-// interestSink is a namespace that records the last share it was handed.
-type interestSink struct {
+// subscriptionSink is a namespace that records the last share it was handed.
+type subscriptionSink struct {
 	namespace.Unimplemented
 	mu    sync.Mutex
 	share []string
 	heard int
 }
 
-func (s *interestSink) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+func (s *subscriptionSink) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	return &gridwellv1.InfoResponse{}, nil
 }
 
-func (s *interestSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+func (s *subscriptionSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	if err := send(nil); err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func (s *interestSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeReq
 	return nil
 }
 
-func (s *interestSink) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
+func (s *subscriptionSink) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.share, s.heard = slices.Clone(req.ShownGridIds), s.heard+1
@@ -52,7 +52,7 @@ func (s *interestSink) SetView(_ context.Context, req *gridwellv1.SetViewRequest
 }
 
 // await waits for the sink's share to be want.
-func (s *interestSink) await(t *testing.T, want []string) {
+func (s *subscriptionSink) await(t *testing.T, want []string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -91,9 +91,9 @@ func subscribed(cl *rpc.Client) func() {
 // Two clients showing overlapping grids of one namespace hand it the union,
 // peeled to its own ids, and a grid of another namespace is not its business;
 // a client whose stream closes takes its grids with it.
-func TestInterestReachesEachNamespaceAsItsShare(t *testing.T) {
+func TestSubscriptionReachesEachNamespaceAsItsShare(t *testing.T) {
 	const a, b = "pinta01", "pintb01"
-	sinkA, sinkB := &interestSink{}, &interestSink{}
+	sinkA, sinkB := &subscriptionSink{}, &subscriptionSink{}
 	reg := plugin.NewRegistry()
 	reg.Register(a, "feed", sinkA, nil)
 	reg.Register(b, "feed", sinkB, nil)
@@ -123,9 +123,9 @@ func TestInterestReachesEachNamespaceAsItsShare(t *testing.T) {
 // A grid behind a connection is the far node's to watch: the transport tells
 // it, peeled of the connection segment, under the connection's own session,
 // and takes it back when the client here stops showing it.
-func TestInterestCrossesAConnection(t *testing.T) {
+func TestSubscriptionCrossesAConnection(t *testing.T) {
 	const far = "pintf01"
-	sink := &interestSink{}
+	sink := &subscriptionSink{}
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
 		func(reg *plugin.Registry, _ *store.Store) { reg.Register(far, "feed", sink, nil) })
 	ctx := context.Background()
@@ -145,7 +145,7 @@ func TestInterestCrossesAConnection(t *testing.T) {
 // listed, away since the close and watching nothing.
 func TestSessionsHoldEachViewOpenThenAway(t *testing.T) {
 	const a = "pinta01"
-	sink := &interestSink{}
+	sink := &subscriptionSink{}
 	reg := plugin.NewRegistry()
 	reg.Register(a, "feed", sink, nil)
 	srv := servertest.New(t, reg, server.Config{ID: localNodeID})

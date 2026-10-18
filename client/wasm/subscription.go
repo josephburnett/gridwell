@@ -11,11 +11,11 @@ import (
 )
 
 // syncView runs every frame, like syncMirrors: every change to what the panes
-// show draws one. pane.View is the view; interest.Tracker decides when it is
+// show draws one. pane.View is the view; subscription.Tracker decides when it is
 // owed.
 func (a *App) syncView(rects map[string]pane.Rect) {
-	if a.interest.Show(pane.View(a.tree, &a.ws, rects, a.caps.Label(), a.gridIDForPathFrom, a.cachedTiles)) {
-		a.kickInterest()
+	if a.subscription.Show(pane.View(a.tree, &a.ws, rects, a.caps.Label(), a.gridIDForPathFrom, a.cachedTiles)) {
+		a.kickSubscription()
 	}
 }
 
@@ -26,9 +26,9 @@ func (a *App) cachedTiles(gridID string) map[string]*gridwellv1.Tile {
 	return nil
 }
 
-func (a *App) kickInterest() {
+func (a *App) kickSubscription() {
 	select {
-	case a.interestKick <- struct{}{}:
+	case a.subscriptionKick <- struct{}{}:
 	default:
 	}
 }
@@ -37,9 +37,9 @@ func (a *App) kickInterest() {
 // A transport failure is the event stream's to report; the next change or the
 // stream's re-open sends again.
 func (a *App) sendView() {
-	for range a.interestKick {
+	for range a.subscriptionKick {
 		for {
-			v, ok := a.interest.Next()
+			v, ok := a.subscription.Next()
 			if !ok {
 				break
 			}
@@ -47,11 +47,11 @@ func (a *App) sendView() {
 			err := a.cl.SetView(ctx, v)
 			cancel()
 			if err == nil {
-				a.resolveErr("interest")
+				a.resolveErr("subscription")
 				continue
 			}
 			if !clientsync.Unheard(clientsync.Of(err)) {
-				a.reportErr(errsurface.Error, "interest", "the node was not told what is on screen: "+err.Error())
+				a.reportErr(errsurface.Error, "subscription", "the node was not told what is on screen: "+err.Error())
 			}
 			break
 		}

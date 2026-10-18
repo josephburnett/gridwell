@@ -3657,8 +3657,7 @@ func (x *SubscribeRequest) GetSession() string {
 }
 
 // SetView is the whole of what one session shows, sent whenever any of it
-// changes and again whenever the session's stream re-opens; it replaces the
-// retired SetInterest, whose two fields it keeps at their numbers. It is unary
+// changes and again whenever the session's stream re-opens. It is unary
 // rather than a Subscribe field because the view changes many times in one
 // stream's life. The node holds the latest per session in memory while a
 // stream carrying the session is open and never stores it.

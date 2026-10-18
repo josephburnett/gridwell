@@ -27,7 +27,6 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/events"
 	"github.com/josephburnett/gridwell/client/inflight"
-	"github.com/josephburnett/gridwell/client/interest"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/nodebuild"
@@ -40,6 +39,7 @@ import (
 	"github.com/josephburnett/gridwell/client/retry"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
+	"github.com/josephburnett/gridwell/client/subscription"
 	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/touchgest"
 	"github.com/josephburnett/gridwell/client/trace"
@@ -171,9 +171,9 @@ type App struct {
 	// mirrors is what each mirror was last told; see syncMirrors.
 	mirrors mirrorState
 
-	// interest is what the node was told this client shows; see syncView.
-	interest     interest.Tracker
-	interestKick chan struct{}
+	// subscription is what the node was told this client shows; see syncView.
+	subscription     subscription.Tracker
+	subscriptionKick chan struct{}
 
 	// shellMirrorPasses counts shell mirror snapshots, for e2e.
 	shellMirrorPasses int
@@ -595,7 +595,7 @@ func main() {
 		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
 		gate:               gate,
 		c:                  cache.New(),
-		interestKick:       make(chan struct{}, 1),
+		subscriptionKick:   make(chan struct{}, 1),
 		locals:             map[string]*paneLocal{},
 		menu:               menu.New(),
 		errs:               errsurface.New(),
@@ -1015,8 +1015,8 @@ func (a *App) startSSE() {
 	sse := retry.Events{
 		Subscribe: func(ctx context.Context) (retry.Stream, error) {
 			// The node forgets this session's view when its stream closes.
-			a.interest.Reopened()
-			a.kickInterest()
+			a.subscription.Reopened()
+			a.kickSubscription()
 			s, err := a.cl.Subscribe(ctx)
 			if err != nil {
 				return nil, err

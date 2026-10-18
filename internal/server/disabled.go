@@ -62,7 +62,7 @@ func (s *Server) stampDisabledTile(t *pb.Tile) {
 // announceDisabled tells every open stream that each grid of ns on screen
 // changed, so the views showing one read it again and take the stamp.
 func (s *Server) announceDisabled(ns string) {
-	for _, id := range s.interest.Union() {
+	for _, id := range s.subscription.Union() {
 		if rpc.OwnerNamespaceOf(id, s.cfg.ID) == ns {
 			s.switchedOff.Publish(&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: id}}})
 		}
