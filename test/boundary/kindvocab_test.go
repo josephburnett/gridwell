@@ -32,7 +32,7 @@ var kindLiteralOK = map[string]string{
 	// The client's own vocabularies, which collide with a kind word by
 	// coincidence and mean something else.
 	"client/wasm/create_tile.go":         `"url" is an errsurface source label`,
-	"client/wasm/render.go":              "the palette's display and alt-text names, a list that also holds \"markdown\"",
+	"client/wasm/render.go":              "the + menu's display and alt-text names, a list that also holds \"markdown\"",
 	"client/wasm/shell_stream_client.go": `"shell" is an errsurface source label and "text" a DOM property`,
 	"client/wasm/testhook.go":            `"pane" is a crumb shape the hook pairs with "chain", "text" a crumb field`,
 	"client/traceevent/traceevent.go":    `"pane" is a trace record's src and its key for a pane id, and "text" names the save queue`,

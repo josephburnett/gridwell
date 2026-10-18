@@ -44,7 +44,7 @@ function ghostActive(win: Page): Promise<boolean> {
 // A text tile the client holds, so the press that follows grabs it.
 async function textTile(gw: GridwellDriver, cx: number, cy: number) {
   const f = await gw.focused();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(t, 'created text tile').toBeTruthy();
@@ -209,9 +209,9 @@ test('Esc on a swatch drag-create makes nothing', async ({ gw, window }) => {
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
   const n = (await gw.getGrid(f.gridID)).tiles?.length ?? 0;
-  await gw.openPalette();
-  const pal = await gw.palette();
-  const item = pal.items.find((i) => !i.isPlugin && i.kind === 'markdown')!;
+  await gw.openMenu();
+  const menu = await gw.menu();
+  const item = menu.items.find((i) => !i.isPlugin && i.kind === 'markdown')!;
   const to = await gw.cellCenter(f.id, cx, cy);
   const writes = await watchWrites(window);
 
@@ -240,7 +240,7 @@ test('Esc on the ephemeral crumb drag promotes nothing', async ({ electronApp, w
   const visitor = await gw.focused();
   const dest = (await gw.panes()).find((p) => p.id !== visitor.id)!;
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?keep=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
@@ -317,7 +317,7 @@ test('Esc reaches a drag forwarded from a live view that holds keyboard focus', 
 }) => {
   await gw.enterPlugin('home');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/?esc=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

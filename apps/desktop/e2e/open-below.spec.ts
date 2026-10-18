@@ -16,7 +16,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
 
   // Poll for the navigated view rather than a webContents count: the count
   // grows at view creation, before loadURL lands.
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?src=page`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
@@ -122,7 +122,7 @@ test('a link-open split lands without animating an ascent nobody made', async ({
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');

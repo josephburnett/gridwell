@@ -1,8 +1,8 @@
-// Package menu owns the live state of the + creation menu. It is open on at
-// most one pane, the focused one, and every transition goes through a method
-// here, so a new gesture-ending path cannot strand it open on an unfocused
-// pane. What survives a descent rides the place frame instead
-// (pane.Frame.MenuOpen), recorded with OpenOn and restored with Open.
+// Package menu owns the + menu: what it shows, where it draws, and its live
+// state. It is open on at most one pane, the focused one, and every transition
+// goes through a State method, so a new gesture-ending path cannot strand it
+// open on an unfocused pane. What survives a descent rides the place frame
+// instead (pane.Frame.MenuOpen), recorded with OpenOn and restored with Open.
 package menu
 
 const noHover = -1
@@ -31,7 +31,7 @@ func (s *State) PaneID() string {
 	return s.paneID
 }
 
-// Hover is the hovered palette-item index, or -1.
+// Hover is the hovered menu-item index, or -1.
 func (s *State) Hover() int { return s.hover }
 
 // PluginsExpanded is live state rather than a preference, so every opening

@@ -25,7 +25,7 @@ test('cloning a workspace: shared blob, independent divergence', async ({ gw, wi
   const ay = Math.round(f.cy);
 
   // A split makes the original's blob distinctive.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', ax, ay);
   const orig = tileAt(await gw.getGrid(rootGrid), 'pane', ax, ay);
   expect(orig).toBeTruthy();
@@ -77,7 +77,7 @@ test('an unreadable layout opens read-only and is never overwritten', async ({ g
   const ax = Math.round(f.cx);
   const ay = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', ax, ay);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', ax, ay);
   expect(pt).toBeTruthy();

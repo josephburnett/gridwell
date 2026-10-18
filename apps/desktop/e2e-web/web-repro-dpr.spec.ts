@@ -15,7 +15,7 @@ test('gestures at deviceScaleFactor 2: move, resize, delete, pane descent', asyn
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   let t = tileAt(await gw.getGrid(grid), 'text', cx, cy);
   expect(t, 'created tile persisted').toBeTruthy();
@@ -31,7 +31,7 @@ test('gestures at deviceScaleFactor 2: move, resize, delete, pane descent', asyn
   expect(Number(t!.w), 'resize grew the tile wider').toBeGreaterThan(1);
 
   // PANE TILE: create, descend, ascend, delete.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx - 2, cy - 2);
   const pt = tileAt(await gw.getGrid(grid), 'pane', cx - 2, cy - 2);
   expect(pt, 'pane tile persisted').toBeTruthy();

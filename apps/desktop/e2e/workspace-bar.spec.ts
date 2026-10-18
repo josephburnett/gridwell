@@ -42,7 +42,7 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(fp0.x, 'no outline gutter outside a workspace').toBe(0);
   expect(fp0.y, 'no outline gutter outside a workspace').toBe(0);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   expect(pt).toBeTruthy();

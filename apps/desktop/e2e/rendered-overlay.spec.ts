@@ -15,7 +15,7 @@ test('rendered mode shows sanitized HTML; the toggle round-trips to the editor',
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.typeText('# Big Title\n\nhello *world* <script>alert(1)</script>');

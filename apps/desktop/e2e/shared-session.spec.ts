@@ -16,7 +16,7 @@ test('live tiles in different plugins share the one local session', async ({
   gw,
 }) => {
   const goLiveURL = async (marker: string) => {
-    await gw.clickPaletteSwatch('url');
+    await gw.clickMenuSwatch('url');
     await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
     await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?${marker}`);
     await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

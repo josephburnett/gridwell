@@ -15,7 +15,7 @@ test('an ephemeral url visit explains itself instead of opening a dead modal', a
   window,
 }) => {
   await gw.enterPlugin('home');
-  await gw.clickPaletteSwatch('url'); // opens the palette itself
+  await gw.clickMenuSwatch('url'); // opens the menu itself
   // No modal: the visit could only ever produce a blank frozen tile.
   await expect(window.locator('#gw-url-modal.open')).toHaveCount(0);
   await expect.poll(async () => livecapMessage(window)).toContain('desktop');
@@ -35,7 +35,7 @@ test('a frozen url tile: the circle button opens the address in a new tab', asyn
   // stays frozen here. The drop lands bare, the first descent prompts for the
   // address, and with no live capability the descent is the frozen one.
   const addr = `${serve.origin}/wasm_exec.js?newtab=1`;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -50,10 +50,10 @@ test('a frozen url tile: the circle button opens the address in a new tab', asyn
   // frozen address in a new tab. It arrives as the context 'page' event, because
   // noopener severs the popup relationship.
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
-  const pal = await gw.palette();
+  const menu = await gw.menu();
   const [popup] = await Promise.all([
     window.context().waitForEvent('page', { timeout: 10_000 }),
-    window.mouse.click(pal.plusX, pal.plusY),
+    window.mouse.click(menu.plusX, menu.plusY),
   ]);
   await popup.waitForURL(/newtab=1/, { timeout: 10_000 });
   expect(popup.url()).toBe(addr);

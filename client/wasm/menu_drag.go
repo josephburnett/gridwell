@@ -12,27 +12,27 @@ import (
 	"github.com/josephburnett/gridwell/client/caps"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/palette"
+	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 )
 
 // The + menu swatch as a gesture: arming a template drag, what a bare click
 // does, and what a release over a grid creates. What a swatch shows is
-// client/palette's decision, what a click means is palette.ClickOn's, and
-// what a release does is palette.DropOn's. The create RPCs are in
+// client/menu's decision, what a click means is menu.ClickOn's, and
+// what a release does is menu.DropOn's. The create RPCs are in
 // create_tile.go.
 
-// startPaletteDrag arms a drag from the i'th palette item, as a regular tile
+// startMenuDrag arms a drag from the i'th menu item, as a regular tile
 // drag but with isTemplate=true so the release branches to creation. The
-// palette stays open until commit.
-func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) {
-	items := a.paletteItems(p)
+// menu stays open until commit.
+func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) {
+	items := a.menuItems(p)
 	if idx < 0 || idx >= len(items) {
 		return
 	}
 	item := items[idx]
-	tx, ty, tw, _ := a.paletteTileRect(p, idx)
+	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		isTemplate:   true,
@@ -46,7 +46,7 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 		curScreenY:    sy,
 		cellOffsetX:   0.5,
 		cellOffsetY:   0.5,
-		snapshotTile:  paletteItemGhostNode(item),
+		snapshotTile:  menuItemGhostNode(item),
 		originScreenX: tx,
 		originScreenY: ty,
 		// The ghost starts at the fixed swatch size and the drop-target
@@ -56,13 +56,13 @@ func (a *App) startPaletteDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float6
 	}
 }
 
-// paletteItemGhostNode synthesizes the 1x1 tile the ghost renderer paints, so
+// menuItemGhostNode synthesizes the 1x1 tile the ghost renderer paints, so
 // an in-flight item takes the same draw path as a real tile. A plugin item
 // carries the plugin's uuid as its id, so the health tint and the
 // not-enterable descent guard can name it. Every answer is caller-owned:
 // primitives share one template apiece, and a caller placing the ghost at a
 // cell would otherwise leave those coordinates on the next gesture's swatch.
-func paletteItemGhostNode(item paletteItem) *gridwellv1.Tile {
+func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
 	if item.isPlugin {
 		t := rpc.PluginWellTile(item.plugin)
 		t.Id = item.plugin.Uuid
@@ -74,8 +74,8 @@ func paletteItemGhostNode(item paletteItem) *gridwellv1.Tile {
 	return &gridwellv1.Tile{}
 }
 
-// clickTemplate runs the bare-click behavior of the palette item a template
-// drag was armed from. Which behavior is palette.ClickOn's, over the swatch
+// clickTemplate runs the bare-click behavior of the menu item a template
+// drag was armed from. Which behavior is menu.ClickOn's, over the swatch
 // alone since a click has no destination. Every swatch has an answer.
 func (a *App) clickTemplate(d *dragState) {
 	fp := a.tree.FindPane(d.originPaneID)
@@ -83,22 +83,22 @@ func (a *App) clickTemplate(d *dragState) {
 		return
 	}
 	pr, _ := primitiveFor(d.item.primitive)
-	switch palette.ClickOn(palette.Swatch{
+	switch menu.ClickOn(menu.Swatch{
 		IsPlugin: d.item.isPlugin,
 		Promote:  d.item.promotePane != "",
 		Visits:   pr.click != nil,
 	}) {
-	case palette.ClickEnter:
+	case menu.ClickEnter:
 		// The same descent a link tile takes, through a synthetic link tile
 		// at the pane's view center, so ascent lands back exactly here.
-		well := paletteItemGhostNode(d.item)
+		well := menuItemGhostNode(d.item)
 		if v, ok := fp.Live(); ok {
 			well.X, well.Y = int64(math.Floor(v.Cx()-0.5)), int64(math.Floor(v.Cy()-0.5))
 		}
 		a.descend(fp, well)
-	case palette.ClickVisit:
+	case menu.ClickVisit:
 		pr.click(a, fp)
-	case palette.ClickNothing:
+	case menu.ClickNothing:
 	}
 }
 
@@ -135,13 +135,13 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 	a.visitEphemeralShell(p) // reports if there is nowhere to open
 }
 
-// commitTemplateDrop resolves the template drag at release. palette.DropOn
+// commitTemplateDrop resolves the template drag at release. menu.DropOn
 // says what the release does; this gathers the facts and runs it. The
 // destination is the (t, dropX, dropY) the one gather produced for the verdict
 // that routed this call, so the create lands exactly where DecideDrop said it
 // may, and dropTargetAt owns what is legal.
 func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
-	r := palette.Release{Target: t != nil, Doorway: d.item.isPlugin,
+	r := menu.Release{Target: t != nil, Doorway: d.item.isPlugin,
 		Promote: d.item.primitive == tplURL && d.item.promotePane != ""}
 	if r.Target {
 		// The target's grid is the open well's child when the cursor promoted
@@ -155,27 +155,27 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 			r.Enterable = classified && st == pluginhealth.Enterable
 		}
 	}
-	switch palette.DropOn(r) {
-	case palette.DropSnapBack:
+	switch menu.DropOn(r) {
+	case menu.DropSnapBack:
 		a.cancelDragSnapBack(d)
 		return
-	case palette.DropRefuse:
+	case menu.DropRefuse:
 		a.reportErr(errsurface.Info, "menu",
 			"this menu belongs to another node — drop into a grid on that node, or open the menu here")
 		a.cancelDragSnapBack(d)
 		return
-	case palette.DropLink:
+	case menu.DropLink:
 		// A doorway becomes an exit-well link to its root grid, and a
 		// connection row drops the same way with its chained root already
 		// qualified.
 		a.landGhostAtCell(t, dropX, dropY)
 		a.createPluginLinkAtCell(t.gridID, d.item.plugin, dropX, dropY)
-	case palette.DropPromote:
+	case menu.DropPromote:
 		// The ephemeral url off the bar's crumb becomes a persistent tile and
 		// the pane relocates onto it.
 		a.landGhostAtCell(t, dropX, dropY)
 		a.promoteEphemeralURL(d.item.promotePane, t.pane.ID, t.gridID, dropX, dropY)
-	case palette.DropCreate:
+	case menu.DropCreate:
 		// The drop never prompts: whatever a kind needs is asked for on the
 		// first descent, so create is one experience everywhere.
 		a.landGhostAtCell(t, dropX, dropY)

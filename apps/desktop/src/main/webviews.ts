@@ -264,7 +264,7 @@ export class WebviewRegistry {
       },
     });
     // hidden and focused start from the renderer's verdict for this frame,
-    // because it owns both. hidden keeps a view placed under an open palette
+    // because it owns both. hidden keeps a view placed under an open menu
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.

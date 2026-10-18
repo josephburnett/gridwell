@@ -469,7 +469,7 @@ func (a *App) startPromoteDrag(p *pane.Pane, t *gridwellv1.Tile, seg wsbar.Segme
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
 		isTemplate:    true,
-		item:          paletteItem{primitive: tplURL, promotePane: p.ID},
+		item:          menuItem{primitive: tplURL, promotePane: p.ID},
 		menuNS:        a.paneNodeNS(p),
 		startScreenX:  sx,
 		startScreenY:  sy,

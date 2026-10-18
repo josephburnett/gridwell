@@ -17,7 +17,7 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
   const homeBefore = await gw.getGrid(home.gridID);
 
   // Clicking the swatch descends into a live shell.
-  await gw.clickPaletteSwatch('shell');
+  await gw.clickMenuSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // The tile lives in the scratch grid, and home is untouched.

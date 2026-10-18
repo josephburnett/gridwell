@@ -123,14 +123,14 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   expect((await gw.focused()).gridID, 'descended').not.toBe(root);
 
   // Right-clicking the slot must do nothing.
-  const pal = await gw.palette();
-  await window.mouse.click(pal.plusX, pal.plusY, { button: 'right' });
+  const menu = await gw.menu();
+  await window.mouse.click(menu.plusX, menu.plusY, { button: 'right' });
   await gw.waitIdle();
   expect((await gw.focused()).gridID, 'slot right-click must not ascend').not.toBe(root);
 
@@ -145,7 +145,7 @@ test('middle-click ascends out of a descended well', async ({ gw }) => {
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   const inside = await gw.focused();
@@ -165,7 +165,7 @@ test('one click on a tile in an unfocused pane focuses it and descends', async (
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
 
   await gw.splitFocusedPaneVertical();
@@ -185,7 +185,7 @@ test('one ctrl+click on a tile in an unfocused pane descends in a split below', 
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
 
   await gw.splitFocusedPaneVertical();
@@ -216,7 +216,7 @@ test.describe('stack hygiene', () => {
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy) - 1;
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.dragCreate('well', cx, cy);
 
     await gw.descendCell(cx, cy); // the well descent pushes a second frame

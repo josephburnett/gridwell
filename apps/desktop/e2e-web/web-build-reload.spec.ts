@@ -89,7 +89,7 @@ test('a tab whose node changed build offers the reload and lands where it was wh
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
   await gw.descendCell(cx, cy);
@@ -170,7 +170,7 @@ test('a tab holding unsaved text keeps it on screen and says to copy it first', 
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   await gw.descendCell(cx, cy);

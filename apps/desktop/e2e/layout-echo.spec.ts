@@ -24,7 +24,7 @@ test('a pane layout write is never read back by the client that wrote it', async
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
   expect(pt, 'the pane tile persisted').toBeTruthy();

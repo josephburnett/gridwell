@@ -14,7 +14,7 @@ test('shell descent reconnects the running session with its state', async ({ gw,
 
   // The drop lands bare, like every primitive; the first descent creates the
   // session, through shellconn.DecideAutoLive's fresh-shell arm.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await expect.poll(async () => tileAt(await gw.getGrid(f.gridID), 'shell', cx, cy)).toBeTruthy();
   await gw.waitIdle();
@@ -72,7 +72,7 @@ test('url descent reopens the page live; a sibling preview stays frozen', async 
 
   // The drop lands bare; the first descent prompts for the address and goes
   // live, and the ascent freezes it.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

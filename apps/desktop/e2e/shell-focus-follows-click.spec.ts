@@ -24,7 +24,7 @@ test('left-click into a live shell transfers pane focus', async ({
   const lf = await gw.focused();
   const cx = Math.round(lf.cx);
   const cy = Math.round(lf.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
@@ -55,7 +55,7 @@ async function shellBesideGrid(gw: any) {
   const lf = await gw.focused();
   const cx = Math.round(lf.cx);
   const cy = Math.round(lf.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
@@ -85,12 +85,12 @@ test('one click into an unfocused live shell takes the next keystroke', async ({
 
 test('one click on a shell parked under an open menu closes the menu and takes keys', async ({ window, gw }) => {
   const { shell, cx, cy } = await shellBesideGrid(gw);
-  await gw.openPalette();
-  expect((await gw.palette()).open, 'the menu is open on the other pane').toBe(true);
+  await gw.openMenu();
+  expect((await gw.menu()).open, 'the menu is open on the other pane').toBe(true);
   const s = await paneOf(gw, shell);
   await window.mouse.click(s.x + s.w / 2, s.y + s.h / 2);
   await gw.waitIdle();
-  expect((await gw.palette()).open, 'the click closed the menu').toBe(false);
+  expect((await gw.menu()).open, 'the click closed the menu').toBe(false);
   expect((await gw.focused()).id, 'and focused the shell pane').toBe(shell);
   await window.keyboard.type("printf '%s\\n' PARKED-CLICK\n");
   await gw.waitShellLine('PARKED-CLICK');
@@ -106,7 +106,7 @@ test('nothing deferred moves keyboard focus off a clicked shell', async ({ windo
   const o = await gw.focused();
   const tx = Math.round(o.cx);
   const ty = Math.round(o.cy) + 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', tx, ty);
   const doc = tileAt(await gw.getGrid(o.gridID), 'text', tx, ty)!;
   expect(doc, 'text tile created').toBeTruthy();
@@ -153,7 +153,7 @@ test('a click on a shell while a drop is still landing takes the keyboard', asyn
   const { shell, cx, cy } = await shellBesideGrid(gw);
   const o = await gw.focused();
   await window.evaluate(() => (window as any).__gridwellTest.setSnapMs(60_000));
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', Math.round(o.cx), Math.round(o.cy) + 1);
   const s = await paneOf(gw, shell);
   expect(await window.evaluate(() => (window as any).__gridwellTest.ghost().active), 'the drop is landing').toBe(true);

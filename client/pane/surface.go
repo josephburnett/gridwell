@@ -47,7 +47,7 @@ type CanvasGesture struct {
 	// PaneResize: half the divider's grab band is a surface's own rect
 	// (live-border-drag.spec.ts).
 	PaneResize bool
-	// MenuOpen: the + palette is anchored to the bar, so it floats over the
+	// MenuOpen: the + menu is anchored to the bar, so it floats over the
 	// pane below its own (menu-over-live-pane.spec.ts).
 	MenuOpen  bool
 	ModalOpen bool

@@ -38,7 +38,7 @@ async function visitInsideWorkspace(gw: GridwellDriver, window: any) {
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   expect(pt, 'pane tile persisted').toBeTruthy();
@@ -53,7 +53,7 @@ async function visitInsideWorkspace(gw: GridwellDriver, window: any) {
   const watcher = (await gw.panes()).find((p) => p.id !== visitor.id)!;
   expect(watcher.gridID, 'the other pane shows the grid holding the workspace').toBe(rootGrid);
 
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?workspace-preview-inside=1`);
   await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());

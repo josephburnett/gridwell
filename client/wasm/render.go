@@ -18,7 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/palette"
+	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -140,8 +140,8 @@ func (a *App) drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
 	c.Call("restore")
 }
 
-// plusButtonRadius comes from palette.Default(), so canvas and DOM agree.
-var plusButtonRadius = palette.Default().PlusRadius
+// plusButtonRadius comes from menu.Default(), so canvas and DOM agree.
+var plusButtonRadius = menu.Default().PlusRadius
 
 // templateKind identifies one built-in tile primitive. Order matters: it is
 // the popover layout and the hit-test index.
@@ -169,7 +169,7 @@ type primitive struct {
 	click func(a *App, p *pane.Pane)
 }
 
-// primitives is the palette layout order and primitiveKinds its derived
+// primitives is the menu layout order and primitiveKinds its derived
 // order. Both fill in init, because the rows close over App methods.
 var (
 	primitives     []primitive
@@ -226,8 +226,8 @@ func primitiveFor(k templateKind) (primitive, bool) {
 	return primitive{}, false
 }
 
-// paletteItem is a configured plugin or a built-in primitive.
-type paletteItem struct {
+// menuItem is a configured plugin or a built-in primitive.
+type menuItem struct {
 	isPlugin  bool
 	plugin    *gridwellv1.PluginInfo // when isPlugin (also set for a root ENTRY's owner)
 	primitive templateKind           // when !isPlugin
@@ -236,17 +236,17 @@ type paletteItem struct {
 	promotePane string
 }
 
-// paletteItems returns pane p's palette entries in display order. Every
+// menuItems returns pane p's menu entries in display order. Every
 // consumer reads this one list, so a swatch not shown cannot be clicked.
-func (a *App) paletteItems(p *pane.Pane) []paletteItem {
-	items, _ := a.paletteView(p)
+func (a *App) menuItems(p *pane.Pane) []menuItem {
+	items, _ := a.menuView(p)
 	return items
 }
 
-// paletteView returns the items and the section decision; see palette.Show.
-func (a *App) paletteView(p *pane.Pane) ([]paletteItem, palette.Shown) {
-	plugins, primitives := a.paletteGroups(p)
-	show := palette.Show(palette.Section{
+// menuView returns the items and the section decision; see menu.Show.
+func (a *App) menuView(p *pane.Pane) ([]menuItem, menu.Shown) {
+	plugins, primitives := a.menuGroups(p)
+	show := menu.Show(menu.Section{
 		Plugins:    len(plugins),
 		Primitives: len(primitives),
 		Expanded:   a.menu.PluginsExpanded(),
@@ -257,33 +257,33 @@ func (a *App) paletteView(p *pane.Pane) ([]paletteItem, palette.Shown) {
 	return append(plugins, primitives...), show
 }
 
-// paletteGroups is unfiltered by the fold, so palette.Show counts what the
+// menuGroups is unfiltered by the fold, so menu.Show counts what the
 // node declares.
-func (a *App) paletteGroups(p *pane.Pane) (plugins, primitives []paletteItem) {
+func (a *App) menuGroups(p *pane.Pane) (plugins, primitives []menuItem) {
 	// The menu belongs to the pane's node; "", local or uncached, is the handshake.
 	ctx := a.menuCtx(p)
-	// palette.Doorways owns the composition. Every swatch is a pseudo-plugin, so
+	// menu.Doorways owns the composition. Every swatch is a pseudo-plugin, so
 	// every downstream flow is one path.
-	sw := palette.Doorways(ctx.plugins)
-	items := make([]paletteItem, 0, len(sw))
+	sw := menu.Doorways(ctx.plugins)
+	items := make([]menuItem, 0, len(sw))
 	for _, s := range sw {
-		items = append(items, paletteItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
+		items = append(items, menuItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
 	}
-	prims := make([]paletteItem, 0, len(primitiveKinds))
+	prims := make([]menuItem, 0, len(primitiveKinds))
 	acceptsTiles, _ := a.gridAcceptsTiles(a.gridIDForPane(p))
-	offer := palette.Offer{AcceptsTiles: acceptsTiles, ShellsDisabled: ctx.shellsDisabled}
+	offer := menu.Offer{AcceptsTiles: acceptsTiles, ShellsDisabled: ctx.shellsDisabled}
 	if offer.Primitives() {
 		for _, k := range primitiveKinds {
 			if k == tplShell && !offer.Shell() {
 				continue
 			}
-			prims = append(prims, paletteItem{primitive: k})
+			prims = append(prims, menuItem{primitive: k})
 		}
 	}
 	return items, prims
 }
 
-func paletteTopRow(items []paletteItem) int {
+func menuTopRow(items []menuItem) int {
 	n := 0
 	for _, it := range items {
 		if it.isPlugin {
@@ -330,7 +330,7 @@ func (a *App) draw() {
 	if a.menu.IsOpen() {
 		if mp := a.tree.FindPane(a.menu.PaneID()); mp != nil {
 			if _, ok := rects[mp.ID]; ok {
-				a.drawPalette(mp)
+				a.drawMenu(mp)
 			}
 		}
 	}

@@ -24,7 +24,7 @@ test('a right-drag started on the text overlay splits the pane', async ({ gw }) 
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
   await expect
@@ -40,7 +40,7 @@ test('a right-drag started on the shell overlay splits the pane', async ({ gw })
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   // The drop lands bare; the descent opens the session and the xterm host.
   await gw.descendCell(cx, cy);

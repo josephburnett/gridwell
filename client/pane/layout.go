@@ -7,7 +7,7 @@ import (
 )
 
 // Rect is the screen-space rectangle in logical pixels, one shape, aliased by
-// client/palette.
+// client/menu.
 type Rect struct {
 	X, Y, W, H float64
 }

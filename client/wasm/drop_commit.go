@@ -41,7 +41,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// Reset any drag-time cursor change.
 	a.canvas.Get("style").Set("cursor", "")
 
-	// A palette swatch released without a drag is the menu's gesture, not the
+	// A menu swatch released without a drag is the menu's gesture, not the
 	// verdict's bare-click arm, which is the canvas's. The popover floats
 	// over a live pane, so falling through would act on the tile behind the
 	// swatch.

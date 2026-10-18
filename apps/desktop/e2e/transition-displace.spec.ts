@@ -36,7 +36,7 @@ test('a second link-open mid-animation does not void the first pane descent', as
   const panesBefore = (await gw.panes()).length;
 
   // A live ephemeral visit: the page that will pop the two links.
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?src=page`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

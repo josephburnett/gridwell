@@ -19,7 +19,7 @@ test('ascending arms a fading trace on the tile just left, then it expires', asy
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
 

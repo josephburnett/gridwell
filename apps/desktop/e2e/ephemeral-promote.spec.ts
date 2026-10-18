@@ -22,7 +22,7 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
   const dest = panes.find((p) => p.id !== visitor.id)!;
 
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', 'https://example.com/promote-me');
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

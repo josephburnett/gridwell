@@ -13,15 +13,15 @@ test('the + menu closes when focus leaves its pane', async ({ gw }) => {
   // The right pane's + sits at the window edge, clear of the divider's resize
   // band, which the left pane's would overlap.
   await gw.focusPane(right);
-  await gw.openPalette();
-  expect((await gw.palette()).open, 'menu opened on the focused (right) pane').toBe(true);
+  await gw.openMenu();
+  expect((await gw.menu()).open, 'menu opened on the focused (right) pane').toBe(true);
 
-  // palette() reports the focused pane, so a stranded menu reads open after
+  // menu() reports the focused pane, so a stranded menu reads open after
   // focus leaves and comes back.
   await gw.focusPane(left);
   await gw.focusPane(right);
   expect(
-    (await gw.palette()).open,
+    (await gw.menu()).open,
     'the menu must not survive focus leaving and returning to its pane',
   ).toBe(false);
 });

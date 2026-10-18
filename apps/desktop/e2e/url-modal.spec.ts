@@ -14,7 +14,7 @@ test('live views park under the url modal and return on close', async ({
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?m=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
@@ -44,7 +44,7 @@ test('live views park under the url modal and return on close', async ({
 
   // With the modal open, the live view parks off screen.
   await gw.splitFocusedPaneVertical();
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await expect
     .poll(async () => (await viewBounds())!.x, { timeout: 5_000 })

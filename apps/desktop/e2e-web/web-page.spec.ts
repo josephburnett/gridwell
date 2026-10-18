@@ -51,10 +51,10 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
 
   // The circle opens a new tab, as it does for a frozen url tile on a browser
   // host, at the derived door address.
-  const pal = await gw.palette();
+  const menu = await gw.menu();
   const [popup] = await Promise.all([
     window.context().waitForEvent('page', { timeout: 10_000 }),
-    window.mouse.click(pal.plusX, pal.plusY),
+    window.mouse.click(menu.plusX, menu.plusY),
   ]);
   await popup.waitForURL(/\/content\//, { timeout: 10_000 });
   expect(popup.url()).toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}/$`));

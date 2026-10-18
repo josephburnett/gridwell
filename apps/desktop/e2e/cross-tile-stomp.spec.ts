@@ -19,7 +19,7 @@ async function seedTile(
   cy: number,
   seed: string,
 ): Promise<string> {
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(gridID), 'text', cx, cy)!;
   expect(created, `markdown tile created at (${cx},${cy})`).toBeTruthy();

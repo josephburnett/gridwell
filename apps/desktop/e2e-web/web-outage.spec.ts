@@ -49,7 +49,7 @@ test('typing survives a server outage and saves itself after the restart', async
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   await gw.descendCell(cx, cy);
@@ -119,7 +119,7 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
   const child = well.childGridId as string;
@@ -130,7 +130,7 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   const inner = await gw.focused();
   const icx = Math.round(inner.cx);
   const icy = Math.round(inner.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', icx, icy);
   const note = tileAt(await gw.getGrid(child), 'text', icx, icy)!;
   expect(note, 'the well holds a tile to come back to').toBeTruthy();
@@ -202,7 +202,7 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
 
   // A fresh well's zoom stays 0 until the first framing write, the oracle
   // framing-roundtrip.spec.ts settles with.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
   await gw.descendCell(cx, cy);
@@ -249,7 +249,7 @@ test('an ephemeral visit left during an outage parks its delete and drains on re
   await gw.enterPlugin('home');
 
   // Shells ride the web door, so this is the browser's own visit.
-  await gw.clickPaletteSwatch('shell');
+  await gw.clickMenuSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const ephemeralID = (await gw.focused()).textFocus;
   expect(
@@ -289,7 +289,7 @@ test('a write the network swallows parks in the outbox and drains itself', async
   const cy = Math.round(f.cy);
 
   // A fresh well's zoom stays 0 until the first framing write.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
   await gw.descendCell(cx, cy);
@@ -356,7 +356,7 @@ test('the backstop re-posts a parked write on its interval, not before', async (
   const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
   await gw.enterPlugin('home');
 
-  await gw.clickPaletteSwatch('shell');
+  await gw.clickMenuSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const ephemeralID = (await gw.focused()).textFocus;
 

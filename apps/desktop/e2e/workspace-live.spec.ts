@@ -21,7 +21,7 @@ test('workspace descent keeps the outer live url running, parked; ascent shows i
   const cy = Math.round(f.cy);
 
   // A pane tile to enter later.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx + 2, cy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', cx + 2, cy);
   expect(pt).toBeTruthy();
@@ -30,7 +30,7 @@ test('workspace descent keeps the outer live url running, parked; ascent shows i
   // the layout capture, so the fresh workspace will not clone this pane, no
   // one-surface takeover applies, and the outer view must keep running hidden.
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', 'https://example.com/workspace-live');
   await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());

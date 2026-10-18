@@ -12,7 +12,7 @@ test('a clone reads no listing back; its event lands the copy', async ({ gw }) =
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.waitIdle();
 
@@ -40,7 +40,7 @@ test('a text view flip reads no listing back', async ({ gw, window }) => {
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) - 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const made = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   await gw.splitFocusedPaneVertical();

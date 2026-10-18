@@ -13,7 +13,7 @@ import type { GridwellDriver } from './driver';
 
 async function textTile(gw: GridwellDriver, cx: number, cy: number): Promise<Tile> {
   const f = await gw.focused();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(t, `text tile at ${cx},${cy}`).toBeTruthy();
@@ -184,7 +184,7 @@ test('inside a pane tile the selection is the pane\'s, in the layout, never the 
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
   expect(pt, 'pane tile').toBeTruthy();
@@ -236,11 +236,11 @@ test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
   expect(pt, 'pane tile').toBeTruthy();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx, wy + 2);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', wx, wy + 2)!;
   expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
@@ -285,7 +285,7 @@ test('Clear selections empties every grid\'s set', async ({ electronApp, gw, win
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
   const a = await textTile(gw, cx, cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx + 2, cy);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', cx + 2, cy)!;
   expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
@@ -310,7 +310,7 @@ test('Clear selections empties a pane\'s own set inside a pane tile', async ({ e
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
   expect(pt, 'pane tile').toBeTruthy();

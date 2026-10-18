@@ -25,7 +25,7 @@ test('first descent captures the current split; later descents restore it', asyn
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx, cy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', cx, cy)!;
   expect(pt, 'pane tile created').toBeTruthy();

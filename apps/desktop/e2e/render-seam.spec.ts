@@ -15,17 +15,17 @@ test('a text tile created in a descended grid is rendered, not just persisted', 
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx, wy);
   await gw.descendCell(wx, wy);
   f = await gw.focused();
   const childGrid = f.gridID;
   expect(childGrid, 'descended into the child grid').not.toBe(rootGrid);
 
-  // A text tile's palette kind is "markdown" and its store kind is "text".
+  // A text tile's menu kind is "markdown" and its store kind is "text".
   const tx = Math.round(f.cx);
   const ty = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', tx, ty);
 
   // Server truth.
@@ -53,7 +53,7 @@ test('cloning a tile leaves both the original and the copy rendered', async ({ g
   const cy = Math.round(f.cy);
   const grid = f.gridID;
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   // A right-drag to an adjacent cell is the clone gesture.
   await gw.cloneTileCell(cx, cy, cx + 1, cy);
@@ -91,7 +91,7 @@ test('a moved tile stays rendered at its destination', async ({ gw }) => {
   const cy = Math.round(f.cy);
   const grid = f.gridID;
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const before = tileAt(await gw.getGrid(grid), 'well', cx, cy)!;
 
@@ -114,7 +114,7 @@ test('a deleted tile is removed from the render', async ({ gw }) => {
   const cy = Math.round(f.cy);
   const grid = f.gridID;
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const created = tileAt(await gw.getGrid(grid), 'well', cx, cy)!;
   expect((await gw.focused()).tileIds, 'created tile is rendered').toContain(created.id);

@@ -17,7 +17,7 @@ test('ascending in rendered mode persists it, renders the preview, and restores 
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();

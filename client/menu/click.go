@@ -1,7 +1,7 @@
-package palette
+package menu
 
-// What a bare click on a palette swatch means. The popover floats over a live
-// canvas, so a click the palette does not claim reaches the gesture behind it
+// What a bare click on a menu swatch means. The popover floats over a live
+// canvas, so a click the menu does not claim reaches the gesture behind it
 // and acts on whatever tile sits there. Every swatch therefore names a
 // behavior, and a table gives a new kind the ClickNothing default.
 

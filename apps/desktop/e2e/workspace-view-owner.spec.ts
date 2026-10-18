@@ -46,9 +46,9 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   const well = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy);
@@ -121,9 +121,9 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   const well = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy);
@@ -181,9 +181,9 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   const doc = tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy)!;
@@ -255,9 +255,9 @@ test('inside a pane tile a document scrolled and left reopens where it was left,
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', wx + 1, wy);
   const doc = tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy)!;
   await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));

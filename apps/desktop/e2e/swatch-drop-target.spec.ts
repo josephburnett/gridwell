@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-// dropTargetAt is the one owner of where a palette swatch may land, and it
+// dropTargetAt is the one owner of where a menu swatch may land, and it
 // refuses a pane descended into a tile, because there is no grid on screen to
 // drop into. The commit reads that same verdict through dropInputAt rather than
 // resolving the destination again, so a release over a descended pane cannot
@@ -27,7 +27,7 @@ test('a swatch dropped into another pane that shows a grid lands there', async (
   const [left, right] = panes;
 
   await gw.focusPane(left);
-  await gw.openPalette();
+  await gw.openMenu();
   const pt = dropPoint(right);
   await gw.dragCreateToScreen('well', pt.x, pt.y);
 
@@ -44,7 +44,7 @@ test('a swatch dropped over a pane descended into a tile creates nothing', async
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const before = await gw.getGrid(home.gridID);
   expect((before.tiles ?? []).length, 'the text tile landed').toBe(1);
@@ -66,7 +66,7 @@ test('a swatch dropped over a pane descended into a tile creates nothing', async
   // A swatch dragged out of the left pane's menu and released over the descended
   // right pane resolves no drop target, so nothing is created anywhere.
   await gw.focusPane(left);
-  await gw.openPalette();
+  await gw.openMenu();
   const pt = dropPoint(right);
   await gw.dragCreateToScreen('well', pt.x, pt.y);
 

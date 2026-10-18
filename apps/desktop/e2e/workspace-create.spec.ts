@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt, writeContent } from './oracle';
 
-// The palette's fifth "pane" swatch persists a kind="pane" tile, and a foreign
+// The + menu's fifth "pane" swatch persists a kind="pane" tile, and a foreign
 // layout write reaches this client's preview state: a layout is the user's
 // bytes, so the write claims version 0 and its echo arrives one version on.
 
@@ -25,9 +25,9 @@ test('workspace primitive: drag-create persists a pane tile and its preview trac
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  // dragCreate resolves the swatch by templateKindName, so a missing palette
+  // dragCreate resolves the swatch by templateKindName, so a missing menu
   // entry fails right here.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const snap = await gw.getGrid(rootGrid);
   const pt = tileAt(snap, 'pane', wx, wy);

@@ -1,4 +1,4 @@
-package palette
+package menu
 
 // What a template drag's release does. The + menu's swatches and the bar's
 // promote crumb ride the same drag, so one verdict answers for every one of

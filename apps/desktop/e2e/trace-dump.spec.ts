@@ -41,7 +41,7 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   // A gesture with server work behind it, so the join is on a call this spec
   // made rather than only on the boot's.
   const f = await gw.focused();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', Math.round(f.cx), Math.round(f.cy));
   await gw.waitIdle();
 

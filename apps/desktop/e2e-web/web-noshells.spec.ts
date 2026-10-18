@@ -6,10 +6,10 @@ import { removeHome } from '../e2e/homes';
 import { Served, spawnServe, stopServe, freePort, authenticate } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 
-// server.yaml `disable_shells: true`, seen from a real client: the + palette
+// server.yaml `disable_shells: true`, seen from a real client: the + menu
 // offers every primitive except shell. The flag rides the Handshake into caps,
 // the one owner of what this client can do, and the same server refuses shell
-// creates outright, so the palette gap is the face of a server-side refusal.
+// creates outright, so the menu gap is the face of a server-side refusal.
 // The suites without the flag, web-core.spec.ts and its neighbors and
 // browser-shim.spec.ts in the Electron suite, pin the default, where the shell
 // swatch is present.
@@ -43,11 +43,11 @@ const test = base.extend<Fixtures>({
   },
 });
 
-test('disable_shells removes the shell primitive from the + palette', async ({ gw }) => {
+test('disable_shells removes the shell primitive from the + menu', async ({ gw }) => {
   await gw.enterPlugin('home'); // a writable grid, so the primitives show
-  await gw.openPalette();
-  const pal = await gw.palette();
-  const primitives = pal.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
+  await gw.openMenu();
+  const menu = await gw.menu();
+  const primitives = menu.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
   expect(primitives, 'the other primitives all survive').toEqual(
     expect.arrayContaining(['well', 'markdown', 'url', 'pane']),
   );

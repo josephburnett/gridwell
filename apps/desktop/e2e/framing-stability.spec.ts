@@ -36,7 +36,7 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.wheelAtFocusedCenter(-240); // reframe the child
@@ -171,7 +171,7 @@ test('a reload inside the settle window does not lose the framing', async ({ gw,
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.wheelAtFocusedCenter(-240);
@@ -196,7 +196,7 @@ test('text scroll persists without an ascent', async ({ gw, window }) => {
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
   const { updateText } = await import('./oracle');
@@ -229,7 +229,7 @@ for (const face of ['text', 'rendered'] as const) {
     const home = await gw.focused();
     const cx = Math.round(home.cx);
     const cy = Math.round(home.cy);
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.dragCreate('markdown', cx, cy);
     const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
     const { updateText } = await import('./oracle');
@@ -465,7 +465,7 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
@@ -501,7 +501,7 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
 
   // Settle a root framing the user chose, so there is something to keep.
@@ -549,7 +549,7 @@ test('looking at a grid never stamps a framing on it', async ({ gw, window }) =>
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const uuid = (await gw.plugins()).find((p) => p.kind === 'home')!.uuid;
   // Two settle windows with no gesture in them at all.

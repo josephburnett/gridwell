@@ -75,7 +75,7 @@ for (const kind of ['well', 'markdown', 'url', 'shell'] as const) {
     const cx = Math.round(home.cx);
     const cy = Math.round(home.cy);
 
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.dragCreate(kind, cx, cy);
     const rowKind = kind === 'markdown' ? 'text' : kind;
     await expect
@@ -131,7 +131,7 @@ for (const kind of ['well', 'markdown'] as const) {
     const cy = Math.round(home.cy);
     const rowKind = kind === 'markdown' ? 'text' : kind;
 
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.dragCreate(kind, cx, cy);
     await expect
       .poll(async () => tileAt(await gw.getGrid(home.gridID), rowKind, cx, cy))
@@ -181,7 +181,7 @@ test('looking inside a long document and coming back writes nothing', async ({ g
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
   const { updateText } = await import('./oracle');
@@ -223,7 +223,7 @@ test("a document framed in another pane size is looked at without a write", asyn
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
   const { updateText, setTextView } = await import('./oracle');

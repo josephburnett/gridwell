@@ -31,16 +31,16 @@ test('a boot, a descent and an ascent read each grid they show once', async ({ g
 
   // home ⊃ A ⊃ {B, C}: entering A draws B and C as wells, which reads their
   // grids.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const a = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   await gw.descendCell(cx, cy);
   const inA = await gw.focused();
   const ax = Math.round(inA.cx);
   const ay = Math.round(inA.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', ax, ay);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', ax + 1, ay);
   const inner = await gw.getGrid(a.childGridId!);
   const b = tileAt(inner, 'well', ax, ay)!;
@@ -85,7 +85,7 @@ test('a preview is fetched once on first look', async ({ electronApp, gw, window
   const cy = Math.round(f.cy);
 
   // The ascent out of the live page freezes it, which mints the preview.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -109,7 +109,7 @@ test('a preview is fetched once on first look', async ({ electronApp, gw, window
   // The first look happens during an ascent, so frames are drawing while the
   // bytes decode: a reload inside a well empties the preview cache without
   // showing the tile, and the ascent out is stretched.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx + 1, cy);
   await gw.descendCell(cx + 1, cy);
   const inside = (await gw.focused()).gridID;
@@ -137,11 +137,11 @@ test('coming back to what the cache holds asks for nothing again', async ({ gw, 
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy) - 2;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const text = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
   const px = cx + Number(text.w ?? 1);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', px, cy);
   const pt = tileAt(await gw.getGrid(home.gridID), 'pane', px, cy);
   expect(pt, 'the pane tile persisted').toBeTruthy();

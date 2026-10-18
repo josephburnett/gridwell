@@ -18,7 +18,7 @@ for (const press of presses) {
       const a0 = await gw.focused();
       const cx = Math.round(a0.cx);
       const cy = Math.round(a0.cy) - 1;
-      await gw.openPalette();
+      await gw.openMenu();
       await gw.dragCreate('well', cx, cy);
 
       if (unfocused) {

@@ -35,7 +35,7 @@ test('a refused place surfaces and leaves the pane retryable, not falsely live',
     };
   });
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -63,7 +63,7 @@ test('a refused place surfaces and leaves the pane retryable, not falsely live',
     const g = globalThis as any;
     g.__gwRegistry.place = g.__gwRealPlace;
   });
-  const slot = await window.evaluate(() => (window as any).__gridwellTest.palette());
+  const slot = await window.evaluate(() => (window as any).__gridwellTest.menu());
   await window.mouse.click(slot.plusX, slot.plusY);
   await expect
     .poll(liveWithMarker, {

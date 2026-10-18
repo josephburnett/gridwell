@@ -7,7 +7,7 @@ import { test, expect } from './fixtures';
 //
 // panebox.LiveViewOwnsPoint owns that decision for the press and the release
 // alike, over pane.CanvasOwnsPointer: an armed gesture keeps its own release,
-// so the view never swallows it. And the open palette parks every live view
+// so the view never swallows it. And the open menu parks every live view
 // (pane.ParkSurface), so the real press reaches the canvas at all. A release
 // swallowed here leaves the swatch's template drag armed forever, so no url
 // modal opens and waitIdle never returns.
@@ -31,7 +31,7 @@ test('the + menu over a stacked live url pane keeps its own release', async ({
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/?menu-over-live=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
@@ -46,11 +46,11 @@ test('the + menu over a stacked live url pane keeps its own release', async ({
   const upper = (await gw.panes()).find((p) => p.id === upperId)!;
   await gw.focusPane(upper);
   expect((await gw.focused()).id, 'the upper pane has focus').toBe(upperId);
-  await gw.openPalette();
+  await gw.openMenu();
 
-  const pal = await gw.palette();
-  const swatch = pal.items.find((i) => !i.isPlugin && i.kind === 'url');
-  expect(swatch, 'the url swatch is in the palette').toBeTruthy();
+  const menu = await gw.menu();
+  const swatch = menu.items.find((i) => !i.isPlugin && i.kind === 'url');
+  expect(swatch, 'the url swatch is in the menu').toBeTruthy();
   const cx = swatch!.x + swatch!.w / 2;
   const cy = swatch!.y + swatch!.h / 2;
 

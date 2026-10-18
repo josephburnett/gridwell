@@ -22,7 +22,7 @@ test('right-clicking a live url pane focuses it before the menu can act', async 
   // The url has to be one the sidecar serves, so the load commits and the
   // view's getURL carries the marker.
   const marker = 'gwe2emenufocus';
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

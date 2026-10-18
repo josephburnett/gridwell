@@ -26,14 +26,14 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   expect(pt, 'pane tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 
-  await gw.clickPaletteSwatch('shell');
+  await gw.clickMenuSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellTile = (await gw.focused()).textFocus;
   await expect

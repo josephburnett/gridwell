@@ -41,7 +41,7 @@ test('a live url is captured only while another pane shows it', async ({ electro
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -106,7 +106,7 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   await gw.focusPane(b);
   const bcx = Math.round(b.cx);
   const bcy = Math.round(b.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', bcx, bcy);
   await gw.descendCell(bcx, bcy);
   const bIn = (await gw.panes()).find((p) => p.id === b.id)!;
@@ -115,7 +115,7 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   await gw.focusPane((await gw.panes()).find((p) => p.id === a.id)!);
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) + 2;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
@@ -132,13 +132,13 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   // The + menu on the other pane parks the overlay, and the shell's own pane
   // then draws the face: one snapshot, taken at the park.
   await gw.focusPane((await gw.panes()).find((p) => p.id === b.id)!);
-  await gw.openPalette();
+  await gw.openMenu();
   await expect.poll(() => gw.shellMirrors(), { message: 'the park took the face' }).toBe(alone + 1);
   await window.waitForTimeout(c.shellMirrorMs * 4);
   expect(await gw.shellMirrors(), 'and only that one').toBe(alone + 1);
-  const pal = await gw.palette();
-  await window.mouse.click(pal.plusX, pal.plusY);
-  await expect.poll(async () => (await gw.palette()).open).toBe(false);
+  const menu = await gw.menu();
+  await window.mouse.click(menu.plusX, menu.plusY);
+  await expect.poll(async () => (await gw.menu()).open).toBe(false);
 
   // The other pane comes back to the home grid, where the shell's face is
   // drawn: joining the mirrored set takes the face, and a repaint takes it

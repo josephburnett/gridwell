@@ -13,7 +13,7 @@ test('typing into a descended text tile persists to the server', async ({ gw, wi
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();

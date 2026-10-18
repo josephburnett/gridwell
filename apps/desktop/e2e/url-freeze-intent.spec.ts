@@ -21,7 +21,7 @@ test('freeze intent survives re-descent; reconnect clears it', async ({
   const grid = f.gridID;
 
   // A bare url tile prompts for its address on the first descent.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

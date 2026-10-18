@@ -92,10 +92,10 @@ test("a box's link opens its thread's page in a new tab", async ({ gw, window })
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.barSlot()), { timeout: 15_000 })
     .toBe('opentab');
-  const pal = await gw.palette();
+  const menu = await gw.menu();
   const [popup] = await Promise.all([
     window.context().waitForEvent('page', { timeout: 10_000 }),
-    window.mouse.click(pal.plusX, pal.plusY),
+    window.mouse.click(menu.plusX, menu.plusY),
   ]);
   await popup.waitForURL(/\/content\//, { timeout: 10_000 });
   const url = new URL(popup.url());

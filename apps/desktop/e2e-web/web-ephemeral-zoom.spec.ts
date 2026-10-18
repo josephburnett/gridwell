@@ -31,7 +31,7 @@ test('Ctrl+= in an ephemeral shell zooms live and persists nothing', async ({ wi
   await gw.enterPlugin('home');
 
   // A click, not a drag, creates an ephemeral shell off-grid and descends.
-  await gw.clickPaletteSwatch('shell');
+  await gw.clickMenuSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 20_000 }).not.toBe('');
   const scratch = await gw.getGrid(scratchGridID);
   const shells = (scratch.tiles ?? []).filter((t: any) => t.kind === 'shell');

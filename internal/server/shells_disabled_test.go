@@ -5,7 +5,7 @@ package server_test
 // and both enter through the one shell route. The refusal lives at the router,
 // before plugin resolution, so no plugin can serve a shell while the flag is
 // set:
-//   - Handshake carries shells_disabled (the client drops the palette
+//   - Handshake carries shells_disabled (the client drops the menu
 //     swatch from it),
 //   - CreateTile(kind=shell) is PermissionDenied while other kinds work,
 //   - OpenShell is PermissionDenied — the only PTY door on the node,

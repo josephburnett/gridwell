@@ -18,8 +18,8 @@ test('freezing a live shell keeps its face; the clone keeps it after the origina
   const shellText = () => window.evaluate(() => (window as any).__gridwellTest.shellText());
   // The circle's own center, the same geometry the click handler hit-tests.
   const clickSlot = async () => {
-    const pal = await gw.palette();
-    await gw.clickScreen(pal.plusX, pal.plusY);
+    const menu = await gw.menu();
+    await gw.clickScreen(menu.plusX, menu.plusY);
   };
 
   await gw.enterPlugin('home');
@@ -29,7 +29,7 @@ test('freezing a live shell keeps its face; the clone keeps it after the origina
   const grid = f.gridID;
   const shellAt = async (x: number, y: number) => tileAt(await gw.getGrid(grid), 'shell', x, y);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();

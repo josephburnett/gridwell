@@ -5,7 +5,7 @@ import { tileAt } from './oracle';
 // The first descent opens the url modal, and submitting writes the address as
 // the tile's content through the store's url arm, which validates and bumps
 // the version, then descends into the live page. Cancel keeps the dropped
-// tile. Clicking the palette swatch is an ephemeral visit and still prompts up
+// tile. Clicking the menu swatch is an ephemeral visit and still prompts up
 // front, since going to a url needs an address.
 
 test('a url drops bare; the first descent prompts, writes the address, and goes live (#209)', async ({
@@ -18,7 +18,7 @@ test('a url drops bare; the first descent prompts, writes the address, and goes 
   const cy = Math.round(home.cy);
 
   // Drop: no modal, an address-less url tile.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   const openModal = window.locator('#gw-url-modal.open');
   await expect(openModal, 'the drop never prompts (#209)').toHaveCount(0);

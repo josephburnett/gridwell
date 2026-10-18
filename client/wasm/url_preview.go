@@ -121,7 +121,7 @@ func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, da
 			if n.PreviewBlobId != 0 {
 				a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 			} else if w > 20 && h > 20 {
-				// A palette drop never refreshed, so paint the glyph rather
+				// A menu drop never refreshed, so paint the glyph rather
 				// than a blank box.
 				drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder)
 			}

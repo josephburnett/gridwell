@@ -12,7 +12,7 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(doc).toBeTruthy();
@@ -23,10 +23,10 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
 
   // The trashcan swatch is a declared menu entry on the + menu's top row, and
   // clicking it descends like any other swatch.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.expandPlugins();
-  const pal = await gw.palette();
-  const trash = pal.items.find((i) => i.isPlugin && i.entry === 'trash');
+  const menu = await gw.menu();
+  const trash = menu.items.find((i) => i.isPlugin && i.entry === 'trash');
   expect(trash, 'the + menu offers the declared trashcan').toBeTruthy();
   await gw.clickPluginSwatch('trash (home)');
   const troot = await gw.focused();

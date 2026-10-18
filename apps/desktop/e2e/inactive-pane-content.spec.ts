@@ -29,7 +29,7 @@ async function splitOnText(gw: any, body: string) {
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) + 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   await gw.splitFocusedPaneVertical();

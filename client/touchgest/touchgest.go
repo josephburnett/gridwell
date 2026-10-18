@@ -2,7 +2,7 @@
 // mouse-gesture vocabulary, so the gesture engine needs no touch knowledge:
 //
 //	tap                → left click        (focus / descend / select)
-//	drag past slop     → left drag         (pan / move tile / palette drag)
+//	drag past slop     → left drag         (pan / move tile / menu drag)
 //	long-press (hold)  → right button      (the whole right-drag vocabulary:
 //	                                        ascend circle, clone, resize,
 //	                                        split, swap)

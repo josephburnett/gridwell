@@ -18,7 +18,7 @@ test('placement: a move and a resize are the client\'s before their echo', async
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(t, 'markdown tile created').toBeTruthy();
@@ -46,9 +46,9 @@ test('placement: a refused move goes back and says so', async ({ gw, window, ser
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy + 2);
   const snap = await gw.getGrid(f.gridID);
   const a = tileAt(snap, 'text', cx, cy)!;

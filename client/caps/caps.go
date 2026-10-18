@@ -14,7 +14,7 @@ type Caps struct {
 	// ChoiceMenu is whether the host renders a menu of declared choices for
 	// the client. Without it the client draws its own DOM popover.
 	ChoiceMenu bool
-	// Shells is whether shell tiles exist on this node at all: the + palette
+	// Shells is whether shell tiles exist on this node at all: the + menu
 	// offers the primitive, a descent attaches, a create is accepted.
 	Shells bool
 	// HostTrace is whether the host keeps a trace half of its own, which a

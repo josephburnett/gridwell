@@ -24,7 +24,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(tile, 'markdown tile created').toBeTruthy();
@@ -95,7 +95,7 @@ test('a body whose source is unreachable is asked for once per backstop, not per
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(tile, 'markdown tile created').toBeTruthy();

@@ -27,9 +27,9 @@ async function twoTiles(gw: GridwellDriver) {
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx + 2, cy);
   const snap = await gw.getGrid(f.gridID);
   const a = tileAt(snap, 'text', cx, cy)!;

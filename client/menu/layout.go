@@ -1,9 +1,9 @@
-// Package palette computes the layout of the tile-creation menu. One swatch
-// per declared doorway sits on the top row (Doorways), the tile primitives on
-// a row below, and a disclosure strip folds the top row away (Show). Layout
-// depends only on the + button's center and the tile counts; the wasm renderer
-// paints into the rects.
-package palette
+package menu
+
+// The + menu's geometry. One swatch per declared doorway sits on the top row
+// (Doorways), the tile primitives on a row below, and a disclosure strip folds
+// the top row away (Show). Layout depends only on the + button's center and
+// the tile counts; the wasm renderer paints into the rects.
 
 import "github.com/josephburnett/gridwell/client/pane"
 
@@ -34,7 +34,7 @@ func Default() Config {
 	}
 }
 
-// Layout snapshots one palette's input. Every method is pure.
+// Layout snapshots one menu's input. Every method is pure.
 type Layout struct {
 	Cfg          Config
 	PlusX, PlusY float64
