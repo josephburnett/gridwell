@@ -11,7 +11,7 @@ type BorderColors struct {
 	URL, URLFaded             string
 	URLLive, URLLiveFaded     string
 	Shell, ShellFaded         string
-	Exit, ExitFaded           string
+	Host, HostFaded           string
 	Ephemeral, EphemeralFaded string
 }
 
@@ -26,7 +26,7 @@ type BorderInput struct {
 	Focused      bool // the keyboard-focused pane in the split tree
 	URLLive      bool // a live native view renders into this pane
 	// InHostGrid is the viewed grid's declared host_content. It drives the
-	// Exit family for a read-only host text tile; the grid view itself stays
+	// Host family for a read-only host text tile; the grid view itself stays
 	// FamilyGrid, because every grid is a grid.
 	InHostGrid bool
 	// Ephemeral is the descended tile living in the scratch grid, so it is
@@ -45,7 +45,7 @@ const (
 	FamilyURL                   // a descent into a url tile, frozen
 	FamilyURLLive               // a descent into a url tile with a live view
 	FamilyShell                 // a descent into a shell tile
-	FamilyExit                  // a read-only text tile in a host-content grid
+	FamilyHost                  // a read-only text tile in a host-content grid
 	// FamilyEphemeral is a descent into a scratch-grid tile. It beats the kind
 	// color, because ascending deletes the tile.
 	FamilyEphemeral
@@ -68,7 +68,7 @@ func FamilyOf(s BorderInput) Family {
 				return FamilyShell
 			case rpc.KindText:
 				if s.InHostGrid {
-					return FamilyExit
+					return FamilyHost
 				}
 				return FamilyText
 			}
@@ -89,8 +89,8 @@ func BorderColor(s BorderInput, c BorderColors) string {
 		return focused(s, c.URL, c.URLFaded)
 	case FamilyShell:
 		return focused(s, c.Shell, c.ShellFaded)
-	case FamilyExit:
-		return focused(s, c.Exit, c.ExitFaded)
+	case FamilyHost:
+		return focused(s, c.Host, c.HostFaded)
 	case FamilyText:
 		return focused(s, c.Text, c.TextFaded)
 	}

@@ -3356,9 +3356,9 @@ func (x *DeleteTileResponse) GetTmuxLeft() string {
 // InvalidArgument with the reason (rpc.FramingOf); never visited is no write.
 //
 // Exactly one target is set, and that target also routes the call to the owning
-// plugin. tile_id names the door tile a grid was entered through, interior
-// or exit or link, each door keeping its own framing; root_grid_id names a
-// root grid, which has no door to carry it.
+// plugin. tile_id names the door tile a grid was entered through, onto its
+// own grid, into another namespace or as a link, each door keeping its own
+// framing; root_grid_id names a root grid, which has no door to carry it.
 //
 // Framing carries no version claim and makes no version bump; it is
 // last-writer-wins. A plugin that keeps no framing answers Unimplemented, which

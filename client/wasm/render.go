@@ -1036,8 +1036,8 @@ func (a *App) paneBorderColors() pane.BorderColors {
 		URLLiveFaded:   a.pal.URLLiveLineFaded,
 		Shell:          a.pal.ShellBorder,
 		ShellFaded:     a.pal.ShellBorderFaded,
-		Exit:           a.pal.PluginBorder,
-		ExitFaded:      a.pal.PluginBorderFaded,
+		Host:           a.pal.PluginBorder,
+		HostFaded:      a.pal.PluginBorderFaded,
 		Ephemeral:      a.pal.EphemeralBorder,
 		EphemeralFaded: a.pal.EphemeralBorderFaded,
 	}

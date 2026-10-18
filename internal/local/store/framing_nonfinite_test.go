@@ -80,12 +80,12 @@ func TestNeverVisitedRoundTripsAsNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exit, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 0, 1, 1, "aabbccddaabbccddaabbccddaabbccdd/7", "exit", rpc.View{})
+	far, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 0, 1, 1, "aabbccddaabbccddaabbccddaabbccdd/7", "far", rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := []string{fresh.Id, exit.Id}
-	for i, src := range []string{fresh.Id, exit.Id} {
+	ids := []string{fresh.Id, far.Id}
+	for i, src := range []string{fresh.Id, far.Id} {
 		c, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src, DestGridId: root, X: int64(10 + 3*i), Y: 10})
 		if err != nil {
 			t.Fatal(err)

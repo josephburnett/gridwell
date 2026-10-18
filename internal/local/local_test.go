@@ -263,7 +263,7 @@ func TestCreateDoor_InteriorVsExit(t *testing.T) {
 		t.Errorf("interior door label = %q, want recipes (the wire's AltText is the grid name)", interior.Tile.AltText)
 	}
 
-	exit, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+	far, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: root,
 		Tile: &gridwellv1.Tile{
 			Kind: "door", X: 2, Y: 0, W: 1, H: 1,
@@ -271,13 +271,13 @@ func TestCreateDoor_InteriorVsExit(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("exit CreateTile: %v", err)
+		t.Fatalf("far CreateTile: %v", err)
 	}
-	if exit.Tile.ChildGridId != "other-plugin-uuid/9" {
-		t.Errorf("door to another namespace child = %q, want verbatim cross-plugin ref", exit.Tile.ChildGridId)
+	if far.Tile.ChildGridId != "other-plugin-uuid/9" {
+		t.Errorf("door to another namespace child = %q, want verbatim cross-plugin ref", far.Tile.ChildGridId)
 	}
-	if exit.Tile.AltText != "far" {
-		t.Errorf("door to another namespace label = %q, want far", exit.Tile.AltText)
+	if far.Tile.AltText != "far" {
+		t.Errorf("door to another namespace label = %q, want far", far.Tile.AltText)
 	}
 }
 

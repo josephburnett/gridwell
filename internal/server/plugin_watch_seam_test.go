@@ -178,7 +178,7 @@ func TestPluginWatchCrossesAConnection(t *testing.T) {
 // A grid seen only as a door's preview in home is shown by the child
 // grid id the client reads off that door (pane.Showing), and a change in it
 // reaches the client under that same id.
-func TestPluginWatchReachesAWellPreview(t *testing.T) {
+func TestPluginWatchReachesADoorPreview(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/gridwell.db")
 	if err != nil {
 		t.Fatal(err)

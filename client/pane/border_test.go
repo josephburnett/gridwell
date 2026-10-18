@@ -14,8 +14,8 @@ func testColors() BorderColors {
 		URLLiveFaded:   "URL_LIVE_FADED",
 		Shell:          "SHELL",
 		ShellFaded:     "SHELL_FADED",
-		Exit:           "EXIT",
-		ExitFaded:      "EXIT_FADED",
+		Host:           "HOST",
+		HostFaded:      "HOST_FADED",
 		Ephemeral:      "EPHEMERAL",
 		EphemeralFaded: "EPHEMERAL_FADED",
 	}
@@ -150,7 +150,7 @@ func TestBorderColorShellTile(t *testing.T) {
 	}
 }
 
-func TestBorderColorTextInHostGridIsExit(t *testing.T) {
+func TestBorderColorTextInHostGridIsHost(t *testing.T) {
 	// A text tile inside a host-content grid XX	// state, so the editable color would lie. A url tile in one is still a url.
 	in := BorderInput{
 		HasTextFocus: true,
@@ -160,12 +160,12 @@ func TestBorderColorTextInHostGridIsExit(t *testing.T) {
 		InHostGrid:   true,
 		Focused:      true,
 	}
-	if got := BorderColor(in, testColors()); got != "EXIT" {
-		t.Errorf("text-in-host-grid + focused: got %q, want EXIT", got)
+	if got := BorderColor(in, testColors()); got != "HOST" {
+		t.Errorf("text-in-host-grid + focused: got %q, want HOST", got)
 	}
 	in.Focused = false
-	if got := BorderColor(in, testColors()); got != "EXIT_FADED" {
-		t.Errorf("text-in-source-grid + not focused: got %q, want EXIT_FADED", got)
+	if got := BorderColor(in, testColors()); got != "HOST_FADED" {
+		t.Errorf("text-in-source-grid + not focused: got %q, want HOST_FADED", got)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestFamilyOf(t *testing.T) {
 	}{
 		{"grid", BorderInput{}, FamilyGrid},
 		{"text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text"}, FamilyText},
-		{"host text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InHostGrid: true}, FamilyExit},
+		{"host text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InHostGrid: true}, FamilyHost},
 		{"url frozen", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url"}, FamilyURL},
 		{"url live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true}, FamilyURLLive},
 		{"shell", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell"}, FamilyShell},

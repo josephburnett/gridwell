@@ -178,14 +178,14 @@ func TestMoveTileDoorToOtherNamespaceHasNoLocalSubtree(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	interior := doorAt(t, s, root, 0, 0)
-	exit, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 3, 1, 1,
+	far, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 3, 1, 1,
 		"aabbccddaabbccddaabbccddaabbccdd/7", "far", rpc.View{})
 	if err != nil {
 		t.Fatalf("create door to another namespace: %v", err)
 	}
 
 	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: exit.Id, GridId: interior.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
+		TileId: far.Id, GridId: interior.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("placing a door to another namespace into an interior grid: %v", err)
 	}
