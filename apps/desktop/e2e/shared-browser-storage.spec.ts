@@ -10,7 +10,7 @@ import { test, expect } from './fixtures';
 
 test.use({ extraNodes: ['second'] });
 
-test('live tiles in different plugins share the one local session', async ({
+test('live tiles in different plugins share one set of cookies and storage', async ({
   electronApp,
   window,
   gw,
