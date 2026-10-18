@@ -14,7 +14,7 @@
 // or "pid:1234". Changing the key scheme orphans every stored reference, as
 // re-minting ids would.
 //
-// Unimplemented is always polite: Search means no results, ServeContent a 404,
+// Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
 // thumbnail, and Delete refused. A minimal plugin is Info, List and
 // ReadContent.
@@ -276,13 +276,13 @@ message DeleteRequest {
 }
 message DeleteResponse {}
 
-// ─── Search ────────────────────────────────────────────────────────────────
+// ─── Find ────────────────────────────────────────────────────────────────
 
-message SearchRequest {
+message FindRequest {
   string query = 1;
   int32  limit = 2; // 0 = plugin default
 }
-message SearchResult {
+message FindResult {
   Entry entry = 1;
   // context_path is the containing-context chain from the root, outermost first.
   // The node resolves it to a navigable tile path.
@@ -290,8 +290,8 @@ message SearchResult {
   string snippet = 3;
   double score   = 4;
 }
-message SearchResponse {
-  repeated SearchResult results = 1;
+message FindResponse {
+  repeated FindResult results = 1;
 }
 
 // ─── Events ────────────────────────────────────────────────────────────────
@@ -349,6 +349,6 @@ service Plugin {
   rpc GetPreview(GetPreviewRequest)   returns (GetPreviewResponse);
   rpc Probe(ProbeRequest)             returns (ProbeResponse);
   rpc Delete(DeleteRequest)           returns (DeleteResponse);
-  rpc Search(SearchRequest)           returns (SearchResponse);
+  rpc Find(FindRequest)           returns (FindResponse);
   rpc Watch(WatchRequest)             returns (stream Change);
 }

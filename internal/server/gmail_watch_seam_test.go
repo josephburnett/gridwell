@@ -223,17 +223,17 @@ func TestGmailProbeAnswersForTheContextAsked(t *testing.T) {
 	}
 }
 
-// A search hit lands on the message's one tile, the one all mail lists — the
+// A find hit lands on the message's one tile, the one all mail lists — the
 // same id, so the hit descends into what the grid shows.
-func TestGmailSearchLandsOnTheAllMailTile(t *testing.T) {
+func TestGmailFindLandsOnTheAllMailTile(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	want := n.tile(t, n.all, "Invoice 41")
-	resp, err := n.cl.Search(t.Context(), "invoice", "", 0)
+	resp, err := n.cl.Find(t.Context(), "invoice", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := resp.GetResults(); len(got) != 1 || got[0].GetTile().GetId() != want.Id {
-		t.Fatalf("search invoice = %v, want all mail's %s", resp, want.Id)
+		t.Fatalf("find invoice = %v, want all mail's %s", resp, want.Id)
 	}
 }
 

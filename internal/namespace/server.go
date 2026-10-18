@@ -42,8 +42,8 @@ func (g *grpcServer) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewR
 	return g.ns.GetTilePreview(ctx, req)
 }
 
-func (g *grpcServer) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return g.ns.Search(ctx, req)
+func (g *grpcServer) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error) {
+	return g.ns.Find(ctx, req)
 }
 
 func (g *grpcServer) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {

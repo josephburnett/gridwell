@@ -91,7 +91,7 @@ func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 	}
 }
 
-// contentChangedAt reads a tile row's content time the way the search filter
+// contentChangedAt reads a tile row's content time the way the find filter
 // does (contentAtSQL).
 func contentChangedAt(t *testing.T, s *Store, tileID string) int64 {
 	t.Helper()

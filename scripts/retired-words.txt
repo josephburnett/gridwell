@@ -47,3 +47,6 @@ stalebuild
 clone .*(slices|maps|bytes|proto|header|Header\(\)|r)\.Clone\(|.*git clone
 clones
 cloned
+# "search" — the one query verb is Find. Allowed: the browser's location
+# search and URLSearchParams, and Go's sort.Search.
+search .*location\.search|.*Get\("search"\)|.*searchParams|.*sort\.Search|.*google\.com/search

@@ -154,7 +154,7 @@ func (d *toolset) readTile(ctx context.Context, id string) (TileOut, error) {
 
 type findIn struct {
 	Query          string `json:"query,omitempty" jsonschema:"free text matched against names, bodies and addresses, or id:<tile-id>; may be empty when a filter is given"`
-	Scope          string `json:"scope,omitempty" jsonschema:"a namespace or id to search within; empty searches everything this node reaches"`
+	Scope          string `json:"scope,omitempty" jsonschema:"a namespace or id to find within; empty finds everything this node reaches"`
 	Limit          int32  `json:"limit,omitempty" jsonschema:"the most hits each namespace answers; 0 is its default"`
 	Grid           string `json:"grid,omitempty" jsonschema:"keep only the tiles on this grid"`
 	Recurse        bool   `json:"recurse,omitempty" jsonschema:"with grid, also the tiles on the grids inside its wells, to any depth; a link well is not followed"`
@@ -193,7 +193,7 @@ func (s *Span) rangeOf(name string) (*pb.TimeRange, error) {
 }
 
 func (d *toolset) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (*mcp.CallToolResult, FindOut, error) {
-	req := &pb.SearchRequest{Query: in.Query, Scope: in.Scope, Limit: in.Limit,
+	req := &pb.FindRequest{Query: in.Query, Scope: in.Scope, Limit: in.Limit,
 		GridId: in.Grid, Recurse: in.Recurse, Selected: in.Selected}
 	var err error
 	if req.Created, err = in.Created.rangeOf("created"); err != nil {
@@ -205,7 +205,7 @@ func (d *toolset) find(ctx context.Context, _ *mcp.CallToolRequest, in findIn) (
 	if req.ContentChanged, err = in.ContentChanged.rangeOf("content_changed"); err != nil {
 		return nil, FindOut{}, err
 	}
-	resp, err := d.rt.Search(ctx, req)
+	resp, err := d.rt.Find(ctx, req)
 	if err != nil {
 		return nil, FindOut{}, refusal(err)
 	}

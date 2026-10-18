@@ -52,8 +52,8 @@ func (p *lackingPlugin) Probe(context.Context, *pluginv1.ProbeRequest) (*pluginv
 	return nil, p.lack("Probe")
 }
 
-func (p *lackingPlugin) Search(context.Context, *pluginv1.SearchRequest) (*pluginv1.SearchResponse, error) {
-	return nil, p.lack("Search")
+func (p *lackingPlugin) Find(context.Context, *pluginv1.FindRequest) (*pluginv1.FindResponse, error) {
+	return nil, p.lack("Find")
 }
 
 func (p *lackingPlugin) Delete(context.Context, *pluginv1.DeleteRequest) (*pluginv1.DeleteResponse, error) {
@@ -107,8 +107,8 @@ var absentVerbCases = []struct {
 		_, err := a.Probe(ctx, &gridwellv1.ProbeRequest{TileId: id})
 		return err
 	}},
-	{"Search", func(ctx context.Context, a namespace.Namespace, _ string) error {
-		_, err := a.Search(ctx, &gridwellv1.SearchRequest{Query: "x"})
+	{"Find", func(ctx context.Context, a namespace.Namespace, _ string) error {
+		_, err := a.Find(ctx, &gridwellv1.FindRequest{Query: "x"})
 		return err
 	}},
 	{"Delete", func(ctx context.Context, a namespace.Namespace, id string) error {

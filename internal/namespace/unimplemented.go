@@ -45,8 +45,8 @@ func (Unimplemented) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) 
 	return nil, unimp("GetTilePreview")
 }
 
-func (Unimplemented) Search(context.Context, *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return nil, unimp("Search")
+func (Unimplemented) Find(context.Context, *pb.FindRequest) (*pb.FindResponse, error) {
+	return nil, unimp("Find")
 }
 
 func (Unimplemented) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileResponse, error) {

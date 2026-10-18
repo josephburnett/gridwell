@@ -41,8 +41,8 @@ func (f fromClient) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRe
 	return f.c.GetTilePreview(ctx, req)
 }
 
-func (f fromClient) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return f.c.Search(ctx, req)
+func (f fromClient) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error) {
+	return f.c.Find(ctx, req)
 }
 
 func (f fromClient) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {

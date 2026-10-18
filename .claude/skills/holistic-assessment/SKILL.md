@@ -181,7 +181,7 @@ Rows: every tile kind (text, url, shell, well, pane) and every doorway
 (home grid, plugin collection, far home). Columns: everything a user can do
 to one — create, place, copy, link, delete, rename, descend, freeze, keep a
 screenshot, save zoom, save a text scroll, save framing, read content, write
-content, serve a page, search, see it update when its source changes, see it
+content, serve a page, find, see it update when its source changes, see it
 dead when its path breaks. One cell per owner: home store, plugin adapter,
 connection transit. Each cell is "same", "decided: CLAUDE.md line N", or a
 hole. The promise allows exactly one class of difference: where the bytes

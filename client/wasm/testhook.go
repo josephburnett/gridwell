@@ -29,8 +29,8 @@ import (
 // independent oracle for what was created. shellVisitURL, setTransitionMs and
 // setBackstopMs are the three that mutate.
 func (a *App) installTestHook() {
-	search := js.Global().Get("location").Get("search").String()
-	if !strings.Contains(search, "e2e=1") {
+	query := js.Global().Get("location").Get("search").String()
+	if !strings.Contains(query, "e2e=1") {
 		return
 	}
 	js.Global().Set("__gridwellTest", js.ValueOf(map[string]any{

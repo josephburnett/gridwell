@@ -11,16 +11,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 )
 
-// A grid_id routes a search to the namespace that owns it, at any depth, and
+// A grid_id routes a find to the namespace that owns it, at any depth, and
 // the filters ride every hop to the node holding the rows: here a far home's
 // selection, asked for through a connection with an empty query.
-func TestSearchFiltersRideToTheGridsOwner(t *testing.T) {
+func TestFindFiltersRideToTheGridsOwner(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
 	raw := gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON())
-	search := func(req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
+	find := func(req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
 		t.Helper()
-		resp, err := raw.Search(ctx, connect.NewRequest(req))
+		resp, err := raw.Find(ctx, connect.NewRequest(req))
 		if err != nil {
 			return nil, err
 		}
@@ -47,16 +47,16 @@ func TestSearchFiltersRideToTheGridsOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := search(&gridwellv1.SearchRequest{GridId: well.ChildGridId})
+	resp, err := find(&gridwellv1.FindRequest{GridId: well.ChildGridId})
 	if err != nil {
-		t.Fatalf("grid search: %v", err)
+		t.Fatalf("grid find: %v", err)
 	}
 	if len(resp.Results) != 2 {
-		t.Fatalf("grid search = %v, want the well's two tiles", resp.Results)
+		t.Fatalf("grid find = %v, want the well's two tiles", resp.Results)
 	}
-	resp, err = search(&gridwellv1.SearchRequest{GridId: farRoot, Recurse: true, Selected: true})
+	resp, err = find(&gridwellv1.FindRequest{GridId: farRoot, Recurse: true, Selected: true})
 	if err != nil {
-		t.Fatalf("selected search: %v", err)
+		t.Fatalf("selected find: %v", err)
 	}
 	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != inside[1].Id {
 		t.Fatalf("selected under the far root = %v, want %s, qualified as it was made", resp.Results, inside[1].Id)
@@ -65,7 +65,7 @@ func TestSearchFiltersRideToTheGridsOwner(t *testing.T) {
 		t.Errorf("path = %v, want the well", p)
 	}
 
-	if _, err := search(&gridwellv1.SearchRequest{Query: "x", Recurse: true}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := find(&gridwellv1.FindRequest{Query: "x", Recurse: true}); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("recurse with no grid: err = %v, want InvalidArgument with the reason", err)
 	}
 }

@@ -428,7 +428,7 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, context string, err err
 	}
 }
 
-// synthesize is one grid with its join kept, so GetGrid, Search's key lookup
+// synthesize is one grid with its join kept, so GetGrid, Find's key lookup
 // and the mint's derived placement read the same tiles.
 func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, error) {
 	gid, ckey, err := a.resolveGrid(gridID)

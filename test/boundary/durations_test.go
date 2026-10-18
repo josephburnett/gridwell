@@ -29,7 +29,7 @@ var allowedUntested = map[string]string{
 // This is the enforcement: every duration declared in the production tree has
 // to appear, by name, in a test.
 //
-// The search is the identifier. A client/wasm value the page only reaches
+// The find is the identifier. A client/wasm value the page only reaches
 // through window.__gridwellTest counts when a spec spells either the
 // identifier or the hook key that reads it, so an accessor a spec polls
 // vouches for the duration it computes from.
@@ -48,7 +48,7 @@ func TestEveryDeclaredDurationHasATest(t *testing.T) {
 			continue
 		}
 		t.Errorf("%s:%d: %s is a declared duration no test names\n"+
-			"  searched: the identifier %q as a word in every *_test.go, *.test.ts and *.spec.ts file "+
+			"  looked for: the identifier %q as a word in every *_test.go, *.test.ts and *.spec.ts file "+
 			"(apps/desktop/e2e and e2e-web included) and every file under apps/desktop/src/harness, "+
 			"and the __gridwellTest hook keys that read it\n"+
 			"  bind a test's wait to the value, or add %q to allowedUntested with the reason waiting on it proves nothing",

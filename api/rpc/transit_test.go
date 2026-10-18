@@ -26,7 +26,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 		HostContent:   true,
 		Glyph:         "folder",
 		SourceLabel:   "/srv/docs",
-		MenuEntries:   []*pb.MenuEntry{{Id: "search", GridId: "far/7"}},
+		MenuEntries:   []*pb.MenuEntry{{Id: "find", GridId: "far/7"}},
 	}
 	out := TransitQualifyGrid("hop", in)
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
@@ -240,11 +240,11 @@ func TestHopPeelsOnlyWhatChainsThroughIt(t *testing.T) {
 	if !proto.Equal(got, want) {
 		t.Errorf("leaf PeelTile = %+v, want %+v", got, want)
 	}
-	if got := transit.PeelSearchQuery("id:n1/rtb/far/2"); got != "id:rtb/far/2" {
-		t.Errorf("PeelSearchQuery = %q, want id:rtb/far/2", got)
+	if got := transit.PeelFindQuery("id:n1/rtb/far/2"); got != "id:rtb/far/2" {
+		t.Errorf("PeelFindQuery = %q, want id:rtb/far/2", got)
 	}
-	if got := transit.PeelSearchQuery("soup"); got != "soup" {
-		t.Errorf("PeelSearchQuery touched free text: %q", got)
+	if got := transit.PeelFindQuery("soup"); got != "soup" {
+		t.Errorf("PeelFindQuery touched free text: %q", got)
 	}
 }
 

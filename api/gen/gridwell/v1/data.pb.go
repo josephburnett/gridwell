@@ -1883,9 +1883,9 @@ func (x *GetTileRequest) GetTileId() string {
 	return ""
 }
 
-// Search is the one generic find verb. Every plugin may implement it, and
+// Find is the one generic find verb. Every plugin may implement it, and
 // Unimplemented means no results. The query is free text with a small selector
-// grammar owned by one shared parser (rpc.ParseSearchQuery): id:<tile-id> is an
+// grammar owned by one shared parser (rpc.ParseFindQuery): id:<tile-id> is an
 // exact-id lookup, and anything else is plugin-interpreted text matching
 // against names, bodies, addresses, or whatever the plugin's data means. Each
 // result carries the tile plus its containing-well chain from the plugin's root
@@ -1897,14 +1897,14 @@ func (x *GetTileRequest) GetTileId() string {
 // that qualified id answers, and an id: lookup or a grid_id routes on its id the
 // same way; otherwise an empty scope fans out to every configured plugin in
 // config order. A transit hop forwards the query to the remote node, which
-// fans out again, so an unscoped search recurses through every connected node
+// fans out again, so an unscoped find recurses through every connected node
 // and results come back qualified like every other id.
 //
 // The filters narrow every hit and AND together. They are the node's, applied
 // to the rows it holds, never a plugin's: the plugin API has none. A query may
 // be empty when a filter is given, and then every tile passing the filters is
 // a hit, the newest first by the time filtered on (created when none is).
-type SearchRequest struct {
+type FindRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Query string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	// limit caps the results per answering plugin; 0 means the plugin's
@@ -1931,20 +1931,20 @@ type SearchRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchRequest) Reset() {
-	*x = SearchRequest{}
+func (x *FindRequest) Reset() {
+	*x = FindRequest{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchRequest) String() string {
+func (x *FindRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchRequest) ProtoMessage() {}
+func (*FindRequest) ProtoMessage() {}
 
-func (x *SearchRequest) ProtoReflect() protoreflect.Message {
+func (x *FindRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1956,68 +1956,68 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
-func (*SearchRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindRequest.ProtoReflect.Descriptor instead.
+func (*FindRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *SearchRequest) GetQuery() string {
+func (x *FindRequest) GetQuery() string {
 	if x != nil {
 		return x.Query
 	}
 	return ""
 }
 
-func (x *SearchRequest) GetLimit() int32 {
+func (x *FindRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-func (x *SearchRequest) GetScope() string {
+func (x *FindRequest) GetScope() string {
 	if x != nil {
 		return x.Scope
 	}
 	return ""
 }
 
-func (x *SearchRequest) GetGridId() string {
+func (x *FindRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
 	return ""
 }
 
-func (x *SearchRequest) GetRecurse() bool {
+func (x *FindRequest) GetRecurse() bool {
 	if x != nil {
 		return x.Recurse
 	}
 	return false
 }
 
-func (x *SearchRequest) GetCreated() *TimeRange {
+func (x *FindRequest) GetCreated() *TimeRange {
 	if x != nil {
 		return x.Created
 	}
 	return nil
 }
 
-func (x *SearchRequest) GetModified() *TimeRange {
+func (x *FindRequest) GetModified() *TimeRange {
 	if x != nil {
 		return x.Modified
 	}
 	return nil
 }
 
-func (x *SearchRequest) GetContentChanged() *TimeRange {
+func (x *FindRequest) GetContentChanged() *TimeRange {
 	if x != nil {
 		return x.ContentChanged
 	}
 	return nil
 }
 
-func (x *SearchRequest) GetSelected() bool {
+func (x *FindRequest) GetSelected() bool {
 	if x != nil {
 		return x.Selected
 	}
@@ -2077,7 +2077,7 @@ func (x *TimeRange) GetTo() int64 {
 	return 0
 }
 
-type SearchResult struct {
+type FindResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tile          *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`
 	Path          []*Tile                `protobuf:"bytes,2,rep,name=path,proto3" json:"path,omitempty"`
@@ -2087,20 +2087,20 @@ type SearchResult struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchResult) Reset() {
-	*x = SearchResult{}
+func (x *FindResult) Reset() {
+	*x = FindResult{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchResult) String() string {
+func (x *FindResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchResult) ProtoMessage() {}
+func (*FindResult) ProtoMessage() {}
 
-func (x *SearchResult) ProtoReflect() protoreflect.Message {
+func (x *FindResult) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2112,64 +2112,64 @@ func (x *SearchResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchResult.ProtoReflect.Descriptor instead.
-func (*SearchResult) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindResult.ProtoReflect.Descriptor instead.
+func (*FindResult) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *SearchResult) GetTile() *Tile {
+func (x *FindResult) GetTile() *Tile {
 	if x != nil {
 		return x.Tile
 	}
 	return nil
 }
 
-func (x *SearchResult) GetPath() []*Tile {
+func (x *FindResult) GetPath() []*Tile {
 	if x != nil {
 		return x.Path
 	}
 	return nil
 }
 
-func (x *SearchResult) GetSnippet() string {
+func (x *FindResult) GetSnippet() string {
 	if x != nil {
 		return x.Snippet
 	}
 	return ""
 }
 
-func (x *SearchResult) GetScore() float64 {
+func (x *FindResult) GetScore() float64 {
 	if x != nil {
 		return x.Score
 	}
 	return 0
 }
 
-type SearchResponse struct {
+type FindResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
-	Results []*SearchResult        `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	Results []*FindResult          `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	// skipped is every namespace a fan-out asked and did not hear from, so a
 	// shorter list never passes for a whole one. Unimplemented is no results,
 	// not a skip.
-	Skipped       []*SearchSkip `protobuf:"bytes,2,rep,name=skipped,proto3" json:"skipped,omitempty"`
+	Skipped       []*FindSkip `protobuf:"bytes,2,rep,name=skipped,proto3" json:"skipped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchResponse) Reset() {
-	*x = SearchResponse{}
+func (x *FindResponse) Reset() {
+	*x = FindResponse{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchResponse) String() string {
+func (x *FindResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchResponse) ProtoMessage() {}
+func (*FindResponse) ProtoMessage() {}
 
-func (x *SearchResponse) ProtoReflect() protoreflect.Message {
+func (x *FindResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2181,28 +2181,28 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
-func (*SearchResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindResponse.ProtoReflect.Descriptor instead.
+func (*FindResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{25}
 }
 
-func (x *SearchResponse) GetResults() []*SearchResult {
+func (x *FindResponse) GetResults() []*FindResult {
 	if x != nil {
 		return x.Results
 	}
 	return nil
 }
 
-func (x *SearchResponse) GetSkipped() []*SearchSkip {
+func (x *FindResponse) GetSkipped() []*FindSkip {
 	if x != nil {
 		return x.Skipped
 	}
 	return nil
 }
 
-// SearchSkip names one namespace a fan-out went without, qualified like a
+// FindSkip names one namespace a fan-out went without, qualified like a
 // health event's plugin_uuid, and why.
-type SearchSkip struct {
+type FindSkip struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
@@ -2210,20 +2210,20 @@ type SearchSkip struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchSkip) Reset() {
-	*x = SearchSkip{}
+func (x *FindSkip) Reset() {
+	*x = FindSkip{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchSkip) String() string {
+func (x *FindSkip) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchSkip) ProtoMessage() {}
+func (*FindSkip) ProtoMessage() {}
 
-func (x *SearchSkip) ProtoReflect() protoreflect.Message {
+func (x *FindSkip) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2235,19 +2235,19 @@ func (x *SearchSkip) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchSkip.ProtoReflect.Descriptor instead.
-func (*SearchSkip) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindSkip.ProtoReflect.Descriptor instead.
+func (*FindSkip) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *SearchSkip) GetNamespace() string {
+func (x *FindSkip) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
 	return ""
 }
 
-func (x *SearchSkip) GetReason() string {
+func (x *FindSkip) GetReason() string {
 	if x != nil {
 		return x.Reason
 	}
@@ -4634,8 +4634,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x01w\x18\x04 \x01(\x03R\x01w\x12\f\n" +
 	"\x01h\x18\x05 \x01(\x03R\x01h\")\n" +
 	"\x0eGetTileRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\xc7\x02\n" +
-	"\rSearchRequest\x12\x14\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\xc5\x02\n" +
+	"\vFindRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x14\n" +
 	"\x05scope\x18\x03 \x01(\tR\x05scope\x12\x17\n" +
@@ -4647,17 +4647,17 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\bselected\x18\t \x01(\bR\bselected\"/\n" +
 	"\tTimeRange\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x03R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x03R\x02to\"\x8c\x01\n" +
-	"\fSearchResult\x12%\n" +
+	"\x02to\x18\x02 \x01(\x03R\x02to\"\x8a\x01\n" +
+	"\n" +
+	"FindResult\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12%\n" +
 	"\x04path\x18\x02 \x03(\v2\x11.gridwell.v1.TileR\x04path\x12\x18\n" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x14\n" +
-	"\x05score\x18\x04 \x01(\x01R\x05score\"x\n" +
-	"\x0eSearchResponse\x123\n" +
-	"\aresults\x18\x01 \x03(\v2\x19.gridwell.v1.SearchResultR\aresults\x121\n" +
-	"\askipped\x18\x02 \x03(\v2\x17.gridwell.v1.SearchSkipR\askipped\"B\n" +
-	"\n" +
-	"SearchSkip\x12\x1c\n" +
+	"\x05score\x18\x04 \x01(\x01R\x05score\"r\n" +
+	"\fFindResponse\x121\n" +
+	"\aresults\x18\x01 \x03(\v2\x17.gridwell.v1.FindResultR\aresults\x12/\n" +
+	"\askipped\x18\x02 \x03(\v2\x15.gridwell.v1.FindSkipR\askipped\"@\n" +
+	"\bFindSkip\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
@@ -4813,7 +4813,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rplugin_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventPluginHealthH\x00R\fpluginHealth\x12S\n" +
 	"\x14grid_framing_changed\x18\x05 \x01(\v2\x1f.gridwell.v1.GridFramingChangedH\x00R\x12gridFramingChanged\x12L\n" +
 	"\x11selection_changed\x18\x06 \x01(\v2\x1d.gridwell.v1.SelectionChangedH\x00R\x10selectionChangedB\t\n" +
-	"\apayload2\x89\r\n" +
+	"\apayload2\x83\r\n" +
 	"\bGridwell\x12;\n" +
 	"\x04Info\x12\x18.gridwell.v1.InfoRequest\x1a\x19.gridwell.v1.InfoResponse\x12>\n" +
 	"\x05Probe\x12\x19.gridwell.v1.ProbeRequest\x1a\x1a.gridwell.v1.ProbeResponse\x12J\n" +
@@ -4821,8 +4821,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tOpenShell\x12\x1d.gridwell.v1.OpenShellRequest\x1a\x1e.gridwell.v1.OpenShellResponse(\x010\x01\x12D\n" +
 	"\aGetGrid\x12\x1b.gridwell.v1.GetGridRequest\x1a\x1c.gridwell.v1.GetGridResponse\x12A\n" +
 	"\aGetTile\x12\x1b.gridwell.v1.GetTileRequest\x1a\x19.gridwell.v1.TileResponse\x12Y\n" +
-	"\x0eGetTilePreview\x12\".gridwell.v1.GetTilePreviewRequest\x1a#.gridwell.v1.GetTilePreviewResponse\x12A\n" +
-	"\x06Search\x12\x1a.gridwell.v1.SearchRequest\x1a\x1b.gridwell.v1.SearchResponse\x12K\n" +
+	"\x0eGetTilePreview\x12\".gridwell.v1.GetTilePreviewRequest\x1a#.gridwell.v1.GetTilePreviewResponse\x12;\n" +
+	"\x04Find\x12\x18.gridwell.v1.FindRequest\x1a\x19.gridwell.v1.FindResponse\x12K\n" +
 	"\vReadContent\x12\x1f.gridwell.v1.ReadContentRequest\x1a\x19.gridwell.v1.ContentChunk0\x01\x12M\n" +
 	"\fWriteContent\x12 .gridwell.v1.WriteContentRequest\x1a\x19.gridwell.v1.TileResponse(\x01\x12R\n" +
 	"\fServeContent\x12 .gridwell.v1.ServeContentRequest\x1a\x1e.gridwell.v1.ServeContentChunk0\x01\x12E\n" +
@@ -4880,11 +4880,11 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*PlaceTileRequest)(nil),          // 20: gridwell.v1.PlaceTileRequest
 	(*Placement)(nil),                 // 21: gridwell.v1.Placement
 	(*GetTileRequest)(nil),            // 22: gridwell.v1.GetTileRequest
-	(*SearchRequest)(nil),             // 23: gridwell.v1.SearchRequest
+	(*FindRequest)(nil),               // 23: gridwell.v1.FindRequest
 	(*TimeRange)(nil),                 // 24: gridwell.v1.TimeRange
-	(*SearchResult)(nil),              // 25: gridwell.v1.SearchResult
-	(*SearchResponse)(nil),            // 26: gridwell.v1.SearchResponse
-	(*SearchSkip)(nil),                // 27: gridwell.v1.SearchSkip
+	(*FindResult)(nil),                // 25: gridwell.v1.FindResult
+	(*FindResponse)(nil),              // 26: gridwell.v1.FindResponse
+	(*FindSkip)(nil),                  // 27: gridwell.v1.FindSkip
 	(*HandshakeRequest)(nil),          // 28: gridwell.v1.HandshakeRequest
 	(*PluginInfo)(nil),                // 29: gridwell.v1.PluginInfo
 	(*ConnectionInfo)(nil),            // 30: gridwell.v1.ConnectionInfo
@@ -4926,13 +4926,13 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	1,  // 4: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
 	3,  // 5: gridwell.v1.GetGridResponse.tiles:type_name -> gridwell.v1.Tile
 	21, // 6: gridwell.v1.PlaceTileRequest.claim:type_name -> gridwell.v1.Placement
-	24, // 7: gridwell.v1.SearchRequest.created:type_name -> gridwell.v1.TimeRange
-	24, // 8: gridwell.v1.SearchRequest.modified:type_name -> gridwell.v1.TimeRange
-	24, // 9: gridwell.v1.SearchRequest.content_changed:type_name -> gridwell.v1.TimeRange
-	3,  // 10: gridwell.v1.SearchResult.tile:type_name -> gridwell.v1.Tile
-	3,  // 11: gridwell.v1.SearchResult.path:type_name -> gridwell.v1.Tile
-	25, // 12: gridwell.v1.SearchResponse.results:type_name -> gridwell.v1.SearchResult
-	27, // 13: gridwell.v1.SearchResponse.skipped:type_name -> gridwell.v1.SearchSkip
+	24, // 7: gridwell.v1.FindRequest.created:type_name -> gridwell.v1.TimeRange
+	24, // 8: gridwell.v1.FindRequest.modified:type_name -> gridwell.v1.TimeRange
+	24, // 9: gridwell.v1.FindRequest.content_changed:type_name -> gridwell.v1.TimeRange
+	3,  // 10: gridwell.v1.FindResult.tile:type_name -> gridwell.v1.Tile
+	3,  // 11: gridwell.v1.FindResult.path:type_name -> gridwell.v1.Tile
+	25, // 12: gridwell.v1.FindResponse.results:type_name -> gridwell.v1.FindResult
+	27, // 13: gridwell.v1.FindResponse.skipped:type_name -> gridwell.v1.FindSkip
 	2,  // 14: gridwell.v1.PluginInfo.menu_entries:type_name -> gridwell.v1.MenuEntry
 	29, // 15: gridwell.v1.HandshakeResponse.plugins:type_name -> gridwell.v1.PluginInfo
 	30, // 16: gridwell.v1.HandshakeResponse.connections:type_name -> gridwell.v1.ConnectionInfo
@@ -4956,7 +4956,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	11, // 34: gridwell.v1.Gridwell.GetGrid:input_type -> gridwell.v1.GetGridRequest
 	22, // 35: gridwell.v1.Gridwell.GetTile:input_type -> gridwell.v1.GetTileRequest
 	13, // 36: gridwell.v1.Gridwell.GetTilePreview:input_type -> gridwell.v1.GetTilePreviewRequest
-	23, // 37: gridwell.v1.Gridwell.Search:input_type -> gridwell.v1.SearchRequest
+	23, // 37: gridwell.v1.Gridwell.Find:input_type -> gridwell.v1.FindRequest
 	15, // 38: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
 	17, // 39: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
 	18, // 40: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
@@ -4978,7 +4978,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	12, // 56: gridwell.v1.Gridwell.GetGrid:output_type -> gridwell.v1.GetGridResponse
 	32, // 57: gridwell.v1.Gridwell.GetTile:output_type -> gridwell.v1.TileResponse
 	14, // 58: gridwell.v1.Gridwell.GetTilePreview:output_type -> gridwell.v1.GetTilePreviewResponse
-	26, // 59: gridwell.v1.Gridwell.Search:output_type -> gridwell.v1.SearchResponse
+	26, // 59: gridwell.v1.Gridwell.Find:output_type -> gridwell.v1.FindResponse
 	16, // 60: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
 	32, // 61: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
 	19, // 62: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk

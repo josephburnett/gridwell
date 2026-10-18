@@ -5,7 +5,7 @@ import { tileAt, placeTile } from './oracle';
 // immutable while paths are not, so the path goes stale the moment the tile is
 // moved, and re-entering the workspace must heal the leaf. The client notices
 // the stored path no longer leads to the tile's grid, asks the server for a
-// scoped `id:` search, and rebinds the pane at the containing-well chain that
+// scoped `id:` find, and rebinds the pane at the containing-well chain that
 // comes back, so the descent works and the crumbs show a true path. The move
 // happens through the server directly, as a foreign writer, which is the
 // out-from-under case a live session never sees.

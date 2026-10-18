@@ -300,13 +300,13 @@ func TestNodeExportContentStreams(t *testing.T) {
 	}
 }
 
-// TestNodeExportSearches pins that Search crosses the node export. Why this
-// existed as a gap: the export delegates every unary verb by hand, Search was
+// TestNodeExportFinds pins that Find crosses the node export. Why this
+// existed as a gap: the export delegates every unary verb by hand, Find was
 // simply never added, and BOTH downstream layers (the connection transport and
 // the connect handler's fan-out) treat any per-hop error — Unimplemented
-// included — as "that hop contributes nothing", so a federated search
+// included — as "that hop contributes nothing", so a federated find
 // silently answered empty instead of failing loudly anywhere.
-func TestNodeExportSearches(t *testing.T) {
+func TestNodeExportFinds(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
 
@@ -321,20 +321,20 @@ func TestNodeExportSearches(t *testing.T) {
 	writeOne(t, c, created.Tile.Id, created.Tile.Version, []byte("# xylophone notes"))
 
 	// Free text finds the tile, id qualified for THIS hop's view.
-	resp, err := c.Search(ctx, &gridwellv1.SearchRequest{Query: "xylophone", Limit: 10})
+	resp, err := c.Find(ctx, &gridwellv1.FindRequest{Query: "xylophone", Limit: 10})
 	if err != nil {
-		t.Fatalf("Search via export: %v", err)
+		t.Fatalf("Find via export: %v", err)
 	}
 	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != created.Tile.Id {
-		t.Fatalf("search results = %+v, want the created tile %s", resp.Results, created.Tile.Id)
+		t.Fatalf("find results = %+v, want the created tile %s", resp.Results, created.Tile.Id)
 	}
 
 	// The id: form routes too.
-	resp, err = c.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + created.Tile.Id, Limit: 1})
+	resp, err = c.Find(ctx, &gridwellv1.FindRequest{Query: "id:" + created.Tile.Id, Limit: 1})
 	if err != nil {
-		t.Fatalf("Search id: via export: %v", err)
+		t.Fatalf("Find id: via export: %v", err)
 	}
 	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != created.Tile.Id {
-		t.Fatalf("id search results = %+v, want %s", resp.Results, created.Tile.Id)
+		t.Fatalf("id find results = %+v, want %s", resp.Results, created.Tile.Id)
 	}
 }

@@ -75,7 +75,7 @@ type Crumb struct {
 	Name string `json:"name,omitempty"`
 }
 
-// Skip is a namespace a search went without, and why.
+// Skip is a namespace a find went without, and why.
 type Skip struct {
 	Namespace string `json:"namespace"`
 	Reason    string `json:"reason"`

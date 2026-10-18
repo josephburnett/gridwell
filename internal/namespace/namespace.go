@@ -48,7 +48,7 @@ type Namespace interface {
 	GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error)
 	GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error)
 	GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error)
-	Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error)
+	Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error)
 
 	// ── writes ───────────────────────────────────────────────────────────
 	CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error)

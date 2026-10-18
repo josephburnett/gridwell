@@ -188,13 +188,13 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	return tileResp(t, err)
 }
 
-// Search is the one generic find verb; the store owns the semantics.
-func (p *Plugin) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	res, err := p.st.Search(ctx, req)
+// Find is the one generic find verb; the store owns the semantics.
+func (p *Plugin) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
+	res, err := p.st.Find(ctx, req)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.SearchResponse{Results: res}, nil
+	return &gridwellv1.FindResponse{Results: res}, nil
 }
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and

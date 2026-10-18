@@ -101,9 +101,9 @@ func (h Hop) PeelTile(t *pb.Tile) *pb.Tile {
 	return out
 }
 
-// PeelSearchQuery peels an id: selector through the one grammar parser.
-func (h Hop) PeelSearchQuery(query string) string {
-	q := ParseSearchQuery(query)
+// PeelFindQuery peels an id: selector through the one grammar parser.
+func (h Hop) PeelFindQuery(query string) string {
+	q := ParseFindQuery(query)
 	if q.ID == "" {
 		return query
 	}
@@ -139,9 +139,9 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 	case *pb.SetFramingRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.RootGridId = h.PeelID(r.RootGridId)
-	case *pb.SearchRequest:
+	case *pb.FindRequest:
 		// scope is consumed by the hop that routes on it.
-		r.Query = h.PeelSearchQuery(r.Query)
+		r.Query = h.PeelFindQuery(r.Query)
 		r.GridId = h.PeelID(r.GridId)
 		r.Scope = ""
 	case *pb.SetSelectionRequest:
@@ -179,16 +179,16 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	return out
 }
 
-// QualifySearchResponse rewrites every id a search answer carries through the
+// QualifyFindResponse rewrites every id a find answer carries through the
 // caller's tile rule, the one place leaf and transit differ, and puts the hop's
 // segment, prefix, before every skipped namespace.
-func QualifySearchResponse(prefix string, resp *pb.SearchResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.SearchResponse {
-	out := &pb.SearchResponse{Results: make([]*pb.SearchResult, 0, len(resp.Results))}
+func QualifyFindResponse(prefix string, resp *pb.FindResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.FindResponse {
+	out := &pb.FindResponse{Results: make([]*pb.FindResult, 0, len(resp.Results))}
 	for _, s := range resp.Skipped {
-		out.Skipped = append(out.Skipped, &pb.SearchSkip{Namespace: QualifyNS(prefix, s.Namespace), Reason: s.Reason})
+		out.Skipped = append(out.Skipped, &pb.FindSkip{Namespace: QualifyNS(prefix, s.Namespace), Reason: s.Reason})
 	}
 	for _, r := range resp.Results {
-		qr := &pb.SearchResult{Snippet: r.Snippet, Score: r.Score}
+		qr := &pb.FindResult{Snippet: r.Snippet, Score: r.Score}
 		if r.Tile != nil {
 			qr.Tile = qualifyTiles([]*pb.Tile{r.Tile})[0]
 		}

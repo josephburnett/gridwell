@@ -157,7 +157,7 @@ type readCase struct {
 }
 
 // readCases is every read the store serves, the wire's four (GetGrid, GetTile,
-// GetTilePreview, Search) plus the handshake's fields, content, blobs and the
+// GetTilePreview, Find) plus the handshake's fields, content, blobs and the
 // plugin namespace's join.
 func readCases() []readCase {
 	ignore2 := func(_ any, _ error) {}
@@ -198,21 +198,21 @@ func readCases() []readCase {
 		{"ReadContent/shell", func(ctx context.Context, s *Store, sub readSubject) {
 			s.ReadContent(ctx, sub.shell)
 		}},
-		{"Search/text", func(ctx context.Context, s *Store, _ readSubject) {
-			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "findable", Limit: 20}))
+		{"Find/text", func(ctx context.Context, s *Store, _ readSubject) {
+			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "findable", Limit: 20}))
 		}},
-		{"Search/name", func(ctx context.Context, s *Store, _ readSubject) {
-			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "a room", Limit: 20}))
+		{"Find/name", func(ctx context.Context, s *Store, _ readSubject) {
+			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "a room", Limit: 20}))
 		}},
-		{"Search/id", func(ctx context.Context, s *Store, sub readSubject) {
-			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + sub.text, Limit: 20}))
+		{"Find/id", func(ctx context.Context, s *Store, sub readSubject) {
+			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "id:" + sub.text, Limit: 20}))
 		}},
-		{"Search/filtered", func(ctx context.Context, s *Store, sub readSubject) {
-			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{GridId: sub.root, Recurse: true, Selected: true,
+		{"Find/filtered", func(ctx context.Context, s *Store, sub readSubject) {
+			ignore2(s.Find(ctx, &gridwellv1.FindRequest{GridId: sub.root, Recurse: true, Selected: true,
 				ContentChanged: &gridwellv1.TimeRange{From: 1}}))
 		}},
-		{"Search/nothing", func(ctx context.Context, s *Store, _ readSubject) {
-			ignore2(s.Search(ctx, &gridwellv1.SearchRequest{Query: "zzzznomatch", Limit: 20}))
+		{"Find/nothing", func(ctx context.Context, s *Store, _ readSubject) {
+			ignore2(s.Find(ctx, &gridwellv1.FindRequest{Query: "zzzznomatch", Limit: 20}))
 		}},
 		{"ShellSessionNamers", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.ShellSessionNamers(ctx, sub.shell)) }},
 		{"WorkspaceEphemeralRefs", func(ctx context.Context, s *Store, _ readSubject) {

@@ -247,7 +247,7 @@ func (m *Machine) followLink(g Gesture, w World) Plan {
 }
 
 // healStale re-derives a restored pane's path when it no longer leads to the
-// descended tile's grid. It reports whether the search started; if so the
+// descended tile's grid. It reports whether the find started; if so the
 // go-live verdict rides the answer.
 func (m *Machine) healStale(paneID string, tile *gridwellv1.Tile, w World, pl *planner) bool {
 	p, ok := w.Pane(paneID)
@@ -270,7 +270,7 @@ func (m *Machine) healStale(paneID string, tile *gridwellv1.Tile, w World, pl *p
 		Tile:   tile,
 	})
 	pl.add(Effect{Kind: EffAwait, Token: tok,
-		Request: Request{Kind: RequestSearch, Query: "id:" + tile.Id,
+		Request: Request{Kind: RequestFind, Query: "id:" + tile.Id,
 			Scope: tile.Id, Limit: 1}})
 	return true
 }

@@ -16,14 +16,14 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// failingSearch is a namespace whose search index is not answering.
-type failingSearch struct{ namespace.Unimplemented }
+// failingFind is a namespace whose find index is not answering.
+type failingFind struct{ namespace.Unimplemented }
 
-func (failingSearch) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+func (failingFind) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	return &gridwellv1.InfoResponse{}, nil
 }
 
-func (failingSearch) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+func (failingFind) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	if err := send(nil); err != nil {
 		return err
 	}
@@ -31,22 +31,22 @@ func (failingSearch) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeReque
 	return nil
 }
 
-func (failingSearch) Search(context.Context, *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
+func (failingFind) Find(context.Context, *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
 	return nil, status.Error(codes.Unavailable, "the index is not answering")
 }
 
-// A free-text search that went without a namespace says which and why, at
+// A free-text find that went without a namespace says which and why, at
 // any depth: a far plugin that failed, and then the connection itself once
-// the far node is gone. A namespace that does not search is no skip.
-func TestASearchSaysWhatItWentWithout(t *testing.T) {
+// the far node is gone. A namespace that does not find is no skip.
+func TestAFindSaysWhatItWentWithout(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingSearch{}, nil) })
+		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingFind{}, nil) })
 	skipped := func() []string {
 		t.Helper()
-		resp, err := h.localCl.Search(ctx, "xylophone", "", 0)
+		resp, err := h.localCl.Find(ctx, "xylophone", "", 0)
 		if err != nil {
-			t.Fatalf("Search: %v", err)
+			t.Fatalf("Find: %v", err)
 		}
 		var out []string
 		for _, s := range resp.Skipped {
@@ -73,7 +73,7 @@ func TestASearchSaysWhatItWentWithout(t *testing.T) {
 func TestAnIDLookupAsksOnlyItsOwner(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingSearch{}, nil) })
+		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingFind{}, nil) })
 	tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: localNodeID + "/geneva/rnode1/" + h.rootBare,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 1, H: 1},
@@ -81,9 +81,9 @@ func TestAnIDLookupAsksOnlyItsOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := h.localCl.Search(ctx, "id:"+tile.Id, tile.Id, 1)
+	resp, err := h.localCl.Find(ctx, "id:"+tile.Id, tile.Id, 1)
 	if err != nil {
-		t.Fatalf("Search: %v", err)
+		t.Fatalf("Find: %v", err)
 	}
 	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != tile.Id || len(resp.Skipped) != 0 {
 		t.Fatalf("id lookup = %v, want the one tile and nothing skipped", resp)

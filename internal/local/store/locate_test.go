@@ -11,7 +11,7 @@ import (
 // The id: selector is an exact lookup whose one result carries the
 // containing-well chain, outermost first, tracking moves. A missing id gives
 // empty results, never an error.
-func TestSearchByID(t *testing.T) {
+func TestFindByID(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -30,9 +30,9 @@ func TestSearchByID(t *testing.T) {
 	}
 
 	// At the root: one result, empty chain.
-	res, err := s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + text.Id, Limit: 0})
+	res, err := s.Find(ctx, &gridwellv1.FindRequest{Query: "id:" + text.Id, Limit: 0})
 	if err != nil {
-		t.Fatalf("search at root: %v", err)
+		t.Fatalf("find at root: %v", err)
 	}
 	if len(res) != 1 || len(res[0].Path) != 0 || res[0].Tile.Id != text.Id {
 		t.Fatalf("root result = %+v, want the tile with an empty chain", res)
@@ -45,9 +45,9 @@ func TestSearchByID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("move into inner: %v", err)
 	}
-	res, err = s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:" + text.Id, Limit: 0})
+	res, err = s.Find(ctx, &gridwellv1.FindRequest{Query: "id:" + text.Id, Limit: 0})
 	if err != nil {
-		t.Fatalf("search after move: %v", err)
+		t.Fatalf("find after move: %v", err)
 	}
 	if len(res) != 1 {
 		t.Fatalf("results = %d, want 1", len(res))
@@ -61,14 +61,14 @@ func TestSearchByID(t *testing.T) {
 	}
 
 	// A missing id is EMPTY, not an error — "no results" is an answer.
-	if res, err := s.Search(ctx, &gridwellv1.SearchRequest{Query: "id:999999", Limit: 0}); err != nil || len(res) != 0 {
+	if res, err := s.Find(ctx, &gridwellv1.FindRequest{Query: "id:999999", Limit: 0}); err != nil || len(res) != 0 {
 		t.Fatalf("missing tile: res=%v err=%v, want empty and nil", res, err)
 	}
 }
 
 // Free text matches names and text bodies, names ranked first, each hit a
 // PLACE with its chain; ephemeral (scratch) tiles never surface.
-func TestSearchText(t *testing.T) {
+func TestFindText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -89,9 +89,9 @@ func TestSearchText(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := s.Search(ctx, &gridwellv1.SearchRequest{Query: "gopher", Limit: 0})
+	res, err := s.Find(ctx, &gridwellv1.FindRequest{Query: "gopher", Limit: 0})
 	if err != nil {
-		t.Fatalf("text search: %v", err)
+		t.Fatalf("text find: %v", err)
 	}
 	if len(res) != 2 {
 		t.Fatalf("results = %d (%+v), want 2 (name + body)", len(res), res)
@@ -111,10 +111,10 @@ func TestSearchText(t *testing.T) {
 	}
 
 	// Case-insensitive; no match = empty.
-	if res, _ := s.Search(ctx, &gridwellv1.SearchRequest{Query: "GOPHER", Limit: 0}); len(res) != 2 {
+	if res, _ := s.Find(ctx, &gridwellv1.FindRequest{Query: "GOPHER", Limit: 0}); len(res) != 2 {
 		t.Errorf("case-insensitive: %d results, want 2", len(res))
 	}
-	if res, _ := s.Search(ctx, &gridwellv1.SearchRequest{Query: "zebra", Limit: 0}); len(res) != 0 {
+	if res, _ := s.Find(ctx, &gridwellv1.FindRequest{Query: "zebra", Limit: 0}); len(res) != 0 {
 		t.Errorf("no-match: %+v, want empty", res)
 	}
 
@@ -126,7 +126,7 @@ func TestSearchText(t *testing.T) {
 	if _, err := s.CreateText(ctx, scratch, 0, 0, 1, 1, []byte("gopher scratchpad")); err != nil {
 		t.Fatal(err)
 	}
-	if res, _ := s.Search(ctx, &gridwellv1.SearchRequest{Query: "gopher", Limit: 0}); len(res) != 2 {
+	if res, _ := s.Find(ctx, &gridwellv1.FindRequest{Query: "gopher", Limit: 0}); len(res) != 2 {
 		t.Errorf("scratch tile surfaced: %d results, want still 2", len(res))
 	}
 }

@@ -14,18 +14,18 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// SearchHopTimeout bounds one hop's answer during a search fan-out, so a hung
-// hop cannot stall the whole search. One owner for both fan-outs: the
+// FindHopTimeout bounds one hop's answer during a find fan-out, so a hung
+// hop cannot stall the whole find. One owner for both fan-outs: the
 // server's per-plugin loop and the connection transport's per-connection one.
-const SearchHopTimeout = 3 * time.Second
+const FindHopTimeout = 3 * time.Second
 
-// SearchDefaultLimit caps a query that brings no limit, wherever the node
+// FindDefaultLimit caps a query that brings no limit, wherever the node
 // answers from its own rows.
-const SearchDefaultLimit = 20
+const FindDefaultLimit = 20
 
-// SearchQuery is the parsed form of a Search query, the one grammar every
+// FindQuery is the parsed form of a Find query, the one grammar every
 // plugin reads. Exactly one of ID and Text is set.
-type SearchQuery struct {
+type FindQuery struct {
 	// ID is an exact tile id to locate; the result carries the tile and its
 	// containing-well path.
 	ID string
@@ -33,32 +33,32 @@ type SearchQuery struct {
 	Text string
 }
 
-// ParseSearchQuery is the selector grammar: id:<tile-id> and free text. New
+// ParseFindQuery is the selector grammar: id:<tile-id> and free text. New
 // selectors extend here, never in a plugin, or the grammar forks.
-func ParseSearchQuery(q string) SearchQuery {
+func ParseFindQuery(q string) FindQuery {
 	q = strings.TrimSpace(q)
 	if rest, ok := strings.CutPrefix(q, "id:"); ok {
-		return SearchQuery{ID: strings.TrimSpace(rest)}
+		return FindQuery{ID: strings.TrimSpace(rest)}
 	}
-	return SearchQuery{Text: q}
+	return FindQuery{Text: q}
 }
 
-// SearchNeedsRow reports whether req filters on a fact only a node's row
+// FindNeedsRow reports whether req filters on a fact only a node's row
 // holds, a time or the selection, so an entry with no row passes none.
-func SearchNeedsRow(req *pb.SearchRequest) bool {
+func FindNeedsRow(req *pb.FindRequest) bool {
 	return req.Selected || req.Created != nil || req.Modified != nil || req.ContentChanged != nil
 }
 
-// SearchFiltered reports whether req narrows by anything beyond its query,
-// which is what lets an empty query search.
-func SearchFiltered(req *pb.SearchRequest) bool {
-	return req.GridId != "" || SearchNeedsRow(req)
+// FindFiltered reports whether req narrows by anything beyond its query,
+// which is what lets an empty query find.
+func FindFiltered(req *pb.FindRequest) bool {
+	return req.GridId != "" || FindNeedsRow(req)
 }
 
-// CheckSearch refuses filters that cannot mean anything, with the reason.
-func CheckSearch(req *pb.SearchRequest) error {
+// CheckFind refuses filters that cannot mean anything, with the reason.
+func CheckFind(req *pb.FindRequest) error {
 	if req.Recurse && req.GridId == "" {
-		return errors.New("search: recurse needs a grid_id")
+		return errors.New("find: recurse needs a grid_id")
 	}
 	for name, r := range map[string]*pb.TimeRange{
 		"created": req.Created, "modified": req.Modified, "content_changed": req.ContentChanged,
@@ -66,19 +66,19 @@ func CheckSearch(req *pb.SearchRequest) error {
 		switch {
 		case r == nil:
 		case r.From < 0 || r.To < 0:
-			return fmt.Errorf("search: %s range has a negative end", name)
+			return fmt.Errorf("find: %s range has a negative end", name)
 		case r.From > 0 && r.To > 0 && r.From > r.To:
-			return fmt.Errorf("search: %s range ends before it starts", name)
+			return fmt.Errorf("find: %s range ends before it starts", name)
 		}
 	}
 	return nil
 }
 
-// Search issues one query. scope routes to the namespace owning that qualified
+// Find issues one query. scope routes to the namespace owning that qualified
 // id; "" fans out across every plugin, and transit nodes recurse. limit caps
 // results per answering plugin, 0 for its default.
-func (c *Client) Search(ctx context.Context, query, scope string, limit int32) (*pb.SearchResponse, error) {
-	resp, err := c.cl.Search(ctx, connect.NewRequest(&pb.SearchRequest{
+func (c *Client) Find(ctx context.Context, query, scope string, limit int32) (*pb.FindResponse, error) {
+	resp, err := c.cl.Find(ctx, connect.NewRequest(&pb.FindRequest{
 		Query: query, Scope: scope, Limit: limit,
 	}))
 	if err != nil {
@@ -87,20 +87,20 @@ func (c *Client) Search(ctx context.Context, query, scope string, limit int32) (
 	return resp.Msg, nil
 }
 
-// SearchHop is one fan-out hop's answer as the fan-out keeps it: what the hop
+// FindHop is one fan-out hop's answer as the fan-out keeps it: what the hop
 // found, or for a hop that failed, one skip naming the hop itself, an empty
 // namespace its qualifier fills in. Unimplemented is no results.
-func SearchHop(resp *pb.SearchResponse, err error) *pb.SearchResponse {
+func FindHop(resp *pb.FindResponse, err error) *pb.FindResponse {
 	var reason string
 	switch {
 	case err == nil:
 		return resp
 	case status.Code(err) == codes.Unimplemented:
-		return &pb.SearchResponse{}
+		return &pb.FindResponse{}
 	case errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.DeadlineExceeded:
-		reason = "did not answer within " + SearchHopTimeout.String()
+		reason = "did not answer within " + FindHopTimeout.String()
 	default:
 		reason = status.Convert(err).Message()
 	}
-	return &pb.SearchResponse{Skipped: []*pb.SearchSkip{{Reason: reason}}}
+	return &pb.FindResponse{Skipped: []*pb.FindSkip{{Reason: reason}}}
 }

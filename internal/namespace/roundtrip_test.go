@@ -79,8 +79,8 @@ func (f *fake) GetTile(context.Context, *pb.GetTileRequest) (*pb.TileResponse, e
 func (f *fake) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	return &pb.GetTilePreviewResponse{}, nil
 }
-func (f *fake) Search(context.Context, *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return &pb.SearchResponse{}, nil
+func (f *fake) Find(context.Context, *pb.FindRequest) (*pb.FindResponse, error) {
+	return &pb.FindResponse{}, nil
 }
 func (f *fake) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil

@@ -102,15 +102,15 @@ func TestHeyProbeAnswersForTheContextAsked(t *testing.T) {
 	}
 }
 
-// A search result is the thread's one tile, in everything, wherever the
+// A find result is the thread's one tile, in everything, wherever the
 // thread is filed, so opening it opens the same tile a box links to.
-func TestHeySearchLandsOnTheEverythingTile(t *testing.T) {
+func TestHeyFindLandsOnTheEverythingTile(t *testing.T) {
 	_, cl, info := heyStack(t, heyAccount(t))
 	grids := heyGrids(t, info)
 	all := walked(t, cl, grids)
 	want := tileWithLabel(t, all, "Conference talk")
 
-	resp, err := cl.Search(t.Context(), &gridwellv1.SearchRequest{Query: "conference"})
+	resp, err := cl.Find(t.Context(), &gridwellv1.FindRequest{Query: "conference"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,6 @@
 package pluginhost
 
-// Search on a plugin's namespace. The plugin answers text; the filters are
+// Find on a plugin's namespace. The plugin answers text; the filters are
 // the node's, applied to the rows the answer maps to (store.tileFilter), so
 // the plugin API carries none.
 
@@ -17,22 +17,22 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// searchHit is one placed hit and the row behind it, 0 for an entry with none.
-type searchHit struct {
-	result *gridwellv1.SearchResult
+// findHit is one placed hit and the row behind it, 0 for an entry with none.
+type findHit struct {
+	result *gridwellv1.FindResult
 	row    int64
 }
 
-// Search turns each hit into a place (tile plus well chain) through the
+// Find turns each hit into a place (tile plus well chain) through the
 // synthesis GetGrid runs, dropping hits it cannot place, and keeps the ones
 // the filters pass. An empty query with a filter lists instead: the grid and,
 // with recurse, every grid under it, or with no grid the rows whose facts
 // pass. An id: locate is refused: there is no parent index here.
-func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	if q := rpc.ParseSearchQuery(req.Query); q.ID != "" {
+func (a *Adapter) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
+	if q := rpc.ParseFindQuery(req.Query); q.ID != "" {
 		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the memory DB)")
 	}
-	g := &searchGrids{a: a, ctx: ctx, byContext: map[string]*synthesized{}}
+	g := &findGrids{a: a, ctx: ctx, byContext: map[string]*synthesized{}}
 	scope := ""
 	if req.GridId != "" {
 		_, ckey, err := a.resolveGrid(req.GridId)
@@ -43,12 +43,12 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 	}
 	listing := strings.TrimSpace(req.Query) == ""
 	var (
-		hits []searchHit
+		hits []findHit
 		err  error
 	)
 	switch {
-	case listing && !rpc.SearchFiltered(req):
-		return &gridwellv1.SearchResponse{}, nil
+	case listing && !rpc.FindFiltered(req):
+		return &gridwellv1.FindResponse{}, nil
 	case listing && scope != "":
 		// A scope no held way reaches lists with paths that start at it.
 		var above []*gridwellv1.Tile
@@ -68,9 +68,9 @@ func (a *Adapter) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*g
 
 // filterHits keeps the hits whose rows pass the filters; a listing is ordered
 // newest first and capped, as home's is.
-func (a *Adapter) filterHits(req *gridwellv1.SearchRequest, hits []searchHit, listing bool) (*gridwellv1.SearchResponse, error) {
-	out := &gridwellv1.SearchResponse{}
-	if !listing && !rpc.SearchNeedsRow(req) {
+func (a *Adapter) filterHits(req *gridwellv1.FindRequest, hits []findHit, listing bool) (*gridwellv1.FindResponse, error) {
+	out := &gridwellv1.FindResponse{}
+	if !listing && !rpc.FindNeedsRow(req) {
 		for _, h := range hits {
 			out.Results = append(out.Results, h.result)
 		}
@@ -82,23 +82,23 @@ func (a *Adapter) filterHits(req *gridwellv1.SearchRequest, hits []searchHit, li
 			ids = append(ids, h.row)
 		}
 	}
-	passing, err := a.mem.SearchPassing(ids, req)
+	passing, err := a.mem.FindPassing(ids, req)
 	if err != nil {
 		return nil, err
 	}
 	kept := hits[:0]
 	for _, h := range hits {
 		_, ok := passing[h.row]
-		if ok || (h.row == 0 && !rpc.SearchNeedsRow(req)) {
+		if ok || (h.row == 0 && !rpc.FindNeedsRow(req)) {
 			kept = append(kept, h)
 		}
 	}
 	if listing {
 		// An entry with no row has no time and lists after every row.
-		slices.SortStableFunc(kept, func(x, y searchHit) int { return int(passing[y.row] - passing[x.row]) })
+		slices.SortStableFunc(kept, func(x, y findHit) int { return int(passing[y.row] - passing[x.row]) })
 		limit := int(req.Limit)
 		if limit <= 0 {
-			limit = rpc.SearchDefaultLimit
+			limit = rpc.FindDefaultLimit
 		}
 		kept = kept[:min(len(kept), limit)]
 	}
@@ -108,14 +108,14 @@ func (a *Adapter) filterHits(req *gridwellv1.SearchRequest, hits []searchHit, li
 	return out, nil
 }
 
-// searchGrids synthesizes each grid a search reads once.
-type searchGrids struct {
+// findGrids synthesizes each grid a find reads once.
+type findGrids struct {
 	a         *Adapter
 	ctx       context.Context
 	byContext map[string]*synthesized
 }
 
-func (g *searchGrids) grid(ckey string) (*synthesized, error) {
+func (g *findGrids) grid(ckey string) (*synthesized, error) {
 	if s, ok := g.byContext[ckey]; ok {
 		return s, nil
 	}
@@ -128,14 +128,14 @@ func (g *searchGrids) grid(ckey string) (*synthesized, error) {
 }
 
 // hit is key's tile on the grid of ckey, nil when the grid has none.
-func (g *searchGrids) hit(ckey, key string, path []*gridwellv1.Tile, snippet string, score float64) (*searchHit, error) {
+func (g *findGrids) hit(ckey, key string, path []*gridwellv1.Tile, snippet string, score float64) (*findHit, error) {
 	s, err := g.grid(ckey)
 	if err != nil {
 		return nil, err
 	}
 	for i, row := range s.rows {
 		if row.Key == key {
-			return &searchHit{row: row.ID, result: &gridwellv1.SearchResult{
+			return &findHit{row: row.ID, result: &gridwellv1.FindResult{
 				Tile: s.tiles[i], Path: path, Snippet: snippet, Score: score}}, nil
 		}
 	}
@@ -145,14 +145,14 @@ func (g *searchGrids) hit(ckey, key string, path []*gridwellv1.Tile, snippet str
 // text is the plugin's answer to the query, placed, and kept when it sits on
 // the scope (or under it, with recurse): a hit's context path names every grid
 // above it.
-func (g *searchGrids) text(req *gridwellv1.SearchRequest, scope string) ([]searchHit, error) {
-	resp, err := ask(&g.a.lacks, "Search", func() (*pluginv1.SearchResponse, error) {
-		return g.a.cp.Search(g.ctx, &pluginv1.SearchRequest{Query: req.Query, Limit: req.Limit})
+func (g *findGrids) text(req *gridwellv1.FindRequest, scope string) ([]findHit, error) {
+	resp, err := ask(&g.a.lacks, "Find", func() (*pluginv1.FindResponse, error) {
+		return g.a.cp.Find(g.ctx, &pluginv1.FindRequest{Query: req.Query, Limit: req.Limit})
 	})
 	if err != nil {
 		return nil, err
 	}
-	var out []searchHit
+	var out []findHit
 	for _, r := range resp.Results {
 		n := len(r.ContextPath)
 		if r.Entry == nil || n == 0 {
@@ -193,15 +193,15 @@ func (g *searchGrids) text(req *gridwellv1.SearchRequest, scope string) ([]searc
 // walk lists the grid of ckey and, with recurse, every grid its wells open,
 // each tile placed under the wells that reached it; path is the chain above
 // ckey.
-func (g *searchGrids) walk(ckey string, path []*gridwellv1.Tile, recurse bool, seen map[string]bool) ([]searchHit, error) {
+func (g *findGrids) walk(ckey string, path []*gridwellv1.Tile, recurse bool, seen map[string]bool) ([]findHit, error) {
 	seen[ckey] = true
 	s, err := g.grid(ckey)
 	if err != nil {
 		return nil, err
 	}
-	var out []searchHit
+	var out []findHit
 	for i, t := range s.tiles {
-		out = append(out, searchHit{row: s.rows[i].ID, result: &gridwellv1.SearchResult{Tile: t, Path: path, Score: 1}})
+		out = append(out, findHit{row: s.rows[i].ID, result: &gridwellv1.FindResult{Tile: t, Path: path, Score: 1}})
 	}
 	if !recurse {
 		return out, nil
@@ -222,16 +222,16 @@ func (g *searchGrids) walk(ckey string, path []*gridwellv1.Tile, recurse bool, s
 
 // rows is an empty query with no grid: the rows whose facts pass, each placed
 // on its chain, and dropped, as an unplaceable text hit is, without one.
-func (g *searchGrids) rows(req *gridwellv1.SearchRequest) ([]searchHit, error) {
+func (g *findGrids) rows(req *gridwellv1.FindRequest) ([]findHit, error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
-		limit = rpc.SearchDefaultLimit
+		limit = rpc.FindDefaultLimit
 	}
-	found, err := g.a.mem.SearchRows(req, limit)
+	found, err := g.a.mem.FindRows(req, limit)
 	if err != nil {
 		return nil, err
 	}
-	var out []searchHit
+	var out []findHit
 	for _, r := range found {
 		ckey, err := g.a.mem.ContextKey(r.GridID)
 		if err != nil {
@@ -257,9 +257,9 @@ func (g *searchGrids) rows(req *gridwellv1.SearchRequest) ([]searchHit, error) {
 
 // chain is the wells from a collection down to the grid of target, found by
 // listing down from each collection the plugin declares through the grids the
-// node holds rows for, which are the ones the user has touched: the search
+// node holds rows for, which are the ones the user has touched: the find
 // never walks the source. ok is false when no such way down reaches it.
-func (g *searchGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err error) {
+func (g *findGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err error) {
 	ci, err := g.a.cp.Info(g.ctx, &pluginv1.InfoRequest{})
 	if err != nil {
 		return nil, false, err

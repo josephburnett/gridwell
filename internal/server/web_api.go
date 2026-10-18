@@ -56,8 +56,8 @@ func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Reques
 	return unary(h.rt.GetTilePreview)(ctx, req)
 }
 
-func (h *connectHandler) Search(ctx context.Context, req *connect.Request[pb.SearchRequest]) (*connect.Response[pb.SearchResponse], error) {
-	return unary(h.rt.Search)(ctx, req)
+func (h *connectHandler) Find(ctx context.Context, req *connect.Request[pb.FindRequest]) (*connect.Response[pb.FindResponse], error) {
+	return unary(h.rt.Find)(ctx, req)
 }
 
 func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb.CreateTileRequest]) (*connect.Response[pb.TileResponse], error) {

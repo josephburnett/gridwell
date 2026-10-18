@@ -170,7 +170,7 @@ const (
 	// RequestReadLayout reads a pane tile's layout blob back as Data, never
 	// into the cache: ID.
 	RequestReadLayout
-	RequestSearch     // Query, Scope, Limit
+	RequestFind       // Query, Scope, Limit
 	RequestProbeShell // ID is the content id asked, Key the session the answer caches under
 	// RequestFlushLayout writes the pane-tile layout as the tree stands now
 	// and answers OK once the node holds it.
@@ -190,12 +190,12 @@ type Request struct {
 // Result is one async answer, handed back to Resume with the token that
 // asked for it.
 type Result struct {
-	// OK is false when the read failed or answered nothing usable: a search
-	// with no hit is the same no as a search that could not run.
+	// OK is false when the read failed or answered nothing usable: a find
+	// with no hit is the same no as a find that could not run.
 	OK    bool
 	Alive bool
 	Tile  *gridwellv1.Tile
-	// Wells is the search hit's containing-well chain, outermost first; empty
+	// Wells is the find hit's containing-well chain, outermost first; empty
 	// means the tile sits at a root.
 	Wells []*gridwellv1.Tile
 	Data  []byte

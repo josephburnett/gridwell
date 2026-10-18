@@ -11,17 +11,17 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Search implements home's side of the one find verb. rpc.ParseSearchQuery
+// Find implements home's side of the one find verb. rpc.ParseFindQuery
 // decides the mode: id: is the exact locate, and free text matches names and
 // text bodies case-insensitively, names ranking above bodies. The request's
 // filters narrow every mode (tileFilter); an empty query with a filter lists
 // what passes, newest first. Every result is a tile plus its path. Scratch-grid
 // tiles never surface, because a result is a promise you can go there and they
 // die on ascent. Matching nothing returns empty results, never an error.
-func (s *Store) Search(ctx context.Context, req *gridwellv1.SearchRequest) ([]*gridwellv1.SearchResult, error) {
+func (s *Store) Find(ctx context.Context, req *gridwellv1.FindRequest) ([]*gridwellv1.FindResult, error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
-		limit = rpc.SearchDefaultLimit
+		limit = rpc.FindDefaultLimit
 	}
 	f := tileFilter{req: req}
 	if req.GridId != "" {
@@ -31,22 +31,22 @@ func (s *Store) Search(ctx context.Context, req *gridwellv1.SearchRequest) ([]*g
 		}
 		f.grid = gid
 	}
-	q := rpc.ParseSearchQuery(req.Query)
+	q := rpc.ParseFindQuery(req.Query)
 	if q.ID != "" {
 		return s.locate(ctx, q.ID, f)
 	}
-	f.scratch = s.searchScratchGrid(ctx)
+	f.scratch = s.findScratchGrid(ctx)
 	where, args := f.sql()
 
-	var out []*gridwellv1.SearchResult
+	var out []*gridwellv1.FindResult
 	seen := map[int64]bool{}
 	appendHits := func(snippet func(text string) string, score float64, q string, qargs ...any) error {
 		rows, err := s.db.QueryContext(ctx, q, append(qargs, limit)...)
 		if err != nil {
 			return err
 		}
-		hits, err := collect(rows, func(rows *sql.Rows) (searchHit, error) {
-			var h searchHit
+		hits, err := collect(rows, func(rows *sql.Rows) (findHit, error) {
+			var h findHit
 			err := rows.Scan(&h.id, &h.text)
 			return h, err
 		})
@@ -69,7 +69,7 @@ func (s *Store) Search(ctx context.Context, req *gridwellv1.SearchRequest) ([]*g
 			if err != nil {
 				return err
 			}
-			out = append(out, &gridwellv1.SearchResult{Tile: t, Path: path, Snippet: snippet(h.text), Score: score})
+			out = append(out, &gridwellv1.FindResult{Tile: t, Path: path, Snippet: snippet(h.text), Score: score})
 		}
 		return nil
 	}
@@ -77,14 +77,14 @@ func (s *Store) Search(ctx context.Context, req *gridwellv1.SearchRequest) ([]*g
 
 	needle := strings.ToLower(strings.TrimSpace(q.Text))
 	if needle == "" {
-		if !rpc.SearchFiltered(req) {
+		if !rpc.FindFiltered(req) {
 			return nil, nil
 		}
 		err := appendHits(none, 1, `SELECT t.id, '' FROM tiles t WHERE `+where+
 			` ORDER BY `+f.newest()+` DESC, t.id DESC LIMIT ?`, args...)
 		return out, err
 	}
-	near := func(text string) string { return searchSnippet(text, needle) }
+	near := func(text string) string { return findSnippet(text, needle) }
 	// instr rather than LIKE, so there is no pattern-escaping trap.
 	if err := appendHits(near, 1, `SELECT t.id, t.alt_text FROM tiles t
 		WHERE t.alt_text != '' AND instr(lower(t.alt_text), ?) > 0 AND `+where+`
@@ -102,7 +102,7 @@ func (s *Store) Search(ctx context.Context, req *gridwellv1.SearchRequest) ([]*g
 
 // locate is the id: mode: the one tile, when it passes the filters, and its
 // path. A scratch tile is found by its id, the id being the promise.
-func (s *Store) locate(ctx context.Context, tileID string, f tileFilter) ([]*gridwellv1.SearchResult, error) {
+func (s *Store) locate(ctx context.Context, tileID string, f tileFilter) ([]*gridwellv1.FindResult, error) {
 	t, err := s.GetTile(ctx, tileID)
 	if errors.Is(err, ErrNotFound) {
 		return nil, nil
@@ -110,7 +110,7 @@ func (s *Store) locate(ctx context.Context, tileID string, f tileFilter) ([]*gri
 	if err != nil {
 		return nil, err
 	}
-	if rpc.SearchFiltered(f.req) {
+	if rpc.FindFiltered(f.req) {
 		id, err := parseID(t.Id)
 		if err != nil {
 			return nil, err
@@ -126,21 +126,21 @@ func (s *Store) locate(ctx context.Context, tileID string, f tileFilter) ([]*gri
 	if err != nil {
 		return nil, err
 	}
-	return []*gridwellv1.SearchResult{{Tile: t, Path: path, Score: 1}}, nil
+	return []*gridwellv1.FindResult{{Tile: t, Path: path, Score: 1}}, nil
 }
 
-type searchHit struct {
+type findHit struct {
 	id   int64
 	text string
 }
 
-// tileFilter is a search's filters as one SQL condition over `tiles t`, the
-// one place they mean anything: home's search and a plugin's rows
-// (Namespace.SearchRows) both read it. grid 0 is no grid scope; scratch 0
+// tileFilter is a find's filters as one SQL condition over `tiles t`, the
+// one place they mean anything: home's find and a plugin's rows
+// (Namespace.FindRows) both read it. grid 0 is no grid scope; scratch 0
 // excludes no grid.
 type tileFilter struct {
 	ns      string
-	req     *gridwellv1.SearchRequest
+	req     *gridwellv1.FindRequest
 	grid    int64
 	scratch int64
 }
@@ -202,9 +202,9 @@ func (f tileFilter) newest() string {
 	return "t.created_at"
 }
 
-// searchScratchGrid resolves the scratch grid's id for the surface filter, 0
+// findScratchGrid resolves the scratch grid's id for the surface filter, 0
 // when it is unresolvable.
-func (s *Store) searchScratchGrid(ctx context.Context) int64 {
+func (s *Store) findScratchGrid(ctx context.Context) int64 {
 	id, err := s.ScratchGridID(ctx)
 	if err != nil {
 		return 0
@@ -216,9 +216,9 @@ func (s *Store) searchScratchGrid(ctx context.Context) int64 {
 	return gid
 }
 
-// searchSnippet is a one-line window around the first case-insensitive
+// findSnippet is a one-line window around the first case-insensitive
 // occurrence of needle in text.
-func searchSnippet(text, needle string) string {
+func findSnippet(text, needle string) string {
 	const around = 40
 	i := strings.Index(strings.ToLower(text), needle)
 	if i < 0 {
@@ -274,17 +274,17 @@ func reverse(ts []*gridwellv1.Tile) {
 	}
 }
 
-// SearchRow is a plugin row a search found by its facts alone: its id, the
+// FindRow is a plugin row a find found by its facts alone: its id, the
 // grid it sits on and its key there.
-type SearchRow struct {
+type FindRow struct {
 	ID, GridID int64
 	Key        string
 }
 
-// SearchPassing answers which of ids pass req's time and selection filters,
+// FindPassing answers which of ids pass req's time and selection filters,
 // each with the time an empty query orders by. A plugin's grid scope is its
 // caller's, the grids being contexts the plugin names.
-func (n *Namespace) SearchPassing(ids []int64, req *gridwellv1.SearchRequest) (map[int64]int64, error) {
+func (n *Namespace) FindPassing(ids []int64, req *gridwellv1.FindRequest) (map[int64]int64, error) {
 	out := map[int64]int64{}
 	if len(ids) == 0 {
 		return out, nil
@@ -312,10 +312,10 @@ func (n *Namespace) SearchPassing(ids []int64, req *gridwellv1.SearchRequest) (m
 	return out, err
 }
 
-// SearchRows lists this namespace's rows passing req's time and selection
+// FindRows lists this namespace's rows passing req's time and selection
 // filters, newest first, at most limit: all an empty query with no grid can
 // find, since an entry with no row has no time and is in no selection.
-func (n *Namespace) SearchRows(req *gridwellv1.SearchRequest, limit int) ([]SearchRow, error) {
+func (n *Namespace) FindRows(req *gridwellv1.FindRequest, limit int) ([]FindRow, error) {
 	f := tileFilter{ns: n.ns, req: req}
 	where, args := f.sql()
 	rows, err := n.s.db.Query(`SELECT t.id, t.grid_id, t.key FROM tiles t WHERE `+where+
@@ -323,8 +323,8 @@ func (n *Namespace) SearchRows(req *gridwellv1.SearchRequest, limit int) ([]Sear
 	if err != nil {
 		return nil, err
 	}
-	return collect(rows, func(rows *sql.Rows) (SearchRow, error) {
-		var r SearchRow
+	return collect(rows, func(rows *sql.Rows) (FindRow, error) {
+		var r FindRow
 		err := rows.Scan(&r.ID, &r.GridID, &r.Key)
 		return r, err
 	})

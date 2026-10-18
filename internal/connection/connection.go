@@ -864,12 +864,12 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 	}
 }
 
-// Search forwards the one find verb, filters and all. A grid_id or an id:
+// Find forwards the one find verb, filters and all. A grid_id or an id:
 // query routes to its connection; free text fans out to live connections only,
 // never dialing the world.
-func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	if ref := cmp.Or(req.GridId, rpc.ParseSearchQuery(req.Query).ID); ref != "" {
-		return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.Search, prependSearchResp)
+func (s *Server) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
+	if ref := cmp.Or(req.GridId, rpc.ParseFindQuery(req.Query).ID); ref != "" {
+		return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.Find, prependFindResp)
 	}
 	s.mu.Lock()
 	hops := make([]forward, 0, len(s.live))
@@ -878,22 +878,22 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	}
 	s.mu.Unlock()
 	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
-	out := &gridwellv1.SearchResponse{}
+	out := &gridwellv1.FindResponse{}
 	for _, hp := range hops {
-		// Each hop is bounded by rpc.SearchHopTimeout, shared with the
-		// node's fan-out, so one hung tunnel cannot stall the search.
-		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := hp.client.Search(hctx, req)
+		// Each hop is bounded by rpc.FindHopTimeout, shared with the
+		// node's fan-out, so one hung tunnel cannot stall the find.
+		hctx, cancel := context.WithTimeout(ctx, rpc.FindHopTimeout)
+		resp, err := hp.client.Find(hctx, req)
 		cancel()
-		q := prependSearchResp(hp.ns, rpc.SearchHop(resp, err))
+		q := prependFindResp(hp.ns, rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
-func prependSearchResp(ns string, resp *gridwellv1.SearchResponse) *gridwellv1.SearchResponse {
-	return rpc.QualifySearchResponse(ns, resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
+func prependFindResp(ns string, resp *gridwellv1.FindResponse) *gridwellv1.FindResponse {
+	return rpc.QualifyFindResponse(ns, resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
 		return rpc.TransitQualifyTiles(ns, ts)
 	})
 }

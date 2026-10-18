@@ -202,7 +202,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   when the row was made; `updated_at`, when anything last wrote it (a move,
   framing, a freeze, content); `content_at`, when its content last changed,
   written only by the version bump (`bumpTileVersion`) and read as
-  `created_at` until then. Search filters on them, on a grid (`grid_id`,
+  `created_at` until then. Find filters on them, on a grid (`grid_id`,
   `recurse` through owned wells, never a link) and on the selection; the
   filters AND, an empty query with one lists what passes, newest first, and
   they are the node's, applied to the rows it holds (`store.tileFilter`),

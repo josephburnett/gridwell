@@ -423,9 +423,9 @@ func TestGmailPluginReadsItsCredentialPathsAndCachesNoSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Non-vacuous: the plugin did cache its walk there, and what it cached is
-	// what was searched.
+	// what was looked through.
 	if files == 0 {
-		t.Fatal("the state directory is empty; nothing was searched for a secret")
+		t.Fatal("the state directory is empty; nothing was scanned for a secret")
 	}
 }
 

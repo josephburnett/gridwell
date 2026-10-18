@@ -455,9 +455,9 @@ message GetTileRequest {
   string tile_id = 1;
 }
 
-// Search is the one generic find verb. Every plugin may implement it, and
+// Find is the one generic find verb. Every plugin may implement it, and
 // Unimplemented means no results. The query is free text with a small selector
-// grammar owned by one shared parser (rpc.ParseSearchQuery): id:<tile-id> is an
+// grammar owned by one shared parser (rpc.ParseFindQuery): id:<tile-id> is an
 // exact-id lookup, and anything else is plugin-interpreted text matching
 // against names, bodies, addresses, or whatever the plugin's data means. Each
 // result carries the tile plus its containing-well chain from the plugin's root
@@ -469,14 +469,14 @@ message GetTileRequest {
 // that qualified id answers, and an id: lookup or a grid_id routes on its id the
 // same way; otherwise an empty scope fans out to every configured plugin in
 // config order. A transit hop forwards the query to the remote node, which
-// fans out again, so an unscoped search recurses through every connected node
+// fans out again, so an unscoped find recurses through every connected node
 // and results come back qualified like every other id.
 //
 // The filters narrow every hit and AND together. They are the node's, applied
 // to the rows it holds, never a plugin's: the plugin API has none. A query may
 // be empty when a filter is given, and then every tile passing the filters is
 // a hit, the newest first by the time filtered on (created when none is).
-message SearchRequest {
+message FindRequest {
   string query = 1;
   // limit caps the results per answering plugin; 0 means the plugin's
   // default.
@@ -505,22 +505,22 @@ message TimeRange {
   int64 from = 1;
   int64 to = 2;
 }
-message SearchResult {
+message FindResult {
   Tile tile = 1;
   repeated Tile path = 2;
   string snippet = 3;
   double score = 4;
 }
-message SearchResponse {
-  repeated SearchResult results = 1;
+message FindResponse {
+  repeated FindResult results = 1;
   // skipped is every namespace a fan-out asked and did not hear from, so a
   // shorter list never passes for a whole one. Unimplemented is no results,
   // not a skip.
-  repeated SearchSkip skipped = 2;
+  repeated FindSkip skipped = 2;
 }
-// SearchSkip names one namespace a fan-out went without, qualified like a
+// FindSkip names one namespace a fan-out went without, qualified like a
 // health event's plugin_uuid, and why.
-message SearchSkip {
+message FindSkip {
   string namespace = 1;
   string reason    = 2;
 }
@@ -988,7 +988,7 @@ service Gridwell {
   rpc GetGrid(GetGridRequest)               returns (GetGridResponse);
   rpc GetTile(GetTileRequest)               returns (TileResponse);
   rpc GetTilePreview(GetTilePreviewRequest) returns (GetTilePreviewResponse);
-  rpc Search(SearchRequest)                 returns (SearchResponse);
+  rpc Find(FindRequest)                 returns (FindResponse);
 
   // ── Content streams (the one way content bytes move; see the messages) ────
   rpc ReadContent(ReadContentRequest)        returns (stream ContentChunk);

@@ -48,7 +48,7 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
 - **Keys are forever**: a key names the same thing for the life of the
   plugin. Changing your key scheme orphans every stored reference.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
-  `ReadContent`. Search = no results, ServeContent = 404, Watch = the
+  `ReadContent`. Find = no results, ServeContent = 404, Watch = the
   node learns of changes only when it next lists, WriteContent =
   read-only (leave `writable` unset), GetPreview = no thumbnail,
   Delete = refused. Unimplemented means the verb, not the key: the node

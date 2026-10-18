@@ -87,7 +87,7 @@ record shapes. Everything else derives from it:
 | Group | Methods |
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
-| Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Search` |
+| Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Find` |
 | Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
@@ -96,7 +96,7 @@ record shapes. Everything else derives from it:
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
 
-`Search` is the one find verb: free text, or `id:` for the exact locate,
+`Find` is the one find verb: free text, or `id:` for the exact locate,
 narrowed by filters the node applies to the rows it holds — a grid and
 everything under it, a range on each of a row's three times (made, last
 written, content last changed), and the selection. A `grid_id` routes like a

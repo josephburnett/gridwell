@@ -38,7 +38,7 @@ const (
 	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
 	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
 	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
-	Gridwell_Search_FullMethodName            = "/gridwell.v1.Gridwell/Search"
+	Gridwell_Find_FullMethodName              = "/gridwell.v1.Gridwell/Find"
 	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
 	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
 	Gridwell_ServeContent_FullMethodName      = "/gridwell.v1.Gridwell/ServeContent"
@@ -75,7 +75,7 @@ type GridwellClient interface {
 	GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error)
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
-	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
+	Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
 	WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error)
@@ -182,10 +182,10 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewR
 	return out, nil
 }
 
-func (c *gridwellClient) Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error) {
+func (c *gridwellClient) Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SearchResponse)
-	err := c.cc.Invoke(ctx, Gridwell_Search_FullMethodName, in, out, cOpts...)
+	out := new(FindResponse)
+	err := c.cc.Invoke(ctx, Gridwell_Find_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +382,7 @@ type GridwellServer interface {
 	GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error)
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
-	Search(context.Context, *SearchRequest) (*SearchResponse, error)
+	Find(context.Context, *FindRequest) (*FindResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
 	WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error
@@ -437,8 +437,8 @@ func (UnimplementedGridwellServer) GetTile(context.Context, *GetTileRequest) (*T
 func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
 }
-func (UnimplementedGridwellServer) Search(context.Context, *SearchRequest) (*SearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
+func (UnimplementedGridwellServer) Find(context.Context, *FindRequest) (*FindResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Find not implemented")
 }
 func (UnimplementedGridwellServer) ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error {
 	return status.Error(codes.Unimplemented, "method ReadContent not implemented")
@@ -618,20 +618,20 @@ func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SearchRequest)
+func _Gridwell_Find_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).Search(ctx, in)
+		return srv.(GridwellServer).Find(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_Search_FullMethodName,
+		FullMethod: Gridwell_Find_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).Search(ctx, req.(*SearchRequest))
+		return srv.(GridwellServer).Find(ctx, req.(*FindRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -888,8 +888,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_GetTilePreview_Handler,
 		},
 		{
-			MethodName: "Search",
-			Handler:    _Gridwell_Search_Handler,
+			MethodName: "Find",
+			Handler:    _Gridwell_Find_Handler,
 		},
 		{
 			MethodName: "PlaceTile",
