@@ -20,7 +20,7 @@ test('the bar crumb renames and zooms a live url pane; no native pill exists', a
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

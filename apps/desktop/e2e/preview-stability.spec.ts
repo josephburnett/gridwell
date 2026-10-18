@@ -19,13 +19,13 @@ test('a descend/ascend round trip leaves every preview byte-identical; a reframe
   const cy = Math.round(a.cy) - 1;
 
   // A well with content, and an unrelated markdown tile beside it.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx + 1, cy);
   const well = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   await gw.descendCell(cx, cy);
-  await gw.openPalette();
+  await gw.openMenu();
   const inner = await gw.focused();
   await gw.dragCreate('markdown', Math.round(inner.cx), Math.round(inner.cy) - 1);
   await gw.middleClickCell(Math.round(inner.cx), Math.round(inner.cy) + 1);

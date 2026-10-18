@@ -16,7 +16,7 @@ test('back ascends a descent; forward re-descends; pans never make entries', asy
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   const child = await gw.focused();

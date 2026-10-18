@@ -20,7 +20,7 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   const grid = f.gridID;
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await expect
@@ -158,7 +158,7 @@ test('a shell url click is not also delivered to the terminal application', asyn
   const grid = f.gridID;
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await expect
@@ -254,7 +254,7 @@ test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async
   const grid = f.gridID;
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await expect

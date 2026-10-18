@@ -206,13 +206,13 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     .toBe('my far place');
   await expect.poll(async () => (await gw.barName()).label).toBe('my far place');
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.expandPlugins();
   await expect
     .poll(
       async () => {
-        const pal = await window.evaluate(() => (window as any).__gridwellTest.palette());
-        return (pal.items ?? [])
+        const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
+        return (menu.items ?? [])
           .filter((i: any) => i.isPlugin)
           .map((i: any) => i.label)
           .join(',');
@@ -248,9 +248,9 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   // Back to the remote pane: drag markdown from its menu into the local
   // sibling. The refusal is visible and no tile appears.
   await gw.clickScreen(inside.x + 20, inside.y + 20);
-  await gw.openPalette();
-  const pal = await window.evaluate(() => (window as any).__gridwellTest.palette());
-  const md = pal.items.find((i: any) => !i.isPlugin && i.kind === 'markdown');
+  await gw.openMenu();
+  const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
+  const md = menu.items.find((i: any) => !i.isPlugin && i.kind === 'markdown');
   expect(md, 'the remote menu offers markdown').toBeTruthy();
   const target = await gw.cellCenter(sib.id, Math.round(sib.cx) + 1, Math.round(sib.cy) + 1);
   const before = ((await gw.getGrid(f.gridID)).tiles ?? []).length;
@@ -399,10 +399,10 @@ test('a menu read the network swallows does not latch the remote menu empty', as
     await route.continue();
   });
 
-  await gw.openPalette();
-  const pal = await window.evaluate(() => (window as any).__gridwellTest.palette());
-  expect(pal.open, 'the remote pane has its menu open').toBe(true);
-  expect(pal.toggle.present, 'the swallowed read leaves no plugin section to unfold').toBe(false);
+  await gw.openMenu();
+  const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
+  expect(menu.open, 'the remote pane has its menu open').toBe(true);
+  expect(menu.toggle.present, 'the swallowed read leaves no plugin section to unfold').toBe(false);
 
   // No user action beyond keeping the menu open: the bounded read gives up,
   // says so on the strip, and the draw of the menu after the backstop tick
@@ -414,11 +414,11 @@ test('a menu read the network swallows does not latch the remote menu empty', as
       async () => {
         const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
         if (errs.notices.some((n: any) => n.source === 'rpc:Handshake')) sawNotice = true;
-        const p = await window.evaluate(() => (window as any).__gridwellTest.palette());
+        const p = await window.evaluate(() => (window as any).__gridwellTest.menu());
         if (p.toggle?.present && !p.toggle.expanded) {
           await window.mouse.click(p.toggle.x + p.toggle.w / 2, p.toggle.y + p.toggle.h / 2);
         }
-        const now = await window.evaluate(() => (window as any).__gridwellTest.palette());
+        const now = await window.evaluate(() => (window as any).__gridwellTest.menu());
         return (now.items ?? [])
           .filter((i: any) => i.isPlugin)
           .map((i: any) => i.label)
@@ -454,8 +454,8 @@ test('a menu read that fails is not asked again every frame', async ({ gw, windo
 
   // Reading the menu asks for it, and the failure's notice raises the strip
   // and moves the + circle, so the menu is opened only once the strip is up.
-  const palette = () => window.evaluate(() => (window as any).__gridwellTest.palette());
-  await palette();
+  const menu = () => window.evaluate(() => (window as any).__gridwellTest.menu());
+  await menu();
   await expect
     .poll(
       async () =>
@@ -465,14 +465,14 @@ test('a menu read that fails is not asked again every frame', async ({ gw, windo
       { timeout: 10_000 },
     )
     .toBe(true);
-  await gw.openPalette();
+  await gw.openMenu();
   const before = failed;
 
   // Two seconds of the open menu is over a hundred frames if each failure
   // draws the next; the backstop is 30s, so none of them is its tick.
   await window.waitForTimeout(2_000);
   expect(
-    { open: (await palette()).open, reasked: failed - before },
+    { open: (await menu()).open, reasked: failed - before },
     'the open menu, and Handshake reads for the dark far node while it was open',
   ).toEqual({ open: true, reasked: 0 });
   await window.unroute(`**/${SERVICE}/Handshake`);

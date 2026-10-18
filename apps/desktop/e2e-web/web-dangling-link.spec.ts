@@ -33,7 +33,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     const gw = new GridwellDriver(page, served1.origin);
     await gw.waitIdle();
     const f = await gw.focused();
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.dragPluginLink('files', Math.round(f.cx), Math.round(f.cy));
     await gw.waitIdle();
     const seeded: any = await gw.getGrid(f.gridID);

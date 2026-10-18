@@ -11,7 +11,7 @@ test('the canvas paints the rows the textarea soft-wraps', async ({ gw, window }
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');

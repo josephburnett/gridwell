@@ -149,7 +149,7 @@ func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b 
 		"history":     history,
 		"gen":         float64(gen),
 		// This frame's gesture-hide verdict, so a view placed mid-drag or
-		// under the palette starts parked. The registry never guesses.
+		// under the + menu starts parked. The registry never guesses.
 		"hidden": hidden,
 		// The renderer owns focus, and a view goes live on paths that are not
 		// a gesture on the focused pane, so this cannot be inferred. Chromium

@@ -40,7 +40,7 @@ test('the node hears which grids the panes and their previews show, and hears th
 
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx, wy);
   const well = tileAt(await gw.getGrid(rootGrid), 'well', wx, wy);
   expect(well, 'the well persisted').toBeTruthy();

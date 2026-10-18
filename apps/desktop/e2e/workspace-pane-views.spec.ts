@@ -62,9 +62,9 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   const wellBefore = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy)!;
@@ -131,9 +131,9 @@ test('a reopened pane ascends onto the view it left the level below at', async (
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
 
@@ -150,7 +150,7 @@ test('a reopened pane ascends onto the view it left the level below at', async (
   z = await gw.focused();
   const ix = Math.round(z.cx);
   const iy = Math.round(z.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', ix, iy);
   const outer = await gw.focused();
   const outerView = { cx: outer.cx, cy: outer.cy, zoom: outer.zoom };

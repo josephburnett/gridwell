@@ -19,7 +19,7 @@ test('ctrl+right-drag links inside one namespace; plain right-drag still clones'
 
   // Distinctive bytes make both "the link resolves to the source" and "the
   // source is byte-identical afterwards" observable.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const src = tileAt(await gw.getGrid(grid), 'text', cx, cy);
   expect(src, 'created the source text tile').toBeTruthy();
@@ -81,7 +81,7 @@ test('ctrl+right-drag on a well links the same child grid, not a copy of it', as
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(grid), 'well', cx, cy);
   expect(well, 'created the source well').toBeTruthy();

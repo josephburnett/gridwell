@@ -564,10 +564,10 @@ type dragState struct {
 	originScreenX float64
 	originScreenY float64
 
-	// item is a palette drag's grabbed entry: a primitive to create or a plugin
+	// item is a menu drag's grabbed entry: a primitive to create or a plugin
 	// to mount as an exit-well link.
 	isTemplate bool
-	item       paletteItem
+	item       menuItem
 
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string

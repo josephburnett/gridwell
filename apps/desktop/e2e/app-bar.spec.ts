@@ -34,14 +34,14 @@ test('one bar rides the focused pane, in a band reserved once', async ({ gw, win
   }
 
   // The + menu rides the bar, so it sits at the focused pane's right edge.
-  const pal = await gw.palette();
-  expect(pal.plusX, 'the + menu is beside the pane you are working in').toBeGreaterThan(focused.x);
-  expect(pal.plusX).toBeLessThan(focused.x + focused.w);
-  expect(pal.plusY).toBeGreaterThan(bar2.top);
+  const menu = await gw.menu();
+  expect(menu.plusX, 'the + menu is beside the pane you are working in').toBeGreaterThan(focused.x);
+  expect(menu.plusX).toBeLessThan(focused.x + focused.w);
+  expect(menu.plusY).toBeGreaterThan(bar2.top);
 
   await window.mouse.click(other.x + other.w - 8, bar2.top + bar2.height / 2, { button: 'right' });
   await gw.waitIdle();
-  expect((await gw.palette()).open, 'no + menu beside the bar').toBe(false);
+  expect((await gw.menu()).open, 'no + menu beside the bar').toBe(false);
   const afterQuiet = await gw.panes();
   expect(afterQuiet.find((p) => p.focused)?.id, 'focus stayed put').toBe(focused.id);
   expect(afterQuiet.length, 'no pane closed, none zoomed').toBe(2);

@@ -35,8 +35,8 @@ test('a link to a clone takes over its source session, and the source takes it b
   const shellText = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.shellText());
   const slot = () => window.evaluate(() => (window as any).__gridwellTest.barSlot());
   const clickSlot = async () => {
-    const pal = await gw.palette();
-    await gw.clickScreen(pal.plusX, pal.plusY);
+    const menu = await gw.menu();
+    await gw.clickScreen(menu.plusX, menu.plusY);
   };
 
   await gw.enterPlugin('home');
@@ -52,7 +52,7 @@ test('a link to a clone takes over its source session, and the source takes it b
 
   // The source, live in the left pane.
   await gw.focusPane(left);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();

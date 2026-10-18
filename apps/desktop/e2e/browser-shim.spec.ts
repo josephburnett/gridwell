@@ -49,7 +49,7 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
@@ -94,7 +94,7 @@ test('xdg-open under a desktop session opens an ephemeral url visit below', asyn
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');

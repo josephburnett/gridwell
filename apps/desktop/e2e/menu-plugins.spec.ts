@@ -9,7 +9,7 @@ import { tileAt } from './oracle';
 //     where the menu was opened;
 //   - dragging a swatch into a grid drops a dashed exit-well link.
 //
-// These behaviors cross the seam from wasm to server, through paletteItems,
+// These behaviors cross the seam from wasm to server, through menuItems,
 // descend and CreateWell, the home store, and SQLite, and no unit layer sees the
 // composition.
 
@@ -70,12 +70,12 @@ test('a plugin anchor rides in the URL path and survives a reload (issue #193)',
 
 test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
   await gw.plugins();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.expandPlugins();
-  const pal = await gw.palette();
+  const menu = await gw.menu();
 
-  const plugins = pal.items.filter((i) => i.isPlugin);
-  const primitives = pal.items.filter((i) => !i.isPlugin);
+  const plugins = menu.items.filter((i) => i.isPlugin);
+  const primitives = menu.items.filter((i) => !i.isPlugin);
   // One swatch per declared doorway. The node's home and the connection's far
   // home are places and get a row each, in server.yaml order, and every declared
   // entry rides directly after the row that declared it, wearing its instance's
@@ -88,7 +88,7 @@ test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
   ).toEqual(['home', 'trash (home)', 'second']);
   expect(primitives.length, 'the primitive swatches are still there').toBeGreaterThanOrEqual(5);
 
-  expect(pal.items.slice(0, plugins.length).every((i) => i.isPlugin)).toBe(true);
+  expect(menu.items.slice(0, plugins.length).every((i) => i.isPlugin)).toBe(true);
   const pluginRowY = Math.max(...plugins.map((i) => i.y));
   const primitiveRowY = Math.min(...primitives.map((i) => i.y));
   expect(pluginRowY, 'plugin row is above the primitive row').toBeLessThan(primitiveRowY);
@@ -119,7 +119,7 @@ test('dragging a plugin swatch into the grid drops a dashed link', async ({ gw }
   const cx = Math.round(f.cx) + 1;
   const cy = Math.round(f.cy) + 1;
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragPluginLink('second', cx, cy);
 
   const link = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
@@ -138,9 +138,9 @@ test('a menu row wears the same face in the bar: a globe for a connection, a gri
   gw,
 }) => {
   await gw.enterPlugin('home');
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.expandPlugins();
-  const rows = (await gw.palette()).items.filter((i) => i.isPlugin && i.rootGridID);
+  const rows = (await gw.menu()).items.filter((i) => i.isPlugin && i.rootGridID);
   const home = rows.find((r) => r.label === 'home' || r.kind === 'home')!;
   const conn = rows.find((r) => r.kind === 'connection')!;
   expect(home, 'the home plugin has a menu row').toBeTruthy();

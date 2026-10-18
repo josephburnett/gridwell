@@ -8,7 +8,7 @@ import (
 )
 
 // The line-icon vocabulary: the shared glyph primitives, the per-kind glyphs
-// the palette overlays on a swatch, and the delete trashcan. Pure canvas
+// the + menu overlays on a swatch, and the delete trashcan. Pure canvas
 // drawing, no App state. Every identity glyph shares one visual spec so the
 // creation menu reads as a set, bracketed by beginGlyph and endGlyph.
 

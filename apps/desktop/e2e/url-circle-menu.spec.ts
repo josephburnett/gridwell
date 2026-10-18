@@ -21,7 +21,7 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
   const grid = f.gridID;
 
   // Drag-create lands the tile bare, so the first descent prompts.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

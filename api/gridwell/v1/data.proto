@@ -594,7 +594,7 @@ message HandshakeResponse {
   // row with kind "connection", after the home and the content plugins.
   repeated ConnectionInfo connections = 13;
   // shells_disabled: this node refuses shell tiles outright, from server.yaml's
-  // disable_shells. The client removes the shell primitive from the + palette,
+  // disable_shells. The client removes the shell primitive from the + menu,
   // and the server refuses CreateTile(kind=shell) and OpenShell before routing,
   // on any grid. Only a home holds shells: a plugin creates no tile at all (its
   // CreateTile is Unimplemented) and plugin.v1 entry kinds have no shell. It is

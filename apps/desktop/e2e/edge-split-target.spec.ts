@@ -15,7 +15,7 @@ test('a right-press on the pane-tile outline at the window edge splits like an i
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   expect(tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy), 'pane tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);

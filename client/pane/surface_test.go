@@ -64,7 +64,7 @@ func TestParkSurfacePerPane(t *testing.T) {
 		{"tile resize", CanvasGesture{TileResize: true}, true},
 		{"pane swap or split", CanvasGesture{PaneGesture: true}, true},
 		{"divider resize", CanvasGesture{PaneResize: true}, true},
-		{"palette open", CanvasGesture{MenuOpen: true}, true},
+		{"menu open", CanvasGesture{MenuOpen: true}, true},
 		{"url modal open", CanvasGesture{ModalOpen: true}, true},
 	}
 	for _, c := range cases {
@@ -98,7 +98,7 @@ func TestCanvasOwnsPointer(t *testing.T) {
 		{"tile resize", CanvasGesture{TileResize: true}, true},
 		{"pane swap or split", CanvasGesture{PaneGesture: true}, true},
 		{"divider resize", CanvasGesture{PaneResize: true}, true},
-		{"palette open", CanvasGesture{MenuOpen: true}, true},
+		{"menu open", CanvasGesture{MenuOpen: true}, true},
 		{"url modal open", CanvasGesture{ModalOpen: true}, true},
 	}
 	for _, c := range cases {

@@ -210,7 +210,7 @@ func MoveForbidden(sameGrid, crossPlugin, srcHost, dstHost bool) bool {
 type Intent int
 
 const (
-	// IntentMove is a left-drag, and the zero value a palette template drag
+	// IntentMove is a left-drag, and the zero value a menu template drag
 	// leaves unset.
 	IntentMove Intent = iota
 	IntentCopy        // a right-drag

@@ -25,10 +25,10 @@ test.describe('a plugin that declares no doorway', () => {
       pls.find((p) => p.label === 'home')!.rootGridID,
     );
 
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.expandPlugins();
-    const pal = await gw.palette();
-    const swatch = pal.items.find((i) => i.isPlugin && i.label === 'noroot');
+    const menu = await gw.menu();
+    const swatch = menu.items.find((i) => i.isPlugin && i.label === 'noroot');
     expect(swatch, 'a plugin with no doorway contributes no swatch').toBeFalsy();
 
     const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
@@ -56,11 +56,11 @@ test.describe('a plugin that cannot serve its source', () => {
     );
     expect(broken.menuEntries, 'and none of its entries').toHaveLength(0);
 
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.expandPlugins();
-    const pal = await gw.palette();
+    const menu = await gw.menu();
     expect(
-      pal.items.find((i) => i.isPlugin && i.label === 'typo'),
+      menu.items.find((i) => i.isPlugin && i.label === 'typo'),
       'a broken plugin has a swatch, which is where its reason is read',
     ).toBeTruthy();
     await window.keyboard.press('Escape');

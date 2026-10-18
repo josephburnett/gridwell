@@ -17,7 +17,7 @@ test('a left drag whose release is never seen still commits and unhides its tile
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
 
   const tile = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy);
@@ -67,7 +67,7 @@ test('a left drag whose release is never seen still commits and unhides its tile
       const state = {
         ghost: t.ghost(),
         idle: t.idleDetail(),
-        paletteOpen: t.palette().open,
+        menuOpen: t.menu().open,
         from,
         to,
         // The strip is layout: a notice up at the press moved every pane.

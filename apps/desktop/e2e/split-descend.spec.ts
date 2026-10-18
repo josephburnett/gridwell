@@ -11,7 +11,7 @@ test('ctrl+click descends in a new split pane; plain click stays in place', asyn
   const cx = Math.round(before.cx);
   const cy = Math.round(before.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
 
   await gw.ctrlDescendCell(cx, cy);

@@ -17,7 +17,7 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   const child = well.childGridId as string;

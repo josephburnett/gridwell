@@ -13,13 +13,13 @@ test('an edit typed right before leaving the doc still persists', async ({ gw, w
   const cy = Math.round(f.cy) - 1;
 
   // Two docs: A, the one to strand, and B, where the pane goes next.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const docA = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   await gw.descendCell(cx, cy);
   await gw.typeText('the doc');
   await gw.ascendViaCrumb();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx + 1, cy);
   await gw.descendCell(cx + 1, cy);
   await gw.typeText('the other doc');

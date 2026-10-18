@@ -25,7 +25,7 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/?b81=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

@@ -47,7 +47,7 @@ type Config struct {
 	Password string
 	// DisableShells, from server.yaml, is the one server-side owner of the
 	// node-wide shell refusal; Handshake carries it so the client drops the
-	// shell primitive from the + palette.
+	// shell primitive from the + menu.
 	DisableShells bool
 	// Home is the Gridwell home node.Options names; the trace door writes its
 	// dumps under it. Empty refuses a dump rather than guessing a directory.
@@ -69,7 +69,7 @@ type Server struct {
 
 	// infoCache memoizes each plugin's first successful Info handshake by uuid,
 	// because its facts are stable for the plugin's lifetime and without it a
-	// slow remote makes every palette open pay pluginInfoTimeout. Failures are
+	// slow remote makes every menu open pay pluginInfoTimeout. Failures are
 	// never cached.
 	infoMu    sync.Mutex
 	infoCache map[string]*pb.InfoResponse

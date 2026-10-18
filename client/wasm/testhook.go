@@ -100,7 +100,7 @@ func (a *App) installTestHook() {
 		// is canvas pixels.
 		"theme":         js.FuncOf(func(js.Value, []js.Value) any { return a.themeName.String() }),
 		"plugins":       js.FuncOf(a.thPlugins),
-		"palette":       js.FuncOf(a.thPalette),
+		"menu":          js.FuncOf(a.thMenu),
 		"ghost":         js.FuncOf(a.thGhost),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
 		"tileAt":        js.FuncOf(a.thTileAt),
@@ -742,7 +742,7 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 }
 
 // pluginStatusName is the stable string for a row's pluginhealth class,
-// shared by thPlugins/thPalette; "" for a row pluginhealth does not classify.
+// shared by thPlugins/thMenu; "" for a row pluginhealth does not classify.
 func pluginStatusName(pl *gridwellv1.PluginInfo) string {
 	st, classified := pluginhealth.Classify(pl)
 	if !classified {
@@ -757,20 +757,20 @@ func pluginStatusName(pl *gridwellv1.PluginInfo) string {
 	return "enterable"
 }
 
-// thPalette returns the creation palette for the focused pane. The rects are
-// the ones paletteTileIndexAt hit-tests, so a click at an entry's center lands
+// thMenu returns the + menu for the focused pane. The rects are
+// the ones menuTileIndexAt hit-tests, so a click at an entry's center lands
 // on that swatch.
-func (a *App) thPalette(js.Value, []js.Value) any {
+func (a *App) thMenu(js.Value, []js.Value) any {
 	p, _, ok := a.focusedPaneRect()
 	if !ok {
 		return map[string]any{"open": false}
 	}
 	px, py := a.plusButtonCenter()
-	l, show := a.paletteLayoutAndShow(p)
-	items := a.paletteItems(p)
+	l, show := a.menuLayoutAndShow(p)
+	items := a.menuItems(p)
 	entries := make([]any, 0, len(items))
 	for i, item := range items {
-		tx, ty, tw, th := a.paletteTileRect(p, i)
+		tx, ty, tw, th := a.menuTileRect(p, i)
 		e := map[string]any{
 			"index":    i,
 			"isPlugin": item.isPlugin,
@@ -785,7 +785,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 			e["uuid"] = item.plugin.Uuid
 			e["rootGridID"] = item.plugin.RootGridId
 			e["status"] = pluginStatusName(item.plugin)
-			// The exact selector drawPaletteItem renders.
+			// The exact selector drawMenuItem renders.
 			e["glyph"] = door.RowGlyph(item.plugin)
 		} else {
 			e["kind"] = templateKindName(item.primitive)
@@ -805,7 +805,7 @@ func (a *App) thPalette(js.Value, []js.Value) any {
 		"plusY": py,
 		"items": entries,
 		// The plugin section's disclosure strip. The rect is the one
-		// pointInPaletteToggle hit-tests, so a click at its center works the
+		// pointInMenuToggle hit-tests, so a click at its center works the
 		// control.
 		"toggle": map[string]any{
 			"present":  show.Toggle,

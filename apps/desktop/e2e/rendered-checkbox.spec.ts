@@ -18,7 +18,7 @@ test('clicking rendered checkboxes toggles the source markers and persists', asy
   const cy = Math.round(f.cy);
   const grid = f.gridID;
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.pasteText('# Todo\n\n- [ ] alpha\n- [x] beta\n\n```\n- [ ] fenced, not a task\n```');

@@ -18,7 +18,7 @@ test('a revived url tile can still go back', async ({ electronApp, window, gw })
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

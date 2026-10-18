@@ -176,7 +176,7 @@ test('the wide pane-tile crumb is a band lighter than the ink it carries', async
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx, cy);
   await gw.descendCell(cx, cy);
   await expect
@@ -201,9 +201,9 @@ test("the light circle's rim is a casing, not the bar's lettering", async ({ gw,
   // The rim lifts the circle off the band. Worn in the lettering ink it is a
   // near-black ring around a saturated chip, which is what the dark palette
   // looks like, not this one.
-  const pal = await gw.palette();
+  const menu = await gw.menu();
   expect(
-    await darkestIn(window, pal.plusX - 1, pal.plusY - 14, 3, 14),
+    await darkestIn(window, menu.plusX - 1, menu.plusY - 14, 3, 14),
     'the light circle carries no near-black ring',
   ).toBeGreaterThan(120);
 });

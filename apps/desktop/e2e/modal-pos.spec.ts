@@ -11,7 +11,7 @@ test('the url modal centers on the active pane, not the screen', async ({ gw, wi
   await gw.focusPane(right);
 
   // Clicking the swatch, rather than dragging it, opens the modal.
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
 
   const card = await window.locator('#gw-url-form').boundingBox();

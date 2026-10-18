@@ -50,7 +50,7 @@ test('left-drag links a well across nodes; the source stays; deleting the link n
   // The source well goes on the far node. A link can point from home into the
   // far node; the far node cannot route back into this node's home.
   await gw.clickScreen(b.x + 20, b.y + 20);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', tx, ty);
   const src = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
   expect(src, 'source well created').toBeTruthy();
@@ -83,9 +83,9 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
   await gw.clickScreen(b.x + 20, b.y + 20);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', tx, ty);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', tx - 1, ty);
   const srcWell = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
   const srcText = tileAt(await gw.getGrid(b.gridID), 'text', tx - 1, ty)!;
@@ -124,7 +124,7 @@ test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }
   const f = await gw.focused();
   const tx = Math.round(f.cx);
   const ty = Math.round(f.cy) - 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragPluginLink('second', tx, ty);
 
   const mount = tileAt(await gw.getGrid(f.gridID), 'well', tx, ty)!;
@@ -146,7 +146,7 @@ test('a cross-node clone reads no listing back; the relayed event lands the copy
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
   await gw.clickScreen(a.x + 20, a.y + 20);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   expect(tileAt(await gw.getGrid(a.gridID), 'text', cx, cy), 'source created').toBeTruthy();
   await gw.waitIdle();

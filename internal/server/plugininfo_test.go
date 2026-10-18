@@ -169,7 +169,7 @@ func (p *countingInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRes
 
 // TestListPluginsCachesInfo: repeat Handshake calls serve the handshake from
 // the per-uuid cache — the plugin is asked exactly once. Before the cache,
-// every palette open re-handshook every plugin (up to pluginInfoTimeout each
+// every menu open re-handshook every plugin (up to pluginInfoTimeout each
 // for a slow remote).
 func TestListPluginsCachesInfo(t *testing.T) {
 	fake := &countingInfoPlugin{}

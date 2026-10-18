@@ -34,7 +34,7 @@ type ServerConfig struct {
 	// Shell is the login shell for shell tiles; "" means the host default.
 	Shell string `yaml:"shell,omitempty"`
 	// DisableShells removes shell tiles entirely: no shell primitive in the
-	// + palette, CreateTile(kind=shell) and OpenShell refused in every
+	// + menu, CreateTile(kind=shell) and OpenShell refused in every
 	// namespace, existing tiles left with their preview and placement.
 	DisableShells bool `yaml:"disable_shells,omitempty"`
 	// Connections declares the remote nodes. Dropping a stanza does not

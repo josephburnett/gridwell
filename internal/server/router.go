@@ -320,7 +320,7 @@ func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.Searc
 // that node (spellReferences).
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
-	// The node-wide shell refusal is the authority; the palette only hides.
+	// The node-wide shell refusal is the authority; the menu only hides.
 	if rt.srv.cfg.DisableShells && m.Tile.GetKind() == rpc.KindShell {
 		return nil, status.Error(gcodes.PermissionDenied,
 			"shell tiles are disabled on this node (server.yaml disable_shells)")

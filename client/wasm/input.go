@@ -184,7 +184,7 @@ func (a *App) paneAtScreen(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	return nil, pane.Rect{}, false
 }
 
-// menuPaneForPointer routes an open palette's pointer events to the menu's own
+// menuPaneForPointer routes an open menu's pointer events to the menu's own
 // pane, never the pane under the cursor: every swatch rect is laid out for the
 // menu's pane, so routing by the pointer would move focus out of the menu.
 func (a *App) menuPaneForPointer() (*pane.Pane, pane.Rect, bool) {
@@ -408,15 +408,15 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// Routed before pane resolution: resolving the pane under the popover first
 	// would close the very menu being used. Missing a swatch swallows the click.
 	if mp, mr, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 0 {
-		if a.pointInPalette(mp, sx, sy) {
+		if a.pointInMenu(mp, sx, sy) {
 			// Not a swatch, so no drag arms; it changes only the menu.
-			if a.pointInPaletteToggle(mp, sx, sy) {
+			if a.pointInMenuToggle(mp, sx, sy) {
 				a.menu.TogglePlugins()
 				a.draw()
 				return nil
 			}
-			if idx := a.paletteTileIndexAt(mp, sx, sy); idx >= 0 {
-				a.startPaletteDrag(mp, mr, idx, sx, sy)
+			if idx := a.menuTileIndexAt(mp, sx, sy); idx >= 0 {
+				a.startMenuDrag(mp, mr, idx, sx, sy)
 			}
 			return nil
 		}
@@ -569,12 +569,12 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		a.onRightMove(sx, sy)
 		return nil
 	}
-	// Palette hover routes through the same resolver the press uses, because
+	// Menu hover routes through the same resolver the press uses, because
 	// the swatches are laid out for the menu's own pane.
 	if a.menu.IsOpen() {
 		hover := -1
 		if mp, _, ok := a.menuPaneForPointer(); ok {
-			hover = a.paletteTileIndexAt(mp, sx, sy)
+			hover = a.menuTileIndexAt(mp, sx, sy)
 		}
 		if a.menu.SetHover(hover) {
 			a.draw()
@@ -628,7 +628,7 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 	}
 	size := d.srcCellSize
 	if size <= 0 {
-		// A template drag has no srcCellSize: the palette's lives in screen px,
+		// A template drag has no srcCellSize: the menu's lives in screen px,
 		// not cells. A right-drag clone keeps the bare cellPx fallback.
 		size = cellPx
 		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.intent.Creates() {

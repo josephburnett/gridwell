@@ -16,7 +16,7 @@ async function twoPanesWithDoc(gw: any, body: string) {
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) + 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(tile, 'text tile created').toBeTruthy();
@@ -87,7 +87,7 @@ test('one forwarded middle click on an unfocused live url pane focuses it and as
 }) => {
   await gw.enterPlugin('home');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?middle=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
@@ -125,7 +125,7 @@ test('one click on an unfocused live url pane hands its page the keyboard, and i
 }) => {
   await gw.enterPlugin('home');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?keys=1`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

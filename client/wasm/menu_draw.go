@@ -8,41 +8,41 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/door"
-	"github.com/josephburnett/gridwell/client/palette"
+	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/tileface"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
-// The creation palette: the screen-space adapters over client/palette, the
+// The + menu: the screen-space adapters over client/menu, the
 // "+" button, and the popover drawing.
 
-// paletteLayoutFor builds the palette.Layout snapshot for a pane.
-// client/palette owns the geometry.
-func (a *App) paletteLayoutFor(p *pane.Pane) palette.Layout {
-	l, _ := a.paletteLayoutAndShow(p)
+// menuLayoutFor builds the menu.Layout snapshot for a pane.
+// client/menu owns the geometry.
+func (a *App) menuLayoutFor(p *pane.Pane) menu.Layout {
+	l, _ := a.menuLayoutAndShow(p)
 	return l
 }
 
-// paletteLayoutAndShow builds the layout together with the section decision
+// menuLayoutAndShow builds the layout together with the section decision
 // behind it, for the two callers that draw or hit-test the disclosure strip.
-func (a *App) paletteLayoutAndShow(p *pane.Pane) (palette.Layout, palette.Shown) {
+func (a *App) menuLayoutAndShow(p *pane.Pane) (menu.Layout, menu.Shown) {
 	cx, cy := a.plusButtonCenter()
-	items, show := a.paletteView(p)
-	return palette.Layout{
-		Cfg:      palette.Default(),
+	items, show := a.menuView(p)
+	return menu.Layout{
+		Cfg:      menu.Default(),
 		PlusX:    cx,
 		PlusY:    cy,
 		NumTiles: len(items),
 		// Both counts come from the one item list, so a folded section leaves
 		// the top row empty rather than needing a second flag.
-		TopRow: paletteTopRow(items),
+		TopRow: menuTopRow(items),
 		Toggle: show.Toggle,
 	}, show
 }
 
-// plusButtonCenter is what clicks hit-test against and what the open palette
+// plusButtonCenter is what clicks hit-test against and what the open menu
 // anchors to. It falls back to the window corner when the window is too short
 // for the band.
 func (a *App) plusButtonCenter() (float64, float64) {
@@ -105,48 +105,48 @@ func (a *App) drawPlusButton(p *pane.Pane) {
 	a.cctx.Set("lineWidth", 1.0)
 }
 
-// paletteRect is the wasm-side adapter for palette.Layout.PopoverRect.
-func (a *App) paletteRect(p *pane.Pane) (x, y, w, h float64) {
-	pop := a.paletteLayoutFor(p).PopoverRect()
+// menuRect is the wasm-side adapter for menu.Layout.PopoverRect.
+func (a *App) menuRect(p *pane.Pane) (x, y, w, h float64) {
+	pop := a.menuLayoutFor(p).PopoverRect()
 	return pop.X, pop.Y, pop.W, pop.H
 }
 
-// paletteTileRect is the wasm-side adapter for palette.Layout.TileRect.
-func (a *App) paletteTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
-	tr := a.paletteLayoutFor(p).TileRect(i)
+// menuTileRect is the wasm-side adapter for menu.Layout.TileRect.
+func (a *App) menuTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
+	tr := a.menuLayoutFor(p).TileRect(i)
 	return tr.X, tr.Y, tr.W, tr.H
 }
 
-// drawPalette paints the creation popover: the plugin section's disclosure
+// drawMenu paints the creation popover: the plugin section's disclosure
 // strip when there is one, plugins on top, then the primitives.
-func (a *App) drawPalette(p *pane.Pane) {
-	mx, my, mw, mh := a.paletteRect(p)
+func (a *App) drawMenu(p *pane.Pane) {
+	mx, my, mw, mh := a.menuRect(p)
 	fillRectC(a.cctx, mx, my, mw, mh, a.pal.MenuBg)
 	a.cctx.Set("strokeStyle", a.pal.PaneBorder)
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
-	items, show := a.paletteView(p)
+	items, show := a.menuView(p)
 	for i, item := range items {
-		tx, ty, tw, th := a.paletteTileRect(p, i)
+		tx, ty, tw, th := a.menuTileRect(p, i)
 		hovered := a.menu.Hover() == i
-		a.drawPaletteItem(item, tx, ty, tw, th, hovered)
+		a.drawMenuItem(item, tx, ty, tw, th, hovered)
 	}
 	if show.Toggle {
-		a.drawPaletteToggle(a.paletteLayoutFor(p).ToggleRect(), show.Chevron)
+		a.drawMenuToggle(a.menuLayoutFor(p).ToggleRect(), show.Chevron)
 	}
 }
 
-// drawPaletteToggle paints the plugin section's disclosure strip, its chevron
+// drawMenuToggle paints the plugin section's disclosure strip, its chevron
 // pointing the way the press moves the section. A band and never a swatch, so
 // nothing invites the drag a template tile takes.
-func (a *App) drawPaletteToggle(r pane.Rect, c palette.Chevron) {
+func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
 	fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.PlusBg)
 	cx := r.X + r.W/2
 	cy := r.Y + r.H/2
 	const halfW = 6.0
 	// Canvas y grows downward, so the apex sits above the ends for "up".
 	dy := -3.0
-	if c == palette.ChevronDown {
+	if c == menu.ChevronDown {
 		dy = -dy
 	}
 	a.cctx.Set("strokeStyle", a.pal.PlusFg)
@@ -159,11 +159,11 @@ func (a *App) drawPaletteToggle(r pane.Rect, c palette.Chevron) {
 	a.cctx.Set("lineWidth", 1.0)
 }
 
-// drawPaletteItem shares its body with the live-tile renderer, so a swatch
+// drawMenuItem shares its body with the live-tile renderer, so a swatch
 // reads identical to what the user drops, with a glyph overlaid for a tile
 // that has no content yet.
-func (a *App) drawPaletteItem(item paletteItem, x, y, w, h float64, hovered bool) {
-	n := paletteItemGhostNode(item)
+func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
+	n := menuItemGhostNode(item)
 	if item.isPlugin {
 		// A plugin swatch is the linked well it drops into a grid, dashed
 		// because a cross-plugin link can be unlinked. Drawn identically
@@ -228,19 +228,19 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	}
 }
 
-// paletteTileIndexAt is the wasm-side adapter for palette.Layout.TileIndexAt.
-func (a *App) paletteTileIndexAt(p *pane.Pane, x, y float64) int {
-	return a.paletteLayoutFor(p).TileIndexAt(x, y)
+// menuTileIndexAt is the wasm-side adapter for menu.Layout.TileIndexAt.
+func (a *App) menuTileIndexAt(p *pane.Pane, x, y float64) int {
+	return a.menuLayoutFor(p).TileIndexAt(x, y)
 }
 
-// pointInPalette is the wasm-side adapter for palette.Layout.PointInPopover.
-func (a *App) pointInPalette(p *pane.Pane, x, y float64) bool {
-	return a.paletteLayoutFor(p).PointInPopover(x, y)
+// pointInMenu is the wasm-side adapter for menu.Layout.PointInPopover.
+func (a *App) pointInMenu(p *pane.Pane, x, y float64) bool {
+	return a.menuLayoutFor(p).PointInPopover(x, y)
 }
 
-// pointInPaletteToggle is the wasm-side adapter for
-// palette.Layout.PointInToggle: false whenever the popover has no strip, so
+// pointInMenuToggle is the wasm-side adapter for
+// menu.Layout.PointInToggle: false whenever the popover has no strip, so
 // the press path needs no second guard.
-func (a *App) pointInPaletteToggle(p *pane.Pane, x, y float64) bool {
-	return a.paletteLayoutFor(p).PointInToggle(x, y)
+func (a *App) pointInMenuToggle(p *pane.Pane, x, y float64) bool {
+	return a.menuLayoutFor(p).PointInToggle(x, y)
 }

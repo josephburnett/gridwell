@@ -42,7 +42,7 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
   await gw.splitFocusedPaneVertical();
   const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(left);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
@@ -76,7 +76,7 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
   const rf = await gw.focused();
   const px = Math.round(rf.cx) + 2; // clear of the shell tile at (cx, cy)
   const py = Math.round(rf.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', px, py);
   expect(tileAt(await gw.getGrid(grid), 'pane', px, py)).toBeTruthy();
   await gw.descendCell(px, py);

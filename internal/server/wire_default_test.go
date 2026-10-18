@@ -20,7 +20,7 @@ func TestCreateTextEmptyData(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
 
-	// Empty Data is what client/wasm/input.go's palette drop sends.
+	// Empty Data is what client/wasm/input.go's menu drop sends.
 	// After proto3 default-value omission round-trips through the wire
 	// the server sees req.Data == nil.
 	tile, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte{})

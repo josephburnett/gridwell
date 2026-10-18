@@ -1,4 +1,4 @@
-package palette
+package menu
 
 // Which primitives the + menu offers on a grid. Both facts are the serving
 // node's: the PTY rides that node's web door, so the client's own caps would

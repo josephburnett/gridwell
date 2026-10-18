@@ -35,7 +35,7 @@ test('a workspace re-entered inside a plugin keeps every crumb down from its roo
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   expect(pt).toBeTruthy();
@@ -97,7 +97,7 @@ test('a workspace restored by ?w= still shows a face on its close-all crumb', as
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   expect(pt).toBeTruthy();

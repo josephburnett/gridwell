@@ -21,7 +21,7 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
   const cy = Math.round(f.cy);
 
   // A markdown tile with real content, persisted.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
   expect(doc, 'markdown created').toBeTruthy();
@@ -30,10 +30,10 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
   await gw.ascendViaCrumb();
 
   // A well to move it into, and a workspace tile.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx + 2, cy);
   const well = tileAt(await gw.getGrid(grid), 'well', cx + 2, cy)!;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx - 2, cy);
   // Wait until the pane tile is rendered before clicking it. The create's
   // optimistic commit and the background refetch land on their own schedule, and

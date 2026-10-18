@@ -14,7 +14,7 @@ test('a navigation inside a live url tile is the tile’s address', async ({ ele
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

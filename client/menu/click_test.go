@@ -1,9 +1,9 @@
-package palette
+package menu
 
 import "testing"
 
 // A swatch with nothing to do on a click answers ClickNothing, so the click
-// stops at the palette instead of reaching the canvas behind the popover.
+// stops at the menu instead of reaching the canvas behind the popover.
 func TestClickOn(t *testing.T) {
 	cases := []struct {
 		name string

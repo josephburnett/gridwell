@@ -45,7 +45,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   expect(before.zoom).toBeLessThan(1);
 
   // Well, well, markdown, descending each level.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const W1 = tileAt(await gw.getGrid(rootGrid), 'well', cx, cy)!;
   expect(W1).toBeTruthy();
@@ -56,7 +56,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
 
   const c1x = Math.round(f1.cx);
   const c1y = Math.round(f1.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', c1x, c1y);
   const W2 = tileAt(await gw.getGrid(g1), 'well', c1x, c1y)!;
   expect(W2).toBeTruthy();
@@ -77,7 +77,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
 
   const c2x = Math.round(f2.cx);
   const c2y = Math.round(f2.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', c2x, c2y);
   const MD = tileAt(await gw.getGrid(g2), 'text', c2x, c2y)!;
   expect(MD).toBeTruthy();

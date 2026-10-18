@@ -47,7 +47,7 @@ test('a clone of a live shell attaches its session: one client, one exit for bot
   const pane = async (id: string) => (await gw.panes()).find((p: any) => p.id === id)!;
 
   await gw.focusPane(left);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
@@ -117,7 +117,7 @@ test('a clone of a never-opened shell starts the session its source then joins',
   const cy = Math.round(f.cy);
   const shellAt = async (x: number, y: number) => tileAt(await gw.getGrid(grid), 'shell', x, y);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.cloneTileCell(cx, cy, cx + 2, cy);
   const source = (await shellAt(cx, cy))!;

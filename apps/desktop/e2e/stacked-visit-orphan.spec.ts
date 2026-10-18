@@ -23,7 +23,7 @@ test('a stacked visit in place tears the outgoing live view down as the pane lea
 
   // Drag-create lands the url tile bare; the first descent prompts for the
   // address.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

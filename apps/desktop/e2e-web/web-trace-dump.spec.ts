@@ -10,7 +10,7 @@ import { readDump, joinedRequests, bootOrigins, describe as describeDump } from 
 test('the circle popover dumps the trace and names the file', async ({ gw, serve, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', Math.round(f.cx), Math.round(f.cy));
   await gw.waitIdle();
 

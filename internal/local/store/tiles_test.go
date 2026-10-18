@@ -40,7 +40,7 @@ func TestCreateWellHappyPath(t *testing.T) {
 }
 
 func TestCreateWellLabelBecomesAltText(t *testing.T) {
-	// The + palette's name field: a user-provided label on an interior well
+	// The + menu's name field: a user-provided label on an interior well
 	// create is stored as the tile's alt_text (the grid's name). Wells have
 	// no content to derive an alt from, so the label is the only writer.
 	s := newTestStore(t)

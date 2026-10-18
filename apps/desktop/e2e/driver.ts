@@ -49,7 +49,7 @@ export interface Cadences {
   snapBackMs: number;
 }
 
-export interface PaletteItem {
+export interface MenuItem {
   index: number;
   // Doorway swatches sit in the top row, one per declared doorway. A click
   // descends into it, a drag drops an exit-well link. isPlugin tells them from
@@ -110,7 +110,7 @@ export interface PluginCollection {
 
 // The plugin section's disclosure strip. chevron is "up" collapsed, "down"
 // expanded, "none" when there is no control.
-export interface PaletteToggle {
+export interface MenuToggle {
   present: boolean;
   chevron: string;
   expanded: boolean;
@@ -120,15 +120,15 @@ export interface PaletteToggle {
   h: number;
 }
 
-export interface PaletteInfo {
+export interface MenuInfo {
   open: boolean;
   plusX: number;
   plusY: number;
-  items: PaletteItem[];
+  items: MenuItem[];
   // The hovered swatch index, or -1, read off client/menu, which owns the
   // menu's live state.
   hover: number;
-  toggle: PaletteToggle;
+  toggle: MenuToggle;
 }
 
 export class GridwellDriver {
@@ -190,8 +190,8 @@ export class GridwellDriver {
     await this.leftDragScreen(left.x + left.w - 2, y, left.x + 6, y);
   }
 
-  palette(): Promise<PaletteInfo> {
-    return this.win.evaluate(() => (window as any).__gridwellTest.palette());
+  menu(): Promise<MenuInfo> {
+    return this.win.evaluate(() => (window as any).__gridwellTest.menu());
   }
 
   // Which palette the client is wearing, client/theme's own spelling. It is a
@@ -353,11 +353,11 @@ export class GridwellDriver {
 
   // Clicks the focused pane's + button. It no-ops when the menu is already
   // open, since + is a toggle and a second open must not close it.
-  async openPalette(): Promise<void> {
-    const pal = await this.palette();
-    if (pal.open) return;
-    await this.win.mouse.click(pal.plusX, pal.plusY);
-    await this.win.waitForFunction(() => (window as any).__gridwellTest.palette().open, null, {
+  async openMenu(): Promise<void> {
+    const menu = await this.menu();
+    if (menu.open) return;
+    await this.win.mouse.click(menu.plusX, menu.plusY);
+    await this.win.waitForFunction(() => (window as any).__gridwellTest.menu().open, null, {
       timeout: 5_000,
     });
   }
@@ -370,18 +370,18 @@ export class GridwellDriver {
     // than read a menu that has not been told yet.
     await this.win.waitForFunction(
       () => {
-        const p = (window as any).__gridwellTest.palette();
+        const p = (window as any).__gridwellTest.menu();
         return p.open && p.toggle && (p.toggle.expanded || p.toggle.present);
       },
       null,
       { timeout: 15_000 },
     );
-    const pal = await this.palette();
-    if (pal.toggle.expanded) return;
-    const t = pal.toggle;
+    const menu = await this.menu();
+    if (menu.toggle.expanded) return;
+    const t = menu.toggle;
     await this.win.mouse.click(t.x + t.w / 2, t.y + t.h / 2);
     await this.win.waitForFunction(
-      () => (window as any).__gridwellTest.palette().toggle.expanded,
+      () => (window as any).__gridwellTest.menu().toggle.expanded,
       null,
       { timeout: 5_000 },
     );
@@ -428,37 +428,37 @@ export class GridwellDriver {
   // Drags a primitive swatch ("well", "markdown", "url", "shell") onto a cell
   // of the focused pane.
   async dragCreate(kind: string, cx: number, cy: number): Promise<void> {
-    const pal = await this.palette();
-    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
-    if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
+    const menu = await this.menu();
+    const item = menu.items.find((i) => !i.isPlugin && i.kind === kind);
+    if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
     await this.dragSwatchToCell(item, cx, cy);
   }
 
   // Drops a link, where clickPluginSwatch descends.
   async dragPluginLink(match: string, cx: number, cy: number): Promise<void> {
     await this.expandPlugins();
-    const pal = await this.palette();
-    const item = pal.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
-    if (!item) throw new Error(`no plugin swatch ${match}; have ${pal.items.map((i) => i.kind)}`);
+    const menu = await this.menu();
+    const item = menu.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
+    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.kind)}`);
     await this.dragSwatchToCell(item, cx, cy);
   }
 
   // For a drop no cell address can name, such as a point inside a pane
   // descended into a tile, where there is no grid to take a cell from.
   async dragCreateToScreen(kind: string, x: number, y: number): Promise<void> {
-    const pal = await this.palette();
-    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
-    if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
+    const menu = await this.menu();
+    const item = menu.items.find((i) => !i.isPlugin && i.kind === kind);
+    if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
     await this.dragSwatchToScreen(item, x, y);
   }
 
-  private async dragSwatchToCell(item: PaletteItem, cx: number, cy: number): Promise<void> {
+  private async dragSwatchToCell(item: MenuItem, cx: number, cy: number): Promise<void> {
     const f = await this.focused();
     const target = await this.cellCenter(f.id, cx, cy);
     await this.dragSwatchToScreen(item, target.x, target.y);
   }
 
-  private async dragSwatchToScreen(item: PaletteItem, x: number, y: number): Promise<void> {
+  private async dragSwatchToScreen(item: MenuItem, x: number, y: number): Promise<void> {
     const sx = item.x + item.w / 2;
     const sy = item.y + item.h / 2;
 
@@ -473,21 +473,21 @@ export class GridwellDriver {
 
   // A click, not a drag: on the url swatch it opens the ephemeral-visit modal,
   // where dragCreate places a tile.
-  async clickPaletteSwatch(kind: string): Promise<void> {
-    await this.openPalette();
-    const pal = await this.palette();
-    const item = pal.items.find((i) => !i.isPlugin && i.kind === kind);
-    if (!item) throw new Error(`no palette primitive ${kind}; have ${pal.items.map((i) => i.kind)}`);
+  async clickMenuSwatch(kind: string): Promise<void> {
+    await this.openMenu();
+    const menu = await this.menu();
+    const item = menu.items.find((i) => !i.isPlugin && i.kind === kind);
+    if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
   }
 
   // A click, not a drag: the pane lands in the plugin's root grid.
   async clickPluginSwatch(match: string): Promise<void> {
-    await this.openPalette();
+    await this.openMenu();
     await this.expandPlugins();
-    const pal = await this.palette();
-    const item = pal.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
-    if (!item) throw new Error(`no plugin swatch ${match}; have ${pal.items.map((i) => i.kind)}`);
+    const menu = await this.menu();
+    const item = menu.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
+    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.kind)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
     await this.waitIdle();
   }
@@ -636,12 +636,12 @@ export class GridwellDriver {
   async deleteTileCell(cx: number, cy: number): Promise<void> {
     const f = await this.focused();
     const from = await this.cellCenter(f.id, cx, cy);
-    const pal = await this.palette();
+    const menu = await this.menu();
     const m = this.win.mouse;
     await m.move(from.x, from.y);
     await m.down({ button: 'left' });
     await m.move(from.x + GridwellDriver.NUDGE, from.y + GridwellDriver.NUDGE);
-    await m.move(pal.plusX, pal.plusY, { steps: 8 });
+    await m.move(menu.plusX, menu.plusY, { steps: 8 });
     await m.up({ button: 'left' });
     await this.waitIdle();
   }
@@ -811,8 +811,8 @@ export class GridwellDriver {
   // The DOM button that flips a file descent between raw text and rendered
   // markdown, in the slot the + button occupies on a grid pane.
   async toggleTextMode(): Promise<void> {
-    const pal = await this.palette();
-    await this.win.mouse.click(pal.plusX, pal.plusY);
+    const menu = await this.menu();
+    await this.win.mouse.click(menu.plusX, menu.plusY);
     await this.waitIdle();
   }
 

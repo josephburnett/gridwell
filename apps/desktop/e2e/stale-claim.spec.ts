@@ -11,7 +11,7 @@ test('a stale move and a stale delete are refused, and the tile stays as the oth
   const f = await gw.focused();
   const cx = Math.round(f.cx) - 2;
   const cy = Math.round(f.cy) - 1;
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const tile = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(tile, 'the tile persisted').toBeTruthy();
@@ -36,13 +36,13 @@ test('a stale move and a stale delete are refused, and the tile stays as the oth
   // A delete: the press sees the tile's words; another window edits them
   // before the drop on the trashcan.
   const here = await gw.cellCenter(f.id, cx + 3, cy);
-  const pal = await gw.palette();
+  const menu = await gw.menu();
   await m.move(here.x, here.y);
   await m.down({ button: 'left' });
   await m.move(here.x + 8, here.y + 8);
   const row = tileAt(await gw.getGrid(f.gridID), 'text', cx + 3, cy)!;
   await updateText(gw.origin, tile.id, Number(row.version ?? 0), '# edited elsewhere\n');
-  await m.move(pal.plusX, pal.plusY, { steps: 8 });
+  await m.move(menu.plusX, menu.plusY, { steps: 8 });
   await m.up({ button: 'left' });
   await gw.waitIdle();
   await gw.waitClientTileAt(f.id, cx + 3, cy, tile.id);

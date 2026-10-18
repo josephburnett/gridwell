@@ -337,15 +337,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections
   are the swatches, one each, and the plugin has none of its own
-  (`client/door.PlacesOf` enumerates, `client/palette.Doorways` composes). An
+  (`client/door.PlacesOf` enumerates, `client/menu.Doorways` composes). An
   entry is named most specific first, then its instance — "Feed (hey)",
   `door.EntryName`, uniformly, with no privileged one, because a clipped
   swatch must still tell entries apart (2026-09-30) — and it carries its grid's framing, so a
   collection reopens where it was left. That row is an open set, so it is
   folded: a menu opens on the primitives with a chevron strip for the section
   above it, and every opening starts folded — the fold is the menu's live
-  state and dies with it (`client/palette` decides what a state shows,
-  `client/menu` owns the flag).
+  state and dies with it (`client/menu` decides what a state shows and owns
+  the flag).
 - Agents reach the node through the MCP door (2026-10-15): `/mcp` on the
   web door, Streamable HTTP, the web password as a bearer beside the cookie,
   and no build gate, since no page is behind it. It is a codec over the one

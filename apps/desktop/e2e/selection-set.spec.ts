@@ -36,7 +36,7 @@ async function selectedPair(gw: GridwellDriver) {
   const at = [[cx - 1, cy], [cx + 1, cy], [cx - 1, cy + 3]];
   const tiles: Tile[] = [];
   for (const [x, y] of at) {
-    await gw.openPalette();
+    await gw.openMenu();
     await gw.dragCreate('markdown', x, y);
     const t = tileAt(await gw.getGrid(f.gridID), 'text', x, y)!;
     expect(t, `created a text tile at ${x},${y}`).toBeTruthy();

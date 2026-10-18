@@ -1,8 +1,8 @@
-package palette
+package menu
 
 // What the + menu shows. The primitives are always there. The swatches above
 // them are an open set, so that section folds behind a chevron. The fold lasts
-// one menu opening and every opening starts folded; client/menu owns the flag.
+// one menu opening and every opening starts folded; State owns the flag.
 
 // Section counts the doorway swatches the node declares and the primitives the
 // grid takes, zero on a read-only grid.

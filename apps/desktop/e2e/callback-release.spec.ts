@@ -11,7 +11,7 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.waitIdle();
 
@@ -44,7 +44,7 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx, cy);
   await gw.descendCell(cx, cy);
   // Split, and the shell goes live in one half while the other half's grid
@@ -53,7 +53,7 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
   const inner = await gw.focused();
   const icx = Math.round(inner.cx);
   const icy = Math.round(inner.cy) + 2; // the first descent captures the layout, pane tile and all
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', icx, icy);
   await gw.descendCell(icx, icy); // the drop lands bare; the descent creates the session
   await expect

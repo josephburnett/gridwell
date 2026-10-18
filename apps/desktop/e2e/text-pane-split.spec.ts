@@ -39,7 +39,7 @@ test('split pane text tiles: overlay covers only focused pane, not preview', asy
 
   // One cell below center: visible in a half-width pane and clear of the
   // pane-center pixel focusPane clicks.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy + 1);
   const tile = tileAt(await gw.getGrid(grid), 'text', cx, cy + 1)!;
   expect(tile, 'text tile created').toBeTruthy();
@@ -110,9 +110,9 @@ test('split pane: focus switch between two text descents preserves both tiles', 
 
   // Flanking the center vertically: visible in half-width panes, with the
   // pane-center pixel left clear for focus clicks.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy - 1);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy + 1);
   const t1 = tileAt(await gw.getGrid(grid), 'text', cx, cy - 1)!;
   const t2 = tileAt(await gw.getGrid(grid), 'text', cx, cy + 1)!;

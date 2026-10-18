@@ -11,7 +11,7 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(created, 'markdown tile created from a plain browser').toBeTruthy();
@@ -29,15 +29,15 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
 });
 
 // Shells in a plain browser: the PTY rides a WebSocket on the web door, so a
-// browser has the same attach capability the desktop has and the palette offers
+// browser has the same attach capability the desktop has and the menu offers
 // the shell swatch. A shell tile made elsewhere renders here too.
 test('the browser offers shell creation and views shell tiles fine', async ({ gw, window, serve }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
 
-  await gw.openPalette();
-  const pal = await gw.palette();
-  const primitives = pal.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
+  await gw.openMenu();
+  const menu = await gw.menu();
+  const primitives = menu.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
   expect(primitives, 'url stays creatable in the browser').toContain('url');
   expect(primitives, 'the browser attaches PTYs now — the swatch is offered').toContain('shell');
   await window.keyboard.press("Escape");

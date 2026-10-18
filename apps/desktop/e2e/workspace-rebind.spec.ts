@@ -11,7 +11,7 @@ async function seedTile(
   cy: number,
   seed: string,
 ): Promise<string> {
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(gridID), 'text', cx, cy)!;
   expect(created, `markdown tile created at (${cx},${cy})`).toBeTruthy();
@@ -46,7 +46,7 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
   // "Today" is the workspace's document and "Routine" the outside one.
   const todayID = await seedTile(gw, rootGrid, cx - 1, cy, 'today today');
   const routineID = await seedTile(gw, rootGrid, cx, cy + 1, 'routine routine');
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', cx + 1, cy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', cx + 1, cy)!;
   expect(pt, 'pane tile created').toBeTruthy();

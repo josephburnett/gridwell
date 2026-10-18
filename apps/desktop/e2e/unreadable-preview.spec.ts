@@ -13,7 +13,7 @@ test('a preview the server refuses is asked for once', async ({ electronApp, gw,
   const cy = Math.round(f.cy);
 
   // The ascent out of the live page freezes it, which mints the preview.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

@@ -19,7 +19,7 @@ test('tile gestures (move, clone, resize, delete) mutate server state', async ({
   const cy = Math.round(f.cy);
 
   // ── MOVE ────────────────────────────────────────────────────────────────
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   expect(tileAt(await gw.getGrid(grid), 'text', cx, cy), 'created text tile').toBeTruthy();
 
@@ -47,7 +47,7 @@ test('tile gestures (move, clone, resize, delete) mutate server state', async ({
   // ── DELETE ──────────────────────────────────────────────────────────────
   // The resized clone now spans where the moved original sits, so trash a fresh
   // 1x1 tile instead and keep the target unambiguous.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx + 1, cy + 1);
   const beforeDel = countKind(await gw.getGrid(grid), 'text');
   await gw.deleteTileCell(cx + 1, cy + 1);
@@ -66,7 +66,7 @@ test('a multi-cell tile moves one cell into its own old footprint (#231)', async
   const cx = Math.round(f.cx) - 1;
   const cy = Math.round(f.cy) - 1;
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.resizeTileCell(cx, cy, cx + 2, cy + 2);
   const t = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;

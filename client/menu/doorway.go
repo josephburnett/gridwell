@@ -1,4 +1,4 @@
-package palette
+package menu
 
 // Which swatches the + menu's top section shows: one per declared doorway. A
 // node is a place, so its home and a connection's far home each get a swatch.

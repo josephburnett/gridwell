@@ -14,7 +14,7 @@ function ghostActive(win: Page): Promise<boolean> {
 
 async function textTile(gw: GridwellDriver, cx: number, cy: number) {
   const f = await gw.focused();
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(t, 'created text tile').toBeTruthy();

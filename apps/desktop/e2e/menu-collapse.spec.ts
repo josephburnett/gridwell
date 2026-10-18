@@ -3,7 +3,7 @@ import { test, expect } from './fixtures';
 // The + menu's plugin and connection section is an open set, since a node
 // declares as many as it likes and one plugin declares several entries, so it
 // is folded away behind a chevron strip and a menu opens on the four
-// primitives. This crosses what palette.Show cannot see on its own: the
+// primitives. This crosses what menu.Show cannot see on its own: the
 // composition decision, the popover geometry it moves, the press that works the
 // strip, and client/menu's fold flag dying with the menu.
 
@@ -13,10 +13,10 @@ test('the + menu opens with the plugin section folded, and the chevron works it'
 }) => {
   await gw.plugins();
   const before = await gw.focused();
-  await gw.openPalette();
+  await gw.openMenu();
 
   // Collapsed: the primitives and a chevron pointing up at the section above.
-  const folded = await gw.palette();
+  const folded = await gw.menu();
   expect(folded.toggle.present, 'the folded section offers a control').toBe(true);
   expect(folded.toggle.chevron, 'it points up: press to open the section above').toBe('up');
   expect(folded.toggle.expanded, 'and the section is not shown').toBe(false);
@@ -41,7 +41,7 @@ test('the + menu opens with the plugin section folded, and the chevron works it'
     folded.toggle.y + folded.toggle.h / 2,
   );
   await gw.waitIdle();
-  const open = await gw.palette();
+  const open = await gw.menu();
   expect(open.open, 'the menu is still open').toBe(true);
   expect(open.toggle.chevron, 'the chevron now folds it back').toBe('down');
   expect(open.toggle.expanded).toBe(true);
@@ -61,7 +61,7 @@ test('the + menu opens with the plugin section folded, and the chevron works it'
     open.toggle.y + open.toggle.h / 2,
   );
   await gw.waitIdle();
-  const refolded = await gw.palette();
+  const refolded = await gw.menu();
   expect(refolded.toggle.chevron, 'folded again').toBe('up');
   expect(refolded.items.some((i) => i.isPlugin), 'the section is hidden again').toBe(false);
   expect(refolded.items.map((i) => i.kind), 'the same primitives, in the same place').toEqual(
@@ -76,7 +76,7 @@ test('an expanded entry still descends, and the next menu opens folded again', a
   const before = await gw.focused();
 
   // Expanded, a swatch click descends into the grid it roots.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.expandPlugins();
   await gw.clickPluginSwatch('home');
   const inside = await gw.focused();
@@ -84,8 +84,8 @@ test('an expanded entry still descends, and the next menu opens folded again', a
 
   // The fold is the menu's own live state and dies with it: the menu that
   // opens after the descent is folded, whatever the last one was left as.
-  await gw.openPalette();
-  const next = await gw.palette();
+  await gw.openMenu();
+  const next = await gw.menu();
   expect(next.toggle.expanded, 'every opening starts folded').toBe(false);
   expect(next.toggle.chevron).toBe('up');
 

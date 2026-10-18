@@ -215,7 +215,7 @@ app.whenReady().then(async () => {
   console.log(`reload ok: ${JSON.stringify(firstBody)} → ${JSON.stringify(reloadedBody)} in the same view`);
 
   // ── a view placed while an overlay is open starts parked ────────────────
-  // A view placed while the palette is open must land at PARK_COORD, never on
+  // A view placed while the menu is open must land at PARK_COORD, never on
   // top of the canvas overlay for even one round trip.
   const hiddenBounds = { x: 10, y: 20, width: 300, height: 200 };
   await registry.place('pane1h', 'u1/45', DATA_URL, hiddenBounds, 0, '', false, true);

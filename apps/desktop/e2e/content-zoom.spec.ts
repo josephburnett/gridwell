@@ -14,7 +14,7 @@ test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
   await gw.descendCell(cx, cy);
@@ -52,7 +52,7 @@ test('Ctrl+= zooms a live url view (composed with the layout zoom)', async ({
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?zoom=82`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());
@@ -101,7 +101,7 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?zoom=170`);
   await window.locator('#gw-url-form').evaluate((f: HTMLFormElement) => f.requestSubmit());

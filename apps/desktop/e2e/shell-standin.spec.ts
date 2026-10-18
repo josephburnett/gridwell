@@ -23,7 +23,7 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
@@ -69,7 +69,7 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   // Open the + menu on the grid pane: overlays park, the stand-in draws. The
   // park takes the terminal's face before the overlay goes.
   const before = await gw.shellMirrors();
-  await gw.openPalette();
+  await gw.openMenu();
   await expect.poll(() => gw.shellMirrors(), { message: 'the park took the face' }).toBeGreaterThan(before);
   const standin = await window.evaluate(
     (id: string) => (window as any).__gridwellTest.shellStandin(id),

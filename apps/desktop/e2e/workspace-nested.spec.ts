@@ -27,9 +27,9 @@ test('nested workspaces: breadcrumbs, session-only membership, safe self-referen
   const ay = Math.round(f.cy);
 
   // Two pane tiles side by side in the root grid, A and B.
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', ax, ay);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', ax + 2, ay);
   const snap = await gw.getGrid(rootGrid);
   const A = tileAt(snap, 'pane', ax, ay);

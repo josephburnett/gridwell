@@ -10,7 +10,7 @@ test('a newly created text tile is empty, not the previously edited content', as
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const a = tileAt(await gw.getGrid(grid), 'text', cx, cy)!;
   expect(a, 'first text tile created').toBeTruthy();
@@ -21,7 +21,7 @@ test('a newly created text tile is empty, not the previously edited content', as
     .poll(async () => gw.getTileContent(a.id), { timeout: 10_000 })
     .toContain('first-tile-content');
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx + 1, cy);
   const b = tileAt(await gw.getGrid(grid), 'text', cx + 1, cy)!;
   expect(b, 'second text tile created').toBeTruthy();

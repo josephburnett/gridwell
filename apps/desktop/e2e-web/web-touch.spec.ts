@@ -14,14 +14,14 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
   // frame for the return trip.
   await gw.plugins();
   const before = await gw.focused();
-  const pal = await gw.palette();
-  await window.touchscreen.tap(pal.plusX, pal.plusY);
-  await window.waitForFunction(() => (window as any).__gridwellTest.palette().open, null, {
+  const menu = await gw.menu();
+  await window.touchscreen.tap(menu.plusX, menu.plusY);
+  await window.waitForFunction(() => (window as any).__gridwellTest.menu().open, null, {
     timeout: 5_000,
   });
   // The plugin section is folded on every opening, and a finger opens it by
   // tapping the chevron strip, which is a press like any other.
-  const folded = await gw.palette();
+  const folded = await gw.menu();
   expect(folded.toggle.present, 'the folded section offers its chevron').toBe(true);
   expect(folded.items.some((i) => i.isPlugin), 'and hides the plugin swatches').toBe(false);
   await window.touchscreen.tap(
@@ -29,11 +29,11 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
     folded.toggle.y + folded.toggle.h / 2,
   );
   await window.waitForFunction(
-    () => (window as any).__gridwellTest.palette().toggle.expanded,
+    () => (window as any).__gridwellTest.menu().toggle.expanded,
     null,
     { timeout: 5_000 },
   );
-  const open = await gw.palette();
+  const open = await gw.menu();
   const swatch = open.items.find((i) => i.isPlugin && i.label === 'home');
   expect(swatch, 'plugin swatch present in the + menu').toBeTruthy();
   await window.touchscreen.tap(swatch!.x + swatch!.w / 2, swatch!.y + swatch!.h / 2);
@@ -81,7 +81,7 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const pt = await gw.cellCenter(f.id, cx, cy);
   await window.touchscreen.tap(pt.x, pt.y);
@@ -104,7 +104,7 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();
@@ -168,7 +168,7 @@ test('touch: a long-press lifted in place toggles the tile in its grid\'s select
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(t, 'markdown tile created').toBeTruthy();

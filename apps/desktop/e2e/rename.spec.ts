@@ -14,7 +14,7 @@ test('the bar crumb names the grid you are in', async ({ gw, window }) => {
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   expect(String(well.altText ?? '')).toBe(''); // unnamed at creation
@@ -45,7 +45,7 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
@@ -85,14 +85,14 @@ test('an async tile event never steals the rename input focus', async ({ gw, win
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   const inside = await gw.focused();
   const icx = Math.round(inside.cx);
   const icy = Math.round(inside.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', icx, icy);
   const doc = tileAt(await gw.getGrid(inside.gridID), 'text', icx, icy)!;
 
@@ -121,7 +121,7 @@ test('a user-set shell name survives the detach command capture', async ({ gw, w
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');

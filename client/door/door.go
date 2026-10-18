@@ -154,7 +154,7 @@ type Place struct {
 }
 
 // PlacesOf enumerates the doorways one menu row declares, in declaration
-// order. It is the one enumeration, read by client/palette, ByRoot and the
+// order. It is the one enumeration, read by client/menu, ByRoot and the
 // framing restore, so what a doorway is cannot be answered three ways.
 func PlacesOf(pl *gridwellv1.PluginInfo) []Place {
 	out := make([]Place, 0, 1+len(pl.MenuEntries))

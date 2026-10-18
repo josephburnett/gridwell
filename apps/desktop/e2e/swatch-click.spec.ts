@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-// A bare click on a palette swatch belongs to the menu. The popover floats over
+// A bare click on a menu swatch belongs to the menu. The popover floats over
 // a live pane, so a swatch whose click nobody claims must not fall through to
 // the canvas navigation at the popover's own coordinates. The seam is in the
 // shim, between a pure verdict and a canvas hit-test, so only the real app can
@@ -11,8 +11,8 @@ test('clicking a swatch that only creates by dragging navigates nowhere', async 
 
   // The cell size is the distance between two neighbouring cell centers, so
   // finding the cell under the swatch needs no constant from the renderer.
-  await gw.openPalette();
-  const swatch = (await gw.palette()).items.find((i) => !i.isPlugin && i.kind === 'well')!;
+  await gw.openMenu();
+  const swatch = (await gw.menu()).items.find((i) => !i.isPlugin && i.kind === 'well')!;
   expect(swatch, 'the well swatch is on the menu').toBeTruthy();
   const origin = await gw.cellCenter(home.id, 0, 0);
   const oneOver = await gw.cellCenter(home.id, 1, 1);
@@ -35,12 +35,12 @@ test('clicking a swatch that only creates by dragging navigates nowhere', async 
 
   // The well swatch creates only by being dragged, so the click must do nothing
   // and must not descend into the tile behind the popover.
-  await gw.openPalette();
-  await gw.clickPaletteSwatch('well');
+  await gw.openMenu();
+  await gw.clickMenuSwatch('well');
   await gw.waitIdle();
 
   const after = await gw.focused();
   expect(after.placeDepth, 'the click pushed no frame').toBe(home.placeDepth);
   expect(after.gridID, 'the pane is on the same grid').toBe(home.gridID);
-  expect((await gw.palette()).open, 'and the menu is still open').toBe(true);
+  expect((await gw.menu()).open, 'and the menu is still open').toBe(true);
 });

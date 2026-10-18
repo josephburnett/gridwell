@@ -50,9 +50,9 @@ export async function hiddenPaneScenario(gw: GridwellDriver, window: any, token:
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   const well = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy)!;

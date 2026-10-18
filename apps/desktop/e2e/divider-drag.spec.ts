@@ -60,7 +60,7 @@ test('a fast divider drag INTO a text pane keeps tracking and releases', async (
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   await gw.descendCell(cx, cy);
   await expect

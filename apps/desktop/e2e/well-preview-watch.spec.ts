@@ -28,7 +28,7 @@ test('a collection shown as a well preview redraws when its source changes', asy
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragPluginLink('code', wx, wy);
   const well = tileAt(await gw.getGrid(f.gridID), 'well', wx, wy)!;
   expect(well, 'the well onto the collection persisted').toBeTruthy();

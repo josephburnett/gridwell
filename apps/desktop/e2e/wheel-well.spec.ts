@@ -17,7 +17,7 @@ test('wheel over a well zooms the well; over empty space, the pane (#210)', asyn
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   expect(well, 'well created').toBeTruthy();
@@ -74,7 +74,7 @@ test('an off-center wheel burst drifts the well view toward the cursor (#219)', 
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   const before = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
   expect(before, 'well created').toBeTruthy();
@@ -111,7 +111,7 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   // The redirect exists for the no-visible-outer-context state, so what this
   // well has to be is bigger than gesture.WellZoomOutRedirect of the content

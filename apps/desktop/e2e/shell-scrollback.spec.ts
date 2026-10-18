@@ -21,7 +21,7 @@ test('wheel over a live shell scrolls back through tmux history (#206)', async (
   const sx = Math.round(home.cx);
   const sy = Math.round(home.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('shell', sx, sy);
   await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the session
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');

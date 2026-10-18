@@ -13,7 +13,7 @@ test('a left click anywhere in the name area zooms; only the name itself renames
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();

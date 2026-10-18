@@ -54,7 +54,7 @@ test('a url taken over by a pane tile moves there and back without a reload', as
   await gw.splitFocusedPaneVertical();
   const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(left);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('url', cx, cy);
   await gw.descendCell(cx, cy);
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -94,7 +94,7 @@ test('a url taken over by a pane tile moves there and back without a reload', as
   const rf = await gw.focused();
   const px = Math.round(rf.cx) + 2;
   const py = Math.round(rf.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', px, py);
   expect(tileAt(await gw.getGrid(grid), 'pane', px, py)).toBeTruthy();
   await gw.descendCell(px, py);

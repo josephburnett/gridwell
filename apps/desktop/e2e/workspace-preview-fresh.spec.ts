@@ -36,9 +36,9 @@ test("a workspace preview never draws a leaf its layout no longer names", async 
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   expect(pt, 'pane tile persisted').toBeTruthy();
@@ -50,7 +50,7 @@ test("a workspace preview never draws a leaf its layout no longer names", async 
   await expect.poll(async () => (await gw.focused()).gridID).not.toBe(rootGrid);
 
   // An ephemeral url visit in the workspace's pane, recorded in its layout.
-  await gw.clickPaletteSwatch('url');
+  await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?workspace-preview=1`);
   await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());

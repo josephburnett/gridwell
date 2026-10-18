@@ -31,7 +31,7 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
   expect(pt, 'pane tile persisted').toBeTruthy();

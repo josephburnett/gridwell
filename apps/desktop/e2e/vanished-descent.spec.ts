@@ -20,7 +20,7 @@ test('a descent whose row is deleted under it says so on the strip', async ({ gw
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('markdown', cx, cy);
   const doc = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(doc, 'markdown tile created').toBeTruthy();

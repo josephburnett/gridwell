@@ -17,12 +17,12 @@ test('a swatch highlights when the popover floats over another pane', async ({ g
   // The menu opens on the upper pane; its popover is drawn over the lower one.
   await gw.focusPane(upper);
   expect((await gw.focused()).id, 'the upper pane has focus').toBe(upper.id);
-  await gw.openPalette();
+  await gw.openMenu();
 
-  const pal = await gw.palette();
-  expect(pal.hover, 'a freshly opened palette hovers nothing').toBe(-1);
-  const swatch = pal.items.find((i) => !i.isPlugin && i.kind === 'url');
-  expect(swatch, 'the url swatch is in the palette').toBeTruthy();
+  const menu = await gw.menu();
+  expect(menu.hover, 'a freshly opened menu hovers nothing').toBe(-1);
+  const swatch = menu.items.find((i) => !i.isPlugin && i.kind === 'url');
+  expect(swatch, 'the url swatch is in the menu').toBeTruthy();
   const cx = swatch!.x + swatch!.w / 2;
   const cy = swatch!.y + swatch!.h / 2;
 
@@ -32,7 +32,7 @@ test('a swatch highlights when the popover floats over another pane', async ({ g
 
   await window.mouse.move(cx, cy);
   await expect
-    .poll(() => window.evaluate(() => (window as any).__gridwellTest.palette().hover), {
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.menu().hover), {
       message: 'the swatch under the cursor highlights',
       timeout: 5_000,
     })
@@ -41,14 +41,14 @@ test('a swatch highlights when the popover floats over another pane', async ({ g
   // Off the popover the hover clears, through the same router.
   await window.mouse.move(upper.x + upper.w / 2, upper.y + upper.h / 2);
   await expect
-    .poll(() => window.evaluate(() => (window as any).__gridwellTest.palette().hover), {
+    .poll(() => window.evaluate(() => (window as any).__gridwellTest.menu().hover), {
       message: 'leaving the popover clears the hover',
       timeout: 5_000,
     })
     .toBe(-1);
 
   // Hovering moves neither the menu nor focus.
-  const after = await gw.palette();
+  const after = await gw.menu();
   expect(after.open, 'the menu stayed open').toBe(true);
   expect((await gw.focused()).id, 'focus stayed on the upper pane').toBe(upper.id);
 });

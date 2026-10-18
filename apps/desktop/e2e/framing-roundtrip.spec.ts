@@ -17,7 +17,7 @@ test('re-descending a reframed well returns to exactly what you left', async ({ 
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   const childGrid = (await gw.focused()).gridID;
@@ -87,7 +87,7 @@ test('a reframe persists without ascending (issue #190)', async ({ gw, window })
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   const childGrid = (await gw.focused()).gridID;
@@ -162,7 +162,7 @@ test('ascending restores the parent viewport unchanged', async ({ gw }) => {
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
 
   const before = await gw.focused();
@@ -245,7 +245,7 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   const parentLeft = await gw.focused();
   const cx = Math.round(parentLeft.cx);
   const cy = Math.round(parentLeft.cy);
-  await gw.openPalette();
+  await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
