@@ -40,6 +40,118 @@ comment beside it says.
 - Nothing is done for nobody: no capture, fetch or walk runs unless
   something on screen or in the store needs its result.
 
+## Vocabulary
+
+One word per thing, and the same word in the UX, the code, the wire and the
+docs. A thing with two spellings is a hole. A word that only restates a
+plain phrase goes; use the phrase. A word that leaves goes on
+`scripts/retired-words.txt`, and `scripts/check-vocabulary.sh` fails the
+build where one comes back outside the paths it allows. Identifiers, wire
+names and MCP tool names spell the word (`CopyTile`, `Find`, `MoveTile`;
+the MCP tools `copy`, `find`, `move`); a renamed wire field keeps its
+number. The tile kinds, glyphs and text modes are spelled once, in
+`api/rpc/types.go`, and `test/boundary` pins it. `docs/concepts.md` says what each concept does; this table says
+what each one is called.
+
+**The node and its APIs**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| node | The one process: one id, one `server.yaml`, one `gridwell.db`. | Its home, which is a namespace; its directory, which is `~/.gridwell`. |
+| `~/.gridwell` | The node's directory: `server.yaml`, `gridwell.db`, `cache.db`, `web-password`, `plugins/<id>`. | A home. |
+| API | One interface the node serves, or in the plugin's case dials: the web API (the browser's calls), the connection API (the socket a connection dials), the plugin API (what a plugin serves the node), the MCP API (agents), the shell API (the WebSocket), the content API (a plugin's pages), the trace API. The web, connection and MCP APIs each decode onto the one router. | A door, which is a tile. |
+| connection | A config row to a far node: an immutable name, a label, how to dial. | |
+
+**Namespaces**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| namespace | A home, a plugin or a connection as the node holds it (`internal/namespace`); the segments of an id before the tile's own. | |
+| home | The node's own namespace. A connection lands on the far node's home. | The node's directory. |
+| plugin | A subprocess that serves keys and content and declares its grids; the node owns the ids and the layout, and mints a plugin's grid when it is touched. | A home. |
+| entry | One thing a plugin lists: its key and its content. | A plugin's grid. |
+| key | A plugin's own name for one thing it serves. | An id, which the node mints. |
+| source | A plugin or a connection, as what a grid's rows come from (`source_label`, `DisableSource`); also the tile a copy was made from. The directory, service or node a plugin or connection represents has no word of its own: name the thing. | |
+| cache | What a source last answered (`cache.db`, `sourcecache`, a plugin's `state_dir`), served while it does not answer. Disposable, rewarmed by use. | Stale. |
+
+**Tiles**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| grid | A plane of tiles. | |
+| tile | One thing on a grid: a text, a url, a shell, a door or a workspace tile. | |
+| door | A tile that leads to a grid, its own or, as a link, another's; descending through it pushes a frame. A drop into another namespace links, never moves. `client/door`. | A content tile; an API. |
+| content tile | A text, a url or a shell; a pane descends into one and it goes live. | A door; a workspace tile. |
+| link | A tile whose content is a path to another tile, drawn dashed, resolved one hop at a time; broken at any hop it reads dead. Deleting one unlinks. A link to a grid is a door. | A copy. |
+| copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target. Right-drag copies. | A link. |
+| text | A tile holding a body; its name is the body's first line. | |
+| url | A tile holding an address; it goes live on descent. | |
+| shell | A tile showing a terminal; it names the tmux it runs in. | |
+| workspace tile | A tile holding a layout: a pane tree, with each frame's framing and scroll. | |
+| preview | What a tile looks like from outside. A capture is one; a freeze keeps one. | |
+| id | Seven lowercase base36 characters with a leading letter, or a legacy 32-hex, qualified by its namespace. Never reassigned. | A key. |
+
+**Places and panes**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| window | The app window: the pane tree a session shows, and its level. | A text tile's scroll. |
+| pane | One panel of the window, on a grid or inside a content tile; one has focus. | |
+| place | A pane's stack of frames, as the URL names it: an anchor and a path. | A move; a placement. |
+| frame | One step of a place: a grid or a content tile reached through a door, with its framing or scroll. | A draw, which is one paint of the screen. |
+| level | The workspace tiles the window is inside, outermost first. | A place, the other axis of where you are. |
+| crumb | One per frame, in the bar; a click ascends. | |
+| bar | The one bottom bar, riding the focused pane (`wsbar`). | |
+| focused tile | The keyboard target a plain click lands on. Session-ephemeral. | The selection. |
+
+**Writes**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| content | A text body, a url address, a typed name, a workspace tile's layout. A write of it claims and bumps `version`. | |
+| version | A count of a tile's content changes; a content write claims it and bumps it. | |
+| framing | A grid's center and zoom on the row that owns the door. No bump. | |
+| scroll | A text tile's scroll position and mode, where it was left. | The window. |
+| placement | Where a tile sits: its grid, x, y, w and h. | A place. |
+| move | Writing a tile's placement, claiming the placement it read. `MoveTile`, the MCP tool `move`. | |
+| capture | A screenshot of a url or shell tile, kept as its preview. No claim, no bump. | A freeze. |
+| freeze | Keeping a captured preview until the reconnect; claims the freeze it saw. | |
+| selection | The tiles of a grid the user has in hand, on the grid row, shown the same in every pane on the grid. A select (`SetSelection`) claims nothing. | The focused tile. |
+| claim | What a write read: a version, a placement, a freeze. | |
+| stale | A claim the row has moved past; refused as a conflict. | A client on another build; a cache. |
+
+**Health**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| dead | A link whose namespace is not declared, or whose key its namespace says is gone (`gwerr.DeadRef`). Nothing is said and nothing is asked until the declaration or that namespace's listing changes. | An error; dark. |
+| dark | A source declared but not answering right now: a connection that will not dial, or a plugin whose directory or service stopped answering while its process still does. Its grids serve from cache, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
+| disabled | A plugin or connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). | Dark. |
+| waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
+| broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
+| unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
+| notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
+
+**Sessions**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| session | One client screen, by the id the client minted at boot and sends on `Subscribe` and `SetView`. | A tmux; the browser's cookies and storage, which every url tile shares. |
+| view | What a session shows (`SetView`): its panes, their places and focus, the level, a label, the grids on screen. | Framing. |
+| subscription | The grids a session shows; the sources watch the union of every open session's. | The event stream, which `Subscribe` opens. |
+| away | A session whose last stream closed, kept ten minutes (`subscription.AwayFor`), watching nothing. | |
+| tmux | The tmux a shell tile names: by its own id, or for a copy by the id its source named. At most one tile live on it. | A session. |
+
+**The menu and the chrome**
+
+| Word | What it names | What it is not |
+|---|---|---|
+| + menu | The menu on the + circle: the primitives, with a folded strip of swatches above. `client/menu`. | A palette. |
+| swatch | One item of the + menu's strip, per door seen from outside: a home, a far home, a plugin's grid. | An entry. |
+| strip | The chevron strip of the folded + menu, above the primitives; folded or open, the menu's own state. | A notice. |
+| palette | The colour set (`theme.Palette`). | The + menu. |
+| glyph | A namespace's icon, on its swatch, its ghost and the crumb of the grid it roots. | |
+
 ## How to work
 
 1. **One fact, one owner.** Before adding a field, map, or piece of state,
