@@ -32,7 +32,7 @@ func TestHeyCLIGoneAfterInfoReadsDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	lunch := tileWithLabel(t, g, "Lunch plans")
-	placed, err := cl.MoveTile(t.Context(), &gridwellv1.MoveTileRequest{TileId: lunch.Id, GridId: imbox, X: 7, Y: 3, W: 2, H: 2})
+	moved, err := cl.MoveTile(t.Context(), &gridwellv1.MoveTileRequest{TileId: lunch.Id, GridId: imbox, X: 7, Y: 3, W: 2, H: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +50,8 @@ func TestHeyCLIGoneAfterInfoReadsDark(t *testing.T) {
 		t.Fatalf("the dark imbox = %v, want every cached row", dark.Tiles)
 	}
 	got := tileWithLabel(t, dark, "Lunch plans")
-	if got.Id != placed.Tile.Id || got.X != 7 || got.Y != 3 {
-		t.Errorf("the placed row drifted in the dark: %+v", got)
+	if got.Id != moved.Tile.Id || got.X != 7 || got.Y != 3 {
+		t.Errorf("the moved row drifted in the dark: %+v", got)
 	}
 
 	hey.Restore(t)

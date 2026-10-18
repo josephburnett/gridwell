@@ -99,7 +99,7 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	if notes.Id == "" {
 		t.Fatal("no notes.md tile to move")
 	}
-	placed, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: notes.Id, X: 7, Y: 3, W: 1, H: 1}))
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: notes.Id, X: 7, Y: 3, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	}
 	var back *gridwellv1.Tile
 	for _, tile := range healed.Tiles {
-		if tile.Id == placed.Id {
+		if tile.Id == moved.Id {
 			back = tile
 		}
 	}
@@ -181,12 +181,12 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 
 	// The user drags the tile somewhere free. The write is the node's own
 	// half, so it must land and report landing.
-	placed, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: moved.Id, X: 9, Y: 9, W: 1, H: 1}))
+	second, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: moved.Id, X: 9, Y: 9, W: 1, H: 1}))
 	if err != nil {
 		t.Fatalf("a placement while the source is dark must still land: %v", err)
 	}
-	if placed.X != 9 || placed.Y != 9 {
-		t.Fatalf("placement answered %d,%d, want 9,9", placed.X, placed.Y)
+	if second.X != 9 || second.Y != 9 {
+		t.Fatalf("placement answered %d,%d, want 9,9", second.X, second.Y)
 	}
 	g, err := cl.GetGrid(ctx, rootGrid)
 	if err != nil {
@@ -235,6 +235,6 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	}
 	darken(t, root)
 	if _, err := cl.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: untouched.Id, X: 1, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(untouched)}); err == nil {
-		t.Fatal("placing an untouched entry while its source is dark must refuse, not invent a row")
+		t.Fatal("moving an untouched entry while its source is dark must refuse, not invent a row")
 	}
 }

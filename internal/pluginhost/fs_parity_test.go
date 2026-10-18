@@ -119,7 +119,7 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	if notes.Id == "" {
 		t.Fatal("no notes.md tile")
 	}
-	placed, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1}))
+	moved, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	if len(after.Tiles) != 1 {
 		t.Fatalf("dark source answered %d tiles, want only the touched one: %+v", len(after.Tiles), after.Tiles)
 	}
-	if got := after.Tiles[0]; got.Id != placed.Id || got.X != 7 || got.Y != 3 || got.AltText != "notes.md" {
+	if got := after.Tiles[0]; got.Id != moved.Id || got.X != 7 || got.Y != 3 || got.AltText != "notes.md" {
 		t.Fatalf("the touched row drifted in the dark: %+v", got)
 	}
 	// The source returns and every entry is back.
@@ -327,7 +327,7 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 			arranged = tile
 		}
 	}
-	placed, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: arranged.Id, GridId: rootGrid, X: 6, Y: 6, W: 1, H: 1}))
+	moved, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: arranged.Id, GridId: rootGrid, X: 6, Y: 6, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,7 +357,7 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 			t.Fatalf("survivor %s lost its identity: %+v != %+v", tile.AltText, s, tile)
 		}
 	}
-	if s := survivors["notes.md"]; s.Id != placed.Id || s.X != 6 || s.Y != 6 {
+	if s := survivors["notes.md"]; s.Id != moved.Id || s.X != 6 || s.Y != 6 {
 		t.Fatalf("the arranged survivor drifted: %+v", s)
 	}
 }

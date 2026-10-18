@@ -247,9 +247,9 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("an unclaimed write_text left %q, want it to claim the row as it stands", *read.Body)
 	}
 
-	placed := landed(t, items(t, s, "move", map[string]any{"id": plan.ID, "x": 6, "y": 4, "w": 2})[0])
-	if placed.X != 6 || placed.Y != 4 || placed.W != 2 || placed.H != 1 || placed.Version != wrote.Version {
-		t.Fatalf("move = %+v, want 2x1 at (6,4) with the content version untouched", placed)
+	moved := landed(t, items(t, s, "move", map[string]any{"id": plan.ID, "x": 6, "y": 4, "w": 2})[0])
+	if moved.X != 6 || moved.Y != 4 || moved.W != 2 || moved.H != 1 || moved.Version != wrote.Version {
+		t.Fatalf("move = %+v, want 2x1 at (6,4) with the content version untouched", moved)
 	}
 
 	copies := items(t, s, "copy",

@@ -190,9 +190,9 @@ func TestMoveTileDispatch(t *testing.T) {
 		TileId: text.Id, GridId: root, X: 4, Y: 5, W: 2, H: 3,
 	})
 	if err != nil {
-		t.Fatalf("place: %v", err)
+		t.Fatalf("move: %v", err)
 	}
 	if r.Tile.X != 4 || r.Tile.Y != 5 || r.Tile.W != 2 || r.Tile.H != 3 {
-		t.Errorf("placed (%d,%d %dx%d), want (4,5 2x3)", r.Tile.X, r.Tile.Y, r.Tile.W, r.Tile.H)
+		t.Errorf("moved (%d,%d %dx%d), want (4,5 2x3)", r.Tile.X, r.Tile.Y, r.Tile.W, r.Tile.H)
 	}
 }

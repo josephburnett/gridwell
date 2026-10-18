@@ -44,10 +44,10 @@ func TestMoveTileResizeInPlace(t *testing.T) {
 		TileId: tile.Id, GridId: root, X: 0, Y: 0, W: 3, H: 2,
 	})
 	if err != nil {
-		t.Fatalf("place: %v", err)
+		t.Fatalf("move: %v", err)
 	}
 	if got.W != 3 || got.H != 2 || got.GridId != root {
-		t.Errorf("placed = grid %s (%d,%d %dx%d), want grid %s 3x2", got.GridId, got.X, got.Y, got.W, got.H, root)
+		t.Errorf("moved = grid %s (%d,%d %dx%d), want grid %s 3x2", got.GridId, got.X, got.Y, got.W, got.H, root)
 	}
 	// Placement is layout, not content: the version stays put
 	// (version_rule_test.go owns the whole rule).
@@ -67,10 +67,10 @@ func TestMoveTileMoveAndResizeAtOnce(t *testing.T) {
 		TileId: tile.Id, GridId: door.ChildGridId, X: 2, Y: 3, W: 2, H: 2,
 	})
 	if err != nil {
-		t.Fatalf("place: %v", err)
+		t.Fatalf("move: %v", err)
 	}
 	if got.GridId != door.ChildGridId || got.X != 2 || got.Y != 3 || got.W != 2 || got.H != 2 {
-		t.Errorf("placed = grid %s (%d,%d %dx%d), want child grid %s (2,3 2x2)",
+		t.Errorf("moved = grid %s (%d,%d %dx%d), want child grid %s (2,3 2x2)",
 			got.GridId, got.X, got.Y, got.W, got.H, door.ChildGridId)
 	}
 
@@ -109,7 +109,7 @@ func TestMoveTileOverlapRefused(t *testing.T) {
 		TileId: b.Id, GridId: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if !errors.Is(err, ErrOverlap) {
-		t.Fatalf("placing onto an occupied cell: got %v, want ErrOverlap", err)
+		t.Fatalf("moving onto an occupied cell: got %v, want ErrOverlap", err)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestMoveTileIgnoresStaleClaim(t *testing.T) {
 		t.Fatalf("stale claim must be accepted: %v", err)
 	}
 	if got.X != 1 || got.Y != 1 {
-		t.Errorf("placed at (%d,%d), want (1,1)", got.X, got.Y)
+		t.Errorf("moved to (%d,%d), want (1,1)", got.X, got.Y)
 	}
 	// The grid is still protected: an overlapping place is refused whatever
 	// the claim says.
@@ -187,7 +187,7 @@ func TestMoveTileDoorToOtherNamespaceHasNoLocalSubtree(t *testing.T) {
 	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: far.Id, GridId: interior.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
-		t.Fatalf("placing a door to another namespace into an interior grid: %v", err)
+		t.Fatalf("moving a door to another namespace into an interior grid: %v", err)
 	}
 }
 
@@ -220,7 +220,7 @@ func TestMoveTileAncestryCycleAnswers(t *testing.T) {
 	select {
 	case err := <-done:
 		if err == nil || !strings.Contains(err.Error(), "ancestry deeper") {
-			t.Fatalf("place into a cyclic grid: got %v, want the capped-ancestry error", err)
+			t.Fatalf("move into a cyclic grid: got %v, want the capped-ancestry error", err)
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("MoveTile hung walking a cyclic ancestry chain")

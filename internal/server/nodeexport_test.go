@@ -288,15 +288,15 @@ func TestNodeExportContentStreams(t *testing.T) {
 		t.Errorf("version %d, want %d — the basis must survive the export hop", version, resp.Tile.Version)
 	}
 
-	placed, err := c.MoveTile(ctx, &gridwellv1.MoveTileRequest{
+	moved, err := c.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: created.Tile.Id, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
 		Claim: rpc.PlacementOf(created.Tile),
 	})
 	if err != nil {
 		t.Fatalf("MoveTile: %v", err)
 	}
-	if placed.Tile.W != 3 || placed.Tile.X != 5 {
-		t.Errorf("placed = (%d,%d %dx%d), want (5,5 3x3)", placed.Tile.X, placed.Tile.Y, placed.Tile.W, placed.Tile.H)
+	if moved.Tile.W != 3 || moved.Tile.X != 5 {
+		t.Errorf("moved = (%d,%d %dx%d), want (5,5 3x3)", moved.Tile.X, moved.Tile.Y, moved.Tile.W, moved.Tile.H)
 	}
 }
 

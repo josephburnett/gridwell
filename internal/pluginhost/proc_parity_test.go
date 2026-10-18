@@ -287,14 +287,14 @@ func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	placed, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
+	moved, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
 		TileId: tileNamed(g.Tiles, gone).Id, GridId: rootGrid, X: 5, Y: 5, W: 1, H: 1,
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	reap()
-	if _, err := v2.DeleteTile(ctx, rpc.DeleteOf(placed)); err != nil {
+	if _, err := v2.DeleteTile(ctx, rpc.DeleteOf(moved)); err != nil {
 		t.Fatalf("delete of a gone process: %v", err)
 	}
 	db, err := sql.Open("sqlite", memPath)
