@@ -86,10 +86,10 @@ type conn struct {
 }
 
 // end delivers the stream's end exactly once and tears the context down.
-func (c *conn) end(message string, sessionGone bool) {
+func (c *conn) end(message string, tmuxGone bool) {
 	c.once.Do(func() {
 		c.cancel()
-		c.onEnd(message, sessionGone)
+		c.onEnd(message, tmuxGone)
 	})
 }
 
@@ -136,7 +136,7 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 				if ctl.OtherBuild != "" && o.OnOtherBuild != nil {
 					o.OnOtherBuild(ctl.OtherBuild)
 				}
-				c.end(ctl.Message, ctl.SessionGone)
+				c.end(ctl.Message, ctl.TmuxGone)
 				return
 			}
 		}

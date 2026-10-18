@@ -14,7 +14,7 @@ export interface Tile {
   h?: number | string;
   childGridId?: string;
   linkTargetId?: string;
-  reference?: boolean;
+  link?: boolean;
   [k: string]: unknown;
 }
 
@@ -139,9 +139,9 @@ function placementOf(t: Tile) {
   return { gridId: t.gridId, x: Number(t.x ?? 0), y: Number(t.y ?? 0), w: Number(t.w ?? 0), h: Number(t.h ?? 0) };
 }
 
-// A foreign writer moving a tile out from under the app's stored references,
+// A foreign writer moving a tile out from under the app's stored links,
 // claiming the placement it read.
-export async function placeTile(
+export async function moveTile(
   origin: string,
   tileId: string,
   gridId: string,
@@ -151,13 +151,13 @@ export async function placeTile(
   h: number,
 ): Promise<void> {
   const claim = placementOf(await getTile(origin, tileId));
-  const res = await fetch(`${origin}/${SERVICE}/PlaceTile`, {
+  const res = await fetch(`${origin}/${SERVICE}/MoveTile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
     body: JSON.stringify({ tileId, gridId, x, y, w, h, claim }),
   });
   if (!res.ok) {
-    throw new Error(`PlaceTile(${tileId}) failed: ${res.status} ${await res.text()}`);
+    throw new Error(`MoveTile(${tileId}) failed: ${res.status} ${await res.text()}`);
   }
 }
 
@@ -231,10 +231,10 @@ export async function deleteTile(origin: string, tileId: string): Promise<void> 
   }
 }
 
-// The node's verdict on the session a shell tile names, asked the way the
+// The node's verdict on the tmux a shell tile names, asked the way the
 // client's descent probe asks it.
-export async function shellSessionAlive(origin: string, tileId: string): Promise<boolean> {
-  const res = await fetch(`${origin}/${SERVICE}/ShellSessionAlive`, {
+export async function shellTmuxAlive(origin: string, tileId: string): Promise<boolean> {
+  const res = await fetch(`${origin}/${SERVICE}/ShellTmuxAlive`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -244,13 +244,13 @@ export async function shellSessionAlive(origin: string, tileId: string): Promise
     body: JSON.stringify({ tileId }),
   });
   if (!res.ok) {
-    throw new Error(`ShellSessionAlive(${tileId}) failed: ${res.status} ${await res.text()}`);
+    throw new Error(`ShellTmuxAlive(${tileId}) failed: ${res.status} ${await res.text()}`);
   }
   return Boolean(((await res.json()) as { alive?: boolean }).alive);
 }
 
 // A well whose child grid is a qualified id in another namespace. The node
-// stores the reference verbatim and cannot check the namespace exists, so this
+// stores the link verbatim and cannot check the namespace exists, so this
 // is also how a spec seeds a dangling link.
 export async function createExitWell(
   origin: string,

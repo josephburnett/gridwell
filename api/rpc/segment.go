@@ -69,7 +69,7 @@ func IsTileSegment(seg string) bool {
 
 // OwnerNamespaceOf returns the namespace the node whose id is nodeID routes a
 // qualified id to: Server.resolve's peel as a value, so a client and a node
-// cannot disagree about whether a reference names a namespace this node
+// cannot disagree about whether a link names a namespace this node
 // declares. The answer is the first segment, except under the node's own id,
 // where a second namespace segment is a connection name and belongs to it. ""
 // for a bare id. Not NamespaceOf, which answers store identity instead.

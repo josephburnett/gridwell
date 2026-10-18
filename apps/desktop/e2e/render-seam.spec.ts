@@ -43,10 +43,10 @@ test('a text tile created in a descended grid is rendered, not just persisted', 
     .toContain(onServer!.id);
 });
 
-// Clone is an eager, independent copy, so after the gesture both tiles must
+// A copy is eager and independent, so after the gesture both tiles must
 // exist on the server and both must be rendered. Picking one up must not make
 // the other vanish until it is put down.
-test('cloning a tile leaves both the original and the copy rendered', async ({ gw }) => {
+test('copying a tile leaves both the original and the copy rendered', async ({ gw }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -55,29 +55,29 @@ test('cloning a tile leaves both the original and the copy rendered', async ({ g
 
   await gw.openMenu();
   await gw.dragCreate('well', cx, cy);
-  // A right-drag to an adjacent cell is the clone gesture.
-  await gw.cloneTileCell(cx, cy, cx + 1, cy);
+  // A right-drag to an adjacent cell is the copy gesture.
+  await gw.copyTileCell(cx, cy, cx + 1, cy);
 
   // Server truth: two independent wells.
   const snap = await gw.getGrid(grid);
   const orig = tileAt(snap, 'well', cx, cy);
   const copy = tileAt(snap, 'well', cx + 1, cy);
   expect(orig, 'original well still on the server').toBeTruthy();
-  expect(copy, 'clone created on the server').toBeTruthy();
-  expect(orig!.id, 'clone is a distinct tile (no id reassignment)').not.toBe(copy!.id);
+  expect(copy, 'copy created on the server').toBeTruthy();
+  expect(orig!.id, 'copy is a distinct tile (no id reassignment)').not.toBe(copy!.id);
 
-  // Render truth: neither the original nor the clone disappeared from the pane.
+  // Render truth: neither the original nor the copy disappeared from the pane.
   // Polled like the create spec above. The guarded bug is a tile that never
   // comes back.
   await expect
     .poll(async () => (await gw.focused()).tileIds, {
-      message: 'the original is still rendered after the clone',
+      message: 'the original is still rendered after the copy',
       timeout: 10_000,
     })
     .toContain(orig!.id);
   await expect
     .poll(async () => (await gw.focused()).tileIds, {
-      message: 'the clone is rendered',
+      message: 'the copy is rendered',
       timeout: 10_000,
     })
     .toContain(copy!.id);

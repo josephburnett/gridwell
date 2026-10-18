@@ -98,11 +98,11 @@ func TestControlRoundTrip(t *testing.T) {
 	if c.Kind != KindResize || c.Cols != 100 || c.Rows != 30 {
 		t.Fatalf("resize round trip gave %+v", c)
 	}
-	c, err = DecodeControl(EncodeExit("session gone", true))
+	c, err = DecodeControl(EncodeExit("tmux gone", true))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Kind != KindExit || c.Message != "session gone" || !c.SessionGone {
+	if c.Kind != KindExit || c.Message != "tmux gone" || !c.TmuxGone {
 		t.Fatalf("exit round trip gave %+v", c)
 	}
 	// A clean end carries no verdict, so an ordinary detach cannot read as gone.
@@ -110,7 +110,7 @@ func TestControlRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Kind != KindExit || c.Message != "" || c.SessionGone {
+	if c.Kind != KindExit || c.Message != "" || c.TmuxGone {
 		t.Fatalf("clean exit round trip gave %+v", c)
 	}
 }

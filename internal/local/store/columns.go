@@ -9,15 +9,19 @@ import (
 )
 
 // A tiles or grids column is described once, here. The CREATE TABLE text, the
-// SELECT list and Scan order, the clone INSERT and every rebuild migration's
+// SELECT list and Scan order, the copy INSERT and every rebuild migration's
 // copy list are derived from this table, so a column list that cannot be
 // spelled twice cannot be spelled inconsistently. Adding a column is one entry
 // here plus a migration. The per-kind CREATE statements are not in this class:
 // each names only the columns that kind sets.
 type column[T any] struct {
 	// name is the SQL column name. For a column that is on the wire it is
-	// also the proto field name; TestDescriptorMatchesProto pins that.
+	// also the proto field name unless field names one;
+	// TestDescriptorMatchesProto pins that.
 	name string
+	// field is the proto field name of a column whose SQL name predates it,
+	// since a column is never renamed (this package's CLAUDE.md).
+	field string
 	// ddl is the SQL that follows the name in CREATE TABLE: type, NOT NULL,
 	// DEFAULT, REFERENCES, CHECK.
 	ddl string
@@ -33,7 +37,7 @@ type column[T any] struct {
 	// it returns the destination a row scan reads this column into. nil is
 	// storage-only, a fact the store keeps for itself.
 	bind func(*T) any
-	// noCopy, when non-empty, is the reason a clone deliberately does not
+	// noCopy, when non-empty, is the reason a copy deliberately does not
 	// copy this column. Every column is one or the other, and
 	// TestEveryTileColumnIsCopiedOrExcused holds that line.
 	noCopy string
@@ -80,7 +84,7 @@ integer origin view_x/view_y, which v11 converted.`,
 	{
 		name: "child_grid_id", ddl: "INTEGER", since: 1,
 		comment: `No FK on child_grid_id: an exit well's child grid lives in another
-plugin (a qualified "<uuid>/<id>" reference), so the link is a soft
+plugin (a qualified "<uuid>/<id>" link), so the link is a soft
 pointer. Interior well integrity rests on the refcount machinery +
 property test.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ChildGridId} },
@@ -105,8 +109,8 @@ in is the viewer's geometry, not a fact about the tile.`,
 		name: "url_string", ddl: "TEXT", since: 1,
 		comment: `url-only: the URL string. The frozen JPEG preview from last close
 lives in the blobs table; preview_blob_id points at it (NULL until
-first close). Hash-deduped across clones the same way text content
-is — clones that haven't navigated independently share one row.`,
+first close). Hash-deduped across copies the same way text content
+is — copies that haven't navigated independently share one row.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.UrlString} },
 	},
 	{
@@ -148,11 +152,11 @@ writeback and never bumps version. Added at schema v4, additive.`,
 	{
 		name: "link_target_id", ddl: "TEXT", since: 6,
 		comment: `link_target_id makes a leaf tile (text, url, shell, pane) a link: a
-qualified "<uuid>/<tile-id>" reference to the tile that owns the
+qualified "<uuid>/<tile-id>" link to the tile that owns the
 content, or on a plugin's row a bare entry address in that same plugin
 (rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content
 of its own, which the CHECK's link branch enforces, and readers
-resolve bytes, preview, and session through the target id. The well
+resolve bytes, preview, and tmux through the target id. The well
 kind's link variant is a qualified child_grid_id, the exit well, so
 this column is never set on wells. Added at schema v6, by rebuild:
 the CHECK gained the link branch.`,
@@ -174,7 +178,7 @@ plugin id ('' is home); key is the plugin's stable key for the entry;
 tombstoned=1 retires the key forever, so the id is never reused and a
 recreated key mints fresh. Home rows carry the defaults. Added at
 schema v9, additive.`,
-		noCopy: "a clone lands in home (ns ''): plugin rows are re-listed, never cloned",
+		noCopy: "a copy lands in home (ns ''): plugin rows are re-listed, never copied",
 	},
 	{
 		name: "key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
@@ -194,16 +198,16 @@ snapshot of the listing, so a row its source does not list right now
 still presents as a page rather than as a url tile with no address.
 Added at schema v14, additive.`,
 		bind:   func(t *gridwellv1.Tile) any { return intBool{&t.ServesPage} },
-		noCopy: "a clone lands in home, where nothing serves a page",
+		noCopy: "a copy lands in home, where nothing serves a page",
 	},
 	{
-		name: "shell_session", ddl: "INTEGER", since: 15,
-		comment: `shell_session is the id of the tile whose tmux session a shell row
-attaches, written on a clone so every copy shares its source's
-session. NULL is the row's own id. It names a session, not a row: the
-tile that started it may be gone while a copy still names it. Added
-at schema v15, additive.`,
-		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ShellSession} },
+		name: "shell_session", field: "shell_tmux", ddl: "INTEGER", since: 15,
+		comment: `shell_session is the id of the tile whose tmux a shell row attaches,
+written on a copy so every copy shares its source's tmux. NULL is the
+row's own id. It names a tmux, not a row: the tile that started it may
+be gone while a copy still names it. On the wire it is shell_tmux.
+Added at schema v15, additive.`,
+		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ShellTmux} },
 	},
 	{
 		name: "content_at", ddl: "INTEGER", since: 19,
@@ -211,7 +215,7 @@ at schema v15, additive.`,
 stamped only where version bumps (bumpTileVersion). NULL is a row whose
 content has not changed since created_at; contentAtSQL reads the two as
 one time. Storage-only. Added at schema v19, additive.`,
-		noCopy: "a clone's content is new when the clone is: NULL reads as its created_at",
+		noCopy: "a copy's content is new when the copy is: NULL reads as its created_at",
 	},
 }
 
@@ -226,7 +230,7 @@ that id would collide with the client's still-cached copy of the old
 grid — making a fresh well render the deleted well's tiles. Fresh ids
 keep the client cache (keyed by id) honest.
 
-No refcount: grids are owned 1:1 by their parent well (copy-on-clone
+No refcount: grids are owned 1:1 by their parent well (eager copy
 never shares a grid), so only blobs are reference-counted.`,
 		bind: func(g *gridwellv1.Grid) any { return &g.Id },
 	},
@@ -269,7 +273,7 @@ var connectionsColumns = []column[struct{}]{
 	{
 		name: "name", ddl: "TEXT PRIMARY KEY", since: 13,
 		comment: `The connection's immutable name, as server.yaml declares it. It is
-the namespace segment stored references are written through, so it is
+the namespace segment stored links are written through, so it is
 never reassigned and never held twice.`,
 	},
 	{
@@ -343,7 +347,7 @@ func scanDests[T any](cols []column[T], v *T) []any {
 	return out
 }
 
-// copyColumns is every tiles column except the ones a clone deliberately
+// copyColumns is every tiles column except the ones a copy deliberately
 // leaves behind, each with its reason on the descriptor entry.
 func copyColumns() []string {
 	var out []string
@@ -355,9 +359,9 @@ func copyColumns() []string {
 	return out
 }
 
-// copyBinding renders the clone INSERT's column list and arguments from vals,
+// copyBinding renders the copy INSERT's column list and arguments from vals,
 // in descriptor order. It refuses a map missing a copied column or naming an
-// uncopied one, so a forgotten clone path is a named error rather than a
+// uncopied one, so a forgotten copy path is a named error rather than a
 // silently incomplete copy.
 func copyBinding(vals map[string]any) (cols string, args []any, err error) {
 	names := copyColumns()

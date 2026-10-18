@@ -26,7 +26,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 		HostContent:   true,
 		Glyph:         "folder",
 		SourceLabel:   "/srv/docs",
-		MenuEntries:   []*pb.MenuEntry{{Id: "search", GridId: "far/7"}},
+		MenuEntries:   []*pb.MenuEntry{{Id: "find", GridId: "far/7"}},
 	}
 	out := TransitQualifyGrid("hop", in)
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
@@ -98,35 +98,35 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 }
 
 // isIDField is the wire's naming for a qualified id within a request or a
-// Tile, plus shell_session, a tile id by another name. MenuEntry's "id" is not
+// Tile, plus shell_tmux, a tile id by another name. MenuEntry's "id" is not
 // one, so the rule is not read wire-wide.
 func isIDField(fd protoreflect.FieldDescriptor) bool {
 	name := string(fd.Name())
 	return fd.Kind() == protoreflect.StringKind &&
-		(name == "id" || strings.HasSuffix(name, "_id") || name == "shell_session")
+		(name == "id" || strings.HasSuffix(name, "_id") || name == "shell_tmux")
 }
 
-// shell_session is optional like a reference, empty meaning the tile's own id,
+// shell_tmux is optional like a link, empty meaning the tile's own id,
 // but names a tile in the tile's own namespace: it qualifies only when set and
 // peels at every hop, as Id does.
-func TestShellSessionQualifiesOnlyWhenSet(t *testing.T) {
+func TestShellTmuxQualifiesOnlyWhenSet(t *testing.T) {
 	unset := &pb.Tile{Id: "far/7", GridId: "far/1"}
-	if got := TransitQualifyTiles("hop", []*pb.Tile{unset})[0].ShellSession; got != "" {
-		t.Errorf("an unset session qualified to %q", got)
+	if got := TransitQualifyTiles("hop", []*pb.Tile{unset})[0].ShellTmux; got != "" {
+		t.Errorf("an unset tmux qualified to %q", got)
 	}
 	leafOwn := &pb.Tile{Id: "7", GridId: "1"}
 	QualifyOwnIDs("n1", leafOwn)
-	if leafOwn.ShellSession != "" || leafOwn.Id != "n1/7" || leafOwn.GridId != "n1/1" {
-		t.Errorf("QualifyOwnIDs = %+v, want ids qualified and no session", leafOwn)
+	if leafOwn.ShellTmux != "" || leafOwn.Id != "n1/7" || leafOwn.GridId != "n1/1" {
+		t.Errorf("QualifyOwnIDs = %+v, want ids qualified and no tmux", leafOwn)
 	}
-	clone := &pb.Tile{Id: "8", GridId: "1", ShellSession: "7"}
-	QualifyOwnIDs("n1", clone)
-	if clone.ShellSession != "n1/7" {
-		t.Errorf("a clone's session qualified to %q, want n1/7", clone.ShellSession)
+	cp := &pb.Tile{Id: "8", GridId: "1", ShellTmux: "7"}
+	QualifyOwnIDs("n1", cp)
+	if cp.ShellTmux != "n1/7" {
+		t.Errorf("a copy's tmux qualified to %q, want n1/7", cp.ShellTmux)
 	}
 	leaf := InboundHop("n1/1", "n1", false)
-	if got := leaf.PeelTile(clone).ShellSession; got != "7" {
-		t.Errorf("a leaf hop peeled the session to %q, want 7", got)
+	if got := leaf.PeelTile(cp).ShellTmux; got != "7" {
+		t.Errorf("a leaf hop peeled the tmux to %q, want 7", got)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest(t *testing.T) {
 
 // Via is OwnerNamespaceOf's answer, so behind a node an id is peeled only when
 // it chains through the same connection as the routed one, and behind a leaf a
-// reference stays qualified, which is what makes it a link.
+// link stays qualified, which is what makes it a link.
 func TestHopPeelsOnlyWhatChainsThroughIt(t *testing.T) {
 	transit := InboundHop("n1/rtb/far/1", "n1", true)
 	for id, want := range map[string]string{
@@ -240,11 +240,11 @@ func TestHopPeelsOnlyWhatChainsThroughIt(t *testing.T) {
 	if !proto.Equal(got, want) {
 		t.Errorf("leaf PeelTile = %+v, want %+v", got, want)
 	}
-	if got := transit.PeelSearchQuery("id:n1/rtb/far/2"); got != "id:rtb/far/2" {
-		t.Errorf("PeelSearchQuery = %q, want id:rtb/far/2", got)
+	if got := transit.PeelFindQuery("id:n1/rtb/far/2"); got != "id:rtb/far/2" {
+		t.Errorf("PeelFindQuery = %q, want id:rtb/far/2", got)
 	}
-	if got := transit.PeelSearchQuery("soup"); got != "soup" {
-		t.Errorf("PeelSearchQuery touched free text: %q", got)
+	if got := transit.PeelFindQuery("soup"); got != "soup" {
+		t.Errorf("PeelFindQuery touched free text: %q", got)
 	}
 }
 

@@ -275,49 +275,49 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 	return out, err
 }
 
-// Search routes a grid_id or a scope to its owner, and an id: lookup is its
+// Find routes a grid_id or a scope to its owner, and an id: lookup is its
 // own scope; free text with no scope fans out to every namespace, each bounded
-// by rpc.SearchHopTimeout, and names each it went without (rpc.SearchHop).
+// by rpc.FindHopTimeout, and names each it went without (rpc.FindHop).
 // Every hop carries the filters (rpc.PeelRequest).
-func (rt *router) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
+func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error) {
 	m := req
-	if err := rpc.CheckSearch(m); err != nil {
+	if err := rpc.CheckFind(m); err != nil {
 		return nil, status.Error(gcodes.InvalidArgument, err.Error())
 	}
-	scope := cmp.Or(m.GridId, m.Scope, rpc.ParseSearchQuery(m.Query).ID)
+	scope := cmp.Or(m.GridId, m.Scope, rpc.ParseFindQuery(m.Query).ID)
 	if scope != "" {
 		c, _, uuid, transit, err := rt.route(scope)
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.Search(ctx, rpc.PeelRequest(rt.hop(scope, transit), m))
+		resp, err := c.Find(ctx, rpc.PeelRequest(rt.hop(scope, transit), m))
 		if err != nil {
 			return nil, err
 		}
-		return qualifySearch(transit, uuid, resp), nil
+		return qualifyFind(transit, uuid, resp), nil
 	}
-	out := &pb.SearchResponse{}
+	out := &pb.FindResponse{}
 	for _, n := range rt.srv.namespaces() {
-		pctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
+		pctx, cancel := context.WithTimeout(ctx, rpc.FindHopTimeout)
 		// No routed id narrows a fan-out, so the hop is the namespace's own.
 		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
-		resp, err := n.NS.Search(pctx, rpc.PeelRequest(hop, m))
+		resp, err := n.NS.Find(pctx, rpc.PeelRequest(hop, m))
 		cancel()
-		q := qualifySearch(n.Transit, n.UUID, rpc.SearchHop(resp, err))
+		q := qualifyFind(n.Transit, n.UUID, rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
-func qualifySearch(transit bool, uuid string, resp *pb.SearchResponse) *pb.SearchResponse {
-	return rpc.QualifySearchResponse(uuid, resp, func(ts []*pb.Tile) []*pb.Tile {
+func qualifyFind(transit bool, uuid string, resp *pb.FindResponse) *pb.FindResponse {
+	return rpc.QualifyFindResponse(uuid, resp, func(ts []*pb.Tile) []*pb.Tile {
 		return qualifyTilesFor(transit, uuid, ts)
 	})
 }
 
-// CreateTile forwards to the destination grid's owner, references spelled for
-// that node (spellReferences).
+// CreateTile forwards to the destination grid's owner, links spelled for
+// that node (spellLinks).
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal is the authority; the menu only hides.
@@ -332,19 +332,19 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	if err := rt.refuseDisabled(m.GridId); err != nil {
 		return nil, err
 	}
-	if err := rt.mintReferences(ctx, m.Tile); err != nil {
+	if err := rt.mintLinks(ctx, m.Tile); err != nil {
 		return nil, err
 	}
-	if err := rt.spellReferences(ctx, m.GridId, m.Tile); err != nil {
+	if err := rt.spellLinks(ctx, m.GridId, m.Tile); err != nil {
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// mintReferences canonicalizes the ids a tile is about to store, so a document
+// mintLinks canonicalizes the ids a tile is about to store, so a document
 // reached through a link never wears a second name.
-func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
+func (rt *router) mintLinks(ctx context.Context, t *pb.Tile) error {
 	if t == nil {
 		return nil
 	}
@@ -360,7 +360,7 @@ func (rt *router) mintReferences(ctx context.Context, t *pb.Tile) error {
 	return nil
 }
 
-// mintRef canonicalizes one qualified reference; an id nothing derives
+// mintRef canonicalizes one qualified link; an id nothing derives
 // answers itself.
 func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	if id == "" {
@@ -377,10 +377,10 @@ func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
 	return rpc.QualifyID(uuid, minted), nil
 }
 
-// CloneTile runs at the nearest node that sees both ends (rpc.SharedOwner);
+// CopyTile runs at the nearest node that sees both ends (rpc.SharedOwner);
 // where the ends part, the copy is made here (deepcopy.go). The link gesture
-// is a plain CreateTile, never a clone.
-func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
+// is a plain CreateTile, never a copy.
+func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
 	if err != nil {
@@ -391,28 +391,28 @@ func (rt *router) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.
 		return nil, err
 	}
 	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
-		return rt.cloneAcrossPlugins(ctx, m, c, local, uuid, transit)
+		return rt.copyAcrossPlugins(ctx, m, c, local, uuid, transit)
 	}
-	resp, err := c.CloneTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
+	resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// cloneAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
+// copyAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
 // deepCopyTile's, and this level owns the host-content refusal and the
 // partial-copy wording.
-func (rt *router) cloneAcrossPlugins(ctx context.Context, m *pb.CloneTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
+func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
 	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
 	if err != nil {
 		return nil, err
 	}
 	srcLocalTile := resp.GetTile()
 	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{srcLocalTile})[0]
-	// No version claim: a clone is layout and the source row is untouched.
+	// No version claim: a copy is layout and the source row is untouched.
 	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
 	if err != nil {
 		return nil, err
 	}
-	if rpc.IsWellKind(st.Kind) && !st.Reference {
+	if rpc.IsWellKind(st.Kind) && !st.Link {
 		// Host content is refused before anything is created: its rows are
 		// metadata stubs, not the files.
 		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetHostContent() {
@@ -486,8 +486,8 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 		// Reap only on an explicit NotFound: a missed reap is reclaimed by the
 		// boot sweep, a wrong one by nothing.
 		if _, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local}); status.Code(err) == gcodes.NotFound {
-			left := append([]string{resp.GetSessionLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
-			resp = &pb.DeleteTileResponse{SessionLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
+			left := append([]string{resp.GetTmuxLeft()}, rt.reapWorkspaceEphemerals(ctx, candidates, qualifiedID)...)
+			resp = &pb.DeleteTileResponse{TmuxLeft: strings.Join(slices.DeleteFunc(left, func(s string) bool { return s == "" }), "; ")}
 		}
 	}
 	return resp, nil
@@ -517,7 +517,7 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 
 // reapWorkspaceEphemerals deletes the scratch-grid tiles among a destroyed pane
 // tile's captured leaves, best-effort: it must not block the user's delete. It
-// answers why each shell session it should have ended is still running.
+// answers why each shell's tmux it should have ended is still running.
 func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {
 	for _, id := range candidates {
 		ec, elocal, euuid, transit, err := rt.route(id)
@@ -550,7 +550,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		case err != nil:
 			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)
 		default:
-			left = append(left, dr.GetSessionLeft())
+			left = append(left, dr.GetTmuxLeft())
 		}
 	}
 	return left
@@ -646,18 +646,18 @@ func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest)
 	return &pb.SetSelectionResponse{}, nil
 }
 
-// ShellSessionAlive routes the per-descent probe to the namespace holding the
-// PTY. With disable_shells every session is dead by design, a verdict; any
+// ShellTmuxAlive routes the per-descent probe to the namespace holding the
+// PTY. With disable_shells every tmux is dead by design, a verdict; any
 // other failure is the owner's to answer and the client's to report.
-func (rt *router) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
+func (rt *router) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
 	if rt.srv.cfg.DisableShells {
-		return &pb.ShellSessionAliveResponse{Alive: false}, nil
+		return &pb.ShellTmuxAliveResponse{Alive: false}, nil
 	}
 	c, local, _, _, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	return c.ShellSessionAlive(ctx, &pb.ShellSessionAliveRequest{TileId: local})
+	return c.ShellTmuxAlive(ctx, &pb.ShellTmuxAliveRequest{TileId: local})
 }
 
 // Subscribe fans every watching namespace's events (Info.watch) into the

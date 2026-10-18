@@ -58,7 +58,7 @@ func TestReachEdgesReadsWhereEachConnectionLands(t *testing.T) {
 	}
 }
 
-// A reference is spelled from the node that holds it, along connections that
+// A link is spelled from the node that holds it, along connections that
 // node declares; with no such chain it cannot be held.
 func TestRespellSpellsFromTheHolderOrRefuses(t *testing.T) {
 	r := branchReach()

@@ -4,7 +4,7 @@ import { tileAt } from './oracle';
 // The federated space through the real stack. Boot lands on the node's own
 // home, the first row of the menu list. Across the boundary a left-drag makes a
 // link in the destination and the source stays put, since there is no
-// cross-plugin move; a right-drag clones; deleting a link only unlinks; editing
+// cross-plugin move; a right-drag copies; deleting a link only unlinks; editing
 // through a leaf link lands on the one shared copy of the bytes. Dragging a
 // menu swatch into a grid mounts that namespace as a link well.
 
@@ -61,7 +61,7 @@ test('left-drag links a well across nodes; the source stays; deleting the link n
   const link = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(link, 'link created in home').toBeTruthy();
   expect(link.childGridId, 'the grid is SHARED, not copied').toBe(src.childGridId);
-  expect(link.reference, 'the link renders dashed').toBe(true);
+  expect(link.link, 'the link renders dashed').toBe(true);
 
   const srcStill = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
   expect(srcStill, 'source well stayed put — a cross-node left-drag is a link, not a move').toBeTruthy();
@@ -76,7 +76,7 @@ test('left-drag links a well across nodes; the source stays; deleting the link n
 });
 
 // Flaked once on CI (2026-09-21, run 35618756780) at the deep-copy read
-// below: waitIdle() could not see a CloneTile in flight, so the spec read the
+// below: waitIdle() could not see a CopyTile in flight, so the spec read the
 // server oracle mid-write. See docs/flake-ledger.md; closed in the client, not
 // here.
 test('right-drag deep-copies a solid well across nodes; a text left-drag links and edits through', async ({ gw }) => {
@@ -91,10 +91,10 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
   const srcText = tileAt(await gw.getGrid(b.gridID), 'text', tx - 1, ty)!;
   expect(srcWell && srcText, 'sources created').toBeTruthy();
 
-  await gw.cloneDragAcrossPanes(b.id, tx, ty, a.id, cx, cy);
+  await gw.copyDragAcrossPanes(b.id, tx, ty, a.id, cx, cy);
   const copied = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
   expect(copied, 'the deep copy landed in home').toBeTruthy();
-  expect(copied.reference ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
+  expect(copied.link ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
   expect(copied.childGridId, 'an independent subtree, not the shared grid').not.toBe(srcWell.childGridId);
   expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'source well untouched').toBeTruthy();
 
@@ -102,7 +102,7 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
   await gw.leftDragAcrossPanes(b.id, tx - 1, ty, a.id, cx - 1, cy);
   const link = tileAt(await gw.getGrid(a.gridID), 'text', cx - 1, cy)!;
   expect(link, 'leaf link created in home').toBeTruthy();
-  expect(link.reference, 'the leaf link renders dashed').toBe(true);
+  expect(link.link, 'the leaf link renders dashed').toBe(true);
   expect(link.linkTargetId, 'the link names the source tile as content owner').toBe(srcText.id);
   expect(tileAt(await gw.getGrid(b.gridID), 'text', tx - 1, ty), 'source text stayed put').toBeTruthy();
 
@@ -130,7 +130,7 @@ test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }
   const mount = tileAt(await gw.getGrid(f.gridID), 'well', tx, ty)!;
   expect(mount, 'mount link created in the destination grid').toBeTruthy();
   expect(mount.childGridId, "the link points at the plugin's root").toBe(second.rootGridID);
-  expect(mount.reference, 'mounts are links — deletes will not propagate').toBe(true);
+  expect(mount.link, 'mounts are links — deletes will not propagate').toBe(true);
   expect(mount.altText, 'the mount carries the plugin label').toBe('second');
 
   await gw.descendCell(tx, ty);
@@ -139,10 +139,10 @@ test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }
 });
 
 // The far node announces the copy it made and the connection relays that
-// TileChanged, so the clone reads neither grid back. A remembered far grid
+// TileChanged, so the copy reads neither grid back. A remembered far grid
 // revalidated afterward finds nothing new either (see
 // sourcecache.TestAFoldedTileChangedIsNotAChange).
-test('a cross-node clone reads no listing back; the relayed event lands the copy', async ({ gw }) => {
+test('a cross-node copy reads no listing back; the relayed event lands the copy', async ({ gw }) => {
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
   await gw.clickScreen(a.x + 20, a.y + 20);
@@ -152,7 +152,7 @@ test('a cross-node clone reads no listing back; the relayed event lands the copy
   await gw.waitIdle();
 
   const reads = await gw.watchGridReads();
-  await gw.cloneDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
+  await gw.copyDragAcrossPanes(a.id, cx, cy, b.id, tx, ty);
   const copy = tileAt(await gw.getGrid(b.gridID), 'text', tx, ty)!;
   expect(copy, 'the copy landed on the far node').toBeTruthy();
   await expect
@@ -163,6 +163,6 @@ test('a cross-node clone reads no listing back; the relayed event lands the copy
     .toBe(true);
   await gw.waitIdle();
   await reads.stop();
-  expect(reads.of(b.gridID), 'the clone read the far grid back').toBe(0);
-  expect(reads.of(a.gridID), 'the clone read the source grid back').toBe(0);
+  expect(reads.of(b.gridID), 'the copy read the far grid back').toBe(0);
+  expect(reads.of(a.gridID), 'the copy read the source grid back').toBe(0);
 });

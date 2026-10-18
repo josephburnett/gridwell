@@ -101,7 +101,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   ).toBe(1);
 
   // Destroying it in the trash terminates what it owns: the scratch tile, and
-  // with it the tmux session, which also leaves teardown clean.
+  // with it the tmux, which also leaves teardown clean.
   await gw.deleteTileCell(Number(parked!.x ?? 0), Number(parked!.y ?? 0));
   await expect
     .poll(async () => {

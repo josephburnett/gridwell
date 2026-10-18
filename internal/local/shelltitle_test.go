@@ -96,7 +96,7 @@ func shellPluginWithTile(t *testing.T, fake *shellsvctest.FakeStreamer) (*local.
 	return p, sh.Tile.Id
 }
 
-// openShellAndDetach opens the tile's shell, runs beforeDetach with the session
+// openShellAndDetach opens the tile's shell, runs beforeDetach with the tmux
 // live, then ends the stream and returns whatever the detach logged. OpenShell
 // releases before it returns, so the capture has run by then.
 func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDetach ...func()) string {
@@ -128,7 +128,7 @@ func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDeta
 			})
 	}()
 
-	<-down // the fake echoed: the session is attached
+	<-down // the fake echoed: the tmux is attached
 	for _, fn := range beforeDetach {
 		fn()
 	}

@@ -33,7 +33,7 @@ test('right-drag splits the focused pane into two — another view of the same g
 
   const panes = await gw.panes();
   expect(panes.length, 'split produced a second pane').toBe(2);
-  // A split is another view of where you are, so the new pane clones the
+  // A split is another view of where you are, so the new pane copies the
   // source's grid, anchor and path.
   const other = panes.find((p) => p.id !== before.id)!;
   expect(other.gridID, 'the new pane shows the SAME grid').toBe(before.gridID);

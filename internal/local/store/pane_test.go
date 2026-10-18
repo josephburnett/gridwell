@@ -84,10 +84,10 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 	}
 }
 
-// Clone shares the layout blob by content address, and an edit to one copy can
+// Copy shares the layout blob by content address, and an edit to one copy can
 // never touch the other: the first SetPaneLayout moves the editor to a new
 // blob while the sibling keeps the old one.
-func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
+func TestPaneCopySharesBlobThenDiverges(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -100,29 +100,29 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 	if orig.BlobId == 0 {
 		t.Fatal("initial layout not stored")
 	}
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     orig.Id,
 		DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.Kind != rpc.KindPane || clone.BlobId != orig.BlobId {
-		t.Fatalf("clone must share the layout blob: %+v", clone)
+	if cp.Kind != rpc.KindPane || cp.BlobId != orig.BlobId {
+		t.Fatalf("copy must share the layout blob: %+v", cp)
 	}
 
-	cloneID, _ := parseID(clone.Id)
-	edited, err := s.SetPaneLayout(ctx, cloneID, clone.Version,
+	copyID, _ := parseID(cp.Id)
+	edited, err := s.SetPaneLayout(ctx, copyID, cp.Version,
 		[]byte(`{"v":1,"root":{"split":{"dir":"h","ratio":0.5,"a":{"pane":{"id":"p1","zoom":1}},"b":{"pane":{"id":"p2","zoom":1}}}},"focus":"p2"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if edited.BlobId == orig.BlobId {
-		t.Fatal("edit did not diverge the clone's blob")
+		t.Fatal("edit did not diverge the copy's blob")
 	}
 	// The original still reads its own bytes and its blob survives.
 	if !blobExists(t, s, orig.BlobId) {
-		t.Error("original's blob was released by the clone's edit")
+		t.Error("original's blob was released by the copy's edit")
 	}
 
 	// Deleting both tiles releases both blobs (tileRefs owns the mapping —
@@ -139,7 +139,7 @@ func TestPaneCloneSharesBlobThenDiverges(t *testing.T) {
 // The plugin identity is the config id injected by SetPluginID, not the
 // bootstrap mint. Layout blobs qualify their references with the config id, so
 // the ephemeral-refs matcher must speak it too, or the boot sweep reaps
-// pane-owned shells and kills their tmux sessions. A test that builds the blob
+// pane-owned shells and kills their tmuxes. A test that builds the blob
 // from PluginUUID cannot catch this: it matches whatever PluginUUID returns.
 func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
 	s := newTestStore(t)

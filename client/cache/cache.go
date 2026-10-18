@@ -26,7 +26,7 @@ type Cache struct {
 	// this client (live_updates_off), keyed the same way.
 	unwatched map[string]bool
 	// content is the one body store, keyed by tile id because blob ids are
-	// not routable and editing one clone must leave a sibling alone.
+	// not routable and editing one copy must leave a sibling alone.
 	content map[string]*contentEntry
 	gens    uint64
 	// holds is the placements written ahead of their echo, by tile id.
@@ -141,7 +141,7 @@ func (c *Cache) PutFetchedContent(tileID string, data []byte, base rpc.ContentBa
 	if n := c.rowLocked(tileID); n != nil && asked.differs(n) {
 		return
 	}
-	c.content[tileID] = &contentEntry{data: cloneBytes(data), base: base, row: asked, gen: c.nextGenLocked()}
+	c.content[tileID] = &contentEntry{data: copyBytes(data), base: base, row: asked, gen: c.nextGenLocked()}
 }
 
 func (c *Cache) nextGenLocked() uint64 {
@@ -173,7 +173,7 @@ func (c *Cache) PutEditedContent(tileID string, data []byte) {
 		e = &contentEntry{}
 		c.content[tileID] = e
 	}
-	e.data = cloneBytes(data)
+	e.data = copyBytes(data)
 	e.dirty = true
 	e.gen = c.nextGenLocked()
 }
@@ -194,7 +194,7 @@ func (c *Cache) PutSavedContent(row *gridwellv1.Tile, data []byte) {
 	if ok && bytes.Equal(e.data, data) {
 		gen = e.gen
 	}
-	c.content[row.Id] = &contentEntry{data: cloneBytes(data), base: base, row: filed, gen: gen}
+	c.content[row.Id] = &contentEntry{data: copyBytes(data), base: base, row: filed, gen: gen}
 }
 
 // SaveBasis returns the basis a content write must claim. Only fetches and
@@ -219,7 +219,7 @@ func (c *Cache) DirtyContent(tileID string) ([]byte, bool) {
 	if !ok || !e.dirty {
 		return nil, false
 	}
-	return cloneBytes(e.data), true
+	return copyBytes(e.data), true
 }
 
 // DirtyTileIDs returns the ids of every tile with an unsaved edit.
@@ -235,7 +235,7 @@ func (c *Cache) DirtyTileIDs() []string {
 	return out
 }
 
-func cloneBytes(b []byte) []byte {
+func copyBytes(b []byte) []byte {
 	cp := make([]byte, len(b))
 	copy(cp, b)
 	return cp
@@ -371,7 +371,7 @@ func (c *Cache) rowLocked(tileID string) *gridwellv1.Tile {
 }
 
 // Grid returns a snapshot: the map is a copy, the rows are the cached rows.
-// A caller changing one clones it and hands it back through Apply or
+// A caller changing one copies it and hands it back through Apply or
 // UpdateTile, so the version interlock still decides.
 func (c *Cache) Grid(id string) (*Grid, bool) {
 	c.mu.Lock()
@@ -603,7 +603,7 @@ func (c *Cache) storeLocked(n *gridwellv1.Tile, told bool) bool {
 }
 
 // PatchTile folds an optimistic local change to one row in through the event
-// path, and reports whether it landed. edit sees a clone.
+// path, and reports whether it landed. edit sees a copy.
 func (c *Cache) PatchTile(t *gridwellv1.Tile, edit func(*gridwellv1.Tile)) bool {
 	if t == nil {
 		return false

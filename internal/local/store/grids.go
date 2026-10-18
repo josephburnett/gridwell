@@ -166,17 +166,17 @@ func (s *Store) tilePreview(ctx context.Context, ns string, id int64) (jpeg []by
 	return jpeg, err
 }
 
-// SessionNamers is how many shell rows name one tmux session, and how many of
+// TmuxNamers is how many shell rows name one tmux, and how many of
 // those carry a frozen preview.
-type SessionNamers struct {
+type TmuxNamers struct {
 	Rows, Previewed int64
 }
 
-// ShellSessionNamers counts the shell rows naming the session key, a trashed
-// row included: a session with no rows is an orphan, and one whose rows have
+// ShellTmuxNamers counts the shell rows naming the tmux key, a trashed
+// row included: a tmux with no rows is an orphan, and one whose rows have
 // no preview was never started.
-func (s *Store) ShellSessionNamers(ctx context.Context, key string) (SessionNamers, error) {
-	var n SessionNamers
+func (s *Store) ShellTmuxNamers(ctx context.Context, key string) (TmuxNamers, error) {
+	var n TmuxNamers
 	keyInt, err := parseID(key)
 	if err != nil {
 		return n, nil

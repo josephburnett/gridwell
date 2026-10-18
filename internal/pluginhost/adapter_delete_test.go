@@ -69,7 +69,7 @@ func (p *deletePlugin) deleteCount() int {
 // the plugin's verb and the plugin decides what it means: fs removes the file,
 // gitlab marks the todo done and keeps the tile. So the node asks the same
 // question it asks on the listing path — Probe — and retires the row only on a
-// definitive GONE. The row is where the placement and every stored reference
+// definitive GONE. The row is where the placement and every stored link
 // live, so retiring one whose thing is still there loses both.
 func TestDeleteRetiresOnlyWhatTheSourceSaysIsGone(t *testing.T) {
 	for _, tc := range []struct {
@@ -113,7 +113,7 @@ func TestDeleteRetiresOnlyWhatTheSourceSaysIsGone(t *testing.T) {
 			// The durable touch: a move is what mints the row, and the row is
 			// what the delete must decide about.
 			addr := before.Tiles[0].Id
-			if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			if _, err := client.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 				TileId: addr, X: 5, Y: 5, W: 3, H: 2,
 			}); err != nil {
 				t.Fatal(err)
@@ -121,7 +121,7 @@ func TestDeleteRetiresOnlyWhatTheSourceSaysIsGone(t *testing.T) {
 			// The row the placement minted, read where it lives: the entry's
 			// public id never changes, so the row is the only thing a
 			// retirement can burn, and it is what this test watches — through
-			// the id a reference stored under the older rule still holds.
+			// the id a link stored under the older rule still holds.
 			rowID := rowIDOf(t, ns, "r", "todo:1")
 
 			if _, err := client.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: addr}); err != nil {
@@ -134,7 +134,7 @@ func TestDeleteRetiresOnlyWhatTheSourceSaysIsGone(t *testing.T) {
 			// The listing keeps naming the entry either way: this plugin never
 			// stops listing the key, and the address is the key's. What the
 			// delete decided is whether the ROW — the placement, and every
-			// stored reference — went with it.
+			// stored link — went with it.
 			after, err := client.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: plugintest.Landing(t, info)})
 			if err != nil {
 				t.Fatal(err)
@@ -240,7 +240,7 @@ func TestDeleteSurfacesWhatItCouldNotResolve(t *testing.T) {
 				t.Fatal(err)
 			}
 			addr := g.Tiles[0].Id
-			if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: addr, X: 5, Y: 5, W: 3, H: 2}); err != nil {
+			if _, err := client.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: addr, X: 5, Y: 5, W: 3, H: 2}); err != nil {
 				t.Fatal(err)
 			}
 

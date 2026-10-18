@@ -1,6 +1,6 @@
 // Package shellsvctest provides an in-memory shellsvc.Streamer, so the shell
 // manager, the home's OpenShell, and the server's WebSocket bridge can be
-// exercised without a real tmux session or PTY. Sessions echo their input to
+// exercised without a real tmux or PTY. Tmuxes echo their input to
 // their output, which is enough to verify a round trip through every hop.
 package shellsvctest
 
@@ -12,49 +12,49 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/tmux"
 )
 
-// FakeStreamer is a programmable shellsvc.Streamer. HasSession is driven per
-// session so a test can pick the create, attach, or reject path, and every
-// OpenSession is recorded with its mode and size.
+// FakeStreamer is a programmable shellsvc.Streamer. Has is driven per
+// tmux so a test can pick the create, attach, or reject path, and every
+// Open is recorded with its mode and size.
 type FakeStreamer struct {
-	mu       sync.Mutex
-	alive    map[string]bool
-	sessions []*FakeSession
-	killed   []string
-	PaneCmd  string // canned PaneCommand answer
-	PaneErr  error  // when set, PaneCommand fails with it: tmux unreachable
-	// OpenErr, when set, makes every OpenSession fail with it and open no
-	// session, which is how the real streamer behaves when the PTY layer
+	mu      sync.Mutex
+	alive   map[string]bool
+	tmuxes  []*FakeAttachment
+	killed  []string
+	PaneCmd string // canned PaneCommand answer
+	PaneErr error  // when set, PaneCommand fails with it: tmux unreachable
+	// OpenErr, when set, makes every Open fail with it and open no
+	// tmux, which is how the real streamer behaves when the PTY layer
 	// refuses: no tmux server, a failed exec, or a platform with no PTY.
 	OpenErr error
-	// KillErr, when set, makes every Kill fail with it and leave the session.
+	// KillErr, when set, makes every Kill fail with it and leave the tmux.
 	KillErr error
 }
 
 func New() *FakeStreamer { return &FakeStreamer{alive: map[string]bool{}} }
 
-// SetAlive programs HasSession's answer for key.
+// SetAlive programs Has's answer for key.
 func (f *FakeStreamer) SetAlive(key string, alive bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.alive[key] = alive
 }
 
-func (f *FakeStreamer) OpenSession(key string, mode tmux.Mode, cols, rows uint16) (shellsvc.Session, error) {
+func (f *FakeStreamer) Open(key string, mode tmux.Mode, cols, rows uint16) (shellsvc.Attachment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.OpenErr != nil {
 		return nil, f.OpenErr
 	}
-	s := &FakeSession{
+	s := &FakeAttachment{
 		Key: key, OpenMode: mode, InitialCols: cols, InitialRows: rows,
 		outCh: make(chan []byte, 64), done: make(chan struct{}),
 	}
-	f.sessions = append(f.sessions, s)
-	f.alive[key] = true // a successful open leaves the session alive
+	f.tmuxes = append(f.tmuxes, s)
+	f.alive[key] = true // a successful open leaves the tmux alive
 	return s, nil
 }
 
-func (f *FakeStreamer) HasSession(key string) (bool, error) {
+func (f *FakeStreamer) Has(key string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.alive[key], nil
@@ -71,7 +71,7 @@ func (f *FakeStreamer) Kill(key string) error {
 	return nil
 }
 
-func (f *FakeStreamer) ListLiveSessions() ([]string, error) {
+func (f *FakeStreamer) ListLive() ([]string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var ids []string
@@ -92,33 +92,33 @@ func (f *FakeStreamer) PaneCommand(string) (string, error) {
 	return f.PaneCmd, nil
 }
 
-// LastSession returns the most recently opened session, or nil.
-func (f *FakeStreamer) LastSession() *FakeSession {
+// LastAttachment returns the most recently opened tmux, or nil.
+func (f *FakeStreamer) LastAttachment() *FakeAttachment {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.sessions) == 0 {
+	if len(f.tmuxes) == 0 {
 		return nil
 	}
-	return f.sessions[len(f.sessions)-1]
+	return f.tmuxes[len(f.tmuxes)-1]
 }
 
-// SessionCount is how many OpenSession calls succeeded.
-func (f *FakeStreamer) SessionCount() int {
+// AttachmentCount is how many Open calls succeeded.
+func (f *FakeStreamer) AttachmentCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.sessions)
+	return len(f.tmuxes)
 }
 
-// Killed returns the session keys passed to Kill, in order.
+// Killed returns the tmux keys passed to Kill, in order.
 func (f *FakeStreamer) Killed() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.killed...)
 }
 
-// FakeSession is an echoing PTY. Bytes written are pushed to Output, so a
+// FakeAttachment is an echoing PTY. Bytes written are pushed to Output, so a
 // round trip through the manager, the namespace, and the bridge returns them.
-type FakeSession struct {
+type FakeAttachment struct {
 	Key         string
 	OpenMode    tmux.Mode
 	InitialCols uint16
@@ -133,9 +133,9 @@ type FakeSession struct {
 	done  chan struct{}
 }
 
-func (s *FakeSession) Output() <-chan []byte { return s.outCh }
+func (s *FakeAttachment) Output() <-chan []byte { return s.outCh }
 
-func (s *FakeSession) Write(p []byte) (int, error) {
+func (s *FakeAttachment) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -151,7 +151,7 @@ func (s *FakeSession) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (s *FakeSession) Resize(cols, rows uint16) error {
+func (s *FakeAttachment) Resize(cols, rows uint16) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -161,9 +161,9 @@ func (s *FakeSession) Resize(cols, rows uint16) error {
 	return nil
 }
 
-func (s *FakeSession) Done() <-chan struct{} { return s.done }
+func (s *FakeAttachment) Done() <-chan struct{} { return s.done }
 
-func (s *FakeSession) Close() error {
+func (s *FakeAttachment) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
@@ -175,21 +175,21 @@ func (s *FakeSession) Close() error {
 	return nil
 }
 
-func (s *FakeSession) IsClosed() bool {
+func (s *FakeAttachment) IsClosed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.closed
 }
 
-// Inputs returns a copy of every byte slice written to the session.
-func (s *FakeSession) Inputs() [][]byte {
+// Inputs returns a copy of every byte slice written to the tmux.
+func (s *FakeAttachment) Inputs() [][]byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([][]byte(nil), s.inputs...)
 }
 
 // Resizes returns a copy of every (cols,rows) resize applied.
-func (s *FakeSession) Resizes() [][2]uint16 {
+func (s *FakeAttachment) Resizes() [][2]uint16 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([][2]uint16(nil), s.resizes...)

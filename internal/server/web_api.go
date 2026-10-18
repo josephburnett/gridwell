@@ -56,8 +56,8 @@ func (h *connectHandler) GetTilePreview(ctx context.Context, req *connect.Reques
 	return unary(h.rt.GetTilePreview)(ctx, req)
 }
 
-func (h *connectHandler) Search(ctx context.Context, req *connect.Request[pb.SearchRequest]) (*connect.Response[pb.SearchResponse], error) {
-	return unary(h.rt.Search)(ctx, req)
+func (h *connectHandler) Find(ctx context.Context, req *connect.Request[pb.FindRequest]) (*connect.Response[pb.FindResponse], error) {
+	return unary(h.rt.Find)(ctx, req)
 }
 
 func (h *connectHandler) CreateTile(ctx context.Context, req *connect.Request[pb.CreateTileRequest]) (*connect.Response[pb.TileResponse], error) {
@@ -68,12 +68,12 @@ func (h *connectHandler) SetTile(ctx context.Context, req *connect.Request[pb.Se
 	return unary(h.rt.SetTile)(ctx, req)
 }
 
-func (h *connectHandler) PlaceTile(ctx context.Context, req *connect.Request[pb.PlaceTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	return unary(h.rt.PlaceTile)(ctx, req)
+func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
+	return unary(h.rt.MoveTile)(ctx, req)
 }
 
-func (h *connectHandler) CloneTile(ctx context.Context, req *connect.Request[pb.CloneTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	return unary(h.rt.CloneTile)(ctx, req)
+func (h *connectHandler) CopyTile(ctx context.Context, req *connect.Request[pb.CopyTileRequest]) (*connect.Response[pb.TileResponse], error) {
+	return unary(h.rt.CopyTile)(ctx, req)
 }
 
 func (h *connectHandler) DeleteTile(ctx context.Context, req *connect.Request[pb.DeleteTileRequest]) (*connect.Response[pb.DeleteTileResponse], error) {
@@ -88,8 +88,8 @@ func (h *connectHandler) SetSelection(ctx context.Context, req *connect.Request[
 	return unary(h.rt.SetSelection)(ctx, req)
 }
 
-func (h *connectHandler) ShellSessionAlive(ctx context.Context, req *connect.Request[pb.ShellSessionAliveRequest]) (*connect.Response[pb.ShellSessionAliveResponse], error) {
-	return unary(h.rt.ShellSessionAlive)(ctx, req)
+func (h *connectHandler) ShellTmuxAlive(ctx context.Context, req *connect.Request[pb.ShellTmuxAliveRequest]) (*connect.Response[pb.ShellTmuxAliveResponse], error) {
+	return unary(h.rt.ShellTmuxAlive)(ctx, req)
 }
 
 func (h *connectHandler) ReadContent(ctx context.Context, req *connect.Request[pb.ReadContentRequest], stream *connect.ServerStream[pb.ContentChunk]) error {

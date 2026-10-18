@@ -55,7 +55,7 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
   const icy = Math.round(inner.cy) + 2; // the first descent captures the layout, pane tile and all
   await gw.openMenu();
   await gw.dragCreate('shell', icx, icy);
-  await gw.descendCell(icx, icy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(icx, icy); // the drop lands bare; the descent creates the tmux
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.shellRenderer()), {
       timeout: 15_000,

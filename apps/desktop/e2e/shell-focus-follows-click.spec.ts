@@ -26,7 +26,7 @@ test('left-click into a live shell transfers pane focus', async ({
   const cy = Math.round(lf.cy);
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPaneId = (await gw.focused()).id;
 
@@ -40,7 +40,7 @@ test('left-click into a live shell transfers pane focus', async ({
     .poll(async () => (await gw.focused()).id, { timeout: 5_000 })
     .toBe(shellPaneId);
 
-  // Delete the shell tile so its tmux session dies before teardown.
+  // Delete the shell tile so its tmux dies before teardown.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);

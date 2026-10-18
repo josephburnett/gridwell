@@ -233,7 +233,7 @@ func TestMCPSessionsMarksTheScreenHoldingYourShell(t *testing.T) {
 	waitSession(t, f.fake)
 	phone := viewer(t, f.hs, "browser", focusedOn(f.root))
 
-	key := rpc.LocalOf(rpc.ShellSession(tile))
+	key := rpc.LocalOf(rpc.ShellTmux(tile))
 	s := agentAt(t, f.hs, map[string]string{mcpapi.ShellHeader: key})
 	yours := func(o mcpapi.SessionsOut) string {
 		for _, x := range o.Sessions {

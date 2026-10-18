@@ -195,8 +195,8 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 	ctx := context.Background()
 
 	link := boxLink(t, cl)
-	if !link.Reference || link.LinkTargetId != threadID() {
-		t.Fatalf("box tile = reference %v target %q, want a link to %q", link.Reference, link.LinkTargetId, threadID())
+	if !link.Link || link.LinkTargetId != threadID() {
+		t.Fatalf("box tile = link %v target %q, want a link to %q", link.Link, link.LinkTargetId, threadID())
 	}
 	if link.Kind != rpc.KindText || link.AltText != "● Lunch" || link.StatusDetail != "unseen" {
 		t.Fatalf("box tile = kind %q label %q status %q, want the box's own label on the target's kind",
@@ -217,16 +217,16 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 	}
 
 	// A copy of a link is another link to the same target.
-	clone, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: link.Id, DestGridId: home, X: 3, Y: 3})
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: link.Id, DestGridId: home, X: 3, Y: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if clone.LinkTargetId != threadID() {
-		t.Fatalf("the clone links to %q, want the thread %q", clone.LinkTargetId, threadID())
+	if cp.LinkTargetId != threadID() {
+		t.Fatalf("the copy links to %q, want the thread %q", cp.LinkTargetId, threadID())
 	}
 
 	src.set(func(m *mailSource) { m.gone = true })
-	for _, id := range []string{link.Id, clone.Id} {
+	for _, id := range []string{link.Id, cp.Id} {
 		if _, _, _, err := cl.ReadContent(ctx, id); !gwerr.IsDeadRef(err) {
 			t.Errorf("ReadContent(%s) once the thread is gone = %v, want the dead verdict", id, err)
 		}
@@ -239,8 +239,8 @@ func TestALinkEntryResolvesThroughItsUntouchedTarget(t *testing.T) {
 	}
 
 	src.set(func(m *mailSource) { m.gone = false })
-	if body, _, _, err := cl.ReadContent(ctx, clone.Id); err != nil || string(body) != "card of t1" {
-		t.Fatalf("the thread is back and the clone reads %q, %v", body, err)
+	if body, _, _, err := cl.ReadContent(ctx, cp.Id); err != nil || string(body) != "card of t1" {
+		t.Fatalf("the thread is back and the copy reads %q, %v", body, err)
 	}
 }
 
@@ -253,10 +253,10 @@ func TestATouchedEntryThatBecomesALinkKeepsItsPlace(t *testing.T) {
 	ctx := context.Background()
 
 	before := boxLink(t, cl)
-	if before.Reference {
+	if before.Link {
 		t.Fatal("an entry with no link_target drew as a link")
 	}
-	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: -2, W: 2, H: 1})); err != nil {
+	if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: before.Id, X: 7, Y: -2, W: 2, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 	src.set(func(m *mailSource) { m.asLink = true })
@@ -264,8 +264,8 @@ func TestATouchedEntryThatBecomesALinkKeepsItsPlace(t *testing.T) {
 	if after.Id != before.Id || after.X != 7 || after.Y != -2 || after.W != 2 {
 		t.Fatalf("after = %s at (%d,%d) w%d, want %s where the user put it", after.Id, after.X, after.Y, after.W, before.Id)
 	}
-	if !after.Reference || after.LinkTargetId != threadID() {
-		t.Fatalf("after = reference %v target %q, want a link to the thread", after.Reference, after.LinkTargetId)
+	if !after.Link || after.LinkTargetId != threadID() {
+		t.Fatalf("after = link %v target %q, want a link to the thread", after.Link, after.LinkTargetId)
 	}
 }
 
@@ -276,7 +276,7 @@ func TestTheSweepProbesTheContextItSweeps(t *testing.T) {
 	cl, _, _ := linkStack(t, src)
 	ctx := context.Background()
 	link := boxLink(t, cl)
-	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: link.Id, X: 4, Y: 4, W: 1, H: 1})); err != nil {
+	if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: link.Id, X: 4, Y: 4, W: 1, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 	src.set(func(m *mailSource) { m.inBox = false })

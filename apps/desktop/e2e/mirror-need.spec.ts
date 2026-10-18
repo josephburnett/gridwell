@@ -117,7 +117,7 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   const cy = Math.round(a.cy) + 2;
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   await gw.shellAttached();
 
@@ -155,7 +155,7 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   await window.keyboard.press('Enter');
   await expect.poll(() => gw.shellMirrors(), { message: 'the repaint was mirrored' }).toBeGreaterThan(shown);
 
-  // Delete the tile so its tmux session dies before teardown.
+  // Delete the tile so its tmux dies before teardown.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);

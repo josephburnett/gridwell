@@ -72,15 +72,15 @@ func (s *swapHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // askCounter is the dialed far namespace with a count of the verbs that decide
-// where a clone ran.
+// where a copy ran.
 type askCounter struct {
 	namespace.Namespace
-	clones, creates, writes atomic.Int32
+	copies, creates, writes atomic.Int32
 }
 
-func (a *askCounter) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	a.clones.Add(1)
-	return a.Namespace.CloneTile(ctx, req)
+func (a *askCounter) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+	a.copies.Add(1)
+	return a.Namespace.CopyTile(ctx, req)
 }
 
 func (a *askCounter) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {

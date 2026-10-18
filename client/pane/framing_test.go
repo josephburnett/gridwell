@@ -24,7 +24,7 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 	}
 
 	// The link tile is the doorway and lives in the level below. The frame
-	// remembers it, so nothing searches the parent grid for it.
+	// remembers it, so nothing looks through the parent grid for it.
 	s.Push(Frame{GridID: "k3x9m2q/1", Door: "lnk"})
 	got = s.FramingTarget(false)
 	if got.TileID != "lnk" || got.DoorAnchor != "home/1" ||
@@ -134,11 +134,11 @@ func TestTakeOver(t *testing.T) {
 	}
 }
 
-// Tiles sharing a session share its one live surface: going live on a clone
+// Tiles sharing a session share its one live surface: going live on a copy
 // closes the source's surface, so it freezes onto its own tile, and places a
-// fresh one bound to the clone. A move would carry a socket bound to the
+// fresh one bound to the copy. A move would carry a socket bound to the
 // source, whose preview and title the server would keep writing.
-func TestTakeOverAcrossTilesOnOneSession(t *testing.T) {
+func TestTakeOverAcrossTilesOnOneTmux(t *testing.T) {
 	cases := []struct {
 		name    string
 		holders []Holder
@@ -149,7 +149,7 @@ func TestTakeOverAcrossTilesOnOneSession(t *testing.T) {
 			[]Holder{{"p1", "u/7", "u/7"}}, "p2", Engagement{Close: []string{"p1"}}},
 		{"the opener holds the source: close it here, place fresh",
 			[]Holder{{"p1", "u/7", "u/7"}}, "p1", Engagement{Close: []string{"p1"}}},
-		{"another pane holds the clone itself: move it",
+		{"another pane holds the copy itself: move it",
 			[]Holder{{"p1", "u/8", "u/7"}}, "p2", Engagement{From: "p1"}},
 		{"another session entirely: untouched",
 			[]Holder{{"p1", "u/9", "u/9"}}, "p2", Engagement{}},

@@ -25,13 +25,13 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   const cy = Math.round(a.cy);
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPaneId = (await gw.focused()).id;
   const shell = tileAt(await gw.getGrid(a.gridID), 'shell', cx, cy)!;
   expect(shell, 'shell created').toBeTruthy();
 
-  // The ascent freezes the session, so a preview snapshot exists to stand in.
+  // The ascent freezes the tmux, so a preview snapshot exists to stand in.
   await window.keyboard.type('echo STANDIN-MARKER');
   await window.keyboard.press('Enter');
   // Wait for echo's output line. The typed command also carries the marker, so a
@@ -85,7 +85,7 @@ test('the parked shell stand-in sits exactly where the live canvas was', async (
   expect(Math.abs(standin.h - live!.h), 'h').toBeLessThan(1.5);
 
   // Refocusing the shell pane closes the menu. Delete the tile so its tmux
-  // session dies before teardown.
+  // tmux dies before teardown.
   await gw.focusPane((await gw.panes()).find((p) => p.id === shellPaneId)!);
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');

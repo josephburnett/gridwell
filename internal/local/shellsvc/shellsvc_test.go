@@ -19,9 +19,9 @@ func TestAcquire_FreshTileCreates(t *testing.T) {
 		t.Fatalf("Acquire: %v", err)
 	}
 	if sess == nil {
-		t.Fatal("nil session")
+		t.Fatal("nil tmux")
 	}
-	last := fake.LastSession()
+	last := fake.LastAttachment()
 	if last.OpenMode != tmux.ModeCreate {
 		t.Errorf("mode = %v, want ModeCreate", last.OpenMode)
 	}
@@ -30,30 +30,30 @@ func TestAcquire_FreshTileCreates(t *testing.T) {
 	}
 }
 
-func TestAcquire_LiveSessionAttaches(t *testing.T) {
+func TestAcquire_LiveTmuxAttaches(t *testing.T) {
 	fake := shellsvctest.New()
-	fake.SetAlive("1", true) // a tmux session already exists
+	fake.SetAlive("1", true) // a tmux already exists
 	m := shellsvc.NewManager(fake)
 
 	if _, _, err := m.Acquire("1", false /*allowCreate*/, 80, 24); err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
-	if got := fake.LastSession().OpenMode; got != tmux.ModeAttach {
+	if got := fake.LastAttachment().OpenMode; got != tmux.ModeAttach {
 		t.Errorf("mode = %v, want ModeAttach", got)
 	}
 }
 
-func TestAcquire_SnapshotNoSessionRejected(t *testing.T) {
+func TestAcquire_SnapshotNoTmuxRejected(t *testing.T) {
 	fake := shellsvctest.New() // not alive
 	m := shellsvc.NewManager(fake)
 
-	// allowCreate false and no live session gives ErrSessionGone, because a
+	// allowCreate false and no live tmux gives ErrTmuxGone, because a
 	// fresh shell must not be fabricated behind the JPEG.
-	if _, _, err := m.Acquire("1", false, 80, 24); !errors.Is(err, shellsvc.ErrSessionGone) {
-		t.Fatalf("err = %v, want ErrSessionGone", err)
+	if _, _, err := m.Acquire("1", false, 80, 24); !errors.Is(err, shellsvc.ErrTmuxGone) {
+		t.Fatalf("err = %v, want ErrTmuxGone", err)
 	}
-	if fake.SessionCount() != 0 {
-		t.Errorf("opened %d sessions, want 0", fake.SessionCount())
+	if fake.AttachmentCount() != 0 {
+		t.Errorf("opened %d tmuxes, want 0", fake.AttachmentCount())
 	}
 }
 
@@ -71,10 +71,10 @@ func TestAcquire_TakeoverReusesPTYAndEvictsOld(t *testing.T) {
 		t.Fatalf("second Acquire: %v", err)
 	}
 	if sess1 != sess2 {
-		t.Error("takeover opened a new PTY; want the same session reused")
+		t.Error("takeover opened a new PTY; want the same tmux reused")
 	}
-	if fake.SessionCount() != 1 {
-		t.Errorf("opened %d sessions, want 1 (reuse)", fake.SessionCount())
+	if fake.AttachmentCount() != 1 {
+		t.Errorf("opened %d tmuxes, want 1 (reuse)", fake.AttachmentCount())
 	}
 	select {
 	case <-stopOld1:
@@ -94,7 +94,7 @@ func TestAcquire_TakeoverForcesARepaint(t *testing.T) {
 	if _, _, err := m.Acquire("1", true, 80, 24); err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	sess := fake.LastSession()
+	sess := fake.LastAttachment()
 	if got := len(sess.Resizes()); got != 0 {
 		t.Fatalf("a first attach resized %d times, want 0 (the open carries the size)", got)
 	}
@@ -107,7 +107,7 @@ func TestAcquire_TakeoverForcesARepaint(t *testing.T) {
 	}
 }
 
-func TestReleaseClosesSessionAndFiresOnDetach(t *testing.T) {
+func TestReleaseClosesAttachmentAndFiresOnDetach(t *testing.T) {
 	fake := shellsvctest.New()
 	m := shellsvc.NewManager(fake)
 
@@ -115,8 +115,8 @@ func TestReleaseClosesSessionAndFiresOnDetach(t *testing.T) {
 	detached := false
 	m.Release("1", sess, stopOld, func() { detached = true })
 
-	if !sess.(*shellsvctest.FakeSession).IsClosed() {
-		t.Error("session not closed on release")
+	if !sess.(*shellsvctest.FakeAttachment).IsClosed() {
+		t.Error("tmux not closed on release")
 	}
 	if !detached {
 		t.Error("onDetach not fired")

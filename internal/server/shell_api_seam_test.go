@@ -110,16 +110,16 @@ func (f *shellAPIFixture) clientStack() *clientStack {
 	return cs
 }
 
-func waitSession(t *testing.T, fake *shellsvctest.FakeStreamer) *shellsvctest.FakeSession {
+func waitSession(t *testing.T, fake *shellsvctest.FakeStreamer) *shellsvctest.FakeAttachment {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if s := fake.LastSession(); s != nil {
+		if s := fake.LastAttachment(); s != nil {
 			return s
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatal("no PTY session opened within 3s")
+	t.Fatal("no PTY opened within 3s")
 	return nil
 }
 
@@ -176,19 +176,19 @@ func TestShellAPIForwardsResize(t *testing.T) {
 	t.Fatal("resize never reached the PTY")
 }
 
-// Two tiles naming one session, a shell and its clone, attached from two
-// clients: the second takes the session over, so the first viewer's stream
+// Two tiles naming one tmux, a shell and its copy, attached from two
+// clients: the second takes the tmux over, so the first viewer's stream
 // ends clean, and the one PTY is reused rather than a second tmux client
 // attached.
-func TestShellAPIAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
+func TestShellAPIAttachesTwoTilesOnOneTmuxOnce(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
 	a := f.createShell(t, 0, 0)
-	b, err := f.cl.CloneTile(context.Background(), &gridwellv1.CloneTileRequest{TileId: a.Id, DestGridId: f.root, X: 2})
+	b, err := f.cl.CopyTile(context.Background(), &gridwellv1.CopyTileRequest{TileId: a.Id, DestGridId: f.root, X: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rpc.ShellSession(b) != a.Id {
-		t.Fatalf("the clone names session %q, want %q", rpc.ShellSession(b), a.Id)
+	if rpc.ShellTmux(b) != a.Id {
+		t.Fatalf("the copy names tmux %q, want %q", rpc.ShellTmux(b), a.Id)
 	}
 	first, second := f.clientStack(), f.clientStack()
 	first.reg.Open(a.Id, a.Id, 80, 24)
@@ -199,35 +199,35 @@ func TestShellAPIAttachesTwoTilesOnOneSessionOnce(t *testing.T) {
 
 	select {
 	case e := <-first.exit:
-		if e.SessionGone || e.Message != "" {
+		if e.TmuxGone || e.Message != "" {
 			t.Errorf("the evicted viewer ended with %+v, want a clean end", e)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("the first viewer was never evicted")
 	}
-	second.reg.Write(a.Id, []byte("one session"))
+	second.reg.Write(a.Id, []byte("one tmux"))
 	select {
 	case got := <-second.out:
-		if string(got) != "one session" {
+		if string(got) != "one tmux" {
 			t.Errorf("round trip = %q", got)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("no output on the second tile within 3s")
 	}
-	if n := f.fake.SessionCount(); n != 1 {
-		t.Errorf("opened %d PTYs, want 1: one attached client per session", n)
+	if n := f.fake.AttachmentCount(); n != 1 {
+		t.Errorf("opened %d PTYs, want 1: one attached client per tmux", n)
 	}
 }
 
-// The verdict crosses the seam: a snapshotted tile whose tmux session is gone
-// must reach the client as sessionGone, the fact the refresh affordance reads
+// The verdict crosses the seam: a snapshotted tile whose tmux is gone
+// must reach the client as tmuxGone, the fact the refresh affordance reads
 // through shellconn.DecideShellRefreshVisible. It rides the API's exit frame,
 // and shellEndVerdict is the one owner of the classification.
-func TestShellAPIReportsSessionGone(t *testing.T) {
+func TestShellAPIReportsTmuxGone(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
 	tile := f.createShell(t, 0, 0)
 	// A frozen snapshot means "do not fabricate a new bash behind the
-	// JPEG"; with no live session, the attach is refused.
+	// JPEG"; with no live tmux, the attach is refused.
 	if _, err := f.cl.SetTile(context.Background(), &gridwellv1.SetTileRequest{TileId: tile.Id, Tile: &gridwellv1.Tile{Kind: rpc.KindShell}, Preview: []byte("jpegbytes")}); err != nil {
 		t.Fatalf("SetShellPreview: %v", err)
 	}
@@ -235,8 +235,8 @@ func TestShellAPIReportsSessionGone(t *testing.T) {
 	cs.reg.Open(tile.Id, tile.Id, 80, 24)
 	select {
 	case e := <-cs.exit:
-		if !e.SessionGone {
-			t.Fatalf("exit = %+v, want SessionGone", e)
+		if !e.TmuxGone {
+			t.Fatalf("exit = %+v, want TmuxGone", e)
 		}
 		if e.TileID != tile.Id || e.Message == "" {
 			t.Fatalf("exit = %+v, want the tile and a reason", e)
@@ -244,8 +244,8 @@ func TestShellAPIReportsSessionGone(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("no exit reported within 3s")
 	}
-	if f.fake.SessionCount() != 0 {
-		t.Errorf("a dead snapshotted session must not spawn a fresh PTY")
+	if f.fake.AttachmentCount() != 0 {
+		t.Errorf("a dead snapshotted tmux must not spawn a fresh PTY")
 	}
 }
 
@@ -253,7 +253,7 @@ func TestShellAPIReportsSessionGone(t *testing.T) {
 // user as an exit frame carrying the reason: shelldriver returns
 // ErrShellsUnavailable, shellsvc hands it up, and the API turns it into the
 // client's exit message. A refusal that only logged would look like the shell
-// silently vanished. Not SessionGone: nothing went away, the node simply
+// silently vanished. Not TmuxGone: nothing went away, the node simply
 // cannot host one.
 func TestShellAPISurfacesADriverThatCannotOpen(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
@@ -269,8 +269,8 @@ func TestShellAPISurfacesADriverThatCannotOpen(t *testing.T) {
 		if !strings.Contains(e.Message, "unavailable") {
 			t.Fatalf("exit message = %q; want the driver's reason carried to the user", e.Message)
 		}
-		if e.SessionGone {
-			t.Errorf("exit = %+v; a node that cannot host a PTY is not a session that went away", e)
+		if e.TmuxGone {
+			t.Errorf("exit = %+v; a node that cannot host a PTY is not a tmux that went away", e)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("a driver that cannot open must surface, not hang")
@@ -285,7 +285,7 @@ func TestShellAPIRefusesUnknownTile(t *testing.T) {
 	cs.reg.Open("nosuch1/9", "nosuch1/9", 80, 24)
 	select {
 	case e := <-cs.exit:
-		if e.SessionGone || e.Message == "" {
+		if e.TmuxGone || e.Message == "" {
 			t.Fatalf("exit = %+v, want a plain failure with a reason", e)
 		}
 	case <-time.After(3 * time.Second):
@@ -314,7 +314,7 @@ func TestShellAPIRequiresTheAuthCookie(t *testing.T) {
 	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated dial: want 401, got %v", resp)
 	}
-	if f.fake.SessionCount() != 0 {
+	if f.fake.AttachmentCount() != 0 {
 		t.Error("an unauthenticated dial must not touch the PTY")
 	}
 }
@@ -338,7 +338,7 @@ func TestShellAPIRefusesCrossOrigin(t *testing.T) {
 		conn.Close(websocket.StatusNormalClosure, "")
 		t.Fatal("a cross-origin page opened the shell API")
 	}
-	if f.fake.SessionCount() != 0 {
+	if f.fake.AttachmentCount() != 0 {
 		t.Error("a cross-origin dial must not touch the PTY")
 	}
 }
@@ -482,8 +482,8 @@ func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 	case e := <-exit:
 		// The timed-out write tears the socket down, so the read loop may
 		// reach the end first; either way the viewer is told, with a reason.
-		if e.Message == "" || e.SessionGone {
-			t.Fatalf("exit = %+v, want the wedged socket reported with a reason and no claim the session died", e)
+		if e.Message == "" || e.TmuxGone {
+			t.Fatalf("exit = %+v, want the wedged socket reported with a reason and no claim the tmux died", e)
 		}
 	case <-time.After(20 * bound):
 		t.Fatalf("a wedged socket parked the terminal for %v; the write bound is %v", 20*bound, bound)
@@ -553,22 +553,22 @@ func TestTheShellAPITracesARefusal(t *testing.T) {
 	t.Error("a refused attach left no record")
 }
 
-// A delete the user asked for lands even when the session it ends will not
+// A delete the user asked for lands even when the tmux it ends will not
 // stop, and the answer at the API says so instead of a log line.
-func TestADeleteThatLeavesTheSessionRunningSaysSo(t *testing.T) {
+func TestADeleteThatLeavesTheTmuxRunningSaysSo(t *testing.T) {
 	ctx := context.Background()
 	f := newShellAPIFixture(t, Config{ID: "lnode1"})
 	sh := f.createShell(t, 0, 0)
 	f.fake.KillErr = errors.New("tmux: server exited unexpectedly")
-	if resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: sh.Id})); err != nil || resp.SessionLeft != "" {
-		t.Fatalf("to the trash = (%v, %v), want a clean delete: the trash keeps the session", resp, err)
+	if resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: sh.Id})); err != nil || resp.TmuxLeft != "" {
+		t.Fatalf("to the trash = (%v, %v), want a clean delete: the trash keeps the tmux", resp, err)
 	}
 	resp, err := f.cl.DeleteTile(ctx, claimtest.Claimed(t, f.cl, &gridwellv1.DeleteTileRequest{TileId: sh.Id}))
 	if err != nil {
 		t.Fatalf("destroy = %v, want it to land", err)
 	}
-	if !strings.Contains(resp.SessionLeft, "server exited unexpectedly") {
-		t.Fatalf("session_left = %q, want the reason the session is still running", resp.SessionLeft)
+	if !strings.Contains(resp.TmuxLeft, "server exited unexpectedly") {
+		t.Fatalf("tmux_left = %q, want the reason the tmux is still running", resp.TmuxLeft)
 	}
 	if _, err := f.cl.GetTile(ctx, sh.Id); connect.CodeOf(err) != connect.CodeNotFound {
 		t.Fatalf("the row after the destroy: %v, want NotFound", err)

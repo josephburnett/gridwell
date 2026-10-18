@@ -42,7 +42,7 @@ test('a right-drag started on the shell overlay splits the pane', async ({ gw })
 
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  // The drop lands bare; the descent opens the session and the xterm host.
+  // The drop lands bare; the descent opens the tmux and the xterm host.
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 

@@ -13,7 +13,7 @@ if [ -z "$range" ]; then
   exit 2
 fi
 if ! git rev-list --no-merges "$range" >/dev/null 2>&1; then
-  echo "gates-named: $range does not resolve here — a shallow clone carries no history to read"
+  echo "gates-named: $range does not resolve here — a shallow copy carries no history to read"
   exit 0
 fi
 

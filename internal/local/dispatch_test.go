@@ -121,31 +121,31 @@ func TestSetAndCreateRejectBadKinds(t *testing.T) {
 	}
 }
 
-// Cloning through the namespace yields an independent tile, with a new row id
+// Copying through the namespace yields an independent tile, with a new row id
 // and a new child grid, so the eager-copy rule holds across the RPC boundary.
-func TestCloneTileThroughPlugin(t *testing.T) {
+func TestCopyTileThroughPlugin(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
 	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
-	clone, err := p.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := p.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: well.Id, DestGridId: root, X: 5, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("CloneTile: %v", err)
+		t.Fatalf("CopyTile: %v", err)
 	}
-	if clone.Tile.Id == well.Id {
-		t.Error("clone reused the source row id")
+	if cp.Tile.Id == well.Id {
+		t.Error("copy reused the source row id")
 	}
-	if clone.Tile.ChildGridId == well.ChildGridId {
-		t.Error("clone shares the source's interior child grid (should be an independent copy)")
+	if cp.Tile.ChildGridId == well.ChildGridId {
+		t.Error("copy shares the source's interior child grid (should be an independent copy)")
 	}
 }
 
 // TestDeleteExitWellThroughPluginNoCascade: deleting an exit well via the plugin
 // removes the tile but does not touch the remote grid it referenced — the
-// plugin's delete honors the shared-reference semantics end to end.
+// plugin's delete honors the shared-link semantics end to end.
 func TestDeleteExitWellThroughPluginNoCascade(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)

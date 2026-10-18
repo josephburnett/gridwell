@@ -138,11 +138,11 @@ func TestCreateURLRPC(t *testing.T) {
 
 // TestMountFsPlugin: mounting the fs plugin drops a plain well tile whose
 // child grid lives in the fs plugin — child_grid_id is the qualified
-// "<fs-uuid>/<id>". (TestMountByClone covers the proc plugin; this covers fs,
+// "<fs-uuid>/<id>". (TestMountByCopy covers the proc plugin; this covers fs,
 // the other built-in source.)
 func TestMountFsPlugin(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
-	tile := mountByClone(t, cl, fsPluginUUID, root, 0, 0)
+	tile := mountByCopy(t, cl, fsPluginUUID, root, 0, 0)
 	if tile.Kind != rpc.KindWell {
 		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindWell)
 	}
@@ -151,13 +151,13 @@ func TestMountFsPlugin(t *testing.T) {
 	}
 }
 
-// mountByClone mounts a plugin into a grid the way the UI does: drag the
+// mountByCopy mounts a plugin into a grid the way the UI does: drag the
 // plugin's + menu swatch = CreateWell with the doorway's qualified grid as
 // the child (an exit-well LINK), labeled with the swatch's label
 // (client/wasm createPluginLinkAtCell). Which swatches a row contributes is
 // door.PlacesOf, the client's own rule, so this drags what the user drags.
 // Every plugin under test here declares one collection, so there is one.
-func mountByClone(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *gridwellv1.Tile {
+func mountByCopy(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
 	ctx := context.Background()
 	lp, err := cl.Handshake(ctx)
@@ -202,7 +202,7 @@ func TestMenuAndMountLabelAgree(t *testing.T) {
 		t.Fatalf("menu label = %q, want the configured %q", menuLabel, "files")
 	}
 
-	tile := mountByClone(t, cl, fsPluginUUID, root, 0, 0)
+	tile := mountByCopy(t, cl, fsPluginUUID, root, 0, 0)
 	if tile.AltText != menuLabel {
 		t.Errorf("dropped well label = %q, want %q (must match the menu)", tile.AltText, menuLabel)
 	}
@@ -219,7 +219,7 @@ func TestResizeAndSetFramingRPCs(t *testing.T) {
 	}
 	id := tile.Id
 
-	resized, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+	resized, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: id, GridId: root, X: 0, Y: 0, W: 2, H: 2,
 	}))
 	if err != nil {
@@ -294,23 +294,23 @@ func TestUpdateTextRPC(t *testing.T) {
 	}
 }
 
-func TestCloneAndMoveRPCs(t *testing.T) {
+func TestCopyAndMoveRPCs(t *testing.T) {
 	_, cl, root := newTestServer(t)
 	ctx := context.Background()
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	clone, err := cl.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     tile.Id,
 		DestGridId: root, X: 5, Y: 5,
 	})
 	if err != nil {
-		t.Fatalf("clone: %v", err)
+		t.Fatalf("copy: %v", err)
 	}
-	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
-		TileId: clone.Id,
-		GridId: root, X: 8, Y: 8, W: clone.W, H: clone.H,
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
+		TileId: cp.Id,
+		GridId: root, X: 8, Y: 8, W: cp.W, H: cp.H,
 	}))
 	if err != nil {
 		t.Fatalf("move: %v", err)
@@ -425,7 +425,7 @@ func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.PluginInfo) st
 
 // TestCreateScratchURLRoutes: creating a url tile whose grid is home's
 // qualified scratch grid is an ephemeral visit — it routes path-free into the
-// scratch grid (no descent path leads there) and the tile carries reference=false
+// scratch grid (no descent path leads there) and the tile carries link=false
 // (it's owned content, just off-grid), with the typed URL. This proves the
 // whole client→server→plugin path-free path the "descend into a url" feature uses.
 func TestCreateScratchURLRoutes(t *testing.T) {
@@ -445,8 +445,8 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	if tile.Kind != rpc.KindURL || tile.UrlString != "https://example.com/ephemeral" {
 		t.Errorf("scratch tile = %+v, want a url tile with the typed URL", tile)
 	}
-	if tile.Reference {
-		t.Error("an ephemeral url tile is owned content (off-grid), not a reference")
+	if tile.Link {
+		t.Error("an ephemeral url tile is owned content (off-grid), not a link")
 	}
 	// It must be readable back from the scratch grid (descent + autocomplete).
 	g, err := cl.GetGrid(ctx, scratch)
@@ -491,22 +491,22 @@ func TestPluginGridCarriesHomeScratch(t *testing.T) {
 	}
 }
 
-// TestMountByClone: mounting a plugin (cloning its node-grid tile) drops an
+// TestMountByCopy: mounting a plugin (copying its node-grid tile) drops an
 // exit well in the destination grid whose child is the plugin's root.
-func TestMountByClone(t *testing.T) {
+func TestMountByCopy(t *testing.T) {
 	cl, root, _ := newTestServerWithPlugins(t)
-	tile := mountByClone(t, cl, procPluginUUID, root, 0, 0)
+	tile := mountByCopy(t, cl, procPluginUUID, root, 0, 0)
 	if tile.Kind != rpc.KindWell {
 		t.Errorf("kind = %q, want well", tile.Kind)
 	}
 	if !strings.HasPrefix(tile.ChildGridId, procPluginUUID+"/") {
 		t.Errorf("child_grid_id = %q, want %q prefix", tile.ChildGridId, procPluginUUID)
 	}
-	// A mount is a LINK: the server must stamp reference=true on the way back
+	// A mount is a LINK: the server must stamp link=true on the way back
 	// through the wire, so the client renders it dashed (and a delete unlinks
 	// only). This is the bit render reads instead of guessing from uuids.
-	if !tile.Reference {
-		t.Error("mounted well must arrive as a reference (dashed link), got reference=false")
+	if !tile.Link {
+		t.Error("mounted well must arrive as a link (dashed link), got link=false")
 	}
 }
 

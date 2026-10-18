@@ -17,7 +17,7 @@ type TileReader interface {
 }
 
 // Claimed fills req's claim with the tile as cl reads it now.
-func Claimed[R *pb.PlaceTileRequest | *pb.DeleteTileRequest](t testing.TB, cl TileReader, req R) R {
+func Claimed[R *pb.MoveTileRequest | *pb.DeleteTileRequest](t testing.TB, cl TileReader, req R) R {
 	t.Helper()
 	read := func(id string) *pb.Tile {
 		row, err := cl.GetTile(context.Background(), id)
@@ -27,7 +27,7 @@ func Claimed[R *pb.PlaceTileRequest | *pb.DeleteTileRequest](t testing.TB, cl Ti
 		return row
 	}
 	switch r := any(req).(type) {
-	case *pb.PlaceTileRequest:
+	case *pb.MoveTileRequest:
 		r.Claim = rpc.PlacementOf(read(r.TileId))
 	case *pb.DeleteTileRequest:
 		row := read(r.TileId)

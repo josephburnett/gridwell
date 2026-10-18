@@ -23,7 +23,7 @@ test('wheel over a live shell scrolls back through tmux history (#206)', async (
 
   await gw.openMenu();
   await gw.dragCreate('shell', sx, sy);
-  await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
 
   // The -end suffix keeps "line-5-end" from matching "line-50..." in the
@@ -49,7 +49,7 @@ test('wheel over a live shell scrolls back through tmux history (#206)', async (
   }
   await expect.poll(() => shellText(window), { timeout: 10_000 }).toContain('scroll-line-200-end');
 
-  // Delete the shell tile so its tmux session dies and teardown does not hang
+  // Delete the shell tile so its tmux dies and teardown does not hang
   // on a live PTY.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');

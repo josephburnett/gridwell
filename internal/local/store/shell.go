@@ -10,8 +10,8 @@ import (
 )
 
 // CreateShell creates a shell tile frozen with an empty preview. An explicit
-// refresh from the client starts the PTY; from then on the session lives in a
-// gridwell-private tmux session named by the tile id and survives ascents
+// refresh from the client starts the PTY; from then on the tmux lives in a
+// gridwell-private tmux named by the tile id and survives ascents
 // until the last row naming it is destroyed or the machine reboots.
 func (s *Store) CreateShell(ctx context.Context, gridID string, x, y, w, h int64) (*gridwellv1.Tile, error) {
 	return s.createTile(ctx, gridID, x, y, w, h,
@@ -32,7 +32,7 @@ func (s *Store) CreateShell(ctx context.Context, gridID string, x, y, w, h int64
 // blobs table. An empty JPEG clears the preview, the reset after a failed
 // refresh. The frame is a capture, not something the user typed, so it carries
 // no version claim and makes no bump; a shell's real concurrency primitive is
-// the live PTY session, one per tile at a time.
+// the live PTY, one per tile at a time.
 func (s *Store) SetShellPreview(ctx context.Context, tileIDStr string, jpeg []byte) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(tileIDStr)
 	if err != nil {

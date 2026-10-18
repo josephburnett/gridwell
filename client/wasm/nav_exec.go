@@ -142,7 +142,7 @@ func (a *App) navInstallPlace(e nav.Effect) {
 		return
 	}
 	if e.Stack != nil {
-		p.Stack = e.Stack.Clone()
+		p.Stack = e.Stack.Copy()
 	}
 	if e.Viewport != nil {
 		p.View = rpc.Saved(*e.Viewport)
@@ -276,7 +276,7 @@ func (a *App) navAwait(e nav.Effect) {
 	tok := e.Token
 	switch e.Request.Kind {
 	case nav.RequestProbeShell:
-		a.probeShellSessionAlive(e.Request.Key, e.Request.ID, func(alive bool) {
+		a.probeShellTmuxAlive(e.Request.Key, e.Request.ID, func(alive bool) {
 			a.runNav(a.nav.Resume(tok, nav.Result{OK: true, Alive: alive}, a.navWorldCommon()))
 		})
 	case nav.RequestGetTile:
@@ -339,13 +339,13 @@ func (a *App) navAwait(e nav.Effect) {
 			}
 			return nav.Result{OK: true, Data: data, Version: basis.Version}
 		})
-	case nav.RequestSearch:
+	case nav.RequestFind:
 		req := e.Request
-		// A search the network swallows resolves as no result on the
+		// A find the network swallows resolves as no result on the
 		// deadline, which the machine already handles, rather than a walk
 		// that never resumes.
 		a.await(tok, inflight.Bounded, a.navWorldCommon, func(ctx context.Context) nav.Result {
-			resp, err := a.cl.Search(ctx, req.Query, req.Scope, int32(req.Limit))
+			resp, err := a.cl.Find(ctx, req.Query, req.Scope, int32(req.Limit))
 			res := resp.GetResults()
 			if err != nil || len(res) == 0 {
 				return nav.Result{}

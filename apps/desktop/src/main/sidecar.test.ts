@@ -92,7 +92,7 @@ test('a slow but TALKING boot is never killed: every line re-arms the window', a
   const p = boot(child, 40);
   for (const line of [
     'gridwell: home: scratch cleanup removed 41 ephemeral tile(s)',
-    'gridwell: home: orphan cleanup killed 3 stale shell session(s)',
+    'gridwell: home: orphan cleanup killed 3 stale tmux(es)',
     'gridwell: plugin fs (fs) respawned',
   ]) {
     await speakAfter(t, child, 30, line); // under the window, every time

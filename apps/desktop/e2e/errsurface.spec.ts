@@ -21,13 +21,13 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
   const created = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
   expect(created, 'markdown tile created').toBeTruthy();
 
-  await window.route('**/gridwell.v1.Gridwell/PlaceTile', (r: any) => r.abort());
+  await window.route('**/gridwell.v1.Gridwell/MoveTile', (r: any) => r.abort());
   await gw.dragTileCell(cx, cy, cx + 1, cy);
 
   await expect
     .poll(async () => {
       const e = await errors(window);
-      return e.notices.find((n: any) => n.source === 'rpc:PlaceTile')?.severity ?? null;
+      return e.notices.find((n: any) => n.source === 'rpc:MoveTile')?.severity ?? null;
     }, { timeout: 10_000 })
     .toBe('error');
 
@@ -44,7 +44,7 @@ test('a failed mutation RPC surfaces a dismissible notice on the strip', async (
   // Server state never moved: the optimistic ghost snapped back.
   expect(tileAt(await gw.getGrid(f.gridID), 'text', cx, cy), 'tile still at origin').toBeTruthy();
 
-  await window.unroute('**/gridwell.v1.Gridwell/PlaceTile');
+  await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
 
   // Clicking the row dismisses it, and the layout returns to full height.
   await gw.clickScreen(200, e.stripTop + 5);
@@ -67,12 +67,12 @@ test('a one-shot notice expires off the strip once its source goes quiet', async
   expect(tileAt(await gw.getGrid(f.gridID), 'text', cx, cy), 'markdown tile created').toBeTruthy();
 
   // One failed mutation, then the route comes back: the one-shot shape.
-  await window.route('**/gridwell.v1.Gridwell/PlaceTile', (r: any) => r.abort());
+  await window.route('**/gridwell.v1.Gridwell/MoveTile', (r: any) => r.abort());
   await gw.dragTileCell(cx, cy, cx + 1, cy);
   await expect
-    .poll(async () => (await errors(window)).notices.some((n: any) => n.source === 'rpc:PlaceTile'))
+    .poll(async () => (await errors(window)).notices.some((n: any) => n.source === 'rpc:MoveTile'))
     .toBe(true);
-  await window.unroute('**/gridwell.v1.Gridwell/PlaceTile');
+  await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
 
   // No click and no dismiss. ExpireAfter is 10s, so poll well past it.
   await expect

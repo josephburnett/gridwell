@@ -8,7 +8,7 @@ type Undo struct {
 	Dividers bool
 	// View: a pan moves the pane's viewport live.
 	View bool
-	// Ghost: a tile, clone, link, swatch or crumb drag returns its ghost to
+	// Ghost: a tile, copy, link, swatch or crumb drag returns its ghost to
 	// where it was grabbed, every tile of a carried set with it.
 	Ghost bool
 	// ClearSelection: nothing was armed, so Esc empties the selection of the

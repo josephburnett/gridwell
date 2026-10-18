@@ -14,7 +14,7 @@ mutates.
 When a decision is unclear, this rule wins — over performance, elegance, and
 convenience. Ask of every change: is everything the user didn't touch
 byte-for-byte the same, and does every reference still resolve to the thing
-it named? That is why ids are never reassigned, clone is a deep copy, framing
+it named? That is why ids are never reassigned, a copy is deep, framing
 never bumps `version`, and there is no cross-plugin move.
 
 ## The promises
@@ -35,7 +35,7 @@ comment beside it says.
   reaches every open view without a gesture.
 - A link is a path. It resolves one hop at a time along one-way connections,
   to any depth, and a break at any hop reads as dead, never as an error.
-- What you can see, you can clone. What the holding node can reach, you can
+- What you can see, you can copy. What the holding node can reach, you can
   link. Anything else is refused with the reason, never stored broken.
 - Nothing is done for nobody: no capture, fetch or walk runs unless
   something on screen or in the store needs its result.
@@ -199,7 +199,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   when the row was made; `updated_at`, when anything last wrote it (a move,
   framing, a freeze, content); `content_at`, when its content last changed,
   written only by the version bump (`bumpTileVersion`) and read as
-  `created_at` until then. Search filters on them, on a grid (`grid_id`,
+  `created_at` until then. Find filters on them, on a grid (`grid_id`,
   `recurse` through owned wells, never a link), on the selection, and on
   the kind (text, url, shell, well or pane, 2026-10-18; an unknown one is
   refused); the filters AND, an empty query with one lists what passes, newest first, and
@@ -235,11 +235,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   event stream keeps those true, so coming back to one reads nothing; a stream
   gap still re-reads every held grid. The planner decides
   (`nav` `planner.fetchGrid`), never the executor (2026-10-14).
-- Clone is an eager deep copy. COW was tried and torn out.
-- A clone of a link is another link to the same target, never a copy of the
+- A copy is eager and deep. COW was tried and torn out.
+- A copy of a link is another link to the same target, never a copy of the
   target: the deep copy is of content, and a link's content is its path
   (2026-10-06).
-- A clone whose source is dark lands as a link to it, never a refused or
+- A copy whose source is dark lands as a link to it, never a refused or
   empty copy: the copy reads the source before it creates anything, and a
   source that does not answer gets the link a ctrl + right-drag would make
   (`server.deepCopyTile`, 2026-10-06).
@@ -260,7 +260,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   enforces it. A test that needs a real plugin spawns the shipped binary
   (`internal/plugintest`). `make build` compiles those binaries out of
   `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into the repo root, so
-  clone the plugins repo beside this one.
+  check out the plugins repo beside this one.
 - A plugin serves keys and content; the node owns ids and layout. A plugin
   holds no node fact, and keeps its own memory of its source in the private
   directory the node hands it at spawn (`<home>/plugins/<id>`, as
@@ -348,10 +348,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   and no build gate, since no page is behind it. It decodes onto the one
   router (`internal/mcpapi`): every write reads first and claims what it
   read, every refusal is a tool error with the router's reason, and a tile it
-  places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
+  creates or copies with no cell named lands at the first free cell
+  (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
   `docs/mcp.md` is the contract. It has ten tools (2026-10-18): `sessions`,
-  `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `place`, `copy`,
+  `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `move`, `copy`,
   `delete` and `select`, and every write takes a list and answers a verdict
   per item in order, each item its own write with its own claim, a refused
   one stopping none after it. A session answers only where the user is
@@ -362,7 +363,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   is the grid's, from `read_grid`, so "here" is a focused pane's grid or
   pane tile and "these" is that grid's selection; `read_tiles` on a pane
   tile answers the panes its layout holds, decoded by the client's own
-  decoder (`pane.DecodeLayout`). A new tmux session carries
+  decoder (`pane.DecodeLayout`). A new tmux carries
   its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
   and the shell API, the one place a socket and its session are both in
   hand, joins the two (`Server.ShellHolder`).
@@ -398,20 +399,20 @@ These were decided deliberately. Do not reverse one without a new decision.
   outside; entering a url reopens it, entering a shell reconnects. One
   owner decides (`shellconn.DecideAutoLive`). The freeze gesture is the
   standing exception, for url and shell alike: it is a screenshot, so the
-  tile keeps that preview, the address and the tmux session keep existing, a
-  clone taken while frozen keeps the copy, and only the reconnect clears it
+  tile keeps that preview, the address and the tmux keep existing, a
+  copy taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
 - Shells ride the web API: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
   shells off is the node (`disable_shells`).
-- A shell tile names a session: its own id, or for a clone the session its
-  source named (`rpc.ShellSession`). Any number of tiles may name one
-  session; at most one is live, and going live on another takes over
-  (close and reopen; within one tile the terminal moves). A session no tile
+- A shell tile names a tmux: its own id, or for a copy the tmux its
+  source named (`rpc.ShellTmux`). Any number of tiles may name one
+  tmux; at most one is live, and going live on another takes over
+  (close and reopen; within one tile the terminal moves). A tmux no tile
   has a preview of was never started, and whichever tile opens it first starts
   it; a started one that is gone is never recreated behind a preview. The
-  session dies when the last row naming it is destroyed. A shell cloned
+  tmux dies when the last row naming it is destroyed. A shell copied
   across nodes lands as a link (2026-10-01).
 - Session-ephemeral: the pane tree, each pane's focused tile (the keyboard
   target a plain click lands on, `pane.SessionState.Selected`; not the
@@ -424,7 +425,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   reopens on the pane it was left on; the focused tile is
   session-ephemeral only outside a pane tile (2026-10-14,
   `pane.LayoutFingerprint`).
-- Left-drag moves, right-drag clones, ctrl + right-drag links — the
+- Left-drag moves, right-drag copies, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Cross-plugin a left-drag links too, because
   there is no cross-plugin move. Dashed means link; deleting a link

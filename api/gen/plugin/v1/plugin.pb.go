@@ -11,10 +11,10 @@
 //
 // Key stability is the plugin's one hard contract. A key names the same logical
 // thing forever, such as a path relative to the configured root, a message-id
-// or "pid:1234". Changing the key scheme orphans every stored reference, as
+// or "pid:1234". Changing the key scheme orphans every stored link, as
 // re-minting ids would.
 //
-// Unimplemented is always polite: Search means no results, ServeContent a 404,
+// Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
 // thumbnail, and Delete refused. A minimal plugin is Info, List and
 // ReadContent.
@@ -1384,7 +1384,7 @@ func (*DeleteResponse) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
 }
 
-type SearchRequest struct {
+type FindRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"` // 0 = plugin default
@@ -1392,20 +1392,20 @@ type SearchRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchRequest) Reset() {
-	*x = SearchRequest{}
+func (x *FindRequest) Reset() {
+	*x = FindRequest{}
 	mi := &file_plugin_v1_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchRequest) String() string {
+func (x *FindRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchRequest) ProtoMessage() {}
+func (*FindRequest) ProtoMessage() {}
 
-func (x *SearchRequest) ProtoReflect() protoreflect.Message {
+func (x *FindRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_plugin_v1_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1417,26 +1417,26 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
-func (*SearchRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindRequest.ProtoReflect.Descriptor instead.
+func (*FindRequest) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *SearchRequest) GetQuery() string {
+func (x *FindRequest) GetQuery() string {
 	if x != nil {
 		return x.Query
 	}
 	return ""
 }
 
-func (x *SearchRequest) GetLimit() int32 {
+func (x *FindRequest) GetLimit() int32 {
 	if x != nil {
 		return x.Limit
 	}
 	return 0
 }
 
-type SearchResult struct {
+type FindResult struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Entry *Entry                 `protobuf:"bytes,1,opt,name=entry,proto3" json:"entry,omitempty"`
 	// context_path is the containing-context chain from the root, outermost first.
@@ -1448,20 +1448,20 @@ type SearchResult struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchResult) Reset() {
-	*x = SearchResult{}
+func (x *FindResult) Reset() {
+	*x = FindResult{}
 	mi := &file_plugin_v1_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchResult) String() string {
+func (x *FindResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchResult) ProtoMessage() {}
+func (*FindResult) ProtoMessage() {}
 
-func (x *SearchResult) ProtoReflect() protoreflect.Message {
+func (x *FindResult) ProtoReflect() protoreflect.Message {
 	mi := &file_plugin_v1_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1473,60 +1473,60 @@ func (x *SearchResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchResult.ProtoReflect.Descriptor instead.
-func (*SearchResult) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindResult.ProtoReflect.Descriptor instead.
+func (*FindResult) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *SearchResult) GetEntry() *Entry {
+func (x *FindResult) GetEntry() *Entry {
 	if x != nil {
 		return x.Entry
 	}
 	return nil
 }
 
-func (x *SearchResult) GetContextPath() []string {
+func (x *FindResult) GetContextPath() []string {
 	if x != nil {
 		return x.ContextPath
 	}
 	return nil
 }
 
-func (x *SearchResult) GetSnippet() string {
+func (x *FindResult) GetSnippet() string {
 	if x != nil {
 		return x.Snippet
 	}
 	return ""
 }
 
-func (x *SearchResult) GetScore() float64 {
+func (x *FindResult) GetScore() float64 {
 	if x != nil {
 		return x.Score
 	}
 	return 0
 }
 
-type SearchResponse struct {
+type FindResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Results       []*SearchResult        `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
+	Results       []*FindResult          `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SearchResponse) Reset() {
-	*x = SearchResponse{}
+func (x *FindResponse) Reset() {
+	*x = FindResponse{}
 	mi := &file_plugin_v1_plugin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SearchResponse) String() string {
+func (x *FindResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SearchResponse) ProtoMessage() {}
+func (*FindResponse) ProtoMessage() {}
 
-func (x *SearchResponse) ProtoReflect() protoreflect.Message {
+func (x *FindResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_plugin_v1_plugin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1538,12 +1538,12 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
-func (*SearchResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use FindResponse.ProtoReflect.Descriptor instead.
+func (*FindResponse) Descriptor() ([]byte, []int) {
 	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *SearchResponse) GetResults() []*SearchResult {
+func (x *FindResponse) GetResults() []*FindResult {
 	if x != nil {
 		return x.Results
 	}
@@ -1950,17 +1950,18 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\rPRESENCE_GONE\x10\x02\"!\n" +
 	"\rDeleteRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"\x10\n" +
-	"\x0eDeleteResponse\";\n" +
-	"\rSearchRequest\x12\x14\n" +
+	"\x0eDeleteResponse\"9\n" +
+	"\vFindRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\x89\x01\n" +
-	"\fSearchResult\x12&\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"\x87\x01\n" +
+	"\n" +
+	"FindResult\x12&\n" +
 	"\x05entry\x18\x01 \x01(\v2\x10.plugin.v1.EntryR\x05entry\x12!\n" +
 	"\fcontext_path\x18\x02 \x03(\tR\vcontextPath\x12\x18\n" +
 	"\asnippet\x18\x03 \x01(\tR\asnippet\x12\x14\n" +
-	"\x05score\x18\x04 \x01(\x01R\x05score\"C\n" +
-	"\x0eSearchResponse\x121\n" +
-	"\aresults\x18\x01 \x03(\v2\x17.plugin.v1.SearchResultR\aresults\"*\n" +
+	"\x05score\x18\x04 \x01(\x01R\x05score\"?\n" +
+	"\fFindResponse\x12/\n" +
+	"\aresults\x18\x01 \x03(\v2\x15.plugin.v1.FindResultR\aresults\"*\n" +
 	"\fWatchRequest\x12\x1a\n" +
 	"\bcontexts\x18\x01 \x03(\tR\bcontexts\"*\n" +
 	"\x0eContextChanged\x12\x18\n" +
@@ -1975,7 +1976,7 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x0fcontext_changed\x18\x01 \x01(\v2\x19.plugin.v1.ContextChangedH\x00R\x0econtextChanged\x12>\n" +
 	"\rentry_removed\x18\x02 \x01(\v2\x17.plugin.v1.EntryRemovedH\x00R\fentryRemoved\x12>\n" +
 	"\rentry_changed\x18\x03 \x01(\v2\x17.plugin.v1.EntryChangedH\x00R\fentryChangedB\t\n" +
-	"\apayload2\xa2\x05\n" +
+	"\apayload2\x9c\x05\n" +
 	"\x06Plugin\x127\n" +
 	"\x04Info\x12\x16.plugin.v1.InfoRequest\x1a\x17.plugin.v1.InfoResponse\x127\n" +
 	"\x04List\x12\x16.plugin.v1.ListRequest\x1a\x17.plugin.v1.ListResponse\x12G\n" +
@@ -1985,8 +1986,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"GetPreview\x12\x1c.plugin.v1.GetPreviewRequest\x1a\x1d.plugin.v1.GetPreviewResponse\x12:\n" +
 	"\x05Probe\x12\x17.plugin.v1.ProbeRequest\x1a\x18.plugin.v1.ProbeResponse\x12=\n" +
-	"\x06Delete\x12\x18.plugin.v1.DeleteRequest\x1a\x19.plugin.v1.DeleteResponse\x12=\n" +
-	"\x06Search\x12\x18.plugin.v1.SearchRequest\x1a\x19.plugin.v1.SearchResponse\x125\n" +
+	"\x06Delete\x12\x18.plugin.v1.DeleteRequest\x1a\x19.plugin.v1.DeleteResponse\x127\n" +
+	"\x04Find\x12\x16.plugin.v1.FindRequest\x1a\x17.plugin.v1.FindResponse\x125\n" +
 	"\x05Watch\x12\x17.plugin.v1.WatchRequest\x1a\x11.plugin.v1.Change0\x01B\x9f\x01\n" +
 	"\rcom.plugin.v1B\vPluginProtoP\x01Z<github.com/josephburnett/gridwell/api/gen/plugin/v1;pluginv1\xa2\x02\x03PXX\xaa\x02\tPlugin.V1\xca\x02\tPlugin\\V1\xe2\x02\x15Plugin\\V1\\GPBMetadata\xea\x02\n" +
 	"Plugin::V1b\x06proto3"
@@ -2027,9 +2028,9 @@ var file_plugin_v1_plugin_proto_goTypes = []any{
 	(*ProbeResponse)(nil),        // 18: plugin.v1.ProbeResponse
 	(*DeleteRequest)(nil),        // 19: plugin.v1.DeleteRequest
 	(*DeleteResponse)(nil),       // 20: plugin.v1.DeleteResponse
-	(*SearchRequest)(nil),        // 21: plugin.v1.SearchRequest
-	(*SearchResult)(nil),         // 22: plugin.v1.SearchResult
-	(*SearchResponse)(nil),       // 23: plugin.v1.SearchResponse
+	(*FindRequest)(nil),          // 21: plugin.v1.FindRequest
+	(*FindResult)(nil),           // 22: plugin.v1.FindResult
+	(*FindResponse)(nil),         // 23: plugin.v1.FindResponse
 	(*WatchRequest)(nil),         // 24: plugin.v1.WatchRequest
 	(*ContextChanged)(nil),       // 25: plugin.v1.ContextChanged
 	(*EntryChanged)(nil),         // 26: plugin.v1.EntryChanged
@@ -2042,8 +2043,8 @@ var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	8,  // 2: plugin.v1.Entry.placement_hint:type_name -> plugin.v1.PlacementHint
 	7,  // 3: plugin.v1.Entry.link_target:type_name -> plugin.v1.EntryRef
 	0,  // 4: plugin.v1.ProbeResponse.presence:type_name -> plugin.v1.ProbeResponse.Presence
-	6,  // 5: plugin.v1.SearchResult.entry:type_name -> plugin.v1.Entry
-	22, // 6: plugin.v1.SearchResponse.results:type_name -> plugin.v1.SearchResult
+	6,  // 5: plugin.v1.FindResult.entry:type_name -> plugin.v1.Entry
+	22, // 6: plugin.v1.FindResponse.results:type_name -> plugin.v1.FindResult
 	6,  // 7: plugin.v1.EntryChanged.entry:type_name -> plugin.v1.Entry
 	25, // 8: plugin.v1.Change.context_changed:type_name -> plugin.v1.ContextChanged
 	27, // 9: plugin.v1.Change.entry_removed:type_name -> plugin.v1.EntryRemoved
@@ -2056,7 +2057,7 @@ var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	15, // 16: plugin.v1.Plugin.GetPreview:input_type -> plugin.v1.GetPreviewRequest
 	17, // 17: plugin.v1.Plugin.Probe:input_type -> plugin.v1.ProbeRequest
 	19, // 18: plugin.v1.Plugin.Delete:input_type -> plugin.v1.DeleteRequest
-	21, // 19: plugin.v1.Plugin.Search:input_type -> plugin.v1.SearchRequest
+	21, // 19: plugin.v1.Plugin.Find:input_type -> plugin.v1.FindRequest
 	24, // 20: plugin.v1.Plugin.Watch:input_type -> plugin.v1.WatchRequest
 	2,  // 21: plugin.v1.Plugin.Info:output_type -> plugin.v1.InfoResponse
 	5,  // 22: plugin.v1.Plugin.List:output_type -> plugin.v1.ListResponse
@@ -2066,7 +2067,7 @@ var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	16, // 26: plugin.v1.Plugin.GetPreview:output_type -> plugin.v1.GetPreviewResponse
 	18, // 27: plugin.v1.Plugin.Probe:output_type -> plugin.v1.ProbeResponse
 	20, // 28: plugin.v1.Plugin.Delete:output_type -> plugin.v1.DeleteResponse
-	23, // 29: plugin.v1.Plugin.Search:output_type -> plugin.v1.SearchResponse
+	23, // 29: plugin.v1.Plugin.Find:output_type -> plugin.v1.FindResponse
 	28, // 30: plugin.v1.Plugin.Watch:output_type -> plugin.v1.Change
 	21, // [21:31] is the sub-list for method output_type
 	11, // [11:21] is the sub-list for method input_type

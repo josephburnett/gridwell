@@ -119,7 +119,7 @@ func TestPluginServesTouchedRowsWhenSourceDark(t *testing.T) {
 	if notes.Id == "" {
 		t.Fatal("no notes.md tile")
 	}
-	placed, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1}))
+	placed, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: notes.Id, GridId: rootGrid, X: 7, Y: 3, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	// "recreation mints fresh" half of the contract needs one. An entry nobody
 	// ever touched has no row — deleting it is the plugin's verdict and
 	// nothing else, which the last stanza pins.
-	minted, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{TileId: bin.Id, GridId: rootGrid, X: 4, Y: 4, W: 1, H: 1}))
+	minted, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: bin.Id, GridId: rootGrid, X: 4, Y: 4, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 	// thing for good — but nothing the retired row held comes back with it: the
 	// file is listed at its hint again, not at the 4,4 the user had chosen, and
 	// the retired row stays retired (TestRetiredKeyStaysRetiredWithoutIdBurn),
-	// so a reference stored against it is dead for good.
+	// so a link stored against it is dead for good.
 	if err := os.WriteFile(filepath.Join(root, "data.bin"), []byte{9}, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
 		return &gridwellv1.Tile{}
 	}
 	notes, sub := find("notes.md"), find("sub")
-	if _, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
+	if _, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
 		TileId: notes.Id, GridId: rootGrid, X: 6, Y: 2, W: 2, H: 1,
 	})); err != nil {
 		t.Fatal(err)
@@ -327,7 +327,7 @@ func TestFSPluginSweepRemovesOnlyTheDead(t *testing.T) {
 			arranged = tile
 		}
 	}
-	placed, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{TileId: arranged.Id, GridId: rootGrid, X: 6, Y: 6, W: 1, H: 1}))
+	placed, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{TileId: arranged.Id, GridId: rootGrid, X: 6, Y: 6, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}

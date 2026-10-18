@@ -448,14 +448,14 @@ func TestShellAPIThroughAConnection(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no PTY output from the mounted remote within 5s")
 	}
-	if h.remoteShell.SessionCount() != 1 {
-		t.Errorf("remote PTY sessions = %d, want 1", h.remoteShell.SessionCount())
+	if h.remoteShell.AttachmentCount() != 1 {
+		t.Errorf("remote PTYs = %d, want 1", h.remoteShell.AttachmentCount())
 	}
 }
 
 // The message-ownership seam: with no wire between the router and its
 // namespaces, one *pb.Event travels to every subscriber by pointer, so
-// qualification has to clone. A hop that rewrote ids in place would give the
+// qualification has to copy. A hop that rewrote ids in place would give the
 // second subscriber "lnode1/lnode1/geneva/…", and a single-subscriber test
 // could not see it.
 func TestTwoSubscribersEachSeeExactlyOnePrefix(t *testing.T) {

@@ -1,11 +1,11 @@
 import { test, expect } from './fixtures';
-import { tileAt, placeTile } from './oracle';
+import { tileAt, moveTile } from './oracle';
 
 // A workspace leaf references its tile by anchor, path, and id. Ids are
 // immutable while paths are not, so the path goes stale the moment the tile is
 // moved, and re-entering the workspace must heal the leaf. The client notices
 // the stored path no longer leads to the tile's grid, asks the server for a
-// scoped `id:` search, and rebinds the pane at the containing-well chain that
+// scoped `id:` find, and rebinds the pane at the containing-well chain that
 // comes back, so the descent works and the crumbs show a true path. The move
 // happens through the server directly, as a foreign writer, which is the
 // out-from-under case a live session never sees.
@@ -58,7 +58,7 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
     .toBe(0);
 
   // A foreign writer moves the tile into the well.
-  await placeTile(gw.origin, doc.id, well.childGridId!, 0, 0, 1, 1);
+  await moveTile(gw.origin, doc.id, well.childGridId!, 0, 0, 1, 1);
   await expect
     .poll(async () => ((await gw.getGrid(well.childGridId!)).tiles ?? []).some((t: any) => t.id === doc.id))
     .toBe(true);

@@ -88,7 +88,7 @@ type connState struct {
 	up     bool
 	detail string // why it is down; "" when up
 	// mismatch is the landing refusal: the far end answered a home other than
-	// the one this connection's stored references were written against.
+	// the one this connection's stored links were written against.
 	mismatch bool
 }
 
@@ -264,7 +264,7 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 		switch {
 		case st.mismatch:
 			// The landing verdict outranks the learned root: the row keeps the
-			// landing its references name, and says why nothing answers.
+			// landing its links name, and says why nothing answers.
 			rootGridID = rpc.QualifyID(name, root)
 		case root != "":
 			rootGridID, status = rpc.QualifyID(name, root), ""
@@ -440,7 +440,7 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 // learnRoot dials the transport and asks the far node where this connection
 // lands, once per live transport. Every later answer is checked against the
 // stored landing, not trusted: a name is bound to the node every stored
-// reference through it was written against.
+// link through it was written against.
 func (s *Server) learnRoot(c *Conn) (string, error) {
 	name := c.Cfg.Name
 	lc, err := s.ensureLive(c)
@@ -492,7 +492,7 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 // read through the connection gets. It is deliberately not marked verified, so
 // the connection keeps asking and restoring the target needs no restart.
 func (s *Server) noteLandingMismatch(name, stored, answered string) error {
-	msg := fmt.Sprintf("connection %q now lands on a different node; stored references name the old one — retire the name or restore the target", name)
+	msg := fmt.Sprintf("connection %q now lands on a different node; stored links name the old one — retire the name or restore the target", name)
 	if s.note(name, connState{detail: msg, mismatch: true}) {
 		log.Printf("gridwell: %s (stored landing %s, the far node answered %s)", msg, stored, answered)
 	}
@@ -734,10 +734,10 @@ func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 	}, namespace.Namespace.GetTilePreview, asIs)
 }
 
-func (s *Server) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.ShellSessionAliveRequest {
-		return &gridwellv1.ShellSessionAliveRequest{TileId: local}
-	}, namespace.Namespace.ShellSessionAlive, asIs)
+func (s *Server) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.ShellTmuxAliveRequest {
+		return &gridwellv1.ShellTmuxAliveRequest{TileId: local}
+	}, namespace.Namespace.ShellTmuxAlive, asIs)
 }
 
 func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
@@ -748,12 +748,12 @@ func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.SetTile, prependTileResp)
 }
 
-func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.PlaceTile, prependTileResp)
+func (s *Server) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.MoveTile, prependTileResp)
 }
 
-func (s *Server) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CloneTile, prependTileResp)
+func (s *Server) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CopyTile, prependTileResp)
 }
 
 func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
@@ -792,7 +792,7 @@ func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	if err != nil {
 		return nil, err
 	}
-	// Clone before rewriting: with no wire between the caller and this hop,
+	// Copy before rewriting: with no wire between the caller and this hop,
 	// the request is the caller's own message (namespace.Namespace).
 	rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
 	rewritten.TileId = local
@@ -819,7 +819,7 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 	if err != nil {
 		return err
 	}
-	// Clone before rewriting the bind: the caller still owns `first`.
+	// Copy before rewriting the bind: the caller still owns `first`.
 	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
 	sentBind := false
@@ -854,7 +854,7 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 				return nil
 			}
 			// The hub hands the same event to every subscriber and nobody
-			// mutates it; the router's qualification clones.
+			// mutates it; the router's qualification copies.
 			if err := send(ev); err != nil {
 				return err
 			}
@@ -864,12 +864,12 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 	}
 }
 
-// Search forwards the one find verb, filters and all. A grid_id or an id:
+// Find forwards the one find verb, filters and all. A grid_id or an id:
 // query routes to its connection; free text fans out to live connections only,
 // never dialing the world.
-func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	if ref := cmp.Or(req.GridId, rpc.ParseSearchQuery(req.Query).ID); ref != "" {
-		return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.Search, prependSearchResp)
+func (s *Server) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
+	if ref := cmp.Or(req.GridId, rpc.ParseFindQuery(req.Query).ID); ref != "" {
+		return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.Find, prependFindResp)
 	}
 	s.mu.Lock()
 	hops := make([]forward, 0, len(s.live))
@@ -878,22 +878,22 @@ func (s *Server) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gr
 	}
 	s.mu.Unlock()
 	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
-	out := &gridwellv1.SearchResponse{}
+	out := &gridwellv1.FindResponse{}
 	for _, hp := range hops {
-		// Each hop is bounded by rpc.SearchHopTimeout, shared with the
-		// node's fan-out, so one hung tunnel cannot stall the search.
-		hctx, cancel := context.WithTimeout(ctx, rpc.SearchHopTimeout)
-		resp, err := hp.client.Search(hctx, req)
+		// Each hop is bounded by rpc.FindHopTimeout, shared with the
+		// node's fan-out, so one hung tunnel cannot stall the find.
+		hctx, cancel := context.WithTimeout(ctx, rpc.FindHopTimeout)
+		resp, err := hp.client.Find(hctx, req)
 		cancel()
-		q := prependSearchResp(hp.ns, rpc.SearchHop(resp, err))
+		q := prependFindResp(hp.ns, rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
-func prependSearchResp(ns string, resp *gridwellv1.SearchResponse) *gridwellv1.SearchResponse {
-	return rpc.QualifySearchResponse(ns, resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
+func prependFindResp(ns string, resp *gridwellv1.FindResponse) *gridwellv1.FindResponse {
+	return rpc.QualifyFindResponse(ns, resp, func(ts []*gridwellv1.Tile) []*gridwellv1.Tile {
 		return rpc.TransitQualifyTiles(ns, ts)
 	})
 }

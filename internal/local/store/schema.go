@@ -4,14 +4,14 @@ package store
 // the schema version lives in the SQLite header, not here. A plugin's memory
 // lives in the same tables under its own namespace, and a well pointing at one
 // is an ordinary `well` row whose child_grid_id is a qualified
-// "<plugin-uuid>/<grid-id>" reference.
+// "<plugin-uuid>/<grid-id>" link.
 //
 // The five tile kinds:
 //   - well: points at a child grid, in this namespace or, as an exit well,
 //     another.
 //   - text: a markdown blob.
 //   - url: an http(s) URL plus a frozen JPEG preview.
-//   - shell: an interactive shell in a gridwell-private tmux session. The
+//   - shell: an interactive shell in a gridwell-private tmux. The
 //     shell and its scrollback live in the tmux server and survive ascents
 //     and restarts; they are gone only when the tile is deleted or the host
 //     reboots.

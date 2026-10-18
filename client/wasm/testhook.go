@@ -29,8 +29,8 @@ import (
 // independent oracle for what was created. shellVisitURL, setTransitionMs and
 // setBackstopMs are the three that mutate.
 func (a *App) installTestHook() {
-	search := js.Global().Get("location").Get("search").String()
-	if !strings.Contains(search, "e2e=1") {
+	query := js.Global().Get("location").Get("search").String()
+	if !strings.Contains(query, "e2e=1") {
 		return
 	}
 	js.Global().Set("__gridwellTest", js.ValueOf(map[string]any{
@@ -467,7 +467,7 @@ func (a *App) thURLViews(js.Value, []js.Value) any {
 	return out
 }
 
-// thShellViews maps each pane holding a live terminal to its session's tile.
+// thShellViews maps each pane holding a live terminal to its tmux's tile.
 func (a *App) thShellViews(js.Value, []js.Value) any {
 	out := map[string]any{}
 	for _, h := range a.shellSurfaces() {
@@ -606,7 +606,7 @@ func tileSig(t *gridwellv1.Tile) string {
 		t.Version, t.Kind, t.X, t.Y, t.W, t.H,
 		t.ViewCx, t.ViewCy, t.ViewZoom,
 		t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode,
-		t.BlobId, t.PreviewBlobId, t.UrlString, t.AltText, t.Reference)
+		t.BlobId, t.PreviewBlobId, t.UrlString, t.AltText, t.Link)
 }
 
 // childSig digests a well's cached child grid, one level, sorted for

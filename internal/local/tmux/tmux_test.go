@@ -13,31 +13,31 @@ import (
 
 // --- Pure-Go tests: name encoding + argv composition ---
 
-// TestSessionNameRoundtrip locks in the canonical tile-id to
-// tmux-session-name mapping. A change to this encoding silently breaks
+// TestNameRoundtrip locks in the canonical tile-id to
+// tmux-name mapping. A change to this encoding silently breaks
 // orphan cleanup, which parses names from `tmux list-sessions`, and makes
-// pre-existing sessions un-attachable after an upgrade.
-func TestSessionNameRoundtrip(t *testing.T) {
+// pre-existing tmuxes un-attachable after an upgrade.
+func TestNameRoundtrip(t *testing.T) {
 	// Qualified ids contain "/" and the uuid may contain "-"/"_"; the encoding
 	// must round-trip all of them.
 	for _, id := range []string{"localdb-uuid/1", "a1b2c3d4/7", "my_db/1000", "gridwell-root/2147483647"} {
-		name := SessionName(id)
-		got, ok := ParseSessionName(name)
+		name := Name(id)
+		got, ok := ParseName(name)
 		if !ok || got != id {
-			t.Errorf("SessionName(%q) = %q; ParseSessionName roundtrip got (%q, %v)", id, name, got, ok)
+			t.Errorf("Name(%q) = %q; ParseName roundtrip got (%q, %v)", id, name, got, ok)
 		}
 	}
 }
 
-// TestParseSessionNameRejectsNonGridwell guards against the orphan cleanup
-// killing sessions that are not Gridwell's.
-func TestParseSessionNameRejectsNonGridwell(t *testing.T) {
+// TestParseNameRejectsNonGridwell guards against the orphan cleanup
+// killing tmuxes that are not Gridwell's.
+func TestParseNameRejectsNonGridwell(t *testing.T) {
 	// Non-gridwell names, the bare prefix (empty payload), and invalid base64
 	// must all be rejected.
 	cases := []string{"", "main", "work", "gridwell-", "gridwell-!@#$", "gridwell-not base64"}
 	for _, name := range cases {
-		if _, ok := ParseSessionName(name); ok {
-			t.Errorf("ParseSessionName(%q) = ok; want not-ok", name)
+		if _, ok := ParseName(name); ok {
+			t.Errorf("ParseName(%q) = ok; want not-ok", name)
 		}
 	}
 }
@@ -50,7 +50,7 @@ func TestArgsCreate(t *testing.T) {
 	got := c.Args("t/42", ModeCreate, 80, 24, "/home/joe")
 	want := []string{
 		"/usr/bin/tmux", "-L", "test", "-f", "/tmp/cfg.conf",
-		"new-session", "-A", "-s", SessionName("t/42"),
+		"new-session", "-A", "-s", Name("t/42"),
 		"-c", "/home/joe",
 		"-e", "GRIDWELL_SHELL=t/42",
 		"-x", "80", "-y", "24", "bash",
@@ -62,7 +62,7 @@ func TestArgsCreate(t *testing.T) {
 
 // TestArgsCreateSkipsCwdWhenEmpty: with no startDir, the shell inherits the
 // spawned process's cwd. Asserting on the omission catches an empty -c ""
-// leaking into argv, which would create the session in / rather than
+// leaking into argv, which would create the tmux in / rather than
 // $HOME.
 func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "bash"}
@@ -75,14 +75,14 @@ func TestArgsCreateSkipsCwdWhenEmpty(t *testing.T) {
 }
 
 // TestArgsAttach locks in the attach-only form. It must not include -A: with
-// -A, a refresh of a tile whose session is gone silently spawns a fresh
+// -A, a refresh of a tile whose tmux is gone silently spawns a fresh
 // shell. Attach must fail in that case so the client hides the button.
 func TestArgsAttach(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c"}
 	got := c.Args("t/7", ModeAttach, 80, 24, "/ignored")
 	want := []string{
 		"tmux", "-L", "s", "-f", "/tmp/c",
-		"attach-session", "-t", SessionName("t/7"),
+		"attach-session", "-t", Name("t/7"),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ModeAttach argv mismatch\n got=%v\nwant=%v", got, want)
@@ -92,7 +92,7 @@ func TestArgsAttach(t *testing.T) {
 // TestFilterEnvDropsTmuxVar guards the recursion case: if gridwell runs
 // inside an outer tmux, that outer's $TMUX would leak into the shell-out, and
 // tmux refuses commands on a different socket from inside an existing
-// session.
+// tmux.
 func TestFilterEnvDropsTmuxVar(t *testing.T) {
 	in := []string{"PATH=/usr/bin", "TMUX=/tmp/tmux-1000/default,1234,0", "HOME=/home/x"}
 	out := filterEnv(in, "TMUX")
@@ -106,11 +106,11 @@ func TestFilterEnvDropsTmuxVar(t *testing.T) {
 	}
 }
 
-// TestIsMissingSessionErrMatchesTmuxMessages: the sentinel detection is what
-// makes HasSession("missing") return (false, nil) rather than bubbling
+// TestIsMissingErrMatchesTmuxMessages: the sentinel detection is what
+// makes Has("missing") return (false, nil) rather than bubbling
 // tmux's exit-1 as an error. Testing it means a tmux version that rewords its
-// diagnostic cannot silently break the "is the session alive?" path.
-func TestIsMissingSessionErrMatchesTmuxMessages(t *testing.T) {
+// diagnostic cannot silently break the "is the tmux alive?" path.
+func TestIsMissingErrMatchesTmuxMessages(t *testing.T) {
 	cases := []string{
 		"can't find session: gridwell-5",
 		"session not found: gridwell-5",
@@ -118,17 +118,17 @@ func TestIsMissingSessionErrMatchesTmuxMessages(t *testing.T) {
 		"Can't find session: gridwell-5\n",
 	}
 	for _, msg := range cases {
-		if !isMissingSessionErr([]byte(msg), errors.New("exit 1")) {
-			t.Errorf("isMissingSessionErr(%q) = false; want true", msg)
+		if !isMissingErr([]byte(msg), errors.New("exit 1")) {
+			t.Errorf("isMissingErr(%q) = false; want true", msg)
 		}
 	}
 	// A real failure must not be classified as missing.
-	if isMissingSessionErr([]byte("permission denied"), errors.New("exit 1")) {
-		t.Error(`isMissingSessionErr("permission denied") = true; want false`)
+	if isMissingErr([]byte("permission denied"), errors.New("exit 1")) {
+		t.Error(`isMissingErr("permission denied") = true; want false`)
 	}
 	// nil error never matches.
-	if isMissingSessionErr([]byte("can't find session"), nil) {
-		t.Error("isMissingSessionErr with nil err = true; want false")
+	if isMissingErr([]byte("can't find session"), nil) {
+		t.Error("isMissingErr with nil err = true; want false")
 	}
 }
 
@@ -196,8 +196,8 @@ func requireTmux(t *testing.T) {
 }
 
 // newTestController gives each integration test its own private
-// socket so concurrent runs don't see each other's sessions. The
-// returned cleanup kills the tmux server (taking all its sessions
+// socket so concurrent runs don't see each other's tmuxes. The
+// returned cleanup kills the tmux server (taking all its tmuxes
 // with it) and removes the config file.
 func newTestController(t *testing.T) *Controller {
 	t.Helper()
@@ -207,7 +207,7 @@ func newTestController(t *testing.T) *Controller {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		// Kill the server (and all its sessions) before removing the
+		// Kill the server (and all its tmuxes) before removing the
 		// config so we don't leave a server hanging.
 		_, _ = c.run("kill-server")
 		_ = cleanup()
@@ -215,86 +215,86 @@ func newTestController(t *testing.T) *Controller {
 	return c
 }
 
-// TestHasSessionMissingReturnsFalseNoErr: the empty-socket case
+// TestHasMissingReturnsFalseNoErr: the empty-socket case
 // (tmux server not running, no sessions) is the steady-state at
 // program startup, not an error.
-func TestHasSessionMissingReturnsFalseNoErr(t *testing.T) {
+func TestHasMissingReturnsFalseNoErr(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
-	alive, err := c.HasSession("t/42")
+	alive, err := c.Has("t/42")
 	if err != nil {
-		t.Fatalf("HasSession with no server: err=%v; want nil", err)
+		t.Fatalf("Has with no server: err=%v; want nil", err)
 	}
 	if alive {
-		t.Errorf("HasSession with no session = true; want false")
+		t.Errorf("Has with no tmux = true; want false")
 	}
 }
 
-// TestCreateThenHasSessionThenKill is the full lifecycle: spawn a
-// session via Args (the same path the WS handler uses), confirm
-// HasSession sees it, kill it, confirm gone. Establishes that our
+// TestCreateThenHasThenKill is the full lifecycle: spawn a
+// tmux via Args (the same path the WS handler uses), confirm
+// Has sees it, kill it, confirm gone. Establishes that our
 // argv vector actually does what we documented.
-func TestCreateThenHasSessionThenKill(t *testing.T) {
+func TestCreateThenHasThenKill(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
 
-	// Spawn a session by exec'ing the create argv detached. We use
-	// `-d` to skip the attach (we just want to provoke session
+	// Spawn a tmux by exec'ing the create argv detached. We use
+	// `-d` to skip the attach (we just want to provoke tmux
 	// creation; no client needed).
 	createArgs := c.Args("t/101", ModeCreate, 80, 24, "")
-	// Insert -d to keep the session detached for the test.
+	// Insert -d to keep the tmux detached for the test.
 	createArgs = injectDetach(createArgs)
 	if out, err := exec.Command(createArgs[0], createArgs[1:]...).CombinedOutput(); err != nil {
-		t.Fatalf("create session: %v: %s", err, out)
+		t.Fatalf("create tmux: %v: %s", err, out)
 	}
 
-	alive, err := c.HasSession("t/101")
+	alive, err := c.Has("t/101")
 	if err != nil || !alive {
-		t.Fatalf("HasSession(101) after create = (%v, %v); want (true, nil)", alive, err)
+		t.Fatalf("Has(101) after create = (%v, %v); want (true, nil)", alive, err)
 	}
 
-	if err := c.KillSession("t/101"); err != nil {
-		t.Fatalf("KillSession: %v", err)
+	if err := c.Kill("t/101"); err != nil {
+		t.Fatalf("Kill: %v", err)
 	}
 
-	alive, err = c.HasSession("t/101")
+	alive, err = c.Has("t/101")
 	if err != nil || alive {
-		t.Errorf("HasSession after kill = (%v, %v); want (false, nil)", alive, err)
+		t.Errorf("Has after kill = (%v, %v); want (false, nil)", alive, err)
 	}
 }
 
-// TestKillSessionMissingIsNoOp: the orphan cleanup path calls Kill
-// on session ids that may or may not exist; "already gone" must not
+// TestKillMissingIsNoOp: the orphan cleanup path calls Kill
+// on tmux ids that may or may not exist; "already gone" must not
 // be an error.
-func TestKillSessionMissingIsNoOp(t *testing.T) {
+func TestKillMissingIsNoOp(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
-	if err := c.KillSession("t/99999"); err != nil {
-		t.Errorf("KillSession on missing = %v; want nil", err)
+	if err := c.Kill("t/99999"); err != nil {
+		t.Errorf("Kill on missing = %v; want nil", err)
 	}
 }
 
-// TestListSessionsEmptyNoServer: at server first-launch the tmux
+// TestListEmptyNoServer: at server first-launch the tmux
 // server isn't running; this must return an empty list (not error).
 // Without this, the orphan cleanup pass would fail noisily on
 // brand-new installs.
-func TestListSessionsEmptyNoServer(t *testing.T) {
+func TestListEmptyNoServer(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
-	ids, err := c.ListSessions()
+	ids, err := c.List()
 	if err != nil {
-		t.Fatalf("ListSessions with no server: %v", err)
+		t.Fatalf("List with no server: %v", err)
 	}
 	if len(ids) != 0 {
-		t.Errorf("ListSessions with no server = %v; want empty", ids)
+		t.Errorf("List with no server = %v; want empty", ids)
 	}
 }
 
-// TestListSessionsEnumeratesGridwellOnly: ListSessions must skip
-// any session not matching the gridwell-N pattern. Without this,
-// orphan cleanup would mass-kill the user's own sessions if they
+// TestListEnumeratesGridwellOnly: List must skip
+// any tmux not matching the gridwell-N pattern. Without this,
+// orphan cleanup would mass-kill the user's own tmuxes if they
 // somehow share our socket.
-func TestListSessionsEnumeratesGridwellOnly(t *testing.T) {
+func TestListEnumeratesGridwellOnly(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
 
@@ -302,7 +302,7 @@ func TestListSessionsEnumeratesGridwellOnly(t *testing.T) {
 	mustExec(t, c.Args("t/11", ModeCreate, 80, 24, ""))
 	mustExec(t, c.run, "new-session", "-d", "-s", "user-session")
 
-	ids, err := c.ListSessions()
+	ids, err := c.List()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,31 +311,31 @@ func TestListSessionsEnumeratesGridwellOnly(t *testing.T) {
 		got[id] = true
 	}
 	if !got["t/7"] || !got["t/11"] {
-		t.Errorf("ListSessions = %v; missing gridwell tiles 7, 11", ids)
+		t.Errorf("List = %v; missing gridwell tiles 7, 11", ids)
 	}
 	if len(got) != 2 {
-		t.Errorf("ListSessions included non-gridwell entries: %v", ids)
+		t.Errorf("List included non-gridwell entries: %v", ids)
 	}
 }
 
-// TestAttachModeFailsWhenSessionMissing is the headline behavioral
-// guarantee for the "shell session is gone" path: an attach attempt
-// against a missing session must exit non-zero so the WS handler's
+// TestAttachModeFailsWhenTmuxMissing is the headline behavioral
+// guarantee for the "shell's tmux is gone" path: an attach attempt
+// against a missing tmux must exit non-zero so the WS handler's
 // shelldriver.Start returns an error, so the WS handler tells the
 // client "not alive", so the refresh button hides. tmux's actual
 // diagnostic in this case is "no sessions" (when the server has no
-// sessions at all) — covered by isMissingSessionErr's matcher.
-func TestAttachModeFailsWhenSessionMissing(t *testing.T) {
+// tmuxes at all) — covered by isMissingErr's matcher.
+func TestAttachModeFailsWhenTmuxMissing(t *testing.T) {
 	requireTmux(t)
 	c := newTestController(t)
 	args := c.Args("t/404", ModeAttach, 80, 24, "")
 	cmd := exec.Command(args[0], args[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
-		t.Fatalf("attach to missing session succeeded; want failure. out=%s", out)
+		t.Fatalf("attach to missing tmux succeeded; want failure. out=%s", out)
 	}
-	if !isMissingSessionErr(out, err) && !isNoServerErr(out, err) {
-		t.Errorf("attach to missing session: want missing/no-server diagnostic, got: %s (err=%v)", out, err)
+	if !isMissingErr(out, err) && !isNoServerErr(out, err) {
+		t.Errorf("attach to missing tmux: want missing/no-server diagnostic, got: %s (err=%v)", out, err)
 	}
 }
 
@@ -343,7 +343,7 @@ func TestAttachModeFailsWhenSessionMissing(t *testing.T) {
 
 // injectDetach inserts the `-d` flag right after the `new-session`
 // verb so the create runs as a detached server side-effect (no
-// client attach). Used to provoke session creation from tests
+// client attach). Used to provoke tmux creation from tests
 // without needing a PTY.
 func injectDetach(args []string) []string {
 	for i, a := range args {
@@ -387,7 +387,7 @@ func mustExec(t *testing.T, run any, extra ...string) {
 }
 
 // TestArgsCreateUsesConfiguredShell: the `shell:` plugin config key picks the
-// login shell for newly-created sessions (issue #86) — the argv's final
+// login shell for newly-created tmuxes (issue #86) — the argv's final
 // element, where the hardcoded "bash" used to live.
 func TestArgsCreateUsesConfiguredShell(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "/bin/zsh"}
@@ -566,7 +566,7 @@ func TestEnvPrependsShadowPath(t *testing.T) {
 	}
 }
 
-// TestArgsCreateInjectsBrowserEnv: new sessions carry BROWSER pointing at the
+// TestArgsCreateInjectsBrowserEnv: new tmuxes carry BROWSER pointing at the
 // shim (tmux new-session -e), so terminal apps that launch a browser hand the
 // url back to gridwell instead of spawning one on the host.
 func TestArgsCreateInjectsBrowserEnv(t *testing.T) {
@@ -592,10 +592,10 @@ func TestConfigAllowsPassthrough(t *testing.T) {
 	}
 }
 
-// TestArgsCreateNamesTheSession: a new session carries GRIDWELL_SHELL, its
+// TestArgsCreateNamesTheTmux: a new tmux carries GRIDWELL_SHELL, its
 // key, so a program inside it (Claude Code) can tell the MCP API which shell
 // it runs in; an attach starts nothing and carries nothing.
-func TestArgsCreateNamesTheSession(t *testing.T) {
+func TestArgsCreateNamesTheTmux(t *testing.T) {
 	c := &Controller{binary: "tmux", socketName: "s", configPath: "/tmp/c", shell: "bash"}
 	has := func(argv []string) bool {
 		for i, a := range argv {

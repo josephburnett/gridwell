@@ -20,7 +20,7 @@ import (
 // binary, a grid scope reads the plugin's context path, and a time or the
 // selection reads the node's row for the entry, so an entry the user never
 // touched, having no row, passes neither.
-func TestSearchFiltersReachAPluginsRows(t *testing.T) {
+func TestFindFiltersReachAPluginsRows(t *testing.T) {
 	gl := gitlabfake.New(t,
 		gitlabTodo(1, "2026-08-18T10:00:00Z", "fix the widget", "please review the widget"),
 		gitlabTodo(2, "2026-08-19T10:00:00Z", "a widget gadget", "no rush"),
@@ -29,11 +29,11 @@ func TestSearchFiltersReachAPluginsRows(t *testing.T) {
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	raw := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	ctx := context.Background()
-	search := func(req *gridwellv1.SearchRequest) []string {
+	find := func(req *gridwellv1.FindRequest) []string {
 		t.Helper()
-		resp, err := raw.Search(ctx, connect.NewRequest(req))
+		resp, err := raw.Find(ctx, connect.NewRequest(req))
 		if err != nil {
-			t.Fatalf("search %v: %v", req, err)
+			t.Fatalf("find %v: %v", req, err)
 		}
 		var alts []string
 		for _, r := range resp.Msg.Results {
@@ -72,13 +72,13 @@ func TestSearchFiltersReachAPluginsRows(t *testing.T) {
 		t.Fatalf("no week well in %v", root.Tiles)
 	}
 
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", GridId: rootID}); len(got) != 0 {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", GridId: rootID}); len(got) != 0 {
 		t.Errorf("widget on the root alone = %v, want none: the todos are a week down", got)
 	}
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", GridId: rootID, Recurse: true}); len(got) != 2 {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", GridId: rootID, Recurse: true}); len(got) != 2 {
 		t.Errorf("widget under the root = %v, want both todos", got)
 	}
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", Created: &gridwellv1.TimeRange{From: 1}}); len(got) != 0 {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", Created: &gridwellv1.TimeRange{From: 1}}); len(got) != 0 {
 		t.Errorf("widget with a created filter = %v, want none: no todo has a row yet", got)
 	}
 
@@ -102,39 +102,39 @@ func TestSearchFiltersReachAPluginsRows(t *testing.T) {
 		Add: []string{second.Id}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", Selected: true}); !has(got, "!2") {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", Selected: true}); !has(got, "!2") {
 		t.Errorf("selected widget = %v, want !2", got)
 	}
-	if got := search(&gridwellv1.SearchRequest{Selected: true}); !has(got, "!2") {
+	if got := find(&gridwellv1.FindRequest{Selected: true}); !has(got, "!2") {
 		t.Errorf("selected, no query = %v, want !2", got)
 	}
 	// Found by its row alone, it is still a place: the path down to it is
 	// listed from the collection through the grids the node holds.
-	r, err := raw.Search(ctx, connect.NewRequest(&gridwellv1.SearchRequest{Selected: true}))
+	r, err := raw.Find(ctx, connect.NewRequest(&gridwellv1.FindRequest{Selected: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p := r.Msg.Results[0].Path; len(p) != 1 || p[0].Id != week.Id {
 		t.Errorf("path = %v, want the week well", p)
 	}
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", Created: &gridwellv1.TimeRange{From: before}}); !has(got, "!2") {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", Created: &gridwellv1.TimeRange{From: before}}); !has(got, "!2") {
 		t.Errorf("widget made since the select = %v, want !2, the one row", got)
 	}
-	if got := search(&gridwellv1.SearchRequest{Selected: true, GridId: rootID}); len(got) != 0 {
+	if got := find(&gridwellv1.FindRequest{Selected: true, GridId: rootID}); len(got) != 0 {
 		t.Errorf("selected on the root alone = %v, want none", got)
 	}
 	// A kind is the node's filter too, and an entry with no row has its kind:
 	// both todos pass their own, and none passes another.
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", Kind: second.Kind}); len(got) != 2 {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", Kind: second.Kind}); len(got) != 2 {
 		t.Errorf("widget of kind %s = %v, want both todos, one with no row", second.Kind, got)
 	}
-	if got := search(&gridwellv1.SearchRequest{Query: "widget", Kind: rpc.KindPane}); len(got) != 0 {
+	if got := find(&gridwellv1.FindRequest{Query: "widget", Kind: rpc.KindPane}); len(got) != 0 {
 		t.Errorf("widget of kind pane = %v, want none", got)
 	}
-	if got := search(&gridwellv1.SearchRequest{GridId: rootID, Recurse: true, Kind: rpc.KindWell}); len(got) == 0 || slices.ContainsFunc(got, func(a string) bool { return strings.Contains(a, "widget") }) {
+	if got := find(&gridwellv1.FindRequest{GridId: rootID, Recurse: true, Kind: rpc.KindWell}); len(got) == 0 || slices.ContainsFunc(got, func(a string) bool { return strings.Contains(a, "widget") }) {
 		t.Errorf("the wells under the root = %v, want the week wells and no todo", got)
 	}
-	got := search(&gridwellv1.SearchRequest{GridId: week.ChildGridId})
+	got := find(&gridwellv1.FindRequest{GridId: week.ChildGridId})
 	if len(got) != 2 || !strings.Contains(got[0], "!2") {
 		t.Errorf("the week listed = %v, want both, the one with a row first", got)
 	}

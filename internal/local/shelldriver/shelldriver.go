@@ -1,5 +1,5 @@
-// Package shelldriver spawns a process attached to a PTY: one Session is one
-// PTY is one process. What that process is stays in internal/local/shellsvc.
+// Package shelldriver spawns a process attached to a PTY: one PTY is one
+// process. What that process is stays in internal/local/shellsvc.
 // shelldriver_nopty.go gives a platform without a PTY a Start that refuses
 // with ErrShellsUnavailable and no creack/pty dependency.
 package shelldriver

@@ -9,7 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 )
 
-// Clone is an eager deep copy: new ids all the way down, blobs shared by
+// A copy is eager and deep: new ids all the way down, blobs shared by
 // content address and refcount, no structural sharing. The existing byte
 // identity tests prove the halves diverge once one of them is edited. This one
 // is about the copy itself: taking it is not a change to the thing copied, so
@@ -56,7 +56,7 @@ func rowsOf(d storetest.Dump, table string, ids map[string]bool) map[string]map[
 	return out
 }
 
-func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
+func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
@@ -117,11 +117,11 @@ func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	srcTiles, srcGrids := subtree(t, s, outer)
 	before := storetest.DumpOf(t, s.db)
 
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: outer.Id, DestGridId: root, X: 10, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone: %v", err)
+		t.Fatalf("copy: %v", err)
 	}
 	after := storetest.DumpOf(t, s.db)
 
@@ -146,15 +146,15 @@ func TestCloningLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 
 	// And it is a copy, not a second name for the same rows: nothing in it is
 	// a row of the source subtree, at any depth.
-	cpyTiles, cpyGrids := subtree(t, s, clone)
+	cpyTiles, cpyGrids := subtree(t, s, cp)
 	for id := range cpyTiles {
 		if srcTiles[id] {
-			t.Errorf("the copy holds the source's tile %s — a clone is a deep copy", id)
+			t.Errorf("the copy holds the source's tile %s — a copy is deep", id)
 		}
 	}
 	for id := range cpyGrids {
 		if srcGrids[id] {
-			t.Errorf("the copy holds the source's grid %s — a clone is a deep copy", id)
+			t.Errorf("the copy holds the source's grid %s — a copy is deep", id)
 		}
 	}
 	if len(cpyTiles) != len(srcTiles) || len(cpyGrids) != len(srcGrids) {

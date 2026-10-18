@@ -17,12 +17,12 @@ func isWellKind(kind string) bool {
 	return rpc.IsWellKind(kind)
 }
 
-// cloneSubtree deep-copies a grid and everything beneath it into fresh rows.
+// copySubtree deep-copies a grid and everything beneath it into fresh rows.
 // Each grid and tile gets a new row id, with the version preserved, so no tile
-// is shared between two clones and editing one can never touch the other.
+// is shared between two copies and editing one can never touch the other.
 // Blobs are immutable and shared by refcount; source grids behind file and
-// process wells are shared by identity. See childGridForClone.
-func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (int64, error) {
+// process wells are shared by identity. See childGridForCopy.
+func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (int64, error) {
 	old, err := s.loadGrid(ctx, tx, srcGridID)
 	if err != nil {
 		return 0, err
@@ -32,7 +32,7 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 		`INSERT INTO grids (version, created_at, updated_at) VALUES (?, ?, ?)`,
 		old.Version, now, now)
 	if err != nil {
-		return 0, fmt.Errorf("insert cloned grid: %w", err)
+		return 0, fmt.Errorf("insert copied grid: %w", err)
 	}
 	newGridID, err := res.LastInsertId()
 	if err != nil {
@@ -45,7 +45,7 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 		return 0, err
 	}
 	for _, src := range tiles {
-		child, err := s.childGridForClone(ctx, tx, src)
+		child, err := s.childGridForCopy(ctx, tx, src)
 		if err != nil {
 			return 0, err
 		}
@@ -56,11 +56,11 @@ func (s *Store) cloneSubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (
 	return newGridID, nil
 }
 
-// childGridForClone returns the child_grid_id a copy of tile n should carry,
+// childGridForCopy returns the child_grid_id a copy of tile n should carry,
 // ready to bind into the INSERT. An interior well gets a deep copy of its
-// subtree; an exit well keeps its qualified cross-plugin reference, since
+// subtree; an exit well keeps its qualified cross-plugin link, since
 // another plugin owns that grid; everything else gets nil.
-func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile) (any, error) {
+func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile) (any, error) {
 	if n.ChildGridId == "" {
 		return nil, nil
 	}
@@ -69,7 +69,7 @@ func (s *Store) childGridForClone(ctx context.Context, tx *sql.Tx, n *gridwellv1
 		return n.ChildGridId, nil
 	}
 	if n.Kind == rpc.KindWell {
-		newChild, err := s.cloneSubtree(ctx, tx, childID)
+		newChild, err := s.copySubtree(ctx, tx, childID)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		urlStr, textMode  sql.NullString
 		urlHist           sql.NullString
 		linkTarget        sql.NullString
-		shellSession      sql.NullString
+		shellTmux         sql.NullString
 	)
 	if n.LinkTargetId != "" {
 		// A copy of a link is a link (CLAUDE.md, 2026-10-06); the CHECK's link
@@ -110,9 +110,9 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			urlHist = sql.NullString{String: n.UrlHistory, Valid: true}
 		}
 	case n.Kind == rpc.KindShell:
-		// The copy names its source's session, started or not, and shows the
+		// The copy names its source's tmux, started or not, and shows the
 		// source's preview until it is live itself.
-		shellSession = sql.NullString{String: rpc.ShellSession(n), Valid: true}
+		shellTmux = sql.NullString{String: rpc.ShellTmux(n), Valid: true}
 		if n.PreviewBlobId != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}
 		}
@@ -145,7 +145,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 	vcx, vcy, vzoom := viewArgs(rpc.ViewOf(n.ViewCx, n.ViewCy, n.ViewZoom))
 	// The copy is written by name: copyBinding renders the column list from
 	// the descriptor in columns.go and refuses a map that misses a copied
-	// column, so a forgotten clone path is a named error, not a silent gap.
+	// column, so a forgotten copy path is a named error, not a silent gap.
 	cols, args, err := copyBinding(map[string]any{
 		"version": n.Version, "grid_id": gridID, "kind": n.Kind,
 		"x": x, "y": y, "w": n.W, "h": n.H,
@@ -157,7 +157,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		"alt_text": n.AltText, "alt_user": altUser,
 		"content_zoom": n.ContentZoom, "url_history": urlHist,
 		"link_target_id": linkTarget, "url_frozen": boolToInt(n.UrlFrozen),
-		"shell_session": shellSession,
+		"shell_session": shellTmux,
 		"created_at":    now, "updated_at": now,
 	})
 	if err != nil {
@@ -311,8 +311,8 @@ func nullToInt(n sql.NullInt64) int64 {
 
 // tileRefs is the one description of what a tile owns: an interior well's
 // child grid, and the blob it holds a refcount on. childGrid is the stored
-// child_grid_id; an exit well's is a qualified reference that does not parse
-// as a local grid id, so it owns no grid and only the reference goes.
+// child_grid_id; an exit well's is a qualified link that does not parse
+// as a local grid id, so it owns no grid and only the link goes.
 // Single-delete and grid teardown both route through it.
 func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch {

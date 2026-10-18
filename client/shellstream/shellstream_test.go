@@ -132,11 +132,11 @@ func TestWriteAndResizeAfterCloseAreNoOps(t *testing.T) {
 	h.reg.Resize("nobody", 10, 10)
 }
 
-func TestSessionGoneRidesTheExit(t *testing.T) {
+func TestTmuxGoneRidesTheExit(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/1", "u/1", 80, 24)
-	h.dialed[0].onEnd("session gone", true)
-	if len(h.exits) != 1 || !h.exits[0].SessionGone {
+	h.dialed[0].onEnd("tmux gone", true)
+	if len(h.exits) != 1 || !h.exits[0].TmuxGone {
 		t.Fatalf("the gone verdict must ride the exit: %+v", h.exits)
 	}
 }
@@ -200,25 +200,25 @@ func TestOutputAndExitNameTheTile(t *testing.T) {
 	}
 }
 
-// A session holds one stream whichever tile opened it: opening a clone on the
-// session its source holds replaces the source's stream, and the new one is
-// bound to the clone, the tile whose preview and title the server writes.
-func TestOpenOnASessionReplacesAnotherTilesStream(t *testing.T) {
+// A tmux holds one stream whichever tile opened it: opening a copy on the
+// tmux its source holds replaces the source's stream, and the new one is
+// bound to the copy, the tile whose preview and title the server writes.
+func TestOpenOnATmuxReplacesAnotherTilesStream(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/7", "u/7", 80, 24)
 	h.reg.Open("u/7", "u/8", 80, 24)
 	if !h.dialed[0].closed {
-		t.Fatal("the source's stream must close when its clone opens the session")
+		t.Fatal("the source's stream must close when its copy opens the tmux")
 	}
 	if h.dialed[1].tileID != "u/8" {
-		t.Fatalf("dialed %q, want the clone u/8 bound", h.dialed[1].tileID)
+		t.Fatalf("dialed %q, want the copy u/8 bound", h.dialed[1].tileID)
 	}
 	h.dialed[1].onData([]byte{1})
 	h.dialed[1].onEnd("", false)
 	if len(h.data) != 1 || h.data[0].tileID != "u/7" {
-		t.Fatalf("data = %+v, want one chunk keyed by the session u/7", h.data)
+		t.Fatalf("data = %+v, want one chunk keyed by the tmux u/7", h.data)
 	}
 	if len(h.exits) != 1 || h.exits[0].Key != "u/7" || h.exits[0].TileID != "u/8" {
-		t.Fatalf("exits = %+v, want the session u/7 and the bound tile u/8", h.exits)
+		t.Fatalf("exits = %+v, want the tmux u/7 and the bound tile u/8", h.exits)
 	}
 }

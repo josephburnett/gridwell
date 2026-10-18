@@ -34,19 +34,19 @@ type hold struct {
 	landed bool
 }
 
-// Placing is one placement write's claim on the cache, settled by its
-// verdict. A nil Placing held nothing and settles nothing.
-type Placing struct {
+// Moving is one move's claim on the cache, settled by its verdict. A
+// nil Moving held nothing and settles nothing.
+type Moving struct {
 	c      *Cache
 	id     string
 	seq    uint64
 	origin Placement
 }
 
-// Place moves the cached row to p ahead of the write that asks for it and
+// Move moves the cached row to p ahead of the write that asks for it and
 // holds it there until that write's echo, its answer under a minted id, or
 // its failure. Nil when the row is not cached.
-func (c *Cache) Place(tileID string, p Placement) *Placing {
+func (c *Cache) Move(tileID string, p Placement) *Moving {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cur := c.rowLocked(tileID)
@@ -58,13 +58,13 @@ func (c *Cache) Place(tileID string, p Placement) *Placing {
 	n := proto.CloneOf(cur)
 	p.set(n)
 	c.storeLocked(n, false)
-	return &Placing{c: c, id: tileID, seq: c.seq, origin: PlacementOf(cur)}
+	return &Moving{c: c, id: tileID, seq: c.seq, origin: PlacementOf(cur)}
 }
 
 // Landed folds the write's answer in for what it set, then lets a read
 // decide the layout. An answer under another id is a plugin's minted row,
 // whose echo will never name this one, so the hold ends there.
-func (pl *Placing) Landed(resp *gridwellv1.Tile) {
+func (pl *Moving) Landed(resp *gridwellv1.Tile) {
 	if pl == nil || resp == nil {
 		return
 	}
@@ -83,7 +83,7 @@ func (pl *Placing) Landed(resp *gridwellv1.Tile) {
 
 // Failed puts the row back where it was, unless a later placement of the
 // tile has superseded this one or the stream has already spoken for it.
-func (pl *Placing) Failed() {
+func (pl *Moving) Failed() {
 	if pl == nil {
 		return
 	}

@@ -16,7 +16,7 @@ func TestMoveNodeWithinGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	got, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: w.Id,
 		GridId: root, X: 5, Y: 5, W: w.W, H: w.H,
 	})
@@ -39,7 +39,7 @@ func TestMoveNodeOverlapRefused(t *testing.T) {
 	if _, err := s.CreateWell(ctx, root, 5, 5, 2, 2, ""); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	_, err = s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: a.Id,
 		GridId: root, X: 4, Y: 4, W: a.W, H: a.H,
 	})
@@ -60,7 +60,7 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	moved, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: target.Id,
 		GridId: a.ChildGridId, X: 0, Y: 0, W: target.W, H: target.H,
 	})

@@ -75,15 +75,15 @@ func TestTargetIDCoversBothLinkShapesAndOnlyLinks(t *testing.T) {
 		want string
 	}{
 		{"a well link carries its child grid",
-			&gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: fs + "/1"}, fs + "/1"},
+			&gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: fs + "/1"}, fs + "/1"},
 		{"a leaf link carries its target",
-			&gridwellv1.Tile{Kind: rpc.KindText, Reference: true, LinkTargetId: fs + "/42"}, fs + "/42"},
+			&gridwellv1.Tile{Kind: rpc.KindText, Link: true, LinkTargetId: fs + "/42"}, fs + "/42"},
 		{"an owned interior well is not a link",
 			&gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: node + "/9"}, ""},
 		{"an owned text tile is not a link",
 			&gridwellv1.Tile{Kind: rpc.KindText}, ""},
-		{"a childless reference is a menu swatch, not a link into anywhere",
-			&gridwellv1.Tile{Kind: rpc.KindWell, Reference: true}, ""},
+		{"a childless link is a menu swatch, not a link into anywhere",
+			&gridwellv1.Tile{Kind: rpc.KindWell, Link: true}, ""},
 	}
 	for _, c := range cases {
 		tile := c.tile
@@ -101,7 +101,7 @@ func TestTargetIDCoversBothLinkShapesAndOnlyLinks(t *testing.T) {
 // that answer stands, whatever the roster says.
 func TestADeepBreakIsDeadByTheVerdictHeard(t *testing.T) {
 	deep := node + "/laptop/far9xyz/toc/near9xy/7"
-	link := &gridwellv1.Tile{Kind: rpc.KindText, Reference: true, LinkTargetId: deep}
+	link := &gridwellv1.Tile{Kind: rpc.KindText, Link: true, LinkTargetId: deep}
 	heard := map[string]bool{}
 	answered := func(id string) bool { return heard[id] }
 	if DeadTile(link, roster(), node, answered) {
@@ -122,11 +122,11 @@ func TestADeepBreakIsDeadByTheVerdictHeard(t *testing.T) {
 }
 
 func TestDeadTile(t *testing.T) {
-	dead := &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: gone + "/1"}
+	dead := &gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: gone + "/1"}
 	if !DeadTile(dead, roster(), node, nil) {
 		t.Error("a link into an undeclared namespace is dead")
 	}
-	live := &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: fs + "/1"}
+	live := &gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: fs + "/1"}
 	if DeadTile(live, roster(), node, nil) {
 		t.Error("a link into a declared plugin is alive, whatever that plugin's health")
 	}

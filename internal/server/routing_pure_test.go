@@ -29,7 +29,7 @@ func TestQualifyTilesQualifiesIDs(t *testing.T) {
 }
 
 // TestQualifyTilesLeavesAlreadyQualifiedChild: an exit well's child_grid_id is
-// already a cross-plugin reference (<uuid>/<local>) and must NOT be re-prefixed
+// already a cross-plugin link (<uuid>/<local>) and must NOT be re-prefixed
 // — re-qualifying would produce uuidA/uuidB/9 and break routing. This is the
 // branch the integration tests never hit.
 func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
@@ -40,34 +40,34 @@ func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
 	}
 }
 
-// TestQualifyTilesReference: the authoritative link signal. A child that
-// arrived ALREADY qualified is a reference (a mount / exit well / cross-plugin
-// clone) — Reference must be set; render draws it dashed. A bare interior child
-// is owned content — Reference stays false (solid). This is the exact bug the
+// TestQualifyTilesLink: the authoritative link signal. A child that
+// arrived ALREADY qualified is a link (a mount / exit well / cross-plugin
+// copy) — Link must be set; render draws it dashed. A bare interior child
+// is owned content — Link stays false (solid). This is the exact bug the
 // fix closes: a same-plugin mount (child uuid == grid uuid) is still a
-// reference, which a bare uuid comparison would call owned and render solid.
-func TestQualifyTilesReference(t *testing.T) {
-	// Cross-plugin reference: child uuid differs from the well's own.
+// link, which a bare uuid comparison would call owned and render solid.
+func TestQualifyTilesLink(t *testing.T) {
+	// Cross-plugin link: child uuid differs from the well's own.
 	cross := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidB/9"}})
-	if !cross[0].Reference {
-		t.Error("cross-plugin exit well should be a reference")
+	if !cross[0].Link {
+		t.Error("cross-plugin exit well should be a link")
 	}
 	// A same-namespace mount: the child arrived qualified with the same uuid
-	// as the well's grid. It is still a reference, which a bare uuid
+	// as the well's grid. It is still a link, which a bare uuid
 	// comparison would miss.
 	same := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidA/9"}})
-	if !same[0].Reference {
-		t.Error("same-plugin mount (qualified child) should be a reference, not owned")
+	if !same[0].Link {
+		t.Error("same-plugin mount (qualified child) should be a link, not owned")
 	}
-	// Interior well: bare numeric child, owned — not a reference.
+	// Interior well: bare numeric child, owned — not a link.
 	interior := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "7"}})
-	if interior[0].Reference {
-		t.Error("interior well (bare child) must not be a reference")
+	if interior[0].Link {
+		t.Error("interior well (bare child) must not be a link")
 	}
-	// A childless tile is never a reference.
+	// A childless tile is never a link.
 	leaf := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1"}})
-	if leaf[0].Reference {
-		t.Error("a tile with no child grid must not be a reference")
+	if leaf[0].Link {
+		t.Error("a tile with no child grid must not be a link")
 	}
 }
 
@@ -78,17 +78,17 @@ func TestQualifyTilesEmptyChildStaysEmpty(t *testing.T) {
 	if out[0].ChildGridId != "" {
 		t.Errorf("empty child became %q", out[0].ChildGridId)
 	}
-	if out[0].ShellSession != "" {
-		t.Errorf("an unset shell session became %q", out[0].ShellSession)
+	if out[0].ShellTmux != "" {
+		t.Errorf("an unset shell_tmux became %q", out[0].ShellTmux)
 	}
 }
 
-// A clone's shell session names a tile in the same namespace, so the client
+// A copy's shell_tmux names a tile in the same namespace, so the client
 // compares it against qualified ids and it must be qualified like one.
-func TestQualifyTilesQualifiesAShellSession(t *testing.T) {
-	out := qualifyTiles("uuidA", []*pb.Tile{{Id: "6", GridId: "1", Kind: "shell", ShellSession: "5"}})
-	if out[0].ShellSession != "uuidA/5" {
-		t.Errorf("shell session = %q, want uuidA/5", out[0].ShellSession)
+func TestQualifyTilesQualifiesAShellTmux(t *testing.T) {
+	out := qualifyTiles("uuidA", []*pb.Tile{{Id: "6", GridId: "1", Kind: "shell", ShellTmux: "5"}})
+	if out[0].ShellTmux != "uuidA/5" {
+		t.Errorf("shell_tmux = %q, want uuidA/5", out[0].ShellTmux)
 	}
 }
 
@@ -96,31 +96,31 @@ func TestQualifyTilesQualifiesAShellSession(t *testing.T) {
 // that are already qualified from the REMOTE node's perspective — chains.
 // Local qualification must prepend the transit plugin's uuid to every id
 // (id, grid, child — even an already-qualified child, which for a leaf plugin
-// would be a sibling reference but through a hop is a reference within the
+// would be a sibling link but through a hop is a link within the
 // remote's namespace, reachable only through this connection), and must trust
-// the wire Reference bit verbatim: a remote plugin's interior well is OWNED
+// the wire Link bit verbatim: a remote plugin's interior well is OWNED
 // content and renders solid, even though its child id contains "/".
 func TestQualifyTilesTransit(t *testing.T) {
 	// A remote home's interior well, as the remote connection API emits it.
 	interior := qualifyTilesTransit("ssh1", []*pb.Tile{{
-		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Reference: false,
+		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Link: false,
 	}})[0]
 	if interior.Id != "ssh1/rp/7" || interior.GridId != "ssh1/rp/1" || interior.ChildGridId != "ssh1/rp/5" {
 		t.Errorf("transit interior = %+v, want every id prefixed with ssh1/", interior)
 	}
-	if interior.Reference {
-		t.Error("a remote plugin's interior well is owned content, not a link — Reference must stay false through the hop")
+	if interior.Link {
+		t.Error("a remote plugin's interior well is owned content, not a link — Link must stay false through the hop")
 	}
 
-	// A remote link (exit well / mount) keeps Reference true and its target
+	// A remote link (exit well / mount) keeps Link true and its target
 	// is prefixed too — the target lives on the remote node.
 	link := qualifyTilesTransit("ssh1", []*pb.Tile{{
-		Id: "rp/9", GridId: "rp/1", ChildGridId: "otherrp/3", Reference: true,
+		Id: "rp/9", GridId: "rp/1", ChildGridId: "otherrp/3", Link: true,
 	}})[0]
 	if link.ChildGridId != "ssh1/otherrp/3" {
 		t.Errorf("transit link child = %q, want ssh1/otherrp/3", link.ChildGridId)
 	}
-	if !link.Reference {
+	if !link.Link {
 		t.Error("a remote link must stay a link through the hop")
 	}
 
@@ -133,33 +133,33 @@ func TestQualifyTilesTransit(t *testing.T) {
 
 // TestQualifyTilesLeafLink: a leaf link (text/url/shell/pane carrying a
 // link_target_id) is the leaf twin of the exit well at the qualify seam — the
-// ONE derived Reference bit covers both shapes. The stored target is always
+// ONE derived Link bit covers both shapes. The stored target is always
 // qualified (the store enforces it), so a leaf plugin's qualification never
 // prefixes it; a transit hop prepends exactly one segment, the same chain rule
 // as a qualified child_grid_id.
 func TestQualifyTilesLeafLink(t *testing.T) {
-	// Leaf plugin: target stays verbatim, Reference derived true.
+	// Leaf plugin: target stays verbatim, Link derived true.
 	ln := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", Kind: "text", LinkTargetId: "uuidB/42"}})[0]
-	if !ln.Reference {
-		t.Error("a leaf link must derive Reference=true (dashed = link)")
+	if !ln.Link {
+		t.Error("a leaf link must derive Link=true (dashed = link)")
 	}
 	if ln.LinkTargetId != "uuidB/42" {
 		t.Errorf("leaf link target rewritten to %q, want uuidB/42 verbatim", ln.LinkTargetId)
 	}
-	// An owned leaf (no target) is not a reference.
+	// An owned leaf (no target) is not a link.
 	owned := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", Kind: "text"}})[0]
-	if owned.Reference {
-		t.Error("an owned leaf must not be a reference")
+	if owned.Link {
+		t.Error("an owned leaf must not be a link")
 	}
 	// Transit hop: the target chains — one prepended segment — and the wire
-	// Reference bit rides verbatim.
+	// Link bit rides verbatim.
 	hop := qualifyTilesTransit("ssh1", []*pb.Tile{{
-		Id: "rp/9", GridId: "rp/1", Kind: "url", LinkTargetId: "otherrp/42", Reference: true,
+		Id: "rp/9", GridId: "rp/1", Kind: "url", LinkTargetId: "otherrp/42", Link: true,
 	}})[0]
 	if hop.LinkTargetId != "ssh1/otherrp/42" {
 		t.Errorf("transit leaf link target = %q, want ssh1/otherrp/42", hop.LinkTargetId)
 	}
-	if !hop.Reference {
+	if !hop.Link {
 		t.Error("a remote leaf link must stay a link through the hop")
 	}
 }
@@ -171,12 +171,12 @@ func TestQualifyTilesLeafLinkWithinOneNamespace(t *testing.T) {
 	target := rpc.EntryTileID("everything", "t1")
 	leaf := qualifyTiles("hey", []*pb.Tile{{Id: rpc.EntryTileID("box", "t1"), GridId: rpc.EntryGridID("box"),
 		Kind: "url", LinkTargetId: target}})[0]
-	if !leaf.Reference || leaf.LinkTargetId != "hey/"+target {
-		t.Fatalf("leaf = reference %v target %q, want a link to hey/%s", leaf.Reference, leaf.LinkTargetId, target)
+	if !leaf.Link || leaf.LinkTargetId != "hey/"+target {
+		t.Fatalf("leaf = link %v target %q, want a link to hey/%s", leaf.Link, leaf.LinkTargetId, target)
 	}
 	far := qualifyTilesTransit("node/conn", []*pb.Tile{leaf})[0]
-	if far.LinkTargetId != "node/conn/hey/"+target || !far.Reference {
-		t.Fatalf("through a connection = reference %v target %q", far.Reference, far.LinkTargetId)
+	if far.LinkTargetId != "node/conn/hey/"+target || !far.Link {
+		t.Fatalf("through a connection = link %v target %q", far.Link, far.LinkTargetId)
 	}
 	back := rpc.Hop{Seg: "node", Via: "node", Transit: true}.PeelTile(far)
 	if back.LinkTargetId != "conn/hey/"+target {

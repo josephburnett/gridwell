@@ -12,9 +12,9 @@ import (
 )
 
 // Every link is an id the holding node resolves from its first segment. A
-// reference written into a far grid is stored in that node's frame, spelled
+// link written into a far grid is stored in that node's frame, spelled
 // along its own connections, or refused with nothing stored.
-func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
+func TestALinkIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 	ctx := context.Background()
 	edges := append([]meshEdge{{aNode, "tob2", bNode}}, branches...)
 	m := newMesh(t, []string{meNode, aNode, bNode, cNode}, edges)
@@ -32,8 +32,8 @@ func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 	wantLink := func(t *testing.T, got *gridwellv1.Tile, grid, target, body string) {
 		t.Helper()
 		for _, tl := range []*gridwellv1.Tile{got, m.tileIn(ctx, meNode, grid, got.Id)} {
-			if tl.LinkTargetId != target || !tl.Reference {
-				t.Fatalf("link target = %q reference=%v, want %q", tl.LinkTargetId, tl.Reference, target)
+			if tl.LinkTargetId != target || !tl.Link {
+				t.Fatalf("link target = %q link=%v, want %q", tl.LinkTargetId, tl.Link, target)
 			}
 		}
 		if b := readBody(ctx, t, me, got.Id); b != body {
@@ -88,9 +88,9 @@ func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		copied, err := me.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: homeLink.Id, DestGridId: aHome, X: 4, Y: 2})
+		copied, err := me.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: homeLink.Id, DestGridId: aHome, X: 4, Y: 2})
 		if err != nil {
-			t.Fatalf("clone a home link into a: %v", err)
+			t.Fatalf("copy a home link into a: %v", err)
 		}
 		wantLink(t, copied, aHome, spelled, "on b")
 	})
@@ -99,7 +99,7 @@ func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 		before := m.count(ctx, meNode, bHome)
 		_, err := link(bHome, 1, aText.Id)
 		wantRefused(t, err, bHome, before)
-		_, err = me.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: mustLink(ctx, t, me, m, aText.Id).Id, DestGridId: bHome, X: 1, Y: 2})
+		_, err = me.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: mustLink(ctx, t, me, m, aText.Id).Id, DestGridId: bHome, X: 1, Y: 2})
 		wantRefused(t, err, bHome, before)
 	})
 

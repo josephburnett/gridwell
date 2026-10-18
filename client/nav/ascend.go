@@ -103,7 +103,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		if !haveSaved {
 			saved = centredAt(cx, cy)
 		}
-		land := landing.Clone()
+		land := landing.Copy()
 		pl.add(Effect{Kind: EffStartTransition, PaneID: p.ID, TraceTileID: door, Land: tok,
 			Segments: []transition.Segment{{
 				Place:  &land,
@@ -129,8 +129,8 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	if !haveSaved {
 		saved = centredAt(switchTo.Cx, switchTo.Cy)
 	}
-	cur := p.Stack.Clone()
-	land := landing.Clone()
+	cur := p.Stack.Copy()
+	land := landing.Copy()
 	childDist := zoomtrans.PanDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom, w.CellPx) +
 		zoomtrans.ZoomDist(from.Zoom, mid.Zoom, w.CellPx, w.ZoomDistFactor)
 	parentDist := zoomtrans.PanDist(saved.Cx()-switchTo.Cx, saved.Cy()-switchTo.Cy, saved.Zoom(), w.CellPx) +
@@ -171,7 +171,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 		pl.add(Effect{Kind: EffSaveText, PaneID: p.ID, TileID: file.Id})
 		// Ascending out of an ephemeral tile retires it, with no freeze for a
 		// row about to die. The answer must be a known yes, and no other pane
-		// may still show it, since a split clones the visit.
+		// may still show it, since a split copies the visit.
 		eph, known := scratch.Ephemeral(p.Scratch, file.GridId)
 		ephemeral := eph && known && !w.otherPaneShows(p.ID, file.Id)
 		if rpc.WebContent(file) {

@@ -22,7 +22,7 @@ test('a browser shell outlives the web API header timeout', async ({ gw, window 
 
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 20_000 }).not.toBe('');
 
   await window.keyboard.type('echo shell-before-wait');
@@ -44,7 +44,7 @@ test('a browser shell outlives the web API header timeout', async ({ gw, window 
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(errs.notices, 'no capability notice: the browser really attached').toEqual([]);
 
-  // Delete the tile so its tmux session dies before teardown.
+  // Delete the tile so its tmux dies before teardown.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);

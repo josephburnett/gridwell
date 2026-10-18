@@ -78,7 +78,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 	if !ok {
 		return
 	}
-	base := p.Stack.Clone()
+	base := p.Stack.Copy()
 	if w.Door.IsLink {
 		// A link crosses into another id space, so the frame carries the target
 		// grid id and every path id below stays in one namespace.
@@ -92,7 +92,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 	}
 	pl.fetchGrid(w, well.ChildGridId)
 
-	child := base.Clone()
+	child := base.Copy()
 	child.Push(next)
 
 	parentDist := zoomtrans.PanDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom, w.CellPx) +
@@ -146,14 +146,14 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 		pl.add(Effect{Kind: EffFetchTileContent, TileID: file.Id})
 	}
 
-	base := p.Stack.Clone()
+	base := p.Stack.Copy()
 	// Stacking a visit over a live descent animates in the grid behind the
 	// current content and leaves the frame on the stack.
-	animBase := base.Clone()
+	animBase := base.Copy()
 	if animBase.Content {
 		animBase.Pop()
 	}
-	landing := base.Clone()
+	landing := base.Copy()
 	landing.Push(pane.ContentFrame(file.Id, foot, target,
 		descentTextMode(file, w.Door.ReadOnly),
 		float64(file.TextX), float64(file.TextY)))
@@ -247,7 +247,7 @@ func (m *Machine) followLink(g Gesture, w World) Plan {
 }
 
 // healStale re-derives a restored pane's path when it no longer leads to the
-// descended tile's grid. It reports whether the search started; if so the
+// descended tile's grid. It reports whether the find started; if so the
 // go-live verdict rides the answer.
 func (m *Machine) healStale(paneID string, tile *gridwellv1.Tile, w World, pl *planner) bool {
 	p, ok := w.Pane(paneID)
@@ -270,7 +270,7 @@ func (m *Machine) healStale(paneID string, tile *gridwellv1.Tile, w World, pl *p
 		Tile:   tile,
 	})
 	pl.add(Effect{Kind: EffAwait, Token: tok,
-		Request: Request{Kind: RequestSearch, Query: "id:" + tile.Id,
+		Request: Request{Kind: RequestFind, Query: "id:" + tile.Id,
 			Scope: tile.Id, Limit: 1}})
 	return true
 }
@@ -303,14 +303,14 @@ func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, 
 // autoLiveOnDescent applies shellconn.DecideAutoLive to the just-descended
 // tile; target is a link's target row once read, nil before.
 func (m *Machine) autoLiveOnDescent(paneID string, tile, target *gridwellv1.Tile, w World, pl *planner) {
-	// The shell facts key by session (shellconn.SessionKey).
-	key, resolved := shellconn.SessionKey(tile, target)
+	// The shell facts key by tmux (shellconn.TmuxKey).
+	key, resolved := shellconn.TmuxKey(tile, target)
 	verdict := shellconn.DecideAutoLive(
 		rpc.DescentOf(tile), w.Caps.LiveURL, w.Caps.Shells,
 		tile.PreviewBlobId != 0, w.ShellAliveKnown[key], w.ShellAlive[key],
 		tile.UrlFrozen)
 	if !resolved && (verdict == shellconn.AutoLiveShell || verdict == shellconn.AutoLiveProbeShell) {
-		// A link's session is its target's, read by the path a url link's
+		// A link's tmux is its target's, read by the path a url link's
 		// target is, and only when a shell would open.
 		tok := m.mint(cont{
 			Guard:  Guard{Kind: GuardDescendedIn, PaneID: paneID, TileID: tile.Id},

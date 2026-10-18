@@ -84,7 +84,7 @@ func TestDescendPlans(t *testing.T) {
 	well := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "g2"}
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Reference: true}
+		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	text := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
 	url := &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
 		UrlString: "https://example.test/"}
@@ -195,7 +195,7 @@ func TestDescendWellPushesGridFrame(t *testing.T) {
 
 func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Reference: true}
+		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{IsLink: true}
 	w.MenuOpenOn = "pane1"
@@ -221,7 +221,7 @@ func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
 
 func TestDescendLinkLeavesAnUnopenedMenuAlone(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Reference: true}
+		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{IsLink: true}
 	w.MenuOpenOn = "other"
@@ -234,7 +234,7 @@ func TestDescendLinkLeavesAnUnopenedMenuAlone(t *testing.T) {
 
 func TestDescendLinkWithNoChildGrid(t *testing.T) {
 	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
-		W: 2, H: 2, Reference: true, AltText: "files"}
+		W: 2, H: 2, Link: true, AltText: "files"}
 
 	t.Run("health notice", func(t *testing.T) {
 		w := baseWorld(gridPane("pane1", "g1"))
@@ -366,7 +366,7 @@ func TestDescendLandGoesLive(t *testing.T) {
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
-		name:  "a shell with an unknown session probes first",
+		name:  "a shell with an unknown tmux probes first",
 		tile:  &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9},
 		caps:  caps.Caps{LiveURL: true, Shells: true},
 		want:  []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay, EffAwait, EffScheduleURLUpdate},
@@ -381,10 +381,10 @@ func TestDescendLandGoesLive(t *testing.T) {
 		want: []EffectKind{EffInstallPlace, EffScaleContent, EffRefreshOverlay,
 			EffScheduleURLUpdate},
 	}, {
-		// The liveness facts key by session, so one exit marks every tile
-		// on it: a clone reads its source's verdict, not its own id's.
-		name:  "a clone whose source's session is known dead stays frozen",
-		tile:  &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9, ShellSession: "s1"},
+		// The liveness facts key by tmux, so one exit marks every tile
+		// on it: a copy reads its source's verdict, not its own id's.
+		name:  "a copy whose source's tmux is known dead stays frozen",
+		tile:  &gridwellv1.Tile{Id: "s2", Kind: rpc.KindShell, GridId: "g1", W: 2, H: 2, PreviewBlobId: 9, ShellTmux: "s1"},
 		caps:  caps.Caps{LiveURL: true, Shells: true},
 		alive: map[string]bool{"s1": false},
 		known: map[string]bool{"s1": true},

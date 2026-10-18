@@ -25,7 +25,7 @@ func newRig() *rig {
 		func(paneID string, seg Segment) {
 			r.entered = append(r.entered, paneID)
 			if seg.Place != nil {
-				r.places[paneID] = seg.Place.Clone()
+				r.places[paneID] = seg.Place.Copy()
 			}
 		},
 		func(t *Transition) {

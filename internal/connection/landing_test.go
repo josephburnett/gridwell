@@ -32,10 +32,10 @@ func (c movingClient) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv
 }
 
 // A connection name is bound to the node it landed on, because every stored
-// reference through it was written against that landing. When the far end
+// link through it was written against that landing. When the far end
 // answers a DIFFERENT home — the socket repointed, the far home rebuilt with a
 // fresh id — the transport refuses to serve the connection and says why. The
-// stored landing is never overwritten: it is what the user's references name,
+// stored landing is never overwritten: it is what the user's links name,
 // and rewriting it would silently re-point every one of them at another
 // node's tiles.
 func TestLandingCheckRefusesADifferentNode(t *testing.T) {
@@ -60,7 +60,7 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 	s.ConnectAll(ctx)
 
 	if r, _ := st.Connection(ctx, "rtb"); r.RemoteRoot != "rnode1/7" {
-		t.Fatalf("stored remote_root = %q — a different node's answer must NEVER overwrite the landing references name", r.RemoteRoot)
+		t.Fatalf("stored remote_root = %q — a different node's answer must NEVER overwrite the landing links name", r.RemoteRoot)
 	}
 	rows := s.Rows(ctx)
 	if len(rows) != 1 || !strings.Contains(rows[0].InfoError, "lands on a different node") {
@@ -93,7 +93,7 @@ func TestLandingCheckRefusesADifferentNode(t *testing.T) {
 
 // A restored target heals without a restart: the check re-asks while the
 // connection is refused, so putting the far node back brings the connection
-// and its references live again.
+// and its links live again.
 func TestLandingCheckHealsWhenTheTargetComesBack(t *testing.T) {
 	ctx := context.Background()
 	st := openStore(t)

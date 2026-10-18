@@ -32,7 +32,7 @@ func TestHeyCLIGoneAfterInfoReadsDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	lunch := tileWithLabel(t, g, "Lunch plans")
-	placed, err := cl.PlaceTile(t.Context(), &gridwellv1.PlaceTileRequest{TileId: lunch.Id, GridId: imbox, X: 7, Y: 3, W: 2, H: 2})
+	placed, err := cl.MoveTile(t.Context(), &gridwellv1.MoveTileRequest{TileId: lunch.Id, GridId: imbox, X: 7, Y: 3, W: 2, H: 2})
 	if err != nil {
 		t.Fatal(err)
 	}

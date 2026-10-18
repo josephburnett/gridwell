@@ -15,7 +15,7 @@ import (
 // the well-into-own-subtree refusal comes from the store's own ancestor walk.
 // The overlap refusal, not a claim, is what protects the grid.
 
-func placeText(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
+func textAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
 	tile, err := s.CreateText(context.Background(), gridID, x, y, 1, 1, []byte("body"))
 	if err != nil {
@@ -24,7 +24,7 @@ func placeText(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Ti
 	return tile
 }
 
-func placeWell(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
+func wellAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
 	tile, err := s.CreateWell(context.Background(), gridID, x, y, 1, 1, "")
 	if err != nil {
@@ -33,14 +33,14 @@ func placeWell(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Ti
 	return tile
 }
 
-func TestPlaceTileResizeInPlace(t *testing.T) {
+func TestMoveTileResizeInPlace(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	tile := placeText(t, s, root, 0, 0)
+	tile := textAt(t, s, root, 0, 0)
 
 	// Growing in place must not collide with the tile's own old footprint.
-	got, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	got, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: tile.Id, GridId: root, X: 0, Y: 0, W: 3, H: 2,
 	})
 	if err != nil {
@@ -56,14 +56,14 @@ func TestPlaceTileResizeInPlace(t *testing.T) {
 	}
 }
 
-func TestPlaceTileMoveAndResizeAtOnce(t *testing.T) {
+func TestMoveTileMoveAndResizeAtOnce(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	well := placeWell(t, s, root, 5, 5)
-	tile := placeText(t, s, root, 0, 0)
+	well := wellAt(t, s, root, 5, 5)
+	tile := textAt(t, s, root, 0, 0)
 
-	got, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	got, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: tile.Id, GridId: well.ChildGridId, X: 2, Y: 3, W: 2, H: 2,
 	})
 	if err != nil {
@@ -97,15 +97,15 @@ func TestPlaceTileMoveAndResizeAtOnce(t *testing.T) {
 	}
 }
 
-func TestPlaceTileOverlapRefused(t *testing.T) {
+func TestMoveTileOverlapRefused(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	a := placeText(t, s, root, 0, 0)
+	a := textAt(t, s, root, 0, 0)
 	_ = a
-	b := placeText(t, s, root, 5, 0)
+	b := textAt(t, s, root, 5, 0)
 
-	_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	_, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: b.Id, GridId: root, X: 0, Y: 0, W: 1, H: 1,
 	})
 	if !errors.Is(err, ErrOverlap) {
@@ -115,13 +115,13 @@ func TestPlaceTileOverlapRefused(t *testing.T) {
 
 // A drag is an explicit act on a tile the user can see, so a version that
 // moved under it must not cost the user the move.
-func TestPlaceTileIgnoresStaleClaim(t *testing.T) {
+func TestMoveTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	tile := placeText(t, s, root, 0, 0)
+	tile := textAt(t, s, root, 0, 0)
 
-	got, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	got, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: tile.Id, GridId: root, X: 1, Y: 1, W: 1, H: 1,
 	})
 	if err != nil {
@@ -132,8 +132,8 @@ func TestPlaceTileIgnoresStaleClaim(t *testing.T) {
 	}
 	// The grid is still protected: an overlapping place is refused whatever
 	// the claim says.
-	other := placeText(t, s, root, 5, 5)
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	other := textAt(t, s, root, 5, 5)
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: other.Id, GridId: root, X: 1, Y: 1, W: 1, H: 1,
 	}); !errors.Is(err, ErrOverlap) {
 		t.Fatalf("overlap with a stale claim: got %v, want ErrOverlap", err)
@@ -142,28 +142,28 @@ func TestPlaceTileIgnoresStaleClaim(t *testing.T) {
 
 // With no path on the wire, the store itself must refuse a well moving into
 // its own subtree, at any depth.
-func TestPlaceTileCycleRefusedWithoutPath(t *testing.T) {
+func TestMoveTileCycleRefusedWithoutPath(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	wellA := placeWell(t, s, root, 0, 0)
+	wellA := wellAt(t, s, root, 0, 0)
 	// wellB lives INSIDE wellA's child grid; its own child is a grandchild of A.
-	wellB := placeWell(t, s, wellA.ChildGridId, 0, 0)
+	wellB := wellAt(t, s, wellA.ChildGridId, 0, 0)
 
 	// Into its own child grid: refused.
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: wellA.Id, GridId: wellA.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("well into own child: got %v, want ErrInvalidArgument", err)
 	}
 	// Into a grandchild grid: refused (the walk crosses two levels).
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: wellA.Id, GridId: wellB.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
 	}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("well into grandchild: got %v, want ErrInvalidArgument", err)
 	}
 	// The inner well hoisted OUT to the root is legal (no cycle upward).
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: wellB.Id, GridId: root, X: 7, Y: 7, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("hoisting the inner well out: %v", err)
@@ -173,18 +173,18 @@ func TestPlaceTileCycleRefusedWithoutPath(t *testing.T) {
 // An exit well's child grid belongs to another plugin — no local subtree, so
 // placement anywhere local is legal and the walk must not trip on the
 // qualified (non-numeric) child_grid_id.
-func TestPlaceTileExitWellHasNoLocalSubtree(t *testing.T) {
+func TestMoveTileExitWellHasNoLocalSubtree(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	interior := placeWell(t, s, root, 0, 0)
+	interior := wellAt(t, s, root, 0, 0)
 	exit, err := s.CreateExitWell(ctx, root, 3, 3, 1, 1,
 		"aabbccddaabbccddaabbccddaabbccdd/7", "mounted", rpc.View{})
 	if err != nil {
 		t.Fatalf("create exit well: %v", err)
 	}
 
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: exit.Id, GridId: interior.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
 		t.Fatalf("placing an exit well into an interior grid: %v", err)
@@ -193,13 +193,13 @@ func TestPlaceTileExitWellHasNoLocalSubtree(t *testing.T) {
 
 // No verb can make a child_grid_id cycle, but a corrupted file can hold one,
 // and the placement walk must answer rather than spin forever.
-func TestPlaceTileAncestryCycleAnswers(t *testing.T) {
+func TestMoveTileAncestryCycleAnswers(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	moving := placeWell(t, s, root, 0, 0)
-	p := placeWell(t, s, root, 1, 0)
-	q := placeWell(t, s, root, 2, 0)
+	moving := wellAt(t, s, root, 0, 0)
+	p := wellAt(t, s, root, 1, 0)
+	q := wellAt(t, s, root, 2, 0)
 
 	// Hang each of the two wells under the other's child grid, so walking up
 	// from either grid never reaches a root.
@@ -212,7 +212,7 @@ func TestPlaceTileAncestryCycleAnswers(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+		_, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 			TileId: moving.Id, GridId: p.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
 		})
 		done <- err
@@ -223,7 +223,7 @@ func TestPlaceTileAncestryCycleAnswers(t *testing.T) {
 			t.Fatalf("place into a cyclic grid: got %v, want the capped-ancestry error", err)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("PlaceTile hung walking a cyclic ancestry chain")
+		t.Fatal("MoveTile hung walking a cyclic ancestry chain")
 	}
 }
 
@@ -231,7 +231,7 @@ func TestPlaceTileAncestryCycleAnswers(t *testing.T) {
 // with the placement on disk standing; the claim is the state, not its
 // history, so a tile moved away and back is where the writer saw it; and a
 // tile already where the write puts it is no conflict.
-func TestPlaceTileClaimsThePlacementItSaw(t *testing.T) {
+func TestMoveTileClaimsThePlacementItSaw(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
@@ -241,7 +241,7 @@ func TestPlaceTileClaimsThePlacementItSaw(t *testing.T) {
 	}
 	seen := &gridwellv1.Placement{GridId: tile.GridId, X: 0, Y: 0, W: 1, H: 1}
 	place := func(x int64, claim *gridwellv1.Placement) (*gridwellv1.Tile, error) {
-		return s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: root, X: x, Y: 0, W: 1, H: 1, Claim: claim})
+		return s.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: tile.Id, GridId: root, X: x, Y: 0, W: 1, H: 1, Claim: claim})
 	}
 	if _, err := place(3, seen); err != nil {
 		t.Fatalf("first writer: %v", err)

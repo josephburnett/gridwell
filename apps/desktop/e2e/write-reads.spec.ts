@@ -5,9 +5,9 @@ import { settle } from './cadence';
 // A write whose answer and event carry the change reads nothing back. Its
 // TileChanged lands the row in every open view, this one included, so a GetGrid
 // behind it is a listing read for a fact the client already holds. The
-// cross-node clone lives in the two-node spec, which has the second node.
+// cross-node copy lives in the two-node spec, which has the second node.
 
-test('a clone reads no listing back; its event lands the copy', async ({ gw }) => {
+test('a copy reads no listing back; its event lands the copy', async ({ gw }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
@@ -17,9 +17,9 @@ test('a clone reads no listing back; its event lands the copy', async ({ gw }) =
   await gw.waitIdle();
 
   const reads = await gw.watchGridReads();
-  await gw.cloneTileCell(cx, cy, cx - 2, cy);
+  await gw.copyTileCell(cx, cy, cx - 2, cy);
   const copy = tileAt(await gw.getGrid(f.gridID), 'text', cx - 2, cy)!;
-  expect(copy, 'the clone landed').toBeTruthy();
+  expect(copy, 'the copy landed').toBeTruthy();
   await expect
     .poll(async () => (await gw.focused()).tileIds.includes(copy.id), {
       message: 'the event put the copy in the pane',
@@ -28,7 +28,7 @@ test('a clone reads no listing back; its event lands the copy', async ({ gw }) =
     .toBe(true);
   await gw.waitIdle();
   await reads.stop();
-  expect(reads.of(f.gridID), 'the clone read its grid back').toBe(0);
+  expect(reads.of(f.gridID), 'the copy read its grid back').toBe(0);
 });
 
 // The flip is written as the pane leaves the text: here by closing it, since

@@ -1,6 +1,6 @@
 package pluginhost_test
 
-// A plugin's Search is only worth anything if the node can reach it and turn
+// A plugin's Find is only worth anything if the node can reach it and turn
 // its answers into places: tiles with the ids the store minted, on a path of
 // well tiles. This crosses the whole seam, from a fake GitLab through the REAL
 // gridwell-plugin-gitlab binary, the adapter, and the server to the rpc
@@ -66,11 +66,11 @@ func gitlabServer(t *testing.T, gl *gitlabfake.Server) *httptest.Server {
 	return servertest.Serve(t, srv)
 }
 
-// Search results are the same tiles GetGrid mints — id, grid, placement — on
+// Find results are the same tiles GetGrid mints — id, grid, placement — on
 // a path of the well tiles that lead there, so a hit is a place the client can
-// go. An adapter that does not forward Search answers Unimplemented, and the
+// go. An adapter that does not forward Find answers Unimplemented, and the
 // server's fan-out then skips the plugin entirely.
-func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
+func TestFindThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 	gl := gitlabfake.New(t,
 		gitlabTodo(1, "2026-08-18T10:00:00Z", "fix the widget", "please review the widget"),
 		gitlabTodo(2, "2026-08-25T10:00:00Z", "add a gadget", "no rush"),
@@ -96,9 +96,9 @@ func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 		t.Fatalf("no week well in the root: %v", root.Tiles)
 	}
 
-	// Search before the week was ever listed: the hit is minted through the
+	// Find before the week was ever listed: the hit is minted through the
 	// same synthesis a GetGrid would run.
-	found, err := cl.Search(ctx, "widget", "", 10)
+	found, err := cl.Find(ctx, "widget", "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,11 +136,11 @@ func TestSearchThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 
 	// Scoped to the plugin, the same answer; an id: locate is the one
 	// selector the adapter cannot resolve yet and says so.
-	found, err = cl.Search(ctx, "widget", hit.Tile.Id, 10)
+	found, err = cl.Find(ctx, "widget", hit.Tile.Id, 10)
 	if scoped := found.GetResults(); err != nil || len(scoped) != 1 || scoped[0].Tile.Id != hit.Tile.Id {
-		t.Errorf("scoped search = %v, %v", found, err)
+		t.Errorf("scoped find = %v, %v", found, err)
 	}
-	if _, err := cl.Search(ctx, "id:"+hit.Tile.Id, hit.Tile.Id, 1); err == nil {
+	if _, err := cl.Find(ctx, "id:"+hit.Tile.Id, hit.Tile.Id, 1); err == nil {
 		t.Error("id: locate through the adapter must refuse, not answer an empty or wrong place")
 	}
 }

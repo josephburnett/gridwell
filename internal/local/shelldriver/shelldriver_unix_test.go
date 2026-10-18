@@ -27,7 +27,7 @@ func requireBash(t *testing.T) string {
 
 // drainUntil reads s.Output() into a buffer until the deadline fires or the
 // buffer contains needle. It returns what it read, for failure messages.
-func drainUntil(t *testing.T, s *Session, needle string, deadline time.Duration) []byte {
+func drainUntil(t *testing.T, s *PTY, needle string, deadline time.Duration) []byte {
 	t.Helper()
 	timer := time.NewTimer(deadline)
 	defer timer.Stop()
@@ -183,7 +183,7 @@ func TestWriteAfterCloseReturnsClosedPipe(t *testing.T) {
 		t.Errorf("Write after Close: err = %v, want io.ErrClosedPipe", err)
 	}
 	// Drain to close. Chunks produced before the fd closed may still arrive
-	// after Close; see Session.Output.
+	// after Close; see PTY.Output.
 	deadline := time.After(5 * time.Second)
 	for {
 		select {
@@ -198,7 +198,7 @@ func TestWriteAfterCloseReturnsClosedPipe(t *testing.T) {
 }
 
 // Without setsid and the process-group kill, a `sleep 60` bash spawned would
-// outlive the session and leak.
+// outlive the PTY and leak.
 func TestCloseTerminatesLongRunningChild(t *testing.T) {
 	bashPath := requireBash(t)
 	s, err := Start(Config{Cwd: "/", Cols: 80, Rows: 24, BashPath: bashPath, Args: []string{"--norc", "--noprofile", "-i"},
@@ -334,7 +334,7 @@ func setSigtermGrace(t *testing.T, d time.Duration) time.Duration {
 }
 
 // startScript runs one bash script on a real PTY.
-func startScript(t *testing.T, script string) *Session {
+func startScript(t *testing.T, script string) *PTY {
 	t.Helper()
 	s, err := Start(Config{
 		Cwd:      "/",

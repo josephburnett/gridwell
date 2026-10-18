@@ -295,8 +295,8 @@ func TestGmailPluginDeclaresAndListsEveryContext(t *testing.T) {
 	// derive at its /content/ API, so the message declares none of its own,
 	// and a text tile could not serve one at all.
 	for _, tl := range all.Tiles {
-		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" || tl.Reference {
-			t.Errorf("%s = kind %q serves_page %v url %q reference %v", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString, tl.Reference)
+		if tl.Kind != rpc.KindURL || !tl.ServesPage || tl.UrlString != "" || tl.Link {
+			t.Errorf("%s = kind %q serves_page %v url %q link %v", tl.AltText, tl.Kind, tl.ServesPage, tl.UrlString, tl.Link)
 		}
 	}
 
@@ -423,9 +423,9 @@ func TestGmailPluginReadsItsCredentialPathsAndCachesNoSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Non-vacuous: the plugin did cache its walk there, and what it cached is
-	// what was searched.
+	// what was looked through.
 	if files == 0 {
-		t.Fatal("the state directory is empty; nothing was searched for a secret")
+		t.Fatal("the state directory is empty; nothing was scanned for a secret")
 	}
 }
 

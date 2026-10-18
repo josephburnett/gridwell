@@ -109,7 +109,7 @@ func mcpAddLine(addr, password string) string {
 		host = "127.0.0.1"
 	}
 	return fmt.Sprintf(`gridwell: agents: claude mcp add --transport http gridwell http://%s%s -H "Authorization: Bearer %s" -H '%s: ${%s:-}'`,
-		net.JoinHostPort(host, port), mcpapi.Path, password, mcpapi.ShellHeader, tmux.SessionEnv)
+		net.JoinHostPort(host, port), mcpapi.Path, password, mcpapi.ShellHeader, tmux.KeyEnv)
 }
 
 // staticFS resolves the static override: "" is the embedded web client, so

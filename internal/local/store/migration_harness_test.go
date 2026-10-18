@@ -1143,8 +1143,8 @@ func init() {
 		},
 	})
 
-	// v15: shell_session. An existing shell, and an existing clone of one
-	// that never shared, keep naming their own sessions: NULL.
+	// v15: shell_session. An existing shell, and an existing copy of one
+	// that never shared, keep naming their own tmuxes: NULL.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 15,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -1156,13 +1156,13 @@ func init() {
 		},
 		verify: func(t *testing.T, db *sql.DB) {
 			t.Helper()
-			var session sql.NullInt64
+			var tmux sql.NullInt64
 			if err := db.QueryRow(`SELECT shell_session FROM tiles WHERE alt_text = 'v14 shell'`).
-				Scan(&session); err != nil {
+				Scan(&tmux); err != nil {
 				t.Fatalf("read v14 shell: %v", err)
 			}
-			if session.Valid {
-				t.Errorf("v14 shell: shell_session = %d, want NULL (its own id)", session.Int64)
+			if tmux.Valid {
+				t.Errorf("v14 shell: shell_session = %d, want NULL (its own id)", tmux.Int64)
 			}
 		},
 	})

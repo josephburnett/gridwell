@@ -84,7 +84,7 @@ func (a *App) cacheDoorwayFraming(gridID string, f rpc.Framing) bool {
 }
 
 // pluginByUUID returns the plugin with the given, possibly chain-qualified,
-// namespace, searching the local list then every fetched remote menu context.
+// namespace, looking in the local list then every fetched remote menu context.
 // A chain-qualified uuid cannot collide with a local one.
 func (a *App) pluginByUUID(u string) (*gridwellv1.PluginInfo, bool) {
 	for i := range a.plugins {

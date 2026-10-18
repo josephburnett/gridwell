@@ -963,7 +963,7 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 }
 
 // MintRef passes the mint through to the source. It is a write, so there is
-// nothing to serve when the source is dark: a reference that cannot be minted
+// nothing to serve when the source is dark: a link that cannot be minted
 // must not be stored.
 func (l *Layer) MintRef(ctx context.Context, localID string) (string, error) {
 	return namespace.MintRef(ctx, l.Namespace, localID)
@@ -1000,8 +1000,8 @@ func (c *Layer) SetTile(ctx context.Context, in *pb.SetTileRequest) (*pb.TileRes
 	return resp, err
 }
 
-func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	resp, err := c.Namespace.PlaceTile(ctx, in)
+func (c *Layer) MoveTile(ctx context.Context, in *pb.MoveTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.MoveTile(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.foldWrite(ctx, in.TileId, resp.GetTile())
@@ -1009,8 +1009,8 @@ func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.Til
 	return resp, err
 }
 
-func (c *Layer) CloneTile(ctx context.Context, in *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	resp, err := c.Namespace.CloneTile(ctx, in)
+func (c *Layer) CopyTile(ctx context.Context, in *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.CopyTile(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.foldTile(ctx, resp.GetTile()) // the request names the source, which stays

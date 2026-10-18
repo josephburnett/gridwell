@@ -188,7 +188,7 @@ func TestBuildGateRefusesTheShellSocket(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the socket of another build never ended")
 	}
-	if f.fake.SessionCount() != 0 {
+	if f.fake.AttachmentCount() != 0 {
 		t.Error("a page of another build's socket touched the PTY")
 	}
 }

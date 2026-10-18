@@ -31,7 +31,7 @@ type shellStreamConn struct {
 	container    js.Value // host <div> in the DOM
 
 	// tileID is the content tile the socket is bound to, whose preview and title
-	// the server writes; key is the session it attaches (rpc.ShellSession).
+	// the server writes; key is the tmux it attaches (rpc.ShellTmux).
 	tileID, key string
 	paneID      string
 	// descentID is the pane frame this stream was opened for: for a shell link,
@@ -94,12 +94,12 @@ func (a *App) hasShellStream(paneID string) bool {
 }
 
 // shellRefreshButtonVisible runs shellconn.DecideShellRefreshVisible, probing
-// ShellSessionAlive when the answer is not cached.
+// ShellTmuxAlive when the answer is not cached.
 func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	if tile == nil {
 		return false
 	}
-	// Until a link's target is read there is no session to ask about, and the
+	// Until a link's target is read there is no tmux to ask about, and the
 	// read askContentRow kicks redraws.
 	key, ok := a.shellKey(tile, true)
 	if !ok {
@@ -110,14 +110,14 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	v := shellconn.DecideShellRefreshVisible(
 		tile.Kind == rpc.KindShell, row.PreviewBlobId != 0, known, alive)
 	if v.Probe {
-		a.probeShellSessionAlive(key, rpc.ContentID(tile), nil)
+		a.probeShellTmuxAlive(key, rpc.ContentID(tile), nil)
 	}
 	return v.Show
 }
 
-// probeShellSessionAlive asks the node about tileID and caches the verdict
-// under its session key, then calls then, unless the probe failed.
-func (a *App) probeShellSessionAlive(key, tileID string, then func(alive bool)) {
+// probeShellTmuxAlive asks the node about tileID and caches the verdict
+// under its tmux key, then calls then, unless the probe failed.
+func (a *App) probeShellTmuxAlive(key, tileID string, then func(alive bool)) {
 	// Single-flight never drops a callback, or a restore's attach is lost when the
 	// badge probe fired first.
 	if waiters, inflight := a.shellAliveProbing[key]; inflight {
@@ -135,12 +135,12 @@ func (a *App) probeShellSessionAlive(key, tileID string, then func(alive bool)) 
 		// Bounded: a probe the network swallowed would dedupe every later one away.
 		ctx, cancel := inflight.Bounded()
 		defer cancel()
-		alive, err := a.cl.ShellSessionAlive(ctx, tileID)
+		alive, err := a.cl.ShellTmuxAlive(ctx, tileID)
 		done := a.shellAliveProbing[key]
 		delete(a.shellAliveProbing, key)
 		if err != nil {
-			shellLog("ShellSessionAlive tile=%s err=%v", tileID, err)
-			a.reportErr(errsurface.Error, "shell", "shell session probe failed: "+rpcErrText(err))
+			shellLog("ShellTmuxAlive tile=%s err=%v", tileID, err)
+			a.reportErr(errsurface.Error, "shell", "shell's tmux probe failed: "+rpcErrText(err))
 			return
 		}
 		a.shellAlive[key] = alive
@@ -160,7 +160,7 @@ func (a *App) setShellAlive(key string, alive bool) {
 	}
 }
 
-// shellKey is shellconn.SessionKey over row's content row, read through
+// shellKey is shellconn.TmuxKey over row's content row, read through
 // contentRow, or askContentRow when ask holds.
 func (a *App) shellKey(row *gridwellv1.Tile, ask bool) (string, bool) {
 	resolve := a.contentRow
@@ -168,10 +168,10 @@ func (a *App) shellKey(row *gridwellv1.Tile, ask bool) (string, bool) {
 		resolve = a.askContentRow
 	}
 	target, _ := resolve(row)
-	return shellconn.SessionKey(row, target)
+	return shellconn.TmuxKey(row, target)
 }
 
-// forgetShellAlive drops the cached verdict for the session tileID names, so
+// forgetShellAlive drops the cached verdict for the tmux tileID names, so
 // whatever still names it probes again.
 func (a *App) forgetShellAlive(tileID string) {
 	key := tileID
@@ -186,8 +186,8 @@ func (a *App) forgetShellAlive(tileID string) {
 
 // openShellStream puts the tile's shell live in pane p: keep, move another
 // pane's terminal, or mount xterm.js on a new PTY, closing any other tile's
-// terminal on the same session first. key is the session tileID resolves to
-// (shellconn.SessionKey). disable_shells refuses.
+// terminal on the same tmux first. key is the tmux tileID resolves to
+// (shellconn.TmuxKey). disable_shells refuses.
 func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	row := a.findTileByID(tileID)
 	frozen := row != nil && row.UrlFrozen
@@ -516,7 +516,7 @@ func (conn *shellStreamConn) placeIn(p *pane.Pane) {
 	conn.anchor, conn.path = p.Anchor(), slices.Clone(p.Path())
 }
 
-func (a *App) shellConnOfSession(key string) *shellStreamConn {
+func (a *App) shellConnOfTmux(key string) *shellStreamConn {
 	for _, pl := range a.locals {
 		if pl.shellConn != nil && pl.shellConn.key == key {
 			return pl.shellConn
@@ -525,9 +525,9 @@ func (a *App) shellConnOfSession(key string) *shellStreamConn {
 	return nil
 }
 
-// onShellData routes PTY output to the session's terminal as a Uint8Array.
+// onShellData routes PTY output to the tmux's terminal as a Uint8Array.
 func (a *App) onShellData(key string, data []byte) {
-	conn := a.shellConnOfSession(key)
+	conn := a.shellConnOfTmux(key)
 	if conn == nil || conn.closed {
 		return
 	}
@@ -537,15 +537,15 @@ func (a *App) onShellData(key string, data []byte) {
 }
 
 // onShellExit handles an unexpected stream end; see shellconn.ExitAlive. The
-// verdict keys by session, so one exit reaches every tile naming it.
-func (a *App) onShellExit(key, message string, sessionGone bool) {
-	conn := a.shellConnOfSession(key)
+// verdict keys by tmux, so one exit reaches every tile naming it.
+func (a *App) onShellExit(key, message string, tmuxGone bool) {
+	conn := a.shellConnOfTmux(key)
 	if conn == nil {
 		return
 	}
-	a.emit(traceevent.ShellExit(conn.paneID, conn.tileID, message, sessionGone))
-	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", conn.paneID, conn.tileID, sessionGone, message)
-	if alive, known := shellconn.ExitAlive(sessionGone); known {
+	a.emit(traceevent.ShellExit(conn.paneID, conn.tileID, message, tmuxGone))
+	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", conn.paneID, conn.tileID, tmuxGone, message)
+	if alive, known := shellconn.ExitAlive(tmuxGone); known {
 		a.setShellAlive(key, alive)
 	} else {
 		delete(a.shellAlive, key)
@@ -590,7 +590,7 @@ func (a *App) termTheme() js.Value {
 }
 
 // closeShellStream is the freeze path: capture, post, detach the tmux client.
-// An ephemeral ascent passes freeze=false: the session is about to be deleted.
+// An ephemeral ascent passes freeze=false: the tmux is about to be deleted.
 func (a *App) closeShellStream(paneID string, freeze bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
@@ -609,7 +609,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 }
 
 // freezeShellPaneByIntent runs the bar circle's freeze on a live shell. The
-// tmux session keeps running: a freeze is a screenshot, not a kill.
+// tmux keeps running: a freeze is a screenshot, not a kill.
 func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
 	t, ok := a.descendedGridTile(p)
 	if !ok || t.Kind != rpc.KindShell {
@@ -776,12 +776,12 @@ func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []b
 	})
 }
 
-// deleteCall is DeleteTile as a write's call. A session the delete left
+// deleteCall is DeleteTile as a write's call. A tmux the delete left
 // running is told, though the delete itself landed.
 func (a *App) deleteCall(req *gridwellv1.DeleteTileRequest) func(context.Context) error {
 	return func(ctx context.Context) error {
 		resp, err := a.cl.DeleteTile(ctx, req)
-		if left := resp.GetSessionLeft(); left != "" {
+		if left := resp.GetTmuxLeft(); left != "" {
 			a.reportErr(errsurface.Error, "shell", "deleted, but "+left)
 		}
 		return err

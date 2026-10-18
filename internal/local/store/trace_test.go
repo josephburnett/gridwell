@@ -102,7 +102,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		verb, keys string
 		write      func() error
 	}{
-		{"Place", "plug1:t/" + ts, func() error { _, err := d.Place(id, 3, 3, 1, 1, nil); return err }},
+		{"Move", "plug1:t/" + ts, func() error { _, err := d.Move(id, 3, 3, 1, 1, nil); return err }},
 		{"SetFraming", "plug1:t/" + ts, func() error { _, err := d.SetFraming(id, 0, f); return err }},
 		{"SetFraming", "plug1:f/" + gs, func() error { _, err := d.SetFraming(0, gid, f); return err }},
 		{"SetTextScroll", "plug1:t/" + ts, func() error { _, err := d.SetTextScroll(id, 0, 0, 4, 4, ""); return err }},
@@ -130,11 +130,11 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 // A refused plugin-row write says so, as a refused home write does.
 func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
 	_, d := openExt(t)
-	if _, err := d.Place(999999, 0, 0, 1, 1, nil); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("Place on no row = %v, want ErrNotFound", err)
+	if _, err := d.Move(999999, 0, 0, 1, 1, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Move on no row = %v, want ErrNotFound", err)
 	}
 	for _, rec := range trace.Default().Snapshot() {
-		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "Place error:") {
+		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "Move error:") {
 			return
 		}
 	}

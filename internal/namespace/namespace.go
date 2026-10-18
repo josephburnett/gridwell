@@ -25,10 +25,10 @@
 // there is no copy layer:
 //
 //   - a Namespace must not retain or mutate a request after it returns; one
-//     that rewrites ids clones first, as internal/connection does;
+//     that rewrites ids copies first, as internal/connection does;
 //   - a Namespace must not mutate a response after returning it;
 //   - a caller must not mutate a response in place. The qualification layer
-//     clones so two subscribers of one event never see each other's prefix.
+//     copies so two subscribers of one event never see each other's prefix.
 package namespace
 
 import (
@@ -48,13 +48,13 @@ type Namespace interface {
 	GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error)
 	GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.TileResponse, error)
 	GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error)
-	Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error)
+	Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error)
 
 	// ── writes ───────────────────────────────────────────────────────────
 	CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error)
 	SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error)
-	PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error)
-	CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error)
+	MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error)
+	CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error)
 	DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error)
 	SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error)
 	SetSelection(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error)
@@ -73,7 +73,7 @@ type Namespace interface {
 
 	// ── live ─────────────────────────────────────────────────────────────
 
-	ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error)
+	ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error)
 	// OpenShell's first recv binds the tile id and the initial size.
 	OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error
 	// Subscribe streams this namespace's change events until ctx ends. A

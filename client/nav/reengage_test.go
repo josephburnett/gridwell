@@ -57,7 +57,7 @@ func TestReEngageAfterTheRowLands(t *testing.T) {
 		world:  func() World { return baseWorld(engagedPane("pane1")) },
 		want:   []EffectKind{EffOpenStream},
 	}, {
-		name:   "the reference no longer resolves: stay frozen",
+		name:   "the link no longer resolves: stay frozen",
 		result: Result{},
 		world:  func() World { return baseWorld(engagedPane("pane1")) },
 		want:   nil,
@@ -112,9 +112,9 @@ func healAwait(t *testing.T, m *Machine, moved *gridwellv1.Tile) Token {
 	w := baseWorld(engagedPane("pane1"))
 	tok := only(t, m.Do(reEngageGesture("pane1", "r1"), w), EffAwait).Token
 	e := only(t, m.Resume(tok, Result{OK: true, Tile: moved}, w), EffAwait)
-	if e.Request.Kind != RequestSearch || e.Request.Query != "id:r1" ||
+	if e.Request.Kind != RequestFind || e.Request.Query != "id:r1" ||
 		e.Request.Scope != "r1" || e.Request.Limit != 1 {
-		t.Fatalf("locate = %+v, want the scoped id: search", e.Request)
+		t.Fatalf("locate = %+v, want the scoped id: find", e.Request)
 	}
 	return e.Token
 }
@@ -164,7 +164,7 @@ func TestHealedPlans(t *testing.T) {
 		}
 	})
 
-	t.Run("an unsearchable tile keeps its place and still engages", func(t *testing.T) {
+	t.Run("a tile find cannot locate keeps its place and still engages", func(t *testing.T) {
 		m := New()
 		tok := healAwait(t, m, moved)
 		plan := m.Resume(tok, Result{}, baseWorld(engagedPane("pane1")))

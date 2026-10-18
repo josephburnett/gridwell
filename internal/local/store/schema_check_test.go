@@ -18,7 +18,7 @@ func TestOpenRejectsLegacyBlobShape(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 
 	// An out-of-contract blobs shape: size and created_at, which the current
-	// writer, putBlob in clone.go, does not populate.
+	// writer, putBlob in copy.go, does not populate.
 	const legacyBlobs = `
 CREATE TABLE blobs (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,

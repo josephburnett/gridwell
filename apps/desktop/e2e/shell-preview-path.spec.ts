@@ -32,7 +32,7 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   const sy = Math.round(inWell.cy);
   await gw.openMenu();
   await gw.dragCreate('shell', sx, sy);
-  await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shell = tileAt(await gw.getGrid(child), 'shell', sx, sy)!;
   expect(shell, 'shell created in the sub-grid').toBeTruthy();
@@ -95,7 +95,7 @@ test('ascending a shell inside a well persists its preview', async ({ gw, window
   }, jpegB64);
   expect(bright, 'frozen preview contains rendered glyph pixels').toBeGreaterThan(50);
 
-  // Delete the shell tile so its tmux session is killed and teardown does not
+  // Delete the shell tile so its tmux is killed and teardown does not
   // hang on a live PTY.
   await gw.deleteTileCell(sx, sy);
 });

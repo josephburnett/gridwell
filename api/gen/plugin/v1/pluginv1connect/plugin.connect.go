@@ -11,10 +11,10 @@
 //
 // Key stability is the plugin's one hard contract. A key names the same logical
 // thing forever, such as a path relative to the configured root, a message-id
-// or "pid:1234". Changing the key scheme orphans every stored reference, as
+// or "pid:1234". Changing the key scheme orphans every stored link, as
 // re-minting ids would.
 //
-// Unimplemented is always polite: Search means no results, ServeContent a 404,
+// Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
 // thumbnail, and Delete refused. A minimal plugin is Info, List and
 // ReadContent.
@@ -72,8 +72,8 @@ const (
 	PluginProbeProcedure = "/plugin.v1.Plugin/Probe"
 	// PluginDeleteProcedure is the fully-qualified name of the Plugin's Delete RPC.
 	PluginDeleteProcedure = "/plugin.v1.Plugin/Delete"
-	// PluginSearchProcedure is the fully-qualified name of the Plugin's Search RPC.
-	PluginSearchProcedure = "/plugin.v1.Plugin/Search"
+	// PluginFindProcedure is the fully-qualified name of the Plugin's Find RPC.
+	PluginFindProcedure = "/plugin.v1.Plugin/Find"
 	// PluginWatchProcedure is the fully-qualified name of the Plugin's Watch RPC.
 	PluginWatchProcedure = "/plugin.v1.Plugin/Watch"
 )
@@ -88,7 +88,7 @@ type PluginClient interface {
 	GetPreview(context.Context, *connect.Request[v1.GetPreviewRequest]) (*connect.Response[v1.GetPreviewResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error)
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
+	Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error)
 	Watch(context.Context, *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.Change], error)
 }
 
@@ -151,10 +151,10 @@ func NewPluginClient(httpClient connect.HTTPClient, baseURL string, opts ...conn
 			connect.WithSchema(pluginMethods.ByName("Delete")),
 			connect.WithClientOptions(opts...),
 		),
-		search: connect.NewClient[v1.SearchRequest, v1.SearchResponse](
+		find: connect.NewClient[v1.FindRequest, v1.FindResponse](
 			httpClient,
-			baseURL+PluginSearchProcedure,
-			connect.WithSchema(pluginMethods.ByName("Search")),
+			baseURL+PluginFindProcedure,
+			connect.WithSchema(pluginMethods.ByName("Find")),
 			connect.WithClientOptions(opts...),
 		),
 		watch: connect.NewClient[v1.WatchRequest, v1.Change](
@@ -176,7 +176,7 @@ type pluginClient struct {
 	getPreview   *connect.Client[v1.GetPreviewRequest, v1.GetPreviewResponse]
 	probe        *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
 	delete       *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
-	search       *connect.Client[v1.SearchRequest, v1.SearchResponse]
+	find         *connect.Client[v1.FindRequest, v1.FindResponse]
 	watch        *connect.Client[v1.WatchRequest, v1.Change]
 }
 
@@ -220,9 +220,9 @@ func (c *pluginClient) Delete(ctx context.Context, req *connect.Request[v1.Delet
 	return c.delete.CallUnary(ctx, req)
 }
 
-// Search calls plugin.v1.Plugin.Search.
-func (c *pluginClient) Search(ctx context.Context, req *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return c.search.CallUnary(ctx, req)
+// Find calls plugin.v1.Plugin.Find.
+func (c *pluginClient) Find(ctx context.Context, req *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error) {
+	return c.find.CallUnary(ctx, req)
 }
 
 // Watch calls plugin.v1.Plugin.Watch.
@@ -240,7 +240,7 @@ type PluginHandler interface {
 	GetPreview(context.Context, *connect.Request[v1.GetPreviewRequest]) (*connect.Response[v1.GetPreviewResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error)
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
+	Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error)
 	Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.Change]) error
 }
 
@@ -299,10 +299,10 @@ func NewPluginHandler(svc PluginHandler, opts ...connect.HandlerOption) (string,
 		connect.WithSchema(pluginMethods.ByName("Delete")),
 		connect.WithHandlerOptions(opts...),
 	)
-	pluginSearchHandler := connect.NewUnaryHandler(
-		PluginSearchProcedure,
-		svc.Search,
-		connect.WithSchema(pluginMethods.ByName("Search")),
+	pluginFindHandler := connect.NewUnaryHandler(
+		PluginFindProcedure,
+		svc.Find,
+		connect.WithSchema(pluginMethods.ByName("Find")),
 		connect.WithHandlerOptions(opts...),
 	)
 	pluginWatchHandler := connect.NewServerStreamHandler(
@@ -329,8 +329,8 @@ func NewPluginHandler(svc PluginHandler, opts ...connect.HandlerOption) (string,
 			pluginProbeHandler.ServeHTTP(w, r)
 		case PluginDeleteProcedure:
 			pluginDeleteHandler.ServeHTTP(w, r)
-		case PluginSearchProcedure:
-			pluginSearchHandler.ServeHTTP(w, r)
+		case PluginFindProcedure:
+			pluginFindHandler.ServeHTTP(w, r)
 		case PluginWatchProcedure:
 			pluginWatchHandler.ServeHTTP(w, r)
 		default:
@@ -374,8 +374,8 @@ func (UnimplementedPluginHandler) Delete(context.Context, *connect.Request[v1.De
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("plugin.v1.Plugin.Delete is not implemented"))
 }
 
-func (UnimplementedPluginHandler) Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("plugin.v1.Plugin.Search is not implemented"))
+func (UnimplementedPluginHandler) Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("plugin.v1.Plugin.Find is not implemented"))
 }
 
 func (UnimplementedPluginHandler) Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.Change]) error {

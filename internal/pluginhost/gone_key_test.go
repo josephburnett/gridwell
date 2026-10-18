@@ -118,7 +118,7 @@ func TestAGoneKeyReadsDeadAndComesBack(t *testing.T) {
 				ctx := context.Background()
 				target := tileLabelled(ctx, t, cl, landing, "doc")
 				if mint {
-					if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: target, X: 4, Y: 4, W: 1, H: 1})); err != nil {
+					if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: target, X: 4, Y: 4, W: 1, H: 1})); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -167,7 +167,7 @@ func TestAGoneKeyReadsDeadAndComesBack(t *testing.T) {
 	}
 }
 
-// A row retired because its key went is dead under the row id a reference
+// A row retired because its key went is dead under the row id a link
 // stored under the older rule still holds.
 func TestARetiredRowReadsDead(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
@@ -199,7 +199,7 @@ func TestARetiredRowReadsDead(t *testing.T) {
 			addr = tile.Id
 		}
 	}
-	if _, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: addr, X: 4, Y: 4, W: 1, H: 1}); err != nil {
+	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: addr, X: 4, Y: 4, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}
 	row := rowIDOf(t, ns, "r", "doc")

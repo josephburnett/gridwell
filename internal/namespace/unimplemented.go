@@ -45,8 +45,8 @@ func (Unimplemented) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) 
 	return nil, unimp("GetTilePreview")
 }
 
-func (Unimplemented) Search(context.Context, *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return nil, unimp("Search")
+func (Unimplemented) Find(context.Context, *pb.FindRequest) (*pb.FindResponse, error) {
+	return nil, unimp("Find")
 }
 
 func (Unimplemented) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileResponse, error) {
@@ -57,12 +57,12 @@ func (Unimplemented) SetTile(context.Context, *pb.SetTileRequest) (*pb.TileRespo
 	return nil, unimp("SetTile")
 }
 
-func (Unimplemented) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	return nil, unimp("PlaceTile")
+func (Unimplemented) MoveTile(context.Context, *pb.MoveTileRequest) (*pb.TileResponse, error) {
+	return nil, unimp("MoveTile")
 }
 
-func (Unimplemented) CloneTile(context.Context, *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	return nil, unimp("CloneTile")
+func (Unimplemented) CopyTile(context.Context, *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	return nil, unimp("CopyTile")
 }
 
 func (Unimplemented) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
@@ -77,8 +77,8 @@ func (Unimplemented) SetSelection(context.Context, *pb.SetSelectionRequest) (*pb
 	return nil, unimp("SetSelection")
 }
 
-func (Unimplemented) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return nil, unimp("ShellSessionAlive")
+func (Unimplemented) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return nil, unimp("ShellTmuxAlive")
 }
 
 func (Unimplemented) ReadContent(context.Context, *pb.ReadContentRequest, func(*pb.ContentChunk) error) error {

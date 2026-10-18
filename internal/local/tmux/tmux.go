@@ -1,7 +1,7 @@
 // Package tmux owns the gridwell-private tmux server. It spawns no PTYs;
 // shelldriver drives the PTY-attaching exec. One Controller is one tmux
 // server, isolated by `-L <socket>` so a user .tmux.conf never leaks into a
-// shell tile and session names collide with nothing run by hand.
+// shell tile and tmux names collide with nothing run by hand.
 package tmux
 
 import (
@@ -35,7 +35,7 @@ set-option -g allow-passthrough on
 set-option -g mouse on
 `
 
-// browserShimScript is the $BROWSER target injected into every new session. It
+// browserShimScript is the $BROWSER target injected into every new tmux. It
 // hands the url back as an OSC 5522 sequence, which the client turns into an
 // ephemeral url descent. Inside tmux that rides the DCS passthrough wrapper
 // with inner ESCs doubled.
@@ -79,10 +79,10 @@ export PATH="$newpath"
 exec "$(basename "$0")" "$@"
 `
 
-// SessionEnv names the session key inside every session ModeCreate starts, so
+// KeyEnv names the tmux key inside every tmux ModeCreate starts, so
 // a program running in a shell tile can say which shell it is in; the MCP API
 // reads it back as a header (docs/mcp.md).
-const SessionEnv = "GRIDWELL_SHELL"
+const KeyEnv = "GRIDWELL_SHELL"
 
 // Controller is one gridwell-owned tmux server. Construct with New.
 type Controller struct {
@@ -90,7 +90,7 @@ type Controller struct {
 	binary     string
 	socketName string
 	configPath string
-	// shell: only ModeCreate consults it, an existing session keeping the
+	// shell: only ModeCreate consults it, an existing tmux keeping the
 	// shell it was created with.
 	shell string
 	// browserShim is injected as $BROWSER by ModeCreate.
@@ -117,7 +117,7 @@ func New(socketName, binary, shell string) (*Controller, func() error, error) {
 		shell = "bash"
 	}
 	// Stable per-socket paths. A per-boot temp path would leak an artifact
-	// per start and let a /tmp cleaner delete a running session's shim.
+	// per start and let a /tmp cleaner delete a running tmux's shim.
 	dir := filepath.Join(os.TempDir(), "gridwell-tmux-"+socketName)
 	shadowDir := filepath.Join(dir, "shadow-bin")
 	if err := os.MkdirAll(shadowDir, 0o700); err != nil {
@@ -167,11 +167,11 @@ func writeShadowLaunchers(dir, shimPath string) error {
 }
 
 // Args is the argv for shelldriver.Start. ModeAttach exits non-zero if the
-// session is gone, so that surfaces to the wasm and the refresh button can
+// tmux is gone, so that surfaces to the wasm and the refresh button can
 // hide. startDir is ignored on attach and "" defaults to $HOME; later resizes
 // ride SIGWINCH through the PTY.
 func (c *Controller) Args(key string, mode Mode, cols, rows uint16, startDir string) []string {
-	name := SessionName(key)
+	name := Name(key)
 	args := []string{c.binary, "-L", c.socketName, "-f", c.configPath}
 	switch mode {
 	case ModeCreate:
@@ -183,7 +183,7 @@ func (c *Controller) Args(key string, mode Mode, cols, rows uint16, startDir str
 			// See browserShimScript.
 			args = append(args, "-e", "BROWSER="+c.browserShim)
 		}
-		args = append(args, "-e", SessionEnv+"="+key)
+		args = append(args, "-e", KeyEnv+"="+key)
 		args = append(args,
 			"-x", strconv.Itoa(int(cols)),
 			"-y", strconv.Itoa(int(rows)),
@@ -219,27 +219,27 @@ func (c *Controller) Env() []string {
 }
 
 // Mode is owned by internal/local's shell stream, which derives allowCreate
-// from whether any tile naming the session has a preview.
+// from whether any tile naming the tmux has a preview.
 type Mode int
 
 const (
-	// ModeCreate is for a session never started, the only case where
+	// ModeCreate is for a tmux never started, the only case where
 	// silently spawning a new shell is right.
 	ModeCreate Mode = iota
-	// ModeAttach fails if the session is gone. A started session silently
+	// ModeAttach fails if the tmux is gone. A started tmux silently
 	// spawning fresh state would discard what the user thought was running.
 	ModeAttach
 )
 
-// SessionName takes a session key, the namespace-local id of the tile that
-// started the session, and base64url-encodes it because a tmux session name
+// Name takes a tmux key, the namespace-local id of the tile that
+// started the tmux, and base64url-encodes it because a tmux name
 // cannot contain "/", "." or ":". It is stable across restarts.
-func SessionName(key string) string {
+func Name(key string) string {
 	return "gridwell-" + base64.RawURLEncoding.EncodeToString([]byte(key))
 }
 
-// ParseSessionName is the inverse of SessionName, for the orphan cleanup.
-func ParseSessionName(name string) (string, bool) {
+// ParseName is the inverse of Name, for the orphan cleanup.
+func ParseName(name string) (string, bool) {
 	const prefix = "gridwell-"
 	if !strings.HasPrefix(name, prefix) {
 		return "", false
@@ -251,37 +251,37 @@ func ParseSessionName(name string) (string, bool) {
 	return string(raw), true
 }
 
-// HasSession errors only on infrastructure failures. Both "session does not
+// Has errors only on infrastructure failures. Both "the tmux does not
 // exist" and the first-launch "no server running yet" yield (false, nil). It
 // is safe to call concurrently; tmux's IPC serializes on the socket.
-func (c *Controller) HasSession(key string) (bool, error) {
-	name := SessionName(key)
+func (c *Controller) Has(key string) (bool, error) {
+	name := Name(key)
 	out, err := c.run("has-session", "-t", name)
 	if err == nil {
 		return true, nil
 	}
-	if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
+	if isMissingErr(out, err) || isNoServerErr(out, err) {
 		return false, nil
 	}
 	return false, fmt.Errorf("tmux has-session %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
 }
 
-// KillSession is a no-op if the session or the server is already gone.
-func (c *Controller) KillSession(key string) error {
-	name := SessionName(key)
+// Kill is a no-op if the tmux or the server is already gone.
+func (c *Controller) Kill(key string) error {
+	name := Name(key)
 	out, err := c.run("kill-session", "-t", name)
 	if err == nil {
 		return nil
 	}
-	if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
+	if isMissingErr(out, err) || isNoServerErr(out, err) {
 		return nil
 	}
 	return fmt.Errorf("tmux kill-session %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
 }
 
-// ListSessions ignores names that do not match the gridwell pattern; an empty
+// List ignores names that do not match the gridwell pattern; an empty
 // result with no error means the server is not running yet.
-func (c *Controller) ListSessions() ([]string, error) {
+func (c *Controller) List() ([]string, error) {
 	out, err := c.run("list-sessions", "-F", "#{session_name}")
 	if err != nil {
 		if isNoServerErr(out, err) {
@@ -295,7 +295,7 @@ func (c *Controller) ListSessions() ([]string, error) {
 		if line == "" {
 			continue
 		}
-		if id, ok := ParseSessionName(line); ok {
+		if id, ok := ParseName(line); ok {
 			ids = append(ids, id)
 		}
 	}
@@ -303,12 +303,12 @@ func (c *Controller) ListSessions() ([]string, error) {
 }
 
 // PaneCommand is tmux's automatic window name, "" with no error when the
-// session is gone so callers skip relabeling.
+// tmux is gone so callers skip relabeling.
 func (c *Controller) PaneCommand(key string) (string, error) {
-	name := SessionName(key)
+	name := Name(key)
 	out, err := c.run("display-message", "-t", name, "-p", "#{pane_current_command}")
 	if err != nil {
-		if isMissingSessionErr(out, err) || isNoServerErr(out, err) {
+		if isMissingErr(out, err) || isNoServerErr(out, err) {
 			return "", nil
 		}
 		return "", fmt.Errorf("tmux display-message %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
@@ -330,9 +330,9 @@ func (c *Controller) run(args ...string) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-// isMissingSessionErr matches every wording tmux uses, so a renamed diagnostic
+// isMissingErr matches every wording tmux uses, so a renamed diagnostic
 // in a future release does not silently break the liveness path.
-func isMissingSessionErr(out []byte, err error) bool {
+func isMissingErr(out []byte, err error) bool {
 	if err == nil {
 		return false
 	}

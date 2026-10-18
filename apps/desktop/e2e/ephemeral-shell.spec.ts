@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 
 // Clicking the shell swatch, rather than dragging it, opens an ephemeral shell:
 // created in the off-grid scratch grid, descended into, PTY spawned. Ascending
-// deletes the tile and kills its tmux session. Nothing lands on the home grid
+// deletes the tile and kills its tmux. Nothing lands on the home grid
 // and no error surfaces.
 
 test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', async ({
@@ -53,7 +53,7 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
     }, { timeout: 10_000 })
     .toBe(true);
 
-  // Ascending by crumb click deletes the tile and its tmux session.
+  // Ascending by crumb click deletes the tile and its tmux.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await expect

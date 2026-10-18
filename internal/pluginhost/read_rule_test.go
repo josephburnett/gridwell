@@ -98,7 +98,7 @@ func TestListingAPluginGridMintsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	notes := tileNamed(g.Tiles, "notes.md")
-	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: notes.Id, X: 7, Y: 3, W: 2, H: 2})); err != nil {
+	if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: notes.Id, X: 7, Y: 3, W: 2, H: 2})); err != nil {
 		t.Fatal(err)
 	}
 	sub := tileNamed(g.Tiles, "sub")

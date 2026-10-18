@@ -23,7 +23,7 @@ var tileIDFields = []struct {
 	{func(t *pb.Tile) *string { return &t.GridId }, false, false},
 	{func(t *pb.Tile) *string { return &t.ChildGridId }, true, true},
 	{func(t *pb.Tile) *string { return &t.LinkTargetId }, true, true},
-	{func(t *pb.Tile) *string { return &t.ShellSession }, true, false},
+	{func(t *pb.Tile) *string { return &t.ShellTmux }, true, false},
 }
 
 func qualifyField(prefix string, id *string, optional bool) {
@@ -33,7 +33,7 @@ func qualifyField(prefix string, id *string, optional bool) {
 }
 
 // TransitQualifyTiles prepends prefix to every id in a tile, an
-// already-qualified child included. The wire Reference bit rides verbatim,
+// already-qualified child included. The wire Link bit rides verbatim,
 // because the far side already decided what is a link and a remote plugin's
 // interior well stays owned though its child id contains "/".
 func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
@@ -63,7 +63,7 @@ func QualifyOwnIDs(uuid string, t *pb.Tile) {
 // hop removes, and only from an id served through the namespace chain Via; any
 // other id crosses verbatim, to be refused behind the hop rather than
 // misresolved. Transit says the namespace behind the hop fronts other nodes'
-// chains, where a reference is peeled like every id.
+// chains, where a link is peeled like every id.
 type Hop struct {
 	Seg, Via string
 	Transit  bool
@@ -71,7 +71,7 @@ type Hop struct {
 
 // InboundHop is the peel for a request routed on the qualified id routed, at
 // the node nodeID. Via is OwnerNamespaceOf's answer, so behind a node a
-// reference is peeled only when it chains through the same connection as the
+// link is peeled only when it chains through the same connection as the
 // routed id. A connection passes nodeID "": its namespace is the first segment.
 func InboundHop(routed, nodeID string, transit bool) Hop {
 	return Hop{Seg: UUIDOf(routed), Via: OwnerNamespaceOf(routed, nodeID), Transit: transit}
@@ -101,9 +101,9 @@ func (h Hop) PeelTile(t *pb.Tile) *pb.Tile {
 	return out
 }
 
-// PeelSearchQuery peels an id: selector through the one grammar parser.
-func (h Hop) PeelSearchQuery(query string) string {
-	q := ParseSearchQuery(query)
+// PeelFindQuery peels an id: selector through the one grammar parser.
+func (h Hop) PeelFindQuery(query string) string {
+	q := ParseFindQuery(query)
 	if q.ID == "" {
 		return query
 	}
@@ -119,7 +119,7 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 	case *pb.CreateTileRequest:
 		r.GridId = h.PeelID(r.GridId)
 		r.Tile = h.PeelTile(r.Tile)
-	case *pb.PlaceTileRequest:
+	case *pb.MoveTileRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.GridId = h.PeelID(r.GridId)
 		if r.Claim != nil {
@@ -130,7 +130,7 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 		if r.Claim != nil {
 			r.Claim.GridId = h.PeelID(r.Claim.GridId)
 		}
-	case *pb.CloneTileRequest:
+	case *pb.CopyTileRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.DestGridId = h.PeelID(r.DestGridId)
 	case *pb.SetTileRequest:
@@ -139,9 +139,9 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 	case *pb.SetFramingRequest:
 		r.TileId = h.PeelID(r.TileId)
 		r.RootGridId = h.PeelID(r.RootGridId)
-	case *pb.SearchRequest:
+	case *pb.FindRequest:
 		// scope is consumed by the hop that routes on it.
-		r.Query = h.PeelSearchQuery(r.Query)
+		r.Query = h.PeelFindQuery(r.Query)
 		r.GridId = h.PeelID(r.GridId)
 		r.Scope = ""
 	case *pb.SetSelectionRequest:
@@ -179,16 +179,16 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	return out
 }
 
-// QualifySearchResponse rewrites every id a search answer carries through the
+// QualifyFindResponse rewrites every id a find answer carries through the
 // caller's tile rule, the one place leaf and transit differ, and puts the hop's
 // segment, prefix, before every skipped namespace.
-func QualifySearchResponse(prefix string, resp *pb.SearchResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.SearchResponse {
-	out := &pb.SearchResponse{Results: make([]*pb.SearchResult, 0, len(resp.Results))}
+func QualifyFindResponse(prefix string, resp *pb.FindResponse, qualifyTiles func([]*pb.Tile) []*pb.Tile) *pb.FindResponse {
+	out := &pb.FindResponse{Results: make([]*pb.FindResult, 0, len(resp.Results))}
 	for _, s := range resp.Skipped {
-		out.Skipped = append(out.Skipped, &pb.SearchSkip{Namespace: QualifyNS(prefix, s.Namespace), Reason: s.Reason})
+		out.Skipped = append(out.Skipped, &pb.FindSkip{Namespace: QualifyNS(prefix, s.Namespace), Reason: s.Reason})
 	}
 	for _, r := range resp.Results {
-		qr := &pb.SearchResult{Snippet: r.Snippet, Score: r.Score}
+		qr := &pb.FindResult{Snippet: r.Snippet, Score: r.Score}
 		if r.Tile != nil {
 			qr.Tile = qualifyTiles([]*pb.Tile{r.Tile})[0]
 		}

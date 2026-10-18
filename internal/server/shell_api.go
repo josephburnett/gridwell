@@ -113,7 +113,7 @@ func (s *Server) shellAPI() http.Handler {
 		conn.SetReadLimit(shellwire.ReadLimit)
 
 		// The PTY is acquired only now: an upgrade nobody completed must never
-		// leave a session behind.
+		// leave a tmux behind.
 		trace.Emit("shellapi", "pty", "open", kv)
 		defer s.shells.hold(attach.TileID, attach.Session)()
 		msg, gone := pumpShell(ctx, cancel, conn, s.shellWriteTimeout, func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
@@ -160,8 +160,8 @@ func (l *liveShells) newestFirst() []shellAttach {
 	return out
 }
 
-// ShellHolder is the client session holding the home's shell session key live
-// right now, key as tmux.SessionEnv names it. The newest attachment naming the
+// ShellHolder is the client session holding the home's tmux key live
+// right now, key as tmux.KeyEnv names it. The newest attachment naming the
 // key holds it: a later attach takes the PTY over (shellsvc.Manager.Acquire)
 // and the older socket closes. ok is false when no open attachment names it;
 // err is a tile read that failed, so a miss it caused is not taken for one.
@@ -177,7 +177,7 @@ func (s *Server) ShellHolder(ctx context.Context, key string) (session string, o
 			err = rerr
 			continue
 		}
-		if rpc.ShellSession(resp.GetTile()) == want {
+		if rpc.ShellTmux(resp.GetTile()) == want {
 			return a.session, true, nil
 		}
 	}
@@ -185,10 +185,10 @@ func (s *Server) ShellHolder(ctx context.Context, key string) (session string, o
 }
 
 // closeVerdict is the one spelling of how an attachment ended, for the record.
-func closeVerdict(message string, sessionGone bool) string {
+func closeVerdict(message string, tmuxGone bool) string {
 	switch {
-	case sessionGone:
-		return "close, session gone: " + message
+	case tmuxGone:
+		return "close, tmux gone: " + message
 	case message != "":
 		return "close: " + message
 	}
@@ -196,7 +196,7 @@ func closeVerdict(message string, sessionGone bool) string {
 }
 
 // writeShellExit carries the verdict a WebSocket close code cannot: why the
-// attachment ended, and whether the session itself is gone.
+// attachment ended, and whether the tmux itself is gone.
 func writeShellExit(conn *websocket.Conn, bound time.Duration, exit []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), bound)
 	_ = conn.Write(ctx, websocket.MessageText, exit)
@@ -207,10 +207,10 @@ func writeShellExit(conn *websocket.Conn, bound time.Duration, exit []byte) {
 // pumpShell runs one attachment and reports the end verdict. It deliberately
 // does not cancel ctx on the way out: the verdict still has to reach the client
 // as an exit frame, and a websocket read whose context is cancelled tears the
-// connection down where it stands, so "the session is gone" would arrive as
+// connection down where it stands, so "the tmux is gone" would arrive as
 // "something broke". The caller cancels once the frame is on the wire.
 func pumpShell(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, bound time.Duration,
-	attach func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error) (message string, sessionGone bool) {
+	attach func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error) (message string, tmuxGone bool) {
 	// A write failure is the viewer's socket breaking, not the PTY ending, and
 	// is remembered separately so it is reported as itself.
 	var writeErr error
@@ -271,9 +271,9 @@ func shellReadFrame(ctx context.Context, cancel context.CancelFunc, conn *websoc
 }
 
 // shellEndVerdict is the one classification of why the attachment ended:
-// NotFound and FailedPrecondition are the PTY owner's codes for "this session
+// NotFound and FailedPrecondition are the PTY owner's codes for "this tmux
 // no longer exists", anything else a failure the client may retry.
-func shellEndVerdict(err error) (message string, sessionGone bool) {
+func shellEndVerdict(err error) (message string, tmuxGone bool) {
 	if err == nil || errors.Is(err, io.EOF) {
 		return "", false
 	}

@@ -9,14 +9,14 @@ import (
 )
 
 // Pins that the refusal is classifiable through ErrShellsUnavailable, carries
-// a reason a person can read, and opens no half-session.
+// a reason a person can read, and opens no half-made PTY.
 func TestStartRefusesWithoutAPTY(t *testing.T) {
 	s, err := Start(Config{Cols: 80, Rows: 24})
 	if err == nil {
 		t.Fatal("Start succeeded on a platform with no PTY")
 	}
 	if s != nil {
-		t.Fatalf("Start returned a session with its error: %#v", s)
+		t.Fatalf("Start returned a PTY with its error: %#v", s)
 	}
 	if !errors.Is(err, ErrShellsUnavailable) {
 		t.Errorf("Start error = %v; want it to wrap ErrShellsUnavailable", err)

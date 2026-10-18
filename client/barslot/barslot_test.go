@@ -63,7 +63,7 @@ func TestDecide(t *testing.T) {
 			ModeGoLive,
 		},
 		{
-			"a frozen shell whose session is gone shows nothing",
+			"a frozen shell whose tmux is gone shows nothing",
 			Input{Descent: true, Content: rpc.DescentShell},
 			ModeNothing,
 		},

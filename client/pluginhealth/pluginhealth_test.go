@@ -150,9 +150,9 @@ func TestUnrootedLink(t *testing.T) {
 		tile *gridwellv1.Tile
 		want bool
 	}{
-		{"doorway with no root", &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true}, true},
-		{"doorway with a root", &gridwellv1.Tile{Kind: rpc.KindWell, Reference: true, ChildGridId: "fs/1"}, false},
-		{"leaf link", &gridwellv1.Tile{Kind: rpc.KindText, Reference: true, LinkTargetId: "fs/2"}, false},
+		{"doorway with no root", &gridwellv1.Tile{Kind: rpc.KindWell, Link: true}, true},
+		{"doorway with a root", &gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: "fs/1"}, false},
+		{"leaf link", &gridwellv1.Tile{Kind: rpc.KindText, Link: true, LinkTargetId: "fs/2"}, false},
 		{"plain well", &gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: "3"}, false},
 	}
 	for _, c := range cases {

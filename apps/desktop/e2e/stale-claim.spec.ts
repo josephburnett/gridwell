@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { placeTile, tileAt, updateText } from './oracle';
+import { moveTile, tileAt, updateText } from './oracle';
 
 // Things stay as you left them, whoever left them. Another window moves or
 // edits a tile while this window is mid-drag on it: the drop still claims the
@@ -26,7 +26,7 @@ test('a stale move and a stale delete are refused, and the tile stays as the oth
   await m.move(from.x, from.y);
   await m.down({ button: 'left' });
   await m.move(from.x + 8, from.y + 8);
-  await placeTile(gw.origin, tile.id, f.gridID, cx + 3, cy, Number(tile.w ?? 1), Number(tile.h ?? 1));
+  await moveTile(gw.origin, tile.id, f.gridID, cx + 3, cy, Number(tile.w ?? 1), Number(tile.h ?? 1));
   await m.move(to.x, to.y, { steps: 8 });
   await m.up({ button: 'left' });
   await gw.waitIdle();

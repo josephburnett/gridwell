@@ -71,7 +71,7 @@ type cont struct {
 	PaneID string
 	TileID string
 	Tile   *gridwellv1.Tile
-	// Key is the shell session a probe answers for, or a reconcile's level
+	// Key is the shell's tmux a probe answers for, or a reconcile's level
 	// pane-id prefix.
 	Key   string
 	Stack pane.Stack
@@ -99,7 +99,7 @@ const (
 	stepLevelRecentre
 	stepLinkTarget // places a live url view on a link's target row
 	// stepShellLinkTarget re-decides a shell link's descent keyed on its
-	// target's session.
+	// target's tmux.
 	stepShellLinkTarget
 	// stepRetireVisit deletes an ended ephemeral visit once the node holds a
 	// layout that no longer names it: deleted first, a pane-tile preview of
@@ -255,13 +255,13 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		}
 		m.autoLiveOnDescent(c.PaneID, c.Tile, r.Tile, w, &pl)
 	case stepReEngage:
-		// A leaf whose reference no longer resolves stays frozen.
+		// A leaf whose link no longer resolves stays frozen.
 		if !r.OK || r.Tile == nil {
 			break
 		}
 		m.engage(c.PaneID, r.Tile, w, &pl)
 	case stepHealed:
-		// A tile from a plugin without Search keeps the place it was restored
+		// A tile from a plugin without Find keeps the place it was restored
 		// with; the engagement happens either way.
 		if r.OK {
 			landHealed(c.PaneID, c.Tile, r.Wells, w, &pl)
@@ -370,6 +370,6 @@ func (p *planner) fetchPaneGrid(w World, paneID, gridID string) {
 // install installs a pane's place on the plan's own copy of the stack, so what
 // the caller does with its own afterwards reaches nobody.
 func (p *planner) install(paneID string, st pane.Stack, vp *rpc.Framing) {
-	c := st.Clone()
+	c := st.Copy()
 	p.add(Effect{Kind: EffInstallPlace, PaneID: paneID, Stack: &c, Viewport: vp})
 }

@@ -179,9 +179,9 @@ invariants from the tree alone — name anything that would mislead them.
 **11. Parity: a tile is a tile wherever it comes from.** Fill the matrix.
 Rows: every tile kind (text, url, shell, well, pane) and every doorway
 (home grid, plugin collection, far home). Columns: everything a user can do
-to one — create, place, clone, link, delete, rename, descend, freeze, keep a
+to one — create, move, copy, link, delete, rename, descend, freeze, keep a
 screenshot, save zoom, save a text scroll, save framing, read content, write
-content, serve a page, search, see it update when its source changes, see it
+content, serve a page, find, see it update when its source changes, see it
 dead when its path breaks. One cell per owner: home store, plugin adapter,
 connection transit. Each cell is "same", "decided: CLAUDE.md line N", or a
 hole. The promise allows exactly one class of difference: where the bytes

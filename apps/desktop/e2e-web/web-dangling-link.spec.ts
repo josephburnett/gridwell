@@ -11,7 +11,7 @@ import { tileAt } from '../e2e/oracle';
 // the node does not declare that namespace, so the tile greys, nothing is
 // asked for it, and nothing is said about it (client/deadref).
 //
-// dead-link.spec.ts pins the state against a reference seeded straight onto
+// dead-link.spec.ts pins the state against a link seeded straight onto
 // the server. This crosses the other half of the seam, in browser mode: a link
 // the user really dropped on a plugin really in server.yaml, then the config
 // edit and the reboot that make it dangle. It counts verdicts and fetches over
@@ -39,7 +39,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     const seeded: any = await gw.getGrid(f.gridID);
     const link = (seeded.tiles ?? []).find((t: any) => t.kind === 'well');
     expect(link, 'boot 1 dropped the plugin link well').toBeTruthy();
-    expect(link.reference, 'and it is a link, not a well of its own').toBe(true);
+    expect(link.link, 'and it is a link, not a well of its own').toBe(true);
     linkID = link.id;
     childGridID = String(link.childGridId ?? '');
     expect(childGridID, 'the link names the plugin root it points at').toBeTruthy();
@@ -99,7 +99,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
 
     // Still a link, still labelled, and still deletable.
     const row = (await gw.getGrid(f.gridID)).tiles!.find((t: any) => t.id === linkID)!;
-    expect(row.reference, 'still a link: deleting it only unlinks').toBe(true);
+    expect(row.link, 'still a link: deleting it only unlinks').toBe(true);
     await page.unroute('**/gridwell.v1.Gridwell/GetGrid');
     await gw.deleteTileCell(Number(row.x ?? 0), Number(row.y ?? 0));
     await expect

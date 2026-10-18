@@ -41,12 +41,12 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
 
 The remainder passes through untouched, so any depth of mounting routes the
 same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
-prefixes and derives `Tile.reference`; transit prepends one segment and
+prefixes and derives `Tile.link`; transit prepends one segment and
 trusts the wire bits (`rpc.TransitQualifyTiles`). Ids coming in are peeled
 once per hop (`rpc.PeelRequest`), every one a request carries, but only
-when it chains through the routed id's namespace, and a reference only at a
+when it chains through the routed id's namespace, and a link only at a
 transit hop: at a leaf, arriving qualified is what makes it a link.
-Qualification clones, and that clone is what keeps a message shared by
+Qualification copies, and that copy is what keeps a message shared by
 pointer from being changed under another reader.
 
 A segment has one of three shapes, and `rpc.ShapeOf` is the one classifier
@@ -62,7 +62,7 @@ A link is such a path stored on a tile (`link_target_id` for a leaf, a
 qualified `child_grid_id` for a well). The node holding it resolves only the
 first segment, one of its own plugins or connections, and forwards the rest,
 so a link reaches anything a chain of one-way connections from the HOLDING
-node reaches, at any depth, and never against an arrow. A reference written
+node reaches, at any depth, and never against an arrow. A link written
 into another node's grid is therefore spelled from that node: behind the same
 connection it is forwarded as sent and the node there decides; where it parts
 (`rpc.HeldAcross`), the router walks the handshakes it can see into a
@@ -80,23 +80,23 @@ record shapes. Everything else derives from it:
   generate`; `make proto-check` fails when it is stale. Every layer holds
   those types — there is no Go twin of a message, and nothing converts.
 - `internal/local/store/columns.go` is the one description of a stored
-  column. It renders the DDL and drives every SELECT, scan, clone INSERT,
+  column. It renders the DDL and drives every SELECT, scan, copy INSERT,
   and rebuild copy list. `TestDescriptorMatchesProto` pins the descriptor
   to the proto in both directions.
 
 | Group | Methods |
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
-| Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Search` |
+| Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Find` |
 | Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its wells too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
-| Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CloneTile`, `DeleteTile` |
-| Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
+| Mutations | `CreateTile`, `SetTile` (one op per call), `MoveTile`, `CopyTile`, `DeleteTile` |
+| Shells | `OpenShell`, `ShellTmuxAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
 
-`Search` is the one find verb: free text, or `id:` for the exact locate,
+`Find` is the one find verb: free text, or `id:` for the exact locate,
 narrowed by filters the node applies to the rows it holds — a grid and
 everything under it, a range on each of a row's three times (made, last
 written, content last changed), the selection, and the kind. A `grid_id` routes like a
@@ -106,7 +106,7 @@ connection to the far node holding the rows.
 No request carries a descent path. The server derives location from rows it
 owns. Sessions and networks never cross the wire.
 
-Wire-only fields are derived in exactly one place each. `Tile.reference`
+Wire-only fields are derived in exactly one place each. `Tile.link`
 (this tile is a link) comes from `server.qualifyTiles`. `text_presentation`
 and `status_detail` come from the plugin's `Entry` through
 `pluginhost/adapter.go`. `Tile.serves_page` (this url tile opens at the
@@ -146,9 +146,9 @@ they are the same value. The MCP API's tools make the calls the client makes
 for the same gesture, reading first and claiming what they read, and hand
 every refusal back with the router's reason.
 
-A clone names two ids and runs at the nearest node that sees both ends. Where
+A copy names two ids and runs at the nearest node that sees both ends. Where
 they share an owner (`rpc.SharedOwner`), a connection included, the router
-forwards the whole clone and the node behind decides again; where they part,
+forwards the whole copy and the node behind decides again; where they part,
 it deep-copies (`deepcopy.go`), reading through one chain and writing through
 the other. So bytes travel no further than the two ends are apart. Two
 connections are two owners even though one transport serves both.
@@ -178,7 +178,7 @@ folds one in, and minting an empty store beside that content would come up as
 a home that had lost everything.
 
 **Home** (`internal/local`) owns the user's content: text, urls, wells, pane
-tiles, shells, and the event stream. Shells are tmux sessions on a private
+tiles, shells, and the event stream. Shells are tmuxes on a private
 socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
@@ -332,8 +332,8 @@ so a reader looking for a third will not find one.
 The request fields that used to carry a claim are `reserved`, so a stale
 claim cannot be expressed. `version_rule_test.go` is the table.
 
-**Identity.** Ids are AUTOINCREMENT and never reused. Clone is an eager deep
-copy: new ids, blobs shared by content address and refcount, no structural
+**Identity.** Ids are AUTOINCREMENT and never reused. A copy is eager and
+deep: new ids, blobs shared by content address and refcount, no structural
 sharing. Blobs are immutable, sha256-addressed, refcounted, and carry their
 own `media_type`.
 
@@ -478,32 +478,32 @@ DOM focus change is a `dom-focus` trace record.
 the lifecycle). Binary frames are PTY bytes, text frames are JSON control
 (resize up, one exit verdict down). The shell API (`internal/server/shell_api.go`)
 resolves the id before accepting, so a refused upgrade never leaves a tmux
-session behind.
+tmux behind.
 
-A shell tile names a tmux session (`rpc.ShellSession`): its own id, or, for a
-clone, the session its source named, which the store writes on every copy
+A shell tile names a tmux (`rpc.ShellTmux`): its own id, or, for a
+copy, the tmux its source named, which the store writes on every copy
 (`tiles.shell_session`) and the id codec qualifies like the tile's own id. The
-home resolves a tile to its session before it touches tmux, and `shellsvc`
-holds one attached client per session, so a second tile going live evicts the
-first exactly as a second pane does. A session no row naming it has a preview of
+home resolves a tile to its tmux before it touches tmux, and `shellsvc`
+holds one attached client per tmux, so a second tile going live evicts the
+first exactly as a second pane does. A tmux no row naming it has a preview of
 was never started and is created by whichever tile opens it first; a started
 one that is gone is refused, never recreated behind a preview. It dies with the
 last row naming it, a trashed one included. A link names its target's
-session, so the client keys every shell fact by `shellconn.SessionKey`, which
-reads the target row first. Sessions live on the node that
-started them, so a shell cloned across namespaces copies as a link.
+tmux, so the client keys every shell fact by `shellconn.TmuxKey`, which
+reads the target row first. Tmuxes live on the node that
+started them, so a shell copied across namespaces copies as a link.
 
 **Takeover.** One live surface per key: a content tile, or for a shell the
-session it names. Opening it elsewhere takes over, and `pane.TakeOver` says
+tmux it names. Opening it elsewhere takes over, and `pane.TakeOver` says
 how — keep the surface the pane already has, move the one another pane holds
-on the same tile, close one another tile holds on the same session, or place
+on the same tile, close one another tile holds on the same tmux, or place
 a fresh one. Every kind of surface moves within its tile. A url view: the
 bridge's `moveWebview` re-keys main's entry to the new pane with that pane's
 bounds, park and focus verdicts, and nothing navigates, so the page keeps its
 scroll, its script state and a half-typed field. A shell: its xterm and its
 `/shell` socket go to the new pane, and the socket never knew the pane,
-because `client/shellstream` keys each attachment by its session; nothing
-reattaches and xterm keeps every row. Another tile on the session is closed,
+because `client/shellstream` keys each attachment by its tmux; nothing
+reattaches and xterm keeps every row. Another tile on the tmux is closed,
 freezing onto its own tile, rather than moved, because the socket is bound to
 the tile whose preview and title the server writes. Leaving a
 pane-tile level hands each of its live surfaces back to the pane of the
@@ -604,7 +604,7 @@ copy:
 |---|---|
 | what a record is | `api/gridwell/v1/data.proto` → generated `api/gen/gridwell/v1` |
 | how a row is stored | `store/columns.go` |
-| this tile is a link | `server.qualifyTiles` → `Tile.reference` |
+| this tile is a link | `server.qualifyTiles` → `Tile.link` |
 | may this write claim a version | `claimContentVersion` vs `loadForWrite` |
 | does this write bump `version` | `finishContentEdit` vs `emitTileChanged` |
 | where is this pane | `pane.Stack` |
@@ -633,13 +633,13 @@ copy:
 | what error is this | `gwerr.ClassifyError` |
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
-| which node runs a clone | `rpc.SharedOwner` |
-| how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellReferences` |
+| which node runs a copy | `rpc.SharedOwner` |
+| how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellLinks` |
 | is this link dead | `deadref.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | does this page run the node's build, and what it does when not | `Server.otherBuild`; `gwerr.OtherBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
-| where a tile lands when nobody chose a cell | `store.FreeSlot` over the one auto-place rule (`autoplace.go`) |
+| where a tile lands when nobody chose a cell | `store.FreeSlot`: the first free cell (`freeslot.go`) |
 | what a link to a tile is | `rpc.LinkOf` |
 | this event stream is established | `namespace.Follow` |
 | what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/subscription.Tracker` |
@@ -669,12 +669,12 @@ pane is inside" and do not spread the word.
 |---|---|
 | Ids never reused | AUTOINCREMENT |
 | `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both APIs refuse one that names none; framing, captures and a select carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
-| Clone is an eager deep copy | `CloneTile` |
+| A copy is eager and deep | `CopyTile` |
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |
 | The APIs cannot drift | each decodes onto one `namespace.Namespace` |
 | A hop peels in exactly what it prepends out | one field list, `rpc.tileIDFields`; `TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest`, `TestIdsWrittenIntoAFarGridComeBackAsSent` |
-| An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
+| An answer is never mutated under another reader | qualification copies; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
 | Text preview never re-wraps | `PreviewFrameOf` takes only the tile's facts |
 | Text letters never follow grid zoom | `PreviewRasterDraw` draws at the frame's scale; `preview-letter-height.spec.ts` |
@@ -682,7 +682,7 @@ pane is inside" and do not spread the word.
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
 | User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |
-| A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored references |
+| A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored links |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 
 ## Module boundaries

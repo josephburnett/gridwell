@@ -12,7 +12,7 @@ import (
 )
 
 // Every id a write carries into a far grid crosses the router and the
-// connection, and each hop peels its own segment (rpc.Hop). A reference that
+// connection, and each hop peels its own segment (rpc.Hop). A link that
 // kept a segment would be stored on the far node as a foreign id and read back
 // with the chain doubled, naming a namespace nobody declares.
 func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
@@ -57,8 +57,8 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 		t.Fatalf("create well with a qualified child: %v", err)
 	}
 	for _, tl := range []*gridwellv1.Tile{mount, inFarGrid("well", mount)} {
-		if tl.ChildGridId != farRoot || !tl.Reference {
-			t.Fatalf("well child = %q reference=%v, want %q as a reference", tl.ChildGridId, tl.Reference, farRoot)
+		if tl.ChildGridId != farRoot || !tl.Link {
+			t.Fatalf("well child = %q link=%v, want %q as a link", tl.ChildGridId, tl.Link, farRoot)
 		}
 	}
 	if _, err := h.localCl.GetGrid(ctx, mount.ChildGridId); err != nil {
@@ -70,42 +70,42 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 		t.Fatalf("create leaf link: %v", err)
 	}
 	for _, tl := range []*gridwellv1.Tile{link, inFarGrid("link", link)} {
-		if tl.LinkTargetId != target.Id || !tl.Reference {
-			t.Fatalf("link target = %q reference=%v, want %q as a reference", tl.LinkTargetId, tl.Reference, target.Id)
+		if tl.LinkTargetId != target.Id || !tl.Link {
+			t.Fatalf("link target = %q link=%v, want %q as a link", tl.LinkTargetId, tl.Link, target.Id)
 		}
 	}
 	if data, _, _, err := h.localCl.ReadContent(ctx, link.Id); err != nil || string(data) != string(body) {
 		t.Fatalf("read through the far link = %q (%v), want %q", data, err, body)
 	}
 
-	// A cross-namespace clone writes the copy straight into the far grid.
+	// A cross-namespace copy writes the copy straight into the far grid.
 	homeLink, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: localHome, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1, LinkTargetId: target.Id}})
 	if err != nil {
 		t.Fatalf("create home link: %v", err)
 	}
-	copied, err := h.localCl.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: homeLink.Id, DestGridId: farGrid, X: 4, Y: 0})
+	copied, err := h.localCl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: homeLink.Id, DestGridId: farGrid, X: 4, Y: 0})
 	if err != nil {
-		t.Fatalf("clone a home link into the far grid: %v", err)
+		t.Fatalf("copy a home link into the far grid: %v", err)
 	}
-	for _, tl := range []*gridwellv1.Tile{copied, inFarGrid("cloned link", copied)} {
-		if tl.LinkTargetId != target.Id || !tl.Reference {
-			t.Fatalf("cloned link target = %q reference=%v, want %q", tl.LinkTargetId, tl.Reference, target.Id)
+	for _, tl := range []*gridwellv1.Tile{copied, inFarGrid("copied link", copied)} {
+		if tl.LinkTargetId != target.Id || !tl.Link {
+			t.Fatalf("copied link target = %q link=%v, want %q", tl.LinkTargetId, tl.Link, target.Id)
 		}
 	}
 
-	// The secondary ids of placement and a same-namespace clone.
-	placed, err := h.localCl.PlaceTile(ctx, claimtest.Claimed(t, h.localCl, &gridwellv1.PlaceTileRequest{TileId: target.Id, GridId: farGrid, X: 0, Y: 4, W: 1, H: 1}))
+	// The secondary ids of placement and a same-namespace copy.
+	placed, err := h.localCl.MoveTile(ctx, claimtest.Claimed(t, h.localCl, &gridwellv1.MoveTileRequest{TileId: target.Id, GridId: farGrid, X: 0, Y: 4, W: 1, H: 1}))
 	if err != nil {
 		t.Fatalf("place into the far grid: %v", err)
 	}
 	if placed.GridId != farGrid || inFarGrid("placed", placed).GridId != farGrid {
 		t.Fatalf("placed grid = %q, want %q", placed.GridId, farGrid)
 	}
-	clone, err := h.localCl.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: target.Id, DestGridId: farGrid, X: 2, Y: 4})
+	cp, err := h.localCl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: target.Id, DestGridId: farGrid, X: 2, Y: 4})
 	if err != nil {
-		t.Fatalf("clone within the far node: %v", err)
+		t.Fatalf("copy within the far node: %v", err)
 	}
-	if clone.GridId != farGrid || inFarGrid("clone", clone).GridId != farGrid {
-		t.Fatalf("clone grid = %q, want %q", clone.GridId, farGrid)
+	if cp.GridId != farGrid || inFarGrid("copy", cp).GridId != farGrid {
+		t.Fatalf("copy grid = %q, want %q", cp.GridId, farGrid)
 	}
 }

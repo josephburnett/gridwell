@@ -146,8 +146,8 @@ func (s *Store) CreateWell(ctx context.Context, gridID string, x, y, w, h int64,
 // CreateExitWell creates a well that is a doorway onto an existing grid rather
 // than the owner of one. It allocates no child grid and holds no refcount: the
 // child is owned by whoever created it and named by a qualified "<uuid>/<id>"
-// string, so deleting the well removes only the reference. view carries the
-// source's framing when the well is a cross-plugin clone of a framed one, so
+// string, so deleting the well removes only the link. view carries the
+// source's framing when the well is a cross-plugin copy of a framed one, so
 // the link previews and descends where the source did.
 func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.View) (*gridwellv1.Tile, error) {
 	vcx, vcy, vzoom := viewArgs(view)
@@ -287,7 +287,7 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.T
 }
 
 // CreateScratchShell is CreateScratchURL's shell twin. Unlike a placed shell
-// it is deleted on ascent, which kills the tmux session, so nothing persists.
+// it is deleted on ascent, which kills the tmux, so nothing persists.
 func (s *Store) CreateScratchShell(ctx context.Context) (*gridwellv1.Tile, error) {
 	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {
 		res, err := tx.ExecContext(ctx, `

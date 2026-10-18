@@ -82,7 +82,7 @@ func (n *Namespace) ContextKey(gridID int64) (string, error) {
 }
 
 // TileKey resolves a minted tile id to its (grid id, plugin key). A retired
-// row still resolves, so a dangling reference stays interpretable; the caller
+// row still resolves, so a dangling link stays interpretable; the caller
 // decides what retirement means.
 func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, err error) {
 	var tomb int64
@@ -195,7 +195,7 @@ func snapshotOf(e *pluginv1.Entry) entrySnapshot {
 // derivePlacement places a hinted entry at the first free rect of the hint's
 // size at or below the hint (belowHint), so a calendar's column stays its
 // column. Any other entry takes the next free cell from the
-// listing's cursor by the one auto-place rule (autoplace.go). Overlay derives
+// listing's cursor, the first free cell (freeslot.go). Overlay derives
 // with it and Mint stores what Overlay derived, so touching a tile never
 // moves it.
 func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *pluginv1.PlacementHint) (x, y, w, h int64) {
@@ -239,7 +239,7 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 
 // Refresh updates a row's content snapshot to what the listing just said,
 // writing only where a value differs. child_grid_id is deliberately not
-// refreshed: re-pointing a stored reference because a listing changed is how
+// refreshed: re-pointing a stored link because a listing changed is how
 // a link starts naming something the user never linked. A link target is
 // different, being the source's own content fact rather than the user's, and
 // an entry that becomes a link converts its row in place, keeping its id,
@@ -419,10 +419,10 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed b
 	})
 }
 
-// Place is the placement writeback; the grid never changes. It claims the
-// footprint the writer saw, as home's PlaceTile does (claimPlacement).
-func (n *Namespace) Place(tileID, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
-	return n.rowWrite("Place", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+// Move is the placement writeback; the grid never changes. It claims the
+// footprint the writer saw, as home's MoveTile does (claimPlacement).
+func (n *Namespace) Move(tileID, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
+	return n.rowWrite("Move", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
 		err := tx.QueryRowContext(ctx, `SELECT x, y, w, h FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
 			tileID, n.ns).Scan(&cur.X, &cur.Y, &cur.W, &cur.H)
@@ -478,7 +478,7 @@ func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) (changed 
 }
 
 // Retire tombstones one tile row: the delete-gesture path. The row stays so a
-// stale reference stays interpretable, its screenshot is released, and it
+// stale link stays interpretable, its screenshot is released, and it
 // leaves its grid's selection.
 func (n *Namespace) Retire(tileID int64) error {
 	return n.write("Retire", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {

@@ -25,7 +25,7 @@ func TestTheAPIsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 	me := m.nodes[meNode]
 	yes := true
 	type api struct {
-		place  func(*gridwellv1.PlaceTileRequest) error
+		place  func(*gridwellv1.MoveTileRequest) error
 		delete func(*gridwellv1.DeleteTileRequest) error
 		set    func(*gridwellv1.SetTileRequest) error
 		sel    func(*gridwellv1.SetSelectionRequest) error
@@ -33,8 +33,8 @@ func TestTheAPIsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 	}
 	apis := map[string]api{
 		"web API": {
-			place: func(r *gridwellv1.PlaceTileRequest) error {
-				_, err := me.web.PlaceTile(ctx, connect.NewRequest(r))
+			place: func(r *gridwellv1.MoveTileRequest) error {
+				_, err := me.web.MoveTile(ctx, connect.NewRequest(r))
 				return err
 			},
 			delete: func(r *gridwellv1.DeleteTileRequest) error {
@@ -52,7 +52,7 @@ func TestTheAPIsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 			code: func(err error) codes.Code { return codes.Code(connect.CodeOf(err)) },
 		},
 		"connection API": {
-			place:  func(r *gridwellv1.PlaceTileRequest) error { _, err := me.far.PlaceTile(ctx, r); return err },
+			place:  func(r *gridwellv1.MoveTileRequest) error { _, err := me.far.MoveTile(ctx, r); return err },
 			delete: func(r *gridwellv1.DeleteTileRequest) error { _, err := me.far.DeleteTile(ctx, r); return err },
 			set:    func(r *gridwellv1.SetTileRequest) error { _, err := me.far.SetTile(ctx, r); return err },
 			sel:    func(r *gridwellv1.SetSelectionRequest) error { _, err := me.far.SetSelection(ctx, r); return err },
@@ -71,7 +71,7 @@ func TestTheAPIsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 				}
 				x += 2
 				tile := m.text(ctx, meNode, grid, x, "# stays")
-				refused("move", d.place(&gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: grid,
+				refused("move", d.place(&gridwellv1.MoveTileRequest{TileId: tile.Id, GridId: grid,
 					X: x + 1, Y: 0, W: 1, H: 1}), "claim")
 				refused("delete", d.delete(&gridwellv1.DeleteTileRequest{TileId: tile.Id, ClaimVersion: tile.Version}), "claim")
 				if got := m.tileIn(ctx, meNode, grid, tile.Id); got.X != x {

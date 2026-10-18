@@ -98,7 +98,7 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 }
 
 // deleteEphemeralTile removes an ended ephemeral visit, and for a
-// shell the plugin kills its tmux session too. Unlike the trashcan delete it
+// shell the plugin kills its tmux too. Unlike the trashcan delete it
 // parks, because an ephemeral row is off-grid and a lost cleanup is invisible
 // until the startup sweep. It claims seen, the row the visit held: no durable
 // write lands on a visit (possiblyEphemeral), and the detach-time title
@@ -106,7 +106,7 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
 	gridID, tileID := seen.GridId, seen.Id
 	req := rpc.DeleteOf(seen)
-	// The row is going, and so is the tmux session behind it.
+	// The row is going, and so is the tmux behind it.
 	a.forgetShellAlive(tileID)
 	// No refetch: nothing renders the scratch grid, and the event stream
 	// carries the removal into the cache.
@@ -119,7 +119,7 @@ func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
 }
 
 // visitEphemeralShell has the opposite exit contract to the url visit: ascent
-// deletes the tile and its tmux session, which the gray border warns about.
+// deletes the tile and its tmux, which the gray border warns about.
 func (a *App) visitEphemeralShell(p *pane.Pane) {
 	a.visitEphemeral(p, "CreateShell",
 		&gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1})

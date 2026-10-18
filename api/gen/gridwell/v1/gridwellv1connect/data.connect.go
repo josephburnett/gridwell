@@ -59,31 +59,30 @@ const (
 	GridwellGetTileProcedure = "/gridwell.v1.Gridwell/GetTile"
 	// GridwellGetTilePreviewProcedure is the fully-qualified name of the Gridwell's GetTilePreview RPC.
 	GridwellGetTilePreviewProcedure = "/gridwell.v1.Gridwell/GetTilePreview"
-	// GridwellSearchProcedure is the fully-qualified name of the Gridwell's Search RPC.
-	GridwellSearchProcedure = "/gridwell.v1.Gridwell/Search"
+	// GridwellFindProcedure is the fully-qualified name of the Gridwell's Find RPC.
+	GridwellFindProcedure = "/gridwell.v1.Gridwell/Find"
 	// GridwellReadContentProcedure is the fully-qualified name of the Gridwell's ReadContent RPC.
 	GridwellReadContentProcedure = "/gridwell.v1.Gridwell/ReadContent"
 	// GridwellWriteContentProcedure is the fully-qualified name of the Gridwell's WriteContent RPC.
 	GridwellWriteContentProcedure = "/gridwell.v1.Gridwell/WriteContent"
 	// GridwellServeContentProcedure is the fully-qualified name of the Gridwell's ServeContent RPC.
 	GridwellServeContentProcedure = "/gridwell.v1.Gridwell/ServeContent"
-	// GridwellPlaceTileProcedure is the fully-qualified name of the Gridwell's PlaceTile RPC.
-	GridwellPlaceTileProcedure = "/gridwell.v1.Gridwell/PlaceTile"
+	// GridwellMoveTileProcedure is the fully-qualified name of the Gridwell's MoveTile RPC.
+	GridwellMoveTileProcedure = "/gridwell.v1.Gridwell/MoveTile"
 	// GridwellCreateTileProcedure is the fully-qualified name of the Gridwell's CreateTile RPC.
 	GridwellCreateTileProcedure = "/gridwell.v1.Gridwell/CreateTile"
 	// GridwellSetTileProcedure is the fully-qualified name of the Gridwell's SetTile RPC.
 	GridwellSetTileProcedure = "/gridwell.v1.Gridwell/SetTile"
-	// GridwellCloneTileProcedure is the fully-qualified name of the Gridwell's CloneTile RPC.
-	GridwellCloneTileProcedure = "/gridwell.v1.Gridwell/CloneTile"
+	// GridwellCopyTileProcedure is the fully-qualified name of the Gridwell's CopyTile RPC.
+	GridwellCopyTileProcedure = "/gridwell.v1.Gridwell/CopyTile"
 	// GridwellDeleteTileProcedure is the fully-qualified name of the Gridwell's DeleteTile RPC.
 	GridwellDeleteTileProcedure = "/gridwell.v1.Gridwell/DeleteTile"
 	// GridwellSetFramingProcedure is the fully-qualified name of the Gridwell's SetFraming RPC.
 	GridwellSetFramingProcedure = "/gridwell.v1.Gridwell/SetFraming"
 	// GridwellSetSelectionProcedure is the fully-qualified name of the Gridwell's SetSelection RPC.
 	GridwellSetSelectionProcedure = "/gridwell.v1.Gridwell/SetSelection"
-	// GridwellShellSessionAliveProcedure is the fully-qualified name of the Gridwell's
-	// ShellSessionAlive RPC.
-	GridwellShellSessionAliveProcedure = "/gridwell.v1.Gridwell/ShellSessionAlive"
+	// GridwellShellTmuxAliveProcedure is the fully-qualified name of the Gridwell's ShellTmuxAlive RPC.
+	GridwellShellTmuxAliveProcedure = "/gridwell.v1.Gridwell/ShellTmuxAlive"
 	// GridwellSubscribeProcedure is the fully-qualified name of the Gridwell's Subscribe RPC.
 	GridwellSubscribeProcedure = "/gridwell.v1.Gridwell/Subscribe"
 	// GridwellSetViewProcedure is the fully-qualified name of the Gridwell's SetView RPC.
@@ -107,18 +106,18 @@ type GridwellClient interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
+	Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest]) (*connect.ServerStreamForClient[v1.ContentChunk], error)
 	WriteContent(context.Context) *connect.ClientStreamForClient[v1.WriteContentRequest, v1.TileResponse]
 	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(context.Context, *connect.Request[v1.ServeContentRequest]) (*connect.ServerStreamForClient[v1.ServeContentChunk], error)
-	// PlaceTile is the single placement writeback.
-	PlaceTile(context.Context, *connect.Request[v1.PlaceTileRequest]) (*connect.Response[v1.TileResponse], error)
+	// MoveTile is the single placement writeback.
+	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
+	CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -126,8 +125,8 @@ type GridwellClient interface {
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
-	// ShellSessionAlive gates the client's refresh button on shell descent.
-	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
+	// ShellTmuxAlive gates the client's refresh button on shell descent.
+	ShellTmuxAlive(context.Context, *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
 	SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error)
 	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
@@ -186,10 +185,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
 			connect.WithClientOptions(opts...),
 		),
-		search: connect.NewClient[v1.SearchRequest, v1.SearchResponse](
+		find: connect.NewClient[v1.FindRequest, v1.FindResponse](
 			httpClient,
-			baseURL+GridwellSearchProcedure,
-			connect.WithSchema(gridwellMethods.ByName("Search")),
+			baseURL+GridwellFindProcedure,
+			connect.WithSchema(gridwellMethods.ByName("Find")),
 			connect.WithClientOptions(opts...),
 		),
 		readContent: connect.NewClient[v1.ReadContentRequest, v1.ContentChunk](
@@ -210,10 +209,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("ServeContent")),
 			connect.WithClientOptions(opts...),
 		),
-		placeTile: connect.NewClient[v1.PlaceTileRequest, v1.TileResponse](
+		moveTile: connect.NewClient[v1.MoveTileRequest, v1.TileResponse](
 			httpClient,
-			baseURL+GridwellPlaceTileProcedure,
-			connect.WithSchema(gridwellMethods.ByName("PlaceTile")),
+			baseURL+GridwellMoveTileProcedure,
+			connect.WithSchema(gridwellMethods.ByName("MoveTile")),
 			connect.WithClientOptions(opts...),
 		),
 		createTile: connect.NewClient[v1.CreateTileRequest, v1.TileResponse](
@@ -228,10 +227,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetTile")),
 			connect.WithClientOptions(opts...),
 		),
-		cloneTile: connect.NewClient[v1.CloneTileRequest, v1.TileResponse](
+		copyTile: connect.NewClient[v1.CopyTileRequest, v1.TileResponse](
 			httpClient,
-			baseURL+GridwellCloneTileProcedure,
-			connect.WithSchema(gridwellMethods.ByName("CloneTile")),
+			baseURL+GridwellCopyTileProcedure,
+			connect.WithSchema(gridwellMethods.ByName("CopyTile")),
 			connect.WithClientOptions(opts...),
 		),
 		deleteTile: connect.NewClient[v1.DeleteTileRequest, v1.DeleteTileResponse](
@@ -252,10 +251,10 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("SetSelection")),
 			connect.WithClientOptions(opts...),
 		),
-		shellSessionAlive: connect.NewClient[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse](
+		shellTmuxAlive: connect.NewClient[v1.ShellTmuxAliveRequest, v1.ShellTmuxAliveResponse](
 			httpClient,
-			baseURL+GridwellShellSessionAliveProcedure,
-			connect.WithSchema(gridwellMethods.ByName("ShellSessionAlive")),
+			baseURL+GridwellShellTmuxAliveProcedure,
+			connect.WithSchema(gridwellMethods.ByName("ShellTmuxAlive")),
 			connect.WithClientOptions(opts...),
 		),
 		subscribe: connect.NewClient[v1.SubscribeRequest, v1.Event](
@@ -281,28 +280,28 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 
 // gridwellClient implements GridwellClient.
 type gridwellClient struct {
-	info              *connect.Client[v1.InfoRequest, v1.InfoResponse]
-	probe             *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
-	handshake         *connect.Client[v1.HandshakeRequest, v1.HandshakeResponse]
-	openShell         *connect.Client[v1.OpenShellRequest, v1.OpenShellResponse]
-	getGrid           *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
-	getTile           *connect.Client[v1.GetTileRequest, v1.TileResponse]
-	getTilePreview    *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
-	search            *connect.Client[v1.SearchRequest, v1.SearchResponse]
-	readContent       *connect.Client[v1.ReadContentRequest, v1.ContentChunk]
-	writeContent      *connect.Client[v1.WriteContentRequest, v1.TileResponse]
-	serveContent      *connect.Client[v1.ServeContentRequest, v1.ServeContentChunk]
-	placeTile         *connect.Client[v1.PlaceTileRequest, v1.TileResponse]
-	createTile        *connect.Client[v1.CreateTileRequest, v1.TileResponse]
-	setTile           *connect.Client[v1.SetTileRequest, v1.TileResponse]
-	cloneTile         *connect.Client[v1.CloneTileRequest, v1.TileResponse]
-	deleteTile        *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
-	setFraming        *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
-	setSelection      *connect.Client[v1.SetSelectionRequest, v1.SetSelectionResponse]
-	shellSessionAlive *connect.Client[v1.ShellSessionAliveRequest, v1.ShellSessionAliveResponse]
-	subscribe         *connect.Client[v1.SubscribeRequest, v1.Event]
-	setView           *connect.Client[v1.SetViewRequest, v1.SetViewResponse]
-	disableSource     *connect.Client[v1.DisableSourceRequest, v1.DisableSourceResponse]
+	info           *connect.Client[v1.InfoRequest, v1.InfoResponse]
+	probe          *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
+	handshake      *connect.Client[v1.HandshakeRequest, v1.HandshakeResponse]
+	openShell      *connect.Client[v1.OpenShellRequest, v1.OpenShellResponse]
+	getGrid        *connect.Client[v1.GetGridRequest, v1.GetGridResponse]
+	getTile        *connect.Client[v1.GetTileRequest, v1.TileResponse]
+	getTilePreview *connect.Client[v1.GetTilePreviewRequest, v1.GetTilePreviewResponse]
+	find           *connect.Client[v1.FindRequest, v1.FindResponse]
+	readContent    *connect.Client[v1.ReadContentRequest, v1.ContentChunk]
+	writeContent   *connect.Client[v1.WriteContentRequest, v1.TileResponse]
+	serveContent   *connect.Client[v1.ServeContentRequest, v1.ServeContentChunk]
+	moveTile       *connect.Client[v1.MoveTileRequest, v1.TileResponse]
+	createTile     *connect.Client[v1.CreateTileRequest, v1.TileResponse]
+	setTile        *connect.Client[v1.SetTileRequest, v1.TileResponse]
+	copyTile       *connect.Client[v1.CopyTileRequest, v1.TileResponse]
+	deleteTile     *connect.Client[v1.DeleteTileRequest, v1.DeleteTileResponse]
+	setFraming     *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
+	setSelection   *connect.Client[v1.SetSelectionRequest, v1.SetSelectionResponse]
+	shellTmuxAlive *connect.Client[v1.ShellTmuxAliveRequest, v1.ShellTmuxAliveResponse]
+	subscribe      *connect.Client[v1.SubscribeRequest, v1.Event]
+	setView        *connect.Client[v1.SetViewRequest, v1.SetViewResponse]
+	disableSource  *connect.Client[v1.DisableSourceRequest, v1.DisableSourceResponse]
 }
 
 // Info calls gridwell.v1.Gridwell.Info.
@@ -340,9 +339,9 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, req *connect.Reques
 	return c.getTilePreview.CallUnary(ctx, req)
 }
 
-// Search calls gridwell.v1.Gridwell.Search.
-func (c *gridwellClient) Search(ctx context.Context, req *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return c.search.CallUnary(ctx, req)
+// Find calls gridwell.v1.Gridwell.Find.
+func (c *gridwellClient) Find(ctx context.Context, req *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error) {
+	return c.find.CallUnary(ctx, req)
 }
 
 // ReadContent calls gridwell.v1.Gridwell.ReadContent.
@@ -360,9 +359,9 @@ func (c *gridwellClient) ServeContent(ctx context.Context, req *connect.Request[
 	return c.serveContent.CallServerStream(ctx, req)
 }
 
-// PlaceTile calls gridwell.v1.Gridwell.PlaceTile.
-func (c *gridwellClient) PlaceTile(ctx context.Context, req *connect.Request[v1.PlaceTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.placeTile.CallUnary(ctx, req)
+// MoveTile calls gridwell.v1.Gridwell.MoveTile.
+func (c *gridwellClient) MoveTile(ctx context.Context, req *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.moveTile.CallUnary(ctx, req)
 }
 
 // CreateTile calls gridwell.v1.Gridwell.CreateTile.
@@ -375,9 +374,9 @@ func (c *gridwellClient) SetTile(ctx context.Context, req *connect.Request[v1.Se
 	return c.setTile.CallUnary(ctx, req)
 }
 
-// CloneTile calls gridwell.v1.Gridwell.CloneTile.
-func (c *gridwellClient) CloneTile(ctx context.Context, req *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return c.cloneTile.CallUnary(ctx, req)
+// CopyTile calls gridwell.v1.Gridwell.CopyTile.
+func (c *gridwellClient) CopyTile(ctx context.Context, req *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return c.copyTile.CallUnary(ctx, req)
 }
 
 // DeleteTile calls gridwell.v1.Gridwell.DeleteTile.
@@ -395,9 +394,9 @@ func (c *gridwellClient) SetSelection(ctx context.Context, req *connect.Request[
 	return c.setSelection.CallUnary(ctx, req)
 }
 
-// ShellSessionAlive calls gridwell.v1.Gridwell.ShellSessionAlive.
-func (c *gridwellClient) ShellSessionAlive(ctx context.Context, req *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
-	return c.shellSessionAlive.CallUnary(ctx, req)
+// ShellTmuxAlive calls gridwell.v1.Gridwell.ShellTmuxAlive.
+func (c *gridwellClient) ShellTmuxAlive(ctx context.Context, req *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error) {
+	return c.shellTmuxAlive.CallUnary(ctx, req)
 }
 
 // Subscribe calls gridwell.v1.Gridwell.Subscribe.
@@ -430,18 +429,18 @@ type GridwellHandler interface {
 	GetGrid(context.Context, *connect.Request[v1.GetGridRequest]) (*connect.Response[v1.GetGridResponse], error)
 	GetTile(context.Context, *connect.Request[v1.GetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	GetTilePreview(context.Context, *connect.Request[v1.GetTilePreviewRequest]) (*connect.Response[v1.GetTilePreviewResponse], error)
-	Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error)
+	Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error
 	WriteContent(context.Context, *connect.ClientStream[v1.WriteContentRequest]) (*connect.Response[v1.TileResponse], error)
 	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(context.Context, *connect.Request[v1.ServeContentRequest], *connect.ServerStream[v1.ServeContentChunk]) error
-	// PlaceTile is the single placement writeback.
-	PlaceTile(context.Context, *connect.Request[v1.PlaceTileRequest]) (*connect.Response[v1.TileResponse], error)
+	// MoveTile is the single placement writeback.
+	MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error)
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
-	CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error)
+	CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -449,8 +448,8 @@ type GridwellHandler interface {
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
-	// ShellSessionAlive gates the client's refresh button on shell descent.
-	ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error)
+	// ShellTmuxAlive gates the client's refresh button on shell descent.
+	ShellTmuxAlive(context.Context, *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
 	SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error)
 	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
@@ -505,10 +504,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("GetTilePreview")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellSearchHandler := connect.NewUnaryHandler(
-		GridwellSearchProcedure,
-		svc.Search,
-		connect.WithSchema(gridwellMethods.ByName("Search")),
+	gridwellFindHandler := connect.NewUnaryHandler(
+		GridwellFindProcedure,
+		svc.Find,
+		connect.WithSchema(gridwellMethods.ByName("Find")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellReadContentHandler := connect.NewServerStreamHandler(
@@ -529,10 +528,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("ServeContent")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellPlaceTileHandler := connect.NewUnaryHandler(
-		GridwellPlaceTileProcedure,
-		svc.PlaceTile,
-		connect.WithSchema(gridwellMethods.ByName("PlaceTile")),
+	gridwellMoveTileHandler := connect.NewUnaryHandler(
+		GridwellMoveTileProcedure,
+		svc.MoveTile,
+		connect.WithSchema(gridwellMethods.ByName("MoveTile")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellCreateTileHandler := connect.NewUnaryHandler(
@@ -547,10 +546,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetTile")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellCloneTileHandler := connect.NewUnaryHandler(
-		GridwellCloneTileProcedure,
-		svc.CloneTile,
-		connect.WithSchema(gridwellMethods.ByName("CloneTile")),
+	gridwellCopyTileHandler := connect.NewUnaryHandler(
+		GridwellCopyTileProcedure,
+		svc.CopyTile,
+		connect.WithSchema(gridwellMethods.ByName("CopyTile")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellDeleteTileHandler := connect.NewUnaryHandler(
@@ -571,10 +570,10 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("SetSelection")),
 		connect.WithHandlerOptions(opts...),
 	)
-	gridwellShellSessionAliveHandler := connect.NewUnaryHandler(
-		GridwellShellSessionAliveProcedure,
-		svc.ShellSessionAlive,
-		connect.WithSchema(gridwellMethods.ByName("ShellSessionAlive")),
+	gridwellShellTmuxAliveHandler := connect.NewUnaryHandler(
+		GridwellShellTmuxAliveProcedure,
+		svc.ShellTmuxAlive,
+		connect.WithSchema(gridwellMethods.ByName("ShellTmuxAlive")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gridwellSubscribeHandler := connect.NewServerStreamHandler(
@@ -611,30 +610,30 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellGetTileHandler.ServeHTTP(w, r)
 		case GridwellGetTilePreviewProcedure:
 			gridwellGetTilePreviewHandler.ServeHTTP(w, r)
-		case GridwellSearchProcedure:
-			gridwellSearchHandler.ServeHTTP(w, r)
+		case GridwellFindProcedure:
+			gridwellFindHandler.ServeHTTP(w, r)
 		case GridwellReadContentProcedure:
 			gridwellReadContentHandler.ServeHTTP(w, r)
 		case GridwellWriteContentProcedure:
 			gridwellWriteContentHandler.ServeHTTP(w, r)
 		case GridwellServeContentProcedure:
 			gridwellServeContentHandler.ServeHTTP(w, r)
-		case GridwellPlaceTileProcedure:
-			gridwellPlaceTileHandler.ServeHTTP(w, r)
+		case GridwellMoveTileProcedure:
+			gridwellMoveTileHandler.ServeHTTP(w, r)
 		case GridwellCreateTileProcedure:
 			gridwellCreateTileHandler.ServeHTTP(w, r)
 		case GridwellSetTileProcedure:
 			gridwellSetTileHandler.ServeHTTP(w, r)
-		case GridwellCloneTileProcedure:
-			gridwellCloneTileHandler.ServeHTTP(w, r)
+		case GridwellCopyTileProcedure:
+			gridwellCopyTileHandler.ServeHTTP(w, r)
 		case GridwellDeleteTileProcedure:
 			gridwellDeleteTileHandler.ServeHTTP(w, r)
 		case GridwellSetFramingProcedure:
 			gridwellSetFramingHandler.ServeHTTP(w, r)
 		case GridwellSetSelectionProcedure:
 			gridwellSetSelectionHandler.ServeHTTP(w, r)
-		case GridwellShellSessionAliveProcedure:
-			gridwellShellSessionAliveHandler.ServeHTTP(w, r)
+		case GridwellShellTmuxAliveProcedure:
+			gridwellShellTmuxAliveHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
 			gridwellSubscribeHandler.ServeHTTP(w, r)
 		case GridwellSetViewProcedure:
@@ -678,8 +677,8 @@ func (UnimplementedGridwellHandler) GetTilePreview(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.GetTilePreview is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) Search(context.Context, *connect.Request[v1.SearchRequest]) (*connect.Response[v1.SearchResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Search is not implemented"))
+func (UnimplementedGridwellHandler) Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.Find is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error {
@@ -694,8 +693,8 @@ func (UnimplementedGridwellHandler) ServeContent(context.Context, *connect.Reque
 	return connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ServeContent is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) PlaceTile(context.Context, *connect.Request[v1.PlaceTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.PlaceTile is not implemented"))
+func (UnimplementedGridwellHandler) MoveTile(context.Context, *connect.Request[v1.MoveTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.MoveTile is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) CreateTile(context.Context, *connect.Request[v1.CreateTileRequest]) (*connect.Response[v1.TileResponse], error) {
@@ -706,8 +705,8 @@ func (UnimplementedGridwellHandler) SetTile(context.Context, *connect.Request[v1
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetTile is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) CloneTile(context.Context, *connect.Request[v1.CloneTileRequest]) (*connect.Response[v1.TileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CloneTile is not implemented"))
+func (UnimplementedGridwellHandler) CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.CopyTile is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error) {
@@ -722,8 +721,8 @@ func (UnimplementedGridwellHandler) SetSelection(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.SetSelection is not implemented"))
 }
 
-func (UnimplementedGridwellHandler) ShellSessionAlive(context.Context, *connect.Request[v1.ShellSessionAliveRequest]) (*connect.Response[v1.ShellSessionAliveResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ShellSessionAlive is not implemented"))
+func (UnimplementedGridwellHandler) ShellTmuxAlive(context.Context, *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ShellTmuxAlive is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error {

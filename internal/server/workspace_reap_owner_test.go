@@ -86,12 +86,12 @@ func TestReapReadsTheSameFieldTheSweepProtects(t *testing.T) {
 	}
 }
 
-// TestReapFindsEncoderWrittenReferences: the other half — a blob written by
+// TestReapFindsEncoderWrittenLinks: the other half — a blob written by
 // the real client encoder, for a place deep enough that the encoder writes
 // BOTH the full `place` stack and the `text_focus` projection. The reap still
 // finds exactly the referenced scratch tile, and leaves viewed content alone.
 // This is the seam: bytes written by client/pane, read by the server.
-func TestReapFindsEncoderWrittenReferences(t *testing.T) {
+func TestReapFindsEncoderWrittenLinks(t *testing.T) {
 	ctx := context.Background()
 	cl, root, scratch := reapFixture(t)
 

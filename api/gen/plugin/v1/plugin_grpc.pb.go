@@ -11,10 +11,10 @@
 //
 // Key stability is the plugin's one hard contract. A key names the same logical
 // thing forever, such as a path relative to the configured root, a message-id
-// or "pid:1234". Changing the key scheme orphans every stored reference, as
+// or "pid:1234". Changing the key scheme orphans every stored link, as
 // re-minting ids would.
 //
-// Unimplemented is always polite: Search means no results, ServeContent a 404,
+// Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
 // thumbnail, and Delete refused. A minimal plugin is Info, List and
 // ReadContent.
@@ -50,7 +50,7 @@ const (
 	Plugin_GetPreview_FullMethodName   = "/plugin.v1.Plugin/GetPreview"
 	Plugin_Probe_FullMethodName        = "/plugin.v1.Plugin/Probe"
 	Plugin_Delete_FullMethodName       = "/plugin.v1.Plugin/Delete"
-	Plugin_Search_FullMethodName       = "/plugin.v1.Plugin/Search"
+	Plugin_Find_FullMethodName         = "/plugin.v1.Plugin/Find"
 	Plugin_Watch_FullMethodName        = "/plugin.v1.Plugin/Watch"
 )
 
@@ -68,7 +68,7 @@ type PluginClient interface {
 	GetPreview(ctx context.Context, in *GetPreviewRequest, opts ...grpc.CallOption) (*GetPreviewResponse, error)
 	Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error)
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
-	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
+	Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error)
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Change], error)
 }
 
@@ -181,10 +181,10 @@ func (c *pluginClient) Delete(ctx context.Context, in *DeleteRequest, opts ...gr
 	return out, nil
 }
 
-func (c *pluginClient) Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error) {
+func (c *pluginClient) Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SearchResponse)
-	err := c.cc.Invoke(ctx, Plugin_Search_FullMethodName, in, out, cOpts...)
+	out := new(FindResponse)
+	err := c.cc.Invoke(ctx, Plugin_Find_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ type PluginServer interface {
 	GetPreview(context.Context, *GetPreviewRequest) (*GetPreviewResponse, error)
 	Probe(context.Context, *ProbeRequest) (*ProbeResponse, error)
 	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
-	Search(context.Context, *SearchRequest) (*SearchResponse, error)
+	Find(context.Context, *FindRequest) (*FindResponse, error)
 	Watch(*WatchRequest, grpc.ServerStreamingServer[Change]) error
 	mustEmbedUnimplementedPluginServer()
 }
@@ -260,8 +260,8 @@ func (UnimplementedPluginServer) Probe(context.Context, *ProbeRequest) (*ProbeRe
 func (UnimplementedPluginServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Delete not implemented")
 }
-func (UnimplementedPluginServer) Search(context.Context, *SearchRequest) (*SearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
+func (UnimplementedPluginServer) Find(context.Context, *FindRequest) (*FindResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Find not implemented")
 }
 func (UnimplementedPluginServer) Watch(*WatchRequest, grpc.ServerStreamingServer[Change]) error {
 	return status.Error(codes.Unimplemented, "method Watch not implemented")
@@ -406,20 +406,20 @@ func _Plugin_Delete_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Plugin_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SearchRequest)
+func _Plugin_Find_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginServer).Search(ctx, in)
+		return srv.(PluginServer).Find(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Plugin_Search_FullMethodName,
+		FullMethod: Plugin_Find_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginServer).Search(ctx, req.(*SearchRequest))
+		return srv.(PluginServer).Find(ctx, req.(*FindRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -463,8 +463,8 @@ var Plugin_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Plugin_Delete_Handler,
 		},
 		{
-			MethodName: "Search",
-			Handler:    _Plugin_Search_Handler,
+			MethodName: "Find",
+			Handler:    _Plugin_Find_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

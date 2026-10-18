@@ -200,7 +200,7 @@ func (a *App) onRightMove(sx, sy float64) {
 	switch rd.kind {
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
-		a.advanceCloneDrag(sx, sy)
+		a.advanceCopyDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
 	}
@@ -216,7 +216,7 @@ func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *gridwellv
 }
 
 // armTileGesture arms the same model for every tile kind: the center 1/3 by 1/3
-// clones or links through a.dragging past the threshold, and everything outside
+// copies or links through a.dragging past the threshold, and everything outside
 // resizes, which has no destination and so ignores the intent.
 func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent, splitNav bool) {
 	ps, ok := p.Screen(r)
@@ -238,7 +238,7 @@ func (a *App) armTileGesture(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, 
 		common.kind = rightDragTileCenter
 		common.cursorInCenter = true
 		a.rightDrag = &common
-		a.armRightClone(p, r, n, sx, sy, intent)
+		a.armRightCopy(p, r, n, sx, sy, intent)
 	} else {
 		common.kind = rightDragTileResize
 		common.pinX, common.pinY,
@@ -316,8 +316,8 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	a.scheduleURLUpdate()
 }
 
-// advanceCloneDrag runs the one ghost promotion the left-drag path runs.
-func (a *App) advanceCloneDrag(sx, sy float64) {
+// advanceCopyDrag runs the one ghost promotion the left-drag path runs.
+func (a *App) advanceCopyDrag(sx, sy float64) {
 	d := a.dragging
 	if d == nil {
 		return
@@ -328,7 +328,7 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 		return
 	}
 	if a.ghost != nil {
-		// The same DecideDrop verdict commitRightClone uses, off the same
+		// The same DecideDrop verdict commitRightCopy uses, off the same
 		// d.intent, so preview and commit cannot diverge.
 		a.previewDrop(d, sx, sy)
 	}
@@ -336,10 +336,10 @@ func (a *App) advanceCloneDrag(sx, sy float64) {
 	d.curScreenY = sy
 }
 
-// armRightClone primes a.dragging for a drag out of tile n's center zone. The
+// armRightCopy primes a.dragging for a drag out of tile n's center zone. The
 // ghost materializes only past dragThreshold, and the original stays visible,
 // because both intents create.
-func (a *App) armRightClone(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
+func (a *App) armRightCopy(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
 	ps, ok := p.Screen(r)
 	if !ok {
 		return
@@ -369,11 +369,11 @@ func (a *App) commitTileCenter(sx, sy float64) {
 		a.draw()
 		return
 	}
-	a.commitRightClone(d, sx, sy)
+	a.commitRightCopy(d, sx, sy)
 }
 
-// commitRightClone deletes, clones, links, or snaps the ghost back.
-func (a *App) commitRightClone(d *dragState, sx, sy float64) {
+// commitRightCopy deletes, copies, links, or snaps the ghost back.
+func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 	// The same gatherer as the left-drag commit, so preview and commit share
 	// one decision off d.intent.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
@@ -390,7 +390,7 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		a.cancelDragSnapBack(d)
 		return
 	case dragdrop.DropLink:
-		// Ctrl was held at the press: the destination gains a reference and the
+		// Ctrl was held at the press: the destination gains a link and the
 		// source stays put, whatever namespace it landed in. The one link commit
 		// the cross-namespace left-drag also uses.
 		a.landGhostAtCell(t, dropX, dropY)
@@ -399,13 +399,13 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		return
 	}
 
-	// DropClone: one CloneTile per carried tile at its offset; a refused one
+	// DropCopy: one CopyTile per carried tile at its offset; a refused one
 	// flies home alone, as in commitMove.
 	a.landGhostAtCell(t, dropX, dropY)
 	gh := a.ghost
 	to := d.carry().At(dropX, dropY)
 	for i, row := range d.carried {
-		req := &gridwellv1.CloneTileRequest{
+		req := &gridwellv1.CopyTileRequest{
 			TileId:     row.Id,
 			DestGridId: t.gridID,
 			X:          to[i].X,
@@ -413,9 +413,9 @@ func (a *App) commitRightClone(d *dragState, sx, sy float64) {
 		}
 		undo := func() { a.snapBackMember(gh, d, i) }
 		a.post(write{
-			label: "CloneTile", gid: d.srcGridID,
+			label: "CopyTile", gid: d.srcGridID,
 			call: func(ctx context.Context) error {
-				_, err := a.cl.CloneTile(ctx, req)
+				_, err := a.cl.CopyTile(ctx, req)
 				return err
 			},
 			undo: undo,
@@ -444,7 +444,7 @@ func (a *App) runDeleteTile(d *dragState, t *dropTarget) {
 		// is refused and its grid re-read, never deleted blind.
 		req := &gridwellv1.DeleteTileRequest{TileId: src.Id,
 			ClaimVersion: src.Version, Claim: rpc.PlacementOf(src)}
-		// The row is moving to the trash or going for good, and its session
+		// The row is moving to the trash or going for good, and its tmux
 		// goes with the last row naming it, so its cached verdict is stale
 		// either way.
 		a.forgetShellAlive(src.Id)
@@ -466,7 +466,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	if p == nil {
 		return
 	}
-	a.postPlacement(a.gridIDForPane(p), &gridwellv1.PlaceTileRequest{
+	a.postPlacement(a.gridIDForPane(p), &gridwellv1.MoveTileRequest{
 		TileId: n.Id,
 		GridId: n.GridId,
 		X:      rd.tileNewX,
@@ -648,7 +648,7 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if err != nil {
 		return
 	}
-	// A new pane is a clone of the source, deliberately: a split means another
+	// A new pane is a copy of the source, deliberately: a split means another
 	// view of where I am. A content frame is the exception, because there is one
 	// native view or PTY attachment per tile and pane, so it ascends one level.
 	if np != nil && np.ContentID() != "" {

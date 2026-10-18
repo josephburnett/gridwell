@@ -3,7 +3,7 @@ import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from '../e2e/homes';
-import { placeTile } from '../e2e/oracle';
+import { moveTile } from '../e2e/oracle';
 import { buildGoTest } from '../e2e/runtree';
 
 // A box's link to a hey thread on the phone client. The link row carries none
@@ -64,13 +64,13 @@ test("a box's link opens its thread's page in a new tab", async ({ gw, window })
     .poll(async () => ((await gw.getGrid(f.gridID)).tiles ?? []).length, { timeout: 30_000 })
     .toBe(1);
   let link = ((await gw.getGrid(f.gridID)).tiles ?? [])[0] as any;
-  expect(link.reference, 'the Set Aside row is a link').toBe(true);
+  expect(link.link, 'the Set Aside row is a link').toBe(true);
   expect(link.linkTargetId, 'to the thread in everything').toBeTruthy();
   expect(link.servesPage ?? false, 'and carries none of its content facts').toBe(false);
 
   // The plugin's own placement may be off screen; put the row under the view.
   const [cx, cy] = [Math.round(f.cx), Math.round(f.cy)];
-  await placeTile(gw.origin, link.id, f.gridID, cx, cy, 1, 1);
+  await moveTile(gw.origin, link.id, f.gridID, cx, cy, 1, 1);
   await gw.waitClientTileAt(f.id, cx, cy, link.id);
   link = ((await gw.getGrid(f.gridID)).tiles ?? [])[0] as any;
 

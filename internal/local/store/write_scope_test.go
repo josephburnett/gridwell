@@ -13,7 +13,7 @@ import (
 // version_rule_test.go says which writes bump a version. This says which
 // columns each of them is allowed to touch at all, in tiles and grids — the
 // two tables holding what the user arranged. A capture that clobbers a name, a
-// framing that resets a scroll, a placement that moves a neighbour and a clone
+// framing that resets a scroll, a placement that moves a neighbour and a copy
 // that reaches back into its source are one class: a write into a fact it does
 // not own, invisible until the user finds a thing they never touched has
 // changed. Blobs are refcounted storage with their own owner
@@ -48,7 +48,7 @@ func seedBystanders(t *testing.T, s *Store, root string) {
 // mutation was handed (tile) and on the grid that row sits in (grid);
 // updated_at is implicit on both, being "when this row was last written" and
 // nothing the user sees. trash names the columns a write may change on the
-// node's trash grid, which Open made. mints allows rows to appear — a clone's
+// node's trash grid, which Open made. mints allows rows to appear — a copy's
 // copy, a delete's month well — and the ids they spend.
 type writeScope struct {
 	tile  []string
@@ -84,10 +84,10 @@ var writeScopes = map[string]writeScope{
 	"SetSelection/the grid's selection": {grid: []string{"selection"}},
 
 	// ── Layout: where it sits. ─────────────────────────────────────────
-	"PlaceTile/move and resize": {tile: []string{"x", "y", "w", "h"}},
+	"MoveTile/move and resize": {tile: []string{"x", "y", "w", "h"}},
 	// The copy is new rows, and the grid it lands in counts one more tile; the
 	// source row is neither.
-	"CloneTile/source row": {grid: []string{"version"}, mints: true},
+	"CopyTile/source row": {grid: []string{"version"}, mints: true},
 	// A delete on an ordinary grid is a move into the trash: the same row, at
 	// a new address, under the month well the trash mints on first use, which
 	// the trash grid counts. A tile that leaves its grid leaves its selection.

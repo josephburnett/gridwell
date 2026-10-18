@@ -67,7 +67,7 @@ func TestARepeatedPluginWriteAnnouncesNothing(t *testing.T) {
 		{"url screenshot", setTile(&gridwellv1.SetTileRequest{TileId: ids[rpc.KindURL],
 			Tile: &gridwellv1.Tile{Kind: rpc.KindURL}, Preview: []byte("\xff\xd8screenshot")})},
 		{"placement", func() error {
-			_, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: ids[rpc.KindText], X: 7, Y: 7, W: 1, H: 1})
+			_, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: ids[rpc.KindText], X: 7, Y: 7, W: 1, H: 1})
 			return err
 		}},
 		{"root framing", func() error {

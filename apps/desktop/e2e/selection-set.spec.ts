@@ -1,16 +1,16 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { placeTile, setSelection, tileAt, Tile } from './oracle';
+import { moveTile, setSelection, tileAt, Tile } from './oracle';
 import type { GridwellDriver } from './driver';
 
 // A gesture on a selected tile acts on its grid's whole selection
-// (dragdrop.CarryOf): a left-drag moves the set, a right-drag clones it, ctrl
+// (dragdrop.CarryOf): a left-drag moves the set, a right-drag copies it, ctrl
 // + right-drag links it, the trashcan deletes it, each tile its own write and
 // claim. The selection is made through the node (SetSelection, as another
 // window would), not a gesture, so these pin what the set does and nothing
 // about how it is made. The server's rows are the oracle.
 
-const WRITES = ['PlaceTile', 'CloneTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
+const WRITES = ['MoveTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
 async function watchWrites(win: Page): Promise<() => string[]> {
   const seen: string[] = [];
@@ -65,7 +65,7 @@ test('a left-drag on a selected tile moves the set; a stale tile is refused and 
   expect(g.carried.slice().sort(), 'the ghost carries the set').toEqual([a.id, b.id].sort());
   expect(g.hidden.slice().sort(), 'the move hides the set').toEqual([a.id, b.id].sort());
   // Another window moves b before the drop, so the press's claim on b is stale.
-  await placeTile(gw.origin, b.id, f.gridID, cx + 4, cy - 2, 1, 1);
+  await moveTile(gw.origin, b.id, f.gridID, cx + 4, cy - 2, 1, 1);
   await m.move(to.x, to.y, { steps: 8 });
   await m.up({ button: 'left' });
   await gw.waitIdle();
@@ -113,10 +113,10 @@ test('a set move onto a cell the set does not vacate is refused whole', async ({
   expect(tileAt(snap, 'text', cx - 1, cy + 3)?.id).toBe(c.id);
 });
 
-test('a right-drag on a selected tile clones the set in its layout', async ({ gw }) => {
+test('a right-drag on a selected tile copies the set in its layout', async ({ gw }) => {
   const { f, cx, cy, a, b } = await selectedPair(gw);
   const n = texts(await gw.getGrid(f.gridID)).length;
-  await gw.cloneTileCell(cx - 1, cy, cx - 1, cy - 2);
+  await gw.copyTileCell(cx - 1, cy, cx - 1, cy - 2);
   const snap = await gw.getGrid(f.gridID);
   expect(texts(snap).length, 'two copies').toBe(n + 2);
   const ca = tileAt(snap, 'text', cx - 1, cy - 2);
@@ -124,7 +124,7 @@ test('a right-drag on a selected tile clones the set in its layout', async ({ gw
   for (const [copy, src] of [[ca, a], [cb, b]] as const) {
     expect(copy, 'a copy at the offset').toBeTruthy();
     expect(copy!.id).not.toBe(src.id);
-    expect(copy!.reference ?? false, 'a copy, not a link').toBe(false);
+    expect(copy!.link ?? false, 'a copy, not a link').toBe(false);
   }
   expect(tileAt(snap, 'text', cx - 1, cy)?.id, 'the sources stay').toBe(a.id);
   expect(tileAt(snap, 'text', cx + 1, cy)?.id).toBe(b.id);
@@ -138,8 +138,8 @@ test('a ctrl + right-drag on a selected tile links the set', async ({ gw }) => {
   const lb = tileAt(snap, 'text', cx + 1, cy - 2);
   expect(la?.linkTargetId, 'a link to a').toBe(a.id);
   expect(lb?.linkTargetId, 'a link to b').toBe(b.id);
-  expect(la?.reference).toBe(true);
-  expect(lb?.reference).toBe(true);
+  expect(la?.link).toBe(true);
+  expect(lb?.link).toBe(true);
 });
 
 test('dropping a selected tile on the trashcan deletes the set', async ({ gw }) => {
@@ -189,8 +189,8 @@ test('a refused set move flies every refused tile home', async ({ gw, window }) 
   await m.down({ button: 'left' });
   await m.move(from.x + 8, from.y + 8);
   // Another window moves both before the drop, so both claims are stale.
-  await placeTile(gw.origin, a.id, f.gridID, cx - 4, cy + 1, 1, 1);
-  await placeTile(gw.origin, b.id, f.gridID, cx + 4, cy + 1, 1, 1);
+  await moveTile(gw.origin, a.id, f.gridID, cx - 4, cy + 1, 1, 1);
+  await moveTile(gw.origin, b.id, f.gridID, cx + 4, cy + 1, 1, 1);
   await m.move(to.x, to.y, { steps: 8 });
   await m.up({ button: 'left' });
   await expect
@@ -206,11 +206,11 @@ test('a refused set move flies every refused tile home', async ({ gw, window }) 
   expect(tileAt(snap, 'text', cx + 4, cy + 1)?.id, "b stays where the other window put it").toBe(b.id);
 });
 
-test('a refused clone of one tile of the set flies that tile home alone', async ({ gw, window }) => {
+test('a refused copy of one tile of the set flies that tile home alone', async ({ gw, window }) => {
   const { f, cx, cy, a, b } = await selectedPair(gw);
   const { snapBackMs } = await gw.cadences();
   await holdLanding(window, 4 * snapBackMs);
-  await window.route('**/gridwell.v1.Gridwell/CloneTile', async (r) => {
+  await window.route('**/gridwell.v1.Gridwell/CopyTile', async (r) => {
     if ((r.request().postDataBuffer()?.toString('latin1') ?? '').includes(b.id)) {
       await r.fulfill({
         status: 400,
@@ -222,7 +222,7 @@ test('a refused clone of one tile of the set flies that tile home alone', async 
     await r.continue();
   });
   const n = texts(await gw.getGrid(f.gridID)).length;
-  await gw.cloneTileCell(cx - 1, cy, cx - 1, cy - 2);
+  await gw.copyTileCell(cx - 1, cy, cx - 1, cy - 2);
   await expect
     .poll(async () => (await ghost(window)).returning, { message: 'the refused copy flies home' })
     .toEqual([b.id]);

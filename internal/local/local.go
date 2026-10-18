@@ -36,14 +36,14 @@ func New(st *store.Store, shell *shellsvc.Manager) *Plugin {
 	return &Plugin{st: st, shell: shell}
 }
 
-// CleanupOrphanedShells kills tmux sessions no shell row names any more: the
+// CleanupOrphanedShells kills tmuxes no shell row names any more: the
 // bounded leak from a delete that raced a crash. Called once at startup.
 func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	if p.shell == nil {
 		return 0, nil
 	}
 	return p.shell.CleanupOrphans(ctx, func(key string) (bool, error) {
-		n, err := p.st.ShellSessionNamers(ctx, key)
+		n, err := p.st.ShellTmuxNamers(ctx, key)
 		return n.Rows > 0, err
 	})
 }
@@ -188,13 +188,13 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 	return tileResp(t, err)
 }
 
-// Search is the one generic find verb; the store owns the semantics.
-func (p *Plugin) Search(ctx context.Context, req *gridwellv1.SearchRequest) (*gridwellv1.SearchResponse, error) {
-	res, err := p.st.Search(ctx, req)
+// Find is the one generic find verb; the store owns the semantics.
+func (p *Plugin) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
+	res, err := p.st.Find(ctx, req)
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	return &gridwellv1.SearchResponse{Results: res}, nil
+	return &gridwellv1.FindResponse{Results: res}, nil
 }
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
@@ -271,7 +271,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	}
 	switch t.Kind {
 	case rpc.KindWell:
-		// child_grid_id set makes an exit well: the qualified reference is
+		// child_grid_id set makes an exit well: the qualified link is
 		// stored verbatim, with no interior grid.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
@@ -302,14 +302,14 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	}
 }
 
-func (p *Plugin) CloneTile(ctx context.Context, req *gridwellv1.CloneTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.CloneTile(ctx, req))
+func (p *Plugin) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.CopyTile(ctx, req))
 }
 
-// PlaceTile is the single placement writeback; the store derives the
+// MoveTile is the single placement writeback; the store derives the
 // well-into-own-subtree refusal itself.
-func (p *Plugin) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.PlaceTile(ctx, req))
+func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.MoveTile(ctx, req))
 }
 
 // SetTile is the single capture writeback: tile.kind selects the one store
@@ -371,31 +371,31 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	}
 }
 
-// ShellSessionAlive is the per-descent liveness probe of the session the tile
+// ShellTmuxAlive is the per-descent liveness probe of the tmux the tile
 // names. A host with no shells, or a row that is gone, answers dead, which is a
 // verdict; a tmux that cannot be asked is not, and answering dead for it would
 // hide the refresh affordance with nothing said.
-func (p *Plugin) ShellSessionAlive(ctx context.Context, req *gridwellv1.ShellSessionAliveRequest) (*gridwellv1.ShellSessionAliveResponse, error) {
+func (p *Plugin) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
 	if p.shell == nil {
-		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
+		return &gridwellv1.ShellTmuxAliveResponse{Alive: false}, nil
 	}
-	key, err := p.sessionOf(ctx, req.TileId)
+	key, err := p.tmuxOf(ctx, req.TileId)
 	if status.Code(err) == codes.NotFound {
-		return &gridwellv1.ShellSessionAliveResponse{Alive: false}, nil
+		return &gridwellv1.ShellTmuxAliveResponse{Alive: false}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	alive, err := p.shell.HasSession(key)
+	alive, err := p.shell.Has(key)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	return &gridwellv1.ShellSessionAliveResponse{Alive: alive}, nil
+	return &gridwellv1.ShellTmuxAliveResponse{Alive: alive}, nil
 }
 
-// sessionOf is the session a shell tile names (rpc.ShellSession), refusing a
+// tmuxOf is the tmux a shell tile names (rpc.ShellTmux), refusing a
 // row that is not there or is not an owned shell.
-func (p *Plugin) sessionOf(ctx context.Context, tileID string) (string, error) {
+func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
 	t, err := p.st.GetTile(ctx, tileID)
 	if err != nil {
 		return "", errToStatus(err)
@@ -403,7 +403,7 @@ func (p *Plugin) sessionOf(ctx context.Context, tileID string) (string, error) {
 	if t.Kind != rpc.KindShell || t.LinkTargetId != "" {
 		return "", status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
 	}
-	return rpc.ShellSession(t), nil
+	return rpc.ShellTmux(t), nil
 }
 
 // OpenShell streams a tile's live PTY both ways: the first request binds the
@@ -426,27 +426,27 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 	}
 	cols, rows = shellsvc.ClampSize(cols, rows)
 
-	key, err := p.sessionOf(sctx, tileID)
+	key, err := p.tmuxOf(sctx, tileID)
 	if err != nil {
 		return err
 	}
-	// A session no tile has a preview of was never started, so whichever tile
+	// A tmux no tile has a preview of was never started, so whichever tile
 	// opens it first creates it; a started one that is gone must not be
 	// fabricated behind the previews that show what was running.
-	namers, err := p.st.ShellSessionNamers(sctx, key)
+	namers, err := p.st.ShellTmuxNamers(sctx, key)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	session, stopOld, err := p.shell.Acquire(key, namers.Previewed == 0, cols, rows)
+	att, stopOld, err := p.shell.Acquire(key, namers.Previewed == 0, cols, rows)
 	if err != nil {
-		if errors.Is(err, shellsvc.ErrSessionGone) {
+		if errors.Is(err, shellsvc.ErrTmuxGone) {
 			return status.Error(codes.FailedPrecondition, err.Error())
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
 	// Detach fires after the stream is ending, so the log is the surface; a
 	// capture that does not land leaves the tile under its current name.
-	defer p.shell.Release(key, session, stopOld, func() {
+	defer p.shell.Release(key, att, stopOld, func() {
 		if err := p.captureShellTitle(key, tileID); err != nil {
 			log.Printf("gridwell: home: shell title capture for tile %s: %v", tileID, err)
 		}
@@ -463,24 +463,24 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 				return
 			}
 			if len(msg.Data) > 0 {
-				if _, werr := session.Write(msg.Data); errors.Is(werr, io.ErrClosedPipe) {
+				if _, werr := att.Write(msg.Data); errors.Is(werr, io.ErrClosedPipe) {
 					return
 				}
 			}
 			if r := msg.Resize; r != nil {
 				c, rw := shellsvc.ClampSize(uint16(r.Cols), uint16(r.Rows))
-				_ = session.Resize(c, rw)
+				_ = att.Resize(c, rw)
 			}
 		}
 	}()
 
 	// Writer: PTY output down.
-	out := session.Output()
+	out := att.Output()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-session.Done():
+		case <-att.Done():
 			return nil
 		case <-stopOld:
 			return nil
@@ -495,8 +495,8 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 	}
 }
 
-// captureShellTitle stamps the label of the tile the session was opened from
-// with the session's foreground command on detach, as a url tile captures the
+// captureShellTitle stamps the label of the tile the tmux was opened from
+// with the tmux's foreground command on detach, as a url tile captures the
 // page title.
 func (p *Plugin) captureShellTitle(key, tileID string) error {
 	cmd, err := p.shell.PaneCommand(key)
@@ -504,7 +504,7 @@ func (p *Plugin) captureShellTitle(key, tileID string) error {
 		return fmt.Errorf("read the foreground command: %w", err)
 	}
 	if cmd == "" {
-		return nil // tmux answers "" for a session that is gone: nothing to stamp
+		return nil // tmux answers "" for a tmux that is gone: nothing to stamp
 	}
 	return p.st.SetTileAlt(context.Background(), tileID, cmd, false)
 }
@@ -513,7 +513,7 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	// The key is read first: a destroy takes the row that names it.
 	key := ""
 	if p.shell != nil {
-		k, err := p.sessionOf(ctx, req.TileId)
+		k, err := p.tmuxOf(ctx, req.TileId)
 		switch status.Code(err) {
 		case codes.OK:
 			key = k
@@ -525,25 +525,25 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 	if err := p.st.DeleteTile(ctx, req); err != nil {
 		return nil, errToStatus(err)
 	}
-	// The session dies with the last row naming it, a trashed row included.
+	// The tmux dies with the last row naming it, a trashed row included.
 	if key == "" {
 		return &gridwellv1.DeleteTileResponse{}, nil
 	}
-	return &gridwellv1.DeleteTileResponse{SessionLeft: p.endSession(ctx, key)}, nil
+	return &gridwellv1.DeleteTileResponse{TmuxLeft: p.endTmux(ctx, key)}, nil
 }
 
-// endSession kills key's session once no row names it, answering why one was
+// endTmux kills key's tmux once no row names it, answering why one was
 // left running.
-func (p *Plugin) endSession(ctx context.Context, key string) string {
-	n, err := p.st.ShellSessionNamers(ctx, key)
+func (p *Plugin) endTmux(ctx context.Context, key string) string {
+	n, err := p.st.ShellTmuxNamers(ctx, key)
 	if err != nil {
-		return "could not tell whether the shell session is still named: " + err.Error()
+		return "could not tell whether the shell's tmux is still named: " + err.Error()
 	}
 	if n.Rows > 0 {
 		return ""
 	}
 	if err := p.shell.Kill(key); err != nil {
-		return "the shell session would not stop: " + err.Error()
+		return "the shell's tmux would not stop: " + err.Error()
 	}
 	return ""
 }
@@ -561,7 +561,7 @@ func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 				return nil
 			}
 			// Nothing downstream writes into the shared event:
-			// server.qualifyTiles clones.
+			// server.qualifyTiles copies.
 			if err := send(ev); err != nil {
 				return err
 			}

@@ -84,7 +84,7 @@ func TestAStalePlacementIsRefusedAndTheFirstMoveStands(t *testing.T) {
 			cl := m.nodes[meNode].cl
 			tile := m.text(ctx, meNode, grid, 20, "# placed")
 			seen := placementOf(m.tileIn(ctx, meNode, grid, tile.Id)) // both windows read it here
-			moved, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: grid,
+			moved, err := cl.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: tile.Id, GridId: grid,
 				X: 22, Y: 0, W: 1, H: 1, Claim: seen})
 			if err != nil {
 				t.Fatalf("first move: %v", err)
@@ -92,7 +92,7 @@ func TestAStalePlacementIsRefusedAndTheFirstMoveStands(t *testing.T) {
 			if moved.Version != tile.Version {
 				t.Fatalf("version %d -> %d: a move bumps no version", tile.Version, moved.Version)
 			}
-			_, err = cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: grid,
+			_, err = cl.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: tile.Id, GridId: grid,
 				X: 24, Y: 0, W: 1, H: 1, Claim: seen})
 			wantConflict(t, "stale move", err)
 			if got := m.tileIn(ctx, meNode, grid, tile.Id); got.X != 22 {

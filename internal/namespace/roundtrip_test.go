@@ -79,8 +79,8 @@ func (f *fake) GetTile(context.Context, *pb.GetTileRequest) (*pb.TileResponse, e
 func (f *fake) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	return &pb.GetTilePreviewResponse{}, nil
 }
-func (f *fake) Search(context.Context, *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return &pb.SearchResponse{}, nil
+func (f *fake) Find(context.Context, *pb.FindRequest) (*pb.FindResponse, error) {
+	return &pb.FindResponse{}, nil
 }
 func (f *fake) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
@@ -88,10 +88,10 @@ func (f *fake) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileRespo
 func (f *fake) SetTile(context.Context, *pb.SetTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
-func (f *fake) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+func (f *fake) MoveTile(context.Context, *pb.MoveTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
-func (f *fake) CloneTile(context.Context, *pb.CloneTileRequest) (*pb.TileResponse, error) {
+func (f *fake) CopyTile(context.Context, *pb.CopyTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
 func (f *fake) DeleteTile(context.Context, *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
@@ -108,8 +108,8 @@ func (f *fake) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetViewRe
 	f.views = append(f.views, req)
 	return &pb.SetViewResponse{}, nil
 }
-func (f *fake) ShellSessionAlive(context.Context, *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return &pb.ShellSessionAliveResponse{Alive: true}, nil
+func (f *fake) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return &pb.ShellTmuxAliveResponse{Alive: true}, nil
 }
 func (f *fake) ReadContent(_ context.Context, _ *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	for _, c := range f.chunks {
@@ -162,7 +162,7 @@ func richTile() *pb.Tile {
 	return &pb.Tile{
 		Id: "12", GridId: "3", Kind: "well", X: -4, Y: 9, W: 2, H: 3,
 		AltText: "a room", Version: 7, BlobId: 11, PreviewBlobId: 13,
-		ChildGridId: "p1/44", LinkTargetId: "p2/55", Reference: true,
+		ChildGridId: "p1/44", LinkTargetId: "p2/55", Link: true,
 		UrlString: "https://example.test/x", UrlHistory: "a\nb", UrlFrozen: true,
 		ViewCx: 1.5, ViewCy: -2.5, ViewZoom: 0.25, ContentZoom: 1.75,
 		TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: "edit",

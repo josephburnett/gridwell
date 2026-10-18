@@ -21,11 +21,11 @@ var leafLinkKinds = map[string]bool{
 }
 
 // CreateLeafLink creates a leaf tile that is a link to another tile.
-// link_target_id holds the qualified "<uuid>/<tile-id>" reference verbatim, on
+// link_target_id holds the qualified "<uuid>/<tile-id>" link verbatim, on
 // the same contract as an exit well's child_grid_id: the qualification is what
-// makes the reference unambiguous, not the crossing, so a same-namespace
+// makes the link unambiguous, not the crossing, so a same-namespace
 // target is an ordinary link. The row carries no content, readers resolving
-// bytes and session through the target, so deleting it only unlinks.
+// bytes and tmux through the target, so deleting it only unlinks.
 func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt string) (*gridwellv1.Tile, error) {
 	if !leafLinkKinds[kind] {
 		return nil, fmt.Errorf("%w: kind %q has no leaf-link variant", ErrInvalidArgument, kind)
@@ -35,7 +35,7 @@ func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h in
 		// to a client that does not know which namespace allocated it. Every
 		// id a client holds is already qualified, home's included, which is
 		// why a same-namespace link needs no special case.
-		return nil, fmt.Errorf("%w: link_target_id %q is not a qualified <uuid>/<tile-id> reference", ErrInvalidArgument, linkTargetID)
+		return nil, fmt.Errorf("%w: link_target_id %q is not a qualified <uuid>/<tile-id> link", ErrInvalidArgument, linkTargetID)
 	}
 	return s.createTile(ctx, gridID, x, y, w, h,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {

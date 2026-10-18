@@ -77,7 +77,7 @@ func pluginRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 }
 
 // fsGrid seeds n files plus one subdirectory and returns the qualified grid id
-// of the plugin's root, WITHOUT mounting it: a mount is a stored reference and
+// of the plugin's root, WITHOUT mounting it: a mount is a stored link and
 // would mint the root grid's row, which is the very thing being counted.
 func fsGrid(t *testing.T, cl *rpc.Client, fsRoot string, n int) string {
 	t.Helper()
@@ -166,7 +166,7 @@ func TestTouchingEveryTileChangesNothingTheClientCanSee(t *testing.T) {
 	// Every tile placed where it already is: the durable touch that mints,
 	// with nothing about the arrangement changed.
 	for _, tile := range derived.Tiles {
-		if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+		if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 			TileId: tile.Id, GridId: root, X: tile.X, Y: tile.Y, W: tile.W, H: tile.H,
 		})); err != nil {
 			t.Fatalf("touch %q: %v", tile.AltText, err)
@@ -202,7 +202,7 @@ func TestOneMoveMintsExactlyOneRow(t *testing.T) {
 	}
 	tiles0, grids0 := pluginRows(t, st)
 
-	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: g.Tiles[3].Id, GridId: root, X: 9, Y: 4, W: 2, H: 2,
 	}))
 	if err != nil {
@@ -239,7 +239,7 @@ func TestOneMoveMintsExactlyOneRow(t *testing.T) {
 
 // A link stores the address the user dragged, tile and grid alike, and mints
 // nothing in the plugin's namespace: a plugin thing's public id is its
-// key-form address, so a reference at rest already names something that cannot
+// key-form address, so a link at rest already names something that cannot
 // reflow, and the address is the same name the listing answers. Storing a row
 // id instead would give the same document two names — one reached in place and
 // one reached through the link — and the client keys a live surface, and a
@@ -297,7 +297,7 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 	if mount.ChildGridId != well.ChildGridId {
 		t.Fatalf("child_grid_id = %q, want the grid the user dragged, %q", mount.ChildGridId, well.ChildGridId)
 	}
-	stored := storedReference(t, st, link.Id)
+	stored := storedLink(t, st, link.Id)
 	if stored != link.LinkTargetId {
 		t.Fatalf("the file holds %q, the wire says %q", stored, link.LinkTargetId)
 	}
@@ -313,13 +313,13 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 	// durable fact about the LINK, which is a home row; the entry it names
 	// needs nothing stored to keep answering.
 	if tiles, _ := pluginRows(t, st); tiles != 0 {
-		t.Fatalf("the two drops minted %d tile rows, want none: a reference names the address", tiles)
+		t.Fatalf("the two drops minted %d tile rows, want none: a link names the address", tiles)
 	}
 }
 
-// storedReference reads a home tile's link_target_id straight out of the file,
+// storedLink reads a home tile's link_target_id straight out of the file,
 // so the assertion is about what is at rest, not about what the wire says.
-func storedReference(t *testing.T, st *sql.DB, qualifiedID string) string {
+func storedLink(t *testing.T, st *sql.DB, qualifiedID string) string {
 	t.Helper()
 	var target sql.NullString
 	if err := st.QueryRow(`SELECT link_target_id FROM tiles WHERE id = ? AND ns = ''`,

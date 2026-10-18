@@ -183,7 +183,7 @@ test('touch: a long-press lifted in place toggles the tile in its grid\'s select
   expect(p.textFocus, 'the hold did not descend').toBe('');
   expect(p.placeDepth, 'the hold did not descend').toBe(f.placeDepth);
   const tiles = (await gw.getGrid(f.gridID)).tiles ?? [];
-  expect(tiles.filter((n) => n.kind === 'text').length, 'the hold made no clone').toBe(1);
+  expect(tiles.filter((n) => n.kind === 'text').length, 'the hold made no copy').toBe(1);
 
   await longPress(window, pt);
   await gw.waitIdle();

@@ -1,10 +1,10 @@
 // Package shellstream owns the lifecycle of the client's live shell
-// attachments, keyed by the session each attaches (rpc.ShellSession): one live
-// attachment per session, whichever of the tiles naming it opened it, so a
+// attachments, keyed by the tmux each attaches (rpc.ShellTmux): one live
+// attachment per tmux, whichever of the tiles naming it opened it, so a
 // pane taking a terminal over moves it without the registry knowing. Open
-// replaces the session's existing stream; Write and Resize outside a stream are
+// replaces the tmux's existing stream; Write and Resize outside a stream are
 // silent no-ops, a teardown racing an in-flight keystroke being expected. An
-// end fires at most once and only while that stream is still the session's
+// end fires at most once and only while that stream is still the tmux's
 // current one, and output routes through the registry rather than the closure,
 // so a replaced stream's late end or late bytes cannot reach the renderer.
 package shellstream
@@ -22,16 +22,16 @@ type Handle interface {
 
 // Dialer opens one attachment bound to tileID, the tile whose preview and title
 // the server writes. onEnd fires exactly once, with message "" for a clean end.
-// sessionGone is the server's verdict that the session is gone, which the
+// tmuxGone is the server's verdict that the tmux is gone, which the
 // caller reads to hide the refresh affordance.
-type Dialer func(tileID string, cols, rows int, onData func(data []byte), onEnd func(message string, sessionGone bool)) Handle
+type Dialer func(tileID string, cols, rows int, onData func(data []byte), onEnd func(message string, tmuxGone bool)) Handle
 
 // Exit is an unexpected end reported to the caller.
 type Exit struct {
-	Key         string
-	TileID      string
-	Message     string
-	SessionGone bool
+	Key      string
+	TileID   string
+	Message  string
+	TmuxGone bool
 }
 
 type entry struct {
@@ -54,8 +54,8 @@ func New(dial Dialer, onData func(key string, data []byte), onExit func(Exit)) *
 	return &Registry{dial: dial, onData: onData, onExit: onExit, streams: map[string]*entry{}}
 }
 
-// Open attaches the session key bound to tileID, replacing whatever the
-// session held.
+// Open attaches the tmux key bound to tileID, replacing whatever the
+// tmux held.
 func (r *Registry) Open(key, tileID string, cols, rows int) {
 	r.Close(key)
 	// The slot is claimed before the dial: a dialer that fails instantly calls
@@ -72,7 +72,7 @@ func (r *Registry) Open(key, tileID string, cols, rows int) {
 			}
 			r.onData(key, data)
 		},
-		func(message string, sessionGone bool) {
+		func(message string, tmuxGone bool) {
 			r.mu.Lock()
 			if e.ended { // exactly-once, whatever raced
 				r.mu.Unlock()
@@ -85,7 +85,7 @@ func (r *Registry) Open(key, tileID string, cols, rows int) {
 			}
 			delete(r.streams, key)
 			r.mu.Unlock()
-			r.onExit(Exit{Key: key, TileID: tileID, Message: message, SessionGone: sessionGone})
+			r.onExit(Exit{Key: key, TileID: tileID, Message: message, TmuxGone: tmuxGone})
 		},
 	)
 	r.mu.Lock()

@@ -11,7 +11,7 @@ import { EV } from '../src/main/ipc';
 // can pass while the other fails: the server's rows, and every mutating call
 // the client sent, counted at the wire.
 
-const WRITES = ['PlaceTile', 'CloneTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
+const WRITES = ['MoveTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
 async function watchWrites(win: Page): Promise<() => string[]> {
   const seen: string[] = [];
@@ -91,7 +91,7 @@ test('Esc on a tile move leaves the tile in its cell and writes nothing', async 
 });
 
 for (const link of [false, true]) {
-  const what = link ? 'ctrl + right-drag link' : 'right-drag clone';
+  const what = link ? 'ctrl + right-drag link' : 'right-drag copy';
   test(`Esc on a ${what} makes no tile`, async ({ gw, window }) => {
     await gw.enterPlugin('home');
     const f = await gw.focused();

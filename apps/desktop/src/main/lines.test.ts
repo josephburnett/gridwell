@@ -57,7 +57,7 @@ test('parseServingLine marks the "already serving" reprint external', () => {
 
 test('parseServingLine rejects every other line', () => {
   assert.equal(parseServingLine('gridwell: opening sqlite store at /x/gridwell.db'), null);
-  assert.equal(parseServingLine('gridwell: orphan cleanup killed 1 stale shell session(s)'), null);
+  assert.equal(parseServingLine('gridwell: orphan cleanup killed 1 stale tmux(es)'), null);
   assert.equal(parseServingLine('gridwell: WARNING: listening on 0.0.0.0:8080 — this is NOT a loopback address.'), null);
   assert.equal(parseServingLine(''), null);
   // A banner-shaped line with a garbage address must not resolve boot.

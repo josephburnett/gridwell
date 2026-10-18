@@ -281,10 +281,10 @@ func TestConnectionSpawn(t *testing.T) {
 	//    gesture, and read the content back through the link. A right-drag
 	//    deep-copies through the chain, so the local home gains an
 	//    independent solid well whose text body matches the remote's.
-	deepCopy := rpc(t, localOrigin, "CloneTile", map[string]any{
+	deepCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
-	if deepCopy["reference"] == true {
+	if deepCopy["link"] == true {
 		t.Fatal("the deep copy must be SOLID (a copy), not a link")
 	}
 	copiedGrid := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": deepCopy["childGridId"]})
@@ -310,8 +310,8 @@ func TestConnectionSpawn(t *testing.T) {
 	if link["childGridId"] != wellChild {
 		t.Fatalf("link child = %v, want the shared remote grid %s", link["childGridId"], wellChild)
 	}
-	if link["reference"] != true {
-		t.Fatal("the link must arrive as a dashed reference")
+	if link["link"] != true {
+		t.Fatal("the link must arrive as a dashed link")
 	}
 	got, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), txt["id"].(string))
 	if err != nil {
@@ -650,7 +650,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	// a row on the far node and the entry keeps the id its listing answers
 	// under. A rename there is invisible on either node alone, so only a
 	// re-list through the tunnel tells the two apart.
-	placed := rpc(t, localOrigin, "PlaceTile", map[string]any{
+	placed := rpc(t, localOrigin, "MoveTile", map[string]any{
 		"tileId": farID, "gridId": fsRoot, "x": 6, "y": 3, "w": 1, "h": 1,
 		"claim": map[string]any{"gridId": back["gridId"], "x": back["x"], "y": back["y"], "w": back["w"], "h": back["h"]},
 	})["tile"].(map[string]any)

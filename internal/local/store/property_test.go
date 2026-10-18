@@ -59,7 +59,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		op := rng.IntN(6)
 		switch op {
 		case 0:
-			// Kind is drawn from well/text/url/shell so clone and delete are
+			// Kind is drawn from well/text/url/shell so copy and delete are
 			// exercised across every refcounted reference a tile can hold:
 			// child grid, text blob, and preview blob.
 			gridID := root
@@ -95,7 +95,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			addTile(n)
 		case 1:
-			// Clone a random tile into root.
+			// Copy a random tile into root.
 			if len(tiles) == 0 {
 				continue
 			}
@@ -105,13 +105,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			x := int64(rng.IntN(20))*2 + 100
 			y := int64(rng.IntN(20)) * 2
-			n, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+			n, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 				TileId:     src.id,
 				DestGridId: root, X: x, Y: y,
 			})
 			if err != nil {
 				if !isBenignPropError(err) {
-					t.Fatalf("iter %d clone: %v", i, err)
+					t.Fatalf("iter %d copy: %v", i, err)
 				}
 				continue
 			}
@@ -128,7 +128,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
-			n, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			n, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 				TileId: pick.id,
 				GridId: pick.gridID, X: pick.x, Y: pick.y, W: w, H: h,
 			})

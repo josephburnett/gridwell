@@ -26,10 +26,10 @@ const outputBufferFrames = 64
 // var so a test can wait it out; see shelldriver_unix_test.go.
 var sigtermGrace = 500 * time.Millisecond
 
-// Session is one live PTY. Every method is safe to call concurrently, and one
+// PTY is one live pseudo-terminal and its process. Every method is safe to call concurrently, and one
 // that needs the PTY after Close returns an error rather than panicking on a
 // torn-down descriptor.
-type Session struct {
+type PTY struct {
 	cmd  *exec.Cmd
 	ptmx *os.File
 	pid  int
@@ -46,7 +46,7 @@ type Session struct {
 }
 
 // Start returns as soon as exec succeeds and the PTY is ready.
-func Start(cfg Config) (*Session, error) {
+func Start(cfg Config) (*PTY, error) {
 	if cfg.Cols == 0 || cfg.Rows == 0 {
 		return nil, fmt.Errorf("shelldriver: cols and rows must be > 0 (got %dx%d)", cfg.Cols, cfg.Rows)
 	}
@@ -82,7 +82,7 @@ func Start(cfg Config) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("shelldriver: start bash: %w", err)
 	}
-	s := &Session{
+	s := &PTY{
 		cmd:    cmd,
 		ptmx:   ptmx,
 		pid:    cmd.Process.Pid,
@@ -98,10 +98,10 @@ func Start(cfg Config) (*Session, error) {
 // closes once the process exits or Close runs. After Close, chunks the PTY
 // produced before the fd closed may still arrive first, the pump's cancellable
 // send racing the consumer's receive, so consumers must drain to close.
-func (s *Session) Output() <-chan []byte { return s.outCh }
+func (s *PTY) Output() <-chan []byte { return s.outCh }
 
 // pump is the single PTY reader, running until the master fd reports EOF.
-func (s *Session) pump() {
+func (s *PTY) pump() {
 	defer close(s.outCh)
 	buf := make([]byte, 4096)
 	for {
@@ -128,7 +128,7 @@ func (s *Session) pump() {
 }
 
 // Write returns 0 and io.ErrClosedPipe after Close.
-func (s *Session) Write(p []byte) (int, error) {
+func (s *PTY) Write(p []byte) (int, error) {
 	if s.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}
@@ -136,7 +136,7 @@ func (s *Session) Write(p []byte) (int, error) {
 }
 
 // Resize needs both dimensions > 0 and is safe to call on every drag frame.
-func (s *Session) Resize(cols, rows uint16) error {
+func (s *PTY) Resize(cols, rows uint16) error {
 	if cols == 0 || rows == 0 {
 		return fmt.Errorf("shelldriver: cols and rows must be > 0 (got %dx%d)", cols, rows)
 	}
@@ -147,12 +147,12 @@ func (s *Session) Resize(cols, rows uint16) error {
 }
 
 // Done returns a channel closed when the spawned process has fully exited.
-func (s *Session) Done() <-chan struct{} { return s.doneCh }
+func (s *PTY) Done() <-chan struct{} { return s.doneCh }
 
 // Close sends SIGTERM, then SIGKILL after sigtermGrace. Repeat calls are
 // no-ops. The error it returns is the process's exit status, not a teardown
 // failure.
-func (s *Session) Close() error {
+func (s *PTY) Close() error {
 	s.closeOnce.Do(func() {
 		s.closed.Store(true)
 		// The process group, so a child the user spawned goes down too.
@@ -184,7 +184,7 @@ func (s *Session) Close() error {
 }
 
 // reap runs in its own goroutine so Close can race it on the timeout.
-func (s *Session) reap() {
+func (s *PTY) reap() {
 	if s.cmd != nil {
 		s.exitErr = s.cmd.Wait()
 	}

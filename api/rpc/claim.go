@@ -16,9 +16,9 @@ import (
 // nothing.
 func UnclaimedWrite(req proto.Message) string {
 	switch r := req.(type) {
-	case *pb.PlaceTileRequest:
+	case *pb.MoveTileRequest:
 		if r.GetClaim() == nil {
-			return "PlaceTile names no claim: a move claims the placement it saw"
+			return "MoveTile names no claim: a move claims the placement it saw"
 		}
 	case *pb.DeleteTileRequest:
 		if r.GetClaim() == nil {

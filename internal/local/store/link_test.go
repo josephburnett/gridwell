@@ -10,9 +10,9 @@ import (
 )
 
 // A leaf link is the exit well's leaf twin: the content lives in another
-// tile, and the local row is a reference plus local framing. The store never
+// tile, and the local row is a link plus local framing. The store never
 // treats the target as something it owns, so there is no blob, no content
-// mutation, delete unlinks, and clone copies the reference.
+// mutation, delete unlinks, and copy copies the link.
 
 const remoteTarget = "remote-uuid/42"
 
@@ -25,7 +25,7 @@ func blobRowCount(t *testing.T, s *Store) int {
 	return n
 }
 
-func TestCreateLeafLinkStoresQualifiedReference(t *testing.T) {
+func TestCreateLeafLinkStoresQualifiedLink(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -80,7 +80,7 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-func TestCloneLeafLinkCopiesReference(t *testing.T) {
+func TestCopyLeafLinkCopiesLink(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -89,18 +89,18 @@ func TestCloneLeafLinkCopiesReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clone, err := s.CloneTile(ctx, &gridwellv1.CloneTileRequest{
+	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId:     ln.Id,
 		DestGridId: root, X: 2, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("clone leaf link: %v", err)
+		t.Fatalf("copy leaf link: %v", err)
 	}
-	if clone.Id == ln.Id {
-		t.Error("clone reused the source row id")
+	if cp.Id == ln.Id {
+		t.Error("copy reused the source row id")
 	}
-	if clone.LinkTargetId != remoteTarget {
-		t.Errorf("clone target = %q, want the shared reference %q", clone.LinkTargetId, remoteTarget)
+	if cp.LinkTargetId != remoteTarget {
+		t.Errorf("copy target = %q, want the shared link %q", cp.LinkTargetId, remoteTarget)
 	}
 	verifyRefcounts(t, s)
 }

@@ -13,14 +13,14 @@ import (
 // Namespace.Place. The grid rides beside it on home's side alone.
 const placementSet = `x = ?, y = ?, w = ?, h = ?`
 
-// PlaceTile is the single placement writeback: placement is one fact,
+// MoveTile is the single placement writeback: placement is one fact,
 // (grid_id, x, y, w, h), and this verb owns all of it, id-addressed with no
 // descent path. It claims the placement the writer saw (claimPlacement) and
 // bumps no version, so a move never conflicts with typing. Two tiles in one
 // cell is refused by the overlap check in this same transaction. Moving a well
 // into its own subtree is refused by wellWouldContainItself, walking a chain
 // the server derives itself.
-func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.Tile, error) {
+func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
@@ -33,7 +33,7 @@ func (s *Store) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest)
 		return nil, fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "PlaceTile", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err = s.withTileWrite(ctx, "MoveTile", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
@@ -114,7 +114,7 @@ func claimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) 
 	return nil
 }
 
-// wellWouldContainItself refuses placing a well inside its own subtree, walking
+// wellWouldContainItself refuses moving a well into its own subtree, walking
 // up from the destination grid through parent wells (gridInSubtree). Each
 // interior child grid hangs off exactly one well by construction, so the
 // ancestor chain is a server-derived fact and needs no client path. Non-well
@@ -132,7 +132,7 @@ func (s *Store) wellWouldContainItself(ctx context.Context, tx *sql.Tx, n *gridw
 		return err
 	}
 	if inside {
-		return fmt.Errorf("%w: cannot place a well inside its own subtree", ErrInvalidArgument)
+		return fmt.Errorf("%w: cannot move a well into its own subtree", ErrInvalidArgument)
 	}
 	return nil
 }

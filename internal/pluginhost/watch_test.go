@@ -767,7 +767,7 @@ func TestWatchEntryChangedIsTheEntrysTileChanged(t *testing.T) {
 	if got := awaitAnnounced(t, p, seen, "all"); len(got) != 0 {
 		t.Fatalf("the open announced %v, want nothing", got)
 	}
-	if _, err := a.PlaceTile(context.Background(), &gridwellv1.PlaceTileRequest{
+	if _, err := a.MoveTile(context.Background(), &gridwellv1.MoveTileRequest{
 		TileId: rpc.EntryTileID("all", "a"), X: 7, Y: 3, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}

@@ -47,7 +47,7 @@ func (u *linkUpstream) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.G
 		Grid: &pb.Grid{Id: "u1/g1"},
 		Tiles: []*pb.Tile{{
 			Id: "u1/1", GridId: "u1/g1", Kind: "text",
-			LinkTargetId: "u1/2", Reference: true,
+			LinkTargetId: "u1/2", Link: true,
 			X: 0, Y: 0, W: 1, H: 1,
 		}},
 	}, nil
@@ -59,7 +59,7 @@ func (u *linkUpstream) GetTile(_ context.Context, req *pb.GetTileRequest) (*pb.T
 	}
 	switch req.TileId {
 	case "u1/1":
-		return &pb.TileResponse{Tile: &pb.Tile{Id: "u1/1", GridId: "u1/g1", Kind: "text", LinkTargetId: "u1/2", Reference: true}}, nil
+		return &pb.TileResponse{Tile: &pb.Tile{Id: "u1/1", GridId: "u1/g1", Kind: "text", LinkTargetId: "u1/2", Link: true}}, nil
 	case "u1/2":
 		return &pb.TileResponse{Tile: &pb.Tile{Id: "u1/2", GridId: "u1/g2", Kind: "text"}}, nil
 	}

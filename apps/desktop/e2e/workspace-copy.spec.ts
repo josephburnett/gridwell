@@ -1,11 +1,11 @@
 import { test, expect } from './fixtures';
 import { tileAt, writeContent } from './oracle';
 
-// Clone semantics for workspaces, driven through the real gesture: an in-grid
-// right-drag clone shares the layout blob by content address, and the copies
-// diverge on the first edit, so rearranging the clone can never touch the
+// Copy semantics for workspaces, driven through the real gesture: an in-grid
+// right-drag copy shares the layout blob by content address, and the copies
+// diverge on the first edit, so rearranging the copy can never touch the
 // original's arrangement. Cross-plugin byte-copy semantics are pinned at the
-// routing seam in internal/server crossplugin_clone_test.go; this is the
+// routing seam in internal/server crossplugin_copy_test.go; this is the
 // gesture-to-store composition for the common case.
 
 
@@ -17,7 +17,7 @@ async function barLeave(gw: any): Promise<void> {
   await gw.leaveWorkspace();
 }
 
-test('cloning a workspace: shared blob, independent divergence', async ({ gw, window }) => {
+test('copying a workspace: shared blob, independent divergence', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
@@ -43,12 +43,12 @@ test('cloning a workspace: shared blob, independent divergence', async ({ gw, wi
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
   const origBlob = await gw.getTileContent(orig!.id);
 
-  // The clone gesture: right-drag from the tile's center to a free cell.
-  await gw.cloneTileCell(ax, ay, ax, ay + 2);
+  // The copy gesture: right-drag from the tile's center to a free cell.
+  await gw.copyTileCell(ax, ay, ax, ay + 2);
   const copy = tileAt(await gw.getGrid(rootGrid), 'pane', ax, ay + 2);
-  expect(copy, 'clone landed').toBeTruthy();
+  expect(copy, 'copy landed').toBeTruthy();
   expect(copy!.id).not.toBe(orig!.id);
-  expect(await gw.getTileContent(copy!.id), 'clone shares the layout bytes').toBe(origBlob);
+  expect(await gw.getTileContent(copy!.id), 'copy shares the layout bytes').toBe(origBlob);
 
   await gw.descendCell(ax, ay + 2);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
@@ -61,10 +61,10 @@ test('cloning a workspace: shared blob, independent divergence', async ({ gw, wi
     } catch {
       return false;
     }
-  }, { message: "the clone's blob must diverge", timeout: 10_000 }).toBe(true);
+  }, { message: "the copy's blob must diverge", timeout: 10_000 }).toBe(true);
   await barLeave(gw);
 
-  expect(await gw.getTileContent(orig!.id), "editing the clone must never touch the original").toBe(origBlob);
+  expect(await gw.getTileContent(orig!.id), "editing the copy must never touch the original").toBe(origBlob);
 });
 
 // A corrupt, or newer-format, layout blob: the workspace opens read-only on a

@@ -13,15 +13,15 @@ import (
 )
 
 // TargetID is the qualified id a link tile points at. The node-derived
-// reference bit is the authoritative "is a link" bit.
+// link bit is the authoritative "is a link" bit.
 func TargetID(t *gridwellv1.Tile) string {
-	if t == nil || !t.Reference {
+	if t == nil || !t.Link {
 		return ""
 	}
 	if t.LinkTargetId != "" {
 		return t.LinkTargetId
 	}
-	// A childless reference is a menu swatch or doorway tile, which names no
+	// A childless link is a menu swatch or doorway tile, which names no
 	// namespace and stays pluginhealth's.
 	return t.ChildGridId
 }

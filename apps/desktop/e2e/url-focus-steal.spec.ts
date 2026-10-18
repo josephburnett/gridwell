@@ -28,7 +28,7 @@ test('a self-reloading url view never keeps stolen focus', async ({
     })
     .toBeGreaterThan(wcBefore);
 
-  // Move pane focus off the url pane. The split's clone ascends the file level,
+  // Move pane focus off the url pane. The split's copy ascends the file level,
   // because live views cannot duplicate; clicking the grid pane then stands in
   // for the user typing somewhere else.
   await gw.splitFocusedPaneVertical();

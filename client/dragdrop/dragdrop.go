@@ -82,8 +82,8 @@ func FloorCellAt(originX, originY, cellSize, sx, sy float64) (int64, int64) {
 }
 
 // HiddenMatch reports whether a tile is skipped during render because a move
-// carries it. It matches by tile id: matching on anything a clone shares with
-// its source would make every clone vanish during the drag.
+// carries it. It matches by tile id: matching on anything a copy shares with
+// its source would make every copy vanish during the drag.
 func HiddenMatch(hidden Carry, hiddenPaneID, currentPaneID string, tileID string) bool {
 	return hiddenPaneID == currentPaneID && hidden.Has(tileID)
 }
@@ -125,7 +125,7 @@ func TileContainsCell(x, y, w, h, cx, cy int64) bool {
 }
 
 // RectsOverlap is the predicate the server's overlap check applies, so the
-// drop preflight and PlaceTile cannot disagree about a collision.
+// drop preflight and MoveTile cannot disagree about a collision.
 func RectsOverlap(ax, ay, aw, ah, bx, by, bw, bh int64) bool {
 	return ax < bx+bw && bx < ax+aw && ay < by+bh && by < ay+ah
 }
@@ -235,8 +235,8 @@ const (
 	DropDelete   // a release over the source pane's trashcan button
 	DropRejected // snaps back
 	DropMove
-	DropClone
-	// DropLink creates a reference, an exit well for a grid and a leaf link
+	DropCopy
+	// DropLink creates a link, an exit well for a grid and a leaf link
 	// otherwise. The source is untouched and identity never migrates.
 	DropLink
 )
@@ -264,7 +264,7 @@ type DropInput struct {
 	SameCell           bool
 	Occupied           bool
 	// CrossPlugin: the grids are in different id namespaces, so a left-drag
-	// verdicts DropLink and a right-drag stays DropClone.
+	// verdicts DropLink and a right-drag stays DropCopy.
 	CrossPlugin bool
 }
 
@@ -295,7 +295,7 @@ func DecideDrop(in DropInput) DropAction {
 	case in.Occupied:
 		return DropRejected
 	case in.Intent == IntentCopy:
-		return DropClone
+		return DropCopy
 	case in.Intent == IntentLink || in.CrossPlugin:
 		return DropLink
 	default:
@@ -330,7 +330,7 @@ func GhostPlanForDrop(action DropAction, forbidden bool,
 			return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
 		}
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
-	default: // DropMove / DropClone
+	default: // DropMove / DropCopy
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize}
 	}
 }

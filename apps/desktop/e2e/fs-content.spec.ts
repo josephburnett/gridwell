@@ -26,7 +26,7 @@ test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, windo
   await gw.expandPlugins();
   const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
   const labels = (menu.items ?? []).map((i: any) => i.label);
-  expect(labels, 'no dead-end search entry on plugin fs').not.toContain('search');
+  expect(labels, 'no dead-end find entry on plugin fs').not.toContain('find');
 });
 
 test('an fs grid wears the glyph its plugin declared, not a kind the client knows', async ({ gw }) => {

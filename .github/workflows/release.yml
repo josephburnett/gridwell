@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       # The plugins are their own repository. The Makefile's PLUGINS_DIR
       # defaults to ../gridwell-plugins, beside this checkout.
-      - name: clone gridwell-plugins beside this checkout
+      - name: fetch gridwell-plugins beside this checkout
         run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       - uses: actions/setup-go@v5
         with:
@@ -55,7 +55,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: clone gridwell-plugins beside this checkout
+      - name: fetch gridwell-plugins beside this checkout
         run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       - uses: actions/setup-go@v5
         with:
@@ -97,7 +97,7 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - name: clone gridwell-plugins beside this checkout
+      - name: fetch gridwell-plugins beside this checkout
         run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       - uses: actions/setup-go@v5
         with:

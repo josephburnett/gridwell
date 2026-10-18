@@ -46,9 +46,9 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
   deletes it for you, not even removing your entry from `server.yaml`. Write
   atomically (temp file, rename), and come up correctly when it is empty.
 - **Keys are forever**: a key names the same thing for the life of the
-  plugin. Changing your key scheme orphans every stored reference.
+  plugin. Changing your key scheme orphans every stored link.
 - **Unimplemented is fine**: a minimal plugin is `Info` + `List` +
-  `ReadContent`. Search = no results, ServeContent = 404, Watch = the
+  `ReadContent`. Find = no results, ServeContent = 404, Watch = the
   node learns of changes only when it next lists, WriteContent =
   read-only (leave `writable` unset), GetPreview = no thumbnail,
   Delete = refused. Unimplemented means the verb, not the key: the node
@@ -137,7 +137,7 @@ node draws such an entry as a link: dashed, with its own key, label,
 `status_detail` and placement, and its content, preview and page read through
 the target, so it reads dead once the target's context says the target is
 gone. A copy of it, or a drag out of your grid, is another link to the
-target, so a reference survives the entry moving between collections. Keep
+target, so a link survives the entry moving between collections. Keep
 `kind` the target's kind, and keep the content facts too if a node older than
 the field must still present it; a new node reads none of them on a link. The
 node mints nothing for the target until the user touches it. A well has no

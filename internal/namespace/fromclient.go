@@ -41,8 +41,8 @@ func (f fromClient) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRe
 	return f.c.GetTilePreview(ctx, req)
 }
 
-func (f fromClient) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchResponse, error) {
-	return f.c.Search(ctx, req)
+func (f fromClient) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error) {
+	return f.c.Find(ctx, req)
 }
 
 func (f fromClient) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
@@ -53,12 +53,12 @@ func (f fromClient) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Ti
 	return f.c.SetTile(ctx, req)
 }
 
-func (f fromClient) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	return f.c.PlaceTile(ctx, req)
+func (f fromClient) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error) {
+	return f.c.MoveTile(ctx, req)
 }
 
-func (f fromClient) CloneTile(ctx context.Context, req *pb.CloneTileRequest) (*pb.TileResponse, error) {
-	return f.c.CloneTile(ctx, req)
+func (f fromClient) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	return f.c.CopyTile(ctx, req)
 }
 
 func (f fromClient) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
@@ -73,8 +73,8 @@ func (f fromClient) SetSelection(ctx context.Context, req *pb.SetSelectionReques
 	return f.c.SetSelection(ctx, req)
 }
 
-func (f fromClient) ShellSessionAlive(ctx context.Context, req *pb.ShellSessionAliveRequest) (*pb.ShellSessionAliveResponse, error) {
-	return f.c.ShellSessionAlive(ctx, req)
+func (f fromClient) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
+	return f.c.ShellTmuxAlive(ctx, req)
 }
 
 func (f fromClient) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {

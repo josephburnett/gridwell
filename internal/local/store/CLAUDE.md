@@ -9,7 +9,7 @@ tombstones. What a connection last answered is cache and lives in `cache.db`
 
 A plugin row is minted LAZILY: listing a source mints nothing (`Overlay` is
 a read-only join, `Mint` the one INSERT), so a row exists only for an entry
-the user has touched — moved, resized, framed, or pointed a reference at.
+the user has touched — moved, resized, framed, or pointed a link at.
 A listing writes only to rows that exist: `Refresh` keeps a touched row's
 outage snapshot at what the source last said, and `Sweep` tombstones a row
 whose key an authoritative listing no longer names.
@@ -43,8 +43,8 @@ intact.
 - `columns.go` (`tilesColumns`, `gridsColumns`, `connectionsColumns`) is the
   one description of a column: name, SQL type and constraints, comment, the
   version whose data it carries (`since`), the `gridwellv1.Tile`/`gridwellv1.Grid` field it
-  binds to when on the wire, and a `noCopy` reason when a clone skips it. The
-  DDL, the SELECT, the scan, the clone INSERT, and every rebuild copy list
+  binds to when on the wire, and a `noCopy` reason when a copy skips it. The
+  DDL, the SELECT, the scan, the copy INSERT, and every rebuild copy list
   derive from it. Only the tiles kind `CHECK` (`tilesCheck`) is literal text.
 - `connections` is in the chain like everything else, adopted by v13. The
   store owns its shape and its queries (`connections.go`), and writes its
@@ -72,7 +72,7 @@ intact.
 
 An on-wire column also needs its proto field (same snake_case name);
 `TestDescriptorMatchesProto` fails until they agree. A derived proto field
-goes on that test's `wireOnly` list with its reason. If a clone must supply
+goes on that test's `wireOnly` list with its reason. If a copy must supply
 a value, `insertTileCopy`'s value map is where; `copyBinding` errors by name
 until it does.
 
@@ -88,7 +88,7 @@ migration tx: create `tiles_new` from the current DDL → `INSERT … SELECT`
 the columns `rebuildColumns(N-1)` derives → `DROP TABLE tiles` → rename →
 recreate every `idx_tiles_*` index (from `tilesIndexDDL` and
 `externalsIndexDDL`) → restore the `sqlite_sequence` row. Without the
-restore, ids of deleted tiles get reused and stored references resolve to
+restore, ids of deleted tiles get reused and stored links resolve to
 the wrong tile. `migrateV10` is the worked example; `rebuildSelect` is where
 a retiring column's meaning converts into its successor (`view_x + w/2`).
 `grids` has no `CHECK`: `DROP INDEX` then `ALTER TABLE … DROP COLUMN`.

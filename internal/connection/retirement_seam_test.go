@@ -44,9 +44,9 @@ func (c landingClient) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest
 
 // A connection's name is dropped from server.yaml and later declared again:
 // three boots over one store, across the boot reconcile, the row, the routing
-// table, and the roster a client reads a reference's deadness from. Boot 1
+// table, and the roster a client reads a link's deadness from. Boot 1
 // declares rtb and a mount into it is live; boot 2 drops the stanza, and the
-// row survives with its landing while the reference goes dead through the
+// row survives with its landing while the link goes dead through the
 // roster, never swept; boot 3 re-declares it and everything comes back on the
 // same landing.
 func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
@@ -58,9 +58,9 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	dialer := func(dial.Config) (namespace.Namespace, func(), error) {
 		return landingClient{root: "rnode1/7"}, func() {}, nil
 	}
-	// The stored reference a mount leaves behind: a link tile into the
+	// The stored link a mount leaves behind: a link tile into the
 	// connection's namespace, as the user's grid holds it.
-	ref := &gridwellv1.Tile{Reference: true, LinkTargetId: nodeID + "/rtb/rnode1/7"}
+	ref := &gridwellv1.Tile{Link: true, LinkTargetId: nodeID + "/rtb/rnode1/7"}
 	roster := func(s *Server) []*gridwellv1.PluginInfo {
 		var out []*gridwellv1.PluginInfo
 		for _, r := range s.Rows(ctx) {
@@ -71,7 +71,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 		return append(out, &gridwellv1.PluginInfo{Uuid: nodeID})
 	}
 
-	// Boot 1: declared, landing learned, reference live.
+	// Boot 1: declared, landing learned, link live.
 	s1, err := New(st, dialer, "", rtb, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 		t.Fatalf("boot 1 remote_root = %q, want the learned landing", r.RemoteRoot)
 	}
 	if deadref.DeadTile(ref, roster(s1), nodeID, nil) {
-		t.Fatal("boot 1: a declared connection's reference must be live")
+		t.Fatal("boot 1: a declared connection's link must be live")
 	}
 	if _, err := s1.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {
 		t.Fatalf("boot 1 GetGrid through the connection: %v", err)
@@ -91,7 +91,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	}
 
 	// Boot 2: the stanza is gone. Nothing is retired; the row and its landing
-	// stay; the namespace does not resolve; the reference is dead.
+	// stay; the namespace does not resolve; the link is dead.
 	s2, err := New(st, dialer, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("boot 2 GetGrid = %v, want NotFound: an undeclared namespace resolves to nothing", err)
 	}
-	// Unresolvable is not GONE: a Probe on the reference must never tell the
+	// Unresolvable is not GONE: a Probe on the link must never tell the
 	// sweeper the tile is gone, or removing a stanza would delete the user's
 	// links.
 	pr, err := s2.Probe(ctx, &gridwellv1.ProbeRequest{TileId: "rtb/rnode1/7"})
@@ -121,7 +121,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 		t.Fatal("boot 2 Probe said GONE for a name that was never retired")
 	}
 	if !deadref.DeadTile(ref, roster(s2), nodeID, nil) {
-		t.Fatal("boot 2: a reference into a namespace the node no longer declares is dead")
+		t.Fatal("boot 2: a link into a namespace the node no longer declares is dead")
 	}
 	if err := s2.Close(); err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 		t.Fatalf("boot 3 rows = %+v, want rtb on its remembered landing", rows)
 	}
 	if deadref.DeadTile(ref, roster(s3), nodeID, nil) {
-		t.Fatal("boot 3: the reference must resolve again")
+		t.Fatal("boot 3: the link must resolve again")
 	}
 	if _, err := s3.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: "rtb/rnode1/7"}); err != nil {
 		t.Fatalf("boot 3 GetGrid through the restored connection: %v", err)

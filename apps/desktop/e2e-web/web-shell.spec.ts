@@ -19,7 +19,7 @@ test('a browser attaches a live shell and its output comes back', async ({ gw, w
 
   await gw.openMenu();
   await gw.dragCreate('shell', cx, cy);
-  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(cx, cy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 20_000 }).not.toBe('');
 
   await window.keyboard.type('echo browser-shell-lives');
@@ -33,7 +33,7 @@ test('a browser attaches a live shell and its output comes back', async ({ gw, w
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(errs.notices, 'no capability notice: the browser really attached').toEqual([]);
 
-  // Delete the tile so its tmux session dies before teardown.
+  // Delete the tile so its tmux dies before teardown.
   await gw.ascendViaCrumb();
   await expect.poll(async () => (await gw.focused()).textFocus).toBe('');
   await gw.deleteTileCell(cx, cy);

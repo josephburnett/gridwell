@@ -9,7 +9,7 @@ import (
 )
 
 // The open seam: a store opened the way the binary opens it reports the config
-// id, not the bootstrap-minted system.plugin_uuid, which qualified references
+// id, not the bootstrap-minted system.plugin_uuid, which qualified links
 // would never match.
 func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")

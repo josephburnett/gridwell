@@ -23,7 +23,7 @@ import (
 // ServerConfig is ~/.gridwell/server.yaml.
 type ServerConfig struct {
 	// ID is the node's identity and its home's: the segment on every local
-	// reference ("<id>/12") and every connection. Never changed once minted.
+	// link ("<id>/12") and every connection. Never changed once minted.
 	ID string `yaml:"id,omitempty"`
 	// Web is the web API. Its password is not yaml; see WebPassword.
 	Web WebConfig `yaml:"web,omitempty"`
@@ -42,7 +42,7 @@ type ServerConfig struct {
 	// them back. Only RetiredNames retires.
 	Connections []ConnectionConfig `yaml:"connections,omitempty"`
 	// RetiredNames is the one owner of retirement: a name here is never
-	// reused and its references stay dangling rather than re-routed. Boot
+	// reused and its links stay dangling rather than re-routed. Boot
 	// mirrors it onto the rows and retires no other way.
 	RetiredNames []string `yaml:"retired_names,omitempty"`
 	// Plugins are the content plugins: separate binaries speaking plugin.v1.
@@ -79,7 +79,7 @@ func FederationSocket(home string) string {
 }
 
 // ConnectionConfig is one remote node. Name is an immutable id, the segment
-// inside every stored reference through this connection, so renaming it
+// inside every stored link through this connection, so renaming it
 // dangles them; change Label instead. Host set means the ssh bridge, Host
 // empty a direct dial; Addr is the far socket path either way.
 type ConnectionConfig struct {
@@ -94,7 +94,7 @@ type ConnectionConfig struct {
 }
 
 // PluginConfig describes one content plugin. ID is the segment on every
-// reference into it, minted once and never changed; Label is display only.
+// link into it, minted once and never changed; Label is display only.
 // Binary defaults to gridwell-plugin-<kind> beside the gridwell binary.
 // Config lands in the plugin's environment, so a secret is a path, not a value.
 type PluginConfig struct {
@@ -326,7 +326,7 @@ func setScalar(m *yaml.Node, key, value string) {
 }
 
 // validateIDs is the one check that catches a hand-edited id before it is
-// stored into references it can never be removed from. Two properties are
+// stored into links it can never be removed from. Two properties are
 // load-bearing: no '/', rpc.SplitID's delimiter, and never purely numeric,
 // which is how a URL tells a segment from a tile id.
 func validateIDs(cfg *ServerConfig) error {

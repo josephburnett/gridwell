@@ -249,7 +249,7 @@ func TestTheEntityIsTheFirstIDFieldSet(t *testing.T) {
 	}{
 		{&pb.SetFramingRequest{TileId: "a/t1", RootGridId: "a/g1"}, "a/t1"},
 		{&pb.SetFramingRequest{RootGridId: "a/g1"}, "a/g1"},
-		{&pb.PlaceTileRequest{TileId: "a/t1", GridId: "a/g1"}, "a/t1"},
+		{&pb.MoveTileRequest{TileId: "a/t1", GridId: "a/g1"}, "a/t1"},
 		{&pb.CreateTileRequest{GridId: "a/g1"}, "a/g1"},
 		{&pb.SubscribeRequest{}, ""},
 		{"not a message", ""},

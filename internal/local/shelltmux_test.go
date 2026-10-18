@@ -15,20 +15,20 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/tmux"
 )
 
-// The namespace side of a shared session: every tile naming a session attaches
-// that one session, the tile it was opened from is the one its detach
-// relabels, and the session lives until the last row naming it is destroyed.
+// The namespace side of a shared tmux: every tile naming a tmux attaches
+// that one tmux, the tile it was opened from is the one its detach
+// relabels, and the tmux lives until the last row naming it is destroyed.
 
-func cloneShell(t *testing.T, p *local.Plugin, srcID string, x int64) string {
+func copyShell(t *testing.T, p *local.Plugin, srcID string, x int64) string {
 	t.Helper()
 	ctx := context.Background()
 	src, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: srcID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := p.CloneTile(ctx, &gridwellv1.CloneTileRequest{TileId: srcID, DestGridId: src.Tile.GridId, X: x})
+	c, err := p.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: srcID, DestGridId: src.Tile.GridId, X: x})
 	if err != nil {
-		t.Fatalf("CloneTile: %v", err)
+		t.Fatalf("CopyTile: %v", err)
 	}
 	return c.Tile.Id
 }
@@ -46,7 +46,7 @@ func (a attached) detach(t *testing.T) error {
 	return <-a.done
 }
 
-// attach opens tileID's shell and waits for the fake's echo, so the session is
+// attach opens tileID's shell and waits for the fake's echo, so the tmux is
 // held when it returns. A refused open returns the refusal instead.
 func attach(t *testing.T, p *local.Plugin, tileID string) (attached, error) {
 	t.Helper()
@@ -80,27 +80,27 @@ func attach(t *testing.T, p *local.Plugin, tileID string) (attached, error) {
 	}
 }
 
-// A clone of a never-opened shell shares the session not yet created: opened
-// first, it starts the session under its source's key, and the source then
-// attaches to that same session.
-func TestAClonedShellStartsAndSharesItsSourcesSession(t *testing.T) {
+// A copy of a never-opened shell shares the tmux not yet created: opened
+// first, it starts the tmux under its source's key, and the source then
+// attaches to that same tmux.
+func TestACopiedShellStartsAndSharesItsSourcesTmux(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "top"
 	p, a := shellPluginWithTile(t, fake)
-	b := cloneShell(t, p, a, 2)
+	b := copyShell(t, p, a, 2)
 
 	sb, err := attach(t, p, b)
 	if err != nil {
-		t.Fatalf("open the clone: %v", err)
+		t.Fatalf("open the copy: %v", err)
 	}
-	if s := fake.LastSession(); s.Key != a || s.OpenMode != tmux.ModeCreate {
-		t.Fatalf("the clone opened session %q mode %v, want its source's %q created", s.Key, s.OpenMode, a)
+	if s := fake.LastAttachment(); s.Key != a || s.OpenMode != tmux.ModeCreate {
+		t.Fatalf("the copy opened tmux %q mode %v, want its source's %q created", s.Key, s.OpenMode, a)
 	}
 	if err := sb.detach(t); err != nil {
 		t.Fatal(err)
 	}
 	if got := altOf(t, p, b); got != "top" {
-		t.Errorf("the clone's label = %q, want the capture %q", got, "top")
+		t.Errorf("the copy's label = %q, want the capture %q", got, "top")
 	}
 	if got := altOf(t, p, a); got != "shell" {
 		t.Errorf("the source's label = %q: a detach relabels the tile it was opened from only", got)
@@ -110,18 +110,18 @@ func TestAClonedShellStartsAndSharesItsSourcesSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open the source: %v", err)
 	}
-	if s := fake.LastSession(); s.Key != a || s.OpenMode != tmux.ModeAttach {
-		t.Errorf("the source opened session %q mode %v, want %q attached", s.Key, s.OpenMode, a)
+	if s := fake.LastAttachment(); s.Key != a || s.OpenMode != tmux.ModeAttach {
+		t.Errorf("the source opened tmux %q mode %v, want %q attached", s.Key, s.OpenMode, a)
 	}
 	_ = sa.detach(t)
 }
 
-// Two tiles on one session hold one attachment: the second evicts the first
+// Two tiles on one tmux hold one attachment: the second evicts the first
 // and reuses its PTY.
-func TestASecondTileOnOneSessionTakesItOver(t *testing.T) {
+func TestASecondTileOnOneTmuxTakesItOver(t *testing.T) {
 	fake := shellsvctest.New()
 	p, a := shellPluginWithTile(t, fake)
-	b := cloneShell(t, p, a, 2)
+	b := copyShell(t, p, a, 2)
 
 	first, err := attach(t, p, a)
 	if err != nil {
@@ -135,28 +135,28 @@ func TestASecondTileOnOneSessionTakesItOver(t *testing.T) {
 		t.Errorf("the evicted holder ended with %v, want a clean end", err)
 	}
 	first.cancel()
-	if n := fake.SessionCount(); n != 1 {
-		t.Errorf("opened %d PTYs, want 1: one attachment per session", n)
+	if n := fake.AttachmentCount(); n != 1 {
+		t.Errorf("opened %d PTYs, want 1: one attachment per tmux", n)
 	}
 	_ = second.detach(t)
 }
 
-// A session someone started and that is gone stays gone behind every preview
+// A tmux someone started and that is gone stays gone behind every preview
 // naming it; one never started is created by whichever tile opens it first.
-func TestAStartedSessionIsNeverFabricatedBehindAPreview(t *testing.T) {
+func TestAStartedTmuxIsNeverFabricatedBehindAPreview(t *testing.T) {
 	fake := shellsvctest.New()
 	p, a := shellPluginWithTile(t, fake)
-	b := cloneShell(t, p, a, 2)
+	b := copyShell(t, p, a, 2)
 	if _, err := p.SetTile(context.Background(), &gridwellv1.SetTileRequest{TileId: a,
 		Tile: &gridwellv1.Tile{Kind: "shell"}, Preview: []byte("preview")}); err != nil {
 		t.Fatal(err)
 	}
 	_, err := attach(t, p, b)
 	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("opening a clone with no preview of a started, gone session = %v, want FailedPrecondition", err)
+		t.Fatalf("opening a copy with no preview of a started, gone tmux = %v, want FailedPrecondition", err)
 	}
-	if n := fake.SessionCount(); n != 0 {
-		t.Errorf("opened %d sessions behind a preview", n)
+	if n := fake.AttachmentCount(); n != 0 {
+		t.Errorf("opened %d tmuxes behind a preview", n)
 	}
 }
 
@@ -169,35 +169,35 @@ func TestAMissingShellRowRefusesAndSpawnsNothing(t *testing.T) {
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("OpenShell on a missing row = %v, want NotFound", err)
 	}
-	if n := fake.SessionCount(); n != 0 {
-		t.Errorf("a missing row spawned %d sessions", n)
+	if n := fake.AttachmentCount(); n != 0 {
+		t.Errorf("a missing row spawned %d tmuxes", n)
 	}
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: "999"})
+	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: "999"})
 	if err != nil || resp.Alive {
 		t.Errorf("probe of a missing row = (%v, %v), want dead", resp, err)
 	}
 }
 
-// A clone's probe asks its session, not its own id.
-func TestACloneProbesTheSessionItNames(t *testing.T) {
+// A copy's probe asks its tmux, not its own id.
+func TestACopyProbesTheTmuxItNames(t *testing.T) {
 	fake := shellsvctest.New()
 	p, a := shellPluginWithTile(t, fake)
-	b := cloneShell(t, p, a, 2)
+	b := copyShell(t, p, a, 2)
 	fake.SetAlive(a, true)
-	resp, err := p.ShellSessionAlive(context.Background(), &gridwellv1.ShellSessionAliveRequest{TileId: b})
+	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: b})
 	if err != nil || !resp.Alive {
-		t.Errorf("the clone's probe = (%v, %v), want its source's live session", resp, err)
+		t.Errorf("the copy's probe = (%v, %v), want its source's live tmux", resp, err)
 	}
 }
 
-// The trash keeps a session, destroying one of two rows keeps it, destroying
-// the last kills it; the boot sweep spares a session a copy still names after
+// The trash keeps a tmux, destroying one of two rows keeps it, destroying
+// the last kills it; the boot sweep spares a tmux a copy still names after
 // its starter is gone.
-func TestASessionDiesWithTheLastRowNamingIt(t *testing.T) {
+func TestATmuxDiesWithTheLastRowNamingIt(t *testing.T) {
 	ctx := context.Background()
 	fake := shellsvctest.New()
 	p, a := shellPluginWithTile(t, fake)
-	b := cloneShell(t, p, a, 2)
+	b := copyShell(t, p, a, 2)
 	fake.SetAlive(a, true)
 	del := func(id string) {
 		t.Helper()
@@ -206,23 +206,23 @@ func TestASessionDiesWithTheLastRowNamingIt(t *testing.T) {
 		}
 	}
 	del(a) // to the trash
-	del(a) // destroyed, b still names the session
+	del(a) // destroyed, b still names the tmux
 	if slices.Contains(fake.Killed(), a) {
-		t.Fatal("destroying the source killed the session its clone names")
+		t.Fatal("destroying the source killed the tmux its copy names")
 	}
-	fake.SetAlive("4242", true) // a session no row names
+	fake.SetAlive("4242", true) // a tmux no row names
 	if n, err := p.CleanupOrphanedShells(ctx); err != nil || n != 1 {
-		t.Fatalf("orphan sweep = (%d, %v), want the one unnamed session", n, err)
+		t.Fatalf("orphan sweep = (%d, %v), want the one unnamed tmux", n, err)
 	}
 	if slices.Contains(fake.Killed(), a) {
-		t.Fatal("the orphan sweep killed a session a clone names")
+		t.Fatal("the orphan sweep killed a tmux a copy names")
 	}
 	del(b)
 	if slices.Contains(fake.Killed(), a) {
-		t.Fatal("a trashed clone still names the session; the trash must keep it")
+		t.Fatal("a trashed copy still names the tmux; the trash must keep it")
 	}
 	del(b)
 	if !slices.Contains(fake.Killed(), a) {
-		t.Errorf("killed %v, want the session %s once its last row was destroyed", fake.Killed(), a)
+		t.Errorf("killed %v, want the tmux %s once its last row was destroyed", fake.Killed(), a)
 	}
 }

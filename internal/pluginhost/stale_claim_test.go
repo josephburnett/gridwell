@@ -56,11 +56,11 @@ func TestAPluginRowsPlacementClaimsWhatTheWriterSaw(t *testing.T) {
 	a, rows := claimAdapter(t)
 	row := rows[rpc.KindText]
 	seen := &gridwellv1.Placement{GridId: row.GridId, X: row.X, Y: row.Y, W: row.W, H: row.H}
-	moved, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: row.Id, X: 9, Y: 9, W: 1, H: 1, Claim: seen})
+	moved, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: row.Id, X: 9, Y: 9, W: 1, H: 1, Claim: seen})
 	if err != nil {
 		t.Fatalf("first move: %v", err)
 	}
-	_, err = a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: moved.Tile.Id, X: 11, Y: 9, W: 1, H: 1, Claim: seen})
+	_, err = a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: moved.Tile.Id, X: 11, Y: 9, W: 1, H: 1, Claim: seen})
 	wantConflict(t, "stale move", err)
 	got, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: moved.Tile.Id})
 	if err != nil {
@@ -76,7 +76,7 @@ func TestAPluginRowsDeleteClaimsWhatTheWriterSaw(t *testing.T) {
 	a, rows := claimAdapter(t)
 	row := rows[rpc.KindText]
 	seen := &gridwellv1.Placement{GridId: row.GridId, X: row.X, Y: row.Y, W: row.W, H: row.H}
-	moved, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: row.Id, X: 9, Y: 9, W: 1, H: 1, Claim: seen})
+	moved, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: row.Id, X: 9, Y: 9, W: 1, H: 1, Claim: seen})
 	if err != nil {
 		t.Fatal(err)
 	}

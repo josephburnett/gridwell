@@ -94,7 +94,7 @@ func (a *App) navPopLevel(e nav.Effect) {
 	a.tree = pane.TreeAtPlace("", e.GridID, nil, rpc.View{})
 }
 
-// captureWorkspaceTree clones the window layout as a fresh pane tile's
+// captureWorkspaceTree copies the window layout as a fresh pane tile's
 // initial arrangement, through the persister's own encode and decode pair, so
 // the capture is byte-for-byte what the first flush stores. Any failure
 // yields the single-pane default, because a capture must not block the

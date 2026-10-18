@@ -43,12 +43,12 @@ func TestAPlacementHoldsUntilItsOwnEchoOrVerdict(t *testing.T) {
 			c.PutGrid(&gridwellv1.Grid{Id: grid}, tiles)
 		}
 	}
-	type step func(c *Cache, pls []*Placing)
-	ev := func(f func(*Cache)) step { return func(c *Cache, _ []*Placing) { f(c) } }
+	type step func(c *Cache, pls []*Moving)
+	ev := func(f func(*Cache)) step { return func(c *Cache, _ []*Moving) { f(c) } }
 	landed := func(i int, p Placement) step {
-		return func(_ *Cache, pls []*Placing) { pls[i].Landed(row(p, "answer")) }
+		return func(_ *Cache, pls []*Moving) { pls[i].Landed(row(p, "answer")) }
 	}
-	failed := func(i int) step { return func(_ *Cache, pls []*Placing) { pls[i].Failed() } }
+	failed := func(i int) step { return func(_ *Cache, pls []*Moving) { pls[i].Failed() } }
 
 	cases := []struct {
 		name   string
@@ -95,11 +95,11 @@ func TestAPlacementHoldsUntilItsOwnEchoOrVerdict(t *testing.T) {
 			c := New()
 			c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row(origin, "start")})
 			c.PutGrid(&gridwellv1.Grid{Id: "b"}, nil)
-			var pls []*Placing
+			var pls []*Moving
 			for _, p := range tc.places {
-				pl := c.Place(id, p)
+				pl := c.Move(id, p)
 				if pl == nil {
-					t.Fatalf("Place(%v) held nothing", p)
+					t.Fatalf("Move(%v) held nothing", p)
 				}
 				pls = append(pls, pl)
 			}
@@ -129,7 +129,7 @@ func TestAHeldRowTakesWhatThePlacementDidNotSet(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{
 		{Id: "t", GridId: "a", Kind: rpc.KindText, W: 1, H: 1, Version: 2, AltText: "old"}})
-	c.Place("t", Placement{GridID: "a", X: 4, W: 1, H: 1})
+	c.Move("t", Placement{GridID: "a", X: 4, W: 1, H: 1})
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
 		Tile: &gridwellv1.Tile{Id: "t", GridId: "a", Kind: rpc.KindText, W: 1, H: 1, Version: 3, AltText: "renamed"}}}})
 	got := mustRow(t, c, "a", "t")
@@ -144,7 +144,7 @@ func TestAnAnswerUnderAMintedIdReleasesTheHold(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{
 		{Id: "key:x", GridId: "a", Kind: rpc.KindText, W: 1, H: 1}})
-	pl := c.Place("key:x", Placement{GridID: "a", X: 2, W: 1, H: 1})
+	pl := c.Move("key:x", Placement{GridID: "a", X: 2, W: 1, H: 1})
 	pl.Landed(&gridwellv1.Tile{Id: "k3a9z1q", GridId: "a", Kind: rpc.KindText, X: 2, W: 1, H: 1})
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
 		Tile: &gridwellv1.Tile{Id: "key:x", GridId: "a", Kind: rpc.KindText, X: 6, W: 1, H: 1}}}})
@@ -157,10 +157,10 @@ func TestAnAnswerUnderAMintedIdReleasesTheHold(t *testing.T) {
 // is the echo's to show.
 func TestPlacingAnUncachedRowHoldsNothing(t *testing.T) {
 	c := New()
-	if pl := c.Place("t", Placement{GridID: "a", W: 1, H: 1}); pl != nil {
-		t.Errorf("Place on an empty cache = %v, want nil", pl)
+	if pl := c.Move("t", Placement{GridID: "a", W: 1, H: 1}); pl != nil {
+		t.Errorf("Move on an empty cache = %v, want nil", pl)
 	}
-	var pl *Placing
+	var pl *Moving
 	pl.Landed(nil)
 	pl.Failed()
 }

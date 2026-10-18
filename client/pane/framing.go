@@ -83,7 +83,7 @@ func FramingWriters(panes []PaneGrid, focusedID string, laid map[string]Rect) ma
 }
 
 // Holder names a pane, the content tile it is descended into, and the key of
-// the live resource behind it: a shell's session (rpc.ShellSession), which
+// the live resource behind it: a shell's tmux (rpc.ShellTmux), which
 // several tiles may name, or else the tile itself.
 type Holder struct {
 	PaneID string

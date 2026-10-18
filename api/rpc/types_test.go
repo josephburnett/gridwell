@@ -156,12 +156,12 @@ func TestPluginWellTile(t *testing.T) {
 	if !IsExitWell(got) {
 		t.Errorf("PluginWellTile is not an exit well; a doorway would draw an inert interior well")
 	}
-	// Reference is the one "this is a link" signal, and the client reads it
+	// Link is the one "this is a link" signal, and the client reads it
 	// alone. This synthetic tile never passes through the server's
 	// qualifyTiles, so it must stamp the bit itself or the menu swatch loses
 	// its dashed border.
-	if !got.Reference {
-		t.Error("PluginWellTile does not set Reference; the doorway swatch would render as owned content, not a link")
+	if !got.Link {
+		t.Error("PluginWellTile does not set Link; the doorway swatch would render as owned content, not a link")
 	}
 	if got.AltText != pl.Label {
 		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
@@ -243,7 +243,7 @@ func TestHomeRow(t *testing.T) {
 // TestContentID: the one resolution point for read-through. A leaf link's
 // content operations key by its target; an owned tile keys by itself. Every
 // client content path (body fetch, edit buffer, save routing, preview fetch,
-// shell session, pane layout) reads this, so a link and its target share one
+// shell's tmux, pane layout) reads this, so a link and its target share one
 // content fact by construction.
 func TestContentID(t *testing.T) {
 	link := &pb.Tile{Id: "b/9", Kind: KindText, LinkTargetId: "a/42"}
@@ -302,14 +302,14 @@ func TestTextDocumentAndPageContent(t *testing.T) {
 }
 
 // TestLeafLink pins that the link question is the target's presence, not the
-// Reference flag: a well with a qualified child grid is a reference too, and
+// Link flag: a well with a qualified child grid is a link too, and
 // it owns its row.
 func TestLeafLink(t *testing.T) {
-	link := &pb.Tile{Id: "b/9", Kind: KindText, LinkTargetId: "a/42", Reference: true}
+	link := &pb.Tile{Id: "b/9", Kind: KindText, LinkTargetId: "a/42", Link: true}
 	if !LeafLink(link) {
 		t.Error("a row with a target is a leaf link")
 	}
-	mount := &pb.Tile{Id: "b/1", Kind: KindWell, ChildGridId: "a/7", Reference: true}
+	mount := &pb.Tile{Id: "b/1", Kind: KindWell, ChildGridId: "a/7", Link: true}
 	if LeafLink(mount) {
 		t.Error("an exit well is not a leaf link")
 	}

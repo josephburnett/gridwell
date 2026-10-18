@@ -223,17 +223,17 @@ func TestGmailProbeAnswersForTheContextAsked(t *testing.T) {
 	}
 }
 
-// A search hit lands on the message's one tile, the one all mail lists — the
+// A find hit lands on the message's one tile, the one all mail lists — the
 // same id, so the hit descends into what the grid shows.
-func TestGmailSearchLandsOnTheAllMailTile(t *testing.T) {
+func TestGmailFindLandsOnTheAllMailTile(t *testing.T) {
 	n := newGmailNode(t, "1h")
 	want := n.tile(t, n.all, "Invoice 41")
-	resp, err := n.cl.Search(t.Context(), "invoice", "", 0)
+	resp, err := n.cl.Find(t.Context(), "invoice", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := resp.GetResults(); len(got) != 1 || got[0].GetTile().GetId() != want.Id {
-		t.Fatalf("search invoice = %v, want all mail's %s", resp, want.Id)
+		t.Fatalf("find invoice = %v, want all mail's %s", resp, want.Id)
 	}
 }
 
@@ -288,10 +288,10 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 	placed := map[string]*gridwellv1.Tile{}
 	for i, grid := range []string{n.inbox, n.starred} {
 		before := n.tile(t, grid, "Invoice 41")
-		if before.Reference {
+		if before.Link {
 			t.Fatalf("%s drew a link from an entry with no link_target", grid)
 		}
-		if _, err := n.cl.PlaceTile(ctx, claimtest.Claimed(t, n.cl, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1})); err != nil {
+		if _, err := n.cl.MoveTile(ctx, claimtest.Claimed(t, n.cl, &gridwellv1.MoveTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1})); err != nil {
 			t.Fatal(err)
 		}
 		placed[grid] = before
@@ -304,8 +304,8 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 		if after.Id != placed[grid].Id || after.X != 7 || after.Y != int64(-2-i) || after.W != 2 {
 			t.Errorf("%s: after = %s at (%d,%d) w%d, want %s where the user put it", grid, after.Id, after.X, after.Y, after.W, placed[grid].Id)
 		}
-		if !after.Reference || after.LinkTargetId != target.Id {
-			t.Errorf("%s: after = reference %v target %q, want a link to %s", grid, after.Reference, after.LinkTargetId, target.Id)
+		if !after.Link || after.LinkTargetId != target.Id {
+			t.Errorf("%s: after = link %v target %q, want a link to %s", grid, after.Link, after.LinkTargetId, target.Id)
 		}
 	}
 }
@@ -324,7 +324,7 @@ func TestGmailDeleteIsRefusedWithItsReason(t *testing.T) {
 }
 
 // A message has no text body, and nothing the node does for a url entry asks
-// for one: listing, serving the email, and a cross-plugin clone all read
+// for one: listing, serving the email, and a cross-plugin copy all read
 // zero. Every reader of a body gates on a body kind (rpc.IsBodyKind: the deep
 // copy, the cache's prefetch; rpc.TextDocument: the client's descent), and a
 // message is a url, so the plugin serves no ReadContent at all.
@@ -335,10 +335,10 @@ func TestGmailURLEntryNeedsNoTextBody(t *testing.T) {
 		t.Fatalf("a message is kind %q; this test's premise is a url", msg.Kind)
 	}
 
-	if _, err := n.cl.CloneTile(t.Context(), &gridwellv1.CloneTileRequest{
+	if _, err := n.cl.CopyTile(t.Context(), &gridwellv1.CopyTileRequest{
 		TileId: msg.Id, DestGridId: n.home, X: 3, Y: 3,
 	}); err != nil {
-		t.Fatalf("clone the message home: %v", err)
+		t.Fatalf("copy the message home: %v", err)
 	}
 	if got := n.cards.n.Load(); got != 0 {
 		t.Fatalf("the node read %d text bodies for a url entry", got)

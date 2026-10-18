@@ -74,11 +74,11 @@ func TestCreateURLEmptyString(t *testing.T) {
 
 // TestMountUnknownPlugin asserts that mounting an unregistered plugin uuid is
 // rejected at the boundary with NotFound, not somewhere deeper. (Mounting is
-// a clone of a node-grid tile; an unknown plugin has no tile, so the source
+// a copy of a node-grid tile; an unknown plugin has no tile, so the source
 // id routes nowhere.)
 func TestMountUnknownPlugin(t *testing.T) {
 	_, cl, root := newTestServer(t)
-	_, err := cl.CloneTile(context.Background(), &gridwellv1.CloneTileRequest{
+	_, err := cl.CopyTile(context.Background(), &gridwellv1.CopyTileRequest{
 		TileId: "no-such-plugin/1", DestGridId: root, X: 0, Y: 0,
 	})
 	if got := errCode(err); got != connect.CodeNotFound {

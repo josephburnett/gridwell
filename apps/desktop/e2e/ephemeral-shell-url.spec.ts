@@ -23,7 +23,7 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
   const shellCy = Math.round(home.cy);
   await gw.openMenu();
   await gw.dragCreate('shell', shellCx, shellCy);
-  await gw.descendCell(shellCx, shellCy); // the drop lands bare; the descent creates the session
+  await gw.descendCell(shellCx, shellCy); // the drop lands bare; the descent creates the tmux
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
   const shellPane = await gw.focused();
   const shellFocus = shellPane.textFocus;
@@ -86,7 +86,7 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
     }, { timeout: 10_000 })
     .toBe(0);
 
-  // Delete the shell tile at the end so its tmux session is killed and teardown
+  // Delete the shell tile at the end so its tmux is killed and teardown
   // does not hang on a live PTY.
   const up = (await gw.panes()).find((p) => p.id === shellPane.id)!;
   await window.mouse.click(up.x + up.w / 2, up.y + up.h / 2);

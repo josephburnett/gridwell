@@ -31,28 +31,28 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Gridwell_Info_FullMethodName              = "/gridwell.v1.Gridwell/Info"
-	Gridwell_Probe_FullMethodName             = "/gridwell.v1.Gridwell/Probe"
-	Gridwell_Handshake_FullMethodName         = "/gridwell.v1.Gridwell/Handshake"
-	Gridwell_OpenShell_FullMethodName         = "/gridwell.v1.Gridwell/OpenShell"
-	Gridwell_GetGrid_FullMethodName           = "/gridwell.v1.Gridwell/GetGrid"
-	Gridwell_GetTile_FullMethodName           = "/gridwell.v1.Gridwell/GetTile"
-	Gridwell_GetTilePreview_FullMethodName    = "/gridwell.v1.Gridwell/GetTilePreview"
-	Gridwell_Search_FullMethodName            = "/gridwell.v1.Gridwell/Search"
-	Gridwell_ReadContent_FullMethodName       = "/gridwell.v1.Gridwell/ReadContent"
-	Gridwell_WriteContent_FullMethodName      = "/gridwell.v1.Gridwell/WriteContent"
-	Gridwell_ServeContent_FullMethodName      = "/gridwell.v1.Gridwell/ServeContent"
-	Gridwell_PlaceTile_FullMethodName         = "/gridwell.v1.Gridwell/PlaceTile"
-	Gridwell_CreateTile_FullMethodName        = "/gridwell.v1.Gridwell/CreateTile"
-	Gridwell_SetTile_FullMethodName           = "/gridwell.v1.Gridwell/SetTile"
-	Gridwell_CloneTile_FullMethodName         = "/gridwell.v1.Gridwell/CloneTile"
-	Gridwell_DeleteTile_FullMethodName        = "/gridwell.v1.Gridwell/DeleteTile"
-	Gridwell_SetFraming_FullMethodName        = "/gridwell.v1.Gridwell/SetFraming"
-	Gridwell_SetSelection_FullMethodName      = "/gridwell.v1.Gridwell/SetSelection"
-	Gridwell_ShellSessionAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellSessionAlive"
-	Gridwell_Subscribe_FullMethodName         = "/gridwell.v1.Gridwell/Subscribe"
-	Gridwell_SetView_FullMethodName           = "/gridwell.v1.Gridwell/SetView"
-	Gridwell_DisableSource_FullMethodName     = "/gridwell.v1.Gridwell/DisableSource"
+	Gridwell_Info_FullMethodName           = "/gridwell.v1.Gridwell/Info"
+	Gridwell_Probe_FullMethodName          = "/gridwell.v1.Gridwell/Probe"
+	Gridwell_Handshake_FullMethodName      = "/gridwell.v1.Gridwell/Handshake"
+	Gridwell_OpenShell_FullMethodName      = "/gridwell.v1.Gridwell/OpenShell"
+	Gridwell_GetGrid_FullMethodName        = "/gridwell.v1.Gridwell/GetGrid"
+	Gridwell_GetTile_FullMethodName        = "/gridwell.v1.Gridwell/GetTile"
+	Gridwell_GetTilePreview_FullMethodName = "/gridwell.v1.Gridwell/GetTilePreview"
+	Gridwell_Find_FullMethodName           = "/gridwell.v1.Gridwell/Find"
+	Gridwell_ReadContent_FullMethodName    = "/gridwell.v1.Gridwell/ReadContent"
+	Gridwell_WriteContent_FullMethodName   = "/gridwell.v1.Gridwell/WriteContent"
+	Gridwell_ServeContent_FullMethodName   = "/gridwell.v1.Gridwell/ServeContent"
+	Gridwell_MoveTile_FullMethodName       = "/gridwell.v1.Gridwell/MoveTile"
+	Gridwell_CreateTile_FullMethodName     = "/gridwell.v1.Gridwell/CreateTile"
+	Gridwell_SetTile_FullMethodName        = "/gridwell.v1.Gridwell/SetTile"
+	Gridwell_CopyTile_FullMethodName       = "/gridwell.v1.Gridwell/CopyTile"
+	Gridwell_DeleteTile_FullMethodName     = "/gridwell.v1.Gridwell/DeleteTile"
+	Gridwell_SetFraming_FullMethodName     = "/gridwell.v1.Gridwell/SetFraming"
+	Gridwell_SetSelection_FullMethodName   = "/gridwell.v1.Gridwell/SetSelection"
+	Gridwell_ShellTmuxAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellTmuxAlive"
+	Gridwell_Subscribe_FullMethodName      = "/gridwell.v1.Gridwell/Subscribe"
+	Gridwell_SetView_FullMethodName        = "/gridwell.v1.Gridwell/SetView"
+	Gridwell_DisableSource_FullMethodName  = "/gridwell.v1.Gridwell/DisableSource"
 )
 
 // GridwellClient is the client API for Gridwell service.
@@ -75,18 +75,18 @@ type GridwellClient interface {
 	GetGrid(ctx context.Context, in *GetGridRequest, opts ...grpc.CallOption) (*GetGridResponse, error)
 	GetTile(ctx context.Context, in *GetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	GetTilePreview(ctx context.Context, in *GetTilePreviewRequest, opts ...grpc.CallOption) (*GetTilePreviewResponse, error)
-	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
+	Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
 	WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error)
 	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(ctx context.Context, in *ServeContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServeContentChunk], error)
-	// PlaceTile is the single placement writeback.
-	PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	// MoveTile is the single placement writeback.
+	MoveTile(ctx context.Context, in *MoveTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(ctx context.Context, in *CreateTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
-	CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
+	CopyTile(ctx context.Context, in *CopyTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -94,8 +94,8 @@ type GridwellClient interface {
 	SetFraming(ctx context.Context, in *SetFramingRequest, opts ...grpc.CallOption) (*SetFramingResponse, error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error)
-	// ShellSessionAlive gates the client's refresh button on shell descent.
-	ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error)
+	// ShellTmuxAlive gates the client's refresh button on shell descent.
+	ShellTmuxAlive(ctx context.Context, in *ShellTmuxAliveRequest, opts ...grpc.CallOption) (*ShellTmuxAliveResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
 	SetView(ctx context.Context, in *SetViewRequest, opts ...grpc.CallOption) (*SetViewResponse, error)
 	DisableSource(ctx context.Context, in *DisableSourceRequest, opts ...grpc.CallOption) (*DisableSourceResponse, error)
@@ -182,10 +182,10 @@ func (c *gridwellClient) GetTilePreview(ctx context.Context, in *GetTilePreviewR
 	return out, nil
 }
 
-func (c *gridwellClient) Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error) {
+func (c *gridwellClient) Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SearchResponse)
-	err := c.cc.Invoke(ctx, Gridwell_Search_FullMethodName, in, out, cOpts...)
+	out := new(FindResponse)
+	err := c.cc.Invoke(ctx, Gridwell_Find_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -243,10 +243,10 @@ func (c *gridwellClient) ServeContent(ctx context.Context, in *ServeContentReque
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_ServeContentClient = grpc.ServerStreamingClient[ServeContentChunk]
 
-func (c *gridwellClient) PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+func (c *gridwellClient) MoveTile(ctx context.Context, in *MoveTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_PlaceTile_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Gridwell_MoveTile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -273,10 +273,10 @@ func (c *gridwellClient) SetTile(ctx context.Context, in *SetTileRequest, opts .
 	return out, nil
 }
 
-func (c *gridwellClient) CloneTile(ctx context.Context, in *CloneTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
+func (c *gridwellClient) CopyTile(ctx context.Context, in *CopyTileRequest, opts ...grpc.CallOption) (*TileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TileResponse)
-	err := c.cc.Invoke(ctx, Gridwell_CloneTile_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Gridwell_CopyTile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -313,10 +313,10 @@ func (c *gridwellClient) SetSelection(ctx context.Context, in *SetSelectionReque
 	return out, nil
 }
 
-func (c *gridwellClient) ShellSessionAlive(ctx context.Context, in *ShellSessionAliveRequest, opts ...grpc.CallOption) (*ShellSessionAliveResponse, error) {
+func (c *gridwellClient) ShellTmuxAlive(ctx context.Context, in *ShellTmuxAliveRequest, opts ...grpc.CallOption) (*ShellTmuxAliveResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ShellSessionAliveResponse)
-	err := c.cc.Invoke(ctx, Gridwell_ShellSessionAlive_FullMethodName, in, out, cOpts...)
+	out := new(ShellTmuxAliveResponse)
+	err := c.cc.Invoke(ctx, Gridwell_ShellTmuxAlive_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -382,18 +382,18 @@ type GridwellServer interface {
 	GetGrid(context.Context, *GetGridRequest) (*GetGridResponse, error)
 	GetTile(context.Context, *GetTileRequest) (*TileResponse, error)
 	GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error)
-	Search(context.Context, *SearchRequest) (*SearchResponse, error)
+	Find(context.Context, *FindRequest) (*FindResponse, error)
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
 	WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error
 	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(*ServeContentRequest, grpc.ServerStreamingServer[ServeContentChunk]) error
-	// PlaceTile is the single placement writeback.
-	PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error)
+	// MoveTile is the single placement writeback.
+	MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error)
 	// ── Mutations (one create, one writeback, plus placement) ─────────────────
 	CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error)
 	SetTile(context.Context, *SetTileRequest) (*TileResponse, error)
-	CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error)
+	CopyTile(context.Context, *CopyTileRequest) (*TileResponse, error)
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
 	// SetFraming persists the framing of a grid: onto the doorway tile it was
 	// entered through, or onto the grid row itself for a root that has no
@@ -401,8 +401,8 @@ type GridwellServer interface {
 	SetFraming(context.Context, *SetFramingRequest) (*SetFramingResponse, error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error)
-	// ShellSessionAlive gates the client's refresh button on shell descent.
-	ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error)
+	// ShellTmuxAlive gates the client's refresh button on shell descent.
+	ShellTmuxAlive(context.Context, *ShellTmuxAliveRequest) (*ShellTmuxAliveResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
 	SetView(context.Context, *SetViewRequest) (*SetViewResponse, error)
 	DisableSource(context.Context, *DisableSourceRequest) (*DisableSourceResponse, error)
@@ -437,8 +437,8 @@ func (UnimplementedGridwellServer) GetTile(context.Context, *GetTileRequest) (*T
 func (UnimplementedGridwellServer) GetTilePreview(context.Context, *GetTilePreviewRequest) (*GetTilePreviewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetTilePreview not implemented")
 }
-func (UnimplementedGridwellServer) Search(context.Context, *SearchRequest) (*SearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Search not implemented")
+func (UnimplementedGridwellServer) Find(context.Context, *FindRequest) (*FindResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Find not implemented")
 }
 func (UnimplementedGridwellServer) ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error {
 	return status.Error(codes.Unimplemented, "method ReadContent not implemented")
@@ -449,8 +449,8 @@ func (UnimplementedGridwellServer) WriteContent(grpc.ClientStreamingServer[Write
 func (UnimplementedGridwellServer) ServeContent(*ServeContentRequest, grpc.ServerStreamingServer[ServeContentChunk]) error {
 	return status.Error(codes.Unimplemented, "method ServeContent not implemented")
 }
-func (UnimplementedGridwellServer) PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method PlaceTile not implemented")
+func (UnimplementedGridwellServer) MoveTile(context.Context, *MoveTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method MoveTile not implemented")
 }
 func (UnimplementedGridwellServer) CreateTile(context.Context, *CreateTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateTile not implemented")
@@ -458,8 +458,8 @@ func (UnimplementedGridwellServer) CreateTile(context.Context, *CreateTileReques
 func (UnimplementedGridwellServer) SetTile(context.Context, *SetTileRequest) (*TileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetTile not implemented")
 }
-func (UnimplementedGridwellServer) CloneTile(context.Context, *CloneTileRequest) (*TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method CloneTile not implemented")
+func (UnimplementedGridwellServer) CopyTile(context.Context, *CopyTileRequest) (*TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CopyTile not implemented")
 }
 func (UnimplementedGridwellServer) DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteTile not implemented")
@@ -470,8 +470,8 @@ func (UnimplementedGridwellServer) SetFraming(context.Context, *SetFramingReques
 func (UnimplementedGridwellServer) SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetSelection not implemented")
 }
-func (UnimplementedGridwellServer) ShellSessionAlive(context.Context, *ShellSessionAliveRequest) (*ShellSessionAliveResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ShellSessionAlive not implemented")
+func (UnimplementedGridwellServer) ShellTmuxAlive(context.Context, *ShellTmuxAliveRequest) (*ShellTmuxAliveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ShellTmuxAlive not implemented")
 }
 func (UnimplementedGridwellServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
@@ -618,20 +618,20 @@ func _Gridwell_GetTilePreview_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_Search_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SearchRequest)
+func _Gridwell_Find_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).Search(ctx, in)
+		return srv.(GridwellServer).Find(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_Search_FullMethodName,
+		FullMethod: Gridwell_Find_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).Search(ctx, req.(*SearchRequest))
+		return srv.(GridwellServer).Find(ctx, req.(*FindRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -665,20 +665,20 @@ func _Gridwell_ServeContent_Handler(srv interface{}, stream grpc.ServerStream) e
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Gridwell_ServeContentServer = grpc.ServerStreamingServer[ServeContentChunk]
 
-func _Gridwell_PlaceTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PlaceTileRequest)
+func _Gridwell_MoveTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveTileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).PlaceTile(ctx, in)
+		return srv.(GridwellServer).MoveTile(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_PlaceTile_FullMethodName,
+		FullMethod: Gridwell_MoveTile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).PlaceTile(ctx, req.(*PlaceTileRequest))
+		return srv.(GridwellServer).MoveTile(ctx, req.(*MoveTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -719,20 +719,20 @@ func _Gridwell_SetTile_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_CloneTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CloneTileRequest)
+func _Gridwell_CopyTile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CopyTileRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).CloneTile(ctx, in)
+		return srv.(GridwellServer).CopyTile(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_CloneTile_FullMethodName,
+		FullMethod: Gridwell_CopyTile_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).CloneTile(ctx, req.(*CloneTileRequest))
+		return srv.(GridwellServer).CopyTile(ctx, req.(*CopyTileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -791,20 +791,20 @@ func _Gridwell_SetSelection_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Gridwell_ShellSessionAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ShellSessionAliveRequest)
+func _Gridwell_ShellTmuxAlive_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShellTmuxAliveRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(GridwellServer).ShellSessionAlive(ctx, in)
+		return srv.(GridwellServer).ShellTmuxAlive(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Gridwell_ShellSessionAlive_FullMethodName,
+		FullMethod: Gridwell_ShellTmuxAlive_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GridwellServer).ShellSessionAlive(ctx, req.(*ShellSessionAliveRequest))
+		return srv.(GridwellServer).ShellTmuxAlive(ctx, req.(*ShellTmuxAliveRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -888,12 +888,12 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_GetTilePreview_Handler,
 		},
 		{
-			MethodName: "Search",
-			Handler:    _Gridwell_Search_Handler,
+			MethodName: "Find",
+			Handler:    _Gridwell_Find_Handler,
 		},
 		{
-			MethodName: "PlaceTile",
-			Handler:    _Gridwell_PlaceTile_Handler,
+			MethodName: "MoveTile",
+			Handler:    _Gridwell_MoveTile_Handler,
 		},
 		{
 			MethodName: "CreateTile",
@@ -904,8 +904,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_SetTile_Handler,
 		},
 		{
-			MethodName: "CloneTile",
-			Handler:    _Gridwell_CloneTile_Handler,
+			MethodName: "CopyTile",
+			Handler:    _Gridwell_CopyTile_Handler,
 		},
 		{
 			MethodName: "DeleteTile",
@@ -920,8 +920,8 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Gridwell_SetSelection_Handler,
 		},
 		{
-			MethodName: "ShellSessionAlive",
-			Handler:    _Gridwell_ShellSessionAlive_Handler,
+			MethodName: "ShellTmuxAlive",
+			Handler:    _Gridwell_ShellTmuxAlive_Handler,
 		},
 		{
 			MethodName: "SetView",

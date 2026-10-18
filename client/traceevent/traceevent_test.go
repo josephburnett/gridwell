@@ -132,7 +132,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		dragdrop.DropDelete:         "delete",
 		dragdrop.DropRejected:       "rejected",
 		dragdrop.DropMove:           "move",
-		dragdrop.DropClone:          "clone",
+		dragdrop.DropCopy:           "copy",
 		dragdrop.DropLink:           "link",
 	}
 	if len(want) != int(dragdrop.DropLink)+1 {
@@ -252,7 +252,7 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 }
 
 // A close says whether the surface was frozen or torn down: a frozen tile
-// keeps its preview and its session, a closed one does not, and a tile that came
+// keeps its preview and its tmux, a closed one does not, and a tile that came
 // back blank is a report about exactly that difference.
 func TestStreamClosesSayWhichKind(t *testing.T) {
 	if got := URLClose("p1", "t7abcde", true).Msg; got != "frozen" {
@@ -261,8 +261,8 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	if got := ShellClose("p1", "t7abcde", false).Msg; got != "closed" {
 		t.Errorf("a shell close reads %q", got)
 	}
-	if got := ShellExit("p1", "t7abcde", "the shell exited", true).Msg; got != "the shell exited (session gone)" {
-		t.Errorf("a session-gone exit reads %q", got)
+	if got := ShellExit("p1", "t7abcde", "the shell exited", true).Msg; got != "the shell exited (tmux gone)" {
+		t.Errorf("a tmux-gone exit reads %q", got)
 	}
 	if e := URLOpen("p1", "t7abcde"); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
 		t.Errorf("a url open is %+v", e)

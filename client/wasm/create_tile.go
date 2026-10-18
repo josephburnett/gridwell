@@ -93,10 +93,10 @@ func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 }
 
 // createShellAtCell lands a shell tile. The first descent creates its private
-// tmux session, and re-descending reattaches to the same one.
+// tmux, and re-descending reattaches to the same one.
 func (a *App) createShellAtCell(gid string, cellX, cellY int64) {
 	// No auto-descent, like every other primitive. DecideAutoLive's
-	// fresh-shell arm creates the session on the first descent.
+	// fresh-shell arm creates the tmux on the first descent.
 	a.createTile("CreateShell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }
