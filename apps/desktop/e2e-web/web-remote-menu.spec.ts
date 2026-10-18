@@ -88,7 +88,7 @@ const test = base.extend<Fixtures>({
   },
 });
 
-// enterFarRoom is the shared preamble of the connection specs below: learn the
+// enterFarHome is the shared preamble of the connection specs below: learn the
 // yaml-declared connection's root, put one tile in the far node's home, link
 // that home into the local grid, descend into it, and wait for the grid to
 // arrive live. It returns the far grid's qualified grid id and the cell the
@@ -99,7 +99,7 @@ const test = base.extend<Fixtures>({
 // node grew the tile, so the first answers for this grid are a legitimately
 // empty cache inside its freshness window. A single read races the correction
 // the revalidation's GridChanged brings, hence the poll.
-async function enterFarRoom(
+async function enterFarHome(
   gw: GridwellDriver,
   world: { local: Served; far: Served },
 ): Promise<{ farHomeGrid: string; cx: number; cy: number; localGrid: string; liveTiles: number }> {
@@ -274,7 +274,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 // offline chip, read here through the panes() hook. Nothing moves and nothing
 // blanks.
 test('a dark connection serves the cached grid, and the chip says so', async ({ gw, window, world }) => {
-  const { farHomeGrid, cx, cy, liveTiles } = await enterFarRoom(gw, world);
+  const { farHomeGrid, cx, cy, liveTiles } = await enterFarHome(gw, world);
 
   // Leave and re-enter: the grid re-reads through the source cache and arrives
   // whole. What says it is cached is the connection's health, which the node
@@ -315,7 +315,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
   world,
 }) => {
   test.setTimeout(240_000);
-  const { farHomeGrid } = await enterFarRoom(gw, world);
+  const { farHomeGrid } = await enterFarHome(gw, world);
   const notices = async (): Promise<{ source: string; message: string }[]> =>
     (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [];
   const health = async () => (await notices()).filter((n) => String(n.source).startsWith('plugin:'));
@@ -381,7 +381,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
   world,
 }) => {
   test.setTimeout(150_000);
-  await enterFarRoom(gw, world);
+  await enterFarHome(gw, world);
 
   // The next Handshake that names the connection is swallowed. The boot
   // handshake (no namespace) and the retry both keep a live link, so the only
@@ -437,7 +437,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
 // paints the draw that asks again. A dark far node is Unreachable: asked
 // again on the backstop tick, not the next draw.
 test('a menu read that fails is not asked again every draw', async ({ gw, window, world }) => {
-  await enterFarRoom(gw, world);
+  await enterFarHome(gw, world);
 
   let failed = 0;
   await window.route(`**/${SERVICE}/Handshake`, async (route) => {
