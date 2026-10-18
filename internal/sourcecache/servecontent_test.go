@@ -70,7 +70,7 @@ func serveContentAPI(c *Layer, tileID, subpath string) (st int64, mediaType stri
 	return st, mediaType, data, err
 }
 
-func TestServeContentServesStaleWhenDark(t *testing.T) {
+func TestServeContentServesTheCacheWhenDark(t *testing.T) {
 	cc, fake := contentFixture(t)
 	body := bytes.Repeat([]byte("img"), 100_000) // multi-chunk
 	fake.bodies["7|photo.jpg"] = contentBody{status: 200, mediaType: "image/jpeg", data: body}
@@ -85,7 +85,7 @@ func TestServeContentServesStaleWhenDark(t *testing.T) {
 		t.Fatalf("a dark source must serve the cached body: %v", err)
 	}
 	if st != 200 || mt != "image/jpeg" || !bytes.Equal(data, body) {
-		t.Errorf("stale serve = (%d, %s, %d bytes), want the exact live answer", st, mt, len(data))
+		t.Errorf("cached serve = (%d, %s, %d bytes), want the exact live answer", st, mt, len(data))
 	}
 
 	// A body never seen stays a transport error; nothing is invented.
@@ -104,11 +104,11 @@ func TestServeContentNeverCachesVerdicts(t *testing.T) {
 	if st != 404 {
 		t.Fatalf("live 404 = %d", st)
 	}
-	// …and is not cached: dark yields the transport error, never a stale
+	// …and is not cached: dark yields the transport error, never a cached
 	// error page.
 	fake.dark = true
 	if _, _, _, err := serveContentAPI(cc, "9", "gone.png"); status.Code(err) != codes.Unavailable {
-		t.Errorf("dark after 404 = %v, want Unavailable (verdicts are never served stale)", err)
+		t.Errorf("dark after 404 = %v, want Unavailable (verdicts are never served from cache)", err)
 	}
 }
 

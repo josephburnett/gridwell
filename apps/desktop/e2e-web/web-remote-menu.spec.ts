@@ -133,7 +133,7 @@ async function enterFarRoom(
   await gw.descendCell(cx, cy);
   const inside = (await gw.panes()).find((p) => p.focused)!;
   expect(inside.gridID).toBe(farHomeGrid);
-  expect(inside.stale, 'a live remote grid is not served from cache').toBeFalsy();
+  expect(inside.cached, 'a live remote grid is not served from cache').toBeFalsy();
   let liveTiles = 0;
   await expect
     .poll(
@@ -273,7 +273,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
 // grid: the tiles render exactly as cached, and the bar shows its quiet
 // offline chip, read here through the panes() hook. Nothing moves and nothing
 // blanks.
-test('a dark connection serves the cached grid, marked stale', async ({ gw, window, world }) => {
+test('a dark connection serves the cached grid, and the chip says so', async ({ gw, window, world }) => {
   const { farHomeGrid, cx, cy, liveTiles } = await enterFarRoom(gw, world);
 
   // Leave and re-enter: the grid re-reads through the source cache and arrives
@@ -286,11 +286,11 @@ test('a dark connection serves the cached grid, marked stale', async ({ gw, wind
   await expect
     .poll(async () => {
       const p = (await gw.panes()).find((q) => q.focused);
-      return p?.gridID === farHomeGrid && p.stale === true;
+      return p?.gridID === farHomeGrid && p.cached === true;
     }, { message: 'the re-entered grid says it is cached (#256)', timeout: 60_000 })
     .toBe(true);
-  const staleTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
-  expect(staleTiles.length, 'the cache renders every cached tile').toBe(liveTiles);
+  const cachedTiles = (await gw.getGrid(farHomeGrid)).tiles ?? [];
+  expect(cachedTiles.length, 'the cache renders every cached tile').toBe(liveTiles);
   void window;
 });
 
@@ -319,9 +319,9 @@ test('a revived connection clears its chip and its notice with nobody touching a
   const notices = async (): Promise<{ source: string; message: string }[]> =>
     (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [];
   const health = async () => (await notices()).filter((n) => String(n.source).startsWith('plugin:'));
-  const focusedStale = async () => {
+  const focusedCached = async () => {
     const p = (await gw.panes()).find((q) => q.focused);
-    return p?.gridID === farHomeGrid ? p.stale === true : null;
+    return p?.gridID === farHomeGrid ? p.cached === true : null;
   };
   expect(await health(), 'a live connection posts no health notice').toEqual([]);
 
@@ -338,7 +338,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
   // A source going down changes what its grids ARE: the grid is the node's
   // cache of it from here on, and the chip says so with no gesture.
   await expect
-    .poll(focusedStale, {
+    .poll(focusedCached, {
       message: 'the chip appears with no gesture',
       timeout: 60_000,
     })
@@ -355,7 +355,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
     })
     .toBe(0);
   await expect
-    .poll(focusedStale, {
+    .poll(focusedCached, {
       message: 'the chip clears with no gesture (freshness.md trace (b))',
       timeout: 120_000,
     })

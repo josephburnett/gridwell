@@ -32,9 +32,8 @@ KindText\b api/rpc/|client/cache/|client/pane/border\.go|client/tilepreview/|cli
 # UnrootedLink is the door precondition. A drop plan's Link is the
 # gesture's, not the tile's.
 \.Link\b api/rpc/|client/deadref/|client/pluginhealth/|client/wasm/render\.go|.*plan\.Link\b
-# The two grid-wide declarations. cache.Grid owns both, nil-safe.
+# The grid-wide declaration. cache.Grid owns it, nil-safe.
 Meta\.HostContent\b client/cache/
-Meta\.Stale\b client/cache/
 # writable: a.gridWritable / a.gridKnownReadOnly, the two safe defaults for
 # one uncached grid (Q7 folds them into one tri-state).
 Meta\.Writable\b client/cache/|client/wasm/plugin_id\.go

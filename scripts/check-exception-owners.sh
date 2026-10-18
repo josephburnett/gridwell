@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-exception-owners: an exception the user can see is asked once, by
-# name. Each of serves_page, text_presentation, host_content, stale, the link
+# name. Each of serves_page, text_presentation, host_content, the link
 # target and the link bit is a fact a plugin or a source declares, and
 # each has one predicate that turns it into the question the rest of the
 # client asks. A bare field read outside that owner is a second derivation,

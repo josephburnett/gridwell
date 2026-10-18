@@ -19,9 +19,9 @@ export interface PaneInfo {
   anchor: string;
   path: string[];
   textFocus: string;
-  // The pane's grid is served from cache: the source serving it is dark. The key keeps
-  // the older name; the client derives it (client/cache.SourceDark).
-  stale?: boolean;
+  // The pane's grid is served from cache: the source serving it is dark. The
+  // client derives it (client/cache.SourceDark).
+  cached?: boolean;
   textMode: string;
   cx: number;
   cy: number;

@@ -66,7 +66,7 @@ func connectionsTableDDL() string { return createTable("connections", connection
 const blobsTemplate = `
 CREATE TABLE IF NOT EXISTS blobs (
     -- AUTOINCREMENT: blob ids feed the client's (tile id, blob id) preview
-    -- cache key, so a recycled blob id could serve stale image bytes.
+    -- cache key, so a recycled blob id could serve another image's bytes.
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     hash       TEXT NOT NULL UNIQUE,
     data       BLOB NOT NULL,

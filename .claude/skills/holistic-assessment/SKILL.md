@@ -115,7 +115,7 @@ without a pure, tested twin.
 concepts and states; `docs/concepts.md` is the current list, and part of the
 lens is whether it still matches the code. Each distinction must earn its
 place, and the plugin exception surface
-(read-only, host_content, serves_page, text_presentation, stale, dead) must
+(read-only, host_content, serves_page, text_presentation, dark, dead) must
 route through named single-owner predicates rather than per-call-site arms.
 Ask the merge question of every concept, wire fields included: state what
 decided behavior would be lost if this concept collapsed into its neighbor,
@@ -137,7 +137,7 @@ documented-unavoidable and tested.
 **6. Freshness stack comprehensibility.** The layered consistency flow —
 source → pluginhost overlay → sourcecache → client cache → outbox/retry — is
 documented in one place (`docs/freshness.md`), each layer's rule stated, and
-the doc matches the code. Cross-layer behavior (stale serve → revalidate →
+the doc matches the code. Cross-layer behavior (cached serve → revalidate →
 GridChanged → client refetch; dark transitions; the echo interlock) is
 covered by seam tests. CLEAN when the doc exists, matches, and the seams are
 tested.

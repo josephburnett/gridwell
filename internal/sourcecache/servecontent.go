@@ -1,7 +1,7 @@
 package sourcecache
 
-// Bounded ServeContent caching, so the /content/ API degrades
-// stale-but-viewable like every other read. These bodies are the one genuinely
+// Bounded ServeContent caching, so the /content/ API serves from cache
+// when its source is dark, like every other read. These bodies are the one genuinely
 // unbounded class this cache touches, so they get their own valves: a
 // per-entry cap and a per-source cap with oldest-first eviction, emergency
 // valves rather than an LRU strategy.
@@ -26,7 +26,7 @@ var (
 
 // ServeContent tees the served body the way ReadContent tees a tile's. Only
 // status-200 answers are cached: an error page is a verdict, and verdicts
-// are never served stale.
+// are never served from cache.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	var status int64
 	var mediaType string

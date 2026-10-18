@@ -2,7 +2,7 @@
 
 How an answer gets old, who notices, and what the user sees. Seven layers
 own a rule each; no layer knows the next one's. This traces a fact through
-all of them, so "why is this stale" can be looked up instead of dug out of
+all of them, so "why is this old" can be looked up instead of dug out of
 the code.
 
 The one rule underneath: a cache may be served, but it is always labelled,
@@ -392,7 +392,7 @@ subscription is the transport's hub stream, which survives one connection's
 outage, so nothing else here notices the machine came back. The client's
 `retryKick` refetches the grids it holds; the walk is for the grids nobody
 re-opened, which is where "a recent copy of what you did not happen to read"
-has gone most stale. It is transport-only — reads, no version claims — and
+has aged most. It is transport-only — reads, no version claims — and
 revalidates through the ordinary window rules.
 
 The trigger is `setDark`'s, not either direction's, because either can notice
@@ -580,14 +580,14 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
 | A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown grid whose listing moved, a grid a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their grids, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a door's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/door-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
-| Serve the cached answer when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
+| Serve the cached answer when dark; verdicts never masked | `sourcecache_test.go:TestServesTheCacheWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every cached door rooted there; a dark framing write is refused as other dark writes are and cached nowhere; a tile event keeps a door's framing | `sourcecache/framing_test.go` |
 | A door answered with no framing keeps the cached one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheCachedFramingAndAnAnswerReplacesIt` |
 | Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its doors | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
 | A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
-| Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
+| Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesTheCacheWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the cached answer, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
-| A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the cached grid, marked stale") |
+| A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the cached grid, and the chip says so") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
 | The client's health arms: `reportPluginHealth` folds the transition in and kicks in BOTH directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the notice row on recovery, and the chip appears and later clears with no gesture either time |

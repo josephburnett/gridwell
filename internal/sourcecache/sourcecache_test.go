@@ -235,7 +235,7 @@ func readContent(t *testing.T, c namespace.Namespace, tileID string) (mediaType 
 	return mediaType, version, data
 }
 
-func TestServesStaleWhenDark(t *testing.T) {
+func TestServesTheCacheWhenDark(t *testing.T) {
 	cc, far, root, _ := fixture(t)
 	ctx := context.Background()
 
@@ -276,10 +276,10 @@ func TestServesStaleWhenDark(t *testing.T) {
 
 	g, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root})
 	if err != nil {
-		t.Fatalf("dark GetGrid should serve stale: %v", err)
+		t.Fatalf("dark GetGrid should serve the cache: %v", err)
 	}
 	if len(g.GetTiles()) != len(warm.GetTiles()) {
-		t.Fatalf("stale grid has %d tiles, want %d", len(g.GetTiles()), len(warm.GetTiles()))
+		t.Fatalf("cached grid has %d tiles, want %d", len(g.GetTiles()), len(warm.GetTiles()))
 	}
 	tr, err := cc.GetTile(ctx, &pb.GetTileRequest{TileId: txt.GetTile().GetId()})
 	if err != nil || tr.GetTile().GetKind() != "text" {
@@ -287,13 +287,13 @@ func TestServesStaleWhenDark(t *testing.T) {
 	}
 	mt, ver, body := readContent(t, cc, txt.GetTile().GetId())
 	if string(body) != "cached words" || string(body) != string(liveBody) {
-		t.Fatalf("stale body = %q, want the live bytes", body)
+		t.Fatalf("cached body = %q, want the live bytes", body)
 	}
 	if ver != liveVer {
-		t.Fatalf("stale version = %d, want %d (the version travels with the bytes it vouches for)", ver, liveVer)
+		t.Fatalf("cached version = %d, want %d (the version travels with the bytes it vouches for)", ver, liveVer)
 	}
 	if mt == "" {
-		t.Error("stale stream lost the media type")
+		t.Error("cached stream lost the media type")
 	}
 	pv, err := cc.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: urlT.GetTile().GetId()})
 	if err != nil || string(pv.GetJpeg()) != "\xff\xd8jpegpreview" {
