@@ -58,7 +58,7 @@ what each one is called.
 | Word | What it names | What it is not |
 |---|---|---|
 | node | The one process: one id, one `server.yaml`, one `gridwell.db`. | Its home, which is a namespace; its directory, which is `~/.gridwell`. |
-| `~/.gridwell` | The node's directory: `server.yaml`, `gridwell.db`, `cache.db`, `web-password`, `plugins/<id>`. | A home. |
+| `~/.gridwell` | The node's directory: `server.yaml`, `gridwell.db`, `cache.db`, `web-password`, `~/.gridwell/plugins/<id>`. | A home. |
 | API | One interface the node serves, or in the plugin's case dials: the web API (the browser's calls), the connection API (the socket a connection dials), the plugin API (what a plugin serves the node), the MCP API (agents), the shell API (the WebSocket), the content API (a plugin's pages), the trace API. The web, connection and MCP APIs each decode onto the one router. | A door, which is a tile. |
 | connection | A config row to a far node: an immutable name, a label, how to dial. | |
 
