@@ -488,7 +488,7 @@ func (c *Cache) ResyncSet(source string) []string {
 // KnownGridIDs returns the set of grid ids the cache currently holds.
 func (c *Cache) KnownGridIDs() []string { return c.ResyncSet(EverySource) }
 
-// putTileLocked is the one door into a grid's tile map. A row strictly older
+// putTileLocked is the one way into a grid's tile map. A row strictly older
 // than the cached one is refused; a same-version row applies, because framing
 // never bumps version. told is ageContentLocked's. Callers hold c.mu.
 func (c *Cache) putTileLocked(g *Grid, n *gridwellv1.Tile, told bool) bool {

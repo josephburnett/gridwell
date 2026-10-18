@@ -15,24 +15,24 @@ import (
 )
 
 // A write of something the user placed that names no claim is refused at
-// either door with the claim it lacks, and the row stands: the lock cannot be
+// either API with the claim it lacks, and the row stands: the lock cannot be
 // bypassed by omission. A tile on a far node behaves the same as one at home.
 // A select is the decided exception: it claims nothing and lands at either
-// door.
-func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
+// API.
+func TestTheAPIsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 	ctx := context.Background()
 	m := staleMesh(t)
 	me := m.nodes[meNode]
 	yes := true
-	type door struct {
+	type api struct {
 		place  func(*gridwellv1.PlaceTileRequest) error
 		delete func(*gridwellv1.DeleteTileRequest) error
 		set    func(*gridwellv1.SetTileRequest) error
 		sel    func(*gridwellv1.SetSelectionRequest) error
 		code   func(error) codes.Code
 	}
-	doors := map[string]door{
-		"web door": {
+	apis := map[string]api{
+		"web API": {
 			place: func(r *gridwellv1.PlaceTileRequest) error {
 				_, err := me.web.PlaceTile(ctx, connect.NewRequest(r))
 				return err
@@ -51,7 +51,7 @@ func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 			},
 			code: func(err error) codes.Code { return codes.Code(connect.CodeOf(err)) },
 		},
-		"connection door": {
+		"connection API": {
 			place:  func(r *gridwellv1.PlaceTileRequest) error { _, err := me.far.PlaceTile(ctx, r); return err },
 			delete: func(r *gridwellv1.DeleteTileRequest) error { _, err := me.far.DeleteTile(ctx, r); return err },
 			set:    func(r *gridwellv1.SetTileRequest) error { _, err := me.far.SetTile(ctx, r); return err },
@@ -60,9 +60,9 @@ func TestTheDoorsRefuseAUserWriteThatNamesNoClaim(t *testing.T) {
 		},
 	}
 	x := int64(50)
-	for dname, d := range doors {
+	for name, d := range apis {
 		for where, grid := range staleWhere(m) {
-			t.Run(dname+"/"+where, func(t *testing.T) {
+			t.Run(name+"/"+where, func(t *testing.T) {
 				refused := func(verb string, err error, want string) {
 					t.Helper()
 					if err == nil || d.code(err) != codes.InvalidArgument || !strings.Contains(err.Error(), want) {

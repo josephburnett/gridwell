@@ -18,17 +18,17 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
-// laterDoor prepares the connection door on sock without opening it, so the
-// first attempts find no socket at all. The returned func brings it up.
-func laterDoor(t *testing.T, sock string) func() {
+// laterConnectionAPI prepares the connection API on sock without opening it, so
+// the first attempts find no socket at all. The returned func brings it up.
+func laterConnectionAPI(t *testing.T, sock string) func() {
 	t.Helper()
-	h := doorHandler(t)
+	h := connectionAPIHandler(t)
 	return func() {
-		ln, err := server.ListenConnectionDoor(sock)
+		ln, err := server.ListenConnectionAPI(sock)
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := server.ConnectionDoorServer(h)
+		srv := server.ConnectionAPIServer(h)
 		go srv.Serve(ln)
 		t.Cleanup(func() { srv.Close() })
 	}
@@ -53,7 +53,7 @@ func TestAConnectionReconnectsWithinTheConnectBackoff(t *testing.T) {
 	bound := 10 * connectBackoff.MaxDelay
 
 	sock := filepath.Join(t.TempDir(), "federation.sock")
-	open := laterDoor(t, sock)
+	open := laterConnectionAPI(t, sock)
 	client, closer, err := Dial(Config{Addr: sock})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -65,7 +65,7 @@ func TestAConnectionReconnectsWithinTheConnectBackoff(t *testing.T) {
 	down := time.Now().Add(3 * time.Second)
 	for time.Now().Before(down) {
 		if answers(t, client) {
-			t.Fatalf("Info answered with no door on %s", sock)
+			t.Fatalf("Info answered with no API on %s", sock)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -74,7 +74,7 @@ func TestAConnectionReconnectsWithinTheConnectBackoff(t *testing.T) {
 	up := time.Now()
 	for !answers(t, client) {
 		if time.Since(up) > bound {
-			t.Fatalf("no reconnect %v after the door came up; the connection's "+
+			t.Fatalf("no reconnect %v after the API came up; the connection's "+
 				"reconnect wait is not connectBackoff", bound)
 		}
 		time.Sleep(5 * time.Millisecond)

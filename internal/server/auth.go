@@ -7,7 +7,7 @@ package server
 // password invalidates every outstanding cookie with no revocation state.
 //
 // Deliberately not gated: ConnectionHandler, whose gate is the kernel, since it
-// is served only on the 0600 unix socket. Everything on the browser door is
+// is served only on the 0600 unix socket. Everything on the web API is
 // gated here, the /shell WebSocket included. The desktop app's own window
 // authenticates without prompting, from the token in the serve banner.
 
@@ -47,7 +47,7 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, contentPathPrefix) {
-			// The /content/ door gates itself; see content_door.go.
+			// The /content/ API gates itself; see content_api.go.
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -73,7 +73,7 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 }
 
 // authed admits the cookie, or the password itself as a bearer, which is how
-// an agent that never logged in reaches the MCP door. Both compare
+// an agent that never logged in reaches the MCP API. Both compare
 // fixed-length hashes, so the constant-time compare leaks nothing.
 func authed(r *http.Request, token string) bool {
 	if c, err := r.Cookie(AuthCookieName); err == nil && subtle.ConstantTimeCompare([]byte(c.Value), []byte(token)) == 1 {

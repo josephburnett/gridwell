@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// A link out of a page the /content/ door serves behaves like a link out of
+// A link out of a page the /content/ API serves behaves like a link out of
 // any live page: target=_blank opens an ephemeral visit in a pane split below
-// and the served page stays put. The door's sandbox must allow popups for
+// and the served page stays put. The API's sandbox must allow popups for
 // that, or the click never reaches the window-open handler. A plain link
 // navigates in place, which is the web's own behaviour.
 

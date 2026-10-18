@@ -97,7 +97,7 @@ interface RegistryCallbacks {
   onError?: (ev: ErrorEvent) => void;
   onOpenBelow?: (ev: OpenBelowEvent) => void;
   onFreezeURL?: (ev: FreezeURLEvent) => void;
-  // Both doors into the menu announce through here.
+  // Both paths into the menu announce through here.
   onContextMenu?: (ev: ContextMenuEvent) => void;
   onZoomKey?: (ev: ZoomKeyEvent) => void;
   onEscapeKey?: (ev: EscapeKeyEvent) => void;
@@ -198,7 +198,7 @@ export class WebviewRegistry {
     menu.popup({ window: this.win });
   }
 
-  // The bar circle's door onto the same menu, with no in-page context. A page
+  // The bar circle's path onto the same menu, with no in-page context. A page
   // can hijack contextmenu; this path always reaches it.
   showMenu(paneId: string): void {
     const e = this.entries.get(paneId);

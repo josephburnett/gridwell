@@ -11,7 +11,7 @@ import (
 )
 
 // The dead verdict is NotFound to every reader of codes, and recognizable by
-// its detail alone on both sides of the Connect codec, so a plain NotFound (a
+// its detail alone on both sides of the web API, so a plain NotFound (a
 // tile that is gone) is never read as a dead link.
 func TestDeadRefIsRecognizableOnBothWires(t *testing.T) {
 	dead := DeadRef("toc", "connection: no connection %q", "toc")
@@ -27,7 +27,7 @@ func TestDeadRefIsRecognizableOnBothWires(t *testing.T) {
 
 	carried := ConnectDetails(dead, connect.NewError(connect.CodeNotFound, errors.New(status.Convert(dead).Message())))
 	if !IsDeadRef(carried) {
-		t.Fatal("the Connect codec dropped the dead verdict")
+		t.Fatal("the web API dropped the dead verdict")
 	}
 	plain := ConnectDetails(status.Error(codes.NotFound, "gone"), connect.NewError(connect.CodeNotFound, errors.New("gone")))
 	if IsDeadRef(plain) {

@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// traceServer is a gated web door with a home to dump into.
+// traceServer is a gated web API with a home to dump into.
 func traceServer(t *testing.T) (*http.Client, string, string) {
 	t.Helper()
 	home := t.TempDir()
@@ -23,9 +23,9 @@ func traceServer(t *testing.T) (*http.Client, string, string) {
 	return hs.Client(), hs.URL, home
 }
 
-func TestTraceDoorIngestsAndDumps(t *testing.T) {
+func TestTraceAPIIngestsAndDumps(t *testing.T) {
 	cl, base, home := traceServer(t)
-	marker := "door-test-" + t.Name()
+	marker := "api-test-" + t.Name()
 	body := `{"origin":"client","src":"nav","kind":"nav","msg":"` + marker + `","kv":{"req":"k3f9x2a"},"cid":"c1","ct":7}` + "\n"
 	res, err := cl.Post(base+tracewire.Path, "application/x-ndjson", strings.NewReader(body))
 	if err != nil {
@@ -76,7 +76,7 @@ func TestTraceDoorIngestsAndDumps(t *testing.T) {
 	t.Errorf("the client's record is not in the dump (%d records)", len(records))
 }
 
-func TestTraceDoorKeepsTheGoodLinesBeforeABadOne(t *testing.T) {
+func TestTraceAPIKeepsTheGoodLinesBeforeABadOne(t *testing.T) {
 	cl, base, _ := traceServer(t)
 	marker := "kept-" + t.Name()
 	body := `{"src":"nav","msg":"` + marker + `"}` + "\nnot json\n"
@@ -114,7 +114,7 @@ func TestTraceDoorKeepsTheGoodLinesBeforeABadOne(t *testing.T) {
 	t.Error("the good line before the malformed one was dropped")
 }
 
-func TestTraceDoorsRefuseEverythingButPost(t *testing.T) {
+func TestTraceAPIsRefuseEverythingButPost(t *testing.T) {
 	cl, base, _ := traceServer(t)
 	for _, path := range []string{tracewire.Path, tracewire.DumpPath} {
 		res, err := cl.Get(base + path)
@@ -168,7 +168,7 @@ func readDump(t *testing.T, path string) []tracewire.Record {
 // guessed time would interleave with the node's records wrongly and say
 // nothing. See TestAClientBatchLandsAtItsEmitTimeOnTheNodesClock for the
 // clock read right.
-func TestTraceDoorRefusesAGarbledSendClock(t *testing.T) {
+func TestTraceAPIRefusesAGarbledSendClock(t *testing.T) {
 	cl, base, _ := traceServer(t)
 	body := `{"src":"nav","kind":"nav","msg":"garbled clock","ct":7}` + "\n"
 	req, _ := http.NewRequest(http.MethodPost, base+tracewire.Path, strings.NewReader(body))

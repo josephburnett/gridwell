@@ -38,7 +38,7 @@ func TestDerive(t *testing.T) {
 	if c := Derive(urlBridge, true); c.Shells {
 		t.Errorf("shells_disabled must kill Shells, got %+v", c)
 	}
-	// The PTY rides the web door, so a browser attaches one too.
+	// The PTY rides the web API, so a browser attaches one too.
 	if c := Derive(NoBridge(), false); !c.Shells {
 		t.Errorf("browser host: shells are live there too, got %+v", c)
 	}

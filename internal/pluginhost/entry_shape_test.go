@@ -63,8 +63,8 @@ func listedBy(t *testing.T, entries ...*pluginv1.Entry) (*gridwellv1.Grid, []*gr
 // A served page is the address a url tile opens, so it rides kind "url" and no
 // other: on a text entry it would put a document body and a page on one row,
 // which is the shape the decision closes — a text tile cannot serve from the
-// plugin. The door is the only place that can close it: with the entry gone,
-// no client can be handed the combination at all.
+// plugin. acceptEntries is the only place that can close it: with the entry
+// gone, no client can be handed the combination at all.
 func TestAPageOnAnyKindButUrlIsRefused(t *testing.T) {
 	for _, kind := range []string{"text", "well", "shell", ""} {
 		_, _, err := listedBy(t, &pluginv1.Entry{
@@ -112,8 +112,8 @@ func TestBothUrlShapesAndATextEntryAreListedNormally(t *testing.T) {
 }
 
 // "rendered" meant document only, with no way back to the source bytes, which
-// the app never allows. The door maps it onto "both" so an old plugin binary
-// keeps presenting and the client is left with two values to read.
+// the app never allows. acceptEntries maps it onto "both" so an old plugin
+// binary keeps presenting and the client is left with two values to read.
 func TestARetiredRenderedDeclarationArrivesAsBoth(t *testing.T) {
 	_, tiles, err := listedBy(t, &pluginv1.Entry{
 		Key: "note", Kind: "text", Label: "note", TextPresentation: "rendered",
@@ -131,7 +131,7 @@ func TestARetiredRenderedDeclarationArrivesAsBoth(t *testing.T) {
 
 // The vocabulary is closed, so a value outside it is a declaration the node
 // cannot present. Reading it as undeclared would be the author's declaration
-// silently ignored, so the door refuses it the way it refuses every other
+// silently ignored, so acceptEntries refuses it the way it refuses every other
 // shape it cannot present.
 func TestAnUnknownTextPresentationIsRefused(t *testing.T) {
 	_, _, err := listedBy(t, &pluginv1.Entry{

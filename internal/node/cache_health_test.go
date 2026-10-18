@@ -17,7 +17,7 @@ import (
 // and only serve-first and offline reading are gone. So the whole seam is the
 // test — the node started over a cache path that will not open, the transport
 // the cache fronts, the router's fan-in, and a real subscriber on the
-// connection door — because every layer of it is what carries the fact from
+// connection API — because every layer of it is what carries the fact from
 // the failed open to the client's strip.
 
 func TestAnUnopenableCacheSurfacesAsHealth(t *testing.T) {
@@ -65,7 +65,7 @@ func serveNode(t *testing.T, home string) *config.ServerConfig {
 	return cfg
 }
 
-// firstUnhealthy subscribes on the connection door as any client does and
+// firstUnhealthy subscribes on the connection API as any client does and
 // returns the first unhealthy report, or nil if the window closes first.
 func firstUnhealthy(t *testing.T, cfg *config.ServerConfig, within time.Duration) *gridwellv1.EventPluginHealth {
 	t.Helper()

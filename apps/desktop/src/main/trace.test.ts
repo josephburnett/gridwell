@@ -115,7 +115,7 @@ test('a flush is due on a full batch or on the clock', async () => {
   assert.equal(records(bodies[0]).length, TRACE_FLUSH_BATCH);
 });
 
-// Quit has no next window to wait for: the sidecar serves the door and is
+// Quit has no next window to wait for: the sidecar serves the API and is
 // about to stop, so the last records go now or not at all.
 test('a forced flush posts inside the window', async () => {
   const bodies: string[] = [];
@@ -158,7 +158,7 @@ test('stop abandons the post in flight and posts nothing after', async () => {
   assert.equal(posts, 1, 'a stopped client posted again');
 });
 
-// A post that never lands must not lose the records it carried: the door is
+// A post that never lands must not lose the records it carried: the API is
 // unreliable and the trace is what explains the failure.
 test('a failed post keeps its records for the next batch', async () => {
   const k = clock();
@@ -341,13 +341,13 @@ test('emit copies the caller kv', () => {
 });
 
 // ── Drift lints across the language seam ───────────────────────────────────
-// api/tracewire owns the door and the record, client/trace the ring, and
+// api/tracewire owns the API and the record, client/trace the ring, and
 // client/cadence the flush window. The main process has no Go in it, so it
 // spells each again; a drifted value posts to a path that 404s, sends an
 // origin the node rewrites, or holds records past the window with nothing to
 // say why.
 
-test('the trace door constants match api/tracewire', () => {
+test('the trace API constants match api/tracewire', () => {
   const src = goSource('api/tracewire/tracewire.go');
   assert.ok(src.includes(`Path = "${TRACE_PATH}"`), `api/tracewire no longer names the path ${TRACE_PATH}`);
   const origin = traceLiteral(/TRACE_ORIGIN = '([^']+)'/);

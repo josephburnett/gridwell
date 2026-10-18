@@ -137,6 +137,6 @@ test('the trace posts while the windows are up and stops before the teardown', a
   assert.equal(h.steps[1], 'stopTrace', 'the traffic ends before the first teardown step');
   assert.ok(
     h.steps.indexOf('stopTrace') < h.steps.indexOf('stopSidecar'),
-    'nothing may be in flight when the door and the app go',
+    'nothing may be in flight when the API and the app go',
   );
 });

@@ -12,14 +12,14 @@ comes from something you declared on the wire.
 
 The shipped plugins live in their own repository,
 `github.com/josephburnett/gridwell-plugins` (`fs`, `proc`, `pages`, `gitlab`,
-`gmail`, `hey`), and use the same door as anyone else's: each is its own Go
-module importing only the api. `pages` is the smallest one, and the example
+`gmail`, `hey`), and use the same plugin API as anyone else's: each is its own
+Go module importing only the api. `pages` is the smallest one, and the example
 for serving web content: no config, no state, and every page generated in the
 plugin. `fs` is the fullest surface. `hey` and `gmail` are the examples for
 links, and `fs` lists its symlinks as links.
 
-This doc is the door. `docs/plugin-standard.md` is what a good plugin does at
-it, rule by rule, with a checklist to tick before you ship.
+This doc is the plugin API's contract. `docs/plugin-standard.md` is what a
+good plugin does at it, rule by rule, with a checklist to tick before you ship.
 
 ## The contract
 

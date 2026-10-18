@@ -4,7 +4,7 @@ import { tileAt } from './oracle';
 // An event landing mid-transition must update tile data and never move the
 // framing the animation owns. Events own data and the animation owns framing.
 // The transition clock is stretched through the e2e-only setTransitionMs hook
-// and a tile is created through the server's front door while transitioning()
+// and a tile is created through the server's web API while transitioning()
 // says the descent animation is in flight, so the landing framing must match an
 // uninjected control descent while the injected tile still shows up.
 
@@ -46,7 +46,8 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
         headers: {
           'Content-Type': 'application/json',
           'Connect-Protocol-Version': '1',
-          // The door refuses a page's call that names no build (Server.staleBuild).
+          // The API refuses a page's call that names no build
+          // (Server.staleBuild).
           'Gridwell-Build': (window as any).__gridwellTest.build(),
         },
         body: JSON.stringify({
@@ -105,7 +106,8 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
           headers: {
             'Content-Type': 'application/json',
             'Connect-Protocol-Version': '1',
-            // The door refuses a page's call that names no build (Server.staleBuild).
+            // The API refuses a page's call that names no build
+            // (Server.staleBuild).
             'Gridwell-Build': (window as any).__gridwellTest.build(),
           },
           body,

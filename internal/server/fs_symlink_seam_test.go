@@ -1,7 +1,7 @@
 package server
 
 // The shipped fs plugin's symlinks through the whole stack: the spawned
-// binary, the adapter, the router and the browser door. A symlink is a link
+// binary, the adapter, the router and the web API. A symlink is a link
 // to the one key of what it lands on; one that lands outside the root, or
 // nowhere, is a dead link, and nothing outside the root is ever served.
 
@@ -114,7 +114,7 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 		}
 	}
 
-	// And the page door serves nothing outside the root, by the link or by
+	// And the content API serves nothing outside the root, by the link or by
 	// the address it names.
 	for _, id := range []string{tiles["out.html"].Id, entry("..", "../outside/secret.html"), entry(".", "out.html")} {
 		local := strings.TrimPrefix(id, fsSymlinkNS+"/")

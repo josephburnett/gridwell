@@ -25,9 +25,9 @@ type ServerConfig struct {
 	// ID is the node's identity and its home's: the segment on every local
 	// reference ("<id>/12") and every connection. Never changed once minted.
 	ID string `yaml:"id,omitempty"`
-	// Web is the browser door. Its password is not yaml; see WebPassword.
+	// Web is the web API. Its password is not yaml; see WebPassword.
 	Web WebConfig `yaml:"web,omitempty"`
-	// Federation is the connection door other nodes mount this one through.
+	// Federation is the connection API other nodes mount this one through.
 	Federation FederationConfig `yaml:"federation,omitempty"`
 	// StaticDir serves the web client from disk, not the embedded copy.
 	StaticDir string `yaml:"static,omitempty"`
@@ -66,14 +66,14 @@ type WebConfig struct {
 	BindSet bool `yaml:"-"`
 }
 
-// FederationConfig is the connection door: a unix socket path, never a TCP
+// FederationConfig is the connection API: a unix socket path, never a TCP
 // address. The socket is 0600, so the kernel keeps every other uid and every
-// sandboxed app off the ungated gRPC export. "" closes the door entirely.
+// sandboxed app off the ungated gRPC export. "" closes the API entirely.
 type FederationConfig struct {
 	Socket string `yaml:"socket,omitempty"`
 }
 
-// FederationSocket is the default connection-door socket path for a home.
+// FederationSocket is the default connection API socket path for a home.
 func FederationSocket(home string) string {
 	return filepath.Join(home, "federation.sock")
 }
@@ -325,7 +325,7 @@ func setScalar(m *yaml.Node, key, value string) {
 	m.Content = append([]*yaml.Node{k, v}, m.Content...)
 }
 
-// validateIDs is the one door that catches a hand-edited id before it is
+// validateIDs is the one check that catches a hand-edited id before it is
 // stored into references it can never be removed from. Two properties are
 // load-bearing: no '/', rpc.SplitID's delimiter, and never purely numeric,
 // which is how a URL tells a segment from a tile id.
@@ -415,7 +415,7 @@ func DurableFiles(home string) []string {
 }
 
 // EnsurePasswordFile returns the home's web password, minting 128 random
-// bits as hex written 0600 when absent, so the door is never open and never
+// bits as hex written 0600 when absent, so the API is never open and never
 // needs a human to choose a secret. Deleting the file rotates.
 func EnsurePasswordFile(home string) (string, error) {
 	path := PasswordFile(home)

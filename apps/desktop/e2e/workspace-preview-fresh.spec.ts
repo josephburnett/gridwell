@@ -1,6 +1,6 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 
 // A pane tile's preview draws the layout its row names now. An ephemeral url
 // visit inside a workspace ends and its tile is deleted, the layout is saved
@@ -75,7 +75,7 @@ test("a workspace preview never draws a leaf its layout no longer names", async 
 
   // Ending the visit deletes the ephemeral and rewrites the layout without it.
   await gw.waitIdle();
-  const baseline = Math.max(0, ...(await dumpViaDoor(gw.origin, token)).map((l) => l.seq ?? 0));
+  const baseline = Math.max(0, ...(await dumpViaAPI(gw.origin, token)).map((l) => l.seq ?? 0));
   await gw.middleClickPane();
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 10_000 }).toBe('');
   await expect
@@ -97,7 +97,7 @@ test("a workspace preview never draws a leaf its layout no longer names", async 
   await gw.waitIdle();
   await window.waitForTimeout(2_000);
 
-  const after: TraceLine[] = (await dumpViaDoor(gw.origin, token)).filter((l) => (l.seq ?? 0) > baseline);
+  const after: TraceLine[] = (await dumpViaAPI(gw.origin, token)).filter((l) => (l.seq ?? 0) > baseline);
   // The ascent itself reads the ephemeral before deleting it; any read after
   // the delete is refused, so a refusal is the count.
   const asked = after.filter(

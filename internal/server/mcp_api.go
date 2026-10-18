@@ -1,8 +1,8 @@
 package server
 
-// The MCP door: the third codec over the one router, at mcpdoor.Path on the
-// web door's gated mux, Streamable HTTP. An agent authenticates with the web
-// password as a bearer (auth.go), and no build gate applies, since no page
+// The MCP API: the third API that decodes onto the one router, at mcpapi.Path
+// on the web API's gated mux, Streamable HTTP. An agent authenticates with the
+// web password as a bearer (auth.go), and no build gate applies, since no page
 // of this node's build is behind it; the tool list is its contract.
 
 import (
@@ -13,13 +13,13 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/josephburnett/gridwell/internal/mcpdoor"
+	"github.com/josephburnett/gridwell/internal/mcpapi"
 )
 
-// mcpDoor is stateless: each request stands alone, so the door holds no
+// mcpAPI is stateless: each request stands alone, so the API holds no
 // session for an agent that went away.
-func (s *Server) mcpDoor() http.Handler {
-	srv := mcpdoor.New(newRouter(s), s.cfg.ID, s.build, s)
+func (s *Server) mcpAPI() http.Handler {
+	srv := mcpapi.New(newRouter(s), s.cfg.ID, s.build, s)
 	srv.AddReceivingMiddleware(traceTools)
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})

@@ -2,7 +2,7 @@ package namespace
 
 // Server writes a Namespace onto the gridwell.v1 gRPC service, for
 // internal/server's ConnectionHandler, which serves the node's router to a
-// remote mounter. That export is a codec, never a second router.
+// remote mounter. That export is the connection API, never a second router.
 
 import (
 	"context"

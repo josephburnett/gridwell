@@ -3,11 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from '../e2e/homes';
 
-// The web-content door on a browser host. With no Electron bridge a url tile
+// The content API on a browser host. With no Electron bridge a url tile
 // cannot go live in place, so the descent shows the frozen face and the bar
 // circle opens the derived /content/ address in a new tab — the same
 // degradation, over the same code path, as a url tile at its own address. The
-// door serves the image bytes sandboxed and with no cookie.
+// API serves the image bytes sandboxed and with no cookie.
 
 const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -29,7 +29,7 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   const cat = (snap.tiles ?? []).find((t) => t.altText === 'cat.png')!;
   expect(cat, 'the fs root grid lists cat.png').toBeTruthy();
   expect(cat.kind, 'an image file is a url tile').toBe('url');
-  expect(cat.servesPage, 'whose page the plugin serves at the door').toBe(true);
+  expect(cat.servesPage, 'whose page the plugin serves at the API').toBe(true);
 
   // With no bridge the tile stays frozen, through DecideAutoLive's browser arm.
   // No dead modal and no error: the pane presents the frozen face.
@@ -50,7 +50,7 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   }
 
   // The circle opens a new tab, as it does for a frozen url tile on a browser
-  // host, at the derived door address.
+  // host, at the derived content API address.
   const menu = await gw.menu();
   const [popup] = await Promise.all([
     window.context().waitForEvent('page', { timeout: 10_000 }),
@@ -60,7 +60,7 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
   expect(popup.url()).toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}/$`));
 
   // The tab shows the file itself: same bytes, image content type, sandboxed by
-  // the door. The token in the path is the whole credential, and this popup
+  // the API. The token in the path is the whole credential, and this popup
   // carries no auth cookie.
   const res = await popup.request.get(popup.url());
   expect(res.status()).toBe(200);

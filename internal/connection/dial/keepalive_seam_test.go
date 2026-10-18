@@ -2,8 +2,8 @@ package dial
 
 // The silent-death seam: a far side that stops answering without closing the
 // socket, which is what a slept laptop or a wedged remote looks like from here.
-// The far side is the node's own connection door — server.ListenConnectionDoor
-// under server.ConnectionDoorServer — behind a listener that swallows bytes on
+// The far side is the node's own connection API — server.ListenConnectionAPI
+// under server.ConnectionAPIServer — behind a listener that swallows bytes on
 // command, so nothing but gRPC keepalive can tell the client anything is wrong.
 // Both dials wear ClientConn, so one transport proves the policy.
 
@@ -25,27 +25,27 @@ import (
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
-// deadDoor serves normally until freeze, after which every byte in either
+// frozenSocket serves normally until freeze, after which every byte in either
 // direction vanishes and the socket stays open: no close, no reset, no error
 // for the client to read. Reads already parked in the kernel are swallowed too,
 // so the client's ping is never answered.
-type deadDoor struct {
+type frozenSocket struct {
 	net.Listener
 	frozen chan struct{}
 	closed chan struct{}
 }
 
-func (d *deadDoor) Accept() (net.Conn, error) {
+func (d *frozenSocket) Accept() (net.Conn, error) {
 	c, err := d.Listener.Accept()
 	if err != nil {
 		return nil, err
 	}
-	return &deadConn{Conn: c, door: d}, nil
+	return &deadConn{Conn: c, sock: d}, nil
 }
 
-func (d *deadDoor) freeze() { close(d.frozen) }
+func (d *frozenSocket) freeze() { close(d.frozen) }
 
-func (d *deadDoor) isFrozen() bool {
+func (d *frozenSocket) isFrozen() bool {
 	select {
 	case <-d.frozen:
 		return true
@@ -56,48 +56,48 @@ func (d *deadDoor) isFrozen() bool {
 
 type deadConn struct {
 	net.Conn
-	door *deadDoor
+	sock *frozenSocket
 }
 
 func (c *deadConn) Read(p []byte) (int, error) {
 	for {
-		if c.door.isFrozen() {
+		if c.sock.isFrozen() {
 			// Park rather than return: an error here is news, and a dead
 			// peer sends none.
-			<-c.door.closed
+			<-c.sock.closed
 			return 0, io.EOF
 		}
 		n, err := c.Conn.Read(p)
-		if !c.door.isFrozen() {
+		if !c.sock.isFrozen() {
 			return n, err
 		}
 	}
 }
 
 func (c *deadConn) Write(p []byte) (int, error) {
-	if c.door.isFrozen() {
+	if c.sock.isFrozen() {
 		return len(p), nil
 	}
 	return c.Conn.Write(p)
 }
 
-// silentDoor stands the real connection door on a real unix socket and returns
-// it with the switch that kills it silently.
-func silentDoor(t *testing.T) (string, *deadDoor) {
+// silentConnectionAPI stands the real connection API on a real unix socket and
+// returns it with the switch that kills it silently.
+func silentConnectionAPI(t *testing.T) (string, *frozenSocket) {
 	t.Helper()
 	sock := filepath.Join(t.TempDir(), "federation.sock")
-	ln, err := server.ListenConnectionDoor(sock)
+	ln, err := server.ListenConnectionAPI(sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	door := &deadDoor{Listener: ln, frozen: make(chan struct{}), closed: make(chan struct{})}
-	httpSrv := server.ConnectionDoorServer(doorHandler(t))
-	go httpSrv.Serve(door)
+	frozen := &frozenSocket{Listener: ln, frozen: make(chan struct{}), closed: make(chan struct{})}
+	httpSrv := server.ConnectionAPIServer(connectionAPIHandler(t))
+	go httpSrv.Serve(frozen)
 	t.Cleanup(func() {
-		close(door.closed)
+		close(frozen.closed)
 		httpSrv.Close()
 	})
-	return sock, door
+	return sock, frozen
 }
 
 // A Subscribe outlives every RPC on the connection, so it is the stream that a
@@ -112,7 +112,7 @@ func TestASilentFarSideFailsAStreamWithinKeepalive(t *testing.T) {
 	keepaliveParams = keepalive.ClientParameters{Time: 10 * time.Second, Timeout: time.Second}
 	bound := keepaliveParams.Time + keepaliveParams.Timeout + 5*time.Second
 
-	sock, door := silentDoor(t)
+	sock, frozen := silentConnectionAPI(t)
 	client, closer, err := Dial(Config{Addr: sock})
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
@@ -133,7 +133,7 @@ func TestASilentFarSideFailsAStreamWithinKeepalive(t *testing.T) {
 		t.Fatalf("Subscribe failed before the far side went silent: %v", err)
 	}
 
-	door.freeze()
+	frozen.freeze()
 	select {
 	case err := <-errc:
 		if status.Code(err) != codes.Unavailable {

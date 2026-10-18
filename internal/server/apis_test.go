@@ -11,19 +11,19 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The two doors are different handlers: the web door no
+// The two APIs are different handlers: the web API no
 // longer demuxes raw gRPC to the node export, so a listener bound to a
 // network address serves exactly the gated surface. Pinned at the
 // handler seam: a gRPC client against WebHandler gets no Gridwell
 // service, while the same call against ConnectionHandler answers.
-func TestWebDoorServesNoGRPC(t *testing.T) {
+func TestWebAPIServesNoGRPC(t *testing.T) {
 	srv := mustNew(t, plugin.NewRegistry(), Config{})
 	serve := func(h http.Handler) string {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
-		hs := ConnectionDoorServer(h)
+		hs := ConnectionAPIServer(h)
 		go hs.Serve(ln)
 		t.Cleanup(func() { hs.Close() })
 		return ln.Addr().String()
@@ -38,9 +38,9 @@ func TestWebDoorServesNoGRPC(t *testing.T) {
 		return err
 	}
 	if err := info(serve(srv.WebHandler())); err == nil {
-		t.Fatal("the web door answered a raw gRPC Info: the node export leaked onto the browser listener")
+		t.Fatal("the web API answered a raw gRPC Info: the node export leaked onto the web API")
 	}
 	if err := info(serve(srv.ConnectionHandler())); err != nil {
-		t.Fatalf("the connection door refused Info: %v", err)
+		t.Fatalf("the connection API refused Info: %v", err)
 	}
 }

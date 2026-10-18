@@ -1,10 +1,10 @@
 package namespace_test
 
-// The codec seam: a Namespace written onto gridwell.v1 by Server and read back
-// off it by FromClient is the same Namespace. Everything else in the node calls
-// the Go value directly, so this is the one test whose subject is the gRPC
-// codec itself, and the loopback it needs lives here rather than in production
-// code.
+// The connection API seam: a Namespace written onto gridwell.v1 by Server and
+// read back off it by FromClient is the same Namespace. Everything else in the
+// node calls the Go value directly, so this is the one test whose subject is
+// the gRPC translation itself, and the loopback it needs lives here rather than
+// in production code.
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func loopback(t *testing.T, ns namespace.Namespace) namespace.Namespace {
 	srv := grpc.NewServer()
 	pb.RegisterGridwellServer(srv, namespace.Server(ns))
 	go srv.Serve(lis)
-	cc, err := grpc.NewClient("passthrough:///codec-seam",
+	cc, err := grpc.NewClient("passthrough:///connection-api-seam",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }))
 	if err != nil {
@@ -46,7 +46,7 @@ func loopback(t *testing.T, ns namespace.Namespace) namespace.Namespace {
 }
 
 // fake is a Namespace that answers from fields, so a test can pin exactly what
-// crosses the codec.
+// crosses the connection API.
 type fake struct {
 	tile     *pb.Tile
 	err      error
@@ -157,7 +157,7 @@ func (f *fake) OpenShell(_ context.Context, recv func() (*pb.OpenShellRequest, e
 }
 
 // richTile carries a value in every field shape the wire has, so an omission in
-// either codec shows up as a byte difference.
+// either side shows up as a byte difference.
 func richTile() *pb.Tile {
 	return &pb.Tile{
 		Id: "12", GridId: "3", Kind: "well", X: -4, Y: 9, W: 2, H: 3,
@@ -187,11 +187,11 @@ func TestTileRoundTripsBytesIdentical(t *testing.T) {
 		t.Fatalf("marshal want: %v", err)
 	}
 	if string(got) != string(wantBytes) {
-		t.Fatalf("tile changed across the codec:\n got %v\nwant %v", resp.GetTile(), want)
+		t.Fatalf("tile changed across the connection API:\n got %v\nwant %v", resp.GetTile(), want)
 	}
 }
 
-// A select's adds and removes cross the codec apart.
+// A select's adds and removes cross the connection API apart.
 func TestASelectCrossesWithItsAddsAndRemoves(t *testing.T) {
 	f := &fake{}
 	ns := loopback(t, f)
@@ -206,9 +206,9 @@ func TestASelectCrossesWithItsAddsAndRemoves(t *testing.T) {
 }
 
 // The client classifies errors by code (client/clientsync). A code that
-// collapses to Unknown at either codec would turn a version conflict into an
+// collapses to Unknown on either side would turn a version conflict into an
 // unrecoverable failure, so pin every code the router hands out.
-func TestStatusCodesSurviveBothCodecs(t *testing.T) {
+func TestStatusCodesSurviveTheConnectionAPI(t *testing.T) {
 	for _, code := range []gcodes.Code{
 		gcodes.NotFound, gcodes.InvalidArgument, gcodes.FailedPrecondition,
 		gcodes.PermissionDenied, gcodes.Unimplemented, gcodes.Unavailable,
@@ -309,11 +309,11 @@ func TestSubscribeStreamRoundTrips(t *testing.T) {
 			t.Fatalf("event crossed as %v", ev)
 		}
 	case <-ctx.Done():
-		t.Fatal("no event crossed the codec")
+		t.Fatal("no event crossed the connection API")
 	}
 }
 
-// A session and its view cross the connection door whole, since the far node
+// A session and its view cross the connection API whole, since the far node
 // books what it hears (subscription.Book).
 func TestSetViewRoundTrips(t *testing.T) {
 	f := &fake{}
@@ -363,8 +363,9 @@ func TestOpenShellBidiRoundTrips(t *testing.T) {
 	}
 }
 
-// The header crosses the codec as a header: a silent far stream is open on
-// the near side before any event, so a near read after it misses nothing.
+// The header crosses the connection API as a header: a silent far stream is
+// open on the near side before any event, so a near read after it misses
+// nothing.
 func TestSubscribeHeaderRoundTrips(t *testing.T) {
 	ns := loopback(t, headerOnly{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -382,7 +383,7 @@ func TestSubscribeHeaderRoundTrips(t *testing.T) {
 			t.Fatalf("the header crossed as the event %v", ev)
 		}
 	case <-ctx.Done():
-		t.Fatal("no header crossed the codec")
+		t.Fatal("no header crossed the connection API")
 	}
 }
 

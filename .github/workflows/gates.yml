@@ -9,7 +9,7 @@
 name: gates
 # There is no `paths:` filter. A dependency or toolchain bump, or any
 # cross-cutting change, is every seam at once, and a filter keyed on go.mod or
-# package-lock.json would let a plain router or door change through on the
+# package-lock.json would let a plain router or API change through on the
 # per-commit gate alone.
 on:
   push:

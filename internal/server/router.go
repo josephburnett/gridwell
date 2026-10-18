@@ -22,10 +22,10 @@ import (
 
 // router is a namespace.Namespace of qualified ids: every verb resolves one
 // segment, strips it, forwards, and re-applies it on the way out. It holds no
-// state; both doors (Connect and the connection export) are codecs over it.
+// state; both APIs (Connect and the connection export) decode onto it.
 type router struct {
 	srv *Server
-	// farAsked is the connection door's router: a far node asking. Only the
+	// farAsked is the connection API's router: a far node asking. Only the
 	// all-clear reads it (SetSelection).
 	farAsked bool
 }
@@ -34,9 +34,9 @@ var _ namespace.Namespace = (*router)(nil)
 
 func newRouter(srv *Server) *router { return &router{srv: srv} }
 
-// refuseUnclaimed is both doors' refusal of a user write that names no claim
+// refuseUnclaimed is both APIs' refusal of a user write that names no claim
 // (rpc.UnclaimedWrite). It lives on the router because the router serves only
-// the doors; the node's own writers call their namespace directly.
+// the APIs; the node's own writers call their namespace directly.
 func refuseUnclaimed(req proto.Message) error {
 	if why := rpc.UnclaimedWrite(req); why != "" {
 		return status.Error(gcodes.InvalidArgument, why)
@@ -192,7 +192,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	}
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
-		// The /content/ door's capability, handed out only here, on the
+		// The /content/ API's capability, handed out only here, on the
 		// cookie-authenticated mux.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
 		Build:        rt.srv.build,
@@ -604,7 +604,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 // clearAllSelections is the all-clear: every namespace this node declares
 // clears its own grids, each in its own write, and the transport forwards it
 // to each live far node. A far node's sets are its rows, so one asked over
-// the connection door clears its home and plugins and forwards nothing,
+// the connection API clears its home and plugins and forwards nothing,
 // which is what keeps a cycle of connections from echoing it. A disabled
 // source is read-only and skipped. Every namespace is tried; the first
 // failure is the answer.
@@ -817,7 +817,7 @@ func isUnimplemented(err error) bool {
 	return false
 }
 
-// Info describes this node to a mounter, on the connection door only.
+// Info describes this node to a mounter, on the connection API only.
 func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
 	// A mount lands where a direct client lands (rpc.HomeGrid).
 	lp, err := rt.Handshake(ctx, &pb.HandshakeRequest{})
@@ -838,7 +838,7 @@ func (rt *router) Probe(ctx context.Context, req *pb.ProbeRequest) (*pb.ProbeRes
 }
 
 // OpenShell attaches a tile's PTY through the one shell route, the same one
-// the browser's /shell WebSocket enters by (shell_door.go).
+// the browser's /shell WebSocket enters by (shell_api.go).
 func (rt *router) OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
 	first, err := recv()
 	if err != nil {

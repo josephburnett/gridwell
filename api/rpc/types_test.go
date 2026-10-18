@@ -242,7 +242,7 @@ func TestHomeRow(t *testing.T) {
 
 // TestContentID: the one resolution point for read-through. A leaf link's
 // content operations key by its target; an owned tile keys by itself. Every
-// client content door (body fetch, edit buffer, save routing, preview fetch,
+// client content path (body fetch, edit buffer, save routing, preview fetch,
 // shell session, pane layout) reads this, so a link and its target share one
 // content fact by construction.
 func TestContentID(t *testing.T) {
@@ -273,7 +273,7 @@ func TestLinkOfNamesTheContentNotTheMiddleman(t *testing.T) {
 // TestTextDocumentAndPageContent pins the two derivations of "is this a
 // page", which were spelled three ways across the shim before they had
 // owners. A served page is a url tile: web content wherever the address comes
-// from, and never a document. The last row is the shape the entry door refuses
+// from, and never a document. The last row is the shape acceptEntries refuses
 // (pluginhost.acceptEntries), so no client meets it; read here it is the plain
 // document its kind says it is.
 func TestTextDocumentAndPageContent(t *testing.T) {

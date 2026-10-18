@@ -1,5 +1,5 @@
 // Package claimtest owns how a test that is not about the claim names one: it
-// reads the row first, as a press would, because both doors refuse a move or
+// reads the row first, as a press would, because both APIs refuse a move or
 // delete that names none (rpc.UnclaimedWrite).
 package claimtest
 

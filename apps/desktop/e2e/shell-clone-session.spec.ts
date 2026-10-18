@@ -12,7 +12,7 @@ import { shellSessionAlive, tileAt } from './oracle';
 // in the other, tmux sees one attached client sized to the clone's pane, and
 // one exit leaves every tile on the session dead. This drives what no unit
 // test can: the clone gesture, the stored session, the client's takeover by
-// session, the /shell door and the real tmux behind it.
+// session, the /shell API and the real tmux behind it.
 
 // The node's private tmux server (gridwell-<id>, internal/node), asked the
 // way the node asks it: through the socket dir the home's environment names.

@@ -244,7 +244,7 @@ func TestServesStaleWhenDark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Body via the upstream write door (writes pass through the cache).
+	// Body via the upstream write path (writes pass through the cache).
 	writeOne(t, cc, txt.GetTile().GetId(), txt.GetTile().GetVersion(), []byte("remembered words"))
 	urlT, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
 		Tile: &pb.Tile{Kind: "url", X: 2, Y: 0, W: 1, H: 1, UrlString: "https://example.com"}})

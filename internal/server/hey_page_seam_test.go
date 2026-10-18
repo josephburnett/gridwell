@@ -15,9 +15,9 @@ import (
 )
 
 // The hey plugin's email page through the shipped binary and the content
-// door, over heyfake; every word in the thread is made up. The page HEY's CLI
+// API, over heyfake; every word in the thread is made up. The page HEY's CLI
 // answers has no stylesheet and keeps its quoted text in a figure's JSON
-// attribute; what the door serves must carry the plugin's own stylesheet and
+// attribute; what the API serves must carry the plugin's own stylesheet and
 // show that quote, as an HTML document.
 
 func fakeHeyCLI(t *testing.T) *heyfake.CLI {
@@ -44,12 +44,12 @@ func fakeHeyCLI(t *testing.T) *heyfake.CLI {
 	return hey
 }
 
-func TestHeyPageThroughTheContentDoor(t *testing.T) {
+func TestHeyPageThroughTheContentAPI(t *testing.T) {
 	client := newPluginClient(t, "hey", fakeHeyCLI(t).Config(nil))
 	reg := plugin.NewRegistry()
 	reg.Register("uh1", "hey", client, nil)
 	srv := mustNew(t, reg, Config{Password: "pw"})
-	hs := webDoorTest(t, srv.WebHandler())
+	hs := webAPITest(t, srv.WebHandler())
 
 	ctx := context.Background()
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})

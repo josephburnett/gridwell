@@ -1,5 +1,5 @@
 // Package shellwire is the shell transport's wire grammar, the one place the
-// client and the server agree on how PTY bytes cross the web door:
+// client and the server agree on how PTY bytes cross the web API:
 //
 //	GET <origin>/shell?tile_id=<qualified>&session=S&cols=N&rows=N&gridwell_build=B   (Upgrade: websocket)
 //	  · gated by the same auth cookie as every other page request
@@ -8,7 +8,7 @@
 //	  · text frames are JSON Control messages. Up "resize", down "exit", sent
 //	    once immediately before the close.
 //
-// internal/server/shell_door_seam_test.go dials the real handler with these.
+// internal/server/shell_api_seam_test.go dials the real handler with these.
 package shellwire
 
 import (
@@ -20,7 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
-// Path is the door's address on the web mux.
+// Path is the API's address on the web mux.
 const Path = "/shell"
 
 // ReadLimit bounds one frame at both ends. A paste is one frame, and the
@@ -57,7 +57,7 @@ type Control struct {
 	// transport failing, and the client flips the refresh affordance off.
 	Message     string `json:"message,omitempty"`
 	SessionGone bool   `json:"session_gone,omitempty"`
-	// StaleBuild is the node's build when the door refused a page of another
+	// StaleBuild is the node's build when the API refused a page of another
 	// one (gwerr.StaleBuild), the socket's form of that verdict.
 	StaleBuild string `json:"stale_build,omitempty"`
 }
@@ -96,13 +96,13 @@ func AttachURL(origin, build, session, tileID string, cols, rows int) (string, e
 	return u.String(), nil
 }
 
-// Attach is the bind AttachURL encodes, as the door reads it back.
+// Attach is the bind AttachURL encodes, as the API reads it back.
 type Attach struct {
 	TileID string
 	// Session is "" from a client that names none, such as a seam test.
 	Session string
 	// Cols/Rows are 0 when absent or unparseable; the serving plugin
-	// substitutes its defaults, so the door never invents a size.
+	// substitutes its defaults, so the API never invents a size.
 	Cols int
 	Rows int
 }
@@ -135,7 +135,7 @@ func EncodeExit(message string, sessionGone bool) []byte {
 	return mustJSON(Control{Kind: KindExit, Message: message, SessionGone: sessionGone})
 }
 
-// EncodeStaleBuild is the exit the door sends a page of another build before
+// EncodeStaleBuild is the exit the API sends a page of another build before
 // any PTY is touched.
 func EncodeStaleBuild(message, node string) []byte {
 	return mustJSON(Control{Kind: KindExit, Message: message, StaleBuild: node})

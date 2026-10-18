@@ -1,5 +1,5 @@
 // Package dial opens an ssh tunnel to a remote host and dials that node's
-// connection door through it with raw gRPC over direct-streamlocal. The far
+// connection API through it with raw gRPC over direct-streamlocal. The far
 // end is the far node's own export, routed by the qualified ids each request
 // carries, so a mount is the whole node and routing is by id at every hop.
 package dial
@@ -33,7 +33,7 @@ type Config struct {
 	KnownHosts string // known_hosts file (ssh only; mandatory, no blind trust)
 	// Addr is the far node's `federation:` socket path, on the remote host
 	// for an ssh bridge or on this one for a direct dial. Never a TCP
-	// address; the door has no such form.
+	// address; the API has no such form.
 	Addr string
 }
 
@@ -260,10 +260,10 @@ var connectBackoff = backoff.Config{
 	MaxDelay:   10 * time.Second,
 }
 
-// ClientConn is the node's one connection-door client: the posture both dials
+// ClientConn is the node's one connection API client: the posture both dials
 // wear, so the ssh bridge and the direct socket cannot drift apart, plus only
-// what the caller's transport needs. A test that dials a connection door uses
-// it too (test/boundary pins it), so it crosses the door the node crosses.
+// what the caller's transport needs. A test that dials a connection API uses
+// it too (test/boundary pins it), so it crosses the API the node crosses.
 func ClientConn(target string, transport ...grpc.DialOption) (*grpc.ClientConn, error) {
 	return grpc.NewClient(target, append([]grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -303,7 +303,7 @@ func Dial(cfg Config) (client namespace.Namespace, closer func(), err error) {
 	return namespace.FromClient(gridwellv1.NewGridwellClient(conn)), closer, nil
 }
 
-// dialDirect is a plain gRPC connection to another node's door on this
+// dialDirect is a plain gRPC connection to another node's API on this
 // machine. There is no auth: the socket's 0600 mode is the gate, admitting the
 // same uid only. Across machines the ssh bridge is the one authenticated
 // transport.

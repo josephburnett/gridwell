@@ -117,7 +117,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
       # The Windows artifact's accepted degradations are in
       # docs/release.md: no live shells, no serve lock, no proc plugin, no
-      # connection door.
+      # connection API.
       - name: portable exe
         run: make dist-win VERSION="${VERSION:-0.0.0-dev}"
       - uses: actions/upload-artifact@v4

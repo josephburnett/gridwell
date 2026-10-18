@@ -65,7 +65,7 @@ func TestNotice(t *testing.T) {
 	}
 }
 
-// Only the door's verdict is a refusal; an answer is an acceptance; a
+// Only the API's verdict is a refusal; an answer is an acceptance; a
 // transport failure is neither, because the node said nothing.
 func TestGateHears(t *testing.T) {
 	var heard []string
@@ -98,7 +98,7 @@ func TestBeaconPathCarriesTheBuild(t *testing.T) {
 	}
 }
 
-// The interceptor stamps the header a unary call carries; the door seam test
+// The interceptor stamps the header a unary call carries; the API seam test
 // (internal/server/build_gate_test.go) crosses the wire with it.
 func TestInterceptorStampsUnary(t *testing.T) {
 	g := New("pagebuild", func(string) {})

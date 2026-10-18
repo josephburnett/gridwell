@@ -1,7 +1,7 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt, updateText, writeContent } from './oracle';
 import { settle } from './cadence';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 
 // Inside a pane tile a grid's view is the layout blob's (2026-10-14), and so
 // is a text leaf's live scroll, while leaving it writes its row (2026-10-16). These cross the seam from the gesture
@@ -70,7 +70,7 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   await gw.wheelAtFocusedCenter(-300);
   await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs) * 2);
 
-  const before = await dumpViaDoor(gw.origin, token);
+  const before = await dumpViaAPI(gw.origin, token);
   const layoutBefore = storeWrites(before, isLayout);
   const writeContentBefore = rpcStarts(before, 'WriteContent');
   const framingBefore = storeWrites(before, isFraming);
@@ -80,14 +80,14 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   const left = await gw.focused();
 
   await expect
-    .poll(async () => storeWrites(await dumpViaDoor(gw.origin, token), isLayout), {
+    .poll(async () => storeWrites(await dumpViaAPI(gw.origin, token), isLayout), {
       message: 'the pan settles into one layout write',
       timeout: 10_000,
     })
     .toBeGreaterThan(layoutBefore);
   // Two more windows of each, so any write armed by the pan has landed.
   await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs) * 2);
-  const after = await dumpViaDoor(gw.origin, token);
+  const after = await dumpViaAPI(gw.origin, token);
   expect(storeWrites(after, isLayout), 'one pan, one layout write').toBe(layoutBefore + 1);
   expect(rpcStarts(after, 'WriteContent'), 'one pan, one WriteContent').toBe(writeContentBefore + 1);
   expect(storeWrites(after, isFraming), 'a pan inside a pane tile wrote a framing row').toBe(framingBefore);
@@ -106,7 +106,7 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   expect(back.cx, 'center x round-tripped').toBeCloseTo(left.cx, 1);
   expect(back.cy, 'center y round-tripped').toBeCloseTo(left.cy, 1);
 
-  const end = await dumpViaDoor(gw.origin, token);
+  const end = await dumpViaAPI(gw.origin, token);
   expect(storeWrites(end, isLayout), 'the round trip wrote the layout blob').toBe(layoutAfterPan);
   await gw.leaveWorkspace();
 });
@@ -212,14 +212,14 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
   const textViews = () =>
     window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetTextView ?? 0));
   const textViewsBefore = await textViews();
-  const layoutBefore = storeWrites(await dumpViaDoor(gw.origin, token), isLayout);
+  const layoutBefore = storeWrites(await dumpViaAPI(gw.origin, token), isLayout);
   const rowBefore = Number((await row()).textY ?? 0);
 
   const p = await gw.focused();
   await window.mouse.move(p.x + p.w / 2, p.y + p.h / 2);
   for (let i = 0; i < 8; i++) await window.mouse.wheel(0, 120);
   await expect
-    .poll(async () => storeWrites(await dumpViaDoor(gw.origin, token), isLayout), {
+    .poll(async () => storeWrites(await dumpViaAPI(gw.origin, token), isLayout), {
       message: 'the scroll settles into a layout write',
       timeout: 10_000,
     })

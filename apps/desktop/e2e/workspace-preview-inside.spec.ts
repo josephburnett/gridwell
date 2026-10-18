@@ -1,6 +1,6 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 import type { GridwellDriver } from './driver';
 
 // Ending an ephemeral visit inside a workspace while another of its panes
@@ -73,7 +73,7 @@ test('ending a visit inside a workspace never shows its preview a deleted leaf',
   const token = await loginToken(gw.origin, homePassword(home));
   const { pt, eph, scratchGridID } = await visitInsideWorkspace(gw, window);
 
-  const baseline = Math.max(0, ...(await dumpViaDoor(gw.origin, token)).map((l) => l.seq ?? 0));
+  const baseline = Math.max(0, ...(await dumpViaAPI(gw.origin, token)).map((l) => l.seq ?? 0));
   await gw.middleClickPane();
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 10_000 }).toBe('');
   await expect
@@ -91,7 +91,7 @@ test('ending a visit inside a workspace never shows its preview a deleted leaf',
   await gw.waitIdle();
   await window.waitForTimeout(1_000);
 
-  const after: TraceLine[] = (await dumpViaDoor(gw.origin, token)).filter((l) => (l.seq ?? 0) > baseline);
+  const after: TraceLine[] = (await dumpViaAPI(gw.origin, token)).filter((l) => (l.seq ?? 0) > baseline);
   const asked = after.filter(
     (l) => l.src === 'router' && l.kind === 'rpc' && l.msg.startsWith('GetTile error') && sameTile(l.kv?.id ?? '', eph),
   );

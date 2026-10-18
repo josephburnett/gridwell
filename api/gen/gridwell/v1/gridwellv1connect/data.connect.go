@@ -111,7 +111,7 @@ type GridwellClient interface {
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest]) (*connect.ServerStreamForClient[v1.ContentChunk], error)
 	WriteContent(context.Context) *connect.ClientStreamForClient[v1.WriteContentRequest, v1.TileResponse]
-	// ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(context.Context, *connect.Request[v1.ServeContentRequest]) (*connect.ServerStreamForClient[v1.ServeContentChunk], error)
 	// PlaceTile is the single placement writeback.
 	PlaceTile(context.Context, *connect.Request[v1.PlaceTileRequest]) (*connect.Response[v1.TileResponse], error)
@@ -434,7 +434,7 @@ type GridwellHandler interface {
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(context.Context, *connect.Request[v1.ReadContentRequest], *connect.ServerStream[v1.ContentChunk]) error
 	WriteContent(context.Context, *connect.ClientStream[v1.WriteContentRequest]) (*connect.Response[v1.TileResponse], error)
-	// ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(context.Context, *connect.Request[v1.ServeContentRequest], *connect.ServerStream[v1.ServeContentChunk]) error
 	// PlaceTile is the single placement writeback.
 	PlaceTile(context.Context, *connect.Request[v1.PlaceTileRequest]) (*connect.Response[v1.TileResponse], error)

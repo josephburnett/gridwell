@@ -1,7 +1,7 @@
 package server
 
 // A plugin entry that links to another of its entries (Entry.link_target),
-// through the whole stack: the adapter, the router, the browser door and the
+// through the whole stack: the adapter, the router, the web API and the
 // store's file. The target is an entry nobody has touched, so every hop must
 // resolve it by its address alone.
 

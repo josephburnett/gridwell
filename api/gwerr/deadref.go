@@ -16,7 +16,7 @@ import (
 // node does not declare, or, with namespace empty, a key its declared
 // namespace says is gone. NotFound, so every reader of the code is unchanged,
 // carrying a pb.DeadReference detail that survives every gRPC hop and the
-// Connect codec.
+// web API.
 func DeadRef(namespace, format string, args ...any) error {
 	st, err := status.New(codes.NotFound, fmt.Sprintf(format, args...)).
 		WithDetails(&pb.DeadReference{Namespace: namespace})
@@ -56,7 +56,7 @@ func IsDeadRef(err error) bool {
 }
 
 // ConnectDetails carries a status's verdict details (DeadReference,
-// SourceDisabled) onto a Connect error; the Connect codec is the one hop that
+// SourceDisabled) onto a Connect error; the web API is the one hop that
 // rebuilds an error and would drop them.
 func ConnectDetails(err error, ce *connect.Error) *connect.Error {
 	st, ok := status.FromError(err)

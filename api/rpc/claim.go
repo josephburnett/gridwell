@@ -7,8 +7,8 @@ import (
 )
 
 // UnclaimedWrite is why req, a write of something the user made or placed,
-// may not cross a door: it names no claim. It answers "" for a request that
-// carries its claim or claims nothing. Both doors refuse what it names and
+// may not cross an API: it names no claim. It answers "" for a request that
+// carries its claim or claims nothing. Both APIs refuse what it names and
 // Client never sends it; the node's own writers (a reap, a sweep) call their
 // namespace directly and never meet it. WriteContent and a rename claim by
 // shape, their version being a plain number every write carries. A select is

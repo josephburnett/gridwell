@@ -65,7 +65,7 @@ func TestAReferenceIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 		}
 		spelled := strings.Replace(bText.Id, meNode+"/tob/", meNode+"/toa/"+aNode+"/tob2/", 1)
 		wantLink(t, got, aHome, spelled, "on b")
-		// The holder's own door reads its own spelling.
+		// The holder's own API reads its own spelling.
 		onA := m.tileIn(ctx, aNode, rpc.QualifyID(aNode, m.nodes[aNode].root), strings.TrimPrefix(got.Id, meNode+"/toa/"))
 		if want := strings.TrimPrefix(spelled, meNode+"/toa/"); onA.LinkTargetId != want {
 			t.Fatalf("on a the link names %q, want %q", onA.LinkTargetId, want)

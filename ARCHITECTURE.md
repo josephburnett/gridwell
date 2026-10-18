@@ -26,9 +26,9 @@ store               internal/local/store      gridwell.db
 
 Inside the node a namespace is a Go interface (`internal/namespace`). There
 are exactly two gRPC hops, both across a real process boundary: the plugin
-subprocess (`plugin.v1`) and the connection door (`gridwell.v1`). Connect
-over HTTP is the third codec, and it crosses to the browser; MCP over HTTP is
-the fourth, and it crosses to an agent (`internal/mcpdoor`, `docs/mcp.md`).
+subprocess (`plugin.v1`) and the connection API (`gridwell.v1`). Connect
+over HTTP is the web API, and it crosses to the browser; MCP over HTTP is the
+MCP API, and it crosses to an agent (`internal/mcpapi`, `docs/mcp.md`).
 
 ## Ids
 
@@ -110,7 +110,7 @@ Wire-only fields are derived in exactly one place each. `Tile.reference`
 (this tile is a link) comes from `server.qualifyTiles`. `text_presentation`
 and `status_detail` come from the plugin's `Entry` through
 `pluginhost/adapter.go`. `Tile.serves_page` (this url tile opens at the
-/content/ door, and only a url entry may say so) comes from the `Entry` too,
+/content/ API, and only a url entry may say so) comes from the `Entry` too,
 and a plugin row also keeps it in its snapshot beside kind, label and
 `url_string` (`store.snapshotOf`), so a row its source does not list right
 now still presents as the page it was. A plugin tile's `preview_blob_id` is
@@ -139,10 +139,10 @@ read rather than serving a grid with a face nobody declared. `Grid.node_ns` come
 ## The router
 
 `internal/server/router.go` is a `namespace.Namespace` over qualified ids.
-It holds no state. Three codecs stand on it and route nothing themselves:
-`connect_codec.go` for the browser, `namespace.Server` (`nodeexport.go`)
-for other nodes, and `mcp_door.go` for agents. They cannot drift because
-they are the same value. The MCP door's tools make the calls the client makes
+It holds no state. Three APIs decode onto it and route nothing themselves:
+`web_api.go` for the browser, `namespace.Server` (`nodeexport.go`)
+for other nodes, and `mcp_api.go` for agents. They cannot drift because
+they are the same value. The MCP API's tools make the calls the client makes
 for the same gesture, reading first and claiming what they read, and hand
 every refusal back with the router's reason.
 
@@ -153,15 +153,15 @@ it deep-copies (`deepcopy.go`), reading through one chain and writing through
 the other. So bytes travel no further than the two ends are apart. Two
 connections are two owners even though one transport serves both.
 
-Two listeners. The web door (`web.bind`) serves Connect, the content door,
-the shell door and the MCP door (`/mcp`) behind a password cookie, or the
+Two sockets. The web API (`web.bind`) serves Connect, the content API,
+the shell API and the MCP API (`/mcp`) behind a password cookie, or the
 password itself as a bearer, which is how an agent authenticates; serve mints
 the 0600 `web-password` file and prints it with the `claude mcp add` line,
 delete it to rotate. Behind the cookie the
 build gate (`Server.staleBuild`) refuses any call a page of another build
 makes, before the verb runs; the page offers a reload (`client/nodebuild`). An
 agent's MCP call is no page's, so the gate never judges it. The
-connection door is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
+connection API is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
 `server.yaml` key is `federation:` and its file is `federation.sock`, kept
 because an existing home already has them written down.
 
@@ -408,7 +408,7 @@ handshake roster the + menu is built from, asks the router's own peel
 node's declaration without asking. A deeper hop is the far node's to judge,
 and its router or transport answers the dead verdict, `gwerr.DeadRef`: a
 NotFound carrying a `DeadReference` detail, which survives every hop and the
-Connect codec (`gwerr.IsDeadRef`). The client reads it as `OutcomeDead`,
+web API (`gwerr.IsDeadRef`). The client reads it as `OutcomeDead`,
 latches the read `inflight.Dead`, surfaces nothing, and `deadref.DeadTile`
 draws the link dead while that latch stands. A dead link is drawn grey and
 inert, is not fetched for again until its latch clears, raises no notice, and
@@ -434,7 +434,7 @@ it cannot move the viewport.
 pane, and two panes animate without either voiding the other. A transition
 that is displaced or cleared LANDS — its destination place is installed and
 its landing runs — so the frame push a descent animates towards is never
-conditional on the animation finishing. `Set.Cancel` is that one door; the
+conditional on the animation finishing. `Set.Cancel` is that one way; the
 only drop without a landing is a pane that is closing.
 
 **Rendered text** is a sanitized HTML overlay (`markdown.RenderHTML`:
@@ -476,7 +476,7 @@ DOM focus change is a `dom-focus` trace record.
 **Shells** attach over a WebSocket at `/shell` on the page's own origin
 (`client/shellwire` writes the address and frames; `client/shellstream` owns
 the lifecycle). Binary frames are PTY bytes, text frames are JSON control
-(resize up, one exit verdict down). The door (`internal/server/shell_door.go`)
+(resize up, one exit verdict down). The shell API (`internal/server/shell_api.go`)
 resolves the id before accepting, so a refused upgrade never leaves a tmux
 session behind.
 
@@ -531,7 +531,7 @@ bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
 view's pixels — a pan in one pane leaves the others alone. The focus guard keeps OS keyboard focus in the focused
 pane's view only. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
-left press, and `showContextMenu` — the one funnel for both doors into the
+left press, and `showContextMenu` — the one funnel for both ways into the
 native menu — announces the pane it is opening on. Both land in `focusToPane`,
 so a right-click moves focus like every other press. A view whose webContents
 ends outside `remove()` — a page that called `window.close()` — is retired at
@@ -561,20 +561,20 @@ and a record without a `ct` keeps receipt time. So a dump sorted by `t`
 interleaves the client's records with the node work they caused, where `seq`
 puts a batch after everything that happened while it waited to be sent.
 
-The door is on the gated web mux beside `/shell`. `POST /trace` takes JSON
+The trace API is on the gated web mux beside `/shell`. `POST /trace` takes JSON
 lines and answers 204; a send clock it cannot read is a 400; a malformed line is a 400 naming its number, and the
 good lines before it stay. `POST /trace/dump` writes the ring in seq order to
 `<home>/dumps/trace-<UTC yyyymmdd-hhmmss>.jsonl`, 0600 in a 0700 directory,
 and answers the path and the count. A dump is a reading: it clears nothing.
 
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
-gesture makes, and both doors' interceptors emit a start and an end record
+gesture makes, and both APIs' interceptors emit a start and an end record
 carrying it and `kv.id`, the tile or grid the request names (a stream's
 rides the end record), with the duration and, on a failure, the code. What emits: every
 store write (one record at `withMutation`, the transaction every mutation runs
 in), every publish, delivery and coalesce in `eventhub`, the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
-transition, the shell door's refusals, opens and closes, each session's
+transition, the shell API's refusals, opens and closes, each session's
 view as it arrives (`view/set`), each new union of the grids the clients show
 (`view/union`), and — through
 `log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
@@ -629,7 +629,7 @@ copy:
 | is the menu open, on which pane | `client/menu` |
 | the viewport transform | `zoomtrans.LiveFromIntrinsic` / `IntrinsicFromLive` |
 | is this pane animating, and where a displaced one lands | `transition.Set` |
-| the shell door's address and frames | `client/shellwire` |
+| the shell API's address and frames | `client/shellwire` |
 | what error is this | `gwerr.ClassifyError` |
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
@@ -645,7 +645,7 @@ copy:
 | what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/subscription.Tracker` |
 | what each session shows, and which grids the clients are showing | `subscription.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
 | how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
-| the trace line, its door and its header | `api/tracewire` |
+| the trace line, its API and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |
 
 Remaining seams with more than one writer, ranked by risk:
@@ -668,11 +668,11 @@ pane is inside" and do not spread the word.
 | Invariant | Enforced by |
 |---|---|
 | Ids never reused | AUTOINCREMENT |
-| `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both doors refuse one that names none; framing, captures and a select carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
+| `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both APIs refuse one that names none; framing, captures and a select carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
 | Clone is an eager deep copy | `CloneTile` |
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |
-| The wire surfaces cannot drift | every one is a codec over one `namespace.Namespace` |
+| The APIs cannot drift | each decodes onto one `namespace.Namespace` |
 | A hop peels in exactly what it prepends out | one field list, `rpc.tileIDFields`; `TestPeelRequestPeelsEveryIDOfEveryMultiIDRequest`, `TestIdsWrittenIntoAFarGridComeBackAsSent` |
 | An answer is never mutated under another reader | qualification clones; `TestTwoSubscribersEachSeeExactlyOnePrefix` |
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |

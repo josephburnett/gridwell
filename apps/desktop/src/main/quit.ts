@@ -44,7 +44,7 @@ export class QuitFlush {
     if (this.started) return;
     this.started = true;
     trace({ src: 'quit', kind: 'begin', msg: 'closing the windows' });
-    // While the windows are still up: the door dies with the sidecar, so this
+    // While the windows are still up: the API dies with the sidecar, so this
     // is the last batch that can land.
     this.deps.flushTrace();
     const set = this.deps.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));

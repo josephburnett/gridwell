@@ -1,6 +1,6 @@
 package sourcecache
 
-// Bounded ServeContent caching, so the /content/ door degrades
+// Bounded ServeContent caching, so the /content/ API degrades
 // stale-but-viewable like every other read. These bodies are the one genuinely
 // unbounded class this cache touches, so they get their own valves: a
 // per-entry cap and a per-source cap with oldest-first eviction, emergency
@@ -16,7 +16,7 @@ import (
 
 // Valves (vars for tests).
 var (
-	// serveContentEntryCap bounds one cached door body. Larger bodies stream
+	// serveContentEntryCap bounds one cached served body. Larger bodies stream
 	// through live and stay online-only.
 	serveContentEntryCap = 32 << 20
 	// serveContentMountCap bounds the servecontent table per source; the
@@ -24,7 +24,7 @@ var (
 	serveContentMountCap = int64(512 << 20)
 )
 
-// ServeContent tees the door body the way ReadContent tees a tile's. Only
+// ServeContent tees the served body the way ReadContent tees a tile's. Only
 // status-200 answers are remembered: an error page is a verdict, and verdicts
 // are never served stale.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {

@@ -29,7 +29,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	// Node A is the other server on this box.
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
-	// remoteAddr is the connection door's unix socket path, the only thing
+	// remoteAddr is the connection API's unix socket path, the only thing
 	// a connection can dial.
 	_, remoteAddr := startServe(t, bin, remoteHome, "127.0.0.1:0")
 

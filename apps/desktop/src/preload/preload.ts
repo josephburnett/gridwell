@@ -1,4 +1,4 @@
-// The renderer's only door to the native url-tile machinery in main, exposed as
+// The renderer's only way to the native url-tile machinery in main, exposed as
 // window.gridwell and called by client/wasm/webview_bridge.go. ipc.ts owns the
 // channels and the payload shapes.
 import { contextBridge, ipcRenderer } from 'electron';

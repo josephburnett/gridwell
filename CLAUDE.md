@@ -47,11 +47,11 @@ comment beside it says.
    need it, one derives and the rest read. `ARCHITECTURE.md` lists the
    shapes to copy. A change that leaves the copy-count the same has not
    fixed the class; aim for the design where the bug cannot be written.
-   A door's listener and server configuration is one such fact with an
-   owner, not glue each harness rewrites: `server.WebDoorServer` and
-   `server.ConnectionDoorServer` are the two shapes, `dial.ClientConn` is
-   the one way to dial a connection door, `test/boundary` pins all three,
-   and a harness that builds its own serves or dials a door the node never
+   An API's socket and server configuration is one such fact with an
+   owner, not glue each harness rewrites: `server.WebAPIServer` and
+   `server.ConnectionAPIServer` are the two shapes, `dial.ClientConn` is
+   the one way to dial a connection API, `test/boundary` pins all three,
+   and a harness that builds its own serves or dials an API the node never
    runs.
 2. **Root-cause first.** State the mechanism in one sentence before touching
    anything. If you cannot name it, keep digging. A retry, a `setTimeout`, or
@@ -148,7 +148,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   re-reads its grid (`App.postPlacement`), a refused delete or freeze
   re-reads it. A claim is about the state, not its history: a tile moved
   away and back is where the writer saw it. A write landing where the row
-  already is writes nothing and loses nothing. The doors refuse a user write
+  already is writes nothing and loses nothing. The APIs refuse a user write
   that names no claim (`rpc.UnclaimedWrite`, which the client checks too), so
   only the node's own writers (a reap, the boot sweep) reach a namespace
   without one; the ephemeral cleanup claims the row its visit held
@@ -173,7 +173,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   without `clear` is refused. `clear` with `all` and nothing else empties
   every set the node holds, one write per namespace (home, each plugin),
   and goes on over each live connection to the far node, whose sets are its
-  rows; asked over its connection door, a node clears its own and forwards
+  rows; asked over its connection API, a node clears its own and forwards
   nothing (`router.clearAllSelections`). The + circle's right-click offers
   it as Clear selections, above Dump logs, which stays the bottom row; the
   client empties the per-pane sets in its open pane tiles' layouts too
@@ -250,12 +250,12 @@ These were decided deliberately. Do not reverse one without a new decision.
 
 - Inside the node a namespace is a Go value (`internal/namespace`). gRPC
   survives at two hops only: the plugin subprocess and the connection
-  door. Both node-side doors are codecs over the one router.
-- Plugins are the third-party door, and they live in their own repository,
-  `github.com/josephburnett/gridwell-plugins` — the shipped fs, proc, pages,
-  gitlab, gmail and hey on the same footing as anyone else's. This repo owns
-  the door: the proto, `api/gen/plugin/v1`, and the go-plugin handshake
-  (`api/compose`).
+  API. Both node-side APIs decode onto the one router.
+- The plugin API is the third-party way in, and plugins live in their own
+  repository, `github.com/josephburnett/gridwell-plugins` — the shipped fs,
+  proc, pages, gitlab, gmail and hey on the same footing as anyone else's.
+  This repo owns the plugin API: the proto, `api/gen/plugin/v1`, and the
+  go-plugin handshake (`api/compose`).
   No gridwell package, TEST FILES INCLUDED, imports a plugin implementation
   or names that repository in a go.mod, and nothing switches on a plugin
   kind; every plugin behavior rides a wire declaration. `test/boundary`
@@ -346,10 +346,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   above it, and every opening starts folded — the fold is the menu's live
   state and dies with it (`client/menu` decides what a state shows and owns
   the flag).
-- Agents reach the node through the MCP door (2026-10-15): `/mcp` on the
-  web door, Streamable HTTP, the web password as a bearer beside the cookie,
-  and no build gate, since no page is behind it. It is a codec over the one
-  router (`internal/mcpdoor`): every write reads first and claims what it
+- Agents reach the node through the MCP API (2026-10-15): `/mcp` on the
+  web API, Streamable HTTP, the web password as a bearer beside the cookie,
+  and no build gate, since no page is behind it. It decodes onto the one
+  router (`internal/mcpapi`): every write reads first and claims what it
   read, every refusal is a tool error with the router's reason, and a tile it
   places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
@@ -362,13 +362,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   selection that pane shows when non-empty, else the grid: inside a pane
   tile the pane's own, read from the layout under the id the view names
   (`ViewPane.layout_pane_id`, `pane.SelectionTarget`), never the row's. The
-  door writes no layout, so `select` sets only a grid row's set: the open
+  MCP API writes no layout, so `select` sets only a grid row's set: the open
   window owns its layout, and an outside write would turn its next change
   into a conflict. The session is the one named,
   else the one holding the agent's shell live, else the one whose view
   changed last, the others named. A new tmux session carries its key in
   `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`, and the shell
-  door, the one place a socket and its session are both in hand, joins the
+  API, the one place a socket and its session are both in hand, joins the
   two (`Server.ShellHolder`).
 - A plugin or connection the user disables, from the Disable button on its
   health notice, stays disabled until the node restarts. It is held in the
@@ -380,15 +380,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   grid it serves is stamped `writable=false`, `accepts_tiles=false`, each
   row `read_only` with the reason, so an edit is refused before it is typed;
   a merely-down source keeps parking writes in the outbox (2026-10-09).
-- The web door always has a password (the minted 0600 `web-password` file;
-  delete it to rotate). The connection door is a 0600 unix socket, never
+- The web API always has a password (the minted 0600 `web-password` file;
+  delete it to rotate). The connection API is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays
   `federation.sock`: an existing home already has them written down.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
   interchangeable with the cookie. It is either a text tile or a url tile: a
   text tile cannot serve from the plugin, so `serves_page` rides a url entry
-  and the door refuses it on every other kind.
+  and the content API refuses it on every other kind.
 
 **Experience**
 
@@ -405,7 +405,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   tile keeps that face, the address and the tmux session keep existing, a
   clone taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
-- Shells ride the web door: a WebSocket at `/shell`, same cookie, same
+- Shells ride the web API: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
   shells off is the node (`disable_shells`).
@@ -498,7 +498,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 - The Chromium session is host-local: one partition for every live url
   tile. Nothing about sessions or networks crosses the wire.
 - No parameterized plugins. Modals center on the active pane.
-- A client the node served runs the node's build: the door refuses any call
+- A client the node served runs the node's build: the web API refuses any call
   from another build, and the client shows one persistent notice with a
   Reload button and reloads only when the user asks (2026-10-07).
 
@@ -512,7 +512,7 @@ and that is where the worst bugs live.
 | `make check` | Go + TS logic; compiles wasm, executes none of it | every commit |
 | `make check-electron` | the `WebContentsView` bridge under xvfb | the live url path, `webviews.ts`, the preload |
 | `make check-e2e` | the full app as a black box | any `apps/desktop` change, anything under `client/wasm` or `web/`, the native layer, cross-seam behavior |
-| `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell door |
+| `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell API |
 | `make check-connections` | the real binaries through a real ssh tunnel | plugin spawn, the dialer, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
 
 A feature is not done when its gates are green. It is done when a trace of

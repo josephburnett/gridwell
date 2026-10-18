@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 
 // One line of a dump: api/tracewire.Record as a suite reads it back. The
 // node stamps seq and t, so a record the client made carries neither until it
-// has been through the door.
+// has been through the API.
 export interface TraceLine {
   seq?: number;
   t?: number;
@@ -23,7 +23,7 @@ export function readDump(file: string): TraceLine[] {
     .map((l) => JSON.parse(l) as TraceLine);
 }
 
-// The request ids that name work on both sides of the door. kv.req is the
+// The request ids that name work on both sides of the API. kv.req is the
 // join: the client stamps it on the call and both halves record it, so an id
 // with a client rpc record and a node one is one gesture seen end to end.
 export function joinedRequests(lines: TraceLine[]): string[] {
@@ -53,10 +53,10 @@ export function describe(lines: TraceLine[]): string {
   return [...byOrigin.entries()].map(([o, n]) => `${o}:${n}`).join(' ');
 }
 
-// dumpViaDoor takes a dump over the web door on the given cookie and reads the
+// dumpViaAPI takes a dump over the web API on the given cookie and reads the
 // file it names. A dump writes the ring to a file and clears nothing, so a
 // poll may take it as often as it likes.
-export async function dumpViaDoor(origin: string, token: string): Promise<TraceLine[]> {
+export async function dumpViaAPI(origin: string, token: string): Promise<TraceLine[]> {
   const res = await fetch(origin + '/trace/dump', {
     method: 'POST',
     headers: { Cookie: `gridwell_auth=${token}` },
@@ -66,7 +66,7 @@ export async function dumpViaDoor(origin: string, token: string): Promise<TraceL
   return readDump(path);
 }
 
-// dumpNow is dumpViaDoor once this client has posted every record it holds,
+// dumpNow is dumpViaAPI once this client has posted every record it holds,
 // with the cid its own records carry.
 export async function dumpNow(
   window: any,
@@ -79,5 +79,5 @@ export async function dumpNow(
     if (Date.now() > deadline) throw new Error('the client never posted its trace backlog');
     await window.waitForTimeout(100);
   }
-  return { cid: (await trace()).cid, lines: await dumpViaDoor(origin, token) };
+  return { cid: (await trace()).cid, lines: await dumpViaAPI(origin, token) };
 }

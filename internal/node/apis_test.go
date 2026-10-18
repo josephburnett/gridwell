@@ -11,17 +11,17 @@ import (
 	"github.com/josephburnett/gridwell/internal/connection/dial"
 )
 
-// The listener seam of the two doors: the web door binds where config says,
-// the connection door is a 0600 unix socket at `federation:` and never TCP,
+// The socket seam of the two APIs: the web API binds where config says,
+// the connection API is a 0600 unix socket at `federation:` and never TCP,
 // and a fresh home is password-gated from the first serve.
-func TestStartBindsTheConnectionDoorOnASocketOnly(t *testing.T) {
+func TestStartBindsTheConnectionAPIOnASocketOnly(t *testing.T) {
 	home := t.TempDir()
 	cfg, err := BuildConfig(home, filepath.Join(home, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.WebPassword == "" || cfg.Federation.Socket != filepath.Join(home, "federation.sock") {
-		t.Fatalf("built config: web %+v connection door %+v", cfg.Web, cfg.Federation)
+		t.Fatalf("built config: web %+v connection API %+v", cfg.Web, cfg.Federation)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
 	n, err := Start(Options{Home: home, Cfg: cfg})
@@ -31,7 +31,7 @@ func TestStartBindsTheConnectionDoorOnASocketOnly(t *testing.T) {
 	n.ServeBackground()
 
 	if n.ConnLn.Addr().Network() != "unix" || n.ConnLn.Addr().String() != cfg.Federation.Socket {
-		t.Fatalf("connection door = %s %s, want the unix socket %s", n.ConnLn.Addr().Network(), n.ConnLn.Addr(), cfg.Federation.Socket)
+		t.Fatalf("connection API = %s %s, want the unix socket %s", n.ConnLn.Addr().Network(), n.ConnLn.Addr(), cfg.Federation.Socket)
 	}
 	st, err := os.Stat(cfg.Federation.Socket)
 	if err != nil || st.Mode().Perm() != 0o600 {
@@ -47,10 +47,10 @@ func TestStartBindsTheConnectionDoorOnASocketOnly(t *testing.T) {
 		return err
 	}
 	if err := info("unix:" + cfg.Federation.Socket); err != nil {
-		t.Fatalf("connection door: %v", err)
+		t.Fatalf("connection API: %v", err)
 	}
 	if err := info(n.Ln.Addr().String()); err == nil {
-		t.Fatal("the web door answered raw gRPC")
+		t.Fatal("the web API answered raw gRPC")
 	}
 	res, err := http.Get("http://" + n.Ln.Addr().String() + "/gridwell.v1.Gridwell/Handshake")
 	if err != nil {
@@ -58,7 +58,7 @@ func TestStartBindsTheConnectionDoorOnASocketOnly(t *testing.T) {
 	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("the web door answered %d without the cookie, want 401 (the password is required)", res.StatusCode)
+		t.Fatalf("the web API answered %d without the cookie, want 401 (the password is required)", res.StatusCode)
 	}
 	if err := n.Close(); err != nil {
 		t.Fatal(err)

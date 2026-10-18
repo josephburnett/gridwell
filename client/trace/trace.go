@@ -1,5 +1,5 @@
 // Package trace is the client's half of the always-on trace: a ring of
-// records the shim posts to the node's trace door, so one dump shows a
+// records the shim posts to the node's trace API, so one dump shows a
 // gesture from the press through the server's work to the frame.
 package trace
 
@@ -92,7 +92,7 @@ func (c *Client) CID() string { return c.cid }
 func (c *Client) PendingCount() int { return int(c.base + uint64(c.count) - c.acked) }
 
 // PendingBatch is every unacknowledged record as JSON lines, and the ack to
-// call once the door has answered. Unacked records ride the next batch, so a
+// call once the API has answered. Unacked records ride the next batch, so a
 // failed post loses nothing.
 func (c *Client) PendingBatch() ([]byte, func()) {
 	if n := c.dropped; n > 0 {

@@ -1,4 +1,4 @@
-// Package tracewire is the trace door: where an emitter posts its records,
+// Package tracewire is the trace API: where an emitter posts its records,
 // the header that ties one gesture to the server work it caused, and the
 // record both sides read. It is in the api module so the node and the client
 // agree on the shape without importing each other.
@@ -25,7 +25,7 @@ const (
 
 	// BuildHeader carries the calling page's BuildCommit on every call it
 	// makes, and BuildQuery the same on the two that cannot set a header: a
-	// beacon and the shell WebSocket. The web door refuses a page of another
+	// beacon and the shell WebSocket. The web API refuses a page of another
 	// build (Server.staleBuild).
 	BuildHeader = "Gridwell-Build"
 	BuildQuery  = "gridwell_build"
@@ -38,7 +38,7 @@ const (
 
 // The origins. OriginClient and OriginElectron are the only two an emitter may
 // claim: the node forces anything else to OriginClient, because a record that
-// came through the door did not come from the node. OriginNode and
+// came through the API did not come from the node. OriginNode and
 // OriginPlugin are the node's own, written on records it makes itself.
 const (
 	OriginClient   = "client"

@@ -243,9 +243,9 @@ func TestUpdateTile(t *testing.T) {
 }
 
 // The interlock belongs to the tile map, not to the path a row arrived on, so
-// the response door obeys it too. The seam version is
+// the response path obeys it too. The seam version is
 // internal/server/outbox_seam_test.go:TestAResponseRowObeysTheInterlock.
-func TestUpdateTileTakesTheOneDoor(t *testing.T) {
+func TestUpdateTileTakesTheOneWayIn(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "10"}, []*gridwellv1.Tile{
 		&gridwellv1.Tile{Id: "100", GridId: "10", Kind: rpc.KindText, Version: 5, W: 1},
@@ -268,7 +268,7 @@ func TestUpdateTileTakesTheOneDoor(t *testing.T) {
 	}
 }
 
-// The response door reconciles cached content the same way an event and a
+// The response path reconciles cached content the same way an event and a
 // refetch do. Skipping it on one path is how a version silently advances past
 // the bytes it vouches for.
 func TestUpdateTileAgesTheBodyToo(t *testing.T) {
@@ -281,14 +281,14 @@ func TestUpdateTileAgesTheBodyToo(t *testing.T) {
 	// A response row at 6 — a rename, say, which is a content edit and bumps.
 	c.UpdateTile("10", &gridwellv1.Tile{Id: "100", GridId: "10", Kind: rpc.KindText, Version: 6, AltText: "named"})
 	if _, ok := c.TileContent("100"); ok {
-		t.Error("the response door left a body vouched for by a version the row has moved past")
+		t.Error("the response path left a body vouched for by a version the row has moved past")
 	}
 
 	// A dirty body is the user's unsaved typing and survives, as everywhere.
 	c.PutEditedContent("100", []byte("typing"))
 	c.UpdateTile("10", &gridwellv1.Tile{Id: "100", GridId: "10", Kind: rpc.KindText, Version: 7})
 	if got, ok := c.DirtyContent("100"); !ok || string(got) != "typing" {
-		t.Errorf("the response door discarded unsaved typing: %q %v", got, ok)
+		t.Errorf("the response path discarded unsaved typing: %q %v", got, ok)
 	}
 }
 

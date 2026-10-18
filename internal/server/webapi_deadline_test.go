@@ -1,17 +1,17 @@
 package server
 
-// The web door's deadline rule: a Connect server stream held open through the
-// WebDoorServer shape, over real HTTP, for longer than any deadline that shape
+// The web API's deadline rule: a Connect server stream held open through the
+// WebAPIServer shape, over real HTTP, for longer than any deadline that shape
 // declares, then proven live by an event after the hold. A declared timeout is
-// a fact, and its test is a wait bound to its value. The web-door twin of
-// door_deadline_test.go.
+// a fact, and its test is a wait bound to its value. The web API twin of
+// api_deadline_test.go.
 //
 // net/http arms ReadHeaderTimeout to read the request headers and clears it
 // once they are read, so an HTTP/1 response body streams on afterward; a
 // WriteTimeout would deadline the whole response write and cut this stream.
-// The hold is derived from WebDoorServer, so it tracks any deadline added to
+// The hold is derived from WebAPIServer, so it tracks any deadline added to
 // the shape. The wait is the test and must not be shortened by lowering the
-// door's timeout.
+// API's timeout.
 
 import (
 	"context"
@@ -24,8 +24,8 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-func TestWebDoorHoldsAConnectStreamPastAnyDeadline(t *testing.T) {
-	shape := WebDoorServer(http.NotFoundHandler())
+func TestWebAPIHoldsAConnectStreamPastAnyDeadline(t *testing.T) {
+	shape := WebAPIServer(http.NotFoundHandler())
 	hold := max(shape.ReadHeaderTimeout, shape.ReadTimeout, shape.WriteTimeout) + 500*time.Millisecond
 	if hold < time.Second {
 		hold = time.Second
@@ -91,15 +91,15 @@ func TestWebDoorHoldsAConnectStreamPastAnyDeadline(t *testing.T) {
 		}
 	}
 
-	// Establish, then hold the stream idle past every deadline the door
+	// Establish, then hold the stream idle past every deadline the API
 	// declares. A WriteTimeout on the shape would cut the response mid-hold; a
-	// door with only ReadHeaderTimeout, cleared once headers are read, keeps
+	// API with only ReadHeaderTimeout, cleared once headers are read, keeps
 	// the stream open through an idle wait longer than that timeout.
 	awaitEvent("establish")
 	start := time.Now()
 	select {
 	case err := <-ended:
-		t.Fatalf("the web door cut the Connect stream %s into the hold: %v",
+		t.Fatalf("the web API cut the Connect stream %s into the hold: %v",
 			time.Since(start).Round(100*time.Millisecond), err)
 	case <-time.After(hold):
 	}
@@ -111,5 +111,5 @@ func TestWebDoorHoldsAConnectStreamPastAnyDeadline(t *testing.T) {
 	}
 	awaitEvent("after the hold")
 
-	fmt.Printf("web door deadline: a Connect server stream held %s past the door's deadlines stayed live OK\n", hold)
+	fmt.Printf("web API deadline: a Connect server stream held %s past the API's deadlines stayed live OK\n", hold)
 }

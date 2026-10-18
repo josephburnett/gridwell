@@ -29,8 +29,8 @@ import (
 // or changing identity; and a plugin restart does not lose the tile.
 //
 // Nothing here is injected. The plugin lives in another repository, so the
-// subprocess is its only door, and the clock is real: a short `refresh:` makes
-// the second walk happen, and weeks derive from each todo's created_at.
+// subprocess is its only way in, and the clock is real: a short `refresh:`
+// makes the second walk happen, and weeks derive from each todo's created_at.
 
 // todoTileW mirrors the plugin's hinted todo width — two cells, so the label
 // reads — and doneMark its one status, the done mark. It is the plugin's own arrangement fact, read back off the wire
@@ -92,7 +92,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	reg := plugin.NewRegistry()
 	reg.Register("ug1", "gitlab", client, nil)
 	srv := mustNew(t, reg, Config{Password: "pw"})
-	webDoorTest(t, srv.WebHandler())
+	webAPITest(t, srv.WebHandler())
 	ctx := context.Background()
 
 	// Root: one well per week, hinted into the epoch-anchored column.

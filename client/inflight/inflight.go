@@ -20,7 +20,7 @@ import (
 const Deadline = 30 * time.Second
 
 // Bounded is the context for a client RPC that holds no dedupe claim: one
-// door to Deadline, so no call site picks its own bound. The caller cancels.
+// way to Deadline, so no call site picks its own bound. The caller cancels.
 func Bounded() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), Deadline)
 }

@@ -36,7 +36,7 @@ export interface Served {
 }
 
 // The one serve spawner for the browser suites. The banner is readiness,
-// because the server prints "serving on" only once both doors listen.
+// because the server prints "serving on" only once both APIs listen.
 export async function spawnServe(home: string, port: number, extraArgs: string[] = []): Promise<Served> {
   const origin = `http://127.0.0.1:${port}`;
   const child = spawn(

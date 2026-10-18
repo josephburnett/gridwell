@@ -79,7 +79,7 @@ type GridwellClient interface {
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(ctx context.Context, in *ReadContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ContentChunk], error)
 	WriteContent(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteContentRequest, TileResponse], error)
-	// ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(ctx context.Context, in *ServeContentRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ServeContentChunk], error)
 	// PlaceTile is the single placement writeback.
 	PlaceTile(ctx context.Context, in *PlaceTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
@@ -386,7 +386,7 @@ type GridwellServer interface {
 	// ── Content streams (the one way content bytes move; see the messages) ────
 	ReadContent(*ReadContentRequest, grpc.ServerStreamingServer[ContentChunk]) error
 	WriteContent(grpc.ClientStreamingServer[WriteContentRequest, TileResponse]) error
-	// ── Web content (the HTTP /content/ door's RPC carrier) ──────────────────
+	// ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
 	ServeContent(*ServeContentRequest, grpc.ServerStreamingServer[ServeContentChunk]) error
 	// PlaceTile is the single placement writeback.
 	PlaceTile(context.Context, *PlaceTileRequest) (*TileResponse, error)

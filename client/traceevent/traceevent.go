@@ -48,7 +48,7 @@ func NodeBuild(node string) Event {
 		KV: kv("node", node)}
 }
 
-// StaleBuild is the door refusing this page's build and what the page did
+// StaleBuild is the web API refusing this page's build and what the page did
 // about it (nodebuild.Decide).
 func StaleBuild(client, node, verdict string) Event {
 	return Event{Src: "client", Kind: "build", Msg: "the node runs " + shortOrUnstamped(node) +

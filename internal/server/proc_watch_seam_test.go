@@ -1,7 +1,7 @@
 package server_test
 
 // The shipped proc plugin's Watch, spawned as the loader spawns it and
-// started through pluginhost.Start, reaching a client at the web door: the
+// started through pluginhost.Start, reaching a client at the web API: the
 // plugin's poll of a shown pid over the real /proc, the node's stream and the
 // fan-out.
 

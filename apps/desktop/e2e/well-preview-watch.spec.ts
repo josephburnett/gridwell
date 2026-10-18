@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 import { tileAt } from './oracle';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 
 // A plugin collection seen only as a well's preview is on screen, so its
 // plugin watches it and a change on disk redraws the preview with no gesture.
@@ -38,7 +38,7 @@ test('a collection shown as a well preview redraws when its source changes', asy
     window.evaluate((gid: string) => Object.keys((window as any).__gridwellTest.gridSigs(gid)).length, child);
   await expect.poll(previewed, { message: 'the preview drew the one file', timeout: 10_000 }).toBe(1);
   await expect
-    .poll(async () => lastUnion(await dumpViaDoor(gw.origin, token)), {
+    .poll(async () => lastUnion(await dumpViaAPI(gw.origin, token)), {
       message: 'the node hears the previewed grid as shown',
       timeout: 10_000,
     })

@@ -4,7 +4,7 @@ import { readDump, joinedRequests, bootOrigins, describe as describeDump } from 
 
 // A phone has no native menu, so the circle's right-click draws its own DOM
 // popover: this is the other renderer's half of e2e/trace-dump.spec.ts. The
-// dump itself is the same door, and the file must hold both halves of the
+// dump itself is the same API, and the file must hold both halves of the
 // trace whichever menu ran the row.
 
 test('the circle popover dumps the trace and names the file', async ({ gw, serve, window }) => {

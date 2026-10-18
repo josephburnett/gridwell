@@ -105,7 +105,7 @@ func TestRefusedNamesNeverReachTheTransport(t *testing.T) {
 		}
 	}
 	if refused != len(shapes) {
-		t.Errorf("config refused %d of %d: the door the transport relies on has moved", refused, len(shapes))
+		t.Errorf("config refused %d of %d: the API the transport relies on has moved", refused, len(shapes))
 	}
 }
 

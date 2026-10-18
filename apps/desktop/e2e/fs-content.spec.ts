@@ -139,7 +139,7 @@ test('a projection rearranged stays rearranged: fs tiles move and resize (#266)'
     })
     .toBe(`${fx},${fy + 2}`);
 
-  // Resize goes through the same placement door. Park the tile at a known
+  // Resize goes through the same placement write. Park the tile at a known
   // in-viewport cell first; the +2 target grows it one cell, because the moving
   // corner snaps the way tile-gestures.spec pins.
   const file = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'sizeme.md')!;

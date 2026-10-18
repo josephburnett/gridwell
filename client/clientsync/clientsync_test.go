@@ -48,7 +48,7 @@ func TestOf(t *testing.T) {
 	}{
 		{"nil is ok", nil, OutcomeOK},
 		{"failed precondition is conflict", connect.NewError(connect.CodeFailedPrecondition, errors.New("version")), OutcomeConflict},
-		{"the door refusing this page's build is transport", gwerr.StaleBuild("nodebuild", "pagebuild"), OutcomeTransport},
+		{"the API refusing this page's build is transport", gwerr.StaleBuild("nodebuild", "pagebuild"), OutcomeTransport},
 		{"unavailable is transport", connect.NewError(connect.CodeUnavailable, errors.New("refused")), OutcomeTransport},
 		{"deadline is transport", connect.NewError(connect.CodeDeadlineExceeded, errors.New("timeout")), OutcomeTransport},
 		{"canceled from the far side is transport", connect.NewError(connect.CodeCanceled, errors.New("canceled")), OutcomeTransport},
@@ -326,7 +326,7 @@ func TestReactRead(t *testing.T) {
 }
 
 // deadAnswer is what the browser receives for a link broken at any hop: the
-// node's gwerr.DeadRef through the Connect codec.
+// node's gwerr.DeadRef through the web API.
 func deadAnswer() error {
 	dead := gwerr.DeadRef("toc", "connection: no connection %q", "toc")
 	return gwerr.ConnectDetails(dead, connect.NewError(connect.CodeNotFound, errors.New(status.Convert(dead).Message())))
@@ -415,7 +415,7 @@ func TestATargetReadSaysNothingOfTheDeadVerdict(t *testing.T) {
 }
 
 // disabledAnswer is the node's disabled verdict as the browser receives it,
-// through the one codec that rebuilds an error.
+// through the web API, the one hop that rebuilds an error.
 func disabledAnswer() error {
 	off := gwerr.SourceDisabled("n/rtb", "rtb is disabled until the node restarts")
 	return gwerr.ConnectDetails(off, connect.NewError(gwerr.ConnectCode(status.Code(off)), errors.New(status.Convert(off).Message())))

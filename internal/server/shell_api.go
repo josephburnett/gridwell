@@ -1,8 +1,8 @@
 package server
 
-// The /shell door: PTY bytes on the web door, like every other primitive. An
+// The /shell API: PTY bytes on the web API, like every other primitive. An
 // attach is an ordinary page request on the gated mux, so there is no second
-// gate to keep in step, and it routes through the one shell route both doors
+// gate to keep in step, and it routes through the one shell route both APIs
 // share. The grammar is client/shellwire, read by both ends.
 
 import (
@@ -28,13 +28,13 @@ import (
 
 // defaultShellWriteTimeout bounds one PTY-output frame write, so a viewer
 // whose socket has stopped draining cannot pin the plugin's PTY reader
-// forever. New copies it onto the Server, which is what the door reads, so a
+// forever. New copies it onto the Server, which is what the API reads, so a
 // seam test can wedge a socket on a server of its own rather than waiting the
-// bound out or lowering it under a door that is already serving.
+// bound out or lowering it under an API that is already serving.
 const defaultShellWriteTimeout = 30 * time.Second
 
 // shellRoute answers whether this attach may happen and who owns the PTY. It is
-// side-effect-free on purpose: the WebSocket door answers it before upgrading,
+// side-effect-free on purpose: the shell API answers it before upgrading,
 // and a refused upgrade must not have spawned a PTY.
 func (s *Server) shellRoute(tileID string) (ns namespace.Namespace, local string, err error) {
 	if s.cfg.DisableShells {
@@ -72,9 +72,9 @@ func (s *Server) openShellRoute(ctx context.Context, first *pb.OpenShellRequest,
 	return s.openShellBound(ctx, ns, local, first, recv, send)
 }
 
-// shellDoor serves shellwire.Path. Same-origin is websocket.Accept's default;
+// shellAPI serves shellwire.Path. Same-origin is websocket.Accept's default;
 // a client that sends no Origin is not a browser and is accepted.
-func (s *Server) shellDoor() http.Handler {
+func (s *Server) shellAPI() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attach, err := shellwire.ParseAttach(r.URL.Query())
 		if err != nil {
@@ -97,14 +97,14 @@ func (s *Server) shellDoor() http.Handler {
 		ns, local, err := s.shellRoute(attach.TileID)
 		kv := map[string]string{"tile": attach.TileID}
 		if err != nil {
-			trace.Emit("shelldoor", "pty", "refused: "+err.Error(), kv)
+			trace.Emit("shellapi", "pty", "refused: "+err.Error(), kv)
 			httpStatusError(w, err)
 			return
 		}
 
 		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
-			trace.Emit("shelldoor", "pty", "upgrade failed: "+err.Error(), kv)
+			trace.Emit("shellapi", "pty", "upgrade failed: "+err.Error(), kv)
 			// Accept has already written the failure to w. Nothing has touched
 			// a PTY yet, and nothing will.
 			cancel()
@@ -114,19 +114,19 @@ func (s *Server) shellDoor() http.Handler {
 
 		// The PTY is acquired only now: an upgrade nobody completed must never
 		// leave a session behind.
-		trace.Emit("shelldoor", "pty", "open", kv)
+		trace.Emit("shellapi", "pty", "open", kv)
 		defer s.shells.hold(attach.TileID, attach.Session)()
 		msg, gone := pumpShell(ctx, cancel, conn, s.shellWriteTimeout, func(recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
 			return s.openShellBound(ctx, ns, local, bind, recv, send)
 		})
-		trace.Emit("shelldoor", "pty", closeVerdict(msg, gone), kv)
+		trace.Emit("shellapi", "pty", closeVerdict(msg, gone), kv)
 		writeShellExit(conn, s.shellWriteTimeout, shellwire.EncodeExit(msg, gone))
 	})
 }
 
 // liveShells joins each open attachment to the client session it rides under.
 // The PTY's owner (shellsvc.Manager) knows it has a holder but not whose
-// screen that is, and this door is the one place both are in hand.
+// screen that is, and this API is the one place both are in hand.
 type liveShells struct {
 	mu   sync.Mutex
 	next uint64
@@ -244,7 +244,7 @@ func shellReadFrame(ctx context.Context, cancel context.CancelFunc, conn *websoc
 			// An ordinary detach says nothing; any other end is worth a line,
 			// or the server has no record of why the attachment vanished.
 			if ctx.Err() == nil && websocket.CloseStatus(err) != websocket.StatusNormalClosure {
-				log.Printf("gridwell: shell door: the client's stream ended: %v", err)
+				log.Printf("gridwell: shell API: the client's stream ended: %v", err)
 			}
 			cancel()
 			return nil, io.EOF
@@ -255,7 +255,7 @@ func shellReadFrame(ctx context.Context, cancel context.CancelFunc, conn *websoc
 		case websocket.MessageText:
 			c, derr := shellwire.DecodeControl(data)
 			if derr != nil {
-				log.Printf("[shell door] bad control frame: %v", derr)
+				log.Printf("[shell API] bad control frame: %v", derr)
 				_ = conn.Close(websocket.StatusUnsupportedData, "bad control frame")
 				cancel()
 				return nil, io.EOF

@@ -53,7 +53,7 @@ func repoRoot(t *testing.T) string {
 }
 
 // startServe launches `gridwell serve` for a home and returns its origin and
-// the connection door's socket path once the banner announces them. The
+// the connection API's socket path once the banner announces them. The
 // socket lives under the home, so two nodes on one box never collide.
 func startServe(t *testing.T, bin, home, bind string) (origin, fedSocket string) {
 	origin, fedSocket, _ = startServeProc(t, bin, home, bind)
@@ -129,7 +129,7 @@ func startServeProc(t *testing.T, bin, home, bind string) (origin, fedSocket str
 	}
 }
 
-// The web door is always password-gated, so startServeProc records each
+// The web API is always password-gated, so startServeProc records each
 // origin's auth token from the serve banner and every helper below rides it
 // as the cookie a logged-in browser would carry.
 var (

@@ -28,7 +28,7 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
   expect(errs.notices).toEqual([]);
 });
 
-// Shells in a plain browser: the PTY rides a WebSocket on the web door, so a
+// Shells in a plain browser: the PTY rides a WebSocket on the web API, so a
 // browser has the same attach capability the desktop has and the menu offers
 // the shell swatch. A shell tile made elsewhere renders here too.
 test('the browser offers shell creation and views shell tiles fine', async ({ gw, window, serve }) => {

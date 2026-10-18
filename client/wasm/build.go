@@ -2,7 +2,7 @@
 
 package main
 
-// The page's one answer to the door refusing its build, wherever the refusal
+// The page's one answer to the API refusing its build, wherever the refusal
 // arrived: an rpc, the event stream, a shell socket. nodebuild.Decide is the
 // rule and nodebuild.Notice the words; this shows them, and reloads only when
 // the notice's button is pressed (errsurface.Reload).

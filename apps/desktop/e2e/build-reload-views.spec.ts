@@ -8,7 +8,7 @@ import { createExitWell } from './oracle';
 // is not part of the page, so one the reload leaves behind paints over the
 // reloaded canvas and swallows its clicks. The sidecar cannot be rebuilt under
 // a running app, so the page's calls are made to name another build, the shape
-// the door judges.
+// the API judges.
 
 const OLD_BUILD = 'e2e-old-build';
 

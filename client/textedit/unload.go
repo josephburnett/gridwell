@@ -12,7 +12,7 @@ const (
 	UnloadSkip   UnloadFlush = iota // a row that takes no content write must not write
 	UnloadBeacon                    // beacon now with the returned claim
 	// UnloadAsync: no claim exists to beacon with, so the async path, which
-	// resolves the owner row, is the only door left.
+	// resolves the owner row, is the only way left.
 	UnloadAsync
 )
 

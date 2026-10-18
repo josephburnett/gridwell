@@ -22,8 +22,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// doorEnded reports that the door has recorded a failed GetGrid of grid.
-func doorEnded(grid string) bool {
+// apiEnded reports that the API has recorded a failed GetGrid of grid.
+func apiEnded(grid string) bool {
 	for _, r := range trace.Default().Snapshot() {
 		if r.Kind == "rpc" && r.KV["id"] == grid && strings.HasPrefix(r.Msg, "GetGrid error") {
 			return true
@@ -138,11 +138,11 @@ func TestAnAbandonedReadIsNoHealthNews(t *testing.T) {
 	if err := <-done; err == nil {
 		t.Fatal("the abandoned read answered")
 	}
-	// The door finishes the abandoned call after the client has given up on
+	// The API finishes the abandoned call after the client has given up on
 	// it; its exit record is the moment the source's verdict, if any, is in.
-	for !doorEnded(grid) {
+	for !apiEnded(grid) {
 		if ctx.Err() != nil {
-			t.Fatal("the door never finished the abandoned read")
+			t.Fatal("the API never finished the abandoned read")
 		}
 		time.Sleep(time.Millisecond)
 	}

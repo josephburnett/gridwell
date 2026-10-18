@@ -1,7 +1,7 @@
-// Package server is the HTTP layer of Gridwell: a Connect-RPC codec at
+// Package server is the HTTP layer of Gridwell: Connect-RPC at
 // /gridwell.v1.Gridwell/<Method>, the static web client at /, the shell
-// WebSocket, so every host that runs the client has shells, and the MCP door
-// for agents. Two doors, WebHandler and ConnectionHandler; nodeexport.go
+// WebSocket, so every host that runs the client has shells, and the MCP API
+// for agents. Two APIs, WebHandler and ConnectionHandler; nodeexport.go
 // declares both.
 package server
 
@@ -26,7 +26,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/eventhub"
-	"github.com/josephburnett/gridwell/internal/mcpdoor"
+	"github.com/josephburnett/gridwell/internal/mcpapi"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/subscription"
@@ -49,14 +49,14 @@ type Config struct {
 	// node-wide shell refusal; Handshake carries it so the client drops the
 	// shell primitive from the + menu.
 	DisableShells bool
-	// Home is the Gridwell home node.Options names; the trace door writes its
+	// Home is the Gridwell home node.Options names; the trace API writes its
 	// dumps under it. Empty refuses a dump rather than guessing a directory.
 	Home string
 }
 
 // Server routes every operation through the registry by the first segment of
 // its qualified id; home is where a client lands. Mount WebHandler and
-// ConnectionHandler on their own listeners; see node.Start.
+// ConnectionHandler on their own sockets; see node.Start.
 type Server struct {
 	cfg       Config
 	pluginReg *plugin.Registry
@@ -88,10 +88,10 @@ type Server struct {
 	build string
 }
 
-// New refuses an empty Config.Password: the browser door has no open mode.
+// New refuses an empty Config.Password: the web API has no open mode.
 func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 	if cfg.Password == "" {
-		return nil, errors.New("server: a web password is required (the browser door is never open)")
+		return nil, errors.New("server: a web password is required (the web API is never open)")
 	}
 	srv := &Server{
 		cfg:               cfg,
@@ -113,7 +113,7 @@ func (s *Server) routeClient(uuid string) (namespace.Namespace, bool) {
 	return s.pluginReg.Get(uuid)
 }
 
-// resolve is the routing lookup every door goes through: the namespace owning a
+// resolve is the routing lookup every API goes through: the namespace owning a
 // qualified id, the local id it understands, the uuid to re-qualify with, and
 // whether it is transit. "<id>/<digits>" is the home store; "<id>/<letters>/…"
 // is a connection, whose local id keeps the connection segment for the
@@ -228,23 +228,23 @@ func (s *Server) invalidateInfoCache(uuid string) {
 }
 
 func (s *Server) routes() {
-	// A thin codec over the one in-process router.
+	// The web API decodes onto the one in-process router.
 	path, handler := gridwellv1connect.NewGridwellHandler(newConnectHandler(newRouter(s)),
 		connect.WithInterceptors(traceInterceptor{}))
 	s.mux.Handle(path, handler)
 
-	// One live PTY per WebSocket, on the same gated mux (shell_door.go).
-	s.mux.Handle(shellwire.Path, s.shellDoor())
+	// One live PTY per WebSocket, on the same gated mux (shell_api.go).
+	s.mux.Handle(shellwire.Path, s.shellAPI())
 
-	// The agents' door (mcp_door.go), gated like the browser's.
-	s.mux.Handle(mcpdoor.Path, s.mcpDoor())
+	// The agents' API (mcp_api.go), gated like the browser's.
+	s.mux.Handle(mcpapi.Path, s.mcpAPI())
 
-	// Exempt from the cookie gate; see content_door.go.
-	s.mux.Handle(contentPathPrefix, s.contentDoor())
+	// Exempt from the cookie gate; see content_api.go.
+	s.mux.Handle(contentPathPrefix, s.contentAPI())
 
-	// The diagnostic ring, gated like everything else here (trace_door.go).
-	s.mux.Handle(tracewire.Path, s.traceDoor())
-	s.mux.Handle(tracewire.DumpPath, s.traceDumpDoor())
+	// The diagnostic ring, gated like everything else here (trace_api.go).
+	s.mux.Handle(tracewire.Path, s.traceAPI())
+	s.mux.Handle(tracewire.DumpPath, s.traceDumpAPI())
 
 	if s.cfg.StaticFS != nil {
 		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticFS))
@@ -310,4 +310,4 @@ func serveGzipSidecar(w http.ResponseWriter, r *http.Request, fsys fs.FS, name s
 }
 
 // The sentinel-to-class table lives in api/gwerr, next to the sentinel
-// declarations, so every codec maps from the one classification.
+// declarations, so every API maps from the one classification.

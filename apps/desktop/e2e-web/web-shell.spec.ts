@@ -1,9 +1,9 @@
 import { test, expect } from './fixtures';
 
-// A live shell in a plain browser. The PTY rides a WebSocket on the web door,
+// A live shell in a plain browser. The PTY rides a WebSocket on the web API,
 // cookie-gated like every other page request, so a browser, and so a phone, has
 // the same shell the desktop does. This spec is the whole chain with no
-// Electron anywhere: the page's own WebSocket, the /shell door, OpenShell, the
+// Electron anywhere: the page's own WebSocket, the /shell API, OpenShell, the
 // home namespace, a real tmux PTY, and xterm. The unit tests on either side,
 // client/shellstream, client/shellwire, and internal/server, cannot see this
 // composition.

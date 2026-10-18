@@ -2,16 +2,16 @@ package server
 
 // The hey plugin through the whole shipped stack: the binary spawned by the
 // production loader, the pluginhost adapter, the router, and the /content/
-// door as a browser reaches it.
+// API as a browser reaches it.
 //
 // Three things can only be wrong here: the adapter turns each declared context
 // into a grid id the node can serve, so a menu entry with no grid id opens
 // nothing; every collection lists through that mapping; and an email is a url
 // tile carrying serves_page in everything, which every box links to, so the
-// plugin never sees a URL and the door never sees the email.
+// plugin never sees a URL and the API never sees the email.
 //
 // Nothing is injected. The plugin lives in another repository, so the
-// subprocess is its only door, and heyfake is the CLI handed over as the
+// subprocess is its only way in, and heyfake is the CLI handed over as the
 // `binary` config key, so the run, the argv, the environment and the JSON
 // parse are all real.
 
@@ -62,7 +62,7 @@ func heyAccount(t *testing.T) *heyfake.CLI {
 }
 
 // heyStack spawns the plugin over hey and stands it up behind the real browser
-// door, answering with the node-facing Info the adapter derived.
+// API, answering with the node-facing Info the adapter derived.
 func heyStack(t *testing.T, hey *heyfake.CLI) (*httptest.Server, namespace.Namespace, *gridwellv1.InfoResponse) {
 	t.Helper()
 	cl := newPluginClient(t, "hey", hey.Config(nil))
@@ -120,7 +120,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 
 	// Every email arrives in everything as a url tile whose page the plugin
 	// serves. That is the shape the whole client rests on: the address is the
-	// node's to derive at its /content/ door, so the email declares none of
+	// node's to derive at its /content/ API, so the email declares none of
 	// its own, and a text tile could not serve one at all.
 	all, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: info.MenuEntries[3].GridId})
 	if err != nil {
@@ -164,17 +164,17 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 }
 
 // Descending into an email opens the email itself, as HEY's own HTML, through
-// the door a browser reaches, whether the tile is the thread in everything or
+// the API a browser reaches, whether the tile is the thread in everything or
 // a box's link to it. Neither side of the seam can check this: the plugin
-// answers a key and never sees the URL, and the door addresses a tile and
+// answers a key and never sees the URL, and the API addresses a tile and
 // never sees the email.
-func TestHeyPluginServesAnEmailThroughTheContentDoor(t *testing.T) {
+func TestHeyPluginServesAnEmailThroughTheContentAPI(t *testing.T) {
 	hs, cl, info := heyStack(t, heyAccount(t))
-	for _, door := range []struct{ name, grid string }{
+	for _, via := range []struct{ name, grid string }{
 		{"a box's link", info.MenuEntries[0].GridId},
 		{"everything's tile", info.MenuEntries[3].GridId},
 	} {
-		g, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: door.grid})
+		g, err := cl.GetGrid(t.Context(), &gridwellv1.GetGridRequest{GridId: via.grid})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -182,17 +182,17 @@ func TestHeyPluginServesAnEmailThroughTheContentDoor(t *testing.T) {
 
 		res, body := get(t, hs.Client(), rpc.PageURL(hs.URL, ContentToken(testPassword), heyNS+"/"+email.Id), "")
 		if res.StatusCode != http.StatusOK {
-			t.Fatalf("GET the email through %s = %d %q", door.name, res.StatusCode, body)
+			t.Fatalf("GET the email through %s = %d %q", via.name, res.StatusCode, body)
 		}
 		if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-			t.Errorf("%s: Content-Type = %q", door.name, ct)
+			t.Errorf("%s: Content-Type = %q", via.name, ct)
 		}
 		if !strings.Contains(body, "Are you free friday?") {
-			t.Errorf("%s: the email did not arrive: %.200q", door.name, body)
+			t.Errorf("%s: the email did not arrive: %.200q", via.name, body)
 		}
-		// The door's invariant rides an email like any other page.
+		// The content API's invariant rides an email like any other page.
 		if csp := res.Header.Get("Content-Security-Policy"); csp != contentSandbox {
-			t.Errorf("%s: CSP = %q", door.name, csp)
+			t.Errorf("%s: CSP = %q", via.name, csp)
 		}
 	}
 }

@@ -2,7 +2,7 @@
 
 // Shell sessions across a real connection: a clone made on the far node names
 // its source's session there, and attaching the clone through this node's
-// /shell door runs that one session; a shell cloned onto this node from the far
+// /shell API runs that one session; a shell cloned onto this node from the far
 // one cannot share a session that lives over there, so it lands as a link.
 
 package connections_test

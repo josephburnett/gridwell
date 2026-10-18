@@ -1,10 +1,10 @@
 // Package plugintest is the seam harness for a test that needs a plugin.v1
-// client. Spawn is the door for a shipped plugin, running the real binary with
-// the config server.yaml would have given it, and answers a missing binary
-// with a t.Fatal naming what to build rather than a skip, which would leave
-// the seam unexercised while the suite stayed green. Loopback is the door for
-// a stub the test declares, a real gRPC server on an in-memory listener, so
-// the wire's marshalling still happens and no answer crosses by pointer.
+// client. Spawn is the way in for a shipped plugin, running the real binary
+// with the config server.yaml would have given it, and answers a missing binary
+// with a t.Fatal naming what to build rather than a skip, which would leave the
+// seam unexercised while the suite stayed green. Loopback is the way in for a
+// stub the test declares, a real gRPC server on an in-memory listener, so the
+// wire's marshalling still happens and no answer crosses by pointer.
 package plugintest
 
 import (

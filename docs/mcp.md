@@ -1,14 +1,14 @@
-# The MCP door
+# The MCP API
 
 An AI agent such as Claude Code reaches your Gridwell node through the MCP
-door. MCP is the Model Context Protocol: the agent lists the door's tools and
-calls them. The door does what the app does when you make the same gesture,
+API. MCP is the Model Context Protocol: the agent lists the API's tools and
+calls them. The API does what the app does when you make the same gesture,
 and refuses what the app refuses, with the same reason. This page is the
 contract: the tools, what each does, and what each refuses.
 
 ## Connecting
 
-The door is `/mcp` on the web door (`web.bind` in `server.yaml`), over
+The API is `/mcp` on the web API (`web.bind` in `server.yaml`), over
 Streamable HTTP. It takes the web password as a bearer token:
 
 ```
@@ -16,13 +16,13 @@ Authorization: Bearer <the contents of <home>/web-password>
 ```
 
 The browser's login cookie works too. `gridwell serve` prints the line that
-registers the door with Claude Code:
+registers the API with Claude Code:
 
 ```
 claude mcp add --transport http gridwell http://127.0.0.1:<port>/mcp -H "Authorization: Bearer <password>" -H 'X-Gridwell-Shell: ${GRIDWELL_SHELL:-}'
 ```
 
-The second header tells the door which shell tile the agent runs in (see
+The second header tells the API which shell tile the agent runs in (see
 Pointing). Keep it in single quotes: Claude Code, not the shell you paste the
 line into, fills in `${GRIDWELL_SHELL:-}` each time it starts. Inside a shell
 tile it is that shell's name; in any other terminal it is empty.
@@ -44,7 +44,7 @@ A write claims what the agent read, as the app does. `read_tiles` and
 `read_grid` answer a `version` (and, for a text body, `body_version`, or
 `body_stamp` for a plugin's text). Pass it to a write and a change made since
 you read is refused as a conflict; read again and decide. Leave it out and the
-door reads the row and claims it as it stands now. A move claims where the
+API reads the row and claims it as it stands now. A move claims where the
 tile sits now; a delete claims its version and where it sits. `select` claims
 nothing: it names the tiles it adds and removes, or clears, so the user's own
 selects made meanwhile stand beside it.
@@ -113,7 +113,7 @@ The answer says which rule chose (`chosen_by`: `argument`, `your shell` or
 `most recent`), and `others` names every other screen so you can ask the user
 which they meant. When the shell you run in is
 live on no screen, the answer falls to the third rule and `note` says so. A
-shell started before this door existed has no `GRIDWELL_SHELL` until it is
+shell started before this API existed has no `GRIDWELL_SHELL` until it is
 started again.
 
 ## Refusals
@@ -139,8 +139,8 @@ starts with what kind of no it is, then the node's reason:
 
 ## Not exposed
 
-By decision, the door has no tool that destroys a tile from the trash,
+By decision, the API has no tool that destroys a tile from the trash,
 nothing that touches a shell (opening, typing into, or reading a terminal;
 the shell header only says which screen is yours),
 and nothing that changes the node's configuration. There is no
-configuration for the door itself: it is on whenever the web door is.
+configuration for the API itself: it is on whenever the web API is.

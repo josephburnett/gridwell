@@ -177,7 +177,7 @@ func (a *App) onForwardedLeftDown(sx, sy float64) {
 // onForwardedContextMenu focuses the pane a live URL view's native context menu
 // opened on: the preload forwards a right-press only once it becomes a drag, so
 // the menu is all the renderer hears. Keyed by pane id, since the bar-circle
-// door has no cursor.
+// path has no cursor.
 func (a *App) onForwardedContextMenu(paneID string) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {

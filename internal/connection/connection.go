@@ -50,7 +50,7 @@ var rowsHandshakeWait = time.Second
 
 // Server is the transport: a namespace.Namespace whose ids are chains through
 // its connections, each itself a Namespace read off the far node's connection
-// door.
+// API.
 type Server struct {
 	namespace.Unimplemented
 
@@ -339,7 +339,7 @@ func (s *Server) dialConfig(c config.ConnectionConfig) (dial.Config, error) {
 		Addr:       c.Addr,
 	}
 	if cfg.Addr == "" {
-		return dial.Config{}, fmt.Errorf("addr required — the remote node's connection-door socket path (its <home>/federation.sock)")
+		return dial.Config{}, fmt.Errorf("addr required — the remote node's connection API's socket path (its <home>/federation.sock)")
 	}
 	if c.Host == "" {
 		return cfg, nil // a direct dial of the socket: nothing host-local to check

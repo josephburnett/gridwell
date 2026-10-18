@@ -1,7 +1,7 @@
 package server
 
 // Lazy minting through the whole stack: a real spawned fs plugin, the
-// adapter, the router, the browser door, and the store's own file. Every
+// adapter, the router, the web API, and the store's own file. Every
 // assertion here is about the seam, because both halves are individually
 // happy with either behavior — the store will mint a row whenever asked, and
 // the plugin never knows there are rows at all. What must be true is the
@@ -329,7 +329,7 @@ func storedReference(t *testing.T, st *sql.DB, qualifiedID string) string {
 	return target.String
 }
 
-// Every read answers a derived address, all the way out to the browser door.
+// Every read answers a derived address, all the way out to the web API.
 func TestKeyFormReadsRoundTrip(t *testing.T) {
 	cl, st, hs, fsRoot := lazyStack(t)
 	ctx := context.Background()
@@ -362,7 +362,7 @@ func TestKeyFormReadsRoundTrip(t *testing.T) {
 	if string(body) != "f1.txt" || !strings.HasPrefix(media, "text/plain") {
 		t.Fatalf("content = (%q, %q)", body, media)
 	}
-	// The /content/ door: the same id in a URL path, served as HTTP.
+	// The /content/ API: the same id in a URL path, served as HTTP.
 	url := hs.URL + "/content/" + ContentToken(testPassword) + "/" + leaf.Id + "/"
 	res, err := hs.client.Get(url)
 	if err != nil {
@@ -370,21 +370,21 @@ func TestKeyFormReadsRoundTrip(t *testing.T) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		t.Fatalf("the door answered %d for a derived address (%s)", res.StatusCode, url)
+		t.Fatalf("the API answered %d for a derived address (%s)", res.StatusCode, url)
 	}
 	buf := make([]byte, 64)
 	n, _ := res.Body.Read(buf)
 	if string(buf[:n]) != "f1.txt" {
-		t.Fatalf("the door served %q", buf[:n])
+		t.Fatalf("the API served %q", buf[:n])
 	}
 	if tiles, grids := pluginRows(t, st); tiles != 0 || grids != 0 {
 		t.Fatalf("reading minted %d tile and %d grid rows", tiles, grids)
 	}
 }
 
-// A URL naming an untouched leaf resolves through the server, not just
-// through the codec: decode it, walk the descent the way the client does, and
-// the leaf's bytes come back.
+// A URL naming an untouched leaf resolves through the server, not just through
+// the URL codec: decode it, walk the descent the way the client does, and the
+// leaf's bytes come back.
 func TestURLDescentToAKeyFormLeafResolves(t *testing.T) {
 	cl, _, _, fsRoot := lazyStack(t)
 	ctx := context.Background()

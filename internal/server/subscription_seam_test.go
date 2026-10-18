@@ -1,6 +1,6 @@
 package server_test
 
-// The view through the web door: what each client says it shows is counted
+// The view through the web API: what each client says it shows is counted
 // while that client's event stream is open, and reaches each namespace as its
 // share of the union.
 
@@ -139,7 +139,7 @@ func TestSubscriptionCrossesAConnection(t *testing.T) {
 	sink.await(t, nil)
 }
 
-// A session's whole view crosses the Connect codec and is readable from
+// A session's whole view crosses the web API and is readable from
 // Sessions while its stream is open, with its label, panes and focus, and
 // once the stream closes, as a phone's does in the background, it is still
 // listed, away since the close and watching nothing.

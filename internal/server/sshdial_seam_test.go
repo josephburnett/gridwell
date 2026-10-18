@@ -50,14 +50,14 @@ func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	}
 	direct, _ := reg.Get("ur1")
 	srv := servertest.New(t, reg, server.Config{})
-	// The connection door is a unix socket; the test sshd
+	// The connection API is a unix socket; the test sshd
 	// forwards direct-streamlocal to it, exactly like a real sshd.
 	sock := filepath.Join(t.TempDir(), "federation.sock")
-	ln, err := server.ListenConnectionDoor(sock)
+	ln, err := server.ListenConnectionAPI(sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
+	httpSrv := server.ConnectionAPIServer(srv.ConnectionHandler())
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 	return sock, direct

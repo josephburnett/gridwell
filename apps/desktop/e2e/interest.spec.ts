@@ -1,6 +1,6 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 
 // The node's sources watch only what some client shows, and only the client
 // knows what that is (pane.View, sent by the shim's syncView). The node's
@@ -27,8 +27,8 @@ function focusedView(lines: TraceLine[]): string | null {
 
 test('the node hears which grids the panes and their previews show, and hears them leave', async ({ gw, home }) => {
   const token = await loginToken(gw.origin, homePassword(home));
-  const union = async () => lastUnion(await dumpViaDoor(gw.origin, token));
-  const view = async () => focusedView(await dumpViaDoor(gw.origin, token));
+  const union = async () => lastUnion(await dumpViaAPI(gw.origin, token));
+  const view = async () => focusedView(await dumpViaAPI(gw.origin, token));
 
   await gw.enterPlugin('home');
   const f = await gw.focused();

@@ -112,7 +112,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	httpSrv := server.ConnectionDoorServer(srv.ConnectionHandler())
+	httpSrv := server.ConnectionAPIServer(srv.ConnectionHandler())
 	go httpSrv.Serve(ln)
 	t.Cleanup(func() { httpSrv.Close() })
 

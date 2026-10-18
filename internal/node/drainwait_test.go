@@ -1,7 +1,7 @@
 package node
 
 // The drain bound, from both sides. Close cancels every request context and
-// then waits closeDrainWait for the doors to empty: a handler that honors the
+// then waits closeDrainWait for the APIs to empty: a handler that honors the
 // cancellation costs the shutdown nothing, and one that does not costs it the
 // bound exactly once.
 
@@ -29,7 +29,7 @@ func setCloseDrainWait(t *testing.T, d time.Duration) time.Duration {
 	return closeDrainWait
 }
 
-// nodeServing is a node whose web door runs handle, on a real listener, with
+// nodeServing is a node whose web API runs handle, on a real listener, with
 // the production wiring of request contexts: one cancellable base context that
 // Close cancels. It returns once a request is inside the handler.
 func nodeServing(t *testing.T, handle func(ctx context.Context)) *Node {
@@ -41,8 +41,9 @@ func nodeServing(t *testing.T, handle func(ctx context.Context)) *Node {
 	in := make(chan struct{})
 	var once bool
 	requestCtx, cancel := context.WithCancel(context.Background())
-	// The door's one server shape, so the drain under test is the one the node runs.
-	srv := server.WebDoorServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// The API's one server shape, so the drain under test is the one the node
+	// runs.
+	srv := server.WebAPIServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !once {
 			once = true
 			close(in)
@@ -107,9 +108,9 @@ func TestCloseGivesUpOnADrainAtItsBound(t *testing.T) {
 // The other side of the same bound: the cancellation Close sends first is what
 // normally ends a request, so a handler that honors it costs the shutdown none
 // of the wait.
-func TestCloseReturnsAsSoonAsTheDoorsEmpty(t *testing.T) {
+func TestCloseReturnsAsSoonAsTheAPIsEmpty(t *testing.T) {
 	// Generous, because what is asserted is that none of it is spent: the
-	// drain's own poll for an emptied door is the only delay here.
+	// drain's own poll for an emptied API is the only delay here.
 	wait := setCloseDrainWait(t, 2*time.Second)
 	n := nodeServing(t, func(ctx context.Context) { <-ctx.Done() })
 

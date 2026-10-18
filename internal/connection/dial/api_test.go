@@ -1,7 +1,7 @@
 package dial
 
-// The far side every seam test here dials: the node's own connection door,
-// server.ConnectionHandler under server.ConnectionDoorServer, so what a test
+// The far side every seam test here dials: the node's own connection API,
+// server.ConnectionHandler under server.ConnectionAPIServer, so what a test
 // proves about the dialer it proves against what the node serves.
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
-func doorHandler(t *testing.T) http.Handler {
+func connectionAPIHandler(t *testing.T) http.Handler {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {

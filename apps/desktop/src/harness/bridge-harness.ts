@@ -81,7 +81,7 @@ app.whenReady().then(async () => {
 
   // The announce has to land before the menu is up, because once it is up an
   // item can run, and it would run in a pane that never took focus.
-  // showContextMenu is the funnel both doors pass through. Menu.popup is
+  // showContextMenu is the funnel both menu paths pass through. Menu.popup is
   // stubbed, because a native menu under xvfb would never be dismissed.
   const order: string[] = [];
   const realPopup = Menu.prototype.popup;

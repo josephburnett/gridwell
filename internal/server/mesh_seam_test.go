@@ -1,7 +1,7 @@
 package server_test
 
 // A mesh of real nodes in one process: each node is its own store, router,
-// transport, connection door (a real h2c gRPC export) and browser door, and
+// transport, connection API (a real h2c gRPC export) and web API, and
 // each declared connection dials another node's export. Ids cross every hop
 // exactly as they do between machines, so a test can ask what happens when a
 // verb names two ids behind two different connections, or a link is written
@@ -41,10 +41,10 @@ type meshNode struct {
 	id   string
 	st   *store.Store
 	reg  *plugin.Registry
-	cl   *rpc.Client                      // the node's browser door
-	web  gridwellv1connect.GridwellClient // the same door without Client's guards
+	cl   *rpc.Client                      // the node's web API
+	web  gridwellv1connect.GridwellClient // the same API without Client's guards
 	root string                           // the home's bare root grid id
-	door *swapHandler
+	api  *swapHandler
 	far  gridwellv1.GridwellClient
 }
 
@@ -57,7 +57,7 @@ type mesh struct {
 	lands map[string]string // "<from>/<name>" to the node it dials
 }
 
-// swapHandler is a connection door whose router a test can replace, the
+// swapHandler is a connection API whose router a test can replace, the
 // in-process stand-in for a node restarting behind the same socket.
 type swapHandler struct {
 	mu sync.Mutex
@@ -109,9 +109,9 @@ func newMesh(t *testing.T, ids []string, edges []meshEdge) *mesh {
 		if err != nil {
 			t.Fatal(err)
 		}
-		n := &meshNode{id: id, st: st, root: root, door: &swapHandler{h: http.NotFoundHandler()}}
+		n := &meshNode{id: id, st: st, root: root, api: &swapHandler{h: http.NotFoundHandler()}}
 		hs := httptest.NewUnstartedServer(nil)
-		hs.Config = server.ConnectionDoorServer(n.door)
+		hs.Config = server.ConnectionAPIServer(n.api)
 		hs.Start()
 		t.Cleanup(hs.Close)
 		conn, err := dial.ClientConn(strings.TrimPrefix(hs.URL, "http://"))
@@ -129,9 +129,9 @@ func newMesh(t *testing.T, ids []string, edges []meshEdge) *mesh {
 		m.declare(id, edges, nil)
 		n := m.nodes[id]
 		srv := servertest.New(t, n.reg, server.Config{ID: id})
-		n.door.mu.Lock()
-		n.door.h = srv.ConnectionHandler()
-		n.door.mu.Unlock()
+		n.api.mu.Lock()
+		n.api.h = srv.ConnectionHandler()
+		n.api.mu.Unlock()
 		web := servertest.Serve(t, srv)
 		n.cl = rpc.NewClient(web.Client(), web.URL, connect.WithProtoJSON())
 		n.web = gridwellv1connect.NewGridwellClient(web.Client(), web.URL, connect.WithProtoJSON())
@@ -237,7 +237,7 @@ func (m *mesh) landing(from, name string) string {
 	return to
 }
 
-// text creates a text tile with body in grid, through node at's door.
+// text creates a text tile with body in grid, through node at's API.
 func (m *mesh) text(ctx context.Context, at, grid string, x int64, body string) *gridwellv1.Tile {
 	m.t.Helper()
 	tl, err := m.nodes[at].cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: grid,

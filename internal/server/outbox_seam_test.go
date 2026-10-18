@@ -356,7 +356,7 @@ func TestEchoInterlockAcrossTheSeam(t *testing.T) {
 
 // The case the one above does not reach: the older row arrives as a write
 // response rather than an echo. The interlock is a property of the map, not of
-// the door — both paths go through `putTileLocked` — so a response and an echo
+// the path — both paths go through `putTileLocked` — so a response and an echo
 // of the same fact are refused on the same rule. This drives the response path
 // with the same real rows and asserts the row only ever moves forward.
 func TestAResponseRowObeysTheInterlock(t *testing.T) {
@@ -384,12 +384,12 @@ func TestAResponseRowObeysTheInterlock(t *testing.T) {
 	if got := g.Tiles[created.Id].Version; got != resp[1].Version {
 		t.Fatalf("a stale echo moved the row to %d, want %d", got, resp[1].Version)
 	}
-	// And so is the older write's RESPONSE: same fact, same rule, one door.
+	// And so is the older write's RESPONSE: same fact, same rule, one way in.
 	c.UpdateTile(resp[0].GridId, resp[0])
 	g, _ = c.Grid(root)
 	if got := g.Tiles[created.Id].Version; got != resp[1].Version {
 		t.Fatalf("a stale RESPONSE rolled the row back to %d, want %d: "+
-			"Cache.UpdateTile is a second door into the tile map again (#274)", got, resp[1].Version)
+			"Cache.UpdateTile is a second way into the tile map again (#274)", got, resp[1].Version)
 	}
 }
 

@@ -4,11 +4,11 @@ import { removeHome } from '../e2e/homes';
 import { RestartableServe, Served, freePort, authenticate, authHeaders } from './fixtures';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
-import { dumpViaDoor } from '../e2e/trace';
+import { dumpViaAPI } from '../e2e/trace';
 
 // A client the node served runs the node's build. The node is restarted
 // under a live tab and the tab's calls are made to name another build: the
-// shape of a node rebuilt under a tab that was not reloaded, since the door
+// shape of a node rebuilt under a tab that was not reloaded, since the API
 // judges only the build a call names. Every call is refused before its verb
 // (Server.staleBuild); the tab's one answer is nodebuild.Decide's, a notice
 // that offers the reload and takes it only when its button is pressed.
@@ -152,13 +152,13 @@ test('a tab whose node changed build offers the reload and lands where it was wh
   await expect.poll(async () => (await gw.focused()).gridID, { timeout: 15_000 }).toBe(place.gridID);
   expect(await buildNotice(window), 'the reloaded page runs the node build').toBeUndefined();
 
-  // Both halves recorded it: the door's refusal and the page's answer. Read
+  // Both halves recorded it: the API's refusal and the page's answer. Read
   // once, not polled: the old page's records die with it, so its answer is
   // in the ring now only because the reload waited for it (handOverBound).
-  const lines = await dumpViaDoor(node.origin, node.token);
+  const lines = await dumpViaAPI(node.origin, node.token);
   expect(
     {
-      refused: lines.some((l) => l.src === 'webdoor' && l.kind === 'build' && l.kv?.client === OLD_BUILD),
+      refused: lines.some((l) => l.src === 'webapi' && l.kind === 'build' && l.kv?.client === OLD_BUILD),
       answered: lines.some((l) => l.kind === 'build' && l.kv?.verdict === 'offer'),
     },
     'the dump holds the refusal and the answer',

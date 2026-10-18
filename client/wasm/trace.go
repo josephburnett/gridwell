@@ -102,7 +102,7 @@ func (a *App) bridgeHandOverTrace() string {
 // dump replaces the first notice instead of stacking one.
 const traceSource = "trace"
 
-// postTrace is the door hop, answering the reply body. http.DefaultClient is
+// postTrace is the API hop, answering the reply body. http.DefaultClient is
 // fetch under wasm, on this page's own origin and cookie, the same way every
 // other call reaches the node.
 func (a *App) postTrace(path string, body []byte) ([]byte, error) {
@@ -123,7 +123,7 @@ func (a *App) postTrace(path string, body []byte) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// httpStatusError names a door's refusal, which is not a transport error and
+// httpStatusError names an API's refusal, which is not a transport error and
 // so arrives with no error of its own.
 type httpStatusError string
 

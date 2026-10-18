@@ -1,5 +1,5 @@
 // The main process's half of the always-on trace: a ring of records posted to
-// the node's trace door, so one dump tells what the native layer did beside
+// the node's trace API, so one dump tells what the native layer did beside
 // what the canvas and the node did. api/tracewire owns the wire — the path,
 // the record and the cap — and client/trace owns the ring's semantics; this is
 // their spelling for a process with no Go in it, and trace.test.ts pins both
@@ -53,7 +53,7 @@ interface TraceRecord {
   ct: number;
 }
 
-// The door, injected so a test never reaches the network. True means the node
+// The API, injected so a test never reaches the network. True means the node
 // kept the batch; anything else leaves it pending for the next one. The signal
 // is how stop() abandons a post: see stopTrace. headers are the post's to
 // send, the batch's send clock among them.
@@ -95,7 +95,7 @@ export class TraceClient {
     this.lastFlush = this.now();
   }
 
-  // sendWith arms the door once the node's origin is known. What was emitted
+  // sendWith arms the API once the node's origin is known. What was emitted
   // before that stays pending, so boot rides the first batch.
   sendWith(post: TracePost): void {
     this.post = post;
@@ -158,7 +158,7 @@ export class TraceClient {
 
   private async postPending(): Promise<string> {
     const post = this.post;
-    if (!post) return this.pendingCount() > 0 ? 'the trace door is not armed' : '';
+    if (!post) return this.pendingCount() > 0 ? 'the trace API is not armed' : '';
     const batch = this.pendingBatch();
     if (!batch) return '';
     this.lastFlush = this.now();
@@ -180,7 +180,7 @@ export class TraceClient {
   }
 
   // Every unacknowledged record as JSON lines, and the ack to call once the
-  // door has answered.
+  // API has answered.
   pendingBatch(): { body: string; ack: () => void } | null {
     if (this.dropped > 0) {
       // The evictions since the last batch are one record, which can itself
@@ -241,7 +241,7 @@ export class TraceClient {
 // back and deleting it loses nothing.
 const mainRing = new TraceClient();
 
-// trace is what every emit site calls. A record costs nothing until the door
+// trace is what every emit site calls. A record costs nothing until the API
 // is armed, so a site need not know whether boot has reached it yet.
 export function trace(ev: TraceEvent): void {
   mainRing.emit(ev);
@@ -312,7 +312,7 @@ export function stopTrace(): void {
   mainRing.stop();
 }
 
-// startTrace arms the door and keeps the clock half of the flush decision
+// startTrace arms the API and keeps the clock half of the flush decision
 // running, so a lone record posts within the window instead of waiting for
 // company that never comes.
 export function startTrace(post: TracePost): void {

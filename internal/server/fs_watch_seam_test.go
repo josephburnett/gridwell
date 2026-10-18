@@ -1,7 +1,7 @@
 package server_test
 
 // The shipped fs plugin's Watch, spawned as the loader spawns it and started
-// through pluginhost.Start, reaching a client at the web door: the OS change
+// through pluginhost.Start, reaching a client at the web API: the OS change
 // notification, the plugin's scope, the node's stream and the fan-out, with
 // no read on the way.
 

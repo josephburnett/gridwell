@@ -217,31 +217,31 @@ func TestNoPluginImplementation(t *testing.T) {
 	}
 }
 
-// doorServerOwners maps each source file allowed to construct a door server or
-// its listener to why it may, so a harness cannot serve a door configured
-// differently from the node's. nodeexport.go owns the node doors; the other two
-// entries are not node doors, being a plugin subprocess's own server and a
-// throwaway for the namespace codec round trip.
-var doorServerOwners = map[string]string{
-	"internal/server/nodeexport.go":        "the node's door owner: WebDoorServer, ConnectionDoorServer, ConnectionHandler, ListenConnectionDoor",
-	"internal/plugintest/plugintest.go":    "not a node door: the plugin subprocess's own gRPC server",
-	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC server for the namespace codec test",
+// apiServerOwners maps each source file allowed to construct an API server or
+// its socket to why it may, so a harness cannot serve an API configured
+// differently from the node's. nodeexport.go owns the node APIs; the other two
+// entries are not node APIs, being a plugin subprocess's own server and a
+// throwaway for the connection API round trip.
+var apiServerOwners = map[string]string{
+	"internal/server/nodeexport.go":        "the node's API owner: WebAPIServer, ConnectionAPIServer, ConnectionHandler, ListenConnectionAPI",
+	"internal/plugintest/plugintest.go":    "not a node API: the plugin subprocess's own gRPC server",
+	"internal/namespace/roundtrip_test.go": "not a node API: a throwaway gRPC server for the connection API round-trip test",
 }
 
-// doorClientOwners is doorServerOwners for the dialing side: the files allowed
+// apiClientOwners is apiServerOwners for the dialing side: the files allowed
 // to build a gRPC client, and why.
-var doorClientOwners = map[string]string{
+var apiClientOwners = map[string]string{
 	"internal/connection/dial/dial.go":     "the node's dial owner: ClientConn",
-	"internal/plugintest/plugintest.go":    "not a node door: the plugin subprocess's go-plugin client",
-	"internal/namespace/roundtrip_test.go": "not a node door: a throwaway gRPC client for the namespace codec test",
+	"internal/plugintest/plugintest.go":    "not a node API: the plugin subprocess's go-plugin client",
+	"internal/namespace/roundtrip_test.go": "not a node API: a throwaway gRPC client for the connection API round-trip test",
 }
 
 // No file here, test files included, builds a raw http.Server or gRPC server or
 // opens a raw unix listener outside the owners above, nor a gRPC client outside
-// doorClientOwners. A harness that built its own would serve or dial a shape
-// the node never runs, and every seam test through it would cross a door that
+// apiClientOwners. A harness that built its own would serve or dial a shape
+// the node never runs, and every seam test through it would cross an API that
 // does not exist in production.
-func TestOneDoorServerOwner(t *testing.T) {
+func TestOneAPIServerOwner(t *testing.T) {
 	root := repoRoot(t)
 	// Concatenated so this file does not match its own needles.
 	httpNeedle := "&http.Server" + "{"
@@ -265,8 +265,8 @@ func TestOneDoorServerOwner(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, server := doorServerOwners[rel]
-		_, client := doorClientOwners[rel]
+		_, server := apiServerOwners[rel]
+		_, client := apiClientOwners[rel]
 		if server && client {
 			return nil
 		}
@@ -279,19 +279,19 @@ func TestOneDoorServerOwner(t *testing.T) {
 		for line := 1; sc.Scan(); line++ {
 			text := sc.Text()
 			if !client && strings.Contains(text, clientNeedle) {
-				t.Errorf("%s:%d builds a raw gRPC client — the node dials a connection door with one shape (dial.ClientConn); a test that dials another can pass against a door the node cannot reach. Route through it, or exempt this file in doorClientOwners with the reason", rel, line)
+				t.Errorf("%s:%d builds a raw gRPC client — the node dials a connection API with one shape (dial.ClientConn); a test that dials another can pass against an API the node cannot reach. Route through it, or exempt this file in apiClientOwners with the reason", rel, line)
 			}
 			if server {
 				continue
 			}
 			if strings.Contains(text, httpNeedle) {
-				t.Errorf("%s:%d builds a raw http.Server — a node door's server shape has one owner (server.WebDoorServer / server.ConnectionDoorServer); route through it", rel, line)
+				t.Errorf("%s:%d builds a raw http.Server — a node API's server shape has one owner (server.WebAPIServer / server.ConnectionAPIServer); route through it", rel, line)
 			}
 			if strings.Contains(text, grpcNeedle) {
-				t.Errorf("%s:%d builds a raw gRPC server — the node door's gRPC server lives in %s; if this is not a node door, exempt it in doorServerOwners with the reason", rel, line, "internal/server/nodeexport.go")
+				t.Errorf("%s:%d builds a raw gRPC server — the node API's gRPC server lives in %s; if this is not a node API, exempt it in apiServerOwners with the reason", rel, line, "internal/server/nodeexport.go")
 			}
 			if strings.Contains(text, unixNeedle) {
-				t.Errorf("%s:%d opens a raw unix listener — the connection door's listener has one owner (server.ListenConnectionDoor), and its 0600 mode is the door's whole gate; route through it or exempt this file in doorServerOwners with the reason", rel, line)
+				t.Errorf("%s:%d opens a raw unix listener — the connection API's socket has one owner (server.ListenConnectionAPI), and its 0600 mode is the API's whole gate; route through it or exempt this file in apiServerOwners with the reason", rel, line)
 			}
 		}
 		return nil

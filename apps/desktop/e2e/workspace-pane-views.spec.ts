@@ -1,7 +1,7 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
 import { settle } from './cadence';
-import { dumpViaDoor, TraceLine } from './trace';
+import { dumpViaAPI, TraceLine } from './trace';
 import type { GridwellDriver, PaneInfo } from './driver';
 
 // Inside a pane tile each pane keeps its own view of a grid, at every level
@@ -78,7 +78,7 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
   await gw.splitFocusedPaneVertical();
   await expect.poll(async () => (await gw.panes()).length).toBe(2);
   await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs));
-  const framingBefore = storeWrites(await dumpViaDoor(gw.origin, token), isFraming);
+  const framingBefore = storeWrites(await dumpViaAPI(gw.origin, token), isFraming);
 
   // The same grid, two different views: one zoomed in and panned up-left, the
   // other zoomed out and panned down-left. The child is empty, so no press
@@ -102,7 +102,7 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
     })
     .toBe(true);
   await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs));
-  expect(storeWrites(await dumpViaDoor(gw.origin, token), isFraming), 'a pan inside a pane tile wrote SetFraming')
+  expect(storeWrites(await dumpViaAPI(gw.origin, token), isFraming), 'a pan inside a pane tile wrote SetFraming')
     .toBe(framingBefore);
 
   await gw.leaveWorkspace();

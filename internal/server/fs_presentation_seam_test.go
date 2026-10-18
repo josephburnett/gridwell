@@ -87,7 +87,7 @@ func TestFsTextTilesDeclareWhatTheirBodiesAre(t *testing.T) {
 	}
 }
 
-// A file the plugin may not read is refused with that reason at the door, not
+// A file the plugin may not read is refused with that reason at the API, not
 // answered as absent.
 func TestFsUnreadablePageIsForbiddenNotMissing(t *testing.T) {
 	if os.Geteuid() == 0 {
@@ -101,7 +101,7 @@ func TestFsUnreadablePageIsForbiddenNotMissing(t *testing.T) {
 	cl := newPluginClient(t, "fs", map[string]string{"root": root})
 	reg := plugin.NewRegistry()
 	reg.Register(fsPresentationNS, "fs", cl, nil)
-	hs := webDoorTest(t, mustNew(t, reg, Config{}).WebHandler())
+	hs := webAPITest(t, mustNew(t, reg, Config{}).WebHandler())
 
 	ctx := t.Context()
 	info, err := cl.Info(ctx, &gridwellv1.InfoRequest{})

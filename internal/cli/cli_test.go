@@ -123,8 +123,8 @@ func TestServingBanner(t *testing.T) {
 	}
 }
 
-// The serve banner's MCP line is the command Claude Code registers the door
-// with; a door on every interface is named by loopback.
+// The serve banner's MCP line is the command Claude Code registers the API
+// with; an API on every interface is named by loopback.
 func TestMCPAddLine(t *testing.T) {
 	for addr, want := range map[string]string{
 		"127.0.0.1:7777": `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:7777/mcp -H "Authorization: Bearer hunter2" -H 'X-Gridwell-Shell: ${GRIDWELL_SHELL:-}'`,

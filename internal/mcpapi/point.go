@@ -1,10 +1,10 @@
-package mcpdoor
+package mcpapi
 
-// Pointing: how an agent learns what the user means by "here" and "these".
-// The node holds each client session's view, open or away (subscription.Book); a
-// session is chosen, its focused pane's grid read, and the set that pane shows, which
-// pane.SelectionTarget places on the grid row or in the pane tile's layout,
-// is what the user has in hand.
+// Pointing: how an agent learns what the user means by "here" and "these". The
+// node holds each client session's view, open or away (subscription.Book); a
+// session is chosen, its focused pane's grid read, and the set that pane shows,
+// which pane.SelectionTarget places on the grid row or in the pane tile's
+// layout, is what the user has in hand.
 
 import (
 	"context"
@@ -85,10 +85,10 @@ const (
 	byMostRecent = "most recent"
 )
 
-// screensNow is every session showing a screen, the most recently changed first.
-// A view with no panes shows none: it is another node telling its share
+// screensNow is every session showing a screen, the most recently changed
+// first. A view with no panes shows none: it is another node telling its share
 // through a connection.
-func (d *door) screensNow() []subscription.Session {
+func (d *toolset) screensNow() []subscription.Session {
 	all := slices.DeleteFunc(d.screens.Sessions(), func(s subscription.Session) bool { return len(s.View.GetPanes()) == 0 })
 	slices.SortStableFunc(all, func(a, b subscription.Session) int { return b.Changed.Compare(a.Changed) })
 	return all
@@ -122,7 +122,7 @@ type pointedIn struct {
 	Session string `json:"session,omitempty" jsonschema:"a session id from an earlier answer's others; empty chooses by the shell this agent runs in, then the most recent"`
 }
 
-func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointedIn) (*mcp.CallToolResult, PointedOut, error) {
+func (d *toolset) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointedIn) (*mcp.CallToolResult, PointedOut, error) {
 	all := d.screensNow()
 	if len(all) == 0 {
 		return nil, PointedOut{}, errors.New("no session: no screen is showing this node now or was in the last " + subscription.AwayFor.String() + ", so nothing is pointed at; open Gridwell and ask again")
@@ -173,7 +173,7 @@ func (d *door) pointed(ctx context.Context, req *mcp.CallToolRequest, in pointed
 // pane.SelectionTarget places it: the grid row's set (row), or the pane's own
 // in the pane tile's layout, found under its layout id at the place the view
 // names. A layout that has not caught up with the view is not loaded yet.
-func (d *door) shownSet(ctx context.Context, s subscription.Session, p *pb.ViewPane, row []string, out *PointedOut) ([]string, error) {
+func (d *toolset) shownSet(ctx context.Context, s subscription.Session, p *pb.ViewPane, row []string, out *PointedOut) ([]string, error) {
 	place := pane.StackAt(p.GetAnchor(), p.GetPath(), p.GetContentId())
 	switch place.SelectionTarget(out.PaneTile != "") {
 	case pane.SelectionRow:
@@ -203,7 +203,7 @@ func (d *door) shownSet(ctx context.Context, s subscription.Session, p *pb.ViewP
 // choose is the pointing rule: the session named, open or away; else, among
 // the open ones, the one holding the agent's shell live, else the one whose
 // view changed last; else, none being open, the one that went away last.
-func (d *door) choose(ctx context.Context, all []subscription.Session, named, shell string) (subscription.Session, string, string, error) {
+func (d *toolset) choose(ctx context.Context, all []subscription.Session, named, shell string) (subscription.Session, string, string, error) {
 	if named != "" {
 		if i := slices.IndexFunc(all, func(s subscription.Session) bool { return s.ID == named }); i >= 0 {
 			return all[i], byArgument, "", nil
