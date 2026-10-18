@@ -192,7 +192,7 @@ func TestTheMCPDoorListsItsTenTools(t *testing.T) {
 	for _, tl := range res.Tools {
 		got = append(got, tl.Name)
 	}
-	want := []string{"copy", "delete", "find", "place", "pointed", "read_grid", "read_tiles", "rename", "select", "write_text"}
+	want := []string{"copy", "delete", "find", "place", "read_grid", "read_tiles", "rename", "select", "sessions", "write_text"}
 	if slices.Sort(got); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}

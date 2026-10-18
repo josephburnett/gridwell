@@ -31,9 +31,11 @@ answers a verdict per item, in order: "ok", or the refusal. Each item claims
 what you read: pass the version read_tiles or read_grid gave you and a write
 made since is refused as a conflict, or omit it to claim the row as it stands
 now; select claims nothing. Nothing here destroys a tile: delete moves it to
-the trash. Shells are not reachable here. When the user says "this", "here"
-or "these", call pointed: it answers the grid or the selection in front of
-them, and names every other screen.`
+the trash. Shells are not reachable here. When the user says "here", they
+mean the grid of the focused pane, or the pane tile they are in, on their
+screen: sessions lists the screens showing this node, and marks yours, the
+one showing the shell you run in. "These" is that grid's selection, from
+read_grid.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
 // the browser codec does. node is the node's own id, the frame dead links are
@@ -42,7 +44,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	d := &door{rt: rt, node: node, screens: screens}
 	s := mcp.NewServer(&mcp.Implementation{Name: "gridwell", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
-	mcp.AddTool(s, &mcp.Tool{Name: "pointed", Description: "What the user means by \"here\" and \"these\": in one session's focused pane, its grid's selection when it has one, else the grid. The session is the one named, else the one whose pane holds this agent's shell live, else the one whose view changed last. It answers that session's panes and every other screen showing the node, with theirs."}, d.pointed)
+	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "Every screen showing this node, the most recently changed first: its id, label, when its view last changed, when it went away (a phone's browser in the background), the pane tiles it is inside, outermost first, and each pane's place, the grid it shows, the content tile it is inside and whether it has focus. The screen showing the shell this agent runs in is marked yours. An empty list is no screen."}, d.sessions)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the session a shell names, or the grid a well holds. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
 	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its wells too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open, and selected (only tiles in their grid's selection). With a filter the query may be empty: it then lists what passes, newest first."}, d.find)

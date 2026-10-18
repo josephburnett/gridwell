@@ -328,8 +328,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   session-ephemeral (`interest.Book`, `Server.Sessions`, 2026-10-15). The
   node keeps an away session's view for `interest.AwayFor` after its last
   stream closes, listed as away and watching nothing, so an agent sees a
-  phone that went to the background, and `pointed` chooses an open session
-  before an away one (2026-10-18).
+  phone that went to the background, marked away in `sessions` (2026-10-18).
 - A node has no grid of its own. A mount lands on the far node's home.
   The + menu's top row is one swatch per declared doorway: a node's home and
   a connection's far home are places and get a row; a plugin's collections
@@ -350,18 +349,20 @@ These were decided deliberately. Do not reverse one without a new decision.
   read, every refusal is a tool error with the router's reason, and a tile it
   places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
-  `docs/mcp.md` is the contract. It has ten tools (2026-10-17): `pointed`,
+  `docs/mcp.md` is the contract. It has ten tools (2026-10-18): `sessions`,
   `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `place`, `copy`,
   `delete` and `select`, and every write takes a list and answers a verdict
   per item in order, each item its own write with its own claim, a refused
-  one stopping none after it. An agent points as the user does
-  (2026-10-15): `pointed` is the focused pane's grid of one session, its
-  selection when non-empty, else the grid. The session is the one named,
-  else the one holding the agent's shell live, else the one whose view
-  changed last, the others named. A new tmux session carries its key in
-  `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`, and the shell
-  door, the one place a socket and its session are both in hand, joins the
-  two (`Server.ShellHolder`).
+  one stopping none after it. A session answers only where the user is
+  (2026-10-18): `sessions` lists every screen showing the node, newest
+  change first, each with its pane tiles and its panes' places, grids and
+  focus, and marks yours the one holding the agent's shell live; it chooses
+  none, and no screen is an empty list. What a grid holds and has selected
+  is the grid's, from `read_grid`, so "here" is a focused pane's grid or
+  pane tile and "these" is that grid's selection. A new tmux session carries
+  its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
+  and the shell door, the one place a socket and its session are both in
+  hand, joins the two (`Server.ShellHolder`).
 - A plugin or connection the user disables, from the Disable button on its
   health notice, stays disabled until the node restarts. It is held in the
   node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or
