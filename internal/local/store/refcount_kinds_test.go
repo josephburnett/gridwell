@@ -63,11 +63,11 @@ func TestCopyCopiesShellPreviewBlob(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	well, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := s.CreateShell(ctx, well.ChildGridId, 0, 0, 1, 1)
+	sh, err := s.CreateShell(ctx, door.ChildGridId, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,11 +75,11 @@ func TestCopyCopiesShellPreviewBlob(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Copy the well: the copy deep-copies its child grid, re-rowing the
+	// Copy the door: the copy deep-copies its child grid, re-rowing the
 	// shell-with-preview. The copy shares the immutable preview blob, so its
 	// refcount must rise to 2 — the case copySubtree must get right.
 	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
-		TileId:     well.Id,
+		TileId:     door.Id,
 		DestGridId: root, X: 50, Y: 0,
 	})
 	if err != nil {
@@ -104,20 +104,20 @@ func TestCopyCopiesShellPreviewBlob(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestDeleteGridReleasesAllKindRefs: GC'ing a grid (its last well deleted)
+// TestDeleteGridReleasesAllKindRefs: GC'ing a grid (its last door deleted)
 // must release every reference its tiles held — in particular a shell's
-// preview blob — so deleting the containing well doesn't leak the blob.
+// preview blob — so deleting the containing door doesn't leak the blob.
 func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	well, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	sh, err := s.CreateShell(ctx, well.ChildGridId, 2, 0, 1, 1)
+	sh, err := s.CreateShell(ctx, door.ChildGridId, 2, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +130,10 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 		t.Fatalf("setup: previewBlob=%d", previewBlob)
 	}
 
-	// Destroy the only well pointing at the child grid, collapsing the
+	// Destroy the only door pointing at the child grid, collapsing the
 	// two-stage gesture: the child grid is collected, cascading through the
 	// shell inside it.
-	hardDelete(t, s, well.Id)
+	hardDelete(t, s, door.Id)
 
 	verifyRefcounts(t, s)
 	if blobExists(t, s, previewBlob) {

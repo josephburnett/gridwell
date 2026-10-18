@@ -20,7 +20,7 @@ var repeatWritesNothing = map[string]bool{
 	"SetTextScroll/scroll and mode": true,
 	"SetContentZoom/content scale":  true,
 	"SetFrozen/standing freeze":     true,
-	"SetFraming/doorway viewport":   true,
+	"SetFraming/door viewport":      true,
 	"MoveTile/move and resize":      true,
 	"SetTileAlt/automatic capture":  true,
 	"SetURLState/freeze capture":    true,
@@ -69,7 +69,7 @@ func TestARepeatedWriteWritesNothing(t *testing.T) {
 }
 
 // A root has no tile row, so its framing lands on the grid row and announces
-// itself; repeating it must write and announce nothing, as a doorway's does.
+// itself; repeating it must write and announce nothing, as a door's does.
 func TestARepeatedRootFramingWritesNothing(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

@@ -10,7 +10,7 @@ import (
 // Framing is a view of a grid: a float center in the grid's own coordinates
 // plus a zoom. On a row and on the wire the zoom is the pane-size-independent
 // intrinsic ratio, how the grid looked when it was last left through a
-// doorway, so a window resize never moves a saved view; in a pane it is the
+// door, so a window resize never moves a saved view; in a pane it is the
 // live one, and zoomtrans converts. NewFraming is its one constructor, so a
 // held Framing is a finite center at a finite zoom above zero, and "never
 // visited" is not a Framing but a View without one.
@@ -51,7 +51,7 @@ func (f Framing) SameAs(g Framing) bool {
 		math.Abs(f.zoom-g.zoom) < framingEpsilon
 }
 
-// View is a doorway's saved framing, or none: the grid was never visited
+// View is a door's saved framing, or none: the grid was never visited
 // through it. The zero View is none.
 type View struct {
 	f  Framing
@@ -62,7 +62,7 @@ type View struct {
 func Saved(f Framing) View { return View{f, true} }
 
 // ViewOf reads a framing carried as three numbers on a row or an event. A
-// doorway never visited carries none, which proto3 sends as absent zeros and
+// door never visited carries none, which proto3 sends as absent zeros and
 // storage as NULL; whatever NewFraming refuses reads as none too.
 func ViewOf(cx, cy, zoom float64) View {
 	f, err := NewFraming(cx, cy, zoom)
@@ -92,7 +92,7 @@ func (v View) SameAs(w View) bool {
 	return !v.ok || v.f.SameAs(w.f)
 }
 
-// Reframe writes a root grid's framing onto every doorway rooted at gridID, a
+// Reframe writes a root grid's framing onto every door rooted at gridID, a
 // row's own and a declared entry's alike, and reports whether any value moved
 // by SameAs.
 func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {

@@ -3,15 +3,15 @@ package pane
 import "testing"
 
 func TestResolveLeafGrid(t *testing.T) {
-	// Root grid "1" holds well "10" over grid "2", which holds well "20" over
+	// Root grid "1" holds door "10" over grid "2", which holds door "20" over
 	// grid "3".
-	lookup := func(gid, wellID string) (string, bool, bool) {
+	lookup := func(gid, doorID string) (string, bool, bool) {
 		switch {
-		case gid == "1" && wellID == "10":
+		case gid == "1" && doorID == "10":
 			return "2", true, true
-		case gid == "2" && wellID == "20":
+		case gid == "2" && doorID == "20":
 			return "3", true, true
-		case gid == "2" && wellID == "99":
+		case gid == "2" && doorID == "99":
 			return "", true, false // cached, tile missing
 		case gid == "7":
 			return "", false, false // not cached
@@ -26,11 +26,11 @@ func TestResolveLeafGrid(t *testing.T) {
 		want string
 	}{
 		{"empty path -> root", "1", nil, "1"},
-		{"one well", "1", []string{"10"}, "2"},
-		{"two wells -> leaf", "1", []string{"10", "20"}, "3"},
+		{"one door", "1", []string{"10"}, "2"},
+		{"two doors -> leaf", "1", []string{"10", "20"}, "3"},
 		{"root empty -> empty", "", []string{"10"}, ""},
 		{"missing tile stops at current grid", "1", []string{"10", "99"}, "2"},
-		{"unknown well id stops at current grid", "1", []string{"10", "12345"}, "2"},
+		{"unknown door id stops at current grid", "1", []string{"10", "12345"}, "2"},
 	}
 	for _, c := range cases {
 		if got := ResolveLeafGrid(c.root, c.path, lookup); got != c.want {

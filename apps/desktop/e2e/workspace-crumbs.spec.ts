@@ -6,7 +6,7 @@ import { makeRunDir } from './homes';
 //
 // A workspace's durable place is its layout blob, and the bar's chain is that
 // place projected. A pane that crossed into a plugin has frames below the
-// crossing, the grid it started in and the doorway it came through, and those
+// crossing, the grid it started in and the door it came through, and those
 // are the only way back out. Leaving and re-entering the workspace round-trips
 // the whole stack through the blob, so this spec asserts on what the bar shows
 // after the re-entry rather than on the encoder alone.

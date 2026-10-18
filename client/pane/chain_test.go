@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// chainPane is four namespace levels deep, with wells and content descents
+// chainPane is four namespace levels deep, with doors and content descents
 // mixed in.
 func chainPane() *Pane {
 	p := &Pane{ID: "p1", Stack: NewStack("k3x9m2q/1")}

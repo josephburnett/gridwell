@@ -26,11 +26,11 @@ func (a *App) createTile(label, gid string, req *gridwellv1.CreateTileRequest,
 	}, onSuccess)
 }
 
-// createWellAtCell creates an unnamed well; naming happens from inside,
+// createDoorAtCell creates an unnamed door; naming happens from inside,
 // through the bar title.
-func (a *App) createWellAtCell(gid string, cellX, cellY int64) {
-	a.createTile("CreateWell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
+func (a *App) createDoorAtCell(gid string, cellX, cellY int64) {
+	a.createTile("CreateDoor", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }
 
 func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {

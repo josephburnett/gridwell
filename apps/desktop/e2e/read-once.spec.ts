@@ -29,23 +29,23 @@ test('a boot, a descent and an ascent read each grid they show once', async ({ g
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
 
-  // home ⊃ A ⊃ {B, C}: entering A draws B and C as wells, which reads their
+  // home ⊃ A ⊃ {B, C}: entering A draws B and C as doors, which reads their
   // grids.
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const a = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const a = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
   await gw.descendCell(cx, cy);
   const inA = await gw.focused();
   const ax = Math.round(inA.cx);
   const ay = Math.round(inA.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', ax, ay);
+  await gw.dragCreate('door', ax, ay);
   await gw.openMenu();
-  await gw.dragCreate('well', ax + 1, ay);
+  await gw.dragCreate('door', ax + 1, ay);
   const inner = await gw.getGrid(a.childGridId!);
-  const b = tileAt(inner, 'well', ax, ay)!;
-  const c = tileAt(inner, 'well', ax + 1, ay)!;
-  expect(b && c, 'A holds two wells').toBeTruthy();
+  const b = tileAt(inner, 'door', ax, ay)!;
+  const c = tileAt(inner, 'door', ax + 1, ay)!;
+  expect(b && c, 'A holds two doors').toBeTruthy();
   await gw.ascendViaCrumb();
   await settle(window, settleMs);
 
@@ -107,10 +107,10 @@ test('a preview is fetched once on first look', async ({ electronApp, gw, window
   await gw.waitIdle();
 
   // The first look happens during an ascent, so frames are drawing while the
-  // bytes decode: a reload inside a well empties the preview cache without
+  // bytes decode: a reload inside a door empties the preview cache without
   // showing the tile, and the ascent out is stretched.
   await gw.openMenu();
-  await gw.dragCreate('well', cx + 1, cy);
+  await gw.dragCreate('door', cx + 1, cy);
   await gw.descendCell(cx + 1, cy);
   const inside = (await gw.focused()).gridID;
   await settle(window, (await gw.cadences()).framingSaveMs);

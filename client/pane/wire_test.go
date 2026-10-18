@@ -20,7 +20,7 @@ func treesEqual(a, b *Tree) bool {
 }
 
 // placesEqual compares two panes' frame stacks level by level on the identity
-// the blob carries: which grid a frame opens, which doorway it came through,
+// the blob carries: which grid a frame opens, which door it came through,
 // and whether the door is the place.
 func placesEqual(a, b *Pane) bool {
 	fa, fb := a.Frames(), b.Frames()
@@ -373,7 +373,7 @@ func TestLayoutKeepsEveryLevelFromTheRoot(t *testing.T) {
 }
 
 // TestLayoutRestoresTheWholePlace: the crumb chain of a mixed deep place —
-// wells, two crossings, a content descent below the top — survives the blob
+// doors, two crossings, a content descent below the top — survives the blob
 // unchanged. The chain is the projection users navigate by, so it is what the
 // round trip is measured on.
 func TestLayoutRestoresTheWholePlace(t *testing.T) {

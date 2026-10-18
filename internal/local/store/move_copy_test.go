@@ -12,7 +12,7 @@ func TestMoveNodeWithinGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,11 +32,11 @@ func TestMoveNodeOverlapRefused(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	a, err := s.CreateWell(ctx, root, 0, 0, 2, 2, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateWell(ctx, root, 5, 5, 2, 2, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 5, 5, 2, 2, ""); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
@@ -52,11 +52,11 @@ func TestMoveNodeAcrossGrids(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	a, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateWell(ctx, root, 5, 5, 1, 1, "")
+	target, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestUpdateTextRejectsNonText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestWriteContentAddressesNestedTileByID(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}

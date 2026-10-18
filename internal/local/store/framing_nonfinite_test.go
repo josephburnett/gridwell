@@ -19,7 +19,7 @@ func TestSetFramingRefusesNonFinite(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	w, err := s.CreateWell(ctx, root, 0, 0, 9, 7, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 9, 7, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,8 +27,8 @@ func TestSetFramingRefusesNonFinite(t *testing.T) {
 	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{RootGridId: root, Cx: good.Cx(), Cy: good.Cy(), Zoom: good.Zoom()}); err != nil {
 		t.Fatal(err)
 	}
-	well := mkFraming(0.43, 3.7, 0.65)
-	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: w.Id, Cx: well.Cx(), Cy: well.Cy(), Zoom: well.Zoom()}); err != nil {
+	door := mkFraming(0.43, 3.7, 0.65)
+	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: w.Id, Cx: door.Cx(), Cy: door.Cy(), Zoom: door.Zoom()}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -61,13 +61,13 @@ func TestSetFramingRefusesNonFinite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := rpc.ViewOf(tile.ViewCx, tile.ViewCy, tile.ViewZoom); got != rpc.Saved(well) {
-		t.Errorf("well framing after the refused writes = %+v, want %+v", got, well)
+	if got := rpc.ViewOf(tile.ViewCx, tile.ViewCy, tile.ViewZoom); got != rpc.Saved(door) {
+		t.Errorf("door framing after the refused writes = %+v, want %+v", got, door)
 	}
 }
 
-// Never visited is NULL in storage on every path that makes a doorway — a
-// fresh well, an exit well with no view, a copy of either — and reads back
+// Never visited is NULL in storage on every path that makes a door — a
+// fresh door, a door to another namespace with no view, a copy of either — and reads back
 // as an rpc.View without a framing; nothing writes a zero for it.
 func TestNeverVisitedRoundTripsAsNone(t *testing.T) {
 	s := newTestStore(t)
@@ -76,11 +76,11 @@ func TestNeverVisitedRoundTripsAsNone(t *testing.T) {
 	if v, err := s.GridFraming(root); err != nil || v != (rpc.View{}) {
 		t.Errorf("a fresh root's framing = %+v err=%v, want none", v, err)
 	}
-	fresh, err := s.CreateWell(ctx, root, 0, 0, 2, 2, "fresh")
+	fresh, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "fresh")
 	if err != nil {
 		t.Fatal(err)
 	}
-	exit, err := s.CreateExitWell(ctx, root, 3, 0, 1, 1, "aabbccddaabbccddaabbccddaabbccdd/7", "exit", rpc.View{})
+	exit, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 0, 1, 1, "aabbccddaabbccddaabbccddaabbccdd/7", "exit", rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -441,7 +441,7 @@ client draws the status before the name (`client/tilepreview/banner_test.go`).
 
 **Today.** Meets: fs and pages, which send none; proc, 💀 or ⏸
 (`proc/plugin/plugin.go:220-231`); gitlab, ✅ once done
-(`gitlab/todos/todos.go:112-121`), its week wells named by the Monday alone;
+(`gitlab/todos/todos.go:112-121`), its week doors named by the Monday alone;
 gmail, ● unread, else ★ starred outside the starred grid
 (`gmail/mailbox/mailbox.go:185-193`); hey, ● unseen in a box and nothing in
 everything.

@@ -267,16 +267,16 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("read_tiles through the link = %+v, want the target's body", through)
 	}
 
-	well, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}})
+	door, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	renamed := items(t, s, "rename",
-		map[string]any{"id": well.GetTile().GetId(), "name": "inbox"},
+		map[string]any{"id": door.GetTile().GetId(), "name": "inbox"},
 		map[string]any{"id": plan.ID, "name": "x"})
 	if r := landed(t, renamed[0]); r.Name != "inbox" || r.ChildGrid == "" {
-		t.Fatalf("rename = %+v, want the well named inbox", r)
+		t.Fatalf("rename = %+v, want the door named inbox", r)
 	}
 	if !strings.HasPrefix(renamed[1].Verdict, "refused:") {
 		t.Fatalf("renaming a text tile = %q, want refused", renamed[1].Verdict)
@@ -404,7 +404,7 @@ func TestMCPReadTilesAnswersEachIdInOrder(t *testing.T) {
 	}
 }
 
-// find's filters reach the router: a grid with its wells, and the content
+// find's filters reach the router: a grid with its doors, and the content
 // time, keep only the tile whose body was written since.
 func TestMCPFindFiltersReachTheStore(t *testing.T) {
 	n := newMCPNode(t)
@@ -412,12 +412,12 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	well, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 9, Y: 9, W: 1, H: 1}})
+	door, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 9, Y: 9, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner := well.GetTile().GetChildGridId()
+	inner := door.GetTile().GetChildGridId()
 	kept, still, outside := mkText(t, s, inner, "note kept"), mkText(t, s, inner, "note still"), mkText(t, s, n.root, "note outside")
 	made := time.Now().Unix()
 	for time.Now().Unix() == made {
@@ -440,7 +440,7 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 	}
 	sorted := func(ids ...string) []string { slices.Sort(ids); return ids }
 	if got := hits(map[string]any{"query": "note", "grid": n.root, "recurse": true}); !slices.Equal(got, sorted(kept.ID, still.ID, outside.ID)) {
-		t.Fatalf("find in root with its wells = %v, want all three", got)
+		t.Fatalf("find in root with its doors = %v, want all three", got)
 	}
 	if got := hits(map[string]any{"query": "note", "grid": n.root}); !slices.Equal(got, []string{outside.ID}) {
 		t.Fatalf("find in root alone = %v, want [%s]", got, outside.ID)
@@ -450,13 +450,13 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 		t.Fatalf("find changed since %s = %v, want the two rewritten", since, got)
 	}
 	if got := hits(map[string]any{"grid": inner, "content_changed": map[string]any{"from": since}}); !slices.Equal(got, []string{kept.ID}) {
-		t.Fatalf("an empty query in the well changed since %s = %v, want [%s]", since, got, kept.ID)
+		t.Fatalf("an empty query in the door changed since %s = %v, want [%s]", since, got, kept.ID)
 	}
 	if got := hits(map[string]any{"query": "note", "created": map[string]any{"to": "2000-01-01T00:00:00Z"}}); len(got) != 0 {
 		t.Fatalf("find created before 2000 = %v, want none", got)
 	}
 	if got := hits(map[string]any{"query": "note", "modified": map[string]any{"from": since}, "grid": inner}); !slices.Equal(got, []string{kept.ID}) {
-		t.Fatalf("find modified since %s in the well = %v, want [%s]", since, got, kept.ID)
+		t.Fatalf("find modified since %s in the door = %v, want [%s]", since, got, kept.ID)
 	}
 	var g mcpapi.GridOut
 	call(t, s, "select", map[string]any{"grid": inner, "add": []string{still.ID}}, &g)
@@ -478,8 +478,8 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 	if got := hits(map[string]any{"kind": "pane", "content_changed": map[string]any{}}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
 		t.Fatalf("find kind pane by content time = %v, want [%s]", got, pt.GetTile().GetId())
 	}
-	if got := hits(map[string]any{"query": "note", "kind": "well"}); len(got) != 0 {
-		t.Fatalf("find note of kind well = %v, want none", got)
+	if got := hits(map[string]any{"query": "note", "kind": "door"}); len(got) != 0 {
+		t.Fatalf("find note of kind door = %v, want none", got)
 	}
 	refusedWith(t, callRaw(t, s, "find", map[string]any{"kind": "panes"}), "refused:")
 }

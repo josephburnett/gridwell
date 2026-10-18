@@ -9,9 +9,9 @@ import (
 	"github.com/josephburnett/gridwell/client/scratch"
 )
 
-// wellPane is a pane that descended from g1 through the doorway w1, sitting
+// doorPane is a pane that descended from g1 through the door w1, sitting
 // in the child grid at (5, 6) zoom 2.
-func wellPane(id string) PaneView {
+func doorPane(id string) PaneView {
 	p := gridPane(id, "g1")
 	p.Stack.Push(framed(pane.Frame{Door: "w1"}, 5, 6, 2))
 	p.View = viewOf(5, 6, 2)
@@ -28,7 +28,7 @@ func contentPane(id, tileID string) PaneView {
 }
 
 func doorRow() *gridwellv1.Tile {
-	return &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
+	return &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "gc"}
 }
 
@@ -53,16 +53,16 @@ func TestAscendPlans(t *testing.T) {
 		animate: true,
 		want:    []EffectKind{EffCancelTransition, EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
-		name:    "the doorway's grid is not cached: fetch it and land instantly",
-		pane:    wellPane("pane1"),
+		name:    "the door's grid is not cached: fetch it and land instantly",
+		pane:    doorPane("pane1"),
 		leave:   LeaveWorld{DoorGridID: "g1"},
 		animate: true,
 		want: []EffectKind{EffCancelTransition, EffFetchGrid, EffPersistFraming,
 			EffInstallPlace, EffClearSelection, EffFetchGrid,
 			EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
-		name:    "a + menu portal has no doorway row: the root grid owns the framing",
-		pane:    wellPane("pane1"),
+		name:    "a + menu portal has no door row: the root grid owns the framing",
+		pane:    doorPane("pane1"),
 		leave:   LeaveWorld{DoorGridID: "g1", DoorGridCached: true},
 		animate: true,
 		want: []EffectKind{EffCancelTransition, EffPersistFraming,
@@ -70,14 +70,14 @@ func TestAscendPlans(t *testing.T) {
 			EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
 		name:    "animated out of a child grid",
-		pane:    wellPane("pane1"),
+		pane:    doorPane("pane1"),
 		leave:   LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()},
 		animate: true,
 		want: []EffectKind{EffCancelTransition, EffPersistFraming,
 			EffStartTransition, EffRefreshOverlay, EffScheduleURLUpdate},
 	}, {
 		name:    "instant out of a child grid",
-		pane:    wellPane("pane1"),
+		pane:    doorPane("pane1"),
 		leave:   LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()},
 		animate: false,
 		want: []EffectKind{EffCancelTransition, EffPersistFraming,
@@ -155,7 +155,7 @@ func TestAscendEphemeralWithASplitSiblingDoesNotDelete(t *testing.T) {
 	}
 }
 
-func TestAscendOutOfARootGridWithNoDoorway(t *testing.T) {
+func TestAscendOutOfARootGridWithNoDoor(t *testing.T) {
 	p := gridPane("pane1", "g1")
 	p.Stack = pane.StackOf([]pane.Frame{framed(pane.Frame{GridID: "g1"}, 0, 0, 1), framed(pane.Frame{GridID: "g2"}, 0, 0, 1)})
 	w := baseWorld(p)
@@ -164,24 +164,24 @@ func TestAscendOutOfARootGridWithNoDoorway(t *testing.T) {
 
 	pf := only(t, plan, EffPersistFraming)
 	if pf.Door {
-		t.Fatalf("a root grid with no doorway persisted onto a doorway")
+		t.Fatalf("a root grid with no door persisted onto a door")
 	}
 	if pf.Owner.TileID != "" {
 		t.Fatalf("framing owner = %+v, want the grid row", pf.Owner)
 	}
 	// Nothing to zoom out of: the landing is instant.
 	if _, ok := findKind(plan, EffStartTransition); ok {
-		t.Fatalf("animated an ascent with no doorway footprint")
+		t.Fatalf("animated an ascent with no door footprint")
 	}
 }
 
 func TestAscendAnimatesFromTheJustPersistedFraming(t *testing.T) {
-	// The doorway row carries a stale view; the writeback the plan emits
+	// The door row carries a stale view; the writeback the plan emits
 	// replaces it with where the user actually is, and the ascent calibrates
 	// against THAT, so the frame swap does not snap back to the stored origin.
 	door := doorRow()
 	door.ViewCx, door.ViewCy, door.ViewZoom = 99, 99, 0.5
-	w := baseWorld(wellPane("pane1"))
+	w := baseWorld(doorPane("pane1"))
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: door}
 	plan := New().Do(ascendGesture("pane1", 1, true), w)
 
@@ -190,7 +190,7 @@ func TestAscendAnimatesFromTheJustPersistedFraming(t *testing.T) {
 		t.Fatalf("segments = %d, want the child leg and the parent leg", len(tr.Segments))
 	}
 	if tr.TraceTileID != "w1" {
-		t.Fatalf("trace = %q, want the doorway just left", tr.TraceTileID)
+		t.Fatalf("trace = %q, want the door just left", tr.TraceTileID)
 	}
 	child := tr.Segments[0]
 	if child.ToCx != 5 || child.ToCy != 6 || child.ToZoom != 2 {
@@ -208,7 +208,7 @@ func TestAscendAnimatesFromTheJustPersistedFraming(t *testing.T) {
 }
 
 func TestAscendLandsOnTheFrameItReached(t *testing.T) {
-	w := baseWorld(wellPane("pane1"))
+	w := baseWorld(doorPane("pane1"))
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()}
 	m := New()
 	tr := only(t, m.Do(ascendGesture("pane1", 1, true), w), EffStartTransition)
@@ -259,7 +259,7 @@ func TestAscendMultiHopOnlyAnimatesTheLast(t *testing.T) {
 	p.View = viewOf(5, 6, 2)
 	w := baseWorld(p)
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
-		DoorTile: &gridwellv1.Tile{Id: "w2", Kind: rpc.KindWell, GridId: "gc", W: 4, H: 4}}
+		DoorTile: &gridwellv1.Tile{Id: "w2", Kind: rpc.KindDoor, GridId: "gc", W: 4, H: 4}}
 	m := New()
 
 	first := m.Do(ascendGesture("pane1", 2, true), w)
@@ -332,8 +332,8 @@ func findKind(p Plan, k EffectKind) (Effect, bool) {
 }
 
 // Inside a pane tile the layout owns a grid frame's view, so an ascent writes
-// nothing to the doorway row, at a well and at a root, and animates onto the
-// row's own framing, the preview the well shows from outside.
+// nothing to the door row, at a door and at a root, and animates onto the
+// row's own framing, the preview the door shows from outside.
 func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
 	door := doorRow()
 	door.ViewCx, door.ViewCy, door.ViewZoom = 99, 99, 0.5
@@ -344,7 +344,7 @@ func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
 		pane  PaneView
 		leave LeaveWorld
 	}{
-		{"a well", wellPane("pane1"), LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: door}},
+		{"a door", doorPane("pane1"), LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: door}},
 		{"a root", root, LeaveWorld{}},
 	} {
 		w := baseWorld(c.pane)
@@ -356,7 +356,7 @@ func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
 			t.Errorf("%s: an ascent inside a pane tile wrote framing: %+v", c.name, pf)
 		}
 		if c.leave.DoorTile != nil && door.ViewCx != 99 {
-			t.Errorf("%s: the doorway row was patched", c.name)
+			t.Errorf("%s: the door row was patched", c.name)
 		}
 	}
 }

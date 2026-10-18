@@ -133,11 +133,11 @@ func TestServeContentEntryCapSkipsStore(t *testing.T) {
 	}
 }
 
-func TestServeContentMountCapEvictsOldest(t *testing.T) {
+func TestServeContentSourceCapEvictsOldest(t *testing.T) {
 	cc, fake := contentFixture(t)
-	old := serveContentMountCap
-	serveContentMountCap = 2500
-	t.Cleanup(func() { serveContentMountCap = old })
+	old := serveContentSourceCap
+	serveContentSourceCap = 2500
+	t.Cleanup(func() { serveContentSourceCap = old })
 
 	for i := 0; i < 4; i++ {
 		key := fmt.Sprintf("%d|f.bin", i)
@@ -152,7 +152,7 @@ func TestServeContentMountCapEvictsOldest(t *testing.T) {
 		t.Errorf("newest entry evicted: %v", err)
 	}
 	if _, _, _, err := serveContentAPI(cc, "0", "f.bin"); status.Code(err) != codes.Unavailable {
-		t.Errorf("oldest entry survived past the mount cap: %v", err)
+		t.Errorf("oldest entry survived past the source cap: %v", err)
 	}
 }
 

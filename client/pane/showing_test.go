@@ -9,8 +9,8 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// fakeLeaf resolves a place the way the cache would: each well id names the
-// grid behind it, and "?" is a well whose grid is not cached yet.
+// fakeLeaf resolves a place the way the cache would: each door id names the
+// grid behind it, and "?" is a door whose grid is not cached yet.
 func fakeLeaf(anchor string, path []string) string {
 	g := anchor
 	for _, w := range path {
@@ -32,7 +32,7 @@ func TestShowing(t *testing.T) {
 			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"p/1"}},
-		{"a pane through a well shows the well's grid", func() (*Tree, map[string]Rect) {
+		{"a pane through a door shows the door's grid", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", []string{"w5"}, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"g-w5"}},
@@ -59,7 +59,7 @@ func TestShowing(t *testing.T) {
 			second.Stack = StackAt("n/1", nil, "")
 			return tr, map[string]Rect{second.ID: {W: 1, H: 1}}
 		}, []string{"n/1"}},
-		{"a well not yet fetched shows as deep as it resolves", func() (*Tree, map[string]Rect) {
+		{"a door not yet fetched shows as deep as it resolves", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", []string{"w5", "?"}, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"g-w5"}},
@@ -93,21 +93,21 @@ func TestShowingALevelShowsOnlyItsOwnTree(t *testing.T) {
 
 func noTiles(string) map[string]*gridwellv1.Tile { return nil }
 
-func well(id string, x, y int64, child string) *gridwellv1.Tile {
-	return &gridwellv1.Tile{Id: id, Kind: rpc.KindWell, X: x, Y: y, W: 2, H: 2, ChildGridId: child}
+func door(id string, x, y int64, child string) *gridwellv1.Tile {
+	return &gridwellv1.Tile{Id: id, Kind: rpc.KindDoor, X: x, Y: y, W: 2, H: 2, ChildGridId: child}
 }
 
-// A well on screen draws its child grid as a preview, so that grid is shown
+// A door on screen draws its child grid as a preview, so that grid is shown
 // too; one level deep, as the renderer draws it.
-func TestShowingWellPreviews(t *testing.T) {
+func TestShowingDoorPreviews(t *testing.T) {
 	grids := map[string]map[string]*gridwellv1.Tile{
 		"p/1": {
-			"w1":   well("w1", 1, 1, "c/1"),
-			"link": {Id: "link", Kind: rpc.KindWell, Link: true, X: -3, Y: -3, W: 2, H: 2, ChildGridId: "far/c"},
-			"far":  well("far", 100, 100, "c/off"),
+			"w1":   door("w1", 1, 1, "c/1"),
+			"link": {Id: "link", Kind: rpc.KindDoor, Link: true, X: -3, Y: -3, W: 2, H: 2, ChildGridId: "far/c"},
+			"far":  door("far", 100, 100, "c/off"),
 			"text": {Id: "text", Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1},
 		},
-		"c/1": {"deep": well("deep", 0, 0, "c/2")},
+		"c/1": {"deep": door("deep", 0, 0, "c/2")},
 	}
 	tiles := func(g string) map[string]*gridwellv1.Tile { return grids[g] }
 	cases := []struct {
@@ -115,11 +115,11 @@ func TestShowingWellPreviews(t *testing.T) {
 		build func() (*Tree, map[string]Rect)
 		want  []string
 	}{
-		{"a well and a link on screen show their grids, one level deep", func() (*Tree, map[string]Rect) {
+		{"a door and a link on screen show their grids, one level deep", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"c/1", "far/c", "p/1"}},
-		{"a well scrolled into view is shown", func() (*Tree, map[string]Rect) {
+		{"a door scrolled into view is shown", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(100, 100, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"c/off", "p/1"}},

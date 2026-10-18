@@ -59,7 +59,7 @@ func flakyClient(t *testing.T) (hs *httptest.Server, healthy, flaky *rpc.Client,
 	return hs, cl, rpc.NewClient(&hc, hs.URL, connect.WithProtoJSON()), link, root
 }
 
-// framingOf reads a doorway tile's persisted framing back out of the store,
+// framingOf reads a door tile's persisted framing back out of the store,
 // through the server — the far end of every framing write below.
 func framingOf(t *testing.T, cl *rpc.Client, tileID string) rpc.View {
 	t.Helper()
@@ -166,17 +166,17 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 	_, healthy, flaky, link, root := flakyClient(t)
 	ctx := context.Background()
 
-	well, err := healthy.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}})
+	door, err := healthy.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	out := outbox.New()
-	key := outbox.Key{Op: "SetFraming", ID: well.Id}
+	key := outbox.Key{Op: "SetFraming", ID: door.Id}
 	framing := mkFraming(12.5, -3.25, 1.75)
 	var post func()
 	post = func() {
-		_, err := flaky.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()})
+		_, err := flaky.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: door.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()})
 		out.Record(clientsync.Of(err), key, post)
 	}
 
@@ -185,7 +185,7 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 	if out.Len() != 1 {
 		t.Fatalf("a transport failure left %d writes parked, want 1", out.Len())
 	}
-	if got := framingOf(t, healthy, well.Id); got.SameAs(rpc.Saved(framing)) {
+	if got := framingOf(t, healthy, door.Id); got.SameAs(rpc.Saved(framing)) {
 		t.Fatal("the server took the write while the link was down")
 	}
 
@@ -211,7 +211,7 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 	if out.Len() != 0 {
 		t.Errorf("a landed write left %d parked", out.Len())
 	}
-	if got := framingOf(t, healthy, well.Id); !got.SameAs(rpc.Saved(framing)) {
+	if got := framingOf(t, healthy, door.Id); !got.SameAs(rpc.Saved(framing)) {
 		t.Errorf("framing after the kick = %+v, want %+v", got, framing)
 	}
 }
@@ -402,15 +402,15 @@ func TestUnloadDrainsTheOutbox(t *testing.T) {
 	hs, healthy, flaky, link, root := flakyClient(t)
 	ctx := context.Background()
 
-	well, err := healthy.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}})
+	door, err := healthy.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	framing := mkFraming(5, 6, 0.75)
-	req := &gridwellv1.SetFramingRequest{TileId: well.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()}
+	req := &gridwellv1.SetFramingRequest{TileId: door.Id, Cx: framing.Cx(), Cy: framing.Cy(), Zoom: framing.Zoom()}
 
 	out := outbox.New()
-	key := outbox.Key{Op: "SetFraming", ID: well.Id}
+	key := outbox.Key{Op: "SetFraming", ID: door.Id}
 	link.down.Store(true)
 	_, err = flaky.SetFraming(ctx, req)
 	out.Record(clientsync.Of(err), key, func() { t.Fatal("unused") })
@@ -425,7 +425,7 @@ func TestUnloadDrainsTheOutbox(t *testing.T) {
 			t.Fatalf("framing beacon = %d, want 200", res.StatusCode)
 		}
 	}
-	if got := framingOf(t, healthy, well.Id); !got.SameAs(rpc.Saved(framing)) {
+	if got := framingOf(t, healthy, door.Id); !got.SameAs(rpc.Saved(framing)) {
 		t.Errorf("framing after the unload drain = %+v, want %+v", got, framing)
 	}
 }

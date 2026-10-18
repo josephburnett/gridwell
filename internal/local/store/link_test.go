@@ -9,7 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A leaf link is the exit well's leaf twin: the content lives in another
+// A leaf link is the leaf twin of a door to another namespace: the content lives in another
 // tile, and the local row is a link plus local framing. The store never
 // treats the target as something it owns, so there is no blob, no content
 // mutation, delete unlinks, and copy copies the link.
@@ -45,18 +45,18 @@ func TestCreateLeafLinkStoresQualifiedLink(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-func TestCreateLeafLinkRejectsWellAndBareTargets(t *testing.T) {
+func TestCreateLeafLinkRejectsDoorAndBareTargets(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	// The well kind links via child_grid_id (the exit well), never
+	// The door kind links via child_grid_id (the door to another namespace), never
 	// link_target_id — one link shape per kind, no second copy of the fact.
-	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindWell, remoteTarget, ""); err == nil {
-		t.Error("CreateLeafLink accepted kind=well; wells link via child_grid_id")
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindDoor, remoteTarget, ""); err == nil {
+		t.Error("CreateLeafLink accepted kind=door; doors link via child_grid_id")
 	}
 	// A bare (unqualified) target would be ambiguous outside the allocating
-	// plugin — same rule as an exit well's qualified child.
+	// plugin — same rule as the qualified child of a door to another namespace.
 	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", ""); err == nil {
 		t.Error("CreateLeafLink accepted a bare integer target")
 	}

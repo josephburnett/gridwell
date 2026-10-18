@@ -40,8 +40,8 @@ func TestReopenRoundTrip(t *testing.T) {
 	if _, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com"); err != nil {
 		t.Fatalf("create url: %v", err)
 	}
-	if _, err := s.CreateWell(ctx, root, 4, 0, 1, 1, ""); err != nil {
-		t.Fatalf("create well: %v", err)
+	if _, err := s.CreateDoor(ctx, root, 4, 0, 1, 1, ""); err != nil {
+		t.Fatalf("create door: %v", err)
 	}
 
 	before := snapshotDB(t, s, root, txt.BlobId)

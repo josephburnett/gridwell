@@ -13,7 +13,7 @@ func seedCache(t *testing.T) *Cache {
 	t.Helper()
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
-		&gridwellv1.Tile{Id: "100", GridId: "1", Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridId: "2"},
+		&gridwellv1.Tile{Id: "100", GridId: "1", Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, ChildGridId: "2"},
 		&gridwellv1.Tile{Id: "101", GridId: "1", Kind: rpc.KindText, X: 5, Y: 5, W: 1, H: 1},
 	})
 	return c
@@ -71,7 +71,7 @@ func TestRenderedEditVisibleThroughRenderAccessor(t *testing.T) {
 
 func TestApplyTileChanged(t *testing.T) {
 	c := seedCache(t)
-	ok := c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: &gridwellv1.Tile{Id: "100", GridId: "1", Kind: rpc.KindWell, X: 9, Y: 9, W: 2, H: 2, ChildGridId: "2"}}}})
+	ok := c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: &gridwellv1.Tile{Id: "100", GridId: "1", Kind: rpc.KindDoor, X: 9, Y: 9, W: 2, H: 2, ChildGridId: "2"}}}})
 	if !ok {
 		t.Error("Apply returned false")
 	}
@@ -159,7 +159,7 @@ func TestTileRemovedSparesDirtyBuffer(t *testing.T) {
 
 func TestApplyEventForUnknownGridIgnored(t *testing.T) {
 	c := seedCache(t)
-	ok := c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: &gridwellv1.Tile{Id: "999", GridId: "999", Kind: rpc.KindWell, ChildGridId: "1"}}}})
+	ok := c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: &gridwellv1.Tile{Id: "999", GridId: "999", Kind: rpc.KindDoor, ChildGridId: "1"}}}})
 	if ok {
 		t.Error("expected false for unknown grid")
 	}
@@ -685,7 +685,7 @@ func TestACopiedRowLandsThroughUpdateTile(t *testing.T) {
 func TestPatchTileEditsACopyAndLands(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
-		{Id: "100", GridId: "1", Kind: rpc.KindWell, W: 1, H: 1, Version: 9},
+		{Id: "100", GridId: "1", Kind: rpc.KindDoor, W: 1, H: 1, Version: 9},
 	})
 	handed := mustRow(t, c, "1", "100")
 	before := proto.CloneOf(handed)
@@ -724,7 +724,7 @@ func TestPatchTileObeysTheVersionInterlock(t *testing.T) {
 // one: nothing asks for a room nobody is in.
 func TestPatchTileDropsAnUncachedGrid(t *testing.T) {
 	c := New()
-	if c.PatchTile(&gridwellv1.Tile{Id: "100", GridId: "9", Kind: rpc.KindWell},
+	if c.PatchTile(&gridwellv1.Tile{Id: "100", GridId: "9", Kind: rpc.KindDoor},
 		func(n *gridwellv1.Tile) { n.ViewZoom = 2 }) {
 		t.Error("a patch into an uncached grid reported a change")
 	}

@@ -54,7 +54,7 @@ func TestACollidingHintNeverLandsOnAStoredRow(t *testing.T) {
 	}
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
 	if week == nil {
-		t.Fatalf("no week well: %+v", root.Tiles)
+		t.Fatalf("no week door: %+v", root.Tiles)
 	}
 	wk, err := cl.GetGrid(ctx, week.ChildGridId)
 	if err != nil {

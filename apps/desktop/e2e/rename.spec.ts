@@ -15,9 +15,9 @@ test('the bar crumb names the grid you are in', async ({ gw, window }) => {
   const cy = Math.round(home.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
-  expect(String(well.altText ?? '')).toBe(''); // unnamed at creation
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
+  expect(String(door.altText ?? '')).toBe(''); // unnamed at creation
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
@@ -30,9 +30,9 @@ test('the bar crumb names the grid you are in', async ({ gw, window }) => {
   await input.fill('kitchen');
   await input.press('Enter');
 
-  // The name lands on the containing well, which is what the crumb names.
+  // The name lands on the containing door, which is what the crumb names.
   await expect
-    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? ''))
+    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)?.altText ?? ''))
     .toBe('kitchen');
   await expect.poll(async () => (await gw.barName()).label).toBe('kitchen');
 });
@@ -46,7 +46,7 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
@@ -58,9 +58,9 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
   await input.fill('porch');
   await window.mouse.click(200, 200); // click away, with no Enter
   await expect
-    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? ''))
+    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)?.altText ?? ''))
     .toBe('porch');
-  const named = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  const named = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
 
   // An untouched input closed by clicking away writes nothing, because reading
   // never mutates and a no-op close must not bump the version.
@@ -68,7 +68,7 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
   await expect(input).toBeVisible();
   await window.mouse.click(200, 200);
   await expect(input).toHaveCount(0);
-  const after = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  const after = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
   expect(after.version, 'no-op close must not write').toBe(named.version);
 
   // Escape still cancels an edit in progress.
@@ -77,7 +77,7 @@ test('clicking away commits a rename; untouched closes write nothing; Escape can
   await input.fill('discarded');
   await input.press('Escape');
   await expect(input).toHaveCount(0);
-  expect(String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? '')).toBe('porch');
+  expect(String(tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)?.altText ?? '')).toBe('porch');
 });
 
 test('an async tile event never steals the rename input focus', async ({ gw, window }) => {
@@ -86,7 +86,7 @@ test('an async tile event never steals the rename input focus', async ({ gw, win
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   const inside = await gw.focused();
@@ -111,7 +111,7 @@ test('an async tile event never steals the rename input focus', async ({ gw, win
   await window.keyboard.type('den');
   await window.keyboard.press('Enter');
   await expect
-    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)?.altText ?? ''))
+    .poll(async () => String(tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)?.altText ?? ''))
     .toBe('den');
 });
 

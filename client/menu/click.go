@@ -10,7 +10,7 @@ type ClickTarget int
 const (
 	// ClickNothing leaves the menu open and the pane untouched.
 	ClickNothing ClickTarget = iota
-	// ClickEnter descends into the grid a doorway swatch names.
+	// ClickEnter descends into the grid a door swatch names.
 	ClickEnter
 	// ClickVisit opens the ephemeral visit without placing a tile.
 	ClickVisit

@@ -16,7 +16,7 @@ test('a text tile created in a descended grid is rendered, not just persisted', 
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', wx, wy);
+  await gw.dragCreate('door', wx, wy);
   await gw.descendCell(wx, wy);
   f = await gw.focused();
   const childGrid = f.gridID;
@@ -54,15 +54,15 @@ test('copying a tile leaves both the original and the copy rendered', async ({ g
   const grid = f.gridID;
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   // A right-drag to an adjacent cell is the copy gesture.
   await gw.copyTileCell(cx, cy, cx + 1, cy);
 
-  // Server truth: two independent wells.
+  // Server truth: two independent doors.
   const snap = await gw.getGrid(grid);
-  const orig = tileAt(snap, 'well', cx, cy);
-  const copy = tileAt(snap, 'well', cx + 1, cy);
-  expect(orig, 'original well still on the server').toBeTruthy();
+  const orig = tileAt(snap, 'door', cx, cy);
+  const copy = tileAt(snap, 'door', cx + 1, cy);
+  expect(orig, 'original door still on the server').toBeTruthy();
   expect(copy, 'copy created on the server').toBeTruthy();
   expect(orig!.id, 'copy is a distinct tile (no id reassignment)').not.toBe(copy!.id);
 
@@ -92,13 +92,13 @@ test('a moved tile stays rendered at its destination', async ({ gw }) => {
   const grid = f.gridID;
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const before = tileAt(await gw.getGrid(grid), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const before = tileAt(await gw.getGrid(grid), 'door', cx, cy)!;
 
   await gw.dragTileCell(cx, cy, cx + 1, cy);
 
   // A move is in place, so the id never changes.
-  const moved = tileAt(await gw.getGrid(grid), 'well', cx + 1, cy);
+  const moved = tileAt(await gw.getGrid(grid), 'door', cx + 1, cy);
   expect(moved, 'tile is at the destination cell on the server').toBeTruthy();
   expect(moved!.id, 'a move keeps the same tile id').toBe(before.id);
 
@@ -115,15 +115,15 @@ test('a deleted tile is removed from the render', async ({ gw }) => {
   const grid = f.gridID;
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const created = tileAt(await gw.getGrid(grid), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const created = tileAt(await gw.getGrid(grid), 'door', cx, cy)!;
   expect((await gw.focused()).tileIds, 'created tile is rendered').toContain(created.id);
 
   await gw.deleteTileCell(cx, cy);
 
   // The render removal arrives through the TileRemoved fan-out into the cache
   // and a redraw, so poll it rather than reading once.
-  expect(tileAt(await gw.getGrid(grid), 'well', cx, cy), 'tile removed on the server').toBeFalsy();
+  expect(tileAt(await gw.getGrid(grid), 'door', cx, cy), 'tile removed on the server').toBeFalsy();
   await expect
     .poll(async () => (await gw.focused()).tileIds.includes(created.id), { timeout: 5_000 })
     .toBe(false);

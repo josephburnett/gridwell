@@ -11,7 +11,7 @@ import (
 )
 
 // leafLinkKinds is the set of kinds with a link variant through
-// link_target_id. A well's link variant is the exit well, a qualified
+// link_target_id. A door's link variant is the door to another namespace, a qualified
 // child_grid_id. The CHECK's link branch mirrors this set.
 var leafLinkKinds = map[string]bool{
 	rpc.KindText:  true,
@@ -22,7 +22,8 @@ var leafLinkKinds = map[string]bool{
 
 // CreateLeafLink creates a leaf tile that is a link to another tile.
 // link_target_id holds the qualified "<uuid>/<tile-id>" link verbatim, on
-// the same contract as an exit well's child_grid_id: the qualification is what
+// the same contract as the child_grid_id of a door to another namespace: the
+// qualification is what
 // makes the link unambiguous, not the crossing, so a same-namespace
 // target is an ordinary link. The row carries no content, readers resolving
 // bytes and tmux through the target, so deleting it only unlinks.

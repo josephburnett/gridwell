@@ -12,10 +12,10 @@ import (
 // The view names every pane on screen in tree order, each with its place as
 // the URL grammar names it, the grid it resolves to and whether it has focus;
 // the pane-tile level the window is inside, with each pane's bare id in that
-// layout; the label; and Showing, the well previews included. A pane the layout hides is not on screen.
+// layout; the label; and Showing, the door previews included. A pane the layout hides is not on screen.
 func TestView(t *testing.T) {
 	grids := map[string]map[string]*gridwellv1.Tile{
-		"g-w5": {"w1": well("w1", 0, 0, "c/1")},
+		"g-w5": {"w1": door("w1", 0, 0, "c/1")},
 	}
 	tiles := func(g string) map[string]*gridwellv1.Tile { return grids[g] }
 

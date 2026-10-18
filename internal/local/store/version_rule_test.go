@@ -94,9 +94,9 @@ func shellSubject(t *testing.T, s *Store, ctx context.Context, root string) *gri
 	return tile
 }
 
-func wellSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
+func doorSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateWell(ctx, root, 0, 0, 2, 2, "")
+	tile, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +235,7 @@ var versionCases = []versionCase{
 		},
 	},
 	{
-		name: "SetFraming/doorway viewport", subject: wellSubject, bumps: false,
+		name: "SetFraming/door viewport", subject: doorSubject, bumps: false,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
 			_, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 				TileId: tile.Id,
@@ -364,18 +364,18 @@ func TestVersionRuleClaim(t *testing.T) {
 	}
 }
 
-// A well's view_zoom is the grid viewport, a different fact with its own
+// A door's view_zoom is the grid viewport, a different fact with its own
 // writer, so SetContentZoom refuses it.
-func TestContentZoomRefusesWells(t *testing.T) {
+func TestContentZoomRefusesDoors(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	well, err := s.CreateWell(ctx, root, 3, 3, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 3, 3, 1, 1, "")
 	if err != nil {
-		t.Fatalf("CreateWell: %v", err)
+		t.Fatalf("CreateDoor: %v", err)
 	}
-	if _, err := s.SetContentZoom(ctx, well.Id, zoomOf(2)); err == nil {
-		t.Error("SetContentZoom on a well must be refused")
+	if _, err := s.SetContentZoom(ctx, door.Id, zoomOf(2)); err == nil {
+		t.Error("SetContentZoom on a door must be refused")
 	}
 }

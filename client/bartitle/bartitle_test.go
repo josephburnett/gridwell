@@ -51,13 +51,13 @@ func TestDecide(t *testing.T) {
 			Verdict{Label: "ephemeral", Muted: true},
 		},
 		{
-			"a well's grid names the well it was entered through",
-			Input{AtAnchor: true, Door: door.Well, DoorName: "inbox"},
+			"a door's grid names the door it was entered through",
+			Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox"},
 			Verdict{Rename: RenameDoor, Label: "inbox", Editable: true},
 		},
 		{
-			"a nameless well still takes the rename",
-			Input{AtAnchor: true, Door: door.Well},
+			"a nameless door still takes the rename",
+			Input{AtAnchor: true, Door: door.Tile},
 			Verdict{Rename: RenameDoor, Label: unnamed, Editable: true, Muted: true},
 		},
 		{
@@ -86,12 +86,12 @@ func TestDecide(t *testing.T) {
 			Verdict{Label: unnamed, Muted: true},
 		},
 		{
-			"a well row inside a grid names that row",
+			"a door row inside a grid names that row",
 			Input{Parent: true, ParentName: "projects"},
 			Verdict{Rename: RenameParent, Label: "projects", Editable: true},
 		},
 		{
-			"a nameless well row still takes the rename",
+			"a nameless door row still takes the rename",
 			Input{Parent: true},
 			Verdict{Rename: RenameParent, Label: unnamed, Editable: true, Muted: true},
 		},
@@ -117,7 +117,7 @@ func TestDecide(t *testing.T) {
 // cannot rename the room from inside a tile.
 func TestDecideDescentBeatsLevel(t *testing.T) {
 	in := Input{Descent: true, Descended: true, DescendedText: true, DescendedName: "notes",
-		AtAnchor: true, Door: door.Well, DoorName: "inbox", Parent: true, ParentName: "projects"}
+		AtAnchor: true, Door: door.Tile, DoorName: "inbox", Parent: true, ParentName: "projects"}
 	if got := Decide(in); got != (Verdict{Label: "notes"}) {
 		t.Fatalf("Decide(descent over level) = %+v, want the descended tile's name", got)
 	}
@@ -144,7 +144,7 @@ func TestDecideSourceLabel(t *testing.T) {
 		{"a collection names its source after its door",
 			Input{AtAnchor: true, Door: door.Entry, DoorName: "Inbox (hey)", SourceLabel: "Inbox · 12 unread"},
 			"Inbox (hey) — Inbox · 12 unread"},
-		{"a well row inside a plugin grid names its directory",
+		{"a door row inside a plugin grid names its directory",
 			Input{Parent: true, ParentName: "src", SourceLabel: "/srv/src"},
 			"src — /srv/src"},
 		{"a nameless room still says its source",
@@ -193,8 +193,8 @@ func TestDecideReadOnlyReason(t *testing.T) {
 // The source label is shown, never edited: the rename still names the room's
 // own row with its own name.
 func TestDecideSourceLabelLeavesTheRenameAlone(t *testing.T) {
-	v := Decide(Input{AtAnchor: true, Door: door.Well, DoorName: "inbox", SourceLabel: "/srv/inbox"})
+	v := Decide(Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox", SourceLabel: "/srv/inbox"})
 	if v.Rename != RenameDoor || v.Label != "inbox" || !v.Editable {
-		t.Fatalf("Decide = %+v, want the well's rename on its own name", v)
+		t.Fatalf("Decide = %+v, want the door's rename on its own name", v)
 	}
 }

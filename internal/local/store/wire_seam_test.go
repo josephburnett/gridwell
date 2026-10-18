@@ -79,11 +79,11 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	well, err := s.CreateWell(ctx, root, 0, 0, 2, 3, "the well")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 2, 3, "the door")
 	if err != nil {
 		t.Fatal(err)
 	}
-	well, err = s.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.Id,
+	door, err = s.SetFraming(ctx, &pb.SetFramingRequest{TileId: door.Id,
 		Cx: 4.25, Cy: -5.5, Zoom: 0.75})
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 
 	// A user rename: the one writeback that bumps `version`, so the fixture
 	// carries a non-zero version.
-	well, err = s.RenameTile(ctx, well.Id, well.Version, "a renamed well")
+	door, err = s.RenameTile(ctx, door.Id, door.Version, "a renamed door")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	return map[string]*pb.Tile{"well": well, "url": url, "text": text, "link": link, "page": pageRows[0].Tile,
+	return map[string]*pb.Tile{"door": door, "url": url, "text": text, "link": link, "page": pageRows[0].Tile,
 		"shell copy": shellCopy}
 }
 

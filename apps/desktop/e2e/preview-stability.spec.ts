@@ -5,25 +5,25 @@ import { tileAt } from './oracle';
 // not touch changes. framing-roundtrip.spec.ts locks the viewport half; this
 // locks the preview half through the read-only previewSigs hook, a per-tile
 // signature over exactly the fields the preview renderer reads: the tile row
-// and the well's cached child grid.
+// and the door's cached child grid.
 
 // sigs reads the preview signatures of the focused pane's grid.
 async function sigs(window: any): Promise<Record<string, string>> {
   return window.evaluate(() => (window as any).__gridwellTest.previewSigs());
 }
 
-test('a descend/ascend round trip leaves every preview byte-identical; a reframe changes only the reframed well', async ({ gw, window }) => {
+test('a descend/ascend round trip leaves every preview byte-identical; a reframe changes only the reframed door', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
 
-  // A well with content, and an unrelated markdown tile beside it.
+  // A door with content, and an unrelated markdown tile beside it.
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.openMenu();
   await gw.dragCreate('markdown', cx + 1, cy);
-  const well = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
+  const door = tileAt(await gw.getGrid(a.gridID), 'door', cx, cy)!;
   await gw.descendCell(cx, cy);
   await gw.openMenu();
   const inner = await gw.focused();
@@ -34,7 +34,7 @@ test('a descend/ascend round trip leaves every preview byte-identical; a reframe
   await gw.waitIdle();
   const before = await sigs(window);
   expect(Object.keys(before).length, 'baseline has both tiles').toBe(2);
-  expect(before[well.id], 'well signature includes its child grid').toContain('|');
+  expect(before[door.id], 'door signature includes its child grid').toContain('|');
 
   // Reading never mutates, so a round trip with no reframe leaves every
   // signature byte-identical.
@@ -46,7 +46,7 @@ test('a descend/ascend round trip leaves every preview byte-identical; a reframe
   await gw.waitIdle();
   expect(await sigs(window), 'pure round trip changed a preview').toEqual(before);
 
-  // A zoom is a framing change, so the well's preview updates to it: preview
+  // A zoom is a framing change, so the door's preview updates to it: preview
   // equals ascent return. Everything the user did not touch stays
   // byte-identical.
   await gw.descendCell(cx, cy);
@@ -58,12 +58,12 @@ test('a descend/ascend round trip leaves every preview byte-identical; a reframe
   await gw.waitIdle();
   const after = await sigs(window);
   for (const id of Object.keys(before)) {
-    if (id === well.id) continue;
+    if (id === door.id) continue;
     expect(after[id], `unrelated tile ${id} changed during a sibling reframe`).toBe(before[id]);
   }
-  expect(after[well.id], 'the reframed well shows its NEW framing (ascent wrote it back)').not.toBe(before[well.id]);
+  expect(after[door.id], 'the reframed door shows its NEW framing (ascent wrote it back)').not.toBe(before[door.id]);
 
   // The framing writeback is not a content edit, so the version must not bump.
-  const wellAfter = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
-  expect(Number(wellAfter.version ?? 0), 'reframe bumped the version').toBe(Number(well.version ?? 0));
+  const doorAfter = tileAt(await gw.getGrid(a.gridID), 'door', cx, cy)!;
+  expect(Number(doorAfter.version ?? 0), 'reframe bumped the version').toBe(Number(door.version ?? 0));
 });

@@ -15,8 +15,8 @@ import (
 )
 
 // dropTarget is where the cursor points as a drop destination: either the
-// pane's leaf grid or, when the cursor promoted into an open well, that
-// well's child grid. origin{X,Y} is the screen coordinate of cell (0, 0) in
+// pane's leaf grid or, when the cursor promoted into an open door, that
+// door's child grid. origin{X,Y} is the screen coordinate of cell (0, 0) in
 // that grid, so cellSize and the cursor give the target cell.
 type dropTarget struct {
 	pane     *pane.Pane
@@ -150,8 +150,8 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 }
 
 // dropTargetAt resolves the cursor to a drop target, false over a content
-// descent or off-canvas. A carried well is never a drop-into-well target, so
-// dragging well X cannot drop X into its own child grid.
+// descent or off-canvas. A carried door is never a drop-into-door target, so
+// dragging door X cannot drop X into its own child grid.
 func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {
@@ -167,12 +167,12 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 	parentCell := ps.Cell()
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
-	// An open well under the cursor promotes the target to its child grid.
-	// The rule is dragdrop.PromoteToWell's.
+	// An open door under the cursor promotes the target to its child grid.
+	// The rule is dragdrop.PromoteToDoor's.
 	cellX, cellY := ps.CellAt(sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
-		dragdrop.PromoteToWell(rpc.IsWellKind(n.Kind), n.ChildGridId, n.Id, carried) {
-		cp := wellPreviewFor(ps, n)
+		dragdrop.PromoteToDoor(rpc.IsDoorKind(n.Kind), n.ChildGridId, n.Id, carried) {
+		cp := doorPreviewFor(ps, n)
 		return &dropTarget{
 			pane:     p,
 			gridID:   n.ChildGridId,
@@ -200,7 +200,7 @@ func (a *App) gridHostContent(gridID string) bool {
 
 // dropCrossNamespace reports whether the source and destination grids live
 // in different id namespaces, which is what makes a left-drag a link and
-// refuses a solid well's right-drag. The one reader of rpc.NamespaceOf here,
+// refuses a solid door's right-drag. The one reader of rpc.NamespaceOf here,
 // so nothing else can disagree about what cross-plugin means.
 func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
@@ -234,14 +234,14 @@ func (t *dropTarget) cellAtCursor(sx, sy, cellOffsetX, cellOffsetY float64) (int
 	return dragdrop.SnapToCell(cx), dragdrop.SnapToCell(cy)
 }
 
-// childTileAtScreen returns the preview tile under the cursor inside well's
-// child preview, which is what decides whether a click on a well starts a
+// childTileAtScreen returns the preview tile under the cursor inside door's
+// child preview, which is what decides whether a click on a door starts a
 // pull-out gesture.
-func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile, sx, sy float64) *gridwellv1.Tile {
-	if !rpc.IsWellKind(well.Kind) || well.ChildGridId == "" {
+func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, door *gridwellv1.Tile, sx, sy float64) *gridwellv1.Tile {
+	if !rpc.IsDoorKind(door.Kind) || door.ChildGridId == "" {
 		return nil
 	}
-	g, ok := a.c.Grid(well.ChildGridId)
+	g, ok := a.c.Grid(door.ChildGridId)
 	if !ok {
 		return nil
 	}
@@ -249,9 +249,9 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile
 	if !ok {
 		return nil
 	}
-	cp := wellPreviewFor(ps, well)
+	cp := doorPreviewFor(ps, door)
 	// FloorCellAt floors toward -inf, the correct hit-test answer in a
-	// well's negative quadrant, where int64() truncation would mis-target.
+	// door's negative quadrant, where int64() truncation would mis-target.
 	cellX, cellY := dragdrop.FloorCellAt(cp.OriginX, cp.OriginY, cp.CellPx, sx, sy)
 	for _, n := range g.Tiles {
 		if dragdrop.TileContainsCell(n.X, n.Y, n.W, n.H, cellX, cellY) {
@@ -263,12 +263,12 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, well *gridwellv1.Tile
 	return nil
 }
 
-// wellPreviewFor is the one way a well's stored framing becomes a child
-// preview transform, with both halves resolved through zoomtrans.Well's
+// doorPreviewFor is the one way a door's stored framing becomes a child
+// preview transform, with both halves resolved through zoomtrans.Door's
 // never-visited fallback, so the drop target, the pull-out hit test and the
-// renderer place a never-visited well's preview at the same pixels.
-func wellPreviewFor(ps dragdrop.Pane, n *gridwellv1.Tile) dragdrop.ChildPreview {
-	w := wellOf(n)
+// renderer place a never-visited door's preview at the same pixels.
+func doorPreviewFor(ps dragdrop.Pane, n *gridwellv1.Tile) dragdrop.ChildPreview {
+	w := doorOf(n)
 	cx, cy := w.Center()
 	return dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H     int64
@@ -276,6 +276,6 @@ func wellPreviewFor(ps dragdrop.Pane, n *gridwellv1.Tile) dragdrop.ChildPreview 
 	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy}, w.Ratio())
 }
 
-// wellOf forwards to zoomtrans.WellOf. The local name is for the renderer's
+// doorOf forwards to zoomtrans.DoorOf. The local name is for the renderer's
 // many call sites.
-func wellOf(n *gridwellv1.Tile) zoomtrans.Well { return zoomtrans.WellOf(n) }
+func doorOf(n *gridwellv1.Tile) zoomtrans.Door { return zoomtrans.DoorOf(n) }

@@ -71,14 +71,14 @@ func errCode(err error) connect.Code {
 	return connect.CodeInternal
 }
 
-func TestCreateWell(t *testing.T) {
+func TestCreateDoor(t *testing.T) {
 	_, cl, root := newTestServer(t)
-	tile, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 1, Y: 2, W: 1, H: 1}})
+	tile, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 1, Y: 2, W: 1, H: 1}})
 	if err != nil {
-		t.Fatalf("create well: %v", err)
+		t.Fatalf("create door: %v", err)
 	}
-	if tile.Kind != rpc.KindWell {
-		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindWell)
+	if tile.Kind != rpc.KindDoor {
+		t.Errorf("got kind %q, want %q", tile.Kind, rpc.KindDoor)
 	}
 }
 
@@ -107,8 +107,8 @@ func TestSubscribeStreamsEvents(t *testing.T) {
 		doneCh <- ev
 	}()
 
-	if _, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}}); err != nil {
-		t.Fatalf("create well: %v", err)
+	if _, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1}}); err != nil {
+		t.Fatalf("create door: %v", err)
 	}
 
 	select {

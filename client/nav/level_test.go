@@ -419,7 +419,7 @@ func TestLeaveLevels(t *testing.T) {
 		after := baseWorld(gridPane("pane1", "g1"))
 		aw := only(t, m.Do(*plan.Next, after), EffAwait)
 		// The user descended while the row was in flight: they win.
-		moved := baseWorld(wellPane("pane1"))
+		moved := baseWorld(doorPane("pane1"))
 		row := &gridwellv1.Tile{Id: "pt1", GridId: "g9", X: 2, Y: 3, W: 4, H: 4}
 		if plan := m.Resume(aw.Token, Result{OK: true, Tile: row}, moved); len(plan.Effects) != 0 {
 			t.Fatalf("re-centred a pane the user had already moved: %v", kinds(plan))

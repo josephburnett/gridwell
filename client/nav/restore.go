@@ -90,7 +90,7 @@ func (m *Machine) restore(g Gesture, w World) Plan {
 	}
 	pl.install(paneID, oneFrame(d.State.Anchor, p.View), nil)
 
-	// The URL's path segments are bare well ids, qualified with the anchor's
+	// The URL's path segments are bare door ids, qualified with the anchor's
 	// namespace to match the grid's keys.
 	prefix := rpc.NamespaceOf(d.State.Anchor)
 	d.IDs = make([]string, len(d.State.TileIDs))
@@ -253,7 +253,7 @@ func walkURL(d *restoreData, rw *RestoreWorld) (path []string, leaf, need string
 			t := make(map[string]urlwalk.Tile, len(rows))
 			for id, row := range rows {
 				t[id] = urlwalk.Tile{ChildGridID: row.ChildGridID,
-					IsWell: row.IsWell, IsContent: row.IsContent}
+					IsDoor: row.IsDoor, IsContent: row.IsContent}
 			}
 			seen[gid] = t
 			return t, true
@@ -273,12 +273,12 @@ func leafRow(anchor string, path []string, leaf string, rw *RestoreWorld) (Resto
 // leafGrid is the grid path lands in; see pane.ResolveLeafGrid.
 func leafGrid(anchor string, path []string, rw *RestoreWorld) string {
 	return pane.ResolveLeafGrid(anchor, path,
-		func(gid, wellID string) (string, bool, bool) {
+		func(gid, doorID string) (string, bool, bool) {
 			rows, ok := rw.rows(gid)
 			if !ok {
 				return "", false, false
 			}
-			t, ok := rows[wellID]
+			t, ok := rows[doorID]
 			if !ok {
 				return "", true, false
 			}

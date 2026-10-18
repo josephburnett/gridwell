@@ -5,7 +5,7 @@ package gesture
 type ClickVerdict int
 
 const (
-	// ClickNone: there is nothing to open, a kind that is not a doorway or an
+	// ClickNone: there is nothing to open, a kind that is not a door or an
 	// address-less url tile its grid cannot be given an address for. It is
 	// the zero value, so a fact the caller failed to resolve descends nowhere.
 	ClickNone ClickVerdict = iota
@@ -20,10 +20,10 @@ const (
 // ClickInput is the tile's facts at left-click, every one resolved by the
 // caller.
 type ClickInput struct {
-	// Well, ContentDescent and Workspace are rpc.IsWellKind,
+	// Door, ContentDescent and Workspace are rpc.IsDoorKind,
 	// rpc.IsContentDescentKind and rpc.IsWorkspaceKind of the tile's kind.
 	// Together they partition the descendable kinds.
-	Well           bool
+	Door           bool
 	ContentDescent bool
 	Workspace      bool
 	// URL is rpc.KindURL and URLEmpty its typed address being blank.
@@ -55,7 +55,7 @@ func DecideTileClick(in ClickInput) ClickVerdict {
 			return ClickConfigureURL
 		}
 		return ClickNone
-	case !in.Well && !in.ContentDescent && !in.Workspace:
+	case !in.Door && !in.ContentDescent && !in.Workspace:
 		return ClickNone
 	case in.SplitNav && !in.DeadLink:
 		return ClickDescendSplit

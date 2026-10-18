@@ -4,10 +4,10 @@
 package urlwalk
 
 // Tile is what a walk step needs. The caller classifies kinds with
-// rpc.IsWellKind and rpc.IsContentDescentKind, keeping wire types out of here.
+// rpc.IsDoorKind and rpc.IsContentDescentKind, keeping wire types out of here.
 type Tile struct {
 	ChildGridID string
-	IsWell      bool
+	IsDoor      bool
 	IsContent   bool
 }
 
@@ -17,7 +17,7 @@ type Tile struct {
 type GridLookup func(gid string) (tiles map[string]Tile, ok bool)
 
 // Walk resolves tileIDs against the grids reachable from rootGridID and
-// returns the descent path of well ids, plus the trailing file-tile id, "" when
+// returns the descent path of door ids, plus the trailing file-tile id, "" when
 // the leaf is a grid. The rules are loose on input so a bookmarked URL degrades
 // as the canvas changes under it: a missing id or a content tile mid-path is
 // skipped, and a grid that fails to load ends the walk with what resolved.
@@ -35,7 +35,7 @@ func Walk(rootGridID string, tileIDs []string, lookup GridLookup) (path []string
 			continue
 		}
 		switch {
-		case t.IsWell:
+		case t.IsDoor:
 			path = append(path, id)
 			gid = t.ChildGridID
 		case t.IsContent:

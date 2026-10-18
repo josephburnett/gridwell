@@ -22,7 +22,7 @@ func testColors() BorderColors {
 }
 
 func TestBorderColorPluginRootGridIsBlue(t *testing.T) {
-	// A pane at a plugin's root grid (no descent, not the doorway) is a
+	// A pane at a plugin's root grid (no descent, not the door) is a
 	// grid like any other — blue, not brown.
 	if got := BorderColor(BorderInput{}, testColors()); got != "FOCUS_FADED" {
 		t.Errorf("plugin root grid + not focused: got %q, want FOCUS_FADED", got)
@@ -104,13 +104,13 @@ func TestBorderColorUnknownTile(t *testing.T) {
 }
 
 func TestBorderColorUnknownKindFallback(t *testing.T) {
-	// TileKnown=true but the kind isn't text/url (e.g., a well lookup
+	// TileKnown=true but the kind isn't text/url (e.g., a door lookup
 	// that surfaced via TextFocus path).
 	in := BorderInput{
 		HasTextFocus: true,
 		DescentDepth: 1,
 		TileKnown:    true,
-		TileKind:     "well",
+		TileKind:     "door",
 		Focused:      true,
 	}
 	if got := BorderColor(in, testColors()); got != "FOCUS" {

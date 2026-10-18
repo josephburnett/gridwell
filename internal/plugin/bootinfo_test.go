@@ -21,7 +21,7 @@ import (
 )
 
 // hangingInfoPlugin is a plugin that came up and then never answers: a binary
-// blocked on a config file, a mount, or a network its keys point at.
+// blocked on a config file, a mounted filesystem, or a network its keys point at.
 type hangingInfoPlugin struct {
 	pluginv1.UnimplementedPluginServer
 }

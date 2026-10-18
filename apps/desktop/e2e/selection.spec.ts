@@ -245,15 +245,15 @@ test('inside a pane tile a tile that leaves the grid leaves the set, and comes b
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx, wy + 2);
-  const well = tileAt(await gw.getGrid(f.gridID), 'well', wx, wy + 2)!;
-  expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
+  await gw.dragCreate('door', wx, wy + 2);
+  const door = tileAt(await gw.getGrid(f.gridID), 'door', wx, wy + 2)!;
+  expect(door?.childGridId, 'a door with a grid of its own').toBeTruthy();
   const { a, inner: inside } = await descendPaneTile(gw, window);
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inside.id, f.gridID, [a.id], 'selected inside');
 
-  // Another window moves the tile into the well and back to its cell.
-  await moveTile(gw.origin, a.id, well.childGridId!, 0, 0, Number(a.w ?? 1), Number(a.h ?? 1));
+  // Another window moves the tile into the door and back to its cell.
+  await moveTile(gw.origin, a.id, door.childGridId!, 0, 0, Number(a.w ?? 1), Number(a.h ?? 1));
   await expect.poll(async () => (await gw.focused()).tileIds.includes(a.id), { message: 'a left' }).toBe(false);
   await moveTile(gw.origin, a.id, f.gridID, wx + 2, wy, Number(a.w ?? 1), Number(a.h ?? 1));
   await gw.waitClientTileAt(inside.id, wx + 2, wy, a.id);
@@ -270,21 +270,21 @@ test('Clear selections empties every grid\'s set', async ({ electronApp, gw, win
   const cy = Math.round(f.cy);
   const a = await textTile(gw, cx, cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx + 2, cy);
-  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx + 2, cy)!;
-  expect(well?.childGridId, 'a well with a grid of its own').toBeTruthy();
-  const b = await createLeafLink(gw.origin, well.childGridId!, '', 'b.md', 0, 0);
+  await gw.dragCreate('door', cx + 2, cy);
+  const door = tileAt(await gw.getGrid(f.gridID), 'door', cx + 2, cy)!;
+  expect(door?.childGridId, 'a door with a grid of its own').toBeTruthy();
+  const b = await createLeafLink(gw.origin, door.childGridId!, '', 'b.md', 0, 0);
 
   await shiftClick(gw, window, cx, cy);
-  await setSelection(gw.origin, well.childGridId!, [b.id]);
+  await setSelection(gw.origin, door.childGridId!, [b.id]);
   await expectSelection(gw, window, f.id, f.gridID, [a.id], 'selected here');
-  expect(await onNode(gw, well.childGridId!), 'selected in the well').toEqual([b.id]);
+  expect(await onNode(gw, door.childGridId!), 'selected in the door').toEqual([b.id]);
 
   const picked = pickFromNativeMenu(electronApp, 'Clear selections');
   await gw.rightClickCircle();
   await picked;
   await expectSelection(gw, window, f.id, f.gridID, [], 'cleared here');
-  await expect.poll(() => onNode(gw, well.childGridId!), { message: 'cleared in the well' }).toEqual([]);
+  await expect.poll(() => onNode(gw, door.childGridId!), { message: 'cleared in the door' }).toEqual([]);
 });
 
 // Inside a pane tile the set is the grid row's, so the node's clear reaches

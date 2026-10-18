@@ -34,23 +34,23 @@ func rememberedSelection(t *testing.T, cc *Layer, src *framingSource) []string {
 // never came.
 func TestAFarGridsSelectionIsRemembered(t *testing.T) {
 	cc, src := framingFixture(t)
-	cc.applyEvent(context.Background(), rpc.SelectionEvent(farHome, []string{farWell}))
-	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farWell}) {
-		t.Errorf("after the event the remembered selection = %v, want [%s]", got, farWell)
+	cc.applyEvent(context.Background(), rpc.SelectionEvent(farHome, []string{farDoor}))
+	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farDoor}) {
+		t.Errorf("after the event the remembered selection = %v, want [%s]", got, farDoor)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome,
-		Remove: []string{farWell}}); err != nil {
+		Remove: []string{farDoor}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := rememberedSelection(t, cc, src); len(got) != 0 {
 		t.Errorf("after an accepted remove the remembered selection = %v, want none", got)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome,
-		Add: []string{farWell}}); err != nil {
+		Add: []string{farDoor}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farWell}) {
-		t.Errorf("after an accepted add the remembered selection = %v, want [%s]", got, farWell)
+	if got := rememberedSelection(t, cc, src); !slices.Equal(got, []string{farDoor}) {
+		t.Errorf("after an accepted add the remembered selection = %v, want [%s]", got, farDoor)
 	}
 	if _, err := cc.SetSelection(context.Background(), &pb.SetSelectionRequest{GridId: farHome, Clear: true}); err != nil {
 		t.Fatal(err)

@@ -536,7 +536,7 @@ func (a *App) thTransitioning(js.Value, []js.Value) any {
 
 // thPreviewSigs returns, for the focused pane's leaf grid, a per-tile
 // signature of everything the preview renderer reads, including a cached
-// well's child grid rows. It reads the cache render reads, so two equal
+// door's child grid rows. It reads the cache render reads, so two equal
 // captures mean the preview is byte-identical.
 func (a *App) thPreviewSigs(js.Value, []js.Value) any {
 	p := a.tree.FocusedPane()
@@ -609,8 +609,8 @@ func tileSig(t *gridwellv1.Tile) string {
 		t.BlobId, t.PreviewBlobId, t.UrlString, t.AltText, t.Link)
 }
 
-// childSig digests a well's cached child grid, one level, sorted for
-// stability. Empty when uncached or not a well.
+// childSig digests a door's cached child grid, one level, sorted for
+// stability. Empty when uncached or not a door.
 func (a *App) childSig(childGridID string) string {
 	if childGridID == "" {
 		return ""
@@ -666,7 +666,7 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"cx":   cx,
 			"cy":   cy,
 			"zoom": zoom,
-			// Doorways deep: one number, because there is one place stack.
+			// Doors deep: one number, because there is one place stack.
 			"placeDepth": p.Depth() - 1,
 			"tileIds":    a.paneTileIDs(p),
 			// The grid's selection as the client's cache holds it.
@@ -792,7 +792,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		}
 		// A declared menu entry reports its identity, but the label stays
 		// door.EntryName's, the one the banner draws: a second name for
-		// one doorway would let a spec pin the wrong one.
+		// one door would let a spec pin the wrong one.
 		if item.entry != nil {
 			e["entry"] = item.entry.Id
 		}

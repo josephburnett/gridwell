@@ -138,7 +138,7 @@ func TestPortalRoundTrip(t *testing.T) {
 	if !p.MenuOpen {
 		t.Error("menu state not restored with the frame")
 	}
-	// Three more pops empty the stack: the content frame, the two wells.
+	// Three more pops empty the stack: the content frame, the two doors.
 	for i := 0; i < 3; i++ {
 		if !p.Pop() {
 			t.Fatalf("pop %d returned false", i)

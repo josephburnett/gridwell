@@ -95,7 +95,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	webAPITest(t, srv.WebHandler())
 	ctx := context.Background()
 
-	// Root: one well per week, hinted into the epoch-anchored column.
+	// Root: one door per week, hinted into the epoch-anchored column.
 	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A plugin that holds its own content declares no host_content, so its
-	// grids render as owned content — the gitlab glyph is the well's, exactly
+	// grids render as owned content — the gitlab glyph is the door's, exactly
 	// as it was when the client had no declaration for the kind "gitlab".
 	if len(root.Tiles) != 2 || root.Grid.HostContent || root.Grid.Glyph != "" {
 		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
@@ -113,8 +113,8 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
 	// The epoch is the month of 2026-08-24, so August is row 0 and the week
 	// of Monday the 17th is that month's third Monday: column 2.
-	if week == nil || week.Kind != "well" || week.ChildGridId == "" || week.X != 2 || week.Y != 0 {
-		t.Fatalf("week well = %+v", week)
+	if week == nil || week.Kind != "door" || week.ChildGridId == "" || week.X != 2 || week.Y != 0 {
+		t.Fatalf("week door = %+v", week)
 	}
 
 	// Descent: the week's todos, calendar-hinted: a column per day, a row
@@ -254,7 +254,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 		}
 	}
 	if week.ChildGridId == "" {
-		t.Fatalf("no week well: %+v", root.Tiles)
+		t.Fatalf("no week door: %+v", root.Tiles)
 	}
 	wk, err := cl.GetGrid(ctx, week.ChildGridId)
 	if err != nil {

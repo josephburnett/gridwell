@@ -9,7 +9,7 @@ import (
 )
 
 // A copy names its source's tmux, a copy of a copy the same one, and a
-// copy inside a copied well too: every copy is one more viewer of one shell.
+// copy inside a copied door too: every copy is one more viewer of one shell.
 func TestCopySharesTheShellTmux(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -35,7 +35,7 @@ func TestCopySharesTheShellTmux(t *testing.T) {
 		}
 	}
 
-	w, err := s.CreateWell(ctx, root, 6, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 6, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestCopySharesTheShellTmux(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(g.Tiles) != 1 || rpc.ShellTmux(g.Tiles[0]) != inner.Id {
-		t.Fatalf("the shell inside a copied well = %v, want one naming %q", g.Tiles, inner.Id)
+		t.Fatalf("the shell inside a copied door = %v, want one naming %q", g.Tiles, inner.Id)
 	}
 }
 

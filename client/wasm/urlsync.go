@@ -25,8 +25,8 @@ import (
 func (a *App) scheduleFramingSave(fp pane.Fingerprint) {
 	// The hover-wheel's drift is the one thing this flush writes that the pane
 	// tree does not hold, so it joins the key here — unordered, because which
-	// order the map yields its wells in is not a fact about the drift.
-	for id, st := range a.persist.wellWheelPending {
+	// order the map yields its doors in is not a fact about the drift.
+	for id, st := range a.persist.doorWheelPending {
 		fp = fp.MergeUnordered(pane.NewFingerprint().
 			Str(id).Num(st.cx).Num(st.cy).Num(st.ratio))
 	}
@@ -52,17 +52,17 @@ func (a *App) flushFramingSave() {
 			a.persistPaneFraming(p)
 		}
 	})
-	a.flushWellWheelSaves()
+	a.flushDoorWheelSaves()
 }
 
-// flushWellWheelSaves posts the settled hover-wheel well zooms from the
+// flushDoorWheelSaves posts the settled hover-wheel door zooms from the
 // pending drift state, the one owner of the not-yet-persisted view. Reading
 // the cache row instead would let a refetch inside the settle window revert
 // the wheel.
-func (a *App) flushWellWheelSaves() {
-	for id, st := range a.persist.wellWheelPending {
+func (a *App) flushDoorWheelSaves() {
+	for id, st := range a.persist.doorWheelPending {
 		gid := st.gridID
-		delete(a.persist.wellWheelPending, id)
+		delete(a.persist.doorWheelPending, id)
 		tileID := id
 		req := &gridwellv1.SetFramingRequest{
 			TileId: tileID, Cx: st.cx, Cy: st.cy, Zoom: st.ratio,
@@ -99,8 +99,8 @@ func (a *App) persistPaneFraming(p *pane.Pane) {
 	}
 }
 
-// framingDoor resolves the doorway row own names, nil when the root grid's
-// row owns the framing; false while the doorway's grid is not cached.
+// framingDoor resolves the door row own names, nil when the root grid's
+// row owns the framing; false while the door's grid is not cached.
 func (a *App) framingDoor(own pane.FramingOwner) (door *gridwellv1.Tile, ok bool) {
 	if own.TileID == "" {
 		return nil, true
@@ -113,7 +113,7 @@ func (a *App) framingDoor(own pane.FramingOwner) (door *gridwellv1.Tile, ok bool
 	if !ok {
 		return nil, false
 	}
-	// No row for the doorway, as after a + menu descent, means the level's
+	// No row for the door, as after a + menu descent, means the level's
 	// own root grid owns the framing.
 	return g.Tiles[own.TileID], true
 }
@@ -145,7 +145,7 @@ func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
 	}
 	var v pane.Frame
 	if door != nil {
-		f, ok := zoomtrans.StoredView(wellOf(door), size, cellPx)
+		f, ok := zoomtrans.StoredView(doorOf(door), size, cellPx)
 		if !ok {
 			return pane.Frame{}, false
 		}
@@ -181,12 +181,12 @@ func (a *App) adoptPendingViews() {
 
 // persistFraming is the one framing writeback: a float center in the grid the
 // pane is showing, plus the pane-size-independent intrinsic zoom, onto the
-// row that owns it. `door` is the doorway tile the pane entered by, living
+// row that owns it. `door` is the door tile the pane entered by, living
 // under (doorAnchor, doorPath); nil means a root grid, whose own row owns the
-// framing. The zoom is measured against the doorway's footprint, 1x1 for a
+// framing. The zoom is measured against the door's footprint, 1x1 for a
 // root, so preview and descent agree. A no-op when nothing moved, which is
 // measured against what the grid is shown at, never against the stored row:
-// see zoomtrans.ShownWellFraming.
+// see zoomtrans.ShownDoorFraming.
 func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor string, doorPath []string) {
 	// Never a mid-animation viewport: a pane's centre and zoom are then the
 	// transition's scratch values, and storing one would make a frame of an
@@ -203,14 +203,14 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 	}
 	var (
 		req    gridwellv1.SetFramingRequest
-		foot   = zoomtrans.Well{W: 1, H: 1}
+		foot   = zoomtrans.Door{W: 1, H: 1}
 		cur    rpc.View
 		gridID string
 		commit func(rpc.Framing)
 	)
 	if door != nil {
-		foot = zoomtrans.WellOf(door)
-		cur = zoomtrans.ShownWellFraming(foot)
+		foot = zoomtrans.DoorOf(door)
+		cur = zoomtrans.ShownDoorFraming(foot)
 		gridID = a.gridIDForPathFrom(doorAnchor, doorPath)
 		req = gridwellv1.SetFramingRequest{TileId: door.Id}
 		commit = func(f rpc.Framing) {
@@ -230,7 +230,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 			rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom), size, cellPx)
 		gridID = p.Anchor()
 		req = gridwellv1.SetFramingRequest{RootGridId: p.Anchor()}
-		commit = func(f rpc.Framing) { a.cacheDoorwayFraming(p.Anchor(), f) }
+		commit = func(f rpc.Framing) { a.cacheDoorFraming(p.Anchor(), f) }
 	}
 	live, ok := p.Live()
 	if !ok {

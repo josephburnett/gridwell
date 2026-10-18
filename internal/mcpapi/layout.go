@@ -18,7 +18,7 @@ type Layout struct {
 type LayoutPane struct {
 	ID      string   `json:"id"`
 	Anchor  string   `json:"anchor" jsonschema:"the grid the pane's place is rooted at"`
-	Path    []string `json:"path,omitempty" jsonschema:"the doorway tiles from the anchor down to the pane's grid"`
+	Path    []string `json:"path,omitempty" jsonschema:"the door tiles from the anchor down to the pane's grid"`
 	Grid    string   `json:"grid,omitempty" jsonschema:"the grid the pane shows, when the layout names it: its anchor, with no path"`
 	Content string   `json:"content,omitempty" jsonschema:"the content tile the pane is inside, when it is inside one"`
 	Focused bool     `json:"focused,omitempty" jsonschema:"the pane the pane tile reopens on"`

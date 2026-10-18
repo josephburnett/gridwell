@@ -17,10 +17,10 @@ func names(sw []door.Place) []string {
 	return out
 }
 
-// One swatch per declared doorway: a row that names a grid of its own, plus
+// One swatch per declared door: a row that names a grid of its own, plus
 // every menu entry it declares. A plugin names no grid of its own, so only
 // its collections appear, and a plugin that declares nothing shows nothing.
-func TestDoorwaysTable(t *testing.T) {
+func TestDoorsTable(t *testing.T) {
 	entry := func(id, label, grid string) *gridwellv1.MenuEntry {
 		return &gridwellv1.MenuEntry{Id: id, Label: label, GridId: grid}
 	}
@@ -63,7 +63,7 @@ func TestDoorwaysTable(t *testing.T) {
 		},
 		want: []string{"rtb", "far"},
 	}, {
-		name: "an entry with no grid is not a doorway",
+		name: "an entry with no grid is not a door",
 		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{
 			entry("imbox", "Imbox", "hey/1"), entry("feed", "Feed", ""),
 		}}},
@@ -79,7 +79,7 @@ func TestDoorwaysTable(t *testing.T) {
 		want: []string{"home", "trash (home)", "Feed (hey)", "rtb"},
 	}}
 	for _, c := range cases {
-		got := names(Doorways(c.rows))
+		got := names(Doors(c.rows))
 		if len(got) != len(c.want) {
 			t.Errorf("%s: swatches = %q, want %q", c.name, got, c.want)
 			continue
@@ -93,15 +93,15 @@ func TestDoorwaysTable(t *testing.T) {
 	}
 }
 
-// Every swatch names a doorway, so a click has somewhere to go. The one
+// Every swatch names a door, so a click has somewhere to go. The one
 // exception is a row the menu shows in order to report that it is unhealthy.
-func TestEverySwatchNamesADoorwayOrAFailure(t *testing.T) {
+func TestEverySwatchNamesADoorOrAFailure(t *testing.T) {
 	rows := []*gridwellv1.PluginInfo{
 		{Uuid: "n1", Label: "home", RootGridId: "n1/1",
 			MenuEntries: []*gridwellv1.MenuEntry{{Id: "trash", Label: "trash", GridId: "n1/9"}}},
 		{Uuid: "hey", Label: "hey", MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "hey/2"}}},
 	}
-	for _, s := range Doorways(rows) {
+	for _, s := range Doors(rows) {
 		if s.Plugin.RootGridId == "" {
 			t.Errorf("swatch %q names no grid to descend into", s.Plugin.Label)
 		}
@@ -115,7 +115,7 @@ func TestEntrySwatchDoesNotCarryTheRowsEntries(t *testing.T) {
 		{Id: "imbox", Label: "Imbox", GridId: "hey/1"},
 		{Id: "feed", Label: "Feed", GridId: "hey/2"},
 	}}}
-	sw := Doorways(rows)
+	sw := Doors(rows)
 	if len(sw) != 2 {
 		t.Fatalf("swatches = %q, want the two collections", names(sw))
 	}

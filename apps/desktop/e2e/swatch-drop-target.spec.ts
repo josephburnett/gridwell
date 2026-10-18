@@ -29,11 +29,11 @@ test('a swatch dropped into another pane that shows a grid lands there', async (
   await gw.focusPane(left);
   await gw.openMenu();
   const pt = dropPoint(right);
-  await gw.dragCreateToScreen('well', pt.x, pt.y);
+  await gw.dragCreateToScreen('door', pt.x, pt.y);
 
   const after = await gw.getGrid(home.gridID);
   expect(
-    (after.tiles ?? []).filter((t) => t.kind === 'well').length,
+    (after.tiles ?? []).filter((t) => t.kind === 'door').length,
     'the drop landed in the pane under the cursor',
   ).toBe(1);
 });
@@ -68,7 +68,7 @@ test('a swatch dropped over a pane descended into a tile creates nothing', async
   await gw.focusPane(left);
   await gw.openMenu();
   const pt = dropPoint(right);
-  await gw.dragCreateToScreen('well', pt.x, pt.y);
+  await gw.dragCreateToScreen('door', pt.x, pt.y);
 
   const after = await gw.getGrid(home.gridID);
   expect(
@@ -76,7 +76,7 @@ test('a swatch dropped over a pane descended into a tile creates nothing', async
     'the grid behind the descent gained no tile from the refused drop',
   ).toBe((before.tiles ?? []).length);
   expect(
-    (after.tiles ?? []).filter((t) => t.kind === 'well').length,
-    'and no well anywhere on it',
+    (after.tiles ?? []).filter((t) => t.kind === 'door').length,
+    'and no door anywhere on it',
   ).toBe(0);
 });

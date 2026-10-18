@@ -8,27 +8,27 @@ import (
 )
 
 var plugins = []*gridwellv1.PluginInfo{
-	{Uuid: "loc", Label: "home", Glyph: "well", RootGridId: "loc/1",
+	{Uuid: "loc", Label: "home", Glyph: "door", RootGridId: "loc/1",
 		MenuEntries: []*gridwellv1.MenuEntry{{Id: "trash", Label: "trash", Glyph: "trash", GridId: "loc/9"}}},
 	// A connection menu row: a chained uuid whose root is the remote home.
 	{Uuid: "sshc/ns1", Label: "rtb", RootGridId: "sshc/ns1/rp1/root7"},
 }
 
 // The tile descended through wins over every declaration, so an adopted
-// plugin well carries the user's name for the place.
-func TestFindPrefersTheParentGridWell(t *testing.T) {
+// plugin door carries the user's name for the place.
+func TestFindPrefersTheParentGridDoor(t *testing.T) {
 	parent := map[string]*gridwellv1.Tile{
-		"loc/5": {Id: "loc/5", Kind: rpc.KindWell, AltText: "my rtb",
+		"loc/5": {Id: "loc/5", Kind: rpc.KindDoor, AltText: "my rtb",
 			ChildGridId: "sshc/ns1/rp1/root7"},
 		"loc/6": {Id: "loc/6", Kind: rpc.KindText, ChildGridId: "sshc/ns1/rp1/root7"},
 	}
 	got, kind := Find("sshc/ns1/rp1/root7", parent, plugins)
-	if kind != Well || got.Id != "loc/5" || got.AltText != "my rtb" {
-		t.Fatalf("door = %+v (%v), want the parent-grid well loc/5", got, kind)
+	if kind != Tile || got.Id != "loc/5" || got.AltText != "my rtb" {
+		t.Fatalf("door = %+v (%v), want the parent-grid door loc/5", got, kind)
 	}
 }
 
-// A menu-row descent has no parent-grid well, so the connection row is the
+// A menu-row descent has no parent-grid door, so the connection row is the
 // door and its label is declaration-owned.
 func TestFindResolvesConnectionRows(t *testing.T) {
 	got, kind := Find("sshc/ns1/rp1/root7", nil, plugins)
@@ -37,7 +37,7 @@ func TestFindResolvesConnectionRows(t *testing.T) {
 	}
 }
 
-// An entry is a top-level doorway with no level above it, so its crumb wears
+// An entry is a top-level door with no level above it, so its crumb wears
 // the provenance.
 func TestFindResolvesRootEntries(t *testing.T) {
 	got, kind := Find("loc/9", nil, plugins)
@@ -95,11 +95,11 @@ func TestRowGlyphIsTheSameInTheMenuAndInTheBar(t *testing.T) {
 		{"declared keeps its glyph", rows[0],
 			&gridwellv1.Grid{Id: "ufs/1", Glyph: rpc.GlyphFolder, HostContent: true}, rpc.GlyphFolder},
 		{"undeclared plugin takes the grid glyph", rows[1],
-			&gridwellv1.Grid{Id: "ugl/1"}, rpc.GlyphWell},
-		// The far node's home grid declares its own well, and the
+			&gridwellv1.Grid{Id: "ugl/1"}, rpc.GlyphDoor},
+		// The far node's home grid declares its own door, and the
 		// connection's glyph still wins on its own root.
 		{"a connection takes the globe", conn,
-			&gridwellv1.Grid{Id: "n2/rtb/rp/1", Glyph: rpc.GlyphWell, NodeNs: "n2/rtb"}, rpc.GlyphGlobe},
+			&gridwellv1.Grid{Id: "n2/rtb/rp/1", Glyph: rpc.GlyphDoor, NodeNs: "n2/rtb"}, rpc.GlyphGlobe},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := RowGlyph(tc.row); got != tc.want {
@@ -123,7 +123,7 @@ func TestEntryGlyph(t *testing.T) {
 }
 
 // The grid's glyph comes from what its plugin declared, never from a kind the
-// client recognizes. A plugin that declares nothing takes the well.
+// client recognizes. A plugin that declares nothing takes the door.
 func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
 	plugins := []*gridwellv1.PluginInfo{
 		{Uuid: "ufs", Glyph: rpc.GlyphFolder, RootGridId: "ufs/1"},
@@ -140,12 +140,12 @@ func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
 	}{
 		{"declared folder", "ufs/1", &gridwellv1.Grid{Id: "ufs/1", Glyph: rpc.GlyphFolder, HostContent: true}, rpc.GlyphFolder},
 		{"declared process", "up/1", &gridwellv1.Grid{Id: "up/1", Glyph: rpc.GlyphProcess, HostContent: true}, rpc.GlyphProcess},
-		{"declares nothing is owned content", "ugl/1", &gridwellv1.Grid{Id: "ugl/1"}, rpc.GlyphWell},
+		{"declares nothing is owned content", "ugl/1", &gridwellv1.Grid{Id: "ugl/1"}, rpc.GlyphDoor},
 		{"a root entry outranks the grid", "ufs/9", &gridwellv1.Grid{Id: "ufs/9", Glyph: rpc.GlyphFolder}, rpc.GlyphTrash},
-		{"mounted content wears the door", "n1/conn/x/1", &gridwellv1.Grid{Id: "n1/conn/x/1", NodeNs: "n1/conn"}, rpc.GlyphFolder},
-		{"unknown mount takes the globe", "n1/gone/x/1", &gridwellv1.Grid{Id: "n1/gone/x/1", NodeNs: "n1/gone"}, rpc.GlyphGlobe},
+		{"far content wears the door", "n1/conn/x/1", &gridwellv1.Grid{Id: "n1/conn/x/1", NodeNs: "n1/conn"}, rpc.GlyphFolder},
+		{"an unknown connection takes the globe", "n1/gone/x/1", &gridwellv1.Grid{Id: "n1/gone/x/1", NodeNs: "n1/gone"}, rpc.GlyphGlobe},
 		{"uncached falls back to the plugin row", "ufs/4", nil, rpc.GlyphFolder},
-		{"uncached unknown namespace", "zzz/4", nil, rpc.GlyphWell},
+		{"uncached unknown namespace", "zzz/4", nil, rpc.GlyphDoor},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := GlyphFor(tc.gridID, tc.grid, plugins); got != tc.want {
@@ -182,9 +182,9 @@ func TestPlacesOf(t *testing.T) {
 		{"a plugin is its collections", &gridwellv1.PluginInfo{Uuid: "hey", Label: "hey",
 			MenuEntries: []*gridwellv1.MenuEntry{{Id: "imbox", GridId: "hey/1"}, {Id: "feed", GridId: "hey/2"}}},
 			[]string{"hey/1", "hey/2"}},
-		{"an entry with no grid is not a doorway", &gridwellv1.PluginInfo{Uuid: "hey", Label: "hey",
+		{"an entry with no grid is not a door", &gridwellv1.PluginInfo{Uuid: "hey", Label: "hey",
 			MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed"}}}, nil},
-		{"a row that declares nothing is a doorway onto nothing",
+		{"a row that declares nothing is a door onto nothing",
 			&gridwellv1.PluginInfo{Uuid: "fs", Label: "files"}, nil},
 	}
 	for _, c := range cases {
@@ -201,12 +201,12 @@ func TestPlacesOf(t *testing.T) {
 	}
 }
 
-// A collection's framing is remembered against the doorway the menu descends
+// A collection's framing is remembered against the door the menu descends
 // through, so ByRoot must resolve an entry's grid as well as a row's own.
 func TestByRootResolvesADeclaredEntry(t *testing.T) {
 	got, ok := ByRoot("loc/9", plugins)
 	if !ok || got.Label != "trash (home)" || got.RootGridId != "loc/9" {
-		t.Fatalf("ByRoot = %+v (%v), want the trash entry's doorway", got, ok)
+		t.Fatalf("ByRoot = %+v (%v), want the trash entry's door", got, ok)
 	}
 	if _, ok := ByRoot("", plugins); ok {
 		t.Error("an empty grid id must resolve to nothing")

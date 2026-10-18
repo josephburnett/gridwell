@@ -104,7 +104,7 @@ func TestPopEphemeralContent(t *testing.T) {
 		t.Fatalf("asked = %v; a leaf on a grid must not be asked", asked)
 	}
 	if eph.ContentID() != "" || eph.Depth() != 2 || eph.Door != "d1" {
-		t.Fatalf("ephemeral leaf not popped onto its doorway: %+v", eph.Frames())
+		t.Fatalf("ephemeral leaf not popped onto its door: %+v", eph.Frames())
 	}
 	if durable.ContentID() != "keep" || unknown.ContentID() != "unknown" {
 		t.Fatalf("a kept content frame was popped: %q %q", durable.ContentID(), unknown.ContentID())

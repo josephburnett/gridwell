@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 // One host-local Chromium session. Every live url tile, whichever namespace owns
-// it, local or through a mount, browses on the same persistent partition, so a
+// it, local or through a connection, browses on the same persistent partition, so a
 // login holds everywhere.
 //
 // The seam: a cookie set while live in one plugin's tile is visible to a live

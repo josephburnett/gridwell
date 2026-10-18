@@ -40,7 +40,7 @@ type Notice struct {
 	Message  string
 }
 
-// DoorWorld is what only the shim can resolve about the doorway row.
+// DoorWorld is what only the shim can resolve about the door row.
 type DoorWorld struct {
 	DeadLink bool // deadref.DeadTile
 	IsLink   bool // isLinkTile, the row's link declaration
@@ -55,9 +55,9 @@ type LeaveWorld struct {
 	// DescendedTile is the cache-wide walk that finds an off-grid ephemeral
 	// visit, nil when the row vanished or was never cached.
 	DescendedTile  *gridwellv1.Tile
-	DoorGridID     string // the grid the doorway row lives in, one level out
+	DoorGridID     string // the grid the door row lives in, one level out
 	DoorGridCached bool
-	// DoorTile is the doorway row, nil when the grid holds none, as for a +
+	// DoorTile is the door row, nil when the grid holds none, as for a +
 	// menu portal.
 	DoorTile *gridwellv1.Tile
 	// LandingView is persistedGridView for the grid being landed on, nil when
@@ -111,7 +111,7 @@ func (pw *PromoteWorld) old() *gridwellv1.Tile {
 // RestoreTile is one cached row as the URL restore reads it.
 type RestoreTile struct {
 	ChildGridID string
-	IsWell      bool
+	IsDoor      bool
 	IsContent   bool
 
 	// The leaf's half. Only the trailing id can be a content leaf, but only

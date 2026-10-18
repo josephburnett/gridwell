@@ -253,7 +253,7 @@ func jsonBeacon(build func() (string, []byte)) func() (string, []byte, string) {
 }
 
 // postFramingPersist dispatches a settle-persister framing write. id is the
-// doorway tile's id, or the root grid's id when the framing lives on a grid
+// door tile's id, or the root grid's id when the framing lives on a grid
 // row. beacon is nil only for content zoom, which has no *Beacon builder.
 func (a *App) postFramingPersist(label, gid, id string,
 	call func(ctx context.Context) error, beacon func() (string, []byte, string)) {

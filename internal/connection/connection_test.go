@@ -112,7 +112,7 @@ func TestRefusedNamesNeverReachTheTransport(t *testing.T) {
 // The `deleted` column is the mirror of retired_names and nothing else. A
 // tombstone the OLD boot reconcile wrote — one boot with the stanza absent —
 // is a stale mirror, not a retirement, so the next boot clears it and the
-// mounts through that name come back. No SQL by hand.
+// doors and links through that name come back. No SQL by hand.
 func TestStaleTombstonesHealAndRetiredNamesMirror(t *testing.T) {
 	ctx := context.Background()
 	st := openStore(t)

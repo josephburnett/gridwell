@@ -17,8 +17,8 @@ const placementSet = `x = ?, y = ?, w = ?, h = ?`
 // (grid_id, x, y, w, h), and this verb owns all of it, id-addressed with no
 // descent path. It claims the placement the writer saw (claimPlacement) and
 // bumps no version, so a move never conflicts with typing. Two tiles in one
-// cell is refused by the overlap check in this same transaction. Moving a well
-// into its own subtree is refused by wellWouldContainItself, walking a chain
+// cell is refused by the overlap check in this same transaction. Moving a door
+// into its own subtree is refused by doorWouldContainItself, walking a chain
 // the server derives itself.
 func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.Tile, error) {
 	if req.W <= 0 || req.H <= 0 {
@@ -54,7 +54,7 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 		if _, err := s.loadGrid(ctx, tx, destGridID); err != nil {
 			return fmt.Errorf("%w: destination grid %d: %v", ErrInvalidArgument, destGridID, err)
 		}
-		if err := s.wellWouldContainItself(ctx, tx, n, destGridID); err != nil {
+		if err := s.doorWouldContainItself(ctx, tx, n, destGridID); err != nil {
 			return err
 		}
 
@@ -114,25 +114,25 @@ func claimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) 
 	return nil
 }
 
-// wellWouldContainItself refuses moving a well into its own subtree, walking
-// up from the destination grid through parent wells (gridInSubtree). Each
-// interior child grid hangs off exactly one well by construction, so the
-// ancestor chain is a server-derived fact and needs no client path. Non-well
-// tiles and exit wells have no local subtree and pass trivially.
-func (s *Store) wellWouldContainItself(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile, destGridID int64) error {
-	if !isWellKind(n.Kind) {
+// doorWouldContainItself refuses moving a door into its own subtree, walking
+// up from the destination grid through parent doors (gridInSubtree). Each
+// interior child grid hangs off exactly one door by construction, so the
+// ancestor chain is a server-derived fact and needs no client path. Non-door
+// tiles and doors to other namespaces have no local subtree and pass trivially.
+func (s *Store) doorWouldContainItself(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile, destGridID int64) error {
+	if !isDoorKind(n.Kind) {
 		return nil
 	}
 	childGrid, err := strconv.ParseInt(n.ChildGridId, 10, 64)
 	if err != nil {
-		return nil // qualified, an exit well or link: no local subtree
+		return nil // qualified, a door to another namespace or link: no local subtree
 	}
 	inside, err := gridInSubtree(ctx, tx, destGridID, childGrid)
 	if err != nil {
 		return err
 	}
 	if inside {
-		return fmt.Errorf("%w: cannot move a well into its own subtree", ErrInvalidArgument)
+		return fmt.Errorf("%w: cannot move a door into its own subtree", ErrInvalidArgument)
 	}
 	return nil
 }

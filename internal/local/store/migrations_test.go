@@ -197,9 +197,9 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	}
 	res, err := db.ExecContext(ctx,
 		`INSERT INTO tiles (grid_id, kind, x, y, w, h, configure_plugin_id, alt_text, created_at, updated_at)
-		 VALUES (`+root+`, 'well', 3, 3, 2, 2, 'sshpluginuuid', 'gpu box', 100, 100)`)
+		 VALUES (`+root+`, 'door', 3, 3, 2, 2, 'sshpluginuuid', 'gpu box', 100, 100)`)
 	if err != nil {
-		t.Fatalf("plant the v8 unconfigured plugin well: %v", err)
+		t.Fatalf("plant the v8 unconfigured plugin door: %v", err)
 	}
 	staleID := mustID(t, res)
 	if _, err := db.ExecContext(ctx, `PRAGMA ignore_check_constraints = false`); err != nil {
@@ -207,7 +207,7 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	}
 
 	if err := storeOver(db).migrateUp(ctx, migrations, 10); err != nil {
-		t.Fatalf("migrate to v10 over a stale plugin well: %v", err)
+		t.Fatalf("migrate to v10 over a stale plugin door: %v", err)
 	}
 
 	var child sql.NullInt64
@@ -216,13 +216,13 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	if err := db.QueryRowContext(ctx,
 		`SELECT child_grid_id, alt_text, x, y, w, h FROM tiles WHERE id = ?`, staleID).
 		Scan(&child, &alt, &x, &y, &w, &h); err != nil {
-		t.Fatalf("the stale well was DELETED by v10, not adopted: %v", err)
+		t.Fatalf("the stale door was DELETED by v10, not adopted: %v", err)
 	}
 	if !child.Valid {
-		t.Fatal("the adopted well has no child grid; the new CHECK could not have admitted it")
+		t.Fatal("the adopted door has no child grid; the new CHECK could not have admitted it")
 	}
 	if alt != "gpu box" || x != 3 || y != 3 || w != 2 || h != 2 {
-		t.Errorf("the adopted well moved or was renamed: alt=%q at (%d,%d %dx%d)", alt, x, y, w, h)
+		t.Errorf("the adopted door moved or was renamed: alt=%q at (%d,%d %dx%d)", alt, x, y, w, h)
 	}
 	var nGrid, nTiles int
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM grids WHERE id = ?`, child.Int64).Scan(&nGrid); err != nil {
@@ -255,7 +255,7 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 		t.Error("idx_tiles_object_id survived v10 on a genuine v9 file")
 	}
 	// And the file opens through the production opener, reading the adopted
-	// well back as an ordinary tile: a file a released binary wrote still opens
+	// door back as an ordinary tile: a file a released binary wrote still opens
 	// and still holds what the user put in it.
 	if err := db.Close(); err != nil {
 		t.Fatalf("close: %v", err)
@@ -267,17 +267,17 @@ func TestMigrateV10OverAGenuineV9File(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 	reopened, err := s.GetTile(ctx, strconv.FormatInt(staleID, 10))
 	if err != nil {
-		t.Fatalf("read the adopted well after reopen: %v", err)
+		t.Fatalf("read the adopted door after reopen: %v", err)
 	}
-	if reopened.Kind != "well" || reopened.ChildGridId == "" || reopened.AltText != "gpu box" {
-		t.Errorf("adopted well after reopen = %+v, want a named well with a child grid", reopened)
+	if reopened.Kind != "door" || reopened.ChildGridId == "" || reopened.AltText != "gpu box" {
+		t.Errorf("adopted door after reopen = %+v, want a named door with a child grid", reopened)
 	}
 }
 
 // The framing conversion itself, which the fixture cannot reach: a chain-built
 // v10 file already carries view_cx and view_cy, so there is no view_x to
 // convert. A file written by a v10 binary has the integer origin, and every
-// well must come out of v11 showing exactly the framing it showed before,
+// door must come out of v11 showing exactly the framing it showed before,
 // origin + footprint/2.
 func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 	ctx := context.Background()
@@ -312,12 +312,12 @@ func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 		wantX  float64
 		wantY  float64
 	}{
-		{"v10 even well", 2, 4, 7, -3, 0.375, 8, -1},
-		{"v10 odd well", 1, 1, 4, 4, 0.125, 4.5, 4.5},
+		{"v10 even door", 2, 4, 7, -3, 0.375, 8, -1},
+		{"v10 odd door", 1, 1, 4, 4, 0.125, 4.5, 4.5},
 	} {
 		if _, err := db.ExecContext(ctx, `INSERT INTO tiles
 			(grid_id, kind, x, y, w, h, view_x, view_y, view_zoom, child_grid_id, alt_text, created_at, updated_at)
-			VALUES (`+root+`, 'well', 0, 0, ?, ?, ?, ?, ?, ?, ?, 100, 100)`,
+			VALUES (`+root+`, 'door', 0, 0, ?, ?, ?, ?, ?, ?, ?, 100, 100)`,
 			w.w, w.h, w.vx, w.vy, w.zoom, child, w.alt); err != nil {
 			t.Fatalf("plant %s: %v", w.alt, err)
 		}
@@ -340,8 +340,8 @@ func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 		cx, cy float64
 		zoom   float64
 	}{
-		{"v10 even well", 8, -1, 0.375},
-		{"v10 odd well", 4.5, 4.5, 0.125},
+		{"v10 even door", 8, -1, 0.375},
+		{"v10 odd door", 4.5, 4.5, 0.125},
 	} {
 		var cx, cy, zoom float64
 		if err := db.QueryRowContext(ctx,
@@ -385,15 +385,15 @@ func TestMigrateV11OverAGenuineV10File(t *testing.T) {
 	}
 	found := 0
 	for _, tile := range g.Tiles {
-		if tile.AltText == "v10 odd well" {
+		if tile.AltText == "v10 odd door" {
 			found++
 			if tile.ViewCx != 4.5 || tile.ViewCy != 4.5 {
-				t.Errorf("odd well after reopen = (%v, %v), want (4.5, 4.5)", tile.ViewCx, tile.ViewCy)
+				t.Errorf("odd door after reopen = (%v, %v), want (4.5, 4.5)", tile.ViewCx, tile.ViewCy)
 			}
 		}
 	}
 	if found != 1 {
-		t.Errorf("the odd well is not in the reopened grid (%d matches)", found)
+		t.Errorf("the odd door is not in the reopened grid (%d matches)", found)
 	}
 }
 

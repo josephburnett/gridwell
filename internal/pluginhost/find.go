@@ -23,7 +23,7 @@ type findHit struct {
 	row    int64
 }
 
-// Find turns each hit into a place (tile plus well chain) through the
+// Find turns each hit into a place (tile plus door chain) through the
 // synthesis GetGrid runs, dropping hits it cannot place, and keeps the ones
 // the filters pass. An empty query with a filter lists instead: the grid and,
 // with recurse, every grid under it, or with no grid the rows whose facts
@@ -171,12 +171,12 @@ func (g *findGrids) text(req *gridwellv1.FindRequest, scope string) ([]findHit, 
 			if err != nil {
 				return nil, err
 			}
-			well := parent.tileOpening(rpc.EntryGridID(r.ContextPath[i]))
-			if well == nil {
+			door := parent.tileOpening(rpc.EntryGridID(r.ContextPath[i]))
+			if door == nil {
 				placed = false
 				break
 			}
-			path = append(path, well)
+			path = append(path, door)
 		}
 		if !placed {
 			continue
@@ -192,8 +192,8 @@ func (g *findGrids) text(req *gridwellv1.FindRequest, scope string) ([]findHit, 
 	return out, nil
 }
 
-// walk lists the grid of ckey and, with recurse, every grid its wells open,
-// each tile placed under the wells that reached it; path is the chain above
+// walk lists the grid of ckey and, with recurse, every grid its doors open,
+// each tile placed under the doors that reached it; path is the chain above
 // ckey.
 func (g *findGrids) walk(ckey string, path []*gridwellv1.Tile, recurse bool, seen map[string]bool) ([]findHit, error) {
 	seen[ckey] = true
@@ -257,7 +257,7 @@ func (g *findGrids) rows(req *gridwellv1.FindRequest) ([]findHit, error) {
 	return out, nil
 }
 
-// chain is the wells from a collection down to the grid of target, found by
+// chain is the doors from a collection down to the grid of target, found by
 // listing down from each collection the plugin declares through the grids the
 // node holds rows for, which are the ones the user has touched: the find
 // never walks the source. ok is false when no such way down reaches it.

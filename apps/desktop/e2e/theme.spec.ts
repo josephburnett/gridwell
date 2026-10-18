@@ -50,7 +50,7 @@ test('the bar circle right-clicks to a theme menu; light survives a reload', asy
   expect(await gw.theme(), 'a client with no stored preference is dark').toBe('dark');
 
   const f = await gw.focused();
-  // A point inside the pane and well clear of the bar band, so the pixel read
+  // A point inside the pane and door clear of the bar band, so the pixel read
   // is the grid's ground.
   const px = f.x + f.w / 2;
   const py = f.y + 12;

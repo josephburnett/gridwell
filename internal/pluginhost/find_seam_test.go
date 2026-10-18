@@ -2,7 +2,7 @@ package pluginhost_test
 
 // A plugin's Find is only worth anything if the node can reach it and turn
 // its answers into places: tiles with the ids the store minted, on a path of
-// well tiles. This crosses the whole seam, from a fake GitLab through the REAL
+// door tiles. This crosses the whole seam, from a fake GitLab through the REAL
 // gridwell-plugin-gitlab binary, the adapter, and the server to the rpc
 // client. The plugin is spawned and configured — url and token_file — exactly
 // as a server.yaml plugins: entry configures it; nothing here links a plugin
@@ -67,7 +67,7 @@ func gitlabServer(t *testing.T, gl *gitlabfake.Server) *httptest.Server {
 }
 
 // Find results are the same tiles GetGrid mints — id, grid, placement — on
-// a path of the well tiles that lead there, so a hit is a place the client can
+// a path of the door tiles that lead there, so a hit is a place the client can
 // go. An adapter that does not forward Find answers Unimplemented, and the
 // server's fan-out then skips the plugin entirely.
 func TestFindThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
@@ -86,14 +86,14 @@ func TestFindThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var weekWell *gridwellv1.Tile
+	var weekDoor *gridwellv1.Tile
 	for i := range root.Tiles {
 		if strings.HasPrefix(root.Tiles[i].AltText, "2026-08-17") {
-			weekWell = root.Tiles[i]
+			weekDoor = root.Tiles[i]
 		}
 	}
-	if weekWell == nil {
-		t.Fatalf("no week well in the root: %v", root.Tiles)
+	if weekDoor == nil {
+		t.Fatalf("no week door in the root: %v", root.Tiles)
 	}
 
 	// Find before the week was ever listed: the hit is minted through the
@@ -107,17 +107,17 @@ func TestFindThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 		t.Fatalf("hits = %v, want the one widget todo", hits)
 	}
 	hit := hits[0]
-	if len(hit.Path) != 1 || hit.Path[0].Id != weekWell.Id {
-		t.Errorf("path = %v, want the week well %s", hit.Path, weekWell.Id)
+	if len(hit.Path) != 1 || hit.Path[0].Id != weekDoor.Id {
+		t.Errorf("path = %v, want the week door %s", hit.Path, weekDoor.Id)
 	}
-	if hit.Tile.GridId != weekWell.ChildGridId || !strings.Contains(hit.Tile.AltText, "!1") {
-		t.Errorf("hit tile = %+v, want !1 in the week grid %s", hit.Tile, weekWell.ChildGridId)
+	if hit.Tile.GridId != weekDoor.ChildGridId || !strings.Contains(hit.Tile.AltText, "!1") {
+		t.Errorf("hit tile = %+v, want !1 in the week grid %s", hit.Tile, weekDoor.ChildGridId)
 	}
 	if !strings.HasPrefix(hit.Tile.Id, gitlabUUID+"/") {
 		t.Errorf("hit id %q is not qualified into the plugin's namespace", hit.Tile.Id)
 	}
 
-	week, err := cl.GetGrid(ctx, weekWell.ChildGridId)
+	week, err := cl.GetGrid(ctx, weekDoor.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}

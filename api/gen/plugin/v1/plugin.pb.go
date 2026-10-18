@@ -135,7 +135,7 @@ type InfoResponse struct {
 	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Glyph       string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"` // declared glyph vocabulary; "" = the generic globe
 	// root_context is retired and its field number is kept rather than reused.
-	// A plugin contributes doorways, one menu_entries row per collection, and
+	// A plugin contributes doors, one menu_entries row per collection, and
 	// the node has no landing to choose among them. Leave it empty and declare
 	// your collections.
 	//
@@ -166,7 +166,7 @@ type InfoResponse struct {
 	// directory tree or the process table, rather than holding content of their
 	// own. Their rows are summaries the node cannot re-arrange across contexts,
 	// and the client renders them with the host treatment: the outside tint on
-	// every tile and the exit border family on a descent. The node has no list of
+	// every tile and the border family of a door to another namespace on a descent. The node has no list of
 	// which kinds are host-backed, so a third-party plugin gets the same
 	// treatment by declaring it here. It becomes Grid.host_content on every grid
 	// the node serves for this plugin.
@@ -461,12 +461,12 @@ func (x *ListResponse) GetUnreachable() string {
 type Entry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"` // stable, unique within the plugin
-	// kind: "well" | "text" | "url". A text entry is a document body the plugin
+	// kind: "door" | "text" | "url". A text entry is a document body the plugin
 	// answers from ReadContent; a url entry is an address. Only a url entry may
 	// serve a page.
 	Kind  string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
-	// child_context: wells only — the context this entry opens into.
+	// child_context: doors only — the context this entry opens into.
 	ChildContext string `protobuf:"bytes,4,opt,name=child_context,json=childContext,proto3" json:"child_context,omitempty"`
 	// serves_page: this entry's web content is the plugin's, served through
 	// ServeContent. It is a url entry's address in place of url_string — the
@@ -504,7 +504,7 @@ type Entry struct {
 	// node must still present it, since a node that predates this field shows
 	// the entry as content of its own. The node mints nothing for the target
 	// until the user touches it, and a target its context no longer holds
-	// reads as a dead link. A well has no link variant here: its child_context
+	// reads as a dead link. A door has no link variant here: its child_context
 	// already names where it opens.
 	LinkTarget *EntryRef `protobuf:"bytes,11,opt,name=link_target,json=linkTarget,proto3" json:"link_target,omitempty"`
 	// content_stamp names the bytes a text entry's ReadContent answers right

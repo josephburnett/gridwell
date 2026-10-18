@@ -60,7 +60,7 @@ type gmailNode struct {
 	g                   *fakeGmail
 	cards               *gmailClient
 	home                string // the home grid, qualified
-	inbox, starred, all string // the three doorways, qualified
+	inbox, starred, all string // the three doors, qualified
 }
 
 // newGmailNode starts the node with the recorded Gmail's new mail held back,
@@ -103,7 +103,7 @@ func newGmailNodeOf(t *testing.T, refresh string, setup func(*gmailClient)) *gma
 		}
 	}
 	if n.inbox == "" {
-		t.Fatalf("no gmail doorways in the handshake: %v", lp.Plugins)
+		t.Fatalf("no gmail doors in the handshake: %v", lp.Plugins)
 	}
 	return n
 }

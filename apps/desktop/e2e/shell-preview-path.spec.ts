@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Ascending from a shell that lives inside a well, in a descended sub-grid, must
+// Ascending from a shell that lives inside a door, in a descended sub-grid, must
 // persist its frozen preview. The freeze writeback resolves the tile against the
 // descent path's leaf grid, so a shell in a sub-grid needs the pane's path sent
 // with SetShellPreview; without it the save fails with "descent path is invalid"
@@ -13,23 +13,23 @@ async function errors(window: any) {
   return window.evaluate(() => (window as any).__gridwellTest.errors());
 }
 
-test('ascending a shell inside a well persists its preview', async ({ gw, window, electronApp }) => {
+test('ascending a shell inside a door persists its preview', async ({ gw, window, electronApp }) => {
   await gw.enterPlugin('home');
   const home = await gw.focused();
   const wx = Math.round(home.cx);
   const wy = Math.round(home.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', wx, wy);
-  const well = tileAt(await gw.getGrid(home.gridID), 'well', wx, wy)!;
-  expect(well, 'well created').toBeTruthy();
-  const child = well.childGridId as string;
+  await gw.dragCreate('door', wx, wy);
+  const door = tileAt(await gw.getGrid(home.gridID), 'door', wx, wy)!;
+  expect(door, 'door created').toBeTruthy();
+  const child = door.childGridId as string;
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await gw.focused()).gridID).toBe(child);
 
-  const inWell = await gw.focused();
-  const sx = Math.round(inWell.cx);
-  const sy = Math.round(inWell.cy);
+  const inDoor = await gw.focused();
+  const sx = Math.round(inDoor.cx);
+  const sy = Math.round(inDoor.cy);
   await gw.openMenu();
   await gw.dragCreate('shell', sx, sy);
   await gw.descendCell(sx, sy); // the drop lands bare; the descent creates the tmux

@@ -165,18 +165,18 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
 });
 
 // The shared body of the two framing-writeback failure specs. It reframes
-// inside a well with SetFraming failing in the shape `route` decides.
-async function setupWellReframe(
+// inside a door with SetFraming failing in the shape `route` decides.
+async function setupDoorReframe(
   gw: any,
   window: any,
   route: (r: any) => void,
-): Promise<{ parentGrid: string; wellID: string; sig0: Record<string, string> }> {
+): Promise<{ parentGrid: string; doorID: string; sig0: Record<string, string> }> {
   await gw.enterPlugin('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
@@ -186,8 +186,8 @@ async function setupWellReframe(
     (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
     parentGrid,
   );
-  const wellID = Object.keys(sig0)[0];
-  expect(wellID, 'the parent grid holds the well').toBeTruthy();
+  const doorID = Object.keys(sig0)[0];
+  expect(doorID, 'the parent grid holds the door').toBeTruthy();
 
   await window.route('**/gridwell.v1.Gridwell/SetFraming', route);
 
@@ -224,7 +224,7 @@ async function setupWellReframe(
     }, { timeout: 10_000 })
     .toBe(true);
 
-  return { parentGrid, wellID, sig0 };
+  return { parentGrid, doorID, sig0 };
 }
 
 test('a framing writeback REJECTED by the server rolls the optimistic patch back (issue #156)', async ({
@@ -235,7 +235,7 @@ test('a framing writeback REJECTED by the server rolls the optimistic patch back
   // roll back or a sibling pane's preview shows framing the server refused. The
   // rejection is a real Connect error body (OutcomeRejected); a network abort
   // is the other contract, pinned below.
-  const { parentGrid, wellID, sig0 } = await setupWellReframe(gw, window, (r: any) =>
+  const { parentGrid, doorID, sig0 } = await setupDoorReframe(gw, window, (r: any) =>
     r.fulfill({
       status: 400,
       contentType: 'application/json',
@@ -252,7 +252,7 @@ test('a framing writeback REJECTED by the server rolls the optimistic patch back
           (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
           parentGrid,
         );
-        return sigs[wellID] === sig0[wellID];
+        return sigs[doorID] === sig0[doorID];
       },
       { timeout: 10_000 },
     )
@@ -267,7 +267,7 @@ test('a framing writeback lost to TRANSPORT keeps the patch (2026-08-14)', async
   // An abort means the server never spoke, and the patched framing is the only
   // copy of the user's settled viewport, so rolling it back would lose it. The
   // patch stays and the write parks; web-outage.spec.ts proves the drain.
-  const { parentGrid, wellID, sig0 } = await setupWellReframe(gw, window, (r: any) => r.abort());
+  const { parentGrid, doorID, sig0 } = await setupDoorReframe(gw, window, (r: any) => r.abort());
 
   // Repeatedly, since a late rollback is the bug.
   for (let i = 0; i < 5; i++) {
@@ -275,7 +275,7 @@ test('a framing writeback lost to TRANSPORT keeps the patch (2026-08-14)', async
       (gid: string) => (window as any).__gridwellTest.gridSigs(gid),
       parentGrid,
     );
-    expect(sigs[wellID], 'the transport-failed patch must stay').not.toBe(sig0[wellID]);
+    expect(sigs[doorID], 'the transport-failed patch must stay').not.toBe(sig0[doorID]);
     await window.waitForTimeout(300);
   }
   await window.unroute('**/gridwell.v1.Gridwell/SetFraming');

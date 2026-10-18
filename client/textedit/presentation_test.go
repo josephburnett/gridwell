@@ -100,7 +100,7 @@ func TestReadOnlyTable(t *testing.T) {
 		{"text refused by both", rpc.KindText, false, "x", true},
 		{"text from a disabled source", rpc.KindText, false, rpc.DisabledReason("rtb"), true},
 		{"a url is no read-only text", rpc.KindURL, false, "x", false},
-		{"a well is no read-only text", rpc.KindWell, true, "x", false},
+		{"a door is no read-only text", rpc.KindDoor, true, "x", false},
 	}
 	for _, c := range cases {
 		tile := &gridwellv1.Tile{Kind: c.kind, ReadOnly: c.readOnly}

@@ -45,7 +45,7 @@ func (c landingClient) GetGrid(_ context.Context, req *gridwellv1.GetGridRequest
 // A connection's name is dropped from server.yaml and later declared again:
 // three boots over one store, across the boot reconcile, the row, the routing
 // table, and the roster a client reads a link's deadness from. Boot 1
-// declares rtb and a mount into it is live; boot 2 drops the stanza, and the
+// declares rtb and a door into it is live; boot 2 drops the stanza, and the
 // row survives with its landing while the link goes dead through the
 // roster, never swept; boot 3 re-declares it and everything comes back on the
 // same landing.
@@ -58,7 +58,7 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	dialer := func(dial.Config) (namespace.Namespace, func(), error) {
 		return landingClient{root: "rnode1/7"}, func() {}, nil
 	}
-	// The stored link a mount leaves behind: a link tile into the
+	// The stored link a door to it leaves behind: a link tile into the
 	// connection's namespace, as the user's grid holds it.
 	ref := &gridwellv1.Tile{Link: true, LinkTargetId: nodeID + "/rtb/rnode1/7"}
 	roster := func(s *Server) []*gridwellv1.PluginInfo {

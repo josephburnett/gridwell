@@ -82,7 +82,7 @@ func TestSwapTileBlob(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestCopyCopiesChildGrid: copying a well deep-copies its child subtree into
+// TestCopyCopiesChildGrid: copying a door deep-copies its child subtree into
 // fresh, independent rows — a new child grid id and re-rowed inner tiles.
 // Nothing is shared.
 func TestCopyCopiesChildGrid(t *testing.T) {
@@ -90,11 +90,11 @@ func TestCopyCopiesChildGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, w.ChildGridId, 5, 5, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 5, 5, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,18 +127,18 @@ func TestCopyCopiesChildGrid(t *testing.T) {
 	verifyRefcounts(t, s)
 }
 
-// TestCopyIndependentEdit: after copying a well, editing inside the copy
+// TestCopyIndependentEdit: after copying a door, editing inside the copy
 // writes in place (id stable) and the original subtree is byte-identical.
 func TestCopyIndependentEdit(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, w.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestCopyOneLevelByteIdentity(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	outer, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,11 +258,11 @@ func TestCopyTwoLevelByteIdentity(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	a, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.CreateWell(ctx, a.ChildGridId, 0, 0, 1, 1, "")
+	b, err := s.CreateDoor(ctx, a.ChildGridId, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,9 +272,9 @@ func TestCopyTwoLevelByteIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	leafBytes := func(outerWellID string) []byte {
+	leafBytes := func(outerDoorID string) []byte {
 		t.Helper()
-		ot, err := s.GetTile(ctx, outerWellID)
+		ot, err := s.GetTile(ctx, outerDoorID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,8 +282,8 @@ func TestCopyTwoLevelByteIdentity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(g.Tiles) != 1 || g.Tiles[0].Kind != rpc.KindWell {
-			t.Fatalf("expected one well inside outer %s; got %+v", outerWellID, g.Tiles)
+		if len(g.Tiles) != 1 || g.Tiles[0].Kind != rpc.KindDoor {
+			t.Fatalf("expected one door inside outer %s; got %+v", outerDoorID, g.Tiles)
 		}
 		h, err := s.GetGrid(ctx, g.Tiles[0].ChildGridId)
 		if err != nil {
@@ -335,7 +335,7 @@ func TestCopyThreeIndependentCopies(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	a, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,9 +345,9 @@ func TestCopyThreeIndependentCopies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	leafBytes := func(outerWellID string) []byte {
+	leafBytes := func(outerDoorID string) []byte {
 		t.Helper()
-		ot, err := s.GetTile(ctx, outerWellID)
+		ot, err := s.GetTile(ctx, outerDoorID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -356,7 +356,7 @@ func TestCopyThreeIndependentCopies(t *testing.T) {
 			t.Fatal(err)
 		}
 		if len(g.Tiles) != 1 {
-			t.Fatalf("expected 1 tile in outer %s's child; got %d", outerWellID, len(g.Tiles))
+			t.Fatalf("expected 1 tile in outer %s's child; got %d", outerDoorID, len(g.Tiles))
 		}
 		data, err := s.GetBlob(ctx, g.Tiles[0].BlobId)
 		if err != nil {
@@ -434,14 +434,14 @@ func TestRefcountGCBlobOnTileDelete(t *testing.T) {
 	}
 }
 
-// TestDeleteGridCascadesBlobs: deleting a well recursively tears down its
+// TestDeleteGridCascadesBlobs: deleting a door recursively tears down its
 // owned child grid (and nested grids), releasing every blob inside.
 func TestDeleteGridCascadesBlobs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	outer, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub, err := s.CreateWell(ctx, outer.ChildGridId, 5, 0, 1, 1, "")
+	sub, err := s.CreateDoor(ctx, outer.ChildGridId, 5, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +473,7 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 0 {
-		t.Errorf("sub-well child grid still present after delete")
+		t.Errorf("sub-door child grid still present after delete")
 	}
 	if err := s.db.QueryRow(`SELECT refcount FROM blobs WHERE id = ?`, mdTile.BlobId).Scan(&n); err == nil {
 		t.Errorf("md blob still present after delete; refcount=%d", n)

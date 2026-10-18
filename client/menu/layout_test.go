@@ -109,7 +109,7 @@ func TestPopoverTracksCenter(t *testing.T) {
 	}
 }
 
-// TestTwoRowPopover pins that doorways fill the top row and primitives the
+// TestTwoRowPopover pins that doors fill the top row and primitives the
 // bottom, two tiles tall.
 func TestTwoRowPopover(t *testing.T) {
 	l := makeLayout()
@@ -133,7 +133,7 @@ func TestTwoRowPopover(t *testing.T) {
 	}
 }
 
-// TestSingleRowWhenTopRowUnset pins that a node declaring no doorways gets a
+// TestSingleRowWhenTopRowUnset pins that a node declaring no doors gets a
 // single-row popover.
 func TestSingleRowWhenTopRowUnset(t *testing.T) {
 	l := makeLayout()
@@ -155,7 +155,7 @@ func TestSingleRowWhenTopRowUnset(t *testing.T) {
 }
 
 // TestSingleRowWhenTopRowCoversAll pins the read-only grid, where every tile
-// is a doorway and the popover stays a single row.
+// is a door and the popover stays a single row.
 func TestSingleRowWhenTopRowCoversAll(t *testing.T) {
 	l := makeLayout()
 	l.NumTiles = 3

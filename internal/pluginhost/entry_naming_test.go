@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// treePlugin is a two-context source: a root with a directory-shaped well and
+// treePlugin is a two-context source: a root with a directory-shaped door and
 // a read-only document beside it, and the directory's own listing. Whether the
 // root's listing is authoritative, and whether the document is still in it, are
 // knobs the naming tests turn.
@@ -35,7 +35,7 @@ func (p *treePlugin) List(_ context.Context, req *pluginv1.ListRequest) (*plugin
 	switch req.Context {
 	case "/":
 		entries := []*pluginv1.Entry{
-			{Key: "/sub", Kind: rpc.KindWell, Label: "sub", ChildContext: "/sub"},
+			{Key: "/sub", Kind: rpc.KindDoor, Label: "sub", ChildContext: "/sub"},
 		}
 		if !p.hideDoc {
 			entries = append(entries, &pluginv1.Entry{Key: "/note.md", Kind: rpc.KindText, Label: "note.md"})
@@ -117,7 +117,7 @@ func listed(t *testing.T, a *pluginhost.Adapter, gridID, label string) *gridwell
 // forever, and the row a first durable fact mints is bookkeeping the client
 // never hears about. A rename would take the id out from under a URL restore or
 // a descended pane. Both writes below are ones the user makes mid-descent, and
-// each one mints: SetFraming on the doorway, and the framing verbs under the
+// each one mints: SetFraming on the door, and the framing verbs under the
 // file.
 func TestATouchedEntryKeepsTheIdTheListingAnswers(t *testing.T) {
 	a, rootGrid, _ := treeNode(t, &treePlugin{authoritative: true})
@@ -132,12 +132,12 @@ func TestATouchedEntryKeepsTheIdTheListingAnswers(t *testing.T) {
 		t.Fatalf("untouched entries are not named by address: %q, %q", sub.Id, note.Id)
 	}
 
-	// The doorway, reframed mid-descent: the URL is still carrying this id.
+	// The door, reframed mid-descent: the URL is still carrying this id.
 	if _, err := a.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: sub.Id, Cx: 1.5, Cy: -2, Zoom: 3}); err != nil {
 		t.Fatal(err)
 	}
 	if got := listed(t, a, rootGrid, "sub"); got == nil || got.Id != sub.Id {
-		t.Fatalf("framing the doorway renamed it: %q, was %q — a URL segment naming it no longer resolves", got.GetId(), sub.Id)
+		t.Fatalf("framing the door renamed it: %q, was %q — a URL segment naming it no longer resolves", got.GetId(), sub.Id)
 	}
 
 	// The read-only file, under the reader's hand: a scroll (SetTextScroll) and a
@@ -209,7 +209,7 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 		t.Fatalf("the write through the row id did not reach the entry: %+v", after)
 	}
 
-	// A doorway held by a stored link descends: the well's child grid is
+	// A door held by a stored link descends: the door's child grid is
 	// the same grid the listing names.
 	sub := listed(t, a, rootGrid, "sub")
 	if _, err := a.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: sub.Id, Zoom: 2}); err != nil {
@@ -221,10 +221,10 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 	if viaRow.GetTile().GetChildGridId() != sub.ChildGridId {
-		t.Fatalf("a stored doorway descends elsewhere: %q, want %q", viaRow.GetTile().GetChildGridId(), sub.ChildGridId)
+		t.Fatalf("a stored door descends elsewhere: %q, want %q", viaRow.GetTile().GetChildGridId(), sub.ChildGridId)
 	}
 	if _, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: viaRow.GetTile().GetChildGridId()}); err != nil {
-		t.Fatalf("the descent from a stored doorway failed: %v", err)
+		t.Fatalf("the descent from a stored door failed: %v", err)
 	}
 
 	// And a link RE-STORED from an old row id canonicalizes forward, so

@@ -17,18 +17,18 @@ type FramingOwner struct {
 	// views (2026-10-14), so nothing is written to the row named below. That
 	// row's framing is still where a frame with no view of its own starts.
 	Layout bool
-	// TileID is the doorway the pane came in through, or the content tile.
-	// Empty at a root grid with no doorway.
+	// TileID is the door the pane came in through, or the content tile.
+	// Empty at a root grid with no door.
 	TileID     string
-	DoorAnchor string // the doorway's own grid, one level out
+	DoorAnchor string // the door's own grid, one level out
 	DoorPath   []string
-	// RootGridID owns the framing when there is no doorway. Always set for a
-	// grid place, so a caller whose doorway lookup misses, as a + menu
+	// RootGridID owns the framing when there is no door. Always set for a
+	// grid place, so a caller whose door lookup misses, as a + menu
 	// portal's does, falls back without a second rule.
 	RootGridID string
 }
 
-// FramingTarget is the row that owns the pane's framing: the doorway it came
+// FramingTarget is the row that owns the pane's framing: the door it came
 // in by, or the grid itself at a root. Inside a pane tile a grid place's view
 // and a text place's live scroll are the layout's, so the answer names a grid
 // place's row for reading only and a text place's row for its mode on a

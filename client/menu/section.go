@@ -4,7 +4,7 @@ package menu
 // them are an open set, so that section folds behind a chevron. The fold lasts
 // one menu opening and every opening starts folded; State owns the flag.
 
-// Section counts the doorway swatches the node declares and the primitives the
+// Section counts the door swatches the node declares and the primitives the
 // grid takes, zero on a read-only grid.
 type Section struct {
 	Plugins    int
@@ -41,7 +41,7 @@ type Shown struct {
 }
 
 // Show gives two states no toggle, there being nothing to fold: a node that
-// declares no doorways has no section, and a read-only grid offers no
+// declares no doors has no section, and a read-only grid offers no
 // primitives, so folding would leave the popover empty.
 func Show(s Section) Shown {
 	if s.Plugins <= 0 {

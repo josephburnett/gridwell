@@ -12,8 +12,8 @@ test('clicking a swatch that only creates by dragging navigates nowhere', async 
   // The cell size is the distance between two neighbouring cell centers, so
   // finding the cell under the swatch needs no constant from the renderer.
   await gw.openMenu();
-  const swatch = (await gw.menu()).items.find((i) => !i.isPlugin && i.kind === 'well')!;
-  expect(swatch, 'the well swatch is on the menu').toBeTruthy();
+  const swatch = (await gw.menu()).items.find((i) => !i.isPlugin && i.kind === 'door')!;
+  expect(swatch, 'the door swatch is on the menu').toBeTruthy();
   const origin = await gw.cellCenter(home.id, 0, 0);
   const oneOver = await gw.cellCenter(home.id, 1, 1);
   const cell = { w: oneOver.x - origin.x, h: oneOver.y - origin.y };
@@ -22,21 +22,21 @@ test('clicking a swatch that only creates by dragging navigates nowhere', async 
     y: Math.round((swatch.y + swatch.h / 2 - origin.y) / cell.h),
   };
 
-  // The well is created out in the open, then dragged under the menu.
+  // The door is created out in the open, then dragged under the menu.
   const spare = { x: Math.round(home.cx), y: Math.round(home.cy) };
-  await gw.dragCreate('well', spare.x, spare.y);
+  await gw.dragCreate('door', spare.x, spare.y);
   await gw.dragTileCell(spare.x, spare.y, under.x, under.y);
   const grid = await gw.getGrid(home.gridID);
-  const well = (grid.tiles ?? []).find((t) => t.kind === 'well')!;
-  expect([Number(well.x ?? 0), Number(well.y ?? 0)], 'the well sits under the swatch').toEqual([
+  const door = (grid.tiles ?? []).find((t) => t.kind === 'door')!;
+  expect([Number(door.x ?? 0), Number(door.y ?? 0)], 'the door sits under the swatch').toEqual([
     under.x,
     under.y,
   ]);
 
-  // The well swatch creates only by being dragged, so the click must do nothing
+  // The door swatch creates only by being dragged, so the click must do nothing
   // and must not descend into the tile behind the popover.
   await gw.openMenu();
-  await gw.clickMenuSwatch('well');
+  await gw.clickMenuSwatch('door');
   await gw.waitIdle();
 
   const after = await gw.focused();

@@ -83,14 +83,14 @@ func dialThroughSSH(t *testing.T) (namespace.Namespace, namespace.Namespace, err
 	return client, direct, nil
 }
 
-func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
+func TestDialReachesRemoteNodeThroughRealSSH(t *testing.T) {
 	c, direct, err := dialThroughSSH(t)
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
 	}
 	ctx := context.Background()
 
-	// The mount's root is the remote's HOME (its first rooted plugin) —
+	// The connection's root is the remote's HOME (its first rooted plugin) —
 	// where a direct client of that node lands too. The remote's plugin
 	// list rides the same tunnel, labels intact.
 	info, err := c.Info(ctx, &gridwellv1.InfoRequest{})
@@ -109,7 +109,7 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 
 	// Write at the remote's home; read back directly on the remote: the
-	// mount is the same plugin, hop peeled.
+	// connection is the same plugin, hop peeled.
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: info.RootGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
@@ -121,7 +121,7 @@ func TestDialMountsRemoteNodeThroughRealSSH(t *testing.T) {
 		t.Fatalf("created id = %q, want the remote's qualified ur1/<n>", created.Tile.Id)
 	}
 	// The body follows through the tunnel's WriteContent, then reads back
-	// DIRECTLY on the remote — the mount is the same plugin, hop peeled.
+	// DIRECTLY on the remote — the connection is the same plugin, hop peeled.
 	_ = writeThenRead(t, ctx, c, created.Tile.Id, created.Tile.Version, []byte("# over ssh"))
 	got := readAllChunks(t, ctx, direct, strings.TrimPrefix(created.Tile.Id, "ur1/"))
 	if string(got) != "# over ssh" {
@@ -159,10 +159,10 @@ func readAllChunks(t *testing.T, ctx context.Context, c namespace.Namespace, til
 }
 
 // TestTunnelRecoversAfterSSHDeath is the outage seam: the ssh session dies
-// UNDER an established mount (laptop sleep, network change, remote sshd
-// restart) and comes back. The mount must heal by itself — the original
+// UNDER an established connection (laptop sleep, network change, remote sshd
+// restart) and comes back. The connection must heal by itself — the original
 // design captured one ssh.Client in the gRPC dialer at spawn, so every
-// reconnect attempt tunneled through the dead session and the mount stayed
+// reconnect attempt tunneled through the dead session and the connection stayed
 // dark until the plugin was restarted, while the server's fan-in retried
 // forever against a transport that could never recover.
 func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
@@ -200,7 +200,7 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 	}
 	cancel()
 
-	// The sshd returns on the same address. The mount must recover WITHOUT
+	// The sshd returns on the same address. The connection must recover WITHOUT
 	// any restart: gRPC's next reconnect calls the dialer, the dialer
 	// re-establishes the ssh session. A dial parked on the dead session ends
 	// with gRPC's connect bound (20s), so the wait covers that plus a backoff,
@@ -215,7 +215,7 @@ func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("mount never recovered after the sshd returned: %v", err)
+			t.Fatalf("connection never recovered after the sshd returned: %v", err)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

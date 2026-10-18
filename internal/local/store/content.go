@@ -19,7 +19,7 @@ import (
 //	pane → the layout, the user's bytes: claims and bumps like text
 //	url  → the address: changing where a tile points bumps
 //
-// A frozen preview rides SetTile and a well has no local content. A leaf link
+// A frozen preview rides SetTile and a door has no local content. A leaf link
 // is refused: the row owns no content, and a content operation addresses the
 // target the caller names explicitly.
 func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, data []byte) (*gridwellv1.Tile, error) {

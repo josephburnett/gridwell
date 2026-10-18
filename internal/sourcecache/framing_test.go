@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// framingSource is a far node reduced to what a doorway's framing touches: a
+// framingSource is a far node reduced to what a door's framing touches: a
 // handshake per namespace, one grid, and a framing write that lands or does
 // not. Its event stream is silent, so whatever the layer remembers of a write
 // it learned from the write itself.
@@ -83,12 +83,12 @@ const (
 	farHome  = "conn/r/g1"
 	farFeed  = "conn/p/~ZmVlZA"
 	farOther = "conn/r/g9"
-	farWell  = "conn/r/t1"
+	farDoor  = "conn/r/t1"
 )
 
 // framingFixture remembers both handshakes a far root's framing rides — the
 // transport's own row list and the far node's plugin list — and one grid
-// holding a well, all with nothing framed yet.
+// holding a door, all with nothing framed yet.
 func framingFixture(t *testing.T) (*Layer, *framingSource) {
 	t.Helper()
 	src := &framingSource{
@@ -102,7 +102,7 @@ func framingFixture(t *testing.T) (*Layer, *framingSource) {
 			}},
 		},
 		grid: &pb.GetGridResponse{Grid: &pb.Grid{Id: farHome}, Tiles: []*pb.Tile{
-			{Id: farWell, GridId: farHome, Kind: rpc.KindWell, ChildGridId: "conn/r/g2", W: 1, H: 1},
+			{Id: farDoor, GridId: farHome, Kind: rpc.KindDoor, ChildGridId: "conn/r/g2", W: 1, H: 1},
 		}},
 	}
 	cc := openLayer(t, src, filepath.Join(t.TempDir(), "cache.db"), Options{})
@@ -138,10 +138,10 @@ func entryFraming(e *pb.MenuEntry) rpc.View {
 	return rpc.ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)
 }
 
-// A far root's framing event lands on every remembered doorway rooted at that
+// A far root's framing event lands on every remembered door rooted at that
 // grid, in every remembered handshake, and on nothing else; the duplicate the
 // write's own echo makes changes nothing.
-func TestAFramingEventReframesTheRememberedDoorways(t *testing.T) {
+func TestAFramingEventReframesTheRememberedDoors(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
 	f := mkFraming(3, -4, 0.5)
@@ -198,7 +198,7 @@ func TestADarkFramingWriteIsRefusedAndNotRemembered(t *testing.T) {
 	if status.Code(err) != codes.Unavailable {
 		t.Fatalf("dark SetFraming = %v, want Unavailable", err)
 	}
-	_, werr := cc.SetTile(ctx, &pb.SetTileRequest{TileId: farWell})
+	_, werr := cc.SetTile(ctx, &pb.SetTileRequest{TileId: farDoor})
 	if status.Code(werr) != status.Code(err) {
 		t.Errorf("dark SetFraming answers %v, another dark write %v: one refusal", status.Code(err), status.Code(werr))
 	}
@@ -208,25 +208,25 @@ func TestADarkFramingWriteIsRefusedAndNotRemembered(t *testing.T) {
 	}
 }
 
-// A well's framing rides its tile, so the tile event keeps the remembered
+// A door's framing rides its tile, so the tile event keeps the remembered
 // listing current.
-func TestATileEventReframesTheRememberedWell(t *testing.T) {
+func TestATileEventReframesTheRememberedDoor(t *testing.T) {
 	cc, src := framingFixture(t)
 	ctx := context.Background()
-	well := proto.Clone(src.grid.GetTiles()[0]).(*pb.Tile)
-	well.ViewCx, well.ViewCy, well.ViewZoom = 5, 6, 0.25
-	cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: well}}})
+	door := proto.Clone(src.grid.GetTiles()[0]).(*pb.Tile)
+	door.ViewCx, door.ViewCy, door.ViewZoom = 5, 6, 0.25
+	cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: door}}})
 	src.setDown(true)
 	resp, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: farHome})
 	if err != nil {
 		t.Fatalf("GetGrid while dark: %v", err)
 	}
 	if got := resp.GetTiles()[0]; got.ViewCx != 5 || got.ViewCy != 6 || got.ViewZoom != 0.25 {
-		t.Errorf("the remembered well = %+v, want the event's framing", got)
+		t.Errorf("the remembered door = %+v, want the event's framing", got)
 	}
 }
 
-// A live answer that says nothing about a doorway's framing — the transport's
+// A live answer that says nothing about a door's framing — the transport's
 // row for a connection it cannot reach — keeps the remembered one, and a live
 // answer that says something replaces it: coming back is the source's word.
 func TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt(t *testing.T) {

@@ -114,7 +114,7 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
 
   // A wheel over the band zooms the current pane on its center, which is the
-  // escape hatch for well-tiled grids.
+  // escape hatch for door-tiled grids.
   const zBefore = (await gw.focused()).zoom;
   const b3 = await bar(window);
   await window.mouse.move(b3.left + b3.width / 2, b3.top + b3.height / 2);

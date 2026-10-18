@@ -66,7 +66,7 @@ func listedBy(t *testing.T, entries ...*pluginv1.Entry) (*gridwellv1.Grid, []*gr
 // plugin. acceptEntries is the only place that can close it: with the entry
 // gone, no client can be handed the combination at all.
 func TestAPageOnAnyKindButUrlIsRefused(t *testing.T) {
-	for _, kind := range []string{"text", "well", "shell", ""} {
+	for _, kind := range []string{"text", "door", "shell", ""} {
 		_, _, err := listedBy(t, &pluginv1.Entry{
 			Key: "solo", Kind: kind, Label: "solo", ServesPage: true,
 		})

@@ -49,7 +49,7 @@ func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int
 }
 
 // moveTileToTrash files t under the current month's subgrid, minting the month
-// well on first use. It is MoveTile's cross-grid shape exactly: same row and
+// door on first use. It is MoveTile's cross-grid shape exactly: same row and
 // id, tile version untouched, both grid versions bumped, and TileRemoved plus
 // TileChanged, so every client reconciles it as the move it is.
 func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.Event, t *gridwellv1.Tile) error {
@@ -97,14 +97,14 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 	return err
 }
 
-// monthGridTx finds the trash grid's well for month, whose alt_text is the
-// month, minting it on first use. minted reports a fresh well so the caller
+// monthGridTx finds the trash grid's door for month, whose alt_text is the
+// month, minting it on first use. minted reports a fresh door so the caller
 // bumps the trash grid's version exactly once.
 func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, month string) (gridID int64, minted bool, err error) {
 	var childStr sql.NullString
 	err = tx.QueryRowContext(ctx,
 		`SELECT child_grid_id FROM tiles
-		 WHERE grid_id = ? AND kind = 'well' AND alt_text = ? AND child_grid_id IS NOT NULL
+		 WHERE grid_id = ? AND kind = 'door' AND alt_text = ? AND child_grid_id IS NOT NULL
 		 ORDER BY id LIMIT 1`, trashID, month).Scan(&childStr)
 	if err == nil {
 		id, perr := strconv.ParseInt(childStr.String, 10, 64)
@@ -122,7 +122,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	if err != nil {
 		return 0, false, err
 	}
-	if _, err := insertWellRow(ctx, tx, trashID, x, y, 1, 1, child, month, now); err != nil {
+	if _, err := insertDoorRow(ctx, tx, trashID, x, y, 1, 1, child, month, now); err != nil {
 		return 0, false, err
 	}
 	return child, true, nil

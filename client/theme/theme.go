@@ -134,11 +134,11 @@ type Palette struct {
 	SplitInactive string
 	// ScrimStroke casings a preview line over a tile body of any shade.
 	ScrimStroke string
-	// Doorway tints for a non-enterable row (client/pluginhealth). Broken,
+	// Door tints for a non-enterable row (client/pluginhealth). Broken,
 	// every failure whatever the reason, takes the red alarm family; waiting
 	// takes neutral grey, because nothing has gone wrong yet.
-	DoorwayBrokenTint  string
-	DoorwayWaitingTint string
+	DoorBrokenTint  string
+	DoorWaitingTint string
 	// A dead link (client/deadref) is a state, not a failure, so it gets no
 	// alarm color: the veil fades it and the outline and label go muted.
 	DeadLinkVeil string
@@ -250,10 +250,10 @@ var dark = Palette{
 	SplitInactive: "#6c6f78",
 	ScrimStroke:   "rgba(0, 0, 0, 0.55)",
 
-	DoorwayBrokenTint:  "rgba(180, 40, 40, 0.38)",
-	DoorwayWaitingTint: "rgba(40, 40, 46, 0.55)",
-	DeadLinkVeil:       "rgba(12, 13, 17, 0.72)",
-	DeadLink:           "#5c5f68",
+	DoorBrokenTint:  "rgba(180, 40, 40, 0.38)",
+	DoorWaitingTint: "rgba(40, 40, 46, 0.55)",
+	DeadLinkVeil:    "rgba(12, 13, 17, 0.72)",
+	DeadLink:        "#5c5f68",
 
 	BarGridBand:      "#151b2e",
 	BarTextBand:      "#1b2213",
@@ -349,10 +349,10 @@ var light = Palette{
 	SplitInactive: "#9a9da5",
 	ScrimStroke:   "rgba(255, 255, 255, 0.72)",
 
-	DoorwayBrokenTint:  "rgba(200, 60, 60, 0.24)",
-	DoorwayWaitingTint: "rgba(210, 210, 216, 0.55)",
-	DeadLinkVeil:       "rgba(246, 247, 250, 0.72)",
-	DeadLink:           "#8d9099",
+	DoorBrokenTint:  "rgba(200, 60, 60, 0.24)",
+	DoorWaitingTint: "rgba(210, 210, 216, 0.55)",
+	DeadLinkVeil:    "rgba(246, 247, 250, 0.72)",
+	DeadLink:        "#8d9099",
 
 	BarGridBand:      "#e3e9f8",
 	BarTextBand:      "#eef4e0",

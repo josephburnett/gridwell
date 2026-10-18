@@ -1,6 +1,6 @@
-// Package pluginhealth owns how a doorway tile draws and behaves. Every
+// Package pluginhealth owns how a door tile draws and behaves. Every
 // failure is one status, Broken, with the reason only in the click report,
-// since the user cannot act on which failure it was. A row that is no doorway
+// since the user cannot act on which failure it was. A row that is no door
 // and no failure has no status at all: a plugin is not itself a place.
 package pluginhealth
 
@@ -10,7 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
-// Status classifies a doorway's interactivity: a well onto a node's home,
+// Status classifies a door's interactivity: a door onto a node's home,
 // a connection's far home, or a plugin's collection.
 type Status int
 
@@ -27,7 +27,7 @@ const (
 
 // Classify decides pl's status from the Info handshake alone, and no caller
 // asks a second question about the row. ok is false for a row that is no
-// doorway and no failure — every healthy plugin, since a plugin is not a place
+// door and no failure — every healthy plugin, since a plugin is not a place
 // — and nothing draws or reports such a row.
 func Classify(pl *gridwellv1.PluginInfo) (Status, bool) {
 	switch {
@@ -41,11 +41,11 @@ func Classify(pl *gridwellv1.PluginInfo) (Status, bool) {
 	return 0, false
 }
 
-// UnrootedLink is a well link with no root grid behind it. It reads the tile
-// alone, so it holds for a remote node's doorway rows too, which the local
+// UnrootedLink is a door link with no root grid behind it. It reads the tile
+// alone, so it holds for a remote node's door rows too, which the local
 // plugin list cannot classify.
 func UnrootedLink(t *gridwellv1.Tile) bool {
-	return t.Link && rpc.IsWellKind(t.Kind) && t.ChildGridId == ""
+	return t.Link && rpc.IsDoorKind(t.Kind) && t.ChildGridId == ""
 }
 
 // BrokenReason is what the server recorded. Only the click report reads it;
@@ -53,9 +53,9 @@ func UnrootedLink(t *gridwellv1.Tile) bool {
 func BrokenReason(pl *gridwellv1.PluginInfo) string { return pl.InfoError }
 
 // ClickNotice is errsurface.Surface.Report's arguments for clicking a
-// non-enterable doorway tile; false for Enterable, which descends instead.
+// non-enterable door tile; false for Enterable, which descends instead.
 // The source keys on the uuid because two connections can share a label, and
-// on "doorway:" because "plugin:" is errsurface's sticky namespace and a
+// on "door:" because "plugin:" is errsurface's sticky namespace and a
 // click notice should expire.
 func ClickNotice(pl *gridwellv1.PluginInfo) (sev errsurface.Severity, source, message string, ok bool) {
 	st, known := Classify(pl)
@@ -64,9 +64,9 @@ func ClickNotice(pl *gridwellv1.PluginInfo) (sev errsurface.Severity, source, me
 	}
 	switch st {
 	case Broken:
-		return errsurface.Error, "doorway:" + pl.Uuid, pl.Label + ": " + BrokenReason(pl), true
+		return errsurface.Error, "door:" + pl.Uuid, pl.Label + ": " + BrokenReason(pl), true
 	case Waiting:
-		return errsurface.Info, "doorway:" + pl.Uuid, "loading " + pl.Label + " — it will open once the connection answers", true
+		return errsurface.Info, "door:" + pl.Uuid, "loading " + pl.Label + " — it will open once the connection answers", true
 	}
 	return 0, "", "", false
 }

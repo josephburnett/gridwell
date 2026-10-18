@@ -119,9 +119,9 @@ type GridwellClient interface {
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
-	// SetFraming persists the framing of a grid: onto the doorway tile it was
+	// SetFraming persists the framing of a grid: onto the door tile it was
 	// entered through, or onto the grid row itself for a root that has no
-	// doorway. One verb, one shape, both rows.
+	// door. One verb, one shape, both rows.
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
@@ -442,9 +442,9 @@ type GridwellHandler interface {
 	SetTile(context.Context, *connect.Request[v1.SetTileRequest]) (*connect.Response[v1.TileResponse], error)
 	CopyTile(context.Context, *connect.Request[v1.CopyTileRequest]) (*connect.Response[v1.TileResponse], error)
 	DeleteTile(context.Context, *connect.Request[v1.DeleteTileRequest]) (*connect.Response[v1.DeleteTileResponse], error)
-	// SetFraming persists the framing of a grid: onto the doorway tile it was
+	// SetFraming persists the framing of a grid: onto the door tile it was
 	// entered through, or onto the grid row itself for a root that has no
-	// doorway. One verb, one shape, both rows.
+	// door. One verb, one shape, both rows.
 	SetFraming(context.Context, *connect.Request[v1.SetFramingRequest]) (*connect.Response[v1.SetFramingResponse], error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)

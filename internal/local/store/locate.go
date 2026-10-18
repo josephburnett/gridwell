@@ -65,7 +65,7 @@ func (s *Store) Find(ctx context.Context, req *gridwellv1.FindRequest) ([]*gridw
 			if err != nil {
 				return err
 			}
-			path, err := s.wellChainFor(ctx, t)
+			path, err := s.doorChainFor(ctx, t)
 			if err != nil {
 				return err
 			}
@@ -122,7 +122,7 @@ func (s *Store) locate(ctx context.Context, tileID string, f tileFilter) ([]*gri
 			return nil, err
 		}
 	}
-	path, err := s.wellChainFor(ctx, t)
+	path, err := s.doorChainFor(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -154,12 +154,12 @@ func (f tileFilter) sql() (string, []any) {
 	}
 	switch {
 	case f.grid != 0 && f.req.Recurse:
-		// An owned well's child grid is an integer; a link well's is a
+		// An owned door's child grid is an integer; a link door's is a
 		// qualified path elsewhere, which recursion does not follow.
 		conds = append(conds, `t.grid_id IN (WITH RECURSIVE scope(id) AS (
 			SELECT ? UNION
 			SELECT w.child_grid_id FROM tiles w JOIN scope ON w.grid_id = scope.id
-			WHERE w.kind = 'well' AND w.ns = ? AND w.tombstoned = 0 AND typeof(w.child_grid_id) = 'integer')
+			WHERE w.kind = 'door' AND w.ns = ? AND w.tombstoned = 0 AND typeof(w.child_grid_id) = 'integer')
 			SELECT id FROM scope)`)
 		args = append(args, f.grid, f.ns)
 	case f.grid != 0:
@@ -240,31 +240,31 @@ func findSnippet(text, needle string) string {
 	return snip
 }
 
-// wellChainFor returns the containing-well chain for tile t, outermost first,
+// doorChainFor returns the containing-door chain for tile t, outermost first,
 // and empty for a tile at a root. It is the same server-derived parent chain
-// wellWouldContainItself trusts.
-func (s *Store) wellChainFor(ctx context.Context, t *gridwellv1.Tile) ([]*gridwellv1.Tile, error) {
+// doorWouldContainItself trusts.
+func (s *Store) doorChainFor(ctx context.Context, t *gridwellv1.Tile) ([]*gridwellv1.Tile, error) {
 	grid, err := parseID(t.GridId)
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	var wells []*gridwellv1.Tile
+	var doors []*gridwellv1.Tile
 	for {
-		var wellID int64
+		var doorID int64
 		err := s.db.QueryRowContext(ctx,
-			`SELECT id FROM tiles WHERE child_grid_id = ?`, grid).Scan(&wellID)
+			`SELECT id FROM tiles WHERE child_grid_id = ?`, grid).Scan(&doorID)
 		if errors.Is(err, sql.ErrNoRows) {
-			reverse(wells)
-			return wells, nil
+			reverse(doors)
+			return doors, nil
 		}
 		if err != nil {
 			return nil, err
 		}
-		w, err := s.loadTile(ctx, s.db, wellID)
+		w, err := s.loadTile(ctx, s.db, doorID)
 		if err != nil {
 			return nil, err
 		}
-		wells = append(wells, w)
+		doors = append(doors, w)
 		grid, err = parseID(w.GridId)
 		if err != nil {
 			return nil, ErrNotFound

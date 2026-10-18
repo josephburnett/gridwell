@@ -62,7 +62,7 @@ func (rt *router) hop(routed string, transit bool) rpc.Hop {
 	return rpc.InboundHop(routed, rt.srv.cfg.ID, transit)
 }
 
-// tileResp applies the transit rule when the owning plugin is a node mount.
+// tileResp applies the transit rule when the owning plugin is a connection.
 func (rt *router) tileResp(uuid string, transit bool, resp *pb.TileResponse, err error) (*pb.TileResponse, error) {
 	if err != nil {
 		return nil, err
@@ -109,7 +109,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
 			} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
 				// Ephemeral visits from a plugin with no scratch grid land in
-				// home's, stamped on the grid so it chains through mounts.
+				// home's, stamped on the grid so it chains through connections.
 				hinfo, herr := rt.srv.pluginInfo(ctx, hu)
 				if herr != nil {
 					return nil, infoDeclarationError(req.GridId, hu, herr)
@@ -184,7 +184,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			continue
 		}
 		// The server.yaml display name is authoritative, since the menu and a
-		// mounted well must agree; buildPluginInfo owns the fallbacks.
+		// door to the plugin must agree; buildPluginInfo owns the fallbacks.
 		label := rt.srv.pluginReg.Label(n.UUID)
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
@@ -412,12 +412,12 @@ func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, 
 	if err != nil {
 		return nil, err
 	}
-	if rpc.IsWellKind(st.Kind) && !st.Link {
+	if rpc.IsDoorKind(st.Kind) && !st.Link {
 		// Host content is refused before anything is created: its rows are
 		// metadata stubs, not the files.
 		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetHostContent() {
 			return nil, status.Error(gcodes.Unimplemented,
-				"deep copy of a host-content well is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
+				"deep copy of a host-content door is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
 		}
 	}
 	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, copyDst{Namespace: dst, hop: rt.hop(m.DestGridId, dstTransit), holder: m.DestGridId}, dstLocal, m.X, m.Y)
@@ -817,9 +817,9 @@ func isUnimplemented(err error) bool {
 	return false
 }
 
-// Info describes this node to a mounter, on the connection API only.
+// Info describes this node to a connecting node, on the connection API only.
 func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
-	// A mount lands where a direct client lands (rpc.HomeGrid).
+	// A connection lands where a direct client lands (rpc.HomeGrid).
 	lp, err := rt.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return nil, err

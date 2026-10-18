@@ -332,7 +332,7 @@ type v1Seed struct {
 	textMedia   string
 	urlTileID   int64
 	urlString   string
-	wellTileID  int64
+	doorTileID  int64
 	childGridID int64
 }
 
@@ -388,12 +388,12 @@ func seedV1(t *testing.T, db *sql.DB, rootID string) v1Seed {
 
 	res, err = db.ExecContext(ctx,
 		`INSERT INTO tiles (object_id, grid_id, kind, x, y, w, h, child_grid_id, created_at, updated_at)
-		 VALUES ('seed-well', ?, 'well', 4, 0, 1, 1, ?, ?, ?)`,
+		 VALUES ('seed-door', ?, 'well', 4, 0, 1, 1, ?, ?, ?)`,
 		root, fx.childGridID, now, now)
 	if err != nil {
-		t.Fatalf("seed well tile: %v", err)
+		t.Fatalf("seed door tile: %v", err)
 	}
-	fx.wellTileID = mustID(t, res)
+	fx.doorTileID = mustID(t, res)
 	return fx
 }
 
@@ -438,11 +438,11 @@ func verifyV1Survived(t *testing.T, db *sql.DB, fx v1Seed) {
 
 	var child sql.NullInt64
 	if err := db.QueryRowContext(ctx,
-		`SELECT kind, child_grid_id FROM tiles WHERE id = ?`, fx.wellTileID).Scan(&kind, &child); err != nil {
-		t.Fatalf("read seeded well tile: %v", err)
+		`SELECT kind, child_grid_id FROM tiles WHERE id = ?`, fx.doorTileID).Scan(&kind, &child); err != nil {
+		t.Fatalf("read seeded door tile: %v", err)
 	}
-	if kind != "well" || !child.Valid || child.Int64 != fx.childGridID {
-		t.Errorf("seeded well tile changed: kind=%q child=%v", kind, child)
+	if respelled(kind) != rpc.KindDoor || !child.Valid || child.Int64 != fx.childGridID {
+		t.Errorf("seeded door tile changed: kind=%q child=%v", kind, child)
 	}
 
 	var n int
@@ -604,8 +604,8 @@ func init() {
 			}
 			// The constraint moved, it did not loosen.
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES (?, 'well', 12, 12, 1, 1, '', 100, 100)`, gridID); err == nil {
-				t.Errorf("rebuilt CHECK accepted a well without child_grid_id")
+				VALUES (?, 'door', 12, 12, 1, 1, '', 100, 100)`, gridID); err == nil {
+				t.Errorf("rebuilt CHECK accepted a door without child_grid_id")
 			}
 			// The tiles indexes survived the rebuild.
 			var nIdx int
@@ -659,10 +659,10 @@ func init() {
 				VALUES (?, 'url', 26, 6, 1, 1, 'https://smuggled.example', 'aabbccddeeff00112233445566778899/8', '', 100, 100)`, gridID); err == nil {
 				t.Errorf("CHECK accepted a link row carrying url_string content")
 			}
-			// A well links through child_grid_id, never link_target_id.
+			// A door links through child_grid_id, never link_target_id.
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, link_target_id, alt_text, created_at, updated_at)
-				VALUES (?, 'well', 28, 6, 1, 1, 'aabbccddeeff00112233445566778899/9', '', 100, 100)`, gridID); err == nil {
-				t.Errorf("CHECK accepted link_target_id on a well")
+				VALUES (?, 'door', 28, 6, 1, 1, 'aabbccddeeff00112233445566778899/9', '', 100, 100)`, gridID); err == nil {
+				t.Errorf("CHECK accepted link_target_id on a door")
 			}
 		},
 	})
@@ -727,10 +727,10 @@ func init() {
 			if frozen != 1 {
 				t.Errorf("url_frozen = %d, want the v7 standing freeze to survive the rebuild", frozen)
 			}
-			// A childless well is a CHECK violation again.
+			// A childless door is a CHECK violation again.
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES (?, 'well', 46, 6, 1, 1, '', 100, 100)`, gridID); err == nil {
-				t.Error("a childless well must violate the CHECK")
+				VALUES (?, 'door', 46, 6, 1, 1, '', 100, 100)`, gridID); err == nil {
+				t.Error("a childless door must violate the CHECK")
 			}
 		},
 	})
@@ -772,7 +772,7 @@ func init() {
 	// of each thing that goes and one of each that must not, and the verify
 	// proves the table and both columns are gone, every surviving row keeps
 	// its facts, deleted ids stay dead, and the tightened CHECK holds. The
-	// stale-plugin-well arm has its own test.
+	// stale-plugin-door arm has its own test.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 10,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -786,8 +786,8 @@ func init() {
 			}
 			child := mustID(t, res)
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, child_grid_id, alt_text, created_at, updated_at)
-				VALUES (`+rootID+`, 'well', 60, 6, 1, 1, ?, 'v9 well', 100, 100)`, child); err != nil {
-				t.Fatalf("seed v9 well: %v", err)
+				VALUES (`+rootID+`, 'door', 60, 6, 1, 1, ?, 'v9 door', 100, 100)`, child); err != nil {
+				t.Fatalf("seed v9 door: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, url_frozen, content_zoom, alt_text, created_at, updated_at)
 				VALUES (` + rootID + `, 'url', 64, 6, 1, 1, 'https://v9.example', 1, 2.25, 'v9 url', 100, 100)`); err != nil {
@@ -839,25 +839,25 @@ func init() {
 			if url != "https://v9.example" || frozen != 1 || zoom != 2.25 {
 				t.Errorf("v9 url damaged: url=%q frozen=%d zoom=%v", url, frozen, zoom)
 			}
-			// The ordinary well still points at its child grid, and the
+			// The ordinary door still points at its child grid, and the
 			// child grid row survived the grids DROP COLUMN.
-			var wellChild int64
-			if err := db.QueryRow(`SELECT child_grid_id FROM tiles WHERE alt_text = 'v9 well'`).Scan(&wellChild); err != nil {
-				t.Fatalf("read v9 well: %v", err)
+			var doorChild int64
+			if err := db.QueryRow(`SELECT child_grid_id FROM tiles WHERE alt_text = 'v9 door'`).Scan(&doorChild); err != nil {
+				t.Fatalf("read v9 door: %v", err)
 			}
 			var nGrid int
-			if err := db.QueryRow(`SELECT COUNT(*) FROM grids WHERE id = ?`, wellChild).Scan(&nGrid); err != nil {
+			if err := db.QueryRow(`SELECT COUNT(*) FROM grids WHERE id = ?`, doorChild).Scan(&nGrid); err != nil {
 				t.Fatalf("read child grid: %v", err)
 			}
 			if nGrid != 1 {
-				t.Error("the well's child grid did not survive the grids column drop")
+				t.Error("the door's child grid did not survive the grids column drop")
 			}
 			// A chain-built v9 file has no configure_plugin_id column, the v5
 			// rebuild having materialized the v10 shape, so the stale plugin
-			// well is TestMigrateV10OverAGenuineV9File's.
+			// door is TestMigrateV10OverAGenuineV9File's.
 			// The id-reuse trap across the v10 rebuild.
 			res, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES (?, 'shell', 68, 6, 1, 1, 'v10 post', 100, 100)`, wellChild)
+				VALUES (?, 'shell', 68, 6, 1, 1, 'v10 post', 100, 100)`, doorChild)
 			if err != nil {
 				t.Fatalf("insert after rebuild: %v", err)
 			}
@@ -869,10 +869,10 @@ func init() {
 			if newID <= maxOld+1 {
 				t.Errorf("id REUSED after the v10 rebuild: new id %d, deleted id was %d", newID, maxOld+1)
 			}
-			// The tightened CHECK: no childless well of any kind.
+			// The tightened CHECK: no childless door of any kind.
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES (?, 'well', 70, 6, 1, 1, '', 100, 100)`, wellChild); err == nil {
-				t.Error("the v10 CHECK accepted a childless well")
+				VALUES (?, 'door', 70, 6, 1, 1, '', 100, 100)`, doorChild); err == nil {
+				t.Error("the v10 CHECK accepted a childless door")
 			}
 			// v9's live-key index came back after DROP TABLE tiles.
 			var nLive int
@@ -888,7 +888,7 @@ func init() {
 }
 
 // v11: one framing shape. A chain-built v10 file already carries the v11 tiles
-// columns, so what this fixture reaches is the other three halves: a doorway's
+// columns, so what this fixture reaches is the other three halves: a door's
 // framing survives the rebuild untouched, a plugin context's root converts
 // from origin to center, and home's root moves onto its grid row. The view_x
 // conversion needs a genuine v10 file, in
@@ -905,11 +905,11 @@ func init() {
 			child := mustID(t, res)
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, view_cx, view_cy, view_zoom,
 				child_grid_id, alt_text, created_at, updated_at)
-				VALUES (`+rootID+`, 'well', 80, 8, 2, 2, 4.25, -6.5, 0.375, ?, 'v10 framed well', 100, 100)`, child); err != nil {
-				t.Fatalf("seed framed well: %v", err)
+				VALUES (`+rootID+`, 'door', 80, 8, 2, 2, 4.25, -6.5, 0.375, ?, 'v10 framed door', 100, 100)`, child); err != nil {
+				t.Fatalf("seed framed door: %v", err)
 			}
 			// A plugin context's root, stored the old way: the origin of the
-			// 1×1 synthetic doorway the client framed it through.
+			// 1×1 synthetic door the client framed it through.
 			if _, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key, root_cx, root_cy, root_zoom)
 				VALUES (100, 100, 'p1', 'root', 3, -2, 0.5)`); err != nil {
 				t.Fatalf("seed plugin context root: %v", err)
@@ -932,7 +932,7 @@ func init() {
 		},
 		verify: func(t *testing.T, db *sql.DB) {
 			t.Helper()
-			// The retired pair is gone; the surviving doorway kept its
+			// The retired pair is gone; the surviving door kept its
 			// framing to the bit.
 			for _, col := range []string{"view_x", "view_y"} {
 				if _, ok := tableColumnsFP(t, db, "tiles")[col]; ok {
@@ -940,12 +940,12 @@ func init() {
 				}
 			}
 			var cx, cy, zoom float64
-			if err := db.QueryRow(`SELECT view_cx, view_cy, view_zoom FROM tiles WHERE alt_text = 'v10 framed well'`).
+			if err := db.QueryRow(`SELECT view_cx, view_cy, view_zoom FROM tiles WHERE alt_text = 'v10 framed door'`).
 				Scan(&cx, &cy, &zoom); err != nil {
-				t.Fatalf("read the framed well: %v", err)
+				t.Fatalf("read the framed door: %v", err)
 			}
 			if cx != 4.25 || cy != -6.5 || zoom != 0.375 {
-				t.Errorf("doorway framing changed across the rebuild: (%v, %v, %v)", cx, cy, zoom)
+				t.Errorf("door framing changed across the rebuild: (%v, %v, %v)", cx, cy, zoom)
 			}
 			// The plugin context's root converted origin → center.
 			if err := db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE ns = 'p1' AND context_key = 'root'`).
@@ -1167,7 +1167,7 @@ func init() {
 		},
 	})
 
-	// v16: never visited is NULL. A framed well and a framed root keep their
+	// v16: never visited is NULL. A framed door and a framed root keep their
 	// framing to the bit; a zero zoom, the 2026-10-04 trace's NaN-as-NULL
 	// root center and an infinite zoom all read as never visited before and
 	// are three NULLs after. Every row survives.
@@ -1176,9 +1176,9 @@ func init() {
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
 			for _, w := range []struct{ alt, view string }{
-				{"v15 framed well", "4.25, -6.5, 0.375"},
-				{"v15 unvisited well", "4.5, 3.5, 0"},
-				{"v15 infinite well", "1, 1, 9e999"},
+				{"v15 framed door", "4.25, -6.5, 0.375"},
+				{"v15 unvisited door", "4.5, 3.5, 0"},
+				{"v15 infinite door", "1, 1, 9e999"},
 			} {
 				res, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
 				if err != nil {
@@ -1186,7 +1186,7 @@ func init() {
 				}
 				if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, view_cx, view_cy, view_zoom,
 					child_grid_id, alt_text, created_at, updated_at)
-					VALUES (`+rootID+`, 'well', 95, 9, 1, 1, `+w.view+`, ?, ?, 100, 100)`, mustID(t, res), w.alt); err != nil {
+					VALUES (`+rootID+`, 'door', 95, 9, 1, 1, `+w.view+`, ?, ?, 100, 100)`, mustID(t, res), w.alt); err != nil {
 					t.Fatalf("seed %s: %v", w.alt, err)
 				}
 			}
@@ -1209,9 +1209,9 @@ func init() {
 					sql.NullFloat64{Float64: zoom, Valid: true}}
 			}
 			for alt, want := range map[string]view{
-				"v15 framed well":    framed(4.25, -6.5, 0.375),
-				"v15 unvisited well": {},
-				"v15 infinite well":  {},
+				"v15 framed door":    framed(4.25, -6.5, 0.375),
+				"v15 unvisited door": {},
+				"v15 infinite door":  {},
 			} {
 				var got view
 				if err := db.QueryRow(`SELECT view_cx, view_cy, view_zoom FROM tiles WHERE alt_text = ?`, alt).
@@ -1236,19 +1236,19 @@ func init() {
 					t.Errorf("root %s: framing = %+v, want %+v", key, got, want)
 				}
 			}
-			// A well minted after v16 is never visited with nothing written.
+			// A door minted after v16 is never visited with nothing written.
 			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, child_grid_id, alt_text, created_at, updated_at)
-				SELECT grid_id, 'well', 96, 9, 1, 1, ?, 'v16 fresh well', 100, 100 FROM tiles WHERE alt_text = 'v15 framed well'`,
+				SELECT grid_id, 'door', 96, 9, 1, 1, ?, 'v16 fresh door', 100, 100 FROM tiles WHERE alt_text = 'v15 framed door'`,
 				mustID(t, res)); err != nil {
-				t.Fatalf("mint a well after v16: %v", err)
+				t.Fatalf("mint a door after v16: %v", err)
 			}
 			var zoom sql.NullFloat64
-			if err := db.QueryRow(`SELECT view_zoom FROM tiles WHERE alt_text = 'v16 fresh well'`).Scan(&zoom); err != nil || zoom.Valid {
-				t.Errorf("a fresh well's view_zoom = %+v (err %v), want NULL", zoom, err)
+			if err := db.QueryRow(`SELECT view_zoom FROM tiles WHERE alt_text = 'v16 fresh door'`).Scan(&zoom); err != nil || zoom.Valid {
+				t.Errorf("a fresh door's view_zoom = %+v (err %v), want NULL", zoom, err)
 			}
 		},
 	})
@@ -1348,7 +1348,58 @@ func init() {
 			}
 		},
 	})
+
+	// v20: a v19 row of kind 'well' reads back as a door, same id, same child
+	// grid, same framing. A chain-built v19 file already has the current
+	// CHECK, so the seed suspends it to plant the row a v19 binary wrote.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 20,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			child := mustID(t, res)
+			if _, err := db.Exec(`PRAGMA ignore_check_constraints = true`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles
+				(grid_id, kind, x, y, w, h, view_cx, view_cy, view_zoom, child_grid_id, alt_text, created_at, updated_at)
+				VALUES (`+rootID+`, 'well', 98, 9, 2, 2, 1.5, -2.5, 0.25, ?, 'v19 row', 100, 100)`, child); err != nil {
+				t.Fatalf("seed v19 row: %v", err)
+			}
+			if _, err := db.Exec(`PRAGMA ignore_check_constraints = false`); err != nil {
+				t.Fatal(err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var kind string
+			var child sql.NullInt64
+			var cx, cy, zoom sql.NullFloat64
+			if err := db.QueryRow(`SELECT kind, child_grid_id, view_cx, view_cy, view_zoom
+				FROM tiles WHERE alt_text = 'v19 row'`).Scan(&kind, &child, &cx, &cy, &zoom); err != nil {
+				t.Fatal(err)
+			}
+			if kind != rpc.KindDoor || !child.Valid || cx.Float64 != 1.5 || cy.Float64 != -2.5 || zoom.Float64 != 0.25 {
+				t.Errorf("v19 row = (%q, %v, %v, %v, %v), want a door keeping its child and framing",
+					kind, child, cx, cy, zoom)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.
 const objectIDColumn = "object_id"
+
+// respelled is kind as the current binary spells it, so a row seeded at v1
+// reads as the same kind before and after the rebuild that respells it.
+func respelled(kind string) string {
+	for _, r := range respelledKinds {
+		if kind == r[0] {
+			return r[1]
+		}
+	}
+	return kind
+}

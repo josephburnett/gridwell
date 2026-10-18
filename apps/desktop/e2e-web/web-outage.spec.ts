@@ -120,9 +120,9 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   const cy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
-  const child = well.childGridId as string;
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)!;
+  const child = door.childGridId as string;
 
   // An empty child grid signs the same as an uncached one, so without a tile
   // inside "the grid came back" is unobservable.
@@ -133,7 +133,7 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   await gw.openMenu();
   await gw.dragCreate('markdown', icx, icy);
   const note = tileAt(await gw.getGrid(child), 'text', icx, icy)!;
-  expect(note, 'the well holds a tile to come back to').toBeTruthy();
+  expect(note, 'the door holds a tile to come back to').toBeTruthy();
 
   // The next GetGrid for this one grid is never fulfilled and never aborted.
   // Everything else keeps working, so the only thing between the pane and its
@@ -147,7 +147,7 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
     await route.continue();
   });
 
-  // A fresh boot, so the child grid is out of the cache and the well's preview
+  // A fresh boot, so the child grid is out of the cache and the door's preview
   // asks again, into the hole.
   await window.goto(outage.origin + '/?e2e=1');
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
@@ -200,11 +200,11 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // A fresh well's zoom stays 0 until the first framing write, the oracle
+  // A fresh door's zoom stays 0 until the first framing write, the oracle
   // framing-roundtrip.spec.ts settles with.
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)!;
   await gw.descendCell(cx, cy);
   const inside = await gw.focused();
 
@@ -226,7 +226,7 @@ test('framing settled during an outage lands after the restart', async ({ gw, ou
     .poll(
       async () => {
         const g = await gw.getGrid(f.gridID);
-        const t = (g.tiles ?? []).find((t) => t.id === well.id);
+        const t = (g.tiles ?? []).find((t) => t.id === door.id);
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { timeout: 30_000 },
@@ -288,10 +288,10 @@ test('a write the network swallows parks in the outbox and drains itself', async
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // A fresh well's zoom stays 0 until the first framing write.
+  // A fresh door's zoom stays 0 until the first framing write.
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)!;
   await gw.descendCell(cx, cy);
   const inside = await gw.focused();
   // The descent arms the settle persister. Let that tick land before the hole
@@ -300,11 +300,11 @@ test('a write the network swallows parks in the outbox and drains itself', async
   // would then wait on the very write this test observes later.
   await expect.poll(async () => (await gw.oneShots()).live, { timeout: 15_000 }).toBe(0);
 
-  // Every SetFraming for this well hangs until the test opens the route, so the
+  // Every SetFraming for this door hangs until the test opens the route, so the
   // only thing between the viewport and the server is the client's bookkeeping.
   let blackhole = true;
   await window.route('**/gridwell.v1.Gridwell/SetFraming', async (route) => {
-    if (blackhole && (route.request().postData() ?? '').includes(well.id)) return;
+    if (blackhole && (route.request().postData() ?? '').includes(door.id)) return;
     await route.continue();
   });
 
@@ -323,7 +323,7 @@ test('a write the network swallows parks in the outbox and drains itself', async
       message: 'the swallowed write is parked while it waits',
       timeout: 20_000,
     })
-    .toContain('SetFraming:' + well.id);
+    .toContain('SetFraming:' + door.id);
 
   // With no restart and no reconnect, the drain is the only thing left.
   blackhole = false;
@@ -332,7 +332,7 @@ test('a write the network swallows parks in the outbox and drains itself', async
     .poll(
       async () => {
         const g = await gw.getGrid(f.gridID);
-        const t = (g.tiles ?? []).find((t) => t.id === well.id);
+        const t = (g.tiles ?? []).find((t) => t.id === door.id);
         return Number((t as { viewZoom?: number | string } | undefined)?.viewZoom ?? 0);
       },
       { message: 'the parked write reaches the server on its own', timeout: 90_000 },

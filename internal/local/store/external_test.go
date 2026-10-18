@@ -221,11 +221,11 @@ func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.ContextID("root")
-	listing := []*pluginv1.Entry{{Key: "dir", Kind: "well", Label: "dir", ChildContext: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}}
+	listing := []*pluginv1.Entry{{Key: "dir", Kind: "door", Label: "dir", ChildContext: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}}
 	tiles := mintAll(t, d, gid, listing, true)
 	dir, f := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
 	if dir.ChildGridID == 0 {
-		t.Fatal("well minted no child grid")
+		t.Fatal("door minted no child grid")
 	}
 	if _, err := d.SetFraming(dir.ID, 0, mkFraming(3, -1, 1.5)); err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	tiles = mintAll(t, d, gid, listing, true)
 	dir2, f2 := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
 	if dir2.ViewCx != 3 || dir2.ViewCy != -1 || dir2.ViewZoom != 1.5 {
-		t.Fatalf("well framing lost: %+v", dir2)
+		t.Fatalf("door framing lost: %+v", dir2)
 	}
 	if f2.TextY != 120 || f2.TextW != 400 || f2.TextMode != "rendered" || f2.ContentZoom != 1.25 || f2.AltText != "f renamed" {
 		t.Fatalf("text framing/facts lost: %+v", f2)
@@ -405,7 +405,7 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The user drags "b" well clear of the flow.
+	// The user drags "b" door clear of the flow.
 	b := extByKey(t, before, "b")
 	if _, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
 		t.Fatal(err)

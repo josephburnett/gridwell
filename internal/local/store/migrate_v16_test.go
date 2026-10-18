@@ -10,7 +10,7 @@ import (
 // A genuine v15 file has view_cx/cy/zoom NOT NULL DEFAULT 0, which a
 // chain-built one never has (every rebuild materializes the current shape).
 // v16 must drop the constraint and turn its zero-zoom rows into NULLs, so a
-// well minted afterwards is never visited with nothing written.
+// door minted afterwards is never visited with nothing written.
 func TestMigrateV16OverAGenuineV15File(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "genuinev15.db")
@@ -36,7 +36,7 @@ func TestMigrateV16OverAGenuineV15File(t *testing.T) {
 		}
 		if _, err := db.ExecContext(ctx, `INSERT INTO tiles
 			(grid_id, kind, x, y, w, h, view_cx, view_cy, view_zoom, child_grid_id, alt_text, created_at, updated_at)
-			VALUES (`+root+`, 'well', 0, 0, 2, 2, 4.5, 3.5, ?, ?, ?, 100, 100)`,
+			VALUES (`+root+`, 'door', 0, 0, 2, 2, 4.5, 3.5, ?, ?, ?, 100, 100)`,
 			w.zoom, mustID(t, res), w.alt); err != nil {
 			t.Fatalf("plant %s: %v", w.alt, err)
 		}
@@ -68,12 +68,12 @@ func TestMigrateV16OverAGenuineV15File(t *testing.T) {
 		t.Fatalf("a genuine v15 file must open after v16: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	w, err := s.CreateWell(ctx, root, 9, 9, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 9, 9, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var zoom sql.NullFloat64
 	if err := s.db.QueryRowContext(ctx, `SELECT view_zoom FROM tiles WHERE id = ?`, w.Id).Scan(&zoom); err != nil || zoom.Valid {
-		t.Errorf("a well minted after v16 stores view_zoom %+v (err %v), want NULL", zoom, err)
+		t.Errorf("a door minted after v16 stores view_zoom %+v (err %v), want NULL", zoom, err)
 	}
 }

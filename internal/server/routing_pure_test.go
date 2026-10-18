@@ -28,7 +28,7 @@ func TestQualifyTilesQualifiesIDs(t *testing.T) {
 	}
 }
 
-// TestQualifyTilesLeavesAlreadyQualifiedChild: an exit well's child_grid_id is
+// TestQualifyTilesLeavesAlreadyQualifiedChild: the child_grid_id of a door to another namespace is
 // already a cross-plugin link (<uuid>/<local>) and must NOT be re-prefixed
 // — re-qualifying would produce uuidA/uuidB/9 and break routing. This is the
 // branch the integration tests never hit.
@@ -41,28 +41,28 @@ func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
 }
 
 // TestQualifyTilesLink: the authoritative link signal. A child that
-// arrived ALREADY qualified is a link (a mount / exit well / cross-plugin
+// arrived ALREADY qualified is a link (a door to another namespace / cross-plugin
 // copy) — Link must be set; render draws it dashed. A bare interior child
 // is owned content — Link stays false (solid). This is the exact bug the
-// fix closes: a same-plugin mount (child uuid == grid uuid) is still a
+// fix closes: a same-plugin link door (child uuid == grid uuid) is still a
 // link, which a bare uuid comparison would call owned and render solid.
 func TestQualifyTilesLink(t *testing.T) {
-	// Cross-plugin link: child uuid differs from the well's own.
+	// Cross-plugin link: child uuid differs from the door's own.
 	cross := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidB/9"}})
 	if !cross[0].Link {
-		t.Error("cross-plugin exit well should be a link")
+		t.Error("cross-plugin door to another namespace should be a link")
 	}
-	// A same-namespace mount: the child arrived qualified with the same uuid
-	// as the well's grid. It is still a link, which a bare uuid
+	// A same-namespace link door: the child arrived qualified with the same uuid
+	// as the door's grid. It is still a link, which a bare uuid
 	// comparison would miss.
 	same := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidA/9"}})
 	if !same[0].Link {
-		t.Error("same-plugin mount (qualified child) should be a link, not owned")
+		t.Error("same-plugin link door (qualified child) should be a link, not owned")
 	}
-	// Interior well: bare numeric child, owned — not a link.
+	// Interior door: bare numeric child, owned — not a link.
 	interior := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "7"}})
 	if interior[0].Link {
-		t.Error("interior well (bare child) must not be a link")
+		t.Error("interior door (bare child) must not be a link")
 	}
 	// A childless tile is never a link.
 	leaf := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1"}})
@@ -92,16 +92,16 @@ func TestQualifyTilesQualifiesAShellTmux(t *testing.T) {
 	}
 }
 
-// TestQualifyTilesTransit: a TRANSIT plugin (the ssh node mount) speaks ids
+// TestQualifyTilesTransit: a TRANSIT plugin (a connection) speaks ids
 // that are already qualified from the REMOTE node's perspective — chains.
 // Local qualification must prepend the transit plugin's uuid to every id
 // (id, grid, child — even an already-qualified child, which for a leaf plugin
 // would be a sibling link but through a hop is a link within the
 // remote's namespace, reachable only through this connection), and must trust
-// the wire Link bit verbatim: a remote plugin's interior well is OWNED
+// the wire Link bit verbatim: a remote plugin's interior door is OWNED
 // content and renders solid, even though its child id contains "/".
 func TestQualifyTilesTransit(t *testing.T) {
-	// A remote home's interior well, as the remote connection API emits it.
+	// A remote home's interior door, as the remote connection API emits it.
 	interior := qualifyTilesTransit("ssh1", []*pb.Tile{{
 		Id: "rp/7", GridId: "rp/1", ChildGridId: "rp/5", Link: false,
 	}})[0]
@@ -109,10 +109,10 @@ func TestQualifyTilesTransit(t *testing.T) {
 		t.Errorf("transit interior = %+v, want every id prefixed with ssh1/", interior)
 	}
 	if interior.Link {
-		t.Error("a remote plugin's interior well is owned content, not a link — Link must stay false through the hop")
+		t.Error("a remote plugin's interior door is owned content, not a link — Link must stay false through the hop")
 	}
 
-	// A remote link (exit well / mount) keeps Link true and its target
+	// A remote link (door to another namespace) keeps Link true and its target
 	// is prefixed too — the target lives on the remote node.
 	link := qualifyTilesTransit("ssh1", []*pb.Tile{{
 		Id: "rp/9", GridId: "rp/1", ChildGridId: "otherrp/3", Link: true,
@@ -132,7 +132,7 @@ func TestQualifyTilesTransit(t *testing.T) {
 }
 
 // TestQualifyTilesLeafLink: a leaf link (text/url/shell/pane carrying a
-// link_target_id) is the leaf twin of the exit well at the qualify seam — the
+// link_target_id) is the leaf twin of the door to another namespace at the qualify seam — the
 // ONE derived Link bit covers both shapes. The stored target is always
 // qualified (the store enforces it), so a leaf plugin's qualification never
 // prefixes it; a transit hop prepends exactly one segment, the same chain rule
@@ -215,9 +215,9 @@ func TestQualifyEvent(t *testing.T) {
 	}
 
 	// PluginHealth carries a plugin uuid, which is an id like any other: each
-	// hop prepends one segment. A mounted node's fan-in re-serves its own
+	// hop prepends one segment. A far node's fan-in re-serves its own
 	// plugins' health transitions; without the prepend they arrive addressed
-	// by a bare remote uuid that names nothing on this side of the mount, so
+	// by a bare remote uuid that names nothing on this side of the connection, so
 	// the "live updates stopped" notice attaches to nothing (or, worse, could
 	// collide with a local source key). Regression: qualifyEvent's switch
 	// omitted this variant and passed it through verbatim.

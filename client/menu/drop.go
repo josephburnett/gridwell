@@ -13,7 +13,7 @@ const (
 	// by the menu's node, so it refuses visibly rather than snapping back with
 	// no reason given.
 	DropRefuse
-	// DropLink places an exit well onto the doorway's root grid.
+	// DropLink places a door to another namespace onto the door's root grid.
 	DropLink
 	// DropPromote turns the bar's ephemeral visit into a persistent tile and
 	// relocates the pane onto it.
@@ -30,10 +30,10 @@ type Release struct {
 	Target bool
 	// Occupied is whether the snapped cells already hold a tile.
 	Occupied bool
-	// Doorway marks a plugin, connection or declared-root swatch.
-	Doorway bool
+	// Door marks a plugin, connection or declared-root swatch.
+	Door bool
 	// Enterable is pluginhealth.Classify == Enterable. DropOn reads it on the
-	// doorway arm alone, so the caller may leave it false elsewhere.
+	// door arm alone, so the caller may leave it false elsewhere.
 	Enterable bool
 	// AcceptsTiles is the destination's Grid.accepts_tiles. Unknown is false:
 	// minting into a grid that may refuse the link would show a tile
@@ -52,7 +52,7 @@ func DropOn(r Release) Drop {
 	switch {
 	case !r.Target, r.Occupied:
 		return DropSnapBack
-	case r.Doorway:
+	case r.Door:
 		if r.Enterable && r.AcceptsTiles {
 			return DropLink
 		}

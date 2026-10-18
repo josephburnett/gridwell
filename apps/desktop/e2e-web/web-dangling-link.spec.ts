@@ -7,7 +7,7 @@ import { makeRunDir, removeHome } from '../e2e/homes';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
-// A dangling doorway, a link into a plugin no longer in server.yaml, is DEAD:
+// A dangling door, a link into a plugin no longer in server.yaml, is DEAD:
 // the node does not declare that namespace, so the tile greys, nothing is
 // asked for it, and nothing is said about it (client/deadref).
 //
@@ -37,9 +37,9 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     await gw.dragPluginLink('files', Math.round(f.cx), Math.round(f.cy));
     await gw.waitIdle();
     const seeded: any = await gw.getGrid(f.gridID);
-    const link = (seeded.tiles ?? []).find((t: any) => t.kind === 'well');
-    expect(link, 'boot 1 dropped the plugin link well').toBeTruthy();
-    expect(link.link, 'and it is a link, not a well of its own').toBe(true);
+    const link = (seeded.tiles ?? []).find((t: any) => t.kind === 'door');
+    expect(link, 'boot 1 dropped the plugin link door').toBeTruthy();
+    expect(link.link, 'and it is a link, not a door of its own').toBe(true);
     linkID = link.id;
     childGridID = String(link.childGridId ?? '');
     expect(childGridID, 'the link names the plugin root it points at').toBeTruthy();
@@ -55,7 +55,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
   expect(idLine, 'boot 1 minted the node id').toBeTruthy();
   fs.writeFileSync(path.join(home, 'server.yaml'), idLine + '\n');
 
-  // Boot 2: the well is a dangling doorway. Count everything it could say: the
+  // Boot 2: the door is a dangling door. Count everything it could say: the
   // strip's verdict on the console, and every grid the client asks for.
   const unavailable: string[] = [];
   page.on('console', (m) => {
@@ -84,11 +84,11 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
             (gid: string) => (window as any).__gridwellTest.deadLinks(gid),
             f.gridID,
           )) as string[],
-        { message: 'the dangling doorway reads dead', timeout: 15_000 },
+        { message: 'the dangling door reads dead', timeout: 15_000 },
       )
       .toEqual([linkID]);
 
-    // Let the render loop run with the dangling well on screen. Nothing is
+    // Let the render loop run with the dangling door on screen. Nothing is
     // asked and nothing is said, not once per frame and not once at all.
     await page.waitForTimeout(3_000);
     expect(unavailable, 'a dead link raises no verdict').toEqual([]);
@@ -103,7 +103,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     await page.unroute('**/gridwell.v1.Gridwell/GetGrid');
     await gw.deleteTileCell(Number(row.x ?? 0), Number(row.y ?? 0));
     await expect
-      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', Number(row.x ?? 0), Number(row.y ?? 0)))
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'door', Number(row.x ?? 0), Number(row.y ?? 0)))
       .toBeUndefined();
     expect(unavailable, 'and the delete is quiet too').toEqual([]);
   } finally {

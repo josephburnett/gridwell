@@ -124,7 +124,7 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
   const cy = Math.round((await gw.focused()).cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   expect((await gw.focused()).gridID, 'descended').not.toBe(root);
 
@@ -139,17 +139,17 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
   expect((await gw.focused()).gridID, 'crumb click ascended to root').toBe(root);
 });
 
-test('middle-click ascends out of a descended well', async ({ gw }) => {
+test('middle-click ascends out of a descended door', async ({ gw }) => {
   await gw.enterPlugin('home');
   const root = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   const inside = await gw.focused();
-  expect(inside.gridID, 'descended into the well child grid').not.toBe(root);
+  expect(inside.gridID, 'descended into the door child grid').not.toBe(root);
 
   // A middle-click is the in-pane ascend, whatever the pane is showing.
   await gw.middleClickCell(cx, cy);
@@ -201,7 +201,7 @@ test('one ctrl+click on a tile in an unfocused pane descends in a split below', 
   expect(after.find((p) => p.id === a.id)!.textFocus, 'pane A kept its grid').toBe('');
 });
 
-// A balanced excursion, a namespace crossing plus a well descent, must return
+// A balanced excursion, a namespace crossing plus a door descent, must return
 // the pane's place to depth zero. There is one place stack, so one number
 // answers it. Two stacks with disjoint owners would let a descent push the wrong
 // one and leak an orphan a later ascent could mis-consume as a viewport. The
@@ -210,23 +210,23 @@ test('one ctrl+click on a tile in an unfocused pane descends in a split below', 
 test.describe('stack hygiene', () => {
   test.use({ extraNodes: ['second'] });
 
-  test('a namespace crossing and a well round trip leave the place stack empty', async ({ gw }) => {
+  test('a namespace crossing and a door round trip leave the place stack empty', async ({ gw }) => {
     const home = (await gw.focused()).anchor;
     await gw.enterPlugin('second'); // the + menu crossing pushes one frame
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy) - 1;
     await gw.openMenu();
-    await gw.dragCreate('well', cx, cy);
+    await gw.dragCreate('door', cx, cy);
 
-    await gw.descendCell(cx, cy); // the well descent pushes a second frame
+    await gw.descendCell(cx, cy); // the door descent pushes a second frame
     let cur = (await gw.panes()).find((p) => p.id === f.id)!;
-    expect(cur.placeDepth, 'two doorways deep: a well, then the plugin link').toBe(2);
+    expect(cur.placeDepth, 'two doors deep: a door, then the plugin link').toBe(2);
 
     // Pane-center clicks: the ascend is position-independent, and a computed
     // cell center can land off-pane at the child grid's high zoom, which is the
     // silent no-op behind this spec's flake history.
-    await gw.middleClickPane(); // pop the well frame
+    await gw.middleClickPane(); // pop the door frame
     await gw.middleClickPane(); // pop the crossing, back home
 
     cur = (await gw.panes()).find((p) => p.id === f.id)!;

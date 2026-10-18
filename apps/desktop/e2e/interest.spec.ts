@@ -41,13 +41,13 @@ test('the node hears which grids the panes and their previews show, and hears th
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx, wy);
-  const well = tileAt(await gw.getGrid(rootGrid), 'well', wx, wy);
-  expect(well, 'the well persisted').toBeTruthy();
+  await gw.dragCreate('door', wx, wy);
+  const door = tileAt(await gw.getGrid(rootGrid), 'door', wx, wy);
+  expect(door, 'the door persisted').toBeTruthy();
 
-  const child = well!.childGridId!;
+  const child = door!.childGridId!;
   await expect
-    .poll(union, { message: "the well's preview shows its grid too", timeout: 10_000 })
+    .poll(union, { message: "the door's preview shows its grid too", timeout: 10_000 })
     .toEqual([child, rootGrid].sort());
 
   await gw.descendCell(wx, wy);

@@ -165,7 +165,7 @@ func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
 func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	n := menuItemGhostNode(item)
 	if item.isPlugin {
-		// A plugin swatch is the linked well it drops into a grid, dashed
+		// A plugin swatch is the linked door it drops into a grid, dashed
 		// because a cross-plugin link can be unlinked. Drawn identically
 		// here, as the drag ghost, and once dropped.
 		fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
@@ -197,8 +197,8 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 		drawFolderGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphProcess:
 		drawProcessGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
-	case rpc.GlyphWell:
-		drawWellGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
+	case rpc.GlyphDoor:
+		drawDoorGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphTrash:
 		drawTrashGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	default:
@@ -217,11 +217,11 @@ func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	if pluginhealth.UnrootedLink(n) {
 		// A row this node cannot classify gets the neutral dimming too,
 		// because not knowing yet is exactly the waiting look.
-		color := a.pal.DoorwayWaitingTint
+		color := a.pal.DoorWaitingTint
 		// The local plugin list knows more: a failure gets the alarm tint.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {
 			if st, classified := pluginhealth.Classify(pl); classified && st == pluginhealth.Broken {
-				color = a.pal.DoorwayBrokenTint
+				color = a.pal.DoorBrokenTint
 			}
 		}
 		fillRectC(a.cctx, x, y, w, h, color)

@@ -19,9 +19,9 @@ var (
 	// serveContentEntryCap bounds one cached served body. Larger bodies stream
 	// through live and stay online-only.
 	serveContentEntryCap = 32 << 20
-	// serveContentMountCap bounds the servecontent table per source; the
+	// serveContentSourceCap bounds the servecontent table per source; the
 	// oldest entries evict first when a store would exceed it.
-	serveContentMountCap = int64(512 << 20)
+	serveContentSourceCap = int64(512 << 20)
 )
 
 // ServeContent tees the served body the way ReadContent tees a tile's. Only
@@ -87,7 +87,7 @@ func (c *Layer) evictServeContent(ctx context.Context) {
 			c.noteCache("evict servecontent", err)
 			return
 		}
-		if total <= serveContentMountCap {
+		if total <= serveContentSourceCap {
 			return
 		}
 		if _, err := c.db.ExecContext(ctx, `DELETE FROM servecontent WHERE rowid =

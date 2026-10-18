@@ -31,7 +31,7 @@ func gridFetches(p Plan) int {
 }
 
 func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
-	well := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
+	door := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "g2"}
 	text := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
 
@@ -40,13 +40,13 @@ func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
 		grid string // the grid the plan would ask for
 		plan func(t *testing.T, current map[string]bool) Plan
 	}{{
-		name: "descending into a well",
+		name: "descending into a door",
 		grid: "g2",
 		plan: func(t *testing.T, current map[string]bool) Plan {
 			w := baseWorld(gridPane("pane1", "g1"))
 			w.Door = &DoorWorld{}
 			w.Current = current
-			return New().Do(descendGesture("pane1", well), w)
+			return New().Do(descendGesture("pane1", door), w)
 		},
 	}, {
 		name: "descending into a read-only text tile",
@@ -61,7 +61,7 @@ func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
 		name: "an instant ascent out of a child grid",
 		grid: "g1",
 		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(wellPane("pane1"))
+			w := baseWorld(doorPane("pane1"))
 			w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
 				DoorTile: doorRow(), LandingGridID: "g1"}
 			w.Current = current
@@ -71,7 +71,7 @@ func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
 		name: "an animated ascent's landing",
 		grid: "g1",
 		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(wellPane("pane1"))
+			w := baseWorld(doorPane("pane1"))
 			w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
 				DoorTile: doorRow(), LandingGridID: "g1"}
 			w.Current = current
@@ -122,7 +122,7 @@ func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
 			tok := healAwait(t, m, urlRowIn("elsewhere"))
 			w := baseWorld(engagedPane("pane1"))
 			w.Current = current
-			return m.Resume(tok, Result{OK: true, Wells: []*gridwellv1.Tile{
+			return m.Resume(tok, Result{OK: true, Doors: []*gridwellv1.Tile{
 				{Id: "w9", GridId: "root9"}}}, w)
 		},
 	}, {
@@ -130,8 +130,8 @@ func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
 		grid: "p1/3",
 		plan: func(t *testing.T, current map[string]bool) Plan {
 			w := restoreWorld(map[string]map[string]RestoreTile{
-				"p1/1": {"p1/10": wellIn("p1/2")},
-				"p1/2": {"p1/20": wellIn("p1/3")},
+				"p1/1": {"p1/10": doorIn("p1/2")},
+				"p1/2": {"p1/20": doorIn("p1/3")},
 				"p1/3": {},
 			})
 			w.Current = current
@@ -239,13 +239,13 @@ func TestReEngageReadsTheCachedRowWhenItIsCurrent(t *testing.T) {
 func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
 	c := cache.New()
 	c.PutGrid(&gridwellv1.Grid{Id: "pl1/2"}, nil)
-	well := &gridwellv1.Tile{Id: "pl1/w", Kind: rpc.KindWell, GridId: "g1",
+	door := &gridwellv1.Tile{Id: "pl1/w", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "pl1/2"}
 	descend := func() Plan {
 		w := baseWorld(gridPane("pane1", "g1"))
 		w.Door = &DoorWorld{}
 		w.Current = c.Current()
-		return New().Do(descendGesture("pane1", well), w)
+		return New().Do(descendGesture("pane1", door), w)
 	}
 
 	if n := gridFetches(descend()); n != 0 {

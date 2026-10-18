@@ -51,7 +51,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		originScreenY: ty,
 		// The ghost starts at the fixed swatch size and the drop-target
 		// machinery lerps it to the destination grid's cell size, the same
-		// as dragging a tile across wells.
+		// as dragging a tile across doors.
 		srcCellSize: tw,
 	}
 }
@@ -64,7 +64,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // cell would otherwise leave those coordinates on the next gesture's swatch.
 func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
 	if item.isPlugin {
-		t := rpc.PluginWellTile(item.plugin)
+		t := rpc.PluginDoorTile(item.plugin)
 		t.Id = item.plugin.Uuid
 		return t
 	}
@@ -91,11 +91,11 @@ func (a *App) clickTemplate(d *dragState) {
 	case menu.ClickEnter:
 		// The same descent a link tile takes, through a synthetic link tile
 		// at the pane's view center, so ascent lands back exactly here.
-		well := menuItemGhostNode(d.item)
+		door := menuItemGhostNode(d.item)
 		if v, ok := fp.Live(); ok {
-			well.X, well.Y = int64(math.Floor(v.Cx()-0.5)), int64(math.Floor(v.Cy()-0.5))
+			door.X, door.Y = int64(math.Floor(v.Cx()-0.5)), int64(math.Floor(v.Cy()-0.5))
 		}
-		a.descend(fp, well)
+		a.descend(fp, door)
 	case menu.ClickVisit:
 		pr.click(a, fp)
 	case menu.ClickNothing:
@@ -141,16 +141,16 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 // that routed this call, so the create lands exactly where DecideDrop said it
 // may, and dropTargetAt owns what is legal.
 func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
-	r := menu.Release{Target: t != nil, Doorway: d.item.isPlugin,
+	r := menu.Release{Target: t != nil, Door: d.item.isPlugin,
 		Promote: d.item.primitive == tplURL && d.item.promotePane != ""}
 	if r.Target {
-		// The target's grid is the open well's child when the cursor promoted
+		// The target's grid is the open door's child when the cursor promoted
 		// into one, not the pane's own leaf grid.
 		r.Occupied = a.occupiedForDrop(t.gridID, dragdrop.Carry{{
 			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
-		if r.Doorway {
+		if r.Door {
 			st, classified := pluginhealth.Classify(d.item.plugin)
 			r.Enterable = classified && st == pluginhealth.Enterable
 		}
@@ -165,7 +165,7 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		a.cancelDragSnapBack(d)
 		return
 	case menu.DropLink:
-		// A doorway becomes an exit-well link to its root grid, and a
+		// A door becomes a door to another namespace link to its root grid, and a
 		// connection row drops the same way with its chained root already
 		// qualified.
 		a.landGhostAtCell(t, dropX, dropY)
@@ -186,12 +186,12 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 	a.menu.Close()
 }
 
-// createPluginLinkAtCell creates an exit-well link to the plugin's qualified
+// createPluginLinkAtCell creates a door to another namespace link to the plugin's qualified
 // root grid, seeding its framing from the plugin's persisted root view so the
 // preview shows what descent will show.
 func (a *App) createPluginLinkAtCell(gid string, pl *gridwellv1.PluginInfo, cellX, cellY int64) {
-	a.createTile("CreateWell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: cellX, Y: cellY, W: 1, H: 1,
+	a.createTile("CreateDoor", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: cellX, Y: cellY, W: 1, H: 1,
 			ChildGridId: pl.RootGridId, AltText: pl.Label,
 			ViewCx: pl.RootViewCx, ViewCy: pl.RootViewCy, ViewZoom: pl.RootViewZoom}}, nil)
 }

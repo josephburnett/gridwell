@@ -25,9 +25,9 @@ func TestBannerText(t *testing.T) {
 		{"a long name keeps the emoji where no clip reaches",
 			&gridwellv1.Tile{Kind: rpc.KindText, AltText: long, StatusDetail: "✅"}, "✅ " + long},
 		{"an unnamed tile has no banner to hang a status on",
-			&gridwellv1.Tile{Kind: rpc.KindWell, StatusDetail: "✅"}, ""},
-		{"a plain well has neither",
-			&gridwellv1.Tile{Kind: rpc.KindWell}, ""},
+			&gridwellv1.Tile{Kind: rpc.KindDoor, StatusDetail: "✅"}, ""},
+		{"a plain door has neither",
+			&gridwellv1.Tile{Kind: rpc.KindDoor}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := BannerText(tc.tile); got != tc.want {

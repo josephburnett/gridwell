@@ -1,6 +1,6 @@
 package server_test
 
-// The connection API's server shape, at the seam a mounter lives on: one gRPC
+// The connection API's server shape, at the seam a connecting node lives on: one gRPC
 // Subscribe held open through the API for longer than any deadline the API
 // declares, then proven live by an event. Any deadline on this API is a
 // ticking close on every stream through it, so the hold is derived from the

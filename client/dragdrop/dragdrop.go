@@ -95,19 +95,19 @@ type ChildPreview struct {
 }
 
 // ChildPreviewFor takes previewRatio, child cells per parent cell, from the
-// caller's zoomtrans.Well.Ratio. The result is independent of pane size.
-func ChildPreviewFor(parent Pane, well struct {
+// caller's zoomtrans.Door.Ratio. The result is independent of pane size.
+func ChildPreviewFor(parent Pane, door struct {
 	X, Y, W, H     int64
 	ViewCx, ViewCy float64
 }, previewRatio float64) ChildPreview {
 	parentCell := parent.Cell()
 	previewCell := parentCell * previewRatio
-	wellLeft, wellTop := parent.CellToScreen(float64(well.X), float64(well.Y))
-	wellCenterX := wellLeft + float64(well.W)*parentCell/2
-	wellCenterY := wellTop + float64(well.H)*parentCell/2
+	doorLeft, doorTop := parent.CellToScreen(float64(door.X), float64(door.Y))
+	doorCenterX := doorLeft + float64(door.W)*parentCell/2
+	doorCenterY := doorTop + float64(door.H)*parentCell/2
 	return ChildPreview{
-		OriginX: wellCenterX - well.ViewCx*previewCell,
-		OriginY: wellCenterY - well.ViewCy*previewCell,
+		OriginX: doorCenterX - door.ViewCx*previewCell,
+		OriginY: doorCenterY - door.ViewCy*previewCell,
 		CellPx:  previewCell,
 	}
 }
@@ -236,7 +236,7 @@ const (
 	DropRejected // snaps back
 	DropMove
 	DropCopy
-	// DropLink creates a link, an exit well for a grid and a leaf link
+	// DropLink creates a link, a door to another namespace for a grid and a leaf link
 	// otherwise. The source is untouched and identity never migrates.
 	DropLink
 )
@@ -335,9 +335,9 @@ func GhostPlanForDrop(action DropAction, forbidden bool,
 	}
 }
 
-// PromoteToWell excludes every carried tile: a well dropped into its own
-// subtree is a cycle the server rejects. The caller resolves isWell from
-// rpc.IsWellKind, keeping api/rpc out of here.
-func PromoteToWell(isWell bool, childGridID, tileID string, carried Carry) bool {
-	return isWell && childGridID != "" && !carried.Has(tileID)
+// PromoteToDoor excludes every carried tile: a door dropped into its own
+// subtree is a cycle the server rejects. The caller resolves isDoor from
+// rpc.IsDoorKind, keeping api/rpc out of here.
+func PromoteToDoor(isDoor bool, childGridID, tileID string, carried Carry) bool {
+	return isDoor && childGridID != "" && !carried.Has(tileID)
 }

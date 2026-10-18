@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
-// descend takes the pane through the doorway tile. Which frame it pushes is
+// descend takes the pane through the door tile. Which frame it pushes is
 // the tile's wire declaration, never the call site's.
 func (m *Machine) descend(g Gesture, w World) Plan {
 	var pl planner
@@ -43,17 +43,17 @@ func (m *Machine) descend(g Gesture, w World) Plan {
 			Tile: g.Door})
 	case rpc.IsContentDescentKind(g.Door.GetKind()):
 		m.descendContent(p, g.Door, w, &pl)
-	case rpc.IsWellKind(g.Door.GetKind()):
+	case rpc.IsDoorKind(g.Door.GetKind()):
 		m.descendGrid(p, g.Door, w, &pl)
 	}
 	return pl.plan()
 }
 
-// descendGrid plans the transition into a well's child grid: a pan and zoom to
-// the well, the frame push, then an ease to the stored ViewZoom so a
+// descendGrid plans the transition into a door's child grid: a pan and zoom to
+// the door, the frame push, then an ease to the stored ViewZoom so a
 // re-descent lands where the user left.
-func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *planner) {
-	if well.ChildGridId == "" {
+func (m *Machine) descendGrid(p PaneView, door *gridwellv1.Tile, w World, pl *planner) {
+	if door.ChildGridId == "" {
 		// A link whose target is not available says why; pluginhealth owns
 		// the wording.
 		if n := w.Door.Health; n != nil {
@@ -62,7 +62,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 			return
 		}
 		pl.add(Effect{Kind: EffReport, Severity: errsurface.Info, Source: "descend",
-			Message: "nothing to descend into: " + well.AltText})
+			Message: "nothing to descend into: " + door.AltText})
 		return
 	}
 	// A pane with no rect or no view has no descent to plan.
@@ -72,8 +72,8 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 		return
 	}
 	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: live.Cx(), Cy: live.Cy(), Zoom: live.Zoom()}
-	wl := zoomtrans.WellOf(well)
-	next := pane.Frame{Door: well.Id}
+	wl := zoomtrans.DoorOf(door)
+	next := pane.Frame{Door: door.Id}
 	mid, swap, final, ok := zoomtrans.Descent(from, wl, size, w.CellPx)
 	if !ok {
 		return
@@ -82,15 +82,15 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 	if w.Door.IsLink {
 		// A link crosses into another id space, so the frame carries the target
 		// grid id and every path id below stays in one namespace.
-		next.GridID = well.ChildGridId
+		next.GridID = door.ChildGridId
 		base.MenuOpen = w.MenuOpenOn == p.ID
 		pl.add(Effect{Kind: EffCloseMenu})
-		// The synthetic well an in-grid + menu descent goes through rounds
-		// the doorway's position, so recentre on the exact footprint.
-		mid.Cx = float64(well.X) + float64(well.W)/2
-		mid.Cy = float64(well.Y) + float64(well.H)/2
+		// The synthetic door an in-grid + menu descent goes through rounds
+		// the door's position, so recentre on the exact footprint.
+		mid.Cx = float64(door.X) + float64(door.W)/2
+		mid.Cy = float64(door.Y) + float64(door.H)/2
 	}
-	pl.fetchGrid(w, well.ChildGridId)
+	pl.fetchGrid(w, door.ChildGridId)
 
 	child := base.Copy()
 	child.Push(next)
@@ -126,7 +126,7 @@ func (m *Machine) descendGrid(p PaneView, well *gridwellv1.Tile, w World, pl *pl
 func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl *planner) {
 	r := p.Rect
 	foot := pane.Footprint{X: file.X, Y: file.Y, W: file.W, H: file.H}
-	wellCx, wellCy := foot.Center()
+	doorCx, doorCy := foot.Center()
 	live, viewed := p.View.Framing()
 	if !viewed {
 		return
@@ -173,7 +173,7 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 			{
 				Place:  &animBase,
 				FromCx: live.Cx(), FromCy: live.Cy(), FromZoom: live.Zoom(),
-				ToCx: wellCx, ToCy: wellCy, ToZoom: target,
+				ToCx: doorCx, ToCy: doorCy, ToZoom: target,
 				DurationMs: w.TransitionMs,
 			},
 		}})
@@ -278,12 +278,12 @@ func (m *Machine) healStale(paneID string, tile *gridwellv1.Tile, w World, pl *p
 // landHealed re-anchors the pane at the owning root with the fresh path, at
 // the zoom the pane shows; the layout persister picks it up from the live
 // tree.
-func landHealed(paneID string, tile *gridwellv1.Tile, wells []*gridwellv1.Tile, w World, pl *planner) {
+func landHealed(paneID string, tile *gridwellv1.Tile, doors []*gridwellv1.Tile, w World, pl *planner) {
 	anchor := tile.GridId
-	path := make([]string, 0, len(wells))
-	if len(wells) > 0 {
-		anchor = wells[0].GridId
-		for _, wl := range wells {
+	path := make([]string, 0, len(doors))
+	if len(doors) > 0 {
+		anchor = doors[0].GridId
+		for _, wl := range doors {
 			path = append(path, wl.Id)
 		}
 	}

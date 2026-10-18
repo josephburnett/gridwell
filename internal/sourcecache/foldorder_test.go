@@ -77,17 +77,17 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 	t.Run("a tile event against a revalidation", func(t *testing.T) {
 		cc, src, held := heldFixture(t)
 		ageGrid(t, cc, farHome)
-		well := proto.Clone(src.grid.GetTiles()[0]).(*pb.Tile)
-		well.ViewCx, well.ViewCy, well.ViewZoom = 5, 6, 0.25
+		door := proto.Clone(src.grid.GetTiles()[0]).(*pb.Tile)
+		door.ViewCx, door.ViewCy, door.ViewZoom = 5, 6, 0.25
 		if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: farHome}); err != nil {
 			t.Fatal(err)
 		}
 		<-held.entered
-		cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: well}}})
+		cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: door}}})
 		close(held.release)
 		cc.revalWG.Wait()
-		if got := rememberedGrid(t, cc, src).GetTiles()[0]; got.ViewZoom != well.ViewZoom {
-			t.Errorf("the remembered well = %+v, want the folded framing", got)
+		if got := rememberedGrid(t, cc, src).GetTiles()[0]; got.ViewZoom != door.ViewZoom {
+			t.Errorf("the remembered door = %+v, want the folded framing", got)
 		}
 	})
 
@@ -98,11 +98,11 @@ func TestALiveAnswerNeverInstallsOverAFoldMadeSinceItsRead(t *testing.T) {
 			t.Fatal(err)
 		}
 		<-held.entered
-		cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: farWell}}})
+		cc.applyEvent(ctx, &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{TileId: farDoor}}})
 		close(held.release)
 		cc.revalWG.Wait()
 		if n := len(rememberedGrid(t, cc, src).GetTiles()); n != 0 {
-			t.Errorf("the removed well came back: %d tiles remembered", n)
+			t.Errorf("the removed door came back: %d tiles remembered", n)
 		}
 	})
 }

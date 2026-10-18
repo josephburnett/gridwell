@@ -63,7 +63,7 @@ func readOne(t *testing.T, c namespace.Namespace, tileID string) ([]byte, int64)
 	return data, version
 }
 
-// homeRoot is where a mounter lands: the node's home root, from the same
+// homeRoot is where a connecting node lands: the node's home root, from the same
 // handshake a client boots on.
 func homeRoot(t *testing.T, c namespace.Namespace) string {
 	t.Helper()
@@ -125,7 +125,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 }
 
 func TestNodeExportInfoDescribesTheNode(t *testing.T) {
-	// A mounter's Info handshake sees the NODE: its HOME as the root, where
+	// A connecting node's Info handshake sees the NODE: its HOME as the root, where
 	// a direct client lands too.
 	c, _ := nodeServer(t)
 	info, err := c.Info(context.Background(), &gridwellv1.InfoRequest{})
@@ -182,7 +182,7 @@ func TestNodeExportUnknownPluginIsNotFound(t *testing.T) {
 
 func TestNodeExportSubscribeStreamsQualifiedEvents(t *testing.T) {
 	// Server-stream through the export: the whole node's fan-in, ids
-	// qualified — this is how a mounting laptop hears a remote plugin change.
+	// qualified — this is how a connecting laptop hears a remote plugin change.
 	c, _ := nodeServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -259,7 +259,7 @@ func TestNodeExportOpenShellBidi(t *testing.T) {
 }
 
 // TestNodeExportContentStreams drives the new content verbs over the raw
-// gRPC export — the wire a remote mounter sees. WriteContent commits at
+// gRPC export — the wire a remote connecting node sees. WriteContent commits at
 // close and the response re-qualifies; ReadContent streams the bytes paired
 // with their version; MoveTile routes like every unary.
 func TestNodeExportContentStreams(t *testing.T) {

@@ -20,7 +20,7 @@ var (
 	ErrInvalidArgument = errors.New("invalid argument")
 	ErrNotURLTile      = errors.New("not a URL tile")
 	ErrNotTextTile     = errors.New("not a text tile")
-	ErrNotWellTile     = errors.New("not a well tile")
+	ErrNotDoorTile     = errors.New("not a door tile")
 	ErrNotShellTile    = errors.New("not a shell tile")
 	ErrNotPaneTile     = errors.New("not a pane tile")
 	ErrVersionConflict = errors.New("version mismatch")
@@ -51,7 +51,7 @@ var sentinelClasses = []struct {
 	{ErrInvalidPath, ClassInvalidArgument},
 	{ErrNotURLTile, ClassInvalidArgument},
 	{ErrNotTextTile, ClassInvalidArgument},
-	{ErrNotWellTile, ClassInvalidArgument},
+	{ErrNotDoorTile, ClassInvalidArgument},
 	{ErrNotShellTile, ClassInvalidArgument},
 	{ErrNotPaneTile, ClassInvalidArgument},
 	{ErrOverlap, ClassConflict},

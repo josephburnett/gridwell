@@ -11,8 +11,8 @@ import (
 // snapshot, so what is really under test is the walk's loose-input contract
 // and the token loop that replaces its blocking fetch.
 
-func wellIn(child string) RestoreTile {
-	return RestoreTile{IsWell: true, ChildGridID: child}
+func doorIn(child string) RestoreTile {
+	return RestoreTile{IsDoor: true, ChildGridID: child}
 }
 
 func textIn(stored string, scrollY int64) RestoreTile {
@@ -42,8 +42,8 @@ func bootGesture(raw string) Gesture {
 
 func TestRestoreBootPlans(t *testing.T) {
 	grids := map[string]map[string]RestoreTile{
-		"p1/1": {"p1/10": wellIn("p1/2"), "p1/88": textIn(rpc.TextModeRendered, 0)},
-		"p1/2": {"p1/20": wellIn("p1/3"), "p1/99": textIn(rpc.TextModeRendered, 12)},
+		"p1/1": {"p1/10": doorIn("p1/2"), "p1/88": textIn(rpc.TextModeRendered, 0)},
+		"p1/2": {"p1/20": doorIn("p1/3"), "p1/99": textIn(rpc.TextModeRendered, 12)},
 		"p1/3": {},
 	}
 
@@ -68,7 +68,7 @@ func TestRestoreBootPlans(t *testing.T) {
 		grids: homeOnly(),
 		want:  []EffectKind{EffInstallPlace, EffScheduleURLUpdate},
 	}, {
-		name:  "a well path lands on the grid it names",
+		name:  "a door path lands on the grid it names",
 		raw:   "/10/20",
 		grids: grids,
 		want: []EffectKind{EffInstallPlace, EffInstallPlace, EffFetchGrid,
@@ -113,7 +113,7 @@ func TestRestoreBootPlans(t *testing.T) {
 		st := *plan.Effects[1].Stack
 		got := st.Path()
 		if st.Anchor() != "p1/1" || len(got) != 2 || got[0] != "p1/10" || got[1] != "p1/20" {
-			t.Fatalf("place = (%q, %v), want the two live doorways", st.Anchor(), got)
+			t.Fatalf("place = (%q, %v), want the two live doors", st.Anchor(), got)
 		}
 	})
 }
@@ -224,9 +224,9 @@ func TestRestoreCursorLandsAfterTheBody(t *testing.T) {
 }
 
 func TestRestoreWalkSuspendsOnAnUncachedGrid(t *testing.T) {
-	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": wellIn("p1/2")}}
+	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": doorIn("p1/2")}}
 	warm := map[string]map[string]RestoreTile{
-		"p1/1": {"p1/10": wellIn("p1/2")},
+		"p1/1": {"p1/10": doorIn("p1/2")},
 		"p1/2": {"p1/99": textIn(rpc.TextModeText, 0)},
 	}
 
@@ -251,7 +251,7 @@ func TestRestoreWalkSuspendsOnAnUncachedGrid(t *testing.T) {
 }
 
 func TestRestoreWalkAsksForAGridOnlyOnce(t *testing.T) {
-	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": wellIn("p1/2")}}
+	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": doorIn("p1/2")}}
 	m := New()
 	tok := only(t, m.Do(bootGesture("/10/99"), restoreWorld(cold)), EffAwait).Token
 
@@ -270,7 +270,7 @@ func TestRestoreWalkAsksForAGridOnlyOnce(t *testing.T) {
 }
 
 func TestRestoreWalkStopsAtALatchedGrid(t *testing.T) {
-	w := restoreWorld(map[string]map[string]RestoreTile{"p1/1": {"p1/10": wellIn("p1/2")}})
+	w := restoreWorld(map[string]map[string]RestoreTile{"p1/1": {"p1/10": doorIn("p1/2")}})
 	w.Restore.Failed["p1/2"] = true
 	plan := New().Do(bootGesture("/10/99"), w)
 
@@ -282,7 +282,7 @@ func TestRestoreWalkStopsAtALatchedGrid(t *testing.T) {
 }
 
 func TestRestorePaneClosedMidWalk(t *testing.T) {
-	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": wellIn("p1/2")}}
+	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": doorIn("p1/2")}}
 	m := New()
 	tok := only(t, m.Do(bootGesture("/10/99"), restoreWorld(cold)), EffAwait).Token
 
@@ -350,7 +350,7 @@ func TestRestoreFromHistoryEndsEvenWithNoPane(t *testing.T) {
 }
 
 func TestRestoreFromHistorySuspendedWalkStillEnds(t *testing.T) {
-	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": wellIn("p1/2")}}
+	cold := map[string]map[string]RestoreTile{"p1/1": {"p1/10": doorIn("p1/2")}}
 	m := New()
 	w := restoreWorld(cold)
 	m.Do(Gesture{Kind: GestureRestoreFromHistory, Raw: "/10/99"}, w)

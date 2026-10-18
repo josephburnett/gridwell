@@ -1,7 +1,7 @@
 # Gridwell architecture
 
 Gridwell is a personal space made of tiles on an infinite 2D grid. There are
-four primitives: text, url, shell, and well (a tile that holds another grid).
+four primitives: text, url, shell, and door (a tile that holds another grid).
 A pane tile holds a split-pane layout. Grids nest without limit, and they
 federate across plugins and machines. The one rule: things stay as you left
 them.
@@ -39,7 +39,7 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
 - the node's own id followed by a letter-leading segment: a connection
 - anything else: a plugin
 
-The remainder passes through untouched, so any depth of mounting routes the
+The remainder passes through untouched, so any depth of hops routes the
 same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
 prefixes and derives `Tile.link`; transit prepends one segment and
 trusts the wire bits (`rpc.TransitQualifyTiles`). Ids coming in are peeled
@@ -59,7 +59,7 @@ both tell a namespace segment from a tile id with no lookup. Ids are never
 reassigned.
 
 A link is such a path stored on a tile (`link_target_id` for a leaf, a
-qualified `child_grid_id` for a well). The node holding it resolves only the
+qualified `child_grid_id` for a door). The node holding it resolves only the
 first segment, one of its own plugins or connections, and forwards the rest,
 so a link reaches anything a chain of one-way connections from the HOLDING
 node reaches, at any depth, and never against an arrow. A link written
@@ -91,7 +91,7 @@ record shapes. Everything else derives from it:
 | Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
-| Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its wells too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
+| Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its doors too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `MoveTile`, `CopyTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellTmuxAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
@@ -177,7 +177,7 @@ layout from before one database per node — a `db/<id>/` directory and no
 folds one in, and minting an empty store beside that content would come up as
 a home that had lost everything.
 
-**Home** (`internal/local`) owns the user's content: text, urls, wells, pane
+**Home** (`internal/local`) owns the user's content: text, urls, doors, pane
 tiles, shells, and the event stream. Shells are tmuxes on a private
 socket, so they survive restarts.
 
@@ -193,7 +193,7 @@ that sentence and none of its entries, each subscriber's fan-in asks again on
 its backoff, and the up that ends the refusal reaches the strip like any
 other. While it is up, and only if its
 `InfoResponse.watch` declares one and some client shows one of its grids (a
-pane's grid, or a well's preview on screen: `pane.Showing`), the node holds
+pane's grid, or a door's preview on screen: `pane.Showing`), the node holds
 one `Watch` stream to it (`pluginhost.Start`), scoped to the
 contexts shown (`WatchRequest.contexts`, the plugin's share of
 `subscription.Book`'s union, re-opened with the new set when it changes), and
@@ -232,7 +232,7 @@ home, and remembers that landing and nothing else. Retirement is EXPLICIT:
 `retired_names:` is its one owner, a retired name never returns, and the
 stored `deleted` flag is only that list mirrored onto the rows. Dropping a
 connection's stanza retires nothing — the row and its landing stay, the
-mounts and links through it go dead in the roster, and putting the stanza
+doors and links through it go dead in the roster, and putting the stanza
 back brings them all live again.
 The landing is checked, not merely learned: every transport asks the far node
 where it lands before it is used, and an answer that differs from the stored
@@ -310,8 +310,8 @@ format contract is `internal/local/store/CLAUDE.md`.
 
 **Framing** is one shape: a float center in the grid's own coordinates plus
 a pane-size-independent zoom (the intrinsic ratio, live/overtake). It lives
-on the row that owns the doorway — `tiles.view_cx/cy/zoom` for a well,
-`grids.root_cx/cy/zoom` for a root with no doorway. It is a checked value,
+on the row that owns the door — `tiles.view_cx/cy/zoom` for a door,
+`grids.root_cx/cy/zoom` for a root with no door. It is a checked value,
 `rpc.Framing`, whose one constructor refuses a center that is not a point or
 a zoom that is not a finite size above zero, at the wire and at the store.
 Never visited is no framing: NULL in storage, absent on the wire, an
@@ -367,7 +367,7 @@ pane tree instead — that is the one second axis (`levels.go`), and it is
 session-only.
 
 There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
-descent lands is the tile's own declaration: a well or link pushes a frame
+descent lands is the tile's own declaration: a door or link pushes a frame
 onto the child grid, a text, url or shell tile pushes one onto the tile
 itself, a pane tile descends the window a level. Every ascent hop writes
 framing back through `SetFraming`, except inside a pane tile where the blob
@@ -426,7 +426,7 @@ re-asks that namespace's dead verdicts (`events.Plan.Revive`,
 `inflight.Reads.ReviveIf`).
 
 **Events** flow only into the cache, and a root grid's framing into the
-doorways rooted at it (`rpc.Reframe`). Viewport writes live only in gesture
+doors rooted at it (`rpc.Reframe`). Viewport writes live only in gesture
 and transition code. An event landing mid-animation updates data and redraws;
 it cannot move the viewport.
 
@@ -539,7 +539,7 @@ once (`retire`): its entry goes, every later call for the pane is a no-op, and
 the renderer hears `onViewGone` and drops its handle, so the pane shows the
 tile's frozen preview. One Chromium partition
 (`persist:gridwell`) holds every
-live url tile, local or mounted; live tiles browse from the host's network.
+live url tile, local or far; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
 
 ## The trace

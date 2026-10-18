@@ -125,7 +125,7 @@ func TestHealedPlans(t *testing.T) {
 	t.Run("the locate answers: re-anchor, then engage", func(t *testing.T) {
 		m := New()
 		tok := healAwait(t, m, moved)
-		plan := m.Resume(tok, Result{OK: true, Wells: []*gridwellv1.Tile{
+		plan := m.Resume(tok, Result{OK: true, Doors: []*gridwellv1.Tile{
 			{Id: "w9", GridId: "root9"}, {Id: "w8", GridId: "mid"},
 		}}, baseWorld(engagedPane("pane1")))
 
@@ -139,7 +139,7 @@ func TestHealedPlans(t *testing.T) {
 			t.Errorf("anchor = %q, want the owning root", st.Anchor())
 		}
 		if got := st.Path(); len(got) != 2 || got[0] != "w9" || got[1] != "w8" {
-			t.Errorf("path = %v, want the fresh well chain", got)
+			t.Errorf("path = %v, want the fresh door chain", got)
 		}
 		if st.ContentID() != "r1" {
 			t.Errorf("content = %q, want the tile still descended", st.ContentID())
@@ -154,7 +154,7 @@ func TestHealedPlans(t *testing.T) {
 		}
 	})
 
-	t.Run("a tile at a root has no well chain", func(t *testing.T) {
+	t.Run("a tile at a root has no door chain", func(t *testing.T) {
 		m := New()
 		tok := healAwait(t, m, moved)
 		plan := m.Resume(tok, Result{OK: true}, baseWorld(engagedPane("pane1")))
@@ -176,7 +176,7 @@ func TestHealedPlans(t *testing.T) {
 	t.Run("the user moved on while the locate was in flight", func(t *testing.T) {
 		m := New()
 		tok := healAwait(t, m, moved)
-		plan := m.Resume(tok, Result{OK: true, Wells: []*gridwellv1.Tile{{Id: "w9", GridId: "root9"}}},
+		plan := m.Resume(tok, Result{OK: true, Doors: []*gridwellv1.Tile{{Id: "w9", GridId: "root9"}}},
 			baseWorld(gridPane("pane1", "g1")))
 		if len(plan.Effects) != 0 {
 			t.Fatalf("re-anchored a pane that moved on: %v", kinds(plan))

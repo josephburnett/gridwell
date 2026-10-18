@@ -95,9 +95,9 @@ func TestFsSymlinksAreLinksAndNothingOutsideTheRootServes(t *testing.T) {
 		t.Errorf("GetTilePreview through the link: %v", err)
 	}
 
-	// A link to a directory is a well onto that directory's own grid.
-	if d := tiles["dirlink"]; d == nil || d.Kind != rpc.KindWell || d.ChildGridId != rpc.QualifyID(fsSymlinkNS, rpc.EntryGridID("dir")) {
-		t.Errorf("dirlink = %+v, want a well onto dir", d)
+	// A link to a directory is a door onto that directory's own grid.
+	if d := tiles["dirlink"]; d == nil || d.Kind != rpc.KindDoor || d.ChildGridId != rpc.QualifyID(fsSymlinkNS, rpc.EntryGridID("dir")) {
+		t.Errorf("dirlink = %+v, want a door onto dir", d)
 	}
 
 	// A link out of the root, or to nothing, reads dead at every verb.

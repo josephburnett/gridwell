@@ -27,8 +27,8 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
   const cx = Math.round(landed.cx);
   const cy = Math.round(landed.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  expect(tileAt(await gw.getGrid(landed.gridID), 'well', cx, cy), 'a well to move through').toBeTruthy();
+  await gw.dragCreate('door', cx, cy);
+  expect(tileAt(await gw.getGrid(landed.gridID), 'door', cx, cy), 'a door to move through').toBeTruthy();
   const roundTrip = async () => {
     await gw.descendCell(cx, cy);
     await gw.ascendViaCrumb();

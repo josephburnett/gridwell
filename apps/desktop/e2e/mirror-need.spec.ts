@@ -101,16 +101,16 @@ test('a live shell snapshots only at a park and while another pane shows it', as
   const a = await gw.focused();
   const b = (await gw.panes()).find((p) => p.id !== a.id)!;
 
-  // The other pane leaves the home grid first, into a well, so nothing but
+  // The other pane leaves the home grid first, into a door, so nothing but
   // the shell's own pane draws the shell.
   await gw.focusPane(b);
   const bcx = Math.round(b.cx);
   const bcy = Math.round(b.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', bcx, bcy);
+  await gw.dragCreate('door', bcx, bcy);
   await gw.descendCell(bcx, bcy);
   const bIn = (await gw.panes()).find((p) => p.id === b.id)!;
-  expect(bIn.gridID, 'the other pane is in the well').not.toBe(a.gridID);
+  expect(bIn.gridID, 'the other pane is in the door').not.toBe(a.gridID);
 
   await gw.focusPane((await gw.panes()).find((p) => p.id === a.id)!);
   const cx = Math.round(a.cx);

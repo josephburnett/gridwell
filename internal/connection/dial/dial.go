@@ -1,7 +1,7 @@
 // Package dial opens an ssh tunnel to a remote host and dials that node's
 // connection API through it with raw gRPC over direct-streamlocal. The far
 // end is the far node's own export, routed by the qualified ids each request
-// carries, so a mount is the whole node and routing is by id at every hop.
+// carries, so a connection reaches the whole node and routing is by id at every hop.
 package dial
 
 import (

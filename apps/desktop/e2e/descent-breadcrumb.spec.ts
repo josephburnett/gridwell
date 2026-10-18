@@ -35,7 +35,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   expect(segs.length).toBe(1);
   expect(segs[0].anchor, 'the root crumb names the anchor').toBe(f0.anchor);
 
-  // Wheel-zoom over empty space, since over a well the wheel zooms the well.
+  // Wheel-zoom over empty space, since over a door the wheel zooms the door.
   // This gives the root a viewport the jump's landing can be compared against.
   const rootEmpty = await gw.cellCenter(f0.id, cx + 5, cy + 3);
   await window.mouse.move(rootEmpty.x, rootEmpty.y);
@@ -44,10 +44,10 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   const before = await gw.focused();
   expect(before.zoom).toBeLessThan(1);
 
-  // Well, well, markdown, descending each level.
+  // Door, door, markdown, descending each level.
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const W1 = tileAt(await gw.getGrid(rootGrid), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const W1 = tileAt(await gw.getGrid(rootGrid), 'door', cx, cy)!;
   expect(W1).toBeTruthy();
   await gw.descendCell(cx, cy);
   await expect.poll(async () => (await gw.focused()).gridID).not.toBe(rootGrid);
@@ -57,8 +57,8 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   const c1x = Math.round(f1.cx);
   const c1y = Math.round(f1.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', c1x, c1y);
-  const W2 = tileAt(await gw.getGrid(g1), 'well', c1x, c1y)!;
+  await gw.dragCreate('door', c1x, c1y);
+  const W2 = tileAt(await gw.getGrid(g1), 'door', c1x, c1y)!;
   expect(W2).toBeTruthy();
   await gw.descendCell(c1x, c1y);
   await expect.poll(async () => (await gw.focused()).gridID).not.toBe(g1);
@@ -89,7 +89,7 @@ test('a chain crumb click ascends all the way to that level and keeps the round 
   segs = await chainSegs(window);
   expect(segs.map((s: any) => s.tileID || 'root')).toEqual(['root', W1.id, W2.id, MD.id]);
   expect(segs[3].text, 'the leaf crumb is a text descent').toBe(true);
-  expect((await gw.focused()).placeDepth, 'three doorways deep').toBe(3);
+  expect((await gw.focused()).placeDepth, 'three doors deep').toBe(3);
 
   // One click on the root crumb: the intermediate pops are instant and the
   // final hop animates.

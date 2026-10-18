@@ -30,7 +30,7 @@ func TestPaneClosedBeforeTheDescentLands(t *testing.T) {
 }
 
 func TestPaneClosedBeforeTheAscentLands(t *testing.T) {
-	w := baseWorld(wellPane("pane1"))
+	w := baseWorld(doorPane("pane1"))
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()}
 	m := New()
 	tr := only(t, m.Do(ascendGesture("pane1", 1, true), w), EffStartTransition)
@@ -41,15 +41,15 @@ func TestPaneClosedBeforeTheAscentLands(t *testing.T) {
 }
 
 func TestSecondDescentMidAnimationLandsTheFirst(t *testing.T) {
-	well := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
+	door := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "gc"}
-	inner := &gridwellv1.Tile{Id: "w2", Kind: rpc.KindWell, GridId: "gc",
+	inner := &gridwellv1.Tile{Id: "w2", Kind: rpc.KindDoor, GridId: "gc",
 		X: 0, Y: 0, W: 2, H: 2, ChildGridId: "gcc"}
 	m := New()
 
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{}
-	m.Do(descendGesture("pane1", well), w)
+	m.Do(descendGesture("pane1", door), w)
 
 	// The second descent arrives while the first is still animating: the plan
 	// is the cancel alone, and the machine asks to be called again.
@@ -90,7 +90,7 @@ func TestSecondDescentMidAnimationLandsTheFirst(t *testing.T) {
 }
 
 func TestSecondAscentMidAnimationLandsTheFirst(t *testing.T) {
-	w := baseWorld(wellPane("pane1"))
+	w := baseWorld(doorPane("pane1"))
 	w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()}
 	w.Animating = map[string]bool{"pane1": true}
 	plan := New().Do(ascendGesture("pane1", 1, true), w)

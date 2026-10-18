@@ -30,16 +30,16 @@ func seedBystanders(t *testing.T, s *Store, root string) {
 	if _, err := s.CreateURL(ctx, root, 23, 0, 2, 2, "https://neighbour.example"); err != nil {
 		t.Fatal(err)
 	}
-	well, err := s.CreateWell(ctx, root, 26, 0, 2, 2, "next door")
+	door, err := s.CreateDoor(ctx, root, 26, 0, 2, 2, "next door")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: 9, Cy: 9, Zoom: 2,
+		TileId: door.Id, Cx: 9, Cy: 9, Zoom: 2,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateText(ctx, well.ChildGridId, 0, 0, 1, 1, []byte("inside the neighbour")); err != nil {
+	if _, err := s.CreateText(ctx, door.ChildGridId, 0, 0, 1, 1, []byte("inside the neighbour")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -49,7 +49,7 @@ func seedBystanders(t *testing.T, s *Store, root string) {
 // updated_at is implicit on both, being "when this row was last written" and
 // nothing the user sees. trash names the columns a write may change on the
 // node's trash grid, which Open made. mints allows rows to appear — a copy's
-// copy, a delete's month well — and the ids they spend.
+// copy, a delete's month door — and the ids they spend.
 type writeScope struct {
 	tile  []string
 	grid  []string
@@ -78,7 +78,7 @@ var writeScopes = map[string]writeScope{
 	"SetTextScroll/scroll and mode": {tile: []string{"text_x", "text_y", "text_w", "text_h", "text_mode"}},
 	"SetContentZoom/content scale":  {tile: []string{"content_zoom"}},
 	"SetFrozen/standing freeze":     {tile: []string{"url_frozen"}},
-	"SetFraming/doorway viewport":   {tile: []string{"view_cx", "view_cy", "view_zoom"}},
+	"SetFraming/door viewport":      {tile: []string{"view_cx", "view_cy", "view_zoom"}},
 
 	// ── Selection: what the user has in hand, on the grid row. ─────────
 	"SetSelection/the grid's selection": {grid: []string{"selection"}},
@@ -89,7 +89,7 @@ var writeScopes = map[string]writeScope{
 	// source row is neither.
 	"CopyTile/source row": {grid: []string{"version"}, mints: true},
 	// A delete on an ordinary grid is a move into the trash: the same row, at
-	// a new address, under the month well the trash mints on first use, which
+	// a new address, under the month door the trash mints on first use, which
 	// the trash grid counts. A tile that leaves its grid leaves its selection.
 	"DeleteTile/move to trash": {tile: []string{"grid_id", "x", "y"}, grid: []string{"version", "selection"}, trash: []string{"version"}, mints: true},
 }
@@ -167,7 +167,7 @@ func (w writeScope) refuse(change, tileID, gridID, trashID string) string {
 
 // A grid's own version is not a tile's: it counts the arrangement of the grid,
 // so a framing left on a root must not move it — a root framing is the same
-// no-claim, no-bump write a doorway's is, on the row a root keeps it in.
+// no-claim, no-bump write a door's is, on the row a root keeps it in.
 func TestRootFramingLeavesTheGridRowOtherwiseAlone(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

@@ -46,7 +46,7 @@ func TestAttachURLRoundTrip(t *testing.T) {
 }
 
 // A qualified id is a chain with slashes, and it must survive the query string
-// intact, or a mounted node's shell attaches to the wrong tile.
+// intact, or a far node's shell attaches to the wrong tile.
 func TestAttachURLQualifiedChain(t *testing.T) {
 	const id = "abc1234/desk/xyz9876/41"
 	raw, err := AttachURL("http://127.0.0.1:1/", "b1", "", id, 80, 24)

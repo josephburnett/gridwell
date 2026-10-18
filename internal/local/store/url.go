@@ -154,7 +154,7 @@ func (s *Store) setAltTx(ctx context.Context, tx *sql.Tx, tileID int64, alt stri
 const contentZoomSet = `content_zoom = ?`
 
 // SetContentZoom persists the per-tile content scale. It is framing, so no
-// claim and no bump. Wells are refused: their view_zoom is the grid viewport,
+// claim and no bump. Doors are refused: their view_zoom is the grid viewport,
 // a different fact with its own writer.
 func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoom rpc.ContentZoom) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(tileIDStr)
@@ -167,8 +167,8 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 		if err != nil {
 			return err
 		}
-		if isWellKind(n.Kind) {
-			return fmt.Errorf("%w: a well has no content zoom", ErrInvalidArgument)
+		if isDoorKind(n.Kind) {
+			return fmt.Errorf("%w: a door has no content zoom", ErrInvalidArgument)
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET `+contentZoomSet+`, updated_at = ? WHERE id = ?`,

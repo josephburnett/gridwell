@@ -2,12 +2,12 @@ package store
 
 // The canonical SQLite schema. The `system` KV table holds singleton state;
 // the schema version lives in the SQLite header, not here. A plugin's memory
-// lives in the same tables under its own namespace, and a well pointing at one
-// is an ordinary `well` row whose child_grid_id is a qualified
+// lives in the same tables under its own namespace, and a door pointing at one
+// is an ordinary `door` row whose child_grid_id is a qualified
 // "<plugin-uuid>/<grid-id>" link.
 //
 // The five tile kinds:
-//   - well: points at a child grid, in this namespace or, as an exit well,
+//   - door: points at a child grid, in this namespace or, as a door to another namespace,
 //     another.
 //   - text: a markdown blob.
 //   - url: an http(s) URL plus a frozen JPEG preview.
@@ -17,7 +17,7 @@ package store
 //     reboots.
 //   - pane: blob_id holds the api/panelayout split-pane layout.
 //
-// A well row's one framing (view_cx, view_cy, view_zoom) is at once the
+// A door row's one framing (view_cx, view_cy, view_zoom) is at once the
 // preview frame, the descent target and the ascent return. A text row carries
 // a doc-space scroll plus a rendered/text mode plus blob_id. A url row carries
 // the address and preview_blob_id, hash-deduped like text content.
@@ -93,8 +93,8 @@ func tilesTableDDL(name string) string {
 // of the table a rebuild migration can change.
 const tilesCheck = `    CHECK (
        (link_target_id IS NULL AND (
-          -- well: an interior or exit well always has a child grid.
-          (kind = 'well'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL AND preview_blob_id IS NULL AND text_mode IS NULL)
+          -- door: a door always has a child grid, its own or another namespace's.
+          (kind = 'door'  AND child_grid_id IS NOT NULL AND blob_id IS NULL AND url_string IS NULL AND preview_blob_id IS NULL AND text_mode IS NULL)
        OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
        OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
        OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
@@ -106,8 +106,8 @@ const tilesCheck = `    CHECK (
     -- link variant: a leaf tile whose content lives in another plugin's
     -- tile, named by link_target_id. No content columns: bytes, preview,
     -- and url are read through the target. The text framing columns and
-    -- view_* stay usable, because framing is per-link local, like an exit
-    -- well's view.
+    -- view_* stay usable, because framing is per-link local, like the view of a
+    -- door to another namespace.
     OR (link_target_id IS NOT NULL AND kind IN ('text','url','shell','pane')
         AND child_grid_id IS NULL AND blob_id IS NULL AND url_string IS NULL
         AND preview_blob_id IS NULL AND text_mode IS NULL)

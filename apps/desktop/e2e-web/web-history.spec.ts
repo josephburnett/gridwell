@@ -17,10 +17,10 @@ test('back ascends a descent; forward re-descends; pans never make entries', asy
   const cy = Math.round(home.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   const child = await gw.focused();
-  expect(child.gridID, 'descended into the well').not.toBe(home.gridID);
+  expect(child.gridID, 'descended into the door').not.toBe(home.gridID);
 
   // Pan and zoom are framing, so they must create no history entries.
   await gw.wheelAtFocusedCenter(-300);
@@ -38,7 +38,7 @@ test('back ascends a descent; forward re-descends; pans never make entries', asy
     .toBe(home.gridID);
   expect((await gw.focused()).path, 'back landed at the parent, path empty').toEqual([]);
 
-  // Forward re-descends into the well and restores the framing it was left at.
+  // Forward re-descends into the door and restores the framing it was left at.
   await window.evaluate(() => history.forward());
   await expect
     .poll(async () => (await gw.focused()).gridID, { timeout: 10_000 })

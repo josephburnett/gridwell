@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
 // After an ascent a yellow outline marks the tile the pane just came out of,
-// so the user can tell which shell or well they left. It arms when the ascent
+// so the user can tell which shell or door they left. It arms when the ascent
 // transition lands, fades over client/cadence's TraceFadeMs, and expires. It is
 // view state and nothing is persisted.
 
@@ -20,17 +20,17 @@ test('ascending arms a fading trace on the tile just left, then it expires', asy
   const cy = Math.round(home.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
 
   await gw.descendCell(cx, cy);
-  await expect.poll(async () => (await gw.focused()).gridID).toBe(well.childGridId);
+  await expect.poll(async () => (await gw.focused()).gridID).toBe(door.childGridId);
   await gw.middleClickCell(cx, cy);
   await gw.waitIdle();
 
   const armed = await traces(window);
   expect(armed.length, 'one trace armed after the ascent').toBe(1);
-  expect(armed[0].tileId, 'trace points at the well just left').toBe(well.id);
+  expect(armed[0].tileId, 'trace points at the door just left').toBe(door.id);
   expect(armed[0].paneId).toBe((await gw.focused()).id);
   expect(armed[0].alpha).toBeGreaterThan(0.3);
 
@@ -56,6 +56,6 @@ test('ascending arms a fading trace on the tile just left, then it expires', asy
     .poll(async () => (await traces(window)).length, { timeout: c.traceFadeMs * 3 })
     .toBe(0);
 
-  const after = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
-  expect(after.version, 'no version bump from the trace').toBe(well.version);
+  const after = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
+  expect(after.version, 'no version bump from the trace').toBe(door.version);
 });

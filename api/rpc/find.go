@@ -28,7 +28,7 @@ const FindDefaultLimit = 20
 // plugin reads. Exactly one of ID and Text is set.
 type FindQuery struct {
 	// ID is an exact tile id to locate; the result carries the tile and its
-	// containing-well path.
+	// containing-door path.
 	ID string
 	// Text is interpreted by each plugin against its own data.
 	Text string
@@ -58,7 +58,7 @@ func FindFiltered(req *pb.FindRequest) bool {
 
 // FindKinds are the kinds a find's kind filter names, the four
 // primitives and the pane tile.
-var FindKinds = []string{KindText, KindURL, KindShell, KindWell, KindPane}
+var FindKinds = []string{KindText, KindURL, KindShell, KindDoor, KindPane}
 
 // FindKeepsKind reports whether a tile of kind passes req's kind filter.
 func FindKeepsKind(req *pb.FindRequest, kind string) bool {

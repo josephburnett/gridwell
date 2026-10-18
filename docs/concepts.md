@@ -8,7 +8,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **well** | The only tile with a child grid, and the only doorway that pushes a frame onto a grid. |
+| **door** | A tile that leads to a grid: its own, or, as a link, another's. The only tile with a child grid. |
 | **text** | The only tile the user types into, and the only one whose `version` claims bytes. |
 | **url** | The only tile with an address of its own and a Chromium session behind it. |
 | **shell** | The only tile whose content is a host process. It survives ascent as a tmux. |
@@ -18,7 +18,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **exit well** | A doorway onto a grid in another namespace — a mount, a plugin, a file tree. Derived from the ids alone (`rpc.IsExitWell`), never stored. |
+| **door to another namespace** | A door onto a grid in another namespace — a far home, a plugin's grid, a file tree. Derived from the ids alone (`rpc.IsDoorToOtherNamespace`), never stored. |
 | **leaf link** | One content tile shown in two places: `link_target_id` plus one owning row. The same document, over there, without a copy. |
 | **dead link** | A link whose path ends in nothing: a namespace some hop no longer declares, or a target its namespace says is gone. Grey, inert, no notice, still deletable. Separates "gone" from "not answering". |
 | **childless link** | A link that names no namespace yet — the + menu row and the drag ghost, drawn before there is a grid to point at. |
@@ -28,8 +28,8 @@ here.
 | Concept | What it does |
 |---|---|
 | **collection** | One grid a plugin serves, declared as a + menu entry (`door.PlacesOf`). A plugin has no place of its own, so a collection is the only way in, and it is named label first, then its instance — "Feed (hey)" (`door.EntryName`). |
-| **menu fold** | The + menu's doorway row is an open set, so it opens folded behind a chevron over the primitives, and every opening starts folded. The fold is the menu's live state, and what a folded or open menu shows is decided in the same package (`client/menu`). |
-| **frame** | One step through a doorway (`pane.Frame`), into a grid or into a tile, with where you left it. The whole of where a pane is, and a descent into a document is the same step as a descent into a grid, ascended out of the same way. Text scroll, text mode and content zoom belong to the tile's row, written by `SetTile`; the frame carries the working copy while you are inside it, as it carries the viewport `SetFraming` writes back to the doorway's row. Inside a pane tile that viewport and the live text scroll are the pane's own, kept in the layout blob: a settle there writes the row only the text mode, and leaving the text writes the row's whole scroll. |
+| **menu fold** | The + menu's door row is an open set, so it opens folded behind a chevron over the primitives, and every opening starts folded. The fold is the menu's live state, and what a folded or open menu shows is decided in the same package (`client/menu`). |
+| **frame** | One step through a door (`pane.Frame`), into a grid or into a tile, with where you left it. The whole of where a pane is, and a descent into a document is the same step as a descent into a grid, ascended out of the same way. Text scroll, text mode and content zoom belong to the tile's row, written by `SetTile`; the frame carries the working copy while you are inside it, as it carries the viewport `SetFraming` writes back to the door's row. Inside a pane tile that viewport and the live text scroll are the pane's own, kept in the layout blob: a settle there writes the row only the text mode, and leaving the text writes the row's whole scroll. |
 | **level** | A pane-tile descent (`pane.Level`), session-only: a frame moves one pane, a level parks the window's whole pane tree. One pane tile can hold a whole arrangement without the frame stack encoding a tree. |
 | **zoomed pane** | One leaf owns the whole window while the split ratios beneath it stay untouched (`pane.Tree.Zoomed`, the ⛶ title, a click on the title). Session-only outside a pane tile; inside one it is part of the layout the tile remembers, with the focused pane (`pane.LayoutFingerprint`). A structural edit unzooms first. |
 
@@ -48,7 +48,7 @@ here.
 | **dark** (`internal/sourcecache` and `internal/pluginhost`, health events) | Declared, not answering right now — a connection that will not dial, or a plugin whose directory or API stopped answering while its process still does. Fetched, reported, recovers on its own. It is one fact: a room served by a dark source is a memory rather than an answer, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
 | **disabled** (`plugin.Registry.Disable`, `EventPluginHealth.disabled`) | A plugin or connection the user switched off from its health notice, until the node restarts. It reads exactly as dark — memory where there is one, the read failing where there is none — but nothing tries it again and no notice stands, and it is read-only: a write is refused (`gwerr.SourceDisabled`) and dropped, never retried, and its rows say why (`Tile.read_only`). Held in the node's memory only: `server.yaml` and `gridwell.db` never hear of it, so a restart brings the source back. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
-| **broken** (`pluginhealth.Broken`) | A doorway that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
+| **broken** (`pluginhealth.Broken`) | A door that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For`, `a.gridWritable` and `a.gridAcceptsTiles` all return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
 
 `pluginhealth.Classify` answers only for a row that can be a door: a node's
@@ -85,7 +85,7 @@ class, and the word says who started the write.
 | **content zoom** (`Tile.content_zoom`) | The scale of what renders inside one text, shell or url tile, stored on its row by `SetTile`'s content-zoom arm, so a document reads larger without the grid moving and stays that size wherever the tile is shown. Pane zoom is the grid's viewport; this is the tile's. `client/contentzoom` owns the chord and the range. |
 | **status_detail** | The owning plugin's one emoji about a tile's state (✅ done, ● unread, ★ starred), set only when there is something to notice and drawn before the name wherever the name is (`tilepreview.BannerText`). A note on a name, never a second name, and nothing outside the plugin can derive it. |
 | **theme** (`client/theme`) | Which palette the client draws in, dark or light. A view preference of this browser or this app, not a fact about your things: it is never written, never shared between your machines, and defaults to dark. Right-click the + menu circle on any grid to pick one. |
-| **identity glyph** | The glyph a namespace wears on its swatch, its ghost and the crumb of the grid it roots (`door.GlyphFor`): declared by the plugin or the entry, globe for a connection, well for home. An unknown name degrades to the globe, so the client learns no plugin kinds. |
+| **identity glyph** | The glyph a namespace wears on its swatch, its ghost and the crumb of the grid it roots (`door.GlyphFor`): declared by the plugin or the entry, globe for a connection, door for home. An unknown name degrades to the globe, so the client learns no plugin kinds. |
 
 A plugin says whether its text is a document; the user can always see the
 source. That is why there are two values and not three: a declaration that

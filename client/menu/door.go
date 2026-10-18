@@ -1,10 +1,10 @@
 package menu
 
-// Which swatches the + menu's top section shows: one per declared doorway. A
+// Which swatches the + menu's top section shows: one per declared door. A
 // node is a place, so its home and a connection's far home each get a swatch.
 // A plugin is not a place; it contributes one swatch per collection, and none
-// with no collections. A row that declares no doorway is a swatch only when it
-// is broken or still waiting on an answer. client/door decides what a doorway
+// with no collections. A row that declares no door is a swatch only when it
+// is broken or still waiting on an answer. client/door decides what a door
 // is and what it is called.
 
 import (
@@ -13,9 +13,9 @@ import (
 	"github.com/josephburnett/gridwell/client/pluginhealth"
 )
 
-// Doorways composes the section in handshake order, each row's declared
+// Doors composes the section in handshake order, each row's declared
 // entries directly after it.
-func Doorways(rows []*gridwellv1.PluginInfo) []door.Place {
+func Doors(rows []*gridwellv1.PluginInfo) []door.Place {
 	out := make([]door.Place, 0, len(rows))
 	for i := range rows {
 		row := rows[i]

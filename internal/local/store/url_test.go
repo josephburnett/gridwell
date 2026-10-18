@@ -165,7 +165,7 @@ func TestSetURLStateSkipsEmptyFields(t *testing.T) {
 func TestSetURLStateRefusesNonURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
-	w, err := s.CreateWell(context.Background(), root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(context.Background(), root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,28 +182,28 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	// A well whose child grid holds a single URL tile.
-	wellA, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	// A door whose child grid holds a single URL tile.
+	doorA, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateURL(ctx, wellA.ChildGridId, 0, 0, 1, 1, "https://a.example"); err != nil {
+	if _, err := s.CreateURL(ctx, doorA.ChildGridId, 0, 0, 1, 1, "https://a.example"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Copy the well: the copy deep-copies the child grid, so wellB gets
-	// its own independent URL tile (a re-rowed copy of wellA's).
-	wellB, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
-		TileId:     wellA.Id,
+	// Copy the door: the copy deep-copies the child grid, so doorB gets
+	// its own independent URL tile (a re-rowed copy of doorA's).
+	doorB, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{
+		TileId:     doorA.Id,
 		DestGridId: root, X: 50, Y: 0,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Freeze through wellB's OWN copy of the URL tile. It must touch only
-	// wellB; wellA is a separate row and stays as it was.
-	bGrid, err := s.GetGrid(ctx, wellB.ChildGridId)
+	// Freeze through doorB's OWN copy of the URL tile. It must touch only
+	// doorB; doorA is a separate row and stays as it was.
+	bGrid, err := s.GetGrid(ctx, doorB.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		}
 	}
 	if bURL == nil {
-		t.Fatalf("no URL tile in wellB's child grid %s", wellB.ChildGridId)
+		t.Fatalf("no URL tile in doorB's child grid %s", doorB.ChildGridId)
 	}
 	if _, err := s.SetURLState(ctx, bURL.Id, []byte("frozen-b"), "B", ""); err != nil {
 		t.Fatal(err)
@@ -223,12 +223,12 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Reload both wells to get their (possibly forked) child grids, then read
+	// Reload both doors to get their (possibly forked) child grids, then read
 	// the URL tile in each.
-	urlIn := func(well *gridwellv1.Tile) *gridwellv1.Tile {
+	urlIn := func(door *gridwellv1.Tile) *gridwellv1.Tile {
 		t.Helper()
-		wellIDInt, _ := parseID(well.Id)
-		reloaded, err := s.loadTile(ctx, s.db, wellIDInt)
+		doorIDInt, _ := parseID(door.Id)
+		reloaded, err := s.loadTile(ctx, s.db, doorIDInt)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -245,19 +245,19 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 		return nil
 	}
 
-	a := urlIn(wellA)
-	b := urlIn(wellB)
+	a := urlIn(doorA)
+	b := urlIn(doorB)
 	if a.UrlString != "https://a.example" {
-		t.Errorf("wellA URL = %q, want https://a.example (must NOT see the copy's nav)", a.UrlString)
+		t.Errorf("doorA URL = %q, want https://a.example (must NOT see the copy's nav)", a.UrlString)
 	}
 	if a.PreviewBlobId != 0 {
-		t.Errorf("wellA preview = %d, want 0 (the freeze leaked into the original)", a.PreviewBlobId)
+		t.Errorf("doorA preview = %d, want 0 (the freeze leaked into the original)", a.PreviewBlobId)
 	}
 	if b.UrlString != "https://b.example" {
-		t.Errorf("wellB URL = %q, want https://b.example", b.UrlString)
+		t.Errorf("doorB URL = %q, want https://b.example", b.UrlString)
 	}
 	if b.PreviewBlobId == 0 {
-		t.Error("wellB has no preview after freeze")
+		t.Error("doorB has no preview after freeze")
 	}
 	verifyRefcounts(t, s)
 }

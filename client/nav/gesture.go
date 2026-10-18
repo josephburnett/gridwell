@@ -5,12 +5,12 @@ import (
 )
 
 // GestureKind is the closed set of navigation verbs. Which frame a descent
-// pushes is the doorway tile's declaration, never the call site's, so there is
+// pushes is the door tile's declaration, never the call site's, so there is
 // one Descend and one Ascend however the user reached them.
 type GestureKind int
 
 const (
-	GestureDescend GestureKind = iota // takes a pane through a doorway: PaneID, Door
+	GestureDescend GestureKind = iota // takes a pane through a door: PaneID, Door
 	GestureAscend                     // leaves N levels of a place: PaneID, N, Animate
 	// GestureRestore installs a place decoded from a URL: PaneID ("" = the
 	// focused pane), Raw, Reset.
@@ -40,7 +40,7 @@ type Gesture struct {
 	Kind GestureKind
 
 	PaneID string
-	// Door is the doorway row by value: an ephemeral scratch tile is in no
+	// Door is the door row by value: an ephemeral scratch tile is in no
 	// cached grid, so a lookup at transition end would miss it and the
 	// descent would silently skip going live.
 	Door *gridwellv1.Tile

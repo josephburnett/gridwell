@@ -104,7 +104,7 @@ func silentConnectionAPI(t *testing.T) (string, *frozenSocket) {
 // silent far side strands. The keepalive ping is the only thing that notices:
 // within Time+Timeout the transport dies and Recv returns Unavailable, which is
 // what the fan-in retries on. Without the ping this test hangs until the
-// context expires — which is the shape of the bug, a mount gone quiet forever.
+// context expires — which is the shape of the bug, a connection gone quiet forever.
 func TestASilentFarSideFailsAStreamWithinKeepalive(t *testing.T) {
 	// grpc-go's floor is 10s, so a bound test costs that much wall clock.
 	was := keepaliveParams

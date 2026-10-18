@@ -27,14 +27,14 @@ letter segment → that connection; any other letter segment → that plugin.
 ## Where each appears
 
 - URL path: leading letter segments = the namespace chain, then
-  doorway/tile segments (`~` counts as a tile segment, never a namespace).
-- `child_grid_id` (a well or link's target grid) and `link_target_id` (a
+  door/tile segments (`~` counts as a tile segment, never a namespace).
+- `child_grid_id` (a door or link's target grid) and `link_target_id` (a
   leaf link's target): full chains. A key names the entry; whether it
   stands for the entry's tile or its grid is positional, same as digits.
 - `Link` (dashed = link) is derived from the target arriving already
   qualified — never stored. A link inside one namespace is still a
   link: a ctrl + right-drag makes one, and so does a same-namespace
-  mount. A uuid comparison would miss both.
+  link door. A uuid comparison would miss both.
 
 ## What is inside a `~`
 

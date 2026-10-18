@@ -6,7 +6,7 @@ import { tileAt } from './oracle';
 // link in the destination and the source stays put, since there is no
 // cross-plugin move; a right-drag copies; deleting a link only unlinks; editing
 // through a leaf link lands on the one shared copy of the bytes. Dragging a
-// menu swatch into a grid mounts that namespace as a link well.
+// menu swatch into a grid links that namespace as a door.
 
 test.use({ extraNodes: ['second'] });
 
@@ -44,34 +44,34 @@ async function twoPanesTwoPlugins(gw: any) {
   return { a, b: bNow, cx, cy, tx, ty };
 }
 
-test('left-drag links a well across nodes; the source stays; deleting the link never touches it', async ({ gw }) => {
+test('left-drag links a door across nodes; the source stays; deleting the link never touches it', async ({ gw }) => {
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
-  // The source well goes on the far node. A link can point from home into the
+  // The source door goes on the far node. A link can point from home into the
   // far node; the far node cannot route back into this node's home.
   await gw.clickScreen(b.x + 20, b.y + 20);
   await gw.openMenu();
-  await gw.dragCreate('well', tx, ty);
-  const src = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
-  expect(src, 'source well created').toBeTruthy();
+  await gw.dragCreate('door', tx, ty);
+  const src = tileAt(await gw.getGrid(b.gridID), 'door', tx, ty)!;
+  expect(src, 'source door created').toBeTruthy();
 
-  // Left-drag the well from pane B into pane A, which is home.
+  // Left-drag the door from pane B into pane A, which is home.
   await gw.leftDragAcrossPanes(b.id, tx, ty, a.id, cx, cy);
 
-  const link = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
+  const link = tileAt(await gw.getGrid(a.gridID), 'door', cx, cy)!;
   expect(link, 'link created in home').toBeTruthy();
   expect(link.childGridId, 'the grid is SHARED, not copied').toBe(src.childGridId);
   expect(link.link, 'the link renders dashed').toBe(true);
 
-  const srcStill = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
-  expect(srcStill, 'source well stayed put — a cross-node left-drag is a link, not a move').toBeTruthy();
+  const srcStill = tileAt(await gw.getGrid(b.gridID), 'door', tx, ty)!;
+  expect(srcStill, 'source door stayed put — a cross-node left-drag is a link, not a move').toBeTruthy();
   expect(srcStill.id).toBe(src.id);
 
   await gw.clickScreen(a.x + 20, a.y + 20);
   await gw.deleteTileCell(cx, cy);
-  expect(tileAt(await gw.getGrid(a.gridID), 'well', cx, cy), 'link gone').toBeUndefined();
-  const srcAfter = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
-  expect(srcAfter, 'source well survived the unlink').toBeTruthy();
+  expect(tileAt(await gw.getGrid(a.gridID), 'door', cx, cy), 'link gone').toBeUndefined();
+  const srcAfter = tileAt(await gw.getGrid(b.gridID), 'door', tx, ty)!;
+  expect(srcAfter, 'source door survived the unlink').toBeTruthy();
   expect(srcAfter.childGridId).toBe(src.childGridId);
 });
 
@@ -79,24 +79,24 @@ test('left-drag links a well across nodes; the source stays; deleting the link n
 // below: waitIdle() could not see a CopyTile in flight, so the spec read the
 // server oracle mid-write. See docs/flake-ledger.md; closed in the client, not
 // here.
-test('right-drag deep-copies a solid well across nodes; a text left-drag links and edits through', async ({ gw }) => {
+test('right-drag deep-copies a solid door across nodes; a text left-drag links and edits through', async ({ gw }) => {
   const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
 
   await gw.clickScreen(b.x + 20, b.y + 20);
   await gw.openMenu();
-  await gw.dragCreate('well', tx, ty);
+  await gw.dragCreate('door', tx, ty);
   await gw.openMenu();
   await gw.dragCreate('markdown', tx - 1, ty);
-  const srcWell = tileAt(await gw.getGrid(b.gridID), 'well', tx, ty)!;
+  const srcDoor = tileAt(await gw.getGrid(b.gridID), 'door', tx, ty)!;
   const srcText = tileAt(await gw.getGrid(b.gridID), 'text', tx - 1, ty)!;
-  expect(srcWell && srcText, 'sources created').toBeTruthy();
+  expect(srcDoor && srcText, 'sources created').toBeTruthy();
 
   await gw.copyDragAcrossPanes(b.id, tx, ty, a.id, cx, cy);
-  const copied = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
+  const copied = tileAt(await gw.getGrid(a.gridID), 'door', cx, cy)!;
   expect(copied, 'the deep copy landed in home').toBeTruthy();
   expect(copied.link ?? false, 'the copy is SOLID (owned), not a link').toBe(false);
-  expect(copied.childGridId, 'an independent subtree, not the shared grid').not.toBe(srcWell.childGridId);
-  expect(tileAt(await gw.getGrid(b.gridID), 'well', tx, ty), 'source well untouched').toBeTruthy();
+  expect(copied.childGridId, 'an independent subtree, not the shared grid').not.toBe(srcDoor.childGridId);
+  expect(tileAt(await gw.getGrid(b.gridID), 'door', tx, ty), 'source door untouched').toBeTruthy();
 
   // One cell over, since the deep copy above now occupies (cx, cy).
   await gw.leftDragAcrossPanes(b.id, tx - 1, ty, a.id, cx - 1, cy);
@@ -117,7 +117,7 @@ test('right-drag deep-copies a solid well across nodes; a text left-drag links a
     .toContain(marker);
 });
 
-test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }) => {
+test('drag a plugin swatch out of the + menu links it as a door', async ({ gw }) => {
   // The target cell is off-center so later clicks never land on it.
   const pls = await gw.plugins();
   const second = pls.find((p) => p.label === 'second')!;
@@ -127,15 +127,15 @@ test('drag a plugin swatch out of the + menu mounts it as a link', async ({ gw }
   await gw.openMenu();
   await gw.dragPluginLink('second', tx, ty);
 
-  const mount = tileAt(await gw.getGrid(f.gridID), 'well', tx, ty)!;
-  expect(mount, 'mount link created in the destination grid').toBeTruthy();
-  expect(mount.childGridId, "the link points at the plugin's root").toBe(second.rootGridID);
-  expect(mount.link, 'mounts are links — deletes will not propagate').toBe(true);
-  expect(mount.altText, 'the mount carries the plugin label').toBe('second');
+  const farDoor = tileAt(await gw.getGrid(f.gridID), 'door', tx, ty)!;
+  expect(farDoor, 'link door created in the destination grid').toBeTruthy();
+  expect(farDoor.childGridId, "the link points at the plugin's root").toBe(second.rootGridID);
+  expect(farDoor.link, 'doors to other namespaces are links — deletes will not propagate').toBe(true);
+  expect(farDoor.altText, 'the farDoor carries the plugin label').toBe('second');
 
   await gw.descendCell(tx, ty);
   const after = await gw.focused();
-  expect(after.gridID, 'descent through the mount reaches the plugin').toBe(second.rootGridID);
+  expect(after.gridID, 'descent through the door reaches the plugin').toBe(second.rootGridID);
 });
 
 // The far node announces the copy it made and the connection relays that

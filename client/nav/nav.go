@@ -264,7 +264,7 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		// A tile from a plugin without Find keeps the place it was restored
 		// with; the engagement happens either way.
 		if r.OK {
-			landHealed(c.PaneID, c.Tile, r.Wells, w, &pl)
+			landHealed(c.PaneID, c.Tile, r.Doors, w, &pl)
 		}
 		m.autoLiveOnDescent(c.PaneID, c.Tile, nil, w, &pl)
 	case stepRestoreRoot:

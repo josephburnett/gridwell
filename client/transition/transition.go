@@ -1,5 +1,5 @@
 // Package transition owns the viewport animation a pane runs through a
-// doorway. A transition belongs to a pane, so two may animate at once, and one
+// door. A transition belongs to a pane, so two may animate at once, and one
 // that is displaced or cleared lands rather than being dropped, which would
 // strand the pane on a scratch viewport.
 package transition

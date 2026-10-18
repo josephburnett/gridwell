@@ -12,15 +12,15 @@ type Rename int
 
 const (
 	// RenameNone is a read-only title: a text tile's name derives from its
-	// first line, an ephemeral row dies on ascent, and a declared doorway is
+	// first line, an ephemeral row dies on ascent, and a declared door is
 	// config-owned.
 	RenameNone Rename = iota
 	// RenameDescent is the tile the pane is descended into.
 	RenameDescent
-	// RenameDoor is the well the level was entered through: renaming the room
+	// RenameDoor is the door the level was entered through: renaming the room
 	// names its door.
 	RenameDoor
-	// RenameParent is the well row at the tail of the pane's path.
+	// RenameParent is the door row at the tail of the pane's path.
 	RenameParent
 )
 
@@ -49,7 +49,7 @@ type Input struct {
 	// reads it on that arm alone, so the guard cannot change the verdict.
 	Door     door.Kind
 	DoorName string
-	// Parent is whether the path's tail row is a cached well.
+	// Parent is whether the path's tail row is a cached door.
 	Parent     bool
 	ParentName string
 	// ConfigLabel is the declared label of an uncached parent, resolved on the
@@ -136,7 +136,7 @@ func renameOf(in Input) Rename {
 			return RenameDescent
 		}
 	case in.AtAnchor:
-		if in.Door == door.Well {
+		if in.Door == door.Tile {
 			return RenameDoor
 		}
 	case in.Parent:

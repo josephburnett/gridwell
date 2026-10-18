@@ -1,6 +1,6 @@
 //go:build connections
 
-// The mid-session partition gate: a mount that dies under a live session. It
+// The mid-session partition gate: a connection that dies under a live session. It
 // warms internal/sourcecache through a real tunnel, SIGKILLs the remote node,
 // and asserts the offline story end to end: a warmed read serves the memory,
 // never-read bytes fail honestly, the offline deep copy copies what is cached
@@ -41,7 +41,7 @@ func awaitConnHealth(t *testing.T, health <-chan *gridwellv1.Event, conn string,
 	}
 }
 
-func TestMountPartitionServesCache(t *testing.T) {
+func TestConnectionPartitionServesCache(t *testing.T) {
 	root := repoRoot(t)
 	bin := filepath.Join(root, "gridwell")
 	if _, err := os.Stat(bin); err != nil {
@@ -109,22 +109,22 @@ func TestMountPartitionServesCache(t *testing.T) {
 	}()
 	time.Sleep(3 * time.Second)
 
-	// Through the chain: a well holding one text that is warmed and one
+	// Through the chain: a door holding one text that is warmed and one
 	// that is never read.
-	well := rpc(t, localOrigin, "CreateTile", map[string]any{
+	door := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": personalChild,
-		"tile":   map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1, "altText": "trip"},
+		"tile":   map[string]any{"kind": "door", "x": 0, "y": 0, "w": 1, "h": 1, "altText": "trip"},
 	})["tile"].(map[string]any)
-	wellChild := well["childGridId"].(string)
+	doorChild := door["childGridId"].(string)
 	warmT := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": wellChild,
+		"gridId": doorChild,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	if _, err := cl.WriteContent(ctx, warmT["id"].(string), gwrpc.ContentBasis{Version: num(warmT["version"])}, []byte("warmed words")); err != nil {
 		t.Fatal(err)
 	}
 	coldT := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": wellChild,
+		"gridId": doorChild,
 		"tile":   map[string]any{"kind": "text", "x": 2, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	if _, err := cl.WriteContent(ctx, coldT["id"].(string), gwrpc.ContentBasis{Version: num(coldT["version"])}, []byte("cold words")); err != nil {
@@ -133,7 +133,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// A second never-read text for the re-warm after the revival. It is not
 	// read even then, so only the walk can warm it.
 	colderT := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": wellChild,
+		"gridId": doorChild,
 		"tile":   map[string]any{"kind": "text", "x": 4, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	if _, err := cl.WriteContent(ctx, colderT["id"].(string), gwrpc.ContentBasis{Version: num(colderT["version"])}, []byte("colder words")); err != nil {
@@ -142,7 +142,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 
 	// Warm the cache with the grids and one body. A write is never cached.
 	rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": personalChild})
-	rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": wellChild})
+	rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": doorChild})
 	if body, _, _, err := cl.ReadContent(ctx, warmT["id"].(string)); err != nil || string(body) != "warmed words" {
 		t.Fatalf("warm read = %q (%v)", body, err)
 	}
@@ -172,7 +172,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 	// The room itself still serves, whole, out of the cache. Nothing on the
 	// answer says it is a memory: that is the connection's health, awaited
 	// below, and the client's offline chip is drawn from there.
-	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": wellChild})
+	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": doorChild})
 	if len(g["tiles"].([]any)) != 3 {
 		t.Fatalf("dark grid read has %d tiles, want the cached 3", len(g["tiles"].([]any)))
 	}
@@ -187,14 +187,14 @@ func TestMountPartitionServesCache(t *testing.T) {
 	}
 	awaitConnHealth(t, health, "partconn1", false)
 
-	// The offline deep copy: right-drag the remote well into the local
-	// plugin while the mount is dark. Cached text becomes a real copy and
+	// The offline deep copy: right-drag the remote door into the local
+	// plugin while the connection is dark. Cached text becomes a real copy and
 	// never-read text becomes a link to the original.
 	copyResp := rpc(t, localOrigin, "CopyTile", map[string]any{
-		"tileId": well["id"], "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
+		"tileId": door["id"], "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
 	if copyResp["link"] == true {
-		t.Fatal("the offline copy's top well must be SOLID (its grid was cached)")
+		t.Fatal("the offline copy's top door must be SOLID (its grid was cached)")
 	}
 	cg := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": copyResp["childGridId"]})
 	var gotCopy map[string]any
@@ -219,7 +219,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 
 	// The revival. On the same address and the same DB the connection
 	// self-heals, its dial backoff capping at 10s, and the cold body reads
-	// live, so the cache answers only when the mount cannot.
+	// live, so the cache answers only when the connection cannot.
 	_, _, stop2 := startServeProc(t, bin, remoteHome, strings.TrimPrefix(remoteOrigin, "http://"))
 	if stop2 == nil {
 		t.Fatal("remote revival failed")
@@ -237,7 +237,7 @@ func TestMountPartitionServesCache(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 	}
 	if !healed {
-		t.Fatal(fmt.Sprintf("the mount never healed after revival on %s", remoteAddr))
+		t.Fatal(fmt.Sprintf("the connection never healed after revival on %s", remoteAddr))
 	}
 
 	// A recovered connection re-kicks the source's prefetch walk without a

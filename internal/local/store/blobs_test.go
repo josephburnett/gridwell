@@ -102,7 +102,7 @@ func TestSubscribeEventsReceivesPublish(t *testing.T) {
 	ctx := context.Background()
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.CreateWell(ctx, root, 0, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, ""); err != nil {
 		t.Fatal(err)
 	}
 	select {

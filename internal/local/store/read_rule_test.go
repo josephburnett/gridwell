@@ -22,7 +22,7 @@ import (
 type readSubject struct {
 	root, child      string
 	text, url, shell string
-	well, pane, link string
+	door, pane, link string
 	trashed          string
 	scratch, trash   string
 	ns               *Namespace
@@ -76,17 +76,17 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	well, err := s.CreateWell(ctx, root, 0, 3, 2, 2, "a room")
+	door, err := s.CreateDoor(ctx, root, 0, 3, 2, 2, "a room")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub.well, sub.child = well.Id, well.ChildGridId
+	sub.door, sub.child = door.Id, door.ChildGridId
 	if _, err := s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: 3, Cy: 4, Zoom: 1.25,
+		TileId: door.Id, Cx: 3, Cy: 4, Zoom: 1.25,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateText(ctx, well.ChildGridId, 1, 1, 1, 1, []byte("inside")); err != nil {
+	if _, err := s.CreateText(ctx, door.ChildGridId, 1, 1, 1, 1, []byte("inside")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -135,7 +135,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 	sub.nsGrid = gid
 	sub.entries = []*pluginv1.Entry{
 		{Key: "notes.md", Kind: "text", Label: "notes.md"},
-		{Key: "sub", Kind: "well", Label: "sub"},
+		{Key: "sub", Kind: "door", Label: "sub"},
 	}
 	id, err := sub.ns.Mint(gid, sub.entries[0], 0, 0, 0, 1, 1)
 	if err != nil {
@@ -178,7 +178,7 @@ func readCases() []readCase {
 		{"GetTile/text", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.text)) }},
 		{"GetTile/url", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.url)) }},
 		{"GetTile/shell", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.shell)) }},
-		{"GetTile/well", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.well)) }},
+		{"GetTile/door", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.door)) }},
 		{"GetTile/pane", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.pane)) }},
 		{"GetTile/link", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.link)) }},
 		{"GetTile/trashed", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.trashed)) }},
@@ -247,7 +247,7 @@ func readCases() []readCase {
 // Every read verb, against a store holding a tile of every kind, leaves the
 // file byte-identical — the row it read, the rows it walked past, the ids it
 // did not spend. The whole file is the oracle rather than the row the verb
-// names, because a read that stamps the doorway it came through, or mints a
+// names, because a read that stamps the door it came through, or mints a
 // row for an entry the user never touched, writes somewhere else.
 func TestReadingNeverMutates(t *testing.T) {
 	s := newTestStore(t)

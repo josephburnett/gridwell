@@ -88,11 +88,11 @@ const test = base.extend<Fixtures>({
   },
 });
 
-// enterFarRoom is the shared preamble of the mount specs below: learn the
+// enterFarRoom is the shared preamble of the connection specs below: learn the
 // yaml-declared connection's root, put one tile in the far node's home, link
 // that home into the local grid, descend into it, and wait for the room to
 // arrive live. It returns the far room's qualified grid id and the cell the
-// link well sits on.
+// link door sits on.
 //
 // The node serves a remembered grid immediately and revalidates behind it, and
 // the client's own Subscribe prefetched this connection at boot, before the far
@@ -127,9 +127,9 @@ async function enterFarRoom(
   const cy = Math.round(f.cy);
   await rpcJSON(world.local, 'CreateTile', {
     gridId: f.gridID,
-    tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
+    tile: { kind: 'door', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
   });
-  await expect.poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)).toBe(true);
+  await expect.poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)).toBe(true);
   await gw.descendCell(cx, cy);
   const inside = (await gw.panes()).find((p) => p.focused)!;
   expect(inside.gridID).toBe(farHomeGrid);
@@ -172,37 +172,37 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     true,
   );
 
-  // ── A link well to the far home, dropped where the client looks ──
+  // ── A link door to the far home, dropped where the client looks ──
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
   await rpcJSON(world.local, 'CreateTile', {
     gridId: f.gridID,
-    tile: { kind: 'well', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
+    tile: { kind: 'door', x: cx, y: cy, w: 1, h: 1, childGridId: farHomeGrid, altText: 'far' },
   });
   await expect
-    .poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'well', cx, cy))
+    .poll(async () => !!tileAt(await gw.getGrid(f.gridID), 'door', cx, cy))
     .toBe(true);
 
   // ── Descend: the pane is there, and the menu is the far node's. ──
   await gw.descendCell(cx, cy);
 
-  // The bar's title is the link well's own name, never the remote's config
-  // label, and renaming here renames that well. The level's crumb wears the
-  // mount's glyph, the globe, rather than a generic grid glyph.
+  // The bar's title is the link door's own name, never the remote's config
+  // label, and renaming here renames that door. The level's crumb wears the
+  // connection's glyph, the globe, rather than a generic grid glyph.
   await expect.poll(async () => (await gw.barName()).label).toBe('far');
   expect((await gw.barName()).editable, 'the door is a real row — renamable').toBe(true);
   const bar = await gw.bar();
   const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
-  expect(rootCrumb?.glyph, 'the crumb wears the mount door glyph, not a grid').toBe('globe');
+  expect(rootCrumb?.glyph, 'the crumb wears the glyph of the door to another namespace, not a grid').toBe('globe');
   await gw.clickBarName('right');
   const rin = window.locator('#gw-rename-input');
   await expect(rin).toBeVisible();
   await rin.fill('my far place');
   await rin.press('Enter');
   await expect
-    .poll(async () => String(tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)?.altText ?? ''))
+    .poll(async () => String(tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)?.altText ?? ''))
     .toBe('my far place');
   await expect.poll(async () => (await gw.barName()).label).toBe('my far place');
 
@@ -269,11 +269,11 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   expect(((await gw.getGrid(f.gridID)).tiles ?? []).length, 'no cross-node tile was created').toBe(before);
 });
 
-// A mounted machine going dark degrades the remote pane to a cache-served
+// A far node going dark degrades the remote pane to a cache-served
 // memory: the tiles render exactly as remembered, and the bar shows its quiet
 // offline chip, read here through the panes() hook. Nothing moves and nothing
 // blanks.
-test('a dark mount serves the remembered room, marked stale', async ({ gw, window, world }) => {
+test('a dark connection serves the remembered room, marked stale', async ({ gw, window, world }) => {
   const { farHomeGrid, cx, cy, liveTiles } = await enterFarRoom(gw, world);
 
   // Leave and re-enter: the room re-reads through the source cache and arrives
@@ -309,7 +309,7 @@ test('a dark mount serves the remembered room, marked stale', async ({ gw, windo
 // dies, and again after it revives, this spec polls the client's own state and
 // does nothing else. Every refetch it sees was the client's own reaction to an
 // event.
-test('a revived mount clears its chip and its notice with nobody touching anything', async ({
+test('a revived connection clears its chip and its notice with nobody touching anything', async ({
   gw,
   window,
   world,
@@ -323,7 +323,7 @@ test('a revived mount clears its chip and its notice with nobody touching anythi
     const p = (await gw.panes()).find((q) => q.focused);
     return p?.gridID === farHomeGrid ? p.stale === true : null;
   };
-  expect(await health(), 'a live mount posts no health notice').toEqual([]);
+  expect(await health(), 'a live connection posts no health notice').toEqual([]);
 
   // ── Down ──────────────────────────────────────────────────────────────
   // The connection's stream ends, the node publishes one health event, and the

@@ -49,18 +49,18 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx + 1, wy);
+  await gw.dragCreate('door', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
-  const well = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy);
-  expect(pt && well, 'pane tile and well persisted').toBeTruthy();
+  const door = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy);
+  expect(pt && door, 'pane tile and door persisted').toBeTruthy();
 
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
   await gw.descendCell(wx + 1, wy);
   const childGrid = (await gw.focused()).gridID;
-  expect(childGrid, 'descended into the well inside the pane tile').not.toBe(rootGrid);
+  expect(childGrid, 'descended into the door inside the pane tile').not.toBe(rootGrid);
   await expect
-    .poll(async () => (await gw.getTileContent(pt!.id)).includes(well!.id), {
+    .poll(async () => (await gw.getTileContent(pt!.id)).includes(door!.id), {
       message: 'the layout records the descent, which is arrangement',
       timeout: 10_000,
     })
@@ -124,12 +124,12 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx + 1, wy);
+  await gw.dragCreate('door', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
-  const well = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy);
-  expect(pt && well, 'pane tile and well persisted').toBeTruthy();
+  const door = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy);
+  expect(pt && door, 'pane tile and door persisted').toBeTruthy();
 
-  // Frame the well's grid outside any pane tile, so its row owns a view.
+  // Frame the door's grid outside any pane tile, so its row owns a view.
   await gw.descendCell(wx + 1, wy);
   await gw.wheelAtFocusedCenter(-300);
   const zc = await gw.focused();
@@ -138,12 +138,12 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   await gw.middleClickCell(Math.round(left.cx), Math.round(left.cy));
   expect((await gw.focused()).gridID, 'ascended out of the child').toBe(rootGrid);
   await expect
-    .poll(async () => Number(tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy)?.viewZoom ?? 0), {
-      message: 'the ascent wrote the well row',
+    .poll(async () => Number(tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)?.viewZoom ?? 0), {
+      message: 'the ascent wrote the door row',
     })
     .toBeGreaterThan(0);
 
-  // A blob as every Gridwell before this one wrote it: the leaf on the well's
+  // A blob as every Gridwell before this one wrote it: the leaf on the door's
   // grid, with a viewport of its own that disagrees with the row.
   const blobCx = left.cx + 37;
   const blobCy = left.cy - 23;

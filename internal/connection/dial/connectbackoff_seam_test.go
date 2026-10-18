@@ -2,7 +2,7 @@ package dial
 
 // The healed-network seam: a far node that is down when the connection is
 // dialed and comes up later. Nothing asks gRPC to reconnect; the wait between
-// its own attempts is the whole of how fast a mount comes back, and gRPC's
+// its own attempts is the whole of how fast a connection comes back, and gRPC's
 // default grows that wait to two minutes.
 
 import (
@@ -81,7 +81,7 @@ func TestAConnectionReconnectsWithinTheConnectBackoff(t *testing.T) {
 	}
 }
 
-// The default is what a user's mount actually waits out, and the whole point
+// The default is what a user's connection actually waits out, and the whole point
 // of setting it is that gRPC's own default is two minutes.
 func TestTheConnectBackoffDefaultCapsWellBelowGRPCs(t *testing.T) {
 	if connectBackoff.BaseDelay != time.Second || connectBackoff.MaxDelay != 10*time.Second {

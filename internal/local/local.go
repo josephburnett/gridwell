@@ -100,7 +100,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	if err != nil {
 		return nil, errToStatus(err)
 	}
-	// Every declared doorway carries its grid's framing, root and trashcan
+	// Every declared door carries its grid's framing, root and trashcan
 	// alike.
 	view, err := p.st.RootFraming(ctx)
 	if err != nil {
@@ -113,7 +113,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	tcx, tcy, tzoom := trashView.Wire()
 	rcx, rcy, rzoom := view.Wire()
 	return &gridwellv1.InfoResponse{
-		Glyph:         rpc.GlyphWell,
+		Glyph:         rpc.GlyphDoor,
 		DisplayName:   "home",
 		RootGridId:    id,
 		ScratchGridId: scratch,
@@ -130,7 +130,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	}, nil
 }
 
-// SetFraming persists a grid's framing on a doorway tile or, for a root, the
+// SetFraming persists a grid's framing on a door tile or, for a root, the
 // grid row. It never bumps a content version.
 func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	t, err := p.st.SetFraming(ctx, req)
@@ -270,15 +270,15 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 			t.Kind, t.LinkTargetId, t.AltText))
 	}
 	switch t.Kind {
-	case rpc.KindWell:
-		// child_grid_id set makes an exit well: the qualified link is
+	case rpc.KindDoor:
+		// child_grid_id set makes a door to another namespace: the qualified link is
 		// stored verbatim, with no interior grid.
 		if t.ChildGridId != "" {
-			return tileResp(p.st.CreateExitWell(ctx, req.GridId, t.X, t.Y, t.W, t.H,
+			return tileResp(p.st.CreateDoorToOtherNamespace(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 				t.ChildGridId, t.AltText,
 				rpc.ViewOf(t.ViewCx, t.ViewCy, t.ViewZoom)))
 		}
-		return tileResp(p.st.CreateWell(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText))
+		return tileResp(p.st.CreateDoor(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText))
 	case rpc.KindText:
 		return tileResp(p.st.CreateText(ctx, req.GridId, t.X, t.Y, t.W, t.H, req.Content))
 	case rpc.KindURL:
@@ -307,7 +307,7 @@ func (p *Plugin) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) 
 }
 
 // MoveTile is the single placement writeback; the store derives the
-// well-into-own-subtree refusal itself.
+// door-into-own-subtree refusal itself.
 func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
 	return tileResp(p.st.MoveTile(ctx, req))
 }
@@ -352,8 +352,8 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "set: nil tile")
 	}
 	switch t.Kind {
-	case rpc.KindWell:
-		return nil, status.Error(codes.InvalidArgument, "set: well framing rides SetFraming")
+	case rpc.KindDoor:
+		return nil, status.Error(codes.InvalidArgument, "set: door framing rides SetFraming")
 	case rpc.KindText:
 		return tileResp(p.st.SetTextScroll(ctx, req.TileId, t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode))
 	case rpc.KindShell:

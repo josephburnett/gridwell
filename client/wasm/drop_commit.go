@@ -198,8 +198,8 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	to := d.carry().At(dropX, dropY)
 	for i, row := range d.carried {
 		label := "CreateLeafLink"
-		if rpc.IsWellKind(row.Kind) {
-			label = "CreateWell"
+		if rpc.IsDoorKind(row.Kind) {
+			label = "CreateDoor"
 		}
 		a.createTile(label, t.gridID, &gridwellv1.CreateTileRequest{GridId: t.gridID,
 			Tile: rpc.LinkOf(row, to[i].X, to[i].Y)}, nil)

@@ -350,7 +350,7 @@ func (a *App) navAwait(e nav.Effect) {
 			if err != nil || len(res) == 0 {
 				return nav.Result{}
 			}
-			return nav.Result{OK: true, Wells: res[0].Path}
+			return nav.Result{OK: true, Doors: res[0].Path}
 		})
 	case nav.RequestFlushLayout:
 		a.flushWorkspaceSave(func(ok bool) {

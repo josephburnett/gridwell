@@ -94,7 +94,7 @@ func TestAChangeDuringAStreamBreakReachesTheClientWithoutAnotherEvent(t *testing
 		t.Fatal("the client never saw its stream break")
 	}
 	if _, err := writer.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: home,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 2, Y: 2, W: 1, H: 1, AltText: "made in the gap"}}); err != nil {
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 2, Y: 2, W: 1, H: 1, AltText: "made in the gap"}}); err != nil {
 		t.Fatal(err)
 	}
 	close(gap)

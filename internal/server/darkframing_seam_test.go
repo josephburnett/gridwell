@@ -17,7 +17,7 @@ import (
 // A far grid reopens where it was last left while its machine is gone: the
 // source cache in front of the real transport remembers the latest framing of
 // a far root, from this node's own accepted write and from the far node's
-// event alike, and a well's from its tile. Across the whole seam, because the
+// event alike, and a door's from its tile. Across the whole seam, because the
 // framing a dark handshake answers is assembled from three layers' copies.
 func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -47,16 +47,16 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 		RootGridId: root, Cx: mine.Cx(), Cy: mine.Cy(), Zoom: mine.Zoom()}); err != nil {
 		t.Fatalf("SetFraming through the connection: %v", err)
 	}
-	// A well on the far home, framed through the connection.
-	well, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1}})
+	// A door on the far home, framed through the connection.
+	door, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wellFraming := mkFramingExt(5, 6, 0.25)
+	doorFraming := mkFramingExt(5, 6, 0.25)
 	if _, err := h.localCl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: wellFraming.Cx(), Cy: wellFraming.Cy(), Zoom: wellFraming.Zoom()}); err != nil {
-		t.Fatalf("SetFraming a far well: %v", err)
+		TileId: door.Id, Cx: doorFraming.Cx(), Cy: doorFraming.Cy(), Zoom: doorFraming.Zoom()}); err != nil {
+		t.Fatalf("SetFraming a far door: %v", err)
 	}
 	if _, err := h.localCl.GetGrid(ctx, root); err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 
 	h.stopFarNode()
 
-	// The connection's own row is the doorway the + menu and a landing read.
+	// The connection's own row is the door the + menu and a landing read.
 	lp, err = h.localCl.Handshake(ctx)
 	if err != nil {
 		t.Fatalf("the node's handshake while dark: %v", err)
@@ -111,9 +111,9 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 		t.Fatalf("the far home while dark: %v", err)
 	}
 	for _, tl := range g.Tiles {
-		if tl.Id == well.Id {
-			if got := (rpc.ViewOf(tl.ViewCx, tl.ViewCy, tl.ViewZoom)); !got.SameAs(rpc.Saved(wellFraming)) {
-				t.Errorf("the far well while dark = %+v, want %+v", got, wellFraming)
+		if tl.Id == door.Id {
+			if got := (rpc.ViewOf(tl.ViewCx, tl.ViewCy, tl.ViewZoom)); !got.SameAs(rpc.Saved(doorFraming)) {
+				t.Errorf("the far door while dark = %+v, want %+v", got, doorFraming)
 			}
 		}
 	}

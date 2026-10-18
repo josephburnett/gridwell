@@ -69,7 +69,7 @@ func TestFindFiltersReachAPluginsRows(t *testing.T) {
 		}
 	}
 	if week == nil {
-		t.Fatalf("no week well in %v", root.Tiles)
+		t.Fatalf("no week door in %v", root.Tiles)
 	}
 
 	if got := find(&gridwellv1.FindRequest{Query: "widget", GridId: rootID}); len(got) != 0 {
@@ -115,7 +115,7 @@ func TestFindFiltersReachAPluginsRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if p := r.Msg.Results[0].Path; len(p) != 1 || p[0].Id != week.Id {
-		t.Errorf("path = %v, want the week well", p)
+		t.Errorf("path = %v, want the week door", p)
 	}
 	if got := find(&gridwellv1.FindRequest{Query: "widget", Created: &gridwellv1.TimeRange{From: before}}); !has(got, "!2") {
 		t.Errorf("widget made since the select = %v, want !2, the one row", got)
@@ -131,8 +131,8 @@ func TestFindFiltersReachAPluginsRows(t *testing.T) {
 	if got := find(&gridwellv1.FindRequest{Query: "widget", Kind: rpc.KindPane}); len(got) != 0 {
 		t.Errorf("widget of kind pane = %v, want none", got)
 	}
-	if got := find(&gridwellv1.FindRequest{GridId: rootID, Recurse: true, Kind: rpc.KindWell}); len(got) == 0 || slices.ContainsFunc(got, func(a string) bool { return strings.Contains(a, "widget") }) {
-		t.Errorf("the wells under the root = %v, want the week wells and no todo", got)
+	if got := find(&gridwellv1.FindRequest{GridId: rootID, Recurse: true, Kind: rpc.KindDoor}); len(got) == 0 || slices.ContainsFunc(got, func(a string) bool { return strings.Contains(a, "widget") }) {
+		t.Errorf("the doors under the root = %v, want the week doors and no todo", got)
 	}
 	got := find(&gridwellv1.FindRequest{GridId: week.ChildGridId})
 	if len(got) != 2 || !strings.Contains(got[0], "!2") {

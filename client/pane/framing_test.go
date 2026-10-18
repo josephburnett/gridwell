@@ -5,25 +5,25 @@ import (
 	"testing"
 )
 
-// Which row owns the framing of the place this pane is at: the doorway you
+// Which row owns the framing of the place this pane is at: the door you
 // came in by, or the grid itself when you came in by nothing.
-func TestFramingTargetPicksTheDoorway(t *testing.T) {
-	// A root grid: no doorway, the grid row owns it.
+func TestFramingTargetPicksTheDoor(t *testing.T) {
+	// A root grid: no door, the grid row owns it.
 	s := NewStack("home/1")
 	if got := s.FramingTarget(false); got.TileID != "" || got.RootGridID != "home/1" || got.Content {
 		t.Fatalf("root = %+v", got)
 	}
 
-	// A well descent: the well is the doorway, and it lives one level out.
+	// A door descent: the door is the door, and it lives one level out.
 	s.Push(Frame{Door: "4"})
 	s.Push(Frame{Door: "9"})
 	got := s.FramingTarget(false)
 	if got.TileID != "9" || got.DoorAnchor != "home/1" ||
 		!reflect.DeepEqual(got.DoorPath, []string{"4"}) || got.RootGridID != "home/1" {
-		t.Fatalf("well = %+v", got)
+		t.Fatalf("door = %+v", got)
 	}
 
-	// The link tile is the doorway and lives in the level below. The frame
+	// The link tile is the door and lives in the level below. The frame
 	// remembers it, so nothing looks through the parent grid for it.
 	s.Push(Frame{GridID: "k3x9m2q/1", Door: "lnk"})
 	got = s.FramingTarget(false)
@@ -31,7 +31,7 @@ func TestFramingTargetPicksTheDoorway(t *testing.T) {
 		!reflect.DeepEqual(got.DoorPath, []string{"4", "9"}) {
 		t.Fatalf("portal = %+v", got)
 	}
-	// The fallback for a doorway with no row (a + menu portal has no tile in
+	// The fallback for a door with no row (a + menu portal has no tile in
 	// the origin grid) is the level's own root grid.
 	if got.RootGridID != "k3x9m2q/1" {
 		t.Fatalf("portal fallback root = %q", got.RootGridID)
@@ -58,10 +58,10 @@ func TestFramingTargetInsideAPaneTileIsTheLayout(t *testing.T) {
 	}
 	s.Push(Frame{Door: "4"})
 	if got := s.FramingTarget(true); !got.Layout || got.TileID != "4" || got.DoorAnchor != "home/1" {
-		t.Fatalf("well in a pane tile = %+v", got)
+		t.Fatalf("door in a pane tile = %+v", got)
 	}
 	if got := s.FramingTarget(false); got.Layout || got.TileID != "4" {
-		t.Fatalf("well outside a pane tile = %+v", got)
+		t.Fatalf("door outside a pane tile = %+v", got)
 	}
 	s.Push(Frame{Door: "77", Content: true})
 	if got := s.FramingTarget(true); !got.Layout || !got.Content || got.TileID != "77" {

@@ -14,7 +14,7 @@ import (
 
 // Frame is one level of a pane's place. GridID is set only where it is
 // authoritative, on the bottom frame and on a namespace crossing; an ordinary
-// well frame derives its grid through ResolveLeafGrid, since a derived fact
+// door frame derives its grid through ResolveLeafGrid, since a derived fact
 // must not be copied. Content marks a frame whose place is the door tile
 // itself, with no grid of its own.
 type Frame struct {
@@ -140,7 +140,7 @@ func NewStack(gridID string) Stack {
 }
 
 // StackAt builds the stack a restored place names: a root grid, a path of
-// doorway ids, and a content descent on top, with no viewport on the outer
+// door ids, and a content descent on top, with no viewport on the outer
 // frames. It says only one namespace level, so a stack whose crossings matter
 // is decoded by StackOf.
 func StackAt(gridID string, path []string, contentID string) Stack {
@@ -205,7 +205,7 @@ func (s *Stack) Copy() Stack {
 	return c
 }
 
-// Push descends through a doorway: the current frame becomes an outer one.
+// Push descends through a door: the current frame becomes an outer one.
 func (s *Stack) Push(f Frame) {
 	s.below = append(s.below, s.Frame)
 	s.Frame = f
@@ -246,7 +246,7 @@ func (s *Stack) Anchor() string {
 	return anchor
 }
 
-// Path is the doorway tile ids from Anchor down to the pane's grid. A content
+// Path is the door tile ids from Anchor down to the pane's grid. A content
 // frame contributes nothing, sitting in the grid below it.
 func (s *Stack) Path() []string {
 	_, path := s.AnchorPathAt(len(s.below))

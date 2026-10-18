@@ -12,16 +12,16 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// isWellKind is an alias for rpc.IsWellKind, so the set lives in one place.
-func isWellKind(kind string) bool {
-	return rpc.IsWellKind(kind)
+// isDoorKind is an alias for rpc.IsDoorKind, so the set lives in one place.
+func isDoorKind(kind string) bool {
+	return rpc.IsDoorKind(kind)
 }
 
 // copySubtree deep-copies a grid and everything beneath it into fresh rows.
 // Each grid and tile gets a new row id, with the version preserved, so no tile
 // is shared between two copies and editing one can never touch the other.
 // Blobs are immutable and shared by refcount; source grids behind file and
-// process wells are shared by identity. See childGridForCopy.
+// process doors are shared by identity. See childGridForCopy.
 func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (int64, error) {
 	old, err := s.loadGrid(ctx, tx, srcGridID)
 	if err != nil {
@@ -57,8 +57,8 @@ func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (i
 }
 
 // childGridForCopy returns the child_grid_id a copy of tile n should carry,
-// ready to bind into the INSERT. An interior well gets a deep copy of its
-// subtree; an exit well keeps its qualified cross-plugin link, since
+// ready to bind into the INSERT. An interior door gets a deep copy of its
+// subtree; a door to another namespace keeps its qualified cross-plugin link, since
 // another plugin owns that grid; everything else gets nil.
 func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile) (any, error) {
 	if n.ChildGridId == "" {
@@ -68,7 +68,7 @@ func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.
 	if err != nil {
 		return n.ChildGridId, nil
 	}
-	if n.Kind == rpc.KindWell {
+	if n.Kind == rpc.KindDoor {
 		newChild, err := s.copySubtree(ctx, tx, childID)
 		if err != nil {
 			return nil, err
@@ -186,7 +186,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 }
 
 // deleteGrid recursively deletes a grid and everything it owns, which
-// tileRefs decides per row. An owned grid is 1:1 with its parent well, so
+// tileRefs decides per row. An owned grid is 1:1 with its parent door, so
 // there is no refcount to consult.
 func (s *Store) deleteGrid(ctx context.Context, tx *sql.Tx, gridID int64) error {
 	rows, err := tx.QueryContext(ctx,
@@ -309,14 +309,14 @@ func nullToInt(n sql.NullInt64) int64 {
 	return 0
 }
 
-// tileRefs is the one description of what a tile owns: an interior well's
+// tileRefs is the one description of what a tile owns: an interior door's
 // child grid, and the blob it holds a refcount on. childGrid is the stored
-// child_grid_id; an exit well's is a qualified link that does not parse
-// as a local grid id, so it owns no grid and only the link goes.
+// child_grid_id; that of a door to another namespace is a qualified link
+// that does not parse as a local grid id, so it owns no grid and only the link goes.
 // Single-delete and grid teardown both route through it.
 func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch {
-	case isWellKind(kind):
+	case isDoorKind(kind):
 		g, err := strconv.ParseInt(childGrid, 10, 64)
 		if err != nil {
 			return 0, 0
@@ -332,7 +332,7 @@ func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef
 	return 0, 0
 }
 
-// decTileRefs releases what a deleted tile owned: its interior-well child
+// decTileRefs releases what a deleted tile owned: its interior-door child
 // grid, recursively, and its blob, collected at refcount zero.
 func (s *Store) decTileRefs(ctx context.Context, tx *sql.Tx, kind, childGrid string, blob, previewBlob int64) error {
 	g, b := tileRefs(kind, childGrid, blob, previewBlob)

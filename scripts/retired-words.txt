@@ -6,7 +6,7 @@ provider .*[Ll]ink [Pp]rovider|.*registerLinkProvider
 providers
 # "loadout" — the compiled-in plugin set of a leaf binary.
 loadout
-# "viewX"/"viewY" — a doorway's integer window origin, spelled ViewX/ViewY on
+# "viewX"/"viewY" — a door's integer window origin, spelled ViewX/ViewY on
 # the wire and viewX/viewY in proto-JSON. Schema v11 keeps the framing as a
 # float center (viewCx/viewCy), and nothing on the wire answers to the old
 # name, so a stale read is silently undefined. The SQL column view_x is a
@@ -21,7 +21,7 @@ viewY
 # allowed in internal/config, which owns the key, and on any line that spells
 # one of those names.
 federation internal/config/|.*federation\.sock|.*federation=|.*`federation|.*cfg\.Federation|.*config\.FederationSocket|.*e2e/federation\.spec\.ts
-# "launcher" — a well onto a place is a doorway, the word the + menu, the
+# "launcher" — a tile that leads to a grid is a door, the word the + menu, the
 # crumbs and client/door already use; "launcher" named the same tile and said
 # nothing more. Allowed for the shadow launchers, the browser-opening scripts a
 # shell's PATH points at, which are a different thing.
@@ -65,3 +65,10 @@ sessionkey
 session_left
 session_gone
 sessiongone
+# "well" — a tile that leads to a grid is a door (rpc.KindDoor). Allowed: the
+# English word, and the store's migration chain, which reads the kind as a
+# released binary stored it.
+well .*as well|.*well-formed|.*[Ww]ell (past|within|below|under)|internal/local/store/(schema\.go|migrations\.go|migration_harness_test\.go):
+wells
+doorway
+doorways

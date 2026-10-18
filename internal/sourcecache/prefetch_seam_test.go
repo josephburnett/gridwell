@@ -132,20 +132,20 @@ func twoConnFixture(t *testing.T, opts Options) (cc *Layer, a, b *farNode, roots
 // therefore remembers it.
 func qualify(conn, id string) string { return conn + "/" + id }
 
-// seedNested builds root → well → (text "deep note", inner well) on the far
+// seedNested builds root → door → (text "deep note", inner door) on the far
 // store, entirely behind the cache through a raw client, so nothing is cached
-// by the seeding itself. It returns the nested grid id, the inner well's child
+// by the seeding itself. It returns the nested grid id, the inner door's child
 // grid id, and the text tile id, in the source's own frame: a caller reading
 // through a connection qualifies them.
 func seedNested(t *testing.T, raw namespace.Namespace, root string) (nested, inner, textID string) {
 	t.Helper()
 	ctx := context.Background()
-	well, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
-		Tile: &pb.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}})
+	door, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	nested = well.GetTile().GetChildGridId()
+	nested = door.GetTile().GetChildGridId()
 	txt, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: nested,
 		Tile: &pb.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
@@ -154,7 +154,7 @@ func seedNested(t *testing.T, raw namespace.Namespace, root string) (nested, inn
 	textID = txt.GetTile().GetId()
 	writeOne(t, raw, textID, txt.GetTile().GetVersion(), []byte("deep note"))
 	iw, err := raw.CreateTile(ctx, &pb.CreateTileRequest{GridId: nested,
-		Tile: &pb.Tile{Kind: "well", X: 2, Y: 0, W: 1, H: 1}})
+		Tile: &pb.Tile{Kind: "door", X: 2, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestSubscribeDoesNotCrawlWithoutThePolicy(t *testing.T) {
 		_ = cc.Subscribe(subCtx, &pb.SubscribeRequest{}, func(*pb.Event) error { return nil })
 	}()
 	// Give a walk every chance to happen before declaring it did not: the
-	// positive twin above finds the grid well inside this window.
+	// positive twin above finds the grid door inside this window.
 	time.Sleep(500 * time.Millisecond)
 	if _, _, ok := cc.loadGrid(ctx, qualify(conn, nested)); ok {
 		t.Fatal("a namespace without the prefetch policy crawled itself anyway")

@@ -15,7 +15,7 @@ func TestBeaconBodies(t *testing.T) {
 		TileId: "u1/5", Cx: 1, Cy: 2, Zoom: 0.5,
 	})
 	if path != "/gridwell.v1.Gridwell/SetFraming" {
-		t.Errorf("doorway framing path = %q", path)
+		t.Errorf("door framing path = %q", path)
 	}
 	var m map[string]any
 	if err := json.Unmarshal(body, &m); err != nil {

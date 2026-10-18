@@ -19,8 +19,8 @@ import (
 )
 
 // Cross-plugin gesture semantics: a left-drag across a plugin boundary creates
-// a link, an exit well for a grid or a leaf link for a leaf, and a right-drag
-// creates a real copy, bytes for a leaf and a deep copy for a solid well. The
+// a link, a door to another namespace for a grid or a leaf link for a leaf, and a right-drag
+// creates a real copy, bytes for a leaf and a deep copy for a solid door. The
 // left-drag arrives as a plain CreateTile carrying a qualified link, the
 // same shape a + menu swatch drop uses, so both forms run through the real
 // router seam. Framing and labels ride every cross-plugin link and copy.
@@ -61,38 +61,38 @@ func twoPluginServer(t *testing.T) (cl *rpc.Client, uuidA, rootA, uuidB, rootB s
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), uuidA, rootA, uuidB, rootB
 }
 
-func TestLinkWellAcrossPlugins(t *testing.T) {
+func TestLinkDoorAcrossPlugins(t *testing.T) {
 	cl, uuidA, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
-	// A named well with content inside it, in plugin A.
-	well, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"}})
+	// A named door with content inside it, in plugin A.
+	door, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"}})
 	if err != nil {
-		t.Fatalf("CreateWell: %v", err)
+		t.Fatalf("CreateDoor: %v", err)
 	}
-	inner, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# soup"))
+	inner, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: door.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# soup"))
 	if err != nil {
 		t.Fatalf("CreateText: %v", err)
 	}
 
-	// The source well has a framing the user set — the preview the link
+	// The source door has a framing the user set — the preview the link
 	// gesture carries along. Descending the link must land exactly where
 	// descending the source would.
 	framed, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id,
+		TileId: door.Id,
 		Cx:     7, Cy: -2, Zoom: 1.75,
 	})
 	if err != nil {
 		t.Fatalf("SetFraming: %v", err)
 	}
 
-	// LEFT-drag the well into plugin B: the client commits a CreateWell
+	// LEFT-drag the door into plugin B: the client commits a CreateDoor
 	// carrying the source's qualified child grid, label, framing, and
 	// provenance — the destination gains a LINK; there is only one copy of
 	// the grid.
-	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootB, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 3, Y: 3, W: well.W, H: well.H, ChildGridId: well.ChildGridId, AltText: framed.AltText, ViewCx: framed.ViewCx, ViewCy: framed.ViewCy, ViewZoom: framed.ViewZoom}})
+	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootB, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 3, Y: 3, W: door.W, H: door.H, ChildGridId: door.ChildGridId, AltText: framed.AltText, ViewCx: framed.ViewCx, ViewCy: framed.ViewCy, ViewZoom: framed.ViewZoom}})
 	if err != nil {
-		t.Fatalf("cross-plugin link (CreateWell): %v", err)
+		t.Fatalf("cross-plugin link (CreateDoor): %v", err)
 	}
 	if link.ViewCx != 7 || link.ViewCy != -2 || link.ViewZoom != 1.75 {
 		t.Errorf("link framing = (%v, %v, %v), want the source's (7, -2, 1.75) — a link must not reset the viewport",
@@ -101,8 +101,8 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	if u, _, _ := rpc.SplitID(link.Id); u != uuidB {
 		t.Errorf("link lives in %q, want destination plugin %q", u, uuidB)
 	}
-	if link.ChildGridId != well.ChildGridId {
-		t.Errorf("link child = %q, want the SOURCE well's grid %q (shared, not copied)", link.ChildGridId, well.ChildGridId)
+	if link.ChildGridId != door.ChildGridId {
+		t.Errorf("link child = %q, want the SOURCE door's grid %q (shared, not copied)", link.ChildGridId, door.ChildGridId)
 	}
 	if !link.Link {
 		t.Error("cross-plugin link must be marked Link (dashed border, unlink-only delete)")
@@ -119,12 +119,12 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 		t.Errorf("linked grid = %+v, want the source's tile %s", g.Tiles, inner.Id)
 	}
 
-	// Deleting the link only unlinks — the source well and its content survive.
+	// Deleting the link only unlinks — the source door and its content survive.
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: link.Id})); err != nil {
 		t.Fatalf("delete link: %v", err)
 	}
-	if _, err := cl.GetTile(ctx, well.Id); err != nil {
-		t.Errorf("deleting the link destroyed the source well: %v", err)
+	if _, err := cl.GetTile(ctx, door.Id); err != nil {
+		t.Errorf("deleting the link destroyed the source door: %v", err)
 	}
 	if _, _, _, err := cl.ReadContent(ctx, inner.Id); err != nil {
 		t.Errorf("deleting the link destroyed the source's content: %v", err)
@@ -132,44 +132,44 @@ func TestLinkWellAcrossPlugins(t *testing.T) {
 	_ = uuidA
 }
 
-// TestCopyWellAcrossPluginsDeepCopies: a solid well right-dragged across
+// TestCopyDoorAcrossPluginsDeepCopies: a solid door right-dragged across
 // a plugin boundary DEEP-COPIES — the destination gains an independent
 // subtree, byte-identical bodies, framing preserved, provenance carried,
 // links inside copied as links — and editing the copy never
 // touches the source (no structural sharing across the boundary).
-func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
+func TestCopyDoorAcrossPluginsDeepCopies(t *testing.T) {
 	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
-	well, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"}})
+	door, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"}})
 	if err != nil {
-		t.Fatalf("CreateWell: %v", err)
+		t.Fatalf("CreateDoor: %v", err)
 	}
-	// Contents: a text body, a NESTED well with its own text, and a leaf
+	// Contents: a text body, a NESTED door with its own text, and a leaf
 	// LINK (which must copy as a link, not as bytes).
-	inner, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# soup"))
+	inner, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: door.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# soup"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	nested, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 2, Y: 0, W: 1, H: 1, AltText: "drafts"}})
+	nested, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: door.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 2, Y: 0, W: 1, H: 1, AltText: "drafts"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: nested.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# stock")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 4, Y: 0, W: 1, H: 1, LinkTargetId: inner.Id, AltText: "soup-link"}}); err != nil {
+	if _, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: door.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 4, Y: 0, W: 1, H: 1, LinkTargetId: inner.Id, AltText: "soup-link"}}); err != nil {
 		t.Fatal(err)
 	}
-	// Framing on the well (preview = descent = ascent).
+	// Framing on the door (preview = descent = ascent).
 	if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: 7, Cy: 8, Zoom: 2.5,
+		TileId: door.Id, Cx: 7, Cy: 8, Zoom: 2.5,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	copyTop, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
-		TileId: well.Id, DestGridId: rootB, X: 3, Y: 3,
+		TileId: door.Id, DestGridId: rootB, X: 3, Y: 3,
 	})
 	if err != nil {
 		t.Fatalf("deep copy: %v", err)
@@ -181,7 +181,7 @@ func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 		t.Errorf("framing lost: %+v", copyTop)
 	}
 	if copyTop.Link {
-		t.Fatal("the copy must be a SOLID well (a copy, not a link)")
+		t.Fatal("the copy must be a SOLID door (a copy, not a link)")
 	}
 
 	// The copied child grid: text bytes, the nested subtree, the link.
@@ -196,7 +196,7 @@ func TestCopyWellAcrossPluginsDeepCopies(t *testing.T) {
 			copiedText = tl
 		case tl.LinkTargetId != "":
 			copiedLink = tl
-		case tl.Kind == rpc.KindWell:
+		case tl.Kind == rpc.KindDoor:
 			copiedNested = tl
 		}
 	}
@@ -413,12 +413,12 @@ func TestCopyPaneAcrossPluginsCopiesLayout(t *testing.T) {
 	}
 }
 
-// TestLinkDirWellFromFsPlugin: dragging a directory from an fs grid into a
-// home grid creates a link. That is the left-drag, committed as a CreateWell
+// TestLinkDirDoorFromFsPlugin: dragging a directory from an fs grid into a
+// home grid creates a link. That is the left-drag, committed as a CreateDoor
 // carrying the fs dir's qualified grid. This crosses the real seam: server
 // routing → in-process fs plugin (GetGrid materializes the dir tiles) → link
 // created in the home destination.
-func TestLinkDirWellFromFsPlugin(t *testing.T) {
+func TestLinkDirDoorFromFsPlugin(t *testing.T) {
 	ctx := context.Background()
 	reg := plugin.NewRegistry()
 
@@ -463,7 +463,7 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 
 	// The left-drag commit: the client builds the link from its cached tile
 	// (the one it is dragging) — no read from the fs plugin is needed.
-	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: dstRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 1, Y: 1, W: sub.W, H: sub.H, ChildGridId: sub.ChildGridId, AltText: sub.AltText}})
+	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: dstRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 1, Y: 1, W: sub.W, H: sub.H, ChildGridId: sub.ChildGridId, AltText: sub.AltText}})
 	if err != nil {
 		t.Fatalf("cross-plugin link from fs: %v", err)
 	}
@@ -492,12 +492,12 @@ func TestLinkDirWellFromFsPlugin(t *testing.T) {
 		t.Errorf("link label = %q, want the directory's name", link.AltText)
 	}
 
-	// The right-drag (copy) of a dir well is refused loudly — deep copy of a
+	// The right-drag (copy) of a dir door is refused loudly — deep copy of a
 	// host directory is unimplemented.
 	if _, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: sub.Id, DestGridId: dstRoot, X: 3, Y: 3,
 	}); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Errorf("copy of an fs dir well: err=%v, want unimplemented refusal", err)
+		t.Errorf("copy of an fs dir door: err=%v, want unimplemented refusal", err)
 	}
 }
 
@@ -524,7 +524,7 @@ func TestCopyPaneAcrossPluginsNeverArranged(t *testing.T) {
 
 // TestCopyURLAcrossPluginsCarriesPreview: the frozen preview is what a url tile
 // looks like from outside, so a copy of one wears the same preview — at the top
-// level, exactly as a url one level down inside a deep-copied well does.
+// level, exactly as a url one level down inside a deep-copied door does.
 func TestCopyURLAcrossPluginsCarriesPreview(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()

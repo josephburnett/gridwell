@@ -62,15 +62,15 @@ func TestDecideTileClick(t *testing.T) {
 			in:   ClickInput{SplitNav: true},
 			want: ClickNone,
 		},
-		{name: "well descends", in: ClickInput{Well: true}, want: ClickDescend},
+		{name: "door descends", in: ClickInput{Door: true}, want: ClickDescend},
 		{
 			name: "workspace descends",
 			in:   ClickInput{Workspace: true},
 			want: ClickDescend,
 		},
 		{
-			name: "ctrl on a well splits below",
-			in:   ClickInput{Well: true, SplitNav: true},
+			name: "ctrl on a door splits below",
+			in:   ClickInput{Door: true, SplitNav: true},
 			want: ClickDescendSplit,
 		},
 		{
@@ -80,12 +80,12 @@ func TestDecideTileClick(t *testing.T) {
 		},
 		{
 			name: "a dead link births no pane",
-			in:   ClickInput{Well: true, SplitNav: true, DeadLink: true},
+			in:   ClickInput{Door: true, SplitNav: true, DeadLink: true},
 			want: ClickDescend,
 		},
 		{
 			name: "a dead link without ctrl still descends in place",
-			in:   ClickInput{Well: true, DeadLink: true},
+			in:   ClickInput{Door: true, DeadLink: true},
 			want: ClickDescend,
 		},
 	}

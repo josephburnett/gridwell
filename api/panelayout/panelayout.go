@@ -41,7 +41,7 @@ type LayoutSplit struct {
 }
 
 // LayoutFrame is one level of a leaf's place. Only a crossing into another
-// namespace carries GridID; a well frame carries Door alone and its grid is
+// namespace carries GridID; a door frame carries Door alone and its grid is
 // derived from the row. Content marks a frame whose place is the door tile
 // itself.
 type LayoutFrame struct {

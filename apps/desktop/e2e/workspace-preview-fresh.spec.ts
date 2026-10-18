@@ -39,12 +39,12 @@ test("a workspace preview never draws a leaf its layout no longer names", async 
   await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx + 1, wy);
+  await gw.dragCreate('door', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
   expect(pt, 'pane tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
-  // Into the well, so the workspace's pane does not show the grid holding the
+  // Into the door, so the workspace's pane does not show the grid holding the
   // workspace itself and draws no preview of it from inside.
   await gw.descendCell(wx + 1, wy);
   await expect.poll(async () => (await gw.focused()).gridID).not.toBe(rootGrid);

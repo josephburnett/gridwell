@@ -12,7 +12,7 @@ import (
 
 // Tile kinds. A tile is exactly one of these.
 const (
-	KindWell  = "well"
+	KindDoor  = "door"
 	KindText  = "text"
 	KindURL   = "url"
 	KindShell = "shell"
@@ -29,10 +29,10 @@ const ContentChunkBytes = 256 * 1024
 // store.MaxBlobBytes matches it.
 const MaxContentBytes = 16 * 1024 * 1024
 
-// IsWellKind: an exit well is still a well, said by its child_grid_id and not
+// IsDoorKind: a door to another namespace is still a door, said by its child_grid_id and not
 // by its kind.
-func IsWellKind(kind string) bool {
-	return kind == KindWell
+func IsDoorKind(kind string) bool {
+	return kind == KindDoor
 }
 
 // "<uuid>/<local>" is the cross-plugin id convention; QualifyID, SplitID,
@@ -75,16 +75,16 @@ func UUIDOf(id string) string {
 	return uuid
 }
 
-// IsExitWell reads only the two qualified ids, so a PluginWellTile, whose
+// IsDoorToOtherNamespace reads only the two qualified ids, so a PluginDoorTile, whose
 // GridID is empty, is one and previews the plugin's grid.
-func IsExitWell(t *pb.Tile) bool {
-	return IsWellKind(t.Kind) && t.ChildGridId != "" &&
+func IsDoorToOtherNamespace(t *pb.Tile) bool {
+	return IsDoorKind(t.Kind) && t.ChildGridId != "" &&
 		UUIDOf(t.ChildGridId) != UUIDOf(t.GridId)
 }
 
 // NamespaceOf is everything before a qualified id's last segment. Equal
 // namespaces is the test for "same store", which no single-segment comparison
-// answers once ids chain through mounts.
+// answers once ids chain through connections.
 func NamespaceOf(id string) string {
 	if i := strings.LastIndexByte(id, '/'); i >= 0 {
 		return id[:i]
@@ -100,11 +100,11 @@ func LocalOf(id string) string {
 	return id
 }
 
-// PluginWellTile is the synthetic exit-well tile a plugin is rendered as
+// PluginDoorTile is the synthetic door to another namespace tile a plugin is rendered as
 // outside a real grid: the drag ghost and the menu swatch.
-func PluginWellTile(pl *pb.PluginInfo) *pb.Tile {
+func PluginDoorTile(pl *pb.PluginInfo) *pb.Tile {
 	return &pb.Tile{
-		Kind:        KindWell,
+		Kind:        KindDoor,
 		W:           1,
 		H:           1,
 		AltText:     pl.Label,
@@ -183,7 +183,7 @@ func IsBodyKind(kind string) bool {
 const (
 	GlyphFolder  = "folder"
 	GlyphProcess = "process"
-	GlyphWell    = "well"
+	GlyphDoor    = "door"
 	GlyphTrash   = "trash"
 	GlyphGlobe   = "globe"
 )
@@ -298,13 +298,13 @@ func ContentID(t *pb.Tile) string {
 	return t.Id
 }
 
-// LinkOf is the tile a link to src creates at (x, y), src's size: an exit
-// well onto a well's child grid with its framing, or a leaf link to the
+// LinkOf is the tile a link to src creates at (x, y), src's size: a door
+// to another namespace onto a door's child grid with its framing, or a leaf link to the
 // content src names (ContentID), so a link to a link names the content and
 // links never chain through middleman tiles.
 func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
-	if IsWellKind(src.Kind) {
-		return &pb.Tile{Kind: KindWell, X: x, Y: y, W: src.W, H: src.H,
+	if IsDoorKind(src.Kind) {
+		return &pb.Tile{Kind: KindDoor, X: x, Y: y, W: src.W, H: src.H,
 			ChildGridId: src.ChildGridId, AltText: src.AltText,
 			ViewCx: src.ViewCx, ViewCy: src.ViewCy, ViewZoom: src.ViewZoom}
 	}

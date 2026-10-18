@@ -17,8 +17,8 @@ import (
 // windows, its arrangement — is byte-identical afterwards, and the copy shares
 // no id with it.
 
-// subtree walks a well's contents: the grids under it and the tiles in them,
-// the doorway included.
+// subtree walks a door's contents: the grids under it and the tiles in them,
+// the door included.
 func subtree(t *testing.T, s *Store, door *gridwellv1.Tile) (tiles, grids map[string]bool) {
 	t.Helper()
 	ctx := context.Background()
@@ -63,7 +63,7 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 
 	// A room with something of every kind in it, each carrying a fact the user
 	// made: a scroll, a zoom, a freeze, a viewport, a nested room.
-	outer, err := s.CreateWell(ctx, root, 0, 0, 2, 2, "the room")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "the room")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if _, err := s.SetShellPreview(ctx, shell.Id, []byte("shelljpeg")); err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, outer.ChildGridId, 0, 3, 2, 2, "a smaller room")
+	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 3, 2, 2, "a smaller room")
 	if err != nil {
 		t.Fatal(err)
 	}

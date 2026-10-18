@@ -12,14 +12,14 @@ import (
 	"github.com/josephburnett/gridwell/internal/claimtest"
 )
 
-// TestFileWellLifecycleE2E exercises the whole new path through the public RPC
-// surface: create a file well (Attach to the fs plugin), descend (GetGrid
+// TestFileDoorLifecycleE2E exercises the whole new path through the public RPC
+// surface: create a file door (Attach to the fs plugin), descend (GetGrid
 // lists the directory), rearrange a tile (MoveTile persists across a
 // re-descent), and delete a tile (the file is removed and swept from the
-// grid). It is the end-to-end proof that file wells work through the plugin
+// grid). It is the end-to-end proof that file doors work through the plugin
 // boundary and that the primary rule — things stay where you left them — holds
 // across it.
-func TestFileWellLifecycleE2E(t *testing.T) {
+func TestFileDoorLifecycleE2E(t *testing.T) {
 	cl, root, dir := newTestServerWithPlugins(t)
 	if err := os.WriteFile(filepath.Join(dir, "alpha.txt"), []byte("a"), 0o644); err != nil {
 		t.Fatal(err)
@@ -30,17 +30,17 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 1. Mount the fs plugin (rooted at dir) by copying its node-grid tile —
-	//    the UI's right-drag gesture. It is a plain well in the local store
+	// 1. Link the fs plugin (rooted at dir) by copying its node-grid tile —
+	//    the UI's right-drag gesture. It is a plain door in the local store
 	//    whose child grid lives in the fs plugin.
-	well := mountByCopy(t, cl, fsPluginUUID, root, 0, 0)
-	child := well.ChildGridId
+	door := linkBySwatch(t, cl, fsPluginUUID, root, 0, 0)
+	child := door.ChildGridId
 	if !strings.HasPrefix(child, fsPluginUUID+"/") {
 		t.Fatalf("child_grid_id = %q, want %q prefix", child, fsPluginUUID)
 	}
 
 	// 2. Descend: GetGrid on the child routes to the fs plugin and lists the
-	//    directory. The subdir well's child is qualified to the fs plugin too,
+	//    directory. The subdir door's child is qualified to the fs plugin too,
 	//    so descent stays inside the plugin.
 	g, err := cl.GetGrid(ctx, child)
 	if err != nil {
@@ -58,8 +58,8 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	if !ok {
 		t.Fatal("subdir tile missing")
 	}
-	if sub.Kind != rpc.KindWell {
-		t.Errorf("subdir kind = %q, want well", sub.Kind)
+	if sub.Kind != rpc.KindDoor {
+		t.Errorf("subdir kind = %q, want door", sub.Kind)
 	}
 	if !strings.HasPrefix(sub.ChildGridId, fsPluginUUID+"/") {
 		t.Errorf("subdir child_grid_id = %q, want %q prefix", sub.ChildGridId, fsPluginUUID)

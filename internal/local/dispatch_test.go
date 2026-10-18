@@ -38,20 +38,20 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
-	// Well framing rides SetFraming, the one verb for the doorway tile and
+	// Door framing rides SetFraming, the one verb for the door tile and
 	// the root grid alike, so SetTile refuses the kind rather than leaving
 	// the mapping ambiguous. Still no version bump.
-	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
-	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: well.Id, Version: well.Version,
-		Tile: &gridwellv1.Tile{Kind: "well", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err == nil {
-		t.Error("SetTile still accepts well framing; it must route through SetFraming")
+	door := createTile(t, p, root, &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1}, nil)
+	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: door.Id, Version: door.Version,
+		Tile: &gridwellv1.Tile{Kind: "door", ViewCx: 3, ViewCy: 4, ViewZoom: 2}}); err == nil {
+		t.Error("SetTile still accepts door framing; it must route through SetFraming")
 	}
-	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: well.Id,
+	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: door.Id,
 		Cx: 3, Cy: 4, Zoom: 2}); err != nil {
-		t.Fatalf("SetFraming well: %v", err)
+		t.Fatalf("SetFraming door: %v", err)
 	}
-	if v := getTile(t, p, well.Id).Version; v != well.Version {
-		t.Errorf("well framing bumped version %d -> %d", well.Version, v)
+	if v := getTile(t, p, door.Id).Version; v != door.Version {
+		t.Errorf("door framing bumped version %d -> %d", door.Version, v)
 	}
 
 	// text framing: no bump.
@@ -108,7 +108,7 @@ func TestSetAndCreateRejectBadKinds(t *testing.T) {
 	}
 	// Content a kind cannot hold is refused, never dropped.
 	for _, tile := range []*gridwellv1.Tile{
-		{Kind: "well", W: 1, H: 1},
+		{Kind: "door", W: 1, H: 1},
 		{Kind: "url", W: 1, H: 1, UrlString: "https://example.com"},
 		{Kind: "text", W: 1, H: 1, LinkTargetId: "x"},
 	} {
@@ -128,35 +128,35 @@ func TestCopyTileThroughPlugin(t *testing.T) {
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
-	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}, nil)
+	door := createTile(t, p, root, &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1}, nil)
 	cp, err := p.CopyTile(ctx, &gridwellv1.CopyTileRequest{
-		TileId: well.Id, DestGridId: root, X: 5, Y: 0,
+		TileId: door.Id, DestGridId: root, X: 5, Y: 0,
 	})
 	if err != nil {
 		t.Fatalf("CopyTile: %v", err)
 	}
-	if cp.Tile.Id == well.Id {
+	if cp.Tile.Id == door.Id {
 		t.Error("copy reused the source row id")
 	}
-	if cp.Tile.ChildGridId == well.ChildGridId {
+	if cp.Tile.ChildGridId == door.ChildGridId {
 		t.Error("copy shares the source's interior child grid (should be an independent copy)")
 	}
 }
 
-// TestDeleteExitWellThroughPluginNoCascade: deleting an exit well via the plugin
+// TestDeleteDoorToOtherNamespaceThroughPluginNoCascade: deleting a door to another namespace via the plugin
 // removes the tile but does not touch the remote grid it referenced — the
 // plugin's delete honors the shared-link semantics end to end.
-func TestDeleteExitWellThroughPluginNoCascade(t *testing.T) {
+func TestDeleteDoorToOtherNamespaceThroughPluginNoCascade(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
-	ew := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1, ChildGridId: "remote-uuid/7", AltText: "remote"}, nil)
+	ew := createTile(t, p, root, &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1, ChildGridId: "remote-uuid/7", AltText: "remote"}, nil)
 	if ew.ChildGridId != "remote-uuid/7" {
-		t.Fatalf("exit well child = %q, want remote-uuid/7", ew.ChildGridId)
+		t.Fatalf("door to another namespace child = %q, want remote-uuid/7", ew.ChildGridId)
 	}
 	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: ew.Id}); err != nil {
-		t.Fatalf("DeleteTile exit well: %v", err)
+		t.Fatalf("DeleteTile door to another namespace: %v", err)
 	}
 	// It's gone from the grid, and the delete didn't error trying to GC a
 	// non-local child.
@@ -166,7 +166,7 @@ func TestDeleteExitWellThroughPluginNoCascade(t *testing.T) {
 	}
 	for _, tl := range g.Tiles {
 		if tl.Id == ew.Id {
-			t.Error("exit well still present after delete")
+			t.Error("door to another namespace still present after delete")
 		}
 	}
 }

@@ -233,11 +233,11 @@ func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	well := tileNamed(root.Tiles, strconv.Itoa(sh.Process.Pid))
-	if well.ChildGridId == "" {
-		t.Fatalf("sh %d has no well among %v", sh.Process.Pid, root.Tiles)
+	door := tileNamed(root.Tiles, strconv.Itoa(sh.Process.Pid))
+	if door.ChildGridId == "" {
+		t.Fatalf("sh %d has no door among %v", sh.Process.Pid, root.Tiles)
 	}
-	g, err := v2.GetGrid(ctx, well.ChildGridId)
+	g, err := v2.GetGrid(ctx, door.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 	}
 	for i, tile := range []*gridwellv1.Tile{info, tileNamed(g.Tiles, child)} {
 		if _, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
-			TileId: tile.Id, GridId: well.ChildGridId, X: int64(4 + 2*i), Y: 4, W: 1, H: 1,
+			TileId: tile.Id, GridId: door.ChildGridId, X: int64(4 + 2*i), Y: 4, W: 1, H: 1,
 		})); err != nil {
 			t.Fatal(err)
 		}
@@ -258,7 +258,7 @@ func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 
 	_ = sh.Process.Kill()
 	_, _ = sh.Process.Wait()
-	g, err = v2.GetGrid(ctx, well.ChildGridId)
+	g, err = v2.GetGrid(ctx, door.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}

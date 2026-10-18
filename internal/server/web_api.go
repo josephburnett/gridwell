@@ -130,7 +130,7 @@ func (h *connectHandler) Subscribe(ctx context.Context, req *connect.Request[pb.
 
 // asConnectError maps a namespace error, or a raw store sentinel, to a Connect
 // status code through gwerr's two tables, gRPC code to Connect code and class
-// to gRPC code, so a transport failure two mounts away still reads as
+// to gRPC code, so a transport failure two hops away still reads as
 // transport and a sentinel reads as home would answer it.
 func asConnectError(err error) error {
 	if err == nil {

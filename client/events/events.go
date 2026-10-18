@@ -36,7 +36,7 @@ type Plan struct {
 	// Health is a namespace's health event; ReactHealth says what to do about
 	// it.
 	Health *pb.EventPluginHealth
-	// Reframe is a root grid's new framing, applied to its doorways by
+	// Reframe is a root grid's new framing, applied to its doors by
 	// rpc.Reframe. It asks for no fetch: the listing did not change.
 	Reframe *pb.GridFramingChanged
 }

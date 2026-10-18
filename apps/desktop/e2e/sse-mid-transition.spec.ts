@@ -18,9 +18,9 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(a.gridID), 'well', cx, cy)!;
-  const child = well.childGridId as string;
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(a.gridID), 'door', cx, cy)!;
+  const child = door.childGridId as string;
   const origin = await hook<string>(window, 'origin()');
 
   // A clean descent with no injection fixes the expected landing.
@@ -40,7 +40,7 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
   const c = await gw.cellCenter(a.id, cx, cy);
   await window.mouse.click(c.x, c.y);
   const resp = await window.evaluate(
-    async ([org, gridId, wellId]: string[]) => {
+    async ([org, gridId, doorId]: string[]) => {
       const r = await fetch(`${org}/gridwell.v1.Gridwell/CreateTile`, {
         method: 'POST',
         headers: {
@@ -51,14 +51,14 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
         },
         body: JSON.stringify({
           gridId,
-          path: { wellIds: [wellId] },
+          path: { doorIds: [doorId] },
           tile: { kind: 'text', x: 0, y: 0, w: 1, h: 1 },
           data: btoa('# injected mid-flight'),
         }),
       });
       return { ok: r.ok, transitioning: (window as any).__gridwellTest.transitioning() };
     },
-    [origin, child, well.id],
+    [origin, child, door.id],
   );
   expect(resp.ok, 'injection CreateTile succeeded').toBe(true);
   expect(resp.transitioning, 'the event landed while the transition was in flight').toBe(true);
@@ -88,7 +88,7 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
 // is taken before a tile is created, the event arrives first, and the answer
 // lands after. So a tile event owes the grid's read in flight a re-ask
 // (events.Owe); without that the stale answer stands and the tile never
-// shows. The read held is a well preview's first read of its child grid, the
+// shows. The read held is a door preview's first read of its child grid, the
 // one the client makes however it navigates: a descent onto a grid it holds
 // reads nothing. The hold makes the crossing deterministic.
 test('a tile event that crosses its grid read on the wire still reaches the pane', async ({ gw, window }) => {
@@ -115,7 +115,7 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
       [origin, JSON.stringify({ gridId, tile })],
     );
 
-  // The first read of a grid other than home is the new well's preview read
+  // The first read of a grid other than home is the new door's preview read
   // of its child: answered now, held, so its answer predates the injection.
   let release: (() => Promise<void>) | null = null;
   let heldID = '';
@@ -137,12 +137,12 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
     await r.continue();
   });
   let child = '';
-  let wellID = '';
+  let doorID = '';
   try {
-    const made = await create(a.gridID, { kind: 'well', x: cx, y: cy, w: 1, h: 1 });
-    expect(made.ok, 'the well was created').toBe(true);
+    const made = await create(a.gridID, { kind: 'door', x: cx, y: cy, w: 1, h: 1 });
+    expect(made.ok, 'the door was created').toBe(true);
     child = made.tile.childGridId;
-    wellID = made.tile.id;
+    doorID = made.tile.id;
     await expect
       .poll(() => release !== null, { message: "the preview's child grid read is held on the wire", timeout: 10_000 })
       .toBe(true);
@@ -167,7 +167,7 @@ test('a tile event that crosses its grid read on the wire still reaches the pane
   }
   await gw.waitIdle();
 
-  await gw.waitClientTileAt(a.id, cx, cy, wellID);
+  await gw.waitClientTileAt(a.id, cx, cy, doorID);
   await gw.descendCell(cx, cy);
   expect((await gw.focused()).gridID, 'descended into the child grid').toBe(child);
   await expect

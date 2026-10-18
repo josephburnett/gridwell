@@ -28,10 +28,10 @@ func TestWheelZoomFromZeroStaysFinite(t *testing.T) {
 
 // A pane with no rect has no Size, so it has no framing to write: the empty
 // rect's overtake of 0 made an intrinsic zoom of 0, which erased the
-// doorway's framing and, never SameAs what the row then showed, went out
+// door's framing and, never SameAs what the row then showed, went out
 // again on every settle (the trace's repeated identical "zoom 0" persists).
 // A writeback that does land is a no-op the second time.
-func TestDoorwayWritebackInAnEmptyRectSettles(t *testing.T) {
+func TestDoorWritebackInAnEmptyRectSettles(t *testing.T) {
 	if s, ok := SizeOf(0, 0); ok {
 		t.Fatalf("SizeOf(0, 0) = %+v, want none", s)
 	}
@@ -40,22 +40,22 @@ func TestDoorwayWritebackInAnEmptyRectSettles(t *testing.T) {
 			t.Errorf("SizeOf%v = %+v, want none", c, s)
 		}
 	}
-	door := Well{ID: "w8", W: 9, H: 7, View: rpc.ViewOf(0.43, 3.7, 0.6575)}
+	door := Door{ID: "w8", W: 9, H: 7, View: rpc.ViewOf(0.43, 3.7, 0.6575)}
 	pane := sz(800, 600)
 	sv, _ := StoredView(door, pane, 64)
 	cx, cy, live := sv.Cx(), sv.Cy(), sv.Zoom()
-	if f, ok := Writeback(ShownWellFraming(door), door, cx, cy, live, pane, 64); ok {
-		t.Errorf("an untouched doorway wrote %+v", f)
+	if f, ok := Writeback(ShownDoorFraming(door), door, cx, cy, live, pane, 64); ok {
+		t.Errorf("an untouched door wrote %+v", f)
 	}
-	if f, ok := Writeback(ShownWellFraming(door), door, cx, cy, 0, pane, 64); ok {
+	if f, ok := Writeback(ShownDoorFraming(door), door, cx, cy, 0, pane, 64); ok {
 		t.Errorf("a live zoom of 0 wrote %+v", f)
 	}
-	next, ok := Writeback(ShownWellFraming(door), door, cx+1, cy, live*2, pane, 64)
+	next, ok := Writeback(ShownDoorFraming(door), door, cx+1, cy, live*2, pane, 64)
 	if !ok {
 		t.Fatal("a pan and zoom wrote nothing")
 	}
 	door.View = rpc.Saved(next)
-	if f, ok := Writeback(ShownWellFraming(door), door, cx+1, cy, live*2, pane, 64); ok {
+	if f, ok := Writeback(ShownDoorFraming(door), door, cx+1, cy, live*2, pane, 64); ok {
 		t.Errorf("the same view wrote again: %+v", f)
 	}
 }
@@ -99,7 +99,7 @@ func TestFramingMathIsFiniteOrRefused(t *testing.T) {
 		if !ok {
 			continue
 		}
-		w := Well{X: int64(pick()), Y: int64(pick()), W: 1 + int64(rng.Intn(20)), H: 1 + int64(rng.Intn(20)),
+		w := Door{X: int64(pick()), Y: int64(pick()), W: 1 + int64(rng.Intn(20)), H: 1 + int64(rng.Intn(20)),
 			View: rpc.ViewOf(pick(), pick(), pick())}
 		from := Endpoints{Cx: pick(), Cy: pick(), Zoom: math.Abs(pick())}
 		if sv, ok := StoredView(w, s, 64); ok {
@@ -121,7 +121,7 @@ func TestFramingMathIsFiniteOrRefused(t *testing.T) {
 			positive("Ascent mid", amid.Zoom)
 			positive("Ascent to", to.Zoom)
 		}
-		if f, ok := Writeback(ShownWellFraming(w), w, pick(), pick(), pick(), s, 64); ok {
+		if f, ok := Writeback(ShownDoorFraming(w), w, pick(), pick(), pick(), s, 64); ok {
 			finite("Writeback", f.Cx(), f.Cy())
 			positive("Writeback", f.Zoom())
 		}

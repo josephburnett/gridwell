@@ -11,7 +11,7 @@ import { makeRunDir } from './homes';
 const FS_ROOT = makeRunDir();
 // A second fs root, with a document and a subdirectory in it: the host-file
 // scroll test needs a file to descend into and the mid-descent reframe needs a
-// doorway. FS_ROOT stays empty for the root-grid pan test, whose press would
+// door. FS_ROOT stays empty for the root-grid pan test, whose press would
 // otherwise land on a tile instead of the grid.
 const DOC_ROOT = makeRunDir();
 fs.writeFileSync(path.join(DOC_ROOT, 'long.md'), '# long\n\n' + 'line\n\n'.repeat(200));
@@ -37,18 +37,18 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.wheelAtFocusedCenter(-240); // reframe the child
-  // Race: a foreign placement bumps the well's version inside the settle window,
+  // Race: a foreign placement bumps the door's version inside the settle window,
   // so the framing flush's claim is stale.
-  const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
-  await moveTile(gw.origin, well.id, home.gridID, cx, cy, 2, 2);
+  const door = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
+  await moveTile(gw.origin, door.id, home.gridID, cx, cy, 2, 2);
   await expect
     .poll(
       async () =>
         Number(
-          (tileAt(await gw.getGrid(home.gridID), 'well', cx, cy) as { viewZoom?: number | string })
+          (tileAt(await gw.getGrid(home.gridID), 'door', cx, cy) as { viewZoom?: number | string })
             ?.viewZoom ?? 0,
         ),
       { timeout: 10_000 },
@@ -118,7 +118,7 @@ test('a pan longer than the settle window writes only where it came to rest', as
 // A root grid's framing is three numbers, and the event that announces it
 // carries them. Refetching the listing to learn them cost a plugin List per
 // pan, and an ssh round trip per pan on a remote grid. Another writer's
-// framing reaches this client's doorway the same way, and moves no pane.
+// framing reaches this client's door the same way, and moves no pane.
 test('reframing a root grid refetches nothing, and a foreign reframe arrives as the fact', async ({
   gw,
   window,
@@ -144,17 +144,17 @@ test('reframing a root grid refetches nothing, and a foreign reframe arrives as 
   const listings = () => asked.filter((body) => body.includes(p.gridID));
   expect(listings(), "the pane's own framing write refetches no listing").toEqual([]);
 
-  const doorway = async () =>
+  const door = async () =>
     (await gw.plugins()).flatMap((pl) => pl.menuEntries).find((e) => e.gridID === p.gridID)!;
   const rested = await gw.focused();
   await setRootFraming(gw.origin, p.gridID, 7, -3, 2.5);
   await expect
-    .poll(async () => Number((await doorway()).viewZoom), {
-      message: "another writer's framing reaches the doorway",
+    .poll(async () => Number((await door()).viewZoom), {
+      message: "another writer's framing reaches the door",
       timeout: 10_000,
     })
     .toBeCloseTo(2.5, 3);
-  expect(Number((await doorway()).viewCx)).toBeCloseTo(7, 3);
+  expect(Number((await door()).viewCx)).toBeCloseTo(7, 3);
   const after = await gw.focused();
   expect(after.cx, 'an event moves no viewport').toBeCloseTo(rested.cx, 3);
   expect(after.zoom, 'an event moves no viewport').toBeCloseTo(rested.zoom, 3);
@@ -172,7 +172,7 @@ test('a reload inside the settle window does not lose the framing', async ({ gw,
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.wheelAtFocusedCenter(-240);
   // No settle wait: reload immediately. The beacon must land server-side.
@@ -182,7 +182,7 @@ test('a reload inside the settle window does not lose the framing', async ({ gw,
     .poll(
       async () =>
         Number(
-          (tileAt(await gw.getGrid(home.gridID), 'well', cx, cy) as { viewZoom?: number | string })
+          (tileAt(await gw.getGrid(home.gridID), 'door', cx, cy) as { viewZoom?: number | string })
             ?.viewZoom ?? 0,
         ),
       { timeout: 10_000 },
@@ -340,9 +340,9 @@ test('a host file keeps its scroll, and its id, across a reload', async ({ gw, w
     .toBeGreaterThan(0);
 });
 
-// A directory doorway reframed MID-DESCENT is that entry's first durable fact,
-// and the URL is carrying the doorway's id while it happens. If the mint renamed
-// the doorway, the refetched listing would not hold the id the URL names,
+// A directory door reframed MID-DESCENT is that entry's first durable fact,
+// and the URL is carrying the door's id while it happens. If the mint renamed
+// the door, the refetched listing would not hold the id the URL names,
 // urlwalk.Walk would skip it, and the reload would drop the user at the plugin
 // root. #297
 test('a directory reframed mid-descent is still there after a reload', async ({ gw, window }) => {
@@ -350,20 +350,20 @@ test('a directory reframed mid-descent is still there after a reload', async ({ 
   const root = (await gw.focused()).gridID;
   const dir = (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'papers');
   expect(dir, 'papers listed').toBeTruthy();
-  const doorway = dir!.id;
+  const door = dir!.id;
   await gw.descendCell(Number(dir!.x ?? 0), Number(dir!.y ?? 0));
   await expect.poll(async () => (await gw.focused()).gridID).not.toBe(root);
   const inside = (await gw.focused()).gridID;
-  // The reframe: the descent's own zoom, which is what mints the doorway's row.
+  // The reframe: the descent's own zoom, which is what mints the door's row.
   await gw.wheelAtFocusedCenter(-240);
   const papers = async () => (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'papers')!;
   await expect
     .poll(async () => Number(((await papers()) as { viewZoom?: number | string }).viewZoom ?? 0), {
-      message: 'the framing reached the doorway row',
+      message: 'the framing reached the door row',
       timeout: 15_000,
     })
     .toBeGreaterThan(0);
-  expect((await papers()).id, 'the framing renamed the doorway the URL is carrying').toBe(doorway);
+  expect((await papers()).id, 'the framing renamed the door the URL is carrying').toBe(door);
 
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
@@ -375,13 +375,13 @@ test('a directory reframed mid-descent is still there after a reload', async ({ 
     .toBe(inside);
   expect(
     (await gw.focused()).placeDepth,
-    'the restore landed on a root, not through the doorway',
+    'the restore landed on a root, not through the door',
   ).toBeGreaterThan(0);
 });
 
-// A plugin well's framing is its tile's fact and changes no listing, so zooming
-// inside a directory refetches nothing of the grid that holds its doorway.
-test('reframing inside a plugin well refetches nothing of its parent', async ({ gw, window }) => {
+// A plugin door's framing is its tile's fact and changes no listing, so zooming
+// inside a directory refetches nothing of the grid that holds its door.
+test('reframing inside a plugin door refetches nothing of its parent', async ({ gw, window }) => {
   const c = await gw.cadences();
   await gw.enterPlugin('docs');
   const root = (await gw.focused()).gridID;
@@ -407,7 +407,7 @@ test('reframing inside a plugin well refetches nothing of its parent', async ({ 
   await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
   expect(
     asked.filter((body) => body.includes(root)),
-    "the well's framing write refetches its parent's listing",
+    "the door's framing write refetches its parent's listing",
   ).toEqual([]);
 });
 
@@ -466,25 +466,25 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   // Split: two panes now show the same child grid with different rects.
   await gw.splitFocusedPaneVertical();
   await gw.waitIdle();
   await gw.wheelAtFocusedCenter(-240);
-  const well = () => gw.getGrid(home.gridID).then((g) => tileAt(g, 'well', cx, cy)!);
+  const door = () => gw.getGrid(home.gridID).then((g) => tileAt(g, 'door', cx, cy)!);
   await expect
-    .poll(async () => Number((await well()).viewZoom ?? 0), { timeout: 10_000 })
+    .poll(async () => Number((await door()).viewZoom ?? 0), { timeout: 10_000 })
     .toBeGreaterThan(0.125);
-  const settled = await well();
+  const settled = await door();
   // Provoke more settle ticks, through draws, without touching either viewport:
   // the passive sibling must not write its own rect-derived framing back.
   for (let i = 0; i < 3; i++) {
     await window.mouse.move(100 + i, 100);
     await window.waitForTimeout(800);
   }
-  const after = await well();
+  const after = await door();
   expect(after.viewZoom, 'sibling must not overwrite (one active surface)').toEqual(settled.viewZoom);
   expect(after.viewCx, 'center stable').toEqual(settled.viewCx);
   expect(after.viewCy, 'center stable').toEqual(settled.viewCy);
@@ -493,7 +493,7 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
 // A viewport in mid-flight is presentation and never the user's framing. The
 // settle persister fires on its own 600ms clock, so a stretched transition puts
 // a debounce tick inside the animation, when the pane's centre and zoom are
-// racing toward the doorway's overtake and are values the user never chose.
+// racing toward the door's overtake and are values the user never chose.
 // Only persistFraming decides what a framing write carries, so every writer
 // gets the same answer.
 test('a mid-flight viewport never becomes the framing that persists', async ({ gw, window }) => {
@@ -502,7 +502,7 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
 
   // Settle a root framing the user chose, so there is something to keep.
   await gw.wheelAtFocusedCenter(-240);
@@ -515,7 +515,7 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
   const settled = await rootView();
 
   // Stretch the clock and descend without waiting: for the next few seconds
-  // the pane's zoom climbs toward the well's overtake while the settle
+  // the pane's zoom climbs toward the door's overtake while the settle
   // persister keeps firing.
   await window.evaluate(`(window).__gridwellTest.setTransitionMs(4000)`);
   const c = await gw.cellCenter(home.id, cx, cy);
@@ -550,20 +550,20 @@ test('looking at a grid never stamps a framing on it', async ({ gw, window }) =>
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   const uuid = (await gw.plugins()).find((p) => p.kind === 'home')!.uuid;
   // Two settle windows with no gesture in them at all.
   await window.waitForTimeout(1500);
   const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
   expect(Number(pl.rootViewZoom ?? 0), 'the root grid was stamped by being looked at').toBe(0);
 
-  // A descent is a look too: the doorway it entered by keeps its zero.
+  // A descent is a look too: the door it entered by keeps its zero.
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   await window.waitForTimeout(1500);
-  const well = tileAt(await gw.getGrid(home.gridID), 'well', cx, cy)!;
+  const door = tileAt(await gw.getGrid(home.gridID), 'door', cx, cy)!;
   expect(
-    Number((well as { viewZoom?: number | string }).viewZoom ?? 0),
-    'the doorway was stamped by being descended through',
+    Number((door as { viewZoom?: number | string }).viewZoom ?? 0),
+    'the door was stamped by being descended through',
   ).toBe(0);
 });

@@ -148,7 +148,7 @@ var plusButtonRadius = menu.Default().PlusRadius
 type templateKind int
 
 const (
-	tplWell templateKind = iota
+	tplDoor templateKind = iota
 	tplMarkdown
 	tplURL
 	tplShell
@@ -179,10 +179,10 @@ var (
 func init() {
 	primitives = []primitive{
 		{
-			kind: tplWell, name: "well",
-			ghost:  &gridwellv1.Tile{Kind: rpc.KindWell, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawWellGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder) },
-			create: func(a *App, gid string, cellX, cellY int64) { a.createWellAtCell(gid, cellX, cellY) },
+			kind: tplDoor, name: "door",
+			ghost:  &gridwellv1.Tile{Kind: rpc.KindDoor, W: 1, H: 1},
+			glyph:  func(a *App, x, y, w, h float64) { drawDoorGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createDoorAtCell(gid, cellX, cellY) },
 		},
 		{
 			kind: tplMarkdown, name: "markdown",
@@ -262,9 +262,9 @@ func (a *App) menuView(p *pane.Pane) ([]menuItem, menu.Shown) {
 func (a *App) menuGroups(p *pane.Pane) (plugins, primitives []menuItem) {
 	// The menu belongs to the pane's node; "", local or uncached, is the handshake.
 	ctx := a.menuCtx(p)
-	// menu.Doorways owns the composition. Every swatch is a pseudo-plugin, so
+	// menu.Doors owns the composition. Every swatch is a pseudo-plugin, so
 	// every downstream flow is one path.
-	sw := menu.Doorways(ctx.plugins)
+	sw := menu.Doors(ctx.plugins)
 	items := make([]menuItem, 0, len(sw))
 	for _, s := range sw {
 		items = append(items, menuItem{isPlugin: true, plugin: s.Plugin, entry: s.Entry})
@@ -694,7 +694,7 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 	c.Set("globalAlpha", 1.0)
 }
 
-// drawNodeWithPreview previews a well's child grid at the child's cell scale,
+// drawNodeWithPreview previews a door's child grid at the child's cell scale,
 // so the descent zoom crosses no discontinuity.
 func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
 	switch n.Kind {
@@ -714,7 +714,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		a.drawPaneTilePreview(n, x, y, w, h, selected, outside, dashed)
 		return
 	}
-	if n.Kind != rpc.KindWell {
+	if n.Kind != rpc.KindDoor {
 		a.drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
@@ -725,23 +725,23 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	}
 	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 
-	// previewCell is parentCell times the well's intrinsic ratio, so the path
+	// previewCell is parentCell times the door's intrinsic ratio, so the path
 	// swap at Overtake_now is continuous.
-	wl := wellOf(n)
+	wl := doorOf(n)
 	previewCell := parentCellSize * wl.Ratio()
 	showPreview := haveChild && previewCell >= 0.5
 
-	if isExitWell(n) && !showPreview {
+	if isDoorToOtherNamespace(n) && !showPreview {
 		a.drawPluginGlyph(a.pluginGlyph(n.ChildGridId), x, y, w, h)
 	} else {
 		withClip(a.cctx, x, y, w, h, func() {
-			// Aligned so the child point the well's framing centers on lands at the
-			// well's center, where the descent viewport puts it.
+			// Aligned so the child point the door's framing centers on lands at the
+			// door's center, where the descent viewport puts it.
 			viewCenterX, viewCenterY := wl.Center()
-			wellCenterX := x + w/2
-			wellCenterY := y + h/2
-			originX := wellCenterX - viewCenterX*previewCell
-			originY := wellCenterY - viewCenterY*previewCell
+			doorCenterX := x + w/2
+			doorCenterY := y + h/2
+			originX := doorCenterX - viewCenterX*previewCell
+			originY := doorCenterY - viewCenterY*previewCell
 			drawGridLinesIn(a.cctx, a.pal.GridLineInterior, x, y, w, h, previewCell, originX, originY)
 
 			if showPreview {
@@ -750,12 +750,12 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 					hide = a.ghost.hidden
 				}
 				a.drawChildPreview(child, viewCenterX, viewCenterY,
-					wellCenterX, wellCenterY, previewCell, x, y, w, h, hide)
+					doorCenterX, doorCenterY, previewCell, x, y, w, h, hide)
 			}
 		})
 	}
 
-	// Every well is blue; the dash means a link.
+	// Every door is blue; the dash means a link.
 	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, dashed, selected)
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
@@ -773,7 +773,7 @@ func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 }
 
 // isLinkTile reports a link: trashing one unlinks it. Link is the
-// one signal; a uuid comparison would miss a same-plugin mount.
+// one signal; a uuid comparison would miss a same-plugin link door.
 func isLinkTile(n *gridwellv1.Tile) bool {
 	return n.Link
 }
@@ -836,7 +836,7 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 	switch tilepreview.BannerHue(n, outside) {
 	case tilepreview.HueShell:
 		return a.pal.ShellBorder
-	case tilepreview.HueWell:
+	case tilepreview.HueDoor:
 		return a.pal.FocusBorder
 	case tilepreview.HueHost:
 		return a.pal.PluginBorder
@@ -905,7 +905,7 @@ func (a *App) tileBody(n *gridwellv1.Tile) ([]byte, bool) {
 }
 
 // drawChildPreview paints the cached child grid at previewCell px. Child
-// wells render flat: the one-level rule.
+// doors render flat: the one-level rule.
 func (a *App) drawChildPreview(child *cache.Grid,
 	centerCellX, centerCellY, centerScreenX, centerScreenY, previewCell float64,
 	clipX, clipY, clipW, clipH float64,
@@ -927,12 +927,12 @@ func (a *App) drawChildPreview(child *cache.Grid,
 			continue
 		}
 		nn := n
-		// url and shell children skip their JPEGs, so a well's interior reads uniformly.
+		// url and shell children skip their JPEGs, so a door's interior reads uniformly.
 		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tilepreview.Outside(nn, childInHost), borderPx, false)
 	}
 }
 
-// drawNode is the flat renderer, for nested previews and non-well tiles.
+// drawNode is the flat renderer, for nested previews and non-door tiles.
 func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64, dashed bool) {
 	if dashed {
 		setTileDash(c)
@@ -940,7 +940,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 	}
 	fill, line := a.pal.Locked, ""
 	switch n.Kind {
-	case rpc.KindWell:
+	case rpc.KindDoor:
 		fill, line = a.pal.Bg, a.pal.FocusBorder
 	case rpc.KindURL:
 		fill, line = a.pal.URLFill, a.pal.URLLine
@@ -1108,7 +1108,7 @@ func drawTriangle(c js.Value, cx, cy, angle, size float64) {
 }
 
 // drawGridNotice paints a status line in a pane whose grid is not cached;
-// pane.GridNotice words it. A mounted grid falls back to the id; see
+// pane.GridNotice words it. A far grid falls back to the id; see
 // client/scratch.
 func (a *App) drawGridNotice(r pane.Rect, gid string) {
 	if r.W < 80 || r.H < 40 {

@@ -6,14 +6,14 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-func TestIsWellKind(t *testing.T) {
-	if !IsWellKind(KindWell) {
-		t.Errorf("IsWellKind(%q) = false, want true", KindWell)
+func TestIsDoorKind(t *testing.T) {
+	if !IsDoorKind(KindDoor) {
+		t.Errorf("IsDoorKind(%q) = false, want true", KindDoor)
 	}
-	notWells := []string{KindText, KindURL, KindShell, ""}
-	for _, k := range notWells {
-		if IsWellKind(k) {
-			t.Errorf("IsWellKind(%q) = true, want false", k)
+	notDoors := []string{KindText, KindURL, KindShell, ""}
+	for _, k := range notDoors {
+		if IsDoorKind(k) {
+			t.Errorf("IsDoorKind(%q) = true, want false", k)
 		}
 	}
 }
@@ -21,7 +21,7 @@ func TestIsWellKind(t *testing.T) {
 // TestIsContentDescentKind pins the content-descent set the click router and
 // the URL-restore walk both rely on. Shell must be included: it sets
 // TextFocus and is encoded into the URL, so it has to round-trip on reload.
-// The well kinds must not be, because they are grid descents.
+// The door kinds must not be, because they are grid descents.
 func TestIsContentDescentKind(t *testing.T) {
 	content := []string{KindText, KindURL, KindShell}
 	for _, k := range content {
@@ -29,7 +29,7 @@ func TestIsContentDescentKind(t *testing.T) {
 			t.Errorf("IsContentDescentKind(%q) = false, want true", k)
 		}
 	}
-	notContent := []string{KindWell, ""}
+	notContent := []string{KindDoor, ""}
 	for _, k := range notContent {
 		if IsContentDescentKind(k) {
 			t.Errorf("IsContentDescentKind(%q) = true, want false", k)
@@ -113,78 +113,78 @@ func TestLocalOf(t *testing.T) {
 	}
 }
 
-func TestIsExitWell(t *testing.T) {
+func TestIsDoorToOtherNamespace(t *testing.T) {
 	cases := []struct {
 		name string
 		tile *pb.Tile
 		want bool
 	}{
-		{"interior well (same plugin) is not an exit well",
-			&pb.Tile{Kind: KindWell, GridId: "u/1", ChildGridId: "u/2"}, false},
-		{"cross-plugin well is an exit well",
-			&pb.Tile{Kind: KindWell, GridId: "u/1", ChildGridId: "v/2"}, true},
-		{"non-well is never an exit well",
+		{"interior door (same plugin) is not a door to another namespace",
+			&pb.Tile{Kind: KindDoor, GridId: "u/1", ChildGridId: "u/2"}, false},
+		{"cross-plugin door is a door to another namespace",
+			&pb.Tile{Kind: KindDoor, GridId: "u/1", ChildGridId: "v/2"}, true},
+		{"non-door is never a door to another namespace",
 			&pb.Tile{Kind: KindText, GridId: "u/1", ChildGridId: "v/2"}, false},
-		{"well with no child grid is not an exit well",
-			&pb.Tile{Kind: KindWell, GridId: "u/1"}, false},
-		{"synthetic node, both ids empty, is not an exit well",
-			&pb.Tile{Kind: KindWell}, false},
+		{"door with no child grid is not a door to another namespace",
+			&pb.Tile{Kind: KindDoor, GridId: "u/1"}, false},
+		{"synthetic node, both ids empty, is not a door to another namespace",
+			&pb.Tile{Kind: KindDoor}, false},
 		// A menu swatch's exact shape: no owning grid, qualified child grid.
-		{"synthetic doorway node (empty grid_id, qualified child_grid_id) is an exit well",
-			&pb.Tile{Kind: KindWell, ChildGridId: "plugin-uuid/1"}, true},
+		{"synthetic door node (empty grid_id, qualified child_grid_id) is a door to another namespace",
+			&pb.Tile{Kind: KindDoor, ChildGridId: "plugin-uuid/1"}, true},
 	}
 	for _, c := range cases {
-		if got := IsExitWell(c.tile); got != c.want {
-			t.Errorf("%s: IsExitWell = %v, want %v", c.name, got, c.want)
+		if got := IsDoorToOtherNamespace(c.tile); got != c.want {
+			t.Errorf("%s: IsDoorToOtherNamespace = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
 
-func TestPluginWellTile(t *testing.T) {
+func TestPluginDoorTile(t *testing.T) {
 	pl := &pb.PluginInfo{Label: "files", RootGridId: "fs-uuid/1",
 		RootViewCx: 3, RootViewCy: -2, RootViewZoom: 0.5}
-	got := PluginWellTile(pl)
+	got := PluginDoorTile(pl)
 	// The load-bearing invariants the swatch preview depends on: the tile is
-	// a well carrying the plugin's root grid as its child, which makes it an
-	// exit well, so the client fetches and previews that grid.
-	if !IsWellKind(got.Kind) {
-		t.Errorf("PluginWellTile kind = %q, want a well", got.Kind)
+	// a door carrying the plugin's root grid as its child, which makes it an
+	// door to another namespace, so the client fetches and previews that grid.
+	if !IsDoorKind(got.Kind) {
+		t.Errorf("PluginDoorTile kind = %q, want a door", got.Kind)
 	}
 	if got.ChildGridId != pl.RootGridId {
-		t.Errorf("PluginWellTile ChildGridID = %q, want %q", got.ChildGridId, pl.RootGridId)
+		t.Errorf("PluginDoorTile ChildGridID = %q, want %q", got.ChildGridId, pl.RootGridId)
 	}
-	if !IsExitWell(got) {
-		t.Errorf("PluginWellTile is not an exit well; a doorway would draw an inert interior well")
+	if !IsDoorToOtherNamespace(got) {
+		t.Errorf("PluginDoorTile is not a door to another namespace; a door would draw an inert interior door")
 	}
 	// Link is the one "this is a link" signal, and the client reads it
 	// alone. This synthetic tile never passes through the server's
 	// qualifyTiles, so it must stamp the bit itself or the menu swatch loses
 	// its dashed border.
 	if !got.Link {
-		t.Error("PluginWellTile does not set Link; the doorway swatch would render as owned content, not a link")
+		t.Error("PluginDoorTile does not set Link; the door swatch would render as owned content, not a link")
 	}
 	if got.AltText != pl.Label {
-		t.Errorf("PluginWellTile AltText = %q, want %q", got.AltText, pl.Label)
+		t.Errorf("PluginDoorTile AltText = %q, want %q", got.AltText, pl.Label)
 	}
 	// The plugin's persisted root framing rides as the tile's framing. It is
 	// one shape, so it carries across verbatim, and a + menu descent lands at
 	// the left-off view.
 	if got.ViewCx != 3 || got.ViewCy != -2 || got.ViewZoom != 0.5 {
-		t.Errorf("PluginWellTile framing = (%v,%v,%v), want the plugin root framing (3,-2,0.5)",
+		t.Errorf("PluginDoorTile framing = (%v,%v,%v), want the plugin root framing (3,-2,0.5)",
 			got.ViewCx, got.ViewCy, got.ViewZoom)
 	}
 }
 
 // TestKindPartition pins the three descent-class predicates as a partition
 // of the descendable kinds: every kind belongs to exactly one of grid
-// descent (IsWellKind), content descent (IsContentDescentKind), and pane-tile
+// descent (IsDoorKind), content descent (IsContentDescentKind), and pane-tile
 // descent (IsWorkspaceKind). A new kind that joins no class, or two, falls
 // through or double-fires the click router and the URL-restore walk.
 func TestKindPartition(t *testing.T) {
-	all := []string{KindWell, KindText, KindURL, KindShell, KindPane}
+	all := []string{KindDoor, KindText, KindURL, KindShell, KindPane}
 	for _, k := range all {
 		n := 0
-		if IsWellKind(k) {
+		if IsDoorKind(k) {
 			n++
 		}
 		if IsContentDescentKind(k) {
@@ -200,7 +200,7 @@ func TestKindPartition(t *testing.T) {
 	if !IsWorkspaceKind(KindPane) {
 		t.Errorf("IsWorkspaceKind(%q) = false, want true", KindPane)
 	}
-	for _, k := range []string{KindWell, KindText, KindURL, KindShell, ""} {
+	for _, k := range []string{KindDoor, KindText, KindURL, KindShell, ""} {
 		if IsWorkspaceKind(k) {
 			t.Errorf("IsWorkspaceKind(%q) = true, want false", k)
 		}
@@ -209,7 +209,7 @@ func TestKindPartition(t *testing.T) {
 
 // TestHomeGrid: "/" means the handshake's home_grid_id and never a row's
 // position, so a rooted first row is not a home. It is the one boot, URL and
-// mount landing derivation.
+// connection landing derivation.
 func TestHomeGrid(t *testing.T) {
 	first := &pb.PluginInfo{Uuid: "p1", RootGridId: "p1/1"}
 	if got := HomeGrid(&pb.HandshakeResponse{HomeGridId: "n/1", Plugins: []*pb.PluginInfo{first}}); got != "n/1" {
@@ -257,16 +257,16 @@ func TestContentID(t *testing.T) {
 }
 
 // A link names content, never a middleman: a link to a link targets what the
-// first one targets, and a well's link is an exit well onto the same grid,
+// first one targets, and a door's link is a door to another namespace onto the same grid,
 // framed where the source was.
 func TestLinkOfNamesTheContentNotTheMiddleman(t *testing.T) {
 	link := LinkOf(&pb.Tile{Id: "b/9", Kind: KindText, W: 2, H: 1, LinkTargetId: "a/42", AltText: "notes"}, 3, 4)
 	if link.LinkTargetId != "a/42" || link.Kind != KindText || link.X != 3 || link.Y != 4 || link.W != 2 || link.AltText != "notes" {
 		t.Errorf("leaf link = %v, want a 2x1 text link to a/42 at (3,4)", link)
 	}
-	well := LinkOf(&pb.Tile{Id: "a/7", Kind: KindWell, W: 1, H: 1, ChildGridId: "a/8", ViewZoom: 2}, 0, 0)
-	if well.ChildGridId != "a/8" || well.LinkTargetId != "" || well.ViewZoom != 2 {
-		t.Errorf("well link = %v, want an exit well onto a/8 keeping its framing", well)
+	door := LinkOf(&pb.Tile{Id: "a/7", Kind: KindDoor, W: 1, H: 1, ChildGridId: "a/8", ViewZoom: 2}, 0, 0)
+	if door.ChildGridId != "a/8" || door.LinkTargetId != "" || door.ViewZoom != 2 {
+		t.Errorf("door link = %v, want a door to another namespace onto a/8 keeping its framing", door)
 	}
 }
 
@@ -285,7 +285,7 @@ func TestTextDocumentAndPageContent(t *testing.T) {
 		{"text document", &pb.Tile{Kind: KindText}, true, false, false},
 		{"page tile", &pb.Tile{Kind: KindURL, ServesPage: true}, false, true, true},
 		{"url tile at its own address", &pb.Tile{Kind: KindURL}, false, false, true},
-		{"well", &pb.Tile{Kind: KindWell}, false, false, false},
+		{"door", &pb.Tile{Kind: KindDoor}, false, false, false},
 		{"text row flagged serves_page", &pb.Tile{Kind: KindText, ServesPage: true}, true, false, false},
 	}
 	for _, c := range cases {
@@ -302,16 +302,16 @@ func TestTextDocumentAndPageContent(t *testing.T) {
 }
 
 // TestLeafLink pins that the link question is the target's presence, not the
-// Link flag: a well with a qualified child grid is a link too, and
+// Link flag: a door with a qualified child grid is a link too, and
 // it owns its row.
 func TestLeafLink(t *testing.T) {
 	link := &pb.Tile{Id: "b/9", Kind: KindText, LinkTargetId: "a/42", Link: true}
 	if !LeafLink(link) {
 		t.Error("a row with a target is a leaf link")
 	}
-	mount := &pb.Tile{Id: "b/1", Kind: KindWell, ChildGridId: "a/7", Link: true}
-	if LeafLink(mount) {
-		t.Error("an exit well is not a leaf link")
+	farDoor := &pb.Tile{Id: "b/1", Kind: KindDoor, ChildGridId: "a/7", Link: true}
+	if LeafLink(farDoor) {
+		t.Error("a door to another namespace is not a leaf link")
 	}
 	owned := &pb.Tile{Id: "a/42", Kind: KindText}
 	if LeafLink(owned) {
@@ -332,7 +332,7 @@ func TestDescentOf(t *testing.T) {
 		{"page tile", &pb.Tile{Kind: KindURL, ServesPage: true}, DescentURL},
 		{"shell tile", &pb.Tile{Kind: KindShell}, DescentShell},
 		{"text document", &pb.Tile{Kind: KindText}, DescentNone},
-		{"well", &pb.Tile{Kind: KindWell}, DescentNone},
+		{"door", &pb.Tile{Kind: KindDoor}, DescentNone},
 		{"unresolved", nil, DescentNone},
 	}
 	for _, c := range cases {
@@ -342,10 +342,10 @@ func TestDescentOf(t *testing.T) {
 	}
 }
 
-// A root grid's framing lives on every doorway rooted at it, a row's own and a
+// A root grid's framing lives on every door rooted at it, a row's own and a
 // declared entry's alike, and on nothing else. Writing what is already there
 // changes nothing, so the pane that made the write never sees its own echo.
-func TestReframeWritesEveryDoorwayRootedAtTheGrid(t *testing.T) {
+func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 	menu := []*pb.PluginInfo{
 		{Uuid: "loc", RootGridId: "loc/1",
 			MenuEntries: []*pb.MenuEntry{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
@@ -371,6 +371,6 @@ func TestReframeWritesEveryDoorwayRootedAtTheGrid(t *testing.T) {
 		t.Errorf("a plugin collection's entry = %+v", menu[1].MenuEntries[0])
 	}
 	if Reframe("x/1", f, menu) || Reframe("", f, menu) {
-		t.Error("a grid no doorway roots reported a change")
+		t.Error("a grid no door roots reported a change")
 	}
 }

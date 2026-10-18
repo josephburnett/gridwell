@@ -36,7 +36,7 @@ const (
 	// EffFlushFraming persists every pane's settled grid framing now.
 	EffFlushFraming
 	// EffPersistFraming writes one pane's framing onto the row that owns it:
-	// PaneID, Owner, Door (true for the doorway arm).
+	// PaneID, Owner, Door (true for the door arm).
 	EffPersistFraming
 	EffSaveText            // posts an editor buffer and scroll: PaneID, TileID
 	EffFlushDirtyText      // flushes every unsaved edit now
@@ -195,9 +195,9 @@ type Result struct {
 	OK    bool
 	Alive bool
 	Tile  *gridwellv1.Tile
-	// Wells is the find hit's containing-well chain, outermost first; empty
+	// Doors is the find hit's containing-door chain, outermost first; empty
 	// means the tile sits at a root.
-	Wells []*gridwellv1.Tile
+	Doors []*gridwellv1.Tile
 	Data  []byte
 	// Version is the row version a RequestReadLayout's Data was read at.
 	Version int64

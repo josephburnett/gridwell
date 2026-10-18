@@ -100,10 +100,10 @@ func insertGrid(ctx context.Context, tx *sql.Tx, now int64) (int64, error) {
 	return res.LastInsertId()
 }
 
-// ancestryCap bounds the well-parent walk, which a cycle would loop forever.
+// ancestryCap bounds the door-parent walk, which a cycle would loop forever.
 const ancestryCap = 256
 
-// gridInSubtree walks the well-parent chain from gridID up to a root, reporting
+// gridInSubtree walks the door-parent chain from gridID up to a root, reporting
 // whether rootID is on the way. It is the one ancestor walk: the trash's
 // bypass check and placement's own-subtree refusal are both this question.
 func gridInSubtree(ctx context.Context, tx *sql.Tx, gridID, rootID int64) (bool, error) {

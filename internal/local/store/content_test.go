@@ -92,10 +92,10 @@ func TestWriteContentRefusesKindsWithoutContent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	well := wellAt(t, s, root, 0, 0)
+	door := doorAt(t, s, root, 0, 0)
 
-	if _, err := s.WriteContent(ctx, well.Id, well.Version, []byte("x")); !errors.Is(err, ErrInvalidArgument) {
-		t.Errorf("well: got %v, want ErrInvalidArgument", err)
+	if _, err := s.WriteContent(ctx, door.Id, door.Version, []byte("x")); !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("door: got %v, want ErrInvalidArgument", err)
 	}
 }
 

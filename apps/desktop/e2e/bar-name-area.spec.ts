@@ -14,7 +14,7 @@ test('a left click anywhere in the name area zooms; only the name itself renames
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   await gw.splitFocusedPaneVertical();
@@ -22,7 +22,7 @@ test('a left click anywhere in the name area zooms; only the name itself renames
   expect(await gw.panes()).toHaveLength(2);
   await expect.poll(async () => (await gw.barName()).editable).toBe(true);
 
-  // A point in the name area well clear of the drawn title, toward the circle.
+  // A point in the name area door clear of the drawn title, toward the circle.
   const emptyPoint = async () => {
     const bar = await gw.bar();
     const t = await gw.barName();

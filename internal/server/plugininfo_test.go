@@ -281,7 +281,7 @@ func (p *infoFlakePlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.In
 // scratch_grid_id and menu_entries come from the owning namespace's Info and
 // from nowhere else, so a failed handshake must fail the read. The
 // alternative — answering the grid with the fields unset — is a room with no
-// doorways and no ephemeral visits, and that flips back on the next read,
+// doors and no ephemeral visits, and that flips back on the next read,
 // because Info is not negatively cached.
 func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	ctx := context.Background()

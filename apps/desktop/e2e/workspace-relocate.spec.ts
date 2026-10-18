@@ -5,12 +5,12 @@ import { tileAt, moveTile } from './oracle';
 // immutable while paths are not, so the path goes stale the moment the tile is
 // moved, and re-entering the workspace must heal the leaf. The client notices
 // the stored path no longer leads to the tile's grid, asks the server for a
-// scoped `id:` find, and rebinds the pane at the containing-well chain that
+// scoped `id:` find, and rebinds the pane at the containing-door chain that
 // comes back, so the descent works and the crumbs show a true path. The move
 // happens through the server directly, as a foreign writer, which is the
 // out-from-under case a live session never sees.
 
-test('re-entering a workspace heals a leaf whose tile was moved into a well', async ({
+test('re-entering a workspace heals a leaf whose tile was moved into a door', async ({
   gw,
   window,
 }) => {
@@ -29,10 +29,10 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
   await gw.typeText('relocate-me');
   await gw.ascendViaCrumb();
 
-  // A well to move it into, and a workspace tile.
+  // A door to move it into, and a workspace tile.
   await gw.openMenu();
-  await gw.dragCreate('well', cx + 2, cy);
-  const well = tileAt(await gw.getGrid(grid), 'well', cx + 2, cy)!;
+  await gw.dragCreate('door', cx + 2, cy);
+  const door = tileAt(await gw.getGrid(grid), 'door', cx + 2, cy)!;
   await gw.openMenu();
   await gw.dragCreate('pane', cx - 2, cy);
   // Wait until the pane tile is rendered before clicking it. The create's
@@ -57,10 +57,10 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
     .poll(async () => window.evaluate(() => (window as any).__gridwellTest.workspace().depth))
     .toBe(0);
 
-  // A foreign writer moves the tile into the well.
-  await moveTile(gw.origin, doc.id, well.childGridId!, 0, 0, 1, 1);
+  // A foreign writer moves the tile into the door.
+  await moveTile(gw.origin, doc.id, door.childGridId!, 0, 0, 1, 1);
   await expect
-    .poll(async () => ((await gw.getGrid(well.childGridId!)).tiles ?? []).some((t: any) => t.id === doc.id))
+    .poll(async () => ((await gw.getGrid(door.childGridId!)).tiles ?? []).some((t: any) => t.id === doc.id))
     .toBe(true);
 
   // The leaf must find the moved tile and bind to it in its new grid. Without
@@ -75,11 +75,11 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
       const p = await gw.focused();
       return { focus: p.textFocus, grid: p.gridID };
     }, { timeout: 15_000 })
-    .toEqual({ focus: doc.id, grid: well.childGridId });
+    .toEqual({ focus: doc.id, grid: door.childGridId });
 
-  // The crumb chain now passes through the well, so root, well and tile make
+  // The crumb chain now passes through the door, so root, door and tile make
   // three chain crumbs.
   const healed = await window.evaluate(() => (window as any).__gridwellTest.bar());
   const chain = healed.segments.filter((s: any) => s.kind === 'chain');
-  expect(chain.length, 'crumbs show the true path through the well').toBeGreaterThanOrEqual(3);
+  expect(chain.length, 'crumbs show the true path through the door').toBeGreaterThanOrEqual(3);
 });

@@ -154,7 +154,7 @@ func TestSelectionIgnoresATileOffTheGrid(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	a, b, c := threeTexts(t, s, root)
-	w, err := s.CreateWell(ctx, root, 0, 4, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 4, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,16 +278,16 @@ func TestPluginGridSelection(t *testing.T) {
 	}
 }
 
-// nest is root holding well w1 holding well w2, each grid with one text tile
+// nest is root holding door w1 holding door w2, each grid with one text tile
 // selected.
 func nest(t *testing.T, s *Store, root string) (g1, g2 string) {
 	t.Helper()
 	ctx := context.Background()
-	w1, err := s.CreateWell(ctx, root, 0, 6, 1, 1, "")
+	w1, err := s.CreateDoor(ctx, root, 0, 6, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	w2, err := s.CreateWell(ctx, w1.ChildGridId, 0, 0, 1, 1, "")
+	w2, err := s.CreateDoor(ctx, w1.ChildGridId, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,10 +322,10 @@ func TestSelectionClearEmptiesTheNamedGrid(t *testing.T) {
 	}
 }
 
-// clear with recurse empties every grid nested under the named grid's wells,
+// clear with recurse empties every grid nested under the named grid's doors,
 // to any depth, in one write, telling each grid's set; recurse alone is
 // refused and changes nothing.
-func TestSelectionClearRecursesThroughWells(t *testing.T) {
+func TestSelectionClearRecursesThroughDoors(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
@@ -366,8 +366,8 @@ func TestSelectionClearRecursesThroughWells(t *testing.T) {
 	}
 }
 
-// The walk stays in the grid's namespace: an exit well to another namespace's
-// grid is not followed.
+// The walk stays in the grid's namespace: a door to another
+// namespace's grid is not followed.
 func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -384,14 +384,14 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	if _, err := n.SetSelection(gid, SelectOp{Add: []int64{e}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateExitWell(ctx, root, 5, 5, 1, 1, "plug1/"+strconv.FormatInt(gid, 10), "", rpc.View{}); err != nil {
+	if _, err := s.CreateDoorToOtherNamespace(ctx, root, 5, 5, 1, 1, "plug1/"+strconv.FormatInt(gid, 10), "", rpc.View{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: root, Clear: true, Recurse: true}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := n.Selection(gid); err != nil || len(got) != 1 {
-		t.Errorf("another namespace's grid behind an exit well: %v, %v; want it kept", got, err)
+		t.Errorf("the grid behind a door to another namespace: %v, %v; want it kept", got, err)
 	}
 	// From the plugin's side the walk stays in its own rows too.
 	changed, err := n.SetSelection(gid, SelectOp{Clear: true, Recurse: true})

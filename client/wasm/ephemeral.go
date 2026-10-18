@@ -18,7 +18,7 @@ import (
 
 // scratchGridOf reads the pane's own grid as the scratch rule sees it. The
 // stamp rides on the grid, because deriving it from an id would answer for
-// the wrong machine: a mounted remote grid's first segment is the local node.
+// the wrong machine: a far grid's first segment is the local node.
 // A pure read, since the border asks per frame and a read that kicked its own
 // fetch would hammer a grid nobody is drawing.
 func (a *App) scratchGridOf(p *pane.Pane) scratch.Grid {

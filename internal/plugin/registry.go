@@ -18,7 +18,7 @@ type Registry struct {
 	// lookup.
 	kinds map[string]string
 	// labels are the server.yaml display names, shown in the + menu and
-	// stamped on a mounted well, so neither depends on a plugin-derived
+	// stamped on a door to it, so neither depends on a plugin-derived
 	// string.
 	labels map[string]string
 	// order is config order, so the + menu presents plugins as configured.

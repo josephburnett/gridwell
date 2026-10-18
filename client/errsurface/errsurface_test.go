@@ -167,8 +167,8 @@ func TestSticky(t *testing.T) {
 		{BuildStuckSource, true},
 		// One-shot events fade once they stop recurring.
 		{"rpc:MoveTile", false},
-		{"events", false},        // the event retry loop re-reports every second while down
-		{"doorway:files", false}, // a click answer rather than a condition, so it fades
+		{"events", false},     // the event retry loop re-reports every second while down
+		{"door:files", false}, // a click answer rather than a condition, so it fades
 		{"electron:webview", false},
 		{"electron:session", false},
 		{"conflict:UpdateText", false},

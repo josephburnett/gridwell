@@ -13,7 +13,7 @@ import (
 
 // tileIDFields is every id a Tile carries, the one list both directions walk.
 // An optional id stays empty rather than qualifying to a bare prefix. A ref
-// names something elsewhere, a well's child or a leaf link's target: a leaf
+// names something elsewhere, a door's child or a leaf link's target: a leaf
 // keeps it qualified, because arriving qualified is what makes it a link.
 var tileIDFields = []struct {
 	field         func(*pb.Tile) *string
@@ -35,7 +35,7 @@ func qualifyField(prefix string, id *string, optional bool) {
 // TransitQualifyTiles prepends prefix to every id in a tile, an
 // already-qualified child included. The wire Link bit rides verbatim,
 // because the far side already decided what is a link and a remote plugin's
-// interior well stays owned though its child id contains "/".
+// interior door stays owned though its child id contains "/".
 func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {

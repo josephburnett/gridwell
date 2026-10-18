@@ -15,7 +15,7 @@ import (
 // for real, scratch ephemerals bypass the trash, and month minting is
 // idempotent.
 
-// trashMonthGrid resolves the month well's child grid in the trash root,
+// trashMonthGrid resolves the month door's child grid in the trash root,
 // failing the test if absent.
 func trashMonthGrid(t *testing.T, s *Store, month string) string {
 	t.Helper()
@@ -29,11 +29,11 @@ func trashMonthGrid(t *testing.T, s *Store, month string) string {
 		t.Fatal(err)
 	}
 	for _, tl := range g.Tiles {
-		if tl.Kind == rpc.KindWell && tl.AltText == month {
+		if tl.Kind == rpc.KindDoor && tl.AltText == month {
 			return tl.ChildGridId
 		}
 	}
-	t.Fatalf("no %q month well in trash root: %+v", month, g.Tiles)
+	t.Fatalf("no %q month door in trash root: %+v", month, g.Tiles)
 	return ""
 }
 
@@ -112,11 +112,11 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, w.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, inner.Id); err != nil {
-		t.Fatalf("inner well must survive the trash move: %v", err)
+		t.Fatalf("inner door must survive the trash move: %v", err)
 	}
 	// Second delete (the tile now sits in the month grid): real, cascades.
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: w.Id}); err != nil {
@@ -140,7 +140,7 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 
 	// The same is true anywhere DEEPER in the trash tree: delete a tile
 	// while it already sits in a month grid's own subtree.
-	deep, err := s.CreateWell(ctx, root, 5, 5, 1, 1, "")
+	deep, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := s.GetTile(ctx, kid.Id); !errors.Is(err, ErrNotFound) {
-		t.Errorf("delete inside a trashed well's grid must be real: %v", err)
+		t.Errorf("delete inside a trashed door's grid must be real: %v", err)
 	}
 }
 
@@ -193,7 +193,7 @@ func TestTrashMonthMintingIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(g.Tiles) != 1 {
-		t.Fatalf("trash root = %d wells, want the one 2026-01 month", len(g.Tiles))
+		t.Fatalf("trash root = %d doors, want the one 2026-01 month", len(g.Tiles))
 	}
 	mg, err := s.GetGrid(ctx, g.Tiles[0].ChildGridId)
 	if err != nil {
@@ -211,7 +211,7 @@ func TestTrashMonthMintingIsIdempotent(t *testing.T) {
 		seen[k] = true
 	}
 
-	// A new month files under a NEW well.
+	// A new month files under a NEW door.
 	s.SetClock(func() time.Time { return time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC) })
 	txt, err := s.CreateText(ctx, root, 7, 7, 1, 1, nil)
 	if err != nil {
@@ -222,7 +222,7 @@ func TestTrashMonthMintingIsIdempotent(t *testing.T) {
 	}
 	g, _ = s.GetGrid(ctx, trash)
 	if len(g.Tiles) != 2 {
-		t.Fatalf("trash root = %d wells after a second month, want 2", len(g.Tiles))
+		t.Fatalf("trash root = %d doors after a second month, want 2", len(g.Tiles))
 	}
 }
 

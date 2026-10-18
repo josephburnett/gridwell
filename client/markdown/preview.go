@@ -64,7 +64,7 @@ func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, x, y, w, h, topInse
 }
 
 // PreviewContentVisible drops to the alt-text banner alone below one body line
-// of room, mirroring the well's previewCell >= 0.5 gate. availH is the inner
+// of room, mirroring the door's previewCell >= 0.5 gate. availH is the inner
 // height minus the banner.
 func PreviewContentVisible(availH, scale float64) bool {
 	return availH >= PreviewBodyLinePx*scale

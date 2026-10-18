@@ -240,7 +240,7 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	}
 }
 
-// A request names its entity by its first id field set: SetFraming's doorway
+// A request names its entity by its first id field set: SetFraming's door
 // tile, or the root grid when there is none.
 func TestTheEntityIsTheFirstIDFieldSet(t *testing.T) {
 	cases := []struct {

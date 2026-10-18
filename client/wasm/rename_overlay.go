@@ -49,7 +49,7 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 			if entered != nil {
 				in.DoorName = entered.AltText
 			}
-		} else if t, ok := a.parentWell(p); ok {
+		} else if t, ok := a.parentDoor(p); ok {
 			parent, in.Parent, in.ParentName = t, true, t.AltText
 		}
 		in.ConfigLabel = a.declaredLabel(p)
@@ -69,14 +69,14 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 	return v, nil
 }
 
-// parentWell is the well row at the tail of the pane's path, from the cache.
-func (a *App) parentWell(p *pane.Pane) (*gridwellv1.Tile, bool) {
+// parentDoor is the door row at the tail of the pane's path, from the cache.
+func (a *App) parentDoor(p *pane.Pane) (*gridwellv1.Tile, bool) {
 	g, ok := a.c.Grid(a.gridIDForPathFrom(p.Anchor(), p.Path()[:len(p.Path())-1]))
 	if !ok {
 		return nil, false
 	}
 	t, ok := g.Tiles[p.Path()[len(p.Path())-1]]
-	if !ok || !rpc.IsWellKind(t.Kind) {
+	if !ok || !rpc.IsDoorKind(t.Kind) {
 		return nil, false
 	}
 	return t, true

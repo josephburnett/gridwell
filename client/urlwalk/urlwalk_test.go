@@ -34,11 +34,11 @@ func TestWalkEmpty(t *testing.T) {
 	}
 }
 
-func TestWalkWellChain(t *testing.T) {
-	// root grid "1" has well "10" -> grid "2"; grid "2" has well "20" -> grid "3".
+func TestWalkDoorChain(t *testing.T) {
+	// root grid "1" has door "10" -> grid "2"; grid "2" has door "20" -> grid "3".
 	w := world{
-		"1": {"10": {IsWell: true, ChildGridID: "2"}},
-		"2": {"20": {IsWell: true, ChildGridID: "3"}},
+		"1": {"10": {IsDoor: true, ChildGridID: "2"}},
+		"2": {"20": {IsDoor: true, ChildGridID: "3"}},
 		"3": {},
 	}
 	path, file := Walk("1", []string{"10", "20"}, w.lookup())
@@ -52,7 +52,7 @@ func TestWalkWellChain(t *testing.T) {
 
 func TestWalkContentLeaf(t *testing.T) {
 	w := world{
-		"1": {"10": {IsWell: true, ChildGridID: "2"}},
+		"1": {"10": {IsDoor: true, ChildGridID: "2"}},
 		"2": {"99": {IsContent: true}},
 	}
 	path, file := Walk("1", []string{"10", "99"}, w.lookup())
@@ -65,10 +65,10 @@ func TestWalkContentLeaf(t *testing.T) {
 }
 
 func TestWalkSkipsMissingID(t *testing.T) {
-	// "9999" is not in grid "1", so the walk stays there and resolves the well
+	// "9999" is not in grid "1", so the walk stays there and resolves the door
 	// "10" next.
 	w := world{
-		"1": {"10": {IsWell: true, ChildGridID: "2"}},
+		"1": {"10": {IsDoor: true, ChildGridID: "2"}},
 		"2": {"15": {IsContent: true}},
 	}
 	path, file := Walk("1", []string{"9999", "10", "15"}, w.lookup())
@@ -83,7 +83,7 @@ func TestWalkSkipsMissingID(t *testing.T) {
 func TestWalkContentMidPathIgnored(t *testing.T) {
 	// A content tile that is not last is skipped.
 	w := world{
-		"1": {"5": {IsContent: true}, "10": {IsWell: true, ChildGridID: "2"}},
+		"1": {"5": {IsContent: true}, "10": {IsDoor: true, ChildGridID: "2"}},
 		"2": {},
 	}
 	path, file := Walk("1", []string{"5", "10"}, w.lookup())
@@ -96,11 +96,11 @@ func TestWalkContentMidPathIgnored(t *testing.T) {
 }
 
 func TestWalkStopsOnFailedFetch(t *testing.T) {
-	// Grid "2" fails to load, so the walk ends with the well "10" and no file.
+	// Grid "2" fails to load, so the walk ends with the door "10" and no file.
 	// A failed read never invents more path.
 	w := world{
-		"1": {"10": {IsWell: true, ChildGridID: "2"}},
-		"2": {"20": {IsWell: true, ChildGridID: "3"}},
+		"1": {"10": {IsDoor: true, ChildGridID: "2"}},
+		"2": {"20": {IsDoor: true, ChildGridID: "3"}},
 		"3": {},
 	}
 	path, file := Walk("1", []string{"10", "20"}, w.lookupFailingGrid("2"))
@@ -124,7 +124,7 @@ func TestWalkWrongGridIDNotFollowed(t *testing.T) {
 	// id "10" exists in grid "1" but not in grid "2". After descending, later
 	// ids resolve against the child grid, so this "10" is skipped.
 	w := world{
-		"1": {"10": {IsWell: true, ChildGridID: "2"}},
+		"1": {"10": {IsDoor: true, ChildGridID: "2"}},
 		"2": {"7": {IsContent: true}},
 	}
 	path, file := Walk("1", []string{"10", "10", "7"}, w.lookup())

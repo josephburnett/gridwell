@@ -12,8 +12,8 @@ import (
 
 // CopyTile duplicates a tile into a destination grid as an eager, independent
 // copy: a fresh row id, the source's version, and the source row untouched, so
-// a copy is layout, not content. An interior well's whole subtree is
-// deep-copied; an exit well keeps its qualified child_grid_id, another plugin
+// a copy is layout, not content. An interior door's whole subtree is
+// deep-copied; a door to another namespace keeps its qualified child_grid_id, another plugin
 // owning that grid; a leaf shares its blob with the refcount bumped. Nothing
 // else is shared, so editing one can never touch the other.
 func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.Tile, error) {

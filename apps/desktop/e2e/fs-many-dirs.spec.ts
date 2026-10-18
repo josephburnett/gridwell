@@ -5,7 +5,7 @@ import { makeRunDir } from './homes';
 import { settle } from './cadence';
 
 // A directory of many directories, opened through the fs plugin, shows each as
-// a well whose preview reads its child grid. That read is once, and nothing
+// a door whose preview reads its child grid. That read is once, and nothing
 // the source says afterwards may turn into a storm of re-reads: on 2026-10-02
 // a home of ~100 directories made the client cancel and re-ask every grid on
 // each health flip, and each cancelled read came back to the node as a flip.
@@ -81,21 +81,21 @@ test('a directory of many directories reads each once and stays quiet', async ({
 
   await gw.enterPlugin('dirs');
   const here = await gw.focused();
-  const wells = ((await gw.getGrid(here.gridID)).tiles ?? []).filter((t) => t.kind === 'well');
-  expect(wells, 'every directory is a well').toHaveLength(DIRS);
-  // Zoomed out until every well is on screen, as the trace's pane was.
-  const previewed = () => wells.filter((w) => reads.has(w.childGridId!)).length;
+  const doors = ((await gw.getGrid(here.gridID)).tiles ?? []).filter((t) => t.kind === 'door');
+  expect(doors, 'every directory is a door').toHaveLength(DIRS);
+  // Zoomed out until every door is on screen, as the trace's pane was.
+  const previewed = () => doors.filter((w) => reads.has(w.childGridId!)).length;
   for (let i = 0; i < 16 && previewed() < DIRS; i++) {
-    // Over an empty cell: a wheel over a well is not the grid's.
+    // Over an empty cell: a wheel over a door is not the grid's.
     const empty = await gw.cellCenter(here.id, -1, 0);
     await window.mouse.move(empty.x, empty.y);
     await window.mouse.wheel(0, 300);
     await gw.waitIdle();
   }
-  expect(previewed(), 'every well on screen read its grid for a preview').toBe(DIRS);
+  expect(previewed(), 'every door on screen read its grid for a preview').toBe(DIRS);
   expect(await watchNotices(window, 2_000), 'opening many directories raises no notice').toEqual([]);
   expect(await status(), 'and the plugin stays healthy').toBe('');
-  for (const w of wells) {
+  for (const w of doors) {
     expect(reads.get(w.childGridId!) ?? 0, `the preview of ${w.altText} read its grid`).toBeLessThanOrEqual(2);
   }
 
@@ -105,7 +105,7 @@ test('a directory of many directories reads each once and stays quiet', async ({
     await expect.poll(status, { timeout: 30_000, message: `${what}: the plugin is healthy again` }).toBe('');
     await gw.waitIdle();
     await watchNotices(window, 2_000);
-    for (const w of wells) {
+    for (const w of doors) {
       expect(reads.get(w.childGridId!) ?? 0, `${what}: ${w.altText} was re-read a bounded number of times`).toBeLessThanOrEqual(4);
     }
     reads.clear();
@@ -114,7 +114,7 @@ test('a directory of many directories reads each once and stays quiet', async ({
     expect(quiet, `${what}: and the strip is clear`).toEqual([]);
   };
 
-  // Reads abandoned in flight: a reload while the boot is reading the wells'
+  // Reads abandoned in flight: a reload while the boot is reading the doors'
   // grids cancels them at the node.
   await settle(window, (await gw.cadences()).framingSaveMs);
   await window.reload();

@@ -20,7 +20,7 @@ type BorderColors struct {
 // resolves the descended tile and its kind first.
 type BorderInput struct {
 	HasTextFocus bool // the pane's place is a content frame
-	DescentDepth int  // greater than 0 means inside at least one well
+	DescentDepth int  // greater than 0 means inside at least one door
 	TileKnown    bool // the descended row is cached, so TileKind is meaningful
 	TileKind     string
 	Focused      bool // the keyboard-focused pane in the split tree

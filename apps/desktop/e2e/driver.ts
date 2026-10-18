@@ -26,7 +26,7 @@ export interface PaneInfo {
   cx: number;
   cy: number;
   zoom: number;
-  // How many doorways deep the pane's place stack is; 0 is its root grid.
+  // How many doors deep the pane's place stack is; 0 is its root grid.
   // There is one stack, so a leaked frame has nowhere to hide.
   placeDepth: number;
   // The ids of the tiles this pane renders, which is its cache contents. A tile
@@ -51,8 +51,8 @@ export interface Cadences {
 
 export interface MenuItem {
   index: number;
-  // Doorway swatches sit in the top row, one per declared doorway. A click
-  // descends into it, a drag drops an exit-well link. isPlugin tells them from
+  // Door swatches sit in the top row, one per declared door. A click
+  // descends into it, a drag drops a door to another namespace link. isPlugin tells them from
   // the primitive swatches.
   isPlugin: boolean;
   kind: string;
@@ -97,7 +97,7 @@ export interface PluginDescriptor {
   rootViewZoom: number;
 }
 
-// One declared menu entry: a grid the row is a doorway onto. label is instance
+// One declared menu entry: a grid the row is a door onto. label is instance
 // and collection joined (door.EntryName), as "Feed (hey)".
 export interface PluginCollection {
   id: string;
@@ -425,7 +425,7 @@ export class GridwellDriver {
     return center;
   }
 
-  // Drags a primitive swatch ("well", "markdown", "url", "shell") onto a cell
+  // Drags a primitive swatch ("door", "markdown", "url", "shell") onto a cell
   // of the focused pane.
   async dragCreate(kind: string, cx: number, cy: number): Promise<void> {
     const menu = await this.menu();
@@ -590,7 +590,7 @@ export class GridwellDriver {
   }
 
   // A right-drag always copies. Across a plugin boundary a leaf copies its
-  // bytes, a solid well is refused, and a link tile copies as another link.
+  // bytes, a solid door is refused, and a link tile copies as another link.
   async copyDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
     await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'right');
   }

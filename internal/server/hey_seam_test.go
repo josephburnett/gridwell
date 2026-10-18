@@ -77,7 +77,7 @@ func heyStack(t *testing.T, hey *heyfake.CLI) (*httptest.Server, namespace.Names
 	return hs, cl, info
 }
 
-// The plugin's four doorways are four (+) menu entries — imbox, reply later,
+// The plugin's four doors are four (+) menu entries — imbox, reply later,
 // set aside and everything, no landing grid, no privileged one — and every one
 // of them lists its own emails. The mapping from a declared context to a
 // servable grid id is the adapter's, so a plugin unit test cannot see it: it
@@ -108,7 +108,7 @@ func TestHeyPluginDeclaresAndListsEveryCollection(t *testing.T) {
 		{info.MenuEntries[0].GridId, "Lunch plans"},
 		{info.MenuEntries[1].GridId, "Conference talk"},
 		{info.MenuEntries[2].GridId, "Lease renewal"},
-		// The Feed is no doorway, but it is walked into everything.
+		// The Feed is no door, but it is walked into everything.
 		{info.MenuEntries[3].GridId, "Weekly digest"},
 	} {
 		g, err := cl.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: c.grid})

@@ -90,11 +90,11 @@ test('a tab whose node changed build offers the reload and lands where it was wh
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)!;
   await gw.descendCell(cx, cy);
   const place = await gw.focused();
-  expect(place.gridID).toBe(well.childGridId);
+  expect(place.gridID).toBe(door.childGridId);
   // The path is the place's stack of frames; the query is framing, which may
   // settle again before the reload.
   const path = () => new URL(window.url()).pathname;

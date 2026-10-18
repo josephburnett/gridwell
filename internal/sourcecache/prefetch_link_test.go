@@ -16,7 +16,7 @@ import (
 
 // linkUpstream is a fake transport, with qualified ids, the shape a
 // connection really serves: one connection whose landing is a root grid
-// holding one leaf link whose target lives in a grid no well references. The
+// holding one leaf link whose target lives in a grid no door references. The
 // link arm is the target's only warm path, which is the case the walker
 // promises to cover. The walker's mechanics are what this pins, so the
 // upstream is a stub; the walk against the real transport is the seam test.

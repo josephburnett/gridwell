@@ -39,7 +39,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		})
 	}
 
-	w0, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w0, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,13 +59,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		op := rng.IntN(6)
 		switch op {
 		case 0:
-			// Kind is drawn from well/text/url/shell so copy and delete are
+			// Kind is drawn from door/text/url/shell so copy and delete are
 			// exercised across every refcounted reference a tile can hold:
 			// child grid, text blob, and preview blob.
 			gridID := root
 			if len(tiles) > 0 && rng.IntN(2) == 0 {
 				ln := tiles[rng.IntN(len(tiles))]
-				if ln.kind == rpc.KindWell && ln.childGridID != "" {
+				if ln.kind == rpc.KindDoor && ln.childGridID != "" {
 					gridID = ln.childGridID
 				}
 			}
@@ -79,7 +79,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			)
 			switch rng.IntN(4) {
 			case 0:
-				n, err = s.CreateWell(ctx, gridID, x, y, w, h, "")
+				n, err = s.CreateDoor(ctx, gridID, x, y, w, h, "")
 			case 1:
 				n, err = s.CreateText(ctx, gridID, x, y, w, h, []byte(fmt.Sprintf("# tile %d", i)))
 			case 2:
@@ -143,7 +143,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			tiles[pickIdx].w = n.W
 			tiles[pickIdx].h = n.H
 		case 3:
-			// Delete a random tile (cascades through wells).
+			// Delete a random tile (cascades through doors).
 			if len(tiles) == 0 {
 				continue
 			}
@@ -162,7 +162,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			if err == nil {
 				deletedGrids := map[string]bool{}
-				if pick.kind == rpc.KindWell && pick.childGridID != "" {
+				if pick.kind == rpc.KindDoor && pick.childGridID != "" {
 					deletedGrids[pick.childGridID] = true
 				}
 				next := tiles[:0]
@@ -178,13 +178,13 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				tiles = next
 			}
 		case 4:
-			// Set viewport (well-only in the kind/version model).
+			// Set viewport (door-only in the kind/version model).
 			if len(tiles) == 0 {
 				continue
 			}
 			pickIdx := rng.IntN(len(tiles))
 			pick := tiles[pickIdx]
-			if pick.kind != rpc.KindWell {
+			if pick.kind != rpc.KindDoor {
 				continue
 			}
 			if !stillLive(pick.id) {
@@ -195,7 +195,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 				Cx:     rng.Float64() * 50, Cy: rng.Float64() * 50, Zoom: 1.0,
 			})
 			if err != nil && !isBenignPropError(err) {
-				t.Fatalf("iter %d set well view: %v", i, err)
+				t.Fatalf("iter %d set door view: %v", i, err)
 			}
 			if err == nil {
 				tiles[pickIdx].id = n.Id

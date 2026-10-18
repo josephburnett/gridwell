@@ -74,16 +74,16 @@ func TestTargetIDCoversBothLinkShapesAndOnlyLinks(t *testing.T) {
 		tile *gridwellv1.Tile
 		want string
 	}{
-		{"a well link carries its child grid",
-			&gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: fs + "/1"}, fs + "/1"},
+		{"a door link carries its child grid",
+			&gridwellv1.Tile{Kind: rpc.KindDoor, Link: true, ChildGridId: fs + "/1"}, fs + "/1"},
 		{"a leaf link carries its target",
 			&gridwellv1.Tile{Kind: rpc.KindText, Link: true, LinkTargetId: fs + "/42"}, fs + "/42"},
-		{"an owned interior well is not a link",
-			&gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: node + "/9"}, ""},
+		{"an owned interior door is not a link",
+			&gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: node + "/9"}, ""},
 		{"an owned text tile is not a link",
 			&gridwellv1.Tile{Kind: rpc.KindText}, ""},
 		{"a childless link is a menu swatch, not a link into anywhere",
-			&gridwellv1.Tile{Kind: rpc.KindWell, Link: true}, ""},
+			&gridwellv1.Tile{Kind: rpc.KindDoor, Link: true}, ""},
 	}
 	for _, c := range cases {
 		tile := c.tile
@@ -122,16 +122,16 @@ func TestADeepBreakIsDeadByTheVerdictHeard(t *testing.T) {
 }
 
 func TestDeadTile(t *testing.T) {
-	dead := &gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: gone + "/1"}
+	dead := &gridwellv1.Tile{Kind: rpc.KindDoor, Link: true, ChildGridId: gone + "/1"}
 	if !DeadTile(dead, roster(), node, nil) {
 		t.Error("a link into an undeclared namespace is dead")
 	}
-	live := &gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: fs + "/1"}
+	live := &gridwellv1.Tile{Kind: rpc.KindDoor, Link: true, ChildGridId: fs + "/1"}
 	if DeadTile(live, roster(), node, nil) {
 		t.Error("a link into a declared plugin is alive, whatever that plugin's health")
 	}
-	owned := &gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: gone + "/1"}
+	owned := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: gone + "/1"}
 	if DeadTile(owned, roster(), node, nil) {
-		t.Error("an owned well is not a link and has no dead verdict")
+		t.Error("an owned door is not a link and has no dead verdict")
 	}
 }

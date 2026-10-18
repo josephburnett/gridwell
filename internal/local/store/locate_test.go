@@ -9,18 +9,18 @@ import (
 )
 
 // The id: selector is an exact lookup whose one result carries the
-// containing-well chain, outermost first, tracking moves. A missing id gives
+// containing-door chain, outermost first, tracking moves. A missing id gives
 // empty results, never an error.
 func TestFindByID(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	outer, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, outer.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,11 +73,11 @@ func TestFindText(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	well, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := s.CreateText(ctx, well.ChildGridId, 0, 0, 1, 1, []byte("# Plans\n\nthe gopher meeting is on tuesday\n"))
+	doc, err := s.CreateText(ctx, door.ChildGridId, 0, 0, 1, 1, []byte("# Plans\n\nthe gopher meeting is on tuesday\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,8 +106,8 @@ func TestFindText(t *testing.T) {
 	if !strings.Contains(res[1].Snippet, "gopher meeting") {
 		t.Errorf("snippet = %q, want the matched context", res[1].Snippet)
 	}
-	if len(res[1].Path) != 1 || res[1].Path[0].Id != well.Id {
-		t.Errorf("body hit path = %+v, want [well]", res[1].Path)
+	if len(res[1].Path) != 1 || res[1].Path[0].Id != door.Id {
+		t.Errorf("body hit path = %+v, want [door]", res[1].Path)
 	}
 
 	// Case-insensitive; no match = empty.

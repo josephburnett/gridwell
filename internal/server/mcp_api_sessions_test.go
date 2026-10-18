@@ -261,7 +261,7 @@ func TestMCPSessionsMarksTheScreenHoldingYourShell(t *testing.T) {
 
 // select adds and removes without a claim, and answers the grid as read_grid
 // does: a select made while the user's set moved merges with it, a tile off
-// the grid is ignored, a recursive clear reaches the grids inside wells, and
+// the grid is ignored, a recursive clear reaches the grids inside doors, and
 // the all-clear reaches every namespace.
 func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	n := newMCPNode(t)
@@ -293,15 +293,15 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 		t.Fatalf("after removing a, selection = %v, want [%s]", g.Grid.Selection, b.ID)
 	}
 
-	// clear with recurse empties this grid and every grid inside its wells;
+	// clear with recurse empties this grid and every grid inside its doors;
 	// recurse alone is refused.
-	well, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 9, Y: 9, W: 1, H: 1}})
+	door, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: n.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 9, Y: 9, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner := mkText(t, s, well.ChildGridId, "inner")
-	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.ID}}, &g)
+	inner := mkText(t, s, door.ChildGridId, "inner")
+	call(t, s, "select", map[string]any{"grid": door.ChildGridId, "add": []string{inner.ID}}, &g)
 	if len(g.Grid.Selection) != 1 {
 		t.Fatalf("the inner grid's selection = %v", g.Grid.Selection)
 	}
@@ -310,19 +310,19 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	if len(g.Grid.Selection) != 0 {
 		t.Fatalf("after a recursive clear the grid holds %v", g.Grid.Selection)
 	}
-	call(t, s, "read_grid", map[string]any{"id": well.ChildGridId}, &g)
+	call(t, s, "read_grid", map[string]any{"id": door.ChildGridId}, &g)
 	if len(g.Grid.Selection) != 0 {
 		t.Fatalf("after a recursive clear the inner grid holds %v", g.Grid.Selection)
 	}
 
 	// all clears every grid the node holds, the feed plugin's included.
 	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.ID}}, &g)
-	call(t, s, "select", map[string]any{"grid": well.ChildGridId, "add": []string{inner.ID}}, &g)
+	call(t, s, "select", map[string]any{"grid": door.ChildGridId, "add": []string{inner.ID}}, &g)
 	f := mkText(t, s, n.feedRoot, "f")
 	call(t, s, "select", map[string]any{"grid": n.feedRoot, "add": []string{f.ID}}, &g)
 	refusedWith(t, callRaw(t, s, "select", map[string]any{"grid": n.root, "clear": true, "all": true}), "refused:")
 	call(t, s, "select", map[string]any{"clear": true, "all": true}, &g)
-	for _, id := range []string{n.root, well.ChildGridId, n.feedRoot} {
+	for _, id := range []string{n.root, door.ChildGridId, n.feedRoot} {
 		call(t, s, "read_grid", map[string]any{"id": id}, &g)
 		if len(g.Grid.Selection) != 0 {
 			t.Fatalf("after the all-clear grid %s holds %v", id, g.Grid.Selection)
@@ -338,11 +338,11 @@ func TestMCPReadTilesOnAPaneTileAnswersItsLayout(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	ctx := context.Background()
-	well, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 3, Y: 3, W: 1, H: 1}})
+	door, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 3, Y: 3, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	note := mkText(t, s, well.ChildGridId, "note")
+	note := mkText(t, s, door.ChildGridId, "note")
 	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
 	if err != nil {
 		t.Fatal(err)
@@ -353,7 +353,7 @@ func TestMCPReadTilesOnAPaneTileAnswersItsLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second.Push(pane.Frame{Door: well.Id})
+	second.Push(pane.Frame{Door: door.Id})
 	second.Push(pane.Frame{Door: note.ID, Content: true})
 	if err := tr.SetFocus(second.ID); err != nil {
 		t.Fatal(err)
@@ -376,9 +376,9 @@ func TestMCPReadTilesOnAPaneTileAnswersItsLayout(t *testing.T) {
 		if p1.ID != first.ID || p1.Anchor != f.root || len(p1.Path) != 0 || p1.Grid != f.root || p1.Content != "" || p1.Focused {
 			t.Errorf("pane 1 = %+v, want unfocused on %s", p1, f.root)
 		}
-		if p2.ID != second.ID || p2.Anchor != f.root || !slices.Equal(p2.Path, []string{well.Id}) || p2.Grid != "" ||
+		if p2.ID != second.ID || p2.Anchor != f.root || !slices.Equal(p2.Path, []string{door.Id}) || p2.Grid != "" ||
 			p2.Content != note.ID || !p2.Focused {
-			t.Errorf("pane 2 = %+v, want focused inside %s through %s, its grid not named", p2, note.ID, well.Id)
+			t.Errorf("pane 2 = %+v, want focused inside %s through %s, its grid not named", p2, note.ID, door.Id)
 		}
 	}
 }

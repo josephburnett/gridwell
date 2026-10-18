@@ -1,5 +1,5 @@
 // Package door derives a level's identity, its title, rename target and crumb
-// glyph, from the doorway the pane descended through. It is the one
+// glyph, from the door the pane descended through. It is the one
 // derivation; everything else reads it.
 package door
 
@@ -25,7 +25,7 @@ func EntryName(row, entry string) string {
 }
 
 // EntryPlugin shapes one of a row's MenuEntries as a pseudo-row, so every
-// downstream flow takes the ordinary row path. It is a doorway and not a
+// downstream flow takes the ordinary row path. It is a door and not a
 // declarer, so it carries none of the row's entries, which would show every
 // collection twice; its framing is the entry's, so a collection reopens where
 // it was left.
@@ -42,20 +42,20 @@ func EntryPlugin(pl *gridwellv1.PluginInfo, e *gridwellv1.MenuEntry) *gridwellv1
 }
 
 // Kind says what the resolved door is, which decides renamability: a real
-// well row takes the rename gesture, a declaration is config-owned.
+// door row takes the rename gesture, a declaration is config-owned.
 type Kind int
 
 const (
 	None  Kind = iota
-	Well       // a real tile row, renamable where you stand
+	Tile       // a real tile row, renamable where you stand
 	Entry      // a declared MenuEntry's pseudo swatch
 	Root       // a row's own swatch, for a row that is a place. A plugin has none.
 )
 
-// WellInto finds the well tile whose child grid is anchor.
-func WellInto(anchor string, tiles map[string]*gridwellv1.Tile) (*gridwellv1.Tile, bool) {
+// DoorInto finds the door tile whose child grid is anchor.
+func DoorInto(anchor string, tiles map[string]*gridwellv1.Tile) (*gridwellv1.Tile, bool) {
 	for _, t := range tiles {
-		if t.ChildGridId == anchor && rpc.IsWellKind(t.Kind) {
+		if t.ChildGridId == anchor && rpc.IsDoorKind(t.Kind) {
 			return t, true
 		}
 	}
@@ -63,25 +63,25 @@ func WellInto(anchor string, tiles map[string]*gridwellv1.Tile) (*gridwellv1.Til
 }
 
 // Find resolves the door into the level rooted at anchor, most specific
-// first: the parent level's well whose child is anchor, a MenuEntry declaring
+// first: the parent level's door whose child is anchor, a MenuEntry declaring
 // it, then the row rooted at it. None leaves callers their fallback.
 func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gridwellv1.PluginInfo) (*gridwellv1.Tile, Kind) {
 	if anchor == "" {
 		return nil, None
 	}
-	if t, ok := WellInto(anchor, parentTiles); ok {
-		return t, Well
+	if t, ok := DoorInto(anchor, parentTiles); ok {
+		return t, Tile
 	}
 	for _, pl := range plugins {
 		for _, e := range pl.MenuEntries {
 			if e.GridId == anchor {
-				return rpc.PluginWellTile(EntryPlugin(pl, e)), Entry
+				return rpc.PluginDoorTile(EntryPlugin(pl, e)), Entry
 			}
 		}
 	}
 	for _, pl := range plugins {
 		if pl.RootGridId == anchor {
-			return rpc.PluginWellTile(pl), Root
+			return rpc.PluginDoorTile(pl), Root
 		}
 	}
 	return nil, None
@@ -109,15 +109,16 @@ func RowGlyph(pl *gridwellv1.PluginInfo) string {
 	if pl.Glyph != "" {
 		return pl.Glyph
 	}
-	return rpc.GlyphWell
+	return rpc.GlyphDoor
 }
 
 // GlyphFor is a grid's identity glyph, from declarations only, most specific
 // first: a MenuEntry naming it, a row rooted exactly here, the cached grid's
-// own glyph, the mount door's glyph, then the plugin row's glyph by namespace. A
+// own glyph, the glyph of the door to another namespace, then the plugin row's
+// glyph by namespace. A
 // row rooted here wins over the grid's own glyph because a connection's root
-// is the far node's home grid, which declares the far node's glyph. The mount
-// door is looked up by exact uuid, since the node's own id prefixes
+// is the far node's home grid, which declares the far node's glyph. The door to
+// another namespace is looked up by exact uuid, since the node's own id prefixes
 // "<id>/<conn>". There is always an answer, a crumb with no glyph being a blank
 // square.
 func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.PluginInfo) string {
@@ -137,15 +138,15 @@ func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.Plugin
 			}
 			return rpc.GlyphGlobe
 		}
-		return rpc.GlyphWell
+		return rpc.GlyphDoor
 	}
 	if pl, ok := byUUID(rpc.UUIDOf(gridID), plugins); ok {
 		return RowGlyph(pl)
 	}
-	return rpc.GlyphWell
+	return rpc.GlyphDoor
 }
 
-// Place is one grid a menu row is a doorway onto: the row that names it, a
+// Place is one grid a menu row is a door onto: the row that names it, a
 // pseudo-row for an entry, and the entry it was declared by, nil for the
 // row's own grid.
 type Place struct {
@@ -153,9 +154,9 @@ type Place struct {
 	Entry  *gridwellv1.MenuEntry
 }
 
-// PlacesOf enumerates the doorways one menu row declares, in declaration
+// PlacesOf enumerates the doors one menu row declares, in declaration
 // order. It is the one enumeration, read by client/menu, ByRoot and the
-// framing restore, so what a doorway is cannot be answered three ways.
+// framing restore, so what a door is cannot be answered three ways.
 func PlacesOf(pl *gridwellv1.PluginInfo) []Place {
 	out := make([]Place, 0, 1+len(pl.MenuEntries))
 	if pl.RootGridId != "" {
@@ -180,7 +181,7 @@ func Places(plugins []*gridwellv1.PluginInfo) []Place {
 	return out
 }
 
-// ByRoot finds the doorway rooted exactly at gridID. Rooted, not by
+// ByRoot finds the door rooted exactly at gridID. Rooted, not by
 // namespace: a connection row's uuid "<id>/<conn>" is not a prefix of its
 // root "<id>/<conn>/<remote-home>/<n>".
 func ByRoot(gridID string, plugins []*gridwellv1.PluginInfo) (*gridwellv1.PluginInfo, bool) {

@@ -30,38 +30,38 @@ func sz(w, h float64) Size {
 func view(cx, cy, zoom float64) rpc.View { return rpc.ViewOf(cx, cy, zoom) }
 
 func TestOvertakeZoomTakesLargerOfDimRatios(t *testing.T) {
-	// 1x1 well, 1920x1080 pane → must zoom 1920/64=30 to overtake width.
-	z := OvertakeZoom(Well{W: 1, H: 1}, standardPane, cellPx)
+	// 1x1 door, 1920x1080 pane → must zoom 1920/64=30 to overtake width.
+	z := OvertakeZoom(Door{W: 1, H: 1}, standardPane, cellPx)
 	if !near(z, 30) {
 		t.Errorf("z = %v, want 30", z)
 	}
-	// 1x1 well, 1080x1920 pane → must zoom 1920/64 to overtake height.
-	z = OvertakeZoom(Well{W: 1, H: 1}, sz(standardPaneH, standardPaneW), cellPx)
+	// 1x1 door, 1080x1920 pane → must zoom 1920/64 to overtake height.
+	z = OvertakeZoom(Door{W: 1, H: 1}, sz(standardPaneH, standardPaneW), cellPx)
 	if !near(z, 30) {
 		t.Errorf("portrait z = %v, want 30", z)
 	}
-	// 3x2 well, 1920x1080 pane → max(1920/192, 1080/128) = max(10, 8.4375).
-	z = OvertakeZoom(Well{W: 3, H: 2}, standardPane, cellPx)
+	// 3x2 door, 1920x1080 pane → max(1920/192, 1080/128) = max(10, 8.4375).
+	z = OvertakeZoom(Door{W: 3, H: 2}, standardPane, cellPx)
 	if !near(z, 10) {
 		t.Errorf("z = %v, want 10", z)
 	}
 }
 
 func TestOvertakeZoomGuards(t *testing.T) {
-	if OvertakeZoom(Well{W: 0, H: 1}, sz(100, 100), cellPx) != 1 {
+	if OvertakeZoom(Door{W: 0, H: 1}, sz(100, 100), cellPx) != 1 {
 		t.Error("zero w should return 1")
 	}
-	if OvertakeZoom(Well{W: 1, H: 1}, sz(100, 100), 0) != 1 {
+	if OvertakeZoom(Door{W: 1, H: 1}, sz(100, 100), 0) != 1 {
 		t.Error("zero cellPx should return 1")
 	}
 }
 
 func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 	from := Endpoints{Path: nil, Cx: 0, Cy: 0, Zoom: 1.0}
-	w := Well{ID: "7", X: 5, Y: 3, W: 1, H: 1}
+	w := Door{ID: "7", X: 5, Y: 3, W: 1, H: 1}
 	mid, swap, final, _ := Descent(from, w, standardPane, cellPx)
 
-	// Mid centers on well center; zoom is the overtake zoom (30 for the
+	// Mid centers on door center; zoom is the overtake zoom (30 for the
 	// 1x1 / 1920 case).
 	if !near(mid.Cx, 5.5) || !near(mid.Cy, 3.5) {
 		t.Errorf("mid center = (%v, %v)", mid.Cx, mid.Cy)
@@ -88,7 +88,7 @@ func TestDescentMidIsOvertakeAndContinuity(t *testing.T) {
 func TestDescentFinalReconstructsLiveZoom(t *testing.T) {
 	// final.Zoom is the ratio × Overtake for any from.Zoom, including past
 	// Overtake, where swap.Zoom differs for continuity.
-	w := Well{ID: "1", W: 3, H: 2, View: view(0, 0, 0.671)}
+	w := Door{ID: "1", W: 3, H: 2, View: view(0, 0, 0.671)}
 	overtake := OvertakeZoom(w, standardPane, cellPx)
 	wantLive := 0.671 * overtake
 	for _, fromZoom := range []float64{0.5, 1.0, overtake, overtake * 2, 100} {
@@ -103,7 +103,7 @@ func TestDescentFinalReconstructsLiveZoom(t *testing.T) {
 func TestDescentNeverZoomsOut(t *testing.T) {
 	// From past the overtake zoom, mid.Zoom is at least from.Zoom.
 	from := Endpoints{Zoom: 50}
-	w := Well{W: 1, H: 1}
+	w := Door{W: 1, H: 1}
 	mid, _, _, _ := Descent(from, w, standardPane, cellPx)
 	if mid.Zoom < from.Zoom {
 		t.Errorf("mid.Zoom = %v, want >= %v", mid.Zoom, from.Zoom)
@@ -112,7 +112,7 @@ func TestDescentNeverZoomsOut(t *testing.T) {
 
 func TestDescentDoesNotShareSlice(t *testing.T) {
 	from := Endpoints{Path: []string{"1", "2", "3"}, Zoom: 1}
-	w := Well{ID: "9"}
+	w := Door{ID: "9"}
 	_, swap, _, _ := Descent(from, w, sz(100, 100), cellPx)
 	swap.Path[0] = "999"
 	if from.Path[0] == "999" {
@@ -123,7 +123,7 @@ func TestDescentDoesNotShareSlice(t *testing.T) {
 func TestAscentNeverZoomsIn(t *testing.T) {
 	// Caller is already at a tiny zoom; ascent must not zoom in.
 	from := Endpoints{Path: []string{"42"}, Zoom: 0.5}
-	w := Well{ID: "42", W: 1, H: 1}
+	w := Door{ID: "42", W: 1, H: 1}
 	mid, _, _ := Ascent(from, w, nil, standardPane, cellPx)
 	if mid.Zoom > from.Zoom {
 		t.Errorf("mid.Zoom = %v, want <= %v", mid.Zoom, from.Zoom)
@@ -134,7 +134,7 @@ func TestAscentSwitchContinuity(t *testing.T) {
 	// Child cell equals preview cell at the switch, so to.Zoom is
 	// mid.Zoom * PreviewFactor.
 	from := Endpoints{Path: []string{"42"}, Zoom: 5.0}
-	w := Well{ID: "42", X: 1, Y: 2, W: 2, H: 1}
+	w := Door{ID: "42", X: 1, Y: 2, W: 2, H: 1}
 	mid, to, _ := Ascent(from, w, nil, standardPane, cellPx)
 	if !near(to.Zoom, mid.Zoom*PreviewFactor) {
 		t.Errorf("to.Zoom = %v, mid.Zoom*PreviewFactor = %v", to.Zoom, mid.Zoom*PreviewFactor)
@@ -178,8 +178,8 @@ func TestIntrinsicFromLiveGuards(t *testing.T) {
 	}
 }
 
-func TestOvertakeEquivalentWellAndDirect(t *testing.T) {
-	w := Well{W: 3, H: 5}
+func TestOvertakeEquivalentDoorAndDirect(t *testing.T) {
+	w := Door{W: 3, H: 5}
 	if !near(OvertakeZoom(w, standardPane, cellPx),
 		Overtake(3, 5, standardPane, cellPx)) {
 		t.Error("OvertakeZoom and Overtake disagree")
@@ -212,9 +212,9 @@ func TestOvertakeFillsAtLeastOneDim(t *testing.T) {
 // L0. Across pane sizes too: a window resize between ascent and descent must
 // not move the framing.
 
-func TestWellRoundTripSamePane(t *testing.T) {
+func TestDoorRoundTripSamePane(t *testing.T) {
 	for _, L0 := range []float64{0.5, 1.0, 2.98, 10.0, 50.0} {
-		w := Well{ID: "1", W: 3, H: 2}
+		w := Door{ID: "1", W: 3, H: 2}
 
 		overtake := OvertakeZoom(w, standardPane, cellPx)
 		w.View = view(0, 0, IntrinsicFromLive(L0, overtake))
@@ -228,14 +228,14 @@ func TestWellRoundTripSamePane(t *testing.T) {
 	}
 }
 
-func TestWellRoundTripAcrossPaneResize(t *testing.T) {
+func TestDoorRoundTripAcrossPaneResize(t *testing.T) {
 	// A different pane size changes the live zoom, but the visible child
-	// cells across the well width stay invariant.
+	// cells across the door width stay invariant.
 	for _, L0 := range []float64{1.0, 2.98, 7.5} {
-		w := Well{ID: "1", W: 3, H: 2}
+		w := Door{ID: "1", W: 3, H: 2}
 		ot1 := OvertakeZoom(w, standardPane, cellPx)
 		w.View = view(0, 0, IntrinsicFromLive(L0, ot1))
-		// Visible child cells across the well width are W × overtake /
+		// Visible child cells across the door width are W × overtake /
 		// live, and with live = vz × overtake that is W / vz.
 		visibleA := float64(w.W) / w.Ratio()
 
@@ -251,10 +251,10 @@ func TestWellRoundTripAcrossPaneResize(t *testing.T) {
 
 func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 	// The populated-ratio path of the swap continuity;
-	// TestDescentMidIsOvertakeAndContinuity covers a doorway never visited.
+	// TestDescentMidIsOvertakeAndContinuity covers a door never visited.
 	from := Endpoints{Zoom: 1}
 	for _, vz := range []float64{0.1, 0.25, 0.671, 1.0, 3.0} {
-		w := Well{ID: "1", W: 3, H: 2, View: view(0, 0, vz)}
+		w := Door{ID: "1", W: 3, H: 2, View: view(0, 0, vz)}
 		overtake := OvertakeZoom(w, standardPane, cellPx)
 		_, swap, _, _ := Descent(from, w, standardPane, cellPx)
 		previewCellPx := cellPx * overtake * vz
@@ -265,7 +265,7 @@ func TestPathSwapContinuityForIntrinsicRatio(t *testing.T) {
 	}
 }
 
-// Files use the same intrinsic-ratio model as wells, with the inner box as
+// Files use the same intrinsic-ratio model as doors, with the inner box as
 // the reference rect instead of the pane. These pin the invariants at the
 // math level, because fileLiveZoom and fileEffectiveRatio live in the wasm
 // package and are not testable directly.
@@ -347,7 +347,7 @@ func TestAscentMidContinuityForIntrinsicRatio(t *testing.T) {
 	// At the switch the child cell equals the preview cell, so mid.Zoom is
 	// the ratio × overtake.
 	for _, vz := range []float64{0.25, 0.671, 1.0, 3.0} {
-		w := Well{ID: "1", W: 3, H: 2, View: view(0, 0, vz)}
+		w := Door{ID: "1", W: 3, H: 2, View: view(0, 0, vz)}
 		overtake := OvertakeZoom(w, standardPane, cellPx)
 		from := Endpoints{Path: []string{"1"}, Zoom: vz * overtake}
 		mid, _, _ := Ascent(from, w, nil, standardPane, cellPx)
@@ -434,7 +434,7 @@ func TestWheelZoom(t *testing.T) {
 // a full cell per odd-sized round trip.
 func TestFramingRoundTripIsByteIdentical(t *testing.T) {
 	const paneW, paneH, cell = 1280, 800, 64
-	for _, w := range []Well{
+	for _, w := range []Door{
 		{X: 2, Y: 3, W: 2, H: 2, View: view(5.37, -7.125, 0.4)},
 		{X: 0, Y: 0, W: 1, H: 1, View: view(0.5, 0.5, 1.0/PreviewFactor)},
 		{X: 9, Y: 9, W: 3, H: 5, View: view(-0.0001, 1e6+0.5, 0.9)},
@@ -454,14 +454,14 @@ func TestFramingRoundTripIsByteIdentical(t *testing.T) {
 	}
 }
 
-func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
-	w := Well{X: 0, Y: 0, W: 2, H: 2, View: view(5, 7, 0.25)}
+func TestDoorWheelViewAnchorsAtCursor(t *testing.T) {
+	w := Door{X: 0, Y: 0, W: 2, H: 2, View: view(5, 7, 0.25)}
 	const parentCell = 64.0
 	cx0, cy0 := w.Center()
 
-	// The anchor is the point under the cursor, so a cursor at the well
+	// The anchor is the point under the cursor, so a cursor at the door
 	// center moves nothing.
-	cx1, cy1, r1, changed := WellWheelView(-120, w, parentCell, 0, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
+	cx1, cy1, r1, changed := DoorWheelView(-120, w, parentCell, 0, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
 	if !changed || r1 <= 0.25 {
 		t.Fatalf("wheel-in: ratio = %v changed=%v, want a larger ratio", r1, changed)
 	}
@@ -471,7 +471,7 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 
 	// Float in, float out: no per-notch quantization eats the drift.
 	const dx = 40.0
-	cx1, cy1, r1, changed = WellWheelView(-120, w, parentCell, dx, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
+	cx1, cy1, r1, changed = DoorWheelView(-120, w, parentCell, dx, 0, cx0, cy0, 1.1, 1.0/64, 1.0)
 	if !changed {
 		t.Fatal("off-center wheel-in: no change")
 	}
@@ -494,7 +494,7 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 	ccx, ccy := cx0, cy0
 	for i := 0; i < 4; i++ {
 		var r float64
-		ccx, ccy, r, changed = WellWheelView(-120, ww, parentCell, dx, dx, ccx, ccy, 1.1, 1.0/64, 1.0)
+		ccx, ccy, r, changed = DoorWheelView(-120, ww, parentCell, dx, dx, ccx, ccy, 1.1, 1.0/64, 1.0)
 		if !changed {
 			t.Fatalf("notch %d: no change", i)
 		}
@@ -508,12 +508,12 @@ func TestWellWheelViewAnchorsAtCursor(t *testing.T) {
 // One conversion, two readers: a drift between StoredView and Descent's final
 // would make coming back later land differently than descending now.
 func TestStoredViewMatchesDescentFinal(t *testing.T) {
-	wells := []Well{
+	doors := []Door{
 		{X: 2, Y: 3, W: 2, H: 2, View: view(6, 8, 0.4)},
 		{X: 0, Y: 0, W: 1, H: 1},                        // unvisited: default ratio
 		{X: 1, Y: 1, W: 3, H: 1, View: view(0, 0, 1.0)}, // max ratio
 	}
-	for _, w := range wells {
+	for _, w := range doors {
 		from := Endpoints{Cx: 1, Cy: 1, Zoom: 1}
 		_, _, final, _ := Descent(from, w, sz(1280, 800), 64)
 		sv, _ := StoredView(w, sz(1280, 800), 64)
@@ -525,11 +525,11 @@ func TestStoredViewMatchesDescentFinal(t *testing.T) {
 	}
 }
 
-// A never-visited doorway frames the middle of its child's origin cell.
+// A never-visited door frames the middle of its child's origin cell.
 // Reading the stored center raw would slide every unvisited grid up and left
 // by half a footprint.
 func TestNeverVisitedFramingCentersTheFootprint(t *testing.T) {
-	w := Well{ID: "1", X: 4, Y: 2, W: 3, H: 2}
+	w := Door{ID: "1", X: 4, Y: 2, W: 3, H: 2}
 	if cx, cy := w.Center(); !near(cx, 1.5) || !near(cy, 1) {
 		t.Errorf("Center = (%v, %v), want (1.5, 1)", cx, cy)
 	}
@@ -551,14 +551,14 @@ func TestNeverVisitedFramingCentersTheFootprint(t *testing.T) {
 		t.Errorf("Ascent mid center = (%v, %v), want (1.5, 1)", mid.Cx, mid.Cy)
 	}
 
-	// A 1x1 synthetic doorway frames the middle of child cell (0,0).
-	if cx, cy := (Well{W: 1, H: 1}).Center(); !near(cx, 0.5) || !near(cy, 0.5) {
-		t.Errorf("root doorway center = (%v, %v), want (0.5, 0.5)", cx, cy)
+	// A 1x1 synthetic door frames the middle of child cell (0,0).
+	if cx, cy := (Door{W: 1, H: 1}).Center(); !near(cx, 0.5) || !near(cy, 0.5) {
+		t.Errorf("root door center = (%v, %v), want (0.5, 0.5)", cx, cy)
 	}
 
-	// A visited doorway keeps a stored center of (0,0): a center is no sign of
+	// A visited door keeps a stored center of (0,0): a center is no sign of
 	// a visit.
-	v := Well{W: 3, H: 2, View: view(0, 0, 0.4)}
+	v := Door{W: 3, H: 2, View: view(0, 0, 0.4)}
 	if cx, cy := v.Center(); cx != 0 || cy != 0 {
 		t.Errorf("visited center = (%v, %v), want (0, 0)", cx, cy)
 	}
@@ -574,7 +574,7 @@ func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
 	const cell = 64.0
 	for _, pane := range [][2]float64{{1280, 800}, {480, 900}} {
 		paneW, paneH := pane[0], pane[1]
-		for _, w := range []Well{
+		for _, w := range []Door{
 			{X: 0, Y: 0, W: 1, H: 1},
 			{X: 4, Y: 2, W: 3, H: 2},
 			{X: 2, Y: 3, W: 2, H: 2, View: view(5.37, -7.125, 0.4)},
@@ -582,12 +582,12 @@ func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
 			sv, _ := StoredView(w, sz(paneW, paneH), cell)
 			cx, cy, live := sv.Cx(), sv.Cy(), sv.Zoom()
 			saved := rpc.ViewOf(cx, cy, IntrinsicFromLive(live, OvertakeZoom(w, sz(paneW, paneH), cell)))
-			if !ShownWellFraming(w).SameAs(saved) {
+			if !ShownDoorFraming(w).SameAs(saved) {
 				t.Errorf("pane %vx%v: showing %+v and saving back what it shows stamped %+v",
 					paneW, paneH, w, saved)
 			}
 		}
-		// A root grid is entered by no doorway, so its unvisited view is the
+		// A root grid is entered by no door, so its unvisited view is the
 		// origin at live zoom 1 rather than the preview calibration.
 		overtake := Overtake(1, 1, sz(paneW, paneH), cell)
 		shown := ShownRootFraming(rpc.View{}, sz(paneW, paneH), cell)
@@ -602,9 +602,9 @@ func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
 			t.Errorf("pane %vx%v: a zoom of an unvisited root must still be written", paneW, paneH)
 		}
 	}
-	if ShownWellFraming(Well{W: 1, H: 1}).
-		SameAs(rpc.ViewOf(0.5, 0.5, 2*DefaultWellViewZoom)) {
-		t.Error("a reframe of an unvisited doorway must still be written")
+	if ShownDoorFraming(Door{W: 1, H: 1}).
+		SameAs(rpc.ViewOf(0.5, 0.5, 2*DefaultDoorViewZoom)) {
+		t.Error("a reframe of an unvisited door must still be written")
 	}
 	// The stamp is what makes this matter: a root grid's would carry the
 	// window it was looked at in into a window it was not.

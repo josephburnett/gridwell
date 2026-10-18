@@ -402,7 +402,7 @@ func TestDialFailureRidesTheRow(t *testing.T) {
 	}
 }
 
-// A shell on a MOUNTED remote attaches through the /shell API: the web
+// A shell on a far node attaches through the /shell API: the web
 // API's WebSocket → this node's shell route → the transport → the remote
 // node's export → the remote home's PTY. The transport is just another
 // namespace to the API — which is the whole point of the id chain — but
@@ -446,7 +446,7 @@ func TestShellAPIThroughAConnection(t *testing.T) {
 	case e := <-exits:
 		t.Fatalf("the attach ended instead of echoing: %+v", e)
 	case <-time.After(5 * time.Second):
-		t.Fatal("no PTY output from the mounted remote within 5s")
+		t.Fatal("no PTY output from the far node within 5s")
 	}
 	if h.remoteShell.AttachmentCount() != 1 {
 		t.Errorf("remote PTYs = %d, want 1", h.remoteShell.AttachmentCount())

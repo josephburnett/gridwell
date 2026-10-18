@@ -32,9 +32,9 @@ func (collectionsPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1
 	return &pluginv1.ListResponse{Authoritative: true}, nil
 }
 
-// A collection is a doorway, and a doorway remembers the view it was left at.
+// A collection is a door, and a door remembers the view it was left at.
 // The framing write and the handshake read are two sides of one fact, and
-// nothing between them knows which doorway a grid was declared by, so this
+// nothing between them knows which door a grid was declared by, so this
 // crosses the adapter/store seam: frame one collection's grid, hand back a
 // fresh handshake, and read it off that entry — and only that entry.
 func TestAMenuEntryRemembersItsFraming(t *testing.T) {

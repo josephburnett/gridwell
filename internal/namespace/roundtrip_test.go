@@ -160,7 +160,7 @@ func (f *fake) OpenShell(_ context.Context, recv func() (*pb.OpenShellRequest, e
 // either side shows up as a byte difference.
 func richTile() *pb.Tile {
 	return &pb.Tile{
-		Id: "12", GridId: "3", Kind: "well", X: -4, Y: 9, W: 2, H: 3,
+		Id: "12", GridId: "3", Kind: "door", X: -4, Y: 9, W: 2, H: 3,
 		AltText: "a room", Version: 7, BlobId: 11, PreviewBlobId: 13,
 		ChildGridId: "p1/44", LinkTargetId: "p2/55", Link: true,
 		UrlString: "https://example.test/x", UrlHistory: "a\nb", UrlFrozen: true,

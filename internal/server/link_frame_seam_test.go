@@ -71,16 +71,16 @@ func TestALinkIsWrittenInTheHoldersFrameOrRefused(t *testing.T) {
 			t.Fatalf("on a the link names %q, want %q", onA.LinkTargetId, want)
 		}
 
-		well, err := me.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: aHome,
-			Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 3, Y: 2, W: 1, H: 1, ChildGridId: bHome}})
+		door, err := me.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: aHome,
+			Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 3, Y: 2, W: 1, H: 1, ChildGridId: bHome}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if want := strings.Replace(bHome, meNode+"/tob/", meNode+"/toa/"+aNode+"/tob2/", 1); well.ChildGridId != want {
-			t.Fatalf("well child = %q, want %q", well.ChildGridId, want)
+		if want := strings.Replace(bHome, meNode+"/tob/", meNode+"/toa/"+aNode+"/tob2/", 1); door.ChildGridId != want {
+			t.Fatalf("door child = %q, want %q", door.ChildGridId, want)
 		}
-		if _, err := me.GetGrid(ctx, well.ChildGridId); err != nil {
-			t.Fatalf("the well's child does not resolve: %v", err)
+		if _, err := me.GetGrid(ctx, door.ChildGridId); err != nil {
+			t.Fatalf("the door's child does not resolve: %v", err)
 		}
 
 		// A copied link is written the same way.

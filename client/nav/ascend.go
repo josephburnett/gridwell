@@ -53,7 +53,7 @@ func (m *Machine) ascend(g Gesture, w World) Plan {
 }
 
 // ascendOnce pops one frame: leaveFrame's writebacks, then the landing,
-// animated onto the doorway's footprint when that row is cached.
+// animated onto the door's footprint when that row is cached.
 func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	door, doorTile, visit := m.leaveFrame(p, w, pl)
 	landing := p.Stack.Popped(1)
@@ -117,8 +117,8 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	// calibrated switch state, one panning and zooming the parent back to the
 	// landing viewport. Pan and zoom interpolate together inside a segment.
 	from := zoomtrans.Endpoints{Path: p.Stack.Path(), Cx: live.Cx(), Cy: live.Cy(), Zoom: live.Zoom()}
-	wl := zoomtrans.WellOf(doorTile)
-	// The switch state is the doorway's footprint at overtake, the inverse of
+	wl := zoomtrans.DoorOf(doorTile)
+	// The switch state is the door's footprint at overtake, the inverse of
 	// the descent's approach. The child grid's coordinates mean nothing out
 	// here, so zoomtrans.Ascent hands back the parent-grid center.
 	mid, switchTo, ok := zoomtrans.Ascent(from, wl, landing.Path(), size, w.CellPx)
@@ -154,7 +154,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 }
 
 // leaveFrame plans every writeback the frame being left owes and resolves the
-// doorway row the ascent animates onto, nil when it is not cached. It is the
+// door row the ascent animates onto, nil when it is not cached. It is the
 // one place an ascent saves anything. visit is the ephemeral row the landing
 // retires, nil when there is none.
 func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, doorTile, visit *gridwellv1.Tile) {
@@ -189,7 +189,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 	}
 	if own.Layout {
 		// The view leaves with the popped frame and the layout write follows
-		// from the settle; the ascent animates onto the doorway's own framing.
+		// from the settle; the ascent animates onto the door's own framing.
 		return own.TileID, lw.DoorTile, nil
 	}
 	if own.TileID == "" {
@@ -208,7 +208,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
 		return own.TileID, nil, nil
 	}
-	// The executor writes the doorway's view region and patches the cache
+	// The executor writes the door's view region and patches the cache
 	// before the ascent is calibrated, so the frame swap matches where the
 	// user is rather than snapping back. Hence the row handed back already
 	// carries the write.
@@ -218,7 +218,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 	return own.TileID, t, nil
 }
 
-// settleFraming applies to a doorway row the framing PersistFraming is about
+// settleFraming applies to a door row the framing PersistFraming is about
 // to write: zoomtrans.Writeback, the one decision the executor applies too.
 func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 	size, ok := p.Rect.Size()
@@ -226,8 +226,8 @@ func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 	if !ok || !viewed {
 		return
 	}
-	wl := zoomtrans.WellOf(door)
-	next, ok := zoomtrans.Writeback(zoomtrans.ShownWellFraming(wl), wl, live.Cx(), live.Cy(), live.Zoom(), size, cellPx)
+	wl := zoomtrans.DoorOf(door)
+	next, ok := zoomtrans.Writeback(zoomtrans.ShownDoorFraming(wl), wl, live.Cx(), live.Cy(), live.Zoom(), size, cellPx)
 	if !ok {
 		return
 	}

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from './fixtures';
-import { createExitWell, createLeafLink, moveTile, tileAt } from './oracle';
+import { createDoorToOtherNamespace, createLeafLink, moveTile, tileAt } from './oracle';
 import { makeRunDir } from './homes';
 
 // A link into a namespace this node does not declare is DEAD. Removing a
@@ -46,17 +46,17 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
     await r.continue();
   });
 
-  // Seed the dangling link directly on the server: a link well whose child
+  // Seed the dangling link directly on the server: a link door whose child
   // grid lives in a namespace the node has never heard of. That is what a link
   // left behind by a removed plugin looks like on disk.
-  const dead = await createExitWell(gw.origin, f.gridID, `${GONE}/1`, 'old files', cx, cy);
+  const dead = await createDoorToOtherNamespace(gw.origin, f.gridID, `${GONE}/1`, 'old files', cx, cy);
   expect(dead.id, 'the server accepted the dangling link').toBeTruthy();
 
   // The client must see it as a link and as dead.
   await expect
     .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
     .toBe(1);
-  const row = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
+  const row = tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)!;
   expect(row.link, 'still a link — dashed, and deleting it only unlinks').toBe(true);
   expect(row.altText, 'the label survives: you can still see what it was').toBe('old files');
 
@@ -75,7 +75,7 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
   const before = await gw.focused();
   await gw.descendCell(cx, cy);
   const after = await gw.focused();
-  expect(after.gridID, 'a dead link is not a doorway').toBe(before.gridID);
+  expect(after.gridID, 'a dead link is not a door').toBe(before.gridID);
   expect(after.placeDepth, 'no frame was pushed').toBe(before.placeDepth);
   expect((await errors(window)).notices, 'and the click says nothing either').toEqual([]);
 
@@ -85,7 +85,7 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
   // nothing on the far side to cascade to.
   await gw.deleteTileCell(cx, cy);
   await expect
-    .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', cx, cy))
+    .poll(async () => tileAt(await gw.getGrid(f.gridID), 'door', cx, cy))
     .toBeUndefined();
   expect((await errors(window)).notices, 'and the delete is quiet too').toEqual([]);
 });
@@ -110,12 +110,12 @@ test.describe('a declared namespace is never dead', () => {
     const f = await gw.focused();
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;
-    await createExitWell(gw.origin, f.gridID, collection!, 'files', cx, cy);
+    await createDoorToOtherNamespace(gw.origin, f.gridID, collection!, 'files', cx, cy);
 
     // Wait for the tile to be drawn, so the verdict has every chance to fire
     // wrongly before asserting it did not.
     await expect
-      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)?.link)
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)?.link)
       .toBe(true);
     await window.waitForTimeout(1_000);
     expect(await deadLinks(window, f.gridID), 'a declared plugin is alive').toEqual([]);
@@ -193,7 +193,7 @@ test.describe('a link broken beyond a declared connection', () => {
       await r.continue();
     });
 
-    await createExitWell(gw.origin, f.gridID, deep, 'far room', cx, cy);
+    await createDoorToOtherNamespace(gw.origin, f.gridID, deep, 'far room', cx, cy);
     await expect
       .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
       .toBe(1);
@@ -208,12 +208,12 @@ test.describe('a link broken beyond a declared connection', () => {
 
     const before = await gw.focused();
     await gw.descendCell(cx, cy);
-    expect((await gw.focused()).placeDepth, 'a dead link is not a doorway').toBe(before.placeDepth);
+    expect((await gw.focused()).placeDepth, 'a dead link is not a door').toBe(before.placeDepth);
 
     await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
     await gw.deleteTileCell(cx, cy);
     await expect
-      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'well', cx, cy))
+      .poll(async () => tileAt(await gw.getGrid(f.gridID), 'door', cx, cy))
       .toBeUndefined();
     expect((await errors(window)).notices, 'and the delete is quiet too').toEqual([]);
   });

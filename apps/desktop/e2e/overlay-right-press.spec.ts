@@ -9,7 +9,7 @@ import { test, expect } from './fixtures';
 // the button fails here too.
 
 // A right-drag inward from the pane's left third: outside the swap third and
-// outside the resize band, so it classifies as a split, and well inside the
+// outside the resize band, so it classifies as a split, and door inside the
 // overlay, which stops short of the pane edge by a few pixels.
 async function rightDragSplitFromOverlay(gw: any): Promise<number> {
   const p = await gw.focused();

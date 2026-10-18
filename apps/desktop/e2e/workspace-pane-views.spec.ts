@@ -49,7 +49,7 @@ async function reopenByReload(window: any, tileID: string): Promise<void> {
   await expect.poll(() => workspaceDepth(window), { timeout: 15_000 }).toBe(1);
 }
 
-test('two panes on one grid keep their own views through leave, re-entry and reload; the doorway row is unmoved', async ({
+test('two panes on one grid keep their own views through leave, re-entry and reload; the door row is unmoved', async ({
   gw,
   home,
   window,
@@ -65,10 +65,10 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
   await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx + 1, wy);
+  await gw.dragCreate('door', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
-  const wellBefore = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy)!;
-  expect(pt && wellBefore, 'pane tile and well persisted').toBeTruthy();
+  const doorBefore = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)!;
+  expect(pt && doorBefore, 'pane tile and door persisted').toBeTruthy();
 
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
@@ -107,9 +107,9 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
 
   await gw.leaveWorkspace();
   await expect.poll(() => workspaceDepth(window)).toBe(0);
-  const wellAfter = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy)!;
-  expect([wellAfter.viewCx, wellAfter.viewCy, wellAfter.viewZoom], 'the doorway row moved')
-    .toEqual([wellBefore.viewCx, wellBefore.viewCy, wellBefore.viewZoom]);
+  const doorAfter = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)!;
+  expect([doorAfter.viewCx, doorAfter.viewCy, doorAfter.viewZoom], 'the door row moved')
+    .toEqual([doorBefore.viewCx, doorBefore.viewCy, doorBefore.viewZoom]);
 
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
@@ -118,9 +118,9 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
   await reopenByReload(window, pt.id);
   await expectViews(gw, want, 'reload');
   await gw.leaveWorkspace();
-  const wellEnd = tileAt(await gw.getGrid(rootGrid), 'well', wx + 1, wy)!;
-  expect([wellEnd.viewCx, wellEnd.viewCy, wellEnd.viewZoom], 'the doorway row moved by the visit')
-    .toEqual([wellBefore.viewCx, wellBefore.viewCy, wellBefore.viewZoom]);
+  const doorEnd = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)!;
+  expect([doorEnd.viewCx, doorEnd.viewCy, doorEnd.viewZoom], 'the door row moved by the visit')
+    .toEqual([doorBefore.viewCx, doorBefore.viewCy, doorBefore.viewZoom]);
 });
 
 test('a reopened pane ascends onto the view it left the level below at', async ({ gw, window }) => {
@@ -134,7 +134,7 @@ test('a reopened pane ascends onto the view it left the level below at', async (
   await gw.openMenu();
   await gw.dragCreate('pane', wx, wy);
   await gw.openMenu();
-  await gw.dragCreate('well', wx + 1, wy);
+  await gw.dragCreate('door', wx + 1, wy);
   const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
 
   await gw.descendCell(wx, wy);
@@ -142,7 +142,7 @@ test('a reopened pane ascends onto the view it left the level below at', async (
   await gw.descendCell(wx + 1, wy);
   const outerGrid = (await gw.focused()).gridID;
 
-  // Frame the outer grid away from its row's framing, then make a well at
+  // Frame the outer grid away from its row's framing, then make a door at
   // its center and go through it.
   await gw.wheelAtFocusedCenter(-200);
   let z = await gw.focused();
@@ -151,7 +151,7 @@ test('a reopened pane ascends onto the view it left the level below at', async (
   const ix = Math.round(z.cx);
   const iy = Math.round(z.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', ix, iy);
+  await gw.dragCreate('door', ix, iy);
   const outer = await gw.focused();
   const outerView = { cx: outer.cx, cy: outer.cy, zoom: outer.zoom };
   await gw.descendCell(ix, iy);

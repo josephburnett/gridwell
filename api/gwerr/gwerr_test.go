@@ -25,7 +25,7 @@ func TestClassifyError(t *testing.T) {
 		{ErrInvalidPath, ClassInvalidArgument},
 		{ErrNotURLTile, ClassInvalidArgument},
 		{ErrNotTextTile, ClassInvalidArgument},
-		{ErrNotWellTile, ClassInvalidArgument},
+		{ErrNotDoorTile, ClassInvalidArgument},
 		{ErrNotShellTile, ClassInvalidArgument},
 		{ErrOverlap, ClassConflict},
 		{ErrVersionConflict, ClassConflict},

@@ -35,7 +35,25 @@ const cacheApplicationID int64 = 0x67776d63
 
 // cacheSchemaVersion is the current cache generation. The file is disposable,
 // but versioning still refuses newer files and migrates older ones.
-const cacheSchemaVersion = 1
+const cacheSchemaVersion = 2
+
+// cacheMigrations is the chain EnsureVersion runs over an older file.
+var cacheMigrations = []dbformat.Migration{
+	// v2: a far node spells the door kind and glyph 'door'. A cached answer
+	// holds the old spelling, so every cached answer goes and the cache
+	// rewarms from the next read.
+	{To: 2, Run: emptyCache},
+}
+
+// emptyCache deletes every cached answer, keeping the tables.
+func emptyCache(ctx context.Context, tx *sql.Tx) error {
+	for _, table := range []string{"pluginlists", "grids", "tiles", "content", "contentstamps", "previews", "servecontent"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil {
+			return fmt.Errorf("empty %s: %w", table, err)
+		}
+	}
+	return nil
+}
 
 const schemaDDL = `
 DROP TABLE IF EXISTS info;
@@ -248,7 +266,7 @@ func Open(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("sourcecache schema: %w", err)
 	}
-	if err := dbformat.EnsureVersion(context.Background(), db, cacheApplicationID, cacheSchemaVersion, nil); err != nil {
+	if err := dbformat.EnsureVersion(context.Background(), db, cacheApplicationID, cacheSchemaVersion, cacheMigrations); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("sourcecache %s: %w", dbPath, err)
 	}
@@ -368,14 +386,14 @@ func (c *Layer) emitHealth(healthy bool, detail string) {
 func now() int64 { return time.Now().Unix() }
 
 // Handshake forwards the routed plugin list and remembers it per namespace. A
-// doorway answered with no framing keeps the remembered one (keepFraming).
+// door answered with no framing keeps the remembered one (keepFraming).
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	r := c.order.begin()
 	defer r.end()
 	resp, err := c.Namespace.Handshake(ctx, in)
 	c.noteReach(ctx, err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
-		r.install(doorwayGrids(resp), func() {
+		r.install(doorGrids(resp), func() {
 			if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
 				keepFraming(resp, old)
 			}
@@ -409,9 +427,9 @@ func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeRes
 	return l, true
 }
 
-// doorwayGrids names every grid a plugin list frames, the keys reframe folds
+// doorGrids names every grid a plugin list frames, the keys reframe folds
 // under.
-func doorwayGrids(l *pb.HandshakeResponse) []string {
+func doorGrids(l *pb.HandshakeResponse) []string {
 	var ids []string
 	for _, pl := range l.GetPlugins() {
 		ids = append(ids, pl.GetRootGridId())
@@ -422,7 +440,7 @@ func doorwayGrids(l *pb.HandshakeResponse) []string {
 	return ids
 }
 
-// keepFraming gives every doorway of fresh that answers no framing (an
+// keepFraming gives every door of fresh that answers no framing (an
 // rpc.View with none) the framing old remembers for the same grid.
 func keepFraming(fresh, old *pb.HandshakeResponse) {
 	known := map[string]rpc.View{}
@@ -1088,7 +1106,7 @@ func (c *Layer) reselect(ctx context.Context, gridID string, next func(cur []str
 }
 
 // reframe is the one writer of a root grid's remembered framing: it lands on
-// every remembered doorway rooted there (rpc.Reframe), from the source's event
+// every remembered door rooted there (rpc.Reframe), from the source's event
 // and from a write the source accepted alike, which carry the same numbers.
 func (c *Layer) reframe(ctx context.Context, gridID string, f rpc.Framing) {
 	c.order.fold([]string{gridID}, func() { c.reframeRows(ctx, gridID, f) })

@@ -9,15 +9,15 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-func TestCreateWellHappyPath(t *testing.T) {
+func TestCreateDoorHappyPath(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 1, 2, 3, 4, "")
+	w, err := s.CreateDoor(ctx, root, 1, 2, 3, 4, "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if w.Kind != rpc.KindWell {
+	if w.Kind != rpc.KindDoor {
 		t.Errorf("kind=%q", w.Kind)
 	}
 	if w.X != 1 || w.Y != 2 || w.W != 3 || w.H != 4 {
@@ -39,14 +39,14 @@ func TestCreateWellHappyPath(t *testing.T) {
 	}
 }
 
-func TestCreateWellLabelBecomesAltText(t *testing.T) {
-	// The + menu's name field: a user-provided label on an interior well
-	// create is stored as the tile's alt_text (the grid's name). Wells have
+func TestCreateDoorLabelBecomesAltText(t *testing.T) {
+	// The + menu's name field: a user-provided label on an interior door
+	// create is stored as the tile's alt_text (the grid's name). Doors have
 	// no content to derive an alt from, so the label is the only writer.
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 1, 2, 1, 1, "recipes")
+	w, err := s.CreateDoor(ctx, root, 1, 2, 1, 1, "recipes")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -59,11 +59,11 @@ func TestCreateWellLabelBecomesAltText(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(g.Tiles) != 1 || g.Tiles[0].AltText != "recipes" {
-		t.Errorf("grid readback tiles = %+v, want one well named recipes", g.Tiles)
+		t.Errorf("grid readback tiles = %+v, want one door named recipes", g.Tiles)
 	}
 
 	// No label → no alt, exactly as before.
-	plain, err := s.CreateWell(ctx, root, 5, 5, 1, 1, "")
+	plain, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
 	if err != nil {
 		t.Fatalf("create unlabeled: %v", err)
 	}
@@ -72,33 +72,33 @@ func TestCreateWellLabelBecomesAltText(t *testing.T) {
 	}
 }
 
-func TestCreateWellOverlapRefused(t *testing.T) {
+func TestCreateDoorOverlapRefused(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	if _, err := s.CreateWell(ctx, root, 0, 0, 5, 5, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 0, 0, 5, 5, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Overlap.
-	_, err := s.CreateWell(ctx, root, 4, 4, 2, 2, "")
+	_, err := s.CreateDoor(ctx, root, 4, 4, 2, 2, "")
 	if !errors.Is(err, ErrOverlap) {
 		t.Errorf("got %v, want ErrOverlap", err)
 	}
 	// Adjacent (touching) is OK.
-	if _, err := s.CreateWell(ctx, root, 5, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 5, 0, 1, 1, ""); err != nil {
 		t.Errorf("adjacent placement refused: %v", err)
 	}
 }
 
-func TestCreateWellInvalidArgs(t *testing.T) {
+func TestCreateDoorInvalidArgs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	_, err := s.CreateWell(ctx, root, 0, 0, 0, 1, "")
+	_, err := s.CreateDoor(ctx, root, 0, 0, 0, 1, "")
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("zero w: got %v", err)
 	}
-	_, err = s.CreateWell(ctx, root, 0, 0, 1, -1, "")
+	_, err = s.CreateDoor(ctx, root, 0, 0, 1, -1, "")
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("neg h: got %v", err)
 	}
@@ -108,12 +108,12 @@ func TestCreateIntoNestedAndMissingGrids(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Descend into well; create a sub-well inside it.
-	sub, err := s.CreateWell(ctx, w.ChildGridId, 0, 0, 2, 2, "")
+	// Descend into door; create a sub-door inside it.
+	sub, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 2, 2, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCreateIntoNestedAndMissingGrids(t *testing.T) {
 
 	// A create into a grid that doesn't exist is refused (grid_id is the
 	// authoritative location; there is no descent path to validate).
-	_, err = s.CreateWell(ctx, "999999", 1, 1, 1, 1, "")
+	_, err = s.CreateDoor(ctx, "999999", 1, 1, 1, 1, "")
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("got %v, want ErrInvalidArgument", err)
 	}
@@ -206,7 +206,7 @@ func TestResizeNode(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestResizeNode(t *testing.T) {
 		t.Errorf("resize moved the version %d -> %d; layout does not bump", w.Version, r.Version)
 	}
 	// Resize to overlap another tile should fail.
-	_, err = s.CreateWell(ctx, root, 4, 0, 1, 1, "")
+	_, err = s.CreateDoor(ctx, root, 4, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestResizeIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestSetFraming(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,13 +285,13 @@ func TestSetFraming(t *testing.T) {
 	}
 }
 
-// Re-framing one copy of a well must not bump the version, so the copies
+// Re-framing one copy of a door must not bump the version, so the copies
 // still share a version even though their stored framing has diverged.
 func TestFramingKeepsCopysAtSharedVersion(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +368,7 @@ func TestSetTextScrollPersistsWindowAndMode(t *testing.T) {
 	}
 }
 
-func TestSetFramingRejectsNonWell(t *testing.T) {
+func TestSetFramingRejectsNonDoor(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -379,8 +379,8 @@ func TestSetFramingRejectsNonWell(t *testing.T) {
 	_, err = s.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		TileId: f.Id, Cx: 1, Cy: 1, Zoom: 1,
 	})
-	if !errors.Is(err, ErrNotWellTile) {
-		t.Errorf("got %v, want ErrNotWellTile", err)
+	if !errors.Is(err, ErrNotDoorTile) {
+		t.Errorf("got %v, want ErrNotDoorTile", err)
 	}
 }
 
@@ -388,7 +388,7 @@ func TestSetTextScrollRejectsNonText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func TestDeleteTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,32 +413,32 @@ func TestDeleteTile(t *testing.T) {
 	// destroys. This test is about destruction's reference release.
 	hardDelete(t, s, w.Id)
 	if _, err := s.loadTile(ctx, s.db, wIDInt); !errors.Is(err, ErrNotFound) {
-		t.Errorf("well still exists: %v", err)
+		t.Errorf("door still exists: %v", err)
 	}
 	if _, err := s.loadGrid(ctx, s.db, childGridID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("child grid still exists: %v", err)
 	}
 }
 
-func TestDeleteTileCascadesNonEmptyWell(t *testing.T) {
+func TestDeleteTileCascadesNonEmptyDoor(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateWell(ctx, w.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// w may have been bumped by the creation of inner in its child grid?
-	// No: creating inner bumps the inner-grid version, not the outer well's.
+	// No: creating inner bumps the inner-grid version, not the outer door's.
 	// Reload w for current version.
 	hardDelete(t, s, w.Id)
 	innerIDInt, _ := parseID(inner.Id)
 	if _, err := s.loadTile(ctx, s.db, innerIDInt); !errors.Is(err, ErrNotFound) {
-		t.Errorf("inner well still exists after cascading delete")
+		t.Errorf("inner door still exists after cascading delete")
 	}
 }
 
@@ -449,7 +449,7 @@ func TestDeleteTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateWell(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -516,7 +516,7 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 }
 
 // The key-form tile segment rides the URL like a row id: a leaf content
-// descent, a well mid-path, and a slashy key alike. The grammar is pinned to
+// descent, a door mid-path, and a slashy key alike. The grammar is pinned to
 // itself — whatever EncodeURL writes, DecodeURL reads back — because the two
 // halves are the only place the shape is spelled, and a URL that decodes to a
 // different place than it encoded silently relocates the user on reload.
@@ -525,7 +525,7 @@ func TestKeyFormURLRoundTrip(t *testing.T) {
 	for _, st := range []URLState{
 		// A key-form content leaf under a plugin anchor.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{"3", rpc.KeyTileID("/home/joe/x")}},
-		// A key-form WELL mid-path, descending on into a row id.
+		// A key-form DOOR mid-path, descending on into a row id.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{rpc.KeyTileID("/home/joe"), "4"}},
 		// A key whose bytes are full of slashes stays exactly one segment.
 		{Anchor: "ssh4321/remote9/1", TileIDs: []string{deep}},
@@ -533,7 +533,7 @@ func TestKeyFormURLRoundTrip(t *testing.T) {
 		{TileIDs: []string{rpc.KeyTileID("/etc")}},
 		// A text-mode content leaf, cursor and all.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{deep}, CursorMode: true, Col: 24, Row: 10},
-		// A grid leaf with a viewport, reached through a key-form well.
+		// A grid leaf with a viewport, reached through a key-form door.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{deep, "7"}, X: 5.5, Y: -2, Zoom: 1.5, HasZoom: true},
 	} {
 		raw := EncodeURL(st)

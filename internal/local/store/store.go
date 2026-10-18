@@ -32,7 +32,7 @@ var (
 	ErrInvalidArgument = gwerr.ErrInvalidArgument
 	ErrNotURLTile      = gwerr.ErrNotURLTile
 	ErrNotTextTile     = gwerr.ErrNotTextTile
-	ErrNotWellTile     = gwerr.ErrNotWellTile
+	ErrNotDoorTile     = gwerr.ErrNotDoorTile
 	ErrNotShellTile    = gwerr.ErrNotShellTile
 	ErrNotPaneTile     = gwerr.ErrNotPaneTile
 	ErrVersionConflict = gwerr.ErrVersionConflict
@@ -252,10 +252,10 @@ func (s *Store) GridFraming(gridID string) (rpc.View, error) {
 }
 
 // SetFraming is the one framing writer: how this grid looked when the user
-// left it through this doorway, a float center plus the pane-size-independent
+// left it through this door, a float center plus the pane-size-independent
 // zoom, onto the row that owns it. Exactly one target is set: req.TileID names
-// a doorway tile, a well link included, since framing is per-doorway;
-// req.RootGridID names a root grid, which has no doorway to carry it. Framing
+// a door tile, a door link included, since framing is per-door;
+// req.RootGridID names a root grid, which has no door to carry it. Framing
 // is not a content edit: no version claim, no bump.
 func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.Tile, error) {
 	if req.RootGridId != "" {
@@ -275,8 +275,8 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 		if err != nil {
 			return err
 		}
-		if !isWellKind(n.Kind) {
-			return ErrNotWellTile
+		if !isDoorKind(n.Kind) {
+			return ErrNotDoorTile
 		}
 		if _, err := updateFraming(ctx, tx, "", tileID, 0, f, s.now().Unix()); err != nil {
 			return err

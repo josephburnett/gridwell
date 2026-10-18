@@ -35,8 +35,8 @@ func (a *App) paneLayoutUnreadable(tileID string, err error) {
 }
 
 // drawPaneTilePreview draws the stored layout small: dividers plus each
-// leaf's grid one level deep, through the same machinery well previews use.
-// One level deep, flat beyond, so a well inside a leaf draws as its flat
+// leaf's grid one level deep, through the same machinery door previews use.
+// One level deep, flat beyond, so a door inside a leaf draws as its flat
 // preview. A never-arranged layout shows the split glyph.
 func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx

@@ -129,27 +129,27 @@ func (s *Store) createTile(
 	return out, err
 }
 
-// CreateWell creates a well owning a fresh empty child grid, never visited.
-// Label is stored as alt_text; a well has no content
-// to derive an alt from, so this is that column's only writer for wells.
-func (s *Store) CreateWell(ctx context.Context, gridID string, x, y, w, h int64, label string) (*gridwellv1.Tile, error) {
+// CreateDoor creates a door owning a fresh empty child grid, never visited.
+// Label is stored as alt_text; a door has no content
+// to derive an alt from, so this is that column's only writer for doors.
+func (s *Store) CreateDoor(ctx context.Context, gridID string, x, y, w, h int64, label string) (*gridwellv1.Tile, error) {
 	return s.createTile(ctx, gridID, x, y, w, h,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			childGridID, err := insertGrid(ctx, tx, now)
 			if err != nil {
 				return 0, fmt.Errorf("insert child grid: %w", err)
 			}
-			return insertWellRow(ctx, tx, gid, x, y, w, h, childGridID, label, now)
+			return insertDoorRow(ctx, tx, gid, x, y, w, h, childGridID, label, now)
 		})
 }
 
-// CreateExitWell creates a well that is a doorway onto an existing grid rather
+// CreateDoorToOtherNamespace creates a door that is a door onto an existing grid rather
 // than the owner of one. It allocates no child grid and holds no refcount: the
 // child is owned by whoever created it and named by a qualified "<uuid>/<id>"
-// string, so deleting the well removes only the link. view carries the
-// source's framing when the well is a cross-plugin copy of a framed one, so
+// string, so deleting the door removes only the link. view carries the
+// source's framing when the door is a cross-plugin copy of a framed one, so
 // the link previews and descends where the source did.
-func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.View) (*gridwellv1.Tile, error) {
+func (s *Store) CreateDoorToOtherNamespace(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.View) (*gridwellv1.Tile, error) {
 	vcx, vcy, vzoom := viewArgs(view)
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
@@ -160,10 +160,10 @@ func (s *Store) CreateExitWell(ctx context.Context, gridID string, x, y, w, h in
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					view_cx, view_cy, view_zoom, child_grid_id, alt_text,
 					created_at, updated_at)
-				VALUES (?, 'well', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				VALUES (?, 'door', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				gid, x, y, w, h, vcx, vcy, vzoom, childGridID, alt, now, now)
 			if err != nil {
-				return 0, fmt.Errorf("insert exit well: %w", err)
+				return 0, fmt.Errorf("insert door to another namespace: %w", err)
 			}
 			return res.LastInsertId()
 		})
@@ -201,16 +201,16 @@ func (s *Store) CreateText(ctx context.Context, gridID string, x, y, w, h int64,
 		})
 }
 
-// insertWellRow is the single place the interior-well INSERT lives, shared by
-// CreateWell and the trash's month wells so they cannot drift.
-func insertWellRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGridID int64, label string, now int64) (int64, error) {
+// insertDoorRow is the single place the interior-door INSERT lives, shared by
+// CreateDoor and the trash's month doors so they cannot drift.
+func insertDoorRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGridID int64, label string, now int64) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (grid_id, kind, x, y, w, h,
 			child_grid_id, alt_text, created_at, updated_at)
-		VALUES (?, 'well', ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, 'door', ?, ?, ?, ?, ?, ?, ?, ?)`,
 		gridID, x, y, w, h, childGridID, label, now, now)
 	if err != nil {
-		return 0, fmt.Errorf("insert well: %w", err)
+		return 0, fmt.Errorf("insert door: %w", err)
 	}
 	return res.LastInsertId()
 }

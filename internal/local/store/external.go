@@ -39,7 +39,7 @@ func (s *Store) Namespace(ns string) *Namespace {
 
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
-// a well's minted child grid, 0 for a leaf. The caller names every such tile
+// a door's minted child grid, 0 for a leaf. The caller names every such tile
 // by its key either way; see rpc.EntryTileID.
 type ExtTile struct {
 	ID          int64
@@ -506,7 +506,7 @@ func (n *Namespace) Retire(tileID int64) error {
 }
 
 // RootFraming reads a root grid's framing, the row that owns it when there is
-// no doorway tile.
+// no door tile.
 func (n *Namespace) RootFraming(gridID int64) (rpc.View, error) {
 	var ncx, ncy, nzoom sql.NullFloat64
 	err := n.s.db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).

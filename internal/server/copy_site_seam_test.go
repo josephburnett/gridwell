@@ -92,7 +92,7 @@ func TestCopyRunsAtTheNearestNodeThatSeesBothEnds(t *testing.T) {
 		aHome := m.home(meNode, aNode, "toa")
 		src := m.text(ctx, meNode, aHome, 5, "stays on a")
 		room, err := me.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: aHome,
-			Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 6, Y: 0, W: 1, H: 1}})
+			Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 6, Y: 0, W: 1, H: 1}})
 		if err != nil {
 			t.Fatal(err)
 		}

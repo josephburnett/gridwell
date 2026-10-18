@@ -78,13 +78,13 @@ func TestSetTileContentZoomArm(t *testing.T) {
 		t.Errorf("content zoom is framing: version must not bump (%d -> %d)", text.Version, r.Tile.Version)
 	}
 
-	// Wells are refused: their view_zoom is the grid viewport, not
+	// Doors are refused: their view_zoom is the grid viewport, not
 	// content.
-	well := createTile(t, p, root, &gridwellv1.Tile{Kind: "well", X: 3, Y: 0, W: 1, H: 1}, nil)
+	door := createTile(t, p, root, &gridwellv1.Tile{Kind: "door", X: 3, Y: 0, W: 1, H: 1}, nil)
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{
-		TileId: well.Id, Version: well.Version, ContentZoom: zoom(2),
+		TileId: door.Id, Version: door.Version, ContentZoom: zoom(2),
 	}); err == nil {
-		t.Error("well content zoom must be refused")
+		t.Error("door content zoom must be refused")
 	}
 }
 

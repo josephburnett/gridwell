@@ -31,7 +31,7 @@ func TestPushPopRestoresTheViewportYouLeft(t *testing.T) {
 	}
 }
 
-// A frame opening a namespace level carries its grid id; an ordinary well
+// A frame opening a namespace level carries its grid id; an ordinary door
 // frame derives one from the cache. Anchor and Path project that slice.
 func TestAnchorAndPathAreProjections(t *testing.T) {
 	s := NewStack("home/1")

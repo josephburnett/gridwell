@@ -81,9 +81,9 @@ func descendGesture(paneID string, door *gridwellv1.Tile) Gesture {
 }
 
 func TestDescendPlans(t *testing.T) {
-	well := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
+	door := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "g2"}
-	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
+	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	text := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
 	url := &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
@@ -99,8 +99,8 @@ func TestDescendPlans(t *testing.T) {
 		dw   DoorWorld
 		want []EffectKind
 	}{{
-		name: "well",
-		door: well,
+		name: "door",
+		door: door,
 		want: []EffectKind{EffCancelTransition, EffFlushFraming, EffFetchGrid,
 			EffStartTransition},
 	}, {
@@ -160,12 +160,12 @@ func TestDescendPlans(t *testing.T) {
 	}
 }
 
-func TestDescendWellPushesGridFrame(t *testing.T) {
-	well := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindWell, GridId: "g1",
+func TestDescendDoorPushesGridFrame(t *testing.T) {
+	door := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "g2"}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{}
-	plan := New().Do(descendGesture("pane1", well), w)
+	plan := New().Do(descendGesture("pane1", door), w)
 
 	if f := only(t, plan, EffFetchGrid); f.GridID != "g2" {
 		t.Fatalf("fetched %q, want the child grid", f.GridID)
@@ -183,10 +183,10 @@ func TestDescendWellPushesGridFrame(t *testing.T) {
 	if child.Depth() != 2 || child.Door != "w1" {
 		t.Fatalf("child frame = %+v, want a pushed frame through w1", child.Frame)
 	}
-	// A plain well derives its grid by walking the parent; only a crossing is
+	// A plain door derives its grid by walking the parent; only a crossing is
 	// authoritative about the target id.
 	if child.GridID != "" {
-		t.Fatalf("plain well frame carries GridID %q, want it derived", child.GridID)
+		t.Fatalf("plain door frame carries GridID %q, want it derived", child.GridID)
 	}
 	if got := tr.Segments[0].DurationMs + tr.Segments[1].DurationMs; got != 350 {
 		t.Fatalf("total duration = %v, want the transition budget", got)
@@ -194,7 +194,7 @@ func TestDescendWellPushesGridFrame(t *testing.T) {
 }
 
 func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
-	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
+	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{IsLink: true}
@@ -211,7 +211,7 @@ func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
 	if !child.Frames()[0].MenuOpen {
 		t.Fatalf("the captured menu did not travel below the pushed frame")
 	}
-	// The footprint re-centre: a synthetic + menu well rounds its position, so
+	// The footprint re-centre: a synthetic + menu door rounds its position, so
 	// the parent zoom targets the exact footprint centre.
 	if tr.Segments[0].ToCx != 2 || tr.Segments[0].ToCy != 2 {
 		t.Fatalf("parent segment ends at (%v,%v), want the footprint centre (2,2)",
@@ -220,7 +220,7 @@ func TestDescendLinkCarriesTargetGridAndCapturesMenu(t *testing.T) {
 }
 
 func TestDescendLinkLeavesAnUnopenedMenuAlone(t *testing.T) {
-	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
+	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 1, Y: 1, W: 2, H: 2, ChildGridId: "u2/root", Link: true}
 	w := baseWorld(gridPane("pane1", "g1"))
 	w.Door = &DoorWorld{IsLink: true}
@@ -233,16 +233,16 @@ func TestDescendLinkLeavesAnUnopenedMenuAlone(t *testing.T) {
 }
 
 func TestDescendLinkWithNoChildGrid(t *testing.T) {
-	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindWell, GridId: "g1",
+	link := &gridwellv1.Tile{Id: "u1/l1", Kind: rpc.KindDoor, GridId: "g1",
 		W: 2, H: 2, Link: true, AltText: "files"}
 
 	t.Run("health notice", func(t *testing.T) {
 		w := baseWorld(gridPane("pane1", "g1"))
 		w.Door = &DoorWorld{IsLink: true, Health: &Notice{
-			Severity: errsurface.Error, Source: "doorway:u1", Message: "files: boom"}}
+			Severity: errsurface.Error, Source: "door:u1", Message: "files: boom"}}
 		plan := New().Do(descendGesture("pane1", link), w)
 		r := only(t, plan, EffReport)
-		if r.Severity != errsurface.Error || r.Source != "doorway:u1" || r.Message != "files: boom" {
+		if r.Severity != errsurface.Error || r.Source != "door:u1" || r.Message != "files: boom" {
 			t.Fatalf("report = %+v, want pluginhealth's wording verbatim", r)
 		}
 		if len(plan.Effects) != 3 {

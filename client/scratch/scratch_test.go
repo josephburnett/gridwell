@@ -3,7 +3,7 @@ package scratch
 import "testing"
 
 // An uncached grid answers unknown. Guessing from a qualified id's first
-// segment gives the local node for a mounted remote grid (n1/c1/…), so every
+// segment gives the local node for a far grid (n1/c1/…), so every
 // reader would decide about the wrong node.
 func TestFor(t *testing.T) {
 	cases := []struct {
@@ -28,7 +28,7 @@ func TestFor(t *testing.T) {
 }
 
 func TestEphemeral(t *testing.T) {
-	// The pane stands on a mounted remote grid whose first segment is the local
+	// The pane stands on a far grid whose first segment is the local
 	// node id, the shape that invites the wrong answer.
 	const localScratch = "n1/2"
 	remote := Grid{Cached: true, ScratchGridID: "n1/c1/2"}

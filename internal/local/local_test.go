@@ -114,20 +114,20 @@ func TestProbe_Gone(t *testing.T) {
 	}
 }
 
-func TestCreateWell_ThenGetGrid(t *testing.T) {
+func TestCreateDoor_ThenGetGrid(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 
 	cr, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: root,
-		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 4, H: 4},
+		Tile:   &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 4, H: 4},
 	})
 	if err != nil {
-		t.Fatalf("CreateTile(well): %v", err)
+		t.Fatalf("CreateTile(door): %v", err)
 	}
-	if cr.Tile.Kind != "well" {
-		t.Errorf("Kind = %q, want well", cr.Tile.Kind)
+	if cr.Tile.Kind != "door" {
+		t.Errorf("Kind = %q, want door", cr.Tile.Kind)
 	}
 
 	gr, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: root})
@@ -141,7 +141,7 @@ func TestCreateWell_ThenGetGrid(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Error("created well not found in GetGrid response")
+		t.Error("created door not found in GetGrid response")
 	}
 }
 
@@ -242,42 +242,42 @@ func TestShellTmuxAlive_InfrastructureErrorSurfaces(t *testing.T) {
 	}
 }
 
-// A well CreateTile with no child_grid_id allocates an interior child grid;
-// with a qualified one it stores an exit well holding the link verbatim.
-func TestCreateWell_InteriorVsExit(t *testing.T) {
+// A door CreateTile with no child_grid_id allocates an interior child grid;
+// with a qualified one it stores a door to another namespace holding the link verbatim.
+func TestCreateDoor_InteriorVsExit(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 
 	interior, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: root,
-		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"},
+		Tile:   &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1, AltText: "recipes"},
 	})
 	if err != nil {
 		t.Fatalf("interior CreateTile: %v", err)
 	}
 	if interior.Tile.ChildGridId == "" || interior.Tile.ChildGridId == "0" {
-		t.Errorf("interior well child = %q, want a fresh local grid", interior.Tile.ChildGridId)
+		t.Errorf("interior door child = %q, want a fresh local grid", interior.Tile.ChildGridId)
 	}
 	if interior.Tile.AltText != "recipes" {
-		t.Errorf("interior well label = %q, want recipes (the wire's AltText is the grid name)", interior.Tile.AltText)
+		t.Errorf("interior door label = %q, want recipes (the wire's AltText is the grid name)", interior.Tile.AltText)
 	}
 
 	exit, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: root,
 		Tile: &gridwellv1.Tile{
-			Kind: "well", X: 2, Y: 0, W: 1, H: 1,
-			ChildGridId: "other-plugin-uuid/9", AltText: "mounted",
+			Kind: "door", X: 2, Y: 0, W: 1, H: 1,
+			ChildGridId: "other-plugin-uuid/9", AltText: "far",
 		},
 	})
 	if err != nil {
 		t.Fatalf("exit CreateTile: %v", err)
 	}
 	if exit.Tile.ChildGridId != "other-plugin-uuid/9" {
-		t.Errorf("exit well child = %q, want verbatim cross-plugin ref", exit.Tile.ChildGridId)
+		t.Errorf("door to another namespace child = %q, want verbatim cross-plugin ref", exit.Tile.ChildGridId)
 	}
-	if exit.Tile.AltText != "mounted" {
-		t.Errorf("exit well label = %q, want mounted", exit.Tile.AltText)
+	if exit.Tile.AltText != "far" {
+		t.Errorf("door to another namespace label = %q, want far", exit.Tile.AltText)
 	}
 }
 
@@ -334,30 +334,30 @@ func TestGetTileAndRename(t *testing.T) {
 	}
 }
 
-// TestWellFramingNoVersionBump: a framing write, a doorway's view, does not
+// TestDoorFramingNoVersionBump: a framing write, a door's view, does not
 // bump version. It pins the version rule the store operations behind
 // SetFraming and SetTile carry.
-func TestWellFramingNoVersionBump(t *testing.T) {
+func TestDoorFramingNoVersionBump(t *testing.T) {
 	p := openPlugin(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 
-	well, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
+	door, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: root,
-		Tile:   &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1},
+		Tile:   &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1},
 	})
 	if err != nil {
-		t.Fatalf("CreateTile(well): %v", err)
+		t.Fatalf("CreateTile(door): %v", err)
 	}
 	set, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Tile.Id,
+		TileId: door.Tile.Id,
 		Cx:     5, Cy: 6, Zoom: 2,
 	})
 	if err != nil {
-		t.Fatalf("SetFraming(well): %v", err)
+		t.Fatalf("SetFraming(door): %v", err)
 	}
-	if set.Tile.Version != well.Tile.Version {
-		t.Errorf("framing bumped version: %d → %d, want unchanged", well.Tile.Version, set.Tile.Version)
+	if set.Tile.Version != door.Tile.Version {
+		t.Errorf("framing bumped version: %d → %d, want unchanged", door.Tile.Version, set.Tile.Version)
 	}
 	if set.Tile.ViewCx != 5 || set.Tile.ViewCy != 6 || set.Tile.ViewZoom != 2 {
 		t.Errorf("framing not persisted: %+v", set.Tile)
@@ -393,7 +393,7 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 		t.Fatalf("SetFraming(root): %v", err)
 	}
 
-	// Info must now reflect the saved values so entry can seed the doorway
+	// Info must now reflect the saved values so entry can seed the door
 	// framing: the read side of the same seam.
 	info1, err := p.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
@@ -549,7 +549,7 @@ func scratchGrid(t *testing.T, p *local.Plugin) string {
 	return info.ScratchGridId
 }
 
-// The trashcan is a declared menu entry, and an entry is a doorway, so it
+// The trashcan is a declared menu entry, and an entry is a door, so it
 // remembers the view it was left at exactly as home's own root does: frame the
 // trash grid, ask again, and the entry carries it while the root stays put.
 func TestTheTrashcanEntryRemembersItsFraming(t *testing.T) {

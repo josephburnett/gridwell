@@ -200,7 +200,7 @@ func TestTransferFocusForwardedPathClosesMenu(t *testing.T) {
 	}
 }
 
-// The doorway section is folded on every opening, however the last was left.
+// The door section is folded on every opening, however the last was left.
 func TestPluginsCollapsedOnEveryOpen(t *testing.T) {
 	s := New()
 	s.Open("p1")

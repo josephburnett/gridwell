@@ -28,31 +28,31 @@ func TestFindFiltersRideToTheGridsOwner(t *testing.T) {
 	}
 
 	farRoot := localNodeID + "/geneva/rnode1/" + h.rootBare
-	well, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot,
-		Tile: &gridwellv1.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}})
+	door, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot,
+		Tile: &gridwellv1.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var inside []*gridwellv1.Tile
 	for x := int64(0); x < 2; x++ {
-		tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId,
+		tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: door.ChildGridId,
 			Tile: &gridwellv1.Tile{Kind: "text", X: x, Y: 0, W: 1, H: 1}})
 		if err != nil {
 			t.Fatal(err)
 		}
 		inside = append(inside, tile)
 	}
-	if err := h.localCl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: well.ChildGridId,
+	if err := h.localCl.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: door.ChildGridId,
 		Add: []string{inside[1].Id}}); err != nil {
 		t.Fatal(err)
 	}
 
-	resp, err := find(&gridwellv1.FindRequest{GridId: well.ChildGridId})
+	resp, err := find(&gridwellv1.FindRequest{GridId: door.ChildGridId})
 	if err != nil {
 		t.Fatalf("grid find: %v", err)
 	}
 	if len(resp.Results) != 2 {
-		t.Fatalf("grid find = %v, want the well's two tiles", resp.Results)
+		t.Fatalf("grid find = %v, want the door's two tiles", resp.Results)
 	}
 	resp, err = find(&gridwellv1.FindRequest{GridId: farRoot, Recurse: true, Selected: true})
 	if err != nil {
@@ -61,8 +61,8 @@ func TestFindFiltersRideToTheGridsOwner(t *testing.T) {
 	if len(resp.Results) != 1 || resp.Results[0].Tile.Id != inside[1].Id {
 		t.Fatalf("selected under the far root = %v, want %s, qualified as it was made", resp.Results, inside[1].Id)
 	}
-	if p := resp.Results[0].Path; len(p) != 1 || p[0].Id != well.Id {
-		t.Errorf("path = %v, want the well", p)
+	if p := resp.Results[0].Path; len(p) != 1 || p[0].Id != door.Id {
+		t.Errorf("path = %v, want the door", p)
 	}
 
 	if _, err := find(&gridwellv1.FindRequest{Query: "x", Recurse: true}); connect.CodeOf(err) != connect.CodeInvalidArgument {

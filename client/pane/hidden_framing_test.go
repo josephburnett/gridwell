@@ -4,7 +4,7 @@ import "testing"
 
 // A pane hidden under a zoomed sibling has no rect, so any view computed for
 // it is computed against nothing: its overtake is 0 and the intrinsic zoom it
-// would write is 0, which erased a well's framing in the 2026-10-04 trace. It
+// would write is 0, which erased a door's framing in the 2026-10-04 trace. It
 // is no framing writer, on a grid or in a content descent, where the text
 // scroll it would write carries the empty rect's width and height of 0.
 func TestHiddenPaneIsNoFramingWriter(t *testing.T) {
@@ -16,7 +16,7 @@ func TestHiddenPaneIsNoFramingWriter(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		f := Frame{Door: "well8", Content: content}
+		f := Frame{Door: "door8", Content: content}
 		f.SetView(0.43, 3.7, 2)
 		other.Push(f)
 		tr.ToggleZoom("p1")
@@ -44,7 +44,7 @@ func TestHiddenPaneIsNoFramingWriter(t *testing.T) {
 // NaN). Adopt takes only a frame with a view.
 func TestAdoptRefusesAViewWithNoZoom(t *testing.T) {
 	s := NewStack("root")
-	s.Push(Frame{Door: "well8"})
+	s.Push(Frame{Door: "door8"})
 	s.ViewPending = true
 	var none Frame
 	if none.SetView(4.5, 3.5, 0) {

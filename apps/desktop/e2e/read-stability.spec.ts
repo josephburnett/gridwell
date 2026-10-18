@@ -63,11 +63,11 @@ async function roundTrip(gw: any, window: any, cx: number, cy: number, settleMs:
   await settle(window, settleMs);
 }
 
-// The four kinds a descent can land on. A well pushes a frame onto its child
+// The four kinds a descent can land on. A door pushes a frame onto its child
 // grid; a text, url or shell tile pushes one onto the tile itself, and each
 // keeps a different framing fact, so one of them staying still proves nothing
 // about the others.
-for (const kind of ['well', 'markdown', 'url', 'shell'] as const) {
+for (const kind of ['door', 'markdown', 'url', 'shell'] as const) {
   test(`looking inside a ${kind} tile and coming back writes nothing`, async ({ gw, window }) => {
     const settleMs = (await gw.cadences()).framingSaveMs;
     await gw.enterPlugin('home');
@@ -122,7 +122,7 @@ for (const kind of ['well', 'markdown', 'url', 'shell'] as const) {
 // and nowhere else — and a zero proves that only while the persister is
 // actually running, which is why framingFlushes is asserted beside it: an
 // unarmed debounce takes every count quiet with it.
-for (const kind of ['well', 'markdown'] as const) {
+for (const kind of ['door', 'markdown'] as const) {
   test(`a reload inside a ${kind} writes nothing until the user moves`, async ({ gw, window }) => {
     const settleMs = (await gw.cadences()).framingSaveMs;
     await gw.enterPlugin('home');

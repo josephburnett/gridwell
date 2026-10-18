@@ -77,7 +77,7 @@ func pluginRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 }
 
 // fsGrid seeds n files plus one subdirectory and returns the qualified grid id
-// of the plugin's root, WITHOUT mounting it: a mount is a stored link and
+// of the plugin's root, WITHOUT linking it: a door to it is a stored link and
 // would mint the root grid's row, which is the very thing being counted.
 func fsGrid(t *testing.T, cl *rpc.Client, fsRoot string, n int) string {
 	t.Helper()
@@ -131,11 +131,11 @@ func TestListingAHundredEntriesMintsNothing(t *testing.T) {
 		}
 	}
 	if sub.ChildGridId == "" {
-		t.Fatal("the subdirectory well opens into nothing")
+		t.Fatal("the subdirectory door opens into nothing")
 	}
 	// Descend, and list both grids again: still a read.
 	if _, err := cl.GetGrid(ctx, sub.ChildGridId); err != nil {
-		t.Fatalf("descent into an unminted well: %v", err)
+		t.Fatalf("descent into an unminted door: %v", err)
 	}
 	if _, err := cl.GetGrid(ctx, root); err != nil {
 		t.Fatal(err)
@@ -257,30 +257,30 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var leaf, well *gridwellv1.Tile
+	var leaf, door *gridwellv1.Tile
 	for _, tile := range g.Tiles {
 		if tile.AltText == "sub" {
-			well = tile
+			door = tile
 		} else if leaf == nil {
 			leaf = tile
 		}
 	}
-	if leaf == nil || well == nil {
-		t.Fatalf("need a leaf and a well: %+v", g.Tiles)
+	if leaf == nil || door == nil {
+		t.Fatalf("need a leaf and a door: %+v", g.Tiles)
 	}
 	if _, ok := rpc.TileKey(rpc.LocalOf(leaf.Id)); !ok {
 		t.Fatalf("the leaf was already minted: %q", leaf.Id)
 	}
 
-	// The left-drag onto home: a leaf link at its target, an exit well at the
+	// The left-drag onto home: a leaf link at its target, a door to another namespace at the
 	// directory's grid. The client sends exactly the ids it was shown.
 	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: homeGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 4, W: 1, H: 1, LinkTargetId: leaf.Id, AltText: leaf.AltText}})
 	if err != nil {
 		t.Fatalf("leaf link onto an untouched entry: %v", err)
 	}
-	mount, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: homeGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 1, Y: 4, W: 1, H: 1, ChildGridId: well.ChildGridId, AltText: "sub"}})
+	farDoor, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: homeGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 1, Y: 4, W: 1, H: 1, ChildGridId: door.ChildGridId, AltText: "sub"}})
 	if err != nil {
-		t.Fatalf("exit well onto an untouched directory: %v", err)
+		t.Fatalf("door to another namespace onto an untouched directory: %v", err)
 	}
 
 	// What is at rest: the id the user dragged, unchanged. Tile and grid alike
@@ -294,8 +294,8 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 	if link.LinkTargetId != leaf.Id {
 		t.Fatalf("link_target_id = %q, want the id the user dragged, %q", link.LinkTargetId, leaf.Id)
 	}
-	if mount.ChildGridId != well.ChildGridId {
-		t.Fatalf("child_grid_id = %q, want the grid the user dragged, %q", mount.ChildGridId, well.ChildGridId)
+	if farDoor.ChildGridId != door.ChildGridId {
+		t.Fatalf("child_grid_id = %q, want the grid the user dragged, %q", farDoor.ChildGridId, door.ChildGridId)
 	}
 	stored := storedLink(t, st, link.Id)
 	if stored != link.LinkTargetId {

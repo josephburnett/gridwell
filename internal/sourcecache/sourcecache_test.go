@@ -407,8 +407,8 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	cc, upstream, root, _ := fixture(t)
 	ctx := context.Background()
 
-	well, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
-		Tile: &pb.Tile{Kind: "well", X: 0, Y: 0, W: 1, H: 1}})
+	door, err := cc.CreateTile(ctx, &pb.CreateTileRequest{GridId: root,
+		Tile: &pb.Tile{Kind: "door", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +441,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	// a write that changes nothing tells no one.
 	primed := false
 	for i := 0; i < 50 && !primed; i++ {
-		if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
+		if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: door.GetTile().GetId(),
 			Cx: float64(i + 1), Cy: 1, Zoom: 2}); err != nil {
 			t.Fatal(err)
 		}
@@ -455,7 +455,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 		t.Fatal("subscription never delivered the priming event")
 	}
 
-	if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: well.GetTile().GetId(),
+	if _, err := cc.SetFraming(ctx, &pb.SetFramingRequest{TileId: door.GetTile().GetId(),
 		Cx: 9, Cy: 9, Zoom: 3}); err != nil {
 		t.Fatal(err)
 	}
@@ -473,7 +473,7 @@ func TestEventTeeTracksMutations(t *testing.T) {
 			}
 			switch p := ev.GetPayload().(type) {
 			case *pb.Event_TileChanged:
-				if p.TileChanged.GetTile().GetId() == well.GetTile().GetId() &&
+				if p.TileChanged.GetTile().GetId() == door.GetTile().GetId() &&
 					p.TileChanged.GetTile().GetViewZoom() == 3 {
 					sawFraming = true
 				}
@@ -492,23 +492,23 @@ func TestEventTeeTracksMutations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var gotWell *pb.Tile
+	var gotDoor *pb.Tile
 	for _, tl := range g.GetTiles() {
 		if tl.GetId() == doomed.GetTile().GetId() {
 			t.Fatal("the teed TileRemoved should have evicted the deleted tile")
 		}
-		if tl.GetId() == well.GetTile().GetId() {
-			gotWell = tl
+		if tl.GetId() == door.GetTile().GetId() {
+			gotDoor = tl
 		}
 	}
-	if gotWell == nil || gotWell.GetViewZoom() != 3 {
-		t.Fatalf("the teed TileChanged should have kept the framing current: %+v", gotWell)
+	if gotDoor == nil || gotDoor.GetViewZoom() != 3 {
+		t.Fatalf("the teed TileChanged should have kept the framing current: %+v", gotDoor)
 	}
 }
 
 // TestPersistsAcrossRestart: the whole point of SQLite over memory — the
 // node restarts (or the wrapper reopens) and the remembered answers are
-// still there for a mount that is STILL dark.
+// still there for a connection that is STILL dark.
 func TestPersistsAcrossRestart(t *testing.T) {
 	cc, upstream, root, dbPath := fixture(t)
 	ctx := context.Background()

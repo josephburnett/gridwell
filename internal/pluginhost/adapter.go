@@ -299,9 +299,9 @@ func acceptEntries(context string, entries []*pluginv1.Entry) error {
 			case lt.Context == "" || lt.Key == "":
 				return status.Errorf(codes.InvalidArgument,
 					"plugin: entry %q links to context %q key %q; a link_target names both", e.Key, lt.Context, lt.Key)
-			case e.Kind == rpc.KindWell:
+			case e.Kind == rpc.KindDoor:
 				return status.Errorf(codes.InvalidArgument,
-					"plugin: entry %q is a well with a link_target; a well opens its child_context and has no link variant", e.Key)
+					"plugin: entry %q is a door with a link_target; a door opens its child_context and has no link variant", e.Key)
 			case lt.Context == context && lt.Key == e.Key:
 				return status.Errorf(codes.InvalidArgument, "plugin: entry %q links to itself", e.Key)
 			}
@@ -325,7 +325,7 @@ func acceptEntries(context string, entries []*pluginv1.Entry) error {
 }
 
 // buildTiles joins the overlay's rows with the listing's content facts, naming
-// each by its derived address, a well's child grid included: the id a well
+// each by its derived address, a door's child grid included: the id a door
 // hands the client must be the id GetGrid answers under.
 func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*pluginv1.Entry, rowContext func(int64) (string, error)) ([]*gridwellv1.Tile, error) {
 	byKey := map[string]*pluginv1.Entry{}
@@ -343,7 +343,7 @@ func buildTiles(gridID, context string, tiles []store.ExtTile, entries []*plugin
 		case listed && e.ChildContext != "":
 			pt.ChildGridId = rpc.EntryGridID(e.ChildContext)
 		case t.ChildGridID != 0:
-			// A minted well the listing does not carry: its context is read
+			// A minted door the listing does not carry: its context is read
 			// back so the name handed out is still the address.
 			ck, err := rowContext(t.ChildGridID)
 			if err != nil {
@@ -505,7 +505,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		tiles = kept
 	}
 	// host_content, glyph and writable ride the grid: a grid reached through
-	// a mount has no local row. source_label is the listing's own, so it is
+	// a door to another namespace has no local row. source_label is the listing's own, so it is
 	// as fresh as the rows. A plugin creates no tiles.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if err != nil {
@@ -713,7 +713,7 @@ func (s *synthesized) tileForKey(key string) *gridwellv1.Tile {
 	return nil
 }
 
-// tileOpening answers the well tile whose descent is the grid, or nil.
+// tileOpening answers the door tile whose descent is the grid, or nil.
 func (s *synthesized) tileOpening(childGridID string) *gridwellv1.Tile {
 	for _, t := range s.tiles {
 		if t.ChildGridId == childGridID {
@@ -836,7 +836,7 @@ func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool) (*gri
 	return resp.GetTile(), nil
 }
 
-// SetFraming persists framing on a doorway tile row or a context's grid row.
+// SetFraming persists framing on a door tile row or a context's grid row.
 func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	f, err := rpc.FramingOf(req)
 	if err != nil {
@@ -880,7 +880,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 // SetSelection keeps a collection's selection on the node's row for its grid,
 // as its framing is kept; the plugin never sees it. An added entry is
 // touched, so it gets its row; one not in this collection is ignored, as home
-// ignores a tile off its grid. A recursive clear walks the wells the node has
+// ignores a tile off its grid. A recursive clear walks the doors the node has
 // rows for, the ones the user touched.
 func (a *Adapter) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
 	if why := rpc.SelectRefusal(req); why != "" {

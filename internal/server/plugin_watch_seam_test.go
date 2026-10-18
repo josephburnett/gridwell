@@ -160,12 +160,12 @@ func TestPluginWatchReachesTheWebAPI(t *testing.T) {
 		}
 	}
 	if want := rpc.QualifyID(watchUUID, rpc.KeyTileID("all")); grid != want {
-		t.Fatalf("the collection's doorway is %q, want %q", grid, want)
+		t.Fatalf("the collection's door is %q, want %q", grid, want)
 	}
 	awaitGridChanged(t, cl, poke, []string{grid}, grid)
 }
 
-// The same change crosses a connection: a client of the node that mounts the
+// The same change crosses a connection: a client of the node that connects to the
 // far one sees it under the far grid's id through the connection segment.
 func TestPluginWatchCrossesAConnection(t *testing.T) {
 	var poke chan<- struct{}
@@ -175,8 +175,8 @@ func TestPluginWatchCrossesAConnection(t *testing.T) {
 	awaitGridChanged(t, h.localCl, poke, []string{want}, want)
 }
 
-// A collection seen only as a well's preview in home is shown by the child
-// grid id the client reads off that well (pane.Showing), and a change in it
+// A collection seen only as a door's preview in home is shown by the child
+// grid id the client reads off that door (pane.Showing), and a change in it
 // reaches the client under that same id.
 func TestPluginWatchReachesAWellPreview(t *testing.T) {
 	st, err := store.Open(t.TempDir() + "/gridwell.db")
@@ -198,7 +198,7 @@ func TestPluginWatchReachesAWellPreview(t *testing.T) {
 	}
 	home := lp.HomeGridId
 	if _, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: home, Tile: &gridwellv1.Tile{
-		Kind: rpc.KindWell, X: 0, Y: 0, W: 2, H: 2, ChildGridId: rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))}}); err != nil {
+		Kind: rpc.KindDoor, X: 0, Y: 0, W: 2, H: 2, ChildGridId: rpc.QualifyID(watchUUID, rpc.KeyTileID("all"))}}); err != nil {
 		t.Fatal(err)
 	}
 	g, err := cl.GetGrid(ctx, home)
@@ -207,12 +207,12 @@ func TestPluginWatchReachesAWellPreview(t *testing.T) {
 	}
 	var preview string
 	for _, tl := range g.Tiles {
-		if tl.Kind == rpc.KindWell {
+		if tl.Kind == rpc.KindDoor {
 			preview = tl.ChildGridId
 		}
 	}
 	if preview == "" {
-		t.Fatal("home holds no well onto the collection")
+		t.Fatal("home holds no door onto the collection")
 	}
 	awaitGridChanged(t, cl, poke, []string{home, preview}, preview)
 }

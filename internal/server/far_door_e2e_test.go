@@ -14,11 +14,11 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// TestSecondDBMountE2E proves the federated model end to end: with the server
+// TestSecondDBDoorE2E proves the federated model end to end: with the server
 // holding no native state, a second Gridwell DB registered as its own namespace
-// can be mounted as a cross-plugin well in the primary, descended into, and
+// can be reached through a cross-plugin door in the primary, descended into, and
 // edited — and its tiles live in the second DB, isolated from the primary.
-func TestSecondDBMountE2E(t *testing.T) {
+func TestSecondDBDoorE2E(t *testing.T) {
 	ctx := context.Background()
 
 	// The primary DB, registered as the primary namespace.
@@ -55,21 +55,21 @@ func TestSecondDBMountE2E(t *testing.T) {
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
-	// Mount the second DB: an exit well in the primary root whose child is the
+	// Link the second DB: a door to another namespace in the primary root whose child is the
 	// second plugin's root grid.
-	mount, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridId: secondRoot, AltText: "second"}})
+	farDoor, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, ChildGridId: secondRoot, AltText: "second"}})
 	if err != nil {
-		t.Fatalf("mount CreateWell: %v", err)
+		t.Fatalf("farDoor CreateDoor: %v", err)
 	}
-	if mount.ChildGridId != secondRoot {
-		t.Fatalf("mount child = %q, want %q", mount.ChildGridId, secondRoot)
+	if farDoor.ChildGridId != secondRoot {
+		t.Fatalf("farDoor child = %q, want %q", farDoor.ChildGridId, secondRoot)
 	}
-	if u, _, _ := rpc.SplitID(mount.Id); u != primaryUUID {
-		t.Errorf("mount well lives in %q, want primary", u)
+	if u, _, _ := rpc.SplitID(farDoor.Id); u != primaryUUID {
+		t.Errorf("door lives in %q, want primary", u)
 	}
 
-	// Descend: GetGrid on the mount's child routes to the second plugin.
-	g, err := cl.GetGrid(ctx, mount.ChildGridId)
+	// Descend: GetGrid on the door's child routes to the second plugin.
+	g, err := cl.GetGrid(ctx, farDoor.ChildGridId)
 	if err != nil {
 		t.Fatalf("GetGrid second root: %v", err)
 	}
@@ -77,8 +77,8 @@ func TestSecondDBMountE2E(t *testing.T) {
 		t.Fatalf("second DB root should start empty, got %d tiles", len(g.Tiles))
 	}
 
-	// Create a text tile inside the second DB (descend path through the mount).
-	txt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: mount.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# in second"))
+	// Create a text tile inside the second DB (descend path through the door).
+	txt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: farDoor.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 1, H: 1}}, []byte("# in second"))
 	if err != nil {
 		t.Fatalf("CreateText in second DB: %v", err)
 	}
@@ -96,8 +96,8 @@ func TestSecondDBMountE2E(t *testing.T) {
 	}
 
 	// Isolation: the tile appears in the second DB's grid, never in the primary
-	// root (which holds only the mount well).
-	g2, err := cl.GetGrid(ctx, mount.ChildGridId)
+	// root (which holds only the door).
+	g2, err := cl.GetGrid(ctx, farDoor.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}

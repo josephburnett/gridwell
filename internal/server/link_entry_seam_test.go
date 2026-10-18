@@ -299,7 +299,7 @@ func TestTheSweepProbesTheContextItSweeps(t *testing.T) {
 func TestALinkTheNodeCannotDrawIsRefused(t *testing.T) {
 	for name, e := range map[string]*pluginv1.Entry{
 		"no key":    {Key: "a", Kind: rpc.KindText, LinkTarget: &pluginv1.EntryRef{Context: "everything"}},
-		"a well":    {Key: "a", Kind: rpc.KindWell, ChildContext: "c", LinkTarget: &pluginv1.EntryRef{Context: "everything", Key: "t1"}},
+		"a door":    {Key: "a", Kind: rpc.KindDoor, ChildContext: "c", LinkTarget: &pluginv1.EntryRef{Context: "everything", Key: "t1"}},
 		"to itself": {Key: "a", Kind: rpc.KindText, LinkTarget: &pluginv1.EntryRef{Context: "box", Key: "a"}},
 	} {
 		t.Run(name, func(t *testing.T) {

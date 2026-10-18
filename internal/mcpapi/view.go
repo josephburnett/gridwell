@@ -26,7 +26,7 @@ type Tile struct {
 	Version   int64  `json:"version"`
 	Link      string `json:"link,omitempty" jsonschema:"the address this link resolves to, when the tile is a link"`
 	Dead      bool   `json:"dead,omitempty" jsonschema:"the link's path ends in nothing: greyed, inert, still deletable"`
-	ChildGrid string `json:"child_grid,omitempty" jsonschema:"the grid a well holds"`
+	ChildGrid string `json:"child_grid,omitempty" jsonschema:"the grid a door holds"`
 	ReadOnly  string `json:"read_only,omitempty" jsonschema:"why this tile's body takes no edits"`
 }
 
@@ -63,14 +63,14 @@ type FindOut struct {
 	Skipped []Skip `json:"skipped,omitempty"`
 }
 
-// Hit is one match and the wells it sits inside, outermost first.
+// Hit is one match and the doors it sits inside, outermost first.
 type Hit struct {
 	Tile    Tile    `json:"tile"`
 	Inside  []Crumb `json:"inside,omitempty"`
 	Snippet string  `json:"snippet,omitempty"`
 }
 
-// Crumb is one well on a hit's path.
+// Crumb is one door on a hit's path.
 type Crumb struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
@@ -122,7 +122,7 @@ func tileOf(t *pb.Tile, roster []*pb.PluginInfo, node string) Tile {
 	out := Tile{ID: t.GetId(), Kind: t.GetKind(), Name: t.GetAltText(), Grid: t.GetGridId(),
 		X: t.GetX(), Y: t.GetY(), W: t.GetW(), H: t.GetH(), Version: t.GetVersion(),
 		Link: deadref.TargetID(t), ReadOnly: t.GetReadOnly()}
-	if rpc.IsWellKind(t.GetKind()) && !t.GetLink() {
+	if rpc.IsDoorKind(t.GetKind()) && !t.GetLink() {
 		out.ChildGrid = t.GetChildGridId()
 	}
 	out.Dead = roster != nil && deadref.DeadTile(t, roster, node, nil)

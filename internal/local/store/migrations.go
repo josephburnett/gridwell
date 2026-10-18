@@ -23,7 +23,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 19
+const schemaVersion = 20
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -54,7 +54,7 @@ var migrations = []migration{
 	// because the v6 rebuild materializes the current template.
 	{to: 7, run: addColumnIfMissingDDL("tiles", "url_frozen",
 		`ALTER TABLE tiles ADD COLUMN url_frozen INTEGER NOT NULL DEFAULT 0`)},
-	// v8: configure_plugin_id, marking a childless well. The well CHECK gains
+	// v8: configure_plugin_id, marking a childless door. The door CHECK gains
 	// that variant, so this is a rebuild; old rows copy through unchanged.
 	{to: 8, run: rebuildTilesReading(7)},
 	// v9: every plugin's memory joins the home tables — ns, key and
@@ -64,21 +64,21 @@ var migrations = []migration{
 	{to: 9, run: migrateV9},
 	// v10 retires three pieces of dead storage, none carrying a user-visible
 	// meaning any binary read: the `session` table, now that the Chromium
-	// session is host-local; tiles.configure_plugin_id and the well CHECK's
+	// session is host-local; tiles.configure_plugin_id and the door CHECK's
 	// childless branch, which nothing can mint any more, with existing rows
-	// preserved as ordinary wells each given a fresh empty child grid; and
+	// preserved as ordinary doors each given a fresh empty child grid; and
 	// object_id on tiles and grids, a provenance mint no reader decided on.
 	// tiles is a rebuild, because the CHECK must change; grids is a DROP
 	// COLUMN. Both preserve every row and the AUTOINCREMENT seeds.
 	{to: 10, run: migrateV10},
-	// v11 folds three framing representations into one: a well's integer
+	// v11 folds three framing representations into one: a door's integer
 	// window origin (tiles.view_x/view_y) plus an intrinsic ratio, home's
 	// root in the `system` KV table, and a plugin context's root on its grid
 	// row. The one shape is a float center plus the intrinsic zoom, on the
-	// doorway tile (tiles.view_cx/cy/zoom) or, for a root with no doorway, on
+	// door tile (tiles.view_cx/cy/zoom) or, for a root with no door, on
 	// the grid row (grids.root_cx/cy/zoom). Nothing user-visible changes:
 	// every origin becomes the center the client already derived from it,
-	// origin + footprint/2, and a root's synthetic doorway is 1x1, so + 0.5.
+	// origin + footprint/2, and a root's synthetic door is 1x1, so + 0.5.
 	// view_x and view_y retire. tiles is a rebuild; grids and system are
 	// updated in place.
 	{to: 11, run: migrateV11},
@@ -125,6 +125,25 @@ var migrations = []migration{
 	// Every existing row is seeded from updated_at, the nearest fact there is:
 	// it is no earlier than the last content write.
 	{to: 19, run: migrateV19},
+	// v20: the kind 'well' is spelled 'door'. A conversion, not a drop: every
+	// row stays, its kind respelled through respelledKinds. The kind lives in
+	// the CHECK, so this is a rebuild.
+	{to: 20, run: migrateV20},
+}
+
+// respelledKinds maps a kind as a released binary stored it to the kind this
+// binary stores. Every rebuild converts through it (rebuildSelect), because a
+// rebuild materializes the current CHECK, which admits only the new spelling.
+var respelledKinds = [][2]string{{"well", rpc.KindDoor}}
+
+// migrateV20 respells the kinds; see the chain entry.
+func migrateV20(ctx context.Context, tx *sql.Tx) error {
+	if err := rebuildTiles(ctx, tx, 19); err != nil {
+		return err
+	}
+	// DROP TABLE tiles took idx_tiles_live_key with it; see rebuildTiles.
+	_, err := tx.ExecContext(ctx, externalsIndexDDL)
+	return err
 }
 
 // migrateV19 adds and seeds content_at; see the chain entry. A rebuild earlier
@@ -277,15 +296,28 @@ func rebuildTiles(ctx context.Context, tx *sql.Tx, reads int) error {
 
 // rebuildSelect maps a rebuild's destination columns onto the expressions
 // that read them out of the table as it stands. Every column reads as itself
-// but one pair: on a pre-v11 source the framing is an integer window origin,
-// and the center v11 stores is origin + footprint/2, the same arithmetic the
-// client used to display it, so a well shows the framing it showed before.
+// but two: kind reads through respelledKinds, and on a pre-v11 source the
+// framing is an integer window origin, and the center v11 stores is origin +
+// footprint/2, the same arithmetic the client used to display it, so a door
+// shows the framing it showed before.
 func rebuildSelect(ctx context.Context, tx *sql.Tx, columns string) (string, error) {
+	kind := "CASE kind"
+	for _, r := range respelledKinds {
+		kind += " WHEN '" + r[0] + "' THEN '" + r[1] + "'"
+	}
+	kind += " ELSE kind END"
+	cols := strings.Split(columns, ", ")
+	for i, c := range cols {
+		if c == "kind" {
+			cols[i] = kind
+		}
+	}
+	src := strings.Join(cols, ", ")
 	has, err := hasColumn(ctx, tx, "tiles", "view_cx")
 	if err != nil || has {
-		return columns, err
+		return src, err
 	}
-	return strings.Replace(columns, "view_cx, view_cy",
+	return strings.Replace(src, "view_cx, view_cy",
 		"view_x + w / 2.0, view_y + h / 2.0", 1), nil
 }
 
@@ -318,7 +350,7 @@ func migrateV11(ctx context.Context, tx *sql.Tx) error {
 
 // moveHomeRootFraming copies home's root viewport from the system KV table
 // onto its root grid row and deletes the keys. The stored cx and cy were the
-// origin of a 1x1 synthetic doorway, so they convert by + 0.5; what is not an
+// origin of a 1x1 synthetic door, so they convert by + 0.5; what is not an
 // rpc.Framing is never visited, with nothing to carry.
 func moveHomeRootFraming(ctx context.Context, tx *sql.Tx) error {
 	read := func(key string) (float64, error) {
@@ -402,8 +434,8 @@ CREATE TABLE IF NOT EXISTS listings (
 // migrateV10 retires the dead storage listed in the chain entry above. Order
 // matters. grids.object_id goes first, by DROP COLUMN, which SQLite refuses
 // while an index names the column, so that index goes first. Then the stale
-// childless wells are adopted, each given a fresh empty child grid, because
-// the rebuilt tiles CHECK no longer admits a well without one and dropping
+// childless doors are adopted, each given a fresh empty child grid, because
+// the rebuilt tiles CHECK no longer admits a door without one and dropping
 // the user's tile is not an option. tiles goes last, through the shared
 // rebuild, which saves and restores its seed.
 func migrateV10(ctx context.Context, tx *sql.Tx) error {
@@ -427,7 +459,7 @@ func migrateV10(ctx context.Context, tx *sql.Tx) error {
 			}
 		}
 	}
-	if err := adoptStalePluginWells(ctx, tx); err != nil {
+	if err := adoptStalePluginDoors(ctx, tx); err != nil {
 		return err
 	}
 	// An old file still carries idx_tiles_object_id, which tilesIndexDDL does
@@ -444,36 +476,36 @@ func migrateV10(ctx context.Context, tx *sql.Tx) error {
 	return err
 }
 
-// adoptStalePluginWells turns every childless well carrying
-// configure_plugin_id into an ordinary interior well by minting it a fresh
-// empty child grid. Nothing can fill such a well any more, and the
+// adoptStalePluginDoors turns every childless door carrying
+// configure_plugin_id into an ordinary interior door by minting it a fresh
+// empty child grid. Nothing can fill such a door any more, and the
 // alternative to adoption is deleting a tile the user placed.
-func adoptStalePluginWells(ctx context.Context, tx *sql.Tx) error {
+func adoptStalePluginDoors(ctx context.Context, tx *sql.Tx) error {
 	has, err := hasColumn(ctx, tx, "tiles", "configure_plugin_id")
 	if err != nil || !has {
 		return err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id, created_at FROM tiles
-		WHERE kind = 'well' AND child_grid_id IS NULL AND configure_plugin_id != ''`)
+		WHERE child_grid_id IS NULL AND configure_plugin_id != ''`)
 	if err != nil {
-		return fmt.Errorf("find stale plugin wells: %w", err)
+		return fmt.Errorf("find stale plugin doors: %w", err)
 	}
 	type stale struct{ id, createdAt int64 }
-	wells, err := collect(rows, func(rows *sql.Rows) (stale, error) {
+	doors, err := collect(rows, func(rows *sql.Rows) (stale, error) {
 		var w stale
 		if err := rows.Scan(&w.id, &w.createdAt); err != nil {
-			return w, fmt.Errorf("scan stale plugin well: %w", err)
+			return w, fmt.Errorf("scan stale plugin door: %w", err)
 		}
 		return w, nil
 	})
 	if err != nil {
 		return err
 	}
-	for _, w := range wells {
+	for _, w := range doors {
 		res, err := tx.ExecContext(ctx,
 			`INSERT INTO grids (created_at, updated_at) VALUES (?, ?)`, w.createdAt, w.createdAt)
 		if err != nil {
-			return fmt.Errorf("mint child grid for stale plugin well %d: %w", w.id, err)
+			return fmt.Errorf("mint child grid for stale plugin door %d: %w", w.id, err)
 		}
 		gid, err := res.LastInsertId()
 		if err != nil {
@@ -481,7 +513,7 @@ func adoptStalePluginWells(ctx context.Context, tx *sql.Tx) error {
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET child_grid_id = ? WHERE id = ?`, gid, w.id); err != nil {
-			return fmt.Errorf("adopt stale plugin well %d: %w", w.id, err)
+			return fmt.Errorf("adopt stale plugin door %d: %w", w.id, err)
 		}
 	}
 	return nil

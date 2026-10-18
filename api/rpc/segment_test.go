@@ -165,7 +165,7 @@ func TestQualifyCodecIgnoresSegmentShape(t *testing.T) {
 }
 
 // The transit rule prepends one segment and leaves the segment alone,
-// whatever its shape — the seam a mounted node's key-form tile crosses.
+// whatever its shape — the seam a far node's key-form tile crosses.
 func TestTransitQualifyKeyForm(t *testing.T) {
 	key := KeyTileID("/home/joe/x")
 	in := []*pb.Tile{{

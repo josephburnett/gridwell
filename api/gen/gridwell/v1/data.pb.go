@@ -82,7 +82,7 @@ func (ProbeResponse_Presence) EnumDescriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{6, 0}
 }
 
-// Grid is the persistent unit of canvas. Tiles live in grids; wells
+// Grid is the persistent unit of canvas. Tiles live in grids; doors
 // point at child grids. The root grid has no parent.
 type Grid struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -98,12 +98,12 @@ type Grid struct {
 	// scratch_grid_id is the grid where ephemeral visits opened from this grid
 	// land: the owning plugin's own scratch grid, or the serving node's home
 	// scratch grid when the plugin declares none. Qualified from the receiver's
-	// perspective and chained through mounts. "" only when the owning plugin's
+	// perspective and chained through connections. "" only when the owning plugin's
 	// Info was unreachable. Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// node_ns is the namespace chain of the node serving this grid, from the
 	// receiver's perspective: "" for a grid served by the node you are talking
-	// to, "<transit>/<conn>" or deeper through mounts, each transit hop
+	// to, "<transit>/<conn>" or deeper through connections, each transit hop
 	// prepending its segment as scratch_grid_id does. It is the one owner of
 	// which node a pane is inside: the client keys its per-pane + menu context
 	// by it and routes Handshake with it. Wire-only, never persisted.
@@ -114,17 +114,18 @@ type Grid struct {
 	MenuEntries []*MenuEntry `protobuf:"bytes,11,rep,name=menu_entries,json=menuEntries,proto3" json:"menu_entries,omitempty"`
 	// host_content says this grid projects host state, such as a directory or
 	// the process table, instead of holding content of its own, and the client
-	// renders its rows with the host treatment: the outside tint and the exit
-	// border family. The owning plugin declares it (plugin.v1
+	// renders its rows with the host treatment: the outside tint and the
+	// border family of a door to another namespace. The owning plugin declares it (plugin.v1
 	// InfoResponse.host_content), the adapter that serves the grid stamps it,
 	// and transit carries it verbatim. A reader consults it instead of
 	// learning a kind's name. Wire-only, never persisted.
 	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
 	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
-	// client falls back to the well glyph or the mount door's glyph). It
+	// client falls back to the door glyph or the glyph of the door to another
+	// namespace). It
 	// travels on the GRID because a plugin-list lookup cannot answer for a
-	// grid reached through a mount. Stamped by the adapter, verbatim in
+	// grid reached through a door to another namespace. Stamped by the adapter, verbatim in
 	// transit. Wire-only, never persisted.
 	Glyph string `protobuf:"bytes,14,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	// source_label is the owning plugin's name for what backs this grid, as
@@ -259,12 +260,12 @@ func (x *Grid) GetSelection() []string {
 	return nil
 }
 
-// MenuEntry is one declared (+) menu entry: a doorway onto one collection,
+// MenuEntry is one declared (+) menu entry: a door onto one collection,
 // such as the home's trashcan or a mail plugin's Feed. Declared in Info,
 // stamped per grid by the serving node, and passed verbatim
 // through transit hops, where grid_id gains the hop prefix like every id. The
 // swatch behaves like a menu row's over grid_id: click descends, drag drops an
-// exit-well link.
+// door to another namespace link.
 type MenuEntry struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // entry identity within the plugin
@@ -272,7 +273,7 @@ type MenuEntry struct {
 	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default glyph)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
-	// meaning as PluginInfo.root_view_*. A doorway carries the framing of the
+	// meaning as PluginInfo.root_view_*. A door carries the framing of the
 	// grid behind it, so re-entering a collection lands where it was left. All
 	// three are absent when never visited (rpc.ViewOf), and the client
 	// substitutes its calibrated default.
@@ -375,7 +376,7 @@ type Tile struct {
 	Y       int64                  `protobuf:"varint,7,opt,name=y,proto3" json:"y,omitempty"`
 	W       int64                  `protobuf:"varint,8,opt,name=w,proto3" json:"w,omitempty"`
 	H       int64                  `protobuf:"varint,9,opt,name=h,proto3" json:"h,omitempty"`
-	// well-only: the child grid's framing, which is at once the preview frame,
+	// door-only: the child grid's framing, which is at once the preview frame,
 	// the descent target and the ascent return value. A float center in the
 	// child grid's coordinates (view_cx, view_cy) plus the pane-size-independent
 	// intrinsic zoom (live over overtake), the same three numbers a root grid
@@ -402,9 +403,9 @@ type Tile struct {
 	PreviewBlobId int64 `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
 	// alt_text is the canonical display label, rendered verbatim by the
 	// client. Stamped at insert time (for plugin-owned tiles, the entry name;
-	// for an exit well, the mounted plugin's label).
+	// for a door to another namespace, the label of the plugin it leads to).
 	AltText string `protobuf:"bytes,25,opt,name=alt_text,json=altText,proto3" json:"alt_text,omitempty"`
-	// link reports that this well is a link: its child_grid_id is a
+	// link reports that this door is a link: its child_grid_id is a
 	// qualified cross-plugin link rather than a bare local child grid. It
 	// is the one signal for that. The client renders a dashed border from it,
 	// and delete and copy treat a qualified child_grid_id as unlink-only and
@@ -428,8 +429,8 @@ type Tile struct {
 	// content. The link row stores no blob, no url and no preview, and readers
 	// resolve bytes, preview and tmux through the target id, which the router
 	// routes anywhere, including through transit chains that prepend one hop
-	// segment as they do for a well's qualified child_grid_id. Kind stays the
-	// target's kind. A well's link variant is a qualified child_grid_id instead,
+	// segment as they do for a door's qualified child_grid_id. Kind stays the
+	// target's kind. A door's link variant is a qualified child_grid_id instead,
 	// and link is the derived bit over both shapes. Deleting a link only
 	// unlinks.
 	LinkTargetId string `protobuf:"bytes,29,opt,name=link_target_id,json=linkTargetId,proto3" json:"link_target_id,omitempty"`
@@ -789,19 +790,19 @@ type InfoResponse struct {
 	RootGridId string `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	// scratch_grid_id is the plugin's off-grid grid for ephemeral url tiles,
 	// where descending into a url places no tile. Never rendered, never
-	// mounted; it persists as visited-url history. Empty for plugins that do
+	// linked; it persists as visited-url history. Empty for plugins that do
 	// not support ephemeral visits, such as fs and proc.
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
 	// center in grid coordinates and the intrinsic zoom. The home fills it from
 	// its root grid row; a root never visited leaves all three absent.
-	// The client seeds the doorway framing from it so re-entry restores the
+	// The client seeds the door framing from it so re-entry restores the
 	// left-off view. It is read-only here; SetFraming is the write path.
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
 	// glyph is the plugin's identity glyph for the menu and the ghost:
-	// "folder", "process", "well", or "" for the generic globe. The client reads
+	// "folder", "process", "door", or "" for the generic globe. The client reads
 	// the declaration and never switches on the kind, and an unknown value falls
 	// back to the globe, so a third-party plugin degrades politely.
 	Glyph string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
@@ -1659,7 +1660,7 @@ func (x *ServeContentChunk) GetData() []byte {
 // MoveTile is the single placement writeback. Placement is one fact,
 // (grid_id, x, y, w, h), and one verb owns it. grid_id is the destination grid,
 // the same as the tile's current grid for a pure resize. The server refuses
-// overlap, and refuses moving a well into its own subtree by walking
+// overlap, and refuses moving a door into its own subtree by walking
 // ancestors from grid_id, with no client-supplied path. Placement never crosses
 // a plugin boundary; there is no cross-plugin move, only link or copy.
 //
@@ -1888,7 +1889,7 @@ func (x *GetTileRequest) GetTileId() string {
 // grammar owned by one shared parser (rpc.ParseFindQuery): id:<tile-id> is an
 // exact-id lookup, and anything else is plugin-interpreted text matching
 // against names, bodies, addresses, or whatever the plugin's data means. Each
-// result carries the tile plus its containing-well chain from the plugin's root
+// result carries the tile plus its containing-door chain from the plugin's root
 // grid, outermost first and empty at the root, so a hit can be navigated to and
 // its crumbs previewed. snippet and score are optional context and ranking for
 // merged displays.
@@ -1915,8 +1916,8 @@ type FindRequest struct {
 	Scope string `protobuf:"bytes,3,opt,name=scope,proto3" json:"scope,omitempty"`
 	// grid_id keeps the hits on this grid.
 	GridId string `protobuf:"bytes,4,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
-	// recurse, with grid_id, also keeps the hits on the grids of the wells inside
-	// it, to any depth. A link well is a path elsewhere and is not followed.
+	// recurse, with grid_id, also keeps the hits on the grids of the doors inside
+	// it, to any depth. A link door is a path elsewhere and is not followed.
 	Recurse bool `protobuf:"varint,5,opt,name=recurse,proto3" json:"recurse,omitempty"`
 	// created, modified and content_changed keep the hits whose row time falls
 	// in the range: when it was made, when it was last written by anything (a
@@ -1927,7 +1928,7 @@ type FindRequest struct {
 	ContentChanged *TimeRange `protobuf:"bytes,8,opt,name=content_changed,json=contentChanged,proto3" json:"content_changed,omitempty"`
 	// selected keeps the hits in their grid's selection, the node fact.
 	Selected bool `protobuf:"varint,9,opt,name=selected,proto3" json:"selected,omitempty"`
-	// kind keeps the hits of this kind: text, url, shell, well or pane. An
+	// kind keeps the hits of this kind: text, url, shell, door or pane. An
 	// entry with no row has its kind, so it passes or fails like a row.
 	Kind          string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2860,9 +2861,9 @@ func (x *SourceDisabled) GetNamespace() string {
 // CreateTileRequest creates one tile of any kind. There is no version: the
 // tile does not exist yet. tile.kind selects which fields are meaningful:
 //
-//	well  → child_grid_id set makes an exit well pointing at a grid in
+//	door  → child_grid_id set makes a door to another namespace pointing at a grid in
 //	        another plugin, a qualified "<uuid>/<grid-id>"; empty allocates
-//	        a fresh interior child grid. alt_text is the well's label.
+//	        a fresh interior child grid. alt_text is the door's label.
 //	text  → content is the body.
 //	pane  → content is the layout; empty is never arranged.
 //	url   → url_string.
@@ -3103,8 +3104,8 @@ func (x *CopyTileRequest) GetY() int64 {
 //	                                              (automatic capture)
 //	shell → preview jpeg                          (automatic capture)
 //
-// Well framing is not here: SetFraming is the one verb for both rows that
-// can own it, doorway tile and root grid alike. A url's address is content
+// Door framing is not here: SetFraming is the one verb for both rows that
+// can own it, door tile and root grid alike. A url's address is content
 // and rides WriteContent; a SetTile carrying url_string is refused as
 // InvalidArgument, so the address has one writer.
 //
@@ -3134,7 +3135,7 @@ type SetTileRequest struct {
 	// user edit. Refused for text tiles, whose name derives from the first line.
 	Rename string `protobuf:"bytes,6,opt,name=rename,proto3" json:"rename,omitempty"`
 	// content_zoom is the per-tile content scale. Framing: no claim, and it never
-	// bumps version. Refused for wells, and outside the range rpc.NewContentZoom
+	// bumps version. Refused for doors, and outside the range rpc.NewContentZoom
 	// declares. optional so presence is explicit: an absent zoom is no write.
 	ContentZoom *float64 `protobuf:"fixed64,7,opt,name=content_zoom,json=contentZoom,proto3,oneof" json:"content_zoom,omitempty"`
 	// url_frozen is the user's standing freeze on a url or shell tile. It never
@@ -3349,23 +3350,23 @@ func (x *DeleteTileResponse) GetTmuxLeft() string {
 }
 
 // SetFramingRequest is the one framing verb: how a grid looked when the user
-// left it through a given doorway. cx and cy are a float center in the grid's
+// left it through a given door. cx and cy are a float center in the grid's
 // own coordinates; zoom is the pane-size-independent intrinsic ratio (live over
 // overtake), so a window resize never moves a saved view. A center that is not
 // a point or a zoom that is not a finite size above zero is refused as
 // InvalidArgument with the reason (rpc.FramingOf); never visited is no write.
 //
 // Exactly one target is set, and that target also routes the call to the owning
-// plugin. tile_id names the doorway tile a grid was entered through, interior
-// or exit or link, each doorway keeping its own framing; root_grid_id names a
-// root grid, which has no doorway to carry it.
+// plugin. tile_id names the door tile a grid was entered through, interior
+// or exit or link, each door keeping its own framing; root_grid_id names a
+// root grid, which has no door to carry it.
 //
 // Framing carries no version claim and makes no version bump; it is
 // last-writer-wins. A plugin that keeps no framing answers Unimplemented, which
 // the node treats as nothing to store rather than an error.
 type SetFramingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`               // qualified "<plugin-uuid>/<id>"; the doorway
+	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`               // qualified "<plugin-uuid>/<id>"; the door
 	RootGridId    string                 `protobuf:"bytes,2,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified "<plugin-uuid>/<id>"; a root grid
 	Cx            float64                `protobuf:"fixed64,4,opt,name=cx,proto3" json:"cx,omitempty"`
 	Cy            float64                `protobuf:"fixed64,5,opt,name=cy,proto3" json:"cy,omitempty"`
@@ -3439,7 +3440,7 @@ func (x *SetFramingRequest) GetZoom() float64 {
 	return 0
 }
 
-// SetFramingResponse carries the updated doorway tile, so the client can
+// SetFramingResponse carries the updated door tile, so the client can
 // reconcile its row. A root write has no tile and leaves it unset.
 type SetFramingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3490,7 +3491,7 @@ func (x *SetFramingResponse) GetTile() *Tile {
 // carries no claim: two selects of different tiles merge in whichever order
 // they land, and two of the same tile are the last one's. An added tile not on
 // the grid is ignored. recurse, only with clear, also empties every grid
-// nested under the grid's wells, to any depth, within the grid's namespace, in
+// nested under the grid's doors, to any depth, within the grid's namespace, in
 // one write; recurse without clear is refused. all, only with clear and no
 // grid, add, remove or recurse, empties every grid's set the node holds: home
 // and each plugin namespace, and, asked at the web API, each live
@@ -3674,7 +3675,7 @@ func (x *SubscribeRequest) GetSession() string {
 //
 // shown_grid_ids is derived on the client, because the layout rects that say
 // what is on screen are session-ephemeral client facts: each laid-out pane's
-// grid and the child grid of every well whose preview is on screen,
+// grid and the child grid of every door whose preview is on screen,
 // qualified, sorted, each once (pane.Showing). The node unions every open
 // session's shown_grid_ids, and each namespace's share of the union, sent to
 // it as a SetView with only shown_grid_ids and no session, is the scope of
@@ -3802,7 +3803,7 @@ type ViewPane struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// anchor is the grid the place's last namespace level is rooted at, and
-	// path the doorway tiles from it down to the pane's grid.
+	// path the door tiles from it down to the pane's grid.
 	Anchor string   `protobuf:"bytes,2,opt,name=anchor,proto3" json:"anchor,omitempty"`
 	Path   []string `protobuf:"bytes,3,rep,name=path,proto3" json:"path,omitempty"`
 	// content_id is the content tile the pane is inside, "" on a grid.
@@ -4019,7 +4020,7 @@ func (x *GridChanged) GetGridId() string {
 // GridFramingChanged carries a root grid's new framing, the three numbers
 // SetFraming wrote to its row, in MenuEntry's field names. It is apart from
 // GridChanged because a framing write changes no listing: the client applies
-// it to the doorways rooted at grid_id and fetches nothing. A well's framing
+// it to the doors rooted at grid_id and fetches nothing. A door's framing
 // lives on its tile and rides TileChanged.
 type GridFramingChanged struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`

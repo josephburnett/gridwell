@@ -13,7 +13,7 @@ import (
 // The tile kinds by their spelling, each named for the constant that owns it
 // in api/rpc/types.go.
 var kindWords = map[string]string{
-	"well": "rpc.KindWell", "text": "rpc.KindText", "url": "rpc.KindURL",
+	"door": "rpc.KindDoor", "text": "rpc.KindText", "url": "rpc.KindURL",
 	"shell": "rpc.KindShell", "pane": "rpc.KindPane",
 }
 
@@ -96,7 +96,7 @@ func TestKindVocabularyOwner(t *testing.T) {
 				continue
 			}
 			t.Errorf("%s:%d writes the tile kind %s — the kind vocabulary has one owner, api/rpc/types.go; "+
-				"use %s or the predicate that reads it (rpc.IsWellKind, rpc.IsBodyKind, "+
+				"use %s or the predicate that reads it (rpc.IsDoorKind, rpc.IsBodyKind, "+
 				"rpc.IsContentDescentKind, rpc.IsWorkspaceKind), or add this file to kindLiteralOK with the "+
 				"reason its word is not a kind",
 				rel, fset.Position(pos).Line, lit, konst)

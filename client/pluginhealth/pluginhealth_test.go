@@ -25,7 +25,7 @@ func TestClassifyTable(t *testing.T) {
 		{"rooted connection", rpc.ConnectionRow("c1", "", "c1/1", "", rpc.View{}), Enterable, true},
 		{"a plugin's collection swatch", collection, Enterable, true},
 		{"info failed", &gridwellv1.PluginInfo{Label: "Files", InfoError: "plugin not responding: connection refused"}, Broken, true},
-		// A plugin contributes doorways rather than being one, so a rootless
+		// A plugin contributes doors rather than being one, so a rootless
 		// plugin row is not a health state and gets no status at all.
 		{"answered, entries and no root", &gridwellv1.PluginInfo{Label: "Mail",
 			MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "u/2"}}}, 0, false},
@@ -79,13 +79,13 @@ func TestBrokenIsOneStatusWithTheReasonInTheText(t *testing.T) {
 	}
 }
 
-// A plugin with no doorway of its own is not an error, so a click says
+// A plugin with no door of its own is not an error, so a click says
 // nothing.
 func TestClickNotice_UnclassifiedRow_NotOk(t *testing.T) {
 	pl := &gridwellv1.PluginInfo{Uuid: "u1", Label: "Mail",
 		MenuEntries: []*gridwellv1.MenuEntry{{Id: "feed", Label: "Feed", GridId: "u1/2"}}}
 	if _, _, _, ok := ClickNotice(pl); ok {
-		t.Error("a plugin with no doorway of its own must report nothing")
+		t.Error("a plugin with no door of its own must report nothing")
 	}
 }
 
@@ -103,8 +103,8 @@ func TestClickNotice_KeyedByUUID(t *testing.T) {
 	if !ok {
 		t.Fatal("ClickNotice for a broken plugin must return ok=true")
 	}
-	if source != "doorway:uux1" {
-		t.Errorf("source = %q, want doorway:uux1 (the UUID — labels can collide)", source)
+	if source != "door:uux1" {
+		t.Errorf("source = %q, want door:uux1 (the UUID — labels can collide)", source)
 	}
 }
 
@@ -128,7 +128,7 @@ func TestClickNotice_PendingConnection(t *testing.T) {
 	}
 	pl = rpc.ConnectionRow("sshx/conn1", "rtb", "", "", rpc.View{})
 	sev, source, msg, ok := ClickNotice(pl)
-	if !ok || source != "doorway:sshx/conn1" {
+	if !ok || source != "door:sshx/conn1" {
 		t.Fatalf("notice = %v %q %q %v (keyed by UUID — labels can collide)", sev, source, msg, ok)
 	}
 	if sev != errsurface.Info {
@@ -150,10 +150,10 @@ func TestUnrootedLink(t *testing.T) {
 		tile *gridwellv1.Tile
 		want bool
 	}{
-		{"doorway with no root", &gridwellv1.Tile{Kind: rpc.KindWell, Link: true}, true},
-		{"doorway with a root", &gridwellv1.Tile{Kind: rpc.KindWell, Link: true, ChildGridId: "fs/1"}, false},
+		{"door with no root", &gridwellv1.Tile{Kind: rpc.KindDoor, Link: true}, true},
+		{"door with a root", &gridwellv1.Tile{Kind: rpc.KindDoor, Link: true, ChildGridId: "fs/1"}, false},
 		{"leaf link", &gridwellv1.Tile{Kind: rpc.KindText, Link: true, LinkTargetId: "fs/2"}, false},
-		{"plain well", &gridwellv1.Tile{Kind: rpc.KindWell, ChildGridId: "3"}, false},
+		{"plain door", &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "3"}, false},
 	}
 	for _, c := range cases {
 		if got := UnrootedLink(c.tile); got != c.want {

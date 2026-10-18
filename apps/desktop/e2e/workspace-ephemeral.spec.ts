@@ -85,7 +85,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   await gw.deleteTileCell(wx, wy);
   await gw.clickPluginSwatch('trash (home)');
   const troot = await gw.focused();
-  const month = (await gw.getGrid(troot.gridID)).tiles!.find((t) => t.kind === 'well')!;
+  const month = (await gw.getGrid(troot.gridID)).tiles!.find((t) => t.kind === 'door')!;
   await gw.descendCell(Number(month.x ?? 0), Number(month.y ?? 0));
   const monthGridID = (await gw.focused()).gridID;
   let parked: import('./oracle').Tile | undefined;
@@ -93,7 +93,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
     .poll(async () => {
       parked = ((await gw.getGrid(monthGridID)).tiles ?? []).find((t) => t.kind === 'pane');
       return !!parked;
-    }, { message: 'the pane tile is parked under the month well', timeout: 10_000 })
+    }, { message: 'the pane tile is parked under the month door', timeout: 10_000 })
     .toBe(true);
   expect(
     ((await gw.getGrid(scratchGridID)).tiles ?? []).length,

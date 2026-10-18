@@ -87,7 +87,7 @@ func TestAnUnlistedPageRowStaysAPage(t *testing.T) {
 // (client/wasm/input.go attemptDescentOrAscent).
 func clickOn(tile *gridwellv1.Tile, acceptsTiles bool) gesture.ClickVerdict {
 	return gesture.DecideTileClick(gesture.ClickInput{
-		Well:           rpc.IsWellKind(tile.Kind),
+		Door:           rpc.IsDoorKind(tile.Kind),
 		ContentDescent: rpc.IsContentDescentKind(tile.Kind),
 		Workspace:      rpc.IsWorkspaceKind(tile.Kind),
 		URL:            tile.Kind == rpc.KindURL,

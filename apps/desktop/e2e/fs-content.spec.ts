@@ -41,8 +41,8 @@ test('an fs grid wears the glyph its plugin declared, not a kind the client know
   expect(here, 'the fs level has a crumb').toBeTruthy();
   expect(here.glyph, 'the crumb wears the declared folder glyph').toBe('folder');
   // The level the descent came from is the node's own room, which declares
-  // nothing, so it wears the well glyph.
-  expect(chain[0].glyph, 'home is owned content').toBe('well');
+  // nothing, so it wears the door glyph.
+  expect(chain[0].glyph, 'home is owned content').toBe('door');
 });
 
 test('the bar says which directory an fs grid lists, at its door and a level down', async ({ gw }) => {
@@ -58,7 +58,7 @@ test('the bar says which directory an fs grid lists, at its door and a level dow
   await expect.poll(async () => (await gw.barName()).label, { timeout: 10_000 }).toMatch(endsIn(ROOT));
   const f = await gw.focused();
   const sub = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'sub')!;
-  expect(sub, 'sub listed as a well').toBeTruthy();
+  expect(sub, 'sub listed as a door').toBeTruthy();
   await gw.descendCell(Number(sub.x ?? 0), Number(sub.y ?? 0));
   const label = async () => (await gw.barName()).label;
   await expect.poll(label, { timeout: 10_000 }).toMatch(endsIn(path.join(ROOT, 'sub')));

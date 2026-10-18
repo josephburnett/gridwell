@@ -15,22 +15,22 @@ import (
 
 // Cross-plugin copy. deepCopyTile is the one owner of what a copy of a tile
 // into another namespace is: the top-level copy enters through it at the
-// destination cell, the walk inside a copied well at each source cell, so the
+// destination cell, the walk inside a copied door at each source cell, so the
 // rule is written once and holds at every depth. The router reads the source
 // subtree through the namespace interface and materializes it in the
 // destination plugin: create, recurse, framing and preview through the one
 // writeback.
 //
-// Creation is necessarily top-down, because an interior well's child grid is
-// allocated by its create. So the destination well appears immediately and
+// Creation is necessarily top-down, because an interior door's child grid is
+// allocated by its create. So the destination door appears immediately and
 // fills in, and a mid-copy failure leaves a partial subtree that is visible and
 // deletable with the error surfaced: never a silent half-state, and never a
 // rollback that could destroy what the user already sees.
 //
 // What copies as what:
-//   - a solid well becomes a new well plus a recursive copy of its child grid,
+//   - a solid door becomes a new door plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
-//   - an exit well or leaf link copies as a link (CLAUDE.md, 2026-10-06);
+//   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
 //   - text and pane bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
@@ -39,10 +39,10 @@ import (
 //     source's tmux and a tmux is namespace-local;
 //   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
-// deepCopyWell reads the source child grid before anything is created, so an
+// deepCopyDoor reads the source child grid before anything is created, so an
 // unreachable room answers with nothing created and deepCopyTile links instead
-// of leaving an empty solid well pretending to be a copy.
-func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
+// of leaving an empty solid door pretending to be a copy.
+func (rt *router) deepCopyDoor(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, srcLocalTile *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	srcChild := srcLocalTile.ChildGridId
 	g, err := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcChild})
 	if err != nil {
@@ -50,12 +50,12 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 	}
 
 	created, err := rt.createCopy(ctx, dst, dstGrid,
-		&pb.Tile{Kind: rpc.KindWell, X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
+		&pb.Tile{Kind: rpc.KindDoor, X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
 			AltText: srcLocalTile.AltText}, nil)
 	if err != nil {
 		return nil, err
 	}
-	// The well's framing is at once the preview, the descent target and the
+	// The door's framing is at once the preview, the descent target and the
 	// ascent return; a source never visited has none to copy. The
 	// writeback's response is the current row, so return that rather than
 	// the pre-framing create response.
@@ -64,7 +64,7 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 			TileId: created.GetTile().GetId(), Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom(),
 		})
 		if err != nil {
-			return created, fmt.Errorf("well framing: %w", err)
+			return created, fmt.Errorf("door framing: %w", err)
 		}
 		created = &pb.TileResponse{Tile: framed.GetTile()}
 	}
@@ -81,7 +81,7 @@ func (rt *router) deepCopyWell(ctx context.Context, src namespace.Namespace, src
 }
 
 // deepCopyTile copies one source tile into dstGrid at (x, y) and answers with
-// the row it created. A failure once a well's copy exists answers with that
+// the row it created. A failure once a door's copy exists answers with that
 // partial, so the caller can say the partial remains; every other failure
 // answers nil.
 func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, srcTransit bool, srcUUID string, t *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
@@ -90,11 +90,11 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
 
 	switch {
-	case rpc.IsWellKind(q.Kind) && q.Link:
+	case rpc.IsDoorKind(q.Kind) && q.Link:
 		// The link names the shared child, qualified.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
-	case rpc.IsWellKind(q.Kind):
-		created, err := rt.deepCopyWell(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
+	case rpc.IsDoorKind(q.Kind):
+		created, err := rt.deepCopyDoor(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
 		// Degrade only when nothing was created. Degrading with a partial in
 		// place would stack a link on the cell it occupies, and the user
 		// would get an overlap refusal on a grid they never touched.
@@ -178,12 +178,12 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 }
 
 // linkCopy is the copy a link becomes and the copy a dark source degrades
-// to: exactly the exit well or leaf link a left-drag would have made. A well
+// to: exactly the door to another namespace or leaf link a left-drag would have made. A door
 // links by the grid it opens and carries the framing the source was left at; a
 // leaf links by its target.
 func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *pb.Tile, x, y int64, target string) (*pb.TileResponse, error) {
 	tile := &pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H, AltText: t.AltText}
-	if rpc.IsWellKind(t.Kind) {
+	if rpc.IsDoorKind(t.Kind) {
 		tile.ChildGridId = target
 		tile.ViewCx, tile.ViewCy, tile.ViewZoom = t.ViewCx, t.ViewCy, t.ViewZoom
 	} else {

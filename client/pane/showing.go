@@ -11,7 +11,7 @@ import (
 // Showing is the grids this client shows, sorted, each once: the one owner of
 // what it tells the node it shows (SetView's shown_grid_ids). A laid-out pane shows the grid it is
 // at, and a pane standing in a content tile shows the grid that tile sits in,
-// since Anchor and Path leave the content frame out. A well on a pane's screen
+// since Anchor and Path leave the content frame out. A door on a pane's screen
 // shows its child grid too, one level deep, because the renderer draws that
 // grid as its preview. A parked level's tree is off screen and is not t. leaf
 // resolves a place to its grid id, "" when it cannot yet; tiles is a grid's
@@ -36,7 +36,7 @@ func Showing(t *Tree, laidOut map[string]Rect, leaf func(anchor string, path []s
 			return
 		}
 		for _, n := range tiles(g) {
-			if n.Kind == rpc.KindWell && n.ChildGridId != "" && ps.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
+			if n.Kind == rpc.KindDoor && n.ChildGridId != "" && ps.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
 				out = append(out, n.ChildGridId)
 			}
 		}

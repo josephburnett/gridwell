@@ -12,7 +12,7 @@ import (
 )
 
 // Placement is one verb owning one fact, id-addressed with no descent path, so
-// the well-into-own-subtree refusal comes from the store's own ancestor walk.
+// the door-into-own-subtree refusal comes from the store's own ancestor walk.
 // The overlap refusal, not a claim, is what protects the grid.
 
 func textAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
@@ -24,11 +24,11 @@ func textAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile 
 	return tile
 }
 
-func wellAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
+func doorAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateWell(context.Background(), gridID, x, y, 1, 1, "")
+	tile, err := s.CreateDoor(context.Background(), gridID, x, y, 1, 1, "")
 	if err != nil {
-		t.Fatalf("create well: %v", err)
+		t.Fatalf("create door: %v", err)
 	}
 	return tile
 }
@@ -60,18 +60,18 @@ func TestMoveTileMoveAndResizeAtOnce(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	well := wellAt(t, s, root, 5, 5)
+	door := doorAt(t, s, root, 5, 5)
 	tile := textAt(t, s, root, 0, 0)
 
 	got, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: tile.Id, GridId: well.ChildGridId, X: 2, Y: 3, W: 2, H: 2,
+		TileId: tile.Id, GridId: door.ChildGridId, X: 2, Y: 3, W: 2, H: 2,
 	})
 	if err != nil {
 		t.Fatalf("place: %v", err)
 	}
-	if got.GridId != well.ChildGridId || got.X != 2 || got.Y != 3 || got.W != 2 || got.H != 2 {
+	if got.GridId != door.ChildGridId || got.X != 2 || got.Y != 3 || got.W != 2 || got.H != 2 {
 		t.Errorf("placed = grid %s (%d,%d %dx%d), want child grid %s (2,3 2x2)",
-			got.GridId, got.X, got.Y, got.W, got.H, well.ChildGridId)
+			got.GridId, got.X, got.Y, got.W, got.H, door.ChildGridId)
 	}
 
 	// The source grid does not list it; the destination does.
@@ -84,7 +84,7 @@ func TestMoveTileMoveAndResizeAtOnce(t *testing.T) {
 			t.Error("tile still listed in source grid after cross-grid placement")
 		}
 	}
-	dst, err := s.GetGrid(ctx, well.ChildGridId)
+	dst, err := s.GetGrid(ctx, door.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,54 +140,54 @@ func TestMoveTileIgnoresStaleClaim(t *testing.T) {
 	}
 }
 
-// With no path on the wire, the store itself must refuse a well moving into
+// With no path on the wire, the store itself must refuse a door moving into
 // its own subtree, at any depth.
 func TestMoveTileCycleRefusedWithoutPath(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	wellA := wellAt(t, s, root, 0, 0)
-	// wellB lives INSIDE wellA's child grid; its own child is a grandchild of A.
-	wellB := wellAt(t, s, wellA.ChildGridId, 0, 0)
+	doorA := doorAt(t, s, root, 0, 0)
+	// doorB lives INSIDE doorA's child grid; its own child is a grandchild of A.
+	doorB := doorAt(t, s, doorA.ChildGridId, 0, 0)
 
 	// Into its own child grid: refused.
 	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: wellA.Id, GridId: wellA.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
+		TileId: doorA.Id, GridId: doorA.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
 	}); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("well into own child: got %v, want ErrInvalidArgument", err)
+		t.Fatalf("door into own child: got %v, want ErrInvalidArgument", err)
 	}
 	// Into a grandchild grid: refused (the walk crosses two levels).
 	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: wellA.Id, GridId: wellB.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
+		TileId: doorA.Id, GridId: doorB.ChildGridId, X: 3, Y: 3, W: 1, H: 1,
 	}); !errors.Is(err, ErrInvalidArgument) {
-		t.Fatalf("well into grandchild: got %v, want ErrInvalidArgument", err)
+		t.Fatalf("door into grandchild: got %v, want ErrInvalidArgument", err)
 	}
-	// The inner well hoisted OUT to the root is legal (no cycle upward).
+	// The inner door hoisted OUT to the root is legal (no cycle upward).
 	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: wellB.Id, GridId: root, X: 7, Y: 7, W: 1, H: 1,
+		TileId: doorB.Id, GridId: root, X: 7, Y: 7, W: 1, H: 1,
 	}); err != nil {
-		t.Fatalf("hoisting the inner well out: %v", err)
+		t.Fatalf("hoisting the inner door out: %v", err)
 	}
 }
 
-// An exit well's child grid belongs to another plugin — no local subtree, so
+// The child grid of a door to another namespace belongs to another plugin — no local subtree, so
 // placement anywhere local is legal and the walk must not trip on the
 // qualified (non-numeric) child_grid_id.
-func TestMoveTileExitWellHasNoLocalSubtree(t *testing.T) {
+func TestMoveTileDoorToOtherNamespaceHasNoLocalSubtree(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	interior := wellAt(t, s, root, 0, 0)
-	exit, err := s.CreateExitWell(ctx, root, 3, 3, 1, 1,
-		"aabbccddaabbccddaabbccddaabbccdd/7", "mounted", rpc.View{})
+	interior := doorAt(t, s, root, 0, 0)
+	exit, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 3, 1, 1,
+		"aabbccddaabbccddaabbccddaabbccdd/7", "far", rpc.View{})
 	if err != nil {
-		t.Fatalf("create exit well: %v", err)
+		t.Fatalf("create door to another namespace: %v", err)
 	}
 
 	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: exit.Id, GridId: interior.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {
-		t.Fatalf("placing an exit well into an interior grid: %v", err)
+		t.Fatalf("placing a door to another namespace into an interior grid: %v", err)
 	}
 }
 
@@ -197,11 +197,11 @@ func TestMoveTileAncestryCycleAnswers(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	moving := wellAt(t, s, root, 0, 0)
-	p := wellAt(t, s, root, 1, 0)
-	q := wellAt(t, s, root, 2, 0)
+	moving := doorAt(t, s, root, 0, 0)
+	p := doorAt(t, s, root, 1, 0)
+	q := doorAt(t, s, root, 2, 0)
 
-	// Hang each of the two wells under the other's child grid, so walking up
+	// Hang each of the two doors under the other's child grid, so walking up
 	// from either grid never reaches a root.
 	for _, swap := range [][2]string{{p.Id, q.ChildGridId}, {q.Id, p.ChildGridId}} {
 		if _, err := s.db.ExecContext(ctx,

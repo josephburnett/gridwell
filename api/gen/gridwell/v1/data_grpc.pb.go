@@ -88,9 +88,9 @@ type GridwellClient interface {
 	SetTile(ctx context.Context, in *SetTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	CopyTile(ctx context.Context, in *CopyTileRequest, opts ...grpc.CallOption) (*TileResponse, error)
 	DeleteTile(ctx context.Context, in *DeleteTileRequest, opts ...grpc.CallOption) (*DeleteTileResponse, error)
-	// SetFraming persists the framing of a grid: onto the doorway tile it was
+	// SetFraming persists the framing of a grid: onto the door tile it was
 	// entered through, or onto the grid row itself for a root that has no
-	// doorway. One verb, one shape, both rows.
+	// door. One verb, one shape, both rows.
 	SetFraming(ctx context.Context, in *SetFramingRequest, opts ...grpc.CallOption) (*SetFramingResponse, error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error)
@@ -395,9 +395,9 @@ type GridwellServer interface {
 	SetTile(context.Context, *SetTileRequest) (*TileResponse, error)
 	CopyTile(context.Context, *CopyTileRequest) (*TileResponse, error)
 	DeleteTile(context.Context, *DeleteTileRequest) (*DeleteTileResponse, error)
-	// SetFraming persists the framing of a grid: onto the doorway tile it was
+	// SetFraming persists the framing of a grid: onto the door tile it was
 	// entered through, or onto the grid row itself for a root that has no
-	// doorway. One verb, one shape, both rows.
+	// door. One verb, one shape, both rows.
 	SetFraming(context.Context, *SetFramingRequest) (*SetFramingResponse, error)
 	// SetSelection clears, adds to and takes from a grid's selection.
 	SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error)

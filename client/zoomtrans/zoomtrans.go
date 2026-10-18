@@ -1,5 +1,5 @@
 // Package zoomtrans computes the (Cx, Cy, Zoom) endpoints of the zoom into and
-// out of a well, calibrated so a child cell drawn as a preview and drawn
+// out of a door, calibrated so a child cell drawn as a preview and drawn
 // natively are the same size at the path swap. Every computation measures
 // against a Size, so a pane with no rect has no framing to compute.
 package zoomtrans
@@ -43,45 +43,45 @@ func (e Endpoints) view() bool {
 	return err == nil
 }
 
-// Well is a doorway's footprint plus the framing it was left at, whose zoom
+// Door is a door's footprint plus the framing it was left at, whose zoom
 // is dimensionless (live scale over the overtake), so a descent reconstructs
 // the live zoom for the current pane size.
-type Well struct {
+type Door struct {
 	ID   string
 	X, Y int64
 	W, H int64
 	View rpc.View
 }
 
-// WellOf reads a tile row as a Well, the one derivation preview, descent and
+// DoorOf reads a tile row as a Door, the one derivation preview, descent and
 // ascent share.
-func WellOf(t *gridwellv1.Tile) Well {
-	return Well{
+func DoorOf(t *gridwellv1.Tile) Door {
+	return Door{
 		ID: t.Id, X: t.X, Y: t.Y, W: t.W, H: t.H,
 		View: rpc.ViewOf(t.ViewCx, t.ViewCy, t.ViewZoom),
 	}
 }
 
-// PreviewFactor is the scale at which a well shows its child grid: one child
+// PreviewFactor is the scale at which a door shows its child grid: one child
 // cell is parent_cell_size / PreviewFactor pixels.
 const PreviewFactor = 8.0
 
-// DefaultWellViewZoom stands in for a never-visited well's zoom. It is picked
+// DefaultDoorViewZoom stands in for a never-visited door's zoom. It is picked
 // so LiveFromIntrinsic yields the PreviewFactor calibration unchanged.
-const DefaultWellViewZoom = 1.0 / PreviewFactor
+const DefaultDoorViewZoom = 1.0 / PreviewFactor
 
-// Ratio is the intrinsic zoom a doorway shows its grid at: the saved one, or
-// DefaultWellViewZoom when never visited. The one place that branch lives.
-func (w Well) Ratio() float64 {
+// Ratio is the intrinsic zoom a door shows its grid at: the saved one, or
+// DefaultDoorViewZoom when never visited. The one place that branch lives.
+func (w Door) Ratio() float64 {
 	if f, ok := w.View.Framing(); ok {
 		return f.Zoom()
 	}
-	return DefaultWellViewZoom
+	return DefaultDoorViewZoom
 }
 
-// Center is the child-grid point a doorway's framing centers on: the saved
+// Center is the child-grid point a door's framing centers on: the saved
 // center, or the footprint's own center when never visited.
-func (w Well) Center() (cx, cy float64) {
+func (w Door) Center() (cx, cy float64) {
 	if f, ok := w.View.Framing(); ok {
 		return f.Cx(), f.Cy()
 	}
@@ -109,11 +109,11 @@ func WheelZoom(deltaY, oldZoom, cx, cy, cellX, cellY, factorBase, zMin, zMax flo
 	return next.Zoom(), next.Cx(), next.Cy(), true
 }
 
-// WellWheelView advances a hover-wheel zoom of a well's stored preview
+// DoorWheelView advances a hover-wheel zoom of a door's stored preview
 // framing by one notch, anchored on the cursor. The center stays float to the
 // store so sub-cell drift survives. changed is false when nothing moved, so a
 // no-op wheel never mutates.
-func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, cx0, cy0, factorBase, rMin, rMax float64) (cx1, cy1, ratio float64, changed bool) {
+func DoorWheelView(deltaY float64, w Door, parentCell, cursorDxPx, cursorDyPx, cx0, cy0, factorBase, rMin, rMax float64) (cx1, cy1, ratio float64, changed bool) {
 	r0 := w.Ratio()
 	previewCell := parentCell * r0
 	if !(previewCell > 0) {
@@ -129,7 +129,7 @@ func WellWheelView(deltaY float64, w Well, parentCell, cursorDxPx, cursorDyPx, c
 }
 
 // Overtake is the zoom at which the footprint exceeds both dimensions of s, a
-// well's descent target. Returns 1 on a degenerate footprint or cell.
+// door's descent target. Returns 1 on a degenerate footprint or cell.
 func Overtake(footprintW, footprintH int64, s Size, cellPx float64) float64 {
 	if footprintW <= 0 || footprintH <= 0 || !(cellPx > 0) {
 		return 1
@@ -150,8 +150,8 @@ func Fit(footprintW, footprintH int64, refW, refH, cellPx float64) float64 {
 	return math.Min(zw, zh)
 }
 
-// OvertakeZoom is Overtake for a Well.
-func OvertakeZoom(w Well, s Size, cellPx float64) float64 {
+// OvertakeZoom is Overtake for a Door.
+func OvertakeZoom(w Door, s Size, cellPx float64) float64 {
 	return Overtake(w.W, w.H, s, cellPx)
 }
 
@@ -170,11 +170,11 @@ func IntrinsicFromLive(liveZoom, overtake float64) float64 {
 	return liveZoom / overtake
 }
 
-// Writeback is the framing a pane showing a doorway's grid at (cx, cy, live)
-// writes onto the doorway's row, measured against foot's footprint at s, and
+// Writeback is the framing a pane showing a door's grid at (cx, cy, live)
+// writes onto the door's row, measured against foot's footprint at s, and
 // whether it differs from shown, what the row already shows. A live view
 // that is not one is no framing, so it writes nothing.
-func Writeback(shown rpc.View, foot Well, cx, cy, live float64, s Size, cellPx float64) (rpc.Framing, bool) {
+func Writeback(shown rpc.View, foot Door, cx, cy, live float64, s Size, cellPx float64) (rpc.Framing, bool) {
 	next, err := rpc.NewFraming(cx, cy, IntrinsicFromLive(live, OvertakeZoom(foot, s, cellPx)))
 	if err != nil || shown.SameAs(rpc.Saved(next)) {
 		return rpc.Framing{}, false
@@ -183,12 +183,12 @@ func Writeback(shown rpc.View, foot Well, cx, cy, live float64, s Size, cellPx f
 }
 
 // Descent computes the three endpoints of a descent through w: mid pans and
-// zooms to the well at Overtake, swap is the child-grid state right after the
-// path swap, final eases out to the well's saved ratio. ok is false when an
+// zooms to the door at Overtake, swap is the child-grid state right after the
+// path swap, final eases out to the door's saved ratio. ok is false when an
 // endpoint is not a view.
-func Descent(from Endpoints, w Well, s Size, cellPx float64) (mid, swap, final Endpoints, ok bool) {
-	wellCx := float64(w.X) + float64(w.W)/2
-	wellCy := float64(w.Y) + float64(w.H)/2
+func Descent(from Endpoints, w Door, s Size, cellPx float64) (mid, swap, final Endpoints, ok bool) {
+	doorCx := float64(w.X) + float64(w.W)/2
+	doorCy := float64(w.Y) + float64(w.H)/2
 	overtake := OvertakeZoom(w, s, cellPx)
 	// The descent always zooms in, even from past the overtake zoom.
 	zPTarget := overtake
@@ -197,8 +197,8 @@ func Descent(from Endpoints, w Well, s Size, cellPx float64) (mid, swap, final E
 	}
 	mid = Endpoints{
 		Path: from.Path,
-		Cx:   wellCx,
-		Cy:   wellCy,
+		Cx:   doorCx,
+		Cy:   doorCy,
 		Zoom: zPTarget,
 	}
 	childPath := append(slices.Clone(from.Path), w.ID)
@@ -219,25 +219,25 @@ func Descent(from Endpoints, w Well, s Size, cellPx float64) (mid, swap, final E
 	return
 }
 
-// StoredView is the live view a well's persisted framing describes at s, the
+// StoredView is the live view a door's persisted framing describes at s, the
 // same numbers Descent's final lands on; false when that is not a view.
-func StoredView(w Well, s Size, cellPx float64) (rpc.Framing, bool) {
+func StoredView(w Door, s Size, cellPx float64) (rpc.Framing, bool) {
 	cx, cy := w.Center()
 	f, err := rpc.NewFraming(cx, cy, LiveFromIntrinsic(w.Ratio(), OvertakeZoom(w, s, cellPx)))
 	return f, err == nil
 }
 
-// ShownWellFraming is the framing a doorway row is already showing: the stored
-// one, or StoredView's for a doorway never visited. The writeback diffs
+// ShownDoorFraming is the framing a door row is already showing: the stored
+// one, or StoredView's for a door never visited. The writeback diffs
 // against this, so a grid the user only looked at is never stamped.
-func ShownWellFraming(w Well) rpc.View {
+func ShownDoorFraming(w Door) rpc.View {
 	cx, cy := w.Center()
 	return rpc.ViewOf(cx, cy, w.Ratio())
 }
 
-// ShownRootFraming is ShownWellFraming for a root grid, which no doorway leads
+// ShownRootFraming is ShownDoorFraming for a root grid, which no door leads
 // into: an unvisited root sits at the grid origin at live zoom 1, not at
-// DefaultWellViewZoom's preview calibration, so its intrinsic zoom is one over
+// DefaultDoorViewZoom's preview calibration, so its intrinsic zoom is one over
 // the synthetic 1×1 overtake and depends on the pane it is read in.
 func ShownRootFraming(stored rpc.View, s Size, cellPx float64) rpc.View {
 	if _, ok := stored.Framing(); ok {
@@ -248,7 +248,7 @@ func ShownRootFraming(stored rpc.View, s Size, cellPx float64) rpc.View {
 
 // Ascent computes the endpoints of an ascent back through w, Descent's
 // calibration reversed. ok is false when an endpoint is not a view.
-func Ascent(from Endpoints, w Well, parentPath []string, s Size, cellPx float64) (mid, to Endpoints, ok bool) {
+func Ascent(from Endpoints, w Door, parentPath []string, s Size, cellPx float64) (mid, to Endpoints, ok bool) {
 	zPTarget := OvertakeZoom(w, s, cellPx)
 	midZoom := LiveFromIntrinsic(w.Ratio(), zPTarget)
 	midCx, midCy := w.Center()

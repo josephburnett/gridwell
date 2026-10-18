@@ -1,6 +1,6 @@
 import { Route } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { createExitWell } from './oracle';
+import { createDoorToOtherNamespace } from './oracle';
 
 // A renderer whose node runs another build offers the reload in a notice
 // (nodebuild.Decide) and reloads only when its button is pressed; the reload
@@ -58,7 +58,7 @@ test('a renderer offered a reload for its build reloads when asked, leaving no l
       (n: any) => n.source === 'build',
     );
   await window.evaluate(() => ((window as any).__buildSpecMark = true));
-  await createExitWell(gw.origin, home.gridID, 'nowhere/1', 'poke', cx + 2, cy);
+  await createDoorToOtherNamespace(gw.origin, home.gridID, 'nowhere/1', 'poke', cx + 2, cy);
   await expect
     .poll(async () => (await buildNotice())?.message, { message: 'the notice offers the reload', timeout: 30_000 })
     .toMatch(/^Gridwell was updated — reload to continue\./);

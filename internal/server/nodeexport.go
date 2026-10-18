@@ -39,7 +39,7 @@ func WebAPIServer(h http.Handler) *http.Server {
 }
 
 // ConnectionHandler is the connection API: the Gridwell service over raw gRPC,
-// what a remote mounter's ssh tunnel dials, and internal/connection/dial is the
+// what a connecting node's ssh tunnel dials, and internal/connection/dial is the
 // other end. Its gate is the kernel, the 0600 unix socket ListenConnectionAPI
 // opens, with ssh as the authenticated transport. Serve it with
 // ConnectionAPIServer.
@@ -80,7 +80,7 @@ func ListenConnectionAPI(path string) (net.Listener, error) {
 
 // NodeProtocols is the protocol set for the connection API: HTTP/1.1 plus
 // unencrypted HTTP/2, because the ssh tunnel is already private and TLS-only
-// h2 would refuse the mounter.
+// h2 would refuse the connecting node.
 func NodeProtocols() *http.Protocols {
 	p := new(http.Protocols)
 	p.SetHTTP1(true)

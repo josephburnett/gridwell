@@ -8,7 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// gridRowCount returns how many grid rows exist — the witness that an exit-well
+// gridRowCount returns how many grid rows exist — the witness that a door to another namespace
 // operation did NOT materialize (copy) or tear down (delete) a local grid.
 func gridRowCount(t *testing.T, s *Store) int {
 	t.Helper()
@@ -19,20 +19,20 @@ func gridRowCount(t *testing.T, s *Store) int {
 	return n
 }
 
-// An exit well points at another plugin's grid through a qualified
+// A door to another namespace points at another plugin's grid through a qualified
 // child_grid_id, and the store treats that child as a shared link, never
 // a thing it owns: copy copies the link, delete drops only the
 // link, move preserves it.
 const remoteChild = "remote-uuid/9"
 
-func TestCopyExitWellSharesLinkNoNewGrid(t *testing.T) {
+func TestCopyDoorToOtherNamespaceSharesLinkNoNewGrid(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
+	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
 	if err != nil {
-		t.Fatalf("create exit well: %v", err)
+		t.Fatalf("create door to another namespace: %v", err)
 	}
 	before := gridRowCount(t, s)
 
@@ -41,7 +41,7 @@ func TestCopyExitWellSharesLinkNoNewGrid(t *testing.T) {
 		DestGridId: root, X: 2, Y: 0,
 	})
 	if err != nil {
-		t.Fatalf("copy exit well: %v", err)
+		t.Fatalf("copy door to another namespace: %v", err)
 	}
 	// The copy is a distinct row but carries the SAME qualified child verbatim
 	// — a deep copy would have re-pointed it at a fresh local grid.
@@ -52,23 +52,23 @@ func TestCopyExitWellSharesLinkNoNewGrid(t *testing.T) {
 		t.Errorf("copy child = %q, want the shared link %q", cp.ChildGridId, remoteChild)
 	}
 	if after := gridRowCount(t, s); after != before {
-		t.Errorf("copy of an exit well created %d local grid(s); the far grid is shared, not copied", after-before)
+		t.Errorf("copy of a door to another namespace created %d local grid(s); the far grid is shared, not copied", after-before)
 	}
 	verifyRefcounts(t, s)
 }
 
-func TestDeleteExitWellDropsLinkOnly(t *testing.T) {
+func TestDeleteDoorToOtherNamespaceDropsLinkOnly(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	// An interior well alongside it, whose LOCAL child grid must survive the
-	// exit-well delete untouched.
-	interior, err := s.CreateWell(ctx, root, 5, 5, 1, 1, "")
+	// An interior door alongside it, whose LOCAL child grid must survive the
+	// door to another namespace delete untouched.
+	interior, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
+	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,24 +76,24 @@ func TestDeleteExitWellDropsLinkOnly(t *testing.T) {
 	before := gridRowCount(t, s)
 
 	hardDelete(t, s, ew.Id)
-	// No local grid was torn down (the well's own grid count drops by one only
-	// for an interior well; an exit well owns none).
+	// No local grid was torn down (the door's own grid count drops by one only
+	// for an interior door; a door to another namespace owns none).
 	if after := gridRowCount(t, s); after != before {
-		t.Errorf("deleting an exit well removed %d local grid(s); it owns none", before-after)
+		t.Errorf("deleting a door to another namespace removed %d local grid(s); it owns none", before-after)
 	}
-	// The interior well's local child grid is still readable.
+	// The interior door's local child grid is still readable.
 	if _, err := s.GetGrid(ctx, interior.ChildGridId); err != nil {
-		t.Errorf("interior well's child grid was collaterally damaged: %v", err)
+		t.Errorf("interior door's child grid was collaterally damaged: %v", err)
 	}
 	verifyRefcounts(t, s)
 }
 
-func TestMoveExitWellPreservesLink(t *testing.T) {
+func TestMoveDoorToOtherNamespacePreservesLink(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateExitWell(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
+	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,10 +102,10 @@ func TestMoveExitWellPreservesLink(t *testing.T) {
 		GridId: root, X: 3, Y: 3, W: ew.W, H: ew.H,
 	})
 	if err != nil {
-		t.Fatalf("move exit well: %v", err)
+		t.Fatalf("move door to another namespace: %v", err)
 	}
 	if moved.ChildGridId != remoteChild {
-		t.Errorf("moved exit well child = %q, want %q", moved.ChildGridId, remoteChild)
+		t.Errorf("moved door to another namespace child = %q, want %q", moved.ChildGridId, remoteChild)
 	}
 	if moved.X != 3 || moved.Y != 3 {
 		t.Errorf("moved to (%d,%d), want (3,3)", moved.X, moved.Y)

@@ -9,8 +9,8 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// filterWorld is a root holding a text and a well, the well holding a text and
-// a nested well, the nested well holding a text: three depths, each text made
+// filterWorld is a root holding a text and a door, the door holding a text and
+// a nested door, the nested door holding a text: three depths, each text made
 // an hour after the last.
 type filterWorld struct {
 	s                  *Store
@@ -32,10 +32,10 @@ func newFilterWorld(t *testing.T) *filterWorld {
 	clock := func(at time.Time) { w.s.SetClock(func() time.Time { return at }) }
 	var err error
 	clock(w.t0)
-	if w.outer, err = w.s.CreateWell(ctx, w.root, 0, 0, 1, 1, "outer"); err != nil {
+	if w.outer, err = w.s.CreateDoor(ctx, w.root, 0, 0, 1, 1, "outer"); err != nil {
 		t.Fatal(err)
 	}
-	if w.inner, err = w.s.CreateWell(ctx, w.outer.ChildGridId, 0, 0, 1, 1, "inner"); err != nil {
+	if w.inner, err = w.s.CreateDoor(ctx, w.outer.ChildGridId, 0, 0, 1, 1, "inner"); err != nil {
 		t.Fatal(err)
 	}
 	clock(w.t1)
@@ -70,7 +70,7 @@ func sameIDs(got []string, want ...string) bool {
 	return slices.Equal(slices.Sorted(slices.Values(got)), slices.Sorted(slices.Values(want)))
 }
 
-// A grid keeps the hits on it; recurse adds the grids of the wells inside it,
+// A grid keeps the hits on it; recurse adds the grids of the doors inside it,
 // to any depth.
 func TestFindGridScope(t *testing.T) {
 	w := newFilterWorld(t)
@@ -156,7 +156,7 @@ func TestFindEmptyQueryLists(t *testing.T) {
 	w := newFilterWorld(t)
 	got := w.find(t, &gridwellv1.FindRequest{GridId: w.root, Recurse: true})
 	want := []string{w.deep.Id, w.middle.Id, w.top.Id, w.inner.Id, w.outer.Id}
-	// The two wells share t0; the later id is the newer.
+	// The two doors share t0; the later id is the newer.
 	if !slices.Equal(got, want) {
 		t.Errorf("everything under root = %v, want newest first %v", got, want)
 	}
@@ -183,15 +183,15 @@ func TestFindFiltersCombine(t *testing.T) {
 	}
 	req.Query = "inner"
 	if got := w.find(t, req); len(got) != 0 {
-		t.Errorf("the selected well made at t0 passed a from-t2 filter: %v", got)
+		t.Errorf("the selected door made at t0 passed a from-t2 filter: %v", got)
 	}
 }
 
 // kind keeps the tiles of that kind, with a query or alone, newest first.
 func TestFindKind(t *testing.T) {
 	w := newFilterWorld(t)
-	if got := w.find(t, &gridwellv1.FindRequest{Kind: "well"}); !slices.Equal(got, []string{w.inner.Id, w.outer.Id}) {
-		t.Errorf("every well = %v, want inner then outer", got)
+	if got := w.find(t, &gridwellv1.FindRequest{Kind: "door"}); !slices.Equal(got, []string{w.inner.Id, w.outer.Id}) {
+		t.Errorf("every door = %v, want inner then outer", got)
 	}
 	if got := w.find(t, &gridwellv1.FindRequest{Query: "gopher", Kind: "text", GridId: w.outer.ChildGridId}); !sameIDs(got, w.middle.Id) {
 		t.Errorf("gopher texts on outer's grid = %v, want middle", got)
@@ -199,7 +199,7 @@ func TestFindKind(t *testing.T) {
 	if got := w.find(t, &gridwellv1.FindRequest{Query: "gopher", Kind: "pane"}); len(got) != 0 {
 		t.Errorf("gopher panes = %v, want none", got)
 	}
-	if got := w.find(t, &gridwellv1.FindRequest{Query: "id:" + w.top.Id, Kind: "well"}); len(got) != 0 {
-		t.Errorf("a text located by id under kind well = %v, want none", got)
+	if got := w.find(t, &gridwellv1.FindRequest{Query: "id:" + w.top.Id, Kind: "door"}); len(got) != 0 {
+		t.Errorf("a text located by id under kind door = %v, want none", got)
 	}
 }

@@ -256,17 +256,17 @@ func TestConnectionSpawn(t *testing.T) {
 		t.Fatalf("routed menu root = %q, want the landing %q", workChild, sshRoot)
 	}
 
-	// 3. Create a named well with content on the remote, through the
+	// 3. Create a named door with content on the remote, through the
 	//    chain.
-	well := rpc(t, localOrigin, "CreateTile", map[string]any{
+	door := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": workChild,
-		"tile":   map[string]any{"kind": "well", "x": 1, "y": 1, "w": 1, "h": 1, "altText": "remote grid"},
+		"tile":   map[string]any{"kind": "door", "x": 1, "y": 1, "w": 1, "h": 1, "altText": "remote grid"},
 	})["tile"].(map[string]any)
-	wellID := well["id"].(string)
-	wellChild := well["childGridId"].(string)
+	doorID := door["id"].(string)
+	doorChild := door["childGridId"].(string)
 	num := func(v any) int64 { f, _ := v.(float64); return int64(f) }
 	txt := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": wellChild,
+		"gridId": doorChild,
 		"tile":   map[string]any{"kind": "text", "x": 0, "y": 0, "w": 1, "h": 1},
 	})["tile"].(map[string]any)
 	// The body is written after the create, through the
@@ -277,12 +277,12 @@ func TestConnectionSpawn(t *testing.T) {
 		t.Fatalf("WriteContent through the chain: %v", err)
 	}
 
-	// 4. Link the remote well into the local home grid, the left-drag
+	// 4. Link the remote door into the local home grid, the left-drag
 	//    gesture, and read the content back through the link. A right-drag
 	//    deep-copies through the chain, so the local home gains an
-	//    independent solid well whose text body matches the remote's.
+	//    independent solid door whose text body matches the remote's.
 	deepCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
-		"tileId": wellID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
+		"tileId": doorID, "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
 	if deepCopy["link"] == true {
 		t.Fatal("the deep copy must be SOLID (a copy), not a link")
@@ -304,11 +304,11 @@ func TestConnectionSpawn(t *testing.T) {
 	}
 	link := rpc(t, localOrigin, "CreateTile", map[string]any{
 		"gridId": homeRoot,
-		"tile": map[string]any{"kind": "well", "x": 0, "y": 0, "w": 1, "h": 1,
-			"childGridId": wellChild, "altText": "remote grid"},
+		"tile": map[string]any{"kind": "door", "x": 0, "y": 0, "w": 1, "h": 1,
+			"childGridId": doorChild, "altText": "remote grid"},
 	})["tile"].(map[string]any)
-	if link["childGridId"] != wellChild {
-		t.Fatalf("link child = %v, want the shared remote grid %s", link["childGridId"], wellChild)
+	if link["childGridId"] != doorChild {
+		t.Fatalf("link child = %v, want the shared remote grid %s", link["childGridId"], doorChild)
 	}
 	if link["link"] != true {
 		t.Fatal("the link must arrive as a dashed link")
@@ -321,7 +321,7 @@ func TestConnectionSpawn(t *testing.T) {
 		t.Fatalf("content through the chain = %q", got)
 	}
 
-	// 5. Live events cross the mount: a write on the remote node arrives on
+	// 5. Live events cross the connection: a write on the remote node arrives on
 	//    the local Subscribe stream as a TileChanged carrying the fully
 	//    chained tile id, over the seam no in-process test can see.
 	//
@@ -395,7 +395,7 @@ func TestConnectionSpawn(t *testing.T) {
 				arrived = c
 			}
 		case <-deadline2:
-			t.Fatalf("no TileChanged for %s arrived on the local stream after %d remote edits — events do not cross the ssh mount", txtID, wrote)
+			t.Fatalf("no TileChanged for %s arrived on the local stream after %d remote edits — events do not cross the connection", txtID, wrote)
 		}
 		if arrived == nil {
 			continue
@@ -403,8 +403,8 @@ func TestConnectionSpawn(t *testing.T) {
 		if arrived.Tile.Version < 1 {
 			t.Fatalf("event version = %d, want a remote EDIT's bumped version (create is 0)", arrived.Tile.Version)
 		}
-		if arrived.Tile.GridId != wellChild {
-			t.Fatalf("event grid id = %q, want the chained %q", arrived.Tile.GridId, wellChild)
+		if arrived.Tile.GridId != doorChild {
+			t.Fatalf("event grid id = %q, want the chained %q", arrived.Tile.GridId, doorChild)
 		}
 		break
 	}
@@ -443,7 +443,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rplugin>/<grid>", child)
 	}
 
-	// 2. A connection has no well row on the wire, so "<id>/0" names a
+	// 2. A connection has no door row on the wire, so "<id>/0" names a
 	//    grid that does not exist.
 
 	// 3. Real bytes through all three peels and back.
@@ -604,7 +604,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	nodeNS, _ := ng["grid"].(map[string]any)["nodeNs"].(string)
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
-	// The fs plugin's declared collection is the doorway, since a plugin
+	// The fs plugin's declared collection is the door, since a plugin
 	// names no grid of its own, and the entry's grid id chains through the
 	// hop like every other id.
 	var fsRoot string

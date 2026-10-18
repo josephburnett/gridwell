@@ -27,7 +27,7 @@ type ServerConfig struct {
 	ID string `yaml:"id,omitempty"`
 	// Web is the web API. Its password is not yaml; see WebPassword.
 	Web WebConfig `yaml:"web,omitempty"`
-	// Federation is the connection API other nodes mount this one through.
+	// Federation is the connection API other nodes connect to this one through.
 	Federation FederationConfig `yaml:"federation,omitempty"`
 	// StaticDir serves the web client from disk, not the embedded copy.
 	StaticDir string `yaml:"static,omitempty"`

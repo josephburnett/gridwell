@@ -95,7 +95,7 @@ func readSelection(ctx context.Context, q gridReader, ns string, gridID int64) (
 
 // SelectOp is one select: Clear empties the grid's set, then Add puts tiles
 // in and Remove takes them out, by rpc.ApplySelect. Recurse, only with Clear
-// (rpc.SelectRefusal), also empties every grid nested under the grid's wells
+// (rpc.SelectRefusal), also empties every grid nested under the grid's doors
 // within its namespace.
 type SelectOp struct {
 	Add, Remove    []int64
@@ -143,9 +143,9 @@ func setSelectionTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64, op
 	return append(changed, nested...), err
 }
 
-// clearNestedTx empties the set of every grid under gridID's wells, to any
-// depth. A well whose child is another namespace's grid (an exit well, whose
-// child_grid_id is a qualified string) is not followed.
+// clearNestedTx empties the set of every grid under gridID's doors, to any
+// depth. A door to another namespace, whose child_grid_id is a
+// qualified string, is not followed.
 func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]int64, error) {
 	var changed []int64
 	seen := map[int64]bool{gridID: true}
@@ -154,7 +154,7 @@ func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]
 		g := queue[0]
 		queue = queue[1:]
 		rows, err := tx.QueryContext(ctx, `SELECT child_grid_id FROM tiles
-			WHERE grid_id = ? AND ns = ? AND kind = 'well' AND tombstoned = 0
+			WHERE grid_id = ? AND ns = ? AND kind = 'door' AND tombstoned = 0
 			AND typeof(child_grid_id) = 'integer'`, g, ns)
 		if err != nil {
 			return nil, err

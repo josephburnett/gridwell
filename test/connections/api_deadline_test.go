@@ -48,7 +48,7 @@ func TestConnectionAPIHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
 
-	// A remote node behind a real sshd, mounted through a declared
+	// A remote node behind a real sshd, reached through a declared
 	// connection, as TestConnectionSpawn stands up the tunnel.
 	remoteHome := t.TempDir()
 	freshHome(t, remoteHome)
@@ -144,7 +144,7 @@ func TestConnectionAPIHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
 					return
 				}
 			case err := <-ended:
-				t.Fatalf("%s: the mounter's stream ended: %v", what, err)
+				t.Fatalf("%s: the connecting node's stream ended: %v", what, err)
 			case <-tick.C:
 				n++
 				editRemote(fmt.Sprintf("# %s edit %d", what, n))
@@ -169,14 +169,14 @@ holdLoop:
 		select {
 		case ev, ok := <-events:
 			if !ok {
-				t.Fatalf("the mounter's stream channel closed during the %s hold", hold)
+				t.Fatalf("the connecting node's stream channel closed during the %s hold", hold)
 			}
 			if h := ev.GetPluginHealth(); h != nil && !h.Healthy {
 				t.Fatalf("the connection API cut the fan-in stream %s into the hold: health-down for %q: %s",
 					time.Since(start).Round(100*time.Millisecond), h.PluginUuid, h.Detail)
 			}
 		case err := <-ended:
-			t.Fatalf("the mounter's stream ended %s into the hold: %v", time.Since(start).Round(100*time.Millisecond), err)
+			t.Fatalf("the connecting node's stream ended %s into the hold: %v", time.Since(start).Round(100*time.Millisecond), err)
 		case <-holdDone:
 			break holdLoop
 		}

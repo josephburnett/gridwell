@@ -1,7 +1,7 @@
 # Gridwell
 
 Gridwell is a personal space: tiles on an infinite grid, nested, federated
-across plugins and machines. Four primitives (text, url, shell, well) and a
+across plugins and machines. Four primitives (text, url, shell, door) and a
 closed, stable experience over an open set of content. `ARCHITECTURE.md`
 says how it works. Read it first. This file says how to change it.
 
@@ -168,7 +168,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   disagreeing and the last one wins, and nothing is lost that a tap cannot
   redo; an added tile not on the grid is ignored. `clear` empties the
   grid's set without naming it, before the adds; with `recurse` it also
-  empties every grid under the grid's wells, to any depth, within its
+  empties every grid under the grid's doors, to any depth, within its
   namespace, in one write, telling each grid whose set changed; `recurse`
   without `clear` is refused. `clear` with `all` and nothing else empties
   every set the node holds, one write per namespace (home, each plugin),
@@ -200,8 +200,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   framing, a freeze, content); `content_at`, when its content last changed,
   written only by the version bump (`bumpTileVersion`) and read as
   `created_at` until then. Find filters on them, on a grid (`grid_id`,
-  `recurse` through owned wells, never a link), on the selection, and on
-  the kind (text, url, shell, well or pane, 2026-10-18; an unknown one is
+  `recurse` through owned doors, never a link), on the selection, and on
+  the kind (text, url, shell, door or pane, 2026-10-18; an unknown one is
   refused); the filters AND, an empty query with one lists what passes, newest first, and
   they are the node's, applied to the rows it holds (`store.tileFilter`),
   never a plugin's: the plugin answers the text, and the node keeps the hits
@@ -209,11 +209,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   time and is in no selection but has its kind, and a plugin row's times are the node's
   (minted, touched), not the source's.
 - Framing is a float center plus a pane-size-independent zoom on the row
-  that owns the doorway; a root keeps the same shape on its grid row. One
+  that owns the door; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a
   pane tile a grid's view is per pane, not the row's: each frame of each
   pane's stack keeps its center and zoom in the layout blob, a pan there
-  writes the blob on the layout's settle and never the doorway row, and the
+  writes the blob on the layout's settle and never the door row, and the
   one-active-surface rule is the home view's only, since no row is shared
   (`pane.FramingOwner.Layout`, 2026-10-14).
 - A text tile's scroll is where its doc is scrolled and its mode, never the
@@ -273,10 +273,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   its links go dead by the roster, and the stanza brings them back.
   Secrets stay host-local file paths.
 - A plugin is not a place (2026-09-06, reversing the `root_context`
-  decision). Nodes have homes; a plugin contributes doorways. Its
+  decision). Nodes have homes; a plugin contributes doors. Its
   collections are + menu entries, one per collection
   (`InfoResponse.menu_entries`, each naming a context key), and it never
-  wraps them in a synthetic root grid of wells. `root_context` is RETIRED:
+  wraps them in a synthetic root grid of doors. `root_context` is RETIRED:
   the field number is kept forever and the node reads it in one place only —
   a plugin that answers a root_context and NO entries gets one derived entry
   onto it, so an old binary keeps presenting. Declare both and the entries
@@ -330,11 +330,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   node keeps an away session's view for `subscription.AwayFor` after its last
   stream closes, listed as away and watching nothing, so an agent sees a
   phone that went to the background, marked away in `sessions` (2026-10-18).
-- A node has no grid of its own. A mount lands on the far node's home.
-  The + menu's top row is one swatch per declared doorway: a node's home and
+- A node has no grid of its own. A connection lands on the far node's home.
+  The + menu's top row is one swatch per declared door: a node's home and
   a connection's far home are places and get a row; a plugin's collections
   are the swatches, one each, and the plugin has none of its own
-  (`client/door.PlacesOf` enumerates, `client/menu.Doorways` composes). An
+  (`client/door.PlacesOf` enumerates, `client/menu.Doors` composes). An
   entry is named most specific first, then its instance — "Feed (hey)",
   `door.EntryName`, uniformly, with no privileged one, because a clipped
   swatch must still tell entries apart (2026-09-30) — and it carries its grid's framing, so a
@@ -389,7 +389,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 
 **Experience**
 
-- A pane's place is one stack of frames. Descending through any doorway
+- A pane's place is one stack of frames. Descending through any door
   pushes; ascending pops. The URL and the layout blob encode the stack; the
   crumbs project it. The pane-tile level is the one second axis.
 - Every stacked level stays alive. Descending into a pane tile parks the

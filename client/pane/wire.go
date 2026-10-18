@@ -6,7 +6,7 @@
 // persists its whole place and the viewport of every grid frame in it: inside
 // a pane tile the blob owns those (2026-10-14), so two panes on one grid keep
 // two views. Ids are stored in the owning node's namespace frame, so a pane
-// tile mounted over ssh restores against the reader's chain.
+// tile on a far node restores against the reader's chain.
 package pane
 
 import (

@@ -12,7 +12,7 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.waitIdle();
 
   const before = await gw.oneShots();

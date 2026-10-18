@@ -30,15 +30,15 @@ func (oneEntryPlugin) List(context.Context, *pluginv1.ListRequest) (*pluginv1.Li
 		Entries: []*pluginv1.Entry{{Key: "a", Kind: "text", Label: "a"}}}, nil
 }
 
-// wellPlugin lists one well in its collection, opening onto a second context.
-type wellPlugin struct{ oneEntryPlugin }
+// doorPlugin lists one door in its collection, opening onto a second context.
+type doorPlugin struct{ oneEntryPlugin }
 
-func (wellPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
+func (doorPlugin) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	if req.Context != "all" {
 		return &pluginv1.ListResponse{Authoritative: true}, nil
 	}
 	return &pluginv1.ListResponse{Authoritative: true,
-		Entries: []*pluginv1.Entry{{Key: "w", Kind: rpc.KindWell, Label: "w", ChildContext: "inner"}}}, nil
+		Entries: []*pluginv1.Entry{{Key: "w", Kind: rpc.KindDoor, Label: "w", ChildContext: "inner"}}}, nil
 }
 
 // A collection's framing changes no listing, so framing its grid announces the
@@ -101,16 +101,16 @@ func TestRootFramingAnnouncesItsFramingNotAGridChange(t *testing.T) {
 	}
 }
 
-// A well's framing is a fact on its tile row, so framing inside a plugin well
+// A door's framing is a fact on its tile row, so framing inside a plugin door
 // announces that one tile, as home does, and never GridChanged on the grid
 // holding it, which would refetch the parent per pan.
-func TestWellFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
+func TestDoorFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
 	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = memStore.Close() })
-	cp, closer, err := plugintest.Loopback(wellPlugin{})
+	cp, closer, err := plugintest.Loopback(doorPlugin{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,9 +126,9 @@ func TestWellFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
 	grid := info.MenuEntries[0].GridId
 	listing, err := a.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: grid})
 	if err != nil || len(listing.Tiles) != 1 {
-		t.Fatalf("listing = %v, %v; want the one well", listing, err)
+		t.Fatalf("listing = %v, %v; want the one door", listing, err)
 	}
-	well := listing.Tiles[0]
+	door := listing.Tiles[0]
 
 	seen := make(chan *gridwellv1.Event, 64)
 	go func() {
@@ -140,18 +140,18 @@ func TestWellFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
 	awaitSubscriber(t, a, seen)
 
 	resp, err := a.SetFraming(ctx, &gridwellv1.SetFramingRequest{
-		TileId: well.Id, Cx: 1.5, Cy: 2.5, Zoom: 0.5,
+		TileId: door.Id, Cx: 1.5, Cy: 2.5, Zoom: 0.5,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	evs := collect(seen)
 	if len(evs) != 1 || evs[0].GetTileChanged() == nil {
-		t.Fatalf("framing a well announced %v, want exactly one TileChanged", evs)
+		t.Fatalf("framing a door announced %v, want exactly one TileChanged", evs)
 	}
 	got := evs[0].GetTileChanged().GetTile()
-	if got.GetId() != well.Id || got.GetGridId() != grid {
-		t.Errorf("TileChanged names tile %q in grid %q, want %q in %q", got.GetId(), got.GetGridId(), well.Id, grid)
+	if got.GetId() != door.Id || got.GetGridId() != grid {
+		t.Errorf("TileChanged names tile %q in grid %q, want %q in %q", got.GetId(), got.GetGridId(), door.Id, grid)
 	}
 	if got.GetViewCx() != 1.5 || got.GetViewCy() != 2.5 || got.GetViewZoom() != 0.5 {
 		t.Errorf("TileChanged carries framing (%v, %v, %v), want the write's (1.5, 2.5, 0.5)",
@@ -162,7 +162,7 @@ func TestWellFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
 	}
 
 	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: well.Id, X: 4, Y: 4, W: 1, H: 1,
+		TileId: door.Id, X: 4, Y: 4, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

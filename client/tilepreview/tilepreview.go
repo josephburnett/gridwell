@@ -13,7 +13,7 @@ import (
 // Outside reports the outside-Gridwell treatment. A grid that declares
 // host_content makes every row in it host state, whatever the row is.
 func Outside(t *gridwellv1.Tile, parentHostContent bool) bool {
-	return parentHostContent || rpc.IsExitWell(t) || t.Kind == rpc.KindShell
+	return parentHostContent || rpc.IsDoorToOtherNamespace(t) || t.Kind == rpc.KindShell
 }
 
 // Hue is the family a banner label echoes: the tile's own outline, so label
@@ -24,29 +24,29 @@ const (
 	// HueMuted is an unknown kind, which has no outline of its own.
 	HueMuted Hue = iota
 	HueShell
-	// HueWell is every well, exit wells included: a cross-plugin well is
-	// dashed, never recolored.
-	HueWell
+	// HueDoor is every door, a door to another namespace included: a
+	// cross-plugin door is dashed, never recolored.
+	HueDoor
 	// HueHost is host content in the text family: the plugin border.
 	HueHost
 	HueURL
 	HueText
 )
 
-// BannerHue answers in the outline's priority, so a well keeps its blue
+// BannerHue answers in the outline's priority, so a door keeps its blue
 // whichever grid it sits in. outside is Outside's answer for the same row.
 func BannerHue(t *gridwellv1.Tile, outside bool) Hue {
 	switch {
 	case t.Kind == rpc.KindShell:
 		return HueShell
-	case rpc.IsExitWell(t):
-		return HueWell
+	case rpc.IsDoorToOtherNamespace(t):
+		return HueDoor
 	case outside:
 		return HueHost
 	}
 	switch t.Kind {
-	case rpc.KindWell:
-		return HueWell
+	case rpc.KindDoor:
+		return HueDoor
 	case rpc.KindURL:
 		return HueURL
 	case rpc.KindText:

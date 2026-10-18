@@ -95,9 +95,9 @@ test.describe('a page whose file is gone', () => {
     expect(errs.notices, 'a dead link says nothing').toEqual([]);
     expect(tileAt(await gw.getGrid(f.gridID), 'url', cx, cy)?.altText, 'still labelled').toBe('gone.png');
 
-    // Now that it is known dead, a click is no doorway at all.
+    // Now that it is known dead, a click is no door at all.
     await gw.descendCell(cx, cy);
-    expect((await gw.focused()).placeDepth, 'a dead link is not a doorway').toBe(before.placeDepth);
+    expect((await gw.focused()).placeDepth, 'a dead link is not a door').toBe(before.placeDepth);
     await expect(modal(window)).toHaveCount(0);
   });
 });

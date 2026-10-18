@@ -62,7 +62,7 @@ keyed by tile id), showing a deleted tile's frozen frame on a new one.`,
 		bind: func(t *gridwellv1.Tile) any { return &t.GridId },
 	},
 	{
-		name: "kind", ddl: "TEXT NOT NULL CHECK (kind IN ('well','text','url','shell','pane'))", since: 1,
+		name: "kind", ddl: "TEXT NOT NULL CHECK (kind IN ('door','text','url','shell','pane'))", since: 1,
 		bind: func(t *gridwellv1.Tile) any { return &t.Kind },
 	},
 	{name: "x", ddl: "INTEGER NOT NULL", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.X }},
@@ -71,7 +71,7 @@ keyed by tile id), showing a deleted tile's frozen frame on a new one.`,
 	{name: "h", ddl: "INTEGER NOT NULL DEFAULT 1 CHECK (h > 0)", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.H }},
 	{
 		name: "view_cx", ddl: "REAL", since: 1,
-		comment: `well: the framing this doorway was left at — a float center in the
+		comment: `door: the framing this door was left at — a float center in the
 child grid's coordinates plus the pane-size-independent intrinsic
 zoom (live over overtake). One shape, shared with a root grid's
 root_cx/cy/zoom: all three NULL when never visited, else an
@@ -83,9 +83,9 @@ integer origin view_x/view_y, which v11 converted.`,
 	{name: "view_zoom", ddl: "REAL", since: 1, bind: func(t *gridwellv1.Tile) any { return nullFloat64{&t.ViewZoom} }},
 	{
 		name: "child_grid_id", ddl: "INTEGER", since: 1,
-		comment: `No FK on child_grid_id: an exit well's child grid lives in another
-plugin (a qualified "<uuid>/<id>" link), so the link is a soft
-pointer. Interior well integrity rests on the refcount machinery +
+		comment: `No FK on child_grid_id: the child grid of a door to another namespace
+lives in another plugin (a qualified "<uuid>/<id>" link), so the link is a soft
+pointer. Interior door integrity rests on the refcount machinery +
 property test.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ChildGridId} },
 	},
@@ -156,9 +156,9 @@ qualified "<uuid>/<tile-id>" link to the tile that owns the
 content, or on a plugin's row a bare entry address in that same plugin
 (rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content
 of its own, which the CHECK's link branch enforces, and readers
-resolve bytes, preview, and tmux through the target id. The well
-kind's link variant is a qualified child_grid_id, the exit well, so
-this column is never set on wells. Added at schema v6, by rebuild:
+resolve bytes, preview, and tmux through the target id. The door
+kind's link variant is a qualified child_grid_id, the door to another namespace, so
+this column is never set on doors. Added at schema v6, by rebuild:
 the CHECK gained the link branch.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.LinkTargetId} },
 	},
@@ -224,13 +224,13 @@ var gridsColumns = []column[gridwellv1.Grid]{
 	{
 		name: "id", ddl: "INTEGER PRIMARY KEY AUTOINCREMENT", since: 1,
 		comment: `AUTOINCREMENT so a deleted grid's id is never reused. Without it,
-SQLite recycles the rowid of a deleted grid (e.g. an interior well that
+SQLite recycles the rowid of a deleted grid (e.g. an interior door that
 was deleted, taking its owned child grid with it), and a new grid taking
 that id would collide with the client's still-cached copy of the old
-grid — making a fresh well render the deleted well's tiles. Fresh ids
+grid — making a fresh door render the deleted door's tiles. Fresh ids
 keep the client cache (keyed by id) honest.
 
-No refcount: grids are owned 1:1 by their parent well (eager copy
+No refcount: grids are owned 1:1 by their parent door (eager copy
 never shares a grid), so only blobs are reference-counted.`,
 		bind: func(g *gridwellv1.Grid) any { return &g.Id },
 	},
@@ -247,8 +247,8 @@ grids. Added at schema v9, additive.`,
 	{name: "context_key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9},
 	{
 		name: "root_cx", ddl: "REAL", since: 11,
-		comment: `root_cx/cy/zoom is the framing of a root grid — one with no doorway
-tile to carry it — in exactly the shape a doorway's view_cx/cy/zoom
+		comment: `root_cx/cy/zoom is the framing of a root grid — one with no door
+tile to carry it — in exactly the shape a door's view_cx/cy/zoom
 uses, NULL when never visited. Home's root is this
 row with ns = ''; a plugin context's is its own. It reaches the client
 through the Info handshake's root_view_* fields, never as a Grid

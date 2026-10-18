@@ -290,7 +290,7 @@ func (wideFar) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwe
 		rpc.ConnectionRow("geneva", "Geneva", wideRoot, "", rpc.View{})}}, nil
 }
 
-// GetGrid answers twenty wells per grid, two levels deep.
+// GetGrid answers twenty doors per grid, two levels deep.
 func (wideFar) GetGrid(_ context.Context, in *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	resp := &gridwellv1.GetGridResponse{Grid: &gridwellv1.Grid{Id: in.GridId}}
 	if len(in.GridId) > len(wideRoot)+4 {
@@ -298,7 +298,7 @@ func (wideFar) GetGrid(_ context.Context, in *gridwellv1.GetGridRequest) (*gridw
 	}
 	for i := range 20 {
 		resp.Tiles = append(resp.Tiles, &gridwellv1.Tile{
-			Id: fmt.Sprintf("%s/t%d", in.GridId, i), GridId: in.GridId, Kind: "well",
+			Id: fmt.Sprintf("%s/t%d", in.GridId, i), GridId: in.GridId, Kind: "door",
 			ChildGridId: fmt.Sprintf("%s%02d", in.GridId, i), X: int64(i), W: 1, H: 1,
 		})
 	}

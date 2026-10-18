@@ -342,7 +342,7 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	if pl.ContentToken == AuthToken(testPassword) {
 		t.Errorf("content token must never equal the auth token (domain separation)")
 	}
-	// The fs plugin's one declared collection is the doorway this frames: a
+	// The fs plugin's one declared collection is the door this frames: a
 	// plugin is not a place, so there is no root of its own to aim at.
 	if len(pl.Plugins[0].MenuEntries) != 1 || pl.Plugins[0].MenuEntries[0].ViewZoom != 0 {
 		t.Fatalf("fresh row = %+v, want one collection never visited (zoom 0)", pl.Plugins[0])
@@ -366,7 +366,7 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	}
 	got := pl2.Plugins[0].MenuEntries[0]
 	if got.ViewCx != 3 || got.ViewCy != 4 || got.ViewZoom != 0.5 {
-		t.Errorf("doorway view after beacon = (%v,%v,%v), want (3,4,0.5)",
+		t.Errorf("door view after beacon = (%v,%v,%v), want (3,4,0.5)",
 			got.ViewCx, got.ViewCy, got.ViewZoom)
 	}
 }

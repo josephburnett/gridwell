@@ -52,8 +52,8 @@ func endGlyph(c js.Value) {
 	c.Set("lineJoin", "miter")
 }
 
-// drawWellGlyph paints a 2x2 grid square: a grid you descend into.
-func drawWellGlyph(c js.Value, x, y, w, h float64, color string) {
+// drawDoorGlyph paints a 2x2 grid square: a grid you descend into.
+func drawDoorGlyph(c js.Value, x, y, w, h float64, color string) {
 	beginGlyph(c, w, h, color)
 	cx, cy, half := glyphBox(x, y, w, h)
 	c.Call("strokeRect", cx-half, cy-half, half*2, half*2)

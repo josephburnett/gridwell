@@ -4,7 +4,7 @@ import { settle, timeToLand } from './cadence';
 // The descend, reframe, ascend round trip: preview equals descent target
 // equals ascent return. The tests read framing from the panes() hook, the live
 // viewport the user sees, so they catch a desync between the live pane, the
-// saved ascent state, and the server-persisted well framing.
+// saved ascent state, and the server-persisted door framing.
 //
 // A menu portal has no containing link tile, so a plugin root's ascent
 // writeback goes straight to the plugin's root framing through SetFraming's
@@ -12,13 +12,13 @@ import { settle, timeToLand } from './cadence';
 
 test.use({ extraNodes: ['second'] });
 
-test('re-descending a reframed well returns to exactly what you left', async ({ gw }) => {
+test('re-descending a reframed door returns to exactly what you left', async ({ gw }) => {
   await gw.enterPlugin('home');
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   const childGrid = (await gw.focused()).gridID;
 
@@ -88,7 +88,7 @@ test('a reframe persists without ascending (issue #190)', async ({ gw, window })
   const cy = Math.round((await gw.focused()).cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   const childGrid = (await gw.focused()).gridID;
 
@@ -163,7 +163,7 @@ test('ascending restores the parent viewport unchanged', async ({ gw }) => {
   const cy = Math.round((await gw.focused()).cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
 
   const before = await gw.focused();
 
@@ -246,7 +246,7 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   const cx = Math.round(parentLeft.cx);
   const cy = Math.round(parentLeft.cy);
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
+  await gw.dragCreate('door', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
   // Server truth before reloading: the descent flush posted the root view and

@@ -21,10 +21,10 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 }
 
 // qualifyTiles qualifies every id in a namespace's tiles. A ChildGridId that
-// arrived already qualified is a cross-plugin link, so the well is a link
+// arrived already qualified is a cross-plugin link, so the door is a link
 // and is left alone; surfacing that here as Tile.link gives render and
 // store one "is a link" signal. A bare uuid comparison would miss a
-// same-namespace mount, which "arrived qualified" catches.
+// same-namespace link door, which "arrived qualified" catches.
 func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {

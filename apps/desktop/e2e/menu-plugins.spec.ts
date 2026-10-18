@@ -7,10 +7,10 @@ import { tileAt } from './oracle';
 //     above the primitives;
 //   - clicking a swatch descends into it, and the ascent returns exactly to
 //     where the menu was opened;
-//   - dragging a swatch into a grid drops a dashed exit-well link.
+//   - dragging a swatch into a grid drops a dashed door to another namespace link.
 //
 // These behaviors cross the seam from wasm to server, through menuItems,
-// descend and CreateWell, the home store, and SQLite, and no unit layer sees the
+// descend and CreateDoor, the home store, and SQLite, and no unit layer sees the
 // composition.
 
 test.use({ extraNodes: ['second'] });
@@ -76,7 +76,7 @@ test('plugins fill the + menu top row above the primitives', async ({ gw }) => {
 
   const plugins = menu.items.filter((i) => i.isPlugin);
   const primitives = menu.items.filter((i) => !i.isPlugin);
-  // One swatch per declared doorway. The node's home and the connection's far
+  // One swatch per declared door. The node's home and the connection's far
   // home are places and get a row each, in server.yaml order, and every declared
   // entry rides directly after the row that declared it, wearing its instance's
   // name.
@@ -122,8 +122,8 @@ test('dragging a plugin swatch into the grid drops a dashed link', async ({ gw }
   await gw.openMenu();
   await gw.dragPluginLink('second', cx, cy);
 
-  const link = tileAt(await gw.getGrid(f.gridID), 'well', cx, cy)!;
-  expect(link, 'exit-well link created at the drop cell').toBeTruthy();
+  const link = tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)!;
+  expect(link, 'door to another namespace link created at the drop cell').toBeTruthy();
   expect(link.childGridId, "child is the plugin's qualified root").toBe(second.rootGridID);
   expect(link.link, 'renders dashed (a link, delete only unlinks)').toBe(true);
   expect(link.altText, 'labeled with the plugin name').toBe('second');

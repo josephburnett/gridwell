@@ -261,17 +261,17 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		return nil
 	}
 	// gesture.ClassifyWheel routes; this handler only resolves the impure facts.
-	var hoverWell *gridwellv1.Tile
-	wellCoverage := 0.0
+	var hoverDoor *gridwellv1.Tile
+	doorCoverage := 0.0
 	ps, shown := p.Screen(r)
 	if shown && p.ContentID() == "" {
-		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsWellKind(t.Kind) && t.ChildGridId != "" {
-			hoverWell = t
+		if t := a.tileAtScreen(p, r, sx, sy); t != nil && rpc.IsDoorKind(t.Kind) && t.ChildGridId != "" {
+			hoverDoor = t
 			x0, y0 := ps.CellToScreen(float64(t.X), float64(t.Y))
 			x1, _ := ps.CellToScreen(float64(t.X)+1, float64(t.Y))
 			cell := x1 - x0
 			b := panebox.ContentBox(r, paneBorderPx)
-			wellCoverage = gesture.RectCoverage(
+			doorCoverage = gesture.RectCoverage(
 				x0, y0, float64(t.W)*cell, float64(t.H)*cell, b.X, b.Y, b.W, b.H)
 		}
 	}
@@ -281,9 +281,9 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		LiveURLView:       a.urlViewFor(p.ID) != nil,
 		InContentBox:      pointInPaneContent(r, sx, sy),
 		TextModeRendered:  p.TextMode == rpc.TextModeRendered,
-		OverEnterableWell: hoverWell != nil,
+		OverEnterableDoor: hoverDoor != nil,
 		ZoomOut:           dy > 0,
-		WellCoverage:      wellCoverage,
+		DoorCoverage:      doorCoverage,
 	}) {
 	case gesture.WheelSwallow:
 		// A live URL view scrolls itself; a stray wheel must not zoom the pane.
@@ -296,34 +296,34 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		return nil
 	case gesture.WheelIgnore:
 		return nil
-	case gesture.WheelZoomWell:
-		// The wheel zooms the grid inside the hovered well, its stored preview
+	case gesture.WheelZoomDoor:
+		// The wheel zooms the grid inside the hovered door, its stored preview
 		// framing, not the grid the pane shows. The settle persister posts one
 		// framing write per tile at flush.
-		x0, y0 := ps.CellToScreen(float64(hoverWell.X), float64(hoverWell.Y))
-		x1, _ := ps.CellToScreen(float64(hoverWell.X)+1, float64(hoverWell.Y))
+		x0, y0 := ps.CellToScreen(float64(hoverDoor.X), float64(hoverDoor.Y))
+		x1, _ := ps.CellToScreen(float64(hoverDoor.X)+1, float64(hoverDoor.Y))
 		parentCell := x1 - x0
-		wpx := float64(hoverWell.W) * parentCell
-		hpx := float64(hoverWell.H) * parentCell
-		zw := wellOf(hoverWell)
+		wpx := float64(hoverDoor.W) * parentCell
+		hpx := float64(hoverDoor.H) * parentCell
+		zw := doorOf(hoverDoor)
 		// The float center accumulates across the burst: the first notch seeds
 		// from the same Center the preview was drawn with, and later notches
 		// feed the drift back in.
 		cx0, cy0 := zw.Center()
-		if st, ok := a.persist.wellWheelPending[hoverWell.Id]; ok {
+		if st, ok := a.persist.doorWheelPending[hoverDoor.Id]; ok {
 			cx0, cy0 = st.cx, st.cy
 		}
-		cx1, cy1, ratio, changed := zoomtrans.WellWheelView(dy, zw, parentCell,
-			sx-(x0+wpx/2), sy-(y0+hpx/2), cx0, cy0, zoomFactor, wellZoomRatioMin, wellZoomRatioMax)
+		cx1, cy1, ratio, changed := zoomtrans.DoorWheelView(dy, zw, parentCell,
+			sx-(x0+wpx/2), sy-(y0+hpx/2), cx0, cy0, zoomFactor, doorZoomRatioMin, doorZoomRatioMax)
 		if !changed {
 			return nil
 		}
-		a.c.PatchTile(hoverWell, func(t *gridwellv1.Tile) {
+		a.c.PatchTile(hoverDoor, func(t *gridwellv1.Tile) {
 			t.ViewCx, t.ViewCy, t.ViewZoom = cx1, cy1, ratio
 		})
-		a.persist.wellWheelPending[hoverWell.Id] = wellWheelDrift{
+		a.persist.doorWheelPending[hoverDoor.Id] = doorWheelDrift{
 			gridID: a.gridIDForPane(p), cx: cx1, cy: cy1,
-			ratio: ratio, version: hoverWell.Version,
+			ratio: ratio, version: hoverDoor.Version,
 		}
 		a.draw()
 		return nil
@@ -518,10 +518,10 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		pressView:    p.View,
 	}
 	if n != nil {
-		// Pull out of well: when a child preview tile sits at the cursor, that
-		// is the drag source, not the well.
+		// Pull out of door: when a child preview tile sits at the cursor, that
+		// is the drag source, not the door.
 		if child := a.childTileAtScreen(p, r, n, sx, sy); child != nil {
-			cp := wellPreviewFor(ps, n)
+			cp := doorPreviewFor(ps, n)
 			cxF, cyF := cp.ChildCellAtScreen(sx, sy)
 			tlX, tlY := cp.CellToScreen(float64(child.X), float64(child.Y))
 			a.dragging.grabTile(child, cxF, cyF, tlX, tlY)
@@ -713,7 +713,7 @@ func (a *App) attemptDescentOrAscent(p *pane.Pane, r pane.Rect, sx, sy float64, 
 	}
 	acceptsTiles, _ := a.gridAcceptsTiles(hit.GridId)
 	switch gesture.DecideTileClick(gesture.ClickInput{
-		Well:           rpc.IsWellKind(hit.Kind),
+		Door:           rpc.IsDoorKind(hit.Kind),
 		ContentDescent: rpc.IsContentDescentKind(hit.Kind),
 		Workspace:      rpc.IsWorkspaceKind(hit.Kind),
 		URL:            hit.Kind == rpc.KindURL,
@@ -747,7 +747,7 @@ var totalTransitionMs = 350.0
 const zoomDistFactor = 4.0
 
 // A descent through a link tile, a namespace crossing, lives in descend
-// (nav.go), on the same path a plain well takes.
+// (nav.go), on the same path a plain door takes.
 
 // persistedGridView reads the framing the grid at (anchor, path) was left at
 // from the row that owns it. It restores every ascent with no session state,
@@ -768,18 +768,18 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (rpc
 	if !found {
 		return rpc.Framing{}, false
 	}
-	return zoomtrans.StoredView(wellOf(t), size, cellPx)
+	return zoomtrans.StoredView(doorOf(t), size, cellPx)
 }
 
 // storedRootView is the read side of persistFraming's root arm, the same 1x1
-// synthetic doorway inverted, at pane size s. A root's framing rides its
+// synthetic door inverted, at pane size s. A root's framing rides its
 // PluginInfo; false when it has none.
 func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool) {
 	pl, found := a.pluginByRoot(anchor)
 	if !found {
 		return rpc.Framing{}, false
 	}
-	w := zoomtrans.Well{W: 1, H: 1, View: rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom)}
+	w := zoomtrans.Door{W: 1, H: 1, View: rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom)}
 	if _, visited := w.View.Framing(); !visited {
 		return rpc.Framing{}, false
 	}

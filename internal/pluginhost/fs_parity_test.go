@@ -240,7 +240,7 @@ func TestDeleteRetiresOnTheWire(t *testing.T) {
 }
 
 // TestFSPluginPlacementAndFramingPersist: the user drags notes.md and
-// frames the sub well; a later read serves both back verbatim, and a
+// frames the sub door; a later read serves both back verbatim, and a
 // file that arrives afterwards lands in an empty cell, never on top of
 // the placed tile ("things stay as you left them").
 func TestFSPluginPlacementAndFramingPersist(t *testing.T) {
@@ -428,7 +428,7 @@ func TestFSPluginTextScrollPersists(t *testing.T) {
 // Only the seam sees this — the plugin declares a context key and never learns
 // whether it resolves, and the node resolves an id and never learns what the
 // plugin meant by it. It is also the whole of issue #281: a plugin with
-// collections and no root is healthy, and the collection is the doorway.
+// collections and no root is healthy, and the collection is the door.
 func TestAnEntriesOnlyPluginPresentsAndServes(t *testing.T) {
 	root := seedTree(t)
 	cl := pluginNode(t, root)

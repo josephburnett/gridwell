@@ -74,7 +74,7 @@ test('ctrl+right-drag links inside one namespace; plain right-drag still copies'
     .toBe('the original bytes');
 });
 
-test('ctrl+right-drag on a well links the same child grid, not a copy of it', async ({ gw }) => {
+test('ctrl+right-drag on a door links the same child grid, not a copy of it', async ({ gw }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const grid = f.gridID;
@@ -82,25 +82,25 @@ test('ctrl+right-drag on a well links the same child grid, not a copy of it', as
   const cy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('well', cx, cy);
-  const well = tileAt(await gw.getGrid(grid), 'well', cx, cy);
-  expect(well, 'created the source well').toBeTruthy();
-  const childGrid = String(well!.childGridId);
-  expect(childGrid, 'an interior well owns a child grid').toBeTruthy();
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(grid), 'door', cx, cy);
+  expect(door, 'created the source door').toBeTruthy();
+  const childGrid = String(door!.childGridId);
+  expect(childGrid, 'an interior door owns a child grid').toBeTruthy();
 
   await gw.linkTileCell(cx, cy, cx, cy + 2);
   const snap = await gw.getGrid(grid);
-  const linkWell = tileAt(snap, 'well', cx, cy + 2);
-  expect(linkWell, 'ctrl+right-drag left a well at the drop cell').toBeTruthy();
-  expect(linkWell!.id).not.toBe(well!.id);
-  // The doorway leads to the SAME grid, a second way in. A right-drag copy
+  const linkDoor = tileAt(snap, 'door', cx, cy + 2);
+  expect(linkDoor, 'ctrl+right-drag left a door at the drop cell').toBeTruthy();
+  expect(linkDoor!.id).not.toBe(door!.id);
+  // The door leads to the SAME grid, a second way in. A right-drag copy
   // would have deep-copied the subtree into a fresh grid.
-  expect(String(linkWell!.childGridId), 'the link opens the source well\'s own child grid')
+  expect(String(linkDoor!.childGridId), 'the link opens the source door\'s own child grid')
     .toBe(childGrid);
-  expect(linkWell!.link, 'the link well is dashed').toBe(true);
+  expect(linkDoor!.link, 'the link door is dashed').toBe(true);
 
-  const srcAfter = tileAt(snap, 'well', cx, cy)!;
-  expect(String(srcAfter.childGridId), 'the source well still owns its child grid')
+  const srcAfter = tileAt(snap, 'door', cx, cy)!;
+  expect(String(srcAfter.childGridId), 'the source door still owns its child grid')
     .toBe(childGrid);
   expect(srcAfter.link ?? false, 'the source is still owned content, not a link')
     .toBeFalsy();

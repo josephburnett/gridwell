@@ -8,7 +8,7 @@ import { test, expect } from './fixtures';
 // itself a place, so having nothing to enter is not a failure. A plugin that
 // cannot serve the source its config declares refuses Info with the reason, and
 // is broken with that sentence until the source is fixed, without a restart.
-test.describe('a plugin that declares no doorway', () => {
+test.describe('a plugin that declares no door', () => {
   test.use({ extraPlugins: [{ kind: 'fs', name: 'noroot' }] });
 
   test('is healthy and shows nothing', async ({ gw, window }) => {
@@ -29,10 +29,10 @@ test.describe('a plugin that declares no doorway', () => {
     await gw.expandPlugins();
     const menu = await gw.menu();
     const swatch = menu.items.find((i) => i.isPlugin && i.label === 'noroot');
-    expect(swatch, 'a plugin with no doorway contributes no swatch').toBeFalsy();
+    expect(swatch, 'a plugin with no door contributes no swatch').toBeFalsy();
 
     const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
-    const notice = errs.notices.find((n: any) => n.source === 'doorway:' + noroot!.uuid);
+    const notice = errs.notices.find((n: any) => n.source === 'door:' + noroot!.uuid);
     expect(notice, 'a healthy plugin reports nothing').toBeFalsy();
   });
 });

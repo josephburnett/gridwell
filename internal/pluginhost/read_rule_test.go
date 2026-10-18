@@ -37,7 +37,7 @@ func readEveryVerb(t *testing.T, cl *rpc.Client, grid string) {
 		if _, err := cl.GetTilePreview(ctx, tile.Id); err != nil {
 			t.Fatalf("GetTilePreview %s: %v", tile.AltText, err)
 		}
-		if tile.Kind == rpc.KindWell {
+		if tile.Kind == rpc.KindDoor {
 			if _, err := cl.GetGrid(ctx, tile.ChildGridId); err != nil {
 				t.Fatalf("GetGrid %s: %v", tile.AltText, err)
 			}

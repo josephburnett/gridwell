@@ -13,13 +13,13 @@ const presses = [
 
 for (const press of presses) {
   for (const unfocused of [false, true]) {
-    test(`${press.name} on a well in ${unfocused ? 'an unfocused' : 'the focused'} pane descends in a split below`, async ({ gw }) => {
+    test(`${press.name} on a door in ${unfocused ? 'an unfocused' : 'the focused'} pane descends in a split below`, async ({ gw }) => {
       await gw.enterPlugin('home');
       const a0 = await gw.focused();
       const cx = Math.round(a0.cx);
       const cy = Math.round(a0.cy) - 1;
       await gw.openMenu();
-      await gw.dragCreate('well', cx, cy);
+      await gw.dragCreate('door', cx, cy);
 
       if (unfocused) {
         await gw.splitFocusedPaneVertical();
@@ -39,8 +39,8 @@ for (const press of presses) {
       const opened = after.find((p) => p.focused)!;
       const aNow = after.find((p) => p.id === a.id)!;
       expect(panesBefore.some((p) => p.id === opened.id), 'the new pane took focus').toBe(false);
-      expect(opened.placeDepth, 'the new pane descended one doorway').toBe(a.placeDepth + 1);
-      expect(opened.gridID, 'into the well child grid').not.toBe(a.gridID);
+      expect(opened.placeDepth, 'the new pane descended one door').toBe(a.placeDepth + 1);
+      expect(opened.gridID, 'into the door child grid').not.toBe(a.gridID);
       expect(opened.y, 'the new pane is below the clicked one').toBeGreaterThan(aNow.y);
       expect(aNow.gridID, 'the clicked pane keeps its grid').toBe(a.gridID);
       expect(aNow.placeDepth, 'the clicked pane did not descend').toBe(a.placeDepth);

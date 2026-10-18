@@ -25,9 +25,9 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 	}
 	localHome, farRoot := lp.HomeGridId, connectionRows(lp)[0].RootGridId
 
-	room, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 2, H: 2}})
+	room, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farRoot, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 2, H: 2}})
 	if err != nil {
-		t.Fatalf("create far well: %v", err)
+		t.Fatalf("create far door: %v", err)
 	}
 	farGrid := room.ChildGridId
 	body := []byte("# far target")
@@ -52,17 +52,17 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 		return nil
 	}
 
-	mount, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 0, Y: 0, W: 1, H: 1, ChildGridId: farRoot}})
+	farDoor, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, ChildGridId: farRoot}})
 	if err != nil {
-		t.Fatalf("create well with a qualified child: %v", err)
+		t.Fatalf("create door with a qualified child: %v", err)
 	}
-	for _, tl := range []*gridwellv1.Tile{mount, inFarGrid("well", mount)} {
+	for _, tl := range []*gridwellv1.Tile{farDoor, inFarGrid("door", farDoor)} {
 		if tl.ChildGridId != farRoot || !tl.Link {
-			t.Fatalf("well child = %q link=%v, want %q as a link", tl.ChildGridId, tl.Link, farRoot)
+			t.Fatalf("door child = %q link=%v, want %q as a link", tl.ChildGridId, tl.Link, farRoot)
 		}
 	}
-	if _, err := h.localCl.GetGrid(ctx, mount.ChildGridId); err != nil {
-		t.Fatalf("the well's child does not resolve: %v", err)
+	if _, err := h.localCl.GetGrid(ctx, farDoor.ChildGridId); err != nil {
+		t.Fatalf("the door's child does not resolve: %v", err)
 	}
 
 	link, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: farGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 2, Y: 0, W: 1, H: 1, LinkTargetId: target.Id}})

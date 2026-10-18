@@ -62,7 +62,7 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
 ## Info
 
 `InfoResponse` is your one handshake: `kind`, `display_name`, `glyph`
-(`folder`/`process`/`well`/empty), `watch`, `writable`, and `menu_entries`
+(`folder`/`process`/`door`/empty), `watch`, `writable`, and `menu_entries`
 (your collections).
 
 **Refuse a config you cannot serve.** If the source your config names is not
@@ -78,9 +78,9 @@ with `unreachable` set (see Listings), never a verdict.
 key. That is how your plugin is reached: each entry becomes a + menu swatch,
 and the node stamps them onto every grid it serves for you. You have no
 landing grid and no primary collection — a plugin is not a place, it
-contributes doorways — so a mail plugin declares "inbox", "reply later" and
+contributes doors — so a mail plugin declares "inbox", "reply later" and
 "set aside", all three the same way. Do not invent a wrapper context whose
-entries are wells onto the others: that is a grid the user did not make and
+entries are doors onto the others: that is a grid the user did not make and
 cannot arrange.
 
 An entry's `label` is optional. Leave it empty when you serve one collection
@@ -140,7 +140,7 @@ gone. A copy of it, or a drag out of your grid, is another link to the
 target, so a link survives the entry moving between collections. Keep
 `kind` the target's kind, and keep the content facts too if a node older than
 the field must still present it; a new node reads none of them on a link. The
-node mints nothing for the target until the user touches it. A well has no
+node mints nothing for the target until the user touches it. A door has no
 link variant (its `child_context` already says where it opens), and an entry
 may not link to itself.
 

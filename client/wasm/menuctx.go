@@ -37,7 +37,7 @@ func (a *App) paneNodeNS(p *pane.Pane) string {
 
 // gridNodeNS is paneNodeNS by grid id. A drop resolves its destination grid
 // rather than a pane's leaf grid, since the two differ when the cursor
-// promoted into an open well.
+// promoted into an open door.
 func (a *App) gridNodeNS(gridID string) string {
 	if g, ok := a.c.Grid(gridID); ok {
 		return g.Meta.NodeNs

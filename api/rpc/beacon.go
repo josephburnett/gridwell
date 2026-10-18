@@ -52,7 +52,7 @@ func SetTileBeacon(req *pb.SetTileRequest) (path string, body []byte) {
 }
 
 // SetFramingBeacon is the beacon form of Client.SetFraming: the one framing
-// beacon, doorway tile and root grid alike.
+// beacon, door tile and root grid alike.
 func SetFramingBeacon(req *pb.SetFramingRequest) (path string, body []byte) {
 	return beacon(gridwellv1connect.GridwellSetFramingProcedure, req)
 }

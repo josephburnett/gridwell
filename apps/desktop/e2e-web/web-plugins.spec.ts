@@ -92,8 +92,8 @@ test('proc: the root grid lists the served node as a child of this worker', asyn
   const info = tiles.find((t) => t.altText === '@info');
   expect(info, 'the process metadata tile is listed').toBeTruthy();
   const child = tiles.find((t) => t.altText === String(serve.child.pid));
-  expect(child, `pid ${serve.child.pid} (gridwell serve) is a child well of ${process.pid}`).toBeTruthy();
-  expect(child!.kind).toBe('well');
+  expect(child, `pid ${serve.child.pid} (gridwell serve) is a child door of ${process.pid}`).toBeTruthy();
+  expect(child!.kind).toBe('door');
 
   // The child process has its own @info tile, so the child context round-trips
   // through the node's id space.
@@ -104,12 +104,12 @@ test('proc: the root grid lists the served node as a child of this worker', asyn
   expect((innerSnap.tiles ?? []).some((t) => t.altText === '@info'), 'the child process has its @info').toBe(true);
 });
 
-test('gitlab: the week well descends to the todo, whose content is its markdown', async ({ gw, window }) => {
+test('gitlab: the week door descends to the todo, whose content is its markdown', async ({ gw, window }) => {
   await gw.enterPlugin('todos');
   const f = await gw.focused();
   const snap = await gw.getGrid(f.gridID);
   const week = (snap.tiles ?? []).find((t) => /^\d{4}-\d{2}-\d{2}$/.test(String(t.altText)));
-  expect(week, `one week well, named by its Monday; have ${JSON.stringify((snap.tiles ?? []).map((t) => t.altText))}`).toBeTruthy();
+  expect(week, `one week door, named by its Monday; have ${JSON.stringify((snap.tiles ?? []).map((t) => t.altText))}`).toBeTruthy();
 
   await gw.descendCell(Number(week!.x ?? 0), Number(week!.y ?? 0));
   const inner = await gw.focused();

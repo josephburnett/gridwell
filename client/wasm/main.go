@@ -56,10 +56,10 @@ const (
 	zoomMax    = 8.0
 	zoomFactor = 1.1
 
-	// wellZoomRatio* clamp the hover-wheel well zoom in intrinsic-ratio units;
+	// doorZoomRatio* clamp the hover-wheel door zoom in intrinsic-ratio units;
 	// the min keeps the preview above the renderer's 0.5px floor.
-	wellZoomRatioMin = 1.0 / 64.0
-	wellZoomRatioMax = 1.0
+	doorZoomRatioMin = 1.0 / 64.0
+	doorZoomRatioMax = 1.0
 
 	// textFixedScale renders text at one scale, so grid zoom reveals more lines
 	// instead of magnifying the type.
@@ -355,8 +355,8 @@ type persistState struct {
 	// outbox.SaveQueue.
 	contentSaves *outbox.SaveQueue
 
-	// wellWheelPending batches a scroll burst into one SetFraming per tile.
-	wellWheelPending map[string]wellWheelDrift
+	// doorWheelPending batches a scroll burst into one SetFraming per tile.
+	doorWheelPending map[string]doorWheelDrift
 
 	// persistPosts and framingFlushes are e2e-only.
 	persistPosts   map[string]int
@@ -372,7 +372,7 @@ func newPersistState(a *App) persistState {
 	return persistState{
 		sched:            newScheduler(a),
 		contentSaves:     outbox.NewSaveQueue(),
-		wellWheelPending: map[string]wellWheelDrift{},
+		doorWheelPending: map[string]doorWheelDrift{},
 		persistPosts:     map[string]int{},
 		out:              outbox.New(),
 	}
@@ -420,9 +420,9 @@ func newScheduler(a *App) scheduler {
 	}
 }
 
-// wellWheelDrift is one well's not-yet-persisted hover-wheel view. The flush
+// doorWheelDrift is one door's not-yet-persisted hover-wheel view. The flush
 // never re-reads the cache row, which a refetch would have replaced.
-type wellWheelDrift struct {
+type doorWheelDrift struct {
 	gridID  string
 	cx, cy  float64
 	ratio   float64
@@ -565,7 +565,7 @@ type dragState struct {
 	originScreenY float64
 
 	// item is a menu drag's grabbed entry: a primitive to create or a plugin
-	// to mount as an exit-well link.
+	// to link as a door to another namespace.
 	isTemplate bool
 	item       menuItem
 
@@ -1068,7 +1068,7 @@ func (a *App) startSSE() {
 			}
 			if f := plan.Reframe; f != nil {
 				fr, ok := rpc.ViewOf(f.GetViewCx(), f.GetViewCy(), f.GetViewZoom()).Framing()
-				if ok && a.cacheDoorwayFraming(f.GetGridId(), fr) {
+				if ok && a.cacheDoorFraming(f.GetGridId(), fr) {
 					a.emit(traceevent.EventApplied(ev))
 					a.draw()
 				}
@@ -1177,7 +1177,7 @@ func (a *App) retryBackstop() {
 // Session-local state: the URL captures only the focused pane's place, so a
 // restored pane ascends onto persisted framing.
 
-// gridIDForPane walks the pane's anchor down its doorway path; "" when blank.
+// gridIDForPane walks the pane's anchor down its door path; "" when blank.
 func (a *App) gridIDForPane(p *pane.Pane) string {
 	return a.gridIDForPathFrom(p.Anchor(), p.Path())
 }
@@ -1186,13 +1186,13 @@ func (a *App) gridIDForPane(p *pane.Pane) string {
 // empty or stale path.
 func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 	return pane.ResolveLeafGrid(anchor, p,
-		func(gid, wellID string) (string, bool, bool) {
+		func(gid, doorID string) (string, bool, bool) {
 			g, ok := a.c.Grid(gid)
 			if !ok {
 				a.fetchGrid(gid)
 				return "", false, false
 			}
-			w, ok := g.Tiles[wellID]
+			w, ok := g.Tiles[doorID]
 			if !ok {
 				return "", true, false
 			}

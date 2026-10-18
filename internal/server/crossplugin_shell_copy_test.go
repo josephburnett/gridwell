@@ -11,7 +11,7 @@ import (
 // A tmux lives on the node that started it, so a shell copied into
 // another namespace cannot share it there: what the holding node can reach,
 // you can link, and the copy is a link to its source, at the top of the
-// gesture and inside a deep-copied well alike.
+// gesture and inside a deep-copied door alike.
 func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
@@ -30,26 +30,26 @@ func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
 			top.Kind, top.LinkTargetId, top.Link, sh.Id)
 	}
 
-	well, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWell, X: 2, Y: 0, W: 1, H: 1}})
+	door, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 2, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: well.ChildGridId,
+	inner, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: door.ChildGridId,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wc, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: well.Id, DestGridId: rootB, X: 6, Y: 6})
+	wc, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: door.Id, DestGridId: rootB, X: 6, Y: 6})
 	if err != nil {
-		t.Fatalf("cross-plugin well copy: %v", err)
+		t.Fatalf("cross-plugin door copy: %v", err)
 	}
 	g, err := cl.GetGrid(ctx, wc.ChildGridId)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n := len(g.Tiles); n != 1 {
-		t.Fatalf("copied well holds %d tiles, want 1", n)
+		t.Fatalf("copied door holds %d tiles, want 1", n)
 	}
 	if got := g.Tiles[0]; got.LinkTargetId != inner.Id || !got.Link {
 		t.Errorf("nested copy = target %q link %v, want a shell link to %q", got.LinkTargetId, got.Link, inner.Id)

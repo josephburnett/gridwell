@@ -64,13 +64,13 @@ func TestSnapToCell(t *testing.T) {
 
 func TestChildPreviewRoundTrip(t *testing.T) {
 	parent := mkPane(0, 0, 800, 600, 0, 0, 1.0, 64)
-	well := struct {
+	door := struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
 	}{X: -1, Y: 2, W: 3, H: 4, ViewCx: 11.5, ViewCy: -3}
-	// An unvisited well falls back to a ratio of 1/8, so a 64 px parent
+	// An unvisited door falls back to a ratio of 1/8, so a 64 px parent
 	// cell gives 8 px child cells.
-	cp := ChildPreviewFor(parent, well, 1.0/8.0)
+	cp := ChildPreviewFor(parent, door, 1.0/8.0)
 	if !near(cp.CellPx, 8) {
 		t.Errorf("CellPx = %v, want 8", cp.CellPx)
 	}
@@ -87,20 +87,20 @@ func TestChildPreviewRoundTrip(t *testing.T) {
 }
 
 func TestChildPreviewCenterAlignsWithViewCenter(t *testing.T) {
-	// The preview's view center lands at the well's screen center, which
+	// The preview's view center lands at the door's screen center, which
 	// is the calibration zoomtrans relies on.
 	parent := mkPane(0, 0, 1000, 1000, 0, 0, 2.0, 64)
-	well := struct {
+	door := struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
 	}{X: 0, Y: 0, W: 4, H: 4, ViewCx: 2, ViewCy: 2}
-	cp := ChildPreviewFor(parent, well, 1.0/8.0)
-	wellCenterX, wellCenterY := parent.CellToScreen(2, 2) // center of 4×4 well at (0,0)
-	// The well's view center is also (2, 2) in child cells.
+	cp := ChildPreviewFor(parent, door, 1.0/8.0)
+	doorCenterX, doorCenterY := parent.CellToScreen(2, 2) // center of 4×4 door at (0,0)
+	// The door's view center is also (2, 2) in child cells.
 	viewCenterScreenX, viewCenterScreenY := cp.CellToScreen(2, 2)
-	if !near(viewCenterScreenX, wellCenterX) || !near(viewCenterScreenY, wellCenterY) {
+	if !near(viewCenterScreenX, doorCenterX) || !near(viewCenterScreenY, doorCenterY) {
 		t.Errorf("view center maps to (%v,%v), want (%v,%v)",
-			viewCenterScreenX, viewCenterScreenY, wellCenterX, wellCenterY)
+			viewCenterScreenX, viewCenterScreenY, doorCenterX, doorCenterY)
 	}
 }
 
@@ -542,18 +542,18 @@ func TestGhostPlanForDrop(t *testing.T) {
 	}
 }
 
-func TestPromoteToWell(t *testing.T) {
+func TestPromoteToDoor(t *testing.T) {
 	cases := []struct {
 		name                               string
-		isWell                             bool
+		isDoor                             bool
 		childGridID, tileID, draggedTileID string
 		want                               bool
 	}{
-		{"open well promotes", true, "g9", "t1", "t2", true},
-		{"non-well never promotes", false, "g9", "t1", "t2", false},
-		{"well with no child never promotes", true, "", "t1", "t2", false},
-		{"the dragged well itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
-		{"a well the set carries never promotes", true, "g9", "t3", "t1,t3", false},
+		{"open door promotes", true, "g9", "t1", "t2", true},
+		{"non-door never promotes", false, "g9", "t1", "t2", false},
+		{"door with no child never promotes", true, "", "t1", "t2", false},
+		{"the dragged door itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
+		{"a door the set carries never promotes", true, "g9", "t3", "t1,t3", false},
 		{"no drag in flight still promotes", true, "g9", "t1", "", true},
 	}
 	for _, c := range cases {
@@ -563,8 +563,8 @@ func TestPromoteToWell(t *testing.T) {
 				carried = append(carried, Member{ID: id})
 			}
 		}
-		if got := PromoteToWell(c.isWell, c.childGridID, c.tileID, carried); got != c.want {
-			t.Errorf("%s: PromoteToWell = %v, want %v", c.name, got, c.want)
+		if got := PromoteToDoor(c.isDoor, c.childGridID, c.tileID, carried); got != c.want {
+			t.Errorf("%s: PromoteToDoor = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

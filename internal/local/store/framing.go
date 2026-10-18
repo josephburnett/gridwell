@@ -1,10 +1,10 @@
 package store
 
-// Framing is how a grid looked when the user left it through a doorway: a
+// Framing is how a grid looked when the user left it through a door: a
 // float center in the grid's own coordinates plus a pane-size-independent
 // zoom, so a window resize never moves a saved view. It lives on the row that
-// owns the doorway, a tile row (view_cx, view_cy, view_zoom) for a grid
-// entered through a well, or a grid row (root_cx, root_cy, root_zoom) for a
+// owns the door, a tile row (view_cx, view_cy, view_zoom) for a grid
+// entered through a door, or a grid row (root_cx, root_cy, root_zoom) for a
 // root, home's included at ns = ''. Never visited is three NULLs, written only
 // by a row's creation; updateFraming writes only an rpc.Framing. This file is
 // the single SQL writer, so the shape cannot drift.

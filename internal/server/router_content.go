@@ -28,7 +28,7 @@ func (rt *router) ReadContent(ctx context.Context, req *pb.ReadContentRequest, s
 
 // ServeContent forwards a web-content request one hop. HTTP terminates at the
 // local API and the request rides this verb through the tunnel, which is how
-// a mounted node's pages are served.
+// a far node's pages are served.
 func (rt *router) ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	c, local, err := rt.srv.contentRoute(ctx, req.TileId)
 	if err != nil {

@@ -38,7 +38,7 @@ func (s *State) Hover() int { return s.hover }
 // starts folded.
 func (s *State) PluginsExpanded() bool { return s.expanded }
 
-// TogglePlugins flips the doorway section and returns the new state. Hover is
+// TogglePlugins flips the door section and returns the new state. Hover is
 // dropped, because the swatch list under the pointer has changed.
 func (s *State) TogglePlugins() bool {
 	s.expanded = !s.expanded

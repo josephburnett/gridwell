@@ -107,8 +107,8 @@ their responses into the remembered rows (`foldWrite`), except to a source
 the user disabled, whose writes the router refuses before they reach this
 layer (`gwerr.SourceDisabled`, `server/disabled.go`). The relayed stream
 folds in the same way (`applyEvent`): `TileChanged` and `TileRemoved` into
-the tile rows, a well's framing riding its tile, and `GridFramingChanged` into
-every remembered handshake's doorways rooted at that grid (`Layer.reframe`,
+the tile rows, a door's framing riding its tile, and `GridFramingChanged` into
+every remembered handshake's doors rooted at that grid (`Layer.reframe`,
 over `rpc.Reframe`), which is also where an accepted root `SetFraming` lands,
 so a far grid reopens dark where it was last left. `SelectionChanged` and an
 accepted `SetSelection` land the whole set on the remembered grid
@@ -176,7 +176,7 @@ overwritten by a fetch, a save response, or a delete: it is the one copy of
 unsaved typing.
 
 A root grid's framing is not in the cache: it rides the handshake, on the
-doorways rooted at that grid. Its write announces `GridFramingChanged`, which
+doors rooted at that grid. Its write announces `GridFramingChanged`, which
 carries the three numbers, and `events.Route` applies them through
 `rpc.Reframe` and fetches nothing. `GridChanged` means the listing changed
 and nothing else.
@@ -523,7 +523,7 @@ source.
 **Framing is last-writer-wins.** `version` means the user's content bytes,
 a pane tile's layout among them, and nothing else. A placement claims the
 placement it saw instead. Framing and captures carry no claim and cannot
-conflict. Two panes settling the same doorway resolve by arrival order, and
+conflict. Two panes settling the same door resolve by arrival order, and
 the outbox keeps one live entry per key by design.
 
 **Absence is never inferred from silence.** A non-authoritative listing
@@ -531,7 +531,7 @@ retires nothing without a definitive `PRESENCE_GONE`
 (`Adapter.synthesize`, `Adapter.DeleteTile`), and a connection that cannot
 be resolved answers NOT gone (`connection.Server.Probe`). A row kept on
 doubt costs nothing durable; a row retired on doubt loses a placement and
-every link to it. Framing is the same: a doorway answered with no framing
+every link to it. Framing is the same: a door answered with no framing
 (the transport's row for a dark connection) keeps the one the cache
 remembers (`sourcecache.keepFraming`), because a visited grid never becomes
 unvisited.
@@ -578,19 +578,19 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
-| A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown context whose listing moved, a context a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a well's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/well-preview-watch.spec.ts` |
+| A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown context whose listing moved, a context a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their contexts, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a door's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/door-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the remembering when dark; verdicts never masked | `sourcecache_test.go:TestServesStaleWhenDark`, `TestVerdictNeverMasked` |
-| A far root's framing event and an accepted root write land on every remembered doorway rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a well's framing | `sourcecache/framing_test.go` |
-| A doorway answered with no framing keeps the remembered one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt` |
-| Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its wells | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
+| A far root's framing event and an accepted root write land on every remembered door rooted there; a dark framing write is refused as other dark writes are and remembered nowhere; a tile event keeps a door's framing | `sourcecache/framing_test.go` |
+| A door answered with no framing keeps the remembered one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheRememberedFramingAndAnAnswerReplacesIt` |
+| Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its doors | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
 | A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesStaleWhenDark`, `TestServeContentNeverCachesVerdicts` |
-| Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
-| A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark mount serves the remembered room, marked stale") |
+| Real binaries, real ssh: warmed reads serve the remembering, never-read bytes fail honestly, a revived remote answers live | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
+| A dark source is the bar's cached chip, and the join from a source to the rooms it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the remembered room, marked stale") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
-| The client's health arms: `reportPluginHealth` folds the transition in and kicks in BOTH directions, and the notice resolves on recovery | The same revived-mount spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and the chip appears and later clears with no gesture either time |
+| The client's health arms: `reportPluginHealth` folds the transition in and kicks in BOTH directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the strip on recovery, and the chip appears and later clears with no gesture either time |
 | A refused Watch is its own sticky notice beside the dark one, each clears on its own field, and the field alone resyncs nothing | `client/events/events_test.go:TestReactHealthTable`, `client/events/resync_test.go`; live, `apps/desktop/e2e/live-updates-off.spec.ts` |
 | A flap resyncs the flapping source's grids and NOBODY else's, including a chain through it | `client/cache/resync_test.go:TestAFlapResyncsOnlyTheGridsItsSourceServes`, `TestAConnectionsFlapOwnsEveryGridChainedThroughIt`; the chain rule at its owner, `api/rpc/segment_test.go:TestChainedThroughIsTheWholeChainNotOneNodesPeel` |
 | The gap paths keep their breadth: `cache.EverySource` is the whole cache | `client/cache/resync_test.go:TestEverySourceIsTheWholeCache` |
@@ -602,7 +602,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A recovery the layer learns from its own answering call walks it too | `prefetch_seam_test.go:TestARecoveryNoticedByAReadWalksTheSourceToo` |
 | It walks only the source that recovered | `prefetch_seam_test.go:TestARecoveryWalksOnlyTheSourceThatRecovered` (two connections, two far nodes) |
 | A flap storm does not stack walks: single-flight per source | `prefetch_seam_test.go:TestAFlapStormDoesNotStackWalks` |
-| Real binaries, real ssh: a revived connection warms what nobody read, so a second partition serves it | `test/connections/partition_test.go:TestMountPartitionServesCache` (`make check-connections`) |
+| Real binaries, real ssh: a revived connection warms what nobody read, so a second partition serves it | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
 | A cache that never opened reaches a real subscriber as the transport's health | `internal/node/cache_health_test.go:TestAnUnopenableCacheSurfacesAsHealth`, `TestAnOpenedCacheReportsNothing` |
 
 ### Trace (c)

@@ -13,12 +13,12 @@ func TestDropOn(t *testing.T) {
 		{"a release over no grid snaps back", Release{}, DropSnapBack},
 		{"a release over occupied cells snaps back",
 			Release{Target: true, Occupied: true, SameNode: true}, DropSnapBack},
-		{"a healthy doorway over a writable grid links",
-			Release{Target: true, Doorway: true, Enterable: true, AcceptsTiles: true}, DropLink},
-		{"a doorway that cannot be entered snaps back",
-			Release{Target: true, Doorway: true, AcceptsTiles: true}, DropSnapBack},
-		{"a doorway over a read-only or uncached grid snaps back",
-			Release{Target: true, Doorway: true, Enterable: true}, DropSnapBack},
+		{"a healthy door over a writable grid links",
+			Release{Target: true, Door: true, Enterable: true, AcceptsTiles: true}, DropLink},
+		{"a door that cannot be entered snaps back",
+			Release{Target: true, Door: true, AcceptsTiles: true}, DropSnapBack},
+		{"a door over a read-only or uncached grid snaps back",
+			Release{Target: true, Door: true, Enterable: true}, DropSnapBack},
 		{"a primitive over another node's grid refuses",
 			Release{Target: true, AcceptsTiles: true}, DropRefuse},
 		{"a primitive over this node's grid creates",
@@ -37,18 +37,18 @@ func TestDropOn(t *testing.T) {
 
 // A link is the one thing that may cross nodes, since a link out of a plugin
 // is how the far grid is reached at all.
-func TestDropOnDoorwayCrossesNodes(t *testing.T) {
-	in := Release{Target: true, Doorway: true, Enterable: true, AcceptsTiles: true}
+func TestDropOnDoorCrossesNodes(t *testing.T) {
+	in := Release{Target: true, Door: true, Enterable: true, AcceptsTiles: true}
 	if got := DropOn(in); got != DropLink {
-		t.Fatalf("DropOn(doorway across nodes) = %v, want %v", got, DropLink)
+		t.Fatalf("DropOn(door across nodes) = %v, want %v", got, DropLink)
 	}
 }
 
 // A primitive carries no health and no writable check of its own: the swatch
 // was already gated by the menu's node, and the create RPC is the authority.
-func TestDropOnPrimitiveIgnoresDoorwayFacts(t *testing.T) {
+func TestDropOnPrimitiveIgnoresDoorFacts(t *testing.T) {
 	in := Release{Target: true, SameNode: true}
 	if got := DropOn(in); got != DropCreate {
-		t.Fatalf("DropOn(primitive, no doorway facts) = %v, want %v", got, DropCreate)
+		t.Fatalf("DropOn(primitive, no door facts) = %v, want %v", got, DropCreate)
 	}
 }

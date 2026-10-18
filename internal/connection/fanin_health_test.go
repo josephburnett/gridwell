@@ -17,7 +17,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// deadSubscribeClient's event stream never opens: a mount whose tunnel is
+// deadSubscribeClient's event stream never opens: a connection whose tunnel is
 // down.
 type deadSubscribeClient struct {
 	namespace.Namespace

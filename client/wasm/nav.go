@@ -5,7 +5,7 @@ package main
 // Navigation: one descent and one ascent. The decisions are client/nav's, a
 // gesture plus a world snapshot in and an ordered effect list out. This file
 // is the gathering half and nav_exec.go the executing half; nothing here
-// decides anything. Ownership boundaries are wire declarations on the doorway
+// decides anything. Ownership boundaries are wire declarations on the door
 // tile, which the machine reads, so no call site switches on a kind.
 
 import (
@@ -42,13 +42,13 @@ func (a *App) runGesture(g nav.Gesture) {
 	a.reportErr(errsurface.Error, "nav", "navigation did not settle")
 }
 
-// descend takes pane p through the doorway tile: the descent verb.
+// descend takes pane p through the door tile: the descent verb.
 func (a *App) descend(p *pane.Pane, tile *gridwellv1.Tile) {
 	a.runGesture(nav.Gesture{Kind: nav.GestureDescend, PaneID: p.ID, Door: tile})
 }
 
 // ascend leaves n levels of pane p's place. animate asks for the zoom-out
-// onto the doorway on the last hop; false is for the paths with no footprint
+// onto the door on the last hop; false is for the paths with no footprint
 // to zoom out of.
 func (a *App) ascend(p *pane.Pane, n int, animate bool) {
 	a.runGesture(nav.Gesture{Kind: nav.GestureAscend, PaneID: p.ID, N: n, Animate: animate})
@@ -125,7 +125,7 @@ func (a *App) navWorldForRestore() nav.World {
 		for id, t := range g.Tiles {
 			rows[id] = nav.RestoreTile{
 				ChildGridID:  t.ChildGridId,
-				IsWell:       rpc.IsWellKind(t.Kind),
+				IsDoor:       rpc.IsDoorKind(t.Kind),
 				IsContent:    rpc.IsContentDescentKind(t.Kind),
 				TextDocument: rpc.TextDocument(t),
 				ReadOnly:     a.tileReadOnly(t),
@@ -138,7 +138,7 @@ func (a *App) navWorldForRestore() nav.World {
 	for _, id := range a.fetch.grids.FailedKeys() {
 		rw.Failed[id] = true
 	}
-	// Which doorway the address names is the machine's to decode, so every
+	// Which door the address names is the machine's to decode, so every
 	// one is resolved. door.Places is ByRoot's answer set.
 	if p := a.tree.FocusedPane(); p != nil {
 		for _, pd := range door.Places(a.allPlugins()) {
@@ -194,7 +194,7 @@ func (a *App) navWorldCommon() nav.World {
 	return w
 }
 
-// navWorldForDescend resolves the doorway declarations only the shim can
+// navWorldForDescend resolves the door declarations only the shim can
 // read, each through the predicate that owns it.
 func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 	d := &nav.DoorWorld{
@@ -202,10 +202,10 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 		IsLink:   isLinkTile(tile),
 		ReadOnly: a.tileReadOnly(tile),
 	}
-	if tile.ChildGridId != "" || !rpc.IsWellKind(tile.Kind) {
+	if tile.ChildGridId != "" || !rpc.IsDoorKind(tile.Kind) {
 		return d
 	}
-	// A doorway with no target: ask pluginhealth why, so the click says
+	// A door with no target: ask pluginhealth why, so the click says
 	// something. The id is bare on a menu row and node-qualified on a link
 	// tile, so both shapes are tried.
 	pl, ok := a.pluginByUUID(tile.Id)
@@ -222,7 +222,7 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 }
 
 // navWorldForAscend resolves the frame being left: the content row, the
-// doorway row one level out, and the framing the landing grid was left at.
+// door row one level out, and the framing the landing grid was left at.
 func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 	lw := &nav.LeaveWorld{}
 	p := a.tree.FindPane(paneID)
