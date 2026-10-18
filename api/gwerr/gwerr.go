@@ -22,7 +22,7 @@ var (
 	ErrNotTextTile     = errors.New("not a text tile")
 	ErrNotDoorTile     = errors.New("not a door tile")
 	ErrNotShellTile    = errors.New("not a shell tile")
-	ErrNotPaneTile     = errors.New("not a pane tile")
+	ErrNotWorkspace    = errors.New("not a workspace tile")
 	ErrVersionConflict = errors.New("version mismatch")
 	// ErrSchemaDivergence is a deployment problem, hence ClassInternal.
 	ErrSchemaDivergence = errors.New("database schema diverges from this binary's schema")
@@ -53,7 +53,7 @@ var sentinelClasses = []struct {
 	{ErrNotTextTile, ClassInvalidArgument},
 	{ErrNotDoorTile, ClassInvalidArgument},
 	{ErrNotShellTile, ClassInvalidArgument},
-	{ErrNotPaneTile, ClassInvalidArgument},
+	{ErrNotWorkspace, ClassInvalidArgument},
 	{ErrOverlap, ClassConflict},
 	{ErrVersionConflict, ClassConflict},
 	{ErrSchemaDivergence, ClassInternal},

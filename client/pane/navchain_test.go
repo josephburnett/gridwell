@@ -9,7 +9,7 @@ func TestNavChainOutsideAnyView(t *testing.T) {
 	var s Levels
 	p := &Pane{Stack: StackAt("u1/0", []string{"w1"}, "")}
 	got := s.NavChain(p)
-	if len(got) != 2 || got[0].CloseOnly || got[0].PaneTile || got[0].Crumb.Anchor != "u1/0" || got[1].Crumb.TileID != "w1" {
+	if len(got) != 2 || got[0].CloseOnly || got[0].Workspace || got[0].Crumb.Anchor != "u1/0" || got[1].Crumb.TileID != "w1" {
 		t.Fatalf("session tree: chain = %+v", got)
 	}
 	if s.NavChain(nil) != nil {
@@ -30,8 +30,8 @@ func TestNavChainInsideViews(t *testing.T) {
 	got := s.NavChain(live)
 	want := []NavCrumb{
 		{CloseOnly: true, Crumb: op.Crumbs()[0]},
-		{PaneTile: true, WsLevel: 1, TileID: "pt1"},
-		{PaneTile: true, WsLevel: 2, TileID: "pt2"},
+		{Workspace: true, WsLevel: 1, TileID: "pt1"},
+		{Workspace: true, WsLevel: 2, TileID: "pt2"},
 		{Crumb: live.Crumbs()[0]},
 		{Crumb: live.Crumbs()[1]},
 	}
@@ -52,7 +52,7 @@ func TestNavChainRootCrumbAlwaysHasAGlyph(t *testing.T) {
 	boot.Push(Level{TileID: "pt", GridID: "u1/0"})
 	r := boot.NavChain(nil)[0]
 	if !r.CloseOnly || r.Crumb.Anchor != "u1/0" {
-		t.Fatalf("boot-restored root crumb = %+v, want the pane tile's grid glyph", r)
+		t.Fatalf("boot-restored root crumb = %+v, want the workspace tile's grid glyph", r)
 	}
 
 	// A descent's parked tree wins: that is the place the click restores.

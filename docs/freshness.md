@@ -521,7 +521,7 @@ and nothing says so. Only a grid the cache has never seen waits on the
 source.
 
 **Framing is last-writer-wins.** `version` means the user's content bytes,
-a pane tile's layout among them, and nothing else. A placement claims the
+a workspace tile's layout among them, and nothing else. A placement claims the
 placement it saw instead. Framing and captures carry no claim and cannot
 conflict. Two panes settling the same door resolve by arrival order, and
 the outbox keeps one live entry per key by design.

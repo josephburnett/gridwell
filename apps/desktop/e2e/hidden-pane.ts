@@ -4,7 +4,7 @@ import { tileAt } from './oracle';
 import { settle } from './cadence';
 import { dumpNow, TraceLine } from './trace';
 
-// The 2026-10-04 trace, as a scenario both renderers run: inside a pane tile,
+// The 2026-10-04 trace, as a scenario both renderers run: inside a workspace tile,
 // two panes on different grids, one zoomed to fill through the bar title so
 // the other has no rect, then a reload, which restores both leaves pending
 // their owner rows' views. The hidden pane must neither adopt a view against
@@ -51,14 +51,14 @@ export async function hiddenPaneScenario(gw: GridwellDriver, window: any, token:
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('door', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
   const door = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)!;
-  expect(pt && door, 'pane tile and door persisted').toBeTruthy();
+  expect(pt && door, 'workspace tile and door persisted').toBeTruthy();
 
-  // Give the door a saved view of its own, outside the pane tile.
+  // Give the door a saved view of its own, outside the workspace tile.
   await gw.descendCell(wx + 1, wy);
   await gw.wheelAtFocusedCenter(-300);
   const framed = await gw.focused();

@@ -54,7 +54,7 @@ func nodesEqual(a, b TreeNode) bool {
 // TestLayoutGoldenV1 pins the v1 wire format: these exact bytes were written
 // by the first shipping version of the codec and decode to the same
 // arrangement forever. Their views are retired keys the decoder skips. If this
-// test breaks, the change is rewriting history in every user's pane tiles — do
+// test breaks, the change is rewriting history in every user's workspace tiles — do
 // not "fix" the fixture.
 func TestLayoutGoldenV1(t *testing.T) {
 	golden := `{"v":1,"root":{"split":{"dir":"v","ratio":0.25,` +
@@ -403,7 +403,7 @@ func TestLayoutRestoresTheWholePlace(t *testing.T) {
 	}
 }
 
-// TestLayoutKeepsEveryFramesView: inside a pane tile the blob owns each grid
+// TestLayoutKeepsEveryFramesView: inside a workspace tile the blob owns each grid
 // frame's view (2026-10-14), so a restored pane shows its top frame where it
 // was left and an ascent lands on the view the frame below was left at.
 func TestLayoutKeepsEveryFramesView(t *testing.T) {
@@ -667,7 +667,7 @@ func TestLayoutOldViewsAreNotRead(t *testing.T) {
 
 // TestLayoutAdoptedViewIsNotWritten: a leaf from a blob with no view takes its
 // row's view on Adopt, and until the user moves it the blob re-encodes byte
-// for byte, so opening a pane tile and looking writes nothing.
+// for byte, so opening a workspace tile and looking writes nothing.
 func TestLayoutAdoptedViewIsNotWritten(t *testing.T) {
 	blob := `{"v":1,"root":{"pane":{"id":"p1","anchor":"aaaa/1","path":["aaaa/7"]}},"focus":"p1"}`
 	tr, err := DecodeLayout([]byte(blob), nil, "")
@@ -691,7 +691,7 @@ func TestLayoutAdoptedViewIsNotWritten(t *testing.T) {
 	}
 }
 
-// TestLayoutKeepsAScrolledTextLeaf: inside a pane tile a text leaf's scroll is
+// TestLayoutKeepsAScrolledTextLeaf: inside a workspace tile a text leaf's scroll is
 // the layout's once the user moves it. Until then it is the row's, so opening
 // a document writes nothing; a scroll moves the layout fingerprint and reaches
 // the blob, and a restored leaf keeps the blob's scroll when it adopts its

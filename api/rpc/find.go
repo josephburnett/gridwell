@@ -57,8 +57,8 @@ func FindFiltered(req *pb.FindRequest) bool {
 }
 
 // FindKinds are the kinds a find's kind filter names, the four
-// primitives and the pane tile.
-var FindKinds = []string{KindText, KindURL, KindShell, KindDoor, KindPane}
+// primitives and the workspace tile.
+var FindKinds = []string{KindText, KindURL, KindShell, KindDoor, KindWorkspace}
 
 // FindKeepsKind reports whether a tile of kind passes req's kind filter.
 func FindKeepsKind(req *pb.FindRequest, kind string) bool {

@@ -52,7 +52,7 @@ func layoutInto(n TreeNode, r Rect, out map[string]Rect) {
 }
 
 // GutterPane is the pane a press in area but outside root borders: the one
-// holding the press clamped into root. Inside a pane tile root is inset from
+// holding the press clamped into root. Inside a workspace tile root is inset from
 // the pane area by the outline, which belongs to no pane, so without this the
 // window-edge split target would be narrower than an interior divider's.
 func GutterPane(rects map[string]Rect, root, area Rect, sx, sy float64) (string, bool) {

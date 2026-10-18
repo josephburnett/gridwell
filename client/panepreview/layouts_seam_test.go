@@ -27,7 +27,7 @@ func TestAPreviewNeverDrawsAnOlderBlobsLeaves(t *testing.T) {
 	before, after := encode(withGone), encode(pane.TreeAtPlace("", "g0", nil, rpc.ViewOf(0, 0, 1)))
 
 	row := func(blob int64) *gridwellv1.Tile {
-		return &gridwellv1.Tile{Id: "w", GridId: "g", Kind: rpc.KindPane, Version: 1, BlobId: blob}
+		return &gridwellv1.Tile{Id: "w", GridId: "g", Kind: rpc.KindWorkspace, Version: 1, BlobId: blob}
 	}
 	c := cache.New()
 	c.PutGrid(&gridwellv1.Grid{Id: "g"}, []*gridwellv1.Tile{row(7)})
@@ -74,7 +74,7 @@ func TestAPreviewRedrawsWhenItsOwnWriteFilesTheBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	row := func(blob int64) *gridwellv1.Tile {
-		return &gridwellv1.Tile{Id: "w", GridId: "g", Kind: rpc.KindPane, Version: 1, BlobId: blob}
+		return &gridwellv1.Tile{Id: "w", GridId: "g", Kind: rpc.KindWorkspace, Version: 1, BlobId: blob}
 	}
 	c := cache.New()
 	c.PutGrid(&gridwellv1.Grid{Id: "g"}, []*gridwellv1.Tile{row(7)})

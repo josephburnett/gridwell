@@ -26,8 +26,8 @@ test('copying a workspace: shared blob, independent divergence', async ({ gw, wi
 
   // A split makes the original's blob distinctive.
   await gw.openMenu();
-  await gw.dragCreate('pane', ax, ay);
-  const orig = tileAt(await gw.getGrid(rootGrid), 'pane', ax, ay);
+  await gw.dragCreate('workspace', ax, ay);
+  const orig = tileAt(await gw.getGrid(rootGrid), 'workspace', ax, ay);
   expect(orig).toBeTruthy();
   await gw.descendCell(ax, ay);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
@@ -45,7 +45,7 @@ test('copying a workspace: shared blob, independent divergence', async ({ gw, wi
 
   // The copy gesture: right-drag from the tile's center to a free cell.
   await gw.copyTileCell(ax, ay, ax, ay + 2);
-  const copy = tileAt(await gw.getGrid(rootGrid), 'pane', ax, ay + 2);
+  const copy = tileAt(await gw.getGrid(rootGrid), 'workspace', ax, ay + 2);
   expect(copy, 'copy landed').toBeTruthy();
   expect(copy!.id).not.toBe(orig!.id);
   expect(await gw.getTileContent(copy!.id), 'copy shares the layout bytes').toBe(origBlob);
@@ -78,8 +78,8 @@ test('an unreadable layout opens read-only and is never overwritten', async ({ g
   const ay = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', ax, ay);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', ax, ay);
+  await gw.dragCreate('workspace', ax, ay);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', ax, ay);
   expect(pt).toBeTruthy();
 
   // A future-format blob, written directly. The server treats layout bytes as

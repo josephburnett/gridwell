@@ -4,7 +4,7 @@ import { settle } from './cadence';
 import { dumpViaAPI, TraceLine } from './trace';
 import type { GridwellDriver, PaneInfo } from './driver';
 
-// Inside a pane tile each pane keeps its own view of a grid, at every level
+// Inside a workspace tile each pane keeps its own view of a grid, at every level
 // of its stack, in the layout blob (2026-10-14). These cross from the gesture
 // to the node's record of what it wrote, and from the stored blob back to
 // what a reopened pane shows.
@@ -63,12 +63,12 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('door', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
   const doorBefore = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy)!;
-  expect(pt && doorBefore, 'pane tile and door persisted').toBeTruthy();
+  expect(pt && doorBefore, 'workspace tile and door persisted').toBeTruthy();
 
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
@@ -102,7 +102,7 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
     })
     .toBe(true);
   await settle(window, Math.max(c.workspaceSaveMs, c.framingSaveMs));
-  expect(storeWrites(await dumpViaAPI(gw.origin, token), isFraming), 'a pan inside a pane tile wrote SetFraming')
+  expect(storeWrites(await dumpViaAPI(gw.origin, token), isFraming), 'a pan inside a workspace tile wrote SetFraming')
     .toBe(framingBefore);
 
   await gw.leaveWorkspace();
@@ -132,10 +132,10 @@ test('a reopened pane ascends onto the view it left the level below at', async (
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('door', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
 
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);

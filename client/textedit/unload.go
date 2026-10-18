@@ -67,7 +67,7 @@ func ScrollMoved(stored, next Scroll, readOnly bool) bool {
 // RowScroll is what a text pane writes to its tile row from the scroll it
 // shows. The row's scroll is where the tile was left: the grid preview crops
 // there and a fresh descent opens there. So leaving writes it whole, and so
-// does a settle outside a pane tile; a settle inside one, whose layout owns
+// does a settle outside a workspace tile; a settle inside one, whose layout owns
 // the live scroll (pane.FramingOwner), takes only the mode, so a look or a
 // focus tap on another device moves no one's scroll.
 func RowScroll(stored, shown Scroll, layoutOwnsScroll, leaving bool) Scroll {

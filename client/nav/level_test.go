@@ -8,12 +8,12 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// The second axis: the pane-tile descent's two arms, the install they join
+// The second axis: the workspace tile descent's two arms, the install they join
 // into, and the way back out.
 
-// paneTile is a never-arranged pane tile in g1; arranged() gives it a blob.
-func paneTile() *gridwellv1.Tile {
-	return &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindPane, GridId: "g1",
+// workspace is a never-arranged workspace tile in g1; arranged() gives it a blob.
+func workspace() *gridwellv1.Tile {
+	return &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindWorkspace, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, AltText: "plan"}
 }
 
@@ -53,7 +53,7 @@ var installKinds = []EffectKind{EffInstallPlace, EffCancelTransition, EffCloseMe
 
 func TestEnterLevelAnimations(t *testing.T) {
 	t.Run("a never-arranged tile expands rather than zooming", func(t *testing.T) {
-		anim, _, _ := enter(t, New(), paneTile())
+		anim, _, _ := enter(t, New(), workspace())
 		if !anim.Expand {
 			t.Fatalf("the first descent did not ask for the capture animation")
 		}
@@ -64,7 +64,7 @@ func TestEnterLevelAnimations(t *testing.T) {
 	})
 
 	t.Run("an arranged tile zooms into its footprint", func(t *testing.T) {
-		anim, _, _ := enter(t, New(), arranged(paneTile()))
+		anim, _, _ := enter(t, New(), arranged(workspace()))
 		if anim.Expand {
 			t.Fatalf("an arranged tile asked for the capture animation")
 		}
@@ -76,7 +76,7 @@ func TestEnterLevelAnimations(t *testing.T) {
 }
 
 func TestEnterLevelArmsJoin(t *testing.T) {
-	row := arranged(paneTile())
+	row := arranged(workspace())
 	blob := layoutBytes(t)
 
 	// The fetch arm, run to the end. Returns the plan of its last step.
@@ -180,8 +180,8 @@ func TestEnterLevelArmsJoin(t *testing.T) {
 func TestEnterLevelRows(t *testing.T) {
 	t.Run("a pane link opens its target's arrangement", func(t *testing.T) {
 		m := New()
-		_, fetch, w := enter(t, m, paneTile())
-		link := paneTile()
+		_, fetch, w := enter(t, m, workspace())
+		link := workspace()
 		link.LinkTargetId = "u2/pt9"
 		plan := m.Resume(fetch.Token, Result{OK: true, Tile: link}, w)
 		e := only(t, plan, EffAwait)
@@ -199,8 +199,8 @@ func TestEnterLevelRows(t *testing.T) {
 
 	t.Run("a never-arranged tile captures the window at the swap", func(t *testing.T) {
 		m := New()
-		anim, fetch, w := enter(t, m, paneTile())
-		row := paneTile()
+		anim, fetch, w := enter(t, m, workspace())
+		row := workspace()
 		if plan := m.Resume(fetch.Token, Result{OK: true, Tile: row}, w); len(plan.Effects) != 0 {
 			t.Fatalf("a never-arranged tile read a blob: %v", kinds(plan))
 		}
@@ -219,8 +219,8 @@ func TestEnterLevelRows(t *testing.T) {
 
 	t.Run("an unreadable blob opens read-only", func(t *testing.T) {
 		m := New()
-		anim, fetch, w := enter(t, m, arranged(paneTile()))
-		row := arranged(paneTile())
+		anim, fetch, w := enter(t, m, arranged(workspace()))
+		row := arranged(workspace())
 		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: row}, w), EffAwait)
 		plan := m.Resume(body.Token, Result{OK: true, Data: []byte("{}")}, w)
 		if !sameKinds(kinds(plan), []EffectKind{EffReport}) {
@@ -240,9 +240,9 @@ func TestEnterLevelRows(t *testing.T) {
 		m := New()
 		w := baseWorld(gridPane("pane1", "g1"))
 		w.LevelDepth = 1
-		plan := m.Do(enterGesture("pane1", paneTile()), w)
+		plan := m.Do(enterGesture("pane1", workspace()), w)
 		fetch := plan.Effects[1]
-		row := paneTile()
+		row := workspace()
 		m.Resume(fetch.Token, Result{OK: true, Tile: row}, w)
 		e := only(t, m.Land(plan.Effects[0].Land, w), EffInstallLevel)
 		if e.IDPrefix != "w2:" {
@@ -268,7 +268,7 @@ func TestBootLevel(t *testing.T) {
 	t.Run("a reload opens the level with no outer tree", func(t *testing.T) {
 		m := New()
 		fetch, w := boot(t, m)
-		row := arranged(paneTile())
+		row := arranged(workspace())
 		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: row}, w), EffAwait)
 		plan := m.Resume(body.Token, Result{OK: true, Data: layoutBytes(t)}, w)
 		// No barrier, so no origin place to put back: the swap alone.
@@ -284,14 +284,14 @@ func TestBootLevel(t *testing.T) {
 	t.Run("a never-arranged tile opens on its own grid", func(t *testing.T) {
 		m := New()
 		fetch, w := boot(t, m)
-		row := paneTile()
+		row := workspace()
 		e := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: row}, w), EffInstallLevel)
 		if e.Capture {
 			t.Fatalf("a boot restore captured a window it never had")
 		}
 		p := e.Tree.FocusedPane()
 		if p == nil || p.Anchor() != "g1" || !centredOn(p.View, 4, 5) {
-			t.Fatalf("landed at %+v, want the pane tile's grid, centred on the tile", p)
+			t.Fatalf("landed at %+v, want the workspace tile's grid, centred on the tile", p)
 		}
 	})
 
@@ -306,7 +306,7 @@ func TestBootLevel(t *testing.T) {
 	})
 }
 
-// levelWorld is the window inside one pane tile, with `outer` saying whether
+// levelWorld is the window inside one workspace tile, with `outer` saying whether
 // that level parked a tree.
 func levelWorld(outer bool) World {
 	w := baseWorld(gridPane("pane1", "g1"))
@@ -393,13 +393,13 @@ func TestLeaveLevels(t *testing.T) {
 			t.Fatalf("effects = %v, want the hop with a landing grid", kinds(plan))
 		}
 		if e := only(t, plan, EffPopLevel); e.GridID != "g1" {
-			t.Fatalf("pop = %+v, want the pane tile's own grid", e)
+			t.Fatalf("pop = %+v, want the workspace tile's own grid", e)
 		}
 		after := baseWorld(gridPane("pane1", "g1"))
 		land := m.Do(*plan.Next, after)
 		aw := only(t, land, EffAwait)
 		if aw.Request.Kind != RequestGetTile || aw.Request.ID != "pt1" {
-			t.Fatalf("await = %+v, want the pane tile's row", aw.Request)
+			t.Fatalf("await = %+v, want the workspace tile's row", aw.Request)
 		}
 		row := &gridwellv1.Tile{Id: "pt1", GridId: "g9", X: 2, Y: 3, W: 4, H: 4}
 		plan = m.Resume(aw.Token, Result{OK: true, Tile: row}, after)
@@ -499,7 +499,7 @@ func TestFollowLinkTarget(t *testing.T) {
 	})
 }
 
-// A pane tile remembers which pane was focused and which was zoomed, so a
+// A workspace tile remembers which pane was focused and which was zoomed, so a
 // descent and a reload both open on the pane it was left on; see
 // pane.LayoutFingerprint.
 func TestLevelOpensOnRememberedFocus(t *testing.T) {
@@ -528,8 +528,8 @@ func TestLevelOpensOnRememberedFocus(t *testing.T) {
 
 	t.Run("descent", func(t *testing.T) {
 		m := New()
-		anim, fetch, w := enter(t, m, arranged(paneTile()))
-		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: arranged(paneTile())}, w), EffAwait)
+		anim, fetch, w := enter(t, m, arranged(workspace()))
+		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: arranged(workspace())}, w), EffAwait)
 		m.Resume(body.Token, Result{OK: true, Data: data}, w)
 		check(t, only(t, m.Land(anim.Land, w), EffInstallLevel))
 	})
@@ -539,7 +539,7 @@ func TestLevelOpensOnRememberedFocus(t *testing.T) {
 		w := baseWorld(gridPane("pane1", "g1"))
 		w.Home = "g1"
 		fetch := only(t, m.Do(Gesture{Kind: GestureRestore, Raw: "/?w=pt1"}, w), EffAwait)
-		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: arranged(paneTile())}, w), EffAwait)
+		body := only(t, m.Resume(fetch.Token, Result{OK: true, Tile: arranged(workspace())}, w), EffAwait)
 		check(t, only(t, m.Resume(body.Token, Result{OK: true, Data: data}, w), EffInstallLevel))
 	})
 }

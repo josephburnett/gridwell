@@ -71,7 +71,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	root := uuid + "/" + bare
 
-	pt, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: root, Tile: &pb.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
+	pt, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: root, Tile: &pb.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
 	if err != nil {
 		t.Fatal(err)
 	}

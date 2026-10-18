@@ -548,12 +548,12 @@ func init() {
 			}
 		},
 	})
-	// v5: the 'pane' kind, the chain's first table rebuild. It pins the
+	// v5: the workspace kind, the chain's first table rebuild. It pins the
 	// id-reuse trap: DROP TABLE tiles deletes its sqlite_sequence row and the
 	// copy re-seeds at the maximum surviving id, so without the save and
 	// restore a deleted tile's id would come back, and deep links are keyed
 	// by id. The survivor is byte-identical, a fresh insert mints above the
-	// deleted id, and the new CHECK accepts 'pane'.
+	// deleted id, and the new CHECK accepts 'workspace'.
 	migrationFixtures = append(migrationFixtures, migrationFixture{
 		version: 5,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
@@ -591,9 +591,9 @@ func init() {
 				t.Fatalf("read grid id: %v", err)
 			}
 			res, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
-				VALUES (?, 'pane', 10, 10, 2, 2, 'workspace', 100, 100)`, gridID)
+				VALUES (?, 'workspace', 10, 10, 2, 2, 'workspace', 100, 100)`, gridID)
 			if err != nil {
-				t.Fatalf("insert pane tile after rebuild (new CHECK should accept it): %v", err)
+				t.Fatalf("insert workspace tile after rebuild (new CHECK should accept it): %v", err)
 			}
 			newID, err := res.LastInsertId()
 			if err != nil {
@@ -1385,6 +1385,36 @@ func init() {
 			if kind != rpc.KindDoor || !child.Valid || cx.Float64 != 1.5 || cy.Float64 != -2.5 || zoom.Float64 != 0.25 {
 				t.Errorf("v19 row = (%q, %v, %v, %v, %v), want a door keeping its child and framing",
 					kind, child, cx, cy, zoom)
+			}
+		},
+	})
+
+	// v21: a v20 row of kind 'pane' reads back as a workspace, same layout
+	// blob, the seed suspending the CHECK as v20's does.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 21,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`PRAGMA ignore_check_constraints = true`); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+				VALUES (` + rootID + `, 'pane', 99, 9, 2, 2, 'v20 row', 100, 100)`); err != nil {
+				t.Fatalf("seed v20 row: %v", err)
+			}
+			if _, err := db.Exec(`PRAGMA ignore_check_constraints = false`); err != nil {
+				t.Fatal(err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var kind string
+			var w, h int64
+			if err := db.QueryRow(`SELECT kind, w, h FROM tiles WHERE alt_text = 'v20 row'`).Scan(&kind, &w, &h); err != nil {
+				t.Fatal(err)
+			}
+			if kind != rpc.KindWorkspace || w != 2 || h != 2 {
+				t.Errorf("v20 row = (%q, %d, %d), want a 2x2 workspace", kind, w, h)
 			}
 		},
 	})

@@ -16,9 +16,9 @@ const (
 	KindText  = "text"
 	KindURL   = "url"
 	KindShell = "shell"
-	// KindPane is a durable layout: its content blob is a serialized
+	// KindWorkspace is a durable layout: its content blob is a serialized
 	// split-pane layout (api/panelayout).
-	KindPane = "pane"
+	KindWorkspace = "workspace"
 )
 
 // ContentChunkBytes is the size of every content chunk but the last, for
@@ -165,15 +165,15 @@ func IsContentDescentKind(kind string) bool {
 	return kind == KindText || kind == KindURL || kind == KindShell
 }
 
-// IsWorkspaceKind: a pane tile's descent swaps the whole pane tree and pushes
+// IsWorkspaceKind: a workspace tile's descent swaps the whole pane tree and pushes
 // a level.
 func IsWorkspaceKind(kind string) bool {
-	return kind == KindPane
+	return kind == KindWorkspace
 }
 
 // IsBodyKind: these kinds hold a content blob of their own.
 func IsBodyKind(kind string) bool {
-	return kind == KindText || kind == KindPane
+	return kind == KindText || kind == KindWorkspace
 }
 
 // The plugin glyph vocabulary: declared by the plugin, rendered by the

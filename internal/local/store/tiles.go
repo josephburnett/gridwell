@@ -18,7 +18,7 @@ const MaxBlobBytes = rpc.MaxContentBytes
 // claimContentVersion verifies the caller's content claim against the row. It
 // is the store's only optimistic-concurrency check, and "version is the claim
 // for content and nothing else" is enforced by who can reach it: WriteContent's
-// text, url and pane arms, and RenameTile.
+// text, url and workspace arms, and RenameTile.
 func (s *Store) claimContentVersion(ctx context.Context, q gridReader, tileID, claimed int64) (*gridwellv1.Tile, error) {
 	t, err := s.loadTile(ctx, q, tileID)
 	if err != nil {

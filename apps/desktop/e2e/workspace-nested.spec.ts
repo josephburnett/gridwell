@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// A pane tile inside a pane of another pane tile. The stack grows, the bar shows
+// A workspace tile inside a pane of another workspace tile. The stack grows, the bar shows
 // breadcrumbs, and the outer workspace's persisted layout records its pane's
 // place as B's containing grid rather than as inside B. Workspace membership is
 // session-only, like portal frames, because persisting it would make descending
@@ -26,15 +26,15 @@ test('nested workspaces: breadcrumbs, session-only membership, safe self-referen
   const ax = Math.round(f.cx);
   const ay = Math.round(f.cy);
 
-  // Two pane tiles side by side in the root grid, A and B.
+  // Two workspace tiles side by side in the root grid, A and B.
   await gw.openMenu();
-  await gw.dragCreate('pane', ax, ay);
+  await gw.dragCreate('workspace', ax, ay);
   await gw.openMenu();
-  await gw.dragCreate('pane', ax + 2, ay);
+  await gw.dragCreate('workspace', ax + 2, ay);
   const snap = await gw.getGrid(rootGrid);
-  const A = tileAt(snap, 'pane', ax, ay);
-  const B = tileAt(snap, 'pane', ax + 2, ay);
-  expect(A && B, 'both pane tiles persisted').toBeTruthy();
+  const A = tileAt(snap, 'workspace', ax, ay);
+  const B = tileAt(snap, 'workspace', ax + 2, ay);
+  expect(A && B, 'both workspace tiles persisted').toBeTruthy();
 
   // The capture puts A's pane on the containing grid, where B sits, so no
   // navigation is needed.

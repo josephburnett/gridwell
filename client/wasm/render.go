@@ -152,8 +152,8 @@ const (
 	tplMarkdown
 	tplURL
 	tplShell
-	// tplPane is a stored split-pane layout, created never-arranged.
-	tplPane
+	// tplWorkspace is a stored split-pane layout, created never-arranged.
+	tplWorkspace
 )
 
 // primitive is one row per built-in kind, so a kind cannot be half-added.
@@ -205,10 +205,10 @@ func init() {
 			click:  func(a *App, p *pane.Pane) { a.visitShellFromMenu(p) },
 		},
 		{
-			kind: tplPane, name: "pane",
-			ghost:  &gridwellv1.Tile{Kind: rpc.KindPane, W: 1, H: 1, AltText: "workspace"},
-			glyph:  func(a *App, x, y, w, h float64) { drawPaneGlyph(a.cctx, x, y, w, h, a.pal.PaneTileBorder) },
-			create: func(a *App, gid string, cellX, cellY int64) { a.createPaneAtCell(gid, cellX, cellY) },
+			kind: tplWorkspace, name: "workspace",
+			ghost:  &gridwellv1.Tile{Kind: rpc.KindWorkspace, W: 1, H: 1, AltText: "workspace"},
+			glyph:  func(a *App, x, y, w, h float64) { drawWorkspaceGlyph(a.cctx, x, y, w, h, a.pal.WorkspaceBorder) },
+			create: func(a *App, gid string, cellX, cellY int64) { a.createWorkspaceAtCell(gid, cellX, cellY) },
 		},
 	}
 	primitiveKinds = make([]templateKind, len(primitives))
@@ -351,16 +351,16 @@ func (a *App) draw() {
 	a.syncView(rects)
 	a.drawBottomBar()
 	a.drawErrStrip()
-	// Inside a pane tile, a teal line wraps the window in a reserved gutter.
+	// Inside a workspace tile, a teal line wraps the window in a reserved gutter.
 	if a.ws.Depth() > 0 {
 		h := a.paneAreaH()
-		a.cctx.Set("strokeStyle", a.pal.PaneTileBorder)
+		a.cctx.Set("strokeStyle", a.pal.WorkspaceBorder)
 		a.cctx.Set("lineWidth", wsOutlinePx)
 		a.cctx.Call("strokeRect", wsOutlinePx/2, wsOutlinePx/2,
 			a.width-wsOutlinePx, h-wsOutlinePx)
 		a.cctx.Set("lineWidth", 1.0)
 	}
-	// The first-descent capture: the pane tile's preview growing into the outline.
+	// The first-descent capture: the workspace tile's preview growing into the outline.
 	if e := a.overlays.wsExpand; e != nil {
 		t := (nowMs() - e.startMs) / totalTransitionMs
 		if t > 1 {
@@ -369,7 +369,7 @@ func (a *App) draw() {
 		k := anim.EaseOutCubic(t)
 		lerp := func(from, to float64) float64 { return from + (to-from)*k }
 		h := a.paneAreaH()
-		a.cctx.Set("strokeStyle", a.pal.PaneTileBorder)
+		a.cctx.Set("strokeStyle", a.pal.WorkspaceBorder)
 		a.cctx.Set("lineWidth", lerp(tileBorderPx, wsOutlinePx))
 		a.cctx.Call("strokeRect",
 			lerp(e.x, wsOutlinePx/2), lerp(e.y, wsOutlinePx/2),
@@ -389,7 +389,7 @@ func (a *App) layoutPanes() map[string]pane.Rect {
 	return pane.Layout(a.tree, a.rootLayoutRect())
 }
 
-// wsOutlinePx is the pane-tile outline's width and the gutter panes inset by.
+// wsOutlinePx is the workspace tile outline's width and the gutter panes inset by.
 const wsOutlinePx = 3.0
 
 // paneAreaH is the pane tree's height and the bar band's top edge.
@@ -710,8 +710,8 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		a.drawShellTile(n, x, y, w, h, selected, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
-	case rpc.KindPane:
-		a.drawPaneTilePreview(n, x, y, w, h, selected, outside, dashed)
+	case rpc.KindWorkspace:
+		a.drawWorkspacePreview(n, x, y, w, h, selected, outside, dashed)
 		return
 	}
 	if n.Kind != rpc.KindDoor {
@@ -951,8 +951,8 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 		if outside {
 			fill, line = a.pal.PluginFill, a.pal.PluginBorder
 		}
-	case rpc.KindPane:
-		fill, line = a.pal.PaneTileFill, a.pal.PaneTileBorder
+	case rpc.KindWorkspace:
+		fill, line = a.pal.WorkspaceFill, a.pal.WorkspaceBorder
 	}
 	fillRectC(c, x, y, w, h, fill)
 	if line != "" {

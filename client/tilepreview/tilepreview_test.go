@@ -24,7 +24,7 @@ func TestOutside(t *testing.T) {
 		{"an interior door", door("n1/2"), false, false},
 		{"a door to another namespace into another namespace", door("p9/2"), false, true},
 		{"a url tile", &gridwellv1.Tile{Kind: rpc.KindURL}, false, false},
-		{"a pane tile", &gridwellv1.Tile{Kind: rpc.KindPane}, false, false},
+		{"a workspace tile", &gridwellv1.Tile{Kind: rpc.KindWorkspace}, false, false},
 	}
 	for _, c := range cases {
 		if got := Outside(c.tile, c.inHost); got != c.want {
@@ -47,7 +47,7 @@ func TestBannerHue(t *testing.T) {
 		{"host url is the plugin hue too", &gridwellv1.Tile{Kind: rpc.KindURL}, true, HueHost},
 		{"text", &gridwellv1.Tile{Kind: rpc.KindText}, false, HueText},
 		{"url", &gridwellv1.Tile{Kind: rpc.KindURL}, false, HueURL},
-		{"pane has no hue of its own", &gridwellv1.Tile{Kind: rpc.KindPane}, false, HueMuted},
+		{"pane has no hue of its own", &gridwellv1.Tile{Kind: rpc.KindWorkspace}, false, HueMuted},
 	}
 	for _, c := range cases {
 		if got := BannerHue(c.tile, c.outside); got != c.want {

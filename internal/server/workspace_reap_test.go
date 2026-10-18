@@ -15,15 +15,15 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// TestDeletePaneTileReapsItsEphemerals: a pane tile's layout
+// TestDeleteWorkspaceReapsItsEphemerals: a workspace tile's layout
 // blob is the ONLY record of the workspace's ephemeral leaves (scratch-grid
-// tiles). Deleting the pane tile deletes only the arrangement — but must
+// tiles). Deleting the workspace tile deletes only the arrangement — but must
 // terminate what the arrangement owns, exactly like closing a pane does:
 // each referenced SCRATCH tile is deleted (which kills its tmux via
 // the existing DeleteTile→shell.Kill chain). Linkd NON-scratch tiles
 // are content the workspace merely VIEWS and must survive — deleting a
 // workspace never deletes data.
-func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
+func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 	ctx := context.Background()
 	reg := plugin.NewRegistry()
 	st, err := store.Open(":memory:")
@@ -36,9 +36,9 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
-	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
+	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
 	if err != nil {
-		t.Fatalf("CreatePane: %v", err)
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 
 	g, err := cl.GetGrid(ctx, root)
@@ -70,7 +70,7 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 	}
 
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
-		t.Fatalf("DeleteTile(pane): %v", err)
+		t.Fatalf("DeleteTile(workspace): %v", err)
 	}
 
 	// The first delete PARKS the workspace in the local plugin's trash
@@ -79,23 +79,23 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("a trashed workspace must keep its ephemeral shell: %v", err)
 	}
 	if _, err := cl.GetTile(ctx, pt.Id); err != nil {
-		t.Fatalf("trashed pane tile must still read: %v", err)
+		t.Fatalf("trashed workspace tile must still read: %v", err)
 	}
 	// The second delete (inside the trash) DESTROYS — and only then does
 	// the router reap what the arrangement owned.
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
-		t.Fatalf("DeleteTile(pane, in trash): %v", err)
+		t.Fatalf("DeleteTile(workspace, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
-		t.Error("ephemeral scratch tile survived the pane-tile destroy — its shell would leak until the boot sweep")
+		t.Error("ephemeral scratch tile survived the workspace tile destroy — its shell would leak until the boot sweep")
 	}
 	if _, err := cl.GetTile(ctx, txt.Id); err != nil {
 		t.Errorf("viewed content was deleted with the workspace: %v", err)
 	}
 
-	// A pane tile with an UNREADABLE blob must still delete without touching
+	// A workspace tile with an UNREADABLE blob must still delete without touching
 	// anything (never guess at what to reap), mirroring the read-only latch.
-	pt2, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1}})
+	pt2, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 5, Y: 5, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,20 +107,20 @@ func TestDeletePaneTileReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("SetPaneLayout (future version): %v", err)
 	}
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt2.Id})); err != nil {
-		t.Fatalf("DeleteTile(pane, unreadable blob): %v", err)
+		t.Fatalf("DeleteTile(workspace, unreadable blob): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, pt2.Id); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt2.Id})); err != nil {
-		t.Fatalf("DeleteTile(pane, unreadable blob, in trash): %v", err)
+		t.Fatalf("DeleteTile(workspace, unreadable blob, in trash): %v", err)
 	}
 	if _, err := cl.GetTile(ctx, eph2.Id); err != nil {
 		t.Errorf("unreadable blob must reap NOTHING (never guess), but the scratch tile is gone: %v", err)
 	}
 }
 
-// A pane tile's destroy that reaps an ephemeral shell whose tmux will not
+// A workspace tile's destroy that reaps an ephemeral shell whose tmux will not
 // stop says so on its answer, as a destroyed shell row's own delete does.
 func TestAReapThatLeavesATmuxRunningSaysSo(t *testing.T) {
 	ctx := context.Background()
@@ -135,7 +135,7 @@ func TestAReapThatLeavesATmuxRunningSaysSo(t *testing.T) {
 		t.Fatal(err)
 	}
 	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2}})
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2}})
 	if err != nil {
 		t.Fatal(err)
 	}

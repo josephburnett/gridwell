@@ -41,7 +41,7 @@ func TestAStaleLayoutWriteIsRefusedAndTheNewerArrangementStands(t *testing.T) {
 		t.Run(where, func(t *testing.T) {
 			cl := m.nodes[meNode].cl
 			pt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: grid,
-				Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 0, W: 1, H: 1}},
+				Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 5, Y: 0, W: 1, H: 1}},
 				[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 			if err != nil {
 				t.Fatal(err)

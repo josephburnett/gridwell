@@ -45,7 +45,7 @@ func TestCheckFind(t *testing.T) {
 		{"one instant", &pb.FindRequest{ContentChanged: &pb.TimeRange{From: 5, To: 5}}, true},
 		{"backwards", &pb.FindRequest{ContentChanged: &pb.TimeRange{From: 6, To: 5}}, false},
 		{"negative", &pb.FindRequest{Modified: &pb.TimeRange{From: -1}}, false},
-		{"a kind", &pb.FindRequest{Kind: KindPane}, true},
+		{"a kind", &pb.FindRequest{Kind: KindWorkspace}, true},
 		{"an unknown kind", &pb.FindRequest{Kind: "panes"}, false},
 	} {
 		if err := CheckFind(c.req); (err == nil) != c.ok {
@@ -72,7 +72,7 @@ func TestPeelRequestCarriesFindFilters(t *testing.T) {
 // A kind narrows like any filter, so an empty query with a kind alone lists;
 // it needs no row, since an entry with none has its kind.
 func TestAKindIsAFilterThatNeedsNoRow(t *testing.T) {
-	req := &pb.FindRequest{Kind: KindPane}
+	req := &pb.FindRequest{Kind: KindWorkspace}
 	if !FindFiltered(req) || FindNeedsRow(req) {
 		t.Errorf("kind alone: filtered %v, needs a row %v; want filtered, no row", FindFiltered(req), FindNeedsRow(req))
 	}

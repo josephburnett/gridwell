@@ -81,7 +81,7 @@ func (a *App) bottomBarSegments(chain []navCrumb) []wsbar.Segment {
 	}
 	widths := make([]float64, len(chain))
 	for i, nc := range chain {
-		if nc.PaneTile {
+		if nc.Workspace {
 			widths[i] = wsbar.BoundaryW
 		} else {
 			widths[i] = wsbar.RowH
@@ -107,7 +107,7 @@ func (a *App) drawBottomBar() {
 	for _, s := range segs {
 		shifted := s
 		shifted.X += bx
-		if nc := chain[s.Index]; nc.PaneTile {
+		if nc := chain[s.Index]; nc.Workspace {
 			a.drawBoundaryCrumb(nc.WsLevel, shifted, top)
 		} else {
 			a.drawChainCrumb(nc.Crumb, shifted, top)
@@ -141,7 +141,7 @@ func (a *App) drawMemoryChip(bx, top, bw float64) {
 	})
 }
 
-// drawBoundaryCrumb paints a pane-tile boundary crumb as a wide named bar,
+// drawBoundaryCrumb paints a workspace tile boundary crumb as a wide named bar,
 // standing out from the preview squares as the obvious rename target.
 func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 	c := a.cctx
@@ -485,7 +485,7 @@ func (a *App) startPromoteDrag(p *pane.Pane, t *gridwellv1.Tile, seg wsbar.Segme
 }
 
 // openWorkspaceRenameInput opens the shared inline rename input over the
-// pane-tile crumb of `level`, growing rightward to a typeable width.
+// workspace tile crumb of `level`, growing rightward to a typeable width.
 func (a *App) openWorkspaceRenameInput(level int) {
 	f := a.ws.At(level)
 	if f == nil {
@@ -494,7 +494,7 @@ func (a *App) openWorkspaceRenameInput(level int) {
 	chain := a.navChain()
 	idx := -1
 	for i, nc := range chain {
-		if nc.PaneTile && nc.WsLevel == level {
+		if nc.Workspace && nc.WsLevel == level {
 			idx = i
 			break
 		}

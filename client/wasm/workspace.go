@@ -2,8 +2,8 @@
 
 package main
 
-// The pane-tile level executor and the layout persister. Descending into a
-// pane tile swaps the whole pane tree, the second axis beside a pane's own
+// The workspace level executor and the layout persister. Descending into a
+// workspace tile swaps the whole pane tree, the second axis beside a pane's own
 // frame stack. What happens when is client/nav's; this performs the swap, the
 // pop and the capture, and keeps the layout blob current with a debounced
 // snapshot diff.
@@ -24,7 +24,7 @@ import (
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
-// wsExpandState is the first-descent capture animation: the pane tile's rect
+// wsExpandState is the first-descent capture animation: the workspace tile's rect
 // at arm, growing into the level outline. Drawn for as long as the machine
 // has a level descent pending, so nothing has to end it.
 type wsExpandState struct {
@@ -94,7 +94,7 @@ func (a *App) navPopLevel(e nav.Effect) {
 	a.tree = pane.TreeAtPlace("", e.GridID, nil, rpc.View{})
 }
 
-// captureWorkspaceTree copies the window layout as a fresh pane tile's
+// captureWorkspaceTree copies the window layout as a fresh workspace tile's
 // initial arrangement, through the persister's own encode and decode pair, so
 // the capture is byte-for-byte what the first flush stores. Any failure
 // yields the single-pane default, because a capture must not block the
@@ -153,7 +153,7 @@ func (a *App) restoreWorkspaceLeaves(tree *pane.Tree) {
 	})
 }
 
-// commitWorkspaceRename posts the user-owned name for the pane tile at
+// commitWorkspaceRename posts the user-owned name for the workspace tile at
 // `level`. A rename bumps the tile version, so it rides the layout's save
 // chain and its landing advances the level's basis like a layout write's.
 func (a *App) commitWorkspaceRename(level int, alt string) {

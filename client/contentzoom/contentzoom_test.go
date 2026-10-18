@@ -56,7 +56,7 @@ func TestDecide(t *testing.T) {
 		{"out stops at Min", rpc.KindText, false, KeyOut, rpc.ContentZoomMin, Verdict{Next: rpc.ContentZoomMin, Consume: true, Apply: true, Persist: true}},
 		{"ephemeral applies without a write", rpc.KindURL, true, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: false}},
 		{"a door is not zoomable", rpc.KindDoor, false, KeyIn, 1, Verdict{}},
-		{"a pane tile is not zoomable", rpc.KindPane, false, KeyIn, 1, Verdict{}},
+		{"a workspace tile is not zoomable", rpc.KindWorkspace, false, KeyIn, 1, Verdict{}},
 		{"an unknown kind is not zoomable", "sprocket", false, KeyIn, 1, Verdict{}},
 		{"a key outside the chord is not ours", rpc.KindText, false, "z", 1, Verdict{}},
 		{"no key is not ours", rpc.KindText, false, "", 1, Verdict{}},

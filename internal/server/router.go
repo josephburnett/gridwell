@@ -469,7 +469,7 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 	if err := rt.refuseDisabled(req.TileId); err != nil {
 		return nil, err
 	}
-	// The layout blob is the only record of a pane tile's ephemerals: capture
+	// The layout blob is the only record of a workspace tile's ephemerals: capture
 	// before the row dies, reap after only if it is really gone (trash keeps
 	// them for a restore). Transit skips this; the owning node's router reaps.
 	var candidates []string
@@ -493,12 +493,12 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 	return resp, nil
 }
 
-// workspaceEphemeralCandidates reads a pane tile's layout blob for leaf ids
+// workspaceEphemeralCandidates reads a workspace tile's layout blob for leaf ids
 // that might be its ephemerals, nothing when unreadable. The derivation is
 // panelayout.TextFocusIDs, the same one the boot sweep protects by.
 func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namespace.Namespace, localID, qualifiedID string) []string {
 	tr, err := owner.GetTile(ctx, &pb.GetTileRequest{TileId: localID})
-	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindPane || tr.GetTile().BlobId == 0 {
+	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindWorkspace || tr.GetTile().BlobId == 0 {
 		return nil
 	}
 	body, err := readAllContent(ctx, owner, localID)
@@ -506,7 +506,7 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 		return nil
 	}
 	// Blob ids are already in this node's frame: the encoder strips the
-	// reader's transit prefix, empty for a locally-owned pane tile.
+	// reader's transit prefix, empty for a locally-owned workspace tile.
 	ids, err := panelayout.TextFocusIDs(body)
 	if err != nil {
 		log.Printf("gridwell: delete %s: layout blob unreadable, reaping nothing: %v", qualifiedID, err)

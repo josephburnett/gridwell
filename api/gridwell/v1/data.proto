@@ -189,7 +189,7 @@ message Tile {
   // partial capture cannot clobber it, mirroring the preview-JPEG rule.
   string url_history = 28;
 
-  // link_target_id makes a leaf tile (text, url, shell, pane) a link: a
+  // link_target_id makes a leaf tile (text, url, shell, workspace) a link: a
   // qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
   // content. The link row stores no blob, no url and no preview, and readers
   // resolve bytes, preview and tmux through the target id, which the router
@@ -354,7 +354,7 @@ message GetTilePreviewResponse {
 // ─── Content streams ──────────────────────────────────────────────────────
 // ReadContent and WriteContent are the one way content bytes move: finite,
 // versioned, transactional values. OpenShell is the live wire instead.
-// A text or pane tile may be born with its bytes (CreateTileRequest.content);
+// A text or workspace tile may be born with its bytes (CreateTileRequest.content);
 // every later change is a write.
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
@@ -499,7 +499,7 @@ message FindRequest {
   TimeRange content_changed = 8;
   // selected keeps the hits in their grid's selection, the node fact.
   bool selected = 9;
-  // kind keeps the hits of this kind: text, url, shell, door or pane. An
+  // kind keeps the hits of this kind: text, url, shell, door or workspace. An
   // entry with no row has its kind, so it passes or fails like a row.
   string kind = 10;
 }
@@ -674,7 +674,7 @@ message CreateTileRequest {
   string grid_id = 2;
   Tile   tile    = 3;
   reserved 4; // data
-  // content is the bytes a text or pane tile is born with, stored with the
+  // content is the bytes a text or workspace tile is born with, stored with the
   // row in one write, so no reader sees the tile without them. Refused on
   // every other kind.
   bytes  content = 5;
@@ -776,7 +776,7 @@ message DeleteTileRequest {
 }
 // DeleteTileResponse answers a delete that landed. tmux_left is why a shell's
 // tmux the destroy should have ended is still running, the row's own or an
-// ephemeral's its pane tile's layout owned; empty when none was left. The next
+// ephemeral's its workspace tile's layout owned; empty when none was left. The next
 // start's orphan sweep is its net.
 message DeleteTileResponse {
   string tmux_left = 1;
@@ -865,10 +865,10 @@ message SetViewRequest {
   // another node telling its share through a connection.
   string          label          = 3;
   repeated ViewPane panes        = 4;
-  // pane_tiles is the window's pane-tile level, the pane tiles it is inside,
-  // outermost first; empty outside every pane tile. panes are the tree of the
+  // workspace_tiles is the window's workspace level, the workspace tiles it is inside,
+  // outermost first; empty outside every workspace tile. panes are the tree of the
   // innermost.
-  repeated string pane_tiles     = 5;
+  repeated string workspace_tiles     = 5;
 }
 message SetViewResponse {}
 

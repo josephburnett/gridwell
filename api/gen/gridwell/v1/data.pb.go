@@ -424,7 +424,7 @@ type Tile struct {
 	// empty value on a write leaves the stored history untouched, so a
 	// partial capture cannot clobber it, mirroring the preview-JPEG rule.
 	UrlHistory string `protobuf:"bytes,28,opt,name=url_history,json=urlHistory,proto3" json:"url_history,omitempty"`
-	// link_target_id makes a leaf tile (text, url, shell, pane) a link: a
+	// link_target_id makes a leaf tile (text, url, shell, workspace) a link: a
 	// qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
 	// content. The link row stores no blob, no url and no preview, and readers
 	// resolve bytes, preview and tmux through the target id, which the router
@@ -1928,7 +1928,7 @@ type FindRequest struct {
 	ContentChanged *TimeRange `protobuf:"bytes,8,opt,name=content_changed,json=contentChanged,proto3" json:"content_changed,omitempty"`
 	// selected keeps the hits in their grid's selection, the node fact.
 	Selected bool `protobuf:"varint,9,opt,name=selected,proto3" json:"selected,omitempty"`
-	// kind keeps the hits of this kind: text, url, shell, door or pane. An
+	// kind keeps the hits of this kind: text, url, shell, door or workspace. An
 	// entry with no row has its kind, so it passes or fails like a row.
 	Kind          string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2874,7 +2874,7 @@ type CreateTileRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	GridId string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
 	Tile   *Tile                  `protobuf:"bytes,3,opt,name=tile,proto3" json:"tile,omitempty"`
-	// content is the bytes a text or pane tile is born with, stored with the
+	// content is the bytes a text or workspace tile is born with, stored with the
 	// row in one write, so no reader sees the tile without them. Refused on
 	// every other kind.
 	Content       []byte `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
@@ -3303,7 +3303,7 @@ func (x *DeleteTileRequest) GetClaim() *Placement {
 
 // DeleteTileResponse answers a delete that landed. tmux_left is why a shell's
 // tmux the destroy should have ended is still running, the row's own or an
-// ephemeral's its pane tile's layout owned; empty when none was left. The next
+// ephemeral's its workspace tile's layout owned; empty when none was left. The next
 // start's orphan sweep is its net.
 type DeleteTileResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3688,12 +3688,12 @@ type SetViewRequest struct {
 	// another node telling its share through a connection.
 	Label string      `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	Panes []*ViewPane `protobuf:"bytes,4,rep,name=panes,proto3" json:"panes,omitempty"`
-	// pane_tiles is the window's pane-tile level, the pane tiles it is inside,
-	// outermost first; empty outside every pane tile. panes are the tree of the
+	// workspace_tiles is the window's workspace level, the workspace tiles it is inside,
+	// outermost first; empty outside every workspace tile. panes are the tree of the
 	// innermost.
-	PaneTiles     []string `protobuf:"bytes,5,rep,name=pane_tiles,json=paneTiles,proto3" json:"pane_tiles,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	WorkspaceTiles []string `protobuf:"bytes,5,rep,name=workspace_tiles,json=workspaceTiles,proto3" json:"workspace_tiles,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SetViewRequest) Reset() {
@@ -3754,9 +3754,9 @@ func (x *SetViewRequest) GetPanes() []*ViewPane {
 	return nil
 }
 
-func (x *SetViewRequest) GetPaneTiles() []string {
+func (x *SetViewRequest) GetWorkspaceTiles() []string {
 	if x != nil {
-		return x.PaneTiles
+		return x.WorkspaceTiles
 	}
 	return nil
 }
@@ -4763,14 +4763,13 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x03all\x18\b \x01(\bR\x03allJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\x16\n" +
 	"\x14SetSelectionResponse\",\n" +
 	"\x10SubscribeRequest\x12\x18\n" +
-	"\asession\x18\x01 \x01(\tR\asession\"\xb2\x01\n" +
+	"\asession\x18\x01 \x01(\tR\asession\"\xbc\x01\n" +
 	"\x0eSetViewRequest\x12\x18\n" +
 	"\asession\x18\x01 \x01(\tR\asession\x12$\n" +
 	"\x0eshown_grid_ids\x18\x02 \x03(\tR\fshownGridIds\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12+\n" +
-	"\x05panes\x18\x04 \x03(\v2\x15.gridwell.v1.ViewPaneR\x05panes\x12\x1d\n" +
-	"\n" +
-	"pane_tiles\x18\x05 \x03(\tR\tpaneTiles\"\x11\n" +
+	"\x05panes\x18\x04 \x03(\v2\x15.gridwell.v1.ViewPaneR\x05panes\x12'\n" +
+	"\x0fworkspace_tiles\x18\x05 \x03(\tR\x0eworkspaceTiles\"\x11\n" +
 	"\x0fSetViewResponse\"\x9e\x01\n" +
 	"\bViewPane\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +

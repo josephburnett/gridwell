@@ -34,7 +34,7 @@ var (
 	ErrNotTextTile     = gwerr.ErrNotTextTile
 	ErrNotDoorTile     = gwerr.ErrNotDoorTile
 	ErrNotShellTile    = gwerr.ErrNotShellTile
-	ErrNotPaneTile     = gwerr.ErrNotPaneTile
+	ErrNotWorkspace    = gwerr.ErrNotWorkspace
 	ErrVersionConflict = gwerr.ErrVersionConflict
 )
 

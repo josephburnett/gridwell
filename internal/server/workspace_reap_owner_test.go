@@ -16,7 +16,7 @@ import (
 )
 
 // reapFixture stands a node up with a root grid, a scratch grid and a pane
-// tile, and returns a delete-the-pane-tile-for-real closure. Both phases of
+// tile, and returns a delete-the-workspace tile-for-real closure. Both phases of
 // the owner test need the same setup.
 func reapFixture(t *testing.T) (cl *rpc.Client, root, scratch string) {
 	t.Helper()
@@ -41,14 +41,14 @@ func reapFixture(t *testing.T) (cl *rpc.Client, root, scratch string) {
 	return cl, root, scratch
 }
 
-// destroyPane deletes a pane tile twice: once into the trash, once for real,
+// destroyPane deletes a workspace tile twice: once into the trash, once for real,
 // which is when the router reaps what the arrangement owned.
 func destroyPane(t *testing.T, cl *rpc.Client, tileID string) {
 	t.Helper()
 	ctx := context.Background()
 	for i := 0; i < 2; i++ {
 		if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: tileID})); err != nil {
-			t.Fatalf("DeleteTile(pane) %d: %v", i+1, err)
+			t.Fatalf("DeleteTile(workspace) %d: %v", i+1, err)
 		}
 	}
 }
@@ -63,9 +63,9 @@ func TestReapReadsTheSameFieldTheSweepProtects(t *testing.T) {
 	ctx := context.Background()
 	cl, root, scratch := reapFixture(t)
 
-	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
+	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
 	if err != nil {
-		t.Fatalf("CreatePane: %v", err)
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 	eph, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
@@ -95,9 +95,9 @@ func TestReapFindsEncoderWrittenLinks(t *testing.T) {
 	ctx := context.Background()
 	cl, root, scratch := reapFixture(t)
 
-	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
+	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2, AltText: "ops"}})
 	if err != nil {
-		t.Fatalf("CreatePane: %v", err)
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 	eph, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {

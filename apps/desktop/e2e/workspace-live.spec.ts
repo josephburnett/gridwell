@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Descending into a pane tile keeps the outer level fully alive: its live views
+// Descending into a workspace tile keeps the outer level fully alive: its live views
 // park off-screen and keep running, so a hidden call keeps ringing and its
 // shells stay attached. Liveness follows pane existence, so a pane's resources
 // run until the pane closes and leaving a view closes that view's panes. Nothing
@@ -20,10 +20,10 @@ test('workspace descent keeps the outer live url running, parked; ascent shows i
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
 
-  // A pane tile to enter later.
+  // A workspace tile to enter later.
   await gw.openMenu();
-  await gw.dragCreate('pane', cx + 2, cy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', cx + 2, cy);
+  await gw.dragCreate('workspace', cx + 2, cy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', cx + 2, cy);
   expect(pt).toBeTruthy();
 
   // A swatch click is the ephemeral visit. Ephemeral visits are stripped from
@@ -61,7 +61,7 @@ test('workspace descent keeps the outer live url running, parked; ascent shows i
   const urlPane = (await gw.panes()).find((p: any) => p.textFocus !== '');
   expect(urlPane, 'one pane is descended into the url').toBeTruthy();
 
-  // Descending into the pane tile takes over the whole window.
+  // Descending into the workspace tile takes over the whole window.
   await gw.descendCell(cx + 2, cy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 

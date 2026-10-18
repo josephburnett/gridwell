@@ -140,31 +140,31 @@ func TestAPaneSizeIsNotAReframe(t *testing.T) {
 	}
 }
 
-// Inside a pane tile the layout owns the scroll, so a settle there takes only
+// Inside a workspace tile the layout owns the scroll, so a settle there takes only
 // the mode to the row: a scroll writes nothing to it, a toggle does, and a
 // never-framed row looked at is still left alone. Leaving is different: the
 // row's scroll is where the tile was left, so an ascent writes it whole.
-func TestInsideAPaneTileASettleTakesTheModeAndALeaveTheScroll(t *testing.T) {
+func TestInsideAWorkspaceASettleTakesTheModeAndALeaveTheScroll(t *testing.T) {
 	stored := Scroll{X: 0, Y: 240, Mode: rpc.TextModeRendered}
 	scrolled := Scroll{Y: 900, Mode: rpc.TextModeRendered}
 	if ScrollMoved(stored, RowScroll(stored, scrolled, true, false), false) {
-		t.Error("a settle inside a pane tile reframed the row's scroll")
+		t.Error("a settle inside a workspace tile reframed the row's scroll")
 	}
 	if got := RowScroll(stored, scrolled, true, true); got != scrolled {
-		t.Errorf("leaving inside a pane tile writes %+v, want the scroll left %+v", got, scrolled)
+		t.Errorf("leaving inside a workspace tile writes %+v, want the scroll left %+v", got, scrolled)
 	}
 	for _, leaving := range []bool{false, true} {
 		if got := RowScroll(stored, scrolled, false, leaving); got != scrolled {
-			t.Errorf("outside a pane tile (leaving %v) writes %+v, want %+v", leaving, got, scrolled)
+			t.Errorf("outside a workspace tile (leaving %v) writes %+v, want %+v", leaving, got, scrolled)
 		}
 	}
 	toggled := Scroll{Y: 900, Mode: rpc.TextModeText}
 	if got := RowScroll(stored, toggled, true, false); got != (Scroll{Y: 240, Mode: rpc.TextModeText}) {
-		t.Errorf("a toggle settled inside a pane tile writes %+v, want the row's scroll and the new mode", got)
+		t.Errorf("a toggle settled inside a workspace tile writes %+v, want the row's scroll and the new mode", got)
 	}
 	shown := DescentMode(ModeInput{TextDocument: true, Cached: true})
 	if ScrollMoved(Scroll{}, RowScroll(Scroll{}, Scroll{Y: 300, Mode: shown}, true, false), false) {
-		t.Error("a settle inside a pane tile stamped a never-framed row")
+		t.Error("a settle inside a workspace tile stamped a never-framed row")
 	}
 	if ScrollMoved(Scroll{}, RowScroll(Scroll{}, Scroll{Mode: shown}, true, true), false) {
 		t.Error("leaving a never-framed row unscrolled stamped it")

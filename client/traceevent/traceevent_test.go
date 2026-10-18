@@ -95,13 +95,13 @@ func TestEveryGestureIsNamed(t *testing.T) {
 		{nav.Gesture{Kind: nav.GestureRestore, Raw: "/a"}, "restore", "restore /a"},
 		{nav.Gesture{Kind: nav.GestureRestoreFromHistory, Raw: "/b"}, "restore", "restore session /b"},
 		{nav.Gesture{Kind: nav.GesturePromote, OldID: "e7abcde"}, "promote", "promote ephemeral"},
-		{nav.Gesture{Kind: nav.GestureEnterLevel, Door: &pb.Tile{Id: "w7abcde"}}, "push", "enter pane tile"},
+		{nav.Gesture{Kind: nav.GestureEnterLevel, Door: &pb.Tile{Id: "w7abcde"}}, "push", "enter workspace tile"},
 		{nav.Gesture{Kind: nav.GestureLeaveLevels, Count: 3}, "pop", "leave 3 levels"},
 		{nav.Gesture{Kind: nav.GestureLandLevel, TileID: "t7abcde"}, "pop", "land level"},
 		{nav.Gesture{Kind: nav.GestureReEngage, TileID: "t7abcde"}, "reengage", "re-engage content"},
 		{nav.Gesture{Kind: nav.GestureFollowLink, Door: &pb.Tile{Id: "l7abcde"}}, "push", "follow link"},
 		{nav.Gesture{Kind: nav.GestureEngageLeaves}, "reengage", "engage installed leaves"},
-		{nav.Gesture{Kind: nav.GestureReconcileLevel, TileID: "w7abcde"}, "restore", "reconcile pane tile"},
+		{nav.Gesture{Kind: nav.GestureReconcileLevel, TileID: "w7abcde"}, "restore", "reconcile workspace tile"},
 	}
 	if len(cases) != int(nav.GestureReconcileLevel)+1 {
 		t.Fatalf("%d gestures named, %d declared", len(cases), int(nav.GestureReconcileLevel)+1)

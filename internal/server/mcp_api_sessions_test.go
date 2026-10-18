@@ -127,13 +127,13 @@ func TestMCPSessionsListsEveryScreenWithItsPanes(t *testing.T) {
 	}
 }
 
-// paneTileView is a desktop session inside a pane tile whose layout holds two
+// workspaceView is a desktop session inside a workspace tile whose layout holds two
 // panes on root, the second focused. The layout is written and the view said
 // as the client does both, through pane.EncodeLayout and pane.View.
-func paneTileView(t *testing.T, f *shellAPIFixture) (*rpc.Client, *gridwellv1.Tile) {
+func workspaceView(t *testing.T, f *shellAPIFixture) (*rpc.Client, *gridwellv1.Tile) {
 	t.Helper()
 	ctx := context.Background()
-	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
+	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,26 +164,26 @@ func paneTileView(t *testing.T, f *shellAPIFixture) (*rpc.Client, *gridwellv1.Ti
 	return cl, pt
 }
 
-// Inside a pane tile the session names the pane tile, and the selection the
+// Inside a workspace tile the session names the workspace tile, and the selection the
 // panes show is the grid row's: a select writes the row and read_grid answers
 // it (2026-10-18).
-func TestMCPSessionsInsideAPaneTileAndItsGridsSelection(t *testing.T) {
+func TestMCPSessionsInsideAWorkspaceAndItsGridsSelection(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	mkText(t, s, f.root, "a")
 	b := mkText(t, s, f.root, "b")
-	cl, pt := paneTileView(t, f)
+	cl, pt := workspaceView(t, f)
 
 	out := listed(t, s, func(o mcpapi.SessionsOut) bool { return len(o.Sessions) == 1 })
-	if len(out.Sessions) != 1 || out.Sessions[0].ID != cl.Session() || !slices.Equal(out.Sessions[0].PaneTiles, []string{pt.Id}) ||
+	if len(out.Sessions) != 1 || out.Sessions[0].ID != cl.Session() || !slices.Equal(out.Sessions[0].WorkspaceTiles, []string{pt.Id}) ||
 		len(out.Sessions[0].Panes) != 2 {
-		t.Fatalf("sessions = %+v, want %s inside pane tile %s with its two panes", out, cl.Session(), pt.Id)
+		t.Fatalf("sessions = %+v, want %s inside workspace tile %s with its two panes", out, cl.Session(), pt.Id)
 	}
 	var g mcpapi.GridOut
 	call(t, s, "select", map[string]any{"grid": f.root, "add": []string{b.ID}}, &g)
 	call(t, s, "read_grid", map[string]any{"id": f.root}, &g)
 	if !slices.Equal(g.Grid.Selection, []string{b.ID}) {
-		t.Fatalf("select inside a pane tile left the row at %v, want [%s]", g.Grid.Selection, b.ID)
+		t.Fatalf("select inside a workspace tile left the row at %v, want [%s]", g.Grid.Selection, b.ID)
 	}
 }
 
@@ -330,11 +330,11 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 	}
 }
 
-// read_tiles on a pane tile answers its layout as the panes it holds: each
+// read_tiles on a workspace tile answers its layout as the panes it holds: each
 // one's place, the grid the blob names, its content tile and whether it is
 // the focused one, with the version the layout was read at; a link to the
-// pane tile answers the same.
-func TestMCPReadTilesOnAPaneTileAnswersItsLayout(t *testing.T) {
+// workspace tile answers the same.
+func TestMCPReadTilesOnAWorkspaceAnswersItsLayout(t *testing.T) {
 	f := newShellAPIFixture(t, Config{})
 	s := agentAt(t, f.hs, nil)
 	ctx := context.Background()
@@ -343,7 +343,7 @@ func TestMCPReadTilesOnAPaneTileAnswersItsLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	note := mkText(t, s, door.ChildGridId, "note")
-	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
+	pt, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: f.root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 5, Y: 5, W: 1, H: 1, AltText: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}

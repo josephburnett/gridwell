@@ -25,9 +25,9 @@ test('a pane layout write is never read back by the client that wrote it', async
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
-  expect(pt, 'the pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(f.gridID), 'workspace', wx, wy)!;
+  expect(pt, 'the workspace tile persisted').toBeTruthy();
 
   const c = await gw.cadences();
   await gw.descendCell(wx, wy);
@@ -47,5 +47,5 @@ test('a pane layout write is never read back by the client that wrote it', async
   const { lines } = await dumpNow(window, gw.origin, token);
   const wrote = lines.filter((l) => l.origin === 'node' && l.msg === 'WriteContent ok' && l.kv?.id === pt.id);
   expect(wrote.length, 'the trace saw the layout writes').toBeGreaterThanOrEqual(writes);
-  expect(readsAfterOwnWrites(lines, pt.id), 'ReadContent of the pane tile right after its own layout write').toBe(0);
+  expect(readsAfterOwnWrites(lines, pt.id), 'ReadContent of the workspace tile right after its own layout write').toBe(0);
 });

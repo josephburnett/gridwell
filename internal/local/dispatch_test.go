@@ -171,23 +171,23 @@ func TestDeleteDoorToOtherNamespaceThroughPluginNoCascade(t *testing.T) {
 	}
 }
 
-// The pane kind's plugin-level contract: CreateTile makes the metadata row,
+// The workspace kind's plugin-level contract: CreateTile makes the metadata row,
 // the layout follows through WriteContent with no bump, and SetTile refuses
 // the kind, so the mapping stays total.
-func TestPaneDispatch(t *testing.T) {
+func TestWorkspaceDispatch(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
-	pt := createTile(t, p, root, &gridwellv1.Tile{Kind: "pane", X: 0, Y: 4, W: 2, H: 2, AltText: "ws"},
+	pt := createTile(t, p, root, &gridwellv1.Tile{Kind: "workspace", X: 0, Y: 4, W: 2, H: 2, AltText: "ws"},
 		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
-	if pt.Kind != "pane" || pt.BlobId == 0 || pt.AltText != "ws" {
-		t.Fatalf("pane create: %+v", pt)
+	if pt.Kind != "workspace" || pt.BlobId == 0 || pt.AltText != "ws" {
+		t.Fatalf("workspace create: %+v", pt)
 	}
 
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: pt.Id, Version: pt.Version,
-		Tile: &gridwellv1.Tile{Kind: "pane"}}); err == nil {
-		t.Error("SetTile on a pane tile must be refused (layout rides SetPaneLayout)")
+		Tile: &gridwellv1.Tile{Kind: "workspace"}}); err == nil {
+		t.Error("SetTile on a workspace tile must be refused (layout rides SetPaneLayout)")
 	}
 
 	if _, err := p.Store().WriteContent(ctx, pt.Id, pt.Version,

@@ -10,7 +10,7 @@ import (
 )
 
 func paneRow(blob int64) *gridwellv1.Tile {
-	return &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: blob}
+	return &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 1, BlobId: blob}
 }
 
 // seedLayout holds a pane row at blob 7 and its layout "A", read clean.

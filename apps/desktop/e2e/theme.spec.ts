@@ -166,7 +166,7 @@ async function wearLight(gw: any, window: any): Promise<void> {
   await expect.poll(() => gw.theme(), { timeout: 20_000 }).toBe('light');
 }
 
-test('the wide pane-tile crumb is a band lighter than the ink it carries', async ({
+test('the wide workspace tile crumb is a band lighter than the ink it carries', async ({
   gw,
   window,
 }) => {
@@ -177,15 +177,15 @@ test('the wide pane-tile crumb is a band lighter than the ink it carries', async
   const cy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', cx, cy);
+  await gw.dragCreate('workspace', cx, cy);
   await gw.descendCell(cx, cy);
   await expect
     .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth)
     .toBe(1);
 
   const bar = await gw.bar();
-  const crumb = bar.segments.find((s) => s.kind === 'pane');
-  expect(crumb, 'inside a pane tile the bar draws its crumb').toBeTruthy();
+  const crumb = bar.segments.find((s) => s.kind === 'workspace');
+  expect(crumb, 'inside a workspace tile the bar draws its crumb').toBeTruthy();
   expect(
     await darkestIn(window, crumb!.x + crumb!.w - 12, bar.top + bar.height / 2 - 2, 8, 4),
     'the crumb band is lighter than the ink it carries',

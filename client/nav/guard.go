@@ -18,7 +18,7 @@ const (
 	// pushed on it, the post-reload level landing's re-centre guard. PaneID,
 	// Anchor.
 	GuardPaneUntouched
-	// GuardLevelOpen: the window is still inside this pane tile. TileID.
+	// GuardLevelOpen: the window is still inside this workspace tile. TileID.
 	GuardLevelOpen
 )
 

@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Inside a pane tile the panes lay out inset by the pane-tile outline, so the
+// Inside a workspace tile the panes lay out inset by the workspace tile outline, so the
 // outline at the window edge lies outside every pane rect. A right-press on it
 // must start an edge split exactly as one on a pane's own border does, so the
 // edge target is the outline plus the pane border; see pane.GutterPane.
@@ -10,14 +10,14 @@ async function depth(window: any): Promise<number> {
   return (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
 }
 
-test('a right-press on the pane-tile outline at the window edge splits like an interior divider', async ({ gw, window }) => {
+test('a right-press on the workspace tile outline at the window edge splits like an interior divider', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  expect(tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy), 'pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  expect(tileAt(await gw.getGrid(f.gridID), 'workspace', wx, wy), 'workspace tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(() => depth(window)).toBe(1);
 

@@ -1,10 +1,10 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// A pane-tile workspace owns its ephemeral leaves. An ephemeral shell opened
+// A workspace tile workspace owns its ephemeral leaves. An ephemeral shell opened
 // inside the workspace survives ascent, because the boundary detaches and never
 // kills, and it reattaches live on re-descent, so the arrangement stays as it
-// was left. It dies when the pane tile is deleted, the way closing a pane
+// was left. It dies when the workspace tile is deleted, the way closing a pane
 // terminates what it owns.
 
 async function workspaceState(window: any): Promise<{ depth: number }> {
@@ -15,7 +15,7 @@ async function barAscend(gw: any): Promise<void> {
   await gw.leaveWorkspace();
 }
 
-test('workspace ephemeral shell: survives ascent, reattaches on descent, dies with the pane tile', async ({
+test('workspace ephemeral shell: survives ascent, reattaches on descent, dies with the workspace tile', async ({
   gw,
   window,
 }) => {
@@ -27,9 +27,9 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
-  expect(pt, 'pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
+  expect(pt, 'workspace tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 
@@ -78,7 +78,7 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
     })
     .toBe('webgl');
 
-  // Deleting the pane tile parks it in the trash, and a trashed workspace keeps
+  // Deleting the workspace tile parks it in the trash, and a trashed workspace keeps
   // its ephemerals, so a restore comes back whole.
   await barAscend(gw);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(0);
@@ -91,9 +91,9 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
   let parked: import('./oracle').Tile | undefined;
   await expect
     .poll(async () => {
-      parked = ((await gw.getGrid(monthGridID)).tiles ?? []).find((t) => t.kind === 'pane');
+      parked = ((await gw.getGrid(monthGridID)).tiles ?? []).find((t) => t.kind === 'workspace');
       return !!parked;
-    }, { message: 'the pane tile is parked under the month door', timeout: 10_000 })
+    }, { message: 'the workspace tile is parked under the month door', timeout: 10_000 })
     .toBe(true);
   expect(
     ((await gw.getGrid(scratchGridID)).tiles ?? []).length,
@@ -107,6 +107,6 @@ test('workspace ephemeral shell: survives ascent, reattaches on descent, dies wi
     .poll(async () => {
       const g = await gw.getGrid(scratchGridID);
       return (g.tiles ?? []).length;
-    }, { message: 'destroying the pane tile must reap its ephemeral shell', timeout: 10_000 })
+    }, { message: 'destroying the workspace tile must reap its ephemeral shell', timeout: 10_000 })
     .toBe(0);
 });

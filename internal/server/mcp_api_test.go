@@ -468,15 +468,15 @@ func TestMCPFindFiltersReachTheStore(t *testing.T) {
 	// kind keeps the tiles of that kind, alone or with a query; one the node
 	// does not know is refused by the router.
 	pt, err := newRouter(n.srv).CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: inner,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 7, Y: 7, W: 1, H: 1, AltText: "work"}})
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 7, Y: 7, W: 1, H: 1, AltText: "work"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := hits(map[string]any{"kind": "pane"}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
-		t.Fatalf("find kind pane = %v, want [%s]", got, pt.GetTile().GetId())
+	if got := hits(map[string]any{"kind": "workspace"}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
+		t.Fatalf("find kind workspace = %v, want [%s]", got, pt.GetTile().GetId())
 	}
-	if got := hits(map[string]any{"kind": "pane", "content_changed": map[string]any{}}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
-		t.Fatalf("find kind pane by content time = %v, want [%s]", got, pt.GetTile().GetId())
+	if got := hits(map[string]any{"kind": "workspace", "content_changed": map[string]any{}}); !slices.Equal(got, []string{pt.GetTile().GetId()}) {
+		t.Fatalf("find kind workspace by content time = %v, want [%s]", got, pt.GetTile().GetId())
 	}
 	if got := hits(map[string]any{"query": "note", "kind": "door"}); len(got) != 0 {
 		t.Fatalf("find note of kind door = %v, want none", got)

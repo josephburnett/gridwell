@@ -3,7 +3,7 @@ package pane
 import "testing"
 
 // The table the two settle persisters are armed by. The layout persister
-// writes the arrangement and, inside a pane tile, every grid frame's view
+// writes the arrangement and, inside a workspace tile, every grid frame's view
 // (2026-10-14); the framing persister writes the view to its row elsewhere
 // and a text descent's state everywhere. Each row says which of them the
 // change is a fact for. A fact missing from a column is a write that never

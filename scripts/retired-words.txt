@@ -72,3 +72,8 @@ well .*as well|.*well-formed|.*[Ww]ell (past|within|below|under)|internal/local/
 wells
 doorway
 doorways
+# "pane tile" — a tile holding a pane layout is a workspace tile
+# (rpc.KindWorkspace); a pane is one panel of the window.
+pane-tile
+panetile
+kindpane

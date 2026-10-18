@@ -21,7 +21,7 @@ const (
 	// PaneID, DestPaneID, TileID, Foot, Zoom.
 	EffRelocatePane
 	EffForgetPane // drops every session resource keyed to a pane: PaneID
-	// EffInstallLevel swaps the pane tree for a pane-tile level: Level, Tree
+	// EffInstallLevel swaps the pane tree for a workspace level: Level, Tree
 	// (nil with Capture: the window layout at the swap), Baseline, KeepOuter,
 	// IDPrefix.
 	EffInstallLevel
@@ -29,7 +29,7 @@ const (
 	// level's tree: TileID, Tree (nil keeps the tree), Baseline, and Level's
 	// Basis and ReadOnly.
 	EffReplaceLevel
-	// EffPopLevel leaves one pane-tile level, restoring the tree it parked or
+	// EffPopLevel leaves one workspace level, restoring the tree it parked or
 	// a fresh pane at GridID: GridID.
 	EffPopLevel
 
@@ -40,7 +40,7 @@ const (
 	EffPersistFraming
 	EffSaveText            // posts an editor buffer and scroll: PaneID, TileID
 	EffFlushDirtyText      // flushes every unsaved edit now
-	EffFlushLayout         // persists the pane-tile layout blob now
+	EffFlushLayout         // persists the workspace tile layout blob now
 	EffFlushDroppedSubtree // flushes the writebacks a closing subtree owes
 	// EffHandBackSurfaces moves each live surface of the level being left to
 	// its pane.Heir in the parked tree.
@@ -76,11 +76,11 @@ const (
 
 	EffDeleteEphemeral // deletes an ended visit: Tile, the row it claims; see stepRetireVisit
 	EffReport          // surfaces a notice: Severity, Source, Message
-	// EffEnterLevel descends the window into a pane tile: PaneID, TileID, Tile.
+	// EffEnterLevel descends the window into a workspace tile: PaneID, TileID, Tile.
 	// It re-enters the machine against a world gathered after the effects
 	// above it.
 	EffEnterLevel
-	EffLeaveLevels // leaves pane-tile levels: Count. Re-enters the same way.
+	EffLeaveLevels // leaves workspace levels: Count. Re-enters the same way.
 	EffReEngage    // PaneID, TileID. Re-enters the same way.
 )
 
@@ -167,12 +167,12 @@ const (
 	RequestGetTile     RequestKind = iota
 	RequestGetGrid                 // ID
 	RequestReadContent             // reads a tile's body into the cache: ID
-	// RequestReadLayout reads a pane tile's layout blob back as Data, never
+	// RequestReadLayout reads a workspace tile's layout blob back as Data, never
 	// into the cache: ID.
 	RequestReadLayout
 	RequestFind       // Query, Scope, Limit
 	RequestProbeShell // ID is the content id asked, Key the tmux the answer caches under
-	// RequestFlushLayout writes the pane-tile layout as the tree stands now
+	// RequestFlushLayout writes the workspace tile layout as the tree stands now
 	// and answers OK once the node holds it.
 	RequestFlushLayout
 )

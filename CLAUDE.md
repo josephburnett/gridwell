@@ -75,7 +75,7 @@ comment beside it says.
 7. **No client-only state.** Anything the user can change is a server fact,
    written through the store and reflected by an event. The exceptions are
    decided, not accidental: the session pane tree, each pane's focused tile
-   outside a pane tile, the outer frames of a pane's place, the pane-tile level stack,
+   outside a workspace tile, the outer frames of a pane's place, the workspace level stack,
    Chromium's own session storage, and the theme — a client view preference, not a fact
    about your things, so it lives in `localStorage` (2026-09-19). Do not add
    to that list without a decision.
@@ -129,7 +129,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   to absorb a schema change. Retired wire fields are `reserved`. The
   contract is `internal/local/store/CLAUDE.md`.
 - `version` means the user's content bytes: a text body, a typed url, a
-  typed name, a pane tile's layout. Captures, framing, placement and the
+  typed name, a workspace tile's layout. Captures, framing, placement and the
   freeze cause no bump. A url's address follows where the user went: the
   address a live view settles on after a navigation, an ascent or a freeze
   is written as content and claims a version like a typed one, and landing
@@ -137,7 +137,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Every write of something the user made or placed claims what it was read
   at, one claim per fact, because content, placement and the freeze are
   three facts with one owner each (2026-10-14): content (a text body, a url
-  address, a typed name, a pane tile's layout) claims the version and bumps
+  address, a typed name, a workspace tile's layout) claims the version and bumps
   it; a move or resize claims the placement the press saw (grid, x, y, w, h),
   so a move never conflicts with typing nor ages a body; a freeze or
   unfreeze claims the freeze it saw; a delete claims the version and the
@@ -154,7 +154,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   without one; the ephemeral cleanup claims the row its visit held
   (2026-10-14). A select is the decided exception: it names the tiles it
   adds and removes and claims nothing (2026-10-17). Only framing (pan and
-  zoom, the text scroll, content zoom), captures and a select carry no claim. A pane tile's layout counted as framing
+  zoom, the text scroll, content zoom), captures and a select carry no claim. A workspace tile's layout counted as framing
   until this decision.
 - The selection is a node fact (2026-10-15): the set of a grid's tiles the
   user has in hand lives on that grid's row (`grids.selection`), home's
@@ -180,7 +180,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   or any tile's, so a select never refuses a text save. A tap adds or
   removes one tile, a sweep adds the band, Esc removes the set the pane
   shows (`gesture.Toggle`, `Sweep`, `Clear`). `SelectionChanged` carries the whole set, so no view re-reads the
-  grid to learn it. Inside a pane tile the selection is the grid row's too,
+  grid to learn it. Inside a workspace tile the selection is the grid row's too,
   as everywhere (2026-10-18): a fact about a grid comes from the grid, two
   panes on one grid show one set, a select in either writes the row, and an
   agent reads and sets what the user sees. A layout holds no set; one a blob
@@ -201,7 +201,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   written only by the version bump (`bumpTileVersion`) and read as
   `created_at` until then. Find filters on them, on a grid (`grid_id`,
   `recurse` through owned doors, never a link), on the selection, and on
-  the kind (text, url, shell, door or pane, 2026-10-18; an unknown one is
+  the kind (text, url, shell, door or workspace, 2026-10-18; an unknown one is
   refused); the filters AND, an empty query with one lists what passes, newest first, and
   they are the node's, applied to the rows it holds (`store.tileFilter`),
   never a plugin's: the plugin answers the text, and the node keeps the hits
@@ -211,7 +211,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the door; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a
-  pane tile a grid's view is per pane, not the row's: each frame of each
+  workspace tile a grid's view is per pane, not the row's: each frame of each
   pane's stack keeps its center and zoom in the layout blob, a pan there
   writes the blob on the layout's settle and never the door row, and the
   one-active-surface rule is the home view's only, since no row is shared
@@ -221,7 +221,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   from a pane of another size, on another device, writes nothing (`textedit.Scroll`,
   2026-10-16). `text_w`/`text_h` are dead storage. The row's scroll is
   where the tile was left: the grid preview crops there and a descent opens
-  there. Inside a pane tile the live scroll is the layout's: a scroll there
+  there. Inside a workspace tile the live scroll is the layout's: a scroll there
   writes the blob on the layout's settle, a settle or a focus takes only the
   mode to the row, and an ascent, which is leaving, writes the row's whole
   scroll as it does anywhere; a leaf the blob has no scroll for starts at
@@ -321,7 +321,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   none reads as dark until it is upgraded (`namespace.Follow`, 2026-10-14).
 - A client tells the node what it shows as one view per session
   (`SetView`): its panes, each pane's place and whether it has focus, the
-  window's pane-tile level, a label ("desktop", "browser"), and the grids on
+  window's workspace level, a label ("desktop", "browser"), and the grids on
   screen, which the client derives because the layout rects are its own. The
   view is the subscription's one owner: the union the sources watch derives
   from it, and the node holds it in memory per session while a stream
@@ -357,11 +357,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   per item in order, each item its own write with its own claim, a refused
   one stopping none after it. A session answers only where the user is
   (2026-10-18): `sessions` lists every screen showing the node, newest
-  change first, each with its pane tiles and its panes' places, grids and
+  change first, each with its workspace tiles and its panes' places, grids and
   focus, and marks yours the one holding the agent's shell live; it chooses
   none, and no screen is an empty list. What a grid holds and has selected
   is the grid's, from `read_grid`, so "here" is a focused pane's grid or
-  pane tile and "these" is that grid's selection; `read_tiles` on a pane
+  workspace tile and "these" is that grid's selection; `read_tiles` on a pane
   tile answers the panes its layout holds, decoded by the client's own
   decoder (`pane.DecodeLayout`). A new tmux carries
   its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
@@ -391,8 +391,8 @@ These were decided deliberately. Do not reverse one without a new decision.
 
 - A pane's place is one stack of frames. Descending through any door
   pushes; ascending pops. The URL and the layout blob encode the stack; the
-  crumbs project it. The pane-tile level is the one second axis.
-- Every stacked level stays alive. Descending into a pane tile parks the
+  crumbs project it. The workspace level is the one second axis.
+- Every stacked level stays alive. Descending into a workspace tile parks the
   outer level; resources close only when the pane closes. One live surface
   per content tile — opening it elsewhere takes over.
 - Descent goes live. The frozen preview is what a tile looks like from
@@ -418,12 +418,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   target a plain click lands on, `pane.SessionState.Selected`; not the
   selection, which is a node fact), the level stack, and, outside a pane
   tile, the outer frames' viewports. The durable home for a
-  layout is the pane tile, and inside one every frame's viewport is part of
+  layout is the workspace tile, and inside one every frame's viewport is part of
   it (2026-10-14).
-  Inside a pane tile the focused pane and the zoomed pane are part of the
+  Inside a workspace tile the focused pane and the zoomed pane are part of the
   layout the tile remembers, written with it on every change, so a workspace
   reopens on the pane it was left on; the focused tile is
-  session-ephemeral only outside a pane tile (2026-10-14,
+  session-ephemeral only outside a workspace tile (2026-10-14,
   `pane.LayoutFingerprint`).
 - Left-drag moves, right-drag copies, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
@@ -474,7 +474,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   divider per axis, so at the corner of three panes it grabs both and the
   one drag moves both: two ordinary resizes sharing one gesture, rather than
   a gesture of its own. `pane.GrabDividers`.
-- A right-drag from a pane's edge splits it. Inside a pane tile the outline
+- A right-drag from a pane's edge splits it. Inside a workspace tile the outline
   at the window edge is part of the pane it borders, so an edge is as easy
   a target as an interior divider (2026-10-09, `pane.GutterPane`).
 - Pane closing is progressive crush: drag-through with red warning.

@@ -86,7 +86,7 @@ func (c *Client) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb
 	return tileResp(c.cl.CreateTile(ctx, connect.NewRequest(req)))
 }
 
-// CreateWithContent creates a text or pane tile born with data.
+// CreateWithContent creates a text or workspace tile born with data.
 func (c *Client) CreateWithContent(ctx context.Context, req *pb.CreateTileRequest, data []byte) (*pb.Tile, error) {
 	req.Content = data
 	return c.CreateTile(ctx, req)

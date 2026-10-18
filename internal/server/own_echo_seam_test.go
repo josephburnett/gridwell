@@ -23,7 +23,7 @@ func TestALayoutWriteEchoLeadingItsResponseIsNotReadBack(t *testing.T) {
 
 	before := []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)
 	after := []byte(`{"v":1,"root":{"pane":{"id":"p2","zoom":1}},"focus":"p2"}`)
-	pt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2}}, before)
+	pt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: root, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2}}, before)
 	if err != nil {
 		t.Fatal(err)
 	}

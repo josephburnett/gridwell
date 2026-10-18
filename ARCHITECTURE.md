@@ -2,7 +2,7 @@
 
 Gridwell is a personal space made of tiles on an infinite 2D grid. There are
 four primitives: text, url, shell, and door (a tile that holds another grid).
-A pane tile holds a split-pane layout. Grids nest without limit, and they
+A workspace tile holds a split-pane layout. Grids nest without limit, and they
 federate across plugins and machines. The one rule: things stay as you left
 them.
 
@@ -352,25 +352,25 @@ compiles the shim but executes none of it; the gates that do see it are in
 **Place.** A pane's place is one stack of frames (`client/pane/place.go`). A
 frame is the grid you are in, the tile you came through, and your viewport
 there. Every descent pushes a frame; every ascent pops one, restoring the
-viewport that frame holds. The URL (`url.go`) and the pane-tile
+viewport that frame holds. The URL (`url.go`) and the workspace tile
 layout blob (`wire.go`) encode the stack; the bar's crumbs (`chain.go`)
 project it. The blob holds the arrangement, the focused pane, the zoomed
-pane and every grid frame's view, so a pane tile reopens on the pane it was
+pane and every grid frame's view, so a workspace tile reopens on the pane it was
 left on, each pane where it was at every level (`pane.LayoutFingerprint`
-keys the write). A pan inside a pane tile writes the blob and never a
+keys the write). A pan inside a workspace tile writes the blob and never a
 framing row (`pane.FramingOwner.Layout`); a frame the blob has no view for
 starts at its framing row. A text leaf's live scroll is the blob's too once
 the user moves it: a settle there takes only the mode to its tile row, and
 an ascent writes the row's whole scroll, where the tile was left. A
-pane tile swaps the whole
+workspace tile swaps the whole
 pane tree instead — that is the one second axis (`levels.go`), and it is
 session-only.
 
 There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
 descent lands is the tile's own declaration: a door or link pushes a frame
 onto the child grid, a text, url or shell tile pushes one onto the tile
-itself, a pane tile descends the window a level. Every ascent hop writes
-framing back through `SetFraming`, except inside a pane tile where the blob
+itself, a workspace tile descends the window a level. Every ascent hop writes
+framing back through `SetFraming`, except inside a workspace tile where the blob
 owns it, and freezes a live preview, with no claim and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
 
@@ -506,7 +506,7 @@ because `client/shellstream` keys each attachment by its tmux; nothing
 reattaches and xterm keeps every row. Another tile on the tmux is closed,
 freezing onto its own tile, rather than moved, because the socket is bound to
 the tile whose preview and title the server writes. Leaving a
-pane-tile level hands each of its live surfaces back to the pane of the
+workspace level hands each of its live surfaces back to the pane of the
 parked tree that shows the same tile (`pane.Heir`, run by
 `nav.EffHandBackSurfaces`) instead of closing it, so a round trip through a
 level that shows the outer level's tiles rebuilds nothing. A surface closes,

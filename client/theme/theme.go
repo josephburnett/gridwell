@@ -93,9 +93,9 @@ type Palette struct {
 	ShellBorderFaded string
 	// ShellFill is the body behind a shell tile's preview or glyph.
 	ShellFill string
-	// Pane tiles: teal, a hue no other kind uses.
-	PaneTileFill   string
-	PaneTileBorder string
+	// Workspace tiles: teal, a hue no other kind uses.
+	WorkspaceFill   string
+	WorkspaceBorder string
 	// EphemeralBorder overrides the kind color, because ascending deletes the
 	// tile, a shell's tmux included, and the border is the warning.
 	EphemeralBorder      string
@@ -155,9 +155,9 @@ type Palette struct {
 	// CircleRim is a casing, not lettering, so it stays lighter than the chip
 	// in both palettes.
 	CircleRim string
-	// CrumbHere is the wide pane-tile crumb for the level you are in.
+	// CrumbHere is the wide workspace tile crumb for the level you are in.
 	CrumbHere string
-	// CrumbIdle is a crumb that is not where you are: a pane-tile level you
+	// CrumbIdle is a crumb that is not where you are: a workspace level you
 	// are outside, and the outline of one whose row has not arrived yet.
 	CrumbIdle string
 	// The bar chip on a pane whose room is a memory.
@@ -222,8 +222,8 @@ var dark = Palette{
 	ShellBorderFaded: "#6e4a22",
 	ShellFill:        "#2e220f",
 
-	PaneTileFill:   "#10282b",
-	PaneTileBorder: "#3aa8a8",
+	WorkspaceFill:   "#10282b",
+	WorkspaceBorder: "#3aa8a8",
 
 	EphemeralBorder:      "#8b8e96",
 	EphemeralBorderFaded: "#4b4d52",
@@ -321,8 +321,8 @@ var light = Palette{
 	ShellBorderFaded: "#d6ab78",
 	ShellFill:        "#fcf0dc",
 
-	PaneTileFill:   "#e0f2f2",
-	PaneTileBorder: "#1a7a7a",
+	WorkspaceFill:   "#e0f2f2",
+	WorkspaceBorder: "#1a7a7a",
 
 	EphemeralBorder:      "#70747d",
 	EphemeralBorderFaded: "#b3b7bf",

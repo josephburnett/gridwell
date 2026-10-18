@@ -128,8 +128,8 @@ func TestFindFiltersReachAPluginsRows(t *testing.T) {
 	if got := find(&gridwellv1.FindRequest{Query: "widget", Kind: second.Kind}); len(got) != 2 {
 		t.Errorf("widget of kind %s = %v, want both todos, one with no row", second.Kind, got)
 	}
-	if got := find(&gridwellv1.FindRequest{Query: "widget", Kind: rpc.KindPane}); len(got) != 0 {
-		t.Errorf("widget of kind pane = %v, want none", got)
+	if got := find(&gridwellv1.FindRequest{Query: "widget", Kind: rpc.KindWorkspace}); len(got) != 0 {
+		t.Errorf("widget of kind workspace = %v, want none", got)
 	}
 	if got := find(&gridwellv1.FindRequest{GridId: rootID, Recurse: true, Kind: rpc.KindDoor}); len(got) == 0 || slices.ContainsFunc(got, func(a string) bool { return strings.Contains(a, "widget") }) {
 		t.Errorf("the doors under the root = %v, want the week doors and no todo", got)

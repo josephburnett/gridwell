@@ -10,13 +10,13 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// The store side of the 'pane' tile kind: a tile whose content blob is an
+// The store side of the workspace tile kind: a tile whose content blob is an
 // api/panelayout split-pane layout. The store treats it as opaque bytes; the
 // codec, the id-relativity rule and the restore semantics live in client/pane.
 
-// CreatePane creates a pane tile. Empty data leaves blob_id NULL, meaning
+// CreateWorkspace creates a workspace tile. Empty data leaves blob_id NULL, meaning
 // never arranged, and descent installs the default single pane.
-func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64, alt string, data []byte) (*gridwellv1.Tile, error) {
+func (s *Store) CreateWorkspace(ctx context.Context, gridID string, x, y, w, h int64, alt string, data []byte) (*gridwellv1.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
@@ -33,10 +33,10 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,
 					blob_id, alt_text, created_at, updated_at)
-				VALUES (?, 'pane', ?, ?, ?, ?, ?, ?, ?, ?)`,
+				VALUES (?, 'workspace', ?, ?, ?, ?, ?, ?, ?, ?)`,
 				gid, x, y, w, h, blob, alt, now, now)
 			if err != nil {
-				return 0, fmt.Errorf("insert pane tile: %w", err)
+				return 0, fmt.Errorf("insert workspace tile: %w", err)
 			}
 			tileID, err := res.LastInsertId()
 			if err != nil {
@@ -51,7 +51,7 @@ func (s *Store) CreatePane(ctx context.Context, gridID string, x, y, w, h int64,
 		})
 }
 
-// SetPaneLayout writes a pane tile's layout blob. A layout is the user's
+// SetPaneLayout writes a workspace tile's layout blob. A layout is the user's
 // bytes, so it claims the version it was read at and bumps it, as a text save
 // does. Identical bytes are a pure no-op, so a re-save cannot churn the DB.
 func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data []byte) (*gridwellv1.Tile, error) {
@@ -67,8 +67,8 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 		if err != nil {
 			return err
 		}
-		if n.Kind != rpc.KindPane {
-			return ErrNotPaneTile
+		if n.Kind != rpc.KindWorkspace {
+			return ErrNotWorkspace
 		}
 		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, panelayout.LayoutMediaType)
 		if err != nil {
@@ -87,10 +87,10 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 	return out, nil
 }
 
-// WorkspaceEphemeralRefs returns the local tile ids any pane tile's layout
+// WorkspaceEphemeralRefs returns the local tile ids any workspace tile's layout
 // blob references as a content descent. The boot scratch sweep reads it to
 // spare pane-owned ephemerals. The blob is the one record of that ownership,
-// so a reference dies exactly when its pane tile does. unreadable is true when
+// so a reference dies exactly when its workspace tile does. unreadable is true when
 // any pane blob failed to decode, and the caller must then reap nothing: a
 // wrongly-swept shell is a killed process, while a delayed sweep is not.
 func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]bool, unreadable bool, err error) {
@@ -102,7 +102,7 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 	// (see readSnapshot); a NULL is a row whose blob is missing.
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT b.data FROM tiles t LEFT JOIN blobs b ON b.id = t.blob_id
-		 WHERE t.ns = '' AND t.kind = 'pane' AND t.blob_id IS NOT NULL`)
+		 WHERE t.ns = '' AND t.kind = 'workspace' AND t.blob_id IS NOT NULL`)
 	if err != nil {
 		return nil, false, fmt.Errorf("workspace refs: %w", err)
 	}

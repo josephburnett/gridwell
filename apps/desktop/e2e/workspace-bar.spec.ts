@@ -3,9 +3,9 @@ import { tileAt } from './oracle';
 
 // The bottom bar sits in always-reserved layout, a full-width band across the
 // window's bottom, and rides the focused pane inside it. It carries the one nav
-// chain: the complete path from the root as an outer chain, the pane-tile
+// chain: the complete path from the root as an outer chain, the workspace tile
 // boundary crumb, and the inner chain. The band never overlays pane content, and
-// inside a pane tile the bar rides the inset pane. Every crumb click goes to that
+// inside a workspace tile the bar rides the inset pane. Every crumb click goes to that
 // crumb, so the current boundary is a no-op and leaving is clicking any crumb
 // before it. The workspace boundary belongs to the bar alone:
 //   - a middle click, the in-pane ascent gesture, on a fully-ascended pane does
@@ -35,7 +35,7 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect((await workspaceState(window)).depth).toBe(0);
   const fp0 = await gw.focused();
   expect(fp0.y + fp0.h, 'the pane ends where the band begins').toBe(outside.top);
-  expect(outside.segments.some((s: any) => s.kind === 'pane'), 'no boundary crumb outside').toBe(false);
+  expect(outside.segments.some((s: any) => s.kind === 'workspace'), 'no boundary crumb outside').toBe(false);
   expect(outside.segments[0].kind, 'the chain starts the band').toBe('chain');
   expect(outside.band, 'grid-family band shade').toBe('#151b2e');
   expect(outside.button, 'grid-family button hue').toBe('#4a6fff');
@@ -43,8 +43,8 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(fp0.y, 'no outline gutter outside a workspace').toBe(0);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   expect(pt).toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
@@ -69,11 +69,11 @@ test('the bar is always reserved; workspace crumbs appear only inside; in-pane a
   expect(inside0.left, 'the bar rides the inset pane').toBe(wp.x);
   expect(inside0.width).toBe(wp.w);
 
-  // Inside, one nav chain: the outer chain, then the pane tile's boundary crumb,
+  // Inside, one nav chain: the outer chain, then the workspace tile's boundary crumb,
   // then the inner chain. The complete path from the root.
   const inside = await bar(window);
-  const crumb = inside.segments.find((s: any) => s.kind === 'pane' && s.level === 1);
-  expect(crumb, 'the pane-tile boundary crumb must appear').toBeTruthy();
+  const crumb = inside.segments.find((s: any) => s.kind === 'workspace' && s.level === 1);
+  expect(crumb, 'the workspace tile boundary crumb must appear').toBeTruthy();
   const boundaryIdx = inside.segments.indexOf(crumb);
   expect(boundaryIdx, 'the outer chain precedes the boundary').toBeGreaterThan(0);
   expect(inside.segments[boundaryIdx - 1].kind).toBe('chain');

@@ -15,12 +15,12 @@ const FS_ROOT = makeRunDir();
 test.use({ extraPlugins: [{ kind: 'fs', name: 'files', config: { root: FS_ROOT } }] });
 
 // chainAfterBoundary returns the focused pane's own crumbs, everything after the
-// innermost pane-tile boundary. The crumbs before it belong to the window: the
+// innermost workspace tile boundary. The crumbs before it belong to the window: the
 // root close-all crumb and one per open level.
 function chainAfterBoundary(bar: { segments: any[] }): any[] {
   let last = -1;
   bar.segments.forEach((s, i) => {
-    if (s.kind === 'pane') last = i;
+    if (s.kind === 'workspace') last = i;
   });
   return bar.segments.slice(last + 1);
 }
@@ -36,8 +36,8 @@ test('a workspace re-entered inside a plugin keeps every crumb down from its roo
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   expect(pt).toBeTruthy();
 
   // Inside the workspace, cross into a plugin, so the pane's place is the home
@@ -98,8 +98,8 @@ test('a workspace restored by ?w= still shows a glyph on its close-all crumb', a
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   expect(pt).toBeTruthy();
   await gw.descendCell(wx, wy);
 
@@ -121,6 +121,6 @@ test('a workspace restored by ?w= still shows a glyph on its close-all crumb', a
 
   const root = (await gw.bar()).segments[0];
   expect(root.closeOnly, 'the leading crumb closes the levels').toBe(true);
-  expect(root.anchor, 'and names the grid the pane tile sits in').toBe(rootGrid);
+  expect(root.anchor, 'and names the grid the workspace tile sits in').toBe(rootGrid);
   expect(root.glyph, 'so it draws a glyph, not a blank square').not.toBe('');
 });

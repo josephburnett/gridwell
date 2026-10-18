@@ -43,10 +43,10 @@ type Frame struct {
 	ViewPending bool
 	// adopted is the view Adopt took from the owner row. Until the pane moves
 	// off it, it is the row's view, not one the layout keeps, so opening a
-	// pane tile without moving writes nothing.
+	// workspace tile without moving writes nothing.
 	adopted rpc.View
 	// ownScroll: the text scroll was moved by the user or restored from a
-	// layout blob, so inside a pane tile it is the layout's, not the row's.
+	// layout blob, so inside a workspace tile it is the layout's, not the row's.
 	ownScroll bool
 }
 
@@ -54,7 +54,7 @@ type Frame struct {
 // and from either overlay's own scroll, clamped at the top. It reports whether
 // the scroll moved, which is a framing change like a pan: the caller redraws,
 // and the redraw arms the settle persister on FramingFingerprint, and inside a
-// pane tile the layout's on LayoutFingerprint.
+// workspace tile the layout's on LayoutFingerprint.
 func (f *Frame) ScrollText(x, y float64) bool {
 	x, y = max(x, 0), max(y, 0)
 	if x == f.TextScrollX && y == f.TextScrollY {

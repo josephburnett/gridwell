@@ -155,9 +155,9 @@ func TestSessionsHoldEachViewOpenThenAway(t *testing.T) {
 
 	closeSub := subscribed(cl)
 	view := &gridwellv1.SetViewRequest{
-		Label:        "browser",
-		ShownGridIds: []string{a + "/2", a + "/7"},
-		PaneTiles:    []string{localNodeID + "9"},
+		Label:          "browser",
+		ShownGridIds:   []string{a + "/2", a + "/7"},
+		WorkspaceTiles: []string{localNodeID + "9"},
 		Panes: []*gridwellv1.ViewPane{
 			{Id: "p0", Anchor: a + "/1", Path: []string{a + "/4"}, GridId: a + "/2", Focused: true},
 			{Id: "p1", Anchor: a + "/1", Path: []string{a + "/4"}, ContentId: a + "/5", GridId: a + "/2"},

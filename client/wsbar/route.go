@@ -27,9 +27,9 @@ const (
 	// ActionZoom toggles the focused pane's zoom; the title is the pane's
 	// handle, and for the left button the handle is the whole name area.
 	ActionZoom
-	// ActionWorkspaceRename edits Segment's pane-tile crumb.
+	// ActionWorkspaceRename edits Segment's workspace tile crumb.
 	ActionWorkspaceRename
-	// ActionLeaveLevels pops out to Segment's level, for a pane-tile crumb or
+	// ActionLeaveLevels pops out to Segment's level, for a workspace tile crumb or
 	// the leading close-only root.
 	ActionLeaveLevels
 	// ActionPromote arms the drag that lands the current ephemeral visit on
@@ -97,7 +97,7 @@ func RouteClick(in Click) Hit {
 		case inTitle:
 			return Hit{Action: ActionRename}
 		}
-		if s, ok := At(in.Segments, in.X); ok && in.Chain[s.Index].PaneTile {
+		if s, ok := At(in.Segments, in.X); ok && in.Chain[s.Index].Workspace {
 			return Hit{Action: ActionWorkspaceRename, Segment: s}
 		}
 		return Hit{Action: ActionNone}
@@ -116,7 +116,7 @@ func RouteClick(in Click) Hit {
 		return Hit{Action: ActionNone}
 	}
 	switch nc := in.Chain[s.Index]; {
-	case nc.PaneTile || nc.CloseOnly:
+	case nc.Workspace || nc.CloseOnly:
 		return Hit{Action: ActionLeaveLevels, Segment: s}
 	case in.Promote && s.Index == len(in.Chain)-1:
 		return Hit{Action: ActionPromote, Segment: s}

@@ -106,12 +106,12 @@ type Segment struct {
 	X, W  float64
 }
 
-// BoundaryW makes a pane-tile boundary crumb stand out from the RowH squares
+// BoundaryW makes a workspace tile boundary crumb stand out from the RowH squares
 // of chain crumbs. It is the rename target.
 const BoundaryW = 120.0
 
 // Layout takes widths[i] as RowH for a chain crumb and BoundaryW for a
-// pane-tile boundary. When the band cannot fit them all, crumbs drop from the
+// workspace tile boundary. When the band cannot fit them all, crumbs drop from the
 // left and the survivors keep full size, a too-small preview reading as
 // nothing. The current pane's name is a centered title, not a crumb.
 func Layout(widths []float64, width float64) []Segment {

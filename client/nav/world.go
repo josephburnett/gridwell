@@ -81,7 +81,7 @@ func (ew *EngageWorld) tile() *gridwellv1.Tile {
 	return ew.Tile
 }
 
-// LevelWorld is a pane tile's row as the cache holds it: what a level landing
+// LevelWorld is a workspace tile's row as the cache holds it: what a level landing
 // zooms out onto, and what entering one opens off when its grid is current.
 // nil, or a nil Tile, means it is not cached.
 type LevelWorld struct {
@@ -189,7 +189,7 @@ type World struct {
 	Current map[string]bool
 
 	// One per verb: a descent, an ascent hop, a restore and every step of its
-	// walk, a pane-tile landing, a promote, a re-engage.
+	// walk, a workspace tile landing, a promote, a re-engage.
 	Door    *DoorWorld
 	Leave   *LeaveWorld
 	Restore *RestoreWorld

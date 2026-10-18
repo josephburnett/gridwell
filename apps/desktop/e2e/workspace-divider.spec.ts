@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// Inside a pane-tile workspace, panes lay out into rootLayoutRect, which insets
+// Inside a workspace tile workspace, panes lay out into rootLayoutRect, which insets
 // by wsOutlinePx above depth 0, and dividerGrab has to read that same rect.
 // Built from the full window instead, divider midlines drift from the real pane
 // edges and pane.GrabDividers never fires, so a right-drag classifies as an
@@ -24,9 +24,9 @@ test('stacked-pane divider left-resizes inside a workspace; right-drag splits', 
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
-  expect(pt, 'pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
+  expect(pt, 'workspace tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth).toBe(1);
 

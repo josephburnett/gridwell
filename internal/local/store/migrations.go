@@ -23,7 +23,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 20
+const schemaVersion = 21
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -43,7 +43,7 @@ var migrations = []migration{
 	{to: 3, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN content_zoom REAL NOT NULL DEFAULT 0`)},
 	// v4: url_history, a url tile's back-stack across freeze and revive.
 	{to: 4, run: addColumnDDL(`ALTER TABLE tiles ADD COLUMN url_history TEXT`)},
-	// v5: the 'pane' tile kind. A kind lives in the tiles table-level CHECK,
+	// v5: the workspace tile kind. A kind lives in the tiles table-level CHECK,
 	// which ALTER TABLE cannot touch, so this is a table rebuild.
 	{to: 5, run: rebuildTilesReading(4)},
 	// v6: link_target_id, the leaf-link variant. The CHECK gains the link
@@ -129,16 +129,23 @@ var migrations = []migration{
 	// row stays, its kind respelled through respelledKinds. The kind lives in
 	// the CHECK, so this is a rebuild.
 	{to: 20, run: migrateV20},
+	// v21: the kind 'pane' is spelled 'workspace', the same conversion as v20.
+	{to: 21, run: migrateV21},
 }
 
 // respelledKinds maps a kind as a released binary stored it to the kind this
 // binary stores. Every rebuild converts through it (rebuildSelect), because a
 // rebuild materializes the current CHECK, which admits only the new spelling.
-var respelledKinds = [][2]string{{"well", rpc.KindDoor}}
+var respelledKinds = [][2]string{{"well", rpc.KindDoor}, {"pane", rpc.KindWorkspace}}
 
-// migrateV20 respells the kinds; see the chain entry.
-func migrateV20(ctx context.Context, tx *sql.Tx) error {
-	if err := rebuildTiles(ctx, tx, 19); err != nil {
+// migrateV20 and migrateV21 respell the kinds; see the chain entries.
+func migrateV20(ctx context.Context, tx *sql.Tx) error { return respellKinds(ctx, tx, 19) }
+func migrateV21(ctx context.Context, tx *sql.Tx) error { return respellKinds(ctx, tx, 20) }
+
+// respellKinds rebuilds tiles from a table of version reads' shape, which
+// converts every kind through respelledKinds.
+func respellKinds(ctx context.Context, tx *sql.Tx, reads int) error {
+	if err := rebuildTiles(ctx, tx, reads); err != nil {
 		return err
 	}
 	// DROP TABLE tiles took idx_tiles_live_key with it; see rebuildTiles.

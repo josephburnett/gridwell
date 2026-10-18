@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt, writeContent } from './oracle';
 
-// The + menu's fifth "pane" swatch persists a kind="pane" tile, and a foreign
+// The + menu's fifth "workspace" swatch persists a kind="workspace" tile, and a foreign
 // layout write reaches this client's preview state: a layout is the user's
 // bytes, so the write claims version 0 and its echo arrives one version on.
 
@@ -18,7 +18,7 @@ async function sig(window: any, tileId: string): Promise<string> {
   return sigs[tileId] ?? '';
 }
 
-test('workspace primitive: drag-create persists a pane tile and its preview tracks the layout blob', async ({ gw, window }) => {
+test('workspace primitive: drag-create persists a workspace tile and its preview tracks the layout blob', async ({ gw, window }) => {
   await gw.enterPlugin('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
@@ -28,17 +28,17 @@ test('workspace primitive: drag-create persists a pane tile and its preview trac
   // dragCreate resolves the swatch by templateKindName, so a missing menu
   // entry fails right here.
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   const snap = await gw.getGrid(rootGrid);
-  const pt = tileAt(snap, 'pane', wx, wy);
-  expect(pt, `a pane tile should be persisted at (${wx},${wy})`).toBeTruthy();
+  const pt = tileAt(snap, 'workspace', wx, wy);
+  expect(pt, `a workspace tile should be persisted at (${wx},${wy})`).toBeTruthy();
 
   // Never arranged, so no layout blob, at version 0. Polled, because waitIdle
   // can sample the gap between the RPC completing and postTileMutate's
   // background fetchGrid marking itself in flight.
   await expect
     .poll(async () => sig(window, pt!.id), { timeout: 10_000 })
-    .toContain('kpane');
+    .toContain('kworkspace');
   const sig0 = await sig(window, pt!.id);
 
   // Another writer arranges the workspace, claiming version 0.

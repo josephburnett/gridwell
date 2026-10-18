@@ -6,13 +6,13 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// A pane tile's layout is the user's bytes: the level remembers the version
+// A workspace tile's layout is the user's bytes: the level remembers the version
 // its tree derives from, and a refused write puts the arrangement on disk in
 // place of the open tree, whole.
 
 func TestLevelInstallCarriesTheVersionItsTreeDerivesFrom(t *testing.T) {
 	m := New()
-	row := arranged(paneTile())
+	row := arranged(workspace())
 	row.Version = 4
 	anim, fetch, w := enter(t, m, row)
 	m.Land(anim.Land, w)
@@ -26,7 +26,7 @@ func TestLevelInstallCarriesTheVersionItsTreeDerivesFrom(t *testing.T) {
 
 func TestACaptureClaimsTheRowsVersion(t *testing.T) {
 	m := New()
-	row := paneTile()
+	row := workspace()
 	row.Version = 3
 	anim, fetch, w := enter(t, m, row)
 	m.Land(anim.Land, w)

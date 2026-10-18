@@ -34,13 +34,13 @@ type SessionsOut struct {
 
 // Session is one screen showing this node.
 type Session struct {
-	ID        string   `json:"id"`
-	Label     string   `json:"label" jsonschema:"the kind of client: desktop or browser"`
-	Changed   string   `json:"changed" jsonschema:"when its view last changed, RFC 3339"`
-	AwaySince string   `json:"away_since,omitempty" jsonschema:"when its stream closed, RFC 3339, as a phone's does in the background; absent while it is open"`
-	PaneTiles []string `json:"pane_tiles,omitempty" jsonschema:"the pane tiles the window is inside, outermost first"`
-	Panes     []Pane   `json:"panes"`
-	Yours     bool     `json:"yours,omitempty" jsonschema:"this screen shows the shell this agent runs in, live"`
+	ID             string   `json:"id"`
+	Label          string   `json:"label" jsonschema:"the kind of client: desktop or browser"`
+	Changed        string   `json:"changed" jsonschema:"when its view last changed, RFC 3339"`
+	AwaySince      string   `json:"away_since,omitempty" jsonschema:"when its stream closed, RFC 3339, as a phone's does in the background; absent while it is open"`
+	WorkspaceTiles []string `json:"workspace_tiles,omitempty" jsonschema:"the workspace tiles the window is inside, outermost first"`
+	Panes          []Pane   `json:"panes"`
+	Yours          bool     `json:"yours,omitempty" jsonschema:"this screen shows the shell this agent runs in, live"`
 }
 
 // Pane is one pane of a session's view.
@@ -89,7 +89,7 @@ func (d *toolset) listSessions(ctx context.Context, shell string) (SessionsOut, 
 
 func sessionOf(s subscription.Session) Session {
 	v := s.View
-	out := Session{ID: s.ID, Label: v.GetLabel(), Changed: stamp(s.Changed), PaneTiles: v.GetPaneTiles(), Panes: []Pane{}}
+	out := Session{ID: s.ID, Label: v.GetLabel(), Changed: stamp(s.Changed), WorkspaceTiles: v.GetWorkspaceTiles(), Panes: []Pane{}}
 	if !s.Open {
 		out.AwaySince = stamp(s.Away)
 	}

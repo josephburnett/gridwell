@@ -6,7 +6,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// A bar 400 wide: a pane-tile boundary and two chain crumbs from the left,
+// A bar 400 wide: a workspace tile boundary and two chain crumbs from the left,
 // the slot at the right end, and the title between them.
 func barClick(button int, x float64) Click {
 	return Click{
@@ -17,7 +17,7 @@ func barClick(button int, x float64) Click {
 			{Index: 2, X: BoundaryW + RowH, W: RowH},
 		},
 		Chain: []pane.NavCrumb{
-			{PaneTile: true, WsLevel: 1},
+			{Workspace: true, WsLevel: 1},
 			{Crumb: pane.Crumb{TileID: "w1"}},
 			{Crumb: pane.Crumb{TileID: "w2"}},
 		},
@@ -52,9 +52,9 @@ func TestRouteClick(t *testing.T) {
 			barClick(1, 210), ActionNone, -1},
 		{"a right press on the title renames it",
 			barClick(2, 210), ActionRename, -1},
-		{"a left press on a pane-tile crumb leaves its levels",
+		{"a left press on a workspace tile crumb leaves its levels",
 			barClick(0, 10), ActionLeaveLevels, 0},
-		{"a right press on a pane-tile crumb renames the workspace",
+		{"a right press on a workspace tile crumb renames the workspace",
 			barClick(2, 10), ActionWorkspaceRename, 0},
 		{"a left press on a chain crumb ascends to it",
 			barClick(0, BoundaryW+2), ActionAscend, 1},
@@ -148,7 +148,7 @@ func TestRouteClickNameAreaWithoutCrumbs(t *testing.T) {
 	}
 }
 
-// The leading root crumb inside a pane tile pops to the session, so it leaves
+// The leading root crumb inside a workspace tile pops to the session, so it leaves
 // levels like a boundary crumb and never ascends in the tree.
 func TestRouteClickCloseOnly(t *testing.T) {
 	in := barClick(0, BoundaryW+2)

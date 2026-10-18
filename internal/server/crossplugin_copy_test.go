@@ -365,19 +365,19 @@ func TestCopyAcrossPluginsCopiesCurrentContent(t *testing.T) {
 	}
 }
 
-// TestCopyPaneAcrossPluginsCopiesLayout: a workspace crosses a plugin
+// TestCopyWorkspaceAcrossPluginsCopiesLayout: a workspace crosses a plugin
 // boundary as a BYTE COPY of its layout blob (like text) — and because the
 // layout's ids are owner-frame-relative by the codec's rule, the copy's panes
 // keep naming the ORIGINAL places: arrangement copies, referenced content is
 // shared. The copies then diverge independently (content addressing).
-func TestCopyPaneAcrossPluginsCopiesLayout(t *testing.T) {
+func TestCopyWorkspaceAcrossPluginsCopiesLayout(t *testing.T) {
 	cl, _, rootA, uuidB, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
 	layout := []byte(`{"v":1,"root":{"pane":{"id":"p1","anchor":"someplugin/1","zoom":1}},"focus":"p1"}`)
-	pt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2, AltText: "ws"}}, layout)
+	pt, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2, AltText: "ws"}}, layout)
 	if err != nil {
-		t.Fatalf("CreatePane: %v", err)
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: pt.Id, DestGridId: rootB, X: 1, Y: 1,
@@ -388,7 +388,7 @@ func TestCopyPaneAcrossPluginsCopiesLayout(t *testing.T) {
 	if u, _, _ := rpc.SplitID(cp.Id); u != uuidB {
 		t.Errorf("copy lives in %q, want %q", u, uuidB)
 	}
-	if cp.Kind != rpc.KindPane || cp.AltText != "ws" {
+	if cp.Kind != rpc.KindWorkspace || cp.AltText != "ws" {
 		t.Errorf("copy shape: %+v", cp)
 	}
 	body, _, _, err := cl.ReadContent(ctx, cp.Id)
@@ -501,15 +501,15 @@ func TestLinkDirDoorFromFsPlugin(t *testing.T) {
 	}
 }
 
-// TestCopyPaneAcrossPluginsNeverArranged: a pane tile with no layout blob
+// TestCopyWorkspaceAcrossPluginsNeverArranged: a workspace tile with no layout blob
 // copies as an empty workspace (no Data round trip to fail on).
-func TestCopyPaneAcrossPluginsNeverArranged(t *testing.T) {
+func TestCopyWorkspaceAcrossPluginsNeverArranged(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
 
-	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: 0, Y: 0, W: 2, H: 2, AltText: "empty"}})
+	pt, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: 0, Y: 0, W: 2, H: 2, AltText: "empty"}})
 	if err != nil {
-		t.Fatalf("CreatePane: %v", err)
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
 	cp, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: pt.Id, DestGridId: rootB, X: 0, Y: 0,

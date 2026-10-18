@@ -8,19 +8,19 @@ import (
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
-// The window's stack of levels. What lies through a pane tile is a whole tree,
+// The window's stack of levels. What lies through a workspace tile is a whole tree,
 // so it is the window that descends. The window-root tree is
-// session-ephemeral and the durable home for a layout is the pane tile: the
+// session-ephemeral and the durable home for a layout is the workspace tile: the
 // server blob owns it, and savedHash here is only the persister's diff key.
 
-// Level records one pane-tile descent.
+// Level records one workspace tile descent.
 type Level struct {
 	// OuterTree is the pane tree this descent parked, restored verbatim on
-	// ascent and alive while parked. nil when the pane tile was entered from
+	// ascent and alive while parked. nil when the workspace tile was entered from
 	// boot; ascent then falls back to its containing grid.
 	OuterTree  *Tree
 	OriginPane string // the outer pane the descent happened in; focus returns there
-	TileID     string // the pane tile: owner of the layout blob, routing handle for its write
+	TileID     string // the workspace tile: owner of the layout blob, routing handle for its write
 	// GridID is where a close-all ascent re-anchors when this level parked no
 	// tree, and the glyph the bar's root crumb wears there.
 	GridID string
@@ -76,12 +76,12 @@ type Levels struct {
 	frames []Level
 }
 
-// Depth is how many pane tiles deep the window is; 0 is the session tree.
+// Depth is how many workspace tiles deep the window is; 0 is the session tree.
 func (s *Levels) Depth() int { return len(s.frames) }
 
 func (s *Levels) Push(f Level) { s.frames = append(s.frames, f) }
 
-// Pop leaves the current pane tile, returning its level.
+// Pop leaves the current workspace tile, returning its level.
 func (s *Levels) Pop() (Level, bool) {
 	if len(s.frames) == 0 {
 		return Level{}, false
@@ -134,7 +134,7 @@ func (s *Levels) At(level int) *Level {
 }
 
 // PopCountTo is how many levels to leave to be inside level k, level 0 being
-// the session outside every pane tile. Clicking the current boundary pops
+// the session outside every workspace tile. Clicking the current boundary pops
 // nothing.
 func (s *Levels) PopCountTo(level int) int {
 	if level < 0 || level >= len(s.frames) {
@@ -143,7 +143,7 @@ func (s *Levels) PopCountTo(level int) int {
 	return len(s.frames) - level
 }
 
-// tileIDs is the pane tile of each level, outermost first.
+// tileIDs is the workspace tile of each level, outermost first.
 func (s *Levels) tileIDs() []string {
 	var out []string
 	for _, f := range s.frames {
@@ -198,15 +198,15 @@ func ForgetSaved(top *Level, encoded []byte) {
 // NavCrumb is one link of the complete nav chain: the window's levels and the
 // focused pane's frames end to end.
 type NavCrumb struct {
-	// PaneTile marks a window-level boundary: WsLevel is the 1-based nesting
-	// depth and TileID the pane tile, the preview square and rename target.
-	PaneTile bool
-	WsLevel  int
-	TileID   string
+	// Workspace marks a window-level boundary: WsLevel is the 1-based nesting
+	// depth and TileID the workspace tile, the preview square and rename target.
+	Workspace bool
+	WsLevel   int
+	TileID    string
 	// Crumb is the live tree's focused pane's frame-stack entry; a click
 	// ascends to it in place.
 	Crumb Crumb
-	// CloseOnly is the leading root crumb inside a pane tile. Its click pops to
+	// CloseOnly is the leading root crumb inside a workspace tile. Its click pops to
 	// the session and is never an in-tree ascent.
 	CloseOnly bool
 }
@@ -220,7 +220,7 @@ func (s *Levels) NavChain(p *Pane) []NavCrumb {
 	if depth > 0 {
 		// The root crumb wears the glyph of wherever its click lands: the
 		// session origin's root when this level parked a tree, otherwise the
-		// grid its pane tile sits in, where the close-all ascent re-anchors.
+		// grid its workspace tile sits in, where the close-all ascent re-anchors.
 		root := NavCrumb{CloseOnly: true}
 		if f := s.At(1); f != nil {
 			if f.OuterTree != nil && f.OriginPane != "" {
@@ -237,7 +237,7 @@ func (s *Levels) NavChain(p *Pane) []NavCrumb {
 		out = append(out, root)
 		for k := 1; k <= depth; k++ {
 			if f := s.At(k); f != nil {
-				out = append(out, NavCrumb{PaneTile: true, WsLevel: k, TileID: f.TileID})
+				out = append(out, NavCrumb{Workspace: true, WsLevel: k, TileID: f.TileID})
 			}
 		}
 	}

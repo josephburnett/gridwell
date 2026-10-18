@@ -78,7 +78,7 @@ func TestShowing(t *testing.T) {
 	}
 }
 
-// Inside a pane tile the window shows that level's tree; the tree it parked
+// Inside a workspace tile the window shows that level's tree; the tree it parked
 // is off screen, so its grids are not shown.
 func TestShowingALevelShowsOnlyItsOwnTree(t *testing.T) {
 	outer := TreeAtPlace("w0:", "outer/1", nil, rpc.ViewOf(0, 0, 1))

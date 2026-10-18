@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// A pane tile's layout answers its panes in tree order, ids spelled as the
-// tile's own: a pane tile behind a connection gets the connection's prefix.
+// A workspace tile's layout answers its panes in tree order, ids spelled as the
+// tile's own: a workspace tile behind a connection gets the connection's prefix.
 // A grid is named only where the blob names it.
 func TestLayoutOfAnswersThePanesUnderTheTilesChain(t *testing.T) {
 	blob := `{"v":1,"root":{"split":{"dir":"v","ratio":0.5,"a":{"pane":{"id":"p1","anchor":"far/1"}},` +

@@ -355,7 +355,7 @@ func (a *App) syncURLViews() {
 		}
 		switch pane.SurfaceOf(ok, contentID, v.descentID) {
 		case pane.SurfacePark:
-			// A stacked level parked behind a pane tile stays alive.
+			// A stacked level parked behind a workspace tile stays alive.
 			a.bridgeSetHidden(paneID, true, false)
 			continue
 		case pane.SurfaceOrphan:

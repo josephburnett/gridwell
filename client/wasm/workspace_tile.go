@@ -2,7 +2,7 @@
 
 package main
 
-// The pane tile's client preview. The layout memo and the geometry are
+// The workspace tile's client preview. The layout memo and the geometry are
 // client/panepreview's and the codec client/pane's; this is fetch and draw
 // glue.
 
@@ -15,9 +15,9 @@ import (
 	"github.com/josephburnett/gridwell/client/panepreview"
 )
 
-// paneTileLayout is panepreview.Layouts over the content cache; the memo
+// workspaceLayout is panepreview.Layouts over the content cache; the memo
 // policy is that package's. A missing body kicks its fetch here.
-func (a *App) paneTileLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
+func (a *App) workspaceLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
 	return a.views.paneLayouts.Tree(n.Id, n.BlobId, a.c.BodyGen(n.Id), func() ([]byte, bool) {
 		body, ok := a.c.TileContent(n.Id)
 		if !ok {
@@ -34,17 +34,17 @@ func (a *App) paneLayoutUnreadable(tileID string, err error) {
 	a.reportErr(errsurface.Error, "layout:"+tileID, "workspace layout unreadable: "+err.Error())
 }
 
-// drawPaneTilePreview draws the stored layout small: dividers plus each
+// drawWorkspacePreview draws the stored layout small: dividers plus each
 // leaf's grid one level deep, through the same machinery door previews use.
 // One level deep, flat beyond, so a door inside a leaf draws as its flat
 // preview. A never-arranged layout shows the split glyph.
-func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
+func (a *App) drawWorkspacePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
 	c := a.cctx
-	fillRectC(c, x, y, w, h, a.pal.PaneTileFill)
+	fillRectC(c, x, y, w, h, a.pal.WorkspaceFill)
 
-	tree, ok := a.paneTileLayout(n)
+	tree, ok := a.workspaceLayout(n)
 	if !ok {
-		drawPaneGlyph(c, x, y, w, h, a.pal.PaneTileBorder)
+		drawWorkspaceGlyph(c, x, y, w, h, a.pal.WorkspaceBorder)
 	} else {
 		tileRect := pane.Rect{X: x, Y: y, W: w, H: h}
 		withClip(c, x, y, w, h, func() {
@@ -53,12 +53,12 @@ func (a *App) drawPaneTilePreview(n *gridwellv1.Tile, x, y, w, h float64, select
 			}
 			// On top, so the split structure reads at any size.
 			for _, d := range pane.Dividers(tree, tileRect, 1) {
-				fillRectC(c, d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1), a.pal.PaneTileBorder)
+				fillRectC(c, d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1), a.pal.WorkspaceBorder)
 			}
 		})
 	}
 
-	a.strokeTileFrame(c, x, y, w, h, a.pal.PaneTileBorder, dashed, selected)
+	a.strokeTileFrame(c, x, y, w, h, a.pal.WorkspaceBorder, dashed, selected)
 	a.drawTileBannerLabel(n, x, y, w, h, outside)
 }
 
@@ -93,9 +93,9 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 	})
 }
 
-// createPaneAtCell lands an unnamed pane tile with no layout blob, so it is
+// createWorkspaceAtCell lands an unnamed workspace tile with no layout blob, so it is
 // never-arranged and the first descent installs the default single pane.
-func (a *App) createPaneAtCell(gid string, cellX, cellY int64) {
-	a.createTile("CreatePane", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindPane, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
+func (a *App) createWorkspaceAtCell(gid string, cellX, cellY int64) {
+	a.createTile("CreateWorkspace", gid, &gridwellv1.CreateTileRequest{GridId: gid,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }

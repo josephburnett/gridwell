@@ -31,7 +31,7 @@ import (
 //   - a solid door becomes a new door plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
 //   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
-//   - text and pane bytes go ReadContent to the create, so the copy is born
+//   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
 //   - a url copies its url_string plus the frozen preview and history;

@@ -314,12 +314,12 @@ func TestRemoveTileFreesContent(t *testing.T) {
 func TestApplyBlobChangeDropsContent(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
-		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 7},
+		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 3, BlobId: 7},
 	})
 	c.PutFetchedContent("10", []byte(`{"v":1,"old":true}`), vb(3), c.AskContent("10"))
 
 	changed := c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
-		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 8},
+		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 3, BlobId: 8},
 	}}})
 	if !changed {
 		t.Fatal("same-version blob change must apply")
@@ -330,7 +330,7 @@ func TestApplyBlobChangeDropsContent(t *testing.T) {
 	// Same blob again: nothing to drop, content written after the event stays.
 	c.PutFetchedContent("10", []byte(`{"v":1,"new":true}`), vb(3), c.AskContent("10"))
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
-		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 8},
+		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 3, BlobId: 8},
 	}}})
 	if _, ok := c.TileContent("10"); !ok {
 		t.Fatal("an unchanged blob must not drop content")
@@ -752,14 +752,14 @@ func vb(v int64) rpc.ContentBasis { return rpc.ContentBasis{Version: v} }
 func TestALayoutResponseOlderThanAForeignRowIsNotFolded(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
-		{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 3, BlobId: 7},
+		{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 3, BlobId: 7},
 	})
 	end := c.BeginWrite("10")
 	// The foreign writer's echo lands first, one version past this write's.
 	c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{
-		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 5, BlobId: 9},
+		Tile: &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 5, BlobId: 9},
 	}}})
-	own := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 4, BlobId: 8}
+	own := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 4, BlobId: 8}
 	c.PutSavedContent(own, []byte(`{"v":1,"own":true}`))
 	c.PutWriteResponse("1", own, WroteBody)
 	end()

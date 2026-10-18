@@ -177,11 +177,11 @@ func TestPluginDoorTile(t *testing.T) {
 
 // TestKindPartition pins the three descent-class predicates as a partition
 // of the descendable kinds: every kind belongs to exactly one of grid
-// descent (IsDoorKind), content descent (IsContentDescentKind), and pane-tile
+// descent (IsDoorKind), content descent (IsContentDescentKind), and workspace tile
 // descent (IsWorkspaceKind). A new kind that joins no class, or two, falls
 // through or double-fires the click router and the URL-restore walk.
 func TestKindPartition(t *testing.T) {
-	all := []string{KindDoor, KindText, KindURL, KindShell, KindPane}
+	all := []string{KindDoor, KindText, KindURL, KindShell, KindWorkspace}
 	for _, k := range all {
 		n := 0
 		if IsDoorKind(k) {
@@ -197,8 +197,8 @@ func TestKindPartition(t *testing.T) {
 			t.Errorf("kind %q belongs to %d descent classes, want exactly 1", k, n)
 		}
 	}
-	if !IsWorkspaceKind(KindPane) {
-		t.Errorf("IsWorkspaceKind(%q) = false, want true", KindPane)
+	if !IsWorkspaceKind(KindWorkspace) {
+		t.Errorf("IsWorkspaceKind(%q) = false, want true", KindWorkspace)
 	}
 	for _, k := range []string{KindDoor, KindText, KindURL, KindShell, ""} {
 		if IsWorkspaceKind(k) {

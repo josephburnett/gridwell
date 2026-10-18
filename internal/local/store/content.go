@@ -36,7 +36,7 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 		return s.writeTextContent(ctx, tileID, version, data)
 	case rpc.KindURL:
 		return s.writeURLContent(ctx, tileID, version, data)
-	case rpc.KindPane:
+	case rpc.KindWorkspace:
 		id, err := parseID(tileID)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)

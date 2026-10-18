@@ -1,10 +1,10 @@
 // The pane-layout codec: the persisted wire form of a pane tree, stored as a
-// pane tile's content blob.
+// workspace tile's content blob.
 //
 // It is a versioned DTO rather than json.Marshal(Tree) because LayoutV1's
 // bytes are forever (the golden fixture in wire_test.go pins them). A leaf
 // persists its whole place and the viewport of every grid frame in it: inside
-// a pane tile the blob owns those (2026-10-14), so two panes on one grid keep
+// a workspace tile the blob owns those (2026-10-14), so two panes on one grid keep
 // two views. Ids are stored in the owning node's namespace frame, so a pane
 // tile on a far node restores against the reader's chain.
 package pane
@@ -21,7 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
-// ChainPrefix is the transit chain through which a pane tile's owning node is
+// ChainPrefix is the transit chain through which a workspace tile's owning node is
 // reached: "" for a local tile, "<ssh>/" for one hop.
 func ChainPrefix(tileID string) string {
 	ns := rpc.NamespaceOf(rpc.NamespaceOf(tileID))

@@ -30,7 +30,7 @@ func (rt *router) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetVie
 		return nil, status.Error(gcodes.InvalidArgument, "SetView names no session")
 	}
 	trace.Emit("view", "set", viewLine(req), map[string]string{
-		"session": req.GetSession(), "label": req.GetLabel(), "levels": strings.Join(req.GetPaneTiles(), " "),
+		"session": req.GetSession(), "label": req.GetLabel(), "levels": strings.Join(req.GetWorkspaceTiles(), " "),
 	})
 	rt.srv.subscription.Set(req.GetSession(), req)
 	return &pb.SetViewResponse{}, nil

@@ -6,7 +6,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// Layout is a pane tile's content as the MCP API answers it: the panes it holds
+// Layout is a workspace tile's content as the MCP API answers it: the panes it holds
 // and the version it was read at, the claim a later write of it would make.
 // Views, scrolls and the split's shape are the window's, not answered.
 type Layout struct {
@@ -21,17 +21,17 @@ type LayoutPane struct {
 	Path    []string `json:"path,omitempty" jsonschema:"the door tiles from the anchor down to the pane's grid"`
 	Grid    string   `json:"grid,omitempty" jsonschema:"the grid the pane shows, when the layout names it: its anchor, with no path"`
 	Content string   `json:"content,omitempty" jsonschema:"the content tile the pane is inside, when it is inside one"`
-	Focused bool     `json:"focused,omitempty" jsonschema:"the pane the pane tile reopens on"`
+	Focused bool     `json:"focused,omitempty" jsonschema:"the pane the workspace tile reopens on"`
 }
 
-// layoutOf decodes the layout of pane tile tileID with the client's own
+// layoutOf decodes the layout of workspace tile tileID with the client's own
 // decoder (pane.DecodeLayout), spelling its ids as the tile's are: the blob
 // holds them in the owning node's frame.
 func layoutOf(tileID string, data []byte, version int64) (*Layout, error) {
 	prefix := pane.ChainPrefix(tileID)
 	tree, err := pane.DecodeLayout(data, func(id string) string { return prefix + id }, "")
 	if err != nil {
-		return nil, fmt.Errorf("refused: pane tile %s's layout could not be read: %v", tileID, err)
+		return nil, fmt.Errorf("refused: workspace tile %s's layout could not be read: %v", tileID, err)
 	}
 	out := &Layout{Version: version, Panes: []LayoutPane{}}
 	tree.Walk(func(p *pane.Pane) {

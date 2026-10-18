@@ -88,7 +88,7 @@ func (a *App) navWorld(g nav.Gesture) nav.World {
 	return w
 }
 
-// navWorldForLevel resolves the pane tile's row as the landing pane's grid
+// navWorldForLevel resolves the workspace tile's row as the landing pane's grid
 // holds it. A grid that was never cached makes the landing instant.
 func (a *App) navWorldForLevel(paneID, tileID string) *nav.LevelWorld {
 	lw := &nav.LevelWorld{}

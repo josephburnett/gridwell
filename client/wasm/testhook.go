@@ -668,7 +668,7 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 			"zoom": zoom,
 			// Doors deep: one number, because there is one place stack.
 			"placeDepth": p.Depth() - 1,
-			"tileIds":    a.paneTileIDs(p),
+			"tileIds":    a.workspaceIDs(p),
 			// The grid's selection as the client's cache holds it.
 			"selection": a.paneSelection(p),
 		})
@@ -676,10 +676,10 @@ func (a *App) thPanes(js.Value, []js.Value) any {
 	return out
 }
 
-// paneTileIDs returns the ids of the tiles this pane renders, the cache
+// workspaceIDs returns the ids of the tiles this pane renders, the cache
 // contents render.go iterates. A tile in the GetGrid oracle but absent here is
 // the "created, never rendered" bug. Order is unspecified.
-func (a *App) paneTileIDs(p *pane.Pane) []any {
+func (a *App) workspaceIDs(p *pane.Pane) []any {
 	g, ok := a.c.Grid(a.gridIDForPane(p))
 	if !ok {
 		return []any{}
@@ -928,8 +928,8 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
 		nc := chain[s.Index]
-		if nc.PaneTile {
-			e["kind"] = "pane"
+		if nc.Workspace {
+			e["kind"] = "workspace"
 			e["level"] = nc.WsLevel
 			e["tileID"] = nc.TileID
 		} else {
@@ -986,7 +986,7 @@ func (a *App) thRawRows(js.Value, []js.Value) any {
 }
 
 // thWorkspace exposes the workspace stack: depth, crumb names, and the
-// current pane tile's id. Read-only over the state the bar renders.
+// current workspace tile's id. Read-only over the state the bar renders.
 func (a *App) thWorkspace(js.Value, []js.Value) any {
 	names := a.ws.Names()
 	out := map[string]any{

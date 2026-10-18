@@ -457,9 +457,9 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 	}
 }
 
-// A scratch tile referenced by a pane tile's layout blob is part of a durable
+// A scratch tile referenced by a workspace tile's layout blob is part of a durable
 // arrangement, so the boot sweep must not reap it. An unreferenced one still
-// sweeps, and once the pane tile is deleted the reference dies with the blob
+// sweeps, and once the workspace tile is deleted the reference dies with the blob
 // and the next sweep reclaims it.
 func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	p := openPlugin(t)
@@ -475,7 +475,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A pane-tile-owned ephemeral shell, and a crash-leaked orphan.
+	// A workspace tile-owned ephemeral shell, and a crash-leaked orphan.
 	owned, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
 		Tile: &gridwellv1.Tile{Kind: "shell", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
@@ -487,10 +487,10 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The pane tile whose layout references the owned shell, by the
+	// The workspace tile whose layout references the owned shell, by the
 	// qualified id the client persister writes.
 	pt, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
-		Tile: &gridwellv1.Tile{Kind: "pane", X: 0, Y: 0, W: 1, H: 1}})
+		Tile: &gridwellv1.Tile{Kind: "workspace", X: 0, Y: 0, W: 1, H: 1}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -514,7 +514,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 		t.Error("crash-leaked scratch tile survived the sweep")
 	}
 
-	// The first delete parks the pane tile in the trash, and its layout
+	// The first delete parks the workspace tile in the trash, and its layout
 	// keeps holding its ephemerals: a restored arrangement must come back
 	// whole, so nothing is reclaimable yet.
 	if _, err := p.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: pt.Tile.Id}); err != nil {
@@ -523,7 +523,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 0 {
 		t.Errorf("post-trash sweep = (%d, %v), want (0, nil) — a trashed workspace keeps its ephemerals", swept, err)
 	}
-	// The second delete destroys the pane tile, the reference dies with the
+	// The second delete destroys the workspace tile, the reference dies with the
 	// blob, and the next sweep reclaims the ephemeral.
 	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: pt.Tile.Id}); err != nil {
 		t.Fatal(err)

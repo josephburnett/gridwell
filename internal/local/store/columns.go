@@ -62,7 +62,7 @@ keyed by tile id), showing a deleted tile's frozen frame on a new one.`,
 		bind: func(t *gridwellv1.Tile) any { return &t.GridId },
 	},
 	{
-		name: "kind", ddl: "TEXT NOT NULL CHECK (kind IN ('door','text','url','shell','pane'))", since: 1,
+		name: "kind", ddl: "TEXT NOT NULL CHECK (kind IN ('door','text','url','shell','workspace'))", since: 1,
 		bind: func(t *gridwellv1.Tile) any { return &t.Kind },
 	},
 	{name: "x", ddl: "INTEGER NOT NULL", since: 1, bind: func(t *gridwellv1.Tile) any { return &t.X }},
@@ -151,7 +151,7 @@ writeback and never bumps version. Added at schema v4, additive.`,
 	},
 	{
 		name: "link_target_id", ddl: "TEXT", since: 6,
-		comment: `link_target_id makes a leaf tile (text, url, shell, pane) a link: a
+		comment: `link_target_id makes a leaf tile (text, url, shell, workspace) a link: a
 qualified "<uuid>/<tile-id>" link to the tile that owns the
 content, or on a plugin's row a bare entry address in that same plugin
 (rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content

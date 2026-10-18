@@ -91,7 +91,7 @@ func TestDescendPlans(t *testing.T) {
 	shell := &gridwellv1.Tile{Id: "s1", Kind: rpc.KindShell, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
 	page := &gridwellv1.Tile{Id: "p1t", Kind: rpc.KindURL, GridId: "g1", X: 0, Y: 0, W: 3, H: 2,
 		ServesPage: true}
-	wsTile := &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindPane, GridId: "g1", X: 0, Y: 0, W: 2, H: 2}
+	wsTile := &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindWorkspace, GridId: "g1", X: 0, Y: 0, W: 2, H: 2}
 
 	cases := []struct {
 		name string

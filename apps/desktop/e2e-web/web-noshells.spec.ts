@@ -49,7 +49,7 @@ test('disable_shells removes the shell primitive from the + menu', async ({ gw }
   const menu = await gw.menu();
   const primitives = menu.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
   expect(primitives, 'the other primitives all survive').toEqual(
-    expect.arrayContaining(['door', 'markdown', 'url', 'pane']),
+    expect.arrayContaining(['door', 'markdown', 'url', 'workspace']),
   );
   expect(primitives, 'the shell swatch must be gone').not.toContain('shell');
 });

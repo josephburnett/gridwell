@@ -227,10 +227,10 @@ func (a *App) drawTrashcanIcon(c js.Value, x, y, w, h float64) {
 	c.Set("lineWidth", 1.0)
 }
 
-// drawPaneGlyph paints a split layout: a rectangle divided vertically, its
-// right half divided again. Also the glyph of a pane tile whose layout is not
+// drawWorkspaceGlyph paints a split layout: a rectangle divided vertically, its
+// right half divided again. Also the glyph of a workspace tile whose layout is not
 // loaded or not arranged yet.
-func drawPaneGlyph(c js.Value, x, y, w, h float64, color string) {
+func drawWorkspaceGlyph(c js.Value, x, y, w, h float64, color string) {
 	beginGlyph(c, w, h, color)
 	cx, cy, half := glyphBox(x, y, w, h)
 	left, top := cx-half, cy-half*0.75

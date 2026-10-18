@@ -253,7 +253,7 @@ func Nav(g nav.Gesture) Event {
 	case nav.GestureDescend:
 		e.Kind, e.Msg, e.KV = "push", "descend", kv("pane", g.PaneID, "door", door)
 	case nav.GestureEnterLevel:
-		e.Kind, e.Msg, e.KV = "push", "enter pane tile", kv("pane", g.PaneID, "door", door)
+		e.Kind, e.Msg, e.KV = "push", "enter workspace tile", kv("pane", g.PaneID, "door", door)
 	case nav.GestureFollowLink:
 		e.Kind, e.Msg, e.KV = "push", "follow link", kv("pane", g.PaneID, "door", door)
 	case nav.GestureAscend:
@@ -273,7 +273,7 @@ func Nav(g nav.Gesture) Event {
 	case nav.GestureEngageLeaves:
 		e.Kind, e.Msg = "reengage", "engage installed leaves"
 	case nav.GestureReconcileLevel:
-		e.Kind, e.Msg, e.KV = "restore", "reconcile pane tile", kv("tile", g.TileID)
+		e.Kind, e.Msg, e.KV = "restore", "reconcile workspace tile", kv("tile", g.TileID)
 	default:
 		e.Kind, e.Msg = "unknown", "unnamed gesture "+strconv.Itoa(int(g.Kind))
 	}

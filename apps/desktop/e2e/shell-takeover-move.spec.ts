@@ -4,7 +4,7 @@ import { dumpViaAPI } from './trace';
 
 // One live surface per content tile, and taking it over moves it, for a shell
 // as for a url: the terminal and its /shell socket go to the pane that takes
-// it, so nothing reattaches and xterm keeps what it held. Entering a pane tile
+// it, so nothing reattaches and xterm keeps what it held. Entering a workspace tile
 // whose layout shows the shell moves it in, leaving hands it back, entering
 // again moves it in again, and opening the tile in a split pane moves it
 // there. Through all of it the node's shell API opens no second attachment.
@@ -70,15 +70,15 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
     expect(await attaches(), `${why}: the shell reattached`).toBe(1);
   };
 
-  // A pane tile from the right pane captures the layout with the shell pane in
+  // A workspace tile from the right pane captures the layout with the shell pane in
   // it, so the captured copy of that pane takes the shell over.
   await gw.focusPane((await gw.panes()).find((p: any) => p.id === right.id)!);
   const rf = await gw.focused();
   const px = Math.round(rf.cx) + 2; // clear of the shell tile at (cx, cy)
   const py = Math.round(rf.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', px, py);
-  expect(tileAt(await gw.getGrid(grid), 'pane', px, py)).toBeTruthy();
+  await gw.dragCreate('workspace', px, py);
+  expect(tileAt(await gw.getGrid(grid), 'workspace', px, py)).toBeTruthy();
   await gw.descendCell(px, py);
   await expect.poll(depth).toBe(1);
   let inner = '';
@@ -94,7 +94,7 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
   await expect.poll(depth).toBe(0);
   await kept(left.id, 'leaving the level');
 
-  // Entering the same pane tile again moves it in again.
+  // Entering the same workspace tile again moves it in again.
   await gw.focusPane((await gw.panes()).find((p: any) => p.id === right.id)!);
   await gw.descendCell(px, py);
   await expect.poll(depth).toBe(1);

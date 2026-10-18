@@ -320,8 +320,8 @@ func TestSetViewRoundTrips(t *testing.T) {
 	ns := loopback(t, f)
 	want := &pb.SetViewRequest{
 		Session: "s1", Label: "node", ShownGridIds: []string{"p1/4", "n1/7"},
-		PaneTiles: []string{"n1/9"},
-		Panes:     []*pb.ViewPane{{Id: "p0", Anchor: "n1/1", Path: []string{"n1/2"}, ContentId: "n1/3", GridId: "n1/4", Focused: true}},
+		WorkspaceTiles: []string{"n1/9"},
+		Panes:          []*pb.ViewPane{{Id: "p0", Anchor: "n1/1", Path: []string{"n1/2"}, ContentId: "n1/3", GridId: "n1/4", Focused: true}},
 	}
 	if _, err := ns.SetView(context.Background(), want); err != nil {
 		t.Fatalf("SetView: %v", err)

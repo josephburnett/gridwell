@@ -87,7 +87,7 @@ func TestRestoreBootPlans(t *testing.T) {
 			EffAwait, EffRefreshOverlay, EffReEngage, EffFetchGrid,
 			EffScheduleURLUpdate},
 	}, {
-		name:  "a pane-tile address is the whole place",
+		name:  "a workspace tile address is the whole place",
 		raw:   "/?w=pt1",
 		grids: homeOnly(),
 		want:  []EffectKind{EffAwait},

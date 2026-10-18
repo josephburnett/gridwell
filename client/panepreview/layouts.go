@@ -2,7 +2,7 @@ package panepreview
 
 import "github.com/josephburnett/gridwell/client/pane"
 
-// Layouts memoizes each pane tile's decoded tree by the generation of the
+// Layouts memoizes each workspace tile's decoded tree by the generation of the
 // bytes it was decoded from (cache.BodyGen), so no tree outlives its bytes.
 // Which bytes may stand for the row is the cache's: it drops bytes a foreign
 // row moved past, because an older arrangement names panes and tiles the row
@@ -26,7 +26,7 @@ func NewLayouts(onErr func(tileID string, err error)) *Layouts {
 	return &Layouts{onErr: onErr, entries: map[string]*layoutEntry{}}
 }
 
-// Tree answers a pane tile's decoded tree. blobID 0 is never arranged. gen is
+// Tree answers a workspace tile's decoded tree. blobID 0 is never arranged. gen is
 // the cached bytes' cache.BodyGen, 0 when none are cached. body answers the
 // bytes, false while they are still in flight, and is not asked for bytes
 // already decoded. ok is false for a never-arranged tile, a layout whose bytes

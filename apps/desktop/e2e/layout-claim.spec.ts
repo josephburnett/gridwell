@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { tileAt, writeContent } from './oracle';
 import { settle } from './cadence';
 
-// A pane tile's layout is the user's bytes. Another window rearranges the
+// A workspace tile's layout is the user's bytes. Another window rearranges the
 // workspace; this window's next layout write still claims the arrangement it
 // read, so the node refuses it, and the window shows the newer arrangement
 // rather than overwriting it.
@@ -30,9 +30,9 @@ test('a stale layout write is refused and the workspace keeps the newer arrangem
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
-  expect(pt, 'the pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(f.gridID), 'workspace', wx, wy)!;
+  expect(pt, 'the workspace tile persisted').toBeTruthy();
 
   const c = await gw.cadences();
   await gw.descendCell(wx, wy);
@@ -50,7 +50,7 @@ test('a stale layout write is refused and the workspace keeps the newer arrangem
   expect((await gw.panes()).length).toBe(2);
 
   // Another window arranges four panes, claiming the version it read.
-  const row = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
+  const row = tileAt(await gw.getGrid(f.gridID), 'workspace', wx, wy)!;
   const bytes = foreignLayout(anchor!);
   await writeContent(gw.origin, pt.id, Number(row.version ?? 0), Buffer.from(bytes));
 

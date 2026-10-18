@@ -19,7 +19,7 @@ const (
 	// GesturePromote turns an ephemeral visit into a persistent tile: PaneID,
 	// DestPaneID, OldID, Created.
 	GesturePromote
-	GestureEnterLevel  // descends the window into a pane tile: PaneID, Door
+	GestureEnterLevel  // descends the window into a workspace tile: PaneID, Door
 	GestureLeaveLevels // Count
 	// GestureLandLevel finishes one leave hop against the tree the pop
 	// installed: PaneID, TileID, Outer, Animate, Count.

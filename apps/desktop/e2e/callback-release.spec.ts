@@ -36,7 +36,7 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
 // The persisters are armed once per frame, and a workspace holding a busy
 // live shell that another of its panes shows draws them on the mirror's
 // cadence with nobody touching the canvas. Armed by the frame, their settle
-// window could never close, and the pane tile's layout never reached the
+// window could never close, and the workspace tile's layout never reached the
 // server at all. Armed by what they would write, a repainting live tile
 // leaves neither persister pending.
 test('a live tile repainting leaves no settle timer armed', async ({ gw, window }) => {
@@ -45,14 +45,14 @@ test('a live tile repainting leaves no settle timer armed', async ({ gw, window 
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', cx, cy);
+  await gw.dragCreate('workspace', cx, cy);
   await gw.descendCell(cx, cy);
   // Split, and the shell goes live in one half while the other half's grid
   // shows its preview.
   await gw.splitFocusedPaneVertical();
   const inner = await gw.focused();
   const icx = Math.round(inner.cx);
-  const icy = Math.round(inner.cy) + 2; // the first descent captures the layout, pane tile and all
+  const icy = Math.round(inner.cy) + 2; // the first descent captures the layout, workspace tile and all
   await gw.openMenu();
   await gw.dragCreate('shell', icx, icy);
   await gw.descendCell(icx, icy); // the drop lands bare; the descent creates the tmux

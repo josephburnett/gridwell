@@ -177,7 +177,7 @@ the code it describes. CLEAN when a fresh reader could reconstruct the
 invariants from the tree alone — name anything that would mislead them.
 
 **11. Parity: a tile is a tile wherever it comes from.** Fill the matrix.
-Rows: every tile kind (text, url, shell, door, pane) and every door
+Rows: every tile kind (text, url, shell, door, workspace) and every door
 (home grid, plugin collection, far home). Columns: everything a user can do
 to one — create, move, copy, link, delete, rename, descend, freeze, keep a
 screenshot, save zoom, save a text scroll, save framing, read content, write

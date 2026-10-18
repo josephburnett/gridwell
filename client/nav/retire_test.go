@@ -8,7 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/client/scratch"
 )
 
-// Ending an ephemeral visit is one gesture with two writes: the pane-tile
+// Ending an ephemeral visit is one gesture with two writes: the workspace tile
 // layout that stops naming the visit, and the delete. The delete waits on the
 // layout write's verdict, so the node never holds a layout naming a deleted
 // tile.

@@ -203,7 +203,7 @@ func TestASettleHoldsOneTimerAtATime(t *testing.T) {
 // The arm-on-change table. A live url or shell tile repaints on the mirror's
 // own cadence for as long as it is open, and every one of those paints reaches
 // the persisters; keyed on the fact instead of the frame, they arm nothing and
-// the window the gesture opened closes on time. Without this, the pane-tile
+// the window the gesture opened closes on time. Without this, the workspace tile
 // layout of a workspace holding a live shell never reached the server at all.
 func TestArmOnChangeIgnoresARepaintThatPersistsNothingNew(t *testing.T) {
 	q := &queue{}

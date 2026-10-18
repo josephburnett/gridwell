@@ -49,7 +49,7 @@ func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
 }
 
 // CleanupScratch deletes every unowned tile in the scratch grid at startup,
-// sparing any a pane tile's layout blob references. If any pane blob is
+// sparing any a workspace tile's layout blob references. If any pane blob is
 // unreadable it reaps nothing: a wrongly-killed shell is unrecoverable and a
 // delayed sweep is not. Runs before CleanupOrphanedShells.
 func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
@@ -72,7 +72,7 @@ func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 	n := 0
 	for _, t := range g.Tiles {
 		if refs[t.Id] {
-			continue // a pane tile's ephemeral: owned, not leaked
+			continue // a workspace tile's ephemeral: owned, not leaked
 		}
 		if err := p.st.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: t.Id}); err != nil {
 			return n, err
@@ -294,9 +294,9 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 			return tileResp(p.st.CreateScratchShell(ctx))
 		}
 		return tileResp(p.st.CreateShell(ctx, req.GridId, t.X, t.Y, t.W, t.H))
-	case rpc.KindPane:
+	case rpc.KindWorkspace:
 		// No content is a NULL blob_id: never arranged.
-		return tileResp(p.st.CreatePane(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Content))
+		return tileResp(p.st.CreateWorkspace(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Content))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}
@@ -364,7 +364,7 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 			return nil, status.Error(codes.InvalidArgument, "set: a url tile's address rides WriteContent")
 		}
 		return tileResp(p.st.SetURLState(ctx, req.TileId, req.Preview, t.AltText, t.UrlHistory))
-	case rpc.KindPane:
+	case rpc.KindWorkspace:
 		return nil, status.Error(codes.InvalidArgument, "set: pane layout rides WriteContent")
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "set: unknown kind %q", t.Kind)

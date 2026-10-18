@@ -109,7 +109,7 @@ type App struct {
 
 	views viewCaches
 
-	// ws is the window's level stack: which pane tile the user is inside and
+	// ws is the window's level stack: which workspace tile the user is inside and
 	// what outer tree each descent restores. a.tree displays its top.
 	ws pane.Levels
 

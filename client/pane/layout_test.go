@@ -548,7 +548,7 @@ func TestCanSplitAgreesWithTheClamp(t *testing.T) {
 	}
 }
 
-// Inside a pane tile the layout root is inset by the outline; a press on the
+// Inside a workspace tile the layout root is inset by the outline; a press on the
 // outline belongs to the pane whose edge it borders, at every window edge.
 func TestGutterPaneOutlineBelongsToBorderingPane(t *testing.T) {
 	area := Rect{X: 0, Y: 0, W: 800, H: 600}

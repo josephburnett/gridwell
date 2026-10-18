@@ -12,7 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/transition"
 )
 
-// The second axis: a pane tile's place is a whole tree, so the window descends
+// The second axis: a workspace tile's place is a whole tree, so the window descends
 // into one, not a pane, and every level stays alive while parked. A descent's
 // animation and its fetch are two arms of one barrier, so neither knows about
 // the other and nothing polls.
@@ -43,7 +43,7 @@ type levelData struct {
 	ReadOnly bool
 }
 
-// enterLevel descends the window into a pane tile: a zoom into the tile's
+// enterLevel descends the window into a workspace tile: a zoom into the tile's
 // footprint racing the layout fetch, with the swap at whichever finishes last.
 func (m *Machine) enterLevel(g Gesture, w World) Plan {
 	var pl planner
@@ -96,7 +96,7 @@ func (m *Machine) enterLevel(g Gesture, w World) Plan {
 	return pl.plan()
 }
 
-// bootLevel restores the innermost pane tile from a reload. The outer tree is
+// bootLevel restores the innermost workspace tile from a reload. The outer tree is
 // nil by design, nesting membership being session-only.
 func (m *Machine) bootLevel(tileID string, pl *planner) {
 	m.awaitLevelTile(&levelData{Boot: true, TileID: tileID, IDPrefix: "w1:"}, pl)
@@ -176,7 +176,7 @@ func (m *Machine) decodeLevel(ld *levelData, pl *planner) (tree *pane.Tree, read
 	return tree, false
 }
 
-// levelFallbackTree is the single-pane default: the pane tile's grid centred
+// levelFallbackTree is the single-pane default: the workspace tile's grid centred
 // on the tile for a boot restore, the origin pane's own place for a descent,
 // so an unreadable blob leaves you looking at where you were.
 func (m *Machine) levelFallbackTree(ld *levelData) *pane.Tree {
@@ -241,7 +241,7 @@ func (m *Machine) installLevelData(ld *levelData, pl *planner) {
 	lvl := pane.Level{
 		OriginPane: ld.PaneID,
 		TileID:     ld.Tile.Id,
-		// Where the pane tile sits: the close-all landing when no tree was
+		// Where the workspace tile sits: the close-all landing when no tree was
 		// parked, and the glyph the bar's root crumb wears there.
 		GridID: ld.Tile.GridId,
 		// Raw alt text: the bar substitutes the generic label at draw time, so
@@ -313,8 +313,8 @@ func (m *Machine) reconciledLevel(c cont, r Result, pl *planner) {
 	pl.then(Gesture{Kind: GestureEngageLeaves})
 }
 
-// leaveLevels leaves one pane-tile level and hands the rest back: the
-// pane-tile axis of the pop whose pane-frame axis is ascend. Each hop restores
+// leaveLevels leaves one workspace level and hands the rest back: the
+// workspace tile axis of the pop whose pane-frame axis is ascend. Each hop restores
 // the outer tree verbatim with focus on the origin pane.
 func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	var pl planner
@@ -353,7 +353,7 @@ func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	return pl.plan()
 }
 
-// landLevel finishes one hop: the return animation onto the pane tile's
+// landLevel finishes one hop: the return animation onto the workspace tile's
 // footprint, or the post-reload re-centre, then the next hop or the tail.
 func (m *Machine) landLevel(g Gesture, w World) Plan {
 	var pl planner
@@ -405,7 +405,7 @@ func (m *Machine) animateLevelReturn(g Gesture, w World, pl *planner) {
 	}}})
 }
 
-// recentreLevelLanding centres the post-reload landing on the pane tile the
+// recentreLevelLanding centres the post-reload landing on the workspace tile the
 // window came out of, unless the user navigated before the row answered.
 func (m *Machine) recentreLevelLanding(g Gesture, w World, pl *planner) {
 	p, ok := w.Pane(w.Focus)

@@ -142,9 +142,9 @@ test('coming back to what the cache holds asks for nothing again', async ({ gw, 
   const text = tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)!;
   const px = cx + Number(text.w ?? 1);
   await gw.openMenu();
-  await gw.dragCreate('pane', px, cy);
-  const pt = tileAt(await gw.getGrid(home.gridID), 'pane', px, cy);
-  expect(pt, 'the pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', px, cy);
+  const pt = tileAt(await gw.getGrid(home.gridID), 'workspace', px, cy);
+  expect(pt, 'the workspace tile persisted').toBeTruthy();
 
   // One pane in the text tile below, one on home above.
   const top = home.id;
@@ -157,7 +157,7 @@ test('coming back to what the cache holds asks for nothing again', async ({ gw, 
   const grids = await askedIDs(window, 'GetGrid', 'gridId');
   const tiles = await askedIDs(window, 'GetTile', 'tileId');
 
-  // A first descent into a pane tile captures the window, the text pane
+  // A first descent into a workspace tile captures the window, the text pane
   // included, and leaving it hands the outer tree back: a re-engagement of the
   // text pane each way.
   await gw.focusPane((await gw.panes()).find((p: any) => p.id === top)!);
@@ -179,7 +179,7 @@ test('coming back to what the cache holds asks for nothing again', async ({ gw, 
 
   expect.soft(count(grids, home.gridID), 'GetGrid of the home the cache held').toBe(0);
   expect(count(tiles, text.id), 'GetTile of the text row the cache held').toBe(0);
-  expect(count(tiles, pt!.id), 'GetTile of the pane tile row the cache held').toBe(0);
+  expect(count(tiles, pt!.id), 'GetTile of the workspace tile row the cache held').toBe(0);
   await window.unroute('**/gridwell.v1.Gridwell/GetGrid');
   await window.unroute('**/gridwell.v1.Gridwell/GetTile');
 });

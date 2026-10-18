@@ -44,31 +44,31 @@ func TestFramingTargetPicksTheDoor(t *testing.T) {
 	}
 }
 
-// Inside a pane tile a grid place's view is the layout's: the owner still
+// Inside a workspace tile a grid place's view is the layout's: the owner still
 // names the row a frame with no view starts from, but says nothing is written
 // to it. A content place's scroll is the layout's too; its tile row keeps the
 // mode.
-func TestFramingTargetInsideAPaneTileIsTheLayout(t *testing.T) {
+func TestFramingTargetInsideAWorkspaceIsTheLayout(t *testing.T) {
 	s := NewStack("home/1")
 	if got := s.FramingTarget(true); !got.Layout || got.RootGridID != "home/1" {
-		t.Fatalf("root in a pane tile = %+v", got)
+		t.Fatalf("root in a workspace tile = %+v", got)
 	}
 	if got := s.FramingTarget(false); got.Layout {
-		t.Fatalf("root outside a pane tile = %+v, want its row", got)
+		t.Fatalf("root outside a workspace tile = %+v, want its row", got)
 	}
 	s.Push(Frame{Door: "4"})
 	if got := s.FramingTarget(true); !got.Layout || got.TileID != "4" || got.DoorAnchor != "home/1" {
-		t.Fatalf("door in a pane tile = %+v", got)
+		t.Fatalf("door in a workspace tile = %+v", got)
 	}
 	if got := s.FramingTarget(false); got.Layout || got.TileID != "4" {
-		t.Fatalf("door outside a pane tile = %+v", got)
+		t.Fatalf("door outside a workspace tile = %+v", got)
 	}
 	s.Push(Frame{Door: "77", Content: true})
 	if got := s.FramingTarget(true); !got.Layout || !got.Content || got.TileID != "77" {
-		t.Fatalf("content in a pane tile = %+v, want the layout's scroll on its tile row", got)
+		t.Fatalf("content in a workspace tile = %+v, want the layout's scroll on its tile row", got)
 	}
 	if got := s.FramingTarget(false); got.Layout || !got.Content {
-		t.Fatalf("content outside a pane tile = %+v, want its tile row", got)
+		t.Fatalf("content outside a workspace tile = %+v, want its tile row", got)
 	}
 }
 
@@ -164,7 +164,7 @@ func TestTakeOverAcrossTilesOnOneTmux(t *testing.T) {
 }
 
 // One surface makes the whole round trip by moves alone: a split pane takes it,
-// a pane-tile level's copy of the holder takes it, leaving hands it back, and
+// a workspace level's copy of the holder takes it, leaving hands it back, and
 // entering again takes it again. Nothing is ever closed or placed afresh.
 func TestTakeOverAndHeirOnlyMove(t *testing.T) {
 	holders := []Holder{{"p1", "u/7", "u/7"}}

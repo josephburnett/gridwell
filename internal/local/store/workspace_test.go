@@ -10,19 +10,19 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A fresh pane tile has no layout blob, meaning never arranged, carries its
+// A fresh workspace tile has no layout blob, meaning never arranged, carries its
 // name, and SetPaneLayout enforces the kind guard and the version claim.
-func TestCreatePaneDefaultsAndGuards(t *testing.T) {
+func TestCreateWorkspaceDefaultsAndGuards(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "workbench", nil)
+	pt, err := s.CreateWorkspace(ctx, root, 0, 0, 2, 2, "workbench", nil)
 	if err != nil {
-		t.Fatalf("CreatePane: %v", err)
+		t.Fatalf("CreateWorkspace: %v", err)
 	}
-	if pt.Kind != rpc.KindPane || pt.BlobId != 0 || pt.AltText != "workbench" {
-		t.Fatalf("fresh pane tile: %+v", pt)
+	if pt.Kind != rpc.KindWorkspace || pt.BlobId != 0 || pt.AltText != "workbench" {
+		t.Fatalf("fresh workspace tile: %+v", pt)
 	}
 	id, err := parseID(pt.Id)
 	if err != nil {
@@ -35,8 +35,8 @@ func TestCreatePaneDefaultsAndGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	txtID, _ := parseID(txt.Id)
-	if _, err := s.SetPaneLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotPaneTile) {
-		t.Errorf("SetPaneLayout on text tile: err = %v, want ErrNotPaneTile", err)
+	if _, err := s.SetPaneLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotWorkspace) {
+		t.Errorf("SetPaneLayout on text tile: err = %v, want ErrNotWorkspace", err)
 	}
 	// A layout is the user's bytes and claims its version. See
 	// version_rule_test.go.
@@ -58,7 +58,7 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	pt, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "", nil)
+	pt, err := s.CreateWorkspace(ctx, root, 0, 0, 2, 2, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,12 +87,12 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 // Copy shares the layout blob by content address, and an edit to one copy can
 // never touch the other: the first SetPaneLayout moves the editor to a new
 // blob while the sibling keeps the old one.
-func TestPaneCopySharesBlobThenDiverges(t *testing.T) {
+func TestWorkspaceCopySharesBlobThenDiverges(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	orig, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "ws",
+	orig, err := s.CreateWorkspace(ctx, root, 0, 0, 2, 2, "ws",
 		[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ func TestPaneCopySharesBlobThenDiverges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cp.Kind != rpc.KindPane || cp.BlobId != orig.BlobId {
+	if cp.Kind != rpc.KindWorkspace || cp.BlobId != orig.BlobId {
 		t.Fatalf("copy must share the layout blob: %+v", cp)
 	}
 
@@ -126,7 +126,7 @@ func TestPaneCopySharesBlobThenDiverges(t *testing.T) {
 	}
 
 	// Deleting both tiles releases both blobs (tileRefs owns the mapping —
-	// without the pane arm the kind would silently own nothing and the blobs
+	// without the workspace arm the kind would silently own nothing and the blobs
 	// would leak forever).
 	for _, tile := range []*gridwellv1.Tile{orig, edited} {
 		hardDelete(t, s, tile.Id)
@@ -149,7 +149,7 @@ func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
 	// The production identity: a config id DIFFERENT from the minted uuid.
 	s.SetPluginID("k3x9m2q")
 
-	pt, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil)
+	pt, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", nil)
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}

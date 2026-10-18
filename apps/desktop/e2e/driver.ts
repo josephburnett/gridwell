@@ -265,7 +265,7 @@ export class GridwellDriver {
   async leaveWorkspace(toLevel = 0): Promise<void> {
     const bar = await this.win.evaluate(() => (window as any).__gridwellTest.bar());
     const boundary = bar.segments.findIndex(
-      (s: any) => s.kind === 'pane' && s.level === toLevel + 1,
+      (s: any) => s.kind === 'workspace' && s.level === toLevel + 1,
     );
     if (boundary <= 0) throw new Error(`no crumb before the level-${toLevel + 1} boundary`);
     const seg = bar.segments[boundary - 1];

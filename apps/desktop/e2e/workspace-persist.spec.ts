@@ -2,11 +2,11 @@ import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 import { settle, timeToLand } from './cadence';
 
-// Reload inside a workspace. The url is the pane tile, through `?w=`, since the
+// Reload inside a workspace. The url is the workspace tile, through `?w=`, since the
 // workspace is the place and its interior is server-owned, so a fresh boot
 // restores the arrangement from the layout blob. The workspace stack is
 // session-only by design, like portal frames, so after the reload the bar's
-// ascent falls back to the pane tile's containing grid rather than a remembered
+// ascent falls back to the workspace tile's containing grid rather than a remembered
 // outer tree.
 
 async function workspaceState(window: any): Promise<{ depth: number; tileID?: string }> {
@@ -21,8 +21,8 @@ test('reload restores the workspace from ?w=; post-reload bar ascent lands at th
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   expect(pt).toBeTruthy();
 
   // The split is the arrangement the reload must bring back. The persister is

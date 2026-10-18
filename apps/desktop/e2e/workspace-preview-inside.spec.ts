@@ -39,9 +39,9 @@ async function visitInsideWorkspace(gw: GridwellDriver, window: any) {
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
-  expect(pt, 'pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
+  expect(pt, 'workspace tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
   await expect.poll(async () => (await gw.focused()).gridID).toBe(rootGrid);

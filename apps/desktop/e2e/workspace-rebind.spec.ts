@@ -31,7 +31,7 @@ async function seedTile(
 // workspace bar ascent, persists those foreign bytes as the leaf tile's
 // content.
 
-// workspaceState reads the pane-tile level stack's depth and current tile.
+// workspaceState reads the workspace level stack's depth and current tile.
 async function workspaceState(window: any): Promise<{ depth: number; tileID?: string }> {
   return window.evaluate(() => (window as any).__gridwellTest.workspace());
 }
@@ -47,9 +47,9 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
   const todayID = await seedTile(gw, rootGrid, cx - 1, cy, 'today today');
   const routineID = await seedTile(gw, rootGrid, cx, cy + 1, 'routine routine');
   await gw.openMenu();
-  await gw.dragCreate('pane', cx + 1, cy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', cx + 1, cy)!;
-  expect(pt, 'pane tile created').toBeTruthy();
+  await gw.dragCreate('workspace', cx + 1, cy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', cx + 1, cy)!;
+  expect(pt, 'workspace tile created').toBeTruthy();
 
   // Descending into Today makes the layout blob record a text-descended leaf.
   await gw.descendCell(cx + 1, cy);
@@ -91,7 +91,7 @@ test('re-entering a workspace rebinds the editor; leaving it never saves a forei
 
   // The boundary flush on the way out must write nothing foreign into Today.
   const bar2 = await window.evaluate(() => (window as any).__gridwellTest.bar());
-  const ws2 = bar2.segments.find((s: any) => s.kind === 'pane');
+  const ws2 = bar2.segments.find((s: any) => s.kind === 'workspace');
   await window.mouse.click(ws2.x + 20, bar2.top + bar2.height / 2, { button: 'right' });
   await gw.waitIdle();
   await expect

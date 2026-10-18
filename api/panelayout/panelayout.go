@@ -1,7 +1,7 @@
-// Package panelayout is the wire shape of a pane tile's persisted layout
+// Package panelayout is the wire shape of a workspace tile's persisted layout
 // blob and the only decoder for it. Bump Version only with a new DTO type
 // and a decoder that still accepts every older version. A blob from a newer
-// Gridwell is ErrLayoutVersion, and its pane tile goes read-only rather than
+// Gridwell is ErrLayoutVersion, and its workspace tile goes read-only rather than
 // be overwritten by a downgrade.
 package panelayout
 
@@ -99,7 +99,7 @@ func Parse(data []byte) (*LayoutV1, error) {
 	return &l, nil
 }
 
-// TextFocusIDs returns the content tiles a pane tile references. Both sides
+// TextFocusIDs returns the content tiles a workspace tile references. Both sides
 // of the ephemeral reap read it, the store's boot sweep and the router, so
 // the two cannot disagree. It reads TextFocus because a blob older than
 // Place carries nothing else.

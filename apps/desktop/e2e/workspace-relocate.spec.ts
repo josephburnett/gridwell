@@ -34,11 +34,11 @@ test('re-entering a workspace heals a leaf whose tile was moved into a door', as
   await gw.dragCreate('door', cx + 2, cy);
   const door = tileAt(await gw.getGrid(grid), 'door', cx + 2, cy)!;
   await gw.openMenu();
-  await gw.dragCreate('pane', cx - 2, cy);
-  // Wait until the pane tile is rendered before clicking it. The create's
+  await gw.dragCreate('workspace', cx - 2, cy);
+  // Wait until the workspace tile is rendered before clicking it. The create's
   // optimistic commit and the background refetch land on their own schedule, and
   // a click into the gap lands on empty grid with no workspace opening.
-  const pt = tileAt(await gw.getGrid(grid), 'pane', cx - 2, cy)!;
+  const pt = tileAt(await gw.getGrid(grid), 'workspace', cx - 2, cy)!;
   await expect
     .poll(async () => (await gw.focused()).tileIds, { timeout: 10_000 })
     .toContain(pt.id);

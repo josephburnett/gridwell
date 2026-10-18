@@ -35,7 +35,7 @@ const cacheApplicationID int64 = 0x67776d63
 
 // cacheSchemaVersion is the current cache generation. The file is disposable,
 // but versioning still refuses newer files and migrates older ones.
-const cacheSchemaVersion = 2
+const cacheSchemaVersion = 3
 
 // cacheMigrations is the chain EnsureVersion runs over an older file.
 var cacheMigrations = []dbformat.Migration{
@@ -43,6 +43,9 @@ var cacheMigrations = []dbformat.Migration{
 	// holds the old spelling, so every cached answer goes and the cache
 	// rewarms from the next read.
 	{To: 2, Run: emptyCache},
+	// v3: the same for the workspace kind, which a far node spells
+	// 'workspace'.
+	{To: 3, Run: emptyCache},
 }
 
 // emptyCache deletes every cached answer, keeping the tables.

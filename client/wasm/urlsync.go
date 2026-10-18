@@ -81,7 +81,7 @@ func (a *App) flushDoorWheelSaves() {
 
 // persistPaneFraming writes pane p's current place framing, the same write an
 // ascent flushes. Which row owns it is pane.FramingTarget's projection. A
-// no-op inside a pane tile, whose blob owns a grid's view, and when the place
+// no-op inside a workspace tile, whose blob owns a grid's view, and when the place
 // is unresolvable; the next settle retries.
 func (a *App) persistPaneFraming(p *pane.Pane) {
 	own := p.FramingTarget(a.ws.Depth() > 0)
@@ -259,7 +259,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 
 // persistTextScroll is the settle persister's text arm: a text descent's
 // scroll and mode persist framing-class, no version bump, one SetTextScroll when
-// they moved: see textedit.ScrollMoved. Inside a pane tile a settle takes only
+// they moved: see textedit.ScrollMoved. Inside a workspace tile a settle takes only
 // the mode to the row (textedit.RowScroll). A read-only host tile scrolls like any other,
 // because where the user left the scroll is the node's fact even when the
 // body is the plugin's.
@@ -339,7 +339,7 @@ func (a *App) withE2EParam(raw string) string {
 // pane.URLStateOf is the projection; the only thing added here is the
 // textarea cursor, which is a DOM fact.
 func (a *App) encodeFocusedPaneURL() pane.URLState {
-	// Inside a pane tile, that tile is the place: the interior is
+	// Inside a workspace tile, that tile is the place: the interior is
 	// server-owned by the layout blob, so nothing else rides the URL.
 	if top := a.ws.Top(); top != nil {
 		return pane.URLState{Workspace: top.TileID}

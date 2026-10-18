@@ -2,7 +2,7 @@ import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
 import { dumpViaAPI, TraceLine } from './trace';
 
-// A pane tile's preview draws the layout its row names now. An ephemeral url
+// A workspace tile's preview draws the layout its row names now. An ephemeral url
 // visit inside a workspace ends and its tile is deleted, the layout is saved
 // without it, and the next look at the workspace from outside must not draw
 // the arrangement from before: drawing it resolves the gone leaf, which asks
@@ -37,11 +37,11 @@ test("a workspace preview never draws a leaf its layout no longer names", async 
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('door', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
-  expect(pt, 'pane tile persisted').toBeTruthy();
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
+  expect(pt, 'workspace tile persisted').toBeTruthy();
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
   // Into the door, so the workspace's pane does not show the grid holding the

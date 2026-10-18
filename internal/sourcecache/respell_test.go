@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// A cache file from before the door spelling opens empty: every answer it
-// held spelled the old kind, and the next read rewarms it.
+// A cache file from before the door and workspace spellings opens empty: every
+// answer it held spelled an old kind, and the next read rewarms it.
 func TestAV1CacheOpensEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cache.db")
 	s, err := Open(path)

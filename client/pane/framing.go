@@ -13,7 +13,7 @@ type FramingOwner struct {
 	// layout's: a settle takes only the mode to the tile row, and leaving
 	// writes its whole scroll (textedit.RowScroll, 2026-10-16).
 	Content bool
-	// Layout: the pane is inside a pane tile, whose layout blob owns its grid
+	// Layout: the pane is inside a workspace tile, whose layout blob owns its grid
 	// views (2026-10-14), so nothing is written to the row named below. That
 	// row's framing is still where a frame with no view of its own starts.
 	Layout bool
@@ -29,16 +29,16 @@ type FramingOwner struct {
 }
 
 // FramingTarget is the row that owns the pane's framing: the door it came
-// in by, or the grid itself at a root. Inside a pane tile a grid place's view
+// in by, or the grid itself at a root. Inside a workspace tile a grid place's view
 // and a text place's live scroll are the layout's, so the answer names a grid
 // place's row for reading only and a text place's row for its mode on a
 // settle and its whole scroll on leaving.
-func (s *Stack) FramingTarget(inPaneTile bool) FramingOwner {
+func (s *Stack) FramingTarget(inWorkspace bool) FramingOwner {
 	if s.Content {
-		return FramingOwner{Content: true, Layout: inPaneTile, TileID: s.Door}
+		return FramingOwner{Content: true, Layout: inWorkspace, TileID: s.Door}
 	}
 	anchor, path := s.AnchorPathAt(len(s.below))
-	own := FramingOwner{RootGridID: anchor, Layout: inPaneTile}
+	own := FramingOwner{RootGridID: anchor, Layout: inWorkspace}
 	if s.Door == "" {
 		return own
 	}
@@ -60,7 +60,7 @@ type PaneGrid struct {
 // FramingWriters applies the one-active-surface rule to a framing row: of
 // several panes showing one grid only the focused one writes, because every
 // sibling writing its own rect-derived values each settle tick thrashes the
-// persisted framing. Inside a pane tile no grid row is written, so the rule
+// persisted framing. Inside a workspace tile no grid row is written, so the rule
 // is left only to the text mode of a shared content tile. A pane laid has no
 // area in (hidden under a zoomed sibling) shows nothing, so it neither writes
 // nor counts.

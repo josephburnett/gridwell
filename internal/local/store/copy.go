@@ -123,7 +123,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		if n.TextMode != "" {
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
 		}
-	case n.Kind == rpc.KindPane:
+	case n.Kind == rpc.KindWorkspace:
 		// The layout blob is shared by refcount like a text body, and the copy
 		// diverges on its first edit. NULL means never arranged.
 		if n.BlobId != 0 {
@@ -324,7 +324,7 @@ func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef
 		return g, 0
 	case rpc.IsBodyKind(kind):
 		// The places a pane layout references are not owned, so deleting a
-		// pane tile deletes only the arrangement.
+		// workspace tile deletes only the arrangement.
 		return 0, blob
 	case kind == rpc.KindURL || kind == rpc.KindShell:
 		return 0, previewBlob

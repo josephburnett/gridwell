@@ -42,7 +42,7 @@ type URLState struct {
 	CursorMode bool
 	Col, Row   int
 
-	// Workspace is the innermost pane tile the user is inside. When set it is
+	// Workspace is the innermost workspace tile the user is inside. When set it is
 	// the whole place: the interior is the layout blob's.
 	Workspace string
 }
@@ -263,7 +263,7 @@ func SameURLPlace(a, b URLPlace) bool {
 
 // URLPushesEntry is the one owner of whether a navigation deserves a browser
 // history entry, so back and forward traverse descents and ascents, never
-// pans or focus switches. A pane-tile boundary pushes whatever the pane ids,
+// pans or focus switches. A workspace tile boundary pushes whatever the pane ids,
 // since it swaps the whole tree.
 func URLPushesEntry(prev, next URLPlace, seen bool) bool {
 	if !seen || SameURLPlace(prev, next) {

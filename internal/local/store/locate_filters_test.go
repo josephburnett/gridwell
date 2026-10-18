@@ -196,7 +196,7 @@ func TestFindKind(t *testing.T) {
 	if got := w.find(t, &gridwellv1.FindRequest{Query: "gopher", Kind: "text", GridId: w.outer.ChildGridId}); !sameIDs(got, w.middle.Id) {
 		t.Errorf("gopher texts on outer's grid = %v, want middle", got)
 	}
-	if got := w.find(t, &gridwellv1.FindRequest{Query: "gopher", Kind: "pane"}); len(got) != 0 {
+	if got := w.find(t, &gridwellv1.FindRequest{Query: "gopher", Kind: "workspace"}); len(got) != 0 {
 		t.Errorf("gopher panes = %v, want none", got)
 	}
 	if got := w.find(t, &gridwellv1.FindRequest{Query: "id:" + w.top.Id, Kind: "door"}); len(got) != 0 {

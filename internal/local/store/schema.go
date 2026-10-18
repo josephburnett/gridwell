@@ -98,17 +98,17 @@ const tilesCheck = `    CHECK (
        OR (kind = 'text'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL)
        OR (kind = 'url'   AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NOT NULL AND text_mode IS NULL)
        OR (kind = 'shell' AND child_grid_id IS NULL     AND blob_id IS NULL     AND url_string IS NULL     AND text_mode IS NULL)
-       -- pane: blob_id, nullable, holds the serialized layout in the
+       -- workspace: blob_id, nullable, holds the serialized layout in the
        -- api/panelayout format (application/vnd.gridwell.pane-layout+json).
        -- NULL means never arranged, and descent installs the default pane.
-       OR (kind = 'pane'  AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND text_mode IS NULL)
+       OR (kind = 'workspace' AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND text_mode IS NULL)
        ))
     -- link variant: a leaf tile whose content lives in another plugin's
     -- tile, named by link_target_id. No content columns: bytes, preview,
     -- and url are read through the target. The text framing columns and
     -- view_* stay usable, because framing is per-link local, like the view of a
     -- door to another namespace.
-    OR (link_target_id IS NOT NULL AND kind IN ('text','url','shell','pane')
+    OR (link_target_id IS NOT NULL AND kind IN ('text','url','shell','workspace')
         AND child_grid_id IS NULL AND blob_id IS NULL AND url_string IS NULL
         AND preview_blob_id IS NULL AND text_mode IS NULL)
     )

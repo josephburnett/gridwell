@@ -14,7 +14,7 @@ import (
 // in api/rpc/types.go.
 var kindWords = map[string]string{
 	"door": "rpc.KindDoor", "text": "rpc.KindText", "url": "rpc.KindURL",
-	"shell": "rpc.KindShell", "pane": "rpc.KindPane",
+	"shell": "rpc.KindShell", "workspace": "rpc.KindWorkspace",
 }
 
 // kindLiteralOK names each non-test file allowed to write a kind word as a
@@ -31,10 +31,11 @@ var kindLiteralOK = map[string]string{
 
 	// The client's own vocabularies, which collide with a kind word by
 	// coincidence and mean something else.
+	"client/wasm/bottombar.go":           `"workspace" is a workspace crumb's fallback display name`,
 	"client/wasm/create_tile.go":         `"url" is an errsurface source label`,
 	"client/wasm/render.go":              "the + menu's display and alt-text names, a list that also holds \"markdown\"",
 	"client/wasm/shell_stream_client.go": `"shell" is an errsurface source label and "text" a DOM property`,
-	"client/wasm/testhook.go":            `"pane" is a crumb shape the hook pairs with "chain", "text" a crumb field`,
+	"client/wasm/testhook.go":            `"workspace" is a crumb shape the hook pairs with "chain", "text" a crumb field`,
 	"client/traceevent/traceevent.go":    `"pane" is a trace record's src and its key for a pane id, and "text" names the save queue`,
 	"client/wasm/url_modal.go":           `"url" is a DOM dataset property`,
 	"client/wasm/webview_bridge.go":      `"url" is a bridge event property`,

@@ -3,7 +3,7 @@ import { tileAt, updateText, writeContent } from './oracle';
 import { settle } from './cadence';
 import { dumpViaAPI, TraceLine } from './trace';
 
-// Inside a pane tile a grid's view is the layout blob's (2026-10-14), and so
+// Inside a workspace tile a grid's view is the layout blob's (2026-10-14), and so
 // is a text leaf's live scroll, while leaving it writes its row (2026-10-16). These cross the seam from the gesture
 // to the node's own record of what it wrote, and from stored bytes to what a
 // restored leaf shows.
@@ -33,7 +33,7 @@ function rpcStarts(lines: TraceLine[], verb: string): number {
   return lines.filter((l) => l.src === 'router' && l.kind === 'rpc' && l.msg === `${verb} start`).length;
 }
 
-test('a pan inside a pane tile writes the layout blob once and no framing row, and the round trip returns to it', async ({
+test('a pan inside a workspace tile writes the layout blob once and no framing row, and the round trip returns to it', async ({
   gw,
   home,
   window,
@@ -47,18 +47,18 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('door', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   const door = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy);
-  expect(pt && door, 'pane tile and door persisted').toBeTruthy();
+  expect(pt && door, 'workspace tile and door persisted').toBeTruthy();
 
   await gw.descendCell(wx, wy);
   await expect.poll(() => workspaceDepth(window)).toBe(1);
   await gw.descendCell(wx + 1, wy);
   const childGrid = (await gw.focused()).gridID;
-  expect(childGrid, 'descended into the door inside the pane tile').not.toBe(rootGrid);
+  expect(childGrid, 'descended into the door inside the workspace tile').not.toBe(rootGrid);
   await expect
     .poll(async () => (await gw.getTileContent(pt!.id)).includes(door!.id), {
       message: 'the layout records the descent, which is arrangement',
@@ -90,10 +90,10 @@ test('a pan inside a pane tile writes the layout blob once and no framing row, a
   const after = await dumpViaAPI(gw.origin, token);
   expect(storeWrites(after, isLayout), 'one pan, one layout write').toBe(layoutBefore + 1);
   expect(rpcStarts(after, 'WriteContent'), 'one pan, one WriteContent').toBe(writeContentBefore + 1);
-  expect(storeWrites(after, isFraming), 'a pan inside a pane tile wrote a framing row').toBe(framingBefore);
+  expect(storeWrites(after, isFraming), 'a pan inside a workspace tile wrote a framing row').toBe(framingBefore);
   const layoutAfterPan = storeWrites(after, isLayout);
 
-  // Out of the pane tile and back in: the blob is read again, and the leaf
+  // Out of the workspace tile and back in: the blob is read again, and the leaf
   // shows the grid where the blob says it was left.
   await gw.leaveWorkspace();
   await expect.poll(() => workspaceDepth(window)).toBe(0);
@@ -122,14 +122,14 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('door', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   const door = tileAt(await gw.getGrid(rootGrid), 'door', wx + 1, wy);
-  expect(pt && door, 'pane tile and door persisted').toBeTruthy();
+  expect(pt && door, 'workspace tile and door persisted').toBeTruthy();
 
-  // Frame the door's grid outside any pane tile, so its row owns a view.
+  // Frame the door's grid outside any workspace tile, so its row owns a view.
   await gw.descendCell(wx + 1, wy);
   await gw.wheelAtFocusedCenter(-300);
   const zc = await gw.focused();
@@ -182,10 +182,10 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('markdown', wx + 1, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy)!;
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy)!;
   const doc = tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy)!;
   await updateText(gw.origin, doc.id, Number(doc.version ?? 0), '# long\n\n' + 'line\n\n'.repeat(200));
 
@@ -225,8 +225,8 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
     })
     .toBeGreaterThan(layoutBefore);
   await settle(window, settleMs * 2);
-  expect(await textScrolls(), 'a scroll inside a pane tile posted SetTextScroll').toBe(textScrollsBefore);
-  expect(Number((await row()).textY ?? 0), "a scroll inside a pane tile moved the row's scroll").toBe(rowBefore);
+  expect(await textScrolls(), 'a scroll inside a workspace tile posted SetTextScroll').toBe(textScrollsBefore);
+  expect(Number((await row()).textY ?? 0), "a scroll inside a workspace tile moved the row's scroll").toBe(rowBefore);
   const scrolled = await shownScroll(window);
   expect(scrolled, 'the wheel scrolled the document').toBeGreaterThan(0);
 
@@ -243,7 +243,7 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
   await gw.leaveWorkspace();
 });
 
-test('inside a pane tile a document scrolled and left reopens where it was left, and only the leave wrote its row', async ({
+test('inside a workspace tile a document scrolled and left reopens where it was left, and only the leave wrote its row', async ({
   gw,
   window,
 }) => {
@@ -256,7 +256,7 @@ test('inside a pane tile a document scrolled and left reopens where it was left,
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
+  await gw.dragCreate('workspace', wx, wy);
   await gw.openMenu();
   await gw.dragCreate('markdown', wx + 1, wy);
   const doc = tileAt(await gw.getGrid(rootGrid), 'text', wx + 1, wy)!;

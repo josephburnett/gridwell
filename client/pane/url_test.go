@@ -489,7 +489,7 @@ func TestPushesEntry(t *testing.T) {
 	}
 }
 
-// TestWorkspaceURLRoundTrip: inside a pane tile, that tile is the whole place
+// TestWorkspaceURLRoundTrip: inside a workspace tile, that tile is the whole place
 // — `?w=<qualified tile id>` and nothing else. The interior is server-owned
 // by the layout blob, so encoding a path or viewport alongside it would be a
 // second copy of a fact the blob owns.
@@ -508,7 +508,7 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 	if s.Anchor != "" || len(s.TileIDs) != 0 {
 		t.Fatalf("workspace URL must carry nothing else: %+v", s)
 	}
-	// A chained (remote) pane-tile id survives the round trip.
+	// A chained (remote) workspace tile id survives the round trip.
 	s2, err := DecodeURL(EncodeURL(URLState{Workspace: "ssh-uuid/plugin-uuid/9"}))
 	if err != nil || s2.Workspace != "ssh-uuid/plugin-uuid/9" {
 		t.Fatalf("chained workspace: %+v err=%v", s2, err)

@@ -126,7 +126,7 @@ func (a *App) contentKey(tileID string) string {
 // saveTextBeforeAscent posts the editor buffer and the scroll (where
 // the doc is and the mode, textedit.Scroll) when a pane leaves a text descent, through the
 // dispatcher like every other mutation. Leaving writes the row's whole
-// scroll, inside a pane tile too: see textedit.RowScroll.
+// scroll, inside a workspace tile too: see textedit.RowScroll.
 func (a *App) saveTextBeforeAscent(p *pane.Pane, file *gridwellv1.Tile) {
 	// A url or shell row carries no text framing, and the server rejects a
 	// non-text kind with InvalidArgument.

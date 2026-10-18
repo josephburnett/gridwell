@@ -20,14 +20,14 @@ import (
 
 // readSubject is a store with one of everything a read can reach.
 type readSubject struct {
-	root, child      string
-	text, url, shell string
-	door, pane, link string
-	trashed          string
-	scratch, trash   string
-	ns               *Namespace
-	nsGrid, nsTile   int64
-	entries          []*pluginv1.Entry
+	root, child           string
+	text, url, shell      string
+	door, workspace, link string
+	trashed               string
+	scratch, trash        string
+	ns                    *Namespace
+	nsGrid, nsTile        int64
+	entries               []*pluginv1.Entry
 }
 
 // seedForReads writes, through the product's own verbs, a tile of every kind,
@@ -90,11 +90,11 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	pane, err := s.CreatePane(ctx, root, 3, 3, 2, 2, "ws", []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
+	ws, err := s.CreateWorkspace(ctx, root, 3, 3, 2, 2, "ws", []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub.pane = pane.Id
+	sub.workspace = ws.Id
 
 	link, err := s.CreateLeafLink(ctx, root, 6, 3, 1, 1, rpc.KindText, remoteTarget, "a link")
 	if err != nil {
@@ -179,7 +179,7 @@ func readCases() []readCase {
 		{"GetTile/url", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.url)) }},
 		{"GetTile/shell", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.shell)) }},
 		{"GetTile/door", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.door)) }},
-		{"GetTile/pane", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.pane)) }},
+		{"GetTile/workspace", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.workspace)) }},
 		{"GetTile/link", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.link)) }},
 		{"GetTile/trashed", func(ctx context.Context, s *Store, sub readSubject) { ignore2(s.GetTile(ctx, sub.trashed)) }},
 		{"GetTile/missing", func(ctx context.Context, s *Store, _ readSubject) { ignore2(s.GetTile(ctx, "99999")) }},
@@ -192,8 +192,8 @@ func readCases() []readCase {
 		{"ReadContent/url", func(ctx context.Context, s *Store, sub readSubject) {
 			s.ReadContent(ctx, sub.url)
 		}},
-		{"ReadContent/pane", func(ctx context.Context, s *Store, sub readSubject) {
-			s.ReadContent(ctx, sub.pane)
+		{"ReadContent/workspace", func(ctx context.Context, s *Store, sub readSubject) {
+			s.ReadContent(ctx, sub.workspace)
 		}},
 		{"ReadContent/shell", func(ctx context.Context, s *Store, sub readSubject) {
 			s.ReadContent(ctx, sub.shell)

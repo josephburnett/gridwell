@@ -14,10 +14,10 @@ import (
 // link_target_id. A door's link variant is the door to another namespace, a qualified
 // child_grid_id. The CHECK's link branch mirrors this set.
 var leafLinkKinds = map[string]bool{
-	rpc.KindText:  true,
-	rpc.KindURL:   true,
-	rpc.KindShell: true,
-	rpc.KindPane:  true,
+	rpc.KindText:      true,
+	rpc.KindURL:       true,
+	rpc.KindShell:     true,
+	rpc.KindWorkspace: true,
 }
 
 // CreateLeafLink creates a leaf tile that is a link to another tile.

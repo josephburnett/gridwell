@@ -103,7 +103,7 @@ func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
 			return New().Do(leaveGesture(1), w)
 		},
 	}, {
-		name: "the post-reload re-centre on a pane tile",
+		name: "the post-reload re-centre on a workspace tile",
 		grid: "g9",
 		plan: func(t *testing.T, current map[string]bool) Plan {
 			m := New()
@@ -261,11 +261,11 @@ func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
 	}
 }
 
-// A pane tile's row comes from the cache when its grid is current: a layout
+// A workspace tile's row comes from the cache when its grid is current: a layout
 // write claims its version, so a stale row's write is refused rather than
 // overwriting, and asking again would be asking what the stream told.
 func TestEnteringALevelReadsTheCachedRowWhenCurrent(t *testing.T) {
-	row := arranged(paneTile())
+	row := arranged(workspace())
 	row.Version = 4
 	enter := func(current map[string]bool) Plan {
 		w := baseWorld(gridPane("pane1", "g1"))

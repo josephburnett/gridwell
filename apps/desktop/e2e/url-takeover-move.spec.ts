@@ -3,7 +3,7 @@ import { tileAt } from './oracle';
 import { dumpViaAPI, TraceLine } from './trace';
 
 // One live surface per content tile, and taking it over moves it: entering a
-// pane tile whose layout shows a url tile the outer level shows hands the
+// workspace tile whose layout shows a url tile the outer level shows hands the
 // outer pane's view to the inner pane, and leaving hands it back. The same
 // WebContentsView serves both, so the page is never reloaded and nothing it
 // held is lost: not a script's state, not a half-typed field, not the scroll.
@@ -22,7 +22,7 @@ async function pageState(electronApp: any, paneId: string): Promise<unknown[]> {
   return [mark, typed, Math.round(y / 10) * 10];
 }
 
-test('a url taken over by a pane tile moves there and back without a reload', async ({
+test('a url taken over by a workspace tile moves there and back without a reload', async ({
   electronApp,
   gw,
   home,
@@ -88,15 +88,15 @@ test('a url taken over by a pane tile moves there and back without a reload', as
   await window.waitForTimeout(1_500);
   const baseline = Math.max(0, ...(await dumpViaAPI(origin, token)).map((l) => l.seq ?? 0));
 
-  // A pane tile from the right pane captures the layout with the url pane in
+  // A workspace tile from the right pane captures the layout with the url pane in
   // it, so the captured copy of that pane takes the tile's surface over.
   await gw.focusPane((await gw.panes()).find((p: any) => p.id === right.id)!);
   const rf = await gw.focused();
   const px = Math.round(rf.cx) + 2;
   const py = Math.round(rf.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', px, py);
-  expect(tileAt(await gw.getGrid(grid), 'pane', px, py)).toBeTruthy();
+  await gw.dragCreate('workspace', px, py);
+  expect(tileAt(await gw.getGrid(grid), 'workspace', px, py)).toBeTruthy();
   await gw.descendCell(px, py);
   await expect.poll(async () => window.evaluate(() => (window as any).__gridwellTest.workspace().depth)).toBe(1);
 

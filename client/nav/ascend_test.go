@@ -331,10 +331,10 @@ func findKind(p Plan, k EffectKind) (Effect, bool) {
 	return Effect{}, false
 }
 
-// Inside a pane tile the layout owns a grid frame's view, so an ascent writes
+// Inside a workspace tile the layout owns a grid frame's view, so an ascent writes
 // nothing to the door row, at a door and at a root, and animates onto the
 // row's own framing, the preview the door shows from outside.
-func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
+func TestAscendInsideAWorkspaceWritesNoFraming(t *testing.T) {
 	door := doorRow()
 	door.ViewCx, door.ViewCy, door.ViewZoom = 99, 99, 0.5
 	root := gridPane("pane1", "g1")
@@ -353,7 +353,7 @@ func TestAscendInsideAPaneTileWritesNoFraming(t *testing.T) {
 		w.Leave = &lw
 		plan := New().Do(ascendGesture("pane1", 1, true), w)
 		if pf, ok := findKind(plan, EffPersistFraming); ok {
-			t.Errorf("%s: an ascent inside a pane tile wrote framing: %+v", c.name, pf)
+			t.Errorf("%s: an ascent inside a workspace tile wrote framing: %+v", c.name, pf)
 		}
 		if c.leave.DoorTile != nil && door.ViewCx != 99 {
 			t.Errorf("%s: the door row was patched", c.name)

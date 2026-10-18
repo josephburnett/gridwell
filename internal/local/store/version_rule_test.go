@@ -18,7 +18,7 @@ func zoomOf(z float64) rpc.ContentZoom {
 }
 
 // The one pin on what a tile row's `version` means: the user's content bytes
-// changed, a pane tile's layout among them. It is the optimistic-concurrency
+// changed, a workspace tile's layout among them. It is the optimistic-concurrency
 // claim for those edits. Everything else the store writes to a tile row rides
 // the same tile event and bumps nothing:
 //
@@ -105,7 +105,7 @@ func doorSubject(t *testing.T, s *Store, ctx context.Context, root string) *grid
 
 func paneSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreatePane(ctx, root, 0, 0, 2, 2, "ws", nil)
+	tile, err := s.CreateWorkspace(ctx, root, 0, 0, 2, 2, "ws", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ var versionCases = []versionCase{
 		},
 	},
 	{
-		// A pane tile's layout is the user's bytes, claimed like a text body.
+		// A workspace tile's layout is the user's bytes, claimed like a text body.
 		name: "SetPaneLayout/workspace arrangement", subject: paneSubject, bumps: true, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
 			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.Id), tile.Version,
@@ -356,7 +356,7 @@ func TestVersionRuleClaim(t *testing.T) {
 			}
 		})
 	}
-	// The six content arms, a pane tile's layout among them, the placement,
+	// The six content arms, a workspace tile's layout among them, the placement,
 	// the delete and the freeze; a select claims nothing. A change to this
 	// number is a change to the rule.
 	if claimable != 9 {

@@ -30,7 +30,7 @@ func TestCreateLeafLinkStoresQualifiedLink(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	for i, kind := range []string{rpc.KindText, rpc.KindURL, rpc.KindShell, rpc.KindPane} {
+	for i, kind := range []string{rpc.KindText, rpc.KindURL, rpc.KindShell, rpc.KindWorkspace} {
 		ln, err := s.CreateLeafLink(ctx, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind)
 		if err != nil {
 			t.Fatalf("create %s link: %v", kind, err)

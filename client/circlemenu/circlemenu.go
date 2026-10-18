@@ -91,7 +91,7 @@ const (
 	// ActionDump writes the trace ring to a file.
 	ActionDump
 	// ActionClearSelection empties every selection the node holds, and every
-	// pane's own set in the open pane tiles.
+	// pane's own set in the open workspace tiles.
 	ActionClearSelection
 )
 

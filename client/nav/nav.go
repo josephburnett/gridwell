@@ -93,7 +93,7 @@ const (
 	stepRestoreRoot // frames a pathless restore once its anchor was asked for
 	stepRestoreWalk // re-runs the URL walk against the warmer snapshot
 	stepRestoreCursor
-	stepLevelAnimated // reports the pane-tile descent's animation arm
+	stepLevelAnimated // reports the workspace tile descent's animation arm
 	stepLevelTile
 	stepLevelBody // decodes a level's layout blob
 	stepLevelRecentre
@@ -102,7 +102,7 @@ const (
 	// target's tmux.
 	stepShellLinkTarget
 	// stepRetireVisit deletes an ended ephemeral visit once the node holds a
-	// layout that no longer names it: deleted first, a pane-tile preview of
+	// layout that no longer names it: deleted first, a workspace tile preview of
 	// the layout would resolve a gone tile.
 	stepRetireVisit
 	stepReconcileLevel // installs the arrangement on disk over a refused one
@@ -173,7 +173,7 @@ func (m *Machine) arrive(bid BarrierID, failed bool) (*barrier, bool) {
 	return b, true
 }
 
-// LevelPending is a pane-tile descent between its gesture and its install. The
+// LevelPending is a workspace tile descent between its gesture and its install. The
 // shim reads it for the e2e idle signal and the capture animation's rect.
 func (m *Machine) LevelPending() bool { return len(m.barriers) > 0 }
 

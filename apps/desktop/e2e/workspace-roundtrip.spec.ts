@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The pane-tile round trip, crossing between the client tree and the layout blob
-// both ways. Descending into a pane tile swaps the whole tree. Arranging inside,
+// The workspace tile round trip, crossing between the client tree and the layout blob
+// both ways. Descending into a workspace tile swaps the whole tree. Arranging inside,
 // by splitting and navigating, persists to the blob with no save gesture,
 // through the snapshot-diff persister. Ascending through the bar restores the
 // outer arrangement exactly, and re-descending restores the inner one.
@@ -32,9 +32,9 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   const wy = Math.round(f.cy);
 
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', wx, wy);
-  expect(pt, 'pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
+  expect(pt, 'workspace tile persisted').toBeTruthy();
 
   // The outer arrangement is a single pane descended into home.
   const outerBefore = (await gw.panes()).map(stablePane);
@@ -43,7 +43,7 @@ test('workspace round trip: outer panes byte-identical, inner layout restored', 
   // Descending swaps the tree.
   await gw.descendCell(wx, wy);
   await expect.poll(async () => (await workspaceState(window)).depth, {
-    message: 'descending into the pane tile must enter the workspace',
+    message: 'descending into the workspace tile must enter the workspace',
   }).toBe(1);
   expect((await workspaceState(window)).tileID).toBe(pt!.id);
 

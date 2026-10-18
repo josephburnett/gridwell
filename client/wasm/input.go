@@ -163,7 +163,7 @@ func modsOf(ev js.Value) traceevent.Mods {
 		Alt: ev.Get("altKey").Truthy(), Meta: ev.Get("metaKey").Truthy()}
 }
 
-// paneAtGutter resolves a press on the pane-tile outline; see pane.GutterPane.
+// paneAtGutter resolves a press on the workspace tile outline; see pane.GutterPane.
 func (a *App) paneAtGutter(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
 	rects := a.layoutPanes()
 	area := pane.Rect{W: a.width, H: a.paneAreaH()}
@@ -399,7 +399,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		}
 		return nil
 	}
-	// A left-click on a pane-tile crumb goes there, closing everything deeper,
+	// A left-click on a workspace tile crumb goes there, closing everything deeper,
 	// the one gesture that crosses the level boundary; a right-click renames.
 	if a.bottomBarClick(sx, sy, args[0].Get("button").Int()) {
 		args[0].Call("preventDefault")

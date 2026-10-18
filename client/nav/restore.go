@@ -34,7 +34,7 @@ func (m *Machine) restoreFromHistory(g Gesture, w World) Plan {
 	m.urlRestoring = true
 	pl.add(Effect{Kind: EffFlushDirtyText})
 	pl.add(Effect{Kind: EffFlushFraming})
-	// Navigation inside a pane tile pushes no entries, so a popstate always
+	// Navigation inside a workspace tile pushes no entries, so a popstate always
 	// crosses a place boundary.
 	pl.add(Effect{Kind: EffLeaveLevels, Count: w.LevelDepth})
 	// The focused pane can only be read after the levels swap the tree.

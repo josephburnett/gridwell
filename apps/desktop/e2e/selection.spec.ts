@@ -8,7 +8,7 @@ import type { GridwellDriver } from './driver';
 // the gesture to the row the node holds and back to the border every view
 // draws: shift + left-click toggles, shift + left-drag sweeps a band and takes
 // only the tiles wholly inside it, Esc with nothing in flight clears, the +
-// menu's Clear selections empties every set, and inside a pane tile the set is
+// menu's Clear selections empties every set, and inside a workspace tile the set is
 // the grid row's too, shown in every pane on the grid (2026-10-18).
 
 async function textTile(gw: GridwellDriver, cx: number, cy: number): Promise<Tile> {
@@ -179,16 +179,16 @@ test('Esc with no drag in flight clears the selection, and with none selected wr
   expect(sent, 'Esc on an empty selection wrote nothing').toEqual([]);
 });
 
-// descendPaneTile makes a pane tile at the focused pane's center, beside a
+// descendWorkspace makes a workspace tile at the focused pane's center, beside a
 // text tile, and goes in: the pane inside shows the same grid.
-async function descendPaneTile(gw: GridwellDriver, win: Page) {
+async function descendWorkspace(gw: GridwellDriver, win: Page) {
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', wx, wy);
-  const pt = tileAt(await gw.getGrid(f.gridID), 'pane', wx, wy)!;
-  expect(pt, 'pane tile').toBeTruthy();
+  await gw.dragCreate('workspace', wx, wy);
+  const pt = tileAt(await gw.getGrid(f.gridID), 'workspace', wx, wy)!;
+  expect(pt, 'workspace tile').toBeTruthy();
   const a = await textTile(gw, wx + 2, wy);
   await gw.descendCell(wx, wy);
   await expect
@@ -200,12 +200,12 @@ async function descendPaneTile(gw: GridwellDriver, win: Page) {
   return { f, pt, a, inner, wx, wy };
 }
 
-test('inside a pane tile the selection is the grid row\'s, every pane on the grid shows it, and the layout holds none', async ({
+test('inside a workspace tile the selection is the grid row\'s, every pane on the grid shows it, and the layout holds none', async ({
   gw,
   window,
 }) => {
   await gw.enterPlugin('home');
-  const { f, pt, a, inner, wx, wy } = await descendPaneTile(gw, window);
+  const { f, pt, a, inner, wx, wy } = await descendWorkspace(gw, window);
 
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'shift-click inside');
@@ -236,7 +236,7 @@ test('inside a pane tile the selection is the grid row\'s, every pane on the gri
   await expectSelection(gw, window, back.id, f.gridID, [], 'Esc inside clears the row');
 });
 
-test('inside a pane tile a tile that leaves the grid leaves the set, and comes back unselected', async ({
+test('inside a workspace tile a tile that leaves the grid leaves the set, and comes back unselected', async ({
   gw,
   window,
 }) => {
@@ -248,7 +248,7 @@ test('inside a pane tile a tile that leaves the grid leaves the set, and comes b
   await gw.dragCreate('door', wx, wy + 2);
   const door = tileAt(await gw.getGrid(f.gridID), 'door', wx, wy + 2)!;
   expect(door?.childGridId, 'a door with a grid of its own').toBeTruthy();
-  const { a, inner: inside } = await descendPaneTile(gw, window);
+  const { a, inner: inside } = await descendWorkspace(gw, window);
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inside.id, f.gridID, [a.id], 'selected inside');
 
@@ -287,11 +287,11 @@ test('Clear selections empties every grid\'s set', async ({ electronApp, gw, win
   await expect.poll(() => onNode(gw, door.childGridId!), { message: 'cleared in the door' }).toEqual([]);
 });
 
-// Inside a pane tile the set is the grid row's, so the node's clear reaches
+// Inside a workspace tile the set is the grid row's, so the node's clear reaches
 // it like any other.
-test('Clear selections empties the set a pane inside a pane tile shows', async ({ electronApp, gw, window }) => {
+test('Clear selections empties the set a pane inside a workspace tile shows', async ({ electronApp, gw, window }) => {
   await gw.enterPlugin('home');
-  const { f, a, inner, wx, wy } = await descendPaneTile(gw, window);
+  const { f, a, inner, wx, wy } = await descendWorkspace(gw, window);
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'selected inside');
 

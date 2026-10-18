@@ -30,17 +30,17 @@ test('gestures at deviceScaleFactor 2: move, resize, delete, pane descent', asyn
   t = tileAt(await gw.getGrid(grid), 'text', cx + 1, cy);
   expect(Number(t!.w), 'resize grew the tile wider').toBeGreaterThan(1);
 
-  // PANE TILE: create, descend, ascend, delete.
+  // WORKSPACE TILE: create, descend, ascend, delete.
   await gw.openMenu();
-  await gw.dragCreate('pane', cx - 2, cy - 2);
-  const pt = tileAt(await gw.getGrid(grid), 'pane', cx - 2, cy - 2);
-  expect(pt, 'pane tile persisted').toBeTruthy();
+  await gw.dragCreate('workspace', cx - 2, cy - 2);
+  const pt = tileAt(await gw.getGrid(grid), 'workspace', cx - 2, cy - 2);
+  expect(pt, 'workspace tile persisted').toBeTruthy();
   await gw.descendCell(cx - 2, cy - 2);
   const ws = await window.evaluate(() => (window as any).__gridwellTest.workspace());
-  expect(ws.depth, 'descend into pane tile must enter the workspace').toBe(1);
+  expect(ws.depth, 'descend into workspace tile must enter the workspace').toBe(1);
   await gw.leaveWorkspace();
   await gw.waitIdle();
   await gw.deleteTileCell(cx - 2, cy - 2);
   const after = await gw.getGrid(grid);
-  expect(tileAt(after, 'pane', cx - 2, cy - 2), 'trashed pane tile gone').toBeFalsy();
+  expect(tileAt(after, 'workspace', cx - 2, cy - 2), 'trashed workspace tile gone').toBeFalsy();
 });

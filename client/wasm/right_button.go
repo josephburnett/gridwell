@@ -88,7 +88,7 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 		Region:     pane.ClassifyRegion(r, resizeBandPx, sx, sy),
 	}
 
-	// A press on the pane-tile outline lies outside r and is never over a tile.
+	// A press on the workspace tile outline lies outside r and is never over a tile.
 	var tile *gridwellv1.Tile
 	if in.InGridView && r.Contains(sx, sy) {
 		tile = a.tileAtScreen(p, r, sx, sy)

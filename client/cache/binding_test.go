@@ -17,7 +17,7 @@ func changedEvent(n *gridwellv1.Tile) *gridwellv1.Event {
 // reach the cache through a grid that held no earlier row to compare with.
 func TestABodyIsBoundToItsOwnBlob(t *testing.T) {
 	pane := func(grid string, blob int64) *gridwellv1.Tile {
-		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindPane, Version: 1, BlobId: blob}
+		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindWorkspace, Version: 1, BlobId: blob}
 	}
 	fetchA := func(c *Cache) { c.PutFetchedContent("10", []byte("A"), vb(1), c.AskContent("10")) }
 	cases := []struct {
@@ -77,11 +77,11 @@ func TestABodyIsBoundToItsOwnBlob(t *testing.T) {
 func TestASavedBodyAnswersForItsResponseRow(t *testing.T) {
 	c := New()
 	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
-		{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: 7},
+		{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 1, BlobId: 7},
 	})
 	c.PutFetchedContent("10", []byte("A"), vb(1), c.AskContent("10"))
 
-	row := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindPane, Version: 1, BlobId: 8}
+	row := &gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindWorkspace, Version: 1, BlobId: 8}
 	c.PutSavedContent(row, []byte("B"))
 	c.Apply(changedEvent(row))
 	if b, ok := c.TileContent("10"); !ok || string(b) != "B" {
@@ -116,7 +116,7 @@ func TestDirtyTextSurvivesAForeignRowAnywhere(t *testing.T) {
 // behind must not answer for the row, however the grid map iterates.
 func TestARowHasOneHomeInTheCache(t *testing.T) {
 	row := func(grid string, blob int64) *gridwellv1.Tile {
-		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindPane, Version: 1, BlobId: blob}
+		return &gridwellv1.Tile{Id: "10", GridId: grid, Kind: rpc.KindWorkspace, Version: 1, BlobId: blob}
 	}
 	for i := 0; i < 50; i++ {
 		c := New()

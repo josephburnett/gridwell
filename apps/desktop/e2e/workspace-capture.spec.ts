@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The first descent into a never-arranged pane tile captures the current window
+// The first descent into a never-arranged workspace tile captures the current window
 // layout, so the user keeps looking at what they had, now inside the workspace,
 // and the capture persists as the tile's arrangement with no save gesture. A
 // single-pane window captures a single pane, which is what the roundtrip and bar
@@ -26,9 +26,9 @@ test('first descent captures the current split; later descents restore it', asyn
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
   await gw.openMenu();
-  await gw.dragCreate('pane', cx, cy);
-  const pt = tileAt(await gw.getGrid(rootGrid), 'pane', cx, cy)!;
-  expect(pt, 'pane tile created').toBeTruthy();
+  await gw.dragCreate('workspace', cx, cy);
+  const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', cx, cy)!;
+  expect(pt, 'workspace tile created').toBeTruthy();
   await gw.descendCell(cx, cy);
   await expect.poll(async () => depth(window)).toBe(1);
 

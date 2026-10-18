@@ -46,14 +46,14 @@ func TestWriteContentTextBumpsAndPairsWithRead(t *testing.T) {
 	}
 }
 
-// A pane tile's layout is the user's bytes: a write claims the version it was
+// A workspace tile's layout is the user's bytes: a write claims the version it was
 // read at and bumps it, a stale one is refused with the arrangement on disk
 // untouched, and identical bytes at the current version write nothing.
 func TestWriteContentPaneLayoutClaimsAndBumps(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	pane, err := s.CreatePane(ctx, root, 0, 0, 1, 1, "ws", nil)
+	pane, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", nil)
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}
