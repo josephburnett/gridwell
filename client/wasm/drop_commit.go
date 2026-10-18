@@ -130,7 +130,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 }
 
 // commitMove places every carried tile by the grabbed tile's offset, each
-// its own PlaceTile claiming the placement the press saw, so a stale row is
+// its own MoveTile claiming the placement the press saw, so a stale row is
 // refused alone, its cache puts it back alone, and its ghost flies home alone
 // (snapBackMember). They run one after another in dragdrop.Carry.MoveOrder,
 // because the node checks each against the grid as the last one left it.
@@ -142,7 +142,7 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 	for _, i := range c.MoveOrder(dropX, dropY) {
 		row := d.carried[i]
 		snapBack := func() { a.snapBackMember(gh, d, i) }
-		ws = append(ws, a.placementWrite(d.srcGridID, &gridwellv1.PlaceTileRequest{
+		ws = append(ws, a.placementWrite(d.srcGridID, &gridwellv1.MoveTileRequest{
 			TileId: row.Id,
 			GridId: t.gridID,
 			X:      to[i].X,
@@ -155,7 +155,7 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 	a.postInOrder(ws)
 }
 
-// postPlacement is the one placement writeback, PlaceTile: an id plus the
+// postPlacement is the one placement writeback, MoveTile: an id plus the
 // full (grid, x, y, w, h) fact, claiming the placement the press saw, so a
 // move that landed during the drag is refused rather than undone. The cache
 // holds the placement from the release
@@ -163,20 +163,20 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 // failure puts it back, and snapBack is the caller's animation of that; a
 // conflict also re-reads the grid, so the tile lands where the node holds it.
 // A placement parks nothing.
-func (a *App) postPlacement(gid string, req *gridwellv1.PlaceTileRequest, snapBack func()) {
+func (a *App) postPlacement(gid string, req *gridwellv1.MoveTileRequest, snapBack func()) {
 	a.post(a.placementWrite(gid, req, snapBack))
 }
 
 // placementWrite holds the placement in the cache now and is the write that
 // tells the node; see postPlacement.
-func (a *App) placementWrite(gid string, req *gridwellv1.PlaceTileRequest, snapBack func()) write {
-	pl := a.c.Place(req.TileId, cache.Placement{GridID: req.GridId, X: req.X, Y: req.Y, W: req.W, H: req.H})
+func (a *App) placementWrite(gid string, req *gridwellv1.MoveTileRequest, snapBack func()) write {
+	pl := a.c.Move(req.TileId, cache.Placement{GridID: req.GridId, X: req.X, Y: req.Y, W: req.W, H: req.H})
 	var resp *gridwellv1.Tile
 	return write{
-		label: "PlaceTile", gid: gid, optimistic: true,
+		label: "MoveTile", gid: gid, optimistic: true,
 		call: func(ctx context.Context) error {
 			var err error
-			resp, err = a.cl.PlaceTile(ctx, req)
+			resp, err = a.cl.MoveTile(ctx, req)
 			return err
 		},
 		then: func() { pl.Landed(resp) },
@@ -208,7 +208,7 @@ func (a *App) commitLinkDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 
 // occupiedForDrop is dragdrop.Carry.Occupied over the target grid's cached
 // rows: c landed with its first tile at (x, y). vacates is a move's, which
-// mirrors the server's PlaceTile self-exclusion.
+// mirrors the server's MoveTile self-exclusion.
 func (a *App) occupiedForDrop(gridID string, c dragdrop.Carry, x, y int64, vacates bool) bool {
 	g, ok := a.c.Grid(gridID)
 	if !ok {

@@ -21,7 +21,7 @@ var repeatWritesNothing = map[string]bool{
 	"SetContentZoom/content scale":  true,
 	"SetFrozen/standing freeze":     true,
 	"SetFraming/doorway viewport":   true,
-	"PlaceTile/move and resize":     true,
+	"MoveTile/move and resize":      true,
 	"SetTileAlt/automatic capture":  true,
 	"SetURLState/freeze capture":    true,
 	"SetShellPreview/frozen frame":  true,
@@ -129,7 +129,7 @@ func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 		name  string
 		write func() (bool, error)
 	}{
-		{"place", func() (bool, error) { return d.Place(text, 3, 3, 1, 1, nil) }},
+		{"move", func() (bool, error) { return d.Move(text, 3, 3, 1, 1, nil) }},
 		{"tile framing", func() (bool, error) { return d.SetFraming(text, 0, f) }},
 		{"root framing", func() (bool, error) { return d.SetFraming(0, gid, f) }},
 		{"text scroll", func() (bool, error) { return d.SetTextScroll(text, 0, 0, 4, 4, rpc.TextModeRendered) }},

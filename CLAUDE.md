@@ -351,10 +351,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   and no build gate, since no page is behind it. It decodes onto the one
   router (`internal/mcpapi`): every write reads first and claims what it
   read, every refusal is a tool error with the router's reason, and a tile it
-  places unaimed lands by the one auto-place rule (`store.FreeSlot`). It
+  creates or copies with no cell named lands at the first free cell
+  (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
   `docs/mcp.md` is the contract. It has ten tools (2026-10-17): `pointed`,
-  `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `place`, `copy`,
+  `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `move`, `copy`,
   `delete` and `select`, and every write takes a list and answers a verdict
   per item in order, each item its own write with its own claim, a refused
   one stopping none after it. An agent points as the user does

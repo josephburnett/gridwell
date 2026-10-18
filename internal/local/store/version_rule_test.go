@@ -263,9 +263,9 @@ var versionCases = []versionCase{
 	{
 		// A placement claims the placement it saw, not the version: a move
 		// never conflicts with typing.
-		name: "PlaceTile/move and resize", subject: textSubject, bumps: false, claims: true,
+		name: "MoveTile/move and resize", subject: textSubject, bumps: false, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			_, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 				TileId: tile.Id, GridId: tile.GridId, X: 6, Y: 7, W: 3, H: 3, Claim: placementOf(tile),
 			})
 			return err
@@ -273,7 +273,7 @@ var versionCases = []versionCase{
 		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
 			seen := placementOf(tile)
 			seen.X += 20
-			_, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			_, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 				TileId: tile.Id, GridId: tile.GridId, X: 6, Y: 7, W: 3, H: 3, Claim: seen,
 			})
 			return err

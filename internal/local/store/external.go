@@ -195,7 +195,7 @@ func snapshotOf(e *pluginv1.Entry) entrySnapshot {
 // derivePlacement places a hinted entry at the first free rect of the hint's
 // size at or below the hint (belowHint), so a calendar's column stays its
 // column. Any other entry takes the next free cell from the
-// listing's cursor by the one auto-place rule (autoplace.go). Overlay derives
+// listing's cursor, the first free cell (freeslot.go). Overlay derives
 // with it and Mint stores what Overlay derived, so touching a tile never
 // moves it.
 func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *pluginv1.PlacementHint) (x, y, w, h int64) {
@@ -419,10 +419,10 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed b
 	})
 }
 
-// Place is the placement writeback; the grid never changes. It claims the
-// footprint the writer saw, as home's PlaceTile does (claimPlacement).
-func (n *Namespace) Place(tileID, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
-	return n.rowWrite("Place", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+// Move is the placement writeback; the grid never changes. It claims the
+// footprint the writer saw, as home's MoveTile does (claimPlacement).
+func (n *Namespace) Move(tileID, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
+	return n.rowWrite("Move", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
 		err := tx.QueryRowContext(ctx, `SELECT x, y, w, h FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`,
 			tileID, n.ns).Scan(&cur.X, &cur.Y, &cur.W, &cur.H)

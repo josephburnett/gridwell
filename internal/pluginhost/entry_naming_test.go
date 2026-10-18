@@ -187,7 +187,7 @@ func TestAStoredRowIdStillResolvesAfterTheListingKeepsTheAddress(t *testing.T) {
 		t.Fatal("no note.md")
 	}
 	// A durable touch mints the row a link stored under the older rule holds.
-	if _, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: note.Id, X: 4, Y: 4, W: 1, H: 1}); err != nil {
+	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: note.Id, X: 4, Y: 4, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}
 	rowID := rowIDOf(t, ns, "/", "/note.md")

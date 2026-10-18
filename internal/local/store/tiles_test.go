@@ -210,7 +210,7 @@ func TestResizeNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	r, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: w.Id,
 		GridId: w.GridId, X: 0, Y: 0, W: 3, H: 4,
 	})
@@ -229,7 +229,7 @@ func TestResizeNode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	_, err = s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: r.Id,
 		GridId: r.GridId, X: 0, Y: 0, W: 5, H: 4,
 	})
@@ -238,8 +238,8 @@ func TestResizeNode(t *testing.T) {
 	}
 }
 
-// TestResizeIgnoresStaleClaim: resize rides PlaceTile, which carries no
-// version claim. TestPlaceTileIgnoresStaleClaim has the rule and
+// TestResizeIgnoresStaleClaim: resize rides MoveTile, which carries no
+// version claim. TestMoveTileIgnoresStaleClaim has the rule and
 // version_rule_test.go the whole table.
 func TestResizeIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
@@ -249,7 +249,7 @@ func TestResizeIgnoresStaleClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	r, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: w.Id,
 		GridId: w.GridId, X: 0, Y: 0, W: 2, H: 2,
 	})

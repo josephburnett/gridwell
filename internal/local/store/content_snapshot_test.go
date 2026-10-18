@@ -64,7 +64,7 @@ func calledFromDriver() bool {
 func TestReadContentOverlappingWriteReadsOneSnapshot(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
-	tile := placeText(t, s, root, 0, 0)
+	tile := textAt(t, s, root, 0, 0)
 
 	base, cancel := context.WithCancel(context.Background())
 	defer cancel()

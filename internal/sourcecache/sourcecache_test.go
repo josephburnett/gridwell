@@ -836,7 +836,7 @@ func TestWriteResponsesUpdateTheRememberedRows(t *testing.T) {
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cc.PlaceTile(ctx, &pb.PlaceTileRequest{GridId: root,
+	if _, err := cc.MoveTile(ctx, &pb.MoveTileRequest{GridId: root,
 		TileId: moved.GetTile().GetId(), X: 5, Y: 6, W: 2, H: 2}); err != nil {
 		t.Fatal(err)
 	}

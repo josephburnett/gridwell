@@ -57,8 +57,8 @@ func (Unimplemented) SetTile(context.Context, *pb.SetTileRequest) (*pb.TileRespo
 	return nil, unimp("SetTile")
 }
 
-func (Unimplemented) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	return nil, unimp("PlaceTile")
+func (Unimplemented) MoveTile(context.Context, *pb.MoveTileRequest) (*pb.TileResponse, error) {
+	return nil, unimp("MoveTile")
 }
 
 func (Unimplemented) CopyTile(context.Context, *pb.CopyTileRequest) (*pb.TileResponse, error) {

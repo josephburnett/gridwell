@@ -48,7 +48,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the wells it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its wells too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open, and selected (only tiles in their grid's selection). With a filter the query may be empty: it then lists what passes, newest first."}, d.find)
 	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Write text tiles, a list of items applied in order, a verdict per item. An item with id replaces that text tile's whole body (through a link, its target's), claiming the version you read or, with none, the one on disk now. An item with grid and no id creates a 1x1 text tile there, its name the body's first line, at the first free cell or at or below the cell named in near."}, d.writeText)
 	mcp.AddTool(s, &mcp.Tool{Name: "rename", Description: "Rename url, shell, well or pane tiles, a list of items applied in order, a verdict per item. A text tile's name is its first line, so write_text renames it."}, d.rename)
-	mcp.AddTool(s, &mcp.Tool{Name: "place", Description: "Move or resize tiles, within a grid or to another grid of the same namespace, a list of items applied in order, a verdict per item; each claims the placement its tile has now."}, d.place)
+	mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Move or resize tiles, within a grid or to another grid of the same namespace, a list of items applied in order, a verdict per item; each claims the placement its tile has now."}, d.move)
 	mcp.AddTool(s, &mcp.Tool{Name: "copy", Description: "Copy tiles into a grid (the tile's own when none is named), at the cell named or beside the tile, a list of items applied in order, a verdict per item. link false is a deep copy; link true is a link: a dashed tile showing the same content, in this namespace or across one."}, d.copy)
 	mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Delete tiles, a list of items applied in order, a verdict per item: each moves to the trash, claiming the version and placement it has now (or the version you read). Deleting a link unlinks."}, d.delete)
 	mcp.AddTool(s, &mcp.Tool{Name: "select", Description: "Clear, add tiles to and take tiles out of a grid's selection, the tiles the user has in hand; clear with recurse also clears every grid inside its wells, and clear with all (no grid) clears every selection the node and its far nodes hold. It claims nothing: the user's own selects meanwhile stand, and the last select of a tile wins. A pane inside a pane tile shows its own set, which this does not write."}, d.selectTiles)
@@ -323,7 +323,7 @@ func (d *toolset) rename(ctx context.Context, _ *mcp.CallToolRequest, in renameI
 	})
 }
 
-type placeItem struct {
+type moveItem struct {
 	ID   string `json:"id" jsonschema:"the tile"`
 	X    int64  `json:"x" jsonschema:"the column of its top-left cell"`
 	Y    int64  `json:"y" jsonschema:"the row of its top-left cell"`
@@ -332,17 +332,17 @@ type placeItem struct {
 	Grid string `json:"grid,omitempty" jsonschema:"the grid to move it to, in the same namespace; empty keeps its grid"`
 }
 
-type placeIn struct {
-	Items []placeItem `json:"items" jsonschema:"the moves, applied in order"`
+type moveIn struct {
+	Items []moveItem `json:"items" jsonschema:"the moves, applied in order"`
 }
 
-func (d *toolset) place(ctx context.Context, _ *mcp.CallToolRequest, in placeIn) (*mcp.CallToolResult, WriteOut, error) {
-	return each(in.Items, func(it placeItem) (Verdict, error) {
+func (d *toolset) move(ctx context.Context, _ *mcp.CallToolRequest, in moveIn) (*mcp.CallToolResult, WriteOut, error) {
+	return each(in.Items, func(it moveItem) (Verdict, error) {
 		row, err := d.tile(ctx, it.ID)
 		if err != nil {
 			return Verdict{}, err
 		}
-		return d.landed(d.rt.PlaceTile(ctx, &pb.PlaceTileRequest{TileId: row.GetId(),
+		return d.landed(d.rt.MoveTile(ctx, &pb.MoveTileRequest{TileId: row.GetId(),
 			GridId: cmp.Or(it.Grid, row.GetGridId()), X: it.X, Y: it.Y,
 			W: cmp.Or(it.W, row.GetW()), H: cmp.Or(it.H, row.GetH()), Claim: rpc.PlacementOf(row)}))
 	})
@@ -442,8 +442,7 @@ func (d *toolset) landing(ctx context.Context, in copyItem) (src *pb.Tile, grid 
 	return src, grid, x, y, err
 }
 
-// slot reads the grid and asks the one auto-place rule (store.FreeSlot)
-// where a w×h tile lands in it.
+// slot reads the grid and asks store.FreeSlot where a w×h tile lands in it.
 func (d *toolset) slot(ctx context.Context, grid string, near *[2]int64, w, h int64) (x, y int64, err error) {
 	g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: grid})
 	if err != nil {

@@ -39,7 +39,7 @@ func TestFindByID(t *testing.T) {
 	}
 
 	// Move it two levels deep: the chain is [outer, inner].
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: text.Id,
 		GridId: inner.ChildGridId, X: 0, Y: 0, W: 1, H: 1,
 	}); err != nil {

@@ -127,7 +127,7 @@ func TestAMemoryAnswerKeepsEveryRowAndReportsTheReason(t *testing.T) {
 	if t3 == nil {
 		t.Fatalf("no t3 in %v", before.Tiles)
 	}
-	if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: t3.Id, X: 6, Y: 6, W: 1, H: 1})); err != nil {
+	if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: t3.Id, X: 6, Y: 6, W: 1, H: 1})); err != nil {
 		t.Fatal(err)
 	}
 

@@ -95,7 +95,7 @@ func TestAMemoryAnswerServesItsRowsAndReportsTheSourceDown(t *testing.T) {
 
 	grid := rpc.EntryGridID("r")
 	doc := rpc.EntryTileID("r", "doc")
-	if _, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: doc, X: 5, Y: 5, W: 1, H: 1}); err != nil {
+	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: doc, X: 5, Y: 5, W: 1, H: 1}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -192,7 +192,7 @@ func TestTheMCPAPIListsItsTenTools(t *testing.T) {
 	for _, tl := range res.Tools {
 		got = append(got, tl.Name)
 	}
-	want := []string{"copy", "delete", "find", "place", "pointed", "read_grid", "read_tiles", "rename", "select", "write_text"}
+	want := []string{"copy", "delete", "find", "move", "pointed", "read_grid", "read_tiles", "rename", "select", "write_text"}
 	if slices.Sort(got); !slices.Equal(got, want) {
 		t.Fatalf("tools = %v, want %v", got, want)
 	}
@@ -247,9 +247,9 @@ func TestEveryMCPToolRoundTripsThroughTheRouter(t *testing.T) {
 		t.Fatalf("an unclaimed write_text left %q, want it to claim the row as it stands", *read.Body)
 	}
 
-	placed := landed(t, items(t, s, "place", map[string]any{"id": plan.ID, "x": 6, "y": 4, "w": 2})[0])
+	placed := landed(t, items(t, s, "move", map[string]any{"id": plan.ID, "x": 6, "y": 4, "w": 2})[0])
 	if placed.X != 6 || placed.Y != 4 || placed.W != 2 || placed.H != 1 || placed.Version != wrote.Version {
-		t.Fatalf("place = %+v, want 2x1 at (6,4) with the content version untouched", placed)
+		t.Fatalf("move = %+v, want 2x1 at (6,4) with the content version untouched", placed)
 	}
 
 	copies := items(t, s, "copy",
@@ -340,7 +340,7 @@ func TestAnMCPBulkWriteRefusesOneItemAndLandsTheRest(t *testing.T) {
 		map[string]any{"id": a.ID, "name": "x"}, map[string]any{"id": "nowhere/1", "name": "y"}),
 		"refused:", "dead link:")
 
-	verdicts(t, "place", items(t, s, "place",
+	verdicts(t, "move", items(t, s, "move",
 		map[string]any{"id": a.ID, "x": 10, "y": 0},
 		map[string]any{"id": b.ID, "x": 10, "y": 0},
 		map[string]any{"id": c.ID, "x": 11, "y": 0}),

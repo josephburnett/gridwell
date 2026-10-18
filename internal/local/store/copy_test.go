@@ -155,7 +155,7 @@ func TestCopyIndependentEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	cInner := copyChild.Tiles[0]
-	resized, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	resized, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: cInner.Id,
 		GridId: cInner.GridId, X: 0, Y: 0, W: 3, H: 3,
 	})

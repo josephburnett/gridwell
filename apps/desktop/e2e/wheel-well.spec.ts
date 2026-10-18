@@ -131,8 +131,8 @@ test('zoom OUT over a view-filling well goes to the pane; zoom IN stays the well
     (args) => JSON.stringify((window as any).__gridwellTest.gridSigs(args.gid)[args.id] ?? ''),
     { gid: home.gridID, id: fresh.id },
   );
-  const { placeTile } = await import('./oracle');
-  await placeTile(gw.origin, fresh.id, home.gridID, wx, wy, wellW, wellH);
+  const { moveTile } = await import('./oracle');
+  await moveTile(gw.origin, fresh.id, home.gridID, wx, wy, wellW, wellH);
   // The resize is a foreign write, so wait until the client's cache applied the
   // TileChanged event. Otherwise the wheel below still sees a 1x1 well, with
   // near-zero coverage, and routes to the well zoom.

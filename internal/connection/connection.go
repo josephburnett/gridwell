@@ -748,8 +748,8 @@ func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.SetTile, prependTileResp)
 }
 
-func (s *Server) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.PlaceTile, prependTileResp)
+func (s *Server) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.MoveTile, prependTileResp)
 }
 
 func (s *Server) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {

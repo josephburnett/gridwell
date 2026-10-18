@@ -84,7 +84,7 @@ var writeScopes = map[string]writeScope{
 	"SetSelection/the grid's selection": {grid: []string{"selection"}},
 
 	// ── Layout: where it sits. ─────────────────────────────────────────
-	"PlaceTile/move and resize": {tile: []string{"x", "y", "w", "h"}},
+	"MoveTile/move and resize": {tile: []string{"x", "y", "w", "h"}},
 	// The copy is new rows, and the grid it lands in counts one more tile; the
 	// source row is neither.
 	"CopyTile/source row": {grid: []string{"version"}, mints: true},

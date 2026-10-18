@@ -92,7 +92,7 @@ record shapes. Everything else derives from it:
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>/<subpath>`. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its wells too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
-| Mutations | `CreateTile`, `SetTile` (one op per call), `PlaceTile`, `CopyTile`, `DeleteTile` |
+| Mutations | `CreateTile`, `SetTile` (one op per call), `MoveTile`, `CopyTile`, `DeleteTile` |
 | Shells | `OpenShell`, `ShellSessionAlive` — a PTY both ways |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
 
@@ -639,7 +639,7 @@ copy:
 | is this answer the dead verdict | `gwerr.DeadRef` / `gwerr.IsDeadRef` |
 | does this page run the node's build, and what it does when not | `Server.otherBuild`; `gwerr.OtherBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
 | which notices carry a button, and what pressing it does | `errsurface.ActionOf` |
-| where a tile lands when nobody chose a cell | `store.FreeSlot` over the one auto-place rule (`autoplace.go`) |
+| where a tile lands when nobody chose a cell | `store.FreeSlot`: the first free cell (`freeslot.go`) |
 | what a link to a tile is | `rpc.LinkOf` |
 | this event stream is established | `namespace.Follow` |
 | what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/subscription.Tracker` |

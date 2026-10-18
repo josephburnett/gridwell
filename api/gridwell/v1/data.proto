@@ -417,10 +417,10 @@ message ServeContentChunk {
   bytes data = 3;
 }
 
-// PlaceTile is the single placement writeback. Placement is one fact,
+// MoveTile is the single placement writeback. Placement is one fact,
 // (grid_id, x, y, w, h), and one verb owns it. grid_id is the destination grid,
 // the same as the tile's current grid for a pure resize. The server refuses
-// overlap, and refuses placing a well inside its own subtree by walking
+// overlap, and refuses moving a well into its own subtree by walking
 // ancestors from grid_id, with no client-supplied path. Placement never crosses
 // a plugin boundary; there is no cross-plugin move, only link or copy.
 //
@@ -428,7 +428,7 @@ message ServeContentChunk {
 // with the version conflict, the placement on disk standing. The APIs refuse
 // a request with no claim (rpc.UnclaimedWrite); only the node's own writers
 // reach a namespace without one.
-message PlaceTileRequest {
+message MoveTileRequest {
   string tile_id = 1;
   reserved 2; // version
   string grid_id = 3;
@@ -692,7 +692,7 @@ message ShellSessionAliveResponse {
 
 // Mutations. A write of something the user made or placed claims what it was
 // read at, one claim per fact: WriteContent and SetTile's rename claim the
-// version (a row with no version, its stamp), PlaceTile the placement,
+// version (a row with no version, its stamp), MoveTile the placement,
 // url_frozen the freeze, DeleteTile the version and placement. A stale claim
 // is the version conflict, and the APIs refuse a missing one. Framing and
 // capture writes carry no claim.
@@ -997,8 +997,8 @@ service Gridwell {
   // ── Web content (the HTTP /content/ API's RPC carrier) ──────────────────
   rpc ServeContent(ServeContentRequest) returns (stream ServeContentChunk);
 
-  // PlaceTile is the single placement writeback.
-  rpc PlaceTile(PlaceTileRequest) returns (TileResponse);
+  // MoveTile is the single placement writeback.
+  rpc MoveTile(MoveTileRequest) returns (TileResponse);
 
   // ── Mutations (one create, one writeback, plus placement) ─────────────────
   rpc CreateTile(CreateTileRequest) returns (TileResponse);

@@ -88,7 +88,7 @@ func (f *fake) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileRespo
 func (f *fake) SetTile(context.Context, *pb.SetTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
-func (f *fake) PlaceTile(context.Context, *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+func (f *fake) MoveTile(context.Context, *pb.MoveTileRequest) (*pb.TileResponse, error) {
 	return &pb.TileResponse{Tile: f.tile}, nil
 }
 func (f *fake) CopyTile(context.Context, *pb.CopyTileRequest) (*pb.TileResponse, error) {

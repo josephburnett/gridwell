@@ -291,7 +291,7 @@ func TestGmailPlacedLabelRowsBecomeLinksInPlace(t *testing.T) {
 		if before.Reference {
 			t.Fatalf("%s drew a link from an entry with no link_target", grid)
 		}
-		if _, err := n.cl.PlaceTile(ctx, claimtest.Claimed(t, n.cl, &gridwellv1.PlaceTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1})); err != nil {
+		if _, err := n.cl.MoveTile(ctx, claimtest.Claimed(t, n.cl, &gridwellv1.MoveTileRequest{TileId: before.Id, X: 7, Y: int64(-2 - i), W: 2, H: 1})); err != nil {
 			t.Fatal(err)
 		}
 		placed[grid] = before

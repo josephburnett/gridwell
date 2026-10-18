@@ -44,9 +44,9 @@ func TestNotice(t *testing.T) {
 	}{
 		{"nothing to lose", Offer, nil, 0, Updated},
 		{"one write", Offer, []string{"SetFraming"}, 0, Updated + " 1 view change was not saved."},
-		{"kinds that are one kind count together", Offer, []string{"PlaceTile", "PaneLayout"}, 0,
+		{"kinds that are one kind count together", Offer, []string{"MoveTile", "PaneLayout"}, 0,
 			Updated + " 2 layout changes were not saved."},
-		{"kinds in drain order", Offer, []string{"SetFraming", "PlaceTile", "SetTextScroll", "SetFrozen"}, 0,
+		{"kinds in drain order", Offer, []string{"SetFraming", "MoveTile", "SetTextScroll", "SetFrozen"}, 0,
 			Updated + " 2 view changes, 1 layout change and 1 page capture were not saved."},
 		{"a parked selection", Offer, []string{"SetSelection", "SetSelection"}, 0, Updated + " 2 selections were not saved."},
 		{"an op with no name is named by itself", Offer, []string{"SetFraming", "Mystery"}, 0,

@@ -83,10 +83,10 @@ func TestSubprocessPlugin_FS(t *testing.T) {
 	if hello == nil {
 		t.Fatal("hello.md not projected")
 	}
-	if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := client.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: hello.Id, GridId: landing, X: 4, Y: 1, W: 2, H: 2,
 	}); err != nil {
-		t.Fatalf("PlaceTile: %v", err)
+		t.Fatalf("MoveTile: %v", err)
 	}
 	got, err := client.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: hello.Id})
 	if err != nil {

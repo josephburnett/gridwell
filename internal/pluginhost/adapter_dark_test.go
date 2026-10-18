@@ -99,7 +99,7 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	if notes.Id == "" {
 		t.Fatal("no notes.md tile to move")
 	}
-	placed, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: notes.Id, X: 7, Y: 3, W: 1, H: 1}))
+	placed, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: notes.Id, X: 7, Y: 3, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 	}
 	// The arrangement the dark must not cost: one move while the source is
 	// still readable, which is what mints the row.
-	first, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: moved.Id, X: 8, Y: 8, W: 1, H: 1}))
+	first, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: moved.Id, X: 8, Y: 8, W: 1, H: 1}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 
 	// The user drags the tile somewhere free. The write is the node's own
 	// half, so it must land and report landing.
-	placed, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: moved.Id, X: 9, Y: 9, W: 1, H: 1}))
+	placed, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: moved.Id, X: 9, Y: 9, W: 1, H: 1}))
 	if err != nil {
 		t.Fatalf("a placement while the source is dark must still land: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestASourceGoingDarkDoesNotCostTheUserTheirArrangement(t *testing.T) {
 		t.Fatal("no untouched tile to try")
 	}
 	darken(t, root)
-	if _, err := cl.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: untouched.Id, X: 1, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(untouched)}); err == nil {
+	if _, err := cl.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: untouched.Id, X: 1, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(untouched)}); err == nil {
 		t.Fatal("placing an untouched entry while its source is dark must refuse, not invent a row")
 	}
 }

@@ -219,7 +219,7 @@ func TestResizeAndSetFramingRPCs(t *testing.T) {
 	}
 	id := tile.Id
 
-	resized, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+	resized, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: id, GridId: root, X: 0, Y: 0, W: 2, H: 2,
 	}))
 	if err != nil {
@@ -308,7 +308,7 @@ func TestCopyAndMoveRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("copy: %v", err)
 	}
-	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: cp.Id,
 		GridId: root, X: 8, Y: 8, W: cp.W, H: cp.H,
 	}))

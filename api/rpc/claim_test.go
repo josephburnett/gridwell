@@ -18,8 +18,8 @@ func TestUnclaimedWriteNamesTheMissingClaim(t *testing.T) {
 		req  proto.Message
 		want string // a word of the reason, "" for none
 	}{
-		{"move without claim", &pb.PlaceTileRequest{TileId: "u1/7"}, "placement"},
-		{"move with claim", &pb.PlaceTileRequest{TileId: "u1/7", Claim: PlacementOf(row)}, ""},
+		{"move without claim", &pb.MoveTileRequest{TileId: "u1/7"}, "placement"},
+		{"move with claim", &pb.MoveTileRequest{TileId: "u1/7", Claim: PlacementOf(row)}, ""},
 		{"delete without claim", &pb.DeleteTileRequest{TileId: "u1/7", ClaimVersion: 3}, "delete"},
 		{"delete with claim", DeleteOf(row), ""},
 		{"freeze without claim", &pb.SetTileRequest{TileId: "u1/7", UrlFrozen: &yes}, "claim_frozen"},
@@ -39,7 +39,7 @@ func TestUnclaimedWriteNamesTheMissingClaim(t *testing.T) {
 // verb that gains a claim cannot be sent without it by omission.
 func TestUnclaimedWriteKnowsEveryClaim(t *testing.T) {
 	owned := map[protoreflect.FullName]bool{
-		"gridwell.v1.PlaceTileRequest":  true,
+		"gridwell.v1.MoveTileRequest":   true,
 		"gridwell.v1.DeleteTileRequest": true,
 		"gridwell.v1.SetTileRequest":    true,
 	}

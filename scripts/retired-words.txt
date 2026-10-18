@@ -50,3 +50,7 @@ cloned
 # "search" — the one query verb is Find. Allowed: the browser's location
 # search and URLSearchParams, and Go's sort.Search.
 search .*location\.search|.*Get\("search"\)|.*searchParams|.*sort\.Search|.*google\.com/search
+# "place" as the write — writing a placement is a move (MoveTile, the MCP
+# move tool). A pane's place, the noun, stays.
+placetile
+auto-place

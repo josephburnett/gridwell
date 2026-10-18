@@ -75,7 +75,7 @@ func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 		name  string
 		write func() (bool, error)
 	}{
-		{"Place", func() (bool, error) { return ns.Place(id, 4, 4, 2, 2, nil) }},
+		{"Move", func() (bool, error) { return ns.Move(id, 4, 4, 2, 2, nil) }},
 		{"SetTextScroll", func() (bool, error) { return ns.SetTextScroll(id, 10, 20, 0, 0, "rendered") }},
 		{"SetContentZoom", func() (bool, error) { return ns.SetContentZoom(id, zoomOf(1.5)) }},
 	}

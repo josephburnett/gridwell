@@ -141,7 +141,7 @@ function placementOf(t: Tile) {
 
 // A foreign writer moving a tile out from under the app's stored references,
 // claiming the placement it read.
-export async function placeTile(
+export async function moveTile(
   origin: string,
   tileId: string,
   gridId: string,
@@ -151,13 +151,13 @@ export async function placeTile(
   h: number,
 ): Promise<void> {
   const claim = placementOf(await getTile(origin, tileId));
-  const res = await fetch(`${origin}/${SERVICE}/PlaceTile`, {
+  const res = await fetch(`${origin}/${SERVICE}/MoveTile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
     body: JSON.stringify({ tileId, gridId, x, y, w, h, claim }),
   });
   if (!res.ok) {
-    throw new Error(`PlaceTile(${tileId}) failed: ${res.status} ${await res.text()}`);
+    throw new Error(`MoveTile(${tileId}) failed: ${res.status} ${await res.text()}`);
   }
 }
 

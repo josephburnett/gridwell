@@ -97,7 +97,7 @@ func TestMoveExitWellPreservesReference(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	moved, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: ew.Id,
 		GridId: root, X: 3, Y: 3, W: ew.W, H: ew.H,
 	})

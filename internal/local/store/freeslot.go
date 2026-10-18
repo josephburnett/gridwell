@@ -34,15 +34,15 @@ func belowHint(occupied map[[2]int64]bool, x, y, w, h int64) int64 {
 	return y
 }
 
-// AutoPlaceWidth is the fill width the reading order wraps at.
-const AutoPlaceWidth int64 = 8
+// FreeSlotWidth is the fill width the reading order wraps at.
+const FreeSlotWidth int64 = 8
 
 // cursor is where the next scan starts. A fresh one scans from the origin; a
 // running one lets a listing flow without re-walking what it already placed.
 type cursor struct{ x, y int64 }
 
 // nextFreeRect is the first w×h slot, from cur in reading order, whose cells
-// are all free. The slot's origin wraps at AutoPlaceWidth; the slot itself may
+// are all free. The slot's origin wraps at FreeSlotWidth; the slot itself may
 // run past it, because a tile wider than the fill still has to land. The cells
 // are marked occupied and the cursor moved to the slot.
 func nextFreeRect(occupied map[[2]int64]bool, cur *cursor, w, h int64) (x, y int64) {
@@ -60,7 +60,7 @@ func nextFreeRect(occupied map[[2]int64]bool, cur *cursor, w, h int64) (x, y int
 			return cx, cy
 		}
 		cx++
-		if cx >= AutoPlaceWidth {
+		if cx >= FreeSlotWidth {
 			cx = 0
 			cy++
 		}

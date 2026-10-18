@@ -201,7 +201,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 	}
 
 	// Move: into another grid, and back.
-	moved, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	moved, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: b.Id, GridId: w.ChildGridId, X: 0, Y: 0, W: 1, H: 1, Claim: rpc.PlacementOf(b),
 	})
 	if err != nil {
@@ -210,7 +210,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 	if got := selectionOn(t, s, root); !slices.Equal(got, []string{c.Id}) {
 		t.Errorf("after move: selection = %v, want [%s]", got, c.Id)
 	}
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: b.Id, GridId: root, X: b.X, Y: b.Y, W: 1, H: 1, Claim: rpc.PlacementOf(moved),
 	}); err != nil {
 		t.Fatal(err)

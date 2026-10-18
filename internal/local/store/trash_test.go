@@ -241,7 +241,7 @@ func TestDeleteToTrashEmitsMoveShape(t *testing.T) {
 	}
 	evs := drainEvents(t, ch)
 	got := countKinds(evs)
-	// PlaceTile's cross-grid shape exactly: remove-from-source +
+	// MoveTile's cross-grid shape exactly: remove-from-source +
 	// appear-at-destination — the shape every client already reconciles.
 	assertCounts(t, "DeleteTile(to trash)", got, map[string]int{
 		"tile_removed": 1,
@@ -265,11 +265,11 @@ func TestRestoreFromTrashIsAPlainMove(t *testing.T) {
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: txt.Id}); err != nil {
 		t.Fatal(err)
 	}
-	back, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	back, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: txt.Id, GridId: root, X: 4, Y: 4, W: 1, H: 1,
 	})
 	if err != nil {
-		t.Fatalf("restore (PlaceTile out of trash): %v", err)
+		t.Fatalf("restore (MoveTile out of trash): %v", err)
 	}
 	if back.GridId != root {
 		t.Errorf("restored tile grid = %s, want root", back.GridId)
@@ -305,7 +305,7 @@ func TestDeleteClaimsWhatTheWriterSaw(t *testing.T) {
 	if err := del(tile.Version, seen); !errors.Is(err, ErrVersionConflict) {
 		t.Fatalf("delete over an edit it never saw: got %v, want ErrVersionConflict", err)
 	}
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: tile.Id, GridId: root, X: 4, Y: 0, W: 1, H: 1, Claim: seen}); err != nil {
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: tile.Id, GridId: root, X: 4, Y: 0, W: 1, H: 1, Claim: seen}); err != nil {
 		t.Fatal(err)
 	}
 	if err := del(edited.Version, seen); !errors.Is(err, ErrVersionConflict) {

@@ -172,13 +172,13 @@ func (c *Client) WriteContent(ctx context.Context, tileID string, claim ContentB
 	return resp.Msg.Tile, nil
 }
 
-// PlaceTile is the single placement writeback: one verb owns (grid, x, y, w,
+// MoveTile is the single placement writeback: one verb owns (grid, x, y, w,
 // h), move or resize or both.
-func (c *Client) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.Tile, error) {
+func (c *Client) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.Tile, error) {
 	if err := unclaimed(req); err != nil {
 		return nil, err
 	}
-	return tileResp(c.cl.PlaceTile(ctx, connect.NewRequest(req)))
+	return tileResp(c.cl.MoveTile(ctx, connect.NewRequest(req)))
 }
 
 func (c *Client) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Tile, error) {

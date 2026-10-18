@@ -466,7 +466,7 @@ func (a *App) commitTileResize(rd *rightDragState) {
 	if p == nil {
 		return
 	}
-	a.postPlacement(a.gridIDForPane(p), &gridwellv1.PlaceTileRequest{
+	a.postPlacement(a.gridIDForPane(p), &gridwellv1.MoveTileRequest{
 		TileId: n.Id,
 		GridId: n.GridId,
 		X:      rd.tileNewX,

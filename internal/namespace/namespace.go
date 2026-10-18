@@ -53,7 +53,7 @@ type Namespace interface {
 	// ── writes ───────────────────────────────────────────────────────────
 	CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error)
 	SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.TileResponse, error)
-	PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error)
+	MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error)
 	CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error)
 	DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error)
 	SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error)

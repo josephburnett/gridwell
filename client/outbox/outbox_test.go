@@ -302,7 +302,7 @@ func TestSendWithNoRetryParksNothing(t *testing.T) {
 	o := New()
 	dead := connect.NewError(connect.CodeUnavailable, errors.New("refused"))
 	ran := false
-	o.Send(k("PlaceTile", "t1"), nil, func() clientsync.Outcome {
+	o.Send(k("MoveTile", "t1"), nil, func() clientsync.Outcome {
 		ran = true
 		if o.Len() != 0 {
 			t.Errorf("an unparked write parked anyway: %v", o.Keys())

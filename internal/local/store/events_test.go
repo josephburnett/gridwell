@@ -125,7 +125,7 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: w.Id,
 		GridId: w.GridId, X: 0, Y: 0, W: 3, H: 3,
 	}); err != nil {
@@ -215,7 +215,7 @@ func TestEventMoveTileWithinGridEmitsTileChanged(t *testing.T) {
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: w.Id,
 		GridId: root, X: 5, Y: 5, W: w.W, H: w.H,
 	}); err != nil {
@@ -239,7 +239,7 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	}
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: target.Id,
 		GridId: a.ChildGridId, X: 0, Y: 0, W: target.W, H: target.H,
 	}); err != nil {
@@ -335,7 +335,7 @@ func TestEventCopyEditEmitsOnlyTileChanged(t *testing.T) {
 
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: cInner.Id,
 		GridId: cInner.GridId, X: 0, Y: 0, W: 2, H: 2,
 	}); err != nil {

@@ -166,7 +166,7 @@ func TestTouchingEveryTileChangesNothingTheClientCanSee(t *testing.T) {
 	// Every tile placed where it already is: the durable touch that mints,
 	// with nothing about the arrangement changed.
 	for _, tile := range derived.Tiles {
-		if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+		if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 			TileId: tile.Id, GridId: root, X: tile.X, Y: tile.Y, W: tile.W, H: tile.H,
 		})); err != nil {
 			t.Fatalf("touch %q: %v", tile.AltText, err)
@@ -202,7 +202,7 @@ func TestOneMoveMintsExactlyOneRow(t *testing.T) {
 	}
 	tiles0, grids0 := pluginRows(t, st)
 
-	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: g.Tiles[3].Id, GridId: root, X: 9, Y: 4, W: 2, H: 2,
 	}))
 	if err != nil {

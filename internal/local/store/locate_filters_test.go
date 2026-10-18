@@ -103,7 +103,7 @@ func TestFindTimeRanges(t *testing.T) {
 
 	// At t4 the top text moves and the middle one is typed into.
 	w.s.SetClock(func() time.Time { return w.t4 })
-	if _, err := w.s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: w.top.Id, GridId: w.top.GridId,
+	if _, err := w.s.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: w.top.Id, GridId: w.top.GridId,
 		X: 5, Y: 5, W: 1, H: 1, Claim: placementOf(w.top)}); err != nil {
 		t.Fatal(err)
 	}

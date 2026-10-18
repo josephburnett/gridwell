@@ -49,7 +49,7 @@ func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int
 }
 
 // moveTileToTrash files t under the current month's subgrid, minting the month
-// well on first use. It is PlaceTile's cross-grid shape exactly: same row and
+// well on first use. It is MoveTile's cross-grid shape exactly: same row and
 // id, tile version untouched, both grid versions bumped, and TileRemoved plus
 // TileChanged, so every client reconciles it as the move it is.
 func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.Event, t *gridwellv1.Tile) error {
@@ -128,7 +128,7 @@ func (s *Store) monthGridTx(ctx context.Context, tx *sql.Tx, trashID int64, mont
 	return child, true, nil
 }
 
-// firstFreeCell is the one auto-place rule (autoplace.go) over the grid's
+// firstFreeCell is the first free cell (freeslot.go) among the grid's
 // rows: the first slot from the origin that fits (w, h).
 func (s *Store) firstFreeCell(ctx context.Context, tx *sql.Tx, gridID, w, h int64) (int64, int64, error) {
 	tiles, err := s.loadTilesInGrid(ctx, tx, gridID)

@@ -77,7 +77,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	}
 
 	// 3. Move alpha.txt and confirm the new position survives a re-descent.
-	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: alpha.Id,
 		GridId: child,
 		X:      5, Y: 6, W: alpha.W, H: alpha.H,
@@ -95,7 +95,7 @@ func TestFileWellLifecycleE2E(t *testing.T) {
 	if held, err := cl.GetTile(ctx, alpha.Id); err != nil || held.Id != moved.Id {
 		t.Errorf("the pre-mint address stopped resolving: %+v (%v), want %s", held, err, moved.Id)
 	}
-	again, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: moved.Id, GridId: child, X: 5, Y: 6, W: alpha.W, H: alpha.H}))
+	again, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: moved.Id, GridId: child, X: 5, Y: 6, W: alpha.W, H: alpha.H}))
 	if err != nil {
 		t.Fatalf("second move: %v", err)
 	}

@@ -37,7 +37,7 @@ func TestAnUnlistedPageRowStaysAPage(t *testing.T) {
 			cl, landing := goneStack(t, src)
 			ctx := context.Background()
 			page := tileLabelled(ctx, t, cl, landing, "doc")
-			if _, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: page, X: 4, Y: 4, W: 1, H: 1})); err != nil {
+			if _, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: page, X: 4, Y: 4, W: 1, H: 1})); err != nil {
 				t.Fatal(err)
 			}
 

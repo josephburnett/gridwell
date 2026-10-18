@@ -1000,8 +1000,8 @@ func (c *Layer) SetTile(ctx context.Context, in *pb.SetTileRequest) (*pb.TileRes
 	return resp, err
 }
 
-func (c *Layer) PlaceTile(ctx context.Context, in *pb.PlaceTileRequest) (*pb.TileResponse, error) {
-	resp, err := c.Namespace.PlaceTile(ctx, in)
+func (c *Layer) MoveTile(ctx context.Context, in *pb.MoveTileRequest) (*pb.TileResponse, error) {
+	resp, err := c.Namespace.MoveTile(ctx, in)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
 		c.foldWrite(ctx, in.TileId, resp.GetTile())

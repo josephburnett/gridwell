@@ -68,8 +68,8 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
-// PlaceTile is the single placement writeback.
-func (rt *router) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.TileResponse, error) {
+// MoveTile is the single placement writeback.
+func (rt *router) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error) {
 	if err := refuseUnclaimed(req); err != nil {
 		return nil, err
 	}
@@ -80,6 +80,6 @@ func (rt *router) PlaceTile(ctx context.Context, req *pb.PlaceTileRequest) (*pb.
 	if err := rt.refuseDisabled(req.TileId, req.GridId); err != nil {
 		return nil, err
 	}
-	resp, err := c.PlaceTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
+	resp, err := c.MoveTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
 	return rt.tileResp(uuid, transit, resp, err)
 }

@@ -306,10 +306,10 @@ func (p *Plugin) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) 
 	return tileResp(p.st.CopyTile(ctx, req))
 }
 
-// PlaceTile is the single placement writeback; the store derives the
+// MoveTile is the single placement writeback; the store derives the
 // well-into-own-subtree refusal itself.
-func (p *Plugin) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
-	return tileResp(p.st.PlaceTile(ctx, req))
+func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
+	return tileResp(p.st.MoveTile(ctx, req))
 }
 
 // SetTile is the single capture writeback: tile.kind selects the one store

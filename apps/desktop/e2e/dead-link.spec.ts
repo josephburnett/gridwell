@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from './fixtures';
-import { createExitWell, createLeafLink, placeTile, tileAt } from './oracle';
+import { createExitWell, createLeafLink, moveTile, tileAt } from './oracle';
 import { makeRunDir } from './homes';
 
 // A link into a namespace this node does not declare is DEAD. Removing a
@@ -154,7 +154,7 @@ test.describe('a declared namespace is never dead', () => {
     // The file comes back, and a write into its grid is the namespace saying
     // its listing changed.
     fs.writeFileSync(file, '# gone\nback\n');
-    await placeTile(gw.origin, entry!.id, collection, 9, 9, 1, 1);
+    await moveTile(gw.origin, entry!.id, collection, 9, 9, 1, 1);
     await expect
       .poll(async () => (await deadLinks(window, f.gridID)).length, { timeout: 15_000 })
       .toBe(0);

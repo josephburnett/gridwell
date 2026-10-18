@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { createLeafLink, placeTile, setSelection, tileAt, Tile } from './oracle';
+import { createLeafLink, moveTile, setSelection, tileAt, Tile } from './oracle';
 import { pickFromNativeMenu } from './choicemenu';
 import type { GridwellDriver } from './driver';
 
@@ -262,9 +262,9 @@ test('inside a pane tile a tile that leaves the grid leaves the pane\'s set, and
     .toBe(true);
 
   // Another window moves the tile into the well and back to its cell.
-  await placeTile(gw.origin, a.id, well.childGridId!, 0, 0, Number(a.w ?? 1), Number(a.h ?? 1));
+  await moveTile(gw.origin, a.id, well.childGridId!, 0, 0, Number(a.w ?? 1), Number(a.h ?? 1));
   await expect.poll(async () => (await gw.focused()).tileIds.includes(a.id), { message: 'a left' }).toBe(false);
-  await placeTile(gw.origin, a.id, f.gridID, wx + 2, wy, Number(a.w ?? 1), Number(a.h ?? 1));
+  await moveTile(gw.origin, a.id, f.gridID, wx + 2, wy, Number(a.w ?? 1), Number(a.h ?? 1));
   await gw.waitClientTileAt(inner.id, wx + 2, wy, a.id);
   await gw.waitIdle();
   await expect.poll(() => painted(window, inner.id), { message: 'back, unselected' }).toEqual([]);

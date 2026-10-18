@@ -125,7 +125,7 @@ func TileContainsCell(x, y, w, h, cx, cy int64) bool {
 }
 
 // RectsOverlap is the predicate the server's overlap check applies, so the
-// drop preflight and PlaceTile cannot disagree about a collision.
+// drop preflight and MoveTile cannot disagree about a collision.
 func RectsOverlap(ax, ay, aw, ah, bx, by, bw, bh int64) bool {
 	return ax < bx+bw && bx < ax+aw && ay < by+bh && by < ay+ah
 }

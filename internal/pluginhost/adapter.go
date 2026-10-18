@@ -731,9 +731,9 @@ func (a *Adapter) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (
 	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
-// PlaceTile terminates at the store: in-grid only, and unversioned. It is a
+// MoveTile terminates at the store: in-grid only, and unversioned. It is a
 // durable fact about an entry, so it mints the row it writes into.
-func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileRequest) (*gridwellv1.TileResponse, error) {
+func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return nil, err
@@ -751,7 +751,7 @@ func (a *Adapter) PlaceTile(ctx context.Context, req *gridwellv1.PlaceTileReques
 	if err != nil {
 		return nil, err
 	}
-	changed, err := a.mem.Place(id, req.X, req.Y, req.W, req.H, req.Claim)
+	changed, err := a.mem.Move(id, req.X, req.Y, req.W, req.H, req.Claim)
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}

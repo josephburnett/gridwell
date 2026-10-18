@@ -90,7 +90,7 @@ func TestRootFramingAnnouncesItsFramingNotAGridChange(t *testing.T) {
 		t.Errorf("framing a collection announced %v, want exactly %v", evs, want)
 	}
 
-	if _, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: listing.Tiles[0].Id, X: 4, Y: 4, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -161,7 +161,7 @@ func TestWellFramingAnnouncesTheTileNotAGridChange(t *testing.T) {
 		t.Errorf("the event's tile %v differs from the write's answer %v", got, resp.GetTile())
 	}
 
-	if _, err := a.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	if _, err := a.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: well.Id, X: 4, Y: 4, W: 1, H: 1,
 	}); err != nil {
 		t.Fatal(err)

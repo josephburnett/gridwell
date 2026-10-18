@@ -57,7 +57,7 @@ test('tile gestures (move, copy, resize, delete) mutate server state', async ({ 
 });
 
 // A multi-cell tile whose new footprint overlaps its old one must still move:
-// the client's drop preflight excludes the moving tile, as PlaceTile does, or
+// the client's drop preflight excludes the moving tile, as MoveTile does, or
 // the drag snaps back with nothing visibly in the way.
 test('a multi-cell tile moves one cell into its own old footprint (#231)', async ({ gw }) => {
   await gw.enterPlugin('home');

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from './fixtures';
-import { createLeafLink, placeTile, tileAt } from './oracle';
+import { createLeafLink, moveTile, tileAt } from './oracle';
 import { makeRunDir } from './homes';
 
 // A page a plugin serves has no address of its own, so a page row its source
@@ -31,13 +31,13 @@ test.describe('a page whose source goes dark', () => {
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy);
     // A row is what answers while the source cannot: the move mints it.
-    await placeTile(gw.origin, page.id!, f.gridID, cx, cy + 1, 1, 1);
+    await moveTile(gw.origin, page.id!, f.gridID, cx, cy + 1, 1, 1);
 
     fs.chmodSync(siteDir, 0o000);
     try {
       // A second move is a write into the grid, which every open view re-reads,
       // now against a source that cannot list.
-      await placeTile(gw.origin, page.id!, f.gridID, cx + 1, cy + 1, 1, 1);
+      await moveTile(gw.origin, page.id!, f.gridID, cx + 1, cy + 1, 1, 1);
       await expect
         .poll(async () => (await gw.getGrid(f.gridID)).tiles!.map((t) => t.altText), { timeout: 15_000 })
         .toEqual(['kept.png']);

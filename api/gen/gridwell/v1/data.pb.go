@@ -1656,10 +1656,10 @@ func (x *ServeContentChunk) GetData() []byte {
 	return nil
 }
 
-// PlaceTile is the single placement writeback. Placement is one fact,
+// MoveTile is the single placement writeback. Placement is one fact,
 // (grid_id, x, y, w, h), and one verb owns it. grid_id is the destination grid,
 // the same as the tile's current grid for a pure resize. The server refuses
-// overlap, and refuses placing a well inside its own subtree by walking
+// overlap, and refuses moving a well into its own subtree by walking
 // ancestors from grid_id, with no client-supplied path. Placement never crosses
 // a plugin boundary; there is no cross-plugin move, only link or copy.
 //
@@ -1667,7 +1667,7 @@ func (x *ServeContentChunk) GetData() []byte {
 // with the version conflict, the placement on disk standing. The APIs refuse
 // a request with no claim (rpc.UnclaimedWrite); only the node's own writers
 // reach a namespace without one.
-type PlaceTileRequest struct {
+type MoveTileRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
 	GridId        string                 `protobuf:"bytes,3,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
@@ -1680,20 +1680,20 @@ type PlaceTileRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PlaceTileRequest) Reset() {
-	*x = PlaceTileRequest{}
+func (x *MoveTileRequest) Reset() {
+	*x = MoveTileRequest{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PlaceTileRequest) String() string {
+func (x *MoveTileRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PlaceTileRequest) ProtoMessage() {}
+func (*MoveTileRequest) ProtoMessage() {}
 
-func (x *PlaceTileRequest) ProtoReflect() protoreflect.Message {
+func (x *MoveTileRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1705,54 +1705,54 @@ func (x *PlaceTileRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PlaceTileRequest.ProtoReflect.Descriptor instead.
-func (*PlaceTileRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use MoveTileRequest.ProtoReflect.Descriptor instead.
+func (*MoveTileRequest) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *PlaceTileRequest) GetTileId() string {
+func (x *MoveTileRequest) GetTileId() string {
 	if x != nil {
 		return x.TileId
 	}
 	return ""
 }
 
-func (x *PlaceTileRequest) GetGridId() string {
+func (x *MoveTileRequest) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
 	return ""
 }
 
-func (x *PlaceTileRequest) GetX() int64 {
+func (x *MoveTileRequest) GetX() int64 {
 	if x != nil {
 		return x.X
 	}
 	return 0
 }
 
-func (x *PlaceTileRequest) GetY() int64 {
+func (x *MoveTileRequest) GetY() int64 {
 	if x != nil {
 		return x.Y
 	}
 	return 0
 }
 
-func (x *PlaceTileRequest) GetW() int64 {
+func (x *MoveTileRequest) GetW() int64 {
 	if x != nil {
 		return x.W
 	}
 	return 0
 }
 
-func (x *PlaceTileRequest) GetH() int64 {
+func (x *MoveTileRequest) GetH() int64 {
 	if x != nil {
 		return x.H
 	}
 	return 0
 }
 
-func (x *PlaceTileRequest) GetClaim() *Placement {
+func (x *MoveTileRequest) GetClaim() *Placement {
 	if x != nil {
 		return x.Claim
 	}
@@ -4618,8 +4618,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x06status\x18\x01 \x01(\x03R\x06status\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\xb0\x01\n" +
-	"\x10PlaceTileRequest\x12\x17\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\xaf\x01\n" +
+	"\x0fMoveTileRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x17\n" +
 	"\agrid_id\x18\x03 \x01(\tR\x06gridId\x12\f\n" +
 	"\x01x\x18\x04 \x01(\x03R\x01x\x12\f\n" +
@@ -4813,7 +4813,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rplugin_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventPluginHealthH\x00R\fpluginHealth\x12S\n" +
 	"\x14grid_framing_changed\x18\x05 \x01(\v2\x1f.gridwell.v1.GridFramingChangedH\x00R\x12gridFramingChanged\x12L\n" +
 	"\x11selection_changed\x18\x06 \x01(\v2\x1d.gridwell.v1.SelectionChangedH\x00R\x10selectionChangedB\t\n" +
-	"\apayload2\x83\r\n" +
+	"\apayload2\x81\r\n" +
 	"\bGridwell\x12;\n" +
 	"\x04Info\x12\x18.gridwell.v1.InfoRequest\x1a\x19.gridwell.v1.InfoResponse\x12>\n" +
 	"\x05Probe\x12\x19.gridwell.v1.ProbeRequest\x1a\x1a.gridwell.v1.ProbeResponse\x12J\n" +
@@ -4825,8 +4825,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x04Find\x12\x18.gridwell.v1.FindRequest\x1a\x19.gridwell.v1.FindResponse\x12K\n" +
 	"\vReadContent\x12\x1f.gridwell.v1.ReadContentRequest\x1a\x19.gridwell.v1.ContentChunk0\x01\x12M\n" +
 	"\fWriteContent\x12 .gridwell.v1.WriteContentRequest\x1a\x19.gridwell.v1.TileResponse(\x01\x12R\n" +
-	"\fServeContent\x12 .gridwell.v1.ServeContentRequest\x1a\x1e.gridwell.v1.ServeContentChunk0\x01\x12E\n" +
-	"\tPlaceTile\x12\x1d.gridwell.v1.PlaceTileRequest\x1a\x19.gridwell.v1.TileResponse\x12G\n" +
+	"\fServeContent\x12 .gridwell.v1.ServeContentRequest\x1a\x1e.gridwell.v1.ServeContentChunk0\x01\x12C\n" +
+	"\bMoveTile\x12\x1c.gridwell.v1.MoveTileRequest\x1a\x19.gridwell.v1.TileResponse\x12G\n" +
 	"\n" +
 	"CreateTile\x12\x1e.gridwell.v1.CreateTileRequest\x1a\x19.gridwell.v1.TileResponse\x12A\n" +
 	"\aSetTile\x12\x1b.gridwell.v1.SetTileRequest\x1a\x19.gridwell.v1.TileResponse\x12C\n" +
@@ -4877,7 +4877,7 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*WriteContentRequest)(nil),       // 17: gridwell.v1.WriteContentRequest
 	(*ServeContentRequest)(nil),       // 18: gridwell.v1.ServeContentRequest
 	(*ServeContentChunk)(nil),         // 19: gridwell.v1.ServeContentChunk
-	(*PlaceTileRequest)(nil),          // 20: gridwell.v1.PlaceTileRequest
+	(*MoveTileRequest)(nil),           // 20: gridwell.v1.MoveTileRequest
 	(*Placement)(nil),                 // 21: gridwell.v1.Placement
 	(*GetTileRequest)(nil),            // 22: gridwell.v1.GetTileRequest
 	(*FindRequest)(nil),               // 23: gridwell.v1.FindRequest
@@ -4925,7 +4925,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	10, // 3: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
 	1,  // 4: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
 	3,  // 5: gridwell.v1.GetGridResponse.tiles:type_name -> gridwell.v1.Tile
-	21, // 6: gridwell.v1.PlaceTileRequest.claim:type_name -> gridwell.v1.Placement
+	21, // 6: gridwell.v1.MoveTileRequest.claim:type_name -> gridwell.v1.Placement
 	24, // 7: gridwell.v1.FindRequest.created:type_name -> gridwell.v1.TimeRange
 	24, // 8: gridwell.v1.FindRequest.modified:type_name -> gridwell.v1.TimeRange
 	24, // 9: gridwell.v1.FindRequest.content_changed:type_name -> gridwell.v1.TimeRange
@@ -4960,7 +4960,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	15, // 38: gridwell.v1.Gridwell.ReadContent:input_type -> gridwell.v1.ReadContentRequest
 	17, // 39: gridwell.v1.Gridwell.WriteContent:input_type -> gridwell.v1.WriteContentRequest
 	18, // 40: gridwell.v1.Gridwell.ServeContent:input_type -> gridwell.v1.ServeContentRequest
-	20, // 41: gridwell.v1.Gridwell.PlaceTile:input_type -> gridwell.v1.PlaceTileRequest
+	20, // 41: gridwell.v1.Gridwell.MoveTile:input_type -> gridwell.v1.MoveTileRequest
 	36, // 42: gridwell.v1.Gridwell.CreateTile:input_type -> gridwell.v1.CreateTileRequest
 	40, // 43: gridwell.v1.Gridwell.SetTile:input_type -> gridwell.v1.SetTileRequest
 	39, // 44: gridwell.v1.Gridwell.CopyTile:input_type -> gridwell.v1.CopyTileRequest
@@ -4982,7 +4982,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	16, // 60: gridwell.v1.Gridwell.ReadContent:output_type -> gridwell.v1.ContentChunk
 	32, // 61: gridwell.v1.Gridwell.WriteContent:output_type -> gridwell.v1.TileResponse
 	19, // 62: gridwell.v1.Gridwell.ServeContent:output_type -> gridwell.v1.ServeContentChunk
-	32, // 63: gridwell.v1.Gridwell.PlaceTile:output_type -> gridwell.v1.TileResponse
+	32, // 63: gridwell.v1.Gridwell.MoveTile:output_type -> gridwell.v1.TileResponse
 	32, // 64: gridwell.v1.Gridwell.CreateTile:output_type -> gridwell.v1.TileResponse
 	32, // 65: gridwell.v1.Gridwell.SetTile:output_type -> gridwell.v1.TileResponse
 	32, // 66: gridwell.v1.Gridwell.CopyTile:output_type -> gridwell.v1.TileResponse

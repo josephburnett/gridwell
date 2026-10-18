@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { placeTile, tileAt } from '../e2e/oracle';
+import { moveTile, tileAt } from '../e2e/oracle';
 import { installEchoGate, holdEchoFor } from './echo';
 
 // A placement is optimistic like every other write: the client's cache, which
@@ -57,14 +57,14 @@ test('placement: a refused move goes back and says so', async ({ gw, window, ser
 
   // Another writer takes the cell; the client is not told.
   await holdEchoFor(window, 60_000);
-  await placeTile(serve.origin, b.id!, f.gridID, cx + 2, cy, 1, 1);
+  await moveTile(serve.origin, b.id!, f.gridID, cx + 2, cy, 1, 1);
   await gw.dragTileCell(cx, cy, cx + 2, cy);
 
   expect(await clientTileAt(window, f.id, cx, cy), 'the refused move is back').toBe(a.id);
   expect(await clientTileAt(window, f.id, cx + 2, cy), 'the cell shows who took it').toBe(b.id);
   const errs = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(
-    errs.notices.some((n: any) => /PlaceTile/.test(n.source) || /PlaceTile/.test(n.message)),
+    errs.notices.some((n: any) => /MoveTile/.test(n.source) || /MoveTile/.test(n.message)),
     `the refusal is said: ${JSON.stringify(errs.notices)}`,
   ).toBe(true);
 });

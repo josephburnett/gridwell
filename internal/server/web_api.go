@@ -68,8 +68,8 @@ func (h *connectHandler) SetTile(ctx context.Context, req *connect.Request[pb.Se
 	return unary(h.rt.SetTile)(ctx, req)
 }
 
-func (h *connectHandler) PlaceTile(ctx context.Context, req *connect.Request[pb.PlaceTileRequest]) (*connect.Response[pb.TileResponse], error) {
-	return unary(h.rt.PlaceTile)(ctx, req)
+func (h *connectHandler) MoveTile(ctx context.Context, req *connect.Request[pb.MoveTileRequest]) (*connect.Response[pb.TileResponse], error) {
+	return unary(h.rt.MoveTile)(ctx, req)
 }
 
 func (h *connectHandler) CopyTile(ctx context.Context, req *connect.Request[pb.CopyTileRequest]) (*connect.Response[pb.TileResponse], error) {

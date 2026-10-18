@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { tileAt, placeTile } from './oracle';
+import { tileAt, moveTile } from './oracle';
 
 // A workspace leaf references its tile by anchor, path, and id. Ids are
 // immutable while paths are not, so the path goes stale the moment the tile is
@@ -58,7 +58,7 @@ test('re-entering a workspace heals a leaf whose tile was moved into a well', as
     .toBe(0);
 
   // A foreign writer moves the tile into the well.
-  await placeTile(gw.origin, doc.id, well.childGridId!, 0, 0, 1, 1);
+  await moveTile(gw.origin, doc.id, well.childGridId!, 0, 0, 1, 1);
   await expect
     .poll(async () => ((await gw.getGrid(well.childGridId!)).tiles ?? []).some((t: any) => t.id === doc.id))
     .toBe(true);

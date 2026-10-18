@@ -18,7 +18,7 @@ func TestWriteContentTextBumpsAndPairsWithRead(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	tile := placeText(t, s, root, 0, 0)
+	tile := textAt(t, s, root, 0, 0)
 
 	got, err := s.WriteContent(ctx, tile.Id, tile.Version, []byte("# New Title\n\nbody"))
 	if err != nil {
@@ -92,7 +92,7 @@ func TestWriteContentRefusesKindsWithoutContent(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	well := placeWell(t, s, root, 0, 0)
+	well := wellAt(t, s, root, 0, 0)
 
 	if _, err := s.WriteContent(ctx, well.Id, well.Version, []byte("x")); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("well: got %v, want ErrInvalidArgument", err)
@@ -205,7 +205,7 @@ func TestRenameTileVersionedAndLatches(t *testing.T) {
 	}
 
 	// Text tiles derive their name from content; rename is refused.
-	text := placeText(t, s, root, 5, 5)
+	text := textAt(t, s, root, 5, 5)
 	if _, err := s.RenameTile(ctx, text.Id, text.Version, "nope"); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("text rename: got %v, want ErrInvalidArgument", err)
 	}

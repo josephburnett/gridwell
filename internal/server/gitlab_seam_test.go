@@ -148,7 +148,7 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 
 	// The user moves todo 1. That is the durable touch: the entry earns a row
 	// and is named by it from here on.
-	movedOne, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: one.Id, X: 5, Y: 5, W: 3, H: 2})
+	movedOne, err := client.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: one.Id, X: 5, Y: 5, W: 3, H: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestTrashingATodoKeepsItsRowItsPlacementAndItsLinks(t *testing.T) {
 
 	// The user moves the todo somewhere of their own, and drags a link to it
 	// onto the home grid — a weekly plan naming this todo.
-	moved, err := cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: todo.Id, X: 5, Y: 5, W: 3, H: 2}))
+	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: todo.Id, X: 5, Y: 5, W: 3, H: 2}))
 	if err != nil {
 		t.Fatal(err)
 	}

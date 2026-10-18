@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { placeTile, setSelection, tileAt, Tile } from './oracle';
+import { moveTile, setSelection, tileAt, Tile } from './oracle';
 import type { GridwellDriver } from './driver';
 
 // A gesture on a selected tile acts on its grid's whole selection
@@ -10,7 +10,7 @@ import type { GridwellDriver } from './driver';
 // window would), not a gesture, so these pin what the set does and nothing
 // about how it is made. The server's rows are the oracle.
 
-const WRITES = ['PlaceTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
+const WRITES = ['MoveTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
 async function watchWrites(win: Page): Promise<() => string[]> {
   const seen: string[] = [];
@@ -65,7 +65,7 @@ test('a left-drag on a selected tile moves the set; a stale tile is refused and 
   expect(g.carried.slice().sort(), 'the ghost carries the set').toEqual([a.id, b.id].sort());
   expect(g.hidden.slice().sort(), 'the move hides the set').toEqual([a.id, b.id].sort());
   // Another window moves b before the drop, so the press's claim on b is stale.
-  await placeTile(gw.origin, b.id, f.gridID, cx + 4, cy - 2, 1, 1);
+  await moveTile(gw.origin, b.id, f.gridID, cx + 4, cy - 2, 1, 1);
   await m.move(to.x, to.y, { steps: 8 });
   await m.up({ button: 'left' });
   await gw.waitIdle();
@@ -189,8 +189,8 @@ test('a refused set move flies every refused tile home', async ({ gw, window }) 
   await m.down({ button: 'left' });
   await m.move(from.x + 8, from.y + 8);
   // Another window moves both before the drop, so both claims are stale.
-  await placeTile(gw.origin, a.id, f.gridID, cx - 4, cy + 1, 1, 1);
-  await placeTile(gw.origin, b.id, f.gridID, cx + 4, cy + 1, 1, 1);
+  await moveTile(gw.origin, a.id, f.gridID, cx - 4, cy + 1, 1, 1);
+  await moveTile(gw.origin, b.id, f.gridID, cx + 4, cy + 1, 1, 1);
   await m.move(to.x, to.y, { steps: 8 });
   await m.up({ button: 'left' });
   await expect

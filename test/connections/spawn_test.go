@@ -650,7 +650,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	// a row on the far node and the entry keeps the id its listing answers
 	// under. A rename there is invisible on either node alone, so only a
 	// re-list through the tunnel tells the two apart.
-	placed := rpc(t, localOrigin, "PlaceTile", map[string]any{
+	placed := rpc(t, localOrigin, "MoveTile", map[string]any{
 		"tileId": farID, "gridId": fsRoot, "x": 6, "y": 3, "w": 1, "h": 1,
 		"claim": map[string]any{"gridId": back["gridId"], "x": back["x"], "y": back["y"], "w": back["w"], "h": back["h"]},
 	})["tile"].(map[string]any)

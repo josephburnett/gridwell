@@ -113,7 +113,7 @@ func TestProcPluginSweepAndPlacement(t *testing.T) {
 	if tileNamed(g.Tiles, dying).Id == "" {
 		t.Fatalf("child %s not found among %v", dying, g.Tiles)
 	}
-	if _, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
+	if _, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
 		TileId: child.Id, GridId: rootGrid, X: 5, Y: 5, W: 1, H: 1,
 	})); err != nil {
 		t.Fatal(err)
@@ -249,7 +249,7 @@ func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 		t.Errorf("@info presents %q; want %q", info.TextPresentation, rpc.TextPresentationBoth)
 	}
 	for i, tile := range []*gridwellv1.Tile{info, tileNamed(g.Tiles, child)} {
-		if _, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
+		if _, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
 			TileId: tile.Id, GridId: well.ChildGridId, X: int64(4 + 2*i), Y: 4, W: 1, H: 1,
 		})); err != nil {
 			t.Fatal(err)
@@ -287,7 +287,7 @@ func TestProcDeleteOfAGoneProcessRetiresItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	placed, err := v2.PlaceTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.PlaceTileRequest{
+	placed, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
 		TileId: tileNamed(g.Tiles, gone).Id, GridId: rootGrid, X: 5, Y: 5, W: 1, H: 1,
 	}))
 	if err != nil {

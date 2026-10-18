@@ -180,13 +180,13 @@ func TestSetTileOneOperationPerCall(t *testing.T) {
 	}
 }
 
-func TestPlaceTileDispatch(t *testing.T) {
+func TestMoveTileDispatch(t *testing.T) {
 	p := openPlugin(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
 	text := createTile(t, p, root, &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 1, H: 1}, []byte("x"))
-	r, err := p.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	r, err := p.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: text.Id, GridId: root, X: 4, Y: 5, W: 2, H: 3,
 	})
 	if err != nil {

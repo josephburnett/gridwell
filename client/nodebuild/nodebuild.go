@@ -170,7 +170,7 @@ var kinds = map[string][2]string{
 	"Content":         {"text edit", "text edits"},
 	"Rename":          {"rename", "renames"},
 	"ConfigureURL":    {"address", "addresses"},
-	"PlaceTile":       {"layout change", "layout changes"},
+	"MoveTile":        {"layout change", "layout changes"},
 	"PaneLayout":      {"layout change", "layout changes"},
 	"DeleteTile":      {"delete", "deletes"},
 	"SetFraming":      {"view change", "view changes"},

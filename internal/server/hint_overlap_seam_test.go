@@ -68,7 +68,7 @@ func TestACollidingHintNeverLandsOnAStoredRow(t *testing.T) {
 		if tl == nil {
 			t.Fatalf("no %q in %+v", prefix, wk.Tiles)
 		}
-		if kept[prefix], err = cl.PlaceTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.PlaceTileRequest{TileId: tl.Id, X: tl.X, Y: tl.Y, W: tl.W, H: tl.H})); err != nil {
+		if kept[prefix], err = cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{TileId: tl.Id, X: tl.X, Y: tl.Y, W: tl.W, H: tl.H})); err != nil {
 			t.Fatal(err)
 		}
 	}

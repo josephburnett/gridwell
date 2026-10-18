@@ -261,7 +261,7 @@ func TestNodeExportOpenShellBidi(t *testing.T) {
 // TestNodeExportContentStreams drives the new content verbs over the raw
 // gRPC export — the wire a remote mounter sees. WriteContent commits at
 // close and the response re-qualifies; ReadContent streams the bytes paired
-// with their version; PlaceTile routes like every unary.
+// with their version; MoveTile routes like every unary.
 func TestNodeExportContentStreams(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
@@ -288,12 +288,12 @@ func TestNodeExportContentStreams(t *testing.T) {
 		t.Errorf("version %d, want %d — the basis must survive the export hop", version, resp.Tile.Version)
 	}
 
-	placed, err := c.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+	placed, err := c.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 		TileId: created.Tile.Id, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
 		Claim: rpc.PlacementOf(created.Tile),
 	})
 	if err != nil {
-		t.Fatalf("PlaceTile: %v", err)
+		t.Fatalf("MoveTile: %v", err)
 	}
 	if placed.Tile.W != 3 || placed.Tile.X != 5 {
 		t.Errorf("placed = (%d,%d %dx%d), want (5,5 3x3)", placed.Tile.X, placed.Tile.Y, placed.Tile.W, placed.Tile.H)

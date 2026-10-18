@@ -94,7 +94,7 @@ func TestIdsWrittenIntoAFarGridComeBackAsSent(t *testing.T) {
 	}
 
 	// The secondary ids of placement and a same-namespace copy.
-	placed, err := h.localCl.PlaceTile(ctx, claimtest.Claimed(t, h.localCl, &gridwellv1.PlaceTileRequest{TileId: target.Id, GridId: farGrid, X: 0, Y: 4, W: 1, H: 1}))
+	placed, err := h.localCl.MoveTile(ctx, claimtest.Claimed(t, h.localCl, &gridwellv1.MoveTileRequest{TileId: target.Id, GridId: farGrid, X: 0, Y: 4, W: 1, H: 1}))
 	if err != nil {
 		t.Fatalf("place into the far grid: %v", err)
 	}

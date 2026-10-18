@@ -128,7 +128,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			}
 			w := int64(1 + rng.IntN(3))
 			h := int64(1 + rng.IntN(3))
-			n, err := s.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			n, err := s.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 				TileId: pick.id,
 				GridId: pick.gridID, X: pick.x, Y: pick.y, W: w, H: h,
 			})

@@ -11,7 +11,7 @@ import { EV } from '../src/main/ipc';
 // can pass while the other fails: the server's rows, and every mutating call
 // the client sent, counted at the wire.
 
-const WRITES = ['PlaceTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
+const WRITES = ['MoveTile', 'CopyTile', 'CreateTile', 'SetTile', 'DeleteTile', 'SetFraming', 'WriteContent'];
 
 async function watchWrites(win: Page): Promise<() => string[]> {
   const seen: string[] = [];

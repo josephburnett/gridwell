@@ -113,7 +113,7 @@ func TestDeleteRetiresOnlyWhatTheSourceSaysIsGone(t *testing.T) {
 			// The durable touch: a move is what mints the row, and the row is
 			// what the delete must decide about.
 			addr := before.Tiles[0].Id
-			if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{
+			if _, err := client.MoveTile(ctx, &gridwellv1.MoveTileRequest{
 				TileId: addr, X: 5, Y: 5, W: 3, H: 2,
 			}); err != nil {
 				t.Fatal(err)
@@ -240,7 +240,7 @@ func TestDeleteSurfacesWhatItCouldNotResolve(t *testing.T) {
 				t.Fatal(err)
 			}
 			addr := g.Tiles[0].Id
-			if _, err := client.PlaceTile(ctx, &gridwellv1.PlaceTileRequest{TileId: addr, X: 5, Y: 5, W: 3, H: 2}); err != nil {
+			if _, err := client.MoveTile(ctx, &gridwellv1.MoveTileRequest{TileId: addr, X: 5, Y: 5, W: 3, H: 2}); err != nil {
 				t.Fatal(err)
 			}
 
