@@ -134,9 +134,30 @@ func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
 		t.Fatalf("Move on no row = %v, want ErrNotFound", err)
 	}
 	for _, rec := range trace.Default().Snapshot() {
-		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "Move error:") {
+		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "Move error:") && rec.KV["keys"] == "plug1:t/999999" {
 			return
 		}
 	}
-	t.Error("a refused plugin-row write left no record")
+	t.Error("a refused plugin-row write left no record naming its row")
+}
+
+// A plugin-row write that lands where the row already is says so, naming the
+// row, so a dump tells which write was a no-op.
+func TestAnUnchangedPluginRowWriteNamesItsRow(t *testing.T) {
+	_, d := openExt(t)
+	gid, err := d.GridOf("inbox")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := d.Mint(gid, &pluginv1.Entry{Key: "same", Kind: "text", Label: "same"}, 0, 2, 2, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Move(id, 2, 2, 1, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	rec, ok := find(trace.Default().Snapshot(), "Move unchanged")
+	if want := "plug1:t/" + strconv.FormatInt(id, 10); !ok || rec.KV["keys"] != want {
+		t.Errorf("unchanged record = %+v, want keys %s", rec, want)
+	}
 }

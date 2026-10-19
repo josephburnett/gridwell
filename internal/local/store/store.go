@@ -373,11 +373,11 @@ func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.T
 	var events []*gridwellv1.Event
 	err := s.withTx(ctx, func(tx *sql.Tx) error { return fn(tx, &events) })
 	if errors.Is(err, errUnchanged) {
-		trace.Emit("store", "write", verb+" unchanged", nil)
+		trace.Emit("store", "write", verb+" unchanged", touched(events, rows))
 		return nil
 	}
 	if err != nil {
-		trace.Emit("store", "write", verb+" error: "+err.Error(), nil)
+		trace.Emit("store", "write", verb+" error: "+err.Error(), touched(events, rows))
 		return err
 	}
 	trace.Emit("store", "write", verb, touched(events, rows))
@@ -459,8 +459,9 @@ func rowImage(ctx context.Context, tx *sql.Tx, table string, id int64) (string, 
 	return b.String(), rows.Err()
 }
 
-// touched names the entities a mutation changed, and for a single-tile write
-// its kind and the version it left behind.
+// touched names the entities a mutation changed, or was asked to change when
+// it rolled back, and for a single-tile write its kind and the version it
+// left behind.
 func touched(events []*gridwellv1.Event, rows []string) map[string]string {
 	if len(events) == 0 && len(rows) == 0 {
 		return nil
