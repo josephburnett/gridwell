@@ -570,8 +570,9 @@ and answers the path and the count. A dump is a reading: it clears nothing.
 
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
 gesture makes, and both APIs' interceptors emit a start and an end record
-carrying it and `kv.id`, the tile or grid the request names (a stream's
-rides the end record), with the duration and, on a failure, the code. What emits: every
+carrying it and `kv.id`, the tile or grid the request names (`rpc.EntityOf`,
+one spelling for both; a stream's entry record waits for the request it
+sends), with the duration and, on a failure, the code. What emits: every
 store write (one record at `withMutation`, the transaction every mutation runs
 in), every publish, delivery and coalesce in `eventhub`, the plugin
 supervisor's spawns and liveness transitions, each dial and connection health

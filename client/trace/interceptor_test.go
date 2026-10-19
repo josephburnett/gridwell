@@ -84,8 +84,8 @@ func TestTheEndRecordCarriesTheDurationAndTheCode(t *testing.T) {
 	var ms int64
 	i := interceptor{c: c, now: tick(&ms)}
 
-	i.span("k3f9x2a", "/gridwell.v1.Gridwell/SetTile")(nil)
-	i.span("m2p8z1b", "/gridwell.v1.Gridwell/WriteContent")(
+	i.span("k3f9x2a", "/gridwell.v1.Gridwell/SetTile", nil).end(nil)
+	i.span("m2p8z1b", "/gridwell.v1.Gridwell/WriteContent", nil).end(
 		connect.NewError(connect.CodeNotFound, errors.New("no such tile")))
 
 	recs := decode(t, mustBatch(t, c))
@@ -133,6 +133,8 @@ func (f *fakeStream) Receive(any) error {
 
 func (f *fakeStream) CloseResponse() error { return f.closeErr }
 
+func (f *fakeStream) Send(any) error { return nil }
+
 // A stream's verdict arrives on Receive, not on CloseResponse, so a span that
 // reads only the close records a refused ReadContent as "ok".
 func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
@@ -143,7 +145,7 @@ func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
 
 	refused := &tracedConn{
 		StreamingClientConn: &fakeStream{recv: []error{verdict, verdict}},
-		done:                i.span("k3f9x2a", "/gridwell.v1.Gridwell/ReadContent"),
+		s:                   i.span("k3f9x2a", "/gridwell.v1.Gridwell/ReadContent", nil),
 	}
 	_ = refused.Receive(nil)
 	_ = refused.Receive(nil)
@@ -151,7 +153,7 @@ func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
 
 	kept := &tracedConn{
 		StreamingClientConn: &fakeStream{recv: []error{nil, io.EOF}},
-		done:                i.span("m2p8z1b", "/gridwell.v1.Gridwell/ReadContent"),
+		s:                   i.span("m2p8z1b", "/gridwell.v1.Gridwell/ReadContent", nil),
 	}
 	_ = kept.Receive(nil)
 	_ = kept.Receive(nil)
@@ -159,7 +161,7 @@ func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
 
 	closed := &tracedConn{
 		StreamingClientConn: &fakeStream{recv: []error{io.EOF}, closeErr: errors.New("reset")},
-		done:                i.span("p4q7r2c", "/gridwell.v1.Gridwell/Subscribe"),
+		s:                   i.span("p4q7r2c", "/gridwell.v1.Gridwell/Subscribe", nil),
 	}
 	_ = closed.Receive(nil)
 	_ = closed.CloseResponse()
@@ -176,5 +178,33 @@ func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
 	}
 	if !strings.HasPrefix(recs[5].Msg, "Subscribe error: ") {
 		t.Errorf("with no Receive error the close's is the span's; it reads %q", recs[5].Msg)
+	}
+}
+
+// Both halves name the entity a call is about under kv.id, spelled by the one
+// rpc.EntityOf: a unary call from its request, a stream from the request it
+// sends, the entry record waiting for it.
+func TestTheSpanNamesTheEntityTheRequestIsAbout(t *testing.T) {
+	c := New(64, "cid7abc")
+	var ms int64
+	i := interceptor{c: c, now: tick(&ms)}
+
+	i.span("k3f9x2a", "/gridwell.v1.Gridwell/GetGrid", &pb.GetGridRequest{GridId: "a/g1"}).end(nil)
+	streamed := &tracedConn{
+		StreamingClientConn: &fakeStream{recv: []error{io.EOF}},
+		s:                   i.span("m2p8z1b", "/gridwell.v1.Gridwell/ReadContent", nil),
+	}
+	_ = streamed.Send(&pb.ReadContentRequest{TileId: "a/t1"})
+	_ = streamed.Receive(nil)
+	_ = streamed.CloseResponse()
+
+	recs := decode(t, mustBatch(t, c))
+	if len(recs) != 4 {
+		t.Fatalf("%d records, want two spans:\n%v", len(recs), recs)
+	}
+	for n, want := range []string{"a/g1", "a/g1", "a/t1", "a/t1"} {
+		if got := recs[n].KV["id"]; got != want {
+			t.Errorf("record %d (%s) names %q, want %q", n, recs[n].Msg, got, want)
+		}
 	}
 }

@@ -5,7 +5,7 @@ package server
 // error code are already spelled, and both call the one rpcSpan. kv["req"] is
 // the client's own request id off tracewire.RequestHeader: it is what joins a
 // gesture to the calls it caused, and it is empty when nobody sent one.
-// kv["id"] is the entity the request is about; see entityOf.
+// kv["id"] is the entity the request is about; see rpc.EntityOf.
 
 import (
 	"context"
@@ -17,9 +17,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -46,7 +45,7 @@ func rpcSpan(reqID, procedure string, req any) *span {
 // emits the entry record on the first message.
 func (s *span) saw(msg any) {
 	if s.id == "" {
-		s.id = entityOf(msg)
+		s.id = rpc.EntityOf(msg)
 	}
 	s.open()
 }
@@ -78,28 +77,6 @@ func (s *span) kv() map[string]string {
 		kv["id"] = s.id
 	}
 	return kv
-}
-
-// entityOf is a request's primary entity: its first string field named *_id
-// that is set, in declaration order. Every request spells its tile or grid
-// that way, so a verb the service gains is covered with no table to grow.
-func entityOf(msg any) string {
-	m, ok := msg.(proto.Message)
-	if !ok {
-		return ""
-	}
-	r := m.ProtoReflect()
-	fields := r.Descriptor().Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		if fd.Kind() != protoreflect.StringKind || fd.IsList() || !strings.HasSuffix(string(fd.Name()), "_id") {
-			continue
-		}
-		if v := r.Get(fd).String(); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // traceInterceptor traces the web API. Streaming verbs get the same

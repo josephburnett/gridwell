@@ -240,27 +240,6 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 	}
 }
 
-// A request names its entity by its first id field set: SetFraming's door
-// tile, or the root grid when there is none.
-func TestTheEntityIsTheFirstIDFieldSet(t *testing.T) {
-	cases := []struct {
-		req  any
-		want string
-	}{
-		{&pb.SetFramingRequest{TileId: "a/t1", RootGridId: "a/g1"}, "a/t1"},
-		{&pb.SetFramingRequest{RootGridId: "a/g1"}, "a/g1"},
-		{&pb.MoveTileRequest{TileId: "a/t1", GridId: "a/g1"}, "a/t1"},
-		{&pb.CreateTileRequest{GridId: "a/g1"}, "a/g1"},
-		{&pb.SubscribeRequest{}, ""},
-		{"not a message", ""},
-	}
-	for _, c := range cases {
-		if got := entityOf(c.req); got != c.want {
-			t.Errorf("entityOf(%T %v) = %q, want %q", c.req, c.req, got, c.want)
-		}
-	}
-}
-
 // The client's half of the clock: the batch client/trace builds, posted under
 // the header it names, lands at the moment the client emitted each record on
 // the node's clock, however slow the client's clock and however long the

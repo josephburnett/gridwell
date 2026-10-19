@@ -79,3 +79,21 @@ test("the id on the client's records is the session the node files its view unde
     .toBeGreaterThan(0);
   expect(cid).toMatch(/^[a-z][a-z0-9]{6}$/);
 });
+
+test('both halves of an rpc span name the entity the request is about', async ({ gw, home, window }) => {
+  await gw.enterPlugin('home');
+  await gw.waitIdle();
+  const token = await loginToken(gw.origin, homePassword(home));
+  const { cid, lines } = await dumpNow(window, gw.origin, token);
+  const mine = lines.filter(
+    (r) => r.origin === 'client' && r.cid === cid && r.kind === 'rpc' && r.msg.startsWith('GetGrid start'),
+  );
+  expect(mine.length, 'the client read a grid').toBeGreaterThan(0);
+  for (const c of mine) {
+    expect(c.kv?.id, `the client's span names its grid: ${JSON.stringify(c)}`).toBeTruthy();
+    const node = lines.find(
+      (r) => r.origin === 'node' && r.kind === 'rpc' && r.kv?.req === c.kv?.req && r.msg.startsWith('GetGrid start'),
+    );
+    if (node) expect(node.kv?.id, 'one spelling on both sides').toBe(c.kv?.id);
+  }
+});
