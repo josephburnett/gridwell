@@ -431,11 +431,36 @@ func buttonName(b int) string {
 	return "button " + strconv.Itoa(b)
 }
 
-// Drop is a committed release, naming the pane the gesture was made in and
-// the grid it landed on. The ghost's per-move preview records nothing.
-func Drop(v dragdrop.DropAction, paneID, tileID, gridID string) Event {
-	return Event{Src: "drag", Kind: "drop", Msg: dropName(v),
-		KV: kv("pane", paneID, "tile", tileID, "grid", gridID)}
+// DropAt is where a committed release was made and landed: the pane the
+// gesture was made in, the grabbed tile, the grid and cell it landed on (Cell
+// says there is one), how many tiles it carried, and why a rejection was one
+// (dragdrop.WhyRejected).
+type DropAt struct {
+	Pane, Tile, Grid string
+	N                int
+	X, Y             int64
+	Cell             bool
+	Why              string
+}
+
+// Drop is a committed release. The ghost's per-move preview records nothing.
+func Drop(v dragdrop.DropAction, at DropAt) Event {
+	e := Event{Src: "drag", Kind: "drop", Msg: dropName(v),
+		KV: kv("pane", at.Pane, "tile", at.Tile, "grid", at.Grid, "why", at.Why)}
+	if e.KV == nil {
+		e.KV = map[string]string{}
+	}
+	if at.N > 0 {
+		e.KV["n"] = strconv.Itoa(at.N)
+	}
+	if at.Cell {
+		e.KV["x"] = strconv.FormatInt(at.X, 10)
+		e.KV["y"] = strconv.FormatInt(at.Y, 10)
+	}
+	if len(e.KV) == 0 {
+		e.KV = nil
+	}
+	return e
 }
 
 // dropName is the table over DecideDrop's verdicts.

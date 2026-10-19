@@ -273,33 +273,45 @@ type DropInput struct {
 // a destination the target resolution refused; only the pan and the trashcan,
 // which land in no grid, stand above it.
 func DecideDrop(in DropInput) DropAction {
+	v, _ := decideDrop(in)
+	return v
+}
+
+// WhyRejected is the arm that made DecideDrop answer DropRejected, "" for any
+// other verdict.
+func WhyRejected(in DropInput) string {
+	_, why := decideDrop(in)
+	return why
+}
+
+func decideDrop(in DropInput) (DropAction, string) {
 	switch {
 	case !in.Started && in.SplitNav:
-		return DropNavigateSplit
+		return DropNavigateSplit, ""
 	case !in.Started:
-		return DropNavigate
+		return DropNavigate, ""
 	case in.TileID == "" && !in.IsTemplate:
-		return DropPanEnd
+		return DropPanEnd, ""
 	case in.OverDelete:
-		return DropDelete
+		return DropDelete, ""
 	case !in.HasTarget:
-		return DropRejected
+		return DropRejected, "no target"
 	case in.IsTemplate:
-		return DropCreateTemplate
+		return DropCreateTemplate, ""
 	case in.Forbidden:
-		return DropRejected
+		return DropRejected, "forbidden"
 	case in.TargetRefusesTiles && !(in.SameGrid && !in.Intent.Creates()):
-		return DropRejected
+		return DropRejected, "target refuses tiles"
 	case in.SameCell:
-		return DropRejected
+		return DropRejected, "same cell"
 	case in.Occupied:
-		return DropRejected
+		return DropRejected, "occupied"
 	case in.Intent == IntentCopy:
-		return DropCopy
+		return DropCopy, ""
 	case in.Intent == IntentLink || in.CrossPlugin:
-		return DropLink
+		return DropLink, ""
 	default:
-		return DropMove
+		return DropMove, ""
 	}
 }
 

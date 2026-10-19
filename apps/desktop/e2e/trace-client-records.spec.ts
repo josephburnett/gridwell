@@ -190,3 +190,30 @@ test("a reload sends the page's last records by beacon, its unload among them", 
     )
     .toBe(1);
 });
+
+test('a drop names how many tiles it carried and the cell it landed on', async ({ gw, home, window }) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  await gw.waitIdle();
+  await gw.dragTileCell(cx, cy, cx + 3, cy + 2);
+  await gw.waitIdle();
+
+  const token = await loginToken(gw.origin, homePassword(home));
+  let cid = '';
+  let lines: TraceLine[] = [];
+  await expect
+    .poll(
+      async () => {
+        ({ cid, lines } = await dumpNow(window, gw.origin, token));
+        return of(lines, cid, 'drag', 'drop').filter((r) => r.msg === 'move').length;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+  const move = of(lines, cid, 'drag', 'drop').find((r) => r.msg === 'move')!;
+  expect(move.kv, JSON.stringify(move)).toMatchObject({ n: '1', x: String(cx + 3), y: String(cy + 2) });
+});

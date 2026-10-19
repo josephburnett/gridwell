@@ -378,7 +378,7 @@ func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 	// one decision off d.intent.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
-	switch a.commitVerdict(in, d, t) {
+	switch a.commitVerdict(in, d, t, dropX, dropY) {
 	case dragdrop.DropDelete:
 		// The source pane's + button is a trashcan during any drag.
 		a.runDeleteTile(d, nil)

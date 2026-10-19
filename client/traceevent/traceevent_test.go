@@ -140,7 +140,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropLink)+1)
 	}
 	for v, name := range want {
-		e := Drop(v, "p1", "t7abcde", "g7abcde")
+		e := Drop(v, DropAt{Pane: "p1", Tile: "t7abcde", Grid: "g7abcde"})
 		if e.Src != "drag" || e.Kind != "drop" || e.Msg != name {
 			t.Errorf("verdict %d is %+v, want msg %q", v, e, name)
 		}
@@ -150,7 +150,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 			t.Errorf("verdict %d names %v", v, e.KV)
 		}
 	}
-	if got := Drop(dragdrop.DropLink+1, "", "", "").Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
+	if got := Drop(dragdrop.DropLink+1, DropAt{}).Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
 		t.Errorf("an unnamed verdict reads %q", got)
 	}
 }
@@ -401,5 +401,21 @@ func TestPaneRecords(t *testing.T) {
 func TestUnloadCountsItsBeacons(t *testing.T) {
 	if e := Unload(3); e.Src != "client" || e.Kind != "unload" || e.KV["beacons"] != "3" {
 		t.Errorf("unload is %+v", e)
+	}
+}
+
+// A drop says how many tiles it carried and the cell it landed on, and a
+// rejection says which arm refused it, so a snap-back reads without a replay.
+func TestDropCarriesItsCountCellAndReason(t *testing.T) {
+	e := Drop(dragdrop.DropMove, DropAt{Pane: "p1", Tile: "t1", Grid: "g1", N: 3, X: -2, Y: 5, Cell: true})
+	if e.KV["n"] != "3" || e.KV["x"] != "-2" || e.KV["y"] != "5" || e.KV["why"] != "" {
+		t.Errorf("move is %+v", e)
+	}
+	e = Drop(dragdrop.DropRejected, DropAt{Pane: "p1", Tile: "t1", N: 1, Why: "occupied"})
+	if e.KV["why"] != "occupied" || e.KV["x"] != "" {
+		t.Errorf("a rejection with no cell is %+v", e)
+	}
+	if e := Drop(dragdrop.DropPanEnd, DropAt{}); e.KV != nil {
+		t.Errorf("a pan end names %v", e.KV)
 	}
 }
