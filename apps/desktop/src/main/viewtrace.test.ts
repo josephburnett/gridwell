@@ -24,7 +24,7 @@ import {
 test('every webview record carries the pane under one kv key', () => {
   const recs = [
     viewCreated('p1', 'u1/7', 'https://x.test/'),
-    viewDestroyed('p1', 'u1/7', 'https://x.test/'),
+    viewDestroyed('p1', 'u1/7', 'https://x.test/', ''),
     viewBounds('p1', 'u1/7', { x: 1, y: 2, width: 3, height: 4 }),
     viewShown('p1', 'u1/7', true),
     viewFocused('p1', 'u1/7', true),

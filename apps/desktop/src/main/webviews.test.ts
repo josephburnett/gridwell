@@ -19,6 +19,8 @@ class FakeWC extends EventEmitter {
   loads = 0;
   focused = false;
   closed = 0;
+  // What capturePage answers; null is an empty frame.
+  frame: Buffer | null = null;
   restoreRejects: ((err: Error) => void)[] = [];
   setWindowOpenHandler(): void {}
   setZoomFactor(): void {}
@@ -37,7 +39,8 @@ class FakeWC extends EventEmitter {
     return this.focused;
   }
   capturePage(): Promise<unknown> {
-    return Promise.resolve({ isEmpty: () => true });
+    const frame = this.frame;
+    return Promise.resolve({ isEmpty: () => !frame, toJPEG: () => frame });
   }
   close(): void {
     this.closed++;
@@ -428,5 +431,20 @@ test('a gone record says why the view ended', async () => {
   assert.deepEqual(
     kinds(r, 'gone').map((ev) => [ev.kv?.view, ev.kv?.reason]),
     [['p1', 'oom'], ['p2', 'closed']],
+  );
+});
+
+// A tile whose preview did not update after an ascent is read from whether the
+// close took a frame.
+test('a destroy record says how big a preview the close took', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/7', 'https://x.test/', BOUNDS);
+  r.views[0].webContents!.frame = Buffer.from('jpegbytes');
+  await r.reg.remove('p1');
+  await r.reg.place('p2', 'u1/8', 'https://y.test/', BOUNDS);
+  await r.reg.remove('p2');
+  assert.deepEqual(
+    kinds(r, 'destroy').map((ev) => [ev.kv?.view, ev.kv?.frame]),
+    [['p1', '9'], ['p2', '0']],
   );
 });

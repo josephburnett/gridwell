@@ -501,7 +501,7 @@ export class WebviewRegistry {
         this.reportErr('failed to detach live view — ascend may leave a blank overlay: ' + String(err));
       }
     }
-    this.trace(viewDestroyed(paneId, e.tileId, url));
+    this.trace(viewDestroyed(paneId, e.tileId, url, jpegBase64));
     return { jpegBase64, url, title, history };
   }
 

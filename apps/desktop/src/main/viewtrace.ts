@@ -23,8 +23,10 @@ export function viewCreated(paneId: string, tileId: string, url: string): TraceE
   return view('create', paneId, url, { tile: tileId });
 }
 
-export function viewDestroyed(paneId: string, tileId: string, url: string): TraceEvent {
-  return view('destroy', paneId, url, { tile: tileId });
+// frame is the size of the preview taken as the view closed, '0' when none
+// was, which is when the tile keeps its old preview.
+export function viewDestroyed(paneId: string, tileId: string, url: string, jpegBase64: string): TraceEvent {
+  return view('destroy', paneId, url, { tile: tileId, frame: String(Buffer.byteLength(jpegBase64, 'base64')) });
 }
 
 // A view whose webContents ended outside remove(). reason is Chromium's
