@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { bootEvent, lineEvent, TraceClient, TRACE_FLUSH_BATCH, TRACE_FLUSH_MS, TRACE_MAX_MSG, TRACE_PATH } from './trace';
+import { bootEvent, lineEvent, RENDERER_LOG_CAP, TraceClient, TRACE_FLUSH_BATCH, TRACE_FLUSH_MS, TRACE_MAX_MSG, TRACE_PATH } from './trace';
 
 // The fields of one line, as the node reads them back.
 interface Row {
@@ -420,14 +420,27 @@ test('a batch carries its send clock under tracewire.ClockHeader', async () => {
   );
 });
 
-// Main's own console lines are records; a renderer line main forwards is not.
-// The client records its notices and logs in its own ring, so a forwarded copy
-// would be the same fact a third time.
-test('logLine traces main\'s own lines and not the renderer\'s', () => {
+// Main's own console lines are records, and so are the renderer's up to a cap:
+// a wasm panic kills the client's ring, so main's copy is the only one a dump
+// can hold.
+test('logLine traces main\'s lines and the renderer\'s up to the cap, then says it stopped', () => {
   assert.deepEqual(lineEvent('main', '[gridwell] sidecar failed'), {
     src: 'main',
     kind: 'log',
     msg: '[gridwell] sidecar failed',
   });
-  assert.equal(lineEvent('renderer', '[renderer:error] grid unavailable'), null);
+  assert.deepEqual(lineEvent('renderer', '[renderer:error] panic: boom', 0), {
+    src: 'main',
+    kind: 'renderer-log',
+    msg: '[renderer:error] panic: boom',
+  });
+  assert.equal(lineEvent('renderer', 'x', RENDERER_LOG_CAP - 1)?.msg, 'x');
+  assert.deepEqual(lineEvent('renderer', 'x', RENDERER_LOG_CAP), {
+    src: 'main',
+    kind: 'renderer-log',
+    msg: 'later renderer lines are not traced',
+    kv: { cap: String(RENDERER_LOG_CAP) },
+  });
+  assert.equal(lineEvent('renderer', 'x', RENDERER_LOG_CAP + 1), null);
+  assert.equal(lineEvent('main', 'x', RENDERER_LOG_CAP + 1)?.kind, 'log', 'the cap is the renderer\'s alone');
 });

@@ -271,19 +271,33 @@ export function bootEvent(v: BootVersions): TraceEvent {
 // forwards.
 type LineFrom = 'main' | 'renderer';
 
-// lineEvent is what logLine traces. The sidecar's lines are already in the
-// node's ring through its log capture, and the renderer's in the client's own
-// ring as notice and log records, so only main's own lines are new here.
-export function lineEvent(from: LineFrom, line: string): TraceEvent | null {
-  return from === 'main' ? { src: 'main', kind: 'log', msg: line } : null;
+// How many renderer lines one run traces. A wasm panic or an uncaught
+// exception kills the client's own ring, so these copies are the dump's only
+// word of it; the cap keeps a console loop from washing out the ring.
+export const RENDERER_LOG_CAP = 200;
+
+// lineEvent is what logLine traces. seen is how many renderer lines this run
+// has offered before this one: past the cap one record says the rest are not
+// traced, and then nothing. The sidecar's lines are in the node's ring through
+// its log capture.
+export function lineEvent(from: LineFrom, line: string, seen = 0): TraceEvent | null {
+  if (from === 'main') return { src: 'main', kind: 'log', msg: line };
+  if (seen < RENDERER_LOG_CAP) return { src: 'main', kind: 'renderer-log', msg: line };
+  if (seen === RENDERER_LOG_CAP) {
+    return { src: 'main', kind: 'renderer-log', msg: 'later renderer lines are not traced', kv: { cap: String(RENDERER_LOG_CAP) } };
+  }
+  return null;
 }
 
-// logLine is console output from main: every line to the console, and main's
-// own to the trace.
+let rendererSeen = 0;
+
+// logLine is console output from main: every line to the console, and to the
+// trace as lineEvent decides.
 export function logLine(level: 'log' | 'error', line: string, from: LineFrom = 'main'): void {
   if (level === 'error') console.error(line);
   else console.log(line);
-  const ev = lineEvent(from, line);
+  const ev = lineEvent(from, line, rendererSeen);
+  if (from === 'renderer') rendererSeen++;
   if (ev) trace(ev);
 }
 

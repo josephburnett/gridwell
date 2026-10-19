@@ -73,8 +73,8 @@ export function createRootWindow(origin: string): RootWindow {
   // and Chromium paints its own error page in the window.
   void win.loadURL(origin + '/' + query);
 
-  // Forwarding keeps a failure in the app's log after the notice expires off
-  // the notice row.
+  // Forwarded to main's console and trace, which outlive a renderer that
+  // panicked; see trace.lineEvent.
   win.webContents.on('console-message', (_e, level, message) => {
     const line = rendererLogLine(level, message);
     if (line) logLine('error', line, 'renderer');

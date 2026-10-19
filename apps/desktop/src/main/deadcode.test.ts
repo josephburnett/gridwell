@@ -53,6 +53,8 @@ const ALLOWED: Record<string, string> = {
     'the main process has one ring, module-level like internal/trace.Default; trace(), logLine() and startTrace() are the app\'s ways onto it, so only its own test constructs one',
   'main/trace.ts:lineEvent':
     'the decision of which console lines logLine traces; logLine applies it, so only its test names it',
+  'main/trace.ts:RENDERER_LOG_CAP':
+    'the declared cap on traced renderer lines; lineEvent applies it, so only the test that crosses it names it',
   'main/trace.ts:TRACE_MAX_MSG':
     'the declared message cap, api/tracewire.MaxMsg\'s copy; truncate applies it, so only the test that overruns it names it',
   'main/trace.ts:TRACE_FLUSH_BATCH':
