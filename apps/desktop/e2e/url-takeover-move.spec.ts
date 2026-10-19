@@ -42,7 +42,7 @@ test('a url taken over by a workspace tile moves there and back without a reload
   const urlViews = () =>
     window.evaluate(() => (window as any).__gridwellTest.urlViews() as Record<string, string>);
   const views = async (): Promise<TraceLine[]> =>
-    (await dumpViaAPI(origin, token)).filter((l) => l.origin === 'electron' && l.src === 'webviews');
+    (await dumpViaAPI(origin, token)).filter((l) => l.origin === 'electron' && l.src === 'webview');
 
   await gw.enterPlugin('home');
   const f = await gw.focused();

@@ -39,7 +39,7 @@ test('a live url tile puts the main process into the node trace', async ({
     .poll(
       async () => {
         views = (await dumpViaAPI(origin, token)).filter(
-          (l) => l.origin === 'electron' && l.src === 'webviews',
+          (l) => l.origin === 'electron' && l.src === 'webview',
         );
         return views.length;
       },

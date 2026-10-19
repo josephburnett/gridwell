@@ -31,6 +31,7 @@ import { trace } from './trace';
 import {
   menuChose,
   menuOpened,
+  VIEW,
   viewBounds,
   viewCreated,
   viewDestroyed,
@@ -134,10 +135,10 @@ export class WebviewRegistry {
   }
 
   // Every notice the registry raises carries this one source, which
-  // client/errsurface groups by. Everything here is a failure but the mirror's
+  // client/errsurface groups by; see viewtrace.VIEW. Everything here is a failure but the mirror's
   // recovery, so the severity defaults and only that caller passes one.
   private reportErr(message: string, severity: NoticeSeverity = 'error'): void {
-    this.cb.onError?.({ source: 'electron:webview', message, severity });
+    this.cb.onError?.({ source: `electron:${VIEW}`, message, severity });
   }
 
   // The canvas's own F11 handler cannot see the key while a view has focus.

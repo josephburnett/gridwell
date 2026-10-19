@@ -6,8 +6,9 @@ import type { Bounds } from './ipc';
 import type { TraceEvent } from './trace';
 
 // One src per owner, as the node's emitters do: the dump is read by grepping
-// these.
-const VIEW = 'webviews';
+// these. The registry's notices carry VIEW too, under the origin prefix a
+// record carries as its own field, so a dump and the notice row name it alike.
+export const VIEW = 'webview';
 const WINDOW = 'window';
 const MENU = 'contextmenu';
 

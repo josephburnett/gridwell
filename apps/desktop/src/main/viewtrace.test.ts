@@ -21,7 +21,7 @@ import {
 // Every view record names its pane the same way, because a dump is read one
 // pane at a time and a record that spells the key differently is invisible to
 // that read.
-test('every webviews record carries the pane under one kv key', () => {
+test('every webview record carries the pane under one kv key', () => {
   const recs = [
     viewCreated('p1', 'u1/7', 'https://x.test/'),
     viewDestroyed('p1', 'u1/7', 'https://x.test/'),
@@ -34,7 +34,7 @@ test('every webviews record carries the pane under one kv key', () => {
     viewMoved('p0', 'p1', 'u1/7'),
   ];
   for (const r of recs) {
-    assert.equal(r.src, 'webviews', `${r.kind} claims src ${r.src}`);
+    assert.equal(r.src, 'webview', `${r.kind} claims src ${r.src}`);
     assert.equal(r.kv?.view, 'p1', `${r.kind} does not name the pane`);
   }
 });

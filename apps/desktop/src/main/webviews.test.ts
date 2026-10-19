@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { BaseWindow, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
+import { viewCreated } from './viewtrace';
 import type { ErrorEvent, NavEvent, ViewGoneEvent } from './ipc';
 
 // The registry against a fake view, for the paths the capture harness cannot
@@ -396,4 +397,14 @@ test('a mirror that stops capturing is reported once, and its recovery once', as
       'info: pane p1: mirror capture recovered after 3 failed captures',
     ],
   );
+});
+
+// The registry is one owner, so its notices and its trace records name it with
+// one word: the notice row's source is the record's origin and src.
+test('a registry notice names the owner its trace records do', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/7', 'https://x.test/', BOUNDS);
+  await r.reg.place('p1', 'u1/8', 'https://y.test/', BOUNDS);
+  assert.equal(r.errors.length, 1, `want the replace notice, got ${JSON.stringify(r.errors)}`);
+  assert.equal(r.errors[0].source, `electron:${viewCreated('p1', 'u1/7', '').src}`);
 });
