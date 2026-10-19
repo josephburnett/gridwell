@@ -74,7 +74,7 @@ func TestReapReadsTheSameFieldTheSweepProtects(t *testing.T) {
 	layout := fmt.Sprintf(`{"v":1,"root":{"pane":{"id":"p1","cx":0,"cy":0,"zoom":1,`+
 		`"place":[{"g":%q},{"d":%q,"c":true}]}},"focus":"p1"}`, root, eph.Id)
 	if _, err := cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, []byte(layout)); err != nil {
-		t.Fatalf("SetPaneLayout: %v", err)
+		t.Fatalf("SetWorkspaceLayout: %v", err)
 	}
 
 	destroyWorkspace(t, cl, pt.Id)
@@ -131,7 +131,7 @@ func TestReapFindsEncoderWrittenLinks(t *testing.T) {
 		t.Fatalf("encoder skipped leaves: %v", skipped)
 	}
 	if _, err := cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, data); err != nil {
-		t.Fatalf("SetPaneLayout: %v", err)
+		t.Fatalf("SetWorkspaceLayout: %v", err)
 	}
 
 	destroyWorkspace(t, cl, pt.Id)

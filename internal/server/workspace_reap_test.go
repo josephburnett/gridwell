@@ -66,7 +66,7 @@ func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 		`"b":{"pane":{"id":"p2","anchor":%q,"cx":0.5,"cy":0.5,"zoom":1,"text_focus":%q}}}},"focus":"p1"}`,
 		root, eph.Id, root, txt.Id)
 	if _, err := cl.WriteContent(ctx, pt.Id, rpc.ContentBasis{Version: pt.Version}, []byte(layout)); err != nil {
-		t.Fatalf("SetPaneLayout: %v", err)
+		t.Fatalf("SetWorkspaceLayout: %v", err)
 	}
 
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt.Id})); err != nil {
@@ -104,7 +104,7 @@ func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := cl.WriteContent(ctx, pt2.Id, rpc.ContentBasis{Version: pt2.Version}, []byte(`{"v":999,"root":{}}`)); err != nil {
-		t.Fatalf("SetPaneLayout (future version): %v", err)
+		t.Fatalf("SetWorkspaceLayout (future version): %v", err)
 	}
 	if _, err := cl.DeleteTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.DeleteTileRequest{TileId: pt2.Id})); err != nil {
 		t.Fatalf("DeleteTile(workspace, unreadable blob): %v", err)

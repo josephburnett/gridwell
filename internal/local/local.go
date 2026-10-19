@@ -62,7 +62,7 @@ func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	if unreadable {
-		log.Printf("gridwell: home: scratch sweep skipped: a pane layout blob is unreadable (never guess at workspace ownership)")
+		log.Printf("gridwell: home: scratch sweep skipped: a workspace layout blob is unreadable (never guess at workspace ownership)")
 		return 0, nil
 	}
 	g, err := p.st.GetGrid(ctx, scratch)
@@ -365,7 +365,7 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		}
 		return tileResp(p.st.SetURLState(ctx, req.TileId, req.Preview, t.AltText, t.UrlHistory))
 	case rpc.KindWorkspace:
-		return nil, status.Error(codes.InvalidArgument, "set: pane layout rides WriteContent")
+		return nil, status.Error(codes.InvalidArgument, "set: a workspace layout rides WriteContent")
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "set: unknown kind %q", t.Kind)
 	}

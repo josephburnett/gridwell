@@ -51,10 +51,10 @@ func (s *Store) CreateWorkspace(ctx context.Context, gridID string, x, y, w, h i
 		})
 }
 
-// SetPaneLayout writes a workspace tile's layout blob. A layout is the user's
+// SetWorkspaceLayout writes a workspace tile's layout blob. A layout is the user's
 // bytes, so it claims the version it was read at and bumps it, as a text save
 // does. Identical bytes are a pure no-op, so a re-save cannot churn the DB.
-func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data []byte) (*gridwellv1.Tile, error) {
+func (s *Store) SetWorkspaceLayout(ctx context.Context, tileID, version int64, data []byte) (*gridwellv1.Tile, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("%w: empty layout", ErrInvalidArgument)
 	}
@@ -62,7 +62,7 @@ func (s *Store) SetPaneLayout(ctx context.Context, tileID, version int64, data [
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err := s.withMutation(ctx, "SetPaneLayout", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err := s.withMutation(ctx, "SetWorkspaceLayout", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.claimContentVersion(ctx, tx, tileID, version)
 		if err != nil {
 			return err

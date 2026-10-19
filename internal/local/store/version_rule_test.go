@@ -246,14 +246,14 @@ var versionCases = []versionCase{
 	},
 	{
 		// A workspace tile's layout is the user's bytes, claimed like a text body.
-		name: "SetPaneLayout/workspace arrangement", subject: paneSubject, bumps: true, claims: true,
+		name: "SetWorkspaceLayout/workspace arrangement", subject: paneSubject, bumps: true, claims: true,
 		mutate: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.Id), tile.Version,
+			_, err := s.SetWorkspaceLayout(ctx, mustParseID(t, tile.Id), tile.Version,
 				[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 			return err
 		},
 		staleClaim: func(t *testing.T, s *Store, ctx context.Context, tile *gridwellv1.Tile) error {
-			_, err := s.SetPaneLayout(ctx, mustParseID(t, tile.Id), tile.Version+7,
+			_, err := s.SetWorkspaceLayout(ctx, mustParseID(t, tile.Id), tile.Version+7,
 				[]byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 			return err
 		},
