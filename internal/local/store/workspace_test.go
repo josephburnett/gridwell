@@ -11,7 +11,7 @@ import (
 )
 
 // A fresh workspace tile has no layout blob, meaning never arranged, carries its
-// name, and SetPaneLayout enforces the kind guard and the version claim.
+// name, and SetWorkspaceLayout enforces the kind guard and the version claim.
 func TestCreateWorkspaceDefaultsAndGuards(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
@@ -35,25 +35,25 @@ func TestCreateWorkspaceDefaultsAndGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	txtID, _ := parseID(txt.Id)
-	if _, err := s.SetPaneLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotWorkspace) {
-		t.Errorf("SetPaneLayout on text tile: err = %v, want ErrNotWorkspace", err)
+	if _, err := s.SetWorkspaceLayout(ctx, txtID, txt.Version, []byte(`{"v":1}`)); !errors.Is(err, ErrNotWorkspace) {
+		t.Errorf("SetWorkspaceLayout on text tile: err = %v, want ErrNotWorkspace", err)
 	}
 	// A layout is the user's bytes and claims its version. See
 	// version_rule_test.go.
-	if _, err := s.SetPaneLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); !errors.Is(err, ErrVersionConflict) {
+	if _, err := s.SetWorkspaceLayout(ctx, id, pt.Version+7, []byte(`{"v":1}`)); !errors.Is(err, ErrVersionConflict) {
 		t.Errorf("stale claim: err = %v, want ErrVersionConflict", err)
 	}
 	// An empty layout can never be written (NULL means never-arranged; an
 	// arranged workspace always has at least one pane).
-	if _, err := s.SetPaneLayout(ctx, id, pt.Version, nil); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.SetWorkspaceLayout(ctx, id, pt.Version, nil); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("empty layout: err = %v, want ErrInvalidArgument", err)
 	}
 }
 
-// TestSetPaneLayoutStoresTypedBlob: the layout lands as a content-addressed
+// TestSetWorkspaceLayoutStoresTypedBlob: the layout lands as a content-addressed
 // blob tagged with the codec's media type (self-describing media — read back,
 // never hard-coded at the read site).
-func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
+func TestSetWorkspaceLayoutStoresTypedBlob(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
@@ -64,9 +64,9 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 	}
 	id, _ := parseID(pt.Id)
 	layout := []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)
-	out, err := s.SetPaneLayout(ctx, id, pt.Version, layout)
+	out, err := s.SetWorkspaceLayout(ctx, id, pt.Version, layout)
 	if err != nil {
-		t.Fatalf("SetPaneLayout: %v", err)
+		t.Fatalf("SetWorkspaceLayout: %v", err)
 	}
 	if out.BlobId == 0 {
 		t.Fatal("layout write left blob_id NULL")
@@ -85,7 +85,7 @@ func TestSetPaneLayoutStoresTypedBlob(t *testing.T) {
 }
 
 // Copy shares the layout blob by content address, and an edit to one copy can
-// never touch the other: the first SetPaneLayout moves the editor to a new
+// never touch the other: the first SetWorkspaceLayout moves the editor to a new
 // blob while the sibling keeps the old one.
 func TestWorkspaceCopySharesBlobThenDiverges(t *testing.T) {
 	s := newTestStore(t)
@@ -112,7 +112,7 @@ func TestWorkspaceCopySharesBlobThenDiverges(t *testing.T) {
 	}
 
 	copyID, _ := parseID(cp.Id)
-	edited, err := s.SetPaneLayout(ctx, copyID, cp.Version,
+	edited, err := s.SetWorkspaceLayout(ctx, copyID, cp.Version,
 		[]byte(`{"v":1,"root":{"split":{"dir":"h","ratio":0.5,"a":{"pane":{"id":"p1","zoom":1}},"b":{"pane":{"id":"p2","zoom":1}}}},"focus":"p2"}`))
 	if err != nil {
 		t.Fatal(err)

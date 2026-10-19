@@ -569,13 +569,30 @@ and answers the path and the count. A dump is a reading: it clears nothing.
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
 gesture makes, and both APIs' interceptors emit a start and an end record
 carrying it and `kv.id`, the tile or grid the request names (a stream's
-rides the end record), with the duration and, on a failure, the code. What emits: every
+rides the end record), with the duration and, on a failure, the code; a
+request naming a client session carries it as `kv.session`, and a select its
+`add`, `remove`, `clear`, `recurse` and `all`. The MCP API's tool calls are
+the same pair, verb `mcp/<tool>`, carrying the agent's shell key as
+`kv.shell_key`; a list's every item is an `mcp/item` record (`tool`, `i`, `id`,
+`verdict`), and the end record counts `items` and `refused`. What emits: every
 store write (one record at `withMutation`, the transaction every mutation runs
-in), every publish, delivery and coalesce in `eventhub`, the plugin
+in, naming its rows as `kv.keys` whether it wrote, changed nothing or was
+refused), every publish, delivery and coalesce in `eventhub` (keyed by the
+namespace's own id), and the router's `router/event` as it qualifies each
+event (`key`, `local`, `ns`, one record holding both spellings); the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
-transition, the shell API's refusals, opens and closes, each session's
-view as it arrives (`view/set`), each new union of the grids the clients show
-(`view/union`), and — through
+transition, the shell API's refusals, opens and closes (`shellapi/pty`, with
+`tile`, `session` and `tmux`) and its join of a shell key to the session
+holding it (`shellapi/holder`); each session's view as it arrives
+(`view/set`), its streams opening and closing, going away, expiring after
+`AwayFor` and being forgotten (`view/session`, `state`, `streams`),
+`Subscribe listening` when a stream's header goes out, each new union of the
+grids the clients show (`view/union`, `n` and the whole ids that fit),
+and a namespace refusing its share (`view/refused`); each namespace's
+verdict on an all-clear (`selection/clear`); every request the web API
+refuses before a span could, a page of another build (`webapi/build`) and a
+bad credential, content token, trace batch or shell attach
+(`webapi/refused`, `path` and `status`, never the secret); and — through
 `log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
 subprocess's stderr does not pass through that log, so the spawn hands it a
 writer of its own.

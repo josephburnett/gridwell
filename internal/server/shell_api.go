@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -78,6 +79,7 @@ func (s *Server) shellAPI() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attach, err := shellwire.ParseAttach(r.URL.Query())
 		if err != nil {
+			refusedWeb(shellwire.Path, http.StatusBadRequest, err.Error(), nil)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -95,12 +97,13 @@ func (s *Server) shellAPI() http.Handler {
 		// the handshake, which the client sees as a failed dial rather than a
 		// socket that opens and dies.
 		ns, local, err := s.shellRoute(attach.TileID)
-		kv := map[string]string{"tile": attach.TileID}
+		kv := map[string]string{"tile": attach.TileID, "session": attach.Session}
 		if err != nil {
+			kv["status"] = strconv.Itoa(httpStatusError(w, err))
 			trace.Emit("shellapi", "pty", "refused: "+err.Error(), kv)
-			httpStatusError(w, err)
 			return
 		}
+		kv["tmux"] = s.tracedTmux(ctx, attach.TileID)
 
 		conn, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -166,6 +169,13 @@ func (l *liveShells) newestFirst() []shellAttach {
 // and the older socket closes. ok is false when no open attachment names it;
 // err is a tile read that failed, so a miss it caused is not taken for one.
 func (s *Server) ShellHolder(ctx context.Context, key string) (session string, ok bool, err error) {
+	defer func() {
+		kv := map[string]string{"key": key, "session": session, "held": strconv.FormatBool(ok)}
+		if err != nil {
+			kv["err"] = err.Error()
+		}
+		trace.Emit("shellapi", "holder", "join", kv)
+	}()
 	want := s.homeUUID() + "/" + key
 	rt := newRouter(s)
 	for _, a := range s.shells.newestFirst() {
@@ -182,6 +192,16 @@ func (s *Server) ShellHolder(ctx context.Context, key string) (session string, o
 		}
 	}
 	return "", false, err
+}
+
+// tracedTmux is the tmux an attach names, for its records; a row that does
+// not read is said as such, since the attach goes on to its own verdict.
+func (s *Server) tracedTmux(ctx context.Context, tile string) string {
+	resp, err := newRouter(s).GetTile(ctx, &pb.GetTileRequest{TileId: tile})
+	if err != nil {
+		return "unread: " + err.Error()
+	}
+	return rpc.ShellTmux(resp.GetTile())
 }
 
 // closeVerdict is the one spelling of how an attachment ended, for the record.

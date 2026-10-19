@@ -63,11 +63,11 @@ var writeScopes = map[string]writeScope{
 	// ── Content: the bytes, and the claim that guards them. ────────────
 	"WriteContent/text body": {tile: []string{"version", "content_at", "blob_id", "alt_text"}, mints: true},
 	// A no-op write never mutates, so it may not even stamp updated_at.
-	"WriteContent/text body unchanged":    {},
-	"WriteContent/url address":            {tile: []string{"version", "content_at", "url_string"}},
-	"WriteContent/url address unchanged":  {},
-	"RenameTile/user rename":              {tile: []string{"version", "content_at", "alt_text", "alt_user"}},
-	"SetPaneLayout/workspace arrangement": {tile: []string{"version", "content_at", "blob_id"}, mints: true},
+	"WriteContent/text body unchanged":         {},
+	"WriteContent/url address":                 {tile: []string{"version", "content_at", "url_string"}},
+	"WriteContent/url address unchanged":       {},
+	"RenameTile/user rename":                   {tile: []string{"version", "content_at", "alt_text", "alt_user"}},
+	"SetWorkspaceLayout/workspace arrangement": {tile: []string{"version", "content_at", "blob_id"}, mints: true},
 
 	// ── Captures: what the server observed, on top of the user's row. ──
 	"SetTileAlt/automatic capture": {tile: []string{"alt_text"}},

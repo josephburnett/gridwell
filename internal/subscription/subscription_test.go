@@ -6,6 +6,7 @@ import (
 	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // shown is a view of grids alone, the part the union reads.
@@ -187,5 +188,41 @@ func TestAwaySessionsListedForAwayFor(t *testing.T) {
 	b.Open("a")
 	if got := b.Sessions(); len(got) != 1 || !got[0].Open || !got[0].Away.IsZero() {
 		t.Errorf("open again, sessions = %v, want a open with no away time", got)
+	}
+}
+
+// sessionStates is every view/session record of id, in order, as state:streams.
+func sessionStates(id string) []string {
+	var out []string
+	for _, rec := range trace.Default().Snapshot() {
+		if rec.Src == "view" && rec.Kind == "session" && rec.KV["session"] == id {
+			out = append(out, rec.KV["state"]+":"+rec.KV["streams"])
+		}
+	}
+	return out
+}
+
+// A session's life is in the trace: each stream opening and closing, going
+// away when its last one closes, expiring once a listing leaves it out past
+// AwayFor, and being forgotten when newer idle sessions push it out.
+func TestASessionsLifeIsTraced(t *testing.T) {
+	b, _ := record()
+	clock := time.Unix(100, 0)
+	b.now = func() time.Time { return clock }
+	const id = "trace-life"
+	first := b.Open(id)
+	second := b.Open(id)
+	b.Set(id, shown("p/2"))
+	second()
+	first()
+	clock = clock.Add(AwayFor + time.Second)
+	b.Sessions()
+	b.Sessions()
+	for i := range maxIdle {
+		b.Set("trace-push-"+string(rune('a'+i)), shown("p/9"))
+	}
+	want := []string{"open:1", "open:2", "open:1", "away:0", "expired:0", "forgotten:0"}
+	if got := sessionStates(id); !slices.Equal(got, want) {
+		t.Errorf("records = %v, want %v", got, want)
 	}
 }

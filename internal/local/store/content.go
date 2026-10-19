@@ -41,7 +41,7 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 		}
-		return s.SetPaneLayout(ctx, id, version, data)
+		return s.SetWorkspaceLayout(ctx, id, version, data)
 	default:
 		return nil, fmt.Errorf("%w: a %s tile has no writable content", ErrInvalidArgument, t.Kind)
 	}

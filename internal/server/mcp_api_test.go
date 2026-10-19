@@ -18,6 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
 	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // mcpNode is a real Server behind the real web API, with a home and a
@@ -588,5 +589,42 @@ func TestAnMCPCallIsTracedUnderTheFirstIdItNames(t *testing.T) {
 		if got := tracedID(json.RawMessage(raw)); got != want {
 			t.Errorf("tracedID(%s) = %q, want %q", raw, got, want)
 		}
+	}
+}
+
+// A bulk write's refused item is a verdict in the reply, not an error, so the
+// trace says each item's verdict against the id it named, the end record
+// counts them, and every record of the call names the shell that sent it.
+func TestAnMCPBulkWriteTracesEveryItemsVerdict(t *testing.T) {
+	n := newMCPNode(t)
+	const shell = "k7trace"
+	hdr := bearer(testPassword)
+	hdr[mcpapi.ShellHeader] = shell
+	s, err := n.agent(t, hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := mkText(t, s, n.root, "a")
+	const dead = "nowhere/91"
+	verdicts(t, "rename", items(t, s, "rename",
+		map[string]any{"id": a.ID, "name": "x"}, map[string]any{"id": dead, "name": "y"}),
+		"refused:", "dead link:")
+
+	var got []map[string]string
+	var end map[string]string
+	for _, rec := range trace.Default().Snapshot() {
+		switch {
+		case rec.Src == "mcp" && rec.Kind == "item" && rec.KV["tool"] == "rename" && (rec.KV["id"] == a.ID || rec.KV["id"] == dead):
+			got = append(got, rec.KV)
+		case rec.Src == "router" && rec.Msg == "mcp/rename ok" && rec.KV["id"] == a.ID:
+			end = rec.KV
+		}
+	}
+	if len(got) != 2 || got[0]["i"] != "0" || got[1]["i"] != "1" || got[1]["id"] != dead ||
+		!strings.HasPrefix(got[0]["verdict"], "refused:") || !strings.HasPrefix(got[1]["verdict"], "dead link:") {
+		t.Fatalf("item records = %v, want one per item, in order, each with its verdict", got)
+	}
+	if end == nil || end["items"] != "2" || end["refused"] != "2" || end["shell_key"] != shell {
+		t.Fatalf("the span's end record = %v, want items 2, refused 2 and shell_key %s", end, shell)
 	}
 }

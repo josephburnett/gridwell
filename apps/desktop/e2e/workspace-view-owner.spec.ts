@@ -15,7 +15,7 @@ async function workspaceDepth(window: any): Promise<number> {
 function storeWrites(lines: TraceLine[], verb: (msg: string) => boolean): number {
   return lines.filter((l) => l.src === 'store' && l.kind === 'write' && verb(l.msg)).length;
 }
-const isLayout = (m: string) => m === 'SetPaneLayout';
+const isLayout = (m: string) => m === 'SetWorkspaceLayout';
 const isFraming = (m: string) => m.startsWith('SetFraming');
 
 // The scroll of whichever text overlay is showing, -1 when neither is.

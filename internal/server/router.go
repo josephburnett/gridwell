@@ -3,6 +3,7 @@ package server
 import (
 	"cmp"
 	"context"
+	"errors"
 	"log"
 	"slices"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // router is a namespace.Namespace of qualified ids: every verb resolves one
@@ -606,22 +608,26 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 // to each live far node. A far node's sets are its rows, so one asked over
 // the connection API clears its home and plugins and forwards nothing,
 // which is what keeps a cycle of connections from echoing it. A disabled
-// source is read-only and skipped. Every namespace is tried; the first
-// failure is the answer.
+// source is read-only and skipped. Every namespace is tried, and every
+// refusal is in the answer, since each is a set left uncleared.
 func (rt *router) clearAllSelections(ctx context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
-	var first error
+	var errs []error
 	for _, n := range rt.srv.namespaces() {
-		if n.Transit && rt.farAsked {
-			continue
+		verdict := "ok"
+		switch {
+		case n.Transit && rt.farAsked:
+			verdict = "skipped: asked by a far node"
+		case !n.Transit && rt.srv.pluginReg.DisabledReason(n.UUID) != "":
+			verdict = "skipped: disabled"
+		default:
+			if _, err := n.NS.SetSelection(ctx, req); err != nil {
+				errs = append(errs, err)
+				verdict = "refused: " + err.Error()
+			}
 		}
-		if !n.Transit && rt.srv.pluginReg.DisabledReason(n.UUID) != "" {
-			continue
-		}
-		if _, err := n.NS.SetSelection(ctx, req); err != nil && first == nil {
-			first = err
-		}
+		trace.Emit("selection", "clear", verdict, map[string]string{"ns": n.UUID})
 	}
-	return &pb.SetSelectionResponse{}, first
+	return &pb.SetSelectionResponse{}, errors.Join(errs...)
 }
 
 // SetSelection routes a selection write to the namespace owning the grid,
@@ -717,6 +723,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	if err := send(nil); err != nil {
 		return err
 	}
+	trace.Emit("router", "rpc", "Subscribe listening", map[string]string{"session": req.GetSession()})
 	for _, ns := range disabled {
 		if err := send(rpc.DisabledEvent(ns)); err != nil {
 			return err
@@ -785,8 +792,13 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 			}
 			return namespace.Follow(ctx, ns, &pb.SubscribeRequest{},
 				func(ev *pb.Event) error {
+					q := qualifyEvent(uuid, transit, ev)
+					// The hubs below key by the namespace's own id; this is
+					// the one record holding both keys.
+					trace.Emit("router", "event", "qualify", map[string]string{
+						"key": rpc.EventKey(q), "local": rpc.EventKey(ev), "ns": uuid})
 					select {
-					case events <- qualifyEvent(uuid, transit, ev):
+					case events <- q:
 						return nil
 					case <-ctx.Done():
 						return ctx.Err()

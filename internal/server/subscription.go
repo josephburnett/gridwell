@@ -6,12 +6,14 @@ package server
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/subscription"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -57,7 +59,7 @@ func viewLine(v *pb.SetViewRequest) string {
 // included, since a share that emptied must stop being watched. A grid whose
 // namespace this node does not declare is nobody's to watch.
 func (s *Server) spreadSubscription(union []string) {
-	trace.Emit("view", "union", strings.Join(union, " "), nil)
+	traceUnion(union)
 	type owner struct {
 		uuid    string
 		transit bool
@@ -75,4 +77,23 @@ func (s *Server) spreadSubscription(union []string) {
 			trace.Emit("view", "refused", err.Error(), map[string]string{"ns": n.UUID})
 		}
 	}
+}
+
+// traceUnion records a union: its size, and as many whole ids as fit one
+// record's msg (tracewire.MaxMsg), so a cut is said rather than silent.
+func traceUnion(union []string) {
+	var msg strings.Builder
+	listed := 0
+	for _, id := range union {
+		if msg.Len()+1+len(id) > tracewire.MaxMsg {
+			break
+		}
+		if listed > 0 {
+			msg.WriteByte(' ')
+		}
+		msg.WriteString(id)
+		listed++
+	}
+	trace.Emit("view", "union", msg.String(), map[string]string{
+		"n": strconv.Itoa(len(union)), "listed": strconv.Itoa(listed)})
 }

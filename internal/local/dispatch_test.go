@@ -187,7 +187,7 @@ func TestWorkspaceDispatch(t *testing.T) {
 
 	if _, err := p.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: pt.Id, Version: pt.Version,
 		Tile: &gridwellv1.Tile{Kind: "workspace"}}); err == nil {
-		t.Error("SetTile on a workspace tile must be refused (layout rides SetPaneLayout)")
+		t.Error("SetTile on a workspace tile must be refused (layout rides SetWorkspaceLayout)")
 	}
 
 	if _, err := p.Store().WriteContent(ctx, pt.Id, pt.Version,
