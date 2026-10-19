@@ -35,7 +35,8 @@ func (f *scripted) Recv() (*pb.Event, bool, error) {
 func (f *scripted) Close() error { return nil }
 
 // The loop's record of a scripted run: every open says whether it owes the
-// resync, and comes before the events of its stream.
+// resync, and comes before the events of its stream; every stream that
+// opened says how it ended, a clean end included.
 func TestEventsOpensBeforeEventsAndResyncsAfterEveryGap(t *testing.T) {
 	broke := errors.New("network error")
 	plan := []script{
@@ -67,14 +68,21 @@ func TestEventsOpensBeforeEventsAndResyncsAfterEveryGap(t *testing.T) {
 				log = append(log, "open")
 			}
 		},
+		Ended: func(err error) {
+			if err != nil {
+				log = append(log, "end:"+err.Error())
+			} else {
+				log = append(log, "end:clean")
+			}
+		},
 		Broken: func() { log = append(log, "broken") },
 		Event:  func(*pb.Event) { log = append(log, "event") },
 	}.Run(ctx)
 	want := []string{
-		"open", "event", "broken",
+		"open", "event", "end:network error", "broken",
 		"broken",
-		"open+resync", "event", "event",
-		"open+resync",
+		"open+resync", "event", "event", "end:clean",
+		"open+resync", "end:clean",
 		"broken",
 	}
 	if !slices.Equal(log, want) {

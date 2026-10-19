@@ -70,6 +70,7 @@ func TestAChangeDuringAStreamBreakReachesTheClientWithoutAnotherEvent(t *testing
 			}
 			opened <- resync
 		},
+		Ended:  func(error) {},
 		Broken: func() { broken <- struct{}{} },
 		Event:  func(*gridwellv1.Event) {},
 	}.Run(loopCtx)

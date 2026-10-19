@@ -134,6 +134,35 @@ func Framing(gridID, tileID string, cx, cy, zoom float64) Event {
 
 func f(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
 
+// EventsOpen is the event stream opening; resync says a gap came before it,
+// so every held grid is read again (EventsResync).
+func EventsOpen(resync bool) Event {
+	msg := "stream opens"
+	if resync {
+		msg = "stream reopens after a gap"
+	}
+	return Event{Src: "events", Kind: "open", Msg: msg, KV: kv("resync", strconv.FormatBool(resync))}
+}
+
+// EventsEnd is an open stream ending: reason "clean" when the node closed it,
+// "broken" with the error otherwise.
+func EventsEnd(err error) Event {
+	if err == nil {
+		return Event{Src: "events", Kind: "end", Msg: "the node ended the stream", KV: kv("reason", "clean")}
+	}
+	return Event{Src: "events", Kind: "end", Msg: err.Error(), KV: kv("reason", "broken")}
+}
+
+// EventsResync is the re-read a gap owes: n grids asked again from source,
+// "every" when the gap was the whole stream's.
+func EventsResync(source string, n int) Event {
+	if source == "" {
+		source = "every"
+	}
+	return Event{Src: "events", Kind: "resync", Msg: strconv.Itoa(n) + " grids re-read",
+		KV: kv("source", source, "n", strconv.Itoa(n))}
+}
+
 // EventRecv and EventApplied bracket one Subscribe event: what arrived, and
 // whether folding it in changed anything on screen.
 func EventRecv(ev *pb.Event) Event {

@@ -1,6 +1,7 @@
 package traceevent
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 
@@ -339,5 +340,28 @@ func TestSelectNamesTheGridAndTheCount(t *testing.T) {
 	if s.Src != "gesture" || s.Kind != "select" || s.Msg != "band" ||
 		s.KV["pane"] != "p2" || s.KV["grid"] != "n/1" || s.KV["n"] != "3" {
 		t.Errorf("a select reads %+v", s)
+	}
+}
+
+// A burst of GetGrid after a gap reads as the resync it is: the stream's open
+// says it owes one, its end says why, and the resync counts the grids.
+func TestEventStreamLifecycleRecords(t *testing.T) {
+	if e := EventsOpen(false); e.Src != "events" || e.Kind != "open" || e.KV["resync"] != "false" {
+		t.Errorf("first open is %+v", e)
+	}
+	if e := EventsOpen(true); e.KV["resync"] != "true" {
+		t.Errorf("reopen is %+v", e)
+	}
+	if e := EventsEnd(nil); e.Kind != "end" || e.KV["reason"] != "clean" {
+		t.Errorf("clean end is %+v", e)
+	}
+	if e := EventsEnd(errors.New("network error")); e.KV["reason"] != "broken" || e.Msg != "network error" {
+		t.Errorf("broken end is %+v", e)
+	}
+	if e := EventsResync("", 4); e.Kind != "resync" || e.KV["source"] != "every" || e.KV["n"] != "4" {
+		t.Errorf("whole-stream resync is %+v", e)
+	}
+	if e := EventsResync("pfs0001", 0); e.KV["source"] != "pfs0001" || e.KV["n"] != "0" {
+		t.Errorf("one source's resync is %+v", e)
 	}
 }

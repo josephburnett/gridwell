@@ -1024,12 +1024,14 @@ func (a *App) startSSE() {
 			return s, nil
 		},
 		Opened: func(resync bool) {
+			a.emit(traceevent.EventsOpen(resync))
 			a.resolveErr("events")
 			if resync {
 				// The gap swallowed events without saying whose, so nothing scopes.
 				a.retryKick(true, cache.EverySource)
 			}
 		},
+		Ended: func(err error) { a.emit(traceevent.EventsEnd(err)) },
 		// Until this reconnects, everything on screen is silently going stale.
 		Broken: func() { a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying") },
 		Event: func(ev *gridwellv1.Event) {
@@ -1106,7 +1108,8 @@ func (a *App) retryKick(resync bool, source string) {
 		// Failure latches are gap state, asked again by name. The menu set's
 		// predicate is cache.Reaches: a connection's flap covers the nodes behind it.
 		reaches := func(ns string) bool { return cache.Reaches(ns, source) }
-		a.reask(a.fetch.grids.ClearIf(served), a.fetch.tiles.ClearIf(served),
+		latched := a.fetch.grids.ClearIf(served)
+		a.reask(latched, a.fetch.tiles.ClearIf(served),
 			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served),
 			a.fetch.menus.ClearIf(reaches))
 		// A request that dies with its link never returns, and its claim would block
@@ -1117,7 +1120,9 @@ func (a *App) retryKick(resync bool, source string) {
 		a.fetch.contents.CancelIf(served)
 		a.fetch.previews.CancelIf(served)
 		a.fetch.menus.CancelIf(reaches)
-		for _, gid := range append(stuck, a.c.ResyncSet(source)...) {
+		held := append(stuck, a.c.ResyncSet(source)...)
+		a.emit(traceevent.EventsResync(source, len(latched)+len(held)))
+		for _, gid := range held {
 			a.fetchGrid(gid)
 		}
 		a.refetchMenus()

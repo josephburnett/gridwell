@@ -21,6 +21,9 @@ type Events struct {
 	// Opened runs once per stream that opens, before its first event; resync
 	// is Reconnect.Subscribed.
 	Opened func(resync bool)
+	// Ended runs once per stream that opened, when it ends: err is nil for a
+	// clean end, which is a gap like a break.
+	Ended func(err error)
 	// Broken runs when a subscribe or an open stream fails.
 	Broken func()
 	Event  func(*pb.Event)
@@ -40,10 +43,12 @@ func (e Events) Run(ctx context.Context) {
 		for {
 			ev, ok, err := stream.Recv()
 			if err != nil {
+				e.Ended(err)
 				e.Broken()
 				break
 			}
 			if !ok {
+				e.Ended(nil)
 				break
 			}
 			e.Event(ev)
