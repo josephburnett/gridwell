@@ -244,40 +244,48 @@ func OutboxDrain(n int) Event {
 	return Event{Src: "outbox", Kind: "drain", Msg: strconv.Itoa(n) + " owed"}
 }
 
+// SrcURL and SrcShell are the live surfaces' src, on their state records
+// and their console lines alike.
+const (
+	SrcURL   = "url"
+	SrcShell = "shell"
+)
+
 // URLOpen, URLClose, ShellOpen, ShellClose and ShellExit are the live
-// surfaces' state changes: a descent that went live, and what ended it.
-func URLOpen(paneID, tileID string) Event {
-	return Event{Src: "url", Kind: "open", Msg: "live view opens", KV: kv("pane", paneID, "tile", tileID)}
+// surfaces' state changes: a descent that went live, and what ended it. A
+// view opens on an address, which the record carries.
+func URLOpen(paneID, tileID, address string) Event {
+	return Event{Src: SrcURL, Kind: "open", Msg: "live view opens", KV: kv("pane", paneID, "tile", tileID, "url", address)}
 }
 
 func URLClose(paneID, tileID string, freeze bool) Event {
-	return Event{Src: "url", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcURL, Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // URLReload is a live view loading its page again because its source changed
 // it.
 func URLReload(paneID, tileID string) Event {
-	return Event{Src: "url", Kind: "reload", Msg: "live view reloads its changed page", KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcURL, Kind: "reload", Msg: "live view reloads its changed page", KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // URLMove is a live view handed to another pane with its page.
 func URLMove(fromPaneID, toPaneID, tileID string) Event {
-	return Event{Src: "url", Kind: "move", Msg: "live view moves",
+	return Event{Src: SrcURL, Kind: "move", Msg: "live view moves",
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
 }
 
 // ShellMove is a live terminal handed to another pane with its socket.
 func ShellMove(fromPaneID, toPaneID, tileID string) Event {
-	return Event{Src: "shell", Kind: "move", Msg: "live terminal moves",
+	return Event{Src: SrcShell, Kind: "move", Msg: "live terminal moves",
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
 }
 
 func ShellOpen(paneID, tileID string) Event {
-	return Event{Src: "shell", Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcShell, Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
 }
 
 func ShellClose(paneID, tileID string, freeze bool) Event {
-	return Event{Src: "shell", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcShell, Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // ShellExit is the far end going away, which is not this client closing the
@@ -286,7 +294,7 @@ func ShellExit(paneID, tileID, message string, tmuxGone bool) Event {
 	if tmuxGone {
 		message += " (tmux gone)"
 	}
-	return Event{Src: "shell", Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcShell, Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // closeMsg: a frozen surface keeps its preview and its address, a closed one is

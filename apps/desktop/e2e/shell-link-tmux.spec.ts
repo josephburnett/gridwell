@@ -28,7 +28,7 @@ test('a link to a copy takes over the tmux of its source, and the source takes i
   // tmux lives; a takeover closes instead.
   const exits: string[] = [];
   window.on('console', (msg) => {
-    if (msg.text().startsWith('[shellstream] exit ')) exits.push(msg.text());
+    if (msg.text().startsWith('[shell] exit ')) exits.push(msg.text());
   });
   const shellViews = (): Promise<Record<string, string>> =>
     window.evaluate(() => (window as any).__gridwellTest.shellViews());

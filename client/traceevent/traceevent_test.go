@@ -28,7 +28,7 @@ func TestNoticeCarriesItsSourceAndSeverity(t *testing.T) {
 // The console tags are written with brackets, which are punctuation for a
 // console line and noise in a record's src field.
 func TestLogSrcIsTheTagWithoutItsBrackets(t *testing.T) {
-	if got := Log("[shellstream]", "opened").Src; got != "shellstream" {
+	if got := Log("["+SrcShell+"]", "opened").Src; got != SrcShell {
 		t.Errorf("log src is %q, want the bare tag", got)
 	}
 }
@@ -266,7 +266,7 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	if got := ShellExit("p1", "t7abcde", "the shell exited", true).Msg; got != "the shell exited (tmux gone)" {
 		t.Errorf("a tmux-gone exit reads %q", got)
 	}
-	if e := URLOpen("p1", "t7abcde"); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
+	if e := URLOpen("p1", "t7abcde", ""); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
 		t.Errorf("a url open is %+v", e)
 	}
 	if e := URLMove("p1", "w1:p1", "t7abcde"); e.Src != "url" || e.Kind != "move" ||
@@ -437,5 +437,17 @@ func TestClearAllIsNotOneGridsSelect(t *testing.T) {
 	e := SelectClearAll("p1")
 	if e.Src != "gesture" || e.Kind != "select" || e.Msg != "clear all" || e.KV["grid"] != "" || e.KV["pane"] != "p1" {
 		t.Errorf("clear all is %+v", e)
+	}
+}
+
+// A live view's console lines and its state records share one src, and its
+// open names the address it opened on.
+func TestURLOpenCarriesItsAddress(t *testing.T) {
+	e := URLOpen("p1", "t7abcde", "https://example.com/a")
+	if e.Src != SrcURL || e.KV["url"] != "https://example.com/a" || e.KV["pane"] != "p1" {
+		t.Errorf("url open is %+v", e)
+	}
+	if e := ShellOpen("p1", "t7abcde"); e.Src != SrcShell {
+		t.Errorf("shell open is under %q", e.Src)
 	}
 }
