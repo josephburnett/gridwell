@@ -8,12 +8,14 @@ package subscription
 import (
 	"slices"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // maxIdle bounds the sessions kept with no stream open. A view is sent and a
@@ -38,6 +40,7 @@ type session struct {
 	view    *pb.SetViewRequest
 	changed time.Time
 	away    time.Time // when its last stream closed; zero while one is open or before any
+	expired bool      // its expiry is recorded
 }
 
 // Session is one session's view as the node holds it: read-only, and its
@@ -69,16 +72,21 @@ func (b *Book) Open(id string) (close func()) {
 	defer b.mu.Unlock()
 	s := b.at(id)
 	s.streams++
-	s.away = time.Time{}
+	s.away, s.expired = time.Time{}, false
 	b.idle = slices.DeleteFunc(b.idle, func(x string) bool { return x == id })
+	traced(id, s, "open")
 	b.recount()
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			b.mu.Lock()
 			defer b.mu.Unlock()
+			state := "open"
 			if s.streams--; s.streams == 0 {
-				s.away = b.now()
+				s.away, state = b.now(), "away"
+			}
+			traced(id, s, state)
+			if s.streams == 0 {
 				b.rest(id)
 			}
 			b.recount()
@@ -115,6 +123,10 @@ func (b *Book) Sessions() []Session {
 	var out []Session
 	for id, s := range b.sessions {
 		open := s.streams > 0
+		if !open && !s.away.IsZero() && now.Sub(s.away) > AwayFor && !s.expired {
+			s.expired = true
+			traced(id, s, "expired")
+		}
 		if s.view == nil || !open && (s.away.IsZero() || now.Sub(s.away) > AwayFor) {
 			continue
 		}
@@ -138,9 +150,20 @@ func (b *Book) at(id string) *session {
 func (b *Book) rest(id string) {
 	b.idle = append(b.idle, id)
 	if len(b.idle) > maxIdle {
+		if gone, ok := b.sessions[b.idle[0]]; ok {
+			traced(b.idle[0], gone, "forgotten")
+		}
 		delete(b.sessions, b.idle[0])
 		b.idle = b.idle[1:]
 	}
+}
+
+// traced is a session's state change for the trace. An expiry is recorded
+// when a listing first leaves the session out, since nothing runs on a clock
+// to notice it sooner.
+func traced(id string, s *session, state string) {
+	trace.Emit("view", "session", state, map[string]string{
+		"session": id, "streams": strconv.Itoa(s.streams), "state": state})
 }
 
 func (b *Book) recount() {

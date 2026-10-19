@@ -18,6 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/api/panelayout"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // router is a namespace.Namespace of qualified ids: every verb resolves one
@@ -717,6 +718,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	if err := send(nil); err != nil {
 		return err
 	}
+	trace.Emit("router", "rpc", "Subscribe listening", map[string]string{"session": req.GetSession()})
 	for _, ns := range disabled {
 		if err := send(rpc.DisabledEvent(ns)); err != nil {
 			return err

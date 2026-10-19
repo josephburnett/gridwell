@@ -6,7 +6,9 @@ package server_test
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,12 +18,14 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // subscriptionSink is a namespace that records the last share it was handed.
@@ -192,4 +196,66 @@ func TestSessionsHoldEachViewOpenThenAway(t *testing.T) {
 	if len(held) != 1 || held[0].ID != got.ID || held[0].Open || held[0].Away.IsZero() || !proto.Equal(held[0].View, want) {
 		t.Errorf("after the stream closed, sessions = %v, want %s away with its view", held, got.ID)
 	}
+}
+
+// refusingSink is a namespace that refuses every share it is handed.
+type refusingSink struct{ subscriptionSink }
+
+func (s *refusingSink) SetView(context.Context, *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
+	return nil, errors.New("this source cannot watch")
+}
+
+// awaitRecord waits for a record ok accepts, since a stream's records are
+// written as the node gets to them.
+func awaitRecord(t *testing.T, what string, ok func(tracewire.Record) bool) tracewire.Record {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		for _, rec := range trace.Default().Snapshot() {
+			if ok(rec) {
+				return rec
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s record", what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// A session's stream and view cross the web API into the trace under the
+// session's id: the Subscribe span and its listening record, the stream
+// counted open, the view set, a namespace refusing its share, and the stream
+// going away when it closes.
+func TestASessionsStreamAndViewAreTracedUnderItsID(t *testing.T) {
+	const a = "pintr01"
+	reg := plugin.NewRegistry()
+	reg.Register(a, "feed", &refusingSink{}, nil)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	session := cl.Session()
+	of := func(src, kind, msg string) func(tracewire.Record) bool {
+		return func(rec tracewire.Record) bool {
+			return rec.Src == src && rec.Kind == kind && strings.HasPrefix(rec.Msg, msg) && rec.KV["session"] == session
+		}
+	}
+
+	closeSub := subscribed(cl)
+	t.Cleanup(closeSub)
+	awaitRecord(t, "Subscribe start", of("router", "rpc", "Subscribe start"))
+	awaitRecord(t, "Subscribe listening", of("router", "rpc", "Subscribe listening"))
+	if rec := awaitRecord(t, "view/session open", of("view", "session", "open")); rec.KV["streams"] != "1" {
+		t.Errorf("open record = %v, want streams 1", rec.KV)
+	}
+	if err := cl.SetView(context.Background(), &gridwellv1.SetViewRequest{Label: "browser", ShownGridIds: []string{a + "/4"}}); err != nil {
+		t.Fatal(err)
+	}
+	if rec := awaitRecord(t, "view/set", of("view", "set", "")); rec.KV["label"] != "browser" {
+		t.Errorf("view/set = %v, want label browser", rec.KV)
+	}
+	awaitRecord(t, "view/refused", func(rec tracewire.Record) bool {
+		return rec.Src == "view" && rec.Kind == "refused" && rec.KV["ns"] == a && strings.Contains(rec.Msg, "cannot watch")
+	})
+	closeSub()
+	awaitRecord(t, "view/session away", of("view", "session", "away"))
 }

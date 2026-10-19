@@ -5,7 +5,8 @@ package server
 // error code are already spelled, and both call the one rpcSpan. kv["req"] is
 // the client's own request id off tracewire.RequestHeader: it is what joins a
 // gesture to the calls it caused, and it is empty when nobody sent one.
-// kv["id"] is the entity the request is about; see entityOf.
+// kv["id"] is the entity the request is about; see entityOf. kv["session"] is
+// the client session it names; see sessionOf.
 
 import (
 	"context"
@@ -48,6 +49,12 @@ func rpcSpan(reqID, procedure string, req any) *span {
 func (s *span) saw(msg any) {
 	if s.id == "" {
 		s.id = entityOf(msg)
+	}
+	if session := sessionOf(msg); session != "" && s.extra["session"] == "" {
+		if s.extra == nil {
+			s.extra = map[string]string{}
+		}
+		s.extra["session"] = session
 	}
 	s.open()
 }
@@ -104,6 +111,21 @@ func entityOf(msg any) string {
 		}
 	}
 	return ""
+}
+
+// sessionOf is the client session a request names in a field called
+// session (Subscribe, SetView), "" for one that names none.
+func sessionOf(msg any) string {
+	m, ok := msg.(proto.Message)
+	if !ok {
+		return ""
+	}
+	r := m.ProtoReflect()
+	fd := r.Descriptor().Fields().ByName("session")
+	if fd == nil || fd.Kind() != protoreflect.StringKind || fd.IsList() {
+		return ""
+	}
+	return r.Get(fd).String()
 }
 
 // traceInterceptor traces the web API. Streaming verbs get the same
