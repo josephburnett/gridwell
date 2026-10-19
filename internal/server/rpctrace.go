@@ -6,7 +6,8 @@ package server
 // the client's own request id off tracewire.RequestHeader: it is what joins a
 // gesture to the calls it caused, and it is empty when nobody sent one.
 // kv["id"] is the entity the request is about; see entityOf. kv["session"] is
-// the client session it names; see sessionOf.
+// the client session it names; see sessionOf. A select's span carries its
+// counts and flags, since the ids it names are not one entity.
 
 import (
 	"context"
@@ -21,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -51,12 +53,23 @@ func (s *span) saw(msg any) {
 		s.id = entityOf(msg)
 	}
 	if session := sessionOf(msg); session != "" && s.extra["session"] == "" {
-		if s.extra == nil {
-			s.extra = map[string]string{}
-		}
-		s.extra["session"] = session
+		s.add("session", session)
+	}
+	if sel, ok := msg.(*pb.SetSelectionRequest); ok {
+		s.add("add", strconv.Itoa(len(sel.GetAdd())))
+		s.add("remove", strconv.Itoa(len(sel.GetRemove())))
+		s.add("clear", strconv.FormatBool(sel.GetClear()))
+		s.add("recurse", strconv.FormatBool(sel.GetRecurse()))
+		s.add("all", strconv.FormatBool(sel.GetAll()))
 	}
 	s.open()
+}
+
+func (s *span) add(k, v string) {
+	if s.extra == nil {
+		s.extra = map[string]string{}
+	}
+	s.extra[k] = v
 }
 
 // open emits the entry record once.

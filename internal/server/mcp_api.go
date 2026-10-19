@@ -43,7 +43,7 @@ func traceTools(next mcp.MethodHandler) mcp.MethodHandler {
 		sp.verb, sp.id = "mcp/"+tool, tracedID(call.Params.Arguments)
 		if call.Extra != nil {
 			if shell := call.Extra.Header.Get(mcpapi.ShellHeader); shell != "" {
-				sp.extra = map[string]string{"shell_key": shell}
+				sp.add("shell_key", shell)
 			}
 		}
 		sp.open()
@@ -98,10 +98,8 @@ func traceItems(sp *span, tool string, args json.RawMessage, reply any) {
 		trace.Emit("mcp", "item", tool+" "+v.Verdict, map[string]string{
 			"tool": tool, "i": strconv.Itoa(i), "id": id, "verdict": v.Verdict})
 	}
-	if sp.extra == nil {
-		sp.extra = map[string]string{}
-	}
-	sp.extra["items"], sp.extra["refused"] = strconv.Itoa(len(verdicts)), strconv.Itoa(refused)
+	sp.add("items", strconv.Itoa(len(verdicts)))
+	sp.add("refused", strconv.Itoa(refused))
 }
 
 // tracedID is the tile or grid a call's arguments name first: its own, or
