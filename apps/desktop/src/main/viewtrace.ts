@@ -41,6 +41,12 @@ export function viewRevived(paneId: string, tileId: string, how: 'restore' | 'lo
   return view('revive', paneId, url, { tile: tileId, how });
 }
 
+// A same-document navigation that moved the address (a hash, a pushState),
+// which fires no nav-start or nav-done.
+export function viewNavInPage(paneId: string, tileId: string, url: string): TraceEvent {
+  return view('nav-page', paneId, url, { tile: tileId });
+}
+
 // A view handed to another pane with its page, which is neither a create nor
 // a destroy: a dump reading one pane follows it by kv.from.
 export function viewMoved(fromPaneId: string, toPaneId: string, tileId: string): TraceEvent {

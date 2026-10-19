@@ -477,3 +477,19 @@ test('a new view says whether it restored its back-stack or loaded the address',
   );
 });
 
+// An address change inside a page fires no load, so without its own record a
+// dump shows the view on the address it loaded.
+test('an in-page navigation that moves the main frame address is traced once', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', 'https://x.test/', BOUNDS);
+  const wc = r.views[0].webContents!;
+  wc.url = 'https://x.test/#b';
+  wc.emit('did-navigate-in-page', {}, 'https://x.test/#b', true);
+  wc.emit('did-navigate-in-page', {}, 'https://x.test/#b', true);
+  wc.emit('did-navigate-in-page', {}, 'https://frame.test/#c', false);
+  assert.deepEqual(
+    kinds(r, 'nav-page').map((ev) => [ev.kv?.view, ev.msg]),
+    [['p1', 'https://x.test/#b']],
+  );
+  assert.equal(r.navs.length, 3, 'the renderer still hears every in-page event');
+});

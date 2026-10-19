@@ -40,6 +40,7 @@ import {
   viewGone,
   viewMoved,
   viewNav,
+  viewNavInPage,
   viewRevived,
   viewShown,
   viewStealBounced,
@@ -563,7 +564,10 @@ export class WebviewRegistry {
       this.cb.onNav?.({ paneId: e.paneId, tileId: e.tileId, url, title: e.view.webContents.getTitle() });
     };
     e.view.webContents.on('did-navigate', emit);
-    e.view.webContents.on('did-navigate-in-page', emit);
+    e.view.webContents.on('did-navigate-in-page', (_event, url: string, isMainFrame: boolean) => {
+      if (isMainFrame && url !== e.url) this.trace(viewNavInPage(e.paneId, e.tileId, url));
+      emit();
+    });
     e.view.webContents.on('page-title-updated', emit);
     // isPressInput excludes the registry's own mouseWheel injection.
     e.view.webContents.on('input-event', (_event, input) => {
