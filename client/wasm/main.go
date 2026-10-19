@@ -129,6 +129,8 @@ type App struct {
 
 	// unloading switches framing writes to sendBeacon; see unload.go.
 	unloading bool
+	// beacons counts the beacons sent, for the unload record.
+	beacons int
 
 	// gate names this page's build on every call and hears the API refuse
 	// it; buildVerdict is the verdict last acted on (build.go).

@@ -34,10 +34,12 @@ type Client struct {
 	// survives a wrap. base is the serial of the oldest record held, at ring
 	// index first; an eviction carries acked along with it, so the range
 	// still owed is always [acked, base+count).
-	first   int
-	count   int
-	base    uint64
-	acked   uint64
+	first int
+	count int
+	base  uint64
+	acked uint64
+	// out is the end of the last batch handed out, for UnsentBatch.
+	out     uint64
 	dropped int
 	lastCT  int64
 }
@@ -103,21 +105,40 @@ func (c *Client) PendingBatch() ([]byte, func()) {
 		emit(c, dropSrc, dropKind, "records dropped before the node saw them",
 			map[string]string{"n": strconv.Itoa(n)}, c.lastCT)
 	}
-	from, end := c.acked, c.base+uint64(c.count)
-	if from == end {
+	batch, end := c.batchFrom(c.acked)
+	if batch == nil {
 		return nil, func() {}
+	}
+	c.out = end
+	// The ack closes over this batch's end, so a record emitted while the
+	// post is in flight stays pending.
+	return batch, func() {
+		if end > c.acked {
+			c.acked = end
+		}
+	}
+}
+
+// UnsentBatch is every record emitted since the last batch handed out, for
+// the page's last post while that batch is still out: the page dies before
+// either is answered, and sending the out batch's records twice would put
+// them in the node's ring twice.
+func (c *Client) UnsentBatch() []byte {
+	b, _ := c.batchFrom(max(c.acked, c.out))
+	return b
+}
+
+func (c *Client) batchFrom(from uint64) ([]byte, uint64) {
+	end := c.base + uint64(c.count)
+	from = max(from, c.base)
+	if from >= end {
+		return nil, end
 	}
 	recs := make([]tracewire.Record, 0, end-from)
 	for s := from; s < end; s++ {
 		recs = append(recs, c.ring[(c.first+int(s-c.base))%len(c.ring)])
 	}
-	// The ack closes over this batch's end, so a record emitted while the
-	// post is in flight stays pending.
-	return Marshal(recs), func() {
-		if end > c.acked {
-			c.acked = end
-		}
-	}
+	return Marshal(recs), end
 }
 
 // SendClock is tracewire.ClockHeader's value for a batch posted at now: the

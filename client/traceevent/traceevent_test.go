@@ -396,3 +396,10 @@ func TestPaneRecords(t *testing.T) {
 		t.Errorf("unzoom is %+v", e)
 	}
 }
+
+// A page's end says how many writes left by beacon, the one count of them.
+func TestUnloadCountsItsBeacons(t *testing.T) {
+	if e := Unload(3); e.Src != "client" || e.Kind != "unload" || e.KV["beacons"] != "3" {
+		t.Errorf("unload is %+v", e)
+	}
+}

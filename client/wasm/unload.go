@@ -3,7 +3,7 @@
 package main
 
 // The unload flush: quitting or reloading inside the settle window must not
-// lose the last pan or scroll. A write posts through navigator.sendBeacon,
+// lose the last pan or scroll, nor the trace's last second. A write posts through navigator.sendBeacon,
 // which Chromium completes after the page dies; which transport a write takes
 // is the dispatcher's decision, not each call site's. The outbox drains here
 // too, and a transition in flight persists its destination.
@@ -13,6 +13,8 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/api/tracewire"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/urlview"
 )
 
@@ -34,19 +36,29 @@ func (a *App) sendBeacon(path string, body []byte, contentType string) bool {
 	if !nav.Truthy() || !nav.Get("sendBeacon").Truthy() {
 		return false
 	}
-	return nav.Call("sendBeacon", a.origin+a.gate.BeaconPath(path), blob).Bool()
+	sent := nav.Call("sendBeacon", a.origin+a.gate.BeaconPath(path), blob).Bool()
+	if sent {
+		a.beacons++
+	}
+	return sent
 }
 
 // flushOnUnload is the beforeunload durable-state path. It ends with a live
 // page's navigation state, the one thing the settle flush and the outbox do
-// not cover, because it lives in the bridge and not in any ledger.
+// not cover, because it lives in the bridge and not in any ledger, and then
+// the trace records the flush window would otherwise lose.
 func (a *App) flushOnUnload() {
+	a.flush.Stop()
 	a.trans.CancelAll()
 	a.unloading = true
 	a.flushFramingSave()
 	a.syncContentOutbox()
 	a.drainOutbox()
 	a.flushURLStateOnUnload()
+	a.emit(traceevent.Unload(a.beacons))
+	if batch := a.flush.Unload(); batch != nil {
+		a.sendBeacon(tracewire.Path, batch, traceContentType)
+	}
 }
 
 // flushURLStateOnUnload beacons the title a live page navigated to, for every

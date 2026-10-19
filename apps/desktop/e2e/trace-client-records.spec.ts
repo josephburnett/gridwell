@@ -170,3 +170,23 @@ test('the pane tree records its split, zoom, swap and close', async ({ gw, home,
   const close = of(lines, cid, 'pane', 'close')[0];
   expect([left.id, right.id]).toContain(close.kv?.pane);
 });
+
+test("a reload sends the page's last records by beacon, its unload among them", async ({ gw, home, window }) => {
+  await gw.enterPlugin('home');
+  await gw.waitIdle();
+  const before: string = (await window.evaluate(() => (window as any).__gridwellTest.trace())).cid;
+  await window.reload();
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await gw.waitIdle();
+
+  const token = await loginToken(gw.origin, homePassword(home));
+  await expect
+    .poll(
+      async () => {
+        const { lines } = await dumpNow(window, gw.origin, token);
+        return of(lines, before, 'client', 'unload').length;
+      },
+      { timeout: 20_000 },
+    )
+    .toBe(1);
+});

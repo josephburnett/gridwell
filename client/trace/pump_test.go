@@ -108,3 +108,26 @@ func TestForcePostsInsideTheWindow(t *testing.T) {
 		t.Errorf("a forced post with nothing owed still posted %q", b)
 	}
 }
+
+// The page's last batch carries what no post has: all that is pending when
+// none is out, and only what came after the batch still out otherwise, so
+// the node keeps every record once.
+func TestUnloadSendsWhatNoPostCarries(t *testing.T) {
+	c, p := New(4096, "cid7abc"), NewPump(t0)
+	pending(c, 2, t0)
+	if got := decode(t, p.Unload(c)); len(got) != 2 {
+		t.Errorf("with no post out the unload carries %d records, want 2", len(got))
+	}
+
+	c, p = New(4096, "cid7abc"), NewPump(t0)
+	pending(c, 3, t0)
+	out, _ := p.Start(c, t0.Add(flushWindow))
+	if len(decode(t, out)) != 3 {
+		t.Fatal("the first post did not carry the three records")
+	}
+	c.Emit("client", "unload", "late", nil, t0)
+	got := decode(t, p.Unload(c))
+	if len(got) != 1 || got[0].Msg != "late" {
+		t.Errorf("with a post out the unload carries %v, want only the record after it", got)
+	}
+}

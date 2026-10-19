@@ -41,6 +41,13 @@ func Boot(commit, goVersion, userAgent string) Event {
 		KV: kv("commit", commit, "go", goVersion, "ua", userAgent)}
 }
 
+// Unload is the page going away, a reload or a quit: beacons is how many
+// writes it sent by beacon on the way out, which no rpc record shows.
+func Unload(beacons int) Event {
+	return Event{Src: "client", Kind: "unload", Msg: "page unloads",
+		KV: kv("beacons", strconv.Itoa(beacons))}
+}
+
 // NodeBuild is the build the node's handshake named, beside the client's own
 // on its boot record.
 func NodeBuild(node string) Event {
