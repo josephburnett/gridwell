@@ -5,6 +5,7 @@ import type { BaseWindow, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
 import { viewCreated } from './viewtrace';
 import type { ErrorEvent, NavEvent, ViewGoneEvent } from './ipc';
+import type { TraceEvent } from './trace';
 
 // The registry against a fake view, for the paths the capture harness cannot
 // stage on demand: a webContents that ends under the registry, a restore raced
@@ -78,6 +79,7 @@ interface Rig {
   steals: string[];
   escapes: string[];
   children: Set<FakeView>;
+  records: TraceEvent[];
 }
 
 function rig(): Rig {
@@ -88,6 +90,7 @@ function rig(): Rig {
   const steals: string[] = [];
   const escapes: string[] = [];
   const children = new Set<FakeView>();
+  const records: TraceEvent[] = [];
   const win = {
     contentView: {
       addChildView: (v: FakeView) => children.add(v),
@@ -111,11 +114,16 @@ function rig(): Rig {
       views.push(v);
       return v as unknown as WebContentsView;
     },
+    (ev) => records.push(ev),
   );
-  return { reg, views, errors, gone, navs, steals, escapes, children };
+  return { reg, views, errors, gone, navs, steals, escapes, children, records };
 }
 
 const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
+
+function kinds(r: Rig, kind: string): TraceEvent[] {
+  return r.records.filter((ev) => ev.kind === kind);
+}
 
 test('a page that closes itself retires its entry: one notice, the renderer told, nothing throws', async () => {
   const r = rig();
@@ -407,4 +415,18 @@ test('a registry notice names the owner its trace records do', async () => {
   await r.reg.place('p1', 'u1/8', 'https://y.test/', BOUNDS);
   assert.equal(r.errors.length, 1, `want the replace notice, got ${JSON.stringify(r.errors)}`);
   assert.equal(r.errors[0].source, `electron:${viewCreated('p1', 'u1/7', '').src}`);
+});
+
+// A dump that shows a view gone has to say whether its page closed itself or
+// its renderer died, because the two are different bugs.
+test('a gone record says why the view ended', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/7', 'https://x.test/', BOUNDS);
+  r.views[0].webContents!.emit('render-process-gone', {}, { reason: 'oom', exitCode: 9 });
+  await r.reg.place('p2', 'u1/8', 'https://y.test/', BOUNDS);
+  r.views[1].destroy();
+  assert.deepEqual(
+    kinds(r, 'gone').map((ev) => [ev.kv?.view, ev.kv?.reason]),
+    [['p1', 'oom'], ['p2', 'closed']],
+  );
 });

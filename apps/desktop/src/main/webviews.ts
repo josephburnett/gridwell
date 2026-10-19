@@ -27,7 +27,7 @@ import { urlContextMenuTemplate } from './contextmenu';
 import { capturable, captureAttempt, captureJpegBase64, describeAttempt } from './capture';
 import { decideStreak, streakNotice, FRESH, StreakState } from './capturestreak';
 import { decideFocus, isPressInput, GuardPhase } from './focusguard';
-import { trace } from './trace';
+import { trace, type TraceEvent } from './trace';
 import {
   menuChose,
   menuOpened,
@@ -83,8 +83,9 @@ interface Entry {
 }
 
 // How a view ended outside remove(). close is whether its webContents is still
-// open, as a crashed renderer's is.
+// open, as a crashed renderer's is; reason is what the trace says ended it.
 interface Ending {
+  reason: string;
   message: (url: string) => string;
   severity: NoticeSeverity;
   close: boolean;
@@ -112,6 +113,9 @@ interface RegistryCallbacks {
 // node with a fake.
 type NewView = (opts: WebContentsViewConstructorOptions) => WebContentsView;
 
+// Where the registry's records go, injected so webviews.test.ts reads them.
+type Emit = (ev: TraceEvent) => void;
+
 // WebviewRegistry owns the live url-tile WebContentsViews parented to the root
 // window, one per paneId, all on SESSION_PARTITION. It knows nothing of IPC or
 // the store: register.ts wires the Electron handlers to these methods.
@@ -127,11 +131,13 @@ export class WebviewRegistry {
   mirrorCalls = 0;
 
   private readonly newView: NewView;
+  private readonly trace: Emit;
 
-  constructor(win: BaseWindow, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o)) {
+  constructor(win: BaseWindow, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o), emit: Emit = trace) {
     this.win = win;
     this.cb = cb;
     this.newView = newView;
+    this.trace = emit;
   }
 
   // Every notice the registry raises carries this one source, which
@@ -161,7 +167,7 @@ export class WebviewRegistry {
     // Before the pop, so this pane is focused by the time any item runs, and a
     // dismissed menu has still moved focus, as a left-click does.
     this.cb.onContextMenu?.({ paneId });
-    trace(menuOpened(URL_MENU, paneId));
+    this.trace(menuOpened(URL_MENU, paneId));
     const wc = view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(
@@ -191,7 +197,7 @@ export class WebviewRegistry {
         },
         reload: () => wc.reload(),
         freeze: () => this.cb.onFreezeURL?.({ paneId }),
-        chose: (label) => trace(menuChose(URL_MENU, label, paneId)),
+        chose: (label) => this.trace(menuChose(URL_MENU, label, paneId)),
         failed: (message) => this.reportErr(`pane ${paneId}: ${message}`),
       },
     );
@@ -307,7 +313,7 @@ export class WebviewRegistry {
     // The preload suppresses this for a right-drag, so this is a real click.
     view.webContents.on('context-menu', (_event, params) => this.showContextMenu(e.paneId, view, params));
     this.entries.set(paneId, e);
-    trace(viewCreated(paneId, tileId, url));
+    this.trace(viewCreated(paneId, tileId, url));
     this.win.contentView.addChildView(view);
     view.setBounds(hidden ? parkedBounds(rounded.width, rounded.height) : rounded);
     this.wireNav(e);
@@ -339,7 +345,7 @@ export class WebviewRegistry {
     const rounded = roundBounds(bounds);
     if (boundsEqual(e.bounds, rounded)) return;
     e.bounds = rounded;
-    trace(viewBounds(paneId, e.tileId, rounded));
+    this.trace(viewBounds(paneId, e.tileId, rounded));
     if (!e.hidden) {
       e.view.setBounds(rounded);
     }
@@ -398,7 +404,7 @@ export class WebviewRegistry {
     e.hidden = hidden;
     e.focused = focused;
     if (!viewChanged) return;
-    trace(viewShown(paneId, e.tileId, hidden));
+    this.trace(viewShown(paneId, e.tileId, hidden));
     const gen = ++e.parkGen;
     if (!capture) {
       e.view.setBounds(e.bounds);
@@ -441,7 +447,7 @@ export class WebviewRegistry {
     e.durable = durable;
     e.view.setBounds(hidden ? parkedBounds(e.bounds.width, e.bounds.height) : e.bounds);
     this.applyMinWidthZoom(e);
-    trace(viewMoved(fromPaneId, toPaneId, e.tileId));
+    this.trace(viewMoved(fromPaneId, toPaneId, e.tileId));
     // A view that keeps OS focus in a pane that lost it would take the next
     // keystrokes, the steal the guard exists for.
     try {
@@ -495,7 +501,7 @@ export class WebviewRegistry {
         this.reportErr('failed to detach live view — ascend may leave a blank overlay: ' + String(err));
       }
     }
-    trace(viewDestroyed(paneId, e.tileId, url));
+    this.trace(viewDestroyed(paneId, e.tileId, url));
     return { jpegBase64, url, title, history };
   }
 
@@ -596,10 +602,10 @@ export class WebviewRegistry {
       }, act.settleMs);
     };
     e.view.webContents.on('focus', () => {
-      trace(viewFocused(e.paneId, e.tileId, true));
+      this.trace(viewFocused(e.paneId, e.tileId, true));
       step('focus-event', e.presses, false);
     });
-    e.view.webContents.on('blur', () => trace(viewFocused(e.paneId, e.tileId, false)));
+    e.view.webContents.on('blur', () => this.trace(viewFocused(e.paneId, e.tileId, false)));
     // Both halves of a navigation, because the gap between them is where a
     // page hangs with the pane sitting blank.
     // A same-document navigation keeps the surface and fires no load, so
@@ -607,7 +613,7 @@ export class WebviewRegistry {
     e.view.webContents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame || details.isSameDocument) return;
       e.navigating = true;
-      trace(viewNav(e.paneId, e.tileId, false, details.url));
+      this.trace(viewNav(e.paneId, e.tileId, false, details.url));
     });
     // zoomFactor resets across cross-origin navigations.
     e.view.webContents.on('did-finish-load', () => {
@@ -616,7 +622,7 @@ export class WebviewRegistry {
       // destroyed WebContents throws uncaught in main, which hangs it behind
       // an error dialog.
       try {
-        trace(viewNav(e.paneId, e.tileId, true, e.view.webContents.getURL()));
+        this.trace(viewNav(e.paneId, e.tileId, true, e.view.webContents.getURL()));
       } catch {
         return;
       }
@@ -633,7 +639,7 @@ export class WebviewRegistry {
         const message = failLoadMessage(validatedURL, errorDescription, errorCode);
         // Traced even when it is not surfaced: an aborted navigation is noise
         // on the notice row and evidence in a dump.
-        trace(viewFailed(e.paneId, e.tileId, message));
+        this.trace(viewFailed(e.paneId, e.tileId, message));
         if (!shouldSurfaceFailLoad(errorCode, isMainFrame)) return;
         this.reportErr(message);
       },
@@ -643,11 +649,11 @@ export class WebviewRegistry {
     // it can no longer raise, so the view is gone and the next descent places
     // a new one.
     e.view.webContents.on('render-process-gone', (_event, details) =>
-      this.retire(e, { message: (url) => renderProcessGoneMessage(url, details.reason), severity: 'error', close: true }),
+      this.retire(e, { reason: details.reason, message: (url) => renderProcessGoneMessage(url, details.reason), severity: 'error', close: true }),
     );
     // A page that calls window.close() destroys its webContents with no word
     // to the renderer.
-    e.view.webContents.on('destroyed', () => this.retire(e, { message: pageClosedMessage, severity: 'info', close: false }));
+    e.view.webContents.on('destroyed', () => this.retire(e, { reason: 'closed', message: pageClosedMessage, severity: 'info', close: false }));
   }
 
   // retire is the one owner of "the view is gone" for a webContents that ended
@@ -676,7 +682,7 @@ export class WebviewRegistry {
         this.reportErr(`pane ${paneId}: failed to close a dead view: ${String(err)}`);
       }
     }
-    trace(viewGone(paneId, e.tileId, url));
+    this.trace(viewGone(paneId, e.tileId, url, end.reason));
     this.cb.onViewGone?.({ paneId, tileId: e.tileId, gen: e.gen });
     this.reportErr(end.message(url), end.severity);
   }

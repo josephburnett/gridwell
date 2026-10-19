@@ -27,10 +27,10 @@ export function viewDestroyed(paneId: string, tileId: string, url: string): Trac
   return view('destroy', paneId, url, { tile: tileId });
 }
 
-// A view whose webContents ended outside remove(), such as a page that closed
-// itself.
-export function viewGone(paneId: string, tileId: string, url: string): TraceEvent {
-  return view('gone', paneId, url, { tile: tileId });
+// A view whose webContents ended outside remove(). reason is Chromium's
+// render-process-gone reason, or 'closed' for a page that closed itself.
+export function viewGone(paneId: string, tileId: string, url: string, reason: string): TraceEvent {
+  return view('gone', paneId, url, { tile: tileId, reason });
 }
 
 // A view handed to another pane with its page, which is neither a create nor
