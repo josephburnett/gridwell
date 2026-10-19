@@ -29,6 +29,7 @@ import (
 // the entity as a unary one does.
 type span struct {
 	reqID, verb, id string
+	extra           map[string]string // kv a caller adds; every record after carries it
 	start           time.Time
 	started         bool
 }
@@ -74,6 +75,9 @@ func (s *span) end(err error, code string) {
 
 func (s *span) kv() map[string]string {
 	kv := map[string]string{"req": s.reqID}
+	for k, v := range s.extra {
+		kv[k] = v
+	}
 	if s.id != "" {
 		kv["id"] = s.id
 	}
