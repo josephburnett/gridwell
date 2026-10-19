@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   menuChose,
@@ -13,7 +13,9 @@ import {
   viewNav,
   viewShown,
   windowFocused,
-  windowResized,
+  WINDOW_SETTLE_MS,
+  windowState,
+  windowStateRecorder,
 } from './viewtrace';
 
 // Every view record names its pane the same way, because a dump is read one
@@ -91,8 +93,82 @@ test('a choice menu record names no pane', () => {
   assert.deepEqual(menuChose('choice', 'dump').kv, { menu: 'choice' });
 });
 
+const STATE = {
+  resizable: true,
+  maximized: false,
+  fullScreen: false,
+  minimizable: true,
+  maximizable: true,
+  bounds: { x: 10, y: 20, width: 1280, height: 800 },
+  workArea: { width: 1920, height: 1040 },
+  scaleFactor: 1.5,
+  platform: 'win32',
+  electron: '38.0.0',
+  minSize: [0, 0] as [number, number],
+  maxSize: [0, 0] as [number, number],
+};
+
 test('the window records name the window, not a pane', () => {
   assert.equal(windowFocused(true).src, 'window');
-  assert.equal(windowResized(1280, 800).msg, '1280x800');
-  assert.equal(windowResized(1280, 800).kv, undefined);
+  assert.equal(windowState('resize', STATE).src, 'window');
+  assert.equal(windowState('resize', STATE).kv?.view, undefined);
+});
+
+// One kind for every window event, the cause as the message, so a dump greps
+// 'state' and reads the window's history as a table.
+test('a window state record carries the cause as msg and the state as kv', () => {
+  assert.deepEqual(windowState('unmaximize', STATE), {
+    src: 'window',
+    kind: 'state',
+    msg: 'unmaximize',
+    kv: {
+      resizable: 'true',
+      maximized: 'false',
+      fullScreen: 'false',
+      minimizable: 'true',
+      maximizable: 'true',
+      x: '10',
+      y: '20',
+      w: '1280',
+      h: '800',
+      workW: '1920',
+      workH: '1040',
+      scale: '1.5',
+      platform: 'win32',
+      electron: '38.0.0',
+    },
+  });
+});
+
+// A size limit is exactly what would stop an edge drag, so a set one shows.
+test('a window state record names a size limit only when one is set', () => {
+  const r = windowState('create', { ...STATE, resizable: false, minSize: [400, 300], maxSize: [1280, 0] });
+  assert.equal(r.kv?.resizable, 'false');
+  assert.equal(r.kv?.minSize, '400x300');
+  assert.equal(r.kv?.maxSize, '1280x0');
+});
+
+// A drag is a burst of resize and move events; the ring keeps one record for
+// it, the settled one, while a maximize is recorded as it fires.
+test('a burst of resize and move records once, after it settles', () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const seen: string[] = [];
+    const r = windowStateRecorder((cause) => seen.push(cause));
+    r.now('create');
+    r.settle('resize');
+    r.settle('resize');
+    r.settle('move');
+    mock.timers.tick(WINDOW_SETTLE_MS - 1);
+    assert.deepEqual(seen, ['create']);
+    r.now('maximize');
+    mock.timers.tick(1);
+    assert.deepEqual(seen, ['create', 'maximize', 'move']);
+    r.settle('resize');
+    r.stop();
+    mock.timers.tick(WINDOW_SETTLE_MS);
+    assert.deepEqual(seen, ['create', 'maximize', 'move']);
+  } finally {
+    mock.timers.reset();
+  }
 });

@@ -2,7 +2,33 @@ import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 import { rendererLogLine } from './viewutil';
 import { logLine, trace } from './trace';
-import { windowFocused, windowResized } from './viewtrace';
+import { windowFocused, windowState, windowStateRecorder } from './viewtrace';
+
+// A read of a destroyed window throws uncaught, which hangs main behind an
+// error dialog.
+function traceState(win: BrowserWindow, cause: string): void {
+  if (win.isDestroyed()) return;
+  const bounds = win.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  const [minW, minH] = win.getMinimumSize();
+  const [maxW, maxH] = win.getMaximumSize();
+  trace(
+    windowState(cause, {
+      resizable: win.isResizable(),
+      maximized: win.isMaximized(),
+      fullScreen: win.isFullScreen(),
+      minimizable: win.isMinimizable(),
+      maximizable: win.isMaximizable(),
+      bounds,
+      workArea: display.workAreaSize,
+      scaleFactor: display.scaleFactor,
+      platform: process.platform,
+      electron: process.versions.electron,
+      minSize: [minW, minH],
+      maxSize: [maxW, maxH],
+    }),
+  );
+}
 
 interface RootWindow {
   win: BrowserWindow;
@@ -38,6 +64,8 @@ export function createRootWindow(origin: string): RootWindow {
   });
 
   win.maximize();
+  const state = windowStateRecorder((cause) => traceState(win, cause));
+  state.now('create');
 
   // ?e2e=1 makes the wasm client install its read-only window.__gridwellTest.
   const query = process.env.GRIDWELL_E2E === '1' ? '?e2e=1' : '';
@@ -54,13 +82,12 @@ export function createRootWindow(origin: string): RootWindow {
 
   win.on('focus', () => trace(windowFocused(true)));
   win.on('blur', () => trace(windowFocused(false)));
-  win.on('resize', () => {
-    // A read of a destroyed window throws uncaught, which hangs main behind an
-    // error dialog; see the display-metrics handler below.
-    if (win.isDestroyed()) return;
-    const [w, h] = win.getSize();
-    trace(windowResized(w, h));
-  });
+  for (const cause of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'] as const) {
+    win.on(cause as 'maximize', () => state.now(cause));
+  }
+  win.on('resize', () => state.settle('resize'));
+  win.on('move', () => state.settle('move'));
+  win.on('closed', state.stop);
 
   // A fullscreen window can keep its old bounds when the display geometry
   // changes. Only while fullscreen: a normal window is the user's to size.

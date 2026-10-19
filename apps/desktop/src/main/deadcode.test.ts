@@ -37,6 +37,8 @@ const ALLOWED: Record<string, string> = {
     'the decision\'s output shape; the executor switches on act.kind, so only the table test names the type',
   'main/capture.ts:CAPTURE_TIMEOUT_MS':
     'the declared capture bound; captureAttempt and captureJpegBase64 default to it, so only the test that waits it out names it',
+  'main/viewtrace.ts:WINDOW_SETTLE_MS':
+    'the declared settle for a window drag\'s records; windowStateRecorder waits it, so only the test that ticks past it names it',
   'main/capture.ts:MIRROR_INTERVAL_MS':
     'the declared mirror cadence; MirrorPump waits it, so only the test that reads what it scheduled names it',
   'main/capture.ts:CaptureAttempt':

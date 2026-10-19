@@ -84,6 +84,66 @@ export function windowFocused(focused: boolean): TraceEvent {
   return { src: WINDOW, kind: focused ? 'focus' : 'blur', msg: 'root window' };
 }
 
-export function windowResized(width: number, height: number): TraceEvent {
-  return { src: WINDOW, kind: 'resize', msg: `${width}x${height}` };
+// What the window manager has made of the root window, read by window.ts on
+// creation and on each Electron window event. It is the one window-geometry
+// record: a window the user cannot resize or snap is diagnosed from these
+// fields on a platform this repo's gates do not run.
+interface WindowState {
+  resizable: boolean;
+  maximized: boolean;
+  fullScreen: boolean;
+  minimizable: boolean;
+  maximizable: boolean;
+  bounds: Bounds;
+  workArea: { width: number; height: number };
+  scaleFactor: number;
+  platform: string;
+  electron: string;
+  // [0, 0] is Electron's unset, and is left out of the record.
+  minSize: [number, number];
+  maxSize: [number, number];
+}
+
+// A drag fires resize and move per frame, which would wash the ring, so those
+// are recorded once they settle; every other cause is recorded as it fires.
+export const WINDOW_SETTLE_MS = 250;
+
+export function windowStateRecorder(record: (cause: string) => void): {
+  now: (cause: string) => void;
+  settle: (cause: string) => void;
+  stop: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return {
+    now: record,
+    settle: (cause) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => record(cause), WINDOW_SETTLE_MS);
+    },
+    stop: () => clearTimeout(timer),
+  };
+}
+
+// msg names the event that caused the read ('create', 'resize', 'maximize',
+// ...), so a dump greps one kind and reads the cause beside it.
+export function windowState(cause: string, s: WindowState): TraceEvent {
+  const kv: Record<string, string> = {
+    resizable: String(s.resizable),
+    maximized: String(s.maximized),
+    fullScreen: String(s.fullScreen),
+    minimizable: String(s.minimizable),
+    maximizable: String(s.maximizable),
+    x: String(s.bounds.x),
+    y: String(s.bounds.y),
+    w: String(s.bounds.width),
+    h: String(s.bounds.height),
+    workW: String(s.workArea.width),
+    workH: String(s.workArea.height),
+    scale: String(s.scaleFactor),
+    platform: s.platform,
+    electron: s.electron,
+  };
+  if (s.minSize[0] || s.minSize[1]) kv.minSize = `${s.minSize[0]}x${s.minSize[1]}`;
+  if (s.maxSize[0] || s.maxSize[1]) kv.maxSize = `${s.maxSize[0]}x${s.maxSize[1]}`;
+  return { src: WINDOW, kind: 'state', msg: cause, kv };
 }
