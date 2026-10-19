@@ -378,7 +378,7 @@ func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 	// one decision off d.intent.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
-	switch a.commitVerdict(in, d, t) {
+	switch a.commitVerdict(in, d, t, dropX, dropY) {
 	case dragdrop.DropDelete:
 		// The source pane's + button is a trashcan during any drag.
 		a.runDeleteTile(d, nil)
@@ -608,9 +608,12 @@ func (a *App) finishLeftResize() {
 				continue
 			}
 			a.flushDroppedSubtree(seg)
+			var closed []string
+			pane.WalkLeaves(seg, func(p *pane.Pane) { closed = append(closed, p.ID) })
 			if !a.tree.RemoveSegment(seg) {
 				break
 			}
+			a.emit(traceevent.PaneClose(closed))
 		}
 	}
 	a.draw()
@@ -623,7 +626,9 @@ func (a *App) commitSwap(rd *rightDragState, sx, sy float64) {
 	if !ok || destPane.ID == rd.originPaneID {
 		return
 	}
-	_ = a.tree.Swap(rd.originPaneID, destPane.ID)
+	if a.tree.Swap(rd.originPaneID, destPane.ID) == nil {
+		a.emit(traceevent.PaneSwap(rd.originPaneID, destPane.ID))
+	}
 	_ = a.tree.SetFocus(rd.originPaneID)
 }
 
@@ -648,6 +653,7 @@ func (a *App) commitSplit(rd *rightDragState, sx, sy float64) {
 	if err != nil {
 		return
 	}
+	a.emit(traceevent.PaneSplit(np.ID, p.ID))
 	// A new pane is a copy of the source, deliberately: a split means another
 	// view of where I am. A content frame is the exception, because there is one
 	// native view or PTY attachment per tile and pane, so it ascends one level.

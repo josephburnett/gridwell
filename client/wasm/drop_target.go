@@ -62,15 +62,17 @@ func (a *App) carryRows(gridID string, n *gridwellv1.Tile) []*gridwellv1.Tile {
 	return rows
 }
 
-// commitVerdict is the verdict of a release that commits, recorded once. The
-// ghost's preview asks dragdrop.DecideDrop directly, being per pointer move.
-func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget) dragdrop.DropAction {
+// commitVerdict is the verdict of a release that commits, recorded once, at
+// the cell dropInputAt placed it. The ghost's preview asks
+// dragdrop.DecideDrop directly, being per pointer move.
+func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget, x, y int64) dragdrop.DropAction {
 	v := dragdrop.DecideDrop(in)
-	gridID := ""
+	at := traceevent.DropAt{Pane: d.originPaneID, Tile: d.tileID, N: len(d.carried),
+		X: x, Y: y, Cell: in.Started && in.HasTarget, Why: dragdrop.WhyRejected(in)}
 	if t != nil {
-		gridID = t.gridID
+		at.Grid = t.gridID
 	}
-	a.emit(traceevent.Drop(v, d.originPaneID, d.tileID, gridID))
+	a.emit(traceevent.Drop(v, at))
 	return v
 }
 

@@ -74,7 +74,8 @@ func (a *App) postSelection(gid string) {
 		},
 		then: func() { a.c.SelectionLanded(gid, sent) },
 		done: func() {
-			if callErr != nil && clientsync.ReactOptimistic(clientsync.Of(callErr)).DropLocal {
+			if o := clientsync.Of(callErr); callErr != nil && clientsync.ReactOptimistic(o).DropLocal {
+				a.emit(traceevent.OutboxRollback("SetSelection", gid, gid, o))
 				a.c.SelectionRefused(gid, sent)
 				a.scheduleDraw(traceevent.WhySelection)
 			}
@@ -154,6 +155,7 @@ func (a *App) clearAllSelections() {
 	if p := a.tree.FocusedPane(); p != nil {
 		gid = a.gridIDForPane(p)
 	}
+	a.emit(traceevent.SelectClearAll(a.tree.Focus))
 	a.post(write{
 		label: "SetSelection", gid: gid, source: "selection", failText: "the selection was not cleared",
 		call: func(ctx context.Context) error {

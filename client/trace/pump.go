@@ -37,6 +37,16 @@ func (p *Pump) Force(c *Client, now time.Time) (batch []byte, done func(kept boo
 	return p.force(c, now)
 }
 
+// Unload is the page's last batch, sent as it dies with no answer to wait
+// for: everything pending, less what a post still out is carrying.
+func (p *Pump) Unload(c *Client) []byte {
+	if p.inFlight {
+		return c.UnsentBatch()
+	}
+	b, _ := c.PendingBatch()
+	return b
+}
+
 // force takes the batch with no due check of its own.
 func (p *Pump) force(c *Client, now time.Time) ([]byte, func(bool)) {
 	b, ack := c.PendingBatch()

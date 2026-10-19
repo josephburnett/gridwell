@@ -5,8 +5,8 @@ package server
 // error code are already spelled, and both call the one rpcSpan. kv["req"] is
 // the client's own request id off tracewire.RequestHeader: it is what joins a
 // gesture to the calls it caused, and it is empty when nobody sent one.
-// kv["id"] is the entity the request is about; see entityOf. kv["session"] is
-// the client session it names; see sessionOf. A select's span carries its
+// kv["id"] is the entity the request is about; see rpc.EntityOf. kv["session"]
+// is the client session it names; see sessionOf. A select's span carries its
 // counts and flags, since the ids it names are not one entity.
 
 import (
@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -50,7 +51,7 @@ func rpcSpan(reqID, procedure string, req any) *span {
 // emits the entry record on the first message.
 func (s *span) saw(msg any) {
 	if s.id == "" {
-		s.id = entityOf(msg)
+		s.id = rpc.EntityOf(msg)
 	}
 	if session := sessionOf(msg); session != "" && s.extra["session"] == "" {
 		s.add("session", session)
@@ -102,28 +103,6 @@ func (s *span) kv() map[string]string {
 		kv["id"] = s.id
 	}
 	return kv
-}
-
-// entityOf is a request's primary entity: its first string field named *_id
-// that is set, in declaration order. Every request spells its tile or grid
-// that way, so a verb the service gains is covered with no table to grow.
-func entityOf(msg any) string {
-	m, ok := msg.(proto.Message)
-	if !ok {
-		return ""
-	}
-	r := m.ProtoReflect()
-	fields := r.Descriptor().Fields()
-	for i := 0; i < fields.Len(); i++ {
-		fd := fields.Get(i)
-		if fd.Kind() != protoreflect.StringKind || fd.IsList() || !strings.HasSuffix(string(fd.Name()), "_id") {
-			continue
-		}
-		if v := r.Get(fd).String(); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // sessionOf is the client session a request names in a field called

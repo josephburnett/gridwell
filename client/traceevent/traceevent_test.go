@@ -1,11 +1,13 @@
 package traceevent
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/tracewire"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -26,7 +28,7 @@ func TestNoticeCarriesItsSourceAndSeverity(t *testing.T) {
 // The console tags are written with brackets, which are punctuation for a
 // console line and noise in a record's src field.
 func TestLogSrcIsTheTagWithoutItsBrackets(t *testing.T) {
-	if got := Log("[shellstream]", "opened").Src; got != "shellstream" {
+	if got := Log("["+SrcShell+"]", "opened").Src; got != SrcShell {
 		t.Errorf("log src is %q, want the bare tag", got)
 	}
 }
@@ -139,7 +141,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropLink)+1)
 	}
 	for v, name := range want {
-		e := Drop(v, "p1", "t7abcde", "g7abcde")
+		e := Drop(v, DropAt{Pane: "p1", Tile: "t7abcde", Grid: "g7abcde"})
 		if e.Src != "drag" || e.Kind != "drop" || e.Msg != name {
 			t.Errorf("verdict %d is %+v, want msg %q", v, e, name)
 		}
@@ -149,7 +151,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 			t.Errorf("verdict %d names %v", v, e.KV)
 		}
 	}
-	if got := Drop(dragdrop.DropLink+1, "", "", "").Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
+	if got := Drop(dragdrop.DropLink+1, DropAt{}).Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropLink)+1) {
 		t.Errorf("an unnamed verdict reads %q", got)
 	}
 }
@@ -264,7 +266,7 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	if got := ShellExit("p1", "t7abcde", "the shell exited", true).Msg; got != "the shell exited (tmux gone)" {
 		t.Errorf("a tmux-gone exit reads %q", got)
 	}
-	if e := URLOpen("p1", "t7abcde"); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
+	if e := URLOpen("p1", "t7abcde", ""); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
 		t.Errorf("a url open is %+v", e)
 	}
 	if e := URLMove("p1", "w1:p1", "t7abcde"); e.Src != "url" || e.Kind != "move" ||
@@ -339,5 +341,151 @@ func TestSelectNamesTheGridAndTheCount(t *testing.T) {
 	if s.Src != "gesture" || s.Kind != "select" || s.Msg != "band" ||
 		s.KV["pane"] != "p2" || s.KV["grid"] != "n/1" || s.KV["n"] != "3" {
 		t.Errorf("a select reads %+v", s)
+	}
+}
+
+// A burst of GetGrid after a gap reads as the resync it is: the stream's open
+// says it owes one, its end says why, and the resync counts the grids.
+func TestEventStreamLifecycleRecords(t *testing.T) {
+	if e := EventsOpen(false); e.Src != "events" || e.Kind != "open" || e.KV["resync"] != "false" {
+		t.Errorf("first open is %+v", e)
+	}
+	if e := EventsOpen(true); e.KV["resync"] != "true" {
+		t.Errorf("reopen is %+v", e)
+	}
+	if e := EventsEnd(nil); e.Kind != "end" || e.KV["reason"] != "clean" {
+		t.Errorf("clean end is %+v", e)
+	}
+	if e := EventsEnd(errors.New("network error")); e.KV["reason"] != "broken" || e.Msg != "network error" {
+		t.Errorf("broken end is %+v", e)
+	}
+	if e := EventsResync("", 4); e.Kind != "resync" || e.KV["source"] != "every" || e.KV["n"] != "4" {
+		t.Errorf("whole-stream resync is %+v", e)
+	}
+	if e := EventsResync("pfs0001", 0); e.KV["source"] != "pfs0001" || e.KV["n"] != "0" {
+		t.Errorf("one source's resync is %+v", e)
+	}
+}
+
+// A notice's going is a record under the source that raised it, so the dump
+// pairs it with the notice record that put it up.
+func TestNoticeClearNamesItsSourceAndHow(t *testing.T) {
+	for _, how := range []string{ClearResolve, ClearDismiss, ClearExpire} {
+		e := NoticeClear("events", how)
+		if e.Src != "events" || e.Kind != "notice-clear" || e.KV["how"] != how {
+			t.Errorf("%s clear is %+v", how, e)
+		}
+	}
+}
+
+// The pane tree is client-only, so these records are the dump's only word on
+// which pane a later record's pane id came from.
+func TestPaneRecords(t *testing.T) {
+	if e := PaneSplit("p2", "p1"); e.Src != "pane" || e.Kind != "split" || e.KV["pane"] != "p2" || e.KV["from"] != "p1" {
+		t.Errorf("split is %+v", e)
+	}
+	if e := PaneClose([]string{"p2", "p3"}); e.Kind != "close" || e.KV["pane"] != "p2 p3" || e.Msg != "2 closed" {
+		t.Errorf("close is %+v", e)
+	}
+	if e := PaneSwap("p1", "p2"); e.Kind != "swap" || e.KV["pane"] != "p2" || e.KV["from"] != "p1" {
+		t.Errorf("swap is %+v", e)
+	}
+	if e := PaneZoom("p1", true); e.Kind != "zoom" || e.Msg != "zoom" || e.KV["pane"] != "p1" {
+		t.Errorf("zoom is %+v", e)
+	}
+	if e := PaneZoom("p1", false); e.Msg != "unzoom" {
+		t.Errorf("unzoom is %+v", e)
+	}
+}
+
+// A page's end says how many writes left by beacon, the one count of them.
+func TestUnloadCountsItsBeacons(t *testing.T) {
+	if e := Unload(3); e.Src != "client" || e.Kind != "unload" || e.KV["beacons"] != "3" {
+		t.Errorf("unload is %+v", e)
+	}
+}
+
+// A drop says how many tiles it carried and the cell it landed on, and a
+// rejection says which arm refused it, so a snap-back reads without a replay.
+func TestDropCarriesItsCountCellAndReason(t *testing.T) {
+	e := Drop(dragdrop.DropMove, DropAt{Pane: "p1", Tile: "t1", Grid: "g1", N: 3, X: -2, Y: 5, Cell: true})
+	if e.KV["n"] != "3" || e.KV["x"] != "-2" || e.KV["y"] != "5" || e.KV["why"] != "" {
+		t.Errorf("move is %+v", e)
+	}
+	e = Drop(dragdrop.DropRejected, DropAt{Pane: "p1", Tile: "t1", N: 1, Why: "occupied"})
+	if e.KV["why"] != "occupied" || e.KV["x"] != "" {
+		t.Errorf("a rejection with no cell is %+v", e)
+	}
+	if e := Drop(dragdrop.DropPanEnd, DropAt{}); e.KV != nil {
+		t.Errorf("a pan end names %v", e.KV)
+	}
+}
+
+// A write the client took back says so under its op, with the verdict that
+// refused it; a park is the other outcome and has its own record.
+func TestOutboxRollbackNamesTheWriteAndTheVerdict(t *testing.T) {
+	e := OutboxRollback("MoveTile", "t7abcde", "g7abcde", clientsync.OutcomeConflict)
+	if e.Src != "outbox" || e.Kind != "rollback" || e.KV["op"] != "MoveTile" ||
+		e.KV["id"] != "t7abcde" || e.KV["grid"] != "g7abcde" || e.KV["outcome"] != "conflict" {
+		t.Errorf("rollback is %+v", e)
+	}
+}
+
+// Clear selections is not a toggle on the grid in front: it says so, and
+// names no grid it would be read as limited to.
+func TestClearAllIsNotOneGridsSelect(t *testing.T) {
+	e := SelectClearAll("p1")
+	if e.Src != "gesture" || e.Kind != "select" || e.Msg != "clear all" || e.KV["grid"] != "" || e.KV["pane"] != "p1" {
+		t.Errorf("clear all is %+v", e)
+	}
+}
+
+// A live view's console lines and its state records share one src, and its
+// open names the address it opened on.
+func TestURLOpenCarriesItsAddress(t *testing.T) {
+	e := URLOpen("p1", "t7abcde", "https://example.com/a")
+	if e.Src != SrcURL || e.KV["url"] != "https://example.com/a" || e.KV["pane"] != "p1" {
+		t.Errorf("url open is %+v", e)
+	}
+	if e := ShellOpen("p1", "t7abcde"); e.Src != SrcShell {
+		t.Errorf("shell open is under %q", e.Src)
+	}
+}
+
+// The build records name both builds in full under kv and short in the
+// line, and an unstamped build says so rather than printing nothing.
+func TestBuildRecords(t *testing.T) {
+	full := "0123456789abcdef0123456789abcdef01234567"
+	e := NodeBuild(full)
+	if e.Src != "client" || e.Kind != "handshake" || e.KV["node"] != full || e.Msg != "node runs 0123456" {
+		t.Errorf("node build is %+v", e)
+	}
+	if e := NodeBuild(""); e.Msg != "node runs no build" || e.KV != nil {
+		t.Errorf("an unstamped node build is %+v", e)
+	}
+	e = OtherBuild("abcdef0123+dirty", full, "offer")
+	if e.Src != "client" || e.Kind != "build" || e.KV["client"] != "abcdef0123+dirty" ||
+		e.KV["node"] != full || e.KV["verdict"] != "offer" {
+		t.Errorf("other build is %+v", e)
+	}
+	if want := "the node runs 0123456, this page abcdef0+dirty: offer"; e.Msg != want {
+		t.Errorf("other build reads %q, want %q", e.Msg, want)
+	}
+}
+
+// A reload is the source changing the page, told apart from an open.
+func TestURLReloadNamesItsView(t *testing.T) {
+	e := URLReload("p1", "t7abcde")
+	if e.Src != SrcURL || e.Kind != "reload" || e.KV["pane"] != "p1" || e.KV["tile"] != "t7abcde" {
+		t.Errorf("url reload is %+v", e)
+	}
+}
+
+// A post the node did not keep is a trace record, never a notice, under the
+// trace's own src.
+func TestFlushFailedIsTheTracesOwn(t *testing.T) {
+	e := FlushFailed("502 Bad Gateway")
+	if e.Src != "trace" || e.Kind != "flush" || e.Msg != "post failed: 502 Bad Gateway" {
+		t.Errorf("flush failure is %+v", e)
 	}
 }

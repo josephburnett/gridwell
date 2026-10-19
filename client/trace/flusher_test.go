@@ -124,3 +124,18 @@ func TestARefusedPostIsRetriedWithoutAnotherEmit(t *testing.T) {
 		t.Fatalf("%d records were never posted", c.PendingCount())
 	}
 }
+
+// Once the page unloads no post starts, since none would be sent before the
+// page dies; the records wait for the unload batch, which carries them all.
+func TestAStoppedLoopPostsNothingAndUnloadCarriesIt(t *testing.T) {
+	l, c, f := newLoop()
+	f.Stop()
+	pending(c, FlushBatch, l.now)
+	l.advance(2 * flushWindow)
+	if len(l.answers) != 0 {
+		t.Fatalf("a stopped loop started %d posts", len(l.answers))
+	}
+	if got := decode(t, f.Unload()); len(got) != FlushBatch {
+		t.Errorf("the unload batch carries %d records, want %d", len(got), FlushBatch)
+	}
+}

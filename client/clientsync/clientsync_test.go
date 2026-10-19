@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -454,5 +455,18 @@ func TestTheDisabledVerdict(t *testing.T) {
 	}
 	if got, want := React(OutcomeDisabled), (Reaction{Log: true}); got != want {
 		t.Errorf("React(disabled) = %+v, want %+v: a gesture refused says why", got, want)
+	}
+}
+
+// Every outcome has its own word, so a rollback record says which verdict
+// took the write down.
+func TestEveryOutcomeHasItsOwnWord(t *testing.T) {
+	seen := map[string]bool{}
+	for o := OutcomeOK; o <= OutcomeDisabled; o++ {
+		w := o.String()
+		if strings.HasPrefix(w, "outcome ") || seen[w] {
+			t.Errorf("outcome %d reads %q", o, w)
+		}
+		seen[w] = true
 	}
 }

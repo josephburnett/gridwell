@@ -55,7 +55,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// diverge.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
-	verdict := a.commitVerdict(in, d, t)
+	verdict := a.commitVerdict(in, d, t, dropX, dropY)
 	switch verdict {
 	case dragdrop.DropNavigate, dragdrop.DropNavigateSplit:
 		// The split flavor is the same click asking for a split; focus

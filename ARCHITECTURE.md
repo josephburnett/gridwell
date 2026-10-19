@@ -551,7 +551,9 @@ nothing reads it back, and deleting it loses nothing the user owns.
 A record is one JSON object on one line, `api/tracewire.Record`, which the
 node and the client both read: `seq` and `t` are the node's stamps, then
 `origin` (node, client, electron, plugin), `src`, `kind`, `msg` capped at 1024
-bytes, a small `kv`, and the emitter's `cid` and `ct`. `seq` is receipt order.
+bytes, a small `kv`, and the emitter's `cid` and `ct`. A client's `cid` is the
+session it names itself by on `SetView` and `Subscribe` (`rpc.NewSession`), so
+its records join the node's `view/set`. `seq` is receipt order.
 `t` (unix milliseconds UTC) is when the record happened on the node's clock:
 a node record's emit time, and a sent record's `ct` plus its batch's skew.
 Each batch names the sender's clock at the post in `Gridwell-Trace-Clock`
@@ -568,13 +570,14 @@ and answers the path and the count. A dump is a reading: it clears nothing.
 
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
 gesture makes, and both APIs' interceptors emit a start and an end record
-carrying it and `kv.id`, the tile or grid the request names (a stream's
-rides the end record), with the duration and, on a failure, the code; a
-request naming a client session carries it as `kv.session`, and a select its
-`add`, `remove`, `clear`, `recurse` and `all`. The MCP API's tool calls are
-the same pair, verb `mcp/<tool>`, carrying the agent's shell key as
-`kv.shell_key`; a list's every item is an `mcp/item` record (`tool`, `i`, `id`,
-`verdict`), and the end record counts `items` and `refused`. What emits: every
+carrying it and `kv.id`, the tile or grid the request names (`rpc.EntityOf`,
+one spelling for both; a stream's entry record waits for the request it
+sends), with the duration and, on a failure, the code; a request naming a
+client session carries it as `kv.session`, and a select its `add`, `remove`,
+`clear`, `recurse` and `all`. The MCP API's tool calls are the same pair,
+verb `mcp/<tool>`, carrying the agent's shell key as `kv.shell_key`; a list's
+every item is an `mcp/item` record (`tool`, `i`, `id`, `verdict`), and the end
+record counts `items` and `refused`. What emits: every
 store write (one record at `withMutation`, the transaction every mutation runs
 in, naming its rows as `kv.keys` whether it wrote, changed nothing or was
 refused), every publish, delivery and coalesce in `eventhub` (keyed by the

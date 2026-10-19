@@ -17,6 +17,8 @@ type Flusher struct {
 	timer *debounce.Debounce
 	now   func() time.Time
 	post  func(batch []byte, done func(kept bool))
+	// stopped is Stop's, so a timer or an answer already due posts nothing.
+	stopped bool
 }
 
 // NewFlusher becomes c's OnEmit. post sends a batch off the event loop and
@@ -32,6 +34,9 @@ func NewFlusher(c *Client, now func() time.Time, schedule debounce.Schedule, pos
 // Kick posts if a post is due, and otherwise arms the timer for when one
 // will be. It runs after an emit, on the timer, and when a post is answered.
 func (f *Flusher) Kick() {
+	if f.stopped {
+		return
+	}
 	now := f.now()
 	if batch, done := f.pump.Start(f.c, now); batch != nil {
 		f.post(batch, f.answered(done))
@@ -51,6 +56,17 @@ func (f *Flusher) Force() (batch []byte, done func(kept bool)) {
 	}
 	return b, f.answered(d)
 }
+
+// Stop ends the loop as the page unloads: records still land in the ring,
+// and no post starts that the page would die before sending, so Unload's
+// batch is the one that carries them.
+func (f *Flusher) Stop() {
+	f.c.OnEmit = nil
+	f.stopped = true
+}
+
+// Unload is Pump.Unload, for the unload beacon.
+func (f *Flusher) Unload() []byte { return f.pump.Unload(f.c) }
 
 func (f *Flusher) answered(done func(bool)) func(bool) {
 	return func(kept bool) {

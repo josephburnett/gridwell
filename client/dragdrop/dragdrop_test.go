@@ -611,3 +611,29 @@ func TestPaneShows(t *testing.T) {
 		}
 	}
 }
+
+// Every rejection names its arm, and nothing else is a rejection, so a dump
+// says why a tile snapped back.
+func TestWhyRejectedNamesTheArm(t *testing.T) {
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true}
+	cases := []struct {
+		in   func(DropInput) DropInput
+		want string
+	}{
+		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
+		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
+		{func(in DropInput) DropInput { in.TargetRefusesTiles = true; return in }, "target refuses tiles"},
+		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
+		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
+		{func(in DropInput) DropInput { return in }, ""},
+	}
+	for _, c := range cases {
+		in := c.in(base)
+		if got := WhyRejected(in); got != c.want {
+			t.Errorf("%+v: why %q, want %q", in, got, c.want)
+		}
+		if rejected := DecideDrop(in) == DropRejected; rejected != (c.want != "") {
+			t.Errorf("%+v: verdict %v disagrees with why %q", in, DecideDrop(in), c.want)
+		}
+	}
+}

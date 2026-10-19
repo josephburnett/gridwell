@@ -78,9 +78,9 @@ type shellStreamConn struct {
 }
 
 var (
-	shellLog = taggedLog("[shellstream]")
+	shellLog = taggedLog("[" + traceevent.SrcShell + "]")
 	// The state changes carry their own record; see taggedLog.
-	shellConsole = consoleLog("[shellstream]")
+	shellConsole = consoleLog("[" + traceevent.SrcShell + "]")
 )
 
 // isShellDescent reads descentKind, as isURLDescent does, so an ephemeral

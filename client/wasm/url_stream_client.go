@@ -53,9 +53,9 @@ type urlView struct {
 }
 
 var (
-	urlLog = taggedLog("[urlview]")
+	urlLog = taggedLog("[" + traceevent.SrcURL + "]")
 	// The state changes carry their own record; see taggedLog.
-	urlConsole = consoleLog("[urlview]")
+	urlConsole = consoleLog("[" + traceevent.SrcURL + "]")
 )
 
 func contentViewBounds(r pane.Rect) viewBounds {
@@ -113,7 +113,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 		a.seedURLAddress(t)
 	}
 	addr := a.webAddress(t)
-	a.emit(traceevent.URLOpen(p.ID, t.Id))
+	a.emit(traceevent.URLOpen(p.ID, t.Id, addr))
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane.

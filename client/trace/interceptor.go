@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
 
@@ -26,23 +27,67 @@ type interceptor struct {
 	now func() time.Time
 }
 
-// span emits the entry record and returns the exit emitter. It is the client
-// half of server.rpcSpan, which the two APIs share: the msg and kv spellings
-// must match for a dump to read as one story.
-func (i interceptor) span(req, procedure string) func(err error) {
-	verb := procedure[strings.LastIndex(procedure, "/")+1:]
-	start := i.now()
-	i.c.Emit(rpcSrc, rpcKind, verb+" start", map[string]string{"req": req}, start)
-	return func(err error) {
-		end := i.now()
-		kv := map[string]string{"req": req, "ms": strconv.FormatInt(end.Sub(start).Milliseconds(), 10)}
-		msg := verb + " ok"
-		if err != nil {
-			msg = verb + " error: " + err.Error()
-			kv["code"] = connect.CodeOf(err).String()
-		}
-		i.c.Emit(rpcSrc, rpcKind, msg, kv, end)
+// span is one call's pair of records, the client half of server.rpcSpan: the
+// msg and kv spellings must match for a dump to read as one story. A stream's
+// request is sent after the call opens, so its entry record waits for that
+// message, or the end, and names the entity as a unary one does.
+type span struct {
+	i               interceptor
+	req, verb, id   string
+	start           time.Time
+	started, closed bool
+}
+
+// span opens the span; msg is the request message, nil for a stream.
+func (i interceptor) span(req, procedure string, msg any) *span {
+	s := &span{i: i, req: req, verb: procedure[strings.LastIndex(procedure, "/")+1:], start: i.now()}
+	if msg != nil {
+		s.saw(msg)
 	}
+	return s
+}
+
+// saw names the span's entity from the first message that carries one, and
+// emits the entry record on the first message.
+func (s *span) saw(msg any) {
+	if s.id == "" {
+		s.id = rpc.EntityOf(msg)
+	}
+	s.open()
+}
+
+// open emits the entry record once, at the call's start.
+func (s *span) open() {
+	if !s.started {
+		s.started = true
+		s.i.c.Emit(rpcSrc, rpcKind, s.verb+" start", s.kv(), s.start)
+	}
+}
+
+// end emits the exit record once.
+func (s *span) end(err error) {
+	if s.closed {
+		return
+	}
+	s.open()
+	s.closed = true
+	end := s.i.now()
+	kv := s.kv()
+	kv["ms"] = strconv.FormatInt(end.Sub(s.start).Milliseconds(), 10)
+	msg := s.verb + " ok"
+	if err != nil {
+		msg = s.verb + " error: " + err.Error()
+		kv["code"] = connect.CodeOf(err).String()
+	}
+	s.i.c.Emit(rpcSrc, rpcKind, msg, kv, end)
+}
+
+func (s *span) kv() map[string]string {
+	kv := map[string]string{"req": s.req}
+	if s.id != "" {
+		kv["id"] = s.id
+	}
+	return kv
 }
 
 const (
@@ -57,9 +102,9 @@ func (i interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		if req.Spec().IsClient {
 			id := NewRequestID()
 			req.Header().Set(tracewire.RequestHeader, id)
-			done := i.span(id, req.Spec().Procedure)
+			s := i.span(id, req.Spec().Procedure, req.Any())
 			resp, err := next(ctx, req)
-			done(err)
+			s.end(err)
 			return resp, err
 		}
 		return next(ctx, req)
@@ -73,7 +118,7 @@ func (i interceptor) WrapStreamingClient(next connect.StreamingClientFunc) conne
 		conn := next(ctx, spec)
 		id := NewRequestID()
 		conn.RequestHeader().Set(tracewire.RequestHeader, id)
-		return &tracedConn{StreamingClientConn: conn, done: i.span(id, spec.Procedure)}
+		return &tracedConn{StreamingClientConn: conn, s: i.span(id, spec.Procedure, nil)}
 	}
 }
 
@@ -82,14 +127,20 @@ func (i interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) con
 	return next
 }
 
-// tracedConn ends its span when the read side closes, which is where a stream
-// that died and one the client let go both arrive. A server stream's verdict
-// arrives on Receive and the close then reports nothing, so the first
-// non-EOF Receive error is the span's; the close's error only if none.
+// tracedConn hands its span the request it sends, and ends the span when the
+// read side closes, which is where a stream that died and one the client let
+// go both arrive. A server stream's verdict arrives on Receive and the close
+// then reports nothing, so the first non-EOF Receive error is the span's; the
+// close's error only if none.
 type tracedConn struct {
 	connect.StreamingClientConn
-	done    func(err error)
+	s       *span
 	recvErr error
+}
+
+func (t *tracedConn) Send(msg any) error {
+	t.s.saw(msg)
+	return t.StreamingClientConn.Send(msg)
 }
 
 func (t *tracedConn) Receive(msg any) error {
@@ -102,13 +153,10 @@ func (t *tracedConn) Receive(msg any) error {
 
 func (t *tracedConn) CloseResponse() error {
 	err := t.StreamingClientConn.CloseResponse()
-	if t.done != nil {
-		if t.recvErr != nil {
-			t.done(t.recvErr)
-		} else {
-			t.done(err)
-		}
-		t.done = nil
+	if t.recvErr != nil {
+		t.s.end(t.recvErr)
+	} else {
+		t.s.end(err)
 	}
 	return err
 }

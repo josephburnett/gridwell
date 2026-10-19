@@ -27,7 +27,7 @@ func (a *App) otherBuild(node string) {
 	if a.buildVerdict == nil || *a.buildVerdict != v {
 		a.buildVerdict = &v
 		a.emit(traceevent.OtherBuild(a.gate.Build(), node, v.String()))
-		a.errs.Resolve(other)
+		a.resolveErr(other)
 	}
 	keys := a.persist.out.Keys()
 	ops := make([]string, len(keys))

@@ -129,6 +129,8 @@ type App struct {
 
 	// unloading switches framing writes to sendBeacon; see unload.go.
 	unloading bool
+	// beacons counts the beacons sent, for the unload record.
+	beacons int
 
 	// gate names this page's build on every call and hears the API refuse
 	// it; buildVerdict is the verdict last acted on (build.go).
@@ -412,7 +414,10 @@ func newScheduler(a *App) scheduler {
 		// A notice's own deadline, and a throttle: a settle would push the window
 		// out on every new notice.
 		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
-			if a.errs.Expire(time.Now()) {
+			if gone := a.errs.Expire(time.Now()); len(gone) > 0 {
+				for _, source := range gone {
+					a.emit(traceevent.NoticeClear(source, traceevent.ClearExpire))
+				}
 				a.scheduleDraw(traceevent.WhyNotice) // notice row shrank; panes reclaim the height on redraw
 			}
 			a.scheduleErrExpiry()
@@ -585,14 +590,17 @@ const dragThreshold = 4.0
 
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
-	// Before the App: the rpc client's interceptor records into it.
-	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
+	// Before the App: the rpc client's interceptor records into it. The ring
+	// stamps the session the client names itself by, so a dump joins this
+	// page's records to the view the node files under it.
+	session := rpc.NewSession()
+	tr := trace.New(trace.DefaultCapacity, session)
 	gate := nodebuild.New(tracewire.BuildCommit(), func(node string) { app.otherBuild(node) })
 	app = &App{
 		doc:                js.Global().Get("document"),
 		win:                js.Global().Get("window"),
 		origin:             origin,
-		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
+		cl:                 rpc.NewDefaultClient(origin, session, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
 		gate:               gate,
 		c:                  cache.New(),
 		subscriptionKick:   make(chan struct{}, 1),
@@ -1024,12 +1032,14 @@ func (a *App) startSSE() {
 			return s, nil
 		},
 		Opened: func(resync bool) {
+			a.emit(traceevent.EventsOpen(resync))
 			a.resolveErr("events")
 			if resync {
 				// The gap swallowed events without saying whose, so nothing scopes.
 				a.retryKick(true, cache.EverySource)
 			}
 		},
+		Ended: func(err error) { a.emit(traceevent.EventsEnd(err)) },
 		// Until this reconnects, everything on screen is silently going stale.
 		Broken: func() { a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying") },
 		Event: func(ev *gridwellv1.Event) {
@@ -1106,7 +1116,8 @@ func (a *App) retryKick(resync bool, source string) {
 		// Failure latches are gap state, asked again by name. The menu set's
 		// predicate is cache.Reaches: a connection's flap covers the nodes behind it.
 		reaches := func(ns string) bool { return cache.Reaches(ns, source) }
-		a.reask(a.fetch.grids.ClearIf(served), a.fetch.tiles.ClearIf(served),
+		latched := a.fetch.grids.ClearIf(served)
+		a.reask(latched, a.fetch.tiles.ClearIf(served),
 			a.fetch.contents.ClearIf(served), a.fetch.previews.ClearIf(served),
 			a.fetch.menus.ClearIf(reaches))
 		// A request that dies with its link never returns, and its claim would block
@@ -1117,7 +1128,9 @@ func (a *App) retryKick(resync bool, source string) {
 		a.fetch.contents.CancelIf(served)
 		a.fetch.previews.CancelIf(served)
 		a.fetch.menus.CancelIf(reaches)
-		for _, gid := range append(stuck, a.c.ResyncSet(source)...) {
+		held := append(stuck, a.c.ResyncSet(source)...)
+		a.emit(traceevent.EventsResync(source, len(latched)+len(held)))
+		for _, gid := range held {
 			a.fetchGrid(gid)
 		}
 		a.refetchMenus()
@@ -1256,6 +1269,7 @@ func (a *App) scheduleErrExpiry() {
 // rides the surface's verdict.
 func (a *App) resolveErr(source string) {
 	if a.errs.Resolve(source) {
+		a.emit(traceevent.NoticeClear(source, traceevent.ClearResolve))
 		a.scheduleDraw(traceevent.WhyNotice)
 	}
 }

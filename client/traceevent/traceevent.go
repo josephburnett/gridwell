@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/tracewire"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -41,6 +42,13 @@ func Boot(commit, goVersion, userAgent string) Event {
 		KV: kv("commit", commit, "go", goVersion, "ua", userAgent)}
 }
 
+// Unload is the page going away, a reload or a quit: beacons is how many
+// writes it sent by beacon on the way out, which no rpc record shows.
+func Unload(beacons int) Event {
+	return Event{Src: "client", Kind: "unload", Msg: "page unloads",
+		KV: kv("beacons", strconv.Itoa(beacons))}
+}
+
 // NodeBuild is the build the node's handshake named, beside the client's own
 // on its boot record.
 func NodeBuild(node string) Event {
@@ -70,6 +78,20 @@ func Notice(sev errsurface.Severity, source, message string) Event {
 		s = "info"
 	}
 	return Event{Src: source, Kind: "notice", Msg: message, KV: kv("sev", s)}
+}
+
+// How a notice came down: its condition healed, the user pressed it away, or
+// its deadline passed.
+const (
+	ClearResolve = "resolve"
+	ClearDismiss = "dismiss"
+	ClearExpire  = "expire"
+)
+
+// NoticeClear is a notice leaving the row, under the source that raised it, so
+// a dump says how long the user saw it.
+func NoticeClear(source, how string) Event {
+	return Event{Src: source, Kind: "notice-clear", Msg: how, KV: kv("how", how)}
 }
 
 // Log is a console line, under the tag it was written with.
@@ -134,6 +156,35 @@ func Framing(gridID, tileID string, cx, cy, zoom float64) Event {
 
 func f(v float64) string { return strconv.FormatFloat(v, 'g', 6, 64) }
 
+// EventsOpen is the event stream opening; resync says a gap came before it,
+// so every held grid is read again (EventsResync).
+func EventsOpen(resync bool) Event {
+	msg := "stream opens"
+	if resync {
+		msg = "stream reopens after a gap"
+	}
+	return Event{Src: "events", Kind: "open", Msg: msg, KV: kv("resync", strconv.FormatBool(resync))}
+}
+
+// EventsEnd is an open stream ending: reason "clean" when the node closed it,
+// "broken" with the error otherwise.
+func EventsEnd(err error) Event {
+	if err == nil {
+		return Event{Src: "events", Kind: "end", Msg: "the node ended the stream", KV: kv("reason", "clean")}
+	}
+	return Event{Src: "events", Kind: "end", Msg: err.Error(), KV: kv("reason", "broken")}
+}
+
+// EventsResync is the re-read a gap owes: n grids asked again from source,
+// "every" when the gap was the whole stream's.
+func EventsResync(source string, n int) Event {
+	if source == "" {
+		source = "every"
+	}
+	return Event{Src: "events", Kind: "resync", Msg: strconv.Itoa(n) + " grids re-read",
+		KV: kv("source", source, "n", strconv.Itoa(n))}
+}
+
 // EventRecv and EventApplied bracket one Subscribe event: what arrived, and
 // whether folding it in changed anything on screen.
 func EventRecv(ev *pb.Event) Event {
@@ -181,44 +232,60 @@ func OutboxPark(op, id string) Event {
 	return Event{Src: "outbox", Kind: "park", Msg: op, KV: kv("id", id)}
 }
 
+// OutboxRollback is an optimistic write the client took back: the verdict
+// (clientsync.Outcome) refused it, so what the screen showed ahead of the
+// node is undone. id is the entity the write named, grid the grid it re-reads.
+func OutboxRollback(op, id, gridID string, o clientsync.Outcome) Event {
+	return Event{Src: "outbox", Kind: "rollback", Msg: op,
+		KV: kv("op", op, "id", id, "grid", gridID, "outcome", o.String())}
+}
+
 func OutboxDrain(n int) Event {
 	return Event{Src: "outbox", Kind: "drain", Msg: strconv.Itoa(n) + " owed"}
 }
 
+// SrcURL and SrcShell are the live surfaces' src, on their state records
+// and their console lines alike.
+const (
+	SrcURL   = "url"
+	SrcShell = "shell"
+)
+
 // URLOpen, URLClose, ShellOpen, ShellClose and ShellExit are the live
-// surfaces' state changes: a descent that went live, and what ended it.
-func URLOpen(paneID, tileID string) Event {
-	return Event{Src: "url", Kind: "open", Msg: "live view opens", KV: kv("pane", paneID, "tile", tileID)}
+// surfaces' state changes: a descent that went live, and what ended it. A
+// view opens on an address, which the record carries.
+func URLOpen(paneID, tileID, address string) Event {
+	return Event{Src: SrcURL, Kind: "open", Msg: "live view opens", KV: kv("pane", paneID, "tile", tileID, "url", address)}
 }
 
 func URLClose(paneID, tileID string, freeze bool) Event {
-	return Event{Src: "url", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcURL, Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // URLReload is a live view loading its page again because its source changed
 // it.
 func URLReload(paneID, tileID string) Event {
-	return Event{Src: "url", Kind: "reload", Msg: "live view reloads its changed page", KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcURL, Kind: "reload", Msg: "live view reloads its changed page", KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // URLMove is a live view handed to another pane with its page.
 func URLMove(fromPaneID, toPaneID, tileID string) Event {
-	return Event{Src: "url", Kind: "move", Msg: "live view moves",
+	return Event{Src: SrcURL, Kind: "move", Msg: "live view moves",
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
 }
 
 // ShellMove is a live terminal handed to another pane with its socket.
 func ShellMove(fromPaneID, toPaneID, tileID string) Event {
-	return Event{Src: "shell", Kind: "move", Msg: "live terminal moves",
+	return Event{Src: SrcShell, Kind: "move", Msg: "live terminal moves",
 		KV: kv("pane", toPaneID, "from", fromPaneID, "tile", tileID)}
 }
 
 func ShellOpen(paneID, tileID string) Event {
-	return Event{Src: "shell", Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcShell, Kind: "open", Msg: "stream opens", KV: kv("pane", paneID, "tile", tileID)}
 }
 
 func ShellClose(paneID, tileID string, freeze bool) Event {
-	return Event{Src: "shell", Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcShell, Kind: "close", Msg: closeMsg(freeze), KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // ShellExit is the far end going away, which is not this client closing the
@@ -227,7 +294,7 @@ func ShellExit(paneID, tileID, message string, tmuxGone bool) Event {
 	if tmuxGone {
 		message += " (tmux gone)"
 	}
-	return Event{Src: "shell", Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
+	return Event{Src: SrcShell, Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // closeMsg: a frozen surface keeps its preview and its address, a closed one is
@@ -284,6 +351,31 @@ func Nav(g nav.Gesture) Event {
 // one and records nothing.
 func Focus(from, to string) Event {
 	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
+}
+
+// PaneSplit, PaneClose, PaneSwap and PaneZoom are the pane tree's changes,
+// client-only state no call shows: pane is the pane the change made or moved,
+// from the pane it came from.
+func PaneSplit(paneID, fromID string) Event {
+	return Event{Src: "pane", Kind: "split", Msg: "pane opens", KV: kv("pane", paneID, "from", fromID)}
+}
+
+// PaneClose names every pane one crush closed.
+func PaneClose(paneIDs []string) Event {
+	return Event{Src: "pane", Kind: "close", Msg: strconv.Itoa(len(paneIDs)) + " closed",
+		KV: kv("pane", strings.Join(paneIDs, " "))}
+}
+
+func PaneSwap(fromID, toID string) Event {
+	return Event{Src: "pane", Kind: "swap", Msg: "panes swap", KV: kv("pane", toID, "from", fromID)}
+}
+
+func PaneZoom(paneID string, zoomed bool) Event {
+	msg := "unzoom"
+	if zoomed {
+		msg = "zoom"
+	}
+	return Event{Src: "pane", Kind: "zoom", Msg: msg, KV: kv("pane", paneID)}
 }
 
 // DOMFocus is the document's keyboard focus landing on an element: which
@@ -343,6 +435,12 @@ func Select(how, paneID, gridID string, n int) Event {
 		KV: kv("pane", paneID, "grid", gridID, "n", strconv.Itoa(n))}
 }
 
+// SelectClearAll is the menu's Clear selections, which empties every set the
+// node holds rather than one grid's, so it names no grid and no count.
+func SelectClearAll(paneID string) Event {
+	return Event{Src: "gesture", Kind: "select", Msg: "clear all", KV: kv("pane", paneID)}
+}
+
 // buttonName is the table over MouseEvent.button.
 func buttonName(b int) string {
 	switch b {
@@ -356,11 +454,36 @@ func buttonName(b int) string {
 	return "button " + strconv.Itoa(b)
 }
 
-// Drop is a committed release, naming the pane the gesture was made in and
-// the grid it landed on. The ghost's per-move preview records nothing.
-func Drop(v dragdrop.DropAction, paneID, tileID, gridID string) Event {
-	return Event{Src: "drag", Kind: "drop", Msg: dropName(v),
-		KV: kv("pane", paneID, "tile", tileID, "grid", gridID)}
+// DropAt is where a committed release was made and landed: the pane the
+// gesture was made in, the grabbed tile, the grid and cell it landed on (Cell
+// says there is one), how many tiles it carried, and why a rejection was one
+// (dragdrop.WhyRejected).
+type DropAt struct {
+	Pane, Tile, Grid string
+	N                int
+	X, Y             int64
+	Cell             bool
+	Why              string
+}
+
+// Drop is a committed release. The ghost's per-move preview records nothing.
+func Drop(v dragdrop.DropAction, at DropAt) Event {
+	e := Event{Src: "drag", Kind: "drop", Msg: dropName(v),
+		KV: kv("pane", at.Pane, "tile", at.Tile, "grid", at.Grid, "why", at.Why)}
+	if e.KV == nil {
+		e.KV = map[string]string{}
+	}
+	if at.N > 0 {
+		e.KV["n"] = strconv.Itoa(at.N)
+	}
+	if at.Cell {
+		e.KV["x"] = strconv.FormatInt(at.X, 10)
+		e.KV["y"] = strconv.FormatInt(at.Y, 10)
+	}
+	if len(e.KV) == 0 {
+		e.KV = nil
+	}
+	return e
 }
 
 // dropName is the table over DecideDrop's verdicts.
