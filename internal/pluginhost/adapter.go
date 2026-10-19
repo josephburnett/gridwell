@@ -32,6 +32,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // Supervisor is whoever owns the plugin's subprocess. The adapter never decides
@@ -217,8 +218,19 @@ func (a *Adapter) setSource(edit func()) {
 	now := a.sourceLocked()
 	a.srcMu.Unlock()
 	if (now.dark != was.dark || now.liveOff != was.liveOff) && a.processUp() {
+		a.trace("health", now.line(), map[string]string{
+			"dark": strconv.FormatBool(now.dark), "liveOff": now.liveOff, "detail": now.detail})
 		a.hub.Publish(now.event())
 	}
+}
+
+// trace emits one pluginhost record naming this plugin.
+func (a *Adapter) trace(kind, msg string, kv map[string]string) {
+	if kv == nil {
+		kv = map[string]string{}
+	}
+	kv["plugin"] = a.mem.ID()
+	trace.Emit("pluginhost", kind, msg, kv)
 }
 
 func (a *Adapter) processUp() bool {
@@ -234,6 +246,17 @@ func (a *Adapter) processUp() bool {
 type sourceState struct {
 	dark            bool
 	detail, liveOff string
+}
+
+func (s sourceState) line() string {
+	msg := "source live"
+	if s.dark {
+		msg = "source dark"
+	}
+	if s.liveOff != "" {
+		msg += ", live updates off"
+	}
+	return msg
 }
 
 func (s sourceState) event() *gridwellv1.Event {
@@ -452,6 +475,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	cached := resp.Unreachable != ""
 	if cached {
 		outage, resp.Authoritative = resp.Unreachable, false
+		a.trace("serve", "served from the plugin's cache", map[string]string{"grid": gridID, "cached": "1"})
 	}
 	a.noteSource(outage != "", outage)
 	if err := acceptEntries(gkey, resp.Entries); err != nil {

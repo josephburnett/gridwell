@@ -2,8 +2,10 @@ package cli
 
 import (
 	"runtime"
+	"strconv"
 
 	"github.com/josephburnett/gridwell/api/tracewire"
+	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
 // Version is stamped by the release build from the git tag, its one owner.
@@ -18,10 +20,12 @@ func VersionString() string {
 	return Version
 }
 
-// bootRecord is the node's first trace record: the build and the directory it
-// serves.
+// bootRecord is the node's first trace record: the build, the gridwell.db
+// schema it opens (a newer file is refused, an older one migrated to it) and
+// the directory it serves.
 func bootRecord(dir string) tracewire.Record {
-	kv := map[string]string{"version": VersionString(), "go": runtime.Version(), "dir": dir}
+	kv := map[string]string{"version": VersionString(), "go": runtime.Version(), "dir": dir,
+		"schema": strconv.Itoa(store.SchemaVersion())}
 	msg := "gridwell " + VersionString()
 	if c := tracewire.BuildCommit(); c != "" {
 		kv["commit"] = c

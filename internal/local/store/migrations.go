@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/dbformat"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // applicationID marks a database file as a Gridwell DB, written into the
@@ -24,6 +26,9 @@ const applicationID = 0x4757654C // "GWeL"
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
 const schemaVersion = 21
+
+// SchemaVersion is the schema generation this binary reads and writes.
+func SchemaVersion() int { return schemaVersion }
 
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
@@ -563,10 +568,40 @@ func (s *Store) applyMigrations(ctx context.Context) error {
 // the foreign-file and newer-version refusals, the chain — is
 // internal/dbformat.EnsureVersion. migs and target are parameters rather than
 // the globals so tests can drive a synthetic chain against a frozen-v1 DB.
+// Each step that ran is a store/migrate record once the chain commits, with
+// the rows it wrote (SQLite's total_changes across the step).
 func (s *Store) migrateUp(ctx context.Context, migs []migration, target int) error {
+	var ran []map[string]string
 	chain := make([]dbformat.Migration, 0, len(migs))
 	for _, m := range migs {
-		chain = append(chain, dbformat.Migration{To: m.to, Run: m.run})
+		chain = append(chain, dbformat.Migration{To: m.to, Run: func(ctx context.Context, tx *sql.Tx) error {
+			before, err := totalChanges(ctx, tx)
+			if err != nil {
+				return err
+			}
+			if err := m.run(ctx, tx); err != nil {
+				return err
+			}
+			after, err := totalChanges(ctx, tx)
+			if err != nil {
+				return err
+			}
+			ran = append(ran, map[string]string{"from": strconv.Itoa(m.to - 1), "to": strconv.Itoa(m.to),
+				"rows": strconv.FormatInt(after-before, 10)})
+			return nil
+		}})
 	}
-	return dbformat.EnsureVersion(ctx, s.db, applicationID, target, chain)
+	if err := dbformat.EnsureVersion(ctx, s.db, applicationID, target, chain); err != nil {
+		return err
+	}
+	for _, kv := range ran {
+		trace.Emit("store", "migrate", "migrate v"+kv["from"]+" to v"+kv["to"], kv)
+	}
+	return nil
+}
+
+func totalChanges(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var n int64
+	err := tx.QueryRowContext(ctx, `SELECT total_changes()`).Scan(&n)
+	return n, err
 }

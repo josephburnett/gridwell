@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 
 	"google.golang.org/grpc/codes"
@@ -362,6 +363,8 @@ func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func
 		if err := opened(); err != nil {
 			return err
 		}
+		a.traceWatch("open", scope)
+		defer a.traceWatch("close", scope)
 	}
 	for {
 		ch, err := stream.Recv()
@@ -373,6 +376,15 @@ func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func
 		}
 		a.applyChange(apply, ch)
 	}
+}
+
+// traceWatch records a Watch stream opening or closing on the grids it covers.
+func (a *Adapter) traceWatch(state string, scope []string) {
+	grids := make([]string, len(scope))
+	for i, c := range scope {
+		grids[i] = rpc.EntryGridID(c)
+	}
+	a.trace("watch", "watch "+state, map[string]string{"grids": strings.Join(grids, " "), "state": state})
 }
 
 // SetView takes this plugin's share of the node's subscription, grids the
@@ -468,6 +480,10 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 	return slices.Clone(a.scope), a.moved
 }
 
+func (a *Adapter) traceChange(msg, gridKey string) {
+	a.trace("changed", msg, map[string]string{"grid": rpc.EntryGridID(gridKey)})
+}
+
 // applyChange announces a grid whose listing moved (check) and an
 // entry changed in place (applyEntry). A removal is announced as DeleteTile
 // announces one: the refetch it causes runs the listing's own sweep, so the
@@ -475,11 +491,14 @@ func (a *Adapter) scopeNow() ([]string, <-chan struct{}) {
 func (a *Adapter) applyChange(ctx context.Context, ch *pluginv1.Change) {
 	switch p := ch.GetPayload().(type) {
 	case *pluginv1.Change_GridChanged:
+		a.traceChange("grid changed", p.GridChanged.GetGrid())
 		a.check(ctx, []string{p.GridChanged.GetGrid()})
 	case *pluginv1.Change_EntryChanged:
+		a.traceChange("entry changed", p.EntryChanged.GetGrid())
 		a.applyEntry(ctx, p.EntryChanged.GetGrid(), p.EntryChanged.GetEntry())
 	case *pluginv1.Change_EntryRemoved:
 		// The one reading of the retired arm: a GridChanged for its grid.
+		a.traceChange("entry removed", p.EntryRemoved.GetGrid())
 		a.check(ctx, []string{p.EntryRemoved.GetGrid()})
 	}
 }
