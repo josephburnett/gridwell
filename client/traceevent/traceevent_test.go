@@ -365,3 +365,14 @@ func TestEventStreamLifecycleRecords(t *testing.T) {
 		t.Errorf("one source's resync is %+v", e)
 	}
 }
+
+// A notice's going is a record under the source that raised it, so the dump
+// pairs it with the notice record that put it up.
+func TestNoticeClearNamesItsSourceAndHow(t *testing.T) {
+	for _, how := range []string{ClearResolve, ClearDismiss, ClearExpire} {
+		e := NoticeClear("events", how)
+		if e.Src != "events" || e.Kind != "notice-clear" || e.KV["how"] != how {
+			t.Errorf("%s clear is %+v", how, e)
+		}
+	}
+}

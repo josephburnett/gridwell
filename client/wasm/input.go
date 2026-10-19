@@ -395,6 +395,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			}
 		}
 		if press.Dismissed {
+			a.emit(traceevent.NoticeClear(press.Source, traceevent.ClearDismiss))
 			a.draw()
 		}
 		return nil

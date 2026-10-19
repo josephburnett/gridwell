@@ -166,17 +166,19 @@ func (s *Surface) Offer(sev Severity, source, message string, act Action, now ti
 }
 
 // Expire is an explicit mutation on the caller's clock tick, because reading
-// never mutates. It reports whether anything changed.
-func (s *Surface) Expire(now time.Time) bool {
+// never mutates. It answers the sources whose notices it took down.
+func (s *Surface) Expire(now time.Time) []string {
+	var gone []string
 	kept := s.notices[:0]
 	for _, n := range s.notices {
 		if n.deadline.IsZero() || n.deadline.After(now) {
 			kept = append(kept, n)
+		} else {
+			gone = append(gone, n.Source)
 		}
 	}
-	changed := len(kept) != len(s.notices)
 	s.notices = kept
-	return changed
+	return gone
 }
 
 // NextDeadline lets the wasm shell arm one timer instead of polling. The
@@ -318,8 +320,8 @@ func ButtonRect(r Row, width float64) (x, y, w, h float64, ok bool) {
 	return width - ButtonW - ButtonInset, r.Y + ButtonInset, ButtonW, RowH - 2*ButtonInset, true
 }
 
-// Press is what a press in the notice row did: dismissed a notice, or pressed a
-// button whose Action the caller runs on the notice of Source.
+// Press is what a press in the notice row did: dismissed the notice of
+// Source, or pressed a button whose Action the caller runs on it.
 type Press struct {
 	Dismissed bool
 	Action    Action
@@ -341,7 +343,10 @@ func (s *Surface) PressAt(x, y, noticesTop, width float64) Press {
 			}
 			return Press{}
 		}
-		return Press{Dismissed: s.Dismiss(r.Notice.ID)}
+		if s.Dismiss(r.Notice.ID) {
+			return Press{Dismissed: true, Source: r.Notice.Source}
+		}
+		return Press{}
 	}
 	return Press{}
 }

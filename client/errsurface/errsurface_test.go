@@ -184,13 +184,13 @@ func TestSticky(t *testing.T) {
 func TestNonStickyNoticeExpires(t *testing.T) {
 	s := New()
 	s.Report(Error, "rpc:MoveTile", "move failed", t0)
-	if s.Expire(t0.Add(ExpireAfter - time.Millisecond)) {
+	if len(s.Expire(t0.Add(ExpireAfter-time.Millisecond))) > 0 {
 		t.Fatalf("notice expired before its deadline")
 	}
 	if s.Len() != 1 {
 		t.Fatalf("len = %d, want 1 before deadline", s.Len())
 	}
-	if !s.Expire(t0.Add(ExpireAfter)) {
+	if len(s.Expire(t0.Add(ExpireAfter))) == 0 {
 		t.Fatalf("Expire at deadline reported no change")
 	}
 	if s.Len() != 0 {
@@ -205,10 +205,10 @@ func TestReReportRefreshesDeadline(t *testing.T) {
 	s.Report(Error, "rpc:UpdateText", "save failed", t0)
 	t1 := t0.Add(ExpireAfter / 2)
 	s.Report(Error, "rpc:UpdateText", "save failed", t1)
-	if s.Expire(t0.Add(ExpireAfter)) {
+	if len(s.Expire(t0.Add(ExpireAfter))) > 0 {
 		t.Fatalf("recurring notice expired on its stale first deadline")
 	}
-	if !s.Expire(t1.Add(ExpireAfter)) {
+	if len(s.Expire(t1.Add(ExpireAfter))) == 0 {
 		t.Fatalf("notice did not expire after silence")
 	}
 }
@@ -217,7 +217,7 @@ func TestStickySourcesNeverExpire(t *testing.T) {
 	for _, src := range []string{"plugin:abc", "electron:backend"} {
 		s := New()
 		s.Report(Error, src, "down", t0)
-		if s.Expire(t0.Add(100 * ExpireAfter)) {
+		if len(s.Expire(t0.Add(100*ExpireAfter))) > 0 {
 			t.Errorf("sticky source %q expired; must persist until Resolve/Dismiss", src)
 		}
 		s.Resolve(src)
@@ -232,8 +232,8 @@ func TestExpireRemovesOnlyExpired(t *testing.T) {
 	s.Report(Error, "plugin:abc", "down", t0) // sticky
 	s.Report(Error, "old", "x", t0)
 	s.Report(Error, "fresh", "y", t0.Add(ExpireAfter/2))
-	if !s.Expire(t0.Add(ExpireAfter)) {
-		t.Fatalf("Expire reported no change")
+	if gone := s.Expire(t0.Add(ExpireAfter)); len(gone) != 1 || gone[0] != "old" {
+		t.Fatalf("Expire answered %v, want the one source it took down", gone)
 	}
 	got := s.Notices()
 	if len(got) != 2 || got[0].Source != "fresh" || got[1].Source != "plugin:abc" {
@@ -268,8 +268,8 @@ func TestPressAt(t *testing.T) {
 	top, width := 500.0, 800.0
 
 	// A press in the second row dismisses the older notice "a".
-	if got := s.PressAt(10, top+RowH+1, top, width); !got.Dismissed {
-		t.Fatalf("press in row 1 did not dismiss")
+	if got := s.PressAt(10, top+RowH+1, top, width); !got.Dismissed || got.Source != "a" {
+		t.Fatalf("press in row 1 did %+v, want a's dismissal", got)
 	}
 	if s.Len() != 1 || s.Notices()[0].Source != "b" {
 		t.Fatalf("wrong notice dismissed: %+v", s.Notices())

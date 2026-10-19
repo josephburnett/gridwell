@@ -1,6 +1,7 @@
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { envelope } from './oracle';
 import { dumpNow, TraceLine } from './trace';
+import { pickFromNativeMenu } from './choicemenu';
 
 // The client's records that only a dump joins to the node's: each one says
 // something the wire cannot, so each is read back through /trace from a real
@@ -96,4 +97,37 @@ test('both halves of an rpc span name the entity the request is about', async ({
     );
     if (node) expect(node.kv?.id, 'one spelling on both sides').toBe(c.kv?.id);
   }
+});
+
+test('a notice pressed away leaves a record of how it went', async ({ electronApp, gw, home, window }) => {
+  await gw.enterPlugin('home');
+  await gw.waitIdle();
+  // Dump logs puts up an info notice with no button, so a press on its row
+  // dismisses it.
+  const popped = pickFromNativeMenu(electronApp, 'Dump logs');
+  await gw.rightClickCircle();
+  await popped;
+  await expect
+    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices.length, {
+      timeout: 20_000,
+    })
+    .toBeGreaterThan(0);
+  const h = await window.evaluate(() => (window as any).innerHeight as number);
+  await window.mouse.click(10, h - 5);
+  await expect
+    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices.length)
+    .toBe(0);
+
+  const token = await loginToken(gw.origin, homePassword(home));
+  let cid = '';
+  let lines: TraceLine[] = [];
+  await expect
+    .poll(
+      async () => {
+        ({ cid, lines } = await dumpNow(window, gw.origin, token));
+        return of(lines, cid, 'trace', 'notice-clear').map((r) => r.kv?.how);
+      },
+      { timeout: 20_000 },
+    )
+    .toEqual(['dismiss']);
 });

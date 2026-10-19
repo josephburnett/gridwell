@@ -412,7 +412,10 @@ func newScheduler(a *App) scheduler {
 		// A notice's own deadline, and a throttle: a settle would push the window
 		// out on every new notice.
 		errExpire: debounce.New(setTimeoutMs, nowMs, debounce.Throttle, func() {
-			if a.errs.Expire(time.Now()) {
+			if gone := a.errs.Expire(time.Now()); len(gone) > 0 {
+				for _, source := range gone {
+					a.emit(traceevent.NoticeClear(source, traceevent.ClearExpire))
+				}
 				a.scheduleDraw(traceevent.WhyNotice) // notice row shrank; panes reclaim the height on redraw
 			}
 			a.scheduleErrExpiry()
@@ -1264,6 +1267,7 @@ func (a *App) scheduleErrExpiry() {
 // rides the surface's verdict.
 func (a *App) resolveErr(source string) {
 	if a.errs.Resolve(source) {
+		a.emit(traceevent.NoticeClear(source, traceevent.ClearResolve))
 		a.scheduleDraw(traceevent.WhyNotice)
 	}
 }

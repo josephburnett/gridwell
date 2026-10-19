@@ -72,6 +72,20 @@ func Notice(sev errsurface.Severity, source, message string) Event {
 	return Event{Src: source, Kind: "notice", Msg: message, KV: kv("sev", s)}
 }
 
+// How a notice came down: its condition healed, the user pressed it away, or
+// its deadline passed.
+const (
+	ClearResolve = "resolve"
+	ClearDismiss = "dismiss"
+	ClearExpire  = "expire"
+)
+
+// NoticeClear is a notice leaving the row, under the source that raised it, so
+// a dump says how long the user saw it.
+func NoticeClear(source, how string) Event {
+	return Event{Src: source, Kind: "notice-clear", Msg: how, KV: kv("how", how)}
+}
+
 // Log is a console line, under the tag it was written with.
 func Log(tag, message string) Event {
 	return Event{Src: strings.Trim(tag, "[]"), Kind: "log", Msg: message}
