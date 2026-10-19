@@ -605,7 +605,8 @@ answered (`sourcecache/serve`: hit, cached or miss), what each refresh behind
 found (`sourcecache/revalidate`) and each prefetch walk's start and breadth
 (`sourcecache/prefetch`). Every re-dialed stream, a plugin's Watch or a
 connection's events, records its outage and its recovery once each
-(`namespace/stream`, `down` and `up`), however many retries lie between.
+(`namespace/stream`, `down` and `up`), however many retries lie between. Each migration step `gridwell.db` runs at
+open is a `store/migrate` record with its versions and the rows it wrote.
 
 ## One fact, one owner
 
