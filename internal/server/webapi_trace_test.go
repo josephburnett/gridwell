@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -131,4 +132,31 @@ func TestAShellAttachAndItsHolderAreTraced(t *testing.T) {
 	if !open || !holder {
 		t.Errorf("pty open record %v, holder record %v; want both", open, holder)
 	}
+}
+
+// A union too long for one record's msg still says how many grids it holds,
+// and lists whole ids only, so a cut never reads as a different id.
+func TestAViewUnionRecordCountsItsGrids(t *testing.T) {
+	srv := mustNew(t, plugin.NewRegistry(), Config{})
+	var union []string
+	for i := range 300 {
+		union = append(union, "nounion/"+strconv.Itoa(1000+i))
+	}
+	srv.spreadSubscription(union)
+	records := trace.Default().Snapshot()
+	for i := len(records) - 1; i >= 0; i-- {
+		rec := records[i]
+		if rec.Src != "view" || rec.Kind != "union" || !strings.HasPrefix(rec.Msg, "nounion/1000") {
+			continue
+		}
+		listed := strings.Fields(rec.Msg)
+		if rec.KV["n"] != "300" || rec.KV["listed"] != strconv.Itoa(len(listed)) || len(listed) == 0 || len(listed) == 300 {
+			t.Fatalf("union record kv %v listing %d ids, want n 300 and listed the whole ids that fit", rec.KV, len(listed))
+		}
+		if last := listed[len(listed)-1]; last != union[len(listed)-1] {
+			t.Fatalf("the listing ends at %q, want the whole id %q", last, union[len(listed)-1])
+		}
+		return
+	}
+	t.Fatal("no view/union record")
 }
