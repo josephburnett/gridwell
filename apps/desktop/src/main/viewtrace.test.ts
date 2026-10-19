@@ -12,6 +12,7 @@ import {
   viewMoved,
   viewNav,
   viewShown,
+  viewStealBounced,
   windowFocused,
   WINDOW_SETTLE_MS,
   windowState,
@@ -32,6 +33,7 @@ test('every webview record carries the pane under one kv key', () => {
     viewFailed('p1', 'u1/7', 'load failed'),
     viewGone('p1', 'u1/7', 'https://x.test/', 'crashed'),
     viewMoved('p0', 'p1', 'u1/7'),
+    viewStealBounced('p1', 'u1/7', 'settle'),
   ];
   for (const r of recs) {
     assert.equal(r.src, 'webview', `${r.kind} claims src ${r.src}`);

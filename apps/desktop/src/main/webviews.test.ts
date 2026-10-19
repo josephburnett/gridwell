@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import type { BaseWindow, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
 import { viewCreated } from './viewtrace';
+import { FOCUS_SETTLE_MS } from './focusguard';
 import type { ErrorEvent, NavEvent, ViewGoneEvent } from './ipc';
 import type { TraceEvent } from './trace';
 
@@ -315,6 +316,21 @@ test('a view that holds OS focus and moves to an unfocused pane gives the focus 
   r.views[0].webContents!.focused = true;
   r.reg.move('p1', 'w1:p1', BOUNDS, true, false, false);
   assert.deepEqual(r.steals, ['w1:p1']);
+  assert.deepEqual(kinds(r, 'steal').map((ev) => ev.kv), [{ view: 'w1:p1', phase: 'move' }]);
+});
+
+// A keystroke that went to the canvas instead of the page reads in a dump as a
+// steal the guard bounced.
+test('a focus grab on an unfocused pane is bounced and traced with its phase', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, false);
+  const wc = r.views[0].webContents!;
+  wc.focused = true;
+  wc.emit('focus');
+  await new Promise((res) => setTimeout(res, FOCUS_SETTLE_MS + 30));
+  await r.reg.remove('p1'); // cancels the confirmation
+  assert.deepEqual(r.steals, ['p1']);
+  assert.deepEqual(kinds(r, 'steal').map((ev) => ev.kv), [{ view: 'p1', phase: 'settle' }]);
 });
 
 // A key event as before-input-event hands it, with the prevented flag a

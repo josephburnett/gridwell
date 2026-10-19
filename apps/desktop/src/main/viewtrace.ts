@@ -56,6 +56,13 @@ export function viewShown(paneId: string, tileId: string, hidden: boolean): Trac
   return view(hidden ? 'hide' : 'show', paneId, tileId);
 }
 
+// A focus grab the registry handed back to the canvas. phase is
+// focusguard.GuardPhase, or 'move' for a focused view moved into an unfocused
+// pane.
+export function viewStealBounced(paneId: string, tileId: string, phase: string): TraceEvent {
+  return view('steal', paneId, tileId, { phase });
+}
+
 export function viewFocused(paneId: string, tileId: string, focused: boolean): TraceEvent {
   return view(focused ? 'focus' : 'blur', paneId, tileId);
 }

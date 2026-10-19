@@ -41,6 +41,7 @@ import {
   viewMoved,
   viewNav,
   viewShown,
+  viewStealBounced,
 } from './viewtrace';
 
 // The live view's page menu, as a trace record names it; register.ts names the
@@ -451,7 +452,7 @@ export class WebviewRegistry {
     // A view that keeps OS focus in a pane that lost it would take the next
     // keystrokes, the steal the guard exists for.
     try {
-      if (!focused && e.view.webContents.isFocused()) this.cb.onFocusStolen?.({ paneId: toPaneId });
+      if (!focused && e.view.webContents.isFocused()) this.bounce(e, 'move');
     } catch {
       // A view gone under the move retires on its own event.
     }
@@ -591,7 +592,7 @@ export class WebviewRegistry {
         alreadyBounced,
       });
       if (act.kind === 'allow') return;
-      if (act.kind === 'bounce') this.cb.onFocusStolen?.({ paneId: e.paneId });
+      if (act.kind === 'bounce') this.bounce(e, phase);
       if (act.settleMs === null) return;
       if (e.focusSettle) clearTimeout(e.focusSettle);
       const bounced = act.kind === 'bounce';
@@ -654,6 +655,11 @@ export class WebviewRegistry {
     // A page that calls window.close() destroys its webContents with no word
     // to the renderer.
     e.view.webContents.on('destroyed', () => this.retire(e, { reason: 'closed', message: pageClosedMessage, severity: 'info', close: false }));
+  }
+
+  private bounce(e: Entry, phase: string): void {
+    this.trace(viewStealBounced(e.paneId, e.tileId, phase));
+    this.cb.onFocusStolen?.({ paneId: e.paneId });
   }
 
   // retire is the one owner of "the view is gone" for a webContents that ended
