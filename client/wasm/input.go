@@ -792,6 +792,9 @@ func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool
 func (a *App) splitBelowForOpen(p *pane.Pane) (target *pane.Pane, split bool) {
 	prev := a.tree.Focus
 	target, split, shed := a.tree.SplitBelowForOpen(paneRectFor(a, p))
+	if split {
+		a.emit(traceevent.PaneSplit(target.ID, p.ID))
+	}
 	// The split moves focus to the new pane, so the menu has to be told, or
 	// it stays open on a pane that no longer has focus.
 	a.menu.TransferFocus(prev, a.tree.Focus)

@@ -376,3 +376,23 @@ func TestNoticeClearNamesItsSourceAndHow(t *testing.T) {
 		}
 	}
 }
+
+// The pane tree is client-only, so these records are the dump's only word on
+// which pane a later record's pane id came from.
+func TestPaneRecords(t *testing.T) {
+	if e := PaneSplit("p2", "p1"); e.Src != "pane" || e.Kind != "split" || e.KV["pane"] != "p2" || e.KV["from"] != "p1" {
+		t.Errorf("split is %+v", e)
+	}
+	if e := PaneClose([]string{"p2", "p3"}); e.Kind != "close" || e.KV["pane"] != "p2 p3" || e.Msg != "2 closed" {
+		t.Errorf("close is %+v", e)
+	}
+	if e := PaneSwap("p1", "p2"); e.Kind != "swap" || e.KV["pane"] != "p2" || e.KV["from"] != "p1" {
+		t.Errorf("swap is %+v", e)
+	}
+	if e := PaneZoom("p1", true); e.Kind != "zoom" || e.Msg != "zoom" || e.KV["pane"] != "p1" {
+		t.Errorf("zoom is %+v", e)
+	}
+	if e := PaneZoom("p1", false); e.Msg != "unzoom" {
+		t.Errorf("unzoom is %+v", e)
+	}
+}

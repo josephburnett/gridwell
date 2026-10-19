@@ -131,3 +131,42 @@ test('a notice pressed away leaves a record of how it went', async ({ electronAp
     )
     .toEqual(['dismiss']);
 });
+
+test('the pane tree records its split, zoom, swap and close', async ({ gw, home, window }) => {
+  await gw.enterPlugin('home');
+  await gw.waitIdle();
+  const [first] = await gw.panes();
+  await gw.splitFocusedPaneVertical();
+  await expect.poll(async () => (await gw.panes()).length).toBe(2);
+  const [left, right] = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
+
+  await gw.clickBarName('left');
+  await gw.clickBarName('left');
+
+  // A right-drag from a pane's inner third onto another pane swaps them.
+  await gw.rightDragScreen(left.x + left.w / 2, left.y + left.h / 2, right.x + right.w / 2, right.y + right.h / 2);
+  await gw.collapseLeftPane();
+  await expect.poll(async () => (await gw.panes()).length).toBe(1);
+
+  const token = await loginToken(gw.origin, homePassword(home));
+  let cid = '';
+  let lines: TraceLine[] = [];
+  await expect
+    .poll(
+      async () => {
+        ({ cid, lines } = await dumpNow(window, gw.origin, token));
+        return of(lines, cid, 'pane', 'close').length;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+
+  const split = of(lines, cid, 'pane', 'split')[0];
+  expect(split?.kv?.from, `the split names the pane it came from: ${JSON.stringify(split)}`).toBe(first.id);
+  expect([left.id, right.id]).toContain(split.kv?.pane);
+  expect(of(lines, cid, 'pane', 'zoom').map((r) => r.msg)).toEqual(['zoom', 'unzoom']);
+  const swap = of(lines, cid, 'pane', 'swap')[0];
+  expect(swap?.kv, `the swap names both panes: ${JSON.stringify(swap)}`).toEqual({ pane: right.id, from: left.id });
+  const close = of(lines, cid, 'pane', 'close')[0];
+  expect([left.id, right.id]).toContain(close.kv?.pane);
+});

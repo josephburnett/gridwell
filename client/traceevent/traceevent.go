@@ -329,6 +329,31 @@ func Focus(from, to string) Event {
 	return Event{Src: "pane", Kind: "focus", Msg: "focus moves", KV: kv("from", from, "pane", to)}
 }
 
+// PaneSplit, PaneClose, PaneSwap and PaneZoom are the pane tree's changes,
+// client-only state no call shows: pane is the pane the change made or moved,
+// from the pane it came from.
+func PaneSplit(paneID, fromID string) Event {
+	return Event{Src: "pane", Kind: "split", Msg: "pane opens", KV: kv("pane", paneID, "from", fromID)}
+}
+
+// PaneClose names every pane one crush closed.
+func PaneClose(paneIDs []string) Event {
+	return Event{Src: "pane", Kind: "close", Msg: strconv.Itoa(len(paneIDs)) + " closed",
+		KV: kv("pane", strings.Join(paneIDs, " "))}
+}
+
+func PaneSwap(fromID, toID string) Event {
+	return Event{Src: "pane", Kind: "swap", Msg: "panes swap", KV: kv("pane", toID, "from", fromID)}
+}
+
+func PaneZoom(paneID string, zoomed bool) Event {
+	msg := "unzoom"
+	if zoomed {
+		msg = "zoom"
+	}
+	return Event{Src: "pane", Kind: "zoom", Msg: msg, KV: kv("pane", paneID)}
+}
+
 // DOMFocus is the document's keyboard focus landing on an element: which
 // surface it is and the pane it serves, "" for none. Only a press, a user's
 // descent or ascent, or a modal moves it, so one after the press that caused

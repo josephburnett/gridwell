@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // Naming: name the grid you are in. The focused pane's name renders as the
@@ -126,6 +127,7 @@ func (a *App) togglePaneZoom() {
 	}
 	a.menu.Close()
 	a.tree.ToggleZoom(p.ID)
+	a.emit(traceevent.PaneZoom(p.ID, a.tree.Zoomed == p.ID))
 	a.draw()
 	a.scheduleURLUpdate()
 }
