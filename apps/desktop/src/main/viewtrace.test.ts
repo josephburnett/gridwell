@@ -12,6 +12,7 @@ import {
   viewMoved,
   viewNav,
   viewNavInPage,
+  viewOpenRequested,
   viewRevived,
   viewShown,
   viewStealBounced,
@@ -37,6 +38,7 @@ test('every webview record carries the pane under one kv key', () => {
     viewMoved('p0', 'p1', 'u1/7'),
     viewStealBounced('p1', 'u1/7', 'settle'),
     viewRevived('p1', 'u1/7', 'load', 'https://x.test/'),
+    viewOpenRequested('p1', 'https://x.test/', true),
     viewNavInPage('p1', 'u1/7', 'https://x.test/#a'),
   ];
   for (const r of recs) {
@@ -177,4 +179,10 @@ test('a burst of resize and move records once, after it settles', () => {
   } finally {
     mock.timers.reset();
   }
+});
+
+// The canvas is no live view, so its denied opens carry no pane key rather
+// than an empty one.
+test('an open from the canvas names no pane', () => {
+  assert.deepEqual(viewOpenRequested(undefined, 'https://x.test/', false).kv, { below: 'false' });
 });

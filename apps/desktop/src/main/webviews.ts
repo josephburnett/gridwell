@@ -41,6 +41,7 @@ import {
   viewMoved,
   viewNav,
   viewNavInPage,
+  viewOpenRequested,
   viewRevived,
   viewShown,
   viewStealBounced,
@@ -282,6 +283,7 @@ export class WebviewRegistry {
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = openBelowUrl(target);
+      this.trace(viewOpenRequested(e.paneId, target, !!below));
       if (below) {
         this.cb.onOpenBelow?.({ paneId: e.paneId, url: below });
       }

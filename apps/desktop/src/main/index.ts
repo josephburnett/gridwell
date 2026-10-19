@@ -10,6 +10,7 @@ import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
 import { QuitFlush } from './quit';
+import { viewOpenRequested } from './viewtrace';
 import { bootEvent, flushTrace, logLine, startTrace, stopTrace, trace, TRACE_PATH } from './trace';
 
 // See userdata.ts. The e2e fixture also passes --user-data-dir as a Chromium
@@ -44,7 +45,10 @@ async function boot(): Promise<void> {
   // No webContents may spawn a window; the registry replaces this for a live
   // view. Gridwell never calls window.open, so a call here is a page leaving.
   app.on('web-contents-created', (_ev, wc) => {
-    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+    wc.setWindowOpenHandler(({ url }) => {
+      trace(viewOpenRequested(undefined, url, false));
+      return { action: 'deny' };
+    });
   });
   try {
     // Never start a server; discover a separately-run one.

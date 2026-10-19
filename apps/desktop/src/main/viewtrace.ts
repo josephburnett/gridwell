@@ -47,6 +47,16 @@ export function viewNavInPage(paneId: string, tileId: string, url: string): Trac
   return view('nav-page', paneId, url, { tile: tileId });
 }
 
+// A window.open or target=_blank, which never opens a window: below is whether
+// it became a split below, and a webContents that is no live view (the
+// canvas) names no pane. msg is the address the page asked for, or only the
+// scheme of one that is not http(s), since a data: or javascript: address is
+// page content.
+export function viewOpenRequested(paneId: string | undefined, url: string, below: boolean): TraceEvent {
+  const msg = /^https?:\/\//i.test(url) ? url : (/^[a-z][a-z0-9+.-]*:/i.exec(url)?.[0] ?? '');
+  return { src: VIEW, kind: 'open', msg, kv: { ...(paneId ? { view: paneId } : {}), below: String(below) } };
+}
+
 // A view handed to another pane with its page, which is neither a create nor
 // a destroy: a dump reading one pane follows it by kv.from.
 export function viewMoved(fromPaneId: string, toPaneId: string, tileId: string): TraceEvent {

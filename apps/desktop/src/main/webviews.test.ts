@@ -23,7 +23,10 @@ class FakeWC extends EventEmitter {
   // What capturePage answers; null is an empty frame.
   frame: Buffer | null = null;
   restoreRejects: ((err: Error) => void)[] = [];
-  setWindowOpenHandler(): void {}
+  openHandler: ((d: { url: string }) => { action: string }) | null = null;
+  setWindowOpenHandler(h: (d: { url: string }) => { action: string }): void {
+    this.openHandler = h;
+  }
   setZoomFactor(): void {}
   loadURL(u: string): Promise<void> {
     this.loads++;
@@ -492,4 +495,19 @@ test('an in-page navigation that moves the main frame address is traced once', a
     [['p1', 'https://x.test/#b']],
   );
   assert.equal(r.navs.length, 3, 'the renderer still hears every in-page event');
+});
+
+// A link that did nothing reads in a dump as an open the registry denied, or
+// one it sent to a split below. An address that is page content keeps only
+// its scheme.
+test('every window.open a view asks for is denied and traced, with whether it went below', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', 'https://x.test/', BOUNDS);
+  const open = r.views[0].webContents!.openHandler!;
+  assert.equal(open({ url: 'https://y.test/' }).action, 'deny');
+  assert.equal(open({ url: 'data:text/html,<p>secret</p>' }).action, 'deny');
+  assert.deepEqual(
+    kinds(r, 'open').map((ev) => [ev.kv?.view, ev.kv?.below, ev.msg]),
+    [['p1', 'true', 'https://y.test/'], ['p1', 'false', 'data:']],
+  );
 });
