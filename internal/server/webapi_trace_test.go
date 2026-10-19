@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
@@ -104,4 +105,30 @@ func TestABuildRefusalIsTraced(t *testing.T) {
 		}
 	}
 	t.Error("no webapi/build record names the two builds")
+}
+
+// An attach says which session it rides and which tmux it names, and the
+// MCP API's join of a shell key to the screen holding it is a record.
+func TestAShellAttachAndItsHolderAreTraced(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
+	tile := f.createShell(t, 0, 0)
+	desk := viewer(t, f.hs, "desktop", focusedOn(f.root))
+	attach(t, f, desk, tile.Id)
+	waitAttachment(t, f.fake)
+	key := rpc.LocalOf(rpc.ShellTmux(tile))
+	var out mcpapi.SessionsOut
+	call(t, agentAt(t, f.hs, map[string]string{mcpapi.ShellHeader: key}), "sessions", nil, &out)
+	var open, holder bool
+	for _, rec := range trace.Default().Snapshot() {
+		if rec.Src == "shellapi" && rec.Kind == "pty" && rec.Msg == "open" && rec.KV["tile"] == tile.Id &&
+			rec.KV["session"] == desk.Session() && rec.KV["tmux"] == rpc.ShellTmux(tile) {
+			open = true
+		}
+		if rec.Src == "shellapi" && rec.Kind == "holder" && rec.KV["key"] == key && rec.KV["session"] == desk.Session() && rec.KV["held"] == "true" {
+			holder = true
+		}
+	}
+	if !open || !holder {
+		t.Errorf("pty open record %v, holder record %v; want both", open, holder)
+	}
 }
