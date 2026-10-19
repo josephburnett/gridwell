@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/dbformat"
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 	_ "modernc.org/sqlite"
 )
 
@@ -180,9 +182,10 @@ func sourceOfNS(ns string) string {
 }
 
 // setDark is the one writer of c.dark, for a failed call and the source's own
-// health alike; announce is whether the client must be told. The transition
-// back to light is the prefetch walk's second trigger.
-func (c *Layer) setDark(source string, dark bool, announce bool, grid func() string) {
+// health alike; reason says why it is dark, and announce is whether the client
+// must be told. The transition back to light is the prefetch walk's second
+// trigger.
+func (c *Layer) setDark(source string, dark bool, reason string, announce bool, grid func() string) {
 	c.darkMu.Lock()
 	changed := c.dark[source] != dark
 	c.dark[source] = dark
@@ -190,6 +193,14 @@ func (c *Layer) setDark(source string, dark bool, announce bool, grid func() str
 	if !changed {
 		return
 	}
+	msg := "source light"
+	if dark {
+		msg = "source dark"
+	} else {
+		reason = ""
+	}
+	trace.Emit("sourcecache", "dark", msg, map[string]string{
+		"source": source, "dark": strconv.FormatBool(dark), "reason": reason})
 	if !dark {
 		c.kickPrefetch(source)
 	}
@@ -215,7 +226,12 @@ func (c *Layer) noteReach(ctx context.Context, err error, source string, grid fu
 	if gwerr.IsAbandoned(ctx, err) {
 		return
 	}
-	c.setDark(source, err != nil && gwerr.IsTransport(err), true, grid)
+	dark := err != nil && gwerr.IsTransport(err)
+	reason := ""
+	if dark {
+		reason = err.Error()
+	}
+	c.setDark(source, dark, reason, true, grid)
 }
 
 // noteReachGrid and noteReachTile are noteReach for the two shapes of call.
@@ -476,14 +492,31 @@ func keepFraming(fresh, old *pb.HandshakeResponse) {
 // Only a miss waits on the source.
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if cached, fetchedAt, hit := c.loadGrid(ctx, in.GridId); hit {
+		how := "hit"
 		if time.Since(time.Unix(fetchedAt, 0)) >= c.window() || c.isDark(sourceOf(in.GridId)) {
+			how = "cached"
 			c.revalidateGrid(in.GridId)
 		}
+		traceGrid("serve", how, in.GridId)
 		return cached, nil
 	}
 	// A miss has nothing better than the source's word.
+	traceGrid("serve", "miss", in.GridId)
 	resp, _, err := c.getGridLive(ctx, in.GridId)
 	return resp, err
+}
+
+// traceGrid records how this layer answered or refreshed one grid: a serve's
+// how is hit (fresh), cached (stale or dark, refreshing behind) or miss (the
+// source's word); a revalidation's verdict is changed, same, overtaken or
+// evicted.
+func traceGrid(kind, verdict, gridID string) {
+	key := "how"
+	if kind == "revalidate" {
+		key = "verdict"
+	}
+	trace.Emit("sourcecache", kind, kind+" "+verdict, map[string]string{
+		"source": sourceOf(gridID), "grid": gridID, key: verdict})
 }
 
 // getGridLive reads one grid from the source and caches the answer unless a
@@ -530,13 +563,19 @@ func (c *Layer) revalidateGrid(gridID string) {
 		old, _, hit := c.loadGrid(ctx, gridID)
 		resp, installed, err := c.getGridLive(ctx, gridID)
 		switch {
+		case err == nil && !installed:
+			traceGrid("revalidate", "overtaken", gridID)
 		case err == nil:
-			if installed && (!hit || !gridRespEqual(old, resp)) {
+			if !hit || !gridRespEqual(old, resp) {
+				traceGrid("revalidate", "changed", gridID)
 				c.emitGridChanged(gridID)
+			} else {
+				traceGrid("revalidate", "same", gridID)
 			}
 		case !gwerr.IsAbandoned(ctx, err) && !gwerr.IsTransport(err):
 			// An answered error is an answer: the cached grid must not
 			// outlive the source's verdict.
+			traceGrid("revalidate", "evicted", gridID)
 			c.evictGrid(ctx, gridID)
 			c.emitGridChanged(gridID)
 		}
@@ -979,7 +1018,7 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		// The source's supervisor says whether it can be reached. A key deeper
 		// than a connection segment is a far plugin, not the machine. No
 		// announce: the event itself is relayed onward.
-		c.setDark(p.PluginHealth.GetPluginUuid(), !p.PluginHealth.GetHealthy(), false, nil)
+		c.setDark(p.PluginHealth.GetPluginUuid(), !p.PluginHealth.GetHealthy(), p.PluginHealth.GetDetail(), false, nil)
 	}
 }
 

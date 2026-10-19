@@ -599,7 +599,11 @@ records too, naming the plugin or source by id: a plugin source's health
 transitions (`pluginhost/health`), a read the plugin answered from its own
 cache (`pluginhost/serve`), each Watch stream the node opens and closes on a
 plugin (`pluginhost/watch`) and each change a plugin tells on one
-(`pluginhost/changed`).
+(`pluginhost/changed`); and in the connection cache, each source going dark
+or light with the reason (`sourcecache/dark`), how each grid read was
+answered (`sourcecache/serve`: hit, cached or miss), what each refresh behind
+found (`sourcecache/revalidate`) and each prefetch walk's start and breadth
+(`sourcecache/prefetch`).
 
 ## One fact, one owner
 

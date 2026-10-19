@@ -11,14 +11,16 @@ package sourcecache
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/api/gwerr"
+	"strconv"
 	"sync"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // Emergency valves, not tuning knobs: a source that trips one is outside the
@@ -99,6 +101,11 @@ func (c *Layer) stopWalks() {
 // plugin lists and content bodies.
 func (c *Layer) prefetch(ctx context.Context, source string) {
 	w := &walker{c: c, ctx: ctx, seenGrids: map[string]bool{}, seenTiles: map[string]bool{}, seenNs: map[string]bool{}}
+	trace.Emit("sourcecache", "prefetch", "prefetch start", map[string]string{"source": source, "state": "start"})
+	defer func() {
+		trace.Emit("sourcecache", "prefetch", "prefetch done", map[string]string{
+			"source": source, "state": "done", "grids": strconv.Itoa(len(w.seenGrids))})
+	}()
 	// The roots are what the fronted namespace declares about itself, through
 	// the call every namespace answers: the handshake with no namespace.
 	hs, err := c.Handshake(ctx, &pb.HandshakeRequest{})
