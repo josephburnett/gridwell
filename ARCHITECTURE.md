@@ -594,6 +594,13 @@ under the pointer and the button; a press adds the modifiers, and a
 release's verdict is the `drag/drop` record's. Esc letting go of a drag is a
 `gesture/cancel` record naming the pane.
 
+Where a read was answered from and whether a source is reachable are
+records too, naming the plugin or source by id: a plugin source's health
+transitions (`pluginhost/health`), a read the plugin answered from its own
+cache (`pluginhost/serve`), each Watch stream the node opens and closes on a
+plugin (`pluginhost/watch`) and each change a plugin tells on one
+(`pluginhost/changed`).
+
 ## One fact, one owner
 
 Every fact is derived in one place and read everywhere else. The shapes to
