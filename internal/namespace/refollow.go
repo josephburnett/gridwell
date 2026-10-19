@@ -10,6 +10,8 @@ import (
 	"errors"
 	"log"
 	"time"
+
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // Backoff is how long a fan-in waits before re-dialing: First after the stream
@@ -59,6 +61,7 @@ func (r Refollow) Run(ctx context.Context) {
 			wait = b.First
 			if !healthy {
 				healthy = true
+				trace.Emit("namespace", "stream", "up", map[string]string{"label": r.Label})
 				r.Up()
 			}
 		})
@@ -71,6 +74,7 @@ func (r Refollow) Run(ctx context.Context) {
 		log.Printf("gridwell: %s: %v — retrying in %v", r.Label, err, wait)
 		if healthy {
 			healthy = false
+			trace.Emit("namespace", "stream", "down", map[string]string{"label": r.Label, "reason": err.Error()})
 			r.Down(err.Error())
 		}
 		select {

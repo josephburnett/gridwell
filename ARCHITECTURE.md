@@ -603,7 +603,9 @@ plugin (`pluginhost/watch`) and each change a plugin tells on one
 or light with the reason (`sourcecache/dark`), how each grid read was
 answered (`sourcecache/serve`: hit, cached or miss), what each refresh behind
 found (`sourcecache/revalidate`) and each prefetch walk's start and breadth
-(`sourcecache/prefetch`).
+(`sourcecache/prefetch`). Every re-dialed stream, a plugin's Watch or a
+connection's events, records its outage and its recovery once each
+(`namespace/stream`, `down` and `up`), however many retries lie between.
 
 ## One fact, one owner
 
