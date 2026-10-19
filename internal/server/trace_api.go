@@ -22,6 +22,7 @@ import (
 func (s *Server) traceAPI() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
+			refusedWeb(tracewire.Path, http.StatusMethodNotAllowed, "method "+r.Method, nil)
 			http.Error(w, "trace: POST only", http.StatusMethodNotAllowed)
 			return
 		}
@@ -29,11 +30,15 @@ func (s *Server) traceAPI() http.Handler {
 		if h := r.Header.Get(tracewire.ClockHeader); h != "" {
 			var err error
 			if sent, err = strconv.ParseInt(h, 10, 64); err != nil {
+				refusedWeb(tracewire.Path, http.StatusBadRequest, tracewire.ClockHeader+": "+err.Error(), nil)
 				http.Error(w, "trace: "+tracewire.ClockHeader+": "+err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
-		if _, err := trace.Default().Ingest(r.Body, sent); err != nil {
+		// A batch cut at a bad line loses the lines after it, so the refusal
+		// counts what did land.
+		if n, err := trace.Default().Ingest(r.Body, sent); err != nil {
+			refusedWeb(tracewire.Path, http.StatusBadRequest, err.Error(), map[string]string{"ingested": strconv.Itoa(n)})
 			http.Error(w, "trace: "+err.Error(), http.StatusBadRequest)
 			return
 		}

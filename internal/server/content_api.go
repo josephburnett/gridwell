@@ -23,6 +23,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"net/http"
+	"strconv"
 	"strings"
 
 	gcodes "google.golang.org/grpc/codes"
@@ -30,6 +31,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 const contentPathPrefix = "/content/"
@@ -93,17 +95,22 @@ func (s *Server) contentAPI() http.Handler {
 	want := []byte(ContentToken(s.cfg.Password))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			refusedWeb(contentPathPrefix, http.StatusMethodNotAllowed, "method "+r.Method, nil)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		token, tileID, subpath, needSlash, ok := parseContentPath(r.URL.Path)
+		// The path holds the token, so a record names the tile alone.
+		path := contentPathPrefix + tileID
 		if !ok {
+			refusedWeb(contentPathPrefix, http.StatusNotFound, "not a content path", nil)
 			http.NotFound(w, r)
 			return
 		}
 		if subtle.ConstantTimeCompare([]byte(token), want) != 1 {
 			// The same shape as a bad cookie elsewhere: a 401, never a
 			// hint.
+			refusedWeb(path, http.StatusUnauthorized, "bad content token", nil)
 			http.Error(w, "gridwell: bad content token", http.StatusUnauthorized)
 			return
 		}
@@ -113,7 +120,7 @@ func (s *Server) contentAPI() http.Handler {
 		}
 		c, local, err := s.contentRoute(r.Context(), tileID)
 		if err != nil {
-			httpStatusError(w, err)
+			refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
 			return
 		}
 		// The first chunk carries the status and media type, so headers are
@@ -140,22 +147,35 @@ func (s *Server) contentAPI() http.Handler {
 				return werr
 			})
 		if serr != nil && !wroteHeader {
-			httpStatusError(w, serr)
+			refusedWeb(path, httpStatusError(w, serr), serr.Error(), nil)
 		}
 	})
 }
 
-// httpStatusError maps a routing or RPC failure onto the API's HTTP surface.
-// Unimplemented is deliberately 404: a plugin that serves no web content has
-// no pages.
-func httpStatusError(w http.ResponseWriter, err error) {
+// httpStatusError maps a routing or RPC failure onto the API's HTTP surface
+// and answers the status it wrote. Unimplemented is deliberately 404: a
+// plugin that serves no web content has no pages.
+func httpStatusError(w http.ResponseWriter, err error) int {
 	st, _ := status.FromError(err)
 	switch st.Code() {
 	case gcodes.NotFound, gcodes.Unimplemented, gcodes.InvalidArgument:
 		http.Error(w, "not found", http.StatusNotFound)
+		return http.StatusNotFound
 	case gcodes.PermissionDenied:
 		http.Error(w, "forbidden", http.StatusForbidden)
+		return http.StatusForbidden
 	default:
 		http.Error(w, "content API: "+st.Message(), http.StatusBadGateway)
+		return http.StatusBadGateway
 	}
+}
+
+// refusedWeb records a request the web API refused before any rpc span
+// could: path, never a token, and the status written.
+func refusedWeb(path string, code int, why string, kv map[string]string) {
+	if kv == nil {
+		kv = map[string]string{}
+	}
+	kv["path"], kv["status"] = path, strconv.Itoa(code)
+	trace.Emit("webapi", "refused", why, kv)
 }

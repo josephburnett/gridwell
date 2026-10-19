@@ -78,6 +78,7 @@ func (s *Server) shellAPI() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attach, err := shellwire.ParseAttach(r.URL.Query())
 		if err != nil {
+			refusedWeb(shellwire.Path, http.StatusBadRequest, err.Error(), nil)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -98,7 +99,7 @@ func (s *Server) shellAPI() http.Handler {
 		kv := map[string]string{"tile": attach.TileID}
 		if err != nil {
 			trace.Emit("shellapi", "pty", "refused: "+err.Error(), kv)
-			httpStatusError(w, err)
+			_ = httpStatusError(w, err)
 			return
 		}
 

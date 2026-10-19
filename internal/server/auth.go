@@ -62,6 +62,7 @@ func (s *Server) authWrap(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		refusedWeb(r.URL.Path, http.StatusUnauthorized, "password required", map[string]string{"presented": presented(r)})
 		// A browser navigation gets the login page; anything else gets a bare
 		// 401 the client surfaces as an error.
 		if r.Method == http.MethodGet || r.Method == http.MethodHead {
@@ -81,6 +82,22 @@ func authed(r *http.Request, token string) bool {
 	}
 	bearer, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	return ok && subtle.ConstantTimeCompare([]byte(AuthToken(bearer)), []byte(token)) == 1
+}
+
+// presented is which credential a refused request carried, for the trace:
+// "cookie", "bearer", both, or "none", never its value.
+func presented(r *http.Request) string {
+	var got []string
+	if _, err := r.Cookie(AuthCookieName); err == nil {
+		got = append(got, "cookie")
+	}
+	if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		got = append(got, "bearer")
+	}
+	if len(got) == 0 {
+		return "none"
+	}
+	return strings.Join(got, "+")
 }
 
 func setAuthCookie(w http.ResponseWriter, token string) {
@@ -108,6 +125,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, token strin
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
+		refusedWeb(authLoginPath, http.StatusUnauthorized, "wrong password", nil)
 		writeLoginPage(w, http.StatusUnauthorized, true)
 	case http.MethodGet, http.MethodHead:
 		if authed(r, token) {
@@ -120,6 +138,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request, token strin
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
+			refusedWeb(authLoginPath, http.StatusUnauthorized, "wrong token", nil)
 			writeLoginPage(w, http.StatusUnauthorized, true)
 			return
 		}
