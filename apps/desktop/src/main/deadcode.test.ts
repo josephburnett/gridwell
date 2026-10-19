@@ -53,6 +53,16 @@ const ALLOWED: Record<string, string> = {
     'the main process has one ring, module-level like internal/trace.Default; trace(), logLine() and startTrace() are the app\'s ways onto it, so only its own test constructs one',
   'main/trace.ts:lineEvent':
     'the decision of which console lines logLine traces; logLine applies it, so only its test names it',
+  'main/crashlog.ts:redact':
+    'the one redaction of the node\'s secrets; LineTail applies it on the way in, so only the test that feeds it serve.go\'s lines names it',
+  'main/crashlog.ts:LineTail':
+    'the bounded tail\'s type; crashlog holds its two instances, so only the test that overruns one constructs another',
+  'main/crashlog.ts:dumpsDir':
+    'config.Dir and config.DumpsDir\'s copy; writeCrashFile applies it, so only the test that pins it against config.go names it',
+  'main/crashlog.ts:crashFileName':
+    'internal/trace.DumpName\'s shape for a crash; writeCrashFile applies it, so only its test names it',
+  'main/crashlog.ts:crashText':
+    'the crash file\'s text; writeCrashFile writes it, so only the test that reads it names it',
   'main/trace.ts:RENDERER_LOG_CAP':
     'the declared cap on traced renderer lines; lineEvent applies it, so only the test that crosses it names it',
   'main/trace.ts:TRACE_MAX_MSG':

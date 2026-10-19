@@ -21,11 +21,12 @@ class FakeChild extends EventEmitter {
   }
 }
 
-function boot(child: FakeChild, silenceMs = 200) {
+function boot(child: FakeChild, silenceMs = 200, crashes: Record<string, string>[] = []) {
   return startSidecar({
     port: 4242,
     silenceMs,
     onLog: () => {},
+    onCrash: (kv) => crashes.push(kv),
     spawnFn: () => child as unknown as ChildProcess,
     binaryPath: '/fake/gridwell',
     staticPath: '/fake/web',
@@ -176,4 +177,58 @@ test('--no-server connects to a running server via the status banner', async () 
   const sc = await p;
   assert.equal(sc.external, true);
   assert.equal(sc.origin, 'http://127.0.0.1:10010');
+});
+
+// The node's ring dies with it and a panic's stack is written straight to
+// stderr, so an exit nobody asked for is the one moment the tail must be kept.
+test('an exit nobody asked for is a crash; a stop, a clean shutdown and a probe are not', async () => {
+  const ready = 'gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1)\n';
+
+  const panicked = new FakeChild();
+  const crashes: Record<string, string>[] = [];
+  const p = boot(panicked, 200, crashes);
+  panicked.stdout.write(ready);
+  await p;
+  panicked.emit('exit', 2, null);
+  assert.deepEqual(crashes, [{ code: '2', signal: '' }]);
+
+  const killed = new FakeChild();
+  const k: Record<string, string>[] = [];
+  const pk = boot(killed, 200, k);
+  killed.stdout.write(ready);
+  await pk;
+  killed.emit('exit', null, 'SIGKILL');
+  assert.deepEqual(k, [{ code: '', signal: 'SIGKILL' }], 'a kill from outside is a crash');
+
+  const stopped = new FakeChild();
+  const s: Record<string, string>[] = [];
+  const ps = boot(stopped, 200, s);
+  stopped.stdout.write(ready);
+  (await ps).stop();
+  stopped.emit('exit', null, 'SIGTERM');
+  assert.deepEqual(s, [], 'stop() asked for that exit');
+
+  const clean = new FakeChild();
+  const c: Record<string, string>[] = [];
+  const pc = boot(clean, 200, c);
+  clean.stdout.write(ready);
+  await pc;
+  clean.emit('exit', 0, null);
+  assert.deepEqual(c, [], 'a node that shut itself down on a signal exits 0');
+
+  const probe = new FakeChild();
+  const e: Record<string, string>[] = [];
+  const pe = boot(probe, 200, e);
+  probe.stdout.write('gridwell: already serving on 127.0.0.1:7001 (static=embedded plugins=2 federation=/x)\n');
+  await pe;
+  probe.emit('exit', 1, null);
+  assert.deepEqual(e, [], 'the probe of an external server exits by design');
+
+  const early = new FakeChild();
+  const b: Record<string, string>[] = [];
+  const pb = boot(early, 200, b);
+  early.stderr.write('panic: boom\n');
+  early.emit('exit', 2, null);
+  await assert.rejects(pb);
+  assert.deepEqual(b, [{ code: '2', signal: '' }], 'a death before the banner is a crash too');
 });

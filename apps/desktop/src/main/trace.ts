@@ -278,8 +278,8 @@ export const RENDERER_LOG_CAP = 200;
 
 // lineEvent is what logLine traces. seen is how many renderer lines this run
 // has offered before this one: past the cap one record says the rest are not
-// traced, and then nothing. The sidecar's lines are in the node's ring through
-// its log capture.
+// traced, and then nothing. The sidecar's log lines reach the node's ring
+// through its log capture, and the rest a crash file (crashlog.ts).
 export function lineEvent(from: LineFrom, line: string, seen = 0): TraceEvent | null {
   if (from === 'main') return { src: 'main', kind: 'log', msg: line };
   if (seen < RENDERER_LOG_CAP) return { src: 'main', kind: 'renderer-log', msg: line };

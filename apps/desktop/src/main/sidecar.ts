@@ -4,6 +4,7 @@ import { freePort } from './freeport';
 import { sidecarBinary, staticDir } from './paths';
 import { makeLineSplitter, parseServingLine, windowOrigin } from './lines';
 import { trace } from './trace';
+import { reportCrash, sidecarTail } from './crashlog';
 
 export interface Sidecar {
   // From the serve banner: loopback, unless server.yaml `web.bind` pins one.
@@ -30,6 +31,8 @@ interface StartOptions {
   spawnFn?: (bin: string, args: string[]) => ChildProcess;
   binaryPath?: string;
   staticPath?: string;
+  // Called for an exit nobody asked for; see crashlog.reportCrash.
+  onCrash?: (kv: Record<string, string>) => void;
 }
 
 // Every sidecar-lifecycle record wears this src.
@@ -62,22 +65,27 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
     ? opts.spawnFn(bin, args)
     : spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
   trace({ src: TRACE_SRC, kind: 'spawn', msg: [bin, ...args].join(' ') });
-  // The one place an exit is traced, whenever it happens: the settle listeners
-  // below stop at boot, and index.ts's watcher only surfaces the notice. The
-  // sidecar's own stdout is already in the node's ring through its log capture,
-  // so onLog posts nothing.
-  child.on('exit', (code, signal) =>
-    trace({
-      src: TRACE_SRC,
-      kind: 'exit',
-      msg: 'sidecar exited',
-      kv: { code: String(code ?? ''), signal: signal ?? '' },
-    }),
-  );
-
+  // Whether the exit below was asked for: stop() was called, the child is a
+  // probe (`status`, or a serve that found the home already served), or the
+  // node shut itself down cleanly on a signal of its own.
+  let stopped = false;
+  let external = false;
   const stop = () => {
+    stopped = true;
     if (!child.killed) child.kill('SIGTERM');
   };
+  const onCrash = opts.onCrash ?? ((kv) => reportCrash('sidecar-exit', kv));
+  // The one place an exit is traced, whenever it happens: the settle listeners
+  // below stop at boot, and index.ts's watcher only surfaces the notice. The
+  // node's log lines are in its ring through its log capture, but what it
+  // writes directly, the banner and a panic's stack among them, is not, and
+  // the ring dies with it: an exit nobody asked for writes the tail to a crash
+  // file.
+  child.on('exit', (code, signal) => {
+    const kv = { code: String(code ?? ''), signal: signal ?? '' };
+    trace({ src: TRACE_SRC, kind: 'exit', msg: 'sidecar exited', kv });
+    if (!stopped && !external && !opts.noServer && code !== 0) onCrash(kv);
+  });
 
   // Keeping the tail lets the boot-failure dialog say why, not just the code.
   const lastLines: string[] = [];
@@ -98,6 +106,7 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
 
     const handleLine = (line: string) => {
       onLog(line);
+      sidecarTail.push(line);
       if (settled) return;
       clearTimeout(timer);
       timer = arm();
@@ -116,6 +125,7 @@ export async function startSidecar(opts: StartOptions = {}): Promise<Sidecar> {
       const served = parseServingLine(line);
       if (served) {
         settled = true;
+        external = !!served.external;
         clearTimeout(timer);
         trace({
           src: TRACE_SRC,

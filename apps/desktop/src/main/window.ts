@@ -2,6 +2,7 @@ import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 import { rendererLogLine } from './viewutil';
 import { logLine, trace } from './trace';
+import { rendererTail } from './crashlog';
 import { windowFocused, windowState, windowStateRecorder } from './viewtrace';
 
 // A read of a destroyed window throws uncaught, which hangs main behind an
@@ -73,11 +74,13 @@ export function createRootWindow(origin: string): RootWindow {
   // and Chromium paints its own error page in the window.
   void win.loadURL(origin + '/' + query);
 
-  // Forwarded to main's console and trace, which outlive a renderer that
-  // panicked; see trace.lineEvent.
+  // Forwarded to main's console, trace and crash tail, which outlive a
+  // renderer that panicked; see trace.lineEvent.
   win.webContents.on('console-message', (_e, level, message) => {
     const line = rendererLogLine(level, message);
-    if (line) logLine('error', line, 'renderer');
+    if (!line) return;
+    logLine('error', line, 'renderer');
+    rendererTail.push(line);
   });
 
   win.on('focus', () => trace(windowFocused(true)));
