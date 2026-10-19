@@ -57,6 +57,13 @@ export function viewOpenRequested(paneId: string | undefined, url: string, below
   return { src: VIEW, kind: 'open', msg, kv: { ...(paneId ? { view: paneId } : {}), below: String(below) } };
 }
 
+// A page's permission request and viewutil.allowPermission's verdict, so a
+// site that "cannot use the camera" reads as the deny it was. It names no pane:
+// the handler is the session's, which every view shares.
+export function permissionDecided(permission: string, allowed: boolean): TraceEvent {
+  return { src: VIEW, kind: 'permission', msg: permission, kv: { permission, allowed: String(allowed) } };
+}
+
 // A view handed to another pane with its page, which is neither a create nor
 // a destroy: a dump reading one pane follows it by kv.from.
 export function viewMoved(fromPaneId: string, toPaneId: string, tileId: string): TraceEvent {

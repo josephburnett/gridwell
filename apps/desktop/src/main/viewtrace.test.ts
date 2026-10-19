@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   menuChose,
   menuOpened,
+  permissionDecided,
   viewBounds,
   viewCreated,
   viewDestroyed,
@@ -185,4 +186,11 @@ test('a burst of resize and move records once, after it settles', () => {
 // than an empty one.
 test('an open from the canvas names no pane', () => {
   assert.deepEqual(viewOpenRequested(undefined, 'https://x.test/', false).kv, { below: 'false' });
+});
+
+test('a permission record carries the request and the verdict as kv', () => {
+  const r = permissionDecided('media', false);
+  assert.equal(r.src, 'webview');
+  assert.equal(r.kind, 'permission');
+  assert.deepEqual(r.kv, { permission: 'media', allowed: 'false' });
 });

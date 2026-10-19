@@ -10,7 +10,7 @@ import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
 import { QuitFlush } from './quit';
-import { viewOpenRequested } from './viewtrace';
+import { permissionDecided, viewOpenRequested } from './viewtrace';
 import { bootEvent, flushTrace, logLine, startTrace, stopTrace, trace, TRACE_PATH } from './trace';
 
 // See userdata.ts. The e2e fixture also passes --user-data-dir as a Chromium
@@ -38,7 +38,9 @@ async function boot(): Promise<void> {
   // allowPermission owns the decision; the deny covers every session.
   const denyExternal = (ses: Electron.Session) =>
     ses.setPermissionRequestHandler((_wc, permission, callback) => {
-      callback(allowPermission(permission));
+      const allowed = allowPermission(permission);
+      trace(permissionDecided(permission, allowed));
+      callback(allowed);
     });
   denyExternal(session.defaultSession);
   denyExternal(session.fromPartition(SESSION_PARTITION));
