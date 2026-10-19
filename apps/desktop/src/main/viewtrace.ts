@@ -35,6 +35,12 @@ export function viewGone(paneId: string, tileId: string, url: string, reason: st
   return view('gone', paneId, url, { tile: tileId, reason });
 }
 
+// How a new view got its page: 'restore' is its saved back-stack, 'load' the
+// tile's address alone (viewutil.reviveNavigation decides). msg is the address.
+export function viewRevived(paneId: string, tileId: string, how: 'restore' | 'load', url: string): TraceEvent {
+  return view('revive', paneId, url, { tile: tileId, how });
+}
+
 // A view handed to another pane with its page, which is neither a create nor
 // a destroy: a dump reading one pane follows it by kv.from.
 export function viewMoved(fromPaneId: string, toPaneId: string, tileId: string): TraceEvent {

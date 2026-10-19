@@ -464,3 +464,16 @@ test('a destroy record says how big a preview the close took', async () => {
     [['p1', '9'], ['p2', '0']],
   );
 });
+
+// A pane showing a page other than the one it was left on is read from whether
+// the view restored its back-stack or loaded the address.
+test('a new view says whether it restored its back-stack or loaded the address', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, STACK);
+  await r.reg.place('p2', 'u1/8', 'https://y.test/', BOUNDS);
+  assert.deepEqual(
+    kinds(r, 'revive').map((ev) => [ev.kv?.view, ev.kv?.how, ev.msg]),
+    [['p1', 'restore', SLACK], ['p2', 'load', 'https://y.test/']],
+  );
+});
+

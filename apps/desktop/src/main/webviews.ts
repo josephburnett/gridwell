@@ -40,6 +40,7 @@ import {
   viewGone,
   viewMoved,
   viewNav,
+  viewRevived,
   viewShown,
   viewStealBounced,
 } from './viewtrace';
@@ -322,6 +323,7 @@ export class WebviewRegistry {
     // reviveNavigation owns the tie-break between the persisted back-stack and
     // the tile's user-editable address.
     const nav = reviveNavigation(url, history);
+    this.trace(viewRevived(paneId, tileId, nav.kind, url));
     if (nav.kind === 'restore') {
       // A url Chromium refuses outright commits nothing and fires no
       // did-fail-load, so the pane sits blank and this report is the only
