@@ -792,8 +792,13 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 			}
 			return namespace.Follow(ctx, ns, &pb.SubscribeRequest{},
 				func(ev *pb.Event) error {
+					q := qualifyEvent(uuid, transit, ev)
+					// The hubs below key by the namespace's own id; this is
+					// the one record holding both keys.
+					trace.Emit("router", "event", "qualify", map[string]string{
+						"key": rpc.EventKey(q), "local": rpc.EventKey(ev), "ns": uuid})
 					select {
-					case events <- qualifyEvent(uuid, transit, ev):
+					case events <- q:
 						return nil
 					case <-ctx.Done():
 						return ctx.Err()

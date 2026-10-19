@@ -259,3 +259,32 @@ func TestASessionsStreamAndViewAreTracedUnderItsID(t *testing.T) {
 	closeSub()
 	awaitRecord(t, "view/session away", of("view", "session", "away"))
 }
+
+// tellingSink is a namespace whose stream tells one grid change.
+type tellingSink struct{ subscriptionSink }
+
+func (s *tellingSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
+	if err := send(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: "5"}}}); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return nil
+}
+
+// A namespace's event is keyed by its own id in the event hub's records and
+// by the qualified id in every rpc record; the router, which qualifies it,
+// writes both keys and the namespace in one record, so one grep joins them.
+func TestAnEventsQualifiedKeyIsTracedBesideItsLocalOne(t *testing.T) {
+	const a = "pinte01"
+	reg := plugin.NewRegistry()
+	reg.Register(a, "feed", &tellingSink{}, nil)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	t.Cleanup(subscribed(cl))
+	awaitRecord(t, "router/event", func(rec tracewire.Record) bool {
+		return rec.Src == "router" && rec.Kind == "event" && rec.KV["key"] == "g/"+a+"/5" && rec.KV["local"] == "g/5" && rec.KV["ns"] == a
+	})
+}
