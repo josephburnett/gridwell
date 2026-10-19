@@ -27,6 +27,9 @@ const applicationID = 0x4757654C // "GWeL"
 // shortcut sound. The contract is CLAUDE.md in this directory.
 const schemaVersion = 21
 
+// SchemaVersion is the schema generation this binary reads and writes.
+func SchemaVersion() int { return schemaVersion }
+
 // migration is one step from version to-1 up to version to. Additive is the
 // default. A drop must be recorded in the chain entry's comment: only storage
 // no released binary reads for a user-visible meaning may go, and the step

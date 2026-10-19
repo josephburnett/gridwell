@@ -606,7 +606,9 @@ found (`sourcecache/revalidate`) and each prefetch walk's start and breadth
 (`sourcecache/prefetch`). Every re-dialed stream, a plugin's Watch or a
 connection's events, records its outage and its recovery once each
 (`namespace/stream`, `down` and `up`), however many retries lie between. Each migration step `gridwell.db` runs at
-open is a `store/migrate` record with its versions and the rows it wrote.
+open is a `store/migrate` record with its versions and the rows it wrote,
+and the node's `boot` record names the schema the binary holds it at
+(`kv.schema`).
 
 ## One fact, one owner
 
