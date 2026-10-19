@@ -98,6 +98,12 @@ function writeCrashFile(cause: string, kv: Record<string, string>, now = new Dat
   return file;
 }
 
+// Chromium's reasons for a renderer ending all mean it died but 'clean-exit',
+// which is a renderer that was asked to go.
+export function rendererCrashed(reason: string): boolean {
+  return reason !== 'clean-exit';
+}
+
 // reportCrash is what a death calls: the file, and where it landed in main's
 // console and trace.
 export function reportCrash(cause: string, kv: Record<string, string>): void {

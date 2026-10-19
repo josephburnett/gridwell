@@ -18,6 +18,9 @@ import {
   viewShown,
   viewStealBounced,
   windowFocused,
+  windowGone,
+  windowLoadFailed,
+  windowResponsive,
   WINDOW_SETTLE_MS,
   windowState,
   windowStateRecorder,
@@ -193,4 +196,23 @@ test('a permission record carries the request and the verdict as kv', () => {
   assert.equal(r.src, 'webview');
   assert.equal(r.kind, 'permission');
   assert.deepEqual(r.kv, { permission: 'media', allowed: 'false' });
+});
+
+// The root window's lifecycle reads as kinds under one src, its cause as kv,
+// so a dump greps "window" and sees the canvas die, hang or fail to load.
+test('the root window\'s deaths, hangs and failed loads are kinds of their own', () => {
+  assert.deepEqual(windowGone('crashed', 133), {
+    src: 'window',
+    kind: 'gone',
+    msg: 'root renderer',
+    kv: { reason: 'crashed', exitCode: '133' },
+  });
+  assert.equal(windowResponsive(false).kind, 'unresponsive');
+  assert.equal(windowResponsive(true).kind, 'responsive');
+  assert.deepEqual(windowLoadFailed(-102, 'http://127.0.0.1:1/', 'ERR_CONNECTION_REFUSED'), {
+    src: 'window',
+    kind: 'fail',
+    msg: 'ERR_CONNECTION_REFUSED',
+    kv: { code: '-102', url: 'http://127.0.0.1:1/' },
+  });
 });

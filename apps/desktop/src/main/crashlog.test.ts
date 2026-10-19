@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { crashFileName, crashText, dumpsDir, LineTail, redact } from './crashlog';
+import { crashFileName, crashText, dumpsDir, LineTail, redact, rendererCrashed } from './crashlog';
 
 const here = dirname(fileURLToPath(import.meta.url)); // apps/desktop/src/main
 const repoRoot = resolve(here, '../../../..');
@@ -75,4 +75,11 @@ test('a crash file says what died and holds both tails', () => {
   assert.match(text, /\ncode: 2\nsignal: \n/);
   assert.match(text, /node output, last 2 lines ---\npanic: boom\ngoroutine 1/);
   assert.match(text, /renderer console, last 1 lines ---\n\[renderer:error\] x\n/);
+});
+
+test('every renderer ending is a crash but one it was asked for', () => {
+  for (const r of ['crashed', 'oom', 'killed', 'abnormal-exit', 'launch-failed', 'integrity-failure']) {
+    assert.equal(rendererCrashed(r), true, r);
+  }
+  assert.equal(rendererCrashed('clean-exit'), false);
 });

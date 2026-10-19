@@ -123,6 +123,23 @@ export function windowFocused(focused: boolean): TraceEvent {
   return { src: WINDOW, kind: focused ? 'focus' : 'blur', msg: 'root window' };
 }
 
+// The root renderer died: the canvas is gone, and with it the client's ring.
+// reason and exitCode are Chromium's.
+export function windowGone(reason: string, exitCode: number): TraceEvent {
+  return { src: WINDOW, kind: 'gone', msg: 'root renderer', kv: { reason, exitCode: String(exitCode) } };
+}
+
+// Chromium's hang verdict on the root renderer and its recovery, one kind
+// each, so a frozen canvas reads as the span between them.
+export function windowResponsive(responsive: boolean): TraceEvent {
+  return { src: WINDOW, kind: responsive ? 'responsive' : 'unresponsive', msg: 'root renderer' };
+}
+
+// The canvas's own page failed to load, which leaves Chromium's error page.
+export function windowLoadFailed(code: number, url: string, description: string): TraceEvent {
+  return { src: WINDOW, kind: 'fail', msg: description, kv: { code: String(code), url } };
+}
+
 // What the window manager has made of the root window, read by window.ts on
 // creation and on each Electron window event. It is the one window-geometry
 // record: a window the user cannot resize or snap is diagnosed from these

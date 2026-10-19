@@ -2,8 +2,8 @@ import { BrowserWindow, Menu, screen } from 'electron';
 import * as path from 'node:path';
 import { rendererLogLine } from './viewutil';
 import { logLine, trace } from './trace';
-import { rendererTail } from './crashlog';
-import { windowFocused, windowState, windowStateRecorder } from './viewtrace';
+import { rendererCrashed, rendererTail, reportCrash } from './crashlog';
+import { windowFocused, windowGone, windowLoadFailed, windowResponsive, windowState, windowStateRecorder } from './viewtrace';
 
 // A read of a destroyed window throws uncaught, which hangs main behind an
 // error dialog.
@@ -81,6 +81,18 @@ export function createRootWindow(origin: string): RootWindow {
     if (!line) return;
     logLine('error', line, 'renderer');
     rendererTail.push(line);
+  });
+
+  // The canvas's death takes the client's ring with it, so it writes the
+  // crash file a dead node does.
+  win.webContents.on('render-process-gone', (_e, details) => {
+    trace(windowGone(details.reason, details.exitCode));
+    if (rendererCrashed(details.reason)) reportCrash('renderer-gone', { reason: details.reason, exitCode: String(details.exitCode) });
+  });
+  win.on('unresponsive', () => trace(windowResponsive(false)));
+  win.on('responsive', () => trace(windowResponsive(true)));
+  win.webContents.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+    if (isMainFrame) trace(windowLoadFailed(code, url, description));
   });
 
   win.on('focus', () => trace(windowFocused(true)));
