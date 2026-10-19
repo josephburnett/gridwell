@@ -451,3 +451,41 @@ func TestURLOpenCarriesItsAddress(t *testing.T) {
 		t.Errorf("shell open is under %q", e.Src)
 	}
 }
+
+// The build records name both builds in full under kv and short in the
+// line, and an unstamped build says so rather than printing nothing.
+func TestBuildRecords(t *testing.T) {
+	full := "0123456789abcdef0123456789abcdef01234567"
+	e := NodeBuild(full)
+	if e.Src != "client" || e.Kind != "handshake" || e.KV["node"] != full || e.Msg != "node runs 0123456" {
+		t.Errorf("node build is %+v", e)
+	}
+	if e := NodeBuild(""); e.Msg != "node runs no build" || e.KV != nil {
+		t.Errorf("an unstamped node build is %+v", e)
+	}
+	e = OtherBuild("abcdef0123+dirty", full, "offer")
+	if e.Src != "client" || e.Kind != "build" || e.KV["client"] != "abcdef0123+dirty" ||
+		e.KV["node"] != full || e.KV["verdict"] != "offer" {
+		t.Errorf("other build is %+v", e)
+	}
+	if want := "the node runs 0123456, this page abcdef0+dirty: offer"; e.Msg != want {
+		t.Errorf("other build reads %q, want %q", e.Msg, want)
+	}
+}
+
+// A reload is the source changing the page, told apart from an open.
+func TestURLReloadNamesItsView(t *testing.T) {
+	e := URLReload("p1", "t7abcde")
+	if e.Src != SrcURL || e.Kind != "reload" || e.KV["pane"] != "p1" || e.KV["tile"] != "t7abcde" {
+		t.Errorf("url reload is %+v", e)
+	}
+}
+
+// A post the node did not keep is a trace record, never a notice, under the
+// trace's own src.
+func TestFlushFailedIsTheTracesOwn(t *testing.T) {
+	e := FlushFailed("502 Bad Gateway")
+	if e.Src != "trace" || e.Kind != "flush" || e.Msg != "post failed: 502 Bad Gateway" {
+		t.Errorf("flush failure is %+v", e)
+	}
+}
