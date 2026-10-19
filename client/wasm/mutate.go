@@ -150,6 +150,7 @@ func (a *App) dispatch(w write) error {
 	}
 	if err != nil {
 		if w.undo != nil {
+			a.emit(traceevent.OutboxRollback(w.label, w.id, w.gid, o))
 			w.undo()
 		}
 		return err
@@ -318,6 +319,7 @@ func (a *App) postWriteContent(gid, tileID string, claim rpc.ContentBasis, newCo
 			// The server never spoke, so the entry stays dirty and the
 			// flush sweep re-posts it. It is the only copy of the user's
 			// unsaved words.
+			a.emit(traceevent.OutboxPark(outbox.OpContent, tileID))
 			a.reportErr(errsurface.Info, "textsave",
 				"unsaved changes kept — server unreachable, will retry")
 		}

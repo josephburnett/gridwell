@@ -74,7 +74,8 @@ func (a *App) postSelection(gid string) {
 		},
 		then: func() { a.c.SelectionLanded(gid, sent) },
 		done: func() {
-			if callErr != nil && clientsync.ReactOptimistic(clientsync.Of(callErr)).DropLocal {
+			if o := clientsync.Of(callErr); callErr != nil && clientsync.ReactOptimistic(o).DropLocal {
+				a.emit(traceevent.OutboxRollback("SetSelection", gid, gid, o))
 				a.c.SelectionRefused(gid, sent)
 				a.scheduleDraw(traceevent.WhySelection)
 			}

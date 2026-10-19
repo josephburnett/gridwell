@@ -217,3 +217,30 @@ test('a drop names how many tiles it carried and the cell it landed on', async (
   const move = of(lines, cid, 'drag', 'drop').find((r) => r.msg === 'move')!;
   expect(move.kv, JSON.stringify(move)).toMatchObject({ n: '1', x: String(cx + 3), y: String(cy + 2) });
 });
+
+test('a move the node never heard is taken back, and the dump says so', async ({ gw, home, window }) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  await gw.waitIdle();
+  await window.route('**/gridwell.v1.Gridwell/MoveTile', (r: any) => r.abort());
+  await gw.dragTileCell(cx, cy, cx + 1, cy);
+  await gw.waitIdle();
+  await window.unroute('**/gridwell.v1.Gridwell/MoveTile');
+
+  const token = await loginToken(gw.origin, homePassword(home));
+  let cid = '';
+  let lines: TraceLine[] = [];
+  await expect
+    .poll(
+      async () => {
+        ({ cid, lines } = await dumpNow(window, gw.origin, token));
+        return of(lines, cid, 'outbox', 'rollback').map((r) => r.kv);
+      },
+      { timeout: 20_000 },
+    )
+    .toEqual([{ op: 'MoveTile', grid: f.gridID, outcome: 'transport' }]);
+});

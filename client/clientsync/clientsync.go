@@ -6,6 +6,7 @@ package clientsync
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"connectrpc.com/connect"
 
@@ -36,6 +37,27 @@ const (
 	// restarts, so nothing parks or retries it.
 	OutcomeDisabled
 )
+
+// String is the outcome's one word, for a trace record.
+func (o Outcome) String() string {
+	switch o {
+	case OutcomeOK:
+		return "ok"
+	case OutcomeConflict:
+		return "conflict"
+	case OutcomeRejected:
+		return "rejected"
+	case OutcomeTransport:
+		return "transport"
+	case OutcomeDead:
+		return "dead"
+	case OutcomeAbandoned:
+		return "abandoned"
+	case OutcomeDisabled:
+		return "disabled"
+	}
+	return "outcome " + strconv.Itoa(int(o))
+}
 
 // Of reads a non-connect error as Transport and every coded error as a server
 // that answered. A context deadline is the client's own timer

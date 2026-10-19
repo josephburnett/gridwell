@@ -7,6 +7,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/tracewire"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -417,5 +418,15 @@ func TestDropCarriesItsCountCellAndReason(t *testing.T) {
 	}
 	if e := Drop(dragdrop.DropPanEnd, DropAt{}); e.KV != nil {
 		t.Errorf("a pan end names %v", e.KV)
+	}
+}
+
+// A write the client took back says so under its op, with the verdict that
+// refused it; a park is the other outcome and has its own record.
+func TestOutboxRollbackNamesTheWriteAndTheVerdict(t *testing.T) {
+	e := OutboxRollback("MoveTile", "t7abcde", "g7abcde", clientsync.OutcomeConflict)
+	if e.Src != "outbox" || e.Kind != "rollback" || e.KV["op"] != "MoveTile" ||
+		e.KV["id"] != "t7abcde" || e.KV["grid"] != "g7abcde" || e.KV["outcome"] != "conflict" {
+		t.Errorf("rollback is %+v", e)
 	}
 }

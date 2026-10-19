@@ -9,6 +9,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/tracewire"
+	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
@@ -229,6 +230,14 @@ func payloadOf(ev *pb.Event) (name, id string) {
 // the kick that re-posts what is owed.
 func OutboxPark(op, id string) Event {
 	return Event{Src: "outbox", Kind: "park", Msg: op, KV: kv("id", id)}
+}
+
+// OutboxRollback is an optimistic write the client took back: the verdict
+// (clientsync.Outcome) refused it, so what the screen showed ahead of the
+// node is undone. id is the entity the write named, grid the grid it re-reads.
+func OutboxRollback(op, id, gridID string, o clientsync.Outcome) Event {
+	return Event{Src: "outbox", Kind: "rollback", Msg: op,
+		KV: kv("op", op, "id", id, "grid", gridID, "outcome", o.String())}
 }
 
 func OutboxDrain(n int) Event {
