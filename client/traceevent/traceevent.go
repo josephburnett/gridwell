@@ -427,6 +427,12 @@ func Select(how, paneID, gridID string, n int) Event {
 		KV: kv("pane", paneID, "grid", gridID, "n", strconv.Itoa(n))}
 }
 
+// SelectClearAll is the menu's Clear selections, which empties every set the
+// node holds rather than one grid's, so it names no grid and no count.
+func SelectClearAll(paneID string) Event {
+	return Event{Src: "gesture", Kind: "select", Msg: "clear all", KV: kv("pane", paneID)}
+}
+
 // buttonName is the table over MouseEvent.button.
 func buttonName(b int) string {
 	switch b {

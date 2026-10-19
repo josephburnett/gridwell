@@ -430,3 +430,12 @@ func TestOutboxRollbackNamesTheWriteAndTheVerdict(t *testing.T) {
 		t.Errorf("rollback is %+v", e)
 	}
 }
+
+// Clear selections is not a toggle on the grid in front: it says so, and
+// names no grid it would be read as limited to.
+func TestClearAllIsNotOneGridsSelect(t *testing.T) {
+	e := SelectClearAll("p1")
+	if e.Src != "gesture" || e.Kind != "select" || e.Msg != "clear all" || e.KV["grid"] != "" || e.KV["pane"] != "p1" {
+		t.Errorf("clear all is %+v", e)
+	}
+}

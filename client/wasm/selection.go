@@ -155,6 +155,7 @@ func (a *App) clearAllSelections() {
 	if p := a.tree.FocusedPane(); p != nil {
 		gid = a.gridIDForPane(p)
 	}
+	a.emit(traceevent.SelectClearAll(a.tree.Focus))
 	a.post(write{
 		label: "SetSelection", gid: gid, source: "selection", failText: "the selection was not cleared",
 		call: func(ctx context.Context) error {

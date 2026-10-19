@@ -244,3 +244,24 @@ test('a move the node never heard is taken back, and the dump says so', async ({
     )
     .toEqual([{ op: 'MoveTile', grid: f.gridID, outcome: 'transport' }]);
 });
+
+test('Clear selections reads as clearing all, not as one grid\'s select', async ({ electronApp, gw, home, window }) => {
+  await gw.enterPlugin('home');
+  await gw.waitIdle();
+  const picked = pickFromNativeMenu(electronApp, 'Clear selections');
+  await gw.rightClickCircle();
+  await picked;
+
+  const token = await loginToken(gw.origin, homePassword(home));
+  let cid = '';
+  let lines: TraceLine[] = [];
+  await expect
+    .poll(
+      async () => {
+        ({ cid, lines } = await dumpNow(window, gw.origin, token));
+        return of(lines, cid, 'gesture', 'select').map((r) => r.msg);
+      },
+      { timeout: 20_000 },
+    )
+    .toEqual(['clear all']);
+});
