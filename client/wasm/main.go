@@ -585,14 +585,17 @@ const dragThreshold = 4.0
 
 func main() {
 	origin := js.Global().Get("location").Get("origin").String()
-	// Before the App: the rpc client's interceptor records into it.
-	tr := trace.New(trace.DefaultCapacity, trace.NewRequestID())
+	// Before the App: the rpc client's interceptor records into it. The ring
+	// stamps the session the client names itself by, so a dump joins this
+	// page's records to the view the node files under it.
+	session := rpc.NewSession()
+	tr := trace.New(trace.DefaultCapacity, session)
 	gate := nodebuild.New(tracewire.BuildCommit(), func(node string) { app.otherBuild(node) })
 	app = &App{
 		doc:                js.Global().Get("document"),
 		win:                js.Global().Get("window"),
 		origin:             origin,
-		cl:                 rpc.NewDefaultClient(origin, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
+		cl:                 rpc.NewDefaultClient(origin, session, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
 		gate:               gate,
 		c:                  cache.New(),
 		subscriptionKick:   make(chan struct{}, 1),

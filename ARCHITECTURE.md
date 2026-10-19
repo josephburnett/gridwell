@@ -551,7 +551,9 @@ nothing reads it back, and deleting it loses nothing the user owns.
 A record is one JSON object on one line, `api/tracewire.Record`, which the
 node and the client both read: `seq` and `t` are the node's stamps, then
 `origin` (node, client, electron, plugin), `src`, `kind`, `msg` capped at 1024
-bytes, a small `kv`, and the emitter's `cid` and `ct`. `seq` is receipt order.
+bytes, a small `kv`, and the emitter's `cid` and `ct`. A client's `cid` is the
+session it names itself by on `SetView` and `Subscribe` (`rpc.NewSession`), so
+its records join the node's `view/set`. `seq` is receipt order.
 `t` (unix milliseconds UTC) is when the record happened on the node's clock:
 a node record's emit time, and a sent record's `ct` plus its batch's skew.
 Each batch names the sender's clock at the post in `Gridwell-Trace-Clock`

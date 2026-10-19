@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"net/http"
 
@@ -11,28 +10,37 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/idshape"
 )
 
 // Client wraps the Connect-generated gridwell client: one method per verb,
 // streams assembled. Go callers use this rather than the raw connect client.
 type Client struct {
 	cl gridwellv1connect.GridwellClient
-	// session names this client to the node, minted here so its event
-	// stream and its subscription cannot name two different clients.
+	// session names this client to the node, held here so its event stream
+	// and its view cannot name two different clients.
 	session string
 }
 
-// NewClient wires a Client to a Connect-RPC server. baseURL is protocol and
-// host with no path.
+// NewSession mints the id a client names itself by to the node, in the node's
+// own id shape.
+func NewSession() string { return idshape.NewShortID() }
+
+// NewClient wires a Client to a Connect-RPC server under a fresh session.
+// baseURL is protocol and host with no path.
 func NewClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{cl: gridwellv1connect.NewGridwellClient(httpClient, baseURL, opts...), session: rand.Text()}
+	return &Client{cl: gridwellv1connect.NewGridwellClient(httpClient, baseURL, opts...), session: NewSession()}
 }
 
 // NewDefaultClient uses http.DefaultClient, which rides fetch under WASM, and
 // the JSON-over-proto codec so dev-tools network panels show readable bodies.
-// opts are the caller's own, such as the shim's trace interceptor.
-func NewDefaultClient(baseURL string, opts ...connect.ClientOption) *Client {
-	return NewClient(http.DefaultClient, baseURL, append([]connect.ClientOption{connect.WithProtoJSON()}, opts...)...)
+// session is the caller's, minted before the client because the caller names
+// itself by it first: the shim's trace ring stamps it on every record. opts
+// are the caller's own, such as the shim's trace interceptor.
+func NewDefaultClient(baseURL, session string, opts ...connect.ClientOption) *Client {
+	c := NewClient(http.DefaultClient, baseURL, append([]connect.ClientOption{connect.WithProtoJSON()}, opts...)...)
+	c.session = session
+	return c
 }
 
 func (c *Client) GetGrid(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {

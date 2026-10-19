@@ -43,7 +43,8 @@ type Client struct {
 }
 
 // New mints a ring of capacity records, each stamped with cid, the id that
-// says which client emitted them.
+// says which client emitted them: the shim passes its session
+// (rpc.NewSession), the id the node files its view under.
 func New(capacity int, cid string) *Client {
 	if capacity < 1 {
 		capacity = DefaultCapacity

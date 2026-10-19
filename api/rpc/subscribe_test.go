@@ -119,3 +119,54 @@ func (w *memWriter) Write(b []byte) (int, error) {
 }
 
 func (w *memWriter) Flush() { w.WriteHeader(http.StatusOK) }
+
+// A client named by its caller's session says that session on its stream and
+// its view, so the id the shim stamps on its records is the one the node
+// files the view under.
+func TestDefaultClientNamesItselfByTheGivenSession(t *testing.T) {
+	seen := &sessionsSeen{}
+	_, h := gridwellv1connect.NewGridwellHandler(seen)
+	was := http.DefaultClient.Transport
+	http.DefaultClient.Transport = memTransport{h}
+	defer func() { http.DefaultClient.Transport = was }()
+	cl := NewDefaultClient("http://node", "s123abc")
+	if err := cl.SetView(t.Context(), &pb.SetViewRequest{Label: "desktop"}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	s, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	_ = s.Close()
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if seen.view != "s123abc" || seen.stream != "s123abc" || cl.Session() != "s123abc" {
+		t.Errorf("view %q, stream %q, Session %q; want the caller's", seen.view, seen.stream, cl.Session())
+	}
+}
+
+type sessionsSeen struct {
+	gridwellv1connect.UnimplementedGridwellHandler
+	mu           sync.Mutex
+	view, stream string
+}
+
+func (h *sessionsSeen) SetView(_ context.Context, req *connect.Request[pb.SetViewRequest]) (*connect.Response[pb.SetViewResponse], error) {
+	h.mu.Lock()
+	h.view = req.Msg.GetSession()
+	h.mu.Unlock()
+	return connect.NewResponse(&pb.SetViewResponse{}), nil
+}
+
+func (h *sessionsSeen) Subscribe(ctx context.Context, req *connect.Request[pb.SubscribeRequest], stream *connect.ServerStream[pb.Event]) error {
+	h.mu.Lock()
+	h.stream = req.Msg.GetSession()
+	h.mu.Unlock()
+	if err := stream.Send(nil); err != nil {
+		return err
+	}
+	<-ctx.Done()
+	return nil
+}

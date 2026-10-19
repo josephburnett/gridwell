@@ -56,3 +56,26 @@ test('a stream that ends and reopens leaves its open, its end and the resync it 
   expect(resync.kv?.source).toBe('every');
   expect(Number(resync.kv?.n), 'the resync counts the grids it re-reads').toBeGreaterThan(0);
 });
+
+test("the id on the client's records is the session the node files its view under", async ({
+  gw,
+  home,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  await gw.waitIdle();
+  const token = await loginToken(gw.origin, homePassword(home));
+  let cid = '';
+  let lines: TraceLine[] = [];
+  await expect
+    .poll(
+      async () => {
+        ({ cid, lines } = await dumpNow(window, gw.origin, token));
+        return lines.filter((r) => r.origin === 'node' && r.src === 'view' && r.kind === 'set' && r.kv?.session === cid)
+          .length;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThan(0);
+  expect(cid).toMatch(/^[a-z][a-z0-9]{6}$/);
+});
