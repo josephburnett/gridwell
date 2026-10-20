@@ -14,6 +14,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -27,12 +28,12 @@ type findHit struct {
 // synthesis GetGrid runs, dropping hits it cannot place, and keeps the ones
 // the filters pass. An empty query with a filter lists instead: the grid and,
 // with recurse, every grid under it, or with no grid the rows whose facts
-// pass. An id: locate is refused: there is no parent index here.
+// pass. An id: is the locate.
 func (a *Adapter) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
-	if q := rpc.ParseFindQuery(req.Query); q.ID != "" {
-		return nil, status.Error(codes.Unimplemented, "plugin: locate by id is not supported (no parent index in the store)")
-	}
 	g := &findGrids{a: a, ctx: ctx, byGrid: map[string]*synthesized{}}
+	if q := rpc.ParseFindQuery(req.Query); q.ID != "" {
+		return a.locate(req, g, q.ID)
+	}
 	scope := ""
 	if req.GridId != "" {
 		_, gkey, err := a.resolveGrid(req.GridId)
@@ -64,6 +65,28 @@ func (a *Adapter) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridw
 		return nil, err
 	}
 	return a.filterHits(req, hits, listing)
+}
+
+// locate is the id: mode, home's rule (store.locate): the one tile, when it
+// passes the filters, on its chain of doors, and nothing for an id that
+// names no live entry.
+func (a *Adapter) locate(req *gridwellv1.FindRequest, g *findGrids, id string) (*gridwellv1.FindResponse, error) {
+	ref, err := a.resolveTile(id)
+	switch {
+	case gwerr.IsDeadLink(err), status.Code(err) == codes.NotFound:
+		return &gridwellv1.FindResponse{}, nil
+	case err != nil:
+		return nil, err
+	}
+	path, ok, err := g.chain(ref.gridKey)
+	if err != nil || !ok {
+		return &gridwellv1.FindResponse{}, err
+	}
+	h, err := g.hit(ref.gridKey, ref.key, path, "", 1)
+	if err != nil || h == nil {
+		return &gridwellv1.FindResponse{}, err
+	}
+	return a.filterHits(req, []findHit{*h}, false)
 }
 
 // filterHits keeps the hits whose rows pass the filters, and the kind a hit

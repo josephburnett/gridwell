@@ -134,13 +134,13 @@ func TestFindThroughTheAdapterAnswersMintedPlaces(t *testing.T) {
 		t.Errorf("hit placement %+v differs from the grid's %+v", hit.Tile, minted)
 	}
 
-	// Scoped to the plugin, the same answer; an id: locate is the one
-	// selector the adapter cannot resolve yet and says so.
+	// Scoped to the plugin, the same answer; located by id, the same place.
 	found, err = cl.Find(ctx, "widget", hit.Tile.Id, 10)
 	if scoped := found.GetResults(); err != nil || len(scoped) != 1 || scoped[0].Tile.Id != hit.Tile.Id {
 		t.Errorf("scoped find = %v, %v", found, err)
 	}
-	if _, err := cl.Find(ctx, "id:"+hit.Tile.Id, hit.Tile.Id, 1); err == nil {
-		t.Error("id: locate through the adapter must refuse, not answer an empty or wrong place")
+	found, err = cl.Find(ctx, "id:"+hit.Tile.Id, hit.Tile.Id, 1)
+	if located := found.GetResults(); err != nil || len(located) != 1 || located[0].Tile.Id != hit.Tile.Id || len(located[0].Path) != len(hit.Path) {
+		t.Errorf("id: locate = %v, %v, want the one hit on its path", found, err)
 	}
 }

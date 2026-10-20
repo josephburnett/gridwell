@@ -139,3 +139,55 @@ func TestFindFiltersReachAPluginsRows(t *testing.T) {
 		t.Errorf("the week listed = %v, want both, the one with a row first", got)
 	}
 }
+
+// id: finds a plugin's tile as it finds home's: the one tile and the doors
+// down to it, through the grids the node holds; a filter it fails leaves it
+// out.
+func TestFindLocatesAPluginsTileByID(t *testing.T) {
+	gl := gitlabfake.New(t, gitlabTodo(1, "2026-08-18T10:00:00Z", "fix the widget", "please review the widget"))
+	hs := gitlabServer(t, gl)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	raw := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	ctx := context.Background()
+	pl, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootID := plugintest.LandingOf(t, pl.Plugins[0])
+	root, err := cl.GetGrid(ctx, rootID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var week *gridwellv1.Tile
+	for _, tile := range root.Tiles {
+		if strings.HasPrefix(tile.AltText, "2026-08-17") {
+			week = tile
+		}
+	}
+	if week == nil {
+		t.Fatalf("no week door in %v", root.Tiles)
+	}
+	weekGrid, err := cl.GetGrid(ctx, week.ChildGridId)
+	if err != nil {
+		t.Fatal(err)
+	}
+	todo := weekGrid.Tiles[0]
+
+	resp, err := raw.Find(ctx, connect.NewRequest(&gridwellv1.FindRequest{Query: "id:" + todo.Id}))
+	if err != nil {
+		t.Fatalf("locate %s: %v", todo.Id, err)
+	}
+	if r := resp.Msg.Results; len(r) != 1 || r[0].Tile.Id != todo.Id {
+		t.Fatalf("locate %s = %v, want the one tile", todo.Id, r)
+	}
+	if p := resp.Msg.Results[0].Path; len(p) != 1 || p[0].Id != week.Id {
+		t.Errorf("path = %v, want the week door", p)
+	}
+	resp, err = raw.Find(ctx, connect.NewRequest(&gridwellv1.FindRequest{Query: "id:" + todo.Id, Kind: rpc.KindWorkspace}))
+	if err != nil {
+		t.Fatalf("locate with a kind filter: %v", err)
+	}
+	if len(resp.Msg.Results) != 0 {
+		t.Errorf("locate as a workspace = %v, want none", resp.Msg.Results)
+	}
+}
