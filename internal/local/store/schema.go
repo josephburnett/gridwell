@@ -15,7 +15,7 @@ package store
 //     shell and its scrollback live in the tmux server and survive ascents
 //     and restarts; they are gone only when the tile is deleted or the host
 //     reboots.
-//   - pane: blob_id holds the api/panelayout split-pane layout.
+//   - workspace: blob_id holds the api/panelayout layout.
 //
 // A door row's one framing (view_cx, view_cy, view_zoom) is at once the
 // preview frame, the descent target and the ascent return. A text row carries

@@ -7,8 +7,8 @@
 //   - kind and text_mode are strings rather than enums. The DDL CHECK
 //     constraints already pin the closed sets, and strings keep the
 //     proto-to-column mapping mechanical.
-//   - created_at and updated_at exist in the DDL but are not on the wire. They
-//     are storage metadata.
+//   - created_at, updated_at and content_at exist in the DDL and not on the
+//     wire; Find filters on them.
 syntax = "proto3";
 
 package gridwell.v1;
@@ -276,9 +276,8 @@ message InfoResponse {
   string display_name   = 2;
   reserved 3; // schema_version
   reserved 4; // watch
-  // root_grid_id is the plugin's default root: fs uses its configured
-  // root, proc pid 1, the home its singleton root. Click-enter descends
-  // here.
+  // root_grid_id is the home's root grid. A plugin declares none, since a
+  // plugin is not a place; a connection answers the far home's.
   string root_grid_id   = 5;
   reserved 6; // network
   reserved 7; // has_session
@@ -794,8 +793,7 @@ message DeleteTileResponse {
 // framing; root_grid_id names a root grid, which has no door to carry it.
 //
 // Framing carries no version claim and makes no version bump; it is
-// last-writer-wins. A plugin that keeps no framing answers Unimplemented, which
-// the node treats as nothing to store rather than an error.
+// last-writer-wins, and the node keeps a plugin row's as it keeps home's.
 message SetFramingRequest {
   string tile_id      = 1;  // qualified "<plugin-uuid>/<id>"; the door
   string root_grid_id = 2;  // qualified "<plugin-uuid>/<id>"; a root grid
@@ -848,7 +846,8 @@ message SubscribeRequest {
 // changes and again whenever the session's stream re-opens. It is unary
 // rather than a Subscribe field because the view changes many times in one
 // stream's life. The node holds the latest per session in memory while a
-// stream carrying the session is open and never stores it.
+// stream carrying the session is open and for subscription.AwayFor after its
+// last one closes, listed away; it never stores one.
 //
 // shown_grid_ids is derived on the client, because the layout rects that say
 // what is on screen are session-ephemeral client facts: each laid-out pane's
@@ -968,8 +967,8 @@ message Event {
   }
 }
 
-// Gridwell is the unified RPC surface, implemented by every node and by
-// every plugin.
+// Gridwell is the one RPC surface a node serves: the web, connection and MCP
+// APIs decode onto it, and pluginhost adapts plugin.v1 to it.
 service Gridwell {
   // ── Lifecycle ───────────────────────────────────────────────────────────
   // Info is the whole handshake: identity plus the default root. Handshake
