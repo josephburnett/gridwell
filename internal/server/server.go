@@ -181,15 +181,30 @@ func (s *Server) namespaces() []namespaceRow {
 }
 
 // homeUUID is the configured node id, or the first registered entry when a test
-// wires a registry without one, since home is registered first.
+// registers home under another id, since home is registered first.
 func (s *Server) homeUUID() string {
-	if s.cfg.ID != "" {
+	if _, ok := s.pluginReg.Get(s.cfg.ID); ok {
 		return s.cfg.ID
 	}
 	if o := s.pluginReg.Ordered(); len(o) > 0 {
 		return o[0].UUID
 	}
 	return ""
+}
+
+// homeScratch is the node's scratch grid, home's, qualified: where every
+// ephemeral visit this node serves lands, whatever grid it was opened from.
+// "" when no home is registered.
+func (s *Server) homeScratch(ctx context.Context) (string, error) {
+	hu := s.homeUUID()
+	if hu == "" {
+		return "", nil
+	}
+	info, err := s.pluginInfo(ctx, hu)
+	if err != nil || info.ScratchGridId == "" {
+		return "", err
+	}
+	return rpc.QualifyID(hu, info.ScratchGridId), nil
 }
 
 // pluginInfo serves repeat calls from the per-uuid cache. The live call is

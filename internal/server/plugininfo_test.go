@@ -278,8 +278,8 @@ func (p *infoFlakePlugin) Info(ctx context.Context, req *pb.InfoRequest) (*pb.In
 
 // TestGetGridFailsWhenOwnerInfoFails crosses the read seam a buildPluginInfo
 // unit test cannot reach: server -> Connect wire -> rpc.Client.GetGrid. Grid
-// scratch_grid_id and plugin_grids come from the owning namespace's Info and
-// from nowhere else, so a failed handshake must fail the read. The
+// plugin_grids comes from the owning namespace's Info and scratch_grid_id
+// from home's, from nowhere else, so a failed handshake must fail the read. The
 // alternative — answering the grid with the fields unset — is a grid with no
 // doors and no ephemeral visits, and that flips back on the next read,
 // because Info is not negatively cached.
@@ -331,24 +331,24 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	}
 }
 
-// scratchlessPlugin declares no scratch grid of its own: its ephemeral visits
-// land in the node home's scratch grid.
-type scratchlessPlugin struct {
+// plainPlugin is a plugin: its ephemeral visits land in the node's scratch
+// grid, home's.
+type plainPlugin struct {
 	namespace.Unimplemented
 }
 
-func (scratchlessPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+func (plainPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
 	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
-func (scratchlessPlugin) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
+func (plainPlugin) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	return &pb.GetGridResponse{Grid: &pb.Grid{Id: req.GridId}}, nil
 }
 
 // TestGetGridFailsWhenHomeInfoFails is the other arm of the same fact: the
-// scratch grid a plugin without one borrows is the node home's, read from
-// home's Info. A home that will not answer must fail the read too, or the grid
-// is answered with no landing for its ephemeral visits and nothing says so.
+// scratch grid every grid stamps is the node's, read from home's Info. A home
+// that will not answer must fail a plugin grid's read too, or the grid is
+// answered with no landing for its ephemeral visits and nothing says so.
 func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(":memory:")
@@ -363,7 +363,7 @@ func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
 	home := &infoFlakePlugin{Namespace: local.New(st, nil)}
 	reg := plugin.NewRegistry()
 	reg.Register(homeUUID, "home", home, nil)
-	reg.Register("u-scratchless", "test", scratchlessPlugin{}, nil)
+	reg.Register("u-scratchless", "test", plainPlugin{}, nil)
 	srv := mustNew(t, reg, Config{ID: homeUUID})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

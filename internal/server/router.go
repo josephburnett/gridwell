@@ -93,8 +93,8 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	if err != nil {
 		return nil, err
 	}
-	// scratch_grid_id and plugin_grids are the owning plugin's facts, from
-	// its Info or, in transit, the remote node's stamp.
+	// plugin_grids is the owning plugin's fact, from its Info; scratch_grid_id
+	// is the node's, from home's. In transit both are the remote node's stamp.
 	var g *pb.Grid
 	if transit {
 		g = rpc.TransitQualifyGrid(uuid, resp.Grid)
@@ -107,20 +107,10 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			if ierr != nil {
 				return nil, infoDeclarationError(req.GridId, uuid, ierr)
 			}
-			if info.ScratchGridId != "" {
-				g.ScratchGridId = rpc.QualifyID(uuid, info.ScratchGridId)
-			} else if hu := rt.srv.homeUUID(); hu != "" && hu != uuid {
-				// Ephemeral visits from a plugin with no scratch grid land in
-				// home's, stamped on the grid so it chains through connections.
-				hinfo, herr := rt.srv.pluginInfo(ctx, hu)
-				if herr != nil {
-					return nil, infoDeclarationError(req.GridId, hu, herr)
-				}
-				if hinfo.ScratchGridId != "" {
-					g.ScratchGridId = rpc.QualifyID(hu, hinfo.ScratchGridId)
-				}
-			}
 			g.PluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
+			if g.ScratchGridId, ierr = rt.srv.homeScratch(ctx); ierr != nil {
+				return nil, infoDeclarationError(req.GridId, rt.srv.homeUUID(), ierr)
+			}
 		}
 	}
 	tiles := qualifyTilesFor(transit, uuid, resp.Tiles)
@@ -521,6 +511,11 @@ func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namesp
 // tile's captured leaves, best-effort: it must not block the user's delete. It
 // answers why each shell's tmux it should have ended is still running.
 func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []string, qualifiedID string) (left []string) {
+	scratch, err := rt.srv.homeScratch(ctx)
+	if err != nil {
+		log.Printf("gridwell: delete %s: not reaping ephemeral candidates: home handshake failed: %v", qualifiedID, err)
+		return nil
+	}
 	for _, id := range candidates {
 		ec, elocal, euuid, transit, err := rt.route(id)
 		if err != nil {
@@ -532,17 +527,9 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 			log.Printf("gridwell: delete %s: not reaping remote ephemeral candidate %s (transit)", qualifiedID, id)
 			continue
 		}
-		// Ephemeral means on the owning namespace's scratch grid.
-		info, err := rt.srv.pluginInfo(ctx, euuid)
-		if err != nil {
-			log.Printf("gridwell: delete %s: not reaping candidate %s: plugin %s handshake failed: %v", qualifiedID, id, euuid, err)
-			continue
-		}
-		if info.ScratchGridId == "" {
-			continue
-		}
+		// Ephemeral means on the node's scratch grid.
 		et, err := ec.GetTile(ctx, &pb.GetTileRequest{TileId: elocal})
-		if err != nil || et.GetTile() == nil || et.GetTile().GridId != info.ScratchGridId {
+		if err != nil || et.GetTile() == nil || rpc.QualifyID(euuid, et.GetTile().GridId) != scratch {
 			continue // not an ephemeral: viewed content, never touched
 		}
 		dr, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal})

@@ -96,10 +96,9 @@ type Grid struct {
 	// that differ. Wire-only, never persisted.
 	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
 	// scratch_grid_id is the grid where ephemeral visits opened from this grid
-	// land: the owning plugin's own scratch grid, or the serving node's home
-	// scratch grid when the plugin declares none. Qualified from the receiver's
-	// perspective and chained through connections. "" only when the owning plugin's
-	// Info was unreachable. Wire-only.
+	// land: the serving node's scratch grid, home's, whatever namespace this
+	// grid is in. Qualified from the receiver's perspective and chained through
+	// connections. "" only when home's Info was unreachable. Wire-only.
 	ScratchGridId string `protobuf:"bytes,7,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// node_ns is the namespace chain of the node serving this grid, from the
 	// receiver's perspective: "" for a grid served by the node you are talking
@@ -787,10 +786,10 @@ type InfoResponse struct {
 	// root_grid_id is the home's root grid. A plugin declares none, since a
 	// plugin is not a place; a connection answers the far home's.
 	RootGridId string `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
-	// scratch_grid_id is the plugin's off-grid grid for ephemeral url tiles,
-	// where descending into a url places no tile. Never rendered, never
-	// linked; it persists as visited-url history. Empty for plugins that do
-	// not support ephemeral visits, such as fs and proc.
+	// scratch_grid_id is home's off-grid grid for ephemeral visits, where
+	// descending into a url places no tile; the node stamps it on every grid
+	// it serves as Grid.scratch_grid_id. Never rendered, never linked; it
+	// persists as visited-url history. A plugin answers none.
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
 	// center in grid coordinates and the intrinsic zoom. The home fills it from
