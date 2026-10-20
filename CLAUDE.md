@@ -406,10 +406,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   answers for the grid it names, so leaving one grid is not being
   gone. One thing listed in many grids is
   one tile (hey: a thread in everything, its boxes holding links).
-- A plugin's entry is its source's thing, so three writes home takes are
-  the source's (2026-10-19). Its name is the source's bytes and `plugin.v1`
-  has no name write, so a rename is refused with the reason
-  (`pluginhost.SetTile`). A delete is handed to the plugin, which says what
+- A plugin's entry is its source's thing, so two writes home takes are
+  the source's (2026-10-19). Its name is the user's once typed (2026-10-20):
+  the source's label names it until a rename, which the node keeps on its
+  row as home keeps one (`alt_text`, `alt_user` latched), claiming and
+  bumping the version, and no later label replaces; `plugin.v1` has no name
+  write and the plugin is never told (`pluginhost.SetTile`). A text tile's
+  name stays its source's, since its presentation reads it.
+  A delete is handed to the plugin, which says what
   deleting means (fs removes the file, gitlab marks the todo done, a
   read-only projection refuses), and the row retires only when the listing
   says the key is gone; the trash holds home's rows alone, since a key is
