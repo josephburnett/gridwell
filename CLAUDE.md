@@ -601,6 +601,15 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A right-drag from a pane's edge splits it. Inside a workspace tile the outline
   at the window edge is part of the pane it borders, so an edge is as easy
   a target as an interior divider (2026-10-09, `pane.GutterPane`).
+- A grid's framing is relative to the pane showing it (2026-10-19): the
+  stored zoom is the live zoom over the pane's overtake
+  (`zoomtrans.Writeback`), and no size change (a window resize, a divider
+  drag, a split) rescales a pane's live view, so a pane keeps showing the
+  pixels it showed. A split copies the focused pane's live view into a
+  smaller pane, another view of where I am, so its relative framing is
+  larger, and the focused pane persists it at the next settle as it
+  persists any framing it shows. A grid's first visit persists the default
+  it opened at, so it reopens where it was left.
 - Pane closing is progressive crush: drag-through with red warning.
 - The rendered view is a sanitized HTML overlay. Task-list checkboxes are
   the one interactive control; everything else is read-only.
