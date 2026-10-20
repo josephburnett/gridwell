@@ -89,7 +89,7 @@ what each one is called.
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
 | workspace tile | A tile holding a layout: a pane tree, with each frame's framing and scroll. | |
 | preview | What a tile looks like from outside. A capture is one; a freeze keeps one. | |
-| id | Seven lowercase base36 characters with a leading letter, or a legacy 32-hex, qualified by its namespace. Never reassigned. | A key. |
+| id | A tile's or grid's own segment, qualified by its namespace's: digits for a row the node minted, or `~` plus a plugin thing's own address. A namespace's is seven lowercase base36 characters with a leading letter, or a legacy 32-hex. Never reassigned. `docs/ids.md`. | A key. |
 
 **Places and panes**
 
@@ -406,6 +406,18 @@ These were decided deliberately. Do not reverse one without a new decision.
   answers for the grid it names, so leaving one grid is not being
   gone. One thing listed in many grids is
   one tile (hey: a thread in everything, its boxes holding links).
+- A plugin's entry is its source's thing, so three writes home takes are
+  the source's (2026-10-19). Its name is the source's bytes and `plugin.v1`
+  has no name write, so a rename is refused with the reason
+  (`pluginhost.SetTile`). A delete is handed to the plugin, which says what
+  deleting means (fs removes the file, gitlab marks the todo done, a
+  read-only projection refuses), and the row retires only when the listing
+  says the key is gone; the trash holds home's rows alone, since a key is
+  the plugin's address and never a row of home's. A plugin door copied onto
+  home deep-copies the grid behind it as any door does, except a
+  host-content door, whose rows are the host's and not files: that copy is
+  refused with the reason, and a left-drag makes the link
+  (`server.copyAcrossPlugins`).
 - A source that lists but cannot watch is not dark: its listings stay live
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller

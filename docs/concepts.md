@@ -38,7 +38,7 @@ here.
 | Concept | What it does |
 |---|---|
 | **ephemeral scratch visit** | A real row in the scratch grid that no pane owns — a url typed into the + menu, a shell opened from it. Try it without placing it: grey border, gone on ascent, promotable onto a grid. `client/scratch` reads the `Grid.scratch_grid_id` stamp and nothing else. |
-| **trash** | Delete moves a tile into a per-month subgrid; delete again destroys it. Ids and versions continue, so links keep resolving, and undo needs no undo machinery. Scratch bypasses it (`deleteBypassesTrash`) — a visit was never placed. |
+| **trash** | Delete moves a tile into a per-month subgrid; delete again destroys it. Ids and versions continue, so links keep resolving, and undo needs no undo machinery. Scratch bypasses it (`deleteBypassesTrash`) — a visit was never placed. A plugin's entry bypasses it too: its delete is the plugin's own verb, and a key is never a row of home's. |
 
 ## Health
 
