@@ -72,6 +72,10 @@ type Server struct {
 	// absent is reachable. Every kind of failure is this one fact, written
 	// only by note. Never persisted.
 	health map[string]connState
+	// liveOff is why a far node refused this node's share, by connection,
+	// while the refusal stands: its plugins watch nothing shown here. Written
+	// only by noteLiveOff. Never persisted.
+	liveOff map[string]string
 	// off reads which connections the user disabled, by name; the record is
 	// plugin.Registry's (SwitchedOff). Nil disables none.
 	off func(name string) bool
@@ -128,7 +132,7 @@ var _ namespace.Namespace = (*Server)(nil)
 func New(st *store.Store, dialer Dialer, home string, conns []config.ConnectionConfig, retired []string) (*Server, error) {
 	ctx := context.Background()
 	s := &Server{st: st, dial: dialer, home: home, conns: map[string]*Conn{},
-		live: map[string]*liveConn{}, health: map[string]connState{},
+		live: map[string]*liveConn{}, health: map[string]connState{}, liveOff: map[string]string{},
 		hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
@@ -546,6 +550,7 @@ func (s *Server) note(name string, st connState) bool {
 	} else {
 		s.health[name] = st
 	}
+	ev := s.healthEvent(name, st)
 	s.mu.Unlock()
 	if prev.up == st.up && prev.mismatch == st.mismatch {
 		return false
@@ -555,8 +560,39 @@ func (s *Server) note(name string, st connState) bool {
 		msg = "down: " + st.detail
 	}
 	trace.Emit("connection", "health", msg, map[string]string{"conn": name})
-	s.hub.Publish(rpc.HealthEvent(name, st.up, st.detail))
+	s.hub.Publish(ev)
 	return true
+}
+
+// noteLiveOff records why the far node refused name's share, "" once one
+// lands, and tells the change on name's health as it stands.
+func (s *Server) noteLiveOff(name, reason string) {
+	s.mu.Lock()
+	prev := s.liveOff[name]
+	if reason == "" {
+		delete(s.liveOff, name)
+	} else {
+		s.liveOff[name] = reason
+	}
+	ev := s.healthEvent(name, s.stateLocked(name))
+	s.mu.Unlock()
+	if prev == reason {
+		return
+	}
+	msg := "live updates on"
+	if reason != "" {
+		msg = "live updates off: " + reason
+	}
+	trace.Emit("connection", "health", msg, map[string]string{"conn": name})
+	s.hub.Publish(ev)
+}
+
+// healthEvent is name's health as a client hears it: st, and whether the far
+// node refused this node's share. Under mu.
+func (s *Server) healthEvent(name string, st connState) *gridwellv1.Event {
+	ev := rpc.HealthEvent(name, st.up, st.detail)
+	ev.GetPluginHealth().LiveUpdatesOff = s.liveOff[name]
+	return ev
 }
 
 // stateOf is what the transport last knew about one connection; nothing
@@ -564,24 +600,34 @@ func (s *Server) note(name string, st connState) bool {
 func (s *Server) stateOf(name string) connState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.stateLocked(name)
+}
+
+func (s *Server) stateLocked(name string) connState {
 	if st, ok := s.health[name]; ok {
 		return st
 	}
 	return connState{up: true}
 }
 
-// darkNow is every connection the transport cannot reach, in name order.
-func (s *Server) darkNow() []*gridwellv1.Event {
+// healthNow is every connection the transport cannot reach or whose share the
+// far node refused, in name order.
+func (s *Server) healthNow() []*gridwellv1.Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	names := make([]string, 0, len(s.health))
+	names := make([]string, 0, len(s.health)+len(s.liveOff))
 	for name := range s.health {
 		names = append(names, name)
+	}
+	for name := range s.liveOff {
+		if _, down := s.health[name]; !down {
+			names = append(names, name)
+		}
 	}
 	sort.Strings(names)
 	out := make([]*gridwellv1.Event, 0, len(names))
 	for _, name := range names {
-		out = append(out, rpc.HealthEvent(name, false, s.health[name].detail))
+		out = append(out, s.healthEvent(name, s.stateLocked(name)))
 	}
 	return out
 }
@@ -833,8 +879,8 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 }
 
 // Subscribe streams every connection's prefixed remote events and their
-// health, opening with what is dark right now: a down transition fires once,
-// so a late client would otherwise never hear of the outage. Attach first,
+// health, opening with what is dark or without live updates right now: a
+// transition fires once, so a late client would otherwise never hear of it. Attach first,
 // then read the record, so a racing transition is not lost.
 func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := s.hub.Subscribe()
@@ -842,7 +888,7 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 	if err := send(nil); err != nil {
 		return err
 	}
-	for _, ev := range s.darkNow() {
+	for _, ev := range s.healthNow() {
 		if err := send(ev); err != nil {
 			return err
 		}

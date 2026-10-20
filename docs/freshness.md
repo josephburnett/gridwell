@@ -59,7 +59,9 @@ froze it (`pagePreviewStale`). A coded refusal is not darkness: the listings
 still answer, so it rides a healthy `EventPluginHealth` as
 `live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
 re-opened stream is open. A share of the subscription the adapter cannot take leaves
-the scope where it was, so it is the same notice, cleared when one lands. Every open,
+the scope where it was, so it is the same notice, cleared when one lands; a
+far node that refuses the connection's share (`connection.Server.tellFar`) is
+the same notice on the connection's row. Every open,
 first, after a drop, or for a moved scope, is one path
 (`Adapter.followScope`): the new stream replaces the old only once it is
 open, so a grid in both is watched throughout, and then each grid it
@@ -82,7 +84,7 @@ fails is the same record: a refused dial, a failed learn, a dead stream
 (`fanInRemote`, looping `namespace.Follow`) and a moved landing all go
 through `note`, the one writer of `s.health`, which publishes one
 `EventPluginHealth` per transition, not one per retry. `Server.Subscribe`
-opens with `darkNow()`, so a subscriber attaching after the machine died is
+opens with `healthNow()`, so a subscriber attaching after the machine died is
 told. Landing is checked, not learned: `learnRoot` refuses a connection
 whose far node answers a home other than the stored one
 (`noteLandingMismatch`), and that refusal is a FailedPrecondition on every
@@ -315,7 +317,7 @@ Both health directions, and what each one costs the user.
 **Down, discovered by the transport.** `connection.fanInRemote`'s
 `namespace.Follow` returns; `noteHealth(ns, false, detail)` writes
 `s.dark[name]` and publishes one `healthEvent` on the hub. `Server.Subscribe`
-relays it, and opens with `darkNow()` for anyone attaching later.
+relays it, and opens with `healthNow()` for anyone attaching later.
 
 `Layer.setDark` is the one writer of the cache's dark map, and the layer
 learns from two directions through it. The map is the same fact either way;
@@ -572,7 +574,8 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Behaviour | Pinned by |
 |---|---|
 | The transport learns darkness from its own stream and publishes once | `internal/connection/fanin_health_test.go:TestFanInRemotePublishesHealthOnStreamDeath` |
-| A subscriber arriving after the outage is told (`darkNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
+| A subscriber arriving after the outage is told (`healthNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
+| A far node that refuses the connection's share turns its live updates off on a healthy event, replayed to a late subscriber, cleared when a share lands | `internal/connection/liveoff_test.go:TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff` |
 | Direction one: a failed pass-through is darkness, the cached grid still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
 | A call its caller abandoned is neither dark nor light, in the cache and the plugin adapter alike | `dark_test.go:TestAnAbandonedCallLearnsNothing`, `internal/server/abandoned_read_seam_test.go` |
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |

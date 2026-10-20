@@ -7,7 +7,6 @@ package connection
 import (
 	"context"
 	"crypto/rand"
-	"log"
 	"slices"
 	"time"
 
@@ -91,7 +90,9 @@ func (s *Server) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gr
 // every change and every re-open of the far stream, since the far node
 // forgets a session whose stream closed. An empty share is sent only to
 // retract one the far node may hold. A far node from before SetView answers
-// Unimplemented and watches as it always did.
+// Unimplemented and watches as it always did; any other refusal is the
+// connection's live updates off, told on its health as a plugin's is
+// (pluginhost.Adapter.SetView), until a share lands.
 func (s *Server) tellFar(ctx context.Context, name string, client namespace.Namespace) {
 	f := s.farOf(name)
 	told := false
@@ -104,8 +105,14 @@ func (s *Server) tellFar(ctx context.Context, name string, client namespace.Name
 			_, err := client.SetView(cctx, &gridwellv1.SetViewRequest{Session: f.session, Label: farLabel, ShownGridIds: grids})
 			cancel()
 			told = len(grids) > 0
-			if err != nil && ctx.Err() == nil && status.Code(err) != codes.Unimplemented && !gwerr.IsTransport(err) {
-				log.Printf("gridwell: connection %s: subscription refused: %v", name, err)
+			switch {
+			case ctx.Err() != nil:
+			case err == nil:
+				s.noteLiveOff(name, "")
+			case status.Code(err) == codes.Unimplemented, gwerr.IsTransport(err):
+				// A transport failure is the stream's news (fanInRemote).
+			default:
+				s.noteLiveOff(name, "what is shown could not be watched: "+status.Convert(err).Message())
 			}
 		}
 		select {
