@@ -541,7 +541,7 @@ func sshConnectionYAML(t *testing.T, name string, creds dialtest.Creds, remoteAd
 
 // awaitConnRoot polls the plugin list until the named connection's menu row
 // carries its learned root, which means the tunnel answered. A connection is
-// a plugins row of kind connection, rpc.ConnectionRow's shape.
+// a plugins row marked connection, rpc.ConnectionRow's shape.
 func awaitConnRoot(t *testing.T, origin, name string) string {
 	t.Helper()
 	deadline := time.After(30 * time.Second)
@@ -550,7 +550,7 @@ func awaitConnRoot(t *testing.T, origin, name string) string {
 		rows, _ := lp["plugins"].([]any)
 		for _, p := range rows {
 			pm := p.(map[string]any)
-			if pm["kind"] != "connection" {
+			if c, _ := pm["connection"].(bool); !c {
 				continue
 			}
 			if uuid, _ := pm["uuid"].(string); strings.HasSuffix(uuid, "/"+name) {

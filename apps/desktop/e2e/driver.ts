@@ -55,7 +55,8 @@ export interface MenuItem {
   // descends into it, a drag drops a door to another namespace link. isPlugin tells them from
   // the primitive swatches.
   isPlugin: boolean;
-  kind: string;
+  kind: string; // a primitive's; a door swatch has none
+  connection?: boolean; // a door swatch's: the row is a connection
   label?: string;
   uuid?: string;
   rootGridID?: string;

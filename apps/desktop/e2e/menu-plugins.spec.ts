@@ -141,8 +141,8 @@ test('a menu row wears the same glyph in the bar: a globe for a connection, a gr
   await gw.openMenu();
   await gw.expandPlugins();
   const rows = (await gw.menu()).items.filter((i) => i.isPlugin && i.rootGridID);
-  const home = rows.find((r) => r.label === 'home' || r.kind === 'home')!;
-  const conn = rows.find((r) => r.kind === 'connection')!;
+  const home = rows.find((r) => r.label === 'home')!;
+  const conn = rows.find((r) => r.connection)!;
   expect(home, 'the home plugin has a menu row').toBeTruthy();
   expect(conn, 'the second node is a connection row').toBeTruthy();
   expect(conn.glyph, 'a connection wears the globe').toBe('globe');
