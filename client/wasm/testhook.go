@@ -725,7 +725,7 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 		}
 		out = append(out, map[string]any{
 			"index":         i,
-			"kind":          pl.Kind,
+			"connection":    rpc.IsConnectionRow(pl),
 			"label":         pl.Label,
 			"uuid":          pl.Uuid,
 			"rootGridID":    pl.RootGridId,
@@ -780,7 +780,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 			"h":        th,
 		}
 		if item.isPlugin {
-			e["kind"] = item.plugin.Kind
+			e["connection"] = rpc.IsConnectionRow(item.plugin)
 			e["label"] = item.plugin.Label
 			e["uuid"] = item.plugin.Uuid
 			e["rootGridID"] = item.plugin.RootGridId

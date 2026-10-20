@@ -25,7 +25,7 @@ const zoomPosts = (window: any): Promise<number> =>
   window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetContentZoom ?? 0));
 
 test('Ctrl+= in an ephemeral shell zooms live and persists nothing', async ({ window, gw }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
   expect(scratchGridID, 'the home node advertises a scratch grid').toBeTruthy();
 
   await gw.enterPlugin('home');

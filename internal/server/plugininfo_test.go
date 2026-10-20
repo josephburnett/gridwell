@@ -53,8 +53,8 @@ func TestBuildPluginInfo_NilInfoStillListedWithConfigLabel(t *testing.T) {
 	if got.RootGridId != "" {
 		t.Errorf("a failed Info must leave the root empty, got root=%q", got.RootGridId)
 	}
-	if got.Kind != "proc" || got.Uuid != "u" {
-		t.Errorf("identity must survive a failed Info: kind=%q uuid=%q", got.Kind, got.Uuid)
+	if got.Uuid != "u" {
+		t.Errorf("identity must survive a failed Info: uuid=%q", got.Uuid)
 	}
 }
 

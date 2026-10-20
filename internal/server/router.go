@@ -232,7 +232,6 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	}
 	return &pb.PluginInfo{
 		Uuid:         uuid,
-		Kind:         kind,
 		Label:        label,
 		RootGridId:   rootGridID,
 		RootViewCx:   rootViewCx,

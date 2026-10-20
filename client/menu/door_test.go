@@ -35,7 +35,7 @@ func TestDoorsTable(t *testing.T) {
 		want: []string{"home", "trash (home)"},
 	}, {
 		name: "a plugin with three grids is three swatches and no row",
-		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Kind: "mail", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{
+		rows: []*gridwellv1.PluginInfo{{Uuid: "hey", Label: "hey", PluginGrids: []*gridwellv1.PluginGrid{
 			entry("imbox", "Imbox", "hey/1"),
 			entry("feed", "Feed", "hey/2"),
 			entry("paper_trail", "Paper Trail", "hey/3"),
@@ -43,16 +43,16 @@ func TestDoorsTable(t *testing.T) {
 		want: []string{"Imbox (hey)", "Feed (hey)", "Paper Trail (hey)"},
 	}, {
 		name: "a single-grid plugin declares no entry label and reads as itself",
-		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Kind: "fs", Label: "files",
+		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Label: "files",
 			PluginGrids: []*gridwellv1.PluginGrid{entry(".", "", "fs/1")}}},
 		want: []string{"files"},
 	}, {
 		name: "a plugin that declares nothing contributes nothing",
-		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Kind: "fs", Label: "files"}},
+		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Label: "files"}},
 		want: []string{},
 	}, {
 		name: "a failure is still a swatch, so it can be seen and asked about",
-		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Kind: "fs", Label: "files",
+		rows: []*gridwellv1.PluginInfo{{Uuid: "fs", Label: "files",
 			InfoError: "plugin not responding: boom"}},
 		want: []string{"files"},
 	}, {

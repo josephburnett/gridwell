@@ -19,7 +19,7 @@ func roster() []*gridwellv1.PluginInfo {
 	return []*gridwellv1.PluginInfo{
 		{Uuid: node, Label: "home"},
 		{Uuid: fs, Label: "files"},
-		{Uuid: node + "/laptop", Kind: rpc.PluginKindConnection, Label: "laptop"},
+		{Uuid: node + "/laptop", Connection: true, Label: "laptop"},
 	}
 }
 

@@ -264,7 +264,7 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 	for _, p := range resp.Plugins {
 		q := &pb.PluginInfo{
 			Uuid:         QualifyID(prefix, p.Uuid),
-			Kind:         p.Kind,
+			Connection:   p.Connection,
 			Label:        p.Label,
 			RootViewCx:   p.RootViewCx,
 			RootViewCy:   p.RootViewCy,

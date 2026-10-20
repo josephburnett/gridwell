@@ -76,7 +76,7 @@ export interface MenuItem {
 // window.__gridwellTest.plugins(), available wherever the focused pane sits.
 export interface PluginDescriptor {
   index: number;
-  kind: string;
+  connection: boolean;
   label: string;
   uuid: string;
   // The row's own grid. A plugin names none of its own, so this is empty for
@@ -327,11 +327,11 @@ export class GridwellDriver {
 
   // ── Gestures ────────────────────────────────────────────────────────────
 
-  // Puts the focused pane at the plugin's root grid, matched by kind or label.
+  // Puts the focused pane at the plugin's root grid, matched by label.
   async enterPlugin(match: string): Promise<void> {
     const pls = await this.plugins();
-    const pl = pls.find((p) => p.kind === match || p.label === match);
-    if (!pl) throw new Error(`no plugin matching ${match}; have ${pls.map((p) => p.kind)}`);
+    const pl = pls.find((p) => p.label === match);
+    if (!pl) throw new Error(`no plugin matching ${match}; have ${pls.map((p) => p.label)}`);
     const f = await this.focused();
     if (pl.rootGridID && f.gridID === pl.rootGridID) return; // already there
     await this.clickPluginSwatch(match);
@@ -342,13 +342,13 @@ export class GridwellDriver {
     await this.win.waitForFunction(
       (m: string) =>
         ((window as any).__gridwellTest.plugins() as PluginDescriptor[]).some(
-          (p) => (p.kind === m || p.label === m) && p.scratchGridID !== '',
+          (p) => p.label === m && p.scratchGridID !== '',
         ),
       match,
       { timeout: 15_000 },
     );
     const pls = await this.plugins();
-    return pls.find((p) => p.kind === match || p.label === match)!.scratchGridID;
+    return pls.find((p) => p.label === match)!.scratchGridID;
   }
 
   // Clicks the focused pane's + button. It no-ops when the menu is already
@@ -438,8 +438,8 @@ export class GridwellDriver {
   async dragPluginLink(match: string, cx: number, cy: number): Promise<void> {
     await this.expandPlugins();
     const menu = await this.menu();
-    const item = menu.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
-    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.kind)}`);
+    const item = menu.items.find((i) => i.isPlugin && i.label === match);
+    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.label)}`);
     await this.dragSwatchToCell(item, cx, cy);
   }
 
@@ -486,8 +486,8 @@ export class GridwellDriver {
     await this.openMenu();
     await this.expandPlugins();
     const menu = await this.menu();
-    const item = menu.items.find((i) => i.isPlugin && (i.kind === match || i.label === match));
-    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.kind)}`);
+    const item = menu.items.find((i) => i.isPlugin && i.label === match);
+    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.label)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
     await this.waitIdle();
   }

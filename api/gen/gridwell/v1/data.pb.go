@@ -2320,7 +2320,6 @@ func (x *HandshakeRequest) GetNamespace() string {
 type PluginInfo struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Uuid       string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
-	Kind       string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`                                 // "home", "fs", "proc", "connection"
 	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
 	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
 	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
@@ -2339,7 +2338,11 @@ type PluginInfo struct {
 	Glyph string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	// plugin_grids mirrors InfoResponse.plugin_grids with grid targets
 	// qualified for the receiver: they join the plugin's row in the (+) menu.
-	PluginGrids   []*PluginGrid `protobuf:"bytes,13,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
+	PluginGrids []*PluginGrid `protobuf:"bytes,13,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
+	// connection marks the row a connection, the one row the client tells
+	// from a plugin's (rpc.IsConnectionRow): rootless, it is waiting, not
+	// nothing.
+	Connection    bool `protobuf:"varint,14,opt,name=connection,proto3" json:"connection,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2377,13 +2380,6 @@ func (*PluginInfo) Descriptor() ([]byte, []int) {
 func (x *PluginInfo) GetUuid() string {
 	if x != nil {
 		return x.Uuid
-	}
-	return ""
-}
-
-func (x *PluginInfo) GetKind() string {
-	if x != nil {
-		return x.Kind
 	}
 	return ""
 }
@@ -2444,8 +2440,15 @@ func (x *PluginInfo) GetPluginGrids() []*PluginGrid {
 	return nil
 }
 
+func (x *PluginInfo) GetConnection() bool {
+	if x != nil {
+		return x.Connection
+	}
+	return false
+}
+
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
-// kind "connection", rpc.ConnectionRow's shape, because the + menu is one
+// connection set, rpc.ConnectionRow's shape, because the + menu is one
 // uniform set of rows and this message was a second spelling of one member
 // of it. The message and field 13 are kept forever and read in one place,
 // rpc.TransitQualifyPluginList, so a node built before the fold keeps
@@ -4660,11 +4663,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xd9\x02\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xeb\x02\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
-	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x12\n" +
-	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
 	"rootGridId\x12 \n" +
@@ -4677,7 +4679,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12\x14\n" +
 	"\x05glyph\x18\f \x01(\tR\x05glyph\x12:\n" +
-	"\fplugin_grids\x18\r \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGridsJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\fplugin_grids\x18\r \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12\x1e\n" +
+	"\n" +
+	"connection\x18\x0e \x01(\bR\n" +
+	"connectionJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
 	"\x0eConnectionInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +

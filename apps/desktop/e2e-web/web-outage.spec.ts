@@ -243,7 +243,7 @@ test('an ephemeral visit left during an outage parks its delete and drains on re
   window,
   outage,
 }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
   expect(scratchGridID, 'the home plugin advertises a scratch grid').toBeTruthy();
 
   await gw.enterPlugin('home');
@@ -353,7 +353,7 @@ test('the backstop re-posts a parked write on its interval, not before', async (
   gw,
   window,
 }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.kind === 'home')!.scratchGridID;
+  const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
   await gw.enterPlugin('home');
 
   await gw.clickMenuSwatch('shell');

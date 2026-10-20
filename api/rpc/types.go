@@ -116,27 +116,22 @@ func PluginDoorTile(pl *pb.PluginInfo) *pb.Tile {
 	}
 }
 
-// PluginKindConnection is the one fact that tells a connection row from a
-// plugin row; never the shape of the uuid.
-const PluginKindConnection = "connection"
-
 // ConnectionRow is the one shape a connection takes in the + menu: a plugins
-// row of kind connection, its landing as the root and the last dial failure
+// row marked connection, its landing as the root and the last dial failure
 // as InfoError. A pending connection is rootless, so health reads it as
 // waiting, not broken.
 func ConnectionRow(uuid, label, rootGridID, statusDetail string, view View) *pb.PluginInfo {
 	cx, cy, zoom := view.Wire()
 	return &pb.PluginInfo{
-		Uuid: uuid, Kind: PluginKindConnection, Label: label, Glyph: GlyphGlobe,
+		Uuid: uuid, Connection: true, Label: label, Glyph: GlyphGlobe,
 		RootGridId: rootGridID, InfoError: statusDetail,
 		RootViewCx: cx, RootViewCy: cy, RootViewZoom: zoom,
 	}
 }
 
-// IsConnectionRow reads the declared kind; see PluginKindConnection.
-func IsConnectionRow(pl *pb.PluginInfo) bool {
-	return pl.GetKind() == PluginKindConnection
-}
+// IsConnectionRow is the one fact that tells a connection row from a plugin
+// row; never the shape of the uuid.
+func IsConnectionRow(pl *pb.PluginInfo) bool { return pl.GetConnection() }
 
 // HomeGrid is the qualified grid id "/" means: the handshake's home_grid_id,
 // a field and never a row's position. "" is a node that learned no home.

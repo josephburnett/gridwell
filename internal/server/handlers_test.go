@@ -373,7 +373,7 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 }
 
 // TestListPlugins: the + menu source lists configured plugins in config
-// order, with kind and label.
+// order, with their labels.
 func TestListPlugins(t *testing.T) {
 	cl, _, _ := newTestServerWithPlugins(t)
 	list, err := cl.Handshake(context.Background())
@@ -385,7 +385,7 @@ func TestListPlugins(t *testing.T) {
 	if len(plugins) != 3 {
 		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
 	}
-	if plugins[0].Kind != "home" {
+	if plugins[0].Label != "home" {
 		t.Errorf("plugin[0] = %+v, want the home row", plugins[0])
 	}
 	// Each plugin advertises its qualified root grid id (for click-enter).
@@ -401,10 +401,10 @@ func TestListPlugins(t *testing.T) {
 	if s := home.GetGrid().GetScratchGridId(); !strings.HasPrefix(s, plugins[0].Uuid+"/") || s == plugins[0].RootGridId {
 		t.Errorf("home scratch_grid_id = %q, want %q-prefixed and not the root", s, plugins[0].Uuid)
 	}
-	if plugins[1].Kind != "fs" {
+	if plugins[1].Label != "files" {
 		t.Errorf("plugin[1] = %+v, want fs", plugins[1])
 	}
-	if plugins[2].Kind != "proc" {
+	if plugins[2].Label != "processes" {
 		t.Errorf("plugin[2] = %+v, want proc", plugins[2])
 	}
 }

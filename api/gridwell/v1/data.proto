@@ -542,7 +542,7 @@ message HandshakeRequest {
 }
 message PluginInfo {
   string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
-  string kind          = 2;   // "home", "fs", "proc", "connection"
+  reserved 2;                 // kind; a plugin's kind is config, and nothing switches on it
   string label         = 3;   // display name
   reserved 4;                 // writable; Grid.accepts_tiles and Grid.writable are the facts
   string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
@@ -566,9 +566,13 @@ message PluginInfo {
   // plugin_grids mirrors InfoResponse.plugin_grids with grid targets
   // qualified for the receiver: they join the plugin's row in the (+) menu.
   repeated PluginGrid plugin_grids = 13;
+  // connection marks the row a connection, the one row the client tells
+  // from a plugin's (rpc.IsConnectionRow): rootless, it is waiting, not
+  // nothing.
+  bool connection = 14;
 }
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
-// kind "connection", rpc.ConnectionRow's shape, because the + menu is one
+// connection set, rpc.ConnectionRow's shape, because the + menu is one
 // uniform set of rows and this message was a second spelling of one member
 // of it. The message and field 13 are kept forever and read in one place,
 // rpc.TransitQualifyPluginList, so a node built before the fold keeps

@@ -65,7 +65,7 @@ func TestTransitQualifyGridReadsAnOlderNodesOneBitForBothFacts(t *testing.T) {
 // in ConnectionRow's shape, qualified like the rows beside it, after them.
 func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 	out := TransitQualifyPluginList("hop", &pb.HandshakeResponse{
-		Plugins: []*pb.PluginInfo{{Uuid: "n1", Kind: "home", RootGridId: "n1/1"}},
+		Plugins: []*pb.PluginInfo{{Uuid: "n1", RootGridId: "n1/1"}},
 		Connections: []*pb.ConnectionInfo{
 			{Uuid: "n1/rtb", Label: "rtb", RootGridId: "n1/rtb/r/1", RootViewCx: 2, RootViewCy: 3, RootViewZoom: 0.5},
 			{Uuid: "n1/far", Label: "far", StatusDetail: "dial refused"},

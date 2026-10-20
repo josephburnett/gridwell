@@ -506,7 +506,7 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
 
   // Settle a root framing the user chose, so there is something to keep.
   await gw.wheelAtFocusedCenter(-240);
-  const uuid = (await gw.plugins()).find((p) => p.kind === 'home')!.uuid;
+  const uuid = (await gw.plugins()).find((p) => p.label === 'home')!.uuid;
   const rootView = async () => {
     const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
     return { cx: pl.rootViewCx, cy: pl.rootViewCy, zoom: pl.rootViewZoom };
@@ -551,7 +551,7 @@ test('looking at a grid never stamps a framing on it', async ({ gw, window }) =>
   const cy = Math.round(home.cy);
   await gw.openMenu();
   await gw.dragCreate('door', cx, cy);
-  const uuid = (await gw.plugins()).find((p) => p.kind === 'home')!.uuid;
+  const uuid = (await gw.plugins()).find((p) => p.label === 'home')!.uuid;
   // Two settle windows with no gesture in them at all.
   await window.waitForTimeout(1500);
   const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
