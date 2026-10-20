@@ -129,7 +129,8 @@ captured.`,
 		name: "alt_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 2,
 		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture:
 automatic captures (a url's page title on freeze, a shell's foreground
-command on detach) must not overwrite a name the user set.
+command on detach) and a plugin's listing must not overwrite a name the
+user set.
 Storage-only — the latch is the store's rule, never a client's to set.
 Added at schema v2, additive.`,
 	},

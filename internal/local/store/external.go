@@ -5,14 +5,17 @@ package store
 // answers in stable string keys; the node mints the ids, keeps arrangement and
 // framing, and retires keys as tombstones. Ids are AUTOINCREMENT and never
 // reused, and a recreated key mints a fresh id (a partial unique index over
-// live rows). Plugin rows are unversioned and emit no store events.
+// live rows). Plugin rows emit no store events, and a row's version moves
+// only on a typed name.
 //
 // A row exists only once the user has made a durable fact about an entry.
 // Listing mints nothing: Overlay is a read-only join that derives an
 // untouched entry's placement by the algorithm Mint stores, and Refresh and
 // Sweep write only to rows that exist. An entry with a link_target is a link
 // row, its link_target_id the target's namespace-relative address
-// (rpc.EntryTileID), which the router qualifies on the way out.
+// (rpc.EntryTileID), which the router qualifies on the way out. A row's
+// typed name is the user's, as on home's rows: alt_text with alt_user
+// latched, which no listing overwrites.
 
 import (
 	"context"
@@ -42,12 +45,14 @@ func (n *Namespace) ID() string { return n.ns }
 
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
-// a door's minted child grid, 0 for a leaf. The caller names every such tile
+// a door's minted child grid, 0 for a leaf. Named is the row's alt_user: its
+// AltText is the user's, not the listing's. The caller names every such tile
 // by its key either way; see rpc.EntryTileID.
 type ExtTile struct {
 	ID          int64
 	Key         string
 	ChildGridID int64
+	Named       bool
 	*gridwellv1.Tile
 }
 
@@ -98,8 +103,8 @@ func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned 
 }
 
 // Overlay joins one plugin listing with the stored arrangement and writes
-// nothing. Rows contribute id, placement and framing; the listing contributes
-// every content fact. Rows the listing does not mention follow at the end from
+// nothing. Rows contribute id, placement, framing and a typed name; the
+// listing contributes every other content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
 // gridID 0 means an untouched grid: every entry is derived.
 func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile, error) {
@@ -136,7 +141,10 @@ func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile,
 		if ok {
 			occupyRect(occupied, r.X, r.Y, r.W, r.H)
 			matched[e.Key] = true
-			r.Kind, r.AltText, r.LinkTargetId = entryKind(e), e.Label, linkTargetOf(e)
+			r.Kind, r.LinkTargetId = entryKind(e), linkTargetOf(e)
+			if !r.Named {
+				r.AltText = e.Label
+			}
 			if r.LinkTargetId != "" {
 				r.UrlString, r.ServesPage, r.PreviewBlobId = "", false, 0
 			}
@@ -265,7 +273,7 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 			continue
 		}
 		s := snapshotOf(e)
-		if r.Kind == s.kind && r.AltText == e.Label && r.UrlString == s.url.String && r.ServesPage == s.page &&
+		if r.Kind == s.kind && (r.Named || r.AltText == e.Label) && r.UrlString == s.url.String && r.ServesPage == s.page &&
 			r.LinkTargetId == s.link.String {
 			continue
 		}
@@ -278,7 +286,7 @@ func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
 
 // convert writes a row's new snapshot. A row that becomes a link gives up
 // what the tiles CHECK lets only an owner hold, its screenshot and its text
-// mode, since a link's preview is its target's.
+// mode, since a link's preview is its target's. A typed name stays.
 func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
@@ -292,7 +300,8 @@ func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
 				}
 			}
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?, alt_text = ?, url_string = ?, serves_page = ?,
+		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?,
+			alt_text = CASE WHEN alt_user = 1 THEN alt_text ELSE ? END, url_string = ?, serves_page = ?,
 			link_target_id = ?, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`,
 			s.kind, label, s.url, s.page, s.link, n.s.now().Unix(), r.ID, n.ns)
 		return err
@@ -351,16 +360,17 @@ func (n *Namespace) LiveTileID(gridID int64, key string) (int64, bool, error) {
 }
 
 // tiles lists the live rows of a grid, by id, the stored columns through the
-// one descriptor and the key beside them.
+// one descriptor and the key and alt_user beside them.
 func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
-	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key FROM tiles
+	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key, alt_user FROM tiles
 		WHERE ns = ? AND grid_id = ? AND tombstoned = 0 ORDER BY id`, n.ns, gridID)
 	if err != nil {
 		return nil, err
 	}
 	return collect(rows, func(rows *sql.Rows) (ExtTile, error) {
 		var key string
-		t, err := scanTile(rows, &key)
+		var named bool
+		t, err := scanTile(rows, &key, &named)
 		if err != nil {
 			return ExtTile{}, err
 		}
@@ -375,7 +385,7 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 				return ExtTile{}, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
 			}
 		}
-		return ExtTile{ID: id, Key: key, ChildGridID: child, Tile: t}, nil
+		return ExtTile{ID: id, Key: key, ChildGridID: child, Named: named, Tile: t}, nil
 	})
 }
 
@@ -445,6 +455,41 @@ func (n *Namespace) Move(tileID, x, y, w, h int64, claim *gridwellv1.Placement) 
 			x, y, w, h, n.s.now().Unix(), tileID)
 		return err
 	})
+}
+
+// Rename is the user's name for an entry, kept on its row and never told to
+// the plugin. It is content, so it claims the version and bumps it, as home's
+// RenameTile does; a text tile's name is its source's and is refused, since
+// its presentation reads it. A name the row already holds writes nothing.
+func (n *Namespace) Rename(tileID, version int64, name string) (changed bool, err error) {
+	err = n.write("RenameTile", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
+		var kind, alt string
+		var cur int64
+		var named bool
+		err := tx.QueryRowContext(ctx, `SELECT kind, alt_text, alt_user, version FROM tiles
+			WHERE id = ? AND ns = ? AND tombstoned = 0`, tileID, n.ns).Scan(&kind, &alt, &named, &cur)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if cur != version {
+			return fmt.Errorf("%w: tile %d at version %d, claimed %d", ErrVersionConflict, tileID, cur, version)
+		}
+		if kind == rpc.KindText {
+			return fmt.Errorf("%w: a text tile's name is its source's; its presentation reads it", ErrInvalidArgument)
+		}
+		if named && alt == name {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET alt_text = ?, alt_user = 1 WHERE id = ?`, name, tileID); err != nil {
+			return err
+		}
+		changed = true
+		return n.s.bumpTileVersion(ctx, tx, tileID)
+	})
+	return changed && err == nil, err
 }
 
 // SetFraming persists framing into this namespace's rows, the one writer of

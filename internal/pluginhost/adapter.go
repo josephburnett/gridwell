@@ -790,12 +790,25 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 	return resp, nil
 }
 
-// SetTile terminates the framing and capture arms at the store. Rename is
-// refused (the name is the source's) and a url writeback keeps only its
-// screenshot (the address is the plugin's).
+// SetTile terminates the framing, capture and rename arms at the store. A
+// rename is the user's name on the node's row (store.Namespace.Rename) and
+// the plugin is never told; a url writeback keeps only its screenshot (the
+// address is the plugin's).
 func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	if req.Rename != "" {
-		return nil, status.Error(codes.InvalidArgument, "plugin: tiles derive their names from the source")
+		id, err := a.mint(ctx, req.TileId)
+		if err != nil {
+			return nil, err
+		}
+		changed, err := a.mem.Rename(id, req.Version, req.Rename)
+		if err != nil {
+			return nil, gwerr.ToStatus(err)
+		}
+		t, err := a.changedTile(ctx, id, changed)
+		if err != nil {
+			return nil, err
+		}
+		return &gridwellv1.TileResponse{Tile: t}, nil
 	}
 	if t := req.GetTile(); t.GetKind() == rpc.KindURL && req.ContentZoom == nil && req.UrlFrozen == nil {
 		if t.UrlString != "" || t.AltText != "" || t.UrlHistory != "" {

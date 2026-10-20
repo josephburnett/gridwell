@@ -558,3 +558,50 @@ func TestUnhintedEntriesStillFlowFromTheCursor(t *testing.T) {
 		}
 	}
 }
+
+// A typed name is the user's, on a plugin row as on home's: the listing's
+// label is the name only until the user renames, and every later listing,
+// the join and the stored snapshot alike, keeps what the user typed.
+func TestExtTypedNameOutlivesTheSourcesLabel(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.GridOf("root")
+	listing := []*pluginv1.Entry{{Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}, {Key: "f", Kind: "text", Label: "f"}}
+	tiles := mintAll(t, d, gid, listing, true)
+	u, f := extByKey(t, tiles, "u"), extByKey(t, tiles, "f")
+
+	changed, err := d.Rename(u.ID, 0, "mine")
+	if err != nil || !changed {
+		t.Fatalf("rename: changed=%v err=%v", changed, err)
+	}
+	if _, err := d.Rename(u.ID, 0, "again"); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("a rename claiming the version before the first: got %v, want the conflict", err)
+	}
+	if changed, err := d.Rename(u.ID, 1, "mine"); err != nil || changed {
+		t.Fatalf("the same name again: changed=%v err=%v, want nothing written", changed, err)
+	}
+	if _, err := d.Rename(f.ID, 0, "nope"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("text rename: got %v, want ErrInvalidArgument", err)
+	}
+
+	listing[0].Label, listing[1].Label = "u retitled", "f retitled"
+	if err := d.Refresh(gid, listing); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := d.Overlay(gid, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extByKey(t, stored, "u"); got.AltText != "mine" || got.Version != 1 {
+		t.Fatalf("stored snapshot = %q at version %d, want the typed name at version 1", got.AltText, got.Version)
+	}
+	if got := extByKey(t, stored, "f"); got.AltText != "f retitled" {
+		t.Fatalf("an unrenamed row's snapshot = %q, want the source's new label", got.AltText)
+	}
+	joined, err := d.Overlay(gid, listing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extByKey(t, joined, "u"); got.AltText != "mine" {
+		t.Fatalf("join = %q, want the typed name over the source's label", got.AltText)
+	}
+}
