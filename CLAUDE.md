@@ -417,11 +417,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   deleting means (fs removes the file, gitlab marks the todo done, a
   read-only projection refuses), and the row retires only when the listing
   says the key is gone; the trash holds home's rows alone, since a key is
-  the plugin's address and never a row of home's. A plugin door copied onto
-  home deep-copies the grid behind it as any door does, except a
-  host-content door, whose rows are the host's and not files: that copy is
-  refused with the reason, and a left-drag makes the link
-  (`server.copyAcrossPlugins`).
+  the plugin's address and never a row of home's. A plugin's door never
+  copies (2026-10-20): copied into another namespace, home or a far node's,
+  it lands as the link to its grid a left-drag makes, and the ghost shows
+  the link before the drop; a plugin's text or url still copies its bytes.
+  A door is a plugin's when the grid it opens takes no new tiles
+  (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
+  so a disabled source's door links too, as a dark one does.
 - A source that lists but cannot watch is not dark: its listings stay live
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller
@@ -556,7 +558,8 @@ These were decided deliberately. Do not reverse one without a new decision.
 - Left-drag moves, right-drag copies, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Cross-plugin a left-drag links too, because
-  there is no cross-plugin move. Dashed means link; deleting a link
+  there is no cross-plugin move, and so does a right-drag of a plugin's
+  door, because a plugin door never copies (2026-10-20). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
   the same split a link out of a live tile opens — in any pane; macOS
   reports ctrl + left as a right press with ctrl held, so a ctrl or cmd

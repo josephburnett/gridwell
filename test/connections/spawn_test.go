@@ -583,6 +583,9 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(files, "far.txt"), []byte("hello from the far side"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Mkdir(filepath.Join(files, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	remoteDir := t.TempDir()
 	freshDir(t, remoteDir)
 	appendConnectionsYAML(t, remoteDir, fmt.Sprintf(`plugins:
@@ -676,6 +679,42 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	body, _, _, err = clientFor(localOrigin).ReadContent(context.Background(), farID)
 	if err != nil || string(body) != "hello from the far side" {
 		t.Fatalf("ReadContent after the touch = %q (%v)", body, err)
+	}
+
+	// A copy onto this node's home: the far plugin's door lands as a link to
+	// its grid, since a plugin door never copies, and the far plugin's file
+	// copies its bytes. The far grid's accepts_tiles is what tells this node
+	// the door is a plugin's.
+	var homeRoot string
+	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["plugins"].([]any) {
+		if pm := p.(map[string]any); pm["label"] == "home" {
+			homeRoot, _ = pm["rootGridId"].(string)
+		}
+	}
+	var sub map[string]any
+	for _, ti := range g["tiles"].([]any) {
+		if tm := ti.(map[string]any); tm["altText"] == "sub" {
+			sub = tm
+		}
+	}
+	if homeRoot == "" || sub == nil {
+		t.Fatalf("home root %q, far sub %v", homeRoot, sub)
+	}
+	doorCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
+		"tileId": sub["id"], "destGridId": homeRoot, "x": 5, "y": 5,
+	})["tile"].(map[string]any)
+	if doorCopy["link"] != true || doorCopy["childGridId"] != sub["childGridId"] {
+		t.Fatalf("copy of the far plugin's door = %v, want a link to %v", doorCopy, sub["childGridId"])
+	}
+	fileCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
+		"tileId": farID, "destGridId": homeRoot, "x": 7, "y": 5,
+	})["tile"].(map[string]any)
+	if fileCopy["link"] == true || fileCopy["linkTargetId"] != nil {
+		t.Fatalf("copy of the far plugin's file = %v, want a copy", fileCopy)
+	}
+	body, _, _, err = clientFor(localOrigin).ReadContent(context.Background(), fileCopy["id"].(string))
+	if err != nil || string(body) != "hello from the far side" {
+		t.Fatalf("ReadContent of the copied far file = %q (%v)", body, err)
 	}
 	fmt.Println("connections spawn gate: key-form ids cross the tunnel, survive a touch, and route back OK")
 }

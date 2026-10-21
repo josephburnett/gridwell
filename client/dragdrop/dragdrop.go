@@ -6,6 +6,7 @@ package dragdrop
 import (
 	"math"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -264,8 +265,26 @@ type DropInput struct {
 	SameCell           bool
 	Occupied           bool
 	// CrossPlugin: the grids are in different id namespaces, so a left-drag
-	// verdicts DropLink and a right-drag stays DropCopy.
+	// verdicts DropLink and a right-drag stays DropCopy, unless CopiesAsLink.
 	CrossPlugin bool
+	// CopiesAsLink is CarryCopiesAsLink over what the drag carries.
+	CopiesAsLink bool
+}
+
+// CarryCopiesAsLink: a copy of every row into another namespace is a link
+// (rpc.CopiesAsLink), accepts being Grid.accepts_tiles of the grid they sit
+// on. A carry with any row that copies, or from a grid not yet read, is a
+// copy, and the server decides each row.
+func CarryCopiesAsLink(rows []*gridwellv1.Tile, accepts, known bool) bool {
+	if !known || len(rows) == 0 {
+		return false
+	}
+	for _, r := range rows {
+		if !rpc.CopiesAsLink(r, accepts) {
+			return false
+		}
+	}
+	return true
 }
 
 // DecideDrop's branch order is the decision: an earlier arm wins. HasTarget
@@ -306,7 +325,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, "same cell"
 	case in.Occupied:
 		return DropRejected, "occupied"
-	case in.Intent == IntentCopy:
+	case in.Intent == IntentCopy && !(in.CrossPlugin && in.CopiesAsLink):
 		return DropCopy, ""
 	case in.Intent == IntentLink || in.CrossPlugin:
 		return DropLink, ""

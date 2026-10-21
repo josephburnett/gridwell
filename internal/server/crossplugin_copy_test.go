@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/plugintest"
+	"github.com/josephburnett/gridwell/internal/plugintest/gitlabfake"
 )
 
 // Cross-plugin gesture semantics: a left-drag across a plugin boundary creates
@@ -433,6 +434,9 @@ func TestLinkDirDoorFromFsPlugin(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# notes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	fsClient := newPluginClient(t, "fs", map[string]string{"root": dir})
 	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
@@ -492,12 +496,97 @@ func TestLinkDirDoorFromFsPlugin(t *testing.T) {
 		t.Errorf("link label = %q, want the directory's name", link.AltText)
 	}
 
-	// The right-drag (copy) of a dir door is refused loudly — deep copy of a
-	// host directory is unimplemented.
-	if _, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
+	// The right-drag (copy) of a plugin's door lands the same link: a plugin
+	// door never copies (CLAUDE.md, 2026-10-20).
+	copied, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
 		TileId: sub.Id, DestGridId: dstRoot, X: 3, Y: 3,
-	}); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Errorf("copy of an fs dir door: err=%v, want unimplemented refusal", err)
+	})
+	if err != nil {
+		t.Fatalf("copy of an fs dir door: %v", err)
+	}
+	if !copied.Link || copied.ChildGridId != sub.ChildGridId {
+		t.Errorf("copy of an fs dir door = link %v child %q, want a link to %q",
+			copied.Link, copied.ChildGridId, sub.ChildGridId)
+	}
+	if u := rpc.UUIDOf(copied.Id); u == fsUUID {
+		t.Errorf("the copy landed in the plugin %q, want home", u)
+	}
+	if copied.AltText != "sub" {
+		t.Errorf("copy label = %q, want the directory's name", copied.AltText)
+	}
+
+	// A plugin's content tile still copies its bytes.
+	var file *gridwellv1.Tile
+	for i := range g.Tiles {
+		if g.Tiles[i].AltText == "notes.md" {
+			file = g.Tiles[i]
+		}
+	}
+	if file == nil {
+		t.Fatalf("notes.md tile missing: %+v", g.Tiles)
+	}
+	fileCopy, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
+		TileId: file.Id, DestGridId: dstRoot, X: 5, Y: 5,
+	})
+	if err != nil {
+		t.Fatalf("copy of an fs file: %v", err)
+	}
+	if fileCopy.Link {
+		t.Error("copy of an fs file is a link, want a copy of its bytes")
+	}
+	if body, _, _, err := cl.ReadContent(ctx, fileCopy.Id); err != nil || string(body) != "# notes" {
+		t.Errorf("copied file body = %q (%v), want %q", body, err, "# notes")
+	}
+}
+
+// TestCopyPluginDoorOntoHomeLinks: a plugin's door that is not host content
+// (a gitlab week) right-dragged onto home lands a link to its grid, as the
+// fs directory does: the rule is the plugin's, not host content's.
+func TestCopyPluginDoorOntoHomeLinks(t *testing.T) {
+	ctx := context.Background()
+	reg := plugin.NewRegistry()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	_, homeRoot := registerPrimaryLocaldb(t, reg, st)
+
+	gl := gitlabfake.New(t, gitlabTodo(1, "2026-08-18T10:00:00Z"))
+	client, _, closeStack := gitlabStackAt(t, filepath.Join(t.TempDir(), "mem.db"), gl.Config(t, nil))
+	t.Cleanup(closeStack)
+	const glUUID = "ug1"
+	reg.Register(glUUID, "gitlab", client, nil)
+
+	srv := mustNew(t, reg, Config{})
+	hs := serveWeb(t, srv)
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+
+	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := cl.GetGrid(ctx, glUUID+"/"+plugintest.Landing(t, info))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.Grid.HostContent {
+		t.Fatal("the gitlab grid declares host content; this test needs one that does not")
+	}
+	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
+	if week == nil || !rpc.IsDoorKind(week.Kind) || week.Link {
+		t.Fatalf("week door = %+v", week)
+	}
+
+	copied, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
+		TileId: week.Id, DestGridId: homeRoot, X: 3, Y: 3,
+	})
+	if err != nil {
+		t.Fatalf("copy of a gitlab week door: %v", err)
+	}
+	if !copied.Link || copied.ChildGridId != week.ChildGridId {
+		t.Errorf("copy of a gitlab week door = link %v child %q, want a link to %q",
+			copied.Link, copied.ChildGridId, week.ChildGridId)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -490,6 +491,12 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true}, DropLink},
 		{"cross-plugin right drag -> copy (copy, not link)",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy}, DropCopy},
+		// A plugin's door never copies: a right-drag of one across a
+		// namespace is the link a left-drag makes (CLAUDE.md, 2026-10-20).
+		{"cross-plugin right drag of a plugin door -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy, CopiesAsLink: true}, DropLink},
+		{"right drag of a plugin door in its own namespace -> copy",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, CopiesAsLink: true}, DropCopy},
 		{"cross-plugin link onto occupied -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Occupied: true}, DropRejected},
 		{"cross-plugin link onto read-only target -> rejected",
@@ -500,6 +507,33 @@ func TestDecideDrop(t *testing.T) {
 	for _, c := range cases {
 		if got := DecideDrop(c.in); got != c.want {
 			t.Errorf("%s: DecideDrop(%+v) = %v, want %v", c.name, c.in, got, c.want)
+		}
+	}
+}
+
+func TestCarryCopiesAsLink(t *testing.T) {
+	door := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~a"}
+	link := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~b", Link: true}
+	text := &gridwellv1.Tile{Kind: rpc.KindText}
+	cases := []struct {
+		name           string
+		rows           []*gridwellv1.Tile
+		accepts, known bool
+		want           bool
+	}{
+		{"a plugin's door", []*gridwellv1.Tile{door}, false, true, true},
+		{"two plugin doors", []*gridwellv1.Tile{door, door}, false, true, true},
+		{"a home door", []*gridwellv1.Tile{door}, true, true, false},
+		{"a grid not yet read: the server decides", []*gridwellv1.Tile{door}, false, false, false},
+		// A plugin's text copies its bytes, so a carry holding one is a
+		// copy, and the server links the doors in it row by row.
+		{"a plugin door with a plugin text", []*gridwellv1.Tile{door, text}, false, true, false},
+		{"a link door is a link already", []*gridwellv1.Tile{link}, false, true, false},
+		{"nothing carried", nil, false, true, false},
+	}
+	for _, c := range cases {
+		if got := CarryCopiesAsLink(c.rows, c.accepts, c.known); got != c.want {
+			t.Errorf("%s: CarryCopiesAsLink = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

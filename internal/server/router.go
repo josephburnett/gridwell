@@ -389,27 +389,17 @@ func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Ti
 }
 
 // copyAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
-// deepCopyTile's, and this level owns the host-content refusal and the
-// partial-copy wording.
+// deepCopyTile's, and this level owns the partial-copy wording.
 func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
 	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
 	if err != nil {
 		return nil, err
 	}
 	srcLocalTile := resp.GetTile()
-	st := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{srcLocalTile})[0]
 	// No version claim: a copy is layout and the source row is untouched.
 	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
 	if err != nil {
 		return nil, err
-	}
-	if rpc.IsDoorKind(st.Kind) && !st.Link {
-		// Host content is refused before anything is created: its rows are
-		// metadata stubs, not the files.
-		if sg, gerr := src.GetGrid(ctx, &pb.GetGridRequest{GridId: srcLocalTile.ChildGridId}); gerr == nil && sg.GetGrid().GetHostContent() {
-			return nil, status.Error(gcodes.Unimplemented,
-				"deep copy of a host-content door is not implemented (the copy would be metadata stubs, not the host content); left-drag creates a link")
-		}
 	}
 	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, copyDst{Namespace: dst, hop: rt.hop(m.DestGridId, dstTransit), holder: m.DestGridId}, dstLocal, m.X, m.Y)
 	if err != nil && out != nil {

@@ -107,6 +107,8 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in.TargetRefusesTiles = targetKnown && !accepts
 	in.SameGrid = t.gridID == d.srcGridID
 	in.CrossPlugin = dropCrossNamespace(d, t)
+	srcAccepts, srcKnown := a.gridAcceptsTiles(d.srcGridID)
+	in.CopiesAsLink = dragdrop.CarryCopiesAsLink(d.carried, srcAccepts, srcKnown)
 	if !d.intent.Creates() {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
 	}

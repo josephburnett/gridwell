@@ -31,6 +31,7 @@ import (
 //   - a solid door becomes a new door plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
 //   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
+//   - a plugin's door copies as a link to its grid (rpc.CopiesAsLink);
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
@@ -93,6 +94,8 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	case rpc.IsDoorKind(q.Kind) && q.Link:
 		// The link names the shared child, qualified.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
+	case rt.copiesAsLink(ctx, q):
+		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
 	case rpc.IsDoorKind(q.Kind):
 		created, err := rt.deepCopyDoor(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
 		// Degrade only when nothing was created. Degrading with a partial in
@@ -114,6 +117,18 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	}
 	return nil, status.Errorf(gcodes.InvalidArgument,
 		"cross-plugin copy: unsupported tile kind %q", t.Kind)
+}
+
+// copiesAsLink is rpc.CopiesAsLink over the router's read of the grid q
+// opens, the stamp the client drew its ghost from (transit-normalized,
+// disabled-stamped). A grid that does not answer says nothing here: the door
+// arm reads it again and degrades to a link if it is dark.
+func (rt *router) copiesAsLink(ctx context.Context, q *pb.Tile) bool {
+	if !rpc.IsDoorKind(q.Kind) || q.Link {
+		return false
+	}
+	g, err := rt.GetGrid(ctx, &pb.GetGridRequest{GridId: q.ChildGridId})
+	return err == nil && rpc.CopiesAsLink(q, g.GetGrid().GetAcceptsTiles())
 }
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address
