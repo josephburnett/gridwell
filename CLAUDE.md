@@ -347,7 +347,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   event stream keeps those true, so coming back to one reads nothing; a stream
   gap still re-reads every held grid. The planner decides
   (`nav` `planner.fetchGrid`), never the executor (2026-10-14).
-- A copy is eager and deep. COW was tried and torn out.
+- A copy is eager and deep. COW was tried and torn out. A copy keeps its
+  name across namespaces, latched as typed so a page-title capture never
+  replaces it: a url born with a name holds it as the user's
+  (`store.insertURLRow`, 2026-10-20).
 - A copy of a link is another link to the same target, never a copy of the
   target: the deep copy is of content, and a link's content is its path
   (2026-10-06).
