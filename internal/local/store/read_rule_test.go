@@ -49,7 +49,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	url, err := s.CreateURL(ctx, root, 3, 0, 2, 2, "https://example.com", "")
+	url, err := s.CreateURL(ctx, root, 3, 0, 2, 2, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	door, err := s.CreateDoor(ctx, root, 0, 3, 2, 2, "a door")
+	door, err := s.CreateDoor(ctx, root, 0, 3, 2, 2, "a door", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,13 +90,13 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	ws, err := s.CreateWorkspace(ctx, root, 3, 3, 2, 2, "ws", []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
+	ws, err := s.CreateWorkspace(ctx, root, 3, 3, 2, 2, "ws", false, []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	sub.workspace = ws.Id
 
-	link, err := s.CreateLeafLink(ctx, root, 6, 3, 1, 1, rpc.KindText, remoteTarget, "a link")
+	link, err := s.CreateLeafLink(ctx, root, 6, 3, 1, 1, rpc.KindText, remoteTarget, "a link", false)
 	if err != nil {
 		t.Fatal(err)
 	}

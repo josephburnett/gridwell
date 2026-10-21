@@ -79,7 +79,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	door, err := s.CreateDoor(ctx, root, 0, 0, 2, 3, "the door")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 2, 3, "the door", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	url, err := s.CreateURL(ctx, root, 4, 1, 1, 1, "https://example.com", "")
+	url, err := s.CreateURL(ctx, root, 4, 1, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	link, err := s.CreateLeafLink(ctx, root, 9, 0, 1, 1, rpc.KindText, "otherplugin/42", "a link")
+	link, err := s.CreateLeafLink(ctx, root, 9, 0, 1, 1, rpc.KindText, "otherplugin/42", "a link", false)
 	if err != nil {
 		t.Fatal(err)
 	}

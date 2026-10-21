@@ -19,7 +19,7 @@ func TestSetFramingRefusesNonFinite(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	w, err := s.CreateDoor(ctx, root, 0, 0, 9, 7, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 9, 7, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,11 +76,11 @@ func TestNeverVisitedRoundTripsAsNone(t *testing.T) {
 	if v, err := s.GridFraming(root); err != nil || v != (rpc.View{}) {
 		t.Errorf("a fresh root's framing = %+v err=%v, want none", v, err)
 	}
-	fresh, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "fresh")
+	fresh, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "fresh", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	far, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 0, 1, 1, "aabbccddaabbccddaabbccddaabbccdd/7", "far", rpc.View{})
+	far, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 0, 1, 1, "aabbccddaabbccddaabbccddaabbccdd/7", "far", false, rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}

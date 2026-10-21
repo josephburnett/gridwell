@@ -53,7 +53,7 @@ func TestWriteContentPaneLayoutClaimsAndBumps(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	pane, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", nil)
+	pane, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", false, nil)
 	if err != nil {
 		t.Fatalf("create pane: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestWriteContentURLSetsAddress(t *testing.T) {
 	root := rootID(t, s)
 
 	// An address-less url tile is the legal unconfigured state.
-	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "", "")
+	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "", "", false)
 	if err != nil {
 		t.Fatalf("create empty url: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestWriteContentLinkRefused(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	link, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1,
-		rpc.KindText, "aabbccddaabbccddaabbccddaabbccdd/9", "linked")
+		rpc.KindText, "aabbccddaabbccddaabbccddaabbccdd/9", "linked", false)
 	if err != nil {
 		t.Fatalf("create leaf link: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestRenameTileVersionedAndLatches(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
+	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatalf("create url: %v", err)
 	}

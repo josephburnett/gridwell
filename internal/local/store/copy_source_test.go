@@ -63,7 +63,7 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 
 	// A grid with something of every kind in it, each carrying a fact the user
 	// made: a scroll, a zoom, a freeze, a viewport, a nested door.
-	outer, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "the door")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "the door", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if _, err := s.SetTextScroll(ctx, text.Id, 0, 120, 640, 480, "rendered"); err != nil {
 		t.Fatal(err)
 	}
-	url, err := s.CreateURL(ctx, outer.ChildGridId, 3, 0, 2, 2, "https://example.com", "")
+	url, err := s.CreateURL(ctx, outer.ChildGridId, 3, 0, 2, 2, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,14 +99,14 @@ func TestCopyingLeavesTheSourceSubtreeByteIdentical(t *testing.T) {
 	if _, err := s.SetShellPreview(ctx, shell.Id, []byte("shelljpeg")); err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 3, 2, 2, "a smaller door")
+	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 3, 2, 2, "a smaller door", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateText(ctx, inner.ChildGridId, 1, 1, 1, 1, []byte("deeper still")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateLeafLink(ctx, outer.ChildGridId, 3, 3, 1, 1, rpc.KindText, remoteTarget, "elsewhere"); err != nil {
+	if _, err := s.CreateLeafLink(ctx, outer.ChildGridId, 3, 3, 1, 1, rpc.KindText, remoteTarget, "elsewhere", false); err != nil {
 		t.Fatal(err)
 	}
 

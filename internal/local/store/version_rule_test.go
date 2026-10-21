@@ -78,7 +78,7 @@ func textSubject(t *testing.T, s *Store, ctx context.Context, root string) *grid
 
 func urlSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateURL(ctx, root, 0, 0, 2, 2, "https://example.com", "")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 2, 2, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func shellSubject(t *testing.T, s *Store, ctx context.Context, root string) *gri
 
 func doorSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "")
+	tile, err := s.CreateDoor(ctx, root, 0, 0, 2, 2, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func doorSubject(t *testing.T, s *Store, ctx context.Context, root string) *grid
 
 func paneSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateWorkspace(ctx, root, 0, 0, 2, 2, "ws", nil)
+	tile, err := s.CreateWorkspace(ctx, root, 0, 0, 2, 2, "ws", false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestContentZoomRefusesDoors(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	door, err := s.CreateDoor(ctx, root, 3, 3, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 3, 3, 1, 1, "", false)
 	if err != nil {
 		t.Fatalf("CreateDoor: %v", err)
 	}

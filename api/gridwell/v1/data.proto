@@ -258,6 +258,11 @@ message Tile {
   // transit. The client shows such a body as it shows any read-only text
   // (textedit.ReadOnly). Wire-only, never a stored column.
   string read_only = 40;
+
+  // named: alt_text was typed, by the rename gesture, so no capture or
+  // listing replaces it. Stored as the store's alt_user; only a rename sets
+  // it, a copy carries it, and CreateTile honours it. SetTile ignores it.
+  bool named = 41;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────

@@ -90,11 +90,11 @@ func TestCopyCopiesChildGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, w.ChildGridId, 5, 5, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 5, 5, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,11 +134,11 @@ func TestCopyIndependentEdit(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestCopyOneLevelByteIdentity(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,11 +258,11 @@ func TestCopyTwoLevelByteIdentity(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.CreateDoor(ctx, a.ChildGridId, 0, 0, 1, 1, "")
+	b, err := s.CreateDoor(ctx, a.ChildGridId, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestCopyThreeIndependentCopies(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +441,7 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func TestDeleteGridCascadesBlobs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sub, err := s.CreateDoor(ctx, outer.ChildGridId, 5, 0, 1, 1, "")
+	sub, err := s.CreateDoor(ctx, outer.ChildGridId, 5, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

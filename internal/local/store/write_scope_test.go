@@ -27,10 +27,10 @@ func seedBystanders(t *testing.T, s *Store, root string) {
 	if _, err := s.CreateText(ctx, root, 20, 0, 2, 2, []byte("# a neighbour")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateURL(ctx, root, 23, 0, 2, 2, "https://neighbour.example", ""); err != nil {
+	if _, err := s.CreateURL(ctx, root, 23, 0, 2, 2, "https://neighbour.example", "", false); err != nil {
 		t.Fatal(err)
 	}
-	door, err := s.CreateDoor(ctx, root, 26, 0, 2, 2, "next door")
+	door, err := s.CreateDoor(ctx, root, 26, 0, 2, 2, "next door", false)
 	if err != nil {
 		t.Fatal(err)
 	}

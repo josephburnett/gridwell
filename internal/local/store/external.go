@@ -45,14 +45,12 @@ func (n *Namespace) ID() string { return n.ns }
 
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
-// a door's minted child grid, 0 for a leaf. Named is the row's alt_user: its
-// AltText is the user's, not the listing's. The caller names every such tile
+// a door's minted child grid, 0 for a leaf. The caller names every such tile
 // by its key either way; see rpc.EntryTileID.
 type ExtTile struct {
 	ID          int64
 	Key         string
 	ChildGridID int64
-	Named       bool
 	*gridwellv1.Tile
 }
 
@@ -360,17 +358,16 @@ func (n *Namespace) LiveTileID(gridID int64, key string) (int64, bool, error) {
 }
 
 // tiles lists the live rows of a grid, by id, the stored columns through the
-// one descriptor and the key and alt_user beside them.
+// one descriptor and the key beside them.
 func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
-	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key, alt_user FROM tiles
+	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key FROM tiles
 		WHERE ns = ? AND grid_id = ? AND tombstoned = 0 ORDER BY id`, n.ns, gridID)
 	if err != nil {
 		return nil, err
 	}
 	return collect(rows, func(rows *sql.Rows) (ExtTile, error) {
 		var key string
-		var named bool
-		t, err := scanTile(rows, &key, &named)
+		t, err := scanTile(rows, &key)
 		if err != nil {
 			return ExtTile{}, err
 		}
@@ -385,7 +382,7 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 				return ExtTile{}, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
 			}
 		}
-		return ExtTile{ID: id, Key: key, ChildGridID: child, Named: named, Tile: t}, nil
+		return ExtTile{ID: id, Key: key, ChildGridID: child, Tile: t}, nil
 	})
 }
 

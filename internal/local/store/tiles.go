@@ -87,10 +87,11 @@ func (s *Store) finishContentEdit(ctx context.Context, tx *sql.Tx, tileID int64,
 
 // createTile is the shared scaffolding for the Create* methods. The insert
 // closure receives the canonical gridID and the current timestamp, inserts the
-// row and returns its id.
+// row and returns its id. named latches the row's name as typed, the one place
+// a create sets alt_user.
 func (s *Store) createTile(
 	ctx context.Context,
-	gridIDStr string, x, y, w, h int64,
+	gridIDStr string, x, y, w, h int64, named bool,
 	insert func(tx *sql.Tx, gridID, now int64) (tileID int64, err error),
 ) (*gridwellv1.Tile, error) {
 	gridID, err := parseID(gridIDStr)
@@ -120,6 +121,11 @@ func (s *Store) createTile(
 		if err != nil {
 			return err
 		}
+		if named {
+			if _, err := tx.ExecContext(ctx, `UPDATE tiles SET alt_user = 1 WHERE id = ?`, tileID); err != nil {
+				return err
+			}
+		}
 		if err := s.bumpGridVersion(ctx, tx, gid); err != nil {
 			return err
 		}
@@ -132,8 +138,8 @@ func (s *Store) createTile(
 // CreateDoor creates a door owning a fresh empty child grid, never visited.
 // Label is stored as alt_text; a door has no content
 // to derive an alt from, so this is that column's only writer for doors.
-func (s *Store) CreateDoor(ctx context.Context, gridID string, x, y, w, h int64, label string) (*gridwellv1.Tile, error) {
-	return s.createTile(ctx, gridID, x, y, w, h,
+func (s *Store) CreateDoor(ctx context.Context, gridID string, x, y, w, h int64, label string, named bool) (*gridwellv1.Tile, error) {
+	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			childGridID, err := insertGrid(ctx, tx, now)
 			if err != nil {
@@ -149,12 +155,12 @@ func (s *Store) CreateDoor(ctx context.Context, gridID string, x, y, w, h int64,
 // string, so deleting the door removes only the link. view carries the
 // source's framing when the door is a cross-plugin copy of a framed one, so
 // the link previews and descends where the source did.
-func (s *Store) CreateDoorToOtherNamespace(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, view rpc.View) (*gridwellv1.Tile, error) {
+func (s *Store) CreateDoorToOtherNamespace(ctx context.Context, gridID string, x, y, w, h int64, childGridID, alt string, named bool, view rpc.View) (*gridwellv1.Tile, error) {
 	vcx, vcy, vzoom := viewArgs(view)
 	if childGridID == "" {
 		return nil, fmt.Errorf("%w: child_grid_id required", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h,
+	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,
@@ -176,7 +182,7 @@ func (s *Store) CreateText(ctx context.Context, gridID string, x, y, w, h int64,
 	}
 	hash := hashBytes(data)
 	alt := doctype.AltFromSource(string(data))
-	return s.createTile(ctx, gridID, x, y, w, h,
+	return s.createTile(ctx, gridID, x, y, w, h, false,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			blobID, err := s.putBlob(ctx, tx, hash, data, mediaMarkdown)
 			if err != nil {
@@ -216,14 +222,13 @@ func insertDoorRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGri
 }
 
 // insertURLRow is the single place the url INSERT lives, shared by CreateURL
-// and CreateScratchURL so they cannot drift. A name a url is born with is
-// latched as typed, because only a capture names a url automatically.
+// and CreateScratchURL so they cannot drift.
 func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url, name string, now int64) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			url_string, alt_text, alt_user, created_at, updated_at)
-		VALUES (?, 'url', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, x, y, w, h, url, name, name != "", now, now)
+			url_string, alt_text, created_at, updated_at)
+		VALUES (?, 'url', ?, ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, x, y, w, h, url, name, now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert url tile: %w", err)
 	}
@@ -232,14 +237,14 @@ func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url
 
 // CreateURL creates a url tile. An empty url is the legal unconfigured state:
 // drop first, prompt on first descent, and the address arrives later through
-// WriteContent's url arm. A name is the one a copy across namespaces carries
-// (CLAUDE.md, 2026-10-20); a new url has none.
-func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, url, name string) (*gridwellv1.Tile, error) {
+// WriteContent's url arm. A name, typed or captured, is the one a copy across
+// namespaces carries (CLAUDE.md, 2026-10-20); a new url has none.
+func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, url, name string, named bool) (*gridwellv1.Tile, error) {
 	urlString := strings.TrimSpace(url)
 	if urlString != "" && !rpc.HTTPAddress(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h,
+	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			return insertURLRow(ctx, tx, gid, x, y, w, h, urlString, name, now)
 		})

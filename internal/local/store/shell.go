@@ -14,7 +14,7 @@ import (
 // gridwell-private tmux named by the tile id and survives ascents
 // until the last row naming it is destroyed or the machine reboots.
 func (s *Store) CreateShell(ctx context.Context, gridID string, x, y, w, h int64) (*gridwellv1.Tile, error) {
-	return s.createTile(ctx, gridID, x, y, w, h,
+	return s.createTile(ctx, gridID, x, y, w, h, false,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,

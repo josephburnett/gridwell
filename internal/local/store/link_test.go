@@ -31,7 +31,7 @@ func TestCreateLeafLinkStoresQualifiedLink(t *testing.T) {
 	ctx := context.Background()
 
 	for i, kind := range []string{rpc.KindText, rpc.KindURL, rpc.KindShell, rpc.KindWorkspace} {
-		ln, err := s.CreateLeafLink(ctx, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind)
+		ln, err := s.CreateLeafLink(ctx, root, int64(i*2), 10, 1, 1, kind, remoteTarget, "linked "+kind, false)
 		if err != nil {
 			t.Fatalf("create %s link: %v", kind, err)
 		}
@@ -52,12 +52,12 @@ func TestCreateLeafLinkRejectsDoorAndBareTargets(t *testing.T) {
 
 	// The door kind links via child_grid_id (the door to another namespace), never
 	// link_target_id — one link shape per kind, no second copy of the fact.
-	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindDoor, remoteTarget, ""); err == nil {
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindDoor, remoteTarget, "", false); err == nil {
 		t.Error("CreateLeafLink accepted kind=door; doors link via child_grid_id")
 	}
 	// A bare (unqualified) target would be ambiguous outside the allocating
 	// plugin — same rule as the qualified child of a door to another namespace.
-	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", ""); err == nil {
+	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", "", false); err == nil {
 		t.Error("CreateLeafLink accepted a bare integer target")
 	}
 }
@@ -67,7 +67,7 @@ func TestDeleteLeafLinkUnlinksOnly(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestCopyLeafLinkCopiesLink(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindURL, remoteTarget, "linked")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindURL, remoteTarget, "linked", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestContentMutationOnLeafLinkRejected(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked")
+	ln, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, remoteTarget, "linked", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestSetTextScrollOnLinkKeepsModeNull(t *testing.T) {
 	ctx := context.Background()
 
 	link, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText,
-		"aabbccddeeff00112233445566778899/7", "linked doc")
+		"aabbccddeeff00112233445566778899/7", "linked doc", false)
 	if err != nil {
 		t.Fatal(err)
 	}

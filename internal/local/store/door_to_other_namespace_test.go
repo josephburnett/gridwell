@@ -30,7 +30,7 @@ func TestCopyDoorToOtherNamespaceSharesLinkNoNewGrid(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
+	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", false, rpc.View{})
 	if err != nil {
 		t.Fatalf("create door to another namespace: %v", err)
 	}
@@ -64,11 +64,11 @@ func TestDeleteDoorToOtherNamespaceDropsLinkOnly(t *testing.T) {
 
 	// An interior door alongside it, whose LOCAL child grid must survive the
 	// door to another namespace delete untouched.
-	interior, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
+	interior, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
+	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", false, rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestMoveDoorToOtherNamespacePreservesLink(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", rpc.View{})
+	ew, err := s.CreateDoorToOtherNamespace(ctx, root, 0, 0, 1, 1, remoteChild, "remote", false, rpc.View{})
 	if err != nil {
 		t.Fatal(err)
 	}

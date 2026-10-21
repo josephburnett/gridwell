@@ -80,7 +80,7 @@ func TestEventCreateDoorEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 
-	if _, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
@@ -108,7 +108,7 @@ func TestEventCreateURLEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 
-	if _, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", ""); err != nil {
+	if _, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "", false); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))
@@ -119,7 +119,7 @@ func TestEventResizeTileEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestEventSetFramingEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestEventDeleteTileEmitsTileRemoved(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestEventMoveTileWithinGridEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,11 +229,11 @@ func TestEventMoveTileAcrossGridsEmitsRemovedAndChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	a, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
+	target, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +256,7 @@ func TestEventCopyTileEmitsTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,11 +313,11 @@ func TestEventCopyEditEmitsOnlyTileChanged(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "", false); err != nil {
 		t.Fatal(err)
 	}
 	cp, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{

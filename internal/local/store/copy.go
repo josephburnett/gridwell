@@ -130,18 +130,6 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 			blob = sql.NullInt64{Int64: n.BlobId, Valid: true}
 		}
 	}
-	// alt_user is storage-only, so the latch is read straight from the source
-	// row: a user-owned name must stay user-owned on the copy, or the next
-	// automatic title capture clobbers it.
-	srcID, err := parseID(n.Id)
-	if err != nil {
-		return 0, fmt.Errorf("tile copy: source id %q: %w", n.Id, err)
-	}
-	var altUser int64
-	if err := tx.QueryRowContext(ctx,
-		`SELECT alt_user FROM tiles WHERE id = ?`, srcID).Scan(&altUser); err != nil {
-		return 0, fmt.Errorf("tile copy: read alt_user of source %d: %w", srcID, err)
-	}
 	vcx, vcy, vzoom := viewArgs(rpc.ViewOf(n.ViewCx, n.ViewCy, n.ViewZoom))
 	// The copy is written by name: copyBinding renders the column list from
 	// the descriptor in columns.go and refuses a map that misses a copied
@@ -154,7 +142,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		"text_x":        n.TextX, "text_y": n.TextY, "text_w": n.TextW, "text_h": n.TextH,
 		"text_mode": textMode, "blob_id": blob,
 		"url_string": urlStr, "preview_blob_id": previewBlob,
-		"alt_text": n.AltText, "alt_user": altUser,
+		"alt_text": n.AltText, "alt_user": boolToInt(n.Named),
 		"content_zoom": n.ContentZoom, "url_history": urlHist,
 		"link_target_id": linkTarget, "url_frozen": boolToInt(n.UrlFrozen),
 		"shell_session": shellTmux,

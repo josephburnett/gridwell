@@ -37,10 +37,10 @@ func TestReopenRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create text: %v", err)
 	}
-	if _, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com", ""); err != nil {
+	if _, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com", "", false); err != nil {
 		t.Fatalf("create url: %v", err)
 	}
-	if _, err := s.CreateDoor(ctx, root, 4, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 4, 0, 1, 1, "", false); err != nil {
 		t.Fatalf("create door: %v", err)
 	}
 

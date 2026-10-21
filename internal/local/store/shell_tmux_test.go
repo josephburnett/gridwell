@@ -35,7 +35,7 @@ func TestCopySharesTheShellTmux(t *testing.T) {
 		}
 	}
 
-	w, err := s.CreateDoor(ctx, root, 6, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 6, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

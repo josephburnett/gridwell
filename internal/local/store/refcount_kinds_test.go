@@ -63,7 +63,7 @@ func TestCopyCopiesShellPreviewBlob(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestDeleteGridReleasesAllKindRefs(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

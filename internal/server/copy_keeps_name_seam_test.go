@@ -37,8 +37,8 @@ func (pagesSource) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1
 }
 
 // A plugin's url copied onto home keeps the name the copier saw, the source's
-// or a typed one, and a later page-title capture on the copy does not replace
-// it (CLAUDE.md, 2026-10-20).
+// or a typed one, and whether it was typed: a page-title capture on the copy
+// replaces the source's name and never a typed one (CLAUDE.md, 2026-10-20).
 func TestAPluginURLCopiedOntoHomeKeepsItsName(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
@@ -78,18 +78,18 @@ func TestAPluginURLCopiedOntoHomeKeepsItsName(t *testing.T) {
 	}
 
 	for i, c := range []struct {
-		from *gridwellv1.Tile
-		want string
+		from       *gridwellv1.Tile
+		name, want string
 	}{
-		{renamed, "mine"},
-		{plain, "Source B"},
+		{renamed, "mine", "mine"},
+		{plain, "Source B", "Page title"},
 	} {
 		copied, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: c.from.Id, DestGridId: home, X: int64(4 + i), Y: 4})
 		if err != nil {
-			t.Fatalf("copy %q onto home: %v", c.want, err)
+			t.Fatalf("copy %q onto home: %v", c.name, err)
 		}
-		if copied.AltText != c.want {
-			t.Fatalf("the copy is named %q, want %q, the name it was copied with", copied.AltText, c.want)
+		if copied.AltText != c.name {
+			t.Fatalf("the copy is named %q, want %q, the name it was copied with", copied.AltText, c.name)
 		}
 		if _, err := cl.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: copied.Id,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, AltText: "Page title"}}); err != nil {
@@ -100,13 +100,14 @@ func TestAPluginURLCopiedOntoHomeKeepsItsName(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got.AltText != c.want {
-			t.Fatalf("a page-title capture renamed the copy to %q, want %q", got.AltText, c.want)
+			t.Errorf("a copy of %q after a page-title capture is named %q, want %q", c.name, got.AltText, c.want)
 		}
 	}
 }
 
 // Every kind a copy carries into another namespace keeps the name its source
-// had: a url and a door as copies, a shell and a link as links.
+// had, and whether it was typed: a url and a door as copies, a shell and a
+// link as links.
 func TestEveryKindCopiedAcrossNamespacesKeepsItsName(t *testing.T) {
 	cl, _, rootA, _, rootB := twoPluginServer(t)
 	ctx := context.Background()
@@ -137,8 +138,9 @@ func TestEveryKindCopiedAcrossNamespacesKeepsItsName(t *testing.T) {
 		if err != nil {
 			t.Fatalf("copy %s %q: %v", src.Kind, src.AltText, err)
 		}
-		if copied.AltText != src.AltText {
-			t.Errorf("a %s named %q copied across namespaces is named %q", src.Kind, src.AltText, copied.AltText)
+		if copied.AltText != src.AltText || copied.Named != src.Named {
+			t.Errorf("a %s named %q (typed %v) copied across namespaces is named %q (typed %v)",
+				src.Kind, src.AltText, src.Named, copied.AltText, copied.Named)
 		}
 	}
 }

@@ -267,7 +267,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	if t.LinkTargetId != "" {
 		// A leaf link of any leaf kind; the store validates kind and target.
 		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
-			t.Kind, t.LinkTargetId, t.AltText))
+			t.Kind, t.LinkTargetId, t.AltText, t.Named))
 	}
 	switch t.Kind {
 	case rpc.KindDoor:
@@ -275,10 +275,10 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		// stored verbatim, with no interior grid.
 		if t.ChildGridId != "" {
 			return tileResp(p.st.CreateDoorToOtherNamespace(ctx, req.GridId, t.X, t.Y, t.W, t.H,
-				t.ChildGridId, t.AltText,
+				t.ChildGridId, t.AltText, t.Named,
 				rpc.ViewOf(t.ViewCx, t.ViewCy, t.ViewZoom)))
 		}
-		return tileResp(p.st.CreateDoor(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText))
+		return tileResp(p.st.CreateDoor(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, t.Named))
 	case rpc.KindText:
 		return tileResp(p.st.CreateText(ctx, req.GridId, t.X, t.Y, t.W, t.H, req.Content))
 	case rpc.KindURL:
@@ -287,7 +287,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
 			return tileResp(p.st.CreateScratchURL(ctx, t.UrlString))
 		}
-		return tileResp(p.st.CreateURL(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.UrlString, t.AltText))
+		return tileResp(p.st.CreateURL(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.UrlString, t.AltText, t.Named))
 	case rpc.KindShell:
 		// Likewise an ephemeral shell, deleted on ascent.
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
@@ -296,7 +296,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		return tileResp(p.st.CreateShell(ctx, req.GridId, t.X, t.Y, t.W, t.H))
 	case rpc.KindWorkspace:
 		// No content is a NULL blob_id: never arranged.
-		return tileResp(p.st.CreateWorkspace(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, req.Content))
+		return tileResp(p.st.CreateWorkspace(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, t.Named, req.Content))
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "create: unknown kind %q", t.Kind)
 	}

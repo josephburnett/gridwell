@@ -154,7 +154,7 @@ func TestSelectionIgnoresATileOffTheGrid(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	a, b, c := threeTexts(t, s, root)
-	w, err := s.CreateDoor(ctx, root, 0, 4, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 4, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,11 +283,11 @@ func TestPluginGridSelection(t *testing.T) {
 func nest(t *testing.T, s *Store, root string) (g1, g2 string) {
 	t.Helper()
 	ctx := context.Background()
-	w1, err := s.CreateDoor(ctx, root, 0, 6, 1, 1, "")
+	w1, err := s.CreateDoor(ctx, root, 0, 6, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w2, err := s.CreateDoor(ctx, w1.ChildGridId, 0, 0, 1, 1, "")
+	w2, err := s.CreateDoor(ctx, w1.ChildGridId, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +384,7 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	if _, err := n.SetSelection(gid, SelectOp{Add: []int64{e}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateDoorToOtherNamespace(ctx, root, 5, 5, 1, 1, "plug1/"+strconv.FormatInt(gid, 10), "", rpc.View{}); err != nil {
+	if _, err := s.CreateDoorToOtherNamespace(ctx, root, 5, 5, 1, 1, "plug1/"+strconv.FormatInt(gid, 10), "", false, rpc.View{}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetSelection(ctx, &gridwellv1.SetSelectionRequest{GridId: root, Clear: true, Recurse: true}); err != nil {

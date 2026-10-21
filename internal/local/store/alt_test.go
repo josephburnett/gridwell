@@ -6,14 +6,15 @@ import (
 )
 
 // A user-set name owns alt_text, and an automatic capture must never overwrite
-// it. The latch is the alt_user column, written only by SetTileAlt's user flag.
+// it. The latch is the alt_user column, written by SetTileAlt's user flag and
+// carried by a copy or a named create.
 
 func TestUserRenameWinsOverCaptures(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestURLTitleCaptureStillWorksUnnamed(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}

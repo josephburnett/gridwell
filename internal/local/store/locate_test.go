@@ -16,11 +16,11 @@ func TestFindByID(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	outer, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, outer.ChildGridId, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestFindText(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestFindText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	named, err := s.CreateURL(ctx, root, 3, 0, 1, 1, "https://example.com", "")
+	named, err := s.CreateURL(ctx, root, 3, 0, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

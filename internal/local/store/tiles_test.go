@@ -13,7 +13,7 @@ func TestCreateDoorHappyPath(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 1, 2, 3, 4, "")
+	w, err := s.CreateDoor(ctx, root, 1, 2, 3, 4, "", false)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestCreateDoorLabelBecomesAltText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 1, 2, 1, 1, "recipes")
+	w, err := s.CreateDoor(ctx, root, 1, 2, 1, 1, "recipes", false)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestCreateDoorLabelBecomesAltText(t *testing.T) {
 	}
 
 	// No label → no alt, exactly as before.
-	plain, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
+	plain, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "", false)
 	if err != nil {
 		t.Fatalf("create unlabeled: %v", err)
 	}
@@ -76,16 +76,16 @@ func TestCreateDoorOverlapRefused(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	if _, err := s.CreateDoor(ctx, root, 0, 0, 5, 5, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 0, 0, 5, 5, "", false); err != nil {
 		t.Fatal(err)
 	}
 	// Overlap.
-	_, err := s.CreateDoor(ctx, root, 4, 4, 2, 2, "")
+	_, err := s.CreateDoor(ctx, root, 4, 4, 2, 2, "", false)
 	if !errors.Is(err, ErrOverlap) {
 		t.Errorf("got %v, want ErrOverlap", err)
 	}
 	// Adjacent (touching) is OK.
-	if _, err := s.CreateDoor(ctx, root, 5, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 5, 0, 1, 1, "", false); err != nil {
 		t.Errorf("adjacent placement refused: %v", err)
 	}
 }
@@ -94,11 +94,11 @@ func TestCreateDoorInvalidArgs(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	_, err := s.CreateDoor(ctx, root, 0, 0, 0, 1, "")
+	_, err := s.CreateDoor(ctx, root, 0, 0, 0, 1, "", false)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("zero w: got %v", err)
 	}
-	_, err = s.CreateDoor(ctx, root, 0, 0, 1, -1, "")
+	_, err = s.CreateDoor(ctx, root, 0, 0, 1, -1, "", false)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("neg h: got %v", err)
 	}
@@ -108,12 +108,12 @@ func TestCreateIntoNestedAndMissingGrids(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Descend into door; create a sub-door inside it.
-	sub, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 2, 2, "")
+	sub, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 2, 2, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCreateIntoNestedAndMissingGrids(t *testing.T) {
 
 	// A create into a grid that doesn't exist is refused (grid_id is the
 	// authoritative location; there is no descent path to validate).
-	_, err = s.CreateDoor(ctx, "999999", 1, 1, 1, 1, "")
+	_, err = s.CreateDoor(ctx, "999999", 1, 1, 1, 1, "", false)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("got %v, want ErrInvalidArgument", err)
 	}
@@ -144,7 +144,7 @@ func TestCreateURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestCreateURLTile(t *testing.T) {
 		t.Errorf("URL tile got BlobID = %d, want 0", tile.BlobId)
 	}
 	// Whitespace around the URL should be trimmed.
-	tile2, err := s.CreateURL(ctx, root, 1, 0, 1, 1, "  https://example.org/path\n", "")
+	tile2, err := s.CreateURL(ctx, root, 1, 0, 1, 1, "  https://example.org/path\n", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestCreateURLTile(t *testing.T) {
 		t.Errorf("URLString = %q (whitespace not trimmed)", tile2.UrlString)
 	}
 	// Disallowed scheme → ErrInvalidArgument.
-	_, err = s.CreateURL(ctx, root, 2, 0, 1, 1, "javascript:alert(1)", "")
+	_, err = s.CreateURL(ctx, root, 2, 0, 1, 1, "javascript:alert(1)", "", false)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("javascript: scheme: got %v, want ErrInvalidArgument", err)
 	}
@@ -206,7 +206,7 @@ func TestResizeNode(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestResizeNode(t *testing.T) {
 		t.Errorf("resize moved the version %d -> %d; layout does not bump", w.Version, r.Version)
 	}
 	// Resize to overlap another tile should fail.
-	_, err = s.CreateDoor(ctx, root, 4, 0, 1, 1, "")
+	_, err = s.CreateDoor(ctx, root, 4, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestResizeIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestSetFraming(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestFramingKeepsCopysAtSharedVersion(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +388,7 @@ func TestSetTextScrollRejectsNonText(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,7 +402,7 @@ func TestDeleteTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,11 +424,11 @@ func TestDeleteTileCascadesNonEmptyDoor(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func TestDeleteTileIgnoresStaleClaim(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

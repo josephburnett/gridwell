@@ -39,7 +39,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 		})
 	}
 
-	w0, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w0, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,11 +79,11 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			)
 			switch rng.IntN(4) {
 			case 0:
-				n, err = s.CreateDoor(ctx, gridID, x, y, w, h, "")
+				n, err = s.CreateDoor(ctx, gridID, x, y, w, h, "", false)
 			case 1:
 				n, err = s.CreateText(ctx, gridID, x, y, w, h, []byte(fmt.Sprintf("# tile %d", i)))
 			case 2:
-				n, err = s.CreateURL(ctx, gridID, x, y, w, h, fmt.Sprintf("https://example.com/%d", i), "")
+				n, err = s.CreateURL(ctx, gridID, x, y, w, h, fmt.Sprintf("https://example.com/%d", i), "", false)
 			case 3:
 				n, err = s.CreateShell(ctx, gridID, x, y, w, h)
 			}

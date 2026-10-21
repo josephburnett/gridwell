@@ -52,7 +52,7 @@ func (rt *router) deepCopyDoor(ctx context.Context, src namespace.Namespace, src
 
 	created, err := rt.createCopy(ctx, dst, dstGrid,
 		&pb.Tile{Kind: rpc.KindDoor, X: x, Y: y, W: srcLocalTile.W, H: srcLocalTile.H,
-			AltText: srcLocalTile.AltText}, nil)
+			AltText: srcLocalTile.AltText, Named: srcLocalTile.Named}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 
 	created, err := rt.createCopy(ctx, dst, dstGrid,
 		&pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H,
-			AltText: t.AltText, UrlString: t.UrlString}, body)
+			AltText: t.AltText, Named: t.Named, UrlString: t.UrlString}, body)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 // links by the grid it opens and carries the framing the source was left at; a
 // leaf links by its target.
 func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *pb.Tile, x, y int64, target string) (*pb.TileResponse, error) {
-	tile := &pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H, AltText: t.AltText}
+	tile := &pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H, AltText: t.AltText, Named: t.Named}
 	if rpc.IsDoorKind(t.Kind) {
 		tile.ChildGridId = target
 		tile.ViewCx, tile.ViewCy, tile.ViewZoom = t.ViewCx, t.ViewCy, t.ViewZoom

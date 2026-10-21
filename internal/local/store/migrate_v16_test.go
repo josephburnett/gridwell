@@ -68,7 +68,7 @@ func TestMigrateV16OverAGenuineV15File(t *testing.T) {
 		t.Fatalf("a genuine v15 file must open after v16: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	w, err := s.CreateDoor(ctx, root, 9, 9, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 9, 9, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

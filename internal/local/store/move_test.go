@@ -26,7 +26,7 @@ func textAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile 
 
 func doorAt(t *testing.T, s *Store, gridID string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateDoor(context.Background(), gridID, x, y, 1, 1, "")
+	tile, err := s.CreateDoor(context.Background(), gridID, x, y, 1, 1, "", false)
 	if err != nil {
 		t.Fatalf("create door: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestMoveTileDoorToOtherNamespaceHasNoLocalSubtree(t *testing.T) {
 	root := rootID(t, s)
 	interior := doorAt(t, s, root, 0, 0)
 	far, err := s.CreateDoorToOtherNamespace(ctx, root, 3, 3, 1, 1,
-		"aabbccddaabbccddaabbccddaabbccdd/7", "far", rpc.View{})
+		"aabbccddaabbccddaabbccddaabbccdd/7", "far", false, rpc.View{})
 	if err != nil {
 		t.Fatalf("create door to another namespace: %v", err)
 	}

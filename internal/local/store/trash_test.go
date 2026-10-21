@@ -112,11 +112,11 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	w, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "")
+	inner, err := s.CreateDoor(ctx, w.ChildGridId, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestDeleteInsideTrashIsReal(t *testing.T) {
 
 	// The same is true anywhere DEEPER in the trash tree: delete a tile
 	// while it already sits in a month grid's own subtree.
-	deep, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "")
+	deep, err := s.CreateDoor(ctx, root, 5, 5, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}

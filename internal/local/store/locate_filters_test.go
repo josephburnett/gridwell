@@ -32,10 +32,10 @@ func newFilterWorld(t *testing.T) *filterWorld {
 	clock := func(at time.Time) { w.s.SetClock(func() time.Time { return at }) }
 	var err error
 	clock(w.t0)
-	if w.outer, err = w.s.CreateDoor(ctx, w.root, 0, 0, 1, 1, "outer"); err != nil {
+	if w.outer, err = w.s.CreateDoor(ctx, w.root, 0, 0, 1, 1, "outer", false); err != nil {
 		t.Fatal(err)
 	}
-	if w.inner, err = w.s.CreateDoor(ctx, w.outer.ChildGridId, 0, 0, 1, 1, "inner"); err != nil {
+	if w.inner, err = w.s.CreateDoor(ctx, w.outer.ChildGridId, 0, 0, 1, 1, "inner", false); err != nil {
 		t.Fatal(err)
 	}
 	clock(w.t1)

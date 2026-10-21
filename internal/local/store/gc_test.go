@@ -17,11 +17,11 @@ func TestDestroyDoorHoldingAnDoorToOtherNamespaceReleasesItsSubtree(t *testing.T
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "")
+	door, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateDoorToOtherNamespace(ctx, door.ChildGridId, 0, 0, 1, 1, remoteChild, "remote", rpc.View{}); err != nil {
+	if _, err := s.CreateDoorToOtherNamespace(ctx, door.ChildGridId, 0, 0, 1, 1, remoteChild, "remote", false, rpc.View{}); err != nil {
 		t.Fatal(err)
 	}
 	txt, err := s.CreateText(ctx, door.ChildGridId, 1, 0, 1, 1, []byte("body under the door"))

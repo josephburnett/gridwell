@@ -16,11 +16,11 @@ import (
 
 // CreateWorkspace creates a workspace tile. Empty data leaves blob_id NULL, meaning
 // never arranged, and descent installs the default single pane.
-func (s *Store) CreateWorkspace(ctx context.Context, gridID string, x, y, w, h int64, alt string, data []byte) (*gridwellv1.Tile, error) {
+func (s *Store) CreateWorkspace(ctx context.Context, gridID string, x, y, w, h int64, alt string, named bool, data []byte) (*gridwellv1.Tile, error) {
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h,
+	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			var blob sql.NullInt64
 			if len(data) > 0 {

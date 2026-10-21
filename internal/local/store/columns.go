@@ -126,14 +126,14 @@ captured.`,
 		bind: func(t *gridwellv1.Tile) any { return &t.AltText },
 	},
 	{
-		name: "alt_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 2,
-		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture
-and by a url born with a name (a copy across namespaces, insertURLRow):
+		name: "alt_user", field: "named", ddl: "INTEGER NOT NULL DEFAULT 0", since: 2,
+		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture:
 automatic captures (a url's page title on freeze, a shell's foreground
 command on detach) and a plugin's listing must not overwrite a name the
-user set.
-Storage-only — the latch is the store's rule, never a client's to set.
-Added at schema v2, additive.`,
+user set. A copy carries it, and a create honours it, so a copy across
+namespaces keeps it too. On the wire it is named, read-only to every
+write but those. Added at schema v2, additive.`,
+		bind: func(t *gridwellv1.Tile) any { return intBool{&t.Named} },
 	},
 	{
 		name: "content_zoom", ddl: "REAL NOT NULL DEFAULT 0", since: 3,

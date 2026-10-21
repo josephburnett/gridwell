@@ -321,28 +321,43 @@ func TestConnectionSpawn(t *testing.T) {
 		t.Fatalf("content through the chain = %q", got)
 	}
 
-	// A far url copied onto local home keeps its name, latched as typed, so
-	// the copy's next page-title capture does not replace it (CLAUDE.md,
-	// 2026-10-20).
-	farURL := rpc(t, localOrigin, "CreateTile", map[string]any{
-		"gridId": workChild,
-		"tile":   map[string]any{"kind": "url", "x": 2, "y": 1, "w": 1, "h": 1, "urlString": "https://example.com/"},
-	})["tile"].(map[string]any)
-	if _, err := clientFor(localOrigin).RenameTile(context.Background(), farURL["id"].(string), num(farURL["version"]), "far page"); err != nil {
-		t.Fatalf("rename the far url through the chain: %v", err)
-	}
-	urlCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
-		"tileId": farURL["id"], "destGridId": homeRoot, "x": 6, "y": 5,
-	})["tile"].(map[string]any)
-	if urlCopy["link"] == true || urlCopy["altText"] != "far page" {
-		t.Fatalf("copy of the far url = %v, want a copy named %q", urlCopy, "far page")
-	}
-	if _, err := clientFor(localOrigin).SetTile(context.Background(), &gridwellv1.SetTileRequest{
-		TileId: urlCopy["id"].(string), Tile: &gridwellv1.Tile{Kind: "url", AltText: "Page title"}}); err != nil {
-		t.Fatalf("capture the copy's page title: %v", err)
-	}
-	if captured, err := clientFor(localOrigin).GetTile(context.Background(), urlCopy["id"].(string)); err != nil || captured.AltText != "far page" {
-		t.Fatalf("after a capture the copy reads %v (%v), want the name %q", captured, err, "far page")
+	// A far url copied onto local home keeps its name and whether it was
+	// typed: the copy's next page-title capture replaces a captured title and
+	// never a typed name (CLAUDE.md, 2026-10-20).
+	for i, c := range []struct {
+		name  string
+		typed bool
+		want  string
+	}{
+		{"far title", false, "Page title"},
+		{"far page", true, "far page"},
+	} {
+		farURL := rpc(t, localOrigin, "CreateTile", map[string]any{
+			"gridId": workChild,
+			"tile":   map[string]any{"kind": "url", "x": 2 + i, "y": 1, "w": 1, "h": 1, "urlString": "https://example.com/"},
+		})["tile"].(map[string]any)
+		farID := farURL["id"].(string)
+		if c.typed {
+			if _, err := clientFor(localOrigin).RenameTile(context.Background(), farID, num(farURL["version"]), c.name); err != nil {
+				t.Fatalf("rename the far url through the chain: %v", err)
+			}
+		} else if _, err := clientFor(localOrigin).SetTile(context.Background(), &gridwellv1.SetTileRequest{
+			TileId: farID, Tile: &gridwellv1.Tile{Kind: "url", AltText: c.name}}); err != nil {
+			t.Fatalf("capture the far url's page title through the chain: %v", err)
+		}
+		urlCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
+			"tileId": farID, "destGridId": homeRoot, "x": 6 + i, "y": 5,
+		})["tile"].(map[string]any)
+		if urlCopy["link"] == true || urlCopy["altText"] != c.name {
+			t.Fatalf("copy of the far url = %v, want a copy named %q", urlCopy, c.name)
+		}
+		if _, err := clientFor(localOrigin).SetTile(context.Background(), &gridwellv1.SetTileRequest{
+			TileId: urlCopy["id"].(string), Tile: &gridwellv1.Tile{Kind: "url", AltText: "Page title"}}); err != nil {
+			t.Fatalf("capture the copy's page title: %v", err)
+		}
+		if captured, err := clientFor(localOrigin).GetTile(context.Background(), urlCopy["id"].(string)); err != nil || captured.AltText != c.want {
+			t.Fatalf("a copy of %q (typed %v) after a capture reads %v (%v), want the name %q", c.name, c.typed, captured, err, c.want)
+		}
 	}
 
 	// 5. Live events cross the connection: a write on the remote node arrives on

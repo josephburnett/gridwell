@@ -27,7 +27,7 @@ var leafLinkKinds = map[string]bool{
 // makes the link unambiguous, not the crossing, so a same-namespace
 // target is an ordinary link. The row carries no content, readers resolving
 // bytes and tmux through the target, so deleting it only unlinks.
-func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt string) (*gridwellv1.Tile, error) {
+func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt string, named bool) (*gridwellv1.Tile, error) {
 	if !leafLinkKinds[kind] {
 		return nil, fmt.Errorf("%w: kind %q has no leaf-link variant", ErrInvalidArgument, kind)
 	}
@@ -38,7 +38,7 @@ func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h in
 		// why a same-namespace link needs no special case.
 		return nil, fmt.Errorf("%w: link_target_id %q is not a qualified <uuid>/<tile-id> link", ErrInvalidArgument, linkTargetID)
 	}
-	return s.createTile(ctx, gridID, x, y, w, h,
+	return s.createTile(ctx, gridID, x, y, w, h, named,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
 			res, err := tx.ExecContext(ctx, `
 				INSERT INTO tiles (grid_id, kind, x, y, w, h,

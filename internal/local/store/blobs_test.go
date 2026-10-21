@@ -58,7 +58,7 @@ func TestBlobSelfDescribing(t *testing.T) {
 		t.Errorf("text blob media = %q, want %q", mt, mediaMarkdown)
 	}
 
-	url, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com", "")
+	url, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestSubscribeEventsReceivesPublish(t *testing.T) {
 	ctx := context.Background()
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
-	if _, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, ""); err != nil {
+	if _, err := s.CreateDoor(ctx, root, 0, 0, 1, 1, "", false); err != nil {
 		t.Fatal(err)
 	}
 	select {
