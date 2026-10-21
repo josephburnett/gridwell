@@ -348,9 +348,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   gap still re-reads every held grid. The planner decides
   (`nav` `planner.fetchGrid`), never the executor (2026-10-14).
 - A copy is eager and deep. COW was tried and torn out. A copy keeps its
-  name across namespaces, latched as typed so a page-title capture never
-  replaces it: a url born with a name holds it as the user's
-  (`store.insertURLRow`, 2026-10-20).
+  name and whether it was typed, across any namespace boundary as within
+  home: a url follows its page title until a rename latches the name, and a
+  copy of an unrenamed one still follows it. The row's `alt_user` is the one
+  owner, `Tile.named` carries it, only a rename sets it, and a create
+  honours it (`store.createTile`, 2026-10-20).
 - A copy of a link is another link to the same target, never a copy of the
   target: the deep copy is of content, and a link's content is its path
   (2026-10-06).
