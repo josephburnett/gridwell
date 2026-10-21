@@ -77,7 +77,6 @@ interface Entry {
   // Main sees a press before the renderer does, so no page can delay or
   // suppress the count.
   presses: number;
-  durable: boolean;
   // Tracked so remove() can cancel it before the closure reads a closed view.
   focusSettle: ReturnType<typeof setTimeout> | null;
   captureStreak: StreakState;
@@ -186,8 +185,6 @@ export class WebviewRegistry {
         },
         canGoBack: nav.canGoBack(),
         canGoForward: nav.canGoForward(),
-        // Only a durable tile can hold the freeze intent.
-        canFreeze: this.entries.get(paneId)?.durable ?? false,
       },
       {
         copyText: (t) => clipboard.writeText(t),
@@ -252,7 +249,7 @@ export class WebviewRegistry {
 
   // The view is a child of the window's contentView, so it paints above the
   // root canvas renderer. Later bounds arrive through setBounds.
-  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', durable = false, hidden = false, focused = false, gen = 0): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', hidden = false, focused = false, gen = 0): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = SESSION_PARTITION;
     const stale = this.entries.get(paneId);
@@ -279,7 +276,7 @@ export class WebviewRegistry {
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
-    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, durable, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = openBelowUrl(target);
@@ -428,7 +425,7 @@ export class WebviewRegistry {
   // navigates. It throws when fromPaneId holds no view, which the renderer
   // hears as a refusal and drops the handle it moved. Absent bounds keep the
   // view's own, for a pane not laid out yet.
-  move(fromPaneId: string, toPaneId: string, bounds: Bounds | undefined, durable: boolean, hidden: boolean, focused: boolean): void {
+  move(fromPaneId: string, toPaneId: string, bounds: Bounds | undefined, hidden: boolean, focused: boolean): void {
     const e = this.entries.get(fromPaneId);
     if (!e) throw new Error(`pane ${fromPaneId}: no live view to move`);
     const stale = this.entries.get(toPaneId);
@@ -450,7 +447,6 @@ export class WebviewRegistry {
     if (bounds) e.bounds = roundBounds(bounds);
     e.hidden = hidden;
     e.focused = focused;
-    e.durable = durable;
     e.view.setBounds(hidden ? parkedBounds(e.bounds.width, e.bounds.height) : e.bounds);
     this.applyMinWidthZoom(e);
     this.trace(viewMoved(fromPaneId, toPaneId, e.tileId));

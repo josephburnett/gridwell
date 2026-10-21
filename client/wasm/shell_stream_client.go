@@ -610,7 +610,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 // freezeShellPaneByIntent runs the bar circle's freeze on a live shell. The
 // tmux keeps running: a freeze is a screenshot, not a kill.
 func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
-	t, ok := a.descendedGridTile(p)
+	t, ok := a.descendedTile(p)
 	if !ok || t.Kind != rpc.KindShell {
 		return
 	}

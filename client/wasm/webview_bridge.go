@@ -139,7 +139,7 @@ func rejectionText(v js.Value) string {
 // bridgePlace asks main to create or attach a WebContentsView for paneID, on
 // the one host-local session. onFail runs when main refuses: no view exists,
 // so the caller's live handle must go.
-func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b viewBounds, contentZoom float64, history string, durable, hidden, focused bool, onFail func()) {
+func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b viewBounds, contentZoom float64, history string, hidden, focused bool, onFail func()) {
 	a.bridgeVerb("placeWebview", map[string]any{
 		"paneId":      paneID,
 		"tileId":      tileID,
@@ -156,20 +156,16 @@ func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b 
 		// focuses the new widget as it attaches, so a wrong guess leaks a
 		// draw's worth of keystrokes into it.
 		"focused": focused,
-		// durable gates the context menu's Freeze Page, since an ephemeral
-		// visit has nothing to re-descend into.
-		"durable": durable,
 	}, nil, onFail)
 }
 
 // bridgeMove hands the view on fromID to toID with its page: no reload. A nil
 // b keeps the view's own bounds, for a pane not laid out yet. onFail runs when
 // main has no view on fromID, so the caller's handle must go.
-func (a *App) bridgeMove(fromID, toID string, b *viewBounds, durable, hidden, focused bool, onFail func()) {
+func (a *App) bridgeMove(fromID, toID string, b *viewBounds, hidden, focused bool, onFail func()) {
 	fields := map[string]any{
 		"fromPaneId": fromID,
 		"toPaneId":   toID,
-		"durable":    durable,
 		"hidden":     hidden,
 		"focused":    focused,
 	}

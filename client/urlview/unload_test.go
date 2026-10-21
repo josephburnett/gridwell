@@ -78,17 +78,6 @@ func TestOwns(t *testing.T) {
 	}
 }
 
-// A page is durable exactly when an internet tile is: the page flag plays no
-// part, so Freeze Page, the standing freeze and the zoom follow for both.
-func TestDurable(t *testing.T) {
-	if !Durable(false) {
-		t.Error("a placed tile is not durable")
-	}
-	if Durable(true) {
-		t.Error("a possibly ephemeral visit is durable")
-	}
-}
-
 func sameCapture(a, b Capture) bool {
 	return bytes.Equal(a.JPEG, b.JPEG) && a.Title == b.Title && a.History == b.History
 }

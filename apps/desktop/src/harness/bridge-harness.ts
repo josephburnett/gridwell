@@ -50,10 +50,10 @@ const PAGE =
         await window.gridwell.moveWebview({
           fromPaneId: 'p1', toPaneId: 'w1:p1',
           bounds: { x: 20, y: 30, width: 300, height: 200 },
-          durable: true, hidden: false, focused: true,
+          hidden: false, focused: true,
         });
         let refused = '';
-        await window.gridwell.moveWebview({ fromPaneId: 'p9', toPaneId: 'p8', durable: true, hidden: false, focused: false })
+        await window.gridwell.moveWebview({ fromPaneId: 'p9', toPaneId: 'p8', hidden: false, focused: false })
           .catch((e) => { refused = String(e); });
         if (!refused.includes('no live view to move')) throw new Error('a move from an empty pane was not refused: ' + refused);
         console.log('BRIDGE_MOVED');

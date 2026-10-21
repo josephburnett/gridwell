@@ -99,7 +99,7 @@ test('a new view placed with hidden=true starts parked (new-view-path fix)', asy
 
     // The last argument is PlaceArgs.hidden: the renderer's overlay-is-open
     // verdict for this draw.
-    await reg.place(paneId, 2, args.dataURL, bounds, 0, '', false, true);
+    await reg.place(paneId, 2, args.dataURL, bounds, 0, '', true);
     const boundsAfterPlace = reg.viewBoundsFor(paneId);
     const dLoad = Date.now() + 8_000;
     while (!webContents.getAllWebContents().some((w: any) => w.getURL().includes(args.marker)) && Date.now() < dLoad) {

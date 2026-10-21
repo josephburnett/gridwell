@@ -132,3 +132,89 @@ test('an ephemeral url visit that wrote its address is still deleted on ascent',
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no refused delete or failed write surfaced').toHaveLength(0);
 });
+
+// Freeze Page from the bar circle's menu, which every live view offers.
+async function freezeViaCircle(electronApp: any, window: any): Promise<void> {
+  await electronApp.evaluate(({ Menu }: any) => {
+    const g = globalThis as any;
+    g.__gwEphOrigPopup = Menu.prototype.popup;
+    g.__gwEphMenu = null;
+    Menu.prototype.popup = function (this: any) {
+      g.__gwEphMenu = this;
+      return undefined;
+    };
+  });
+  try {
+    const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
+    await window.mouse.click(bar.left + bar.width - 24, bar.top + bar.height / 2, { button: 'right' });
+    await expect
+      .poll(() => electronApp.evaluate(() => Boolean((globalThis as any).__gwEphMenu)), { timeout: 10_000 })
+      .toBe(true);
+    await electronApp.evaluate(() => {
+      const item = (globalThis as any).__gwEphMenu.items.find((i: any) => i.label === 'Freeze Page');
+      if (!item) throw new Error('an ephemeral visit offered no Freeze Page');
+      item.click();
+    });
+  } finally {
+    await electronApp.evaluate(({ Menu }: any) => {
+      const g = globalThis as any;
+      if (g.__gwEphOrigPopup) Menu.prototype.popup = g.__gwEphOrigPopup;
+      delete g.__gwEphOrigPopup;
+      delete g.__gwEphMenu;
+    });
+  }
+}
+
+test('an ephemeral url visit freezes like a placed tile, and stays frozen in its workspace', async ({ electronApp, window, gw }) => {
+  await gw.enterPlugin('home');
+  const scratchGridID = await gw.scratchGridID('home');
+  const f = await gw.focused();
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('workspace', wx, wy);
+  await gw.descendCell(wx, wy);
+  await expect.poll(() => workspaceDepth(window)).toBe(1);
+
+  const visit = await openVisit(window, gw, `${gw.origin}/wasm_exec.js?frz=1`);
+  const live = liveURL(electronApp, 'frz=');
+  await expect.poll(live, { timeout: 15_000 }).toMatchObject({ loading: false });
+  const row = async () =>
+    ((await gw.getGrid(scratchGridID)).tiles ?? []).find((t: any) => sameID(String(t.id), visit));
+
+  await freezeViaCircle(electronApp, window);
+  await expect.poll(async () => (await live()).url, { timeout: 15_000 }).toBe('');
+  await expect.poll(async () => Boolean((await row())?.urlFrozen), { timeout: 10_000 }).toBe(true);
+
+  await gw.leaveWorkspace();
+  await expect.poll(() => workspaceDepth(window)).toBe(0);
+  await gw.descendCell(wx, wy);
+  await expect.poll(() => workspaceDepth(window)).toBe(1);
+  await gw.waitIdle();
+  await window.waitForTimeout(1_000); // give a wrong go-live time to fire
+  expect((await live()).url, 'a frozen visit reopens frozen').toBe('');
+  expect(Boolean((await row())?.urlFrozen)).toBe(true);
+
+  const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
+  expect(e.notices, 'no notices from the freeze').toHaveLength(0);
+});
+
+test('a frozen ephemeral url visit is still deleted on ascent', async ({ electronApp, window, gw }) => {
+  await gw.enterPlugin('home');
+  const scratchGridID = await gw.scratchGridID('home');
+  const visit = await openVisit(window, gw, `${gw.origin}/wasm_exec.js?frzgone=1`);
+  const live = liveURL(electronApp, 'frzgone=');
+  await expect.poll(live, { timeout: 15_000 }).toMatchObject({ loading: false });
+  const row = async () =>
+    ((await gw.getGrid(scratchGridID)).tiles ?? []).find((t: any) => sameID(String(t.id), visit));
+
+  await freezeViaCircle(electronApp, window);
+  await expect.poll(async () => Boolean((await row())?.urlFrozen), { timeout: 10_000 }).toBe(true);
+  await gw.middleClickCell(0, 0);
+  await expect
+    .poll(async () => (await row()) === undefined, { message: 'the ascent deletes the frozen visit', timeout: 10_000 })
+    .toBe(true);
+  await gw.waitIdle();
+  const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
+  expect(e.notices, 'no notices from the freeze and retire').toHaveLength(0);
+});

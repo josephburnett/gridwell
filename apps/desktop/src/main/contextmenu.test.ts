@@ -46,7 +46,6 @@ function baseParams(over: Partial<ContextParams> = {}): ContextParams {
     editFlags: { canCut: false, canCopy: false, canPaste: false },
     canGoBack: false,
     canGoForward: false,
-    canFreeze: false,
     ...over,
   };
 }
@@ -59,7 +58,7 @@ const labels = (t: ReturnType<typeof urlContextMenuTemplate>) =>
 test('navigation items are always present', () => {
   const { actions } = spyActions();
   const t = urlContextMenuTemplate(baseParams(), actions);
-  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload']);
+  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload', 'Freeze Page']);
 });
 
 // A right-click over a link must offer "Copy Link Address", and clicking it
@@ -69,7 +68,7 @@ test('a link yields Open Link + Copy Link Address that copy the href', () => {
   const url = 'https://example.com/target?x=1';
   const t = urlContextMenuTemplate(baseParams({ linkURL: url }), actions);
 
-  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload']);
+  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload', 'Freeze Page']);
 
   const copy = t.find((i) => i.label === 'Copy Link Address');
   assert.ok(copy?.click, 'Copy Link Address must have a click handler');
@@ -150,21 +149,17 @@ test('Back/Forward enablement tracks the history flags', () => {
   assert.equal(calls.reload?.length, 1);
 });
 
-// Freeze Page is gated by durability. A durable tile's menu offers it and the
-// click fires the injected action, while an ephemeral visit has nothing to
-// re-descend into and gets no item. Clearing browser state is the
-// `gridwell clear-browser-data` CLI and no menu item.
-test('Freeze Page appears only for a durable tile and fires the action', () => {
+// Every live view offers Freeze Page, an ephemeral visit's like a placed
+// tile's, and the click fires the injected action. Clearing browser state is
+// the `gridwell clear-browser-data` CLI and no menu item.
+test('Freeze Page appears on every live view and fires the action', () => {
   const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(baseParams({ canFreeze: true }), actions);
+  const t = urlContextMenuTemplate(baseParams(), actions);
   const item = t.find((i) => i.label === 'Freeze Page');
-  assert.ok(item, 'a durable tile offers Freeze Page');
+  assert.ok(item, 'a live view offers Freeze Page');
   item!.click!();
   assert.equal((calls.freeze ?? []).length, 1);
-
-  const eph = urlContextMenuTemplate(baseParams(), actions);
-  assert.ok(!labels(eph).includes('Freeze Page'), 'an ephemeral visit offers no freeze');
-  assert.ok(!eph.some((i) => i.label?.startsWith('Clear Site Data')), 'clear site data is gone');
+  assert.ok(!t.some((i) => i.label?.startsWith('Clear Site Data')), 'clear site data is gone');
 });
 
 // The choice menu is a renderer declaration rendered verbatim: one radio row
@@ -223,7 +218,7 @@ test('a choice that declares no state is an action row, not an unchecked radio',
 test('every url menu row reports its own label before it acts', () => {
   const { actions, calls } = spyActions();
   const t = urlContextMenuTemplate(
-    baseParams({ linkURL: 'https://x.test/a', isEditable: true, canFreeze: true }),
+    baseParams({ linkURL: 'https://x.test/a', isEditable: true }),
     actions,
   );
   const rows = t.filter((i) => i.label);

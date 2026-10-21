@@ -134,7 +134,7 @@ function kinds(r: Rig, kind: string): TraceEvent[] {
 
 test('a page that closes itself retires its entry: one notice, the renderer told, nothing throws', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/7', 'https://accounts.example/signinclose', BOUNDS, 0, '', false, false, false, 3);
+  await r.reg.place('p1', 'u1/7', 'https://accounts.example/signinclose', BOUNDS, 0, '', false, false, 3);
   const view = r.views[0];
 
   view.destroy();
@@ -162,7 +162,7 @@ test('a page that closes itself retires its entry: one notice, the renderer told
 
 test('a view whose renderer died is retired like one that closed: one notice, the renderer told, the page closed', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS, 0, '', true, false, true, 4);
+  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS, 0, '', false, true, 4);
   const view = r.views[0];
   const wc = view.webContents!;
   // Closing a crashed webContents destroys it, which must not announce twice.
@@ -259,11 +259,11 @@ test('a live view whose stack Chromium refuses is still reported', async () => {
 
 test('a move re-keys the view onto the new pane: its bounds, no reload, and every event under the new id', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
   const view = r.views[0];
   const wc = view.webContents!;
 
-  r.reg.move('p1', 'w1:p1', { x: 100.4, y: 50, width: 600, height: 400 }, true, false, true);
+  r.reg.move('p1', 'w1:p1', { x: 100.4, y: 50, width: 600, height: 400 }, false, true);
 
   assert.equal(r.views.length, 1, 'a move made a second view');
   assert.equal(wc.loads, 1, 'a move reloaded the page');
@@ -295,7 +295,7 @@ test('a move into a hidden pane parks the view at the size it had, and one with 
   await r.reg.place('w1:p1', 'u1/9', SLACK, BOUNDS);
   const view = r.views[0];
 
-  r.reg.move('w1:p1', 'p1', undefined, true, true, false);
+  r.reg.move('w1:p1', 'p1', undefined, true, false);
 
   assert.ok(view.bounds.x < -1000, 'a hidden move left the view on screen');
   assert.equal(view.bounds.width, BOUNDS.width, 'a move with no bounds resized the page');
@@ -308,16 +308,16 @@ test('a park still taking its preview for the old pane does not park the view it
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
   const view = r.views[0];
   r.reg.setHidden('p1', true, false); // waits on its preview before it parks
-  r.reg.move('p1', 'w1:p1', BOUNDS, true, false, true);
+  r.reg.move('p1', 'w1:p1', BOUNDS, false, true);
   await settle();
   assert.deepEqual(view.bounds, BOUNDS, 'the stale park moved the view off screen');
 });
 
 test('a view that holds OS focus and moves to an unfocused pane gives the focus back', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
   r.views[0].webContents!.focused = true;
-  r.reg.move('p1', 'w1:p1', BOUNDS, true, false, false);
+  r.reg.move('p1', 'w1:p1', BOUNDS, false, false);
   assert.deepEqual(r.steals, ['w1:p1']);
   assert.deepEqual(kinds(r, 'steal').map((ev) => ev.kv), [{ view: 'w1:p1', phase: 'move' }]);
 });
@@ -326,7 +326,7 @@ test('a view that holds OS focus and moves to an unfocused pane gives the focus 
 // steal the guard bounced.
 test('a focus grab on an unfocused pane is bounced and traced with its phase', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, false);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, false);
   const wc = r.views[0].webContents!;
   wc.focused = true;
   wc.emit('focus');
@@ -346,7 +346,7 @@ function keyDown(wc: FakeWC, key: string): boolean {
 
 test('a parked view hands Esc to the renderer; a shown one keeps it for its page', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
   const wc = r.views[0].webContents!;
 
   assert.equal(keyDown(wc, 'Escape'), false, 'a shown view gave its page\'s Esc away');
@@ -362,7 +362,7 @@ test('a parked view hands Esc to the renderer; a shown one keeps it for its page
 test('a reload loads the address again in the same view, and a pane with no view ignores it', async () => {
   const r = rig();
   const page = 'http://127.0.0.1:1/content/tok/p%2F~dA/';
-  await r.reg.place('p1', 'p/~dA', page, BOUNDS, 0, '', true, false, true);
+  await r.reg.place('p1', 'p/~dA', page, BOUNDS, 0, '', false, true);
   const wc = r.views[0].webContents!;
 
   r.reg.reload('p1', page);
@@ -377,13 +377,13 @@ test('a reload loads the address again in the same view, and a pane with no view
 
 test('a move from a pane that holds no view is refused', async () => {
   const r = rig();
-  assert.throws(() => r.reg.move('p1', 'w1:p1', BOUNDS, true, false, true), /no live view to move/);
+  assert.throws(() => r.reg.move('p1', 'w1:p1', BOUNDS, false, true), /no live view to move/);
 });
 
 test('a restore on a moved view belongs to the view: a refusal reports under the new pane', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, STACK);
-  r.reg.move('p1', 'w1:p1', BOUNDS, true, false, true);
+  r.reg.move('p1', 'w1:p1', BOUNDS, false, true);
   r.views[0].webContents!.restoreRejects[0](new Error(`ERR_FAILED (-2) loading '${SLACK}'`));
   await settle();
   assert.equal(r.errors.length, 1);
@@ -392,12 +392,12 @@ test('a restore on a moved view belongs to the view: a refusal reports under the
 
 test('a gone event names the view by the gen it was placed with, which a move keeps', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true, 1);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true, 1);
   const first = r.views[0];
   await r.reg.remove('p1');
   // The same tile live again in the same pane: only the gen tells the views apart.
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', true, false, true, 2);
-  r.reg.move('p1', 'w1:p1', BOUNDS, true, false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true, 2);
+  r.reg.move('p1', 'w1:p1', BOUNDS, false, true);
 
   first.webContents!.emit('destroyed');
   assert.deepEqual(r.gone, [], 'the removed view announced an end');

@@ -218,7 +218,7 @@ app.whenReady().then(async () => {
   // A view placed while the menu is open must land at PARK_COORD, never on
   // top of the canvas overlay for even one round trip.
   const hiddenBounds = { x: 10, y: 20, width: 300, height: 200 };
-  await registry.place('pane1h', 'u1/45', DATA_URL, hiddenBounds, 0, '', false, true);
+  await registry.place('pane1h', 'u1/45', DATA_URL, hiddenBounds, 0, '', true);
   const parked = registry.viewBoundsFor('pane1h');
   if (parked?.x !== PARK_COORD) fail(`place(hidden=true) did not park the view (x=${parked?.x})`);
   registry.setHidden('pane1h', false, true);
@@ -338,7 +338,7 @@ app.whenReady().then(async () => {
   // keystrokes in a page they never clicked on.
   const steals: string[] = [];
   const regF = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push(ev.paneId) });
-  await regF.place('paneU', 'u1/47', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false);
+  await regF.place('paneU', 'u1/47', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false);
   if (regF.focusedFor('paneU') !== false) {
     fail(`place(focused=false) recorded focused=${String(regF.focusedFor('paneU'))}`);
   }
@@ -353,7 +353,7 @@ app.whenReady().then(async () => {
   // The focused case is not bounced, or every legitimate descent would fight
   // the guard.
   const regG = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push('WRONG:' + ev.paneId) });
-  await regG.place('paneG', 'u1/48', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, true);
+  await regG.place('paneG', 'u1/48', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, true);
   if (regG.focusedFor('paneG') !== true) fail('place(focused=true) did not record focused');
   const wcG = regG.webContentsFor('paneG')!;
   wcG.focus();
@@ -383,7 +383,7 @@ app.whenReady().then(async () => {
       rootView.webContents.focus();
     },
   });
-  await regC.place('paneC', 'u1/49', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false);
+  await regC.place('paneC', 'u1/49', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false);
   const wcC = regC.webContentsFor('paneC')!;
   // Let the placement's own grab be bounced and focus land back on the root, so
   // the click below starts from an unfocused live pane whose view does not hold
@@ -410,7 +410,7 @@ app.whenReady().then(async () => {
   // starts empty.
   const armSteal = async (paneId: string, tileId: string, steals: string[]) => {
     const reg = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push(ev.paneId) });
-    await reg.place(paneId, tileId, DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false);
+    await reg.place(paneId, tileId, DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false);
     const wc = reg.webContentsFor(paneId)!;
     await new Promise((r) => setTimeout(r, 800));
     rootView.webContents.focus();
@@ -563,7 +563,7 @@ app.whenReady().then(async () => {
   // view, or a focus move would blank live content.
   const regFo = new WebviewRegistry(win, {});
   const foBounds = { x: 5, y: 6, width: 400, height: 300 };
-  await regFo.place('paneFo', 'u1/63', DATA_URL, foBounds, 0, '', false, false, false);
+  await regFo.place('paneFo', 'u1/63', DATA_URL, foBounds, 0, '', false, false);
   const beforeFo = regFo.viewBoundsFor('paneFo');
   regFo.setHidden('paneFo', false, true);
   if (regFo.focusedFor('paneFo') !== true) fail('a focus-only setHidden was not recorded on the entry');
@@ -797,7 +797,7 @@ app.whenReady().then(async () => {
     onError: (ev) => crashErrs.push(ev),
     onViewGone: (ev) => crashGone.push(`${ev.paneId} ${ev.tileId} ${ev.gen}`),
   });
-  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false, 5);
+  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, 5);
   await waitForFirstFrame(regCrash, 'paneCrash', 'crash scenario');
   const wcCrash = regCrash.webContentsFor('paneCrash')!;
   wcCrash.forcefullyCrashRenderer();
@@ -814,17 +814,16 @@ app.whenReady().then(async () => {
   }
   // getURL() is read on a webContents whose renderer just died.
   if (!crashSaid[0].includes('data:text/html')) fail(`the crash notice does not name the page: ${crashSaid[0]}`);
-  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, false, 6);
+  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, 6);
   await waitForFirstFrame(regCrash, 'paneCrash', 'crash recovery');
   if (crashErrs.length !== 1) fail(`the new view raised notices: ${JSON.stringify(crashErrs)}`);
   await regCrash.remove('paneCrash');
   console.log('crash ok: the view retired with its gen, the webContents closed, one notice, and a new place is live');
 
-  // ── Freeze Page appears only where there is something to freeze ─────────
-  // canFreeze is the registry's half of the gating; contextmenu.test.ts owns
-  // the template's arms. An ephemeral visit has no tile to re-descend into, so
-  // offering the item would promise a freeze that lands nowhere. The menu is
-  // popped through a stand-in, because a native popup under xvfb cannot be read.
+  // ── Freeze Page appears on every live view ─────────────────────────────
+  // An ephemeral visit freezes like a placed tile, so the registry takes no
+  // input that could withhold the item. The menu is popped through a stand-in,
+  // because a native popup under xvfb cannot be read.
   const menuCtor = Menu as unknown as {
     buildFromTemplate: (t: { label?: string }[]) => { popup: (o?: unknown) => void };
   };
@@ -835,18 +834,13 @@ app.whenReady().then(async () => {
     return { popup: () => {} };
   };
   const regMenu = new WebviewRegistry(win, {});
-  await regMenu.place('paneEph', 'u1/73', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false);
-  await regMenu.place('paneDur', 'u1/74', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', true);
-  regMenu.showMenu('paneEph');
-  const ephItems = popped.map((i) => i.label).filter(Boolean);
-  regMenu.showMenu('paneDur');
-  const durItems = popped.map((i) => i.label).filter(Boolean);
+  await regMenu.place('paneM', 'u1/73', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  regMenu.showMenu('paneM');
+  const menuItems = popped.map((i) => i.label).filter(Boolean);
   menuCtor.buildFromTemplate = realBuildMenu;
-  if (ephItems.includes('Freeze Page')) fail(`an ephemeral visit offered Freeze Page: ${ephItems.join(',')}`);
-  if (!durItems.includes('Freeze Page')) fail(`a durable tile did not offer Freeze Page: ${durItems.join(',')}`);
-  await regMenu.remove('paneEph');
-  await regMenu.remove('paneDur');
-  console.log('canFreeze ok: offered on the durable tile, withheld from the ephemeral visit');
+  if (!menuItems.includes('Freeze Page')) fail(`a live view did not offer Freeze Page: ${menuItems.join(',')}`);
+  await regMenu.remove('paneM');
+  console.log('freeze ok: every live view offers Freeze Page');
 
   // ── removeAll clears every pane, and a dead view does not stop it ─────
   // The before-quit flush in index.ts is its only caller, so nothing else

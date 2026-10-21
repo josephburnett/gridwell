@@ -13,8 +13,6 @@ interface ContextParams {
   editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
   canGoBack: boolean;
   canGoForward: boolean;
-  // An ephemeral visit has nothing to re-descend into, so no Freeze Page.
-  canFreeze: boolean;
 }
 
 // webviews.ts wires these to the clipboard and the view's webContents.
@@ -83,9 +81,7 @@ export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): Men
   items.push(row('Back', () => a.back(), p.canGoBack));
   items.push(row('Forward', () => a.forward(), p.canGoForward));
   items.push(row('Reload', () => a.reload()));
-  if (p.canFreeze) {
-    items.push(row('Freeze Page', () => a.freeze()));
-  }
+  items.push(row('Freeze Page', () => a.freeze()));
 
   return items;
 }

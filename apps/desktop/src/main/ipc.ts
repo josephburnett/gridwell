@@ -117,8 +117,6 @@ export interface PlaceArgs {
   contentZoom?: number;
   // The persisted back-stack; when valid the view restores it.
   history?: string;
-  // Whether the tile survives ascent, which gates Freeze Page.
-  durable?: boolean;
   // client/urlview.Gen, which ViewGoneEvent echoes.
   gen?: number;
 }
@@ -130,9 +128,8 @@ export interface MoveArgs {
   toPaneId: string;
   // Absent keeps the view's own bounds, for a pane not laid out yet.
   bounds?: Bounds;
-  // The same three verdicts PlaceArgs carries, for the pane the view now
+  // The same two verdicts PlaceArgs carries, for the pane the view now
   // serves.
-  durable: boolean;
   hidden: boolean;
   focused: boolean;
 }

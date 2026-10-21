@@ -50,10 +50,6 @@ type Input struct {
 	// ShellRefreshVisible is shellconn.DecideShellRefreshVisible's Show. The
 	// caller must resolve it lazily: resolving it kicks a liveness probe.
 	ShellRefreshVisible bool
-	// Durable is whether the descended row is one the pane's own grid holds.
-	// An ephemeral visit is deleted on ascent, so there is nothing for a
-	// standing freeze to be about.
-	Durable bool
 }
 
 // String is the mode's name, the one spelling of it outside this package.
@@ -91,9 +87,7 @@ func Decide(in Input) Mode {
 	case rpc.DescentShell:
 		switch {
 		case in.ShellLive:
-			if in.Durable {
-				return ModeFreeze
-			}
+			return ModeFreeze
 		case in.ShellRefreshVisible:
 			return ModeGoLive
 		}

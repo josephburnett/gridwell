@@ -46,9 +46,3 @@ func DecideUnloadURLState(owns, navDirty bool, lastTitle string) (Capture, bool)
 	}
 	return Writeback(true, owns, Capture{Title: lastTitle})
 }
-
-// Durable is whether a live view offers the Freeze Page gesture: its row is
-// not possibly an ephemeral visit.
-func Durable(possiblyEphemeral bool) bool {
-	return !possiblyEphemeral
-}

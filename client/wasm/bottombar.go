@@ -231,27 +231,11 @@ func (a *App) barSlotMode(p *pane.Pane) barslot.Mode {
 		in.ContentPending = s == contentrow.Pending
 	}
 	if in.Content == rpc.DescentShell {
-		// The pane's own grid, with no scratch fallback: an ephemeral visit
-		// resolves to nothing, which is exactly what Durable means.
-		t, ok := a.descendedGridTile(p)
-		in.Durable = ok
-		if ok && !in.ShellLive {
+		if t, ok := a.descendedTile(p); ok && !in.ShellLive {
 			in.ShellRefreshVisible = a.shellRefreshButtonVisible(t)
 		}
 	}
 	return barslot.Decide(in)
-}
-
-// descendedGridTile resolves the descended row from the pane's own grid, with
-// no scratch-grid fallback, so an ephemeral visit has nothing for the slot's
-// go-live and refresh actions to open.
-func (a *App) descendedGridTile(p *pane.Pane) (*gridwellv1.Tile, bool) {
-	g, ok := a.c.Grid(a.gridIDForPane(p))
-	if !ok {
-		return nil, false
-	}
-	t, ok := g.Tiles[p.ContentID()]
-	return t, ok
 }
 
 // drawBarSlot paints the bar's right-end circle. barslot.Decide says which
@@ -292,7 +276,7 @@ func (a *App) barSlotClick(button int) {
 	case barslot.ModeGoLive:
 		// One verdict, one glyph; which stream reopens is the descended
 		// tile's kind, which the pane already knows.
-		if t, ok := a.descendedGridTile(p); ok {
+		if t, ok := a.descendedTile(p); ok {
 			if a.isShellDescent(p) {
 				// The verdict that drew this glyph resolved the key.
 				if key, ok := a.shellKey(t, true); ok {
@@ -315,7 +299,7 @@ func (a *App) barSlotClick(button int) {
 		a.draw()
 	}
 	// ModeNothing: a markdown descent's slot is the DOM toggle button, which
-	// handles its own clicks; an ephemeral shell visit has no row to freeze.
+	// handles its own clicks.
 }
 
 // openURLInNewTab is the frozen host's answer to "descend live". A tile with

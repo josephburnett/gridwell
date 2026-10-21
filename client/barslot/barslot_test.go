@@ -59,7 +59,7 @@ func TestDecide(t *testing.T) {
 		},
 		{
 			"a frozen shell whose refresh shows goes live",
-			Input{Descent: true, Content: rpc.DescentShell, Durable: true, ShellRefreshVisible: true},
+			Input{Descent: true, Content: rpc.DescentShell, ShellRefreshVisible: true},
 			ModeGoLive,
 		},
 		{
@@ -68,14 +68,10 @@ func TestDecide(t *testing.T) {
 			ModeNothing,
 		},
 		{
-			"a live shell freezes",
-			Input{Descent: true, Content: rpc.DescentShell, ShellLive: true, Durable: true, ShellRefreshVisible: true},
-			ModeFreeze,
-		},
-		{
-			"an ephemeral live shell has no row to freeze onto",
+			// An ephemeral visit's row takes a freeze like a placed tile's.
+			"a live shell freezes, wherever its row is",
 			Input{Descent: true, Content: rpc.DescentShell, ShellLive: true},
-			ModeNothing,
+			ModeFreeze,
 		},
 		{
 			"a markdown descent shows nothing",
@@ -92,7 +88,7 @@ func TestDecide(t *testing.T) {
 			// hand a markdown descent a url or a shell button.
 			"a markdown descent ignores every live fact",
 			Input{Descent: true, URLLive: true, ShellLive: true,
-				Durable: true, ShellRefreshVisible: true, CanLiveURL: true},
+				ShellRefreshVisible: true, CanLiveURL: true},
 			ModeNothing,
 		},
 	}
@@ -112,7 +108,6 @@ func TestDecideGridIgnoresDescentFacts(t *testing.T) {
 		Content:             rpc.DescentURL,
 		URLLive:             true,
 		ShellLive:           true,
-		Durable:             true,
 		ShellRefreshVisible: true,
 		CanLiveURL:          true,
 	}

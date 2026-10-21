@@ -33,8 +33,6 @@ type urlView struct {
 	// owns is urlview.Owns for the row: whether its address, title and
 	// trail are the node's to write.
 	owns bool
-	// durable is urlview.Durable for the row.
-	durable bool
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
@@ -117,7 +115,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane.
 	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
-		t.UrlHistory, v.durable, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
+		t.UrlHistory, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
 		func() { a.dropURLView(p.ID, v) })
 	a.draw()
 }
@@ -126,11 +124,6 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 func (a *App) urlViewIn(p *pane.Pane, tileID string, owns bool) *urlView {
 	v := &urlView{tileID: tileID, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(),
 		path: slices.Clone(p.Path()), owns: owns}
-	possiblyEphemeral := false
-	if tile, ok := a.descendedTile(p); ok {
-		possiblyEphemeral = a.possiblyEphemeral(p, tile)
-	}
-	v.durable = urlview.Durable(possiblyEphemeral)
 	return v
 }
 
@@ -187,7 +180,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 		b = &cb
 	}
 	hidden := b == nil || pane.ParkSurface(a.canvasGesture(), to.ID)
-	a.bridgeMove(fromID, to.ID, b, v.durable, hidden, to.ID == a.tree.Focus,
+	a.bridgeMove(fromID, to.ID, b, hidden, to.ID == a.tree.Focus,
 		func() { a.dropURLView(to.ID, v) })
 	a.draw()
 }
@@ -292,7 +285,7 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 		return
 	}
 	tile, ok := a.descendedTile(p)
-	if !ok || tile.Kind != rpc.KindURL || a.possiblyEphemeral(p, tile) {
+	if !ok || tile.Kind != rpc.KindURL {
 		return
 	}
 	a.postFrozen(tile, true, func() {
@@ -311,7 +304,7 @@ func (a *App) postFrozen(row *gridwellv1.Tile, frozen bool, after func()) {
 	var once sync.Once
 	tileID, claim := row.Id, row.UrlFrozen
 	a.post(write{
-		label: "SetFrozen", gid: a.gridIDOfTile(tileID), id: tileID,
+		label: "SetFrozen", gid: a.gridIDOfTile(tileID), id: tileID, chain: tileID,
 		// Its own source, because the teardown's capture reports under
 		// "urlfreeze" on the same gesture and tile.
 		source: "frozen", failText: "freeze state save failed",

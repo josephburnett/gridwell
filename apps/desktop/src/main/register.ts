@@ -64,7 +64,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.durable ?? false, a.hidden ?? false, a.focused ?? false, a.gen ?? 0);
+    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.hidden ?? false, a.focused ?? false, a.gen ?? 0);
   });
 
   ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {
@@ -80,7 +80,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.move, (_e, a: MoveArgs): void => {
-    registry.move(a.fromPaneId, a.toPaneId, a.bounds, a.durable, a.hidden, a.focused);
+    registry.move(a.fromPaneId, a.toPaneId, a.bounds, a.hidden, a.focused);
   });
 
   ipcMain.handle(CH.remove, async (_e, a: RemoveArgs): Promise<FreezeResult> => {
