@@ -261,7 +261,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 // body is the plugin's.
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
-	if !ok || p.ViewPending || !rpc.TextDocument(file) || a.possiblyEphemeral(p, file) {
+	if !ok || p.ViewPending || !rpc.TextDocument(file) {
 		return
 	}
 	r := paneRectFor(a, p)
@@ -283,7 +283,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
 		t.TextX, t.TextY, t.TextMode = next.X, next.Y, next.Mode
 	})
-	a.postFramingPersist("SetTextScroll", gid, file.Id, "",
+	a.postFramingPersist("SetTextScroll", gid, file.Id, file.Id,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetTile(ctx, req)
 			return err
