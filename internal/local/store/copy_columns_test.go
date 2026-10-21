@@ -19,7 +19,7 @@ func TestCopyPreservesAllContentColumns(t *testing.T) {
 	root := rootID(t, s)
 	ctx := context.Background()
 
-	tile, err := s.CreateURL(ctx, root, 0, 0, 2, 1, "https://example.com")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 2, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

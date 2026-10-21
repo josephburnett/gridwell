@@ -13,7 +13,7 @@ func TestUserRenameWinsOverCaptures(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestURLTitleCaptureStillWorksUnnamed(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}

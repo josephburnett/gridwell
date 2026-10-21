@@ -96,7 +96,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	url, err := s.CreateURL(ctx, root, 4, 1, 1, 1, "https://example.com")
+	url, err := s.CreateURL(ctx, root, 4, 1, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

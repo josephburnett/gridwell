@@ -81,7 +81,7 @@ func TestFindText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	named, err := s.CreateURL(ctx, root, 3, 0, 1, 1, "https://example.com")
+	named, err := s.CreateURL(ctx, root, 3, 0, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

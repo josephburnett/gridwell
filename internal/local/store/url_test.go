@@ -12,7 +12,7 @@ import (
 // createURLTileForTest creates a URL tile and returns it.
 func createURLTileForTest(t *testing.T, s *Store, root string, x int64, url string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateURL(context.Background(), root, x, 0, 1, 1, url)
+	tile, err := s.CreateURL(context.Background(), root, x, 0, 1, 1, url, "")
 	if err != nil {
 		t.Fatalf("create URL tile: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestSetURLStateForksSharedGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateURL(ctx, doorA.ChildGridId, 0, 0, 1, 1, "https://a.example"); err != nil {
+	if _, err := s.CreateURL(ctx, doorA.ChildGridId, 0, 0, 1, 1, "https://a.example", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -269,7 +269,7 @@ func TestURLHistoryRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://a")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://a", "")
 	if err != nil {
 		t.Fatalf("CreateURL: %v", err)
 	}

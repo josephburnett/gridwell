@@ -49,7 +49,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	url, err := s.CreateURL(ctx, root, 3, 0, 2, 2, "https://example.com")
+	url, err := s.CreateURL(ctx, root, 3, 0, 2, 2, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

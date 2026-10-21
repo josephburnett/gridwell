@@ -287,7 +287,7 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
 			return tileResp(p.st.CreateScratchURL(ctx, t.UrlString))
 		}
-		return tileResp(p.st.CreateURL(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.UrlString))
+		return tileResp(p.st.CreateURL(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.UrlString, t.AltText))
 	case rpc.KindShell:
 		// Likewise an ephemeral shell, deleted on ascent.
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {

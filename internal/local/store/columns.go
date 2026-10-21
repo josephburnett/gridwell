@@ -127,7 +127,8 @@ captured.`,
 	},
 	{
 		name: "alt_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 2,
-		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture:
+		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture
+and by a url born with a name (a copy across namespaces, insertURLRow):
 automatic captures (a url's page title on freeze, a shell's foreground
 command on detach) and a plugin's listing must not overwrite a name the
 user set.

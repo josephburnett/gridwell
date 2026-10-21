@@ -108,7 +108,7 @@ func TestEventCreateURLEmitsTileChanged(t *testing.T) {
 	ch, cancel := s.SubscribeEvents()
 	defer cancel()
 
-	if _, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com"); err != nil {
+	if _, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", ""); err != nil {
 		t.Fatal(err)
 	}
 	got := countKinds(drainEvents(t, ch))

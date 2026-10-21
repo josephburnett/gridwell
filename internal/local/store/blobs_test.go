@@ -58,7 +58,7 @@ func TestBlobSelfDescribing(t *testing.T) {
 		t.Errorf("text blob media = %q, want %q", mt, mediaMarkdown)
 	}
 
-	url, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com")
+	url, err := s.CreateURL(ctx, root, 2, 0, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

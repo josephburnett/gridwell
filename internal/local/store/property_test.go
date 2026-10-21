@@ -83,7 +83,7 @@ func TestPropertyRefcountAndOverlap(t *testing.T) {
 			case 1:
 				n, err = s.CreateText(ctx, gridID, x, y, w, h, []byte(fmt.Sprintf("# tile %d", i)))
 			case 2:
-				n, err = s.CreateURL(ctx, gridID, x, y, w, h, fmt.Sprintf("https://example.com/%d", i))
+				n, err = s.CreateURL(ctx, gridID, x, y, w, h, fmt.Sprintf("https://example.com/%d", i), "")
 			case 3:
 				n, err = s.CreateShell(ctx, gridID, x, y, w, h)
 			}

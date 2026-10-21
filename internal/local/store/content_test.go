@@ -108,7 +108,7 @@ func TestWriteContentURLSetsAddress(t *testing.T) {
 	root := rootID(t, s)
 
 	// An address-less url tile is the legal unconfigured state.
-	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "")
+	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "", "")
 	if err != nil {
 		t.Fatalf("create empty url: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestRenameTileVersionedAndLatches(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com")
+	url, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatalf("create url: %v", err)
 	}

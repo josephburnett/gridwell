@@ -144,7 +144,7 @@ func TestCreateURLTile(t *testing.T) {
 	s := newTestStore(t)
 	root := rootID(t, s)
 	ctx := context.Background()
-	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 1, 1, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestCreateURLTile(t *testing.T) {
 		t.Errorf("URL tile got BlobID = %d, want 0", tile.BlobId)
 	}
 	// Whitespace around the URL should be trimmed.
-	tile2, err := s.CreateURL(ctx, root, 1, 0, 1, 1, "  https://example.org/path\n")
+	tile2, err := s.CreateURL(ctx, root, 1, 0, 1, 1, "  https://example.org/path\n", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestCreateURLTile(t *testing.T) {
 		t.Errorf("URLString = %q (whitespace not trimmed)", tile2.UrlString)
 	}
 	// Disallowed scheme → ErrInvalidArgument.
-	_, err = s.CreateURL(ctx, root, 2, 0, 1, 1, "javascript:alert(1)")
+	_, err = s.CreateURL(ctx, root, 2, 0, 1, 1, "javascript:alert(1)", "")
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("javascript: scheme: got %v, want ErrInvalidArgument", err)
 	}

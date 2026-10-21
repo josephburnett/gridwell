@@ -78,7 +78,7 @@ func textSubject(t *testing.T, s *Store, ctx context.Context, root string) *grid
 
 func urlSubject(t *testing.T, s *Store, ctx context.Context, root string) *gridwellv1.Tile {
 	t.Helper()
-	tile, err := s.CreateURL(ctx, root, 0, 0, 2, 2, "https://example.com")
+	tile, err := s.CreateURL(ctx, root, 0, 0, 2, 2, "https://example.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -216,13 +216,14 @@ func insertDoorRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h, childGri
 }
 
 // insertURLRow is the single place the url INSERT lives, shared by CreateURL
-// and CreateScratchURL so they cannot drift.
-func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url string, now int64) (int64, error) {
+// and CreateScratchURL so they cannot drift. A name a url is born with is
+// latched as typed, because only a capture names a url automatically.
+func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url, name string, now int64) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO tiles (grid_id, kind, x, y, w, h,
-			url_string, created_at, updated_at)
-		VALUES (?, 'url', ?, ?, ?, ?, ?, ?, ?)`,
-		gridID, x, y, w, h, url, now, now)
+			url_string, alt_text, alt_user, created_at, updated_at)
+		VALUES (?, 'url', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		gridID, x, y, w, h, url, name, name != "", now, now)
 	if err != nil {
 		return 0, fmt.Errorf("insert url tile: %w", err)
 	}
@@ -231,15 +232,16 @@ func insertURLRow(ctx context.Context, tx *sql.Tx, gridID, x, y, w, h int64, url
 
 // CreateURL creates a url tile. An empty url is the legal unconfigured state:
 // drop first, prompt on first descent, and the address arrives later through
-// WriteContent's url arm.
-func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, url string) (*gridwellv1.Tile, error) {
+// WriteContent's url arm. A name is the one a copy across namespaces carries
+// (CLAUDE.md, 2026-10-20); a new url has none.
+func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, url, name string) (*gridwellv1.Tile, error) {
 	urlString := strings.TrimSpace(url)
 	if urlString != "" && !rpc.HTTPAddress(urlString) {
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
 	return s.createTile(ctx, gridID, x, y, w, h,
 		func(tx *sql.Tx, gid, now int64) (int64, error) {
-			return insertURLRow(ctx, tx, gid, x, y, w, h, urlString, now)
+			return insertURLRow(ctx, tx, gid, x, y, w, h, urlString, name, now)
 		})
 }
 
@@ -282,7 +284,7 @@ func (s *Store) CreateScratchURL(ctx context.Context, url string) (*gridwellv1.T
 		return nil, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
 	}
 	return s.createScratch(ctx, func(tx *sql.Tx, gridID, now int64) (int64, error) {
-		return insertURLRow(ctx, tx, gridID, 0, 0, 1, 1, urlString, now)
+		return insertURLRow(ctx, tx, gridID, 0, 0, 1, 1, urlString, "", now)
 	})
 }
 
