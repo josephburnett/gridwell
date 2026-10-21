@@ -263,8 +263,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   already is writes nothing and loses nothing. The APIs refuse a user write
   that names no claim (`rpc.UnclaimedWrite`, which the client checks too), so
   only the node's own writers (a reap, the boot sweep) reach a namespace
-  without one; the ephemeral cleanup claims the row its visit held
-  (2026-10-14). A select is the decided exception: it names the tiles it
+  without one; the ephemeral cleanup claims the row as its visit's own
+  writes left it (2026-10-14, 2026-10-20). A select is the decided exception: it names the tiles it
   adds and removes and claims nothing (2026-10-17). Only framing (pan and
   zoom, the text scroll, content zoom), captures and a select carry no claim. A workspace tile's layout counted as framing
   until this decision.
@@ -537,6 +537,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   tile keeps that preview, the address and the tmux keep existing, a
   copy taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
+- An ephemeral visit is a tile with no home grid and no other difference
+  (2026-10-20): a url visit writes its address, title and freeze wherever
+  its row is (`urlview.WriteAddress`, `urlview.Writeback`), and ephemeral
+  means retirement only. The row is deleted when the visit ends and nothing
+  holds it, no other pane and no workspace tile's layout; the delete rides
+  the row's save chain behind the closing view's writes and claims the row
+  as they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
 - Shells ride the web API: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
