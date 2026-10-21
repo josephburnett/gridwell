@@ -218,3 +218,47 @@ test('a frozen ephemeral url visit is still deleted on ascent', async ({ electro
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no notices from the freeze and retire').toHaveLength(0);
 });
+
+test('an ephemeral url visit keeps its content zoom in its workspace', async ({ electronApp, window, gw }) => {
+  await gw.enterPlugin('home');
+  const scratchGridID = await gw.scratchGridID('home');
+  const f = await gw.focused();
+  const wx = Math.round(f.cx);
+  const wy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('workspace', wx, wy);
+  await gw.descendCell(wx, wy);
+  await expect.poll(() => workspaceDepth(window)).toBe(1);
+
+  const visit = await openVisit(window, gw, `${gw.origin}/wasm_exec.js?ezoom=1`);
+  const factor = () =>
+    electronApp.evaluate(({ webContents }: any) => {
+      const wc = webContents.getAllWebContents().find((w: any) => w.getURL().includes('ezoom='));
+      return wc ? wc.getZoomFactor() : 0;
+    });
+  await expect.poll(factor, { timeout: 15_000 }).toBeGreaterThan(0);
+  const base = await factor();
+  for (let i = 0; i < 3; i++) {
+    await window.keyboard.press('Control+=');
+    await gw.waitIdle();
+  }
+  const row = async () =>
+    ((await gw.getGrid(scratchGridID)).tiles ?? []).find((t: any) => sameID(String(t.id), visit));
+  await expect
+    .poll(async () => Number((await row())?.contentZoom ?? 0), {
+      message: 'the visit writes its zoom like a placed tile',
+      timeout: 10_000,
+    })
+    .toBeCloseTo(1.331, 2);
+
+  await gw.leaveWorkspace();
+  await expect.poll(() => workspaceDepth(window)).toBe(0);
+  await gw.descendCell(wx, wy);
+  await expect.poll(() => workspaceDepth(window)).toBe(1);
+  await expect
+    .poll(factor, { message: 'the visit reopens at its zoom', timeout: 15_000 })
+    .toBeGreaterThan(base * 1.2);
+
+  const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
+  expect(e.notices, 'no notices from the zoom').toHaveLength(0);
+});

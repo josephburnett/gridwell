@@ -68,8 +68,7 @@ func (a *App) contentZoomKeyFromView(paneID, key string) {
 }
 
 func (a *App) contentZoomVerdict(p *pane.Pane, t *gridwellv1.Tile, key string) contentzoom.Verdict {
-	return contentzoom.Decide(t.Kind, a.possiblyEphemeral(p, t),
-		key, contentzoom.Of(t.GetContentZoom()))
+	return contentzoom.Decide(t.Kind, key, contentzoom.Of(t.GetContentZoom()))
 }
 
 // applyContentZoom updates the cache, pokes the live surface for the kinds
@@ -93,16 +92,13 @@ func (a *App) applyContentZoom(p *pane.Pane, t *gridwellv1.Tile, v contentzoom.V
 	}
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode
 	a.draw()
-	if !v.Persist {
-		return
-	}
 	// Through the framing dispatcher like every other framing write, because
 	// a fire-and-forget call would reconcile no verdict and a transport
 	// failure would leave the zoom client-only. There is no beacon form,
 	// content zoom being the one framing write without one, so a quit inside
 	// its settle window still loses it.
 	tileID, z := t.Id, v.Next
-	a.postFramingPersist("SetContentZoom", nt.GridId, tileID,
+	a.postFramingPersist("SetContentZoom", nt.GridId, tileID, tileID,
 		func(ctx context.Context) error {
 			_, err := a.cl.SetContentZoom(ctx, tileID, z)
 			return err

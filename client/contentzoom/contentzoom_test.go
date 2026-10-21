@@ -38,36 +38,34 @@ func TestShellFontPx(t *testing.T) {
 
 func TestDecide(t *testing.T) {
 	cases := []struct {
-		name              string
-		kind              string
-		possiblyEphemeral bool
-		key               string
-		cur               float64
-		want              Verdict
+		name string
+		kind string
+		key  string
+		cur  float64
+		want Verdict
 	}{
-		{"text in", rpc.KindText, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"text in unshifted", rpc.KindText, false, KeyInAlt, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"text out", rpc.KindText, false, KeyOut, 1, Verdict{Next: 1 / Step, Consume: true, Apply: true, Persist: true}},
-		{"text reset", rpc.KindText, false, KeyReset, 2.5, Verdict{Next: 1, Consume: true, Apply: true, Persist: true}},
-		{"url in", rpc.KindURL, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"shell in", rpc.KindShell, false, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"zero reads as unzoomed by Of, not here", rpc.KindText, false, KeyIn, Of(0), Verdict{Next: Step, Consume: true, Apply: true, Persist: true}},
-		{"in stops at Max", rpc.KindText, false, KeyIn, rpc.ContentZoomMax, Verdict{Next: rpc.ContentZoomMax, Consume: true, Apply: true, Persist: true}},
-		{"out stops at Min", rpc.KindText, false, KeyOut, rpc.ContentZoomMin, Verdict{Next: rpc.ContentZoomMin, Consume: true, Apply: true, Persist: true}},
-		{"ephemeral applies without a write", rpc.KindURL, true, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true, Persist: false}},
-		{"a door is not zoomable", rpc.KindDoor, false, KeyIn, 1, Verdict{}},
-		{"a workspace tile is not zoomable", rpc.KindWorkspace, false, KeyIn, 1, Verdict{}},
-		{"an unknown kind is not zoomable", "sprocket", false, KeyIn, 1, Verdict{}},
-		{"a key outside the chord is not ours", rpc.KindText, false, "z", 1, Verdict{}},
-		{"no key is not ours", rpc.KindText, false, "", 1, Verdict{}},
+		{"text in", rpc.KindText, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true}},
+		{"text in unshifted", rpc.KindText, KeyInAlt, 1, Verdict{Next: Step, Consume: true, Apply: true}},
+		{"text out", rpc.KindText, KeyOut, 1, Verdict{Next: 1 / Step, Consume: true, Apply: true}},
+		{"text reset", rpc.KindText, KeyReset, 2.5, Verdict{Next: 1, Consume: true, Apply: true}},
+		{"url in", rpc.KindURL, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true}},
+		{"shell in", rpc.KindShell, KeyIn, 1, Verdict{Next: Step, Consume: true, Apply: true}},
+		{"zero reads as unzoomed by Of, not here", rpc.KindText, KeyIn, Of(0), Verdict{Next: Step, Consume: true, Apply: true}},
+		{"in stops at Max", rpc.KindText, KeyIn, rpc.ContentZoomMax, Verdict{Next: rpc.ContentZoomMax, Consume: true, Apply: true}},
+		{"out stops at Min", rpc.KindText, KeyOut, rpc.ContentZoomMin, Verdict{Next: rpc.ContentZoomMin, Consume: true, Apply: true}},
+		{"a door is not zoomable", rpc.KindDoor, KeyIn, 1, Verdict{}},
+		{"a workspace tile is not zoomable", rpc.KindWorkspace, KeyIn, 1, Verdict{}},
+		{"an unknown kind is not zoomable", "sprocket", KeyIn, 1, Verdict{}},
+		{"a key outside the chord is not ours", rpc.KindText, "z", 1, Verdict{}},
+		{"no key is not ours", rpc.KindText, "", 1, Verdict{}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := Decide(c.kind, c.possiblyEphemeral, c.key, c.cur)
-			if got.Consume != c.want.Consume || got.Apply != c.want.Apply || got.Persist != c.want.Persist ||
+			got := Decide(c.kind, c.key, c.cur)
+			if got.Consume != c.want.Consume || got.Apply != c.want.Apply ||
 				math.Abs(got.Next-c.want.Next) > 1e-9 {
-				t.Errorf("Decide(%q, eph=%v, %q, %v) = %+v, want %+v",
-					c.kind, c.possiblyEphemeral, c.key, c.cur, got, c.want)
+				t.Errorf("Decide(%q, %q, %v) = %+v, want %+v",
+					c.kind, c.key, c.cur, got, c.want)
 			}
 		})
 	}
@@ -78,7 +76,7 @@ func TestDecide(t *testing.T) {
 func TestEveryPressIsWritable(t *testing.T) {
 	for _, k := range []string{KeyIn, KeyOut, KeyReset} {
 		for cur := 0.1; cur < 10; cur *= 1.07 {
-			v := Decide(rpc.KindText, false, k, cur)
+			v := Decide(rpc.KindText, k, cur)
 			if _, err := rpc.NewContentZoom(v.Next); err != nil {
 				t.Errorf("press %q at %v shows %v: %v", k, cur, v.Next, err)
 			}
@@ -89,12 +87,12 @@ func TestEveryPressIsWritable(t *testing.T) {
 // Every chord key decides, and nothing else does.
 func TestKeysAreTheChord(t *testing.T) {
 	for _, k := range []string{KeyIn, KeyInAlt, KeyOut, KeyReset} {
-		if v := Decide(rpc.KindText, false, k, 1); !v.Consume {
+		if v := Decide(rpc.KindText, k, 1); !v.Consume {
 			t.Errorf("chord key %q is not consumed by Decide", k)
 		}
 	}
 	for _, k := range []string{"1", "+ ", "=+", "z", "Enter", ""} {
-		if v := Decide(rpc.KindText, false, k, 1); v.Consume {
+		if v := Decide(rpc.KindText, k, 1); v.Consume {
 			t.Errorf("Decide consumed %q, which is not a chord key", k)
 		}
 	}

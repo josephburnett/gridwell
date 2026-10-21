@@ -176,15 +176,16 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
     await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(want * 0.97);
   }
 
-  // The owner's other half is that it wrote nothing. This visit is ephemeral,
-  // off-grid in the scratch grid and deleted on ascent, so a durable framing
-  // write would mark a row the user never asked to keep (possiblyEphemeral).
-  // web-ephemeral-zoom.spec.ts pins the same contract on an ephemeral shell.
-  const snap: any = await gw.getGrid(scratch);
-  const t = (snap.tiles ?? []).find((t: any) => t.kind === 'url');
-  expect(Number(t?.contentZoom ?? 0), 'the ephemeral row is unmarked').toBe(0);
+  // The owner's other half is the write. This visit is ephemeral, and an
+  // ephemeral row takes its zoom like a placed one: it differs only in that
+  // the ascent deletes it. web-ephemeral-zoom.spec.ts pins the same on a shell.
+  const row = async () =>
+    ((await gw.getGrid(scratch)).tiles ?? []).find((t: any) => t.kind === 'url');
+  await expect
+    .poll(async () => Number((await row())?.contentZoom ?? 0), { timeout: 10_000 })
+    .toBeCloseTo(1.331, 2);
   const posts = await window.evaluate(
     () => Number((window as any).__gridwellTest.persistPosts().SetContentZoom ?? 0),
   );
-  expect(posts, 'no SetContentZoom about a row ascent deletes').toBe(0);
+  expect(posts, 'one SetContentZoom per chord').toBe(3);
 });

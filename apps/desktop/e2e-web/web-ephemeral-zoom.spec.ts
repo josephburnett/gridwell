@@ -1,14 +1,13 @@
 import { test, expect } from './fixtures';
 
-// The content-zoom chord inside an ephemeral visit must zoom and must not
-// write: the row lives in the scratch grid and ascent deletes it, so a durable
-// framing write marks a row nobody will see again. possiblyEphemeral
-// (client/wasm/ephemeral.go) states the contract.
+// The content-zoom chord inside an ephemeral visit zooms and writes, like a
+// placed tile's: an ephemeral row differs only in that the ascent deletes it,
+// and that delete follows the zoom write on the row's chain.
 //
 // The chord goes in at the window keydown, the cell grid comes back out of
-// xterm, and the write's absence is counted at persistPosts and confirmed
-// against the server's row. Browser mode, because a shell is the ephemeral
-// visit every host has.
+// xterm, and the write is counted at persistPosts and confirmed against the
+// server's row. Browser mode, because a shell is the ephemeral visit every
+// host has.
 
 // The live terminal's cell width in screen pixels, from two adjacent cell
 // centers. A coarser grid is the observable for a zoom that took effect.
@@ -24,7 +23,7 @@ const cellPx = async (window: any): Promise<number> => {
 const zoomPosts = (window: any): Promise<number> =>
   window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetContentZoom ?? 0));
 
-test('Ctrl+= in an ephemeral shell zooms live and persists nothing', async ({ window, gw }) => {
+test('Ctrl+= in an ephemeral shell zooms live and persists like a placed tile', async ({ window, gw }) => {
   const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
   expect(scratchGridID, 'the home node advertises a scratch grid').toBeTruthy();
 
@@ -51,11 +50,14 @@ test('Ctrl+= in an ephemeral shell zooms live and persists nothing', async ({ wi
     .poll(() => cellPx(window), { timeout: 15_000 })
     .toBeGreaterThan(base * 1.1);
 
-  // Both halves of "nothing was written": no post, and no content_zoom.
-  expect(await zoomPosts(window), 'no SetContentZoom about a row ascent deletes').toBe(0);
-  const after = await gw.getGrid(scratchGridID);
-  const shell = (after.tiles ?? []).find((t: any) => t.kind === 'shell')!;
-  expect(Number(shell.contentZoom ?? 0), 'the ephemeral row is unmarked').toBe(0);
+  // Both halves of the write: the posts, and the row's content_zoom.
+  expect(await zoomPosts(window), 'one SetContentZoom per chord').toBe(3);
+  await expect
+    .poll(async () => {
+      const after = await gw.getGrid(scratchGridID);
+      return Number((after.tiles ?? []).find((t: any) => t.kind === 'shell')?.contentZoom ?? 0);
+    }, { timeout: 10_000 })
+    .toBeCloseTo(1.331, 2);
 
   // The ascent takes the row with it, and nothing surfaces on the way.
   await gw.ascendViaCrumb();

@@ -43,22 +43,19 @@ type Verdict struct {
 	// Consume: the chord is this tile's, so the key event stops here even
 	// when nothing comes of it.
 	Consume bool
-	Apply   bool
-	Persist bool
+	// Apply: show Next and write it to the row, wherever the row is.
+	Apply bool
 }
 
 // Decide answers one chord press on the tile a pane is descended into; cur is
 // that tile's current zoom, from Of.
-func Decide(kind string, possiblyEphemeral bool, key string, cur float64) Verdict {
+func Decide(kind string, key string, cur float64) Verdict {
 	z, ok := next(key, cur)
 	// The content-descent kind set has one owner, rpc.IsContentDescentKind.
 	if !ok || !rpc.IsContentDescentKind(kind) {
 		return Verdict{}
 	}
-	// The zoom is live for the session either way; only the write is
-	// conditional. An ephemeral visit's row dies on ascent, so persisting its
-	// zoom would mark a row the user never asked to keep.
-	return Verdict{Next: z, Consume: true, Apply: true, Persist: !possiblyEphemeral}
+	return Verdict{Next: z, Consume: true, Apply: true}
 }
 
 func next(key string, cur float64) (float64, bool) {

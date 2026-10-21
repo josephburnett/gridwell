@@ -70,7 +70,7 @@ func (a *App) flushDoorWheelSaves() {
 		a.emit(traceevent.Framing(gid, tileID, st.cx, st.cy, st.ratio))
 		// The unload transport is the dispatcher's business, so a parked
 		// framing write reaches the beacon path too.
-		a.postFramingPersist("SetFraming", gid, tileID,
+		a.postFramingPersist("SetFraming", gid, tileID, "",
 			func(ctx context.Context) error {
 				_, err := a.cl.SetFraming(ctx, req)
 				return err
@@ -245,7 +245,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		key = req.RootGridId
 	}
 	a.emit(traceevent.Framing(gridID, req.TileId, next.Cx(), next.Cy(), next.Zoom()))
-	a.postFramingPersist("SetFraming", gridID, key,
+	a.postFramingPersist("SetFraming", gridID, key, "",
 		func(ctx context.Context) error {
 			_, err := a.cl.SetFraming(ctx, &req)
 			return err
@@ -283,7 +283,7 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
 		t.TextX, t.TextY, t.TextMode = next.X, next.Y, next.Mode
 	})
-	a.postFramingPersist("SetTextScroll", gid, file.Id,
+	a.postFramingPersist("SetTextScroll", gid, file.Id, "",
 		func(ctx context.Context) error {
 			_, err := a.cl.SetTile(ctx, req)
 			return err
