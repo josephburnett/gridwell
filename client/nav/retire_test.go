@@ -58,12 +58,28 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		w := ephemeralWorld(contentPane("pane1", "r1"))
 		plan := m.Do(ascendGesture("pane1", 1, false), w)
 		a := flushAwait(t, plan, EffInstallPlace)
-		if cs := only(t, plan, EffCloseStream); cs.Freeze {
-			t.Fatalf("froze a row about to die")
+		// An ephemeral visit closes like a placed tile: its address,
+		// title and preview are written before the retire.
+		if cs := only(t, plan, EffCloseStream); !cs.Freeze {
+			t.Fatalf("closed an ephemeral visit without its freeze")
 		}
 		landed := baseWorld(gridPane("pane1", "g1"))
 		d := only(t, m.Resume(a.Token, Result{OK: true}, landed), EffDeleteEphemeral)
 		if d.Tile.GetId() != "r1" || d.Tile.GetGridId() != "sg" {
+			t.Fatalf("deleted %+v, want the visit", d)
+		}
+	})
+
+	t.Run("an ephemeral shell freezes like a placed one, then deletes", func(t *testing.T) {
+		m := New()
+		w := ephemeralWorld(contentPane("pane1", "r1"))
+		w.Leave.DescendedTile.Kind = rpc.KindShell
+		plan := m.Do(ascendGesture("pane1", 1, false), w)
+		if cs := only(t, plan, EffCloseStream); cs.Streams != StreamShell || !cs.Freeze {
+			t.Fatalf("closed %+v, want the shell stream with its freeze", cs)
+		}
+		a := flushAwait(t, plan, EffInstallPlace)
+		if d := only(t, m.Resume(a.Token, Result{OK: true}, baseWorld(gridPane("pane1", "g1"))), EffDeleteEphemeral); d.Tile.GetId() != "r1" {
 			t.Fatalf("deleted %+v, want the visit", d)
 		}
 	})

@@ -169,18 +169,18 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 			return own.TileID, nil, nil
 		}
 		pl.add(Effect{Kind: EffSaveText, PaneID: p.ID, TileID: file.Id})
-		// Ascending out of an ephemeral tile retires it, with no freeze for a
-		// row about to die. The answer must be a known yes, and no other pane
-		// may still show it, since a split copies the visit.
+		// An ephemeral tile closes like any other and is then retired. The
+		// answer must be a known yes, and no other pane may still show it,
+		// since a split copies the visit.
 		eph, known := scratch.Ephemeral(p.Scratch, file.GridId)
 		ephemeral := eph && known && !w.otherPaneShows(p.ID, file.Id)
 		if rpc.WebContent(file) {
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
-				Streams: StreamURL, Freeze: !ephemeral})
+				Streams: StreamURL, Freeze: true})
 		}
 		if file.Kind == rpc.KindShell {
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
-				Streams: StreamShell, Freeze: !ephemeral})
+				Streams: StreamShell, Freeze: true})
 		}
 		if ephemeral {
 			visit = file

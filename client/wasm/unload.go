@@ -74,7 +74,7 @@ func (a *App) flushURLStateOnUnload() {
 		if v == nil {
 			continue
 		}
-		c, write := urlview.DecideUnloadURLState(v.owns, v.durable, v.navDirty, v.lastTitle)
+		c, write := urlview.DecideUnloadURLState(v.owns, v.navDirty, v.lastTitle)
 		if !write {
 			continue
 		}

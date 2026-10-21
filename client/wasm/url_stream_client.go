@@ -33,8 +33,7 @@ type urlView struct {
 	// owns is urlview.Owns for the row: whether its address, title and
 	// trail are the node's to write.
 	owns bool
-	// durable mirrors placeURLView's freeze eligibility: false for an
-	// ephemeral visit, whose state a tab close must not persist.
+	// durable is urlview.Durable for the row.
 	durable bool
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
@@ -161,7 +160,7 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 			stored = []byte(t.UrlString)
 		}
 	}
-	if !urlview.WriteAddress(v.durable, v.owns, landed, string(stored)) {
+	if !urlview.WriteAddress(v.owns, landed, string(stored)) {
 		return
 	}
 	a.putEditedContent(v.tileID, []byte(landed))
@@ -242,7 +241,11 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	path := slices.Clone(v.path)
 	a.emit(traceevent.URLClose(paneID, tileID, freeze))
 	urlConsole("close pane=%s tile=%s", paneID, tileID)
+	// The row's delete, when the close ends an ephemeral visit, follows the
+	// writes the bridge's reply posts (see deleteEphemeralTile).
+	release := a.persist.contentSaves.Hold(v.tileID)
 	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
+		defer release()
 		// A promote's target was created carrying the visit's address.
 		if freeze && target == nil {
 			a.noteLandedAddress(v, url)
@@ -261,7 +264,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 					AltText: c.Title, UrlHistory: c.History},
 				Preview: c.JPEG}
 			a.post(write{
-				label: "SetURLState", gid: gid, id: tileID,
+				label: "SetURLState", gid: gid, id: tileID, chain: tileID,
 				source: "urlfreeze", failText: "page preview save failed",
 				call: func(ctx context.Context) error {
 					_, err := a.cl.SetTile(ctx, req)

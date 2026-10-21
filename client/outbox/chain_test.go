@@ -140,3 +140,42 @@ func TestSaveQueueAfterHearsTheLastWrite(t *testing.T) {
 		t.Errorf("After ran before the write finished: node held %q", h)
 	}
 }
+
+// A write that must follow writes not yet enqueued, such as an ephemeral
+// visit's delete behind the captures its closing view has yet to hand back,
+// waits for every hold on its key, then runs after what the holders enqueued.
+func TestSaveQueueEnqueueAfterHolds(t *testing.T) {
+	q := NewSaveQueue()
+	var mu sync.Mutex
+	var order []string
+	note := func(name string) { mu.Lock(); order = append(order, name); mu.Unlock() }
+	done := make(chan struct{})
+
+	r1 := q.Hold("tile1")
+	r2 := q.Hold("tile1")
+	q.EnqueueAfterHolds("tile1", func() bool { note("delete"); close(done); return true })
+	q.Enqueue("tile2", func() bool { note("other key"); return true })
+	r1()
+	r1() // a release is idempotent
+	q.Enqueue("tile1", func() bool { time.Sleep(20 * time.Millisecond); note("address"); return true })
+	select {
+	case <-done:
+		t.Fatal("ran while a hold was outstanding")
+	case <-time.After(50 * time.Millisecond):
+	}
+	r2()
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 3 || order[0] != "other key" || order[1] != "address" || order[2] != "delete" {
+		t.Errorf("order = %v, want other key, address, delete", order)
+	}
+
+	ran := make(chan struct{})
+	q.EnqueueAfterHolds("idle", func() bool { close(ran); return true })
+	select {
+	case <-ran:
+	case <-time.After(time.Second):
+		t.Fatal("a key with no hold did not run")
+	}
+}

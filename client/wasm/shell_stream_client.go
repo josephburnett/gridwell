@@ -590,7 +590,6 @@ func (a *App) termTheme() js.Value {
 }
 
 // closeShellStream is the freeze path: capture, post, detach the tmux client.
-// An ephemeral ascent passes freeze=false: the tmux is about to be deleted.
 func (a *App) closeShellStream(paneID string, freeze bool) {
 	conn := a.shellConnFor(paneID)
 	if conn == nil {
@@ -602,7 +601,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 		tileID := conn.tileID
 		// A wildcard: the blob id is unknown until SetShellPreview returns.
 		a.views.urlPreview.PutWildcard(tileID, jpegBytes, func() { a.draw() })
-		go a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
+		a.postSetShellPreview(tileID, conn.anchor, slices.Clone(conn.path), jpegBytes)
 	}
 	a.shells.Close(conn.key)
 	a.releaseShellStream(paneID, conn)
@@ -760,11 +759,12 @@ func snapshotShellCanvas(container js.Value) []byte {
 // postSetShellPreview sends the captured JPEG to the tile's leaf grid.
 func (a *App) postSetShellPreview(tileID, anchor string, path []string, jpeg []byte) {
 	// A capture is no claim and bumps no version, so a racing close cannot
-	// refuse it.
+	// refuse it. It rides the row's chain, so an ephemeral visit's delete
+	// follows it.
 	req := &gridwellv1.SetTileRequest{TileId: tileID,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindShell}, Preview: jpeg}
-	a.do(write{
-		label: "SetShellPreview", gid: a.gridIDForPathFrom(anchor, path), id: tileID,
+	a.post(write{
+		label: "SetShellPreview", gid: a.gridIDForPathFrom(anchor, path), id: tileID, chain: tileID,
 		source: "shell", failText: "shell preview save failed",
 		call: func(ctx context.Context) error {
 			_, err := a.cl.SetTile(ctx, req)

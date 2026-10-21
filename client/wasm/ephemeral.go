@@ -3,6 +3,8 @@
 package main
 
 import (
+	"context"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -89,9 +91,7 @@ func (a *App) certainlyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 	return known && eph
 }
 
-// possiblyEphemeral: t is ephemeral, or it is not known yet. The durable
-// writes read it, because a write about a visit that is about to die leaves a
-// mark the user never asked for, while a write skipped is only late.
+// possiblyEphemeral: t is ephemeral, or it is not known yet.
 func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 	eph, known := scratch.Ephemeral(a.scratchGridOf(p), t.GridId)
 	return eph || !known
@@ -100,21 +100,26 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 // deleteEphemeralTile removes an ended ephemeral visit, and for a
 // shell the plugin kills its tmux too. Unlike the trashcan delete it
 // parks, because an ephemeral row is off-grid and a lost cleanup is invisible
-// until the startup sweep. It claims seen, the row the visit held: no durable
-// write lands on a visit (possiblyEphemeral), and the detach-time title
-// capture bumps nothing.
+// until the startup sweep. A visit writes its address like any url view, which
+// bumps the version, so the delete rides the row's chain behind the closing
+// view's writes and claims the row as they left it, seen when it is not cached.
 func (a *App) deleteEphemeralTile(seen *gridwellv1.Tile) {
 	gridID, tileID := seen.GridId, seen.Id
-	req := rpc.DeleteOf(seen)
+	req := func() *gridwellv1.DeleteTileRequest {
+		if t := a.cachedTileByID(tileID); t != nil {
+			return rpc.DeleteOf(t)
+		}
+		return rpc.DeleteOf(seen)
+	}
 	// The row is going, and so is the tmux behind it.
 	a.forgetShellAlive(tileID)
 	// No refetch: nothing renders the scratch grid, and the event stream
 	// carries the removal into the cache.
 	a.post(write{
-		label: "DeleteTile", gid: gridID, id: tileID,
+		label: "DeleteTile", gid: gridID, id: tileID, chain: tileID, afterHolds: true,
 		source: "ephemeral", failText: "ephemeral tile cleanup failed",
-		call:   a.deleteCall(req),
-		beacon: jsonBeacon(func() (string, []byte) { return rpc.DeleteTileBeacon(req) }),
+		call:   func(ctx context.Context) error { return a.deleteCall(req())(ctx) },
+		beacon: jsonBeacon(func() (string, []byte) { return rpc.DeleteTileBeacon(req()) }),
 	})
 }
 

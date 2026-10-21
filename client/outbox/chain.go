@@ -11,11 +11,14 @@ type SaveQueue struct {
 	mu      sync.Mutex
 	busy    map[string]bool
 	pending map[string][]func(prev bool) bool
+	holds   map[string]int
+	waiting map[string][]func(prev bool) bool
 }
 
 // NewSaveQueue returns an empty queue.
 func NewSaveQueue() *SaveQueue {
-	return &SaveQueue{busy: map[string]bool{}, pending: map[string][]func(bool) bool{}}
+	return &SaveQueue{busy: map[string]bool{}, pending: map[string][]func(bool) bool{},
+		holds: map[string]int{}, waiting: map[string][]func(bool) bool{}}
 }
 
 // Enqueue schedules task on key's chain; different keys are independent.
@@ -30,6 +33,46 @@ func (q *SaveQueue) Enqueue(key string, task func() (landed bool)) {
 // nothing is owed.
 func (q *SaveQueue) After(key string, held func(landed bool)) {
 	q.add(key, func(prev bool) bool { held(prev); return prev })
+}
+
+// Hold marks writes on key's chain that are not enqueued yet, such as the
+// captures a closing url view's bridge has still to hand back. release is
+// idempotent, and is called once the holder has enqueued them.
+func (q *SaveQueue) Hold(key string) (release func()) {
+	q.mu.Lock()
+	q.holds[key]++
+	q.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			q.mu.Lock()
+			q.holds[key]--
+			var ready []func(bool) bool
+			if q.holds[key] == 0 {
+				delete(q.holds, key)
+				ready = q.waiting[key]
+				delete(q.waiting, key)
+			}
+			q.mu.Unlock()
+			for _, task := range ready {
+				q.add(key, task)
+			}
+		})
+	}
+}
+
+// EnqueueAfterHolds is Enqueue once every Hold on key is released, so task
+// follows the writes the holders enqueued.
+func (q *SaveQueue) EnqueueAfterHolds(key string, task func() (landed bool)) {
+	t := func(bool) bool { return task() }
+	q.mu.Lock()
+	if q.holds[key] > 0 {
+		q.waiting[key] = append(q.waiting[key], t)
+		q.mu.Unlock()
+		return
+	}
+	q.mu.Unlock()
+	q.add(key, t)
 }
 
 func (q *SaveQueue) add(key string, task func(prev bool) bool) {

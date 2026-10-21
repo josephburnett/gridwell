@@ -74,7 +74,7 @@ const (
 	EffWriteURLNow       // writes the history entry now
 	EffPlaceCursor       // puts the text cursor at a position: Col, Row
 
-	EffDeleteEphemeral // deletes an ended visit: Tile, the row it claims; see stepRetireVisit
+	EffDeleteEphemeral // deletes an ended visit: Tile; see stepRetireVisit
 	EffReport          // surfaces a notice: Severity, Source, Message
 	// EffEnterLevel descends the window into a workspace tile: PaneID, TileID, Tile.
 	// It re-enters the machine against a world gathered after the effects

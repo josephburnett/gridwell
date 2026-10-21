@@ -7,52 +7,52 @@ import (
 
 func TestDecideUnloadURLStateTable(t *testing.T) {
 	cases := []struct {
-		name                    string
-		owns, durable, navDirty bool
-		want                    Capture
-		write                   bool
+		name           string
+		owns, navDirty bool
+		want           Capture
+		write          bool
 	}{
-		{"navigated durable view writes its title", true, true, true, Capture{Title: "t"}, true},
+		// A scratch-grid row and a placed one alike: an ephemeral visit is
+		// a url view like any other.
+		{"a navigated view writes its title", true, true, Capture{Title: "t"}, true},
 		// The unload has no frame, and an unowned row's title is its
 		// plugin's, so it has nothing left to write.
-		{"unowned row writes nothing at unload", false, true, true, Capture{}, false},
-		{"ephemeral visit never writes", true, false, true, Capture{}, false},
-		{"no navigation since place", true, true, false, Capture{}, false},
+		{"unowned row writes nothing at unload", false, true, Capture{}, false},
+		{"no navigation since place", true, false, Capture{}, false},
 	}
 	for _, c := range cases {
-		got, write := DecideUnloadURLState(c.owns, c.durable, c.navDirty, "t")
+		got, write := DecideUnloadURLState(c.owns, c.navDirty, "t")
 		if write != c.write || (write && !sameCapture(got, c.want)) {
 			t.Errorf("%s: = (%+v, %v), want (%+v, %v)", c.name, got, write, c.want, c.write)
 		}
 	}
-	if _, write := DecideUnloadURLState(true, true, true, ""); write {
+	if _, write := DecideUnloadURLState(true, true, ""); write {
 		t.Error("an untitled page wrote an empty capture")
 	}
 }
 
 // The address is content and the verdict is the one place that says when a
-// landed address becomes a write: never for an ephemeral visit, never for a
-// row the node does not own, never for what the store refuses, and never for
+// landed address becomes a write, wherever the row sits: never for a row the
+// node does not own, never for what the store refuses, and never for
 // the address already stored.
 func TestWriteAddress(t *testing.T) {
 	const a, b = "https://a.test/", "https://b.test/p"
 	cases := []struct {
 		name           string
-		durable, owns  bool
+		owns           bool
 		landed, stored string
 		want           bool
 	}{
-		{"a durable owned row writes where it landed", true, true, b, a, true},
-		{"landing where the row points writes nothing", true, true, a, a, false},
-		{"an ephemeral visit writes nothing", false, true, b, a, false},
-		{"an unowned row writes nothing", true, false, b, a, false},
-		{"a non-http landing writes nothing", true, true, "about:blank", a, false},
-		{"an error page writes nothing", true, true, "chrome-error://chromewebdata/", a, false},
-		{"no landing writes nothing", true, true, "", a, false},
-		{"an unconfigured row takes its first address", true, true, b, "", true},
+		{"an owned row writes where it landed", true, b, a, true},
+		{"landing where the row points writes nothing", true, a, a, false},
+		{"an unowned row writes nothing", false, b, a, false},
+		{"a non-http landing writes nothing", true, "about:blank", a, false},
+		{"an error page writes nothing", true, "chrome-error://chromewebdata/", a, false},
+		{"no landing writes nothing", true, "", a, false},
+		{"an unconfigured row takes its first address", true, b, "", true},
 	}
 	for _, c := range cases {
-		if got := WriteAddress(c.durable, c.owns, c.landed, c.stored); got != c.want {
+		if got := WriteAddress(c.owns, c.landed, c.stored); got != c.want {
 			t.Errorf("%s: = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -109,7 +109,7 @@ func TestWriteback(t *testing.T) {
 		{"an empty capture never overwrites", true, true, Capture{}, Capture{}, false},
 		{"an unowned row writes its frame alone", true, false, full, Capture{JPEG: []byte{1}}, true},
 		{"an unowned row with no frame writes nothing", true, false, Capture{Title: "t", History: "h"}, Capture{}, false},
-		{"an ephemeral ascent asked for no freeze", false, true, full, Capture{}, false},
+		{"a close asked for no freeze", false, true, full, Capture{}, false},
 	}
 	for _, c := range cases {
 		got, write := Writeback(c.freeze, c.owns, c.in)

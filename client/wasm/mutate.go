@@ -64,6 +64,9 @@ type write struct {
 	// chain is the outbox.SaveQueue key a content write rides through post,
 	// its retry included. Empty runs it on its own goroutine.
 	chain string
+	// afterHolds joins the chain only once every outbox.SaveQueue.Hold on it
+	// is released.
+	afterHolds bool
 }
 
 // isUnimplemented reports a plugin's "I don't serve this" answer: a
@@ -172,7 +175,12 @@ func (a *App) post(w write) {
 		return
 	}
 	if w.chain != "" {
-		a.persist.contentSaves.Enqueue(w.chain, func() bool { return a.dispatch(w) == nil })
+		task := func() bool { return a.dispatch(w) == nil }
+		if w.afterHolds {
+			a.persist.contentSaves.EnqueueAfterHolds(w.chain, task)
+		} else {
+			a.persist.contentSaves.Enqueue(w.chain, task)
+		}
 		return
 	}
 	go a.dispatch(w)

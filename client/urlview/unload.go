@@ -21,10 +21,10 @@ func Owns(page, gridAcceptsTiles, gridKnown bool) bool {
 }
 
 // WriteAddress decides whether the address a live view landed on is written
-// to its row as content, like a typed one. A visit that goes nowhere leaves
-// the row byte-identical.
-func WriteAddress(durable, owns bool, landed, stored string) bool {
-	return durable && owns && rpc.HTTPAddress(landed) && landed != stored
+// to its row as content, like a typed one, on a grid or in the scratch grid
+// alike. A visit that goes nowhere leaves the row byte-identical.
+func WriteAddress(owns bool, landed, stored string) bool {
+	return owns && rpc.HTTPAddress(landed) && landed != stored
 }
 
 // Writeback is what a closing view writes to its row as captures, false for
@@ -40,15 +40,15 @@ func Writeback(freeze, owns bool, c Capture) (Capture, bool) {
 // DecideUnloadURLState decides what captures a dying page writes about one
 // live view; the landed address is the content flush's. The bridge's frame and
 // trail are unreachable by then, so the title rides alone.
-func DecideUnloadURLState(owns, durable, navDirty bool, lastTitle string) (Capture, bool) {
-	if !durable || !navDirty {
+func DecideUnloadURLState(owns, navDirty bool, lastTitle string) (Capture, bool) {
+	if !navDirty {
 		return Capture{}, false
 	}
 	return Writeback(true, owns, Capture{Title: lastTitle})
 }
 
-// Durable is whether a live view's descended row survives ascent. Not known
-// yet counts as ephemeral, because durable is a promise to write.
+// Durable is whether a live view offers the Freeze Page gesture: its row is
+// not possibly an ephemeral visit.
 func Durable(possiblyEphemeral bool) bool {
 	return !possiblyEphemeral
 }
