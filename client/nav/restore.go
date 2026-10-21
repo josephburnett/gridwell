@@ -218,10 +218,12 @@ func (m *Machine) awaitGrid(d *restoreData, gridID string, s step, w World, pl *
 	return true
 }
 
-// oneFrame is the place a jump clears a pane down to.
+// oneFrame is the place a jump clears a pane down to, landed at view.
 func oneFrame(gridID string, view rpc.View) pane.Stack {
+	f := pane.Frame{GridID: gridID, View: view}
+	f.Settle()
 	var s pane.Stack
-	s.Reset(pane.Frame{GridID: gridID, View: view})
+	s.Reset(f)
 	return s
 }
 

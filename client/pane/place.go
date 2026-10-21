@@ -41,6 +41,10 @@ type Frame struct {
 	// ViewPending marks a top frame a layout blob restored with no view: until
 	// Adopt, its view is a placeholder that must never be written to its owner row.
 	ViewPending bool
+	// settled is the view the pane last landed on or wrote to its row. A view
+	// still at it writes no framing, whatever the pane's size now: a framing
+	// is decided by a pan or a zoom, not by a resize or a split (2026-10-20).
+	settled rpc.View
 	// adopted is the view Adopt took from the owner row. Until the pane moves
 	// off it, it is the row's view, not one the layout keeps, so opening a
 	// workspace tile without moving writes nothing.
@@ -86,9 +90,20 @@ func ContentFrame(tileID string, foot Footprint, zoom float64, textMode string, 
 	return f
 }
 
-// SetView sets the frame's viewport, refusing a center that is not a point or
-// a zoom that is not a size; the frame then keeps what it had.
+// SetView sets the frame's viewport where a navigation lands it, settled,
+// refusing a center that is not a point or a zoom that is not a size; the
+// frame then keeps what it had.
 func (f *Frame) SetView(cx, cy, zoom float64) bool {
+	if !f.Steer(cx, cy, zoom) {
+		return false
+	}
+	f.Settle()
+	return true
+}
+
+// Steer is SetView for the user's own pan or zoom, which leaves the view
+// unsettled until a framing write takes it.
+func (f *Frame) Steer(cx, cy, zoom float64) bool {
 	v, err := rpc.NewFraming(cx, cy, zoom)
 	if err != nil {
 		return false
@@ -96,6 +111,9 @@ func (f *Frame) SetView(cx, cy, zoom float64) bool {
 	f.View = rpc.Saved(v)
 	return true
 }
+
+// Settle marks the view as the one the row holds.
+func (f *Frame) Settle() { f.settled = f.View }
 
 // Live is the frame's viewport, false when it has none.
 func (f Frame) Live() (rpc.Framing, bool) { return f.View.Framing() }
@@ -118,7 +136,7 @@ func (s *Stack) Adopt(v Frame) bool {
 	if _, ok := v.Live(); !ok {
 		return false
 	}
-	s.View, s.adopted = v.View, v.View
+	s.View, s.adopted, s.settled = v.View, v.View, v.View
 	s.TextMode = v.TextMode
 	if !s.ownScroll {
 		s.TextScrollX, s.TextScrollY = v.TextScrollX, v.TextScrollY
@@ -136,7 +154,8 @@ type Stack struct {
 }
 
 func NewStack(gridID string) Stack {
-	return Stack{Frame: Frame{GridID: gridID, View: rpc.Saved(zoomtrans.Origin)}}
+	o := rpc.Saved(zoomtrans.Origin)
+	return Stack{Frame: Frame{GridID: gridID, View: o, settled: o}}
 }
 
 // StackAt builds the stack a restored place names: a root grid, a path of

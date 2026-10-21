@@ -184,9 +184,8 @@ func (a *App) adoptPendingViews() {
 // row that owns it. `door` is the door tile the pane entered by, living
 // under (doorAnchor, doorPath); nil means a root grid, whose own row owns the
 // framing. The zoom is measured against the door's footprint, 1x1 for a
-// root, so preview and descent agree. A no-op when nothing moved, which is
-// measured against what the grid is shown at, never against the stored row:
-// see zoomtrans.ShownDoorFraming.
+// root, so preview and descent agree. A no-op when nothing moved: see
+// pane.Frame.FramingWrite.
 func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor string, doorPath []string) {
 	// Never a mid-animation viewport: a pane's centre and zoom are then the
 	// transition's scratch values, and storing one would make a draw of an
@@ -232,15 +231,12 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		req = gridwellv1.SetFramingRequest{RootGridId: p.Anchor()}
 		commit = func(f rpc.Framing) { a.cacheDoorFraming(p.Anchor(), f) }
 	}
-	live, ok := p.Live()
-	if !ok {
-		return
-	}
-	next, ok := zoomtrans.Writeback(cur, foot, live.Cx(), live.Cy(), live.Zoom(), size, cellPx)
+	next, ok := p.FramingWrite(cur, foot, size, cellPx)
 	if !ok {
 		return
 	}
 	commit(next)
+	p.Settle()
 	req.Cx, req.Cy, req.Zoom = next.Cx(), next.Cy(), next.Zoom()
 	// One dispatcher for both rows a framing can live on. They differ only in
 	// which id keys the parked write, never in policy.

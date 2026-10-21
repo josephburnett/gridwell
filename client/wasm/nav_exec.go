@@ -8,7 +8,6 @@ package main
 
 import (
 	"context"
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 
 	"github.com/josephburnett/gridwell/client/clientsync"
@@ -144,8 +143,8 @@ func (a *App) navInstallPlace(e nav.Effect) {
 	if e.Stack != nil {
 		p.Stack = e.Stack.Copy()
 	}
-	if e.Viewport != nil {
-		p.View = rpc.Saved(*e.Viewport)
+	if v := e.Viewport; v != nil {
+		p.SetView(v.Cx(), v.Cy(), v.Zoom())
 	}
 }
 

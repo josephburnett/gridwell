@@ -1,6 +1,11 @@
 package pane
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
+)
 
 // The framing writeback and the liveness projection. Both are projections of
 // the frame stack, so neither can drift from where the pane is.
@@ -49,6 +54,16 @@ func (s *Stack) FramingTarget(inWorkspace bool) FramingOwner {
 		own.DoorAnchor, own.DoorPath = s.AnchorPathAt(len(s.below) - 1)
 	}
 	return own
+}
+
+// FramingWrite is the framing f writes to its row: zoomtrans.Writeback of its
+// live view at s, false when it has none or it is still where it settled.
+func (f Frame) FramingWrite(shown rpc.View, foot zoomtrans.Door, s zoomtrans.Size, cellPx float64) (rpc.Framing, bool) {
+	live, ok := f.Live()
+	if !ok || f.View == f.settled {
+		return rpc.Framing{}, false
+	}
+	return zoomtrans.Writeback(shown, foot, live.Cx(), live.Cy(), live.Zoom(), s, cellPx)
 }
 
 // PaneGrid names one pane and the grid it shows.

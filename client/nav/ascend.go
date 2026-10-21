@@ -219,15 +219,14 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 }
 
 // settleFraming applies to a door row the framing PersistFraming is about
-// to write: zoomtrans.Writeback, the one decision the executor applies too.
+// to write: pane.Frame.FramingWrite, the one decision the executor applies too.
 func settleFraming(door *gridwellv1.Tile, p PaneView, cellPx float64) {
 	size, ok := p.Rect.Size()
-	live, viewed := p.View.Framing()
-	if !ok || !viewed {
+	if !ok {
 		return
 	}
 	wl := zoomtrans.DoorOf(door)
-	next, ok := zoomtrans.Writeback(zoomtrans.ShownDoorFraming(wl), wl, live.Cx(), live.Cy(), live.Zoom(), size, cellPx)
+	next, ok := p.Stack.FramingWrite(zoomtrans.ShownDoorFraming(wl), wl, size, cellPx)
 	if !ok {
 		return
 	}

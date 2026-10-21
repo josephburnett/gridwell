@@ -351,7 +351,7 @@ func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
 	v := ps.View()
 	cellX, cellY := ps.ScreenToCell(sx, sy)
 	if z, cx, cy, ok := zoomtrans.WheelZoom(dy, v.Zoom(), v.Cx(), v.Cy(), cellX, cellY, zoomFactor, zoomMin, zoomMax); ok {
-		p.SetView(cx, cy, z)
+		p.Steer(cx, cy, z)
 	}
 	a.draw()
 	a.scheduleURLUpdate()
@@ -596,7 +596,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		if focused != nil {
 			if v, ok := focused.Live(); ok {
 				cellSize := cellPx * v.Zoom()
-				focused.SetView(v.Cx()-(sx-d.curScreenX)/cellSize, v.Cy()-(sy-d.curScreenY)/cellSize, v.Zoom())
+				focused.Steer(v.Cx()-(sx-d.curScreenX)/cellSize, v.Cy()-(sy-d.curScreenY)/cellSize, v.Zoom())
 			}
 		}
 	} else if a.ghost != nil {

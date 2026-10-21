@@ -490,6 +490,46 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
   expect(after.viewCy, 'center stable').toEqual(settled.viewCy);
 });
 
+// The framing is decided when the user frames it (2026-10-20): a first visit
+// and a split show a view nobody chose, so neither writes, and the next zoom
+// writes the ratio at the pane it was made in.
+test('a split writes no framing until a pane moves', async ({ gw, window }) => {
+  const c = await gw.cadences();
+  await gw.enterPlugin('home');
+  const home = await gw.focused();
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  await gw.openMenu();
+  await gw.dragCreate('door', cx, cy);
+  const door = () => gw.getGrid(home.gridID).then((g) => tileAt(g, 'door', cx, cy)!);
+  const writes = () =>
+    window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetFraming ?? 0));
+  const before = await writes();
+
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  expect(await writes(), 'the first visit wrote a framing').toBe(before);
+  expect(Number((await door()).viewZoom ?? 0), 'the first visit framed the door').toBe(0);
+
+  await gw.splitFocusedPaneVertical();
+  await gw.waitIdle();
+  await settle(window, c.framingSaveMs);
+  await settle(window, c.framingSaveMs);
+  expect(await writes(), 'the split wrote a framing').toBe(before);
+  expect(Number((await door()).viewZoom ?? 0), 'the split framed the door').toBe(0);
+
+  await gw.wheelAtFocusedCenter(-240);
+  await settle(window, c.framingSaveMs);
+  await expect.poll(writes, { timeout: 10_000 }).toBe(before + 1);
+  const p = await gw.focused();
+  const d = await door();
+  const overtake = Math.max(p.w / (Number(d.w) * 64), p.h / (Number(d.h) * 64));
+  await expect
+    .poll(async () => Number((await door()).viewZoom ?? 0), { timeout: 10_000 })
+    .toBeCloseTo(p.zoom / overtake, 6);
+});
+
 // A viewport in mid-flight is presentation and never the user's framing. The
 // settle persister fires on its own 600ms clock, so a stretched transition puts
 // a debounce tick inside the animation, when the pane's centre and zoom are

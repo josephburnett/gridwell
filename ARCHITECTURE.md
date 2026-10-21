@@ -314,7 +314,7 @@ on the row that owns the door — `tiles.view_cx/cy/zoom` for a door,
 `grids.root_cx/cy/zoom` for a root with no door. It is a checked value,
 `rpc.Framing`, whose one constructor refuses a center that is not a point or
 a zoom that is not a finite size above zero, at the wire and at the store.
-Never visited is no framing: NULL in storage, absent on the wire, an
+Never framed is no framing: NULL in storage, absent on the wire, an
 `rpc.View` without one in Go. One store writer, one wire verb, one client
 function.
 
@@ -370,8 +370,9 @@ There is one `descend` and one `ascend` (`client/wasm/nav.go`). Where a
 descent lands is the tile's own declaration: a door or link pushes a frame
 onto the child grid, a text, url or shell tile pushes one onto the tile
 itself, a workspace tile descends the window a level. Every ascent hop writes
-framing back through `SetFraming`, except inside a workspace tile where the blob
-owns it, and freezes a live preview, with no claim and no version bump.
+framing back through `SetFraming` if the pane moved its view since it last
+settled (`pane.Frame.FramingWrite`), except inside a workspace tile where the
+blob owns it, and freezes a live preview, with no claim and no version bump.
 A debounced settle persister does the same without waiting for an ascent.
 
 **Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a

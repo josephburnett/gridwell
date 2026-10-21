@@ -49,6 +49,7 @@ func TreeAtPlace(idPrefix, anchor string, path []string, view rpc.View) *Tree {
 	if _, ok := view.Framing(); ok {
 		p.View = view
 	}
+	p.Settle()
 	return t
 }
 
