@@ -538,12 +538,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   copy taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
 - An ephemeral visit is a tile with no home grid and no other difference
-  (2026-10-20): a url visit writes its address, title and freeze wherever
-  its row is (`urlview.WriteAddress`, `urlview.Writeback`), and ephemeral
-  means retirement only. The row is deleted when the visit ends and nothing
-  holds it, no other pane and no workspace tile's layout; the delete rides
-  the row's save chain behind the closing view's writes and claims the row
-  as they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
+  (2026-10-20): a visit writes its address, title, freeze, name and content
+  zoom wherever its row is, and offers the freeze gesture and the rename
+  (`urlview.WriteAddress`, `urlview.Writeback`, `contentzoom.Decide`,
+  `barslot.Decide`, `bartitle.Decide`, none of which decides a write from
+  whether a row is ephemeral). Ephemeral means retirement only, which the grey border and
+  the title's "— ephemeral" say. The row is deleted when the visit ends and
+  nothing holds it, no other pane and no workspace tile's layout; the
+  delete rides the row's save chain behind every write on the row and
+  claims the row as they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
 - Shells ride the web API: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns

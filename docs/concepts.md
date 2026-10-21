@@ -37,7 +37,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **ephemeral scratch visit** | A real row in the scratch grid that no pane owns — a url typed into the + menu, a shell opened from it. Try it without placing it: grey border, promotable onto a grid. It writes like a placed tile of its kind; the ascent deletes it unless another pane or a workspace tile's layout still holds it. `client/scratch` reads the `Grid.scratch_grid_id` stamp and nothing else. |
+| **ephemeral scratch visit** | A real row in the scratch grid that no pane owns — a url typed into the + menu, a shell opened from it. Try it without placing it: grey border, promotable onto a grid. It writes, freezes, zooms and renames like a placed tile of its kind; the ascent deletes it unless another pane or a workspace tile's layout still holds it. `client/scratch` reads the `Grid.scratch_grid_id` stamp and nothing else. |
 | **trash** | Delete moves a tile into a per-month subgrid; delete again destroys it. Ids and versions continue, so links keep resolving, and undo needs no undo machinery. Scratch bypasses it (`deleteBypassesTrash`) — a visit was never placed. A plugin's entry bypasses it too: its delete is the plugin's own verb, and a key is never a row of home's. |
 
 ## Health
