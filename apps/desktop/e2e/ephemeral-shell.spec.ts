@@ -28,11 +28,18 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
     tileCount(homeBefore),
   );
 
-  // The crumb labels the dying context "ephemeral" and is read-only, so no
-  // rename input opens.
-  await expect.poll(async () => (await gw.barName()).label).toBe('ephemeral');
+  // The title says the visit is ephemeral, and the name is the user's to
+  // write like a placed tile's: ephemeral is retirement only.
+  await expect.poll(async () => (await gw.barName()).label).toMatch(/ — ephemeral$/);
   await gw.clickBarName('right');
-  await expect(window.locator('#gw-rename-input')).toHaveCount(0);
+  const rename = window.locator('#gw-rename-input');
+  await expect(rename).toBeVisible();
+  await rename.fill('scratch-shell');
+  await rename.press('Enter');
+  await expect
+    .poll(async () => ((await gw.getGrid(scratchGridID)).tiles ?? []).find((t) => t.kind === 'shell')?.altText ?? '')
+    .toBe('scratch-shell');
+  await expect.poll(async () => (await gw.barName()).label).toBe('scratch-shell — ephemeral');
 
   // attachShellRenderer falls back to the slower DOM renderer when WebGL2 is
   // unavailable, and Chromium can drop software WebGL out from under it. This

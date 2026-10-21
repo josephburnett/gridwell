@@ -12,8 +12,7 @@ type Rename int
 
 const (
 	// RenameNone is a read-only title: a text tile's name derives from its
-	// first line, an ephemeral row dies on ascent, and a declared door is
-	// config-owned.
+	// first line, and a declared door is config-owned.
 	RenameNone Rename = iota
 	// RenameDescent is the tile the pane is descended into.
 	RenameDescent
@@ -36,10 +35,8 @@ type Input struct {
 	// DescendedReadOnly is the descended row's Tile.read_only: why its source
 	// takes no edits to its body.
 	DescendedReadOnly string
-	// PossiblyEphemeral gates the rename and CertainlyEphemeral the label: a
-	// name written about a visit that may be about to die is a mark the user
-	// never asked for, while saying "ephemeral" needs a known yes.
-	PossiblyEphemeral  bool
+	// CertainlyEphemeral says the descended row is an ephemeral visit, which
+	// the title says after its name, since saying so needs a known yes.
 	CertainlyEphemeral bool
 	// AtAnchor is len(pane.Path()) == 0: the pane stands on the level's own
 	// grid, so its door is the row it was entered through.
@@ -88,7 +85,8 @@ const unnamed = "unnamed"
 // names that tile and not the grid around it. Anything with no name of its own
 // falls through to a muted "unnamed" rather than to blank chrome. A pane on a
 // grid also says what its source calls it, unless that only repeats the name,
-// and a pane inside a body its source takes no edits to says why.
+// a pane inside a body its source takes no edits to says why, and one inside
+// an ephemeral visit says so.
 func Decide(in Input) Verdict {
 	v := decideName(in)
 	switch {
@@ -96,6 +94,8 @@ func Decide(in Input) Verdict {
 		v.Source = in.SourceLabel
 	case in.Descent && in.Descended && in.DescendedReadOnly != "":
 		v.Source = "read-only: " + in.DescendedReadOnly
+	case in.Descent && in.Descended && in.CertainlyEphemeral:
+		v.Source = "ephemeral"
 	}
 	return v
 }
@@ -112,9 +112,6 @@ func decideName(in Input) Verdict {
 	switch {
 	case in.Descent:
 		if in.Descended {
-			if in.CertainlyEphemeral {
-				return Verdict{Label: "ephemeral", Muted: true}
-			}
 			if in.DescendedName != "" {
 				return Verdict{Label: in.DescendedName} // derived, read-only
 			}
@@ -132,7 +129,7 @@ func decideName(in Input) Verdict {
 func renameOf(in Input) Rename {
 	switch {
 	case in.Descent:
-		if in.Descended && !in.DescendedText && !in.PossiblyEphemeral {
+		if in.Descended && !in.DescendedText {
 			return RenameDescent
 		}
 	case in.AtAnchor:

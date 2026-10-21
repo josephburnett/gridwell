@@ -41,7 +41,6 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 		if row, s := a.askContentRow(t); s == contentrow.Ready {
 			in.DescendedReadOnly = row.ReadOnly
 		}
-		in.PossiblyEphemeral = a.possiblyEphemeral(p, t)
 		in.CertainlyEphemeral = a.certainlyEphemeral(p, t)
 	}
 	if !in.Descent {

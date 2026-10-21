@@ -40,15 +40,15 @@ func TestDecide(t *testing.T) {
 			Verdict{Label: unnamed, Muted: true},
 		},
 		{
-			"a visit that may be ephemeral is not renamable, but still says its name",
-			Input{Descent: true, Descended: true, PossiblyEphemeral: true, DescendedName: "example.com"},
-			Verdict{Label: "example.com"},
+			// Ephemeral is retirement only: the name is the user's to write.
+			"a visit not yet known to be ephemeral is renamable like a placed tile",
+			Input{Descent: true, Descended: true, DescendedName: "example.com"},
+			Verdict{Rename: RenameDescent, Label: "example.com", Editable: true},
 		},
 		{
-			"a known ephemeral visit says so",
-			Input{Descent: true, Descended: true, PossiblyEphemeral: true,
-				CertainlyEphemeral: true, DescendedName: "example.com"},
-			Verdict{Label: "ephemeral", Muted: true},
+			"a known ephemeral visit is renamable and says it is ephemeral",
+			Input{Descent: true, Descended: true, CertainlyEphemeral: true, DescendedName: "example.com"},
+			Verdict{Rename: RenameDescent, Label: "example.com", Source: "ephemeral", Editable: true},
 		},
 		{
 			"a door's grid names the door it was entered through",
