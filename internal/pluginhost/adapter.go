@@ -491,14 +491,14 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	if !dark {
 		a.noteLinks(gkey, resp.Entries)
 	}
+	listed := map[string]bool{}
+	for _, e := range resp.Entries {
+		listed[e.Key] = true
+	}
 	// An authoritative listing is a verdict on every key, so rows it does not
 	// mention retire. An untouched entry has nothing to retire.
 	if !dark && resp.Authoritative && gid != 0 {
-		present := map[string]bool{}
-		for _, e := range resp.Entries {
-			present[e.Key] = true
-		}
-		if err := a.mem.Sweep(gid, present); err != nil {
+		if err := a.mem.Sweep(gid, listed); err != nil {
 			return nil, err
 		}
 	}
@@ -514,13 +514,9 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// A non-authoritative listing sweeps by arbitration: only a definitive
 	// GONE from Probe retires an unlisted row.
 	if !dark && !cached && !resp.Authoritative {
-		live := map[string]bool{}
-		for _, e := range resp.Entries {
-			live[e.Key] = true
-		}
 		kept := tiles[:0]
 		for _, t := range tiles {
-			if live[t.Key] {
+			if listed[t.Key] {
 				kept = append(kept, t)
 				continue
 			}
@@ -618,15 +614,6 @@ func (a *Adapter) resolveTile(tileID string) (tileRef, error) {
 	default:
 		return tileRef{}, status.Errorf(codes.InvalidArgument, "plugin: invalid tile_id %q", tileID)
 	}
-}
-
-// contentKey is the plugin key alone, all a content verb needs.
-func (a *Adapter) contentKey(tileID string) (string, error) {
-	ref, err := a.resolveTile(tileID)
-	if err != nil {
-		return "", err
-	}
-	return ref.key, nil
 }
 
 // mint is the one place a plugin tile becomes a row, at the placement GetGrid
@@ -1020,12 +1007,21 @@ func (a *Adapter) selection(gkey string, gid int64) ([]string, error) {
 	return out, nil
 }
 
+// ReadContent answers a url's content as its address under its entry's
+// stamp, as home does (store.ReadContent); only a body is the plugin's.
 func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
-	key, err := a.contentKey(req.TileId)
+	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return err
 	}
-	cs, err := a.cp.ReadContent(ctx, &pluginv1.ReadContentRequest{Key: key})
+	s, err := a.synthesize(ctx, rpc.EntryGridID(ref.gridKey))
+	if err != nil {
+		return err
+	}
+	if t := s.tileForKey(ref.key); t != nil && rpc.WebContent(t) {
+		return send(&gridwellv1.ContentChunk{Data: []byte(t.UrlString), MediaType: rpc.AddressMediaType, ContentStamp: t.ContentStamp})
+	}
+	cs, err := a.cp.ReadContent(ctx, &pluginv1.ReadContentRequest{Key: ref.key})
 	if err != nil {
 		return err
 	}
@@ -1037,8 +1033,7 @@ func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRe
 		if rerr != nil {
 			return rerr
 		}
-		// Plugin content is not version-edited, so version 0; its stamp
-		// stands in.
+		// A plugin's stamp stands in for the version it lacks.
 		if serr := send(&gridwellv1.ContentChunk{Data: chunk.Data, MediaType: chunk.MediaType, ContentStamp: chunk.ContentStamp}); serr != nil {
 			return serr
 		}
@@ -1055,7 +1050,7 @@ func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.Wri
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "plugin: write: empty stream")
 	}
-	key, err := a.contentKey(first.TileId)
+	ref, err := a.resolveTile(first.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -1068,7 +1063,7 @@ func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.Wri
 		if err != nil {
 			return nil, err
 		}
-		msg := &pluginv1.WriteContentRequest{Key: key, Data: first.Data, ContentStamp: first.ContentStamp}
+		msg := &pluginv1.WriteContentRequest{Key: ref.key, Data: first.Data, ContentStamp: first.ContentStamp}
 		for n := len(first.Data); ; {
 			if err := up.Send(msg); err != nil {
 				_, rerr := up.CloseAndRecv()
@@ -1103,12 +1098,12 @@ func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.Wri
 }
 
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
-	key, err := a.contentKey(req.TileId)
+	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return err
 	}
 	_, err = ask(&a.lacks, "ServeContent", func() (struct{}, error) {
-		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: key, Subpath: req.Subpath})
+		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: ref.key, Subpath: req.Subpath})
 		if err != nil {
 			return struct{}{}, err
 		}

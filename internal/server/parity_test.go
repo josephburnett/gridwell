@@ -153,7 +153,6 @@ const (
 // The holes, where the code makes a difference no decision names.
 const (
 	hPluginMove     = "internal/pluginhost/adapter.go:778: MoveTile refuses another grid of the same plugin; home moves a tile to any of its grids, and CLAUDE.md names only the cross-plugin move"
-	hPluginReadURL  = "internal/pluginhost/adapter.go:1023: ReadContent asks the plugin for a url entry's bytes, where home answers the address itself (internal/local/store/content.go:106)"
 	hPluginWriteURL = "client/urlview/unload.go:19: a plugin url's address is never written, so it does not follow where the user went as home's does"
 	hGoneGrid       = "internal/pluginhost/adapter.go:471: a grid its source no longer lists reads as an empty grid, where home's gone grid reads refused (internal/local/local.go:174); neither reads dead"
 )
@@ -219,7 +218,7 @@ var parityTable = []parityCell{
 	{kURL, opScroll, onFar, na, naScroll, nil},
 	{kURL, opFraming, onPlugin, na, naFraming, nil},
 	{kURL, opFraming, onFar, na, naFraming, nil},
-	{kURL, opRead, onPlugin, hole, hPluginReadURL, nil},
+	{kURL, opRead, onPlugin, same, "", checkRead},
 	{kURL, opRead, onFar, same, "", checkRead},
 	{kURL, opWrite, onPlugin, hole, hPluginWriteURL, nil},
 	{kURL, opWrite, onFar, same, "", checkWrite},

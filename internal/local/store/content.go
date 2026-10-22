@@ -104,7 +104,7 @@ func (s *Store) ReadContent(ctx context.Context, tileID string) (data []byte, me
 		version = t.Version
 		switch {
 		case rpc.WebContent(t):
-			data, mediaType = []byte(t.UrlString), "text/plain; charset=utf-8"
+			data, mediaType = []byte(t.UrlString), rpc.AddressMediaType
 		case t.BlobId != 0:
 			data, mediaType, err = readBlob(ctx, tx, t.BlobId)
 		}

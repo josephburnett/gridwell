@@ -63,6 +63,9 @@ const (
 	ContentAddress         // the address the tile holds, url_string
 )
 
+// AddressMediaType is the media type a read of an address answers under.
+const AddressMediaType = "text/plain; charset=utf-8"
+
 // InBlob: the content is bytes in a blob of the tile's own.
 func (c Content) InBlob() bool { return c == ContentBody || c == ContentLayout }
 
