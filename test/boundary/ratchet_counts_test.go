@@ -3,6 +3,7 @@ package boundary
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -600,6 +601,37 @@ func productionPackages(t *testing.T, root string) []string {
 		out = append(out, d)
 	}
 	return out
+}
+
+// traceBudgetFile is the one owner of the trace budget. The boundary test
+// cannot run the e2e gate, so it reads the number this file records, and
+// apps/desktop/e2e/trace-budget.spec.ts, which fails when its script's run
+// leaves another count, is what keeps the number true.
+const traceBudgetFile = "apps/desktop/e2e/trace-budget.json"
+
+// traceBudget is the count of trace records the script's run owes to no
+// gesture, event, view or decision, as trace-budget.json records it.
+func traceBudget(t *testing.T, root string) int {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, traceBudgetFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var budget struct {
+		Unattributed *int `json:"unattributed"`
+	}
+	if err := json.Unmarshal(data, &budget); err != nil || budget.Unattributed == nil {
+		t.Fatalf("%s: want {\"unattributed\": N}: %v", traceBudgetFile, err)
+	}
+	return *budget.Unattributed
+}
+
+// TestTraceBudgetIsZero holds the trace budget at the floor it was first
+// measured at, so it is a permanent test rather than a ledger row.
+func TestTraceBudgetIsZero(t *testing.T) {
+	if n := traceBudget(t, repoRoot(t)); n != 0 {
+		t.Errorf("%s records %d unattributed records: attribute each to a gesture, an event, a view or a decision in CLAUDE.md, or stop the work", traceBudgetFile, n)
+	}
 }
 
 // productionLines counts the lines of the tree scripts/comment-share.sh reads.

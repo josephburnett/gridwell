@@ -64,8 +64,8 @@ one (2026-10-21).
    the flag guard on the proto is still to come.
 4. **Nothing silent.** No verb an owner leaves unanswered, no empty cell,
    no failure that only logs, no clock asking a source that can tell, no
-   work for nobody. Held by the verb count, the timer list and the log-only
-   arm list; the trace budget is still to come.
+   work for nobody. Held by the verb count, the timer list, the log-only
+   arm list and the trace budget (`trace-budget.spec.ts`, at zero).
 5. **Small enough to hold whole, and only shrinking.** Lines, packages,
    comment share and policy-file size are ceilings, so a fix pays for
    itself. Held by the ledger's ceilings.
