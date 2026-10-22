@@ -399,7 +399,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 		}
 		if p != nil {
 			in.SlotMenu = a.slotHasMenu(p)
-			if t, ok := a.descendedTile(p); ok && t.Kind == rpc.KindURL &&
+			if t, ok := a.descendedTile(p); ok && rpc.WebContent(t) &&
 				a.certainlyEphemeral(p, t) {
 				visit, in.Promote = t, true
 			}

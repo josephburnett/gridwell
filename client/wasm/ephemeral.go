@@ -172,7 +172,7 @@ func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, c
 		return
 	}
 	t, ok := a.descendedTile(op)
-	if !ok || t.Kind != rpc.KindURL || !a.certainlyEphemeral(op, t) {
+	if !ok || !rpc.WebContent(t) || !a.certainlyEphemeral(op, t) {
 		return
 	}
 	url := t.UrlString

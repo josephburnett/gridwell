@@ -23,8 +23,6 @@ const (
 	namespaceImport = repoModule + "/internal/namespace"
 )
 
-var kindConsts = map[string]bool{"KindText": true, "KindURL": true, "KindShell": true, "KindDoor": true, "KindWorkspace": true}
-
 // importName is the name f refers to path by, or "" when f does not import it.
 func importName(f *ast.File, path string) string {
 	for _, imp := range f.Imports {
@@ -52,47 +50,6 @@ func productionGo(t *testing.T, root string, visit func(rel string, fset *token.
 		}
 		visit(rel, fset, f)
 	})
-}
-
-// kindSwitches are the case clauses and ==/!= comparisons that name a tile
-// kind outside the kind table, each a dispatch a capability on the table
-// would answer once.
-func kindSwitches(t *testing.T, root string) []string {
-	var out []string
-	productionGo(t, root, func(rel string, fset *token.FileSet, f *ast.File) {
-		if filepath.ToSlash(rel) == "api/rpc/types.go" {
-			return
-		}
-		local := filepath.ToSlash(filepath.Dir(rel)) == "api/rpc"
-		rpc := importName(f, rpcImport)
-		isKind := func(e ast.Expr) bool {
-			switch e := e.(type) {
-			case *ast.SelectorExpr:
-				x, ok := e.X.(*ast.Ident)
-				return ok && rpc != "" && x.Name == rpc && kindConsts[e.Sel.Name]
-			case *ast.Ident:
-				return local && kindConsts[e.Name]
-			}
-			return false
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.CaseClause:
-				for _, e := range n.List {
-					if isKind(e) {
-						out = append(out, fmt.Sprintf("%s:%d", rel, fset.Position(n.Pos()).Line))
-						break
-					}
-				}
-			case *ast.BinaryExpr:
-				if (n.Op == token.EQL || n.Op == token.NEQ) && (isKind(n.X) || isKind(n.Y)) {
-					out = append(out, fmt.Sprintf("%s:%d", rel, fset.Position(n.Pos()).Line))
-				}
-			}
-			return true
-		})
-	})
-	return out
 }
 
 // unimplementedEmbeds are the struct types in internal/ that embed

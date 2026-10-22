@@ -80,14 +80,14 @@ func (a *App) applyContentZoom(p *pane.Pane, t *gridwellv1.Tile, v contentzoom.V
 	nt := proto.CloneOf(t)
 	nt.ContentZoom = v.Next
 	a.c.UpdateTile(nt.GridId, nt)
-	switch t.Kind {
-	case rpc.KindText:
+	switch k := rpc.KindOf(t.Kind); {
+	case k.Content == rpc.ContentBody:
 		// Keep the pane's live scale, which the scroll math divides by, in
 		// step with what the next draw reads.
 		p.TextZoom = textFixedScale * v.Next
-	case rpc.KindShell:
+	case k.Live == rpc.DescentShell:
 		a.applyShellZoom(p.ID, v.Next)
-	case rpc.KindURL:
+	case k.Live == rpc.DescentURL:
 		a.bridgeSetZoom(p.ID, v.Next)
 	}
 	a.refreshFileOverlay() // textarea font tracks the scale in text mode

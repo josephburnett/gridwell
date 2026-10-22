@@ -13,7 +13,6 @@ import (
 // ratchetCounts maps each ledger row to the code that measures it. A row the
 // ledger names and this map does not is a typo or a count deleted too early.
 var ratchetCounts = map[string]func(t *testing.T, root string) int{
-	"kind-switch":          length(kindSwitches),
 	"unimplemented-embeds": length(unimplementedEmbeds),
 	"packages":             length(productionPackages),
 	"lines":                productionLines,

@@ -342,10 +342,10 @@ func (a *App) thShellStandin(_ js.Value, args []js.Value) any {
 		return nil
 	}
 	file, ok := a.descendedTile(p)
-	if !ok || file.Kind != rpc.KindShell {
+	if !ok || rpc.DescentOf(file) != rpc.DescentShell {
 		return nil
 	}
-	// The same box the in-pane draw uses; see render.go's KindShell arm.
+	// The same box the in-pane draw uses; see render.go's DescentShell arm.
 	r := a.paneRectByID(p.ID)
 	x, y, _, _ := paneContentBox(r)
 	cached, ok := a.views.urlPreview.Get(rpc.ContentID(file), file.PreviewBlobId)

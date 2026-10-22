@@ -25,7 +25,7 @@ func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 			return true
 		}
 		for _, t := range g.Tiles {
-			if t.Kind == rpc.KindURL && t.UrlString != "" {
+			if rpc.WebContent(t) && t.UrlString != "" {
 				// AltText is the title captured at freeze, so typing title
 				// words finds the address.
 				out = append(out, urlnorm.Candidate{URL: t.UrlString, Title: t.AltText})

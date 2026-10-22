@@ -485,7 +485,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					case rpc.WebContent(file):
 						ix, iy, iw, ih := paneContentBox(r)
 						a.drawURLTileInPane(file, ix, iy, iw, ih)
-					case file.Kind == rpc.KindShell:
+					case rpc.DescentOf(file) == rpc.DescentShell:
 						ix, iy, iw, ih := paneContentBox(r)
 						a.drawShellTileInPane(p, file, ix, iy, iw, ih)
 					default:
@@ -697,24 +697,24 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 // drawNodeWithPreview previews a door's child grid at the child's cell scale,
 // so the descent zoom crosses no discontinuity.
 func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
-	switch n.Kind {
-	case rpc.KindText:
+	k := rpc.KindOf(n.Kind)
+	switch {
+	case k.Content == rpc.ContentBody:
 		a.drawMarkdownNode(n, x, y, w, h, selected, outside, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
-	case rpc.KindURL:
+	case k.Live == rpc.DescentURL:
 		a.drawURLTile(n, x, y, w, h, selected, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
-	case rpc.KindShell:
+	case k.Live == rpc.DescentShell:
 		a.drawShellTile(n, x, y, w, h, selected, dashed)
 		a.drawTileBannerLabel(n, x, y, w, h, outside)
 		return
-	case rpc.KindWorkspace:
+	case k.Content == rpc.ContentLayout:
 		a.drawWorkspacePreview(n, x, y, w, h, selected, outside, dashed)
 		return
-	}
-	if n.Kind != rpc.KindDoor {
+	case k.Descends != rpc.DescendGrid:
 		a.drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
 		return
 	}
@@ -939,19 +939,19 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 		defer clearTileDash(c)
 	}
 	fill, line := a.pal.Locked, ""
-	switch n.Kind {
-	case rpc.KindDoor:
+	switch k := rpc.KindOf(n.Kind); {
+	case k.Descends == rpc.DescendGrid:
 		fill, line = a.pal.Bg, a.pal.FocusBorder
-	case rpc.KindURL:
+	case k.Live == rpc.DescentURL:
 		fill, line = a.pal.URLFill, a.pal.URLLine
-	case rpc.KindShell:
+	case k.Live == rpc.DescentShell:
 		fill, line = a.pal.ShellFill, a.pal.ShellBorder
-	case rpc.KindText:
+	case k.Content == rpc.ContentBody:
 		fill, line = a.pal.MarkdownFill, a.pal.MarkdownLine
 		if outside {
 			fill, line = a.pal.PluginFill, a.pal.PluginBorder
 		}
-	case rpc.KindWorkspace:
+	case k.Content == rpc.ContentLayout:
 		fill, line = a.pal.WorkspaceFill, a.pal.WorkspaceBorder
 	}
 	fillRectC(c, x, y, w, h, fill)

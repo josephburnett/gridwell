@@ -37,7 +37,7 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 	if t, ok := a.descendedTile(p); ok {
 		descended = t
 		in.Descended, in.DescendedName = true, t.AltText
-		in.DescendedText = t.Kind == rpc.KindText
+		in.DescendedText = !rpc.KindOf(t.Kind).TypedName
 		if row, s := a.askContentRow(t); s == contentrow.Ready {
 			in.DescendedReadOnly = row.ReadOnly
 		}

@@ -285,7 +285,7 @@ func (a *App) freezeURLPaneByIntent(paneID string) {
 		return
 	}
 	tile, ok := a.descendedTile(p)
-	if !ok || tile.Kind != rpc.KindURL {
+	if !ok || !rpc.WebContent(tile) {
 		return
 	}
 	a.postFrozen(tile, true, func() {

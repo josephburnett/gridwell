@@ -108,7 +108,7 @@ func (a *App) shellRefreshButtonVisible(tile *gridwellv1.Tile) bool {
 	row, _ := a.contentRow(tile)
 	alive, known := a.shellAlive[key]
 	v := shellconn.DecideShellRefreshVisible(
-		tile.Kind == rpc.KindShell, row.PreviewBlobId != 0, known, alive)
+		rpc.KindOf(tile.Kind).Tmux, row.PreviewBlobId != 0, known, alive)
 	if v.Probe {
 		a.probeShellTmuxAlive(key, rpc.ContentID(tile), nil)
 	}
@@ -611,7 +611,7 @@ func (a *App) closeShellStream(paneID string, freeze bool) {
 // tmux keeps running: a freeze is a screenshot, not a kill.
 func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
 	t, ok := a.descendedTile(p)
-	if !ok || t.Kind != rpc.KindShell {
+	if !ok || rpc.DescentOf(t) != rpc.DescentShell {
 		return
 	}
 	a.postFrozen(t, true, func() {
