@@ -20,11 +20,7 @@ import (
 type menuContext struct {
 	plugins        []*gridwellv1.PluginInfo
 	shellsDisabled bool
-	// fetched marks a completed load. Concurrent opens are kept to one read,
-	// and a failed one from being asked every draw, by a.fetch.menus, not by
-	// a flag here, so the read is bounded and a Handshake the network
-	// swallows does not leave the menu without its plugin section for the
-	// life of the page.
+	// fetched marks a completed load; a.fetch.menus owns asking.
 	fetched bool
 }
 
