@@ -16,8 +16,8 @@
 //
 // Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
-// thumbnail, and Delete refused. A minimal plugin is Info, List and
-// ReadContent.
+// thumbnail, Delete refused, and an undeclared Move refused. A minimal plugin
+// is Info, List and ReadContent.
 //
 // docs/plugin-authoring.md is this contract from the plugin's side.
 
@@ -72,6 +72,8 @@ const (
 	PluginProbeProcedure = "/plugin.v1.Plugin/Probe"
 	// PluginDeleteProcedure is the fully-qualified name of the Plugin's Delete RPC.
 	PluginDeleteProcedure = "/plugin.v1.Plugin/Delete"
+	// PluginMoveProcedure is the fully-qualified name of the Plugin's Move RPC.
+	PluginMoveProcedure = "/plugin.v1.Plugin/Move"
 	// PluginFindProcedure is the fully-qualified name of the Plugin's Find RPC.
 	PluginFindProcedure = "/plugin.v1.Plugin/Find"
 	// PluginWatchProcedure is the fully-qualified name of the Plugin's Watch RPC.
@@ -88,6 +90,7 @@ type PluginClient interface {
 	GetPreview(context.Context, *connect.Request[v1.GetPreviewRequest]) (*connect.Response[v1.GetPreviewResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error)
+	Move(context.Context, *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error)
 	Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error)
 	Watch(context.Context, *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.Change], error)
 }
@@ -151,6 +154,12 @@ func NewPluginClient(httpClient connect.HTTPClient, baseURL string, opts ...conn
 			connect.WithSchema(pluginMethods.ByName("Delete")),
 			connect.WithClientOptions(opts...),
 		),
+		move: connect.NewClient[v1.MoveRequest, v1.MoveResponse](
+			httpClient,
+			baseURL+PluginMoveProcedure,
+			connect.WithSchema(pluginMethods.ByName("Move")),
+			connect.WithClientOptions(opts...),
+		),
 		find: connect.NewClient[v1.FindRequest, v1.FindResponse](
 			httpClient,
 			baseURL+PluginFindProcedure,
@@ -176,6 +185,7 @@ type pluginClient struct {
 	getPreview   *connect.Client[v1.GetPreviewRequest, v1.GetPreviewResponse]
 	probe        *connect.Client[v1.ProbeRequest, v1.ProbeResponse]
 	delete       *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
+	move         *connect.Client[v1.MoveRequest, v1.MoveResponse]
 	find         *connect.Client[v1.FindRequest, v1.FindResponse]
 	watch        *connect.Client[v1.WatchRequest, v1.Change]
 }
@@ -220,6 +230,11 @@ func (c *pluginClient) Delete(ctx context.Context, req *connect.Request[v1.Delet
 	return c.delete.CallUnary(ctx, req)
 }
 
+// Move calls plugin.v1.Plugin.Move.
+func (c *pluginClient) Move(ctx context.Context, req *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error) {
+	return c.move.CallUnary(ctx, req)
+}
+
 // Find calls plugin.v1.Plugin.Find.
 func (c *pluginClient) Find(ctx context.Context, req *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error) {
 	return c.find.CallUnary(ctx, req)
@@ -240,6 +255,7 @@ type PluginHandler interface {
 	GetPreview(context.Context, *connect.Request[v1.GetPreviewRequest]) (*connect.Response[v1.GetPreviewResponse], error)
 	Probe(context.Context, *connect.Request[v1.ProbeRequest]) (*connect.Response[v1.ProbeResponse], error)
 	Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error)
+	Move(context.Context, *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error)
 	Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error)
 	Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.Change]) error
 }
@@ -299,6 +315,12 @@ func NewPluginHandler(svc PluginHandler, opts ...connect.HandlerOption) (string,
 		connect.WithSchema(pluginMethods.ByName("Delete")),
 		connect.WithHandlerOptions(opts...),
 	)
+	pluginMoveHandler := connect.NewUnaryHandler(
+		PluginMoveProcedure,
+		svc.Move,
+		connect.WithSchema(pluginMethods.ByName("Move")),
+		connect.WithHandlerOptions(opts...),
+	)
 	pluginFindHandler := connect.NewUnaryHandler(
 		PluginFindProcedure,
 		svc.Find,
@@ -329,6 +351,8 @@ func NewPluginHandler(svc PluginHandler, opts ...connect.HandlerOption) (string,
 			pluginProbeHandler.ServeHTTP(w, r)
 		case PluginDeleteProcedure:
 			pluginDeleteHandler.ServeHTTP(w, r)
+		case PluginMoveProcedure:
+			pluginMoveHandler.ServeHTTP(w, r)
 		case PluginFindProcedure:
 			pluginFindHandler.ServeHTTP(w, r)
 		case PluginWatchProcedure:
@@ -372,6 +396,10 @@ func (UnimplementedPluginHandler) Probe(context.Context, *connect.Request[v1.Pro
 
 func (UnimplementedPluginHandler) Delete(context.Context, *connect.Request[v1.DeleteRequest]) (*connect.Response[v1.DeleteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("plugin.v1.Plugin.Delete is not implemented"))
+}
+
+func (UnimplementedPluginHandler) Move(context.Context, *connect.Request[v1.MoveRequest]) (*connect.Response[v1.MoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("plugin.v1.Plugin.Move is not implemented"))
 }
 
 func (UnimplementedPluginHandler) Find(context.Context, *connect.Request[v1.FindRequest]) (*connect.Response[v1.FindResponse], error) {

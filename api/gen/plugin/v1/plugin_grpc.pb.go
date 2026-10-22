@@ -16,8 +16,8 @@
 //
 // Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
-// thumbnail, and Delete refused. A minimal plugin is Info, List and
-// ReadContent.
+// thumbnail, Delete refused, and an undeclared Move refused. A minimal plugin
+// is Info, List and ReadContent.
 //
 // docs/plugin-authoring.md is this contract from the plugin's side.
 
@@ -50,6 +50,7 @@ const (
 	Plugin_GetPreview_FullMethodName   = "/plugin.v1.Plugin/GetPreview"
 	Plugin_Probe_FullMethodName        = "/plugin.v1.Plugin/Probe"
 	Plugin_Delete_FullMethodName       = "/plugin.v1.Plugin/Delete"
+	Plugin_Move_FullMethodName         = "/plugin.v1.Plugin/Move"
 	Plugin_Find_FullMethodName         = "/plugin.v1.Plugin/Find"
 	Plugin_Watch_FullMethodName        = "/plugin.v1.Plugin/Watch"
 )
@@ -68,6 +69,7 @@ type PluginClient interface {
 	GetPreview(ctx context.Context, in *GetPreviewRequest, opts ...grpc.CallOption) (*GetPreviewResponse, error)
 	Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error)
 	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
+	Move(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (*MoveResponse, error)
 	Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error)
 	Watch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Change], error)
 }
@@ -181,6 +183,16 @@ func (c *pluginClient) Delete(ctx context.Context, in *DeleteRequest, opts ...gr
 	return out, nil
 }
 
+func (c *pluginClient) Move(ctx context.Context, in *MoveRequest, opts ...grpc.CallOption) (*MoveResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MoveResponse)
+	err := c.cc.Invoke(ctx, Plugin_Move_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pluginClient) Find(ctx context.Context, in *FindRequest, opts ...grpc.CallOption) (*FindResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(FindResponse)
@@ -224,6 +236,7 @@ type PluginServer interface {
 	GetPreview(context.Context, *GetPreviewRequest) (*GetPreviewResponse, error)
 	Probe(context.Context, *ProbeRequest) (*ProbeResponse, error)
 	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
+	Move(context.Context, *MoveRequest) (*MoveResponse, error)
 	Find(context.Context, *FindRequest) (*FindResponse, error)
 	Watch(*WatchRequest, grpc.ServerStreamingServer[Change]) error
 	mustEmbedUnimplementedPluginServer()
@@ -259,6 +272,9 @@ func (UnimplementedPluginServer) Probe(context.Context, *ProbeRequest) (*ProbeRe
 }
 func (UnimplementedPluginServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Delete not implemented")
+}
+func (UnimplementedPluginServer) Move(context.Context, *MoveRequest) (*MoveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Move not implemented")
 }
 func (UnimplementedPluginServer) Find(context.Context, *FindRequest) (*FindResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Find not implemented")
@@ -406,6 +422,24 @@ func _Plugin_Delete_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Plugin_Move_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MoveRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServer).Move(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Plugin_Move_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServer).Move(ctx, req.(*MoveRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Plugin_Find_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FindRequest)
 	if err := dec(in); err != nil {
@@ -461,6 +495,10 @@ var Plugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Delete",
 			Handler:    _Plugin_Delete_Handler,
+		},
+		{
+			MethodName: "Move",
+			Handler:    _Plugin_Move_Handler,
 		},
 		{
 			MethodName: "Find",

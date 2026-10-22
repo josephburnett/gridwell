@@ -16,8 +16,8 @@
 //
 // Unimplemented is always polite: Find means no results, ServeContent a 404,
 // an undeclared Watch no events, WriteContent read-only, GetPreview no
-// thumbnail, and Delete refused. A minimal plugin is Info, List and
-// ReadContent.
+// thumbnail, Delete refused, and an undeclared Move refused. A minimal plugin
+// is Info, List and ReadContent.
 //
 // docs/plugin-authoring.md is this contract from the plugin's side.
 syntax = "proto3";
@@ -62,13 +62,19 @@ message InfoResponse {
   repeated PluginGrid grids = 7;
   // host_content: this plugin's grids project host state, such as a
   // directory tree or the process table, rather than holding content of their
-  // own. Their rows are summaries the node cannot re-arrange across grids,
-  // and the client renders them with the host treatment: the outside tint on
+  // own. Their rows are summaries the node moves across grids only through
+  // Move, and the client renders them with the host treatment: the outside tint on
   // every tile and the border family of a door to another namespace on a descent. The node has no list of
   // which kinds are host-backed, so a third-party plugin gets the same
   // treatment by declaring it here. It becomes Grid.host_content on every grid
   // the node serves for this plugin.
   bool host_content = 8;
+  // move: the plugin implements Move, so an entry can go to another of its
+  // grids, as a file to another directory. It is the one owner: without it
+  // the node refuses a move to another grid with the reason and never asks.
+  // A plugin that sets it and answers Unimplemented is refused the same way,
+  // with that answer as the reason. A mailbox leaves it unset.
+  bool move = 9;
 }
 
 // PluginGrid mirrors the gridwell.v1 shape with grid keys for targets: one of
@@ -276,6 +282,22 @@ message DeleteRequest {
 }
 message DeleteResponse {}
 
+// Move asks the plugin to move the source thing behind an entry from grid to
+// to_grid: rename the file into another directory. key is the entry's key in
+// to_grid, which may differ from the key it had (a file's key is its path).
+// The node keeps the entry's id and points its row at the new grid and key,
+// so every link to it still resolves; the key stability contract is about the
+// scheme, and this is the one answer that changes a key. Refuse with the
+// reason when the move cannot be made.
+message MoveRequest {
+  string key     = 1;
+  string grid    = 2;
+  string to_grid = 3;
+}
+message MoveResponse {
+  string key = 1;
+}
+
 // ─── Find ────────────────────────────────────────────────────────────────
 
 message FindRequest {
@@ -349,6 +371,7 @@ service Plugin {
   rpc GetPreview(GetPreviewRequest)   returns (GetPreviewResponse);
   rpc Probe(ProbeRequest)             returns (ProbeResponse);
   rpc Delete(DeleteRequest)           returns (DeleteResponse);
+  rpc Move(MoveRequest)               returns (MoveResponse);
   rpc Find(FindRequest)           returns (FindResponse);
   rpc Watch(WatchRequest)             returns (stream Change);
 }
