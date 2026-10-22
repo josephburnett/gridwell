@@ -893,21 +893,7 @@ func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 			return err
 		}
 	}
-	for {
-		select {
-		case ev, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			// The hub hands the same event to every subscriber and nobody
-			// mutates it; the router's qualification copies.
-			if err := send(ev); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return nil
-		}
-	}
+	return namespace.Relay(ctx, ch, send)
 }
 
 // Find forwards the one find verb, filters and all. A grid_id or an id:

@@ -175,19 +175,7 @@ func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest,
 			return err
 		}
 	}
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case ev, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if err := send(ev); err != nil {
-				return err
-			}
-		}
-	}
+	return namespace.Relay(ctx, ch, send)
 }
 
 func (a *Adapter) emitHealth(healthy bool, detail string) {

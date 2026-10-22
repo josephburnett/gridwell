@@ -1,6 +1,7 @@
 package namespace
 
-// Follow supplies the moment an in-process subscription counts as established.
+// Follow supplies the moment an in-process subscription counts as established,
+// and Relay the tail every Subscribe ends in.
 // Subscribe is one call that runs for the stream's whole life, so the header is
 // the only open stream there is to observe, and deciding it here keeps
 // internal/server and internal/connection agreed on what established means.
@@ -28,4 +29,22 @@ func Follow(ctx context.Context, ns Namespace, req *pb.SubscribeRequest, onEvent
 		}
 		return onEvent(ev)
 	})
+}
+
+// Relay sends each event ch carries until ch closes or ctx ends, answering a
+// failed send.
+func Relay(ctx context.Context, ch <-chan *pb.Event, send func(*pb.Event) error) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := send(ev); err != nil {
+				return err
+			}
+		}
+	}
 }

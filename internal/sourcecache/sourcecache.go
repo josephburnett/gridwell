@@ -954,20 +954,8 @@ func (c *Layer) Subscribe(ctx context.Context, in *pb.SubscribeRequest, send fun
 	own := make(chan struct{})
 	go func() {
 		defer close(own)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case ev, ok := <-ch:
-				if !ok {
-					return
-				}
-				if err := emit(ev); err != nil {
-					ownErr = err
-					cancel()
-					return
-				}
-			}
+		if ownErr = namespace.Relay(ctx, ch, emit); ownErr != nil {
+			cancel()
 		}
 	}()
 	// The far node's header is ours: this layer's own stream is attached.

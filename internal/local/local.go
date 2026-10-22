@@ -90,25 +90,25 @@ func (p *Plugin) Close() error { return p.st.Close() }
 func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	id, err := p.st.RootGridID(ctx)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	scratch, err := p.st.ScratchGridID(ctx)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	trash, err := p.st.TrashGridID(ctx)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	// Every declared door carries its grid's framing, root and trashcan
 	// alike.
 	view, err := p.st.RootFraming(ctx)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	trashView, err := p.st.GridFraming(trash)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	tcx, tcy, tzoom := trashView.Wire()
 	rcx, rcy, rzoom := view.Wire()
@@ -135,7 +135,7 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	t, err := p.st.SetFraming(ctx, req)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.SetFramingResponse{Tile: t}, nil
 }
@@ -143,7 +143,7 @@ func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 // SetSelection is a select of a home grid. It never bumps a version.
 func (p *Plugin) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
 	if err := p.st.SetSelection(ctx, req); err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.SetSelectionResponse{}, nil
 }
@@ -154,7 +154,7 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
 	}
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
 }
@@ -164,7 +164,7 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	r, err := p.st.GetGrid(ctx, req.GridId)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	r.Grid.AcceptsTiles, r.Grid.Writable = proto.Bool(true), true
 	return r, nil
@@ -173,7 +173,7 @@ func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	jpeg, err := p.st.GetTilePreview(ctx, req.TileId)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
@@ -192,7 +192,7 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 func (p *Plugin) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
 	res, err := p.st.Find(ctx, req)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.FindResponse{Results: res}, nil
 }
@@ -202,7 +202,7 @@ func (p *Plugin) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwe
 func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
 	data, mediaType, version, err := p.st.ReadContent(ctx, req.TileId)
 	if err != nil {
-		return errToStatus(err)
+		return gwerr.ToStatus(err)
 	}
 	first := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
 	if len(data) <= rpc.ContentChunkBytes {
@@ -250,7 +250,7 @@ func (p *Plugin) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	}
 	tile, err := p.st.WriteContent(ctx, tileID, version, data)
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.TileResponse{Tile: tile}, nil
 }
@@ -398,7 +398,7 @@ func (p *Plugin) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAl
 func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
 	t, err := p.st.GetTile(ctx, tileID)
 	if err != nil {
-		return "", errToStatus(err)
+		return "", gwerr.ToStatus(err)
 	}
 	if !rpc.KindOf(t.Kind).Tmux || t.LinkTargetId != "" {
 		return "", status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
@@ -523,7 +523,7 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 		}
 	}
 	if err := p.st.DeleteTile(ctx, req); err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	// The tmux dies with the last row naming it, a trashed row included.
 	if key == "" {
@@ -554,29 +554,12 @@ func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, 
 	if err := send(nil); err != nil {
 		return err
 	}
-	for {
-		select {
-		case ev, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			// Nothing downstream writes into the shared event:
-			// server.qualifyTiles copies.
-			if err := send(ev); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return nil
-		}
-	}
+	return namespace.Relay(ctx, ch, send)
 }
 
 func tileResp(t *gridwellv1.Tile, err error) (*gridwellv1.TileResponse, error) {
 	if err != nil {
-		return nil, errToStatus(err)
+		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.TileResponse{Tile: t}, nil
 }
-
-// errToStatus is gwerr.ToStatus, the one class-to-code table.
-func errToStatus(err error) error { return gwerr.ToStatus(err) }
