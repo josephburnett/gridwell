@@ -178,7 +178,7 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
 				Streams: StreamURL, Freeze: true})
 		}
-		if file.Kind == rpc.KindShell {
+		if rpc.DescentOf(file) == rpc.DescentShell {
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
 				Streams: StreamShell, Freeze: true})
 		}

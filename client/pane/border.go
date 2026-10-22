@@ -58,15 +58,15 @@ func FamilyOf(s BorderInput) Family {
 			if s.Ephemeral {
 				return FamilyEphemeral
 			}
-			switch s.TileKind {
-			case rpc.KindURL:
+			switch k := rpc.KindOf(s.TileKind); {
+			case k.Live == rpc.DescentURL:
 				if s.URLLive {
 					return FamilyURLLive
 				}
 				return FamilyURL
-			case rpc.KindShell:
+			case k.Live == rpc.DescentShell:
 				return FamilyShell
-			case rpc.KindText:
+			case k.Content == rpc.ContentBody:
 				if s.InHostGrid {
 					return FamilyHost
 				}

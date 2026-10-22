@@ -36,7 +36,7 @@ func Showing(t *Tree, laidOut map[string]Rect, leaf func(anchor string, path []s
 			return
 		}
 		for _, n := range tiles(g) {
-			if n.Kind == rpc.KindDoor && n.ChildGridId != "" && ps.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
+			if rpc.IsDoorKind(n.Kind) && n.ChildGridId != "" && ps.Shows(float64(n.X), float64(n.Y), float64(n.W), float64(n.H)) {
 				out = append(out, n.ChildGridId)
 			}
 		}

@@ -13,7 +13,7 @@ import (
 // Outside reports the outside-Gridwell treatment. A grid that declares
 // host_content makes every row in it host state, whatever the row is.
 func Outside(t *gridwellv1.Tile, parentHostContent bool) bool {
-	return parentHostContent || rpc.IsDoorToOtherNamespace(t) || t.Kind == rpc.KindShell
+	return parentHostContent || rpc.IsDoorToOtherNamespace(t) || rpc.KindOf(t.Kind).Tmux
 }
 
 // Hue is the family a banner label echoes: the tile's own outline, so label
@@ -36,20 +36,18 @@ const (
 // BannerHue answers in the outline's priority, so a door keeps its blue
 // whichever grid it sits in. outside is Outside's answer for the same row.
 func BannerHue(t *gridwellv1.Tile, outside bool) Hue {
-	switch {
-	case t.Kind == rpc.KindShell:
+	switch k := rpc.KindOf(t.Kind); {
+	case k.Live == rpc.DescentShell:
 		return HueShell
 	case rpc.IsDoorToOtherNamespace(t):
 		return HueDoor
 	case outside:
 		return HueHost
-	}
-	switch t.Kind {
-	case rpc.KindDoor:
+	case k.Descends == rpc.DescendGrid:
 		return HueDoor
-	case rpc.KindURL:
+	case k.Live == rpc.DescentURL:
 		return HueURL
-	case rpc.KindText:
+	case k.Content == rpc.ContentBody:
 		return HueText
 	}
 	return HueMuted
