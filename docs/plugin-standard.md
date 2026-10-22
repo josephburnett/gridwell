@@ -12,8 +12,8 @@ apply the promises in `CLAUDE.md` one hop further, inside the plugin.
 
 Each rule has the rule, the promise or decision it serves, an example, the
 test that pins it, and where the six shipped plugins stand today. Code paths
-are in the plugins repository (`github.com/josephburnett/gridwell-plugins`)
-at main `729ba73`, unless they start with `internal/`.
+are in the plugins repository (`github.com/josephburnett/gridwell-plugins`),
+unless they start with `internal/`, and name a function, never a line.
 
 ## 1. Declare what you implement
 
@@ -25,7 +25,7 @@ never switches on a plugin kind; every behavior rides a wire declaration
 (CLAUDE.md, Node). A `Watch` the plugin never declares is never opened, so its
 grids go stale while the code that would have told the node sits unused.
 
-**Example.** `fs/plugin/plugin.go:178-181`:
+**Example.** `fs/plugin/plugin.go:Info`:
 
 ```go
 // The one grid this plugin serves: the configured tree. It
@@ -40,10 +40,9 @@ resp.Watch = true
 hey); pages pins that it declares none
 (`pages/plugin/plugin_test.go:TestInfoDeclaresTheGridAndNotHostContent`).
 
-**Today.** Meets: fs (`fs/plugin/plugin.go:181`), proc
-(`proc/plugin/plugin.go:136`), gitlab (`gitlab/plugin/plugin.go:286`), gmail
-(`gmail/plugin/plugin.go:307`), hey (`hey/plugin/plugin.go:265`); pages
-implements no `Watch` and declares none.
+**Today.** Meets: fs, proc, gitlab, gmail and hey, each in its `Info`
+(`fs/plugin/plugin.go:Info` and the same in each); pages implements no
+`Watch` and declares none.
 
 ## 2. Refuse a config you cannot serve, then latch
 
@@ -55,7 +54,7 @@ and latch after the first pass.
 the fix lands, which needs no restart" (2026-09-30). The latch is what makes
 a later outage weather (rule 3) rather than a config verdict.
 
-**Example.** `fs/plugin/plugin.go:172-177`:
+**Example.** `fs/plugin/plugin.go:Info`:
 
 ```go
 if !p.served.Load() {
@@ -73,11 +72,11 @@ binaries `internal/server/fs_info_refusal_seam_test.go`,
 `gitlab_info_refusal_seam_test.go` and
 `gmail_seam_test.go:TestGmailRefusesATokenGoogleRefuses`.
 
-**Today.** Meets: fs (`fs/plugin/plugin.go:172-177`), proc
-(`proc/plugin/plugin.go:111-117`), gitlab, which asks GitLab whether it takes
-the token (`gitlab/plugin/plugin.go:272-279`), gmail, which asks Google for the
-account's history id (`gmail/plugin/plugin.go:289-296`), and hey, which asks
-whether the CLI runs (`hey/plugin/plugin.go:248-254`). N/A: pages, which
+**Today.** Meets, each in its `Info`: fs (`fs/plugin/plugin.go:Info`), proc
+(`proc/plugin/plugin.go:Info`), gitlab, which asks GitLab whether it takes
+the token (`gitlab/plugin/plugin.go:Info`), gmail, which asks Google for the
+account's history id (`gmail/plugin/plugin.go:Info`), and hey, which asks
+whether the CLI runs (`hey/plugin/plugin.go:Info`). N/A: pages, which
 takes no config.
 
 ## 3. After Info, unreachable is Unavailable
@@ -91,7 +90,7 @@ means "not right now", and the node serves its rows and marks the source dark
 answer is a verdict the user is shown, and a swallowed failure is an empty
 grid that looks true.
 
-**Example.** `fs/plugin/plugin.go:244-250`:
+**Example.** `fs/plugin/plugin.go:List`:
 
 ```go
 entries, readErr := fssource.Read(dir)
@@ -114,17 +113,21 @@ across the seam `internal/server/hey_dark_seam_test.go:TestHeyCLIGoneAfterInfoRe
 and `gitlab_outage_seam_test.go`.
 
 **Today.** Meets: fs; proc answers a table it cannot read `Unavailable`
-(`proc/plugin/plugin.go:192-195`, `207-209`); hey turns every failed walk,
-a cold one included, into the cache with its reason (`hey/plugin/plugin.go:406-420`),
-and a CLI it cannot run is `Unavailable` (`hey/heycli/heycli.go:357`).
-Partial: gitlab and gmail map a network failure to `Unavailable`
-(`gitlab/gitlabapi/client.go:105-110`, `142`; `gmail/gmailapi/client.go`), but
-a cold read, one the cache has no answer for, whose walk fails still fails with
-the walk's own code (`memo/flights.go:119`, pinned by `memo/flights_test.go`,
-"a cold read whose walk failed answers the failure";
-`gitlab/plugin/plugin.go:301-304`, `gmail/plugin/plugin.go:470-472`). So a
-token revoked after `Info` reads `PermissionDenied` on a grid neither has
-read yet. N/A: pages, whose site is its own code and is never unreachable.
+(`proc/plugin/plugin.go:List`); gitlab, gmail and hey, whose reads go through
+`memo.Flights.Read` (`memo/flights.go:Read`; `gitlab/plugin/plugin.go:List`,
+`gmail/plugin/plugin.go:read`, `hey/plugin/plugin.go:read`). A cold read, one
+the cache has no answer for, whose walk failed is `Unavailable` with the
+walk's reason, whatever code the source gave; a warm read is the cache with
+the reason in `unreachable` (rule 7). So a token revoked after `Info` reads
+dark with the refusal as its reason. hey goes one step further and answers a
+cold failure from its empty cache with the reason. gitlab and gmail map a
+network failure to `Unavailable` (`gitlab/gitlabapi/client.go:do`, `Page`;
+`gmail/gmailapi/client.go`), and a hey CLI that cannot run is `Unavailable`
+(`hey/heycli/heycli.go:notRunnable`). Pinned by `memo/flights_test.go`
+("a cold read whose walk was refused is Unavailable, never the refusal's
+code"), `gitlab/plugin/plugin_test.go:TestAColdReadOfARefusedTokenIsUnavailable`
+and `gmail/plugin/plugin_test.go:TestAColdWalkRefusedIsUnavailableWithTheReason`.
+N/A: pages, whose site is its own code and is never unreachable.
 
 ## 4. Authoritative when definitive
 
@@ -139,7 +142,7 @@ authoritative listing lets the node retire a gone key in one pass; a
 non-authoritative one costs a `Probe` per missing key, and a wrongly
 authoritative one retires a row the user placed.
 
-**Example.** `pages/plugin/plugin.go:65-72`:
+**Example.** `pages/plugin/plugin.go:List`:
 
 ```go
 // List enumerates the site. It is authoritative — the site is fixed, so a key
@@ -160,10 +163,10 @@ read while the feed is down or resyncing, do not.
 Per plugin: `gmail/plugin/allmail_test.go:TestALabelListingIsAuthoritativeOnlyWhenDefinitive`,
 `hey/plugin/watch_test.go:TestAuthoritativeOnlyWhenDefinitive`.
 
-**Today.** Meets: fs (`fs/plugin/plugin.go:255`), pages; gmail, a label read
-whole with the cache current to Gmail's history (`gmail/plugin/plugin.go:503`);
+**Today.** Meets: fs (`fs/plugin/plugin.go:List`), pages; gmail, a label read
+whole with the cache current to Gmail's history (`gmail/plugin/plugin.go:List`);
 hey, a box whose catch-up walk read it whole with the feed live
-(`hey/plugin/plugin.go:295-299`, `450`). All mail and everything are never
+(`hey/plugin/plugin.go:authoritative`, `List`). All mail and everything are never
 authoritative, by decision. proc and gitlab are never definitive by design
 and never claim it.
 
@@ -177,7 +180,7 @@ thing listed in many grids is one tile" (2026-10-02). Two entries with
 one key are two tiles: placement, a copy and a link each attach to one of
 them, and the user sees one thing twice.
 
-**Example.** `hey/mail/entries.go:33-44`:
+**Example.** `hey/mail/entries.go:BoxEntries`:
 
 ```go
 // BoxEntries derives one box's grid: GridEntries, each a link to the
@@ -200,8 +203,8 @@ and `fs/plugin/symlink_test.go:TestSymlinksListAsLinksToTheOneKey` on the
 plugin side; `internal/server/link_entry_seam_test.go` across the seam.
 
 **Today.** Meets: gitlab, pages, proc (each key in one grid); fs, whose
-symlinks are links to the one key (`fs/plugin/plugin.go:299-318`); gmail,
-whose labels link into all mail (`gmail/mailbox/entries.go:27-33`); hey.
+symlinks are links to the one key (`fs/plugin/plugin.go:linkEntry`); gmail,
+whose labels link into all mail (`gmail/mailbox/entries.go:LabelEntries`); hey.
 
 ## 6. Probe answers for the grid asked
 
@@ -212,7 +215,7 @@ whose labels link into all mail (`gmail/mailbox/entries.go:27-33`); hey.
 is not being gone" (2026-10-02). A thread that left the Imbox is usually in
 Reply Later; GONE for the plugin would retire its tile everywhere.
 
-**Example.** `hey/plugin/plugin.go:566-575`:
+**Example.** `hey/plugin/plugin.go:Probe`:
 
 ```go
 default:
@@ -231,8 +234,8 @@ default:
 `internal/server/link_entry_seam_test.go:TestTheSweepProbesTheGridItSweeps`
 across the seam.
 
-**Today.** Meets: hey; gmail (`gmail/plugin/plugin.go:564-601`); pages
-(`pages/plugin/plugin.go:165-170`) and proc (`proc/plugin/plugin.go:259-283`),
+**Today.** Meets: hey; gmail (`gmail/plugin/plugin.go:Probe`); pages
+(`pages/plugin/plugin.go:Probe`) and proc (`proc/plugin/plugin.go:Probe`),
 which answer for the grid named too; fs and gitlab, whose keys live in one
 grid each, so the plugin-wide answer is the grid's. Every plugin but fs
 and gitlab has a `TestProbeAnswersForTheGridAsked`.
@@ -250,7 +253,7 @@ source's health" (`docs/freshness.md`, layer 4, `internal/sourcecache/`).
 A failed `List` costs the user every entry the node has not minted a row for,
 which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
 
-**Example.** `gitlab/plugin/plugin.go:300-308`, over `memo.Flights.Read`:
+**Example.** `gitlab/plugin/plugin.go:List`, over `memo.Flights.Read`:
 
 ```go
 start := since(req.Grid)
@@ -276,10 +279,11 @@ the seam `internal/server/gitlab_outage_seam_test.go`,
 `gmail_watch_seam_test.go:TestGmailWarmGridSurvivesGmailGoingAway` and
 `hey_unreachable_seam_test.go:TestHeySignedOutKeepsTheGridAndSaysWhy`.
 
-**Today.** Meets: gitlab (`gitlab/plugin/plugin.go:294-319`), gmail
-(`gmail/plugin/plugin.go:469-475`), hey (`hey/plugin/plugin.go:406-420`),
-all through `memo.Flights.Read` (`memo/flights.go:102-125`). A cold read has
-no cache to answer from, and is rule 3's. N/A: fs, proc and pages, which keep
+**Today.** Meets: gitlab (`gitlab/plugin/plugin.go:List`), gmail
+(`gmail/plugin/plugin.go:read`), hey (`hey/plugin/plugin.go:read`),
+all through `memo.Flights.Read` (`memo/flights.go:Read`): a warm read answers
+the cache at once with the last walk's failure as `unreachable`. A cold read
+has no cache to answer from, and is rule 3's. N/A: fs, proc and pages, which keep
 no cache.
 
 ## 8. Work only while watched
@@ -294,7 +298,7 @@ stream only while a client shows one of the plugin's grids, so the stream is
 the plugin's signal that someone is looking. Decided for plugins 2026-10-02
 (CLAUDE.md, Node).
 
-**Example.** `fs/plugin/watch.go:250-257`: the OS watch exists only while
+**Example.** `fs/plugin/watch.go:detachIfIdle`: the OS watch exists only while
 some stream's scope needs it.
 
 ```go
@@ -320,10 +324,11 @@ fake source saw no request; open a stream and assert it did:
 seam `internal/server/hey_watch_seam_test.go:TestHeyFeedRunsOnlyWhileAGridIsShown`.
 
 **Today.** Meets: fs; proc polls a pid only while a stream shows it
-(`proc/plugin/watch.go:27-43`); gitlab's refresher, gmail's history poll and
+(`proc/plugin/watch.go:follow`); gitlab's refresher, gmail's history poll and
 hey's live feed are `memo.Changes` work, which runs only while a stream needs
-it and a linger after (`gitlab/plugin/plugin.go:152-158`,
-`gmail/plugin/plugin.go:211-217`, `hey/plugin/plugin.go:216-222`). pages does
+it and a linger after (each plugin's `New` builds its `memo.Changes`:
+`gitlab/plugin/plugin.go:New`, `gmail/plugin/plugin.go:New`,
+`hey/plugin/plugin.go:New`). pages does
 no background work.
 
 ## 9. Watch: header, collapse, overflow
@@ -336,7 +341,7 @@ stream open at the header and lists what it adds only then
 (`internal/pluginhost/watch.go`); every change costs each showing client a
 listing; a dropped change is a grid that never repaints.
 
-**Example.** `fs/plugin/watch.go:70-80`:
+**Example.** `fs/plugin/watch.go:Watch`:
 
 ```go
 for {
@@ -365,7 +370,7 @@ told its whole scope); `TestWatchSendsItsHeaderOnAccept` in proc, gitlab,
 gmail and hey.
 
 **Today.** Meets: fs; proc, gitlab, gmail and hey, which serve `Watch` through
-`memo.Changes.Serve` (`memo/changes.go:106-131`, the overflow at `224-247`).
+`memo.Changes.Serve` (`memo/changes.go:Serve`, the overflow in `sub.add`).
 N/A: pages.
 
 ## 10. Placement hints are a function of the key
@@ -378,7 +383,7 @@ listed moves when a neighbor arrives late, and differs between two grids
 that list the same thing, so first placement depends on the order things
 were read.
 
-**Example.** `pages/plugin/plugin.go:74-78`:
+**Example.** `pages/plugin/plugin.go:List`:
 
 ```go
 e := &pluginv1.Entry{
@@ -399,8 +404,9 @@ is unchanged: `hey/mail/entries_test.go:TestEntriesHintIsPureInTheCreationTime`,
 `gitlab/todos/todos_test.go:TestTodoHintsAreAFunctionOfTheTodo` and
 `TestWeekHintsAreTheSharedWeekCell`, and `memo/calendar/calendar_test.go`.
 
-**Today.** Meets: pages; gitlab (`gitlab/todos/entries.go:16`, `43`), gmail
-(`gmail/mailbox/entries.go:38`) and hey (`hey/mail/entries.go:21`), each a
+**Today.** Meets: pages; gitlab (`gitlab/todos/entries.go:RootEntries`,
+`WeekEntries`), gmail (`gmail/mailbox/entries.go:entries`) and hey
+(`hey/mail/entries.go:GridEntries`), each a
 calendar cell of the creation time. fs and proc send no hints.
 
 ## 11. State is status_detail, and quiet
@@ -414,8 +420,8 @@ the name at every zoom the name is drawn (`tilepreview.BannerText`). A label tha
 changes the tile's name as the state changes, and a word on every tile is
 noise that hides the one that matters.
 
-**Example.** `hey/mail/mail.go:168-175`, beside a `Label` that reads the
-same seen or unseen (`hey/mail/mail.go:155-165`):
+**Example.** `hey/mail/mail.go:StatusDetail`, beside a `Label` that reads the
+same seen or unseen (`hey/mail/mail.go:Label`):
 
 ```go
 // StatusDetail is UnseenMark while the thread is unseen in the box it was
@@ -440,10 +446,10 @@ and `hey/mail/entries_test.go:TestStatusIsTheUnseenMarkInABoxOnly`,
 client draws the status before the name (`client/tilepreview/banner_test.go`).
 
 **Today.** Meets: fs and pages, which send none; proc, 💀 or ⏸
-(`proc/plugin/plugin.go:220-231`); gitlab, ✅ once done
-(`gitlab/todos/todos.go:112-121`), its week doors named by the Monday alone;
+(`proc/plugin/plugin.go:stateMark`); gitlab, ✅ once done
+(`gitlab/todos/todos.go:StatusDetail`), its week doors named by the Monday alone;
 gmail, ● unread, else ★ starred outside the starred grid
-(`gmail/mailbox/mailbox.go:185-193`); hey, ● unseen in a box and nothing in
+(`gmail/mailbox/mailbox.go:StatusDetail`); hey, ● unseen in a box and nothing in
 everything.
 
 ## 12. Declare text_presentation
@@ -454,7 +460,7 @@ everything.
 with no declaration presents however the client defaults, and a markdown body
 shown verbatim (or a log rendered as markdown) is a different tile.
 
-**Example.** `fs/plugin/plugin.go:289-290`:
+**Example.** `fs/plugin/plugin.go:fileFacts`:
 
 ```go
 out.Kind = "text"
@@ -467,8 +473,8 @@ A table test per plugin: every text entry its listings answer carries
 `proc/plugin/plugin_test.go:TestEveryTextEntryDeclaresItsPresentation`,
 `gitlab/todos/todos_test.go:TestEveryTextEntryDeclaresItsPresentation`.
 
-**Today.** Meets: fs, pages (`pages/plugin/plugin.go:89-91`), proc's `@info`
-(`proc/plugin/plugin.go:200`), gitlab's todos (`gitlab/todos/entries.go:47`).
+**Today.** Meets: fs, pages (`pages/plugin/plugin.go:List`), proc's `@info`
+(`proc/plugin/plugin.go:List`), gitlab's todos (`gitlab/todos/entries.go:WeekEntries`).
 N/A: gmail and hey, which list no text entries.
 
 ## 13. Pass the request's context
@@ -481,7 +487,7 @@ call (`gwerr.IsAbandoned`), the work behind it should stop. A detached shared
 walk is the one exception: it outlives any reader by design, and runs under
 the plugin's lifetime context, not `context.Background()`.
 
-**Example.** `hey/plugin/plugin.go:555-559`:
+**Example.** `hey/plugin/plugin.go:Probe`:
 
 ```go
 case mail.EverythingGrid:
@@ -499,10 +505,10 @@ assert the source's context is done:
 `TestAWalkRunsUnderThePluginsLife`, `memo/flights_test.go:TestFlightsWalkUnderTheLifetime`.
 
 **Today.** Meets: gmail (`ServeContent` under `stream.Context()`,
-`gmail/plugin/plugin.go:536`) and hey (`hey/plugin/plugin.go:510`), whose
+`gmail/plugin/plugin.go:ServeContent`) and hey (`hey/plugin/plugin.go:ServeContent`), whose
 walks run under `memo.Life` (`memo/life.go`); gitlab (`MarkDone(ctx)`,
-`gitlab/plugin/plugin.go:370`; walks under `memo.Life`); proc, whose children
-read takes the request's context (`proc/plugin/plugin.go:203`). fs makes no
+`gitlab/plugin/plugin.go:Delete`; walks under `memo.Life`); proc, whose children
+read takes the request's context (`proc/plugin/plugin.go:List`). fs makes no
 cancellable calls. N/A: pages, which has no source to call.
 
 ## 14. Log once per episode
@@ -515,7 +521,7 @@ verdicts, not the log. A log that repeats every glance buries the one line
 that says something changed, and the trace of ordinary use is read line by
 line.
 
-**Example.** `fs/plugin/watch.go:235-241`:
+**Example.** `fs/plugin/watch.go:verdict`:
 
 ```go
 verdict := status.Errorf(codes.ResourceExhausted,
@@ -527,7 +533,7 @@ if !w.limitLogged {
 return verdict
 ```
 
-`limitLogged` clears when a later subscribe succeeds (`fs/plugin/watch.go:154`).
+`limitLogged` clears when a later subscribe succeeds (`fs/plugin/watch.go:subscribe`).
 
 **Test.** Inject the condition twice and assert one log line; clear it,
 inject again, and assert a second: `fs/plugin/watch_test.go:TestWatchLimitLogsOncePerEpisode`,
@@ -539,12 +545,12 @@ inject again, and assert a second: `fs/plugin/watch_test.go:TestWatchLimitLogsOn
 `hey/plugin/watch_test.go:TestAFeedThatKeepsEndingLogsOnce`.
 
 **Today.** Meets: fs; gitlab and hey, whose walk failures and cache writes log
-through memo once per episode (`memo/flights.go:242-247`, `memo/file.go`), and
-hey's feed (`hey/plugin/watch.go:36-73`); proc and pages log nothing.
+through memo once per episode (`memo/flights.go:failLocked`, `memo/file.go`), and
+hey's feed (`hey/plugin/watch.go:watch`); proc and pages log nothing.
 Partial: gmail logs its walk and message failures once per episode
 (`gmail/plugin/episodes.go`), but a token it cannot write back logs on every
 access-token refresh for as long as the write keeps failing
-(`gmail/plugin/config.go:93`).
+(`gmail/plugin/config.go:FromConfig`).
 
 ## 15. Share the cache code once
 
@@ -556,7 +562,7 @@ gitlab's fan-out collapses an overflow to the root, hey's to every
 grid; a fix to one (rule 7, rule 9) must be made three times.
 
 **Example.** `github.com/josephburnett/gridwell-plugins/memo`, a module beside
-`guest` (`memo/README.md`), as hey holds it, `hey/plugin/plugin.go:86-89`:
+`guest` (`memo/README.md`), as hey holds it, `hey/plugin/plugin.go:Plugin`:
 
 ```go
 life    *memo.Life
@@ -566,7 +572,7 @@ changes *memo.Changes
 ```
 
 Each plugin keeps only its snapshot's shape (`gitlab/todos/store.go`,
-`hey/mail/store.go`, `cache` in `gmail/plugin/plugin.go`).
+`hey/mail/store.go`, `cacheRecord` in `gmail/plugin/plugin.go`).
 
 **Test.** The package's own tests (`memo/file_test.go`, `flights_test.go`,
 `changes_test.go`); each plugin keeps one test that its cache survives a
@@ -576,7 +582,7 @@ restart through it: `gitlab/plugin/plugin_test.go:TestRestartAnswersFromTheCache
 
 **Today.** Meets: gitlab, gmail and hey, which take `File`, `Flights`,
 `Changes` and `Life` from memo; proc, which takes `Changes` and `Poll`
-(`proc/plugin/plugin.go:99-103`). N/A: fs, whose OS watch is its own
+(`proc/plugin/plugin.go:newPlugin`). N/A: fs, whose OS watch is its own
 (`fs/plugin/watch.go`), and pages, neither of which keeps a cache.
 
 ## 16. Seam tests with the real binary
@@ -589,7 +595,7 @@ binary (`internal/plugintest`), and every plugin that declares `Watch` has a
 does not catch a contract mismatch. The node reaches a plugin only through its
 binary, so only the binary proves the wire.
 
-**Example.** `internal/server/fs_watch_seam_test.go:43`:
+**Example.** `internal/server/fs_watch_seam_test.go:TestFsWatchReachesAClientShowingTheDirectory`:
 
 ```go
 cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
@@ -624,12 +630,12 @@ what a user configures from.
 config key named in the README and absent from `FromConfig` (or the reverse)
 is the mechanical check to write.
 
-**Today.** Meets: fs, proc, gmail; pages has none and takes no config.
-Partial: gitlab says "a token GitLab stops taking is treated like GitLab being
-down" (`gitlab/README.md:25-26`), which holds for a grid the cache can answer and
-not for a cold one (rule 3); hey says everything is laid out "a row per day,
-newest at the top" (`hey/README.md:210-211`), while its hint is
-`calendar.Cell`: a column per day, newest to the right, a row per hour.
+**Today.** Meets: fs, proc, gmail, and gitlab, whose "a token GitLab stops
+taking is treated like GitLab being down" holds for a cold read too since
+rule 3 was met; pages has none and takes no config. Partial: hey says
+everything is laid out "a row per day, newest at the top" (`hey/README.md`,
+"Everything and the boxes"), while its hint is `calendar.Cell`: a column per
+day, newest to the right, a row per hour.
 
 ## 18. Say which entry changed
 
@@ -759,10 +765,11 @@ find their cache only. N/A: proc and pages, which serve no `Find`.
 
 ## Checklist
 
-Tick each before you ship. At `729ba73` the shipped plugins tick every box
+Tick each before you ship. At `729ba73` the shipped plugins ticked every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
-hey); rules 18 to 20 were added later: 18 is met by fs, proc, gitlab and
-hey, 19 by fs alone, and 20 by fs, gitlab, gmail and hey. The rules' Today
+hey); 3 and gitlab's 17 are met since memo v0.4.2. Rules 18 to 20 were
+added later: 18 is met by fs, proc, gitlab and hey, 19 by fs alone, and 20
+by fs, gitlab, gmail and hey. The rules' Today
 lines say what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
