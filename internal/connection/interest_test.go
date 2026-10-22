@@ -7,12 +7,12 @@ import (
 	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 )
 
 // hungFar never answers its first SetView and records every later one.
 type hungFar struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	calls chan *gridwellv1.SetViewRequest
 	first bool
 }

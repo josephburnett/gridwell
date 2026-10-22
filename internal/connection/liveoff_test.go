@@ -10,13 +10,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 )
 
 // refusingFar refuses every share until accepting is set, as a far node whose
 // store will not read does.
 type refusingFar struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	accepting atomic.Bool
 }
 

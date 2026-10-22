@@ -12,12 +12,12 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // failingFind is a namespace whose find index is not answering.
-type failingFind struct{ namespace.Unimplemented }
+type failingFind struct{ namespacetest.Unimplemented }
 
 func (failingFind) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	return &gridwellv1.InfoResponse{}, nil

@@ -10,11 +10,12 @@ import (
 	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 )
 
 // followNS is a Subscribe the test drives.
 type followNS struct {
-	Unimplemented
+	namespacetest.Unimplemented
 	run func(ctx context.Context, send func(*pb.Event) error) error
 }
 

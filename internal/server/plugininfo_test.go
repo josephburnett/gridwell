@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -154,7 +155,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 // countingInfoPlugin is a minimal plugin that counts Info calls and can fail
 // the first one — the seam for the Info cache tests.
 type countingInfoPlugin struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	calls     atomic.Int32
 	failFirst bool
 }
@@ -222,7 +223,7 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 // alwaysFailInfoPlugin never succeeds its Info handshake — the persistently
 // broken plugin the buildPluginInfo unit tests can only simulate by hand.
 type alwaysFailInfoPlugin struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 }
 
 func (alwaysFailInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
@@ -334,7 +335,7 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 // plainPlugin is a plugin: its ephemeral visits land in the node's scratch
 // grid, home's.
 type plainPlugin struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 }
 
 func (plainPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {

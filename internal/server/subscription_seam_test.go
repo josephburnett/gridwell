@@ -21,7 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
@@ -30,7 +30,7 @@ import (
 
 // subscriptionSink is a namespace that records the last share it was handed.
 type subscriptionSink struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	mu    sync.Mutex
 	share []string
 	heard int

@@ -12,6 +12,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -21,7 +22,7 @@ import (
 // transition — a unit test on the loop in isolation would not prove the
 // transition reaches a real client stream over the real wire; this does.
 type flakyWatchPlugin struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	subCalls      atomic.Int32
 	failSubFirstN int32
 }
@@ -108,7 +109,7 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 // before the fix, a single failed Info AT SUBSCRIBE TIME permanently excluded
 // the plugin from that stream's fan-in — retrying never happened.
 type alwaysFailInfoWatchPlugin struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	infoCalls      atomic.Int32
 	failInfoFirstN int32
 }

@@ -9,7 +9,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
@@ -59,7 +59,7 @@ func TestTheHeaderGoesOutBeforeAFailedSourceIsTold(t *testing.T) {
 		release := make(chan struct{})
 		reg := plugin.NewRegistry()
 		reg.Register("held", "held", heldStream{release: release}, nil)
-		reg.Register("broken", "broken", namespace.Unimplemented{}, nil)
+		reg.Register("broken", "broken", namespacetest.Unimplemented{}, nil)
 		srv := mustNew(t, reg, Config{})
 
 		ctx, cancel := context.WithCancel(t.Context())
@@ -89,7 +89,7 @@ func TestTheHeaderGoesOutBeforeAFailedSourceIsTold(t *testing.T) {
 
 // heldStream is a source whose stream says it is listening only on release.
 type heldStream struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	release <-chan struct{}
 }
 

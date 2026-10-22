@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	rpcImport       = repoModule + "/api/rpc"
-	namespaceImport = repoModule + "/internal/namespace"
+	rpcImport           = repoModule + "/api/rpc"
+	namespacetestImport = repoModule + "/internal/namespace/namespacetest"
 )
 
 // importName is the name f refers to path by, or "" when f does not import it.
@@ -53,15 +53,17 @@ func productionGo(t *testing.T, root string, visit func(rel string, fset *token.
 }
 
 // unimplementedEmbeds are the struct types in internal/ that embed
-// namespace.Unimplemented, so a verb they never wrote answers for them.
+// namespacetest.Unimplemented, so a verb they never wrote answers for them.
 func unimplementedEmbeds(t *testing.T, root string) []string {
 	var out []string
 	productionGo(t, root, func(rel string, fset *token.FileSet, f *ast.File) {
 		if !strings.HasPrefix(filepath.ToSlash(rel), "internal/") {
 			return
 		}
-		local := filepath.ToSlash(filepath.Dir(rel)) == "internal/namespace"
-		ns := importName(f, namespaceImport)
+		ns := importName(f, namespacetestImport)
+		if ns == "" {
+			return
+		}
 		ast.Inspect(f, func(n ast.Node) bool {
 			st, ok := n.(*ast.StructType)
 			if !ok {
@@ -75,15 +77,11 @@ func unimplementedEmbeds(t *testing.T, root string) []string {
 				if star, ok := typ.(*ast.StarExpr); ok {
 					typ = star.X
 				}
-				embeds := false
-				switch typ := typ.(type) {
-				case *ast.SelectorExpr:
-					x, ok := typ.X.(*ast.Ident)
-					embeds = ok && ns != "" && x.Name == ns && typ.Sel.Name == "Unimplemented"
-				case *ast.Ident:
-					embeds = local && typ.Name == "Unimplemented"
+				sel, ok := typ.(*ast.SelectorExpr)
+				if !ok {
+					continue
 				}
-				if embeds {
+				if x, ok := sel.X.(*ast.Ident); ok && x.Name == ns && sel.Sel.Name == "Unimplemented" {
 					out = append(out, fmt.Sprintf("%s:%d", rel, fset.Position(st.Pos()).Line))
 				}
 			}
@@ -97,7 +95,7 @@ func unimplementedEmbeds(t *testing.T, root string) []string {
 // itself, so a refusal names its reason rather than "method X not implemented".
 func TestNoUnimplementedEmbeds(t *testing.T) {
 	for _, at := range unimplementedEmbeds(t, repoRoot(t)) {
-		t.Errorf("%s embeds namespace.Unimplemented: answer every verb of namespace.Namespace explicitly, a refusal naming its reason", at)
+		t.Errorf("%s embeds namespacetest.Unimplemented: answer every verb of namespace.Namespace explicitly, a refusal naming its reason", at)
 	}
 }
 

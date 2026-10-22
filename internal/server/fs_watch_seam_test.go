@@ -20,7 +20,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
 	"github.com/josephburnett/gridwell/internal/plugintest"
@@ -276,7 +276,7 @@ func TestFsShowingWhatWasReadAnnouncesNothing(t *testing.T) {
 // wideFar is a connection wide enough that the prefetch walk over it is still
 // warming cache.db seconds after a client subscribes.
 type wideFar struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 }
 
 const wideRoot = "geneva/rnode1/g"

@@ -7,5 +7,5 @@
 # floor of - is a ceiling: lines and packages only have to keep from rising.
 #
 # name | recorded | floor | owner | mechanism | decision
-packages | 83 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
-lines | 57911 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
+packages | 81 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
+lines | 57553 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1

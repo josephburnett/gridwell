@@ -12,7 +12,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 )
 
 // framingSource is a far node reduced to what a door's framing touches: a
@@ -20,7 +20,7 @@ import (
 // not. Its event stream is silent, so whatever the layer caches of a write
 // it learned from the write itself.
 type framingSource struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	mu    sync.Mutex
 	down  bool
 	lists map[string]*pb.HandshakeResponse

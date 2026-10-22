@@ -10,13 +10,13 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // brokenShellHost is a namespace whose PTY host cannot be asked: the tmux
 // socket refuses. That is not a dead tmux.
-type brokenShellHost struct{ namespace.Unimplemented }
+type brokenShellHost struct{ namespacetest.Unimplemented }
 
 func (brokenShellHost) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
 	return &pb.InfoResponse{DisplayName: "h", RootGridId: "1"}, nil

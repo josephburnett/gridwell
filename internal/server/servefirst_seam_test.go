@@ -12,7 +12,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
@@ -23,7 +23,7 @@ import (
 // was down. tiles is what the far side currently holds, changed behind the
 // cache's back.
 type farConnection struct {
-	namespace.Unimplemented
+	namespacetest.Unimplemented
 	tiles atomic.Int32
 }
 

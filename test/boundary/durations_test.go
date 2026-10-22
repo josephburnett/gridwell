@@ -229,7 +229,7 @@ func isTestFile(rel string) bool {
 // generated code, build output, harnesses and test scaffolding.
 var notProduction = []string{
 	"/gen/", "/dist/", "/out/", "/e2e/", "e2e-web", "playwright",
-	"/harness/", "plugintest", "servertest", "dialtest", "shellsvctest", "test/boundary",
+	"/harness/", "test/",
 }
 
 func isProduction(rel string) bool {

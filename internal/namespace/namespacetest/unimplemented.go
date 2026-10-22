@@ -1,9 +1,7 @@
-package namespace
-
-// Unimplemented is the in-process twin of pb.UnimplementedGridwellServer, for
-// a test's partial namespace: every verb it is not given answers with the code
-// the wire would. A production owner answers every verb itself, its refusals
-// naming their reasons (test/boundary TestNoUnimplementedEmbeds).
+// Package namespacetest holds Unimplemented, the partial namespace a seam test
+// embeds: every verb it is not given answers with the code the wire would. No
+// owner the node runs embeds it (test/boundary TestNoUnimplementedEmbeds).
+package namespacetest
 
 import (
 	"context"

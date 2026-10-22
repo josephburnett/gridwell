@@ -24,6 +24,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 )
 
 // loopback serves ns over a real in-memory gRPC hop and reads it back as a
@@ -388,7 +389,7 @@ func TestSubscribeHeaderRoundTrips(t *testing.T) {
 }
 
 // headerOnly says it is listening and nothing else.
-type headerOnly struct{ namespace.Unimplemented }
+type headerOnly struct{ namespacetest.Unimplemented }
 
 func (headerOnly) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	if err := send(nil); err != nil {
