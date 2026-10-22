@@ -78,19 +78,11 @@ func (a *App) cacheDoorFraming(gridID string, f rpc.Framing) bool {
 }
 
 // pluginByUUID returns the plugin with the given, possibly chain-qualified,
-// namespace, looking in the local list then every fetched remote menu context.
-// A chain-qualified uuid cannot collide with a local one.
+// namespace. A chain-qualified uuid cannot collide with a local one.
 func (a *App) pluginByUUID(u string) (*gridwellv1.PluginInfo, bool) {
-	for i := range a.plugins {
-		if a.plugins[i].Uuid == u {
-			return a.plugins[i], true
-		}
-	}
-	for _, ctx := range a.views.menuCtxs {
-		for i := range ctx.plugins {
-			if ctx.plugins[i].Uuid == u {
-				return ctx.plugins[i], true
-			}
+	for _, p := range a.allPlugins() {
+		if p.Uuid == u {
+			return p, true
 		}
 	}
 	return nil, false
@@ -100,11 +92,8 @@ func (a *App) pluginByUUID(u string) (*gridwellv1.PluginInfo, bool) {
 // grid id. The rule is door.GlyphFor's; this resolves the cached grid and the
 // declaration list it reads.
 func (a *App) pluginGlyph(gridID string) string {
-	plugins := a.allPlugins()
-	if g, ok := a.c.Grid(gridID); ok {
-		return door.GlyphFor(gridID, g.Meta, plugins)
-	}
-	return door.GlyphFor(gridID, nil, plugins)
+	meta, _ := a.gridMeta(gridID)
+	return door.GlyphFor(gridID, meta, a.allPlugins())
 }
 
 // allPlugins is the boot handshake's list plus each fetched remote menu

@@ -10,6 +10,6 @@
 #
 # name | recorded | floor | owner | mechanism | decision
 packages | 81 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
-lines | 57547 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
+lines | 57533 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
 parity | 12 | 0 | internal/server/parity_test.go | fill a hole with a decision in CLAUDE.md or a fix that makes the cell same; write the check for a same cell | CLAUDE.md, promises
-debt | 22 | 0 | test/boundary/debt.txt | derive, never restate, anywhere in the production tree, until lines is back at the low-water mark | CLAUDE.md, How to work 10 (2026-10-22)
+debt | 8 | 0 | test/boundary/debt.txt | derive, never restate, anywhere in the production tree, until lines is back at the low-water mark | CLAUDE.md, How to work 10 (2026-10-22)

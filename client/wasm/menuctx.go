@@ -39,10 +39,8 @@ func (a *App) paneNodeNS(p *pane.Pane) string {
 // rather than a pane's leaf grid, since the two differ when the cursor
 // promoted into an open door.
 func (a *App) gridNodeNS(gridID string) string {
-	if g, ok := a.c.Grid(gridID); ok {
-		return g.Meta.NodeNs
-	}
-	return ""
+	m, _ := a.gridMeta(gridID)
+	return m.GetNodeNs()
 }
 
 // menuCtx returns the context for pane p, kicking a background fetch for a
