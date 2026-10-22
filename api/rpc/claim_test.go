@@ -58,3 +58,43 @@ func TestUnclaimedWriteKnowsEveryClaim(t *testing.T) {
 		}
 	}
 }
+
+// TestCopyWritesCarryEveryCopyFact holds the one list: a fact CopyFacts keeps
+// that no CopyWrites arm writes is a copy across namespaces that drops it.
+func TestCopyWritesCarryEveryCopyFact(t *testing.T) {
+	src := &pb.Tile{}
+	m := src.ProtoReflect()
+	fields := m.Descriptor().Fields()
+	for i := range fields.Len() {
+		fd := fields.Get(i)
+		switch fd.Kind() {
+		case protoreflect.StringKind:
+			m.Set(fd, protoreflect.ValueOfString("set"))
+		case protoreflect.BoolKind:
+			m.Set(fd, protoreflect.ValueOfBool(true))
+		case protoreflect.Int64Kind:
+			m.Set(fd, protoreflect.ValueOfInt64(7))
+		case protoreflect.DoubleKind:
+			m.Set(fd, protoreflect.ValueOfFloat64(1.5))
+		}
+	}
+	want := CopyFacts(src)
+	got := &pb.Tile{Kind: want.Kind}
+	for _, w := range CopyWrites(want, nil) {
+		if w.Tile != nil {
+			proto.Merge(got, w.Tile)
+		}
+		if w.ContentZoom != nil {
+			got.ContentZoom = *w.ContentZoom
+		}
+		if w.UrlFrozen != nil {
+			if UnclaimedWrite(w) != "" {
+				t.Errorf("the freeze write names no claim: %v", w)
+			}
+			got.UrlFrozen = *w.UrlFrozen
+		}
+	}
+	if !proto.Equal(got, want) {
+		t.Errorf("CopyWrites writes %v, CopyFacts keeps %v", got, want)
+	}
+}

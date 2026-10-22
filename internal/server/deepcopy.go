@@ -35,7 +35,7 @@ import (
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
-//   - a url copies its url_string plus the frozen preview and history;
+//   - a url copies its url_string, and every leaf rpc.CopyFacts by rpc.CopyWrites;
 //   - a shell copies as a link to its source, since a copy shares its
 //     source's tmux and a tmux is namespace-local;
 //   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
@@ -132,7 +132,7 @@ func (rt *router) copiesAsLink(ctx context.Context, q *pb.Tile) bool {
 }
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address
-// and frozen preview for a url.
+// for a url, and the facts and preview every copy carries.
 func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *pb.Tile, dst copyDst, dstGrid string, x, y int64) (*pb.TileResponse, error) {
 	// Leaf bytes are read before the copy row is created, so an unreachable
 	// source degrades to a link instead of an empty copy that looks whole. A
@@ -157,39 +157,23 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	if err != nil {
 		return nil, err
 	}
-	id := created.GetTile().GetId()
-	version := created.GetTile().GetVersion()
-
-	switch {
-	case rpc.WebContent(t):
-		// The frozen preview travels with the copy. An unreachable preview skips:
-		// the copy's own facts are present and the preview re-freezes on the next
-		// live visit, so a link here would deny the copy content the walk has.
-		if t.PreviewBlobId == 0 {
-			return created, nil
-		}
+	// An unreachable preview skips: it re-freezes on the next live visit, and a
+	// link here would deny the copy the content the walk has.
+	var preview []byte
+	if rpc.WebContent(t) && t.PreviewBlobId != 0 {
 		pv, err := src.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: t.Id})
-		if gwerr.IsTransport(err) {
-			return created, nil
-		}
-		if err != nil {
+		if err != nil && !gwerr.IsTransport(err) {
 			return nil, err
 		}
-		if len(pv.GetJpeg()) == 0 {
-			return created, nil
-		}
-		if _, err := dst.SetTile(ctx, &pb.SetTileRequest{
-			TileId: id, Version: version,
-			Tile:    &pb.Tile{Kind: t.Kind, UrlHistory: t.UrlHistory},
-			Preview: pv.GetJpeg(),
-		}); err != nil {
-			return nil, err
-		}
-	default:
-		return created, nil
+		preview = pv.GetJpeg()
 	}
-	// The preview write moved the row, so the answer is a fresh read of it.
-	return freshCopy(ctx, dst, created), nil
+	for _, w := range rpc.CopyWrites(rpc.CopyFacts(t), preview) {
+		w.TileId = created.GetTile().GetId()
+		if created, err = dst.SetTile(ctx, w); err != nil {
+			return nil, err
+		}
+	}
+	return created, nil
 }
 
 // linkCopy is the copy a link becomes and the copy a dark source degrades
@@ -228,15 +212,4 @@ func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, t
 		return nil, err
 	}
 	return dst.CreateTile(ctx, &pb.CreateTileRequest{GridId: dstGrid, Tile: dst.hop.PeelTile(tile), Content: content})
-}
-
-// freshCopy re-reads the copy so the answer carries the version and the preview
-// the follow-up write left. An unreadable re-read keeps the create's row: the
-// copy landed, and failing it here would say otherwise.
-func freshCopy(ctx context.Context, dst namespace.Namespace, created *pb.TileResponse) *pb.TileResponse {
-	fresh, err := dst.GetTile(ctx, &pb.GetTileRequest{TileId: created.GetTile().GetId()})
-	if err != nil {
-		return created
-	}
-	return fresh
 }

@@ -83,23 +83,23 @@ func placeholders(n int) string {
 // column nullability mirrors the schema CHECK constraint.
 func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *gridwellv1.Tile, x, y int64, child any, now int64) (int64, error) {
 	var (
-		blob, previewBlob sql.NullInt64
-		urlStr, textMode  sql.NullString
-		urlHist           sql.NullString
-		linkTarget        sql.NullString
-		shellTmux         sql.NullString
+		blob, previewBlob         sql.NullInt64
+		urlStr, textMode, urlHist sql.NullString
+		linkTarget                sql.NullString
+		shellTmux                 sql.NullString
 	)
 	if n.LinkTargetId != "" {
 		// A copy of a link is a link (CLAUDE.md, 2026-10-06); the CHECK's link
 		// branch requires every content column NULL.
 		linkTarget = sql.NullString{String: n.LinkTargetId, Valid: true}
 	}
+	c := rpc.CopyFacts(n)
 	if n.LinkTargetId == "" {
 		k := rpc.KindOf(n.Kind)
 		if k.Content == rpc.ContentAddress {
 			urlStr = sql.NullString{String: n.UrlString, Valid: true}
-			if n.UrlHistory != "" {
-				urlHist = sql.NullString{String: n.UrlHistory, Valid: true}
+			if c.UrlHistory != "" {
+				urlHist = sql.NullString{String: c.UrlHistory, Valid: true}
 			}
 		}
 		if k.Tmux {
@@ -113,8 +113,8 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		if k.Content.InBlob() && n.BlobId != 0 {
 			blob = sql.NullInt64{Int64: n.BlobId, Valid: true}
 		}
-		if k.Content == rpc.ContentBody && n.TextMode != "" {
-			textMode = sql.NullString{String: n.TextMode, Valid: true}
+		if k.Content == rpc.ContentBody && c.TextMode != "" {
+			textMode = sql.NullString{String: c.TextMode, Valid: true}
 		}
 	}
 	vcx, vcy, vzoom := viewArgs(rpc.ViewOf(n.ViewCx, n.ViewCy, n.ViewZoom))
@@ -126,12 +126,12 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		"x": x, "y": y, "w": n.W, "h": n.H,
 		"view_cx": vcx, "view_cy": vcy, "view_zoom": vzoom,
 		"child_grid_id": child,
-		"text_x":        n.TextX, "text_y": n.TextY, "text_w": n.TextW, "text_h": n.TextH,
+		"text_x":        c.TextX, "text_y": c.TextY, "text_w": n.TextW, "text_h": n.TextH,
 		"text_mode": textMode, "blob_id": blob,
 		"url_string": urlStr, "preview_blob_id": previewBlob,
 		"alt_text": n.AltText, "alt_user": boolToInt(n.Named),
-		"content_zoom": n.ContentZoom, "url_history": urlHist,
-		"link_target_id": linkTarget, "url_frozen": boolToInt(n.UrlFrozen),
+		"content_zoom": c.ContentZoom, "url_history": urlHist,
+		"link_target_id": linkTarget, "url_frozen": boolToInt(c.UrlFrozen),
 		"shell_session": shellTmux,
 		"created_at":    now, "updated_at": now,
 	})

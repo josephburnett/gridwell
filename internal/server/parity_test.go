@@ -152,7 +152,6 @@ const (
 // The holes, where the code makes a difference no decision names.
 const (
 	hPluginMove     = "internal/pluginhost/adapter.go:778: MoveTile refuses another grid of the same plugin; home moves a tile to any of its grids, and CLAUDE.md names only the cross-plugin move"
-	hCopyFacts      = "internal/server/deepcopy.go:155: a copy into another namespace carries no text scroll, content zoom or freeze, which store.CopyTile carries within home"
 	hCopyPage       = "internal/server/deepcopy.go:155: a serves_page url entry copies with its empty url_string, which home's CreateURL takes, and like every copy into another namespace with no content zoom or freeze"
 	hPluginReadURL  = "internal/pluginhost/adapter.go:1023: ReadContent asks the plugin for a url entry's bytes, where home answers the address itself (internal/local/store/content.go:106)"
 	hPluginWriteURL = "client/urlview/unload.go:19: a plugin url's address is never written, so it does not follow where the user went as home's does"
@@ -164,8 +163,8 @@ var parityTable = []parityCell{
 	{kText, opCreate, onFar, same, "", checkCreate},
 	{kText, opMove, onPlugin, hole, hPluginMove, nil},
 	{kText, opMove, onFar, same, "", checkMove},
-	{kText, opCopy, onPlugin, hole, hCopyFacts, nil},
-	{kText, opCopy, onFar, hole, hCopyFacts, nil},
+	{kText, opCopy, onPlugin, same, "", checkCopy},
+	{kText, opCopy, onFar, same, "", checkCopy},
 	{kText, opLink, onPlugin, same, "", checkLink},
 	{kText, opLink, onFar, same, "", checkLink},
 	{kText, opDelete, onPlugin, decided, dPluginDelete, nil},
@@ -201,7 +200,7 @@ var parityTable = []parityCell{
 	{kURL, opMove, onPlugin, hole, hPluginMove, nil},
 	{kURL, opMove, onFar, same, "", checkMove},
 	{kURL, opCopy, onPlugin, hole, hCopyPage, nil},
-	{kURL, opCopy, onFar, hole, hCopyFacts, nil},
+	{kURL, opCopy, onFar, same, "", checkCopy},
 	{kURL, opLink, onPlugin, same, "", checkLink},
 	{kURL, opLink, onFar, same, "", checkLink},
 	{kURL, opDelete, onPlugin, decided, dPluginDelete, nil},
