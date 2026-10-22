@@ -462,9 +462,10 @@ func parityCount(table []parityCell) int {
 // count test/boundary records.
 func TestParity(t *testing.T) {
 	t.Run("count", func(t *testing.T) {
-		checkParityTable(t, parityTable)
-		t.Logf("parity count: %d", parityCount(parityTable))
+		checkParityTable(t, append(slices.Clone(parityTable), parityVariantRows()...))
+		t.Logf("parity count: %d", parityCount(parityTable)+parityVariantOwed())
 	})
+	runParityVariants(t)
 	for _, c := range parityTable {
 		if c.verdict != same || c.check == nil {
 			continue
@@ -649,8 +650,14 @@ const (
 	parityThirdConn = parityConn + "rnode1/zurich/"
 )
 
-func newParityFix(t *testing.T) *parityFix {
+// newParityFix builds the fixture, each paritySource first taking declare,
+// a variant's declarations.
+func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 	local, far := newParitySource(), newParitySource()
+	for _, d := range declare {
+		d(local)
+		d(far)
+	}
 	third := newFarNode(t, "cnode1")
 	undeclare := map[parityOwner]func() func(){}
 	at := func(o parityOwner) func(*plugin.Registry, *store.Store) {
@@ -954,6 +961,8 @@ type paritySource struct {
 	stamp   int
 	changes chan *pluginv1.Change
 	moves   bool // declares and answers Move (plugin_move_test.go)
+	// What a variant declares otherwise (parity_variant_test.go).
+	unwritable bool
 }
 
 func newParitySource() *paritySource {
@@ -977,7 +986,7 @@ func newParitySource() *paritySource {
 func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: true, Writable: true, Move: s.moves,
+	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: true, Writable: !s.unwritable, Move: s.moves,
 		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
 }
 
@@ -1032,6 +1041,16 @@ func (s *paritySource) WriteContent(stream grpc.ClientStreamingServer[pluginv1.W
 	}
 	s.mu.Lock()
 	e, _ := s.entry(first.Key)
+	// A plugin that is not writable implements no WriteContent, and one that
+	// declares an entry read-only refuses it with that sentence.
+	switch {
+	case s.unwritable:
+		s.mu.Unlock()
+		return status.Error(codes.Unimplemented, "method WriteContent not implemented")
+	case e != nil && e.ReadOnly != "":
+		s.mu.Unlock()
+		return status.Error(codes.PermissionDenied, e.ReadOnly)
+	}
 	if e == nil || e.ContentStamp != first.ContentStamp {
 		s.mu.Unlock()
 		return status.Errorf(codes.FailedPrecondition, "%q moved past stamp %q", first.Key, first.ContentStamp)
