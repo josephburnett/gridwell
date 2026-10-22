@@ -21,7 +21,7 @@ const maxURLSuggestions = 8
 func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
 	var out []urlnorm.Candidate
 	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
-		if uuidOf(gid) != pluginUUID {
+		if rpc.UUIDOf(gid) != pluginUUID {
 			return true
 		}
 		for _, t := range g.Tiles {

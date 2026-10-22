@@ -272,14 +272,10 @@ func (a *App) childTileAtScreen(p *pane.Pane, r pane.Rect, door *gridwellv1.Tile
 // never-visited fallback, so the drop target, the pull-out hit test and the
 // renderer place a never-visited door's preview at the same pixels.
 func doorPreviewFor(ps dragdrop.Pane, n *gridwellv1.Tile) dragdrop.ChildPreview {
-	w := doorOf(n)
+	w := zoomtrans.DoorOf(n)
 	cx, cy := w.Center()
 	return dragdrop.ChildPreviewFor(ps, struct {
 		X, Y, W, H     int64
 		ViewCx, ViewCy float64
 	}{X: n.X, Y: n.Y, W: n.W, H: n.H, ViewCx: cx, ViewCy: cy}, w.Ratio())
 }
-
-// doorOf forwards to zoomtrans.DoorOf. The local name is for the renderer's
-// many call sites.
-func doorOf(n *gridwellv1.Tile) zoomtrans.Door { return zoomtrans.DoorOf(n) }

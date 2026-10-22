@@ -145,7 +145,7 @@ func (a *App) ownerView(p *pane.Pane, r pane.Rect) (pane.Frame, bool) {
 	}
 	var v pane.Frame
 	if door != nil {
-		f, ok := zoomtrans.StoredView(doorOf(door), size, cellPx)
+		f, ok := zoomtrans.StoredView(zoomtrans.DoorOf(door), size, cellPx)
 		if !ok {
 			return pane.Frame{}, false
 		}

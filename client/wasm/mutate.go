@@ -69,10 +69,6 @@ type write struct {
 	afterHolds bool
 }
 
-// isUnimplemented reports a plugin's "I don't serve this" answer: a
-// capability property, never a failure to surface.
-func isUnimplemented(err error) bool { return clientsync.IsUnimplemented(err) }
-
 // surfaceRPCError puts a failed RPC on the notice row. clientsync's
 // tables never route a conflict here.
 func (a *App) surfaceRPCError(label string, err error) {

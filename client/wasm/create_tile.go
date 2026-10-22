@@ -57,7 +57,7 @@ func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 	// The address is content, so the write claims the row's basis as the
 	// descent saw it.
 	claim := rpc.BasisOf(t)
-	candidates := a.urlSuggestCandidates(uuidOf(gid))
+	candidates := a.urlSuggestCandidates(rpc.UUIDOf(gid))
 	a.openURLModal(candidates, func(url string) {
 		go func() {
 			// The plain dispatcher, not postWriteContent: the typed url has

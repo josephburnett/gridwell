@@ -305,7 +305,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 		parentCell := x1 - x0
 		wpx := float64(hoverDoor.W) * parentCell
 		hpx := float64(hoverDoor.H) * parentCell
-		zw := doorOf(hoverDoor)
+		zw := zoomtrans.DoorOf(hoverDoor)
 		// The float center accumulates across the burst: the first notch seeds
 		// from the same Center the preview was drawn with, and later notches
 		// feed the drift back in.
@@ -769,7 +769,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (rpc
 	if !found {
 		return rpc.Framing{}, false
 	}
-	return zoomtrans.StoredView(doorOf(t), size, cellPx)
+	return zoomtrans.StoredView(zoomtrans.DoorOf(t), size, cellPx)
 }
 
 // storedRootView is the read side of persistFraming's root arm, the same 1x1

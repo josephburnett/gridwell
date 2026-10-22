@@ -25,6 +25,7 @@ import (
 	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 const (
@@ -727,11 +728,11 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 
 	// previewCell is parentCell times the door's intrinsic ratio, so the path
 	// swap at Overtake_now is continuous.
-	wl := doorOf(n)
+	wl := zoomtrans.DoorOf(n)
 	previewCell := parentCellSize * wl.Ratio()
 	showPreview := haveChild && previewCell >= 0.5
 
-	if isDoorToOtherNamespace(n) && !showPreview {
+	if rpc.IsDoorToOtherNamespace(n) && !showPreview {
 		a.drawPluginGlyph(a.pluginGlyph(n.ChildGridId), x, y, w, h)
 	} else {
 		withClip(a.cctx, x, y, w, h, func() {
@@ -1115,7 +1116,7 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 		return
 	}
 	name := gid
-	if pl, ok := a.pluginByUUID(uuidOf(gid)); ok && pl.Label != "" {
+	if pl, ok := a.pluginByUUID(rpc.UUIDOf(gid)); ok && pl.Label != "" {
 		name = pl.Label
 	}
 	label := pane.GridNotice(name, a.fetch.grids.Failed(gid))

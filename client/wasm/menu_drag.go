@@ -119,7 +119,7 @@ func (a *App) visitURLFromMenu(p *pane.Pane) {
 	if a.scratchOrReport(p) == "" {
 		return
 	}
-	a.openURLModal(a.urlSuggestCandidates(uuidOf(a.gridIDForPane(p))),
+	a.openURLModal(a.urlSuggestCandidates(rpc.UUIDOf(a.gridIDForPane(p))),
 		func(url string) {
 			if vp := a.tree.FindPane(paneID); vp != nil {
 				a.visitEphemeralURL(vp, url)

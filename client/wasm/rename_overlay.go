@@ -84,7 +84,7 @@ func (a *App) parentDoor(p *pane.Pane) (*gridwellv1.Tile, bool) {
 
 // declaredLabel is the plugin declaration's label for the pane's grid.
 func (a *App) declaredLabel(p *pane.Pane) string {
-	want := uuidOf(a.gridIDForPane(p))
+	want := rpc.UUIDOf(a.gridIDForPane(p))
 	for _, pl := range a.allPlugins() {
 		if pl.Uuid == want && pl.Label != "" {
 			return pl.Label

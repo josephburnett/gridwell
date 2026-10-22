@@ -9,12 +9,6 @@ import (
 	"github.com/josephburnett/gridwell/client/door"
 )
 
-// uuidOf and isDoorToOtherNamespace forward to api/rpc, where the "<uuid>/<local>" id
-// convention lives and is tested. The local names are for the renderer's many
-// call sites.
-func uuidOf(id string) string                        { return rpc.UUIDOf(id) }
-func isDoorToOtherNamespace(n *gridwellv1.Tile) bool { return rpc.IsDoorToOtherNamespace(n) }
-
 // nodeID is the segment this node's home grid and connections hang under,
 // read off the handshake's home grid, which is where it is written down.
 func (a *App) nodeID() string { return rpc.UUIDOf(a.home) }
