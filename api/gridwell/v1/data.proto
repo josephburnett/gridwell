@@ -90,6 +90,13 @@ message Grid {
   // tiles on this grid, and its order means nothing. Each id is qualified
   // per hop like the tiles'.
   repeated string selection = 17;
+  // moves: a tile of this grid moves to another grid of its namespace
+  // (MoveTile), so a left-drag there is a move. The owning namespace stamps
+  // it on every grid it serves, true for the home and a plugin's from
+  // plugin.v1 InfoResponse.move; transit carries it verbatim. It is absent
+  // only from a node built before it, where a grid moved unless it was
+  // host_content, and rpc.TransitQualifyGrid reads that for it. Wire-only.
+  optional bool moves = 18;
 }
 
 // PluginGrid is one declared (+) menu row: a door onto one grid a namespace

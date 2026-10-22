@@ -173,8 +173,8 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 	return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
 }
 
-// GetGrid stamps what every home grid is: it takes new tiles and its bodies
-// take edits. An id with no row is dead, as GetTile's.
+// GetGrid stamps what every home grid is: it takes new tiles, its bodies
+// take edits and its tiles move to another grid. An id with no row is dead, as GetTile's.
 func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	r, err := p.st.GetGrid(ctx, req.GridId)
 	if errors.Is(err, store.ErrNotFound) {
@@ -183,7 +183,7 @@ func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
-	r.Grid.AcceptsTiles, r.Grid.Writable = proto.Bool(true), true
+	r.Grid.AcceptsTiles, r.Grid.Writable, r.Grid.Moves = proto.Bool(true), true, proto.Bool(true)
 	return r, nil
 }
 

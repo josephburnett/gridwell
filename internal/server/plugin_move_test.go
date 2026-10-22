@@ -50,12 +50,27 @@ func (f *parityFix) body(grid string) *gridwellv1.Tile {
 	return nil
 }
 
+// wantMoves fails unless grid carries the stamp the client's left-drag
+// verdict reads (dragdrop.MoveForbidden).
+func (f *parityFix) wantMoves(grid string, want bool) {
+	f.t.Helper()
+	g, err := f.cl.GetGrid(f.ctx, grid)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if g.Grid.Moves == nil || g.Grid.GetMoves() != want {
+		f.t.Fatalf("%s: moves = %v, want %v", grid, g.Grid.Moves, want)
+	}
+}
+
 // A plugin that declares no move refuses a move to another of its grids with
 // the reason, here and through a connection; one that declares it moves the
 // entry, the row keeping what the node holds on it, and every open view of
 // either grid is told.
 func TestAPluginEntryMovesOnlyWhenThePluginMoves(t *testing.T) {
 	f := newParityFix(t)
+	f.wantMoves(f.away[onHome], true)
+	f.wantMoves(f.away[onFar], true)
 	for ns := range f.src {
 		all, other := rpc.QualifyID(ns, rpc.EntryGridID("all")), rpc.QualifyID(ns, rpc.EntryGridID("other"))
 		tl := f.body(all)
@@ -63,6 +78,7 @@ func TestAPluginEntryMovesOnlyWhenThePluginMoves(t *testing.T) {
 		if clientsync.Of(err) != clientsync.OutcomeRejected || !strings.Contains(err.Error(), "the plugin does not move entries between its grids") {
 			t.Fatalf("%s: undeclared move = %v, want refused with the reason", ns, err)
 		}
+		f.wantMoves(all, false)
 		if _, err := f.cl.SetContentZoom(f.ctx, tl.Id, 1.5); err != nil {
 			t.Fatal(err)
 		}
@@ -77,6 +93,7 @@ func TestAPluginEntryMovesOnlyWhenThePluginMoves(t *testing.T) {
 	}
 	for ns := range f.src {
 		all, other := rpc.QualifyID(ns, rpc.EntryGridID("all")), rpc.QualifyID(ns, rpc.EntryGridID("other"))
+		f.wantMoves(all, true)
 		tl := f.body(all)
 		moved, err := f.cl.MoveTile(f.ctx, &gridwellv1.MoveTileRequest{TileId: tl.Id, GridId: other, X: 3, Y: 3, W: 1, H: 1, Claim: rpc.PlacementOf(tl)})
 		if err != nil {

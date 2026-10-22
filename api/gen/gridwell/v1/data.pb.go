@@ -147,7 +147,14 @@ type Grid struct {
 	// written only by SetSelection, told whole by SelectionChanged. It names only
 	// tiles on this grid, and its order means nothing. Each id is qualified
 	// per hop like the tiles'.
-	Selection     []string `protobuf:"bytes,17,rep,name=selection,proto3" json:"selection,omitempty"`
+	Selection []string `protobuf:"bytes,17,rep,name=selection,proto3" json:"selection,omitempty"`
+	// moves: a tile of this grid moves to another grid of its namespace
+	// (MoveTile), so a left-drag there is a move. The owning namespace stamps
+	// it on every grid it serves, true for the home and a plugin's from
+	// plugin.v1 InfoResponse.move; transit carries it verbatim. It is absent
+	// only from a node built before it, where a grid moved unless it was
+	// host_content, and rpc.TransitQualifyGrid reads that for it. Wire-only.
+	Moves         *bool `protobuf:"varint,18,opt,name=moves,proto3,oneof" json:"moves,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -257,6 +264,13 @@ func (x *Grid) GetSelection() []string {
 		return x.Selection
 	}
 	return nil
+}
+
+func (x *Grid) GetMoves() bool {
+	if x != nil && x.Moves != nil {
+		return *x.Moves
+	}
+	return false
 }
 
 // PluginGrid is one declared (+) menu row: a door onto one grid a namespace
@@ -4503,7 +4517,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xa3\x03\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xc8\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
@@ -4516,8 +4530,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12!\n" +
 	"\fsource_label\x18\x0f \x01(\tR\vsourceLabel\x12(\n" +
 	"\raccepts_tiles\x18\x10 \x01(\bH\x00R\facceptsTiles\x88\x01\x01\x12\x1c\n" +
-	"\tselection\x18\x11 \x03(\tR\tselectionB\x10\n" +
-	"\x0e_accepts_tilesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\tselection\x18\x11 \x03(\tR\tselection\x12\x19\n" +
+	"\x05moves\x18\x12 \x01(\bH\x01R\x05moves\x88\x01\x01B\x10\n" +
+	"\x0e_accepts_tilesB\b\n" +
+	"\x06_movesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\f\x10\r\"\xc2\x01\n" +
 	"\n" +
 	"PluginGrid\x12\x0e\n" +

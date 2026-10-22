@@ -535,7 +535,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 		tiles = kept
 	}
-	// host_content, glyph and writable ride the grid: a grid reached through
+	// host_content, glyph, writable and move ride the grid: a grid reached through
 	// a door to another namespace has no local row. source_label is the listing's own, so it is
 	// as fresh as the rows. A plugin creates no tiles.
 	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
@@ -552,6 +552,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		AcceptsTiles: proto.Bool(false),
 		Writable:     ci.Writable,
 		HostContent:  ci.HostContent,
+		Moves:        proto.Bool(ci.Move),
 		Glyph:        ci.Glyph,
 		SourceLabel:  resp.SourceLabel,
 		Selection:    selection,

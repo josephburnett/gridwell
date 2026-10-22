@@ -36,7 +36,7 @@ func (rt *router) refuseDisabled(ids ...string) error {
 }
 
 // stampDisabled marks a grid answer from a switched-off source as taking no
-// edits and no tiles, every row carrying the reason (Tile.read_only), so the
+// edits, no tiles and no move, every row carrying the reason (Tile.read_only), so the
 // client refuses an edit before it is typed. g and tiles are the router's own
 // qualified copies.
 func (s *Server) stampDisabled(gridID string, g *pb.Grid, tiles []*pb.Tile) {
@@ -45,7 +45,7 @@ func (s *Server) stampDisabled(gridID string, g *pb.Grid, tiles []*pb.Tile) {
 		return
 	}
 	if g != nil {
-		g.Writable, g.AcceptsTiles = false, proto.Bool(false)
+		g.Writable, g.AcceptsTiles, g.Moves = false, proto.Bool(false), proto.Bool(false)
 	}
 	for _, t := range tiles {
 		t.ReadOnly = reason

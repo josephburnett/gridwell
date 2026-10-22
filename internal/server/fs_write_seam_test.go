@@ -73,16 +73,17 @@ func (k *contentClient) stampNow(id string) string {
 	return b.Stamp
 }
 
-// A plugin that declares writable serves grids whose bodies take edits and
-// that take no new tiles: the + menu offers nothing it would refuse.
+// A plugin that declares writable and move serves grids whose bodies take
+// edits, whose tiles move, and that take no new tiles: the + menu offers
+// nothing it would refuse, and a left-drag to another directory is a move.
 func TestFsGridTakesEditsAndNoTiles(t *testing.T) {
 	k := newContentClient(t, "pfsgrid", t.TempDir())
 	g, err := k.cl.GetGrid(k.ctx, k.landing)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !g.Grid.Writable || g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() {
-		t.Errorf("fs grid: writable=%v accepts_tiles=%v; want writable, accepting no tiles", g.Grid.Writable, g.Grid.AcceptsTiles)
+	if !g.Grid.Writable || g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() || !g.Grid.GetMoves() {
+		t.Errorf("fs grid: writable=%v accepts_tiles=%v moves=%v; want writable, moving, accepting no tiles", g.Grid.Writable, g.Grid.AcceptsTiles, g.Grid.Moves)
 	}
 }
 

@@ -319,9 +319,9 @@ func TestDecideDropBareClickAlwaysNavigates(t *testing.T) {
 
 // Rejected before the RPC, so no reconcile notice follows.
 func TestDecideDropTargetRefusesTiles(t *testing.T) {
-	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true}
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true, CrossPlugin: true}
 	if got := DecideDrop(base); got != DropRejected {
-		t.Errorf("move onto read-only grid = %v, want DropRejected", got)
+		t.Errorf("left-drag link onto read-only grid = %v, want DropRejected", got)
 	}
 	cp := base
 	cp.Intent = IntentCopy
@@ -330,8 +330,8 @@ func TestDecideDropTargetRefusesTiles(t *testing.T) {
 	}
 	ok := base
 	ok.TargetRefusesTiles = false
-	if got := DecideDrop(ok); got != DropMove {
-		t.Errorf("move onto writable grid = %v, want DropMove", got)
+	if got := DecideDrop(ok); got != DropLink {
+		t.Errorf("left-drag link onto writable grid = %v, want DropLink", got)
 	}
 }
 
@@ -348,33 +348,44 @@ func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	if got := DecideDrop(cp); got != DropRejected {
 		t.Errorf("same-grid copy on read-only grid = %v, want DropRejected (creation)", got)
 	}
+	// A plugin that moves (fs) takes a left-drag to another of its grids,
+	// though they take no new tiles; across a namespace it is a link.
+	across := rearrange
+	across.SameGrid = false
+	if got := DecideDrop(across); got != DropMove {
+		t.Errorf("cross-grid move in one read-only namespace = %v, want DropMove", got)
+	}
+	across.CrossPlugin = true
+	if got := DecideDrop(across); got != DropRejected {
+		t.Errorf("cross-namespace left-drag onto a read-only grid = %v, want DropRejected (a link creates)", got)
+	}
 }
 
-// Host to host across grids is the case an XOR check would report allowed,
-// inviting a drop the server then rejects.
+// Grid.moves on both ends decides a move to another grid of one namespace,
+// and an end not yet read is the server's to decide.
 func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
-		name             string
-		sameGrid         bool
-		crossPlugin      bool
-		srcHost, dstHost bool
-		want             bool
+		name               string
+		sameGrid           bool
+		crossPlugin        bool
+		srcMoves, srcKnown bool
+		dstMoves, dstKnown bool
+		want               bool
 	}{
-		{"same grid, both host", true, false, true, true, false},
-		{"same grid, regular", true, false, false, false, false},
-		{"cross regular->regular", false, false, false, false, false},
-		{"cross host->regular", false, false, true, false, true},
-		{"cross regular->host", false, false, false, true, true},
-		{"cross host->host (regression)", false, false, true, true, true},
-		// A drag across an id namespace is a link, so the host arms are
-		// exempt and TargetRefusesTiles gates the destination.
-		{"cross-plugin left-drag is a link, not forbidden", false, true, false, false, false},
-		{"cross-plugin from a host grid links too", false, true, true, false, false},
+		{"same grid, neither moves", true, false, false, true, false, true, false},
+		{"across grids, both move (home, fs)", false, false, true, true, true, true, false},
+		{"from a grid that does not move (proc)", false, false, false, true, true, true, true},
+		{"to a grid that does not move", false, false, true, true, false, true, true},
+		{"neither moves (a mailbox)", false, false, false, true, false, true, true},
+		{"to a grid not yet read", false, false, true, true, false, false, false},
+		// A drag across an id namespace is a link, so the stamps are exempt
+		// and TargetRefusesTiles gates the destination.
+		{"cross-plugin left-drag is a link, not forbidden", false, true, false, true, false, true, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcHost, c.dstHost); got != c.want {
-				t.Errorf("MoveForbidden(%v, %v, %v, %v) = %v, want %v", c.sameGrid, c.crossPlugin, c.srcHost, c.dstHost, got, c.want)
+			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcMoves, c.srcKnown, c.dstMoves, c.dstKnown); got != c.want {
+				t.Errorf("MoveForbidden = %v, want %v", got, c.want)
 			}
 		})
 	}
@@ -659,7 +670,7 @@ func TestWhyRejectedNamesTheArm(t *testing.T) {
 	}{
 		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
 		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
-		{func(in DropInput) DropInput { in.TargetRefusesTiles = true; return in }, "target refuses tiles"},
+		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.CrossPlugin = true, true; return in }, "target refuses tiles"},
 		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
 		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
 		{func(in DropInput) DropInput { return in }, ""},

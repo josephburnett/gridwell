@@ -23,6 +23,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 		NodeNs:        "farnode",
 		Writable:      true,
 		AcceptsTiles:  proto.Bool(false),
+		Moves:         proto.Bool(true),
 		HostContent:   true,
 		Glyph:         "folder",
 		SourceLabel:   "/srv/docs",
@@ -32,7 +33,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
 		t.Fatalf("ids not prepended one segment: %+v", out)
 	}
-	if !out.Writable || out.GetAcceptsTiles() || !out.HostContent || out.Glyph != "folder" || out.SourceLabel != "/srv/docs" {
+	if !out.Writable || out.GetAcceptsTiles() || !out.GetMoves() || !out.HostContent || out.Glyph != "folder" || out.SourceLabel != "/srv/docs" {
 		t.Fatalf("stamped facts must ride verbatim: %+v", out)
 	}
 	if len(out.PluginGrids) != 1 || out.PluginGrids[0].GridId != "hop/far/7" {
@@ -56,6 +57,15 @@ func TestTransitQualifyGridReadsAnOlderNodesOneBitForBothFacts(t *testing.T) {
 		out := TransitQualifyGrid("hop", &pb.Grid{Id: "far/7", Writable: writable})
 		if out.AcceptsTiles == nil || out.GetAcceptsTiles() != writable || out.Writable != writable {
 			t.Errorf("writable=%v: accepts_tiles=%v writable=%v, want both %v", writable, out.AcceptsTiles, out.Writable, writable)
+		}
+	}
+}
+
+// A node built before moves moved a grid's tiles unless it was host_content.
+func TestTransitQualifyGridReadsAnOlderNodesMoveFromHostContent(t *testing.T) {
+	for _, host := range []bool{true, false} {
+		if out := TransitQualifyGrid("hop", &pb.Grid{Id: "far/7", HostContent: host}); out.Moves == nil || out.GetMoves() == host {
+			t.Errorf("host_content=%v: moves=%v, want %v", host, out.Moves, !host)
 		}
 	}
 }

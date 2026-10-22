@@ -195,13 +195,6 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 	}, true
 }
 
-// gridHostContent reports the grid's declared host_content, false for a
-// Gridwell-owned or unknown grid.
-func (a *App) gridHostContent(gridID string) bool {
-	g, _ := a.c.Grid(gridID)
-	return g.HostContent()
-}
-
 // dropCrossNamespace reports whether the source and destination grids live
 // in different id namespaces, which is what makes a left-drag a link and
 // refuses a solid door's right-drag. The one reader of rpc.NamespaceOf here,
@@ -213,21 +206,15 @@ func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 	return rpc.NamespaceOf(d.srcGridID) != rpc.NamespaceOf(t.gridID)
 }
 
-// dropForbiddenForMove reports a left-drag rejected up front: a
-// same-namespace cross-grid move with a host-content endpoint, since host mv
-// is unimplemented and host directories are not a placement medium. A
-// cross-namespace left-drag verdicts DropLink and is exempt; a read-only
-// destination is the separate TargetRefusesTiles gate.
+// dropForbiddenForMove gathers dragdrop.MoveForbidden's inputs for a left-drag.
 func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
 	}
-	return dragdrop.MoveForbidden(
-		d.srcGridID == t.gridID,
-		dropCrossNamespace(d, t),
-		a.gridHostContent(d.srcGridID),
-		a.gridHostContent(t.gridID),
-	)
+	src, srcOK := a.gridMeta(d.srcGridID)
+	dst, dstOK := a.gridMeta(t.gridID)
+	return dragdrop.MoveForbidden(d.srcGridID == t.gridID, dropCrossNamespace(d, t),
+		src.GetMoves(), srcOK, dst.GetMoves(), dstOK)
 }
 
 // cellAtCursor returns the cell coord at the cursor, offset by the grab

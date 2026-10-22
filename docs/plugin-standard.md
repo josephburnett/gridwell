@@ -42,7 +42,10 @@ hey); pages pins that it declares none
 
 **Today.** Meets: fs, proc, gitlab, gmail and hey, each in its `Info`
 (`fs/plugin/plugin.go:Info` and the same in each); pages implements no
-`Watch` and declares none.
+`Watch` and declares none. fs declares `move` and implements it
+(`fs/plugin/move_test.go:TestInfoDeclaresMove`), so its grids carry
+`Grid.moves` and a left-drag of a file onto another directory moves it;
+the others declare none and implement none.
 
 ## 2. Refuse a config you cannot serve, then latch
 

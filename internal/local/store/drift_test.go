@@ -29,6 +29,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 			wireOnly: map[string]string{
 				"writable":        "stamped by the owning namespace: its bodies take edits — a per-grid capability, never persisted",
 				"accepts_tiles":   "stamped by the owning namespace: it takes new tiles — a per-grid capability, never persisted",
+				"moves":           "stamped by the owning namespace: its tiles move to another of its grids — a per-grid capability, never persisted",
 				"scratch_grid_id": "stamped by the serving node, qualified per hop",
 				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",
 				"plugin_grids":    "stamped by the serving node from the owning plugin's Info",

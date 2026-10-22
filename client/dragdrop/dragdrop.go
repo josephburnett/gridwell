@@ -196,14 +196,14 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 	return moving, pin - moving
 }
 
-// MoveForbidden reports whether the server would reject a same-namespace
-// cross-grid left-drag because either end declares host_content: host content
-// cannot migrate into Gridwell and host-side mv is not implemented.
-func MoveForbidden(sameGrid, crossPlugin, srcHost, dstHost bool) bool {
+// MoveForbidden reports whether the server would reject a left-drag to
+// another grid of the same namespace: either end is known not to move its
+// tiles (Grid.moves). An end not yet read is left to the server.
+func MoveForbidden(sameGrid, crossPlugin, srcMoves, srcKnown, dstMoves, dstKnown bool) bool {
 	if sameGrid || crossPlugin {
 		return false
 	}
-	return srcHost || dstHost
+	return srcKnown && !srcMoves || dstKnown && !dstMoves
 }
 
 // Intent is fixed by the press that arms the drag and never re-derived, so the
@@ -259,7 +259,8 @@ type DropInput struct {
 	Forbidden  bool
 	// TargetRefusesTiles is a destination known not to accept tiles
 	// (Grid.accepts_tiles), which rejects an arrival before the RPC. A
-	// same-grid left-drag is placement, not creation, and is exempt.
+	// left-drag within one namespace is a move, not creation, and is exempt;
+	// Forbidden gates it.
 	TargetRefusesTiles bool
 	SameGrid           bool
 	SameCell           bool
@@ -319,7 +320,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropCreateTemplate, ""
 	case in.Forbidden:
 		return DropRejected, "forbidden"
-	case in.TargetRefusesTiles && !(in.SameGrid && !in.Intent.Creates()):
+	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossPlugin):
 		return DropRejected, "target refuses tiles"
 	case in.SameCell:
 		return DropRejected, "same cell"
