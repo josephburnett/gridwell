@@ -17,8 +17,8 @@ unless they start with `internal/`, and name a function, never a line.
 
 ## 1. Declare what you implement
 
-**Rule.** Declare every capability you implement in `Info` (`watch`), and test
-the declaration.
+**Rule.** Declare every capability you implement in `Info` (`watch`, `move`),
+and test the declaration.
 
 **Why.** "A tile behaves the same wherever its content comes from." The node
 never switches on a plugin kind; every behavior rides a wire declaration

@@ -34,7 +34,7 @@ func (s *Store) claimContentVersion(ctx context.Context, q gridReader, tileID, c
 // DeleteClaim verifies a delete's claim against row t: the content version and
 // the placement the writer saw, so a delete takes only what the user was
 // looking at. A request with no placement claim is the node's own (a reap)
-// and is not checked. withGrid is claimPlacement's.
+// and is not checked. withGrid is ClaimPlacement's.
 func DeleteClaim(t *gridwellv1.Tile, req *gridwellv1.DeleteTileRequest, withGrid bool) error {
 	if req.GetClaim() == nil {
 		return nil
@@ -43,7 +43,7 @@ func DeleteClaim(t *gridwellv1.Tile, req *gridwellv1.DeleteTileRequest, withGrid
 		return fmt.Errorf("%w: tile %s at version %d, the delete saw %d",
 			ErrVersionConflict, t.Id, t.Version, req.ClaimVersion)
 	}
-	return claimPlacement(t, req.Claim, withGrid)
+	return ClaimPlacement(t, req.Claim, withGrid)
 }
 
 // loadForWrite is the shared preamble for an unclaimed single-tile mutation:

@@ -16,7 +16,7 @@ const placementSet = `x = ?, y = ?, w = ?, h = ?`
 
 // MoveTile is the single placement writeback: placement is one fact,
 // (grid_id, x, y, w, h), and this verb owns all of it, id-addressed with no
-// descent path. It claims the placement the writer saw (claimPlacement) and
+// descent path. It claims the placement the writer saw (ClaimPlacement) and
 // bumps no version, so a move never conflicts with typing. Two tiles in one
 // cell is refused by the overlap check in this same transaction. Moving a door
 // into its own subtree is refused by doorWouldContainItself, walking a chain
@@ -49,7 +49,7 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 			out = n
 			return nil
 		}
-		if err := claimPlacement(n, req.Claim, true); err != nil {
+		if err := ClaimPlacement(n, req.Claim, true); err != nil {
 			return err
 		}
 		if _, err := s.loadGrid(ctx, tx, destGridID); err != nil {
@@ -94,12 +94,12 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 	return out, err
 }
 
-// claimPlacement verifies a placement claim against row n: the placement the
+// ClaimPlacement verifies a placement claim against row n: the placement the
 // writer saw must be the one the row holds. It is the state, not its history,
 // so a tile moved away and back is where the writer saw it and the write
 // lands. A nil claim is the node's own write. withGrid is false for a plugin's
 // row, whose grid its listing fixes.
-func claimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) error {
+func ClaimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) error {
 	if c == nil {
 		return nil
 	}

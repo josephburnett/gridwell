@@ -2,3 +2,4 @@
 # The debt row of ratchet.txt counts the lines above low-water; at 0 that row and the low-water line go, and the next rise brings both back.
 low-water | 57525
 2026-10-22 | plugin move capability, the store half (CLAUDE.md Node) | 10
+2026-10-22 | plugin move capability, the adapter half (CLAUDE.md Node) | 25

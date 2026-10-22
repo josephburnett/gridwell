@@ -19,10 +19,7 @@ import (
 // tiles never surface, because a result is a promise you can go there and they
 // die on ascent. Matching nothing returns empty results, never an error.
 func (s *Store) Find(ctx context.Context, req *gridwellv1.FindRequest) ([]*gridwellv1.FindResult, error) {
-	limit := int(req.Limit)
-	if limit <= 0 {
-		limit = rpc.FindDefaultLimit
-	}
+	limit := rpc.FindLimit(req)
 	f := tileFilter{req: req}
 	if req.GridId != "" {
 		gid, err := parseID(req.GridId)

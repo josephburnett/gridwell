@@ -89,6 +89,10 @@ type Adapter struct {
 	told   map[entryRef]string
 
 	lacks absentVerbs
+
+	// moving keeps a listing from retiring the row a Move is rekeying: the
+	// old grid lists the key no more, and the new one does not hold the row.
+	moving sync.RWMutex
 }
 
 var _ namespace.Namespace = (*Adapter)(nil)
@@ -462,6 +466,8 @@ func (a *Adapter) resolveGrid(gridID string) (gid int64, gridKey string, err err
 // synthesize is one grid with its join kept, so GetGrid, Find's key lookup
 // and the mint's derived placement read the same tiles.
 func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, error) {
+	a.moving.RLock()
+	defer a.moving.RUnlock()
 	gid, gkey, err := a.resolveGrid(gridID)
 	if err != nil {
 		return nil, err
@@ -754,27 +760,38 @@ func (a *Adapter) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (
 	return &gridwellv1.TileResponse{Tile: t}, nil
 }
 
-// MoveTile terminates at the store: in-grid only, and unversioned. It is a
-// durable fact about an entry, so it mints the row it writes into.
+// MoveTile terminates at the store and is unversioned. It is a durable fact
+// about an entry, so it mints the row it writes into.
 func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
 		return nil, err
 	}
+	toKey := ref.gridKey
 	if req.GridId != "" {
-		_, want, err := a.resolveGrid(req.GridId)
+		if _, toKey, err = a.resolveGrid(req.GridId); err != nil {
+			return nil, err
+		}
+	}
+	if toKey != ref.gridKey {
+		ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
 		if err != nil {
 			return nil, err
 		}
-		if want != ref.gridKey {
-			return nil, status.Errorf(codes.InvalidArgument, "plugin: cross-grid placement not supported")
+		if !ci.Move {
+			return nil, status.Error(codes.InvalidArgument, "plugin: the plugin does not move entries between its grids")
 		}
 	}
 	id, err := a.mint(ctx, req.TileId)
 	if err != nil {
 		return nil, err
 	}
-	changed, err := a.mem.Move(id, 0, "", req.X, req.Y, req.W, req.H, req.Claim)
+	var changed bool
+	if toKey == ref.gridKey {
+		changed, err = a.mem.Move(id, 0, "", req.X, req.Y, req.W, req.H, req.Claim)
+	} else {
+		changed, err = a.moveAcross(ctx, req, ref, id, toKey)
+	}
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
@@ -787,6 +804,33 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 		a.emitGridChanged(resp.GetTile().GetGridId())
 	}
 	return resp, nil
+}
+
+// moveAcross is a move to another of the plugin's grids, which the plugin
+// makes (plugin.proto Move) and the row follows under the key it answers. The
+// claim is checked before the plugin is asked, since its move is not undone.
+func (a *Adapter) moveAcross(ctx context.Context, req *gridwellv1.MoveTileRequest, ref tileRef, id int64, toKey string) (bool, error) {
+	t, err := a.tileByID(ctx, req.TileId)
+	if err != nil {
+		return false, err
+	}
+	if err := store.ClaimPlacement(t, req.Claim, false); err != nil {
+		return false, err
+	}
+	to, err := a.mem.GridOf(toKey)
+	if err != nil {
+		return false, err
+	}
+	a.moving.Lock()
+	defer a.moving.Unlock()
+	landed, err := ask(&a.lacks, "Move", func() (*pluginv1.MoveResponse, error) {
+		return a.cp.Move(ctx, &pluginv1.MoveRequest{Key: ref.key, Grid: ref.gridKey, ToGrid: toKey})
+	})
+	if err != nil {
+		return false, err
+	}
+	a.emitGridChanged(rpc.EntryGridID(ref.gridKey))
+	return a.mem.Move(id, to, landed.Key, req.X, req.Y, req.W, req.H, req.Claim)
 }
 
 // SetTile terminates the framing, capture and rename arms at the store. A
@@ -1182,15 +1226,11 @@ func (a *Adapter) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gri
 		return nil, err
 	}
 	// The enums are defined identically. Map by name to keep that a checked
-	// fact rather than a numeric coincidence.
-	switch resp.Presence {
-	case pluginv1.ProbeResponse_PRESENCE_PRESENT:
-		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_PRESENT}, nil
-	case pluginv1.ProbeResponse_PRESENCE_GONE:
-		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
-	default:
-		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_UNSPECIFIED}, nil
-	}
+	// fact rather than a numeric coincidence; anything else is unspecified.
+	return &gridwellv1.ProbeResponse{Presence: map[pluginv1.ProbeResponse_Presence]gridwellv1.ProbeResponse_Presence{
+		pluginv1.ProbeResponse_PRESENCE_PRESENT: gridwellv1.ProbeResponse_PRESENCE_PRESENT,
+		pluginv1.ProbeResponse_PRESENCE_GONE:    gridwellv1.ProbeResponse_PRESENCE_GONE,
+	}[resp.Presence]}, nil
 }
 
 // DeleteTile hands the gesture to the plugin, which says what deleting means,

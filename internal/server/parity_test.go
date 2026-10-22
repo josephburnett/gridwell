@@ -145,20 +145,16 @@ const (
 	dPluginDoorCopy = "A plugin's door never copies"
 	dPluginPageCopy = "A url entry whose plugin serves its page copies as a link too"
 	dPluginName     = "the source's label names it until a rename"
+	dPluginMove     = "a plugin that declares no move refuses with the reason" // plugin_move_test.go
 	dPluginPage     = "Plugins serve web content through"
 	dShellCopy      = "A shell copied across nodes lands as a link"
 	dTextName       = "A text tile's name stays its source's, since its presentation reads it."
 )
 
-// The holes, where the code makes a difference no decision names.
-const (
-	hPluginMove = "internal/pluginhost/adapter.go:778: MoveTile refuses another grid of the same plugin; home moves a tile to any of its grids, and CLAUDE.md names only the cross-plugin move"
-)
-
 var parityTable = []parityCell{
 	{kText, opCreate, onPlugin, decided, dPluginCreates, nil},
 	{kText, opCreate, onFar, same, "", checkCreate},
-	{kText, opMove, onPlugin, hole, hPluginMove, nil},
+	{kText, opMove, onPlugin, decided, dPluginMove, nil},
 	{kText, opMove, onFar, same, "", checkMove},
 	{kText, opCopy, onPlugin, same, "", checkCopy},
 	{kText, opCopy, onFar, same, "", checkCopy},
@@ -194,7 +190,7 @@ var parityTable = []parityCell{
 	{kText, opDead, onFar, same, "", checkDead},
 	{kURL, opCreate, onPlugin, decided, dPluginCreates, nil},
 	{kURL, opCreate, onFar, same, "", checkCreate},
-	{kURL, opMove, onPlugin, hole, hPluginMove, nil},
+	{kURL, opMove, onPlugin, decided, dPluginMove, nil},
 	{kURL, opMove, onFar, same, "", checkMove},
 	{kURL, opCopy, onPlugin, decided, dPluginPageCopy, nil},
 	{kURL, opCopy, onFar, same, "", checkCopy},
@@ -302,7 +298,7 @@ var parityTable = []parityCell{
 	{kWorkspace, opDead, onFar, same, "", checkDead},
 	{kDoor, opCreate, onPlugin, decided, dPluginCreates, nil},
 	{kDoor, opCreate, onFar, same, "", checkCreate},
-	{kDoor, opMove, onPlugin, hole, hPluginMove, nil},
+	{kDoor, opMove, onPlugin, decided, dPluginMove, nil},
 	{kDoor, opMove, onFar, same, "", checkMove},
 	{kDoor, opCopy, onPlugin, decided, dPluginDoorCopy, nil},
 	{kDoor, opCopy, onFar, same, "", checkCopy},
@@ -901,6 +897,7 @@ type paritySource struct {
 	bodies  map[string]string
 	stamp   int
 	changes chan *pluginv1.Change
+	moves   bool // declares and answers Move (plugin_move_test.go)
 }
 
 func newParitySource() *paritySource {
@@ -922,7 +919,9 @@ func newParitySource() *paritySource {
 }
 
 func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: true, Writable: true,
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: true, Writable: true, Move: s.moves,
 		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
 }
 

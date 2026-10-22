@@ -24,6 +24,14 @@ const FindHopTimeout = 3 * time.Second
 // answers from its own rows.
 const FindDefaultLimit = 20
 
+// FindLimit is the request's limit, FindDefaultLimit when it brings none.
+func FindLimit(req *pb.FindRequest) int {
+	if req.GetLimit() <= 0 {
+		return FindDefaultLimit
+	}
+	return int(req.Limit)
+}
+
 // FindQuery is the parsed form of a Find query, the one grammar every
 // plugin reads. Exactly one of ID and Text is set.
 type FindQuery struct {

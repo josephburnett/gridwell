@@ -486,6 +486,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   A door is a plugin's when the grid it opens takes no new tiles
   (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
   so a disabled source's door links too, as a dark one does.
+- A plugin's entry moves to another of the plugin's grids only when the
+  plugin declares move (`InfoResponse.move`), as a file tree can and a
+  mailbox cannot: the plugin moves it and answers its key there, and the
+  node writes the row's grid and key in one write, keeping its id; a plugin
+  that declares no move refuses with the reason (2026-10-21). A link to the
+  old key reads dead: a key is the source's address, and a link means the
+  thing at that address, so a source that renames a key, by its own change
+  or by our move, has retired the old one (2026-10-22).
 - A source that lists but cannot watch is not dark: its listings stay live
   and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
   comes only from a listing the source did not answer, and a read the caller

@@ -439,7 +439,7 @@ func (n *Namespace) Move(tileID, gridID int64, key string, x, y, w, h int64, cla
 		if gridID == from && key == was && cur.X == x && cur.Y == y && cur.W == w && cur.H == h {
 			return nil
 		}
-		if err := claimPlacement(cur, claim, false); err != nil {
+		if err := ClaimPlacement(cur, claim, false); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET grid_id = ?, key = ?, `+placementSet+`, updated_at = ? WHERE id = ?`,

@@ -121,11 +121,7 @@ func (a *Adapter) filterHits(req *gridwellv1.FindRequest, hits []findHit, listin
 	if listing {
 		// An entry with no row has no time and lists after every row.
 		slices.SortStableFunc(kept, func(x, y findHit) int { return int(passing[y.row] - passing[x.row]) })
-		limit := int(req.Limit)
-		if limit <= 0 {
-			limit = rpc.FindDefaultLimit
-		}
-		kept = kept[:min(len(kept), limit)]
+		kept = kept[:min(len(kept), rpc.FindLimit(req))]
 	}
 	for _, h := range kept {
 		out.Results = append(out.Results, h.result)
@@ -246,11 +242,7 @@ func (g *findGrids) walk(gkey string, path []*gridwellv1.Tile, recurse bool, see
 // rows is an empty query with no grid: the rows whose facts pass, each placed
 // on its chain, and dropped, as an unplaceable text hit is, without one.
 func (g *findGrids) rows(req *gridwellv1.FindRequest) ([]findHit, error) {
-	limit := int(req.Limit)
-	if limit <= 0 {
-		limit = rpc.FindDefaultLimit
-	}
-	found, err := g.a.mem.FindRows(req, limit)
+	found, err := g.a.mem.FindRows(req, rpc.FindLimit(req))
 	if err != nil {
 		return nil, err
 	}

@@ -724,20 +724,25 @@ func peeled[Req proto.Message](req Req) func(string, rpc.Hop) Req {
 // asIs is the qualifier for an answer carrying no id of the far node's.
 func asIs[Resp any](_ string, resp Resp) Resp { return resp }
 
+// liveHops is every live connection, by name.
+func (s *Server) liveHops() []forward {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	hops := make([]forward, 0, len(s.live))
+	for ns, lc := range s.live {
+		hops = append(hops, forward{ns, lc.client})
+	}
+	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
+	return hops
+}
+
 // clearAllSelections forwards the all-clear to every live far node, which
 // clears its own rows (see server's router.clearAllSelections). A connection
 // that is not live holds nothing this node can clear now. Every one is tried;
 // the first failure is the answer.
 func (s *Server) clearAllSelections(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
-	s.mu.Lock()
-	hops := make([]forward, 0, len(s.live))
-	for ns, lc := range s.live {
-		hops = append(hops, forward{ns, lc.client})
-	}
-	s.mu.Unlock()
-	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
 	var first error
-	for _, hp := range hops {
+	for _, hp := range s.liveHops() {
 		if _, err := hp.client.SetSelection(ctx, req); err != nil && first == nil {
 			first = err
 		}
@@ -891,15 +896,8 @@ func (s *Server) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwe
 	if ref := cmp.Or(req.GridId, rpc.ParseFindQuery(req.Query).ID); ref != "" {
 		return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.Find, prependFindResp)
 	}
-	s.mu.Lock()
-	hops := make([]forward, 0, len(s.live))
-	for ns, lc := range s.live {
-		hops = append(hops, forward{ns, lc.client})
-	}
-	s.mu.Unlock()
-	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
 	out := &gridwellv1.FindResponse{}
-	for _, hp := range hops {
+	for _, hp := range s.liveHops() {
 		// Each hop is bounded by rpc.FindHopTimeout, shared with the
 		// node's fan-out, so one hung tunnel cannot stall the find.
 		hctx, cancel := context.WithTimeout(ctx, rpc.FindHopTimeout)

@@ -120,7 +120,7 @@ every open. Never relax them.
   of `content_at`, so a row's content time moves exactly when its version
   does; `created_at` and `updated_at` (every write) are the other two times. Everything else — captures, framing, layout —
   goes through `loadForWrite` + `emitTileChanged` and bumps nothing; a
-  placement claims the placement it saw (`claimPlacement`, home and a
+  placement claims the placement it saw (`ClaimPlacement`, home and a
   plugin's rows alike), a freeze claims the freeze it saw (`setFrozenTx`),
   and a delete claims the version and the placement (`DeleteClaim`). Those single-tile writes run in `withTileWrite`, so one that lands
   where the row already is writes nothing and tells no one

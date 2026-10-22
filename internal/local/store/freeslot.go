@@ -46,12 +46,7 @@ type cursor struct{ x, y int64 }
 // run past it, because a tile wider than the fill still has to land. The cells
 // are marked occupied and the cursor moved to the slot.
 func nextFreeRect(occupied map[[2]int64]bool, cur *cursor, w, h int64) (x, y int64) {
-	if w < 1 {
-		w = 1
-	}
-	if h < 1 {
-		h = 1
-	}
+	w, h = max(w, 1), max(h, 1)
 	cx, cy := cur.x, cur.y
 	for {
 		if rectFree(occupied, cx, cy, w, h) {
@@ -79,12 +74,7 @@ func rectFree(occupied map[[2]int64]bool, x, y, w, h int64) bool {
 }
 
 func occupyRect(occupied map[[2]int64]bool, x, y, w, h int64) {
-	if w < 1 {
-		w = 1
-	}
-	if h < 1 {
-		h = 1
-	}
+	w, h = max(w, 1), max(h, 1)
 	for dx := int64(0); dx < w; dx++ {
 		for dy := int64(0); dy < h; dy++ {
 			occupied[[2]int64{x + dx, y + dy}] = true
