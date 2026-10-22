@@ -118,11 +118,11 @@ func UUIDOf(id string) string {
 	return uuid
 }
 
-// IsDoorToOtherNamespace reads only the two qualified ids, so a PluginDoorTile, whose
-// GridID is empty, is one and previews the plugin's grid.
+// IsDoorToOtherNamespace compares whole namespace chains, since behind a connection every
+// id shares its first segment; a PluginDoorTile, whose GridID is empty, is one.
 func IsDoorToOtherNamespace(t *pb.Tile) bool {
 	return IsDoorKind(t.Kind) && t.ChildGridId != "" &&
-		UUIDOf(t.ChildGridId) != UUIDOf(t.GridId)
+		NamespaceOf(t.ChildGridId) != NamespaceOf(t.GridId)
 }
 
 // NamespaceOf is everything before a qualified id's last segment. Equal

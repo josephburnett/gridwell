@@ -132,6 +132,16 @@ func TestIsDoorToOtherNamespace(t *testing.T) {
 		// A menu swatch's exact shape: no owning grid, qualified child grid.
 		{"synthetic door node (empty grid_id, qualified child_grid_id) is a door to another namespace",
 			&pb.Tile{Kind: KindDoor, ChildGridId: "plugin-uuid/1"}, true},
+		{"home door onto a far home's grid, one hop, is a door to another namespace",
+			&pb.Tile{Kind: KindDoor, GridId: "n1/3", ChildGridId: "n1/geneva/n2/5"}, true},
+		{"far door onto a grid two hops further is a door to another namespace",
+			&pb.Tile{Kind: KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/n2/paris/n3/5"}, true},
+		{"far door onto the far node's own plugin grid is a door to another namespace",
+			&pb.Tile{Kind: KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/fs/~L2hvbWU"}, true},
+		{"far link door onto another grid of the far home is not a door to another namespace",
+			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/n2/8"}, false},
+		{"home link door onto another home grid is not a door to another namespace",
+			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/3", ChildGridId: "n1/8"}, false},
 	}
 	for _, c := range cases {
 		if got := IsDoorToOtherNamespace(c.tile); got != c.want {
