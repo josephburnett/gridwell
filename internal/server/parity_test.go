@@ -162,9 +162,9 @@ const (
 
 var parityTable = []parityCell{
 	{kText, opCreate, onPlugin, decided, dPluginCreates, nil},
-	{kText, opCreate, onFar, same, "", nil},
+	{kText, opCreate, onFar, same, "", checkCreate},
 	{kText, opMove, onPlugin, hole, hPluginMove, nil},
-	{kText, opMove, onFar, same, "", nil},
+	{kText, opMove, onFar, same, "", checkMove},
 	{kText, opCopy, onPlugin, hole, hCopyFacts, nil},
 	{kText, opCopy, onFar, hole, hCopyFacts, nil},
 	{kText, opLink, onPlugin, same, "", checkLink},
@@ -179,16 +179,16 @@ var parityTable = []parityCell{
 	{kText, opFreeze, onFar, na, naLive, nil},
 	{kText, opScreenshot, onPlugin, na, naLive, nil},
 	{kText, opScreenshot, onFar, na, naLive, nil},
-	{kText, opZoom, onPlugin, same, "", nil},
-	{kText, opZoom, onFar, same, "", nil},
-	{kText, opScroll, onPlugin, same, "", nil},
-	{kText, opScroll, onFar, same, "", nil},
+	{kText, opZoom, onPlugin, same, "", checkZoom},
+	{kText, opZoom, onFar, same, "", checkZoom},
+	{kText, opScroll, onPlugin, same, "", checkScroll},
+	{kText, opScroll, onFar, same, "", checkScroll},
 	{kText, opFraming, onPlugin, na, naFraming, nil},
 	{kText, opFraming, onFar, na, naFraming, nil},
 	{kText, opRead, onPlugin, same, "", checkRead},
 	{kText, opRead, onFar, same, "", checkRead},
 	{kText, opWrite, onPlugin, decided, dTextName, nil},
-	{kText, opWrite, onFar, same, "", nil},
+	{kText, opWrite, onFar, same, "", checkWrite},
 	{kText, opServe, onPlugin, na, naServe, nil},
 	{kText, opServe, onFar, na, naServe, nil},
 	{kText, opFind, onPlugin, same, "", checkFind},
@@ -198,25 +198,25 @@ var parityTable = []parityCell{
 	{kText, opDead, onPlugin, same, "", nil},
 	{kText, opDead, onFar, same, "", nil},
 	{kURL, opCreate, onPlugin, decided, dPluginCreates, nil},
-	{kURL, opCreate, onFar, same, "", nil},
+	{kURL, opCreate, onFar, same, "", checkCreate},
 	{kURL, opMove, onPlugin, hole, hPluginMove, nil},
-	{kURL, opMove, onFar, same, "", nil},
+	{kURL, opMove, onFar, same, "", checkMove},
 	{kURL, opCopy, onPlugin, hole, hCopyPage, nil},
 	{kURL, opCopy, onFar, hole, hCopyFacts, nil},
 	{kURL, opLink, onPlugin, same, "", checkLink},
 	{kURL, opLink, onFar, same, "", checkLink},
 	{kURL, opDelete, onPlugin, decided, dPluginDelete, nil},
 	{kURL, opDelete, onFar, same, "", nil},
-	{kURL, opRename, onPlugin, same, "", nil},
-	{kURL, opRename, onFar, same, "", nil},
+	{kURL, opRename, onPlugin, same, "", checkRename},
+	{kURL, opRename, onFar, same, "", checkRename},
 	{kURL, opDescend, onPlugin, same, "", checkDescend},
 	{kURL, opDescend, onFar, same, "", checkDescend},
-	{kURL, opFreeze, onPlugin, same, "", nil},
-	{kURL, opFreeze, onFar, same, "", nil},
+	{kURL, opFreeze, onPlugin, same, "", checkFreeze},
+	{kURL, opFreeze, onFar, same, "", checkFreeze},
 	{kURL, opScreenshot, onPlugin, decided, dPluginName, nil},
-	{kURL, opScreenshot, onFar, same, "", nil},
-	{kURL, opZoom, onPlugin, same, "", nil},
-	{kURL, opZoom, onFar, same, "", nil},
+	{kURL, opScreenshot, onFar, same, "", checkScreenshot},
+	{kURL, opZoom, onPlugin, same, "", checkZoom},
+	{kURL, opZoom, onFar, same, "", checkZoom},
 	{kURL, opScroll, onPlugin, na, naScroll, nil},
 	{kURL, opScroll, onFar, na, naScroll, nil},
 	{kURL, opFraming, onPlugin, na, naFraming, nil},
@@ -224,7 +224,7 @@ var parityTable = []parityCell{
 	{kURL, opRead, onPlugin, hole, hPluginReadURL, nil},
 	{kURL, opRead, onFar, same, "", checkRead},
 	{kURL, opWrite, onPlugin, hole, hPluginWriteURL, nil},
-	{kURL, opWrite, onFar, same, "", nil},
+	{kURL, opWrite, onFar, same, "", checkWrite},
 	{kURL, opServe, onPlugin, decided, dPluginPage, nil},
 	{kURL, opServe, onFar, same, "", nil},
 	{kURL, opFind, onPlugin, same, "", checkFind},
@@ -234,9 +234,9 @@ var parityTable = []parityCell{
 	{kURL, opDead, onPlugin, same, "", nil},
 	{kURL, opDead, onFar, same, "", nil},
 	{kShell, opCreate, onPlugin, na, naPluginKind, nil},
-	{kShell, opCreate, onFar, same, "", nil},
+	{kShell, opCreate, onFar, same, "", checkCreate},
 	{kShell, opMove, onPlugin, na, naPluginKind, nil},
-	{kShell, opMove, onFar, same, "", nil},
+	{kShell, opMove, onFar, same, "", checkMove},
 	{kShell, opCopy, onPlugin, na, naPluginKind, nil},
 	{kShell, opCopy, onFar, decided, dShellCopy, nil},
 	{kShell, opLink, onPlugin, na, naPluginKind, nil},
@@ -244,15 +244,15 @@ var parityTable = []parityCell{
 	{kShell, opDelete, onPlugin, na, naPluginKind, nil},
 	{kShell, opDelete, onFar, same, "", nil},
 	{kShell, opRename, onPlugin, na, naPluginKind, nil},
-	{kShell, opRename, onFar, same, "", nil},
+	{kShell, opRename, onFar, same, "", checkRename},
 	{kShell, opDescend, onPlugin, na, naPluginKind, nil},
 	{kShell, opDescend, onFar, same, "", checkDescend},
 	{kShell, opFreeze, onPlugin, na, naPluginKind, nil},
-	{kShell, opFreeze, onFar, same, "", nil},
+	{kShell, opFreeze, onFar, same, "", checkFreeze},
 	{kShell, opScreenshot, onPlugin, na, naPluginKind, nil},
-	{kShell, opScreenshot, onFar, same, "", nil},
+	{kShell, opScreenshot, onFar, same, "", checkScreenshot},
 	{kShell, opZoom, onPlugin, na, naPluginKind, nil},
-	{kShell, opZoom, onFar, same, "", nil},
+	{kShell, opZoom, onFar, same, "", checkZoom},
 	{kShell, opScroll, onPlugin, na, naScroll, nil},
 	{kShell, opScroll, onFar, na, naScroll, nil},
 	{kShell, opFraming, onPlugin, na, naFraming, nil},
@@ -270,9 +270,9 @@ var parityTable = []parityCell{
 	{kShell, opDead, onPlugin, na, naPluginKind, nil},
 	{kShell, opDead, onFar, same, "", nil},
 	{kWorkspace, opCreate, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opCreate, onFar, same, "", nil},
+	{kWorkspace, opCreate, onFar, same, "", checkCreate},
 	{kWorkspace, opMove, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opMove, onFar, same, "", nil},
+	{kWorkspace, opMove, onFar, same, "", checkMove},
 	{kWorkspace, opCopy, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opCopy, onFar, same, "", nil},
 	{kWorkspace, opLink, onPlugin, na, naPluginKind, nil},
@@ -280,7 +280,7 @@ var parityTable = []parityCell{
 	{kWorkspace, opDelete, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opDelete, onFar, same, "", nil},
 	{kWorkspace, opRename, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opRename, onFar, same, "", nil},
+	{kWorkspace, opRename, onFar, same, "", checkRename},
 	{kWorkspace, opDescend, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opDescend, onFar, same, "", checkDescend},
 	{kWorkspace, opFreeze, onPlugin, na, naLive, nil},
@@ -296,7 +296,7 @@ var parityTable = []parityCell{
 	{kWorkspace, opRead, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opRead, onFar, same, "", checkRead},
 	{kWorkspace, opWrite, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opWrite, onFar, same, "", nil},
+	{kWorkspace, opWrite, onFar, same, "", checkWrite},
 	{kWorkspace, opServe, onPlugin, na, naServe, nil},
 	{kWorkspace, opServe, onFar, na, naServe, nil},
 	{kWorkspace, opFind, onPlugin, na, naPluginKind, nil},
@@ -306,17 +306,17 @@ var parityTable = []parityCell{
 	{kWorkspace, opDead, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opDead, onFar, same, "", nil},
 	{kDoor, opCreate, onPlugin, decided, dPluginCreates, nil},
-	{kDoor, opCreate, onFar, same, "", nil},
+	{kDoor, opCreate, onFar, same, "", checkCreate},
 	{kDoor, opMove, onPlugin, hole, hPluginMove, nil},
-	{kDoor, opMove, onFar, same, "", nil},
+	{kDoor, opMove, onFar, same, "", checkMove},
 	{kDoor, opCopy, onPlugin, decided, dPluginDoorCopy, nil},
 	{kDoor, opCopy, onFar, same, "", nil},
 	{kDoor, opLink, onPlugin, same, "", checkLink},
 	{kDoor, opLink, onFar, hole, hDoorOutside, nil},
 	{kDoor, opDelete, onPlugin, decided, dPluginDelete, nil},
 	{kDoor, opDelete, onFar, same, "", nil},
-	{kDoor, opRename, onPlugin, same, "", nil},
-	{kDoor, opRename, onFar, same, "", nil},
+	{kDoor, opRename, onPlugin, same, "", checkRename},
+	{kDoor, opRename, onFar, same, "", checkRename},
 	{kDoor, opDescend, onPlugin, same, "", checkDescend},
 	{kDoor, opDescend, onFar, same, "", checkDescend},
 	{kDoor, opFreeze, onPlugin, na, naLive, nil},
@@ -327,8 +327,8 @@ var parityTable = []parityCell{
 	{kDoor, opZoom, onFar, na, naZoom, nil},
 	{kDoor, opScroll, onPlugin, na, naScroll, nil},
 	{kDoor, opScroll, onFar, na, naScroll, nil},
-	{kDoor, opFraming, onPlugin, same, "", nil},
-	{kDoor, opFraming, onFar, same, "", nil},
+	{kDoor, opFraming, onPlugin, same, "", checkFraming},
+	{kDoor, opFraming, onFar, same, "", checkFraming},
 	{kDoor, opRead, onPlugin, na, naContent, nil},
 	{kDoor, opRead, onFar, na, naContent, nil},
 	{kDoor, opWrite, onPlugin, na, naContent, nil},
@@ -342,9 +342,9 @@ var parityTable = []parityCell{
 	{kDoor, opDead, onPlugin, hole, hGoneGrid, nil},
 	{kDoor, opDead, onFar, hole, hDoorOutside, nil},
 	{kDoorHome, opCreate, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opCreate, onFar, same, "", nil},
+	{kDoorHome, opCreate, onFar, same, "", checkCreate},
 	{kDoorHome, opMove, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opMove, onFar, same, "", nil},
+	{kDoorHome, opMove, onFar, same, "", checkMove},
 	{kDoorHome, opCopy, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opCopy, onFar, hole, hDoorOutside, nil},
 	{kDoorHome, opLink, onPlugin, na, naPluginGrids, nil},
@@ -352,7 +352,7 @@ var parityTable = []parityCell{
 	{kDoorHome, opDelete, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opDelete, onFar, same, "", nil},
 	{kDoorHome, opRename, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opRename, onFar, same, "", nil},
+	{kDoorHome, opRename, onFar, same, "", checkRename},
 	{kDoorHome, opDescend, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opDescend, onFar, same, "", checkDescend},
 	{kDoorHome, opFreeze, onPlugin, na, naLive, nil},
@@ -364,7 +364,7 @@ var parityTable = []parityCell{
 	{kDoorHome, opScroll, onPlugin, na, naScroll, nil},
 	{kDoorHome, opScroll, onFar, na, naScroll, nil},
 	{kDoorHome, opFraming, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opFraming, onFar, same, "", nil},
+	{kDoorHome, opFraming, onFar, same, "", checkFraming},
 	{kDoorHome, opRead, onPlugin, na, naContent, nil},
 	{kDoorHome, opRead, onFar, na, naContent, nil},
 	{kDoorHome, opWrite, onPlugin, na, naContent, nil},
@@ -1183,6 +1183,118 @@ func (f *parityFix) drop(o parityOwner) (x, y int64) {
 func (f *parityFix) dropped(obs observable, x, y int64) observable {
 	if obs.Row["place"] == fmt.Sprint(x, y, 1, 1) {
 		obs.Row["place"] = "the dropped cell"
+	}
+	return obs
+}
+
+// write runs one write on owner's tile of kind and observes it, answering
+// the tile too.
+func (f *parityFix) write(o parityOwner, k parityKind, w func(t *gridwellv1.Tile) error) (observable, *gridwellv1.Tile) {
+	t := f.tile(o, k)
+	before, err := f.cl.GetTile(f.ctx, t.Id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.settle(o)
+	return f.observe(before, t.Id, w(before), true), t
+}
+
+// checkCreate makes the tile as the user does.
+func checkCreate(f *parityFix, o parityOwner, k parityKind) observable {
+	f.settle(o)
+	t := f.tile(o, k)
+	return f.observe(nil, t.Id, nil, true)
+}
+
+// checkMove moves the tile to another grid of its owner.
+func checkMove(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.MoveTile(f.ctx, &gridwellv1.MoveTileRequest{TileId: t.Id, GridId: f.away[o], X: 2, Y: 2, W: 1, H: 1, Claim: rpc.PlacementOf(t)})
+		return err
+	})
+	return obs
+}
+
+func checkRename(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.RenameTile(f.ctx, t.Id, t.Version, "Renamed")
+		return err
+	})
+	return obs
+}
+
+func checkFreeze(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.SetFrozen(f.ctx, t.Id, true, false)
+		return err
+	})
+	return obs
+}
+
+// checkScreenshot keeps a capture as a closing view writes it
+// (urlview.Writeback), or as a shell's capture.
+func checkScreenshot(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		capture := urlview.Capture{JPEG: []byte("\xff\xd8 picture"), Title: "Page title", History: "https://example.com/u"}
+		if rpc.KindOf(t.Kind).Live == rpc.DescentURL {
+			g, err := f.cl.GetGrid(f.ctx, t.GridId)
+			if err != nil {
+				return err
+			}
+			capture, _ = urlview.Writeback(true, urlview.Owns(rpc.PageContent(t), g.Grid.GetAcceptsTiles(), true), capture)
+		}
+		_, err := f.cl.SetTile(f.ctx, &gridwellv1.SetTileRequest{TileId: t.Id, Preview: capture.JPEG,
+			Tile: &gridwellv1.Tile{Kind: t.Kind, AltText: capture.Title, UrlHistory: capture.History}})
+		return err
+	})
+	return obs
+}
+
+func checkZoom(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.SetContentZoom(f.ctx, t.Id, 1.5)
+		return err
+	})
+	return obs
+}
+
+func checkScroll(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.SetTile(f.ctx, &gridwellv1.SetTileRequest{TileId: t.Id,
+			Tile: &gridwellv1.Tile{Kind: t.Kind, TextY: 40, TextMode: rpc.TextModeText}})
+		return err
+	})
+	return obs
+}
+
+func checkFraming(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.SetFraming(f.ctx, &gridwellv1.SetFramingRequest{TileId: t.Id, Cx: 3, Cy: 4, Zoom: 2})
+		return err
+	})
+	return obs
+}
+
+// parityEdits is the content each kind's write puts, the edit a user makes.
+var parityEdits = map[parityKind]string{
+	kText:      "Body edited",
+	kURL:       "https://example.com/v",
+	kWorkspace: `{"v":1,"root":{"pane":{"id":"p2","zoom":1}},"focus":"p2"}`,
+}
+
+// checkWrite saves an edit claiming the basis it read, then reads it back.
+func checkWrite(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, t := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, _, basis, err := f.cl.ReadContent(f.ctx, t.Id)
+		if err != nil {
+			return err
+		}
+		_, err = f.cl.WriteContent(f.ctx, t.Id, basis, []byte(parityEdits[k]))
+		return err
+	})
+	if obs.Outcome == clientsync.OutcomeOK.String() {
+		data, _, _, err := f.cl.ReadContent(f.ctx, t.Id)
+		obs.Read = string(data) + " / " + clientsync.Of(err).String()
 	}
 	return obs
 }
