@@ -423,22 +423,32 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed b
 	})
 }
 
-// Move is the placement writeback; the grid never changes. It claims the
-// footprint the writer saw, as home's MoveTile does (claimPlacement).
-func (n *Namespace) Move(tileID, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
+// Move is the placement writeback, claiming the footprint the writer saw.
+// gridID 0 keeps the row's grid and key; another is the plugin's move
+// (pluginhost Adapter.moveAcross), and the row leaves the old selection.
+func (n *Namespace) Move(tileID, gridID int64, key string, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
 	return n.rowWrite("MoveTile", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
-		if err := liveRow(ctx, tx, n.ns, tileID, "x, y, w, h", &cur.X, &cur.Y, &cur.W, &cur.H); err != nil {
+		from, was := int64(0), ""
+		if err := liveRow(ctx, tx, n.ns, tileID, "x, y, w, h, grid_id, key", &cur.X, &cur.Y, &cur.W, &cur.H, &from, &was); err != nil {
 			return err
 		}
-		if cur.X == x && cur.Y == y && cur.W == w && cur.H == h {
+		if gridID == 0 {
+			gridID, key = from, was
+		}
+		if gridID == from && key == was && cur.X == x && cur.Y == y && cur.W == w && cur.H == h {
 			return nil
 		}
 		if err := claimPlacement(cur, claim, false); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE tiles SET `+placementSet+`, updated_at = ? WHERE id = ?`,
-			x, y, w, h, n.s.now().Unix(), tileID)
+		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET grid_id = ?, key = ?, `+placementSet+`, updated_at = ? WHERE id = ?`,
+			gridID, key, x, y, w, h, n.s.now().Unix(), tileID); err != nil {
+			return err
+		}
+		if gridID != from {
+			_, _, err = leaveSelection(ctx, tx, from, tileID)
+		}
 		return err
 	})
 }

@@ -774,7 +774,7 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 	if err != nil {
 		return nil, err
 	}
-	changed, err := a.mem.Move(id, req.X, req.Y, req.W, req.H, req.Claim)
+	changed, err := a.mem.Move(id, 0, "", req.X, req.Y, req.W, req.H, req.Claim)
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}

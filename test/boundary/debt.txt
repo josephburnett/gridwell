@@ -1,2 +1,4 @@
 # Lines a decision raised the lines ceiling by, owed until derived back down: one entry per rise, date | decision | amount, entered in the commit that makes the rise, and low-water | lines is the value before the first rise.
 # The debt row of ratchet.txt counts the lines above low-water; at 0 that row and the low-water line go, and the next rise brings both back.
+low-water | 57525
+2026-10-22 | plugin move capability, the store half (CLAUDE.md Node) | 10
