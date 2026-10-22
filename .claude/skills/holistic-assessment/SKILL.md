@@ -218,5 +218,9 @@ tree being assessed.
   say what you looked for and did not find.
 - Scale/performance ceilings (full repaint, O(n) cache walks) are decided
   trade-offs, not debt — note them only if the decision comment is missing.
-- Record nothing in the repo from this skill itself; the report goes to the
-  user, who decides what becomes a GitHub issue.
+- The report goes to the user, who decides. The one thing this skill writes
+  into the repo is a ledger row (`test/boundary/ratchet.txt`, CLAUDE.md How
+  to work 10): a finding that names a class the ledger does not yet measure
+  becomes a row with a count, in its own commit, so it outlives the chat. A
+  finding with no count stays a note in the report, and a note that recurs
+  across runs is a sign the class needs a count.

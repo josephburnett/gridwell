@@ -197,6 +197,20 @@ what each one is called.
    instruction seems wrong, say so and propose the alternative — never
    quietly do something else. Fix a stale comment in the same commit that
    touches the file.
+10. **Simplification is a ledger.** `test/boundary/ratchet.txt` is the
+    scoreboard: one row per measure, each counted by code, with the
+    recorded value, its floor, the owner and the mechanism by which the
+    count may fall. `make check` fails on a rise and on an unrecorded fall,
+    so the ledger is always exact and its diff is the progress report. A
+    unit of simplification work is one row: take it in a worktree, lower
+    the count by the mechanism the row names and no other, and record the
+    new value in the same commit. A count lowered by another means is
+    refused like a rise, and a change that lowers one row by raising
+    another is refused by the build. A row at its floor is deleted and its
+    count stays as a permanent test. The holistic assessment finds a class
+    the ledger does not measure and adds it as a row with a count; a
+    finding with no count is a note, not a row. There is nothing more to do
+    when the ledger is empty (2026-10-21).
 
 ## Comments
 
