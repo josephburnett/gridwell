@@ -19,6 +19,7 @@ import (
 var ratchetCounts = map[string]func(t *testing.T, root string) int{
 	"packages": length(productionPackages),
 	"lines":    productionLines,
+	"parity":   parityCells,
 }
 
 func length(offenders func(*testing.T, string) []string) func(*testing.T, string) int {

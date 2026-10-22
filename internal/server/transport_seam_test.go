@@ -109,6 +109,15 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
 	front func(namespace.Namespace) namespace.Namespace, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
 	t.Helper()
+	return buildTransportHarness(t, conns, dialErr, front, nil, remote...)
+}
+
+// buildTransportHarness is newFrontedTransportHarness with near, when set,
+// registering more of the local node beside its home.
+func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
+	front func(namespace.Namespace) namespace.Namespace, near func(*plugin.Registry, *store.Store),
+	remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
+	t.Helper()
 	ctx := context.Background()
 
 	h := &transportHarness{dialErr: dialErr, remoteShell: shellsvctest.New(), cut: make(chan struct{})}
@@ -174,6 +183,9 @@ func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, d
 	localReg.Register(localNodeID, "home", homeClient, nil)
 	localReg.SetLabel(localNodeID, "home")
 	localReg.SetTransport(tClient, nil)
+	if near != nil {
+		near(localReg, localStore)
+	}
 	localSrv := servertest.New(t, localReg, server.Config{ID: localNodeID})
 	localHTTP := servertest.Serve(t, localSrv)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())

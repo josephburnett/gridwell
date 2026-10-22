@@ -648,3 +648,24 @@ func productionLines(t *testing.T, root string) int {
 	})
 	return n
 }
+
+// parityCells is the parity table's count as TestParity/count logs it. The
+// table is Go data beside its checks in internal/server, so the count is read
+// off a run of it rather than spelled a second time here.
+func parityCells(t *testing.T, root string) int {
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestParity$/^count$", "-v", "./internal/server/")
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("TestParity/count: %v\n%s", err, out)
+	}
+	m := regexp.MustCompile(`parity count: (\d+)`).FindSubmatch(out)
+	if m == nil {
+		t.Fatalf("TestParity/count logged no count:\n%s", out)
+	}
+	n, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
