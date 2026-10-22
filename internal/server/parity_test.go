@@ -170,7 +170,7 @@ var parityTable = []parityCell{
 	{kText, opLink, onPlugin, same, "", checkLink},
 	{kText, opLink, onFar, same, "", checkLink},
 	{kText, opDelete, onPlugin, decided, dPluginDelete, nil},
-	{kText, opDelete, onFar, same, "", nil},
+	{kText, opDelete, onFar, same, "", checkDelete},
 	{kText, opRename, onPlugin, na, naName, nil},
 	{kText, opRename, onFar, na, naName, nil},
 	{kText, opDescend, onPlugin, same, "", checkDescend},
@@ -194,9 +194,9 @@ var parityTable = []parityCell{
 	{kText, opFind, onPlugin, same, "", checkFind},
 	{kText, opFind, onFar, same, "", checkFind},
 	{kText, opUpdate, onPlugin, decided, dTextName, nil},
-	{kText, opUpdate, onFar, same, "", nil},
-	{kText, opDead, onPlugin, same, "", nil},
-	{kText, opDead, onFar, same, "", nil},
+	{kText, opUpdate, onFar, same, "", checkUpdate},
+	{kText, opDead, onPlugin, same, "", checkDead},
+	{kText, opDead, onFar, same, "", checkDead},
 	{kURL, opCreate, onPlugin, decided, dPluginCreates, nil},
 	{kURL, opCreate, onFar, same, "", checkCreate},
 	{kURL, opMove, onPlugin, hole, hPluginMove, nil},
@@ -206,7 +206,7 @@ var parityTable = []parityCell{
 	{kURL, opLink, onPlugin, same, "", checkLink},
 	{kURL, opLink, onFar, same, "", checkLink},
 	{kURL, opDelete, onPlugin, decided, dPluginDelete, nil},
-	{kURL, opDelete, onFar, same, "", nil},
+	{kURL, opDelete, onFar, same, "", checkDelete},
 	{kURL, opRename, onPlugin, same, "", checkRename},
 	{kURL, opRename, onFar, same, "", checkRename},
 	{kURL, opDescend, onPlugin, same, "", checkDescend},
@@ -226,13 +226,13 @@ var parityTable = []parityCell{
 	{kURL, opWrite, onPlugin, hole, hPluginWriteURL, nil},
 	{kURL, opWrite, onFar, same, "", checkWrite},
 	{kURL, opServe, onPlugin, decided, dPluginPage, nil},
-	{kURL, opServe, onFar, same, "", nil},
+	{kURL, opServe, onFar, same, "", checkServe},
 	{kURL, opFind, onPlugin, same, "", checkFind},
 	{kURL, opFind, onFar, same, "", checkFind},
-	{kURL, opUpdate, onPlugin, same, "", nil},
-	{kURL, opUpdate, onFar, same, "", nil},
-	{kURL, opDead, onPlugin, same, "", nil},
-	{kURL, opDead, onFar, same, "", nil},
+	{kURL, opUpdate, onPlugin, same, "", checkUpdate},
+	{kURL, opUpdate, onFar, same, "", checkUpdate},
+	{kURL, opDead, onPlugin, same, "", checkDead},
+	{kURL, opDead, onFar, same, "", checkDead},
 	{kShell, opCreate, onPlugin, na, naPluginKind, nil},
 	{kShell, opCreate, onFar, same, "", checkCreate},
 	{kShell, opMove, onPlugin, na, naPluginKind, nil},
@@ -242,7 +242,7 @@ var parityTable = []parityCell{
 	{kShell, opLink, onPlugin, na, naPluginKind, nil},
 	{kShell, opLink, onFar, same, "", checkLink},
 	{kShell, opDelete, onPlugin, na, naPluginKind, nil},
-	{kShell, opDelete, onFar, same, "", nil},
+	{kShell, opDelete, onFar, same, "", checkDelete},
 	{kShell, opRename, onPlugin, na, naPluginKind, nil},
 	{kShell, opRename, onFar, same, "", checkRename},
 	{kShell, opDescend, onPlugin, na, naPluginKind, nil},
@@ -268,17 +268,17 @@ var parityTable = []parityCell{
 	{kShell, opUpdate, onPlugin, na, naPluginKind, nil},
 	{kShell, opUpdate, onFar, same, "", nil},
 	{kShell, opDead, onPlugin, na, naPluginKind, nil},
-	{kShell, opDead, onFar, same, "", nil},
+	{kShell, opDead, onFar, same, "", checkDead},
 	{kWorkspace, opCreate, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opCreate, onFar, same, "", checkCreate},
 	{kWorkspace, opMove, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opMove, onFar, same, "", checkMove},
 	{kWorkspace, opCopy, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opCopy, onFar, same, "", nil},
+	{kWorkspace, opCopy, onFar, same, "", checkCopy},
 	{kWorkspace, opLink, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opLink, onFar, same, "", checkLink},
 	{kWorkspace, opDelete, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opDelete, onFar, same, "", nil},
+	{kWorkspace, opDelete, onFar, same, "", checkDelete},
 	{kWorkspace, opRename, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opRename, onFar, same, "", checkRename},
 	{kWorkspace, opDescend, onPlugin, na, naPluginKind, nil},
@@ -302,19 +302,19 @@ var parityTable = []parityCell{
 	{kWorkspace, opFind, onPlugin, na, naPluginKind, nil},
 	{kWorkspace, opFind, onFar, same, "", checkFind},
 	{kWorkspace, opUpdate, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opUpdate, onFar, same, "", nil},
+	{kWorkspace, opUpdate, onFar, same, "", checkUpdate},
 	{kWorkspace, opDead, onPlugin, na, naPluginKind, nil},
-	{kWorkspace, opDead, onFar, same, "", nil},
+	{kWorkspace, opDead, onFar, same, "", checkDead},
 	{kDoor, opCreate, onPlugin, decided, dPluginCreates, nil},
 	{kDoor, opCreate, onFar, same, "", checkCreate},
 	{kDoor, opMove, onPlugin, hole, hPluginMove, nil},
 	{kDoor, opMove, onFar, same, "", checkMove},
 	{kDoor, opCopy, onPlugin, decided, dPluginDoorCopy, nil},
-	{kDoor, opCopy, onFar, same, "", nil},
+	{kDoor, opCopy, onFar, same, "", checkCopy},
 	{kDoor, opLink, onPlugin, same, "", checkLink},
 	{kDoor, opLink, onFar, hole, hDoorOutside, nil},
 	{kDoor, opDelete, onPlugin, decided, dPluginDelete, nil},
-	{kDoor, opDelete, onFar, same, "", nil},
+	{kDoor, opDelete, onFar, same, "", checkDelete},
 	{kDoor, opRename, onPlugin, same, "", checkRename},
 	{kDoor, opRename, onFar, same, "", checkRename},
 	{kDoor, opDescend, onPlugin, same, "", checkDescend},
@@ -337,8 +337,8 @@ var parityTable = []parityCell{
 	{kDoor, opServe, onFar, na, naServe, nil},
 	{kDoor, opFind, onPlugin, same, "", checkFind},
 	{kDoor, opFind, onFar, same, "", checkFind},
-	{kDoor, opUpdate, onPlugin, same, "", nil},
-	{kDoor, opUpdate, onFar, same, "", nil},
+	{kDoor, opUpdate, onPlugin, same, "", checkUpdate},
+	{kDoor, opUpdate, onFar, same, "", checkUpdate},
 	{kDoor, opDead, onPlugin, hole, hGoneGrid, nil},
 	{kDoor, opDead, onFar, hole, hDoorOutside, nil},
 	{kDoorHome, opCreate, onPlugin, na, naPluginGrids, nil},
@@ -350,7 +350,7 @@ var parityTable = []parityCell{
 	{kDoorHome, opLink, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opLink, onFar, hole, hDoorOutside, nil},
 	{kDoorHome, opDelete, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opDelete, onFar, same, "", nil},
+	{kDoorHome, opDelete, onFar, same, "", checkDelete},
 	{kDoorHome, opRename, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opRename, onFar, same, "", checkRename},
 	{kDoorHome, opDescend, onPlugin, na, naPluginGrids, nil},
@@ -374,9 +374,9 @@ var parityTable = []parityCell{
 	{kDoorHome, opFind, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opFind, onFar, same, "", checkFind},
 	{kDoorHome, opUpdate, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opUpdate, onFar, same, "", nil},
+	{kDoorHome, opUpdate, onFar, same, "", checkUpdate},
 	{kDoorHome, opDead, onPlugin, na, naPluginGrids, nil},
-	{kDoorHome, opDead, onFar, same, "", nil},
+	{kDoorHome, opDead, onFar, same, "", checkDead},
 	{kDoorPlugin, opCreate, onPlugin, na, naPluginDoor, nil},
 	{kDoorPlugin, opCreate, onFar, hole, hDoorOutside, nil},
 	{kDoorPlugin, opMove, onPlugin, na, naPluginDoor, nil},
@@ -724,7 +724,7 @@ var parityLayout = []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"
 func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 	f.t.Helper()
 	if o == onPlugin {
-		name := map[parityKind]string{kText: "Body", kURL: "Site", kDoor: "Room"}[k]
+		name := map[parityKind]string{kText: "Body", kURL: "Site", kDoor: "Door"}[k]
 		g, err := f.cl.GetGrid(f.ctx, f.root[o])
 		if err != nil {
 			f.t.Fatal(err)
@@ -753,7 +753,7 @@ func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 	case kWorkspace:
 		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindWorkspace, AltText: "Desk", Named: true}), parityLayout)
 	case kDoor:
-		made = f.door(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Room"}))
+		made = f.door(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Door"}))
 		f.breaks[made.Id] = f.destroyer(made.Id)
 		return made
 	case kDoorHome:
@@ -916,7 +916,7 @@ func newParitySource() *paritySource {
 				{Key: "t", Kind: rpc.KindText, Label: "Body", ContentStamp: "s0", PlacementHint: at(1, 1)},
 				{Key: "u", Kind: rpc.KindURL, Label: "Site", UrlString: "https://example.com/u", PlacementHint: at(2, 1)},
 				{Key: "p", Kind: rpc.KindURL, Label: "Page", ServesPage: true, PlacementHint: at(2, 2)},
-				{Key: "d", Kind: rpc.KindDoor, Label: "Room", ChildGrid: "inner", PlacementHint: at(5, 1)},
+				{Key: "d", Kind: rpc.KindDoor, Label: "Door", ChildGrid: "inner", PlacementHint: at(5, 1)},
 			},
 			"inner": {{Key: "it", Kind: rpc.KindText, Label: "Inner", ContentStamp: "s0", PlacementHint: at(0, 0)}},
 			"other": {},
@@ -1297,4 +1297,211 @@ func checkWrite(f *parityFix, o parityOwner, k parityKind) observable {
 		obs.Read = string(data) + " / " + clientsync.Of(err).String()
 	}
 	return obs
+}
+
+// add lists one more entry in a grid.
+func (s *paritySource) add(grid string, e *pluginv1.Entry) {
+	s.change(func() *pluginv1.Change {
+		s.grids[grid] = append(s.grids[grid], e)
+		return &pluginv1.Change{Payload: &pluginv1.Change_GridChanged{GridChanged: &pluginv1.GridChanged{Grid: grid}}}
+	})
+}
+
+// edit changes an entry in place, a text's body or a url's address, as a
+// file written.
+func (s *paritySource) edit(key, value string) {
+	s.change(func() *pluginv1.Change {
+		e, g := s.entry(key)
+		if e.Kind == rpc.KindURL {
+			e.UrlString = value
+		} else {
+			s.stamp++
+			e.ContentStamp, s.bodies[key] = fmt.Sprintf("s%d", s.stamp), value
+		}
+		return &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{Grid: g, Entry: proto.CloneOf(e)}}}
+	})
+}
+
+// checkDelete deletes the tile as the trashcan drop does and reads it back.
+func checkDelete(f *parityFix, o parityOwner, k parityKind) observable {
+	obs, _ := f.write(o, k, func(t *gridwellv1.Tile) error {
+		_, err := f.cl.DeleteTile(f.ctx, &gridwellv1.DeleteTileRequest{TileId: t.Id, ClaimVersion: t.Version, Claim: rpc.PlacementOf(t)})
+		return err
+	})
+	return obs
+}
+
+// checkCopy copies the tile onto home, as a right-drag does, after leaving
+// on it every fact a copy could carry, and reads the copy.
+func checkCopy(f *parityFix, o parityOwner, k parityKind) observable {
+	t := f.tile(o, k)
+	caps := rpc.KindOf(t.Kind)
+	if caps.Descends == rpc.DescendContent {
+		if _, err := f.cl.SetContentZoom(f.ctx, t.Id, 1.5); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	if caps.Content == rpc.ContentBody {
+		if _, err := f.cl.SetTile(f.ctx, &gridwellv1.SetTileRequest{TileId: t.Id,
+			Tile: &gridwellv1.Tile{Kind: t.Kind, TextY: 40, TextMode: rpc.TextModeText}}); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	if caps.Freezes() {
+		if _, err := f.cl.SetFrozen(f.ctx, t.Id, true, false); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	if caps.Descends == rpc.DescendGrid && !t.Link {
+		if _, err := f.cl.SetFraming(f.ctx, &gridwellv1.SetFramingRequest{TileId: t.Id, Cx: 3, Cy: 4, Zoom: 2}); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	x, y := f.drop(o)
+	f.settle(onHome)
+	made, err := f.cl.CopyTile(f.ctx, &gridwellv1.CopyTileRequest{TileId: t.Id, DestGridId: f.root[onHome], X: x, Y: y})
+	if err != nil {
+		return observable{Outcome: clientsync.Of(err).String()}
+	}
+	obs := f.dropped(f.observe(nil, made.Id, nil, true), x, y)
+	read, err := f.content(made)
+	obs.Read = read + " / " + clientsync.Of(err).String()
+	return obs
+}
+
+// change is the tile's source changing it: home's or the far node's own
+// writer, or the plugin's source, each in its own words. A door's change is
+// a tile more on the grid it opens.
+func (f *parityFix) change(t *gridwellv1.Tile) {
+	f.t.Helper()
+	conn := localNodeID + "/geneva/"
+	if rpc.IsDoorKind(t.Kind) {
+		if src := f.src[rpc.NamespaceOf(t.ChildGridId)]; src != nil {
+			gkey, _, _, _ := rpc.SplitEntryID(rpc.LocalOf(t.ChildGridId))
+			src.add(gkey, &pluginv1.Entry{Key: "more", Kind: rpc.KindText, Label: "More", PlacementHint: &pluginv1.PlacementHint{X: 3, Y: 3, W: 1, H: 1}})
+			return
+		}
+		cl, grid := f.cl, t.ChildGridId
+		if bare, far := strings.CutPrefix(grid, conn); far {
+			cl, grid = f.h.remoteCl, bare
+		}
+		if _, err := cl.CreateWithContent(f.ctx, &gridwellv1.CreateTileRequest{GridId: grid,
+			Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 3, Y: 3, W: 1, H: 1}}, []byte("More")); err != nil {
+			f.t.Fatal(err)
+		}
+		return
+	}
+	if src := f.src[rpc.NamespaceOf(t.Id)]; src != nil {
+		_, key, _, _ := rpc.SplitEntryID(rpc.LocalOf(t.Id))
+		src.edit(key, parityEdits[parityKind(t.Kind)])
+		return
+	}
+	cl, id := f.cl, t.Id
+	if bare, far := strings.CutPrefix(id, conn); far {
+		cl, id = f.h.remoteCl, bare
+	}
+	_, _, basis, err := cl.ReadContent(f.ctx, id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if _, err := cl.WriteContent(f.ctx, id, basis, []byte(parityEdits[parityKind(t.Kind)])); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// checkUpdate opens a view of the tile, has the source change it, and sees
+// whether the view learns, and what it then reads.
+func checkUpdate(f *parityFix, o parityOwner, k parityKind) observable {
+	t := f.tile(o, k)
+	f.settle(o)
+	before, err := f.cl.GetTile(f.ctx, t.Id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	// The view is open: it has read what the tile shows.
+	if _, err := f.content(before); err != nil {
+		f.t.Fatal(err)
+	}
+	f.change(before)
+	grids := []string{before.GridId}
+	if before.ChildGridId != "" {
+		grids = append(grids, before.ChildGridId)
+	}
+	told := f.told([]string{t.Id}, grids)
+	obs := f.observe(before, t.Id, nil, false)
+	obs.Told = told
+	after, err := f.cl.GetTile(f.ctx, t.Id)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	read, err := f.content(after)
+	obs.Read = read + " / " + clientsync.Of(err).String()
+	return obs
+}
+
+// checkDead breaks the path to the tile and draws a link to it: the tile
+// itself when it is a link, else one made onto home.
+func checkDead(f *parityFix, o parityOwner, k parityKind) observable {
+	t := f.tile(o, k)
+	link := t
+	if !t.Link {
+		x, y := f.drop(o)
+		l := &gridwellv1.Tile{Kind: t.Kind, X: x, Y: y, W: 1, H: 1, AltText: t.AltText, Named: t.Named}
+		if rpc.IsDoorKind(t.Kind) {
+			l.ChildGridId = t.ChildGridId
+		} else {
+			l.LinkTargetId = t.Id
+		}
+		var err error
+		if link, err = f.cl.CreateTile(f.ctx, &gridwellv1.CreateTileRequest{GridId: f.root[onHome], Tile: l}); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	unbroken, _ := f.content(link)
+	f.breaks[t.Id]()
+	// The break reaches a plugin's listing by its Watch, so the read is
+	// asked until it answers something else.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		row, err := f.cl.GetTile(f.ctx, link.Id)
+		if err != nil {
+			return observable{Outcome: clientsync.Of(err).String()}
+		}
+		read, rerr := f.content(row)
+		obs := observable{Outcome: clientsync.OutcomeOK.String(), Draw: f.draw(row), Read: clientsync.Of(rerr).String()}
+		if read != unbroken || rerr != nil || time.Now().After(deadline) {
+			return obs
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// checkServe asks the content API for a page. Home serves none, so its
+// reference is the local plugin's page; the far run asks the far node's.
+func checkServe(f *parityFix, o parityOwner, k parityKind) observable {
+	ns := parityPluginUUID
+	if o == onFar {
+		ns = localNodeID + "/geneva/" + parityFarPluginUUID
+	}
+	g, err := f.cl.GetGrid(f.ctx, rpc.QualifyID(ns, rpc.EntryGridID("all")))
+	if err != nil {
+		return observable{Outcome: clientsync.Of(err).String()}
+	}
+	for _, t := range g.Tiles {
+		if !rpc.PageContent(t) {
+			continue
+		}
+		resp, err := f.h.localHTTP.Client().Get(urlview.Address(true, rpc.PageURL(f.h.localURL, f.token, t.Id), t.UrlString))
+		if err != nil {
+			return observable{Outcome: clientsync.Of(err).String()}
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		return observable{Outcome: clientsync.OutcomeOK.String(), Draw: f.draw(t), Read: fmt.Sprintf("%d %s", resp.StatusCode, body)}
+	}
+	f.t.Fatalf("%s lists no page", ns)
+	return observable{}
 }
