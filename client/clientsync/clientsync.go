@@ -175,9 +175,7 @@ func ReactOptimistic(o Outcome) Reaction {
 // is about to show someone else's bytes.
 func ReactSave(o Outcome) Reaction {
 	switch o {
-	case OutcomeConflict:
-		return Reaction{Refetch: true, Log: true, DropLocal: true}
-	case OutcomeRejected, OutcomeDead, OutcomeDisabled:
+	case OutcomeConflict, OutcomeRejected, OutcomeDead, OutcomeDisabled:
 		return Reaction{Refetch: true, Log: true, DropLocal: true}
 	case OutcomeTransport, OutcomeAbandoned:
 		return Reaction{Log: true, Retry: true}

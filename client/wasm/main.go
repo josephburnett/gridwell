@@ -1213,11 +1213,15 @@ func (a *App) gridIDForPathFrom(anchor string, p []string) string {
 		})
 }
 
-// refetchGridOnConflict also posts an Info notice: the user's optimistic
-// change is being replaced.
-func (a *App) refetchGridOnConflict(gridID string, where string) {
-	a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
-	a.refetchGrid(gridID)
+// reconcileGrid re-reads the grid a verdict moved, saying so when it replaces
+// the user's change (clientsync.Notices.Reloaded).
+func (a *App) reconcileGrid(gridID, where string, r clientsync.Reaction, n clientsync.Notices) {
+	if n.Reloaded {
+		a.reportErr(errsurface.Info, "conflict:"+where, where+": changed elsewhere — reloaded")
+	}
+	if r.Refetch {
+		a.refetchGrid(gridID)
+	}
 }
 
 // reportErr is the one wasm entry into the error surface; it also logs.
