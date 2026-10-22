@@ -93,11 +93,10 @@ func (a *Adapter) goListen(ctx context.Context, label string, fn func(context.Co
 }
 
 // listenProcess is one subprocess's stream, re-opened by namespace.Refollow.
-// Only a process whose InfoResponse.watch declares it is asked; Unimplemented
-// from one that does is a broken declaration, held as live updates off for the
-// process's life. A transport failure re-opens quietly, the death being the
-// supervisor's news; any other code is live updates off until a stream is
-// open. Neither is darkness: the listings still answer (Adapter.liveOff).
+// A process that declares no InfoResponse.watch, or declares it and answers
+// Unimplemented, has live updates off for its life; a transport failure
+// re-opens quietly, being the supervisor's news, and any other code is live
+// updates off until a stream opens. None is darkness (Adapter.liveOff).
 //
 // The stream is opened with the scope and only while it is not empty. Every
 // open, first, after a drop, or for a moved scope, is the one path in
@@ -113,6 +112,7 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 				return err
 			}
 			if !ci.Watch {
+				a.noteWatch("the plugin declares no live updates")
 				<-ctx.Done()
 				return nil
 			}

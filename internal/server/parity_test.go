@@ -634,6 +634,8 @@ type parityFix struct {
 	breaks    map[string]func() // per tile, what breaks the path to it
 	mends     map[string]func() // per tile, what mends a break the next run needs whole
 	marks     int
+	healthMu  sync.Mutex
+	health    map[string]*gridwellv1.EventPluginHealth // the last health each source told
 }
 
 // parityNode is one node of the chain as its own user reaches it.
@@ -679,7 +681,8 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h, third: third, undeclare: undeclare,
 		raw:    gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON()),
 		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){}, mends: map[string]func(){},
-		root: map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
+		health: map[string]*gridwellv1.EventPluginHealth{},
+		root:   map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
 		nodes: map[string]parityNode{"": {h.localCl, h.localHTTP, h.localShell},
 			parityConn: {h.remoteCl, h.remoteWeb, h.remoteShell}, parityThirdConn: {third.cl, third.web, third.shell}}}
 	lp, err := f.cl.Handshake(ctx)
@@ -730,6 +733,11 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 			ev, ok, err := es.Recv()
 			if err != nil || !ok {
 				return
+			}
+			if h := ev.GetPluginHealth(); h != nil {
+				f.healthMu.Lock()
+				f.health[h.PluginUuid] = h
+				f.healthMu.Unlock()
 			}
 			select {
 			case f.events <- ev:
@@ -962,7 +970,7 @@ type paritySource struct {
 	changes chan *pluginv1.Change
 	moves   bool // declares and answers Move (plugin_move_test.go)
 	// What a variant declares otherwise (parity_variant_test.go).
-	unwritable bool
+	unwritable, unwatched bool
 }
 
 func newParitySource() *paritySource {
@@ -986,7 +994,7 @@ func newParitySource() *paritySource {
 func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: true, Writable: !s.unwritable, Move: s.moves,
+	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves,
 		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
 }
 

@@ -44,9 +44,10 @@ message InfoResponse {
   // glyph. Declare both and grids wins; there is no privileged grid.
   string root_grid = 4;
   // watch: the plugin implements Watch (live change events). It is the one
-  // owner: the node opens Watch only when this is set. A plugin that sets it
-  // and answers Unimplemented has live updates off, said once on a healthy
-  // event; its listings still answer, so it is never shown dark.
+  // owner: the node opens Watch only when this is set. A plugin that leaves
+  // it unset, or sets it and answers Unimplemented, has live updates off,
+  // said once on a healthy event, so the client reads its grids on every
+  // move; its listings still answer, so it is never shown dark.
   bool watch = 5;
   // writable: the plugin accepts WriteContent on its text entries. It is the
   // one owner: the node stamps it as Grid.writable on every grid it serves

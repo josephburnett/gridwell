@@ -24,7 +24,7 @@ var Flags = []Flag{
 	{"gridwell.v1.Grid.writable", true, "variant a plugin that is not writable: the decided text write cells, and the url write held to home", "the grid's text bodies take writes"},
 	{"gridwell.v1.Grid.host_content", false, "", "its rows and a pane on it draw with the outside treatment (tilepreview.Outside)"},
 	{"gridwell.v1.Grid.accepts_tiles", true, "owner: true on a home, false on a plugin, and the decided create and door copy cells", "create, a swatch drop and a door's copy"},
-	{"plugin.v1.InfoResponse.watch", true, "", "an open view is told of a change, or reads on every move (cache.Current)"},
+	{"plugin.v1.InfoResponse.watch", true, "variant a plugin with watch off: the decided url update cell", "an open view is told of a change, or reads on every move (cache.Current)"},
 	{"plugin.v1.InfoResponse.writable", true, "as Grid.writable, which it becomes", "the plugin's text bodies take writes"},
 	{"plugin.v1.InfoResponse.host_content", false, "", "becomes Grid.host_content"},
 	{"plugin.v1.InfoResponse.move", true, "the decided move cells, both variants run in plugin_move_test.go", "a move to another grid"},

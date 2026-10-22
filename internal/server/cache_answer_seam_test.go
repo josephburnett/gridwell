@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -37,8 +38,14 @@ type cachedMail struct {
 }
 
 func (cachedMail) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "mail", DisplayName: "mail",
+	return &pluginv1.InfoResponse{Kind: "mail", DisplayName: "mail", Watch: true,
 		Grids: []*pluginv1.PluginGrid{{Id: "inbox", Grid: "inbox"}}}, nil
+}
+
+// Watch tells nothing, so the only health news is what a listing reports.
+func (cachedMail) Watch(_ *pluginv1.WatchRequest, s grpc.ServerStreamingServer[pluginv1.Change]) error {
+	<-s.Context().Done()
+	return nil
 }
 
 func (p cachedMail) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

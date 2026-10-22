@@ -145,9 +145,10 @@ type InfoResponse struct {
 	// glyph. Declare both and grids wins; there is no privileged grid.
 	RootGrid string `protobuf:"bytes,4,opt,name=root_grid,json=rootGrid,proto3" json:"root_grid,omitempty"`
 	// watch: the plugin implements Watch (live change events). It is the one
-	// owner: the node opens Watch only when this is set. A plugin that sets it
-	// and answers Unimplemented has live updates off, said once on a healthy
-	// event; its listings still answer, so it is never shown dark.
+	// owner: the node opens Watch only when this is set. A plugin that leaves
+	// it unset, or sets it and answers Unimplemented, has live updates off,
+	// said once on a healthy event, so the client reads its grids on every
+	// move; its listings still answer, so it is never shown dark.
 	Watch bool `protobuf:"varint,5,opt,name=watch,proto3" json:"watch,omitempty"`
 	// writable: the plugin accepts WriteContent on its text entries. It is the
 	// one owner: the node stamps it as Grid.writable on every grid it serves

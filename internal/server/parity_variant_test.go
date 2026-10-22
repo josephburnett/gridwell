@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
@@ -27,11 +29,13 @@ const parityReadOnly = "a summary stands in for the bytes"
 var (
 	vReadOnly    = parityVariant{"a read-only entry", func(s *paritySource) { s.grids["all"][0].ReadOnly = parityReadOnly }}
 	vNotWritable = parityVariant{"a plugin that is not writable", func(s *paritySource) { s.unwritable = true }}
+	vNoWatch     = parityVariant{"a plugin with watch off", func(s *paritySource) { s.unwatched = true }}
 )
 
 // The decisions the variants are held to, quoted.
 const (
 	dReadOnly = "so an edit is refused before it is typed"
+	dLiveOff  = "a source with live updates off is read on every move"
 )
 
 type parityVariantCell struct {
@@ -49,6 +53,7 @@ var parityVariantTable = []parityVariantCell{
 	{vNotWritable, parityCell{kText, opWrite, onPlugin, decided, dReadOnly, nil}, holdsReadOnly(false)},
 	{vNotWritable, parityCell{kText, opWrite, onFar, decided, dReadOnly, nil}, holdsReadOnly(false)},
 	{vNotWritable, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
+	{vNoWatch, parityCell{kURL, opUpdate, onPlugin, decided, dLiveOff, nil}, holdsLiveOff},
 }
 
 // parityVariantNS is the plugin a decided cell's owner reaches: the local
@@ -143,4 +148,54 @@ func holdsReadOnly(entry bool) func(f *parityFix, ns string) error {
 		}
 		return nil
 	}
+}
+
+// awaitHealth waits for the last health the source serving gridID told to
+// pass ok, as the client's cache folds it.
+func (f *parityFix) awaitHealth(gridID string, ok func(*cache.Cache, *gridwellv1.EventPluginHealth) bool) error {
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		c := cache.New()
+		var last *gridwellv1.EventPluginHealth
+		f.healthMu.Lock()
+		for uuid, h := range f.health {
+			c.NoteHealth(uuid, h.Healthy)
+			c.NoteLiveUpdates(uuid, h.GetLiveUpdatesOff() == "")
+			if cache.ServedBy(gridID, uuid) {
+				last = h
+			}
+		}
+		f.healthMu.Unlock()
+		if g, err := f.cl.GetGrid(f.ctx, gridID); err == nil {
+			c.PutGrid(g.Grid, g.Tiles)
+		}
+		if last != nil && ok(c, last) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("the source serving %s last told %+v", gridID, last)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// holdsLiveOff proves a source that cannot tell says so, so the client's
+// cache holds none of its grids current and a move reads the change.
+func holdsLiveOff(f *parityFix, ns string) error {
+	g, tl, err := f.entry(ns, "Site")
+	if err != nil {
+		return err
+	}
+	if err := f.awaitHealth(g.Id, func(c *cache.Cache, h *gridwellv1.EventPluginHealth) bool {
+		return h.Healthy && h.GetLiveUpdatesOff() != "" && !c.Current()[g.Id]
+	}); err != nil {
+		return fmt.Errorf("live updates off is never said: %v", err)
+	}
+	_, key, _, _ := rpc.SplitEntryID(rpc.LocalOf(tl.Id))
+	f.src[ns].edit(key, parityEdits[kURL])
+	_, after, err := f.entry(ns, "Site")
+	if err != nil || after.UrlString != parityEdits[kURL] {
+		return fmt.Errorf("the read on a move answers %v, %v", after, err)
+	}
+	return nil
 }

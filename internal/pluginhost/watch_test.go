@@ -179,19 +179,23 @@ func TestWatchChangesArriveAsGridChanges(t *testing.T) {
 	}
 }
 
-// A plugin that does not declare Watch is healthy and never asked: the
-// declaration is the owner, not an Unimplemented answer.
+// A plugin that does not declare Watch is healthy and never asked, the
+// declaration being the owner, not an Unimplemented answer; its live updates
+// are off, said once, so a client reads its grids on every move.
 func TestWatchUndeclaredIsNeverAsked(t *testing.T) {
 	p := &watchPlugin{undeclared: true, serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
 		return status.Error(codes.Unimplemented, "method Watch not implemented")
 	}}
 	a, seen := watching(t, p, nil)
+	if off := await(t, seen).GetPluginHealth(); off == nil || !off.Healthy || off.LiveUpdatesOff == "" {
+		t.Fatalf("first event = %v, want healthy with live updates off", off)
+	}
 	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
 	if n := p.calls.Load(); n != 0 {
 		t.Errorf("Watch was opened %d times, want never", n)
 	}
 	if evs := collect(seen); len(evs) != 0 {
-		t.Errorf("a plugin that does not watch announced %v", evs)
+		t.Errorf("a plugin that does not watch announced %v after saying so", evs)
 	}
 	if s := a.source(); s.dark {
 		t.Errorf("source dark (%q), want healthy", s.detail)
