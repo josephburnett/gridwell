@@ -5,14 +5,15 @@ package server_test
 // from the code. Home is the reference every cell is held to, so it has no
 // column of its own: a same cell's check runs the operation against home and
 // against the owner, and parityOracle compares the two observables. The count,
-// the holes plus the same cells with no check, is the parity row of
-// test/boundary/ratchet.txt, which reads it off TestParity/count.
+// the holes plus the same cells with no check, is held at zero by
+// test/boundary's TestParityIsZero, which reads it off TestParity/count.
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"regexp"
@@ -36,9 +37,12 @@ import (
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/deadlink"
 	"github.com/josephburnett/gridwell/client/events"
+	"github.com/josephburnett/gridwell/client/shellstream"
+	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/urlview"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/pluginhost"
@@ -257,7 +261,7 @@ var parityTable = []parityCell{
 	{kShell, opFind, onPlugin, na, naPluginKind, nil},
 	{kShell, opFind, onFar, same, "", checkFind},
 	{kShell, opUpdate, onPlugin, na, naPluginKind, nil},
-	{kShell, opUpdate, onFar, same, "", nil},
+	{kShell, opUpdate, onFar, same, "", checkUpdate},
 	{kShell, opDead, onPlugin, na, naPluginKind, nil},
 	{kShell, opDead, onFar, same, "", checkDead},
 	{kWorkspace, opCreate, onPlugin, na, naPluginKind, nil},
@@ -633,7 +637,9 @@ type parityFix struct {
 
 // parityNode is one node of the chain as its own user reaches it.
 type parityNode struct {
-	cl *rpc.Client
+	cl    *rpc.Client
+	web   *httptest.Server
+	shell *shellsvctest.FakeStreamer
 }
 
 // The connection the local node reaches the far one by, and the far one
@@ -667,7 +673,8 @@ func newParityFix(t *testing.T) *parityFix {
 		raw:    gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON()),
 		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){}, mends: map[string]func(){},
 		root: map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
-		nodes: map[string]parityNode{"": {h.localCl}, parityConn: {h.remoteCl}, parityThirdConn: {third.cl}}}
+		nodes: map[string]parityNode{"": {h.localCl, h.localHTTP, h.localShell},
+			parityConn: {h.remoteCl, h.remoteWeb, h.remoteShell}, parityThirdConn: {third.cl, third.web, third.shell}}}
 	lp, err := f.cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -1435,6 +1442,10 @@ func (f *parityFix) change(t *gridwellv1.Tile) {
 		src.edit(key, parityEdits[parityKind(t.Kind)])
 		return
 	}
+	if t.Kind == rpc.KindShell {
+		f.detach(t.Id, "vim")
+		return
+	}
 	n, id := f.holder(t.Id)
 	_, _, basis, err := n.cl.ReadContent(f.ctx, id)
 	if err != nil {
@@ -1454,6 +1465,25 @@ func (f *parityFix) holder(id string) (parityNode, string) {
 		}
 	}
 	return n, at
+}
+
+// detach attaches to a shell on the node holding it and detaches, which is
+// when the node names the shell by its foreground command.
+func (f *parityFix) detach(id, command string) {
+	f.t.Helper()
+	n, at := f.holder(id)
+	n.shell.PaneCmd = command
+	out := make(chan []byte, 8)
+	reg := shellstream.New(shellws.Dialer(shellws.Options{Origin: n.web.URL, HTTPClient: n.web.Client()}),
+		func(_ string, b []byte) { out <- b }, func(shellstream.Exit) {})
+	reg.Open(at, at, 80, 24)
+	reg.Write(at, []byte("x"))
+	select {
+	case <-out:
+	case <-f.ctx.Done():
+		f.t.Fatalf("the shell %s never attached", id)
+	}
+	reg.Close(at)
 }
 
 // checkUpdate opens a view of the tile, has the source change it, and sees

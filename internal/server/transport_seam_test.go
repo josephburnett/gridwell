@@ -49,6 +49,8 @@ type transportHarness struct {
 	// streamer, so a shell attach through the chain can be asserted
 	// without a tmux anywhere.
 	remoteShell *shellsvctest.FakeStreamer
+	localShell  *shellsvctest.FakeStreamer // the local home's, the same fake
+	remoteWeb   *httptest.Server           // the remote node's own web API server
 	// cut is closed by cutFarStream: the far machine's event stream ends,
 	// which is how a connection's fan-in learns the machine went away. The
 	// dialed namespace is otherwise untouched, so the reads keep working —
@@ -121,8 +123,8 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 	ctx := context.Background()
 
 	far := newFarNode(t, "rnode1", remote...)
-	h := &transportHarness{dialErr: dialErr, remoteShell: far.shell, cut: make(chan struct{}),
-		farAPI: far.api, remoteCl: far.cl, rootBare: rpc.LocalOf(far.root)}
+	h := &transportHarness{dialErr: dialErr, remoteShell: far.shell, localShell: shellsvctest.New(), cut: make(chan struct{}),
+		farAPI: far.api, remoteCl: far.cl, remoteWeb: far.web, rootBare: rpc.LocalOf(far.root)}
 	remoteExport := far.export
 
 	// The local node's own store owns the connections table.
@@ -156,7 +158,7 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = localStore.Close() })
-	homeClient := local.New(localStore, nil)
+	homeClient := local.New(localStore, shellsvc.NewManager(h.localShell))
 	localReg := plugin.NewRegistry()
 	localReg.Register(localNodeID, "home", homeClient, nil)
 	localReg.SetLabel(localNodeID, "home")

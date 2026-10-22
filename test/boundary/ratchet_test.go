@@ -19,7 +19,6 @@ import (
 var ratchetCounts = map[string]func(t *testing.T, root string) int{
 	"packages": length(productionPackages),
 	"lines":    productionLines,
-	"parity":   parityCells,
 	"debt":     debtCount,
 	"axes":     axesUncovered,
 }

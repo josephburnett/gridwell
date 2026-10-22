@@ -681,3 +681,11 @@ func loggedCount(t *testing.T, dir, pkg, test, label string) int {
 	}
 	return n
 }
+
+// TestParityIsZero holds the parity count at its floor, so it is a permanent
+// test rather than a ledger row.
+func TestParityIsZero(t *testing.T) {
+	if n := parityCells(t, repoRoot(t)); n != 0 {
+		t.Errorf("internal/server/parity_test.go counts %d: write the check for each same cell, and fill each hole with a decision in CLAUDE.md or a fix that makes it same", n)
+	}
+}

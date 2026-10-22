@@ -60,8 +60,8 @@ one (2026-10-21).
    caches.
 3. **Every case is a cell.** Behaviour is kinds times operations times
    owners, and every cell is "same" or a decision named here; a decision is
-   a row edit, never a sentence. Held by the parity table once it lands;
-   the flag guard on the proto is still to come.
+   a row edit, never a sentence. Held by the parity table, at zero
+   (`TestParityIsZero`); the flag guard on the proto is still to come.
 4. **Nothing silent.** No verb an owner leaves unanswered, no empty cell,
    no failure that only logs, no clock asking a source that can tell, no
    work for nobody. Held by the verb count, the timer list, the log-only
