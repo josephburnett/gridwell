@@ -1,9 +1,9 @@
 package namespace
 
-// Unimplemented is the in-process twin of pb.UnimplementedGridwellServer:
-// embed it and a namespace declares only the verbs it serves, everything else
-// answering with the code the wire would. Callers read it; see
-// server.isUnimplemented and clientsync.IsUnimplemented.
+// Unimplemented is the in-process twin of pb.UnimplementedGridwellServer, for
+// a test's partial namespace: every verb it is not given answers with the code
+// the wire would. A production owner answers every verb itself, its refusals
+// naming their reasons (test/boundary TestNoUnimplementedEmbeds).
 
 import (
 	"context"

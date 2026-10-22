@@ -52,8 +52,6 @@ var rowsHandshakeWait = time.Second
 // its connections, each itself a Namespace read off the far node's connection
 // API.
 type Server struct {
-	namespace.Unimplemented
-
 	st   *store.Store
 	dial Dialer
 	home string // the host's home dir, for ~-relative key defaults
@@ -650,6 +648,10 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 				}, established)
 		},
 	}.Run(ctx)
+}
+
+func (s *Server) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "the transport declares nothing of its own: each connection's far node answers for itself, through Handshake")
 }
 
 // Handshake forwards a namespaced request through the named connection. With

@@ -50,7 +50,6 @@ type Supervisor interface {
 // the node's store. The router calls it as a Go value; the one gRPC hop
 // underneath is the plugin.v1 subprocess.
 type Adapter struct {
-	namespace.Unimplemented
 	cp  pluginv1.PluginClient
 	mem *store.Namespace
 	sup Supervisor
@@ -136,6 +135,26 @@ func declaredGrids(ci *pluginv1.InfoResponse) []*pluginv1.PluginGrid {
 		return ci.Grids
 	}
 	return []*pluginv1.PluginGrid{{Id: ci.RootGrid, Grid: ci.RootGrid}}
+}
+
+func (a *Adapter) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "a plugin has no handshake of its own: the node enumerates the + menu, and a plugin's rows come from its Info")
+}
+
+func (a *Adapter) CreateTile(context.Context, *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "a plugin's grid takes no new tiles: a plugin serves its source's entries and creates nothing")
+}
+
+func (a *Adapter) CopyTile(context.Context, *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "a plugin's grid takes no new tiles, so a copy into one is refused")
+}
+
+func (a *Adapter) ShellTmuxAlive(context.Context, *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "a plugin serves no shells: a tmux is the node's")
+}
+
+func (a *Adapter) OpenShell(context.Context, func() (*gridwellv1.OpenShellRequest, error), func(*gridwellv1.OpenShellResponse) error) error {
+	return status.Error(codes.Unimplemented, "a plugin serves no shells: a tmux is the node's")
 }
 
 // gridFraming is the framing kept for one grid. An

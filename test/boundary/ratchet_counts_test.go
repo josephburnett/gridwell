@@ -93,6 +93,14 @@ func unimplementedEmbeds(t *testing.T, root string) []string {
 	return out
 }
 
+// TestNoUnimplementedEmbeds holds every namespace owner to answering each verb
+// itself, so a refusal names its reason rather than "method X not implemented".
+func TestNoUnimplementedEmbeds(t *testing.T) {
+	for _, at := range unimplementedEmbeds(t, repoRoot(t)) {
+		t.Errorf("%s embeds namespace.Unimplemented: answer every verb of namespace.Namespace explicitly, a refusal naming its reason", at)
+	}
+}
+
 // declaredNames is what the tree declares: per package (by directory basename
 // and by package name, and per TS module by file basename) and in all.
 type declaredNames struct {

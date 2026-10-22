@@ -7,6 +7,5 @@
 # floor of - is a ceiling: lines and packages only have to keep from rising.
 #
 # name | recorded | floor | owner | mechanism | decision
-unimplemented-embeds | 3 | 0 | internal/namespace/unimplemented.go | every verb answered explicitly, a refusal naming its reason included | CLAUDE.md, How to work 10 (2026-10-21)
 packages | 83 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
-lines | 57879 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
+lines | 57911 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1

@@ -23,7 +23,6 @@ import (
 // Plugin wraps store.Store as a namespace.Namespace and owns the shell PTY
 // lifecycle.
 type Plugin struct {
-	namespace.Unimplemented
 	st    *store.Store
 	shell *shellsvc.Manager // nil means this instance hosts no live shells
 }
@@ -130,6 +129,14 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	}, nil
 }
 
+func (p *Plugin) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "home has no handshake of its own: the node enumerates the + menu, and home's row comes from its Info")
+}
+
+func (p *Plugin) SetView(context.Context, *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "home tells every change it writes, so what is shown scopes nothing")
+}
+
 // SetFraming persists a grid's framing on a door tile or, for a root, the
 // grid row. It never bumps a content version.
 func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
@@ -220,6 +227,10 @@ func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReq
 		}
 	}
 	return nil
+}
+
+func (p *Plugin) ServeContent(context.Context, *gridwellv1.ServeContentRequest, func(*gridwellv1.ServeContentChunk) error) error {
+	return status.Error(codes.Unimplemented, "home serves no pages: the content API serves a plugin's url entries only")
 }
 
 // WriteContent assembles the client stream and commits once, at clean close,
