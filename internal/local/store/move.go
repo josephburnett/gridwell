@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // placementSet is the footprint a placement write touches, here and in
@@ -120,7 +121,7 @@ func claimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) 
 // ancestor chain is a server-derived fact and needs no client path. Non-door
 // tiles and doors to other namespaces have no local subtree and pass trivially.
 func (s *Store) doorWouldContainItself(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile, destGridID int64) error {
-	if !isDoorKind(n.Kind) {
+	if !rpc.IsDoorKind(n.Kind) {
 		return nil
 	}
 	childGrid, err := strconv.ParseInt(n.ChildGridId, 10, 64)

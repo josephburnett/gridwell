@@ -374,3 +374,16 @@ func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 		t.Error("a grid no door roots reported a change")
 	}
 }
+
+// TestEveryKindHasARow: a kind with no row in the kind table can do nothing,
+// so every site that asks it falls through every arm.
+func TestEveryKindHasARow(t *testing.T) {
+	for _, k := range FindKinds {
+		if KindOf(k).Descends == DescendNone {
+			t.Errorf("kind %q has no row in the kind table", k)
+		}
+	}
+	if KindOf("") != (KindCaps{}) {
+		t.Error("an unknown kind reads a row that can do something")
+	}
+}

@@ -12,11 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// isDoorKind is an alias for rpc.IsDoorKind, so the set lives in one place.
-func isDoorKind(kind string) bool {
-	return rpc.IsDoorKind(kind)
-}
-
 // copySubtree deep-copies a grid and everything beneath it into fresh rows.
 // Each grid and tile gets a new row id, with the version preserved, so no tile
 // is shared between two copies and editing one can never touch the other.
@@ -68,7 +63,7 @@ func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.
 	if err != nil {
 		return n.ChildGridId, nil
 	}
-	if n.Kind == rpc.KindDoor {
+	if rpc.IsDoorKind(n.Kind) {
 		newChild, err := s.copySubtree(ctx, tx, childID)
 		if err != nil {
 			return nil, err
@@ -99,35 +94,27 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		// branch requires every content column NULL.
 		linkTarget = sql.NullString{String: n.LinkTargetId, Valid: true}
 	}
-	switch {
-	case n.LinkTargetId != "":
-	case n.Kind == rpc.KindURL:
-		urlStr = sql.NullString{String: n.UrlString, Valid: true}
-		if n.PreviewBlobId != 0 {
+	if n.LinkTargetId == "" {
+		k := rpc.KindOf(n.Kind)
+		if k.Content == rpc.ContentAddress {
+			urlStr = sql.NullString{String: n.UrlString, Valid: true}
+			if n.UrlHistory != "" {
+				urlHist = sql.NullString{String: n.UrlHistory, Valid: true}
+			}
+		}
+		if k.Tmux {
+			// The copy names its source's tmux, started or not, and shows the
+			// source's preview until it is live itself.
+			shellTmux = sql.NullString{String: rpc.ShellTmux(n), Valid: true}
+		}
+		if k.Freezes() && n.PreviewBlobId != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}
 		}
-		if n.UrlHistory != "" {
-			urlHist = sql.NullString{String: n.UrlHistory, Valid: true}
-		}
-	case n.Kind == rpc.KindShell:
-		// The copy names its source's tmux, started or not, and shows the
-		// source's preview until it is live itself.
-		shellTmux = sql.NullString{String: rpc.ShellTmux(n), Valid: true}
-		if n.PreviewBlobId != 0 {
-			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}
-		}
-	case n.Kind == rpc.KindText:
-		if n.BlobId != 0 {
+		if k.Content.InBlob() && n.BlobId != 0 {
 			blob = sql.NullInt64{Int64: n.BlobId, Valid: true}
 		}
-		if n.TextMode != "" {
+		if k.Content == rpc.ContentBody && n.TextMode != "" {
 			textMode = sql.NullString{String: n.TextMode, Valid: true}
-		}
-	case n.Kind == rpc.KindWorkspace:
-		// The layout blob is shared by refcount like a text body, and the copy
-		// diverges on its first edit. NULL means never arranged.
-		if n.BlobId != 0 {
-			blob = sql.NullInt64{Int64: n.BlobId, Valid: true}
 		}
 	}
 	vcx, vcy, vzoom := viewArgs(rpc.ViewOf(n.ViewCx, n.ViewCy, n.ViewZoom))
@@ -304,7 +291,7 @@ func nullToInt(n sql.NullInt64) int64 {
 // Single-delete and grid teardown both route through it.
 func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef int64) {
 	switch {
-	case isDoorKind(kind):
+	case rpc.IsDoorKind(kind):
 		g, err := strconv.ParseInt(childGrid, 10, 64)
 		if err != nil {
 			return 0, 0
@@ -314,7 +301,7 @@ func tileRefs(kind, childGrid string, blob, previewBlob int64) (gridRef, blobRef
 		// The places a pane layout references are not owned, so deleting a
 		// workspace tile deletes only the arrangement.
 		return 0, blob
-	case kind == rpc.KindURL || kind == rpc.KindShell:
+	case rpc.KindOf(kind).Freezes():
 		return 0, previewBlob
 	}
 	return 0, 0

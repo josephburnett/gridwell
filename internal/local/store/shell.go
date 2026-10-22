@@ -44,7 +44,7 @@ func (s *Store) SetShellPreview(ctx context.Context, tileIDStr string, jpeg []by
 		if err != nil {
 			return err
 		}
-		if n.Kind != rpc.KindShell {
+		if !rpc.KindOf(n.Kind).Tmux {
 			return ErrNotShellTile
 		}
 

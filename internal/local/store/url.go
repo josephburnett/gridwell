@@ -67,7 +67,7 @@ func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err 
 		if err != nil {
 			return err
 		}
-		if kind != rpc.KindURL {
+		if rpc.KindOf(kind).Content != rpc.ContentAddress {
 			return ErrNotURLTile
 		}
 		return n.s.setURLPreviewTx(ctx, tx, tileID, jpeg)
@@ -167,7 +167,7 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 		if err != nil {
 			return err
 		}
-		if isDoorKind(n.Kind) {
+		if rpc.IsDoorKind(n.Kind) {
 			return fmt.Errorf("%w: a door has no content zoom", ErrInvalidArgument)
 		}
 		if _, err := tx.ExecContext(ctx,

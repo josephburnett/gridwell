@@ -31,12 +31,12 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 		return nil, fmt.Errorf("%w: a link owns no content; write through its target %s",
 			ErrInvalidArgument, t.LinkTargetId)
 	}
-	switch t.Kind {
-	case rpc.KindText:
+	switch rpc.KindOf(t.Kind).Content {
+	case rpc.ContentBody:
 		return s.writeTextContent(ctx, tileID, version, data)
-	case rpc.KindURL:
+	case rpc.ContentAddress:
 		return s.writeURLContent(ctx, tileID, version, data)
-	case rpc.KindWorkspace:
+	case rpc.ContentLayout:
 		id, err := parseID(tileID)
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
@@ -67,7 +67,7 @@ func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version i
 		if err != nil {
 			return err
 		}
-		if n.Kind != rpc.KindURL {
+		if rpc.KindOf(n.Kind).Content != rpc.ContentAddress {
 			return fmt.Errorf("%w: not a url tile", ErrInvalidArgument)
 		}
 		if n.UrlString == urlString {
@@ -103,7 +103,7 @@ func (s *Store) ReadContent(ctx context.Context, tileID string) (data []byte, me
 		}
 		version = t.Version
 		switch {
-		case t.Kind == rpc.KindURL:
+		case rpc.WebContent(t):
 			data, mediaType = []byte(t.UrlString), "text/plain; charset=utf-8"
 		case t.BlobId != 0:
 			data, mediaType, err = readBlob(ctx, tx, t.BlobId)
@@ -132,7 +132,7 @@ func (s *Store) RenameTile(ctx context.Context, tileID string, version int64, al
 		if err != nil {
 			return err
 		}
-		if n.Kind == rpc.KindText {
+		if !rpc.KindOf(n.Kind).TypedName {
 			return fmt.Errorf("%w: a text tile's name derives from its first line; rename the content instead", ErrInvalidArgument)
 		}
 		if err := s.setAltTx(ctx, tx, id, alt, true, events); err != nil {

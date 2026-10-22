@@ -474,7 +474,7 @@ func (n *Namespace) Rename(tileID, version int64, name string) (changed bool, er
 		if cur != version {
 			return fmt.Errorf("%w: tile %d at version %d, claimed %d", ErrVersionConflict, tileID, cur, version)
 		}
-		if kind == rpc.KindText {
+		if !rpc.KindOf(kind).TypedName {
 			return fmt.Errorf("%w: a text tile's name is its source's; its presentation reads it", ErrInvalidArgument)
 		}
 		if named && alt == name {

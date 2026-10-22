@@ -12,14 +12,59 @@ import (
 
 // Tile kinds. A tile is exactly one of these.
 const (
-	KindDoor  = "door"
-	KindText  = "text"
-	KindURL   = "url"
-	KindShell = "shell"
-	// KindWorkspace is a durable layout: its content blob is a serialized
-	// split-pane layout (api/panelayout).
+	KindDoor      = "door"
+	KindText      = "text"
+	KindURL       = "url"
+	KindShell     = "shell"
 	KindWorkspace = "workspace"
 )
+
+// KindCaps is what a tile kind can do; a site asks it, never which kind it is.
+type KindCaps struct {
+	Descends  Descends // what a descent through the tile enters
+	Live      Descent  // the surface a descent opens, and a freeze keeps a screenshot of
+	Content   Content  // what the content is and where it lives
+	Tmux      bool     // the tile names a tmux (ShellTmux)
+	TypedName bool     // the name is typed, not the content's first line
+}
+
+// kinds is the kind table; an unknown kind reads the zero row, which can do nothing.
+var kinds = map[string]KindCaps{
+	KindDoor:      {Descends: DescendGrid, TypedName: true},
+	KindText:      {Descends: DescendContent, Content: ContentBody},
+	KindURL:       {Descends: DescendContent, Live: DescentURL, Content: ContentAddress, TypedName: true},
+	KindShell:     {Descends: DescendContent, Live: DescentShell, Tmux: true, TypedName: true},
+	KindWorkspace: {Descends: DescendLevel, Content: ContentLayout, TypedName: true},
+}
+
+// KindOf is kind's row of the kind table.
+func KindOf(kind string) KindCaps { return kinds[kind] }
+
+// Freezes: the kind keeps a screenshot as its preview, which a freeze holds.
+func (k KindCaps) Freezes() bool { return k.Live != DescentNone }
+
+// Descends is what a descent through a tile enters.
+type Descends int
+
+const (
+	DescendNone    Descends = iota
+	DescendGrid             // pushes the grid the tile opens
+	DescendContent          // goes live in the tile itself (pane.TextFocus)
+	DescendLevel            // swaps the whole pane tree and pushes a level
+)
+
+// Content is what a tile's content is and where it lives.
+type Content int
+
+const (
+	ContentNone    Content = iota
+	ContentBody            // a document body in the tile's blob
+	ContentLayout          // a pane layout in the tile's blob (api/panelayout)
+	ContentAddress         // the address the tile holds, url_string
+)
+
+// InBlob: the content is bytes in a blob of the tile's own.
+func (c Content) InBlob() bool { return c == ContentBody || c == ContentLayout }
 
 // ContentChunkBytes is the size of every content chunk but the last, for
 // every producer of a content stream.
@@ -31,9 +76,7 @@ const MaxContentBytes = 16 * 1024 * 1024
 
 // IsDoorKind: a door to another namespace is still a door, said by its child_grid_id and not
 // by its kind.
-func IsDoorKind(kind string) bool {
-	return kind == KindDoor
-}
+func IsDoorKind(kind string) bool { return KindOf(kind).Descends == DescendGrid }
 
 // "<uuid>/<local>" is the cross-plugin id convention; QualifyID, SplitID,
 // UUIDOf and NamespaceOf are its only encode/decode points.
@@ -154,22 +197,14 @@ func HomeRow(l *pb.HandshakeResponse) *pb.PluginInfo {
 	return nil
 }
 
-// IsContentDescentKind: descending one of these sets pane.TextFocus rather
-// than pushing a grid.
-func IsContentDescentKind(kind string) bool {
-	return kind == KindText || kind == KindURL || kind == KindShell
-}
+// IsContentDescentKind: a descent goes live in the tile, DescendContent.
+func IsContentDescentKind(kind string) bool { return KindOf(kind).Descends == DescendContent }
 
-// IsWorkspaceKind: a workspace tile's descent swaps the whole pane tree and pushes
-// a level.
-func IsWorkspaceKind(kind string) bool {
-	return kind == KindWorkspace
-}
+// IsWorkspaceKind: a descent swaps the pane tree, DescendLevel.
+func IsWorkspaceKind(kind string) bool { return KindOf(kind).Descends == DescendLevel }
 
 // IsBodyKind: these kinds hold a content blob of their own.
-func IsBodyKind(kind string) bool {
-	return kind == KindText || kind == KindWorkspace
-}
+func IsBodyKind(kind string) bool { return KindOf(kind).Content.InBlob() }
 
 // The plugin glyph vocabulary: declared by the plugin, rendered by the
 // client, an unknown name falling back to the globe so a third-party plugin
@@ -191,16 +226,12 @@ const (
 
 // WebContent is a url tile: at the address it carries, or at the /content/
 // API when its plugin serves the page.
-func WebContent(t *pb.Tile) bool {
-	return t.Kind == KindURL
-}
+func WebContent(t *pb.Tile) bool { return KindOf(t.Kind).Content == ContentAddress }
 
 // TextDocument is a tile whose content is its own document body. Every text
 // tile has one: a served page is a url tile, serves_page on another kind being
 // refused by pluginhost.acceptEntries.
-func TextDocument(t *pb.Tile) bool {
-	return t.Kind == KindText
-}
+func TextDocument(t *pb.Tile) bool { return KindOf(t.Kind).Content == ContentBody }
 
 // HTTPAddress is an address a url tile may hold: http or https, nothing else.
 func HTTPAddress(u string) bool {
@@ -208,9 +239,7 @@ func HTTPAddress(u string) bool {
 }
 
 // PageContent is a url tile whose plugin serves the page, at PageURL.
-func PageContent(t *pb.Tile) bool {
-	return t.Kind == KindURL && t.ServesPage
-}
+func PageContent(t *pb.Tile) bool { return WebContent(t) && t.ServesPage }
 
 // Descent is the content family a pane descended into a tile is showing: a
 // web surface, a terminal, or neither.
@@ -223,17 +252,7 @@ const (
 )
 
 // DescentOf classifies the tile a pane is descended into; nil is DescentNone.
-func DescentOf(t *pb.Tile) Descent {
-	switch {
-	case t == nil:
-		return DescentNone
-	case WebContent(t):
-		return DescentURL
-	case t.Kind == KindShell:
-		return DescentShell
-	}
-	return DescentNone
-}
+func DescentOf(t *pb.Tile) Descent { return KindOf(t.GetKind()).Live }
 
 // LeafLink is one content tile shown in a second place, owning no bytes of its
 // own. ContentID answers whose content it is.

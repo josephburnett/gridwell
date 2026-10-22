@@ -108,11 +108,11 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 		return created, err
 	case q.LinkTargetId != "":
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
-	case t.Kind == rpc.KindShell:
+	case rpc.KindOf(t.Kind).Tmux:
 		// A copy shares its source's tmux, and a tmux lives on the
 		// node that started it, so across namespaces the copy is a link.
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
-	case rpc.IsBodyKind(t.Kind), t.Kind == rpc.KindURL:
+	case rpc.KindOf(t.Kind).Content != rpc.ContentNone:
 		return rt.copyLeaf(ctx, src, t, q, dst, dstGrid, x, y)
 	}
 	return nil, status.Errorf(gcodes.InvalidArgument,
@@ -161,7 +161,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	version := created.GetTile().GetVersion()
 
 	switch {
-	case t.Kind == rpc.KindURL:
+	case rpc.WebContent(t):
 		// The frozen preview travels with the copy. An unreachable preview skips:
 		// the copy's own facts are present and the preview re-freezes on the next
 		// live visit, so a link here would deny the copy content the walk has.

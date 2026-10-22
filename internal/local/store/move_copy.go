@@ -79,7 +79,7 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 		if err != nil {
 			return err
 		}
-		if n.Kind != rpc.KindText {
+		if rpc.KindOf(n.Kind).Content != rpc.ContentBody {
 			return ErrNotTextTile
 		}
 

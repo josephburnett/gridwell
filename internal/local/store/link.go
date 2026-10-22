@@ -10,16 +10,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// leafLinkKinds is the set of kinds with a link variant through
-// link_target_id. A door's link variant is the door to another namespace, a qualified
-// child_grid_id. The CHECK's link branch mirrors this set.
-var leafLinkKinds = map[string]bool{
-	rpc.KindText:      true,
-	rpc.KindURL:       true,
-	rpc.KindShell:     true,
-	rpc.KindWorkspace: true,
-}
-
 // CreateLeafLink creates a leaf tile that is a link to another tile.
 // link_target_id holds the qualified "<uuid>/<tile-id>" link verbatim, on
 // the same contract as the child_grid_id of a door to another namespace: the
@@ -28,7 +18,9 @@ var leafLinkKinds = map[string]bool{
 // target is an ordinary link. The row carries no content, readers resolving
 // bytes and tmux through the target, so deleting it only unlinks.
 func (s *Store) CreateLeafLink(ctx context.Context, gridID string, x, y, w, h int64, kind, linkTargetID, alt string, named bool) (*gridwellv1.Tile, error) {
-	if !leafLinkKinds[kind] {
+	// A door's link variant is the door to another namespace, a qualified
+	// child_grid_id; the CHECK's link branch holds every other kind.
+	if d := rpc.KindOf(kind).Descends; d == rpc.DescendNone || d == rpc.DescendGrid {
 		return nil, fmt.Errorf("%w: kind %q has no leaf-link variant", ErrInvalidArgument, kind)
 	}
 	if !strings.Contains(linkTargetID, "/") {

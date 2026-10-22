@@ -312,7 +312,7 @@ func qualifyFind(transit bool, uuid string, resp *pb.FindResponse) *pb.FindRespo
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal is the authority; the menu only hides.
-	if rt.srv.cfg.DisableShells && m.Tile.GetKind() == rpc.KindShell {
+	if rt.srv.cfg.DisableShells && rpc.KindOf(m.Tile.GetKind()).Tmux {
 		return nil, status.Error(gcodes.PermissionDenied,
 			"shell tiles are disabled on this node (server.yaml disable_shells)")
 	}
@@ -479,7 +479,7 @@ func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*p
 // panelayout.TextFocusIDs, the same one the boot sweep protects by.
 func (rt *router) workspaceEphemeralCandidates(ctx context.Context, owner namespace.Namespace, localID, qualifiedID string) []string {
 	tr, err := owner.GetTile(ctx, &pb.GetTileRequest{TileId: localID})
-	if err != nil || tr.GetTile() == nil || tr.GetTile().Kind != rpc.KindWorkspace || tr.GetTile().BlobId == 0 {
+	if err != nil || tr.GetTile() == nil || rpc.KindOf(tr.GetTile().Kind).Content != rpc.ContentLayout || tr.GetTile().BlobId == 0 {
 		return nil
 	}
 	body, err := readAllContent(ctx, owner, localID)
@@ -523,7 +523,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 		}
 		dr, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal})
 		switch {
-		case err != nil && et.GetTile().Kind == rpc.KindShell:
+		case err != nil && rpc.KindOf(et.GetTile().Kind).Tmux:
 			left = append(left, "the shell "+id+" was not removed: "+status.Convert(err).Message())
 		case err != nil:
 			log.Printf("gridwell: delete %s: reaping ephemeral %s failed: %v", qualifiedID, id, err)

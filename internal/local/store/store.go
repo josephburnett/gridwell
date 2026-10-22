@@ -275,7 +275,7 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 		if err != nil {
 			return err
 		}
-		if !isDoorKind(n.Kind) {
+		if !rpc.IsDoorKind(n.Kind) {
 			return ErrNotDoorTile
 		}
 		if _, err := updateFraming(ctx, tx, "", tileID, 0, f, s.now().Unix()); err != nil {

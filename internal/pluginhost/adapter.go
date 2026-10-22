@@ -322,14 +322,14 @@ func acceptEntries(gridKey string, entries []*pluginv1.Entry) error {
 			case lt.Grid == "" || lt.Key == "":
 				return status.Errorf(codes.InvalidArgument,
 					"plugin: entry %q links to gridKey %q key %q; a link_target names both", e.Key, lt.Grid, lt.Key)
-			case e.Kind == rpc.KindDoor:
+			case rpc.IsDoorKind(e.Kind):
 				return status.Errorf(codes.InvalidArgument,
 					"plugin: entry %q is a door with a link_target; a door opens its child_grid and has no link variant", e.Key)
 			case lt.Grid == gridKey && lt.Key == e.Key:
 				return status.Errorf(codes.InvalidArgument, "plugin: entry %q links to itself", e.Key)
 			}
 		}
-		if e.ServesPage && e.Kind != rpc.KindURL {
+		if e.ServesPage && rpc.KindOf(e.Kind).Content != rpc.ContentAddress {
 			return status.Errorf(codes.InvalidArgument,
 				"plugin: entry %q declares kind %q and serves_page; only a url entry serves a page, the node deriving its address — declare kind %q, or drop serves_page and serve a document body instead",
 				e.Key, e.Kind, rpc.KindURL)
@@ -810,7 +810,7 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 		}
 		return &gridwellv1.TileResponse{Tile: t}, nil
 	}
-	if t := req.GetTile(); t.GetKind() == rpc.KindURL && req.ContentZoom == nil && req.UrlFrozen == nil {
+	if t := req.GetTile(); rpc.KindOf(t.GetKind()).Content == rpc.ContentAddress && req.ContentZoom == nil && req.UrlFrozen == nil {
 		if t.UrlString != "" || t.AltText != "" || t.UrlHistory != "" {
 			return nil, status.Error(codes.InvalidArgument,
 				"plugin: a url tile's address, title and history are its plugin's; the writeback carries the screenshot alone")
@@ -839,10 +839,10 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 		changed, err = a.mem.SetFrozen(id, *req.UrlFrozen, req.ClaimFrozen)
 	default:
 		t := req.GetTile()
-		switch t.GetKind() {
-		case rpc.KindText:
+		switch rpc.KindOf(t.GetKind()).Content {
+		case rpc.ContentBody:
 			changed, err = a.mem.SetTextScroll(id, t.GetTextX(), t.GetTextY(), t.GetTextW(), t.GetTextH(), t.GetTextMode())
-		case rpc.KindURL:
+		case rpc.ContentAddress:
 			changed, err = a.mem.SetURLPreview(id, req.Preview)
 		default:
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())

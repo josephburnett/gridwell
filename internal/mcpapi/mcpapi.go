@@ -140,18 +140,18 @@ func (d *toolset) readTile(ctx context.Context, id string) (TileOut, error) {
 		}
 		content = tr.GetTile()
 	}
-	switch content.GetKind() {
-	case rpc.KindText:
+	switch k := rpc.KindOf(content.GetKind()); {
+	case k.Content == rpc.ContentBody:
 		body, basis, err := d.readBody(ctx, row.GetId())
 		if err != nil {
 			return TileOut{}, refusal(err)
 		}
 		out.Body, out.BodyVersion, out.BodyStamp = &body, &basis.Version, basis.Stamp
-	case rpc.KindURL:
+	case k.Content == rpc.ContentAddress:
 		out.URL = content.GetUrlString()
-	case rpc.KindShell:
+	case k.Tmux:
 		out.ShellTmux = rpc.ShellTmux(content)
-	case rpc.KindWorkspace:
+	case k.Content == rpc.ContentLayout:
 		data, basis, err := d.readBody(ctx, content.GetId())
 		if err != nil {
 			return TileOut{}, refusal(err)

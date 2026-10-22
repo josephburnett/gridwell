@@ -67,7 +67,7 @@ func (s *Store) SetWorkspaceLayout(ctx context.Context, tileID, version int64, d
 		if err != nil {
 			return err
 		}
-		if n.Kind != rpc.KindWorkspace {
+		if rpc.KindOf(n.Kind).Content != rpc.ContentLayout {
 			return ErrNotWorkspace
 		}
 		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, panelayout.LayoutMediaType)

@@ -51,7 +51,7 @@ func (s *Store) setFrozenTx(ctx context.Context, tx *sql.Tx, ns string, tileID i
 	if err != nil {
 		return err
 	}
-	if kind != rpc.KindURL && kind != rpc.KindShell {
+	if !rpc.KindOf(kind).Freezes() {
 		return fmt.Errorf("%w: url_frozen only applies to url and shell tiles", ErrInvalidArgument)
 	}
 	var cur bool

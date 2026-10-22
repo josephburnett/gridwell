@@ -269,8 +269,8 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 			t.Kind, t.LinkTargetId, t.AltText, t.Named))
 	}
-	switch t.Kind {
-	case rpc.KindDoor:
+	switch k := rpc.KindOf(t.Kind); {
+	case k.Descends == rpc.DescendGrid:
 		// child_grid_id set makes a door to another namespace: the qualified link is
 		// stored verbatim, with no interior grid.
 		if t.ChildGridId != "" {
@@ -279,22 +279,22 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 				rpc.ViewOf(t.ViewCx, t.ViewCy, t.ViewZoom)))
 		}
 		return tileResp(p.st.CreateDoor(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, t.Named))
-	case rpc.KindText:
+	case k.Content == rpc.ContentBody:
 		return tileResp(p.st.CreateText(ctx, req.GridId, t.X, t.Y, t.W, t.H, req.Content))
-	case rpc.KindURL:
+	case k.Content == rpc.ContentAddress:
 		// A url create on the scratch grid is an ephemeral visit, routed
 		// path-free because the scratch grid has no descent path.
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
 			return tileResp(p.st.CreateScratchURL(ctx, t.UrlString))
 		}
 		return tileResp(p.st.CreateURL(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.UrlString, t.AltText, t.Named))
-	case rpc.KindShell:
+	case k.Tmux:
 		// Likewise an ephemeral shell, deleted on ascent.
 		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
 			return tileResp(p.st.CreateScratchShell(ctx))
 		}
 		return tileResp(p.st.CreateShell(ctx, req.GridId, t.X, t.Y, t.W, t.H))
-	case rpc.KindWorkspace:
+	case k.Content == rpc.ContentLayout:
 		// No content is a NULL blob_id: never arranged.
 		return tileResp(p.st.CreateWorkspace(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.AltText, t.Named, req.Content))
 	default:
@@ -351,20 +351,20 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "set: nil tile")
 	}
-	switch t.Kind {
-	case rpc.KindDoor:
+	switch k := rpc.KindOf(t.Kind); {
+	case k.Descends == rpc.DescendGrid:
 		return nil, status.Error(codes.InvalidArgument, "set: door framing rides SetFraming")
-	case rpc.KindText:
+	case k.Content == rpc.ContentBody:
 		return tileResp(p.st.SetTextScroll(ctx, req.TileId, t.TextX, t.TextY, t.TextW, t.TextH, t.TextMode))
-	case rpc.KindShell:
+	case k.Tmux:
 		return tileResp(p.st.SetShellPreview(ctx, req.TileId, req.Preview))
-	case rpc.KindURL:
+	case k.Content == rpc.ContentAddress:
 		// The address is content, claimed and bumped, so it rides WriteContent.
 		if t.UrlString != "" {
 			return nil, status.Error(codes.InvalidArgument, "set: a url tile's address rides WriteContent")
 		}
 		return tileResp(p.st.SetURLState(ctx, req.TileId, req.Preview, t.AltText, t.UrlHistory))
-	case rpc.KindWorkspace:
+	case k.Content == rpc.ContentLayout:
 		return nil, status.Error(codes.InvalidArgument, "set: a workspace layout rides WriteContent")
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "set: unknown kind %q", t.Kind)
@@ -400,7 +400,7 @@ func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
 	if err != nil {
 		return "", errToStatus(err)
 	}
-	if t.Kind != rpc.KindShell || t.LinkTargetId != "" {
+	if !rpc.KindOf(t.Kind).Tmux || t.LinkTargetId != "" {
 		return "", status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
 	}
 	return rpc.ShellTmux(t), nil
