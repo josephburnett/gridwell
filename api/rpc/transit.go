@@ -171,9 +171,7 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	}
 	out.Id = QualifyID(prefix, g.Id)
 	out.Selection = QualifyIDs(prefix, g.Selection)
-	if g.ScratchGridId != "" {
-		out.ScratchGridId = QualifyID(prefix, g.ScratchGridId)
-	}
+	out.ScratchGridId = QualifyOptionalID(prefix, g.ScratchGridId)
 	out.NodeNs = QualifyNS(prefix, g.NodeNs)
 	out.PluginGrids = QualifyPluginGrids(prefix, g.PluginGrids)
 	return out
@@ -255,36 +253,16 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 	if resp == nil {
 		return nil
 	}
-	out := &pb.HandshakeResponse{
-		ShellsDisabled: resp.ShellsDisabled,
-	}
-	if resp.HomeGridId != "" {
-		out.HomeGridId = QualifyID(prefix, resp.HomeGridId)
-	}
+	out := &pb.HandshakeResponse{ShellsDisabled: resp.ShellsDisabled, HomeGridId: QualifyOptionalID(prefix, resp.HomeGridId)}
 	for _, p := range resp.Plugins {
-		q := &pb.PluginInfo{
-			Uuid:         QualifyID(prefix, p.Uuid),
-			Connection:   p.Connection,
-			Label:        p.Label,
-			RootViewCx:   p.RootViewCx,
-			RootViewCy:   p.RootViewCy,
-			RootViewZoom: p.RootViewZoom,
-			InfoError:    p.InfoError,
-			Glyph:        p.Glyph,
-		}
-		if p.RootGridId != "" {
-			q.RootGridId = QualifyID(prefix, p.RootGridId)
-		}
+		q := proto.CloneOf(p)
+		q.Uuid, q.RootGridId = QualifyID(prefix, p.Uuid), QualifyOptionalID(prefix, p.RootGridId)
 		q.PluginGrids = QualifyPluginGrids(prefix, p.PluginGrids)
 		out.Plugins = append(out.Plugins, q)
 	}
 	for _, c := range resp.Connections {
-		root := ""
-		if c.RootGridId != "" {
-			root = QualifyID(prefix, c.RootGridId)
-		}
-		out.Plugins = append(out.Plugins, ConnectionRow(QualifyID(prefix, c.Uuid), c.Label, root, c.StatusDetail,
-			ViewOf(c.RootViewCx, c.RootViewCy, c.RootViewZoom)))
+		out.Plugins = append(out.Plugins, ConnectionRow(QualifyID(prefix, c.Uuid), c.Label, QualifyOptionalID(prefix, c.RootGridId),
+			c.StatusDetail, ViewOf(c.RootViewCx, c.RootViewCy, c.RootViewZoom)))
 	}
 	return out
 }
@@ -297,10 +275,8 @@ func QualifyPluginGrids(prefix string, in []*pb.PluginGrid) []*pb.PluginGrid {
 	}
 	out := make([]*pb.PluginGrid, len(in))
 	for i, e := range in {
-		q := proto.Clone(e).(*pb.PluginGrid)
-		if q.GridId != "" {
-			q.GridId = QualifyID(prefix, q.GridId)
-		}
+		q := proto.CloneOf(e)
+		q.GridId = QualifyOptionalID(prefix, q.GridId)
 		out[i] = q
 	}
 	return out

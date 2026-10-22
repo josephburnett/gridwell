@@ -85,6 +85,14 @@ func IsDoorKind(kind string) bool { return KindOf(kind).Descends == DescendGrid 
 // UUIDOf and NamespaceOf are its only encode/decode points.
 func QualifyID(uuid, local string) string { return uuid + "/" + local }
 
+// QualifyOptionalID is QualifyID for an id that may be absent, which stays "".
+func QualifyOptionalID(uuid, local string) string {
+	if local == "" {
+		return ""
+	}
+	return QualifyID(uuid, local)
+}
+
 // QualifyIDs is QualifyID over a list, into a new one.
 func QualifyIDs(uuid string, locals []string) []string {
 	if locals == nil {

@@ -653,15 +653,27 @@ func productionLines(t *testing.T, root string) int {
 // table is Go data beside its checks in internal/server, so the count is read
 // off a run of it rather than spelled a second time here.
 func parityCells(t *testing.T, root string) int {
-	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestParity$/^count$", "-v", "./internal/server/")
-	cmd.Dir = root
+	return loggedCount(t, root, "./internal/server/", "TestParity", "parity count")
+}
+
+// axesUncovered is the flags rpc.Flags classes axis with no parity carrier,
+// as TestFlags/count logs it.
+func axesUncovered(t *testing.T, root string) int {
+	return loggedCount(t, filepath.Join(root, "api"), "./rpc/", "TestFlags", "axes count")
+}
+
+// loggedCount is the number test's count subtest logs after label, run in pkg
+// from dir, since this module imports nothing of the tree's.
+func loggedCount(t *testing.T, dir, pkg, test, label string) int {
+	cmd := exec.Command("go", "test", "-count=1", "-run", "^"+test+"$/^count$", "-v", pkg)
+	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("TestParity/count: %v\n%s", err, out)
+		t.Fatalf("%s/count: %v\n%s", test, err, out)
 	}
-	m := regexp.MustCompile(`parity count: (\d+)`).FindSubmatch(out)
+	m := regexp.MustCompile(label + `: (\d+)`).FindSubmatch(out)
 	if m == nil {
-		t.Fatalf("TestParity/count logged no count:\n%s", out)
+		t.Fatalf("%s/count logged no count:\n%s", test, out)
 	}
 	n, err := strconv.Atoi(string(m[1]))
 	if err != nil {

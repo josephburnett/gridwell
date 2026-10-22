@@ -203,44 +203,20 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 // Info, nil when Info failed with infoErr the reason: the plugin is still
 // listed, and InfoError tells broken from healthy-but-rootless.
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
-	label := configLabel
-	var rootGridID, infoError string
-	var glyph string
-	var pluginGrids []*pb.PluginGrid
-	var rootViewCx, rootViewCy, rootViewZoom float64
+	out := &pb.PluginInfo{Uuid: uuid, Label: configLabel}
 	if info != nil {
-		if info.RootGridId != "" {
-			rootGridID = rpc.QualifyID(uuid, info.RootGridId)
-		}
-		if label == "" {
-			label = info.DisplayName
-		}
-		glyph = info.Glyph
-		pluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
-		rootViewCx = info.RootViewCx
-		rootViewCy = info.RootViewCy
-		rootViewZoom = info.RootViewZoom
+		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(uuid, info.RootGridId), rpc.QualifyPluginGrids(uuid, info.PluginGrids)
+		out.Label, out.Glyph = cmp.Or(configLabel, info.DisplayName), info.Glyph
+		out.RootViewCx, out.RootViewCy, out.RootViewZoom = info.RootViewCx, info.RootViewCy, info.RootViewZoom
 	} else if infoErr != nil {
-		infoError = infoRefusal(infoErr)
+		out.InfoError = infoRefusal(infoErr)
 	}
 	// An error alongside a live Info still rides the row.
-	if infoError == "" && infoErr != nil {
-		infoError = infoErr.Error()
+	if out.InfoError == "" && infoErr != nil {
+		out.InfoError = infoErr.Error()
 	}
-	if label == "" {
-		label = kind
-	}
-	return &pb.PluginInfo{
-		Uuid:         uuid,
-		Label:        label,
-		RootGridId:   rootGridID,
-		RootViewCx:   rootViewCx,
-		RootViewCy:   rootViewCy,
-		RootViewZoom: rootViewZoom,
-		InfoError:    infoError,
-		Glyph:        glyph,
-		PluginGrids:  pluginGrids,
-	}
+	out.Label = cmp.Or(out.Label, kind)
+	return out
 }
 
 // infoRefusal is the sentence a broken row carries: the plugin's own words, or

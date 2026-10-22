@@ -10,5 +10,6 @@
 #
 # name | recorded | floor | owner | mechanism | decision
 packages | 81 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
-lines | 57522 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
+lines | 57517 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
 parity | 12 | 0 | internal/server/parity_test.go | fill a hole with a decision in CLAUDE.md or a fix that makes the cell same; write the check for a same cell | CLAUDE.md, promises
+axes | 9 | 0 | api/rpc/axes.go | give the flag a row or variant in the parity table, or reclassify it as presentation with the reason | CLAUDE.md, The principles 3
