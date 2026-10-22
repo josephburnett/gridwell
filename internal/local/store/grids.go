@@ -43,11 +43,8 @@ func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*grid
 	err := q.QueryRowContext(ctx,
 		`SELECT `+gridColumns+` FROM grids WHERE id = ? AND ns = ''`, gridID,
 	).Scan(scanDests(gridsColumns, &g)...)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
 	if err != nil {
-		return nil, err
+		return nil, notFound(err)
 	}
 	return &g, nil
 }
@@ -71,13 +68,7 @@ func scanTile(scanner interface {
 func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*gridwellv1.Tile, error) {
 	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ? AND ns = ''`, tileID)
 	n, err := scanTile(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return n, nil
+	return n, notFound(err)
 }
 
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]*gridwellv1.Tile, error) {
@@ -154,11 +145,8 @@ func (s *Store) tilePreview(ctx context.Context, ns string, id int64) (jpeg []by
 	err = s.readSnapshot(ctx, func(tx *sql.Tx) error {
 		var previewBID sql.NullInt64
 		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ?`, id, ns).Scan(&previewBID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
 		if err != nil || !previewBID.Valid {
-			return err
+			return notFound(err)
 		}
 		jpeg, _, err = readBlob(ctx, tx, previewBID.Int64)
 		return err

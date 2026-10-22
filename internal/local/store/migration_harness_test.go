@@ -1418,6 +1418,30 @@ func init() {
 			}
 		},
 	})
+
+	// v22: url_user. An existing plugin url row keeps its address, the
+	// listing's, unlatched.
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 22,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key)
+				VALUES (` + rootID + `, 'url', 96, 9, 1, 1, 'https://listed.test/', 'v21 row', 100, 100, 'p21', 'u')`); err != nil {
+				t.Fatalf("seed v21 row: %v", err)
+			}
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var addr string
+			var user int64
+			if err := db.QueryRow(`SELECT url_string, url_user FROM tiles WHERE alt_text = 'v21 row'`).Scan(&addr, &user); err != nil {
+				t.Fatal(err)
+			}
+			if addr != "https://listed.test/" || user != 0 {
+				t.Errorf("v21 row = (%q, %d), want its address unlatched", addr, user)
+			}
+		},
+	})
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.

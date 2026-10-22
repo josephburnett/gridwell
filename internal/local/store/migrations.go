@@ -25,7 +25,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 21
+const schemaVersion = 22
 
 // SchemaVersion is the schema generation this binary reads and writes.
 func SchemaVersion() int { return schemaVersion }
@@ -137,6 +137,9 @@ var migrations = []migration{
 	{to: 20, run: migrateV20},
 	// v21: the kind 'pane' is spelled 'workspace', the same conversion as v20.
 	{to: 21, run: migrateV21},
+	// v22: tiles.url_user, a plugin url's address latched as the user's.
+	// Additive: 0 is the listing's address, every existing row's meaning.
+	{to: 22, run: addColumnIfMissingDDL("tiles", "url_user", `ALTER TABLE tiles ADD COLUMN url_user INTEGER NOT NULL DEFAULT 0`)},
 }
 
 // respelledKinds maps a kind as a released binary stored it to the kind this

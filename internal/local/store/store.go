@@ -38,6 +38,14 @@ var (
 	ErrVersionConflict = gwerr.ErrVersionConflict
 )
 
+// notFound is err with a missing row read as ErrNotFound.
+func notFound(err error) error {
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
 // Store wraps a SQLite database. It is safe for concurrent use.
 type Store struct {
 	db    *sql.DB

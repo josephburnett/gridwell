@@ -7,7 +7,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -33,10 +32,7 @@ func scanConnection(sc interface{ Scan(...any) error }) (ConnectionRow, error) {
 func (s *Store) Connection(ctx context.Context, name string) (ConnectionRow, error) {
 	r, err := scanConnection(s.db.QueryRowContext(ctx,
 		`SELECT name, remote_root, deleted FROM connections WHERE name = ?`, name))
-	if errors.Is(err, sql.ErrNoRows) {
-		return ConnectionRow{}, ErrNotFound
-	}
-	return r, err
+	return r, notFound(err)
 }
 
 // Connections returns every row, retired ones included, by name.

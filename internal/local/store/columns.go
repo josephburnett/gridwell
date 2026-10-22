@@ -219,6 +219,14 @@ content has not changed since created_at; contentAtSQL reads the two as
 one time. Storage-only. Added at schema v19, additive.`,
 		noCopy: "a copy's content is new when the copy is: NULL reads as its created_at",
 	},
+	{
+		name: "url_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 22,
+		comment: `url_user=1 marks a plugin url row's url_string as the user's, the
+address a navigation landed on (Namespace.SetAddress), which no listing
+replaces, as alt_user keeps a typed name. Storage-only. Added at schema
+v22, additive.`,
+		noCopy: "a copy lands in home, where no listing replaces an address",
+	},
 }
 
 // gridsColumns is the grids table, in DDL order.

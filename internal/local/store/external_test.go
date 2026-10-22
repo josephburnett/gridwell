@@ -605,3 +605,69 @@ func TestExtTypedNameOutlivesTheSourcesLabel(t *testing.T) {
 		t.Fatalf("join = %q, want the typed name over the source's label", got.AltText)
 	}
 }
+
+// A landed address is the user's, as a typed name is: the listing's address
+// is the url's only until a navigation lands elsewhere, and every later
+// listing, the join and the stored snapshot alike, keeps where the user went.
+func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.GridOf("root")
+	listing := []*pluginv1.Entry{
+		{Key: "u", Kind: "url", Label: "u", UrlString: "https://a.test/"},
+		{Key: "p", Kind: "url", Label: "p", ServesPage: true},
+		{Key: "f", Kind: "text", Label: "f"},
+	}
+	tiles := mintAll(t, d, gid, listing, true)
+	u := extByKey(t, tiles, "u")
+
+	if changed, err := d.SetAddress(u.ID, 0, "https://a.test/"); err != nil || changed {
+		t.Fatalf("landing where the row points: changed=%v err=%v, want nothing written", changed, err)
+	}
+	if changed, err := d.SetAddress(u.ID, 0, " https://b.test/p "); err != nil || !changed {
+		t.Fatalf("landing: changed=%v err=%v", changed, err)
+	}
+	if _, err := d.SetAddress(u.ID, 0, "https://c.test/"); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("a landing claiming the version before the first: got %v, want the conflict", err)
+	}
+	if _, err := d.SetAddress(u.ID, 1, "about:blank"); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("a non-http address: got %v, want ErrInvalidArgument", err)
+	}
+	for _, k := range []string{"p", "f"} {
+		if _, err := d.SetAddress(extByKey(t, tiles, k).ID, 0, "https://b.test/"); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("%s has no address of its own: got %v, want ErrInvalidArgument", k, err)
+		}
+	}
+
+	listing[0].UrlString = "https://a.test/moved"
+	if err := d.Refresh(gid, listing); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := d.Overlay(gid, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extByKey(t, stored, "u"); got.UrlString != "https://b.test/p" || got.Version != 1 || !got.URLUser {
+		t.Fatalf("stored snapshot = %q at version %d latched %v, want the landed address at version 1", got.UrlString, got.Version, got.URLUser)
+	}
+	joined, err := d.Overlay(gid, listing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := extByKey(t, joined, "u"); got.UrlString != "https://b.test/p" {
+		t.Fatalf("join = %q, want the landed address over the listing's", got.UrlString)
+	}
+	listing[0].LinkTarget = &pluginv1.EntryRef{Grid: "root", Key: "f"}
+	if err := d.Refresh(gid, listing); err != nil {
+		t.Fatal(err)
+	}
+	listing[0].LinkTarget = nil
+	if err := d.Refresh(gid, listing); err != nil {
+		t.Fatal(err)
+	}
+	if joined, err = d.Overlay(gid, listing); err != nil {
+		t.Fatal(err)
+	}
+	if got := extByKey(t, joined, "u"); got.UrlString != "https://a.test/moved" || got.URLUser {
+		t.Fatalf("after a link and back = %q latched %v, want the listing's address: a link holds none", got.UrlString, got.URLUser)
+	}
+}

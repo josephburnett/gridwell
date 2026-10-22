@@ -84,11 +84,8 @@ func (s selectionScan) Scan(v any) error {
 func readSelection(ctx context.Context, q gridReader, ns string, gridID int64) ([]int64, error) {
 	var text string
 	err := q.QueryRowContext(ctx, `SELECT selection FROM grids WHERE id = ? AND ns = ?`, gridID, ns).Scan(&text)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
 	if err != nil {
-		return nil, err
+		return nil, notFound(err)
 	}
 	return parseSelection(text)
 }

@@ -63,8 +63,8 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 // only the picture is the node's to keep.
 func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err error) {
 	return n.rowWrite("SetURLPreview", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
-		kind, err := liveKind(ctx, tx, n.ns, tileID)
-		if err != nil {
+		var kind string
+		if err := liveRow(ctx, tx, n.ns, tileID, "kind", &kind); err != nil {
 			return err
 		}
 		if rpc.KindOf(kind).Content != rpc.ContentAddress {

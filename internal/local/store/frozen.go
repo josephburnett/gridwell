@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -47,16 +46,13 @@ func (n *Namespace) SetFrozen(tileID int64, frozen bool, claim *bool) (changed b
 // own write; a write landing where the row already is loses nothing, so only
 // a freeze that moved under a writer asking to move it is refused.
 func (s *Store) setFrozenTx(ctx context.Context, tx *sql.Tx, ns string, tileID int64, frozen bool, claim *bool) error {
-	kind, err := liveKind(ctx, tx, ns, tileID)
-	if err != nil {
+	var kind string
+	var cur bool
+	if err := liveRow(ctx, tx, ns, tileID, "kind, url_frozen", &kind, &cur); err != nil {
 		return err
 	}
 	if !rpc.KindOf(kind).Freezes() {
 		return fmt.Errorf("%w: url_frozen only applies to url and shell tiles", ErrInvalidArgument)
-	}
-	var cur bool
-	if err := tx.QueryRowContext(ctx, `SELECT url_frozen FROM tiles WHERE id = ?`, tileID).Scan(&cur); err != nil {
-		return err
 	}
 	if cur == frozen {
 		return nil
@@ -64,18 +60,13 @@ func (s *Store) setFrozenTx(ctx context.Context, tx *sql.Tx, ns string, tileID i
 	if claim != nil && *claim != cur {
 		return fmt.Errorf("%w: tile %d's freeze moved since the writer saw it", ErrVersionConflict, tileID)
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE tiles SET url_frozen = ?, updated_at = ? WHERE id = ?`,
+	_, err := tx.ExecContext(ctx, `UPDATE tiles SET url_frozen = ?, updated_at = ? WHERE id = ?`,
 		boolToInt(frozen), s.now().Unix(), tileID)
 	return err
 }
 
-// liveKind reads a live row's kind within one namespace: ErrNotFound for a row
-// that is retired or another namespace's.
-func liveKind(ctx context.Context, q gridReader, ns string, tileID int64) (string, error) {
-	var kind string
-	err := q.QueryRowContext(ctx, `SELECT kind FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`, tileID, ns).Scan(&kind)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", ErrNotFound
-	}
-	return kind, err
+// liveRow scans cols of a live row within one namespace into dests:
+// ErrNotFound for a row that is retired or another namespace's.
+func liveRow(ctx context.Context, q gridReader, ns string, tileID int64, cols string, dests ...any) error {
+	return notFound(q.QueryRowContext(ctx, `SELECT `+cols+` FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`, tileID, ns).Scan(dests...))
 }
