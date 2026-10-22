@@ -40,6 +40,40 @@ comment beside it says.
 - Nothing is done for nobody: no capture, fetch or walk runs unless
   something on screen or in the store needs its result.
 
+## The principles
+
+The promises are about behaviour. These are about the code, and each is
+held by a mechanism the build runs, or says that it is not yet. A principle
+with no mechanism is a wish; the ledger (How to work 10) is where a wish
+becomes a count, and the holistic assessment's only job is to find the next
+one (2026-10-21).
+
+1. **Things stay as you left them.** Reading never mutates, every user
+   write claims what it saw, and a file a released build wrote opens in
+   every later build with every user fact intact. Held by the store write
+   funnel, the claim refusals and the migration chain with its fixtures.
+2. **One fact, one owner.** Every fact is stored or derived once and read
+   from there; a second spelling is a hole. Held by the tables the code
+   derives from (`columns.go`, the kind table in `api/rpc/types.go`), the
+   boundary tests on the API server, dial and store shapes, and the
+   copied-constant and doc-name counts. Not yet held for the client's
+   caches.
+3. **Every case is a cell.** Behaviour is kinds times operations times
+   owners, and every cell is "same" or a decision named here; a decision is
+   a row edit, never a sentence. Held by the parity table once it lands;
+   the flag guard on the proto is still to come.
+4. **Nothing silent.** No verb an owner leaves unanswered, no empty cell,
+   no failure that only logs, no clock asking a source that can tell, no
+   work for nobody. Held by the verb count and the timer list; the trace
+   budget and the log-only count are still to come.
+5. **Small enough to hold whole, and only shrinking.** Lines, packages,
+   comment share and policy-file size are ceilings, so a fix pays for
+   itself. Held by the ledger's ceilings.
+6. **Decisions in pure code, everything else glue.** A branch the user can
+   see lives where a unit test can call it; the shim and Electron main
+   gather inputs and perform effects. Held in part by the boundary tests;
+   the shim is still a reading.
+
 ## Vocabulary
 
 One word per thing, and the same word in the UX, the code, the wire and the
