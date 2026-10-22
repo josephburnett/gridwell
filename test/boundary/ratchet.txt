@@ -5,7 +5,8 @@
 # progress report. A row whose value reaches its floor is deleted and its
 # count kept as a permanent test, as timers_test.go keeps the timer list. A
 # floor of - is a ceiling: lines and packages only have to keep from rising.
-# The value the last commit recorded is the ceiling: a row is never raised.
+# The value the last commit recorded is the ceiling: a row is never raised,
+# except a row in lines by exactly the debt a decision enters in debt.txt.
 #
 # name | recorded | floor | owner | mechanism | decision
 packages | 81 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8

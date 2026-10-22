@@ -240,7 +240,10 @@ what each one is called.
     the count by the mechanism the row names and no other, and record the
     new value in the same commit. A count lowered by another means is
     refused like a rise, and a change that lowers one row by raising
-    another is refused by the build. A row at its floor is deleted and its
+    another is refused by the build. A decision Joe makes may raise a
+    ceiling; the rise is entered in `test/boundary/debt.txt` with the
+    decision, counted by the `debt` row, and paying it back by deriving is
+    the next row of work, not later (2026-10-22). A row at its floor is deleted and its
     count stays as a permanent test. The holistic assessment finds a class
     the ledger does not measure and adds it as a row with a count; a
     finding with no count is a note, not a row. There is nothing more to do

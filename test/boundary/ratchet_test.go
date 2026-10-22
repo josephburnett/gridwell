@@ -20,6 +20,7 @@ var ratchetCounts = map[string]func(t *testing.T, root string) int{
 	"packages": length(productionPackages),
 	"lines":    productionLines,
 	"parity":   parityCells,
+	"debt":     debtCount,
 }
 
 func length(offenders func(*testing.T, string) []string) func(*testing.T, string) int {
@@ -85,24 +86,41 @@ func parseRatchet(t *testing.T, r io.Reader) []ratchetRow {
 
 // raisedAboveCommitted names each row recorded above the value the committed
 // ledger holds for it. A row new since then compares to nothing, and a row
-// gone since then reached its floor.
-func raisedAboveCommitted(committed, now []ratchetRow) []string {
+// gone since then reached its floor. A row counted in lines may rise by
+// exactly the debt entered since then (debt.txt).
+func raisedAboveCommitted(committed, now []ratchetRow, entered int) []string {
 	was := map[string]int{}
 	for _, r := range committed {
 		was[r.name] = r.recorded
 	}
 	var out []string
 	for _, r := range now {
-		if prev, ok := was[r.name]; ok && r.recorded > prev {
+		prev, ok := was[r.name]
+		switch {
+		case !ok || r.recorded <= prev:
+		case !slices.Contains(inLines, r.name):
 			out = append(out, fmt.Sprintf("ratchet.txt:%d: %s is recorded at %d, above the %d committed before it: a count only falls", r.line, r.name, r.recorded, prev))
+		case r.recorded-prev != entered:
+			out = append(out, fmt.Sprintf("ratchet.txt:%d: %s rose by %d with no debt entry naming the decision", r.line, r.name, r.recorded-prev))
 		}
 	}
 	return out
 }
 
 // committedRatchet reads the ledger as HEAD holds it; ok is false when HEAD
-// has none, and the caller is skipped when git cannot answer.
+// has none.
 func committedRatchet(t *testing.T, root string) (rows []ratchetRow, ok bool) {
+	t.Helper()
+	out, ok := committedFile(t, root, "test/boundary/ratchet.txt")
+	if !ok {
+		return nil, false
+	}
+	return parseRatchet(t, bytes.NewReader(out)), true
+}
+
+// committedFile is rel as HEAD holds it; ok is false when HEAD has none, and
+// the caller is skipped when git cannot answer.
+func committedFile(t *testing.T, root, rel string) ([]byte, bool) {
 	t.Helper()
 	run := func(args ...string) ([]byte, error) {
 		cmd := exec.Command("git", args...)
@@ -112,7 +130,7 @@ func committedRatchet(t *testing.T, root string) (rows []ratchetRow, ok bool) {
 	if _, err := run("rev-parse", "--verify", "HEAD"); err != nil {
 		t.Skipf("git cannot read HEAD here, so the committed ledger is not compared: %v", err)
 	}
-	const path = "HEAD:test/boundary/ratchet.txt"
+	path := "HEAD:" + rel
 	if _, err := run("cat-file", "-e", path); err != nil {
 		return nil, false
 	}
@@ -120,17 +138,17 @@ func committedRatchet(t *testing.T, root string) (rows []ratchetRow, ok bool) {
 	if err != nil {
 		t.Skipf("git show %s: %v", path, err)
 	}
-	return parseRatchet(t, bytes.NewReader(out)), true
+	return out, true
 }
 
 func TestRaisedAboveCommitted(t *testing.T) {
 	committed := parseRatchet(t, strings.NewReader("# header\nlines | 100 | - | o | m | d\ngone | 3 | 2 | o | m | d\n"))
 	now := parseRatchet(t, strings.NewReader("# header\nlines | 101 | - | o | m | d\nnew | 9 | 0 | o | m | d\n"))
-	want := []string{"ratchet.txt:2: lines is recorded at 101, above the 100 committed before it: a count only falls"}
-	if got := raisedAboveCommitted(committed, now); !slices.Equal(got, want) {
+	want := []string{"ratchet.txt:2: lines rose by 1 with no debt entry naming the decision"}
+	if got := raisedAboveCommitted(committed, now, 0); !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	if got := raisedAboveCommitted(now, committed); len(got) != 0 {
+	if got := raisedAboveCommitted(now, committed, 0); len(got) != 0 {
 		t.Errorf("a fall passes, got %q", got)
 	}
 }
@@ -149,11 +167,17 @@ func TestRatchet(t *testing.T) {
 		if !ok {
 			return
 		}
-		for _, msg := range raisedAboveCommitted(committed, rows) {
+		was, _ := committedFile(t, root, debtFile)
+		entered := parseDebt(t, bytes.NewReader(was)).enteredSince(readDebt(t, root))
+		for _, msg := range raisedAboveCommitted(committed, rows, entered) {
 			t.Error(msg)
 		}
 	})
+	owing := readDebt(t, root).lowWater != 0
 	for name := range ratchetCounts {
+		if name == "debt" && !owing {
+			continue
+		}
 		if !slices.ContainsFunc(rows, func(r ratchetRow) bool { return r.name == name }) {
 			t.Errorf("ratchet.txt names no row for the count %s: a count with no row is silent, which is the hole the ledger exists to close; add the row, or move the count to a permanent test of its own", name)
 		}
