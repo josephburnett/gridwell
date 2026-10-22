@@ -10,4 +10,3 @@
 # name | recorded | floor | owner | mechanism | decision
 packages | 81 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
 lines | 57553 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1
-log-holes | 1 | 0 | scripts/allowed-logs.txt | route the failure through a surface, then delete the entry | CLAUDE.md, How to work 6

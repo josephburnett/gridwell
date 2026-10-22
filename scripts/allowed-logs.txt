@@ -1,10 +1,9 @@
 # Every log-only arm the production Go tree holds, as "path:anchor | owner | reason":
 # an error handed to a log call in a block that neither returns an error nor
 # calls a surface, so nothing reaches the user. The owner says who reclaims
-# what the failure left, or is hole: a failure the user can see that only
-# logs, counted by the log-holes row of test/boundary/ratchet.txt. The anchor
-# is a line number, the enclosing Go function, or a word on the log's line or
-# the line above it. test/boundary/logs_test.go enforces it.
+# what the failure left; hole, a failure the user can see that only logs, is
+# refused (TestNoLogHoles). The anchor is a line number, the enclosing Go
+# function, or a word on the log's line or the line above it. test/boundary/logs_test.go enforces it.
 internal/connection/connection.go:ConnectAll | connection.Server.learnRoot | a boot dial's failure is already on the connection's health: learnRoot notes every dial, Info and landing failure; shutdown and disabled are said by their own owners
 internal/node/nativelocal.go:CleanupScratch | the next boot's scratch sweep | a failed sweep leaves ephemeral rows on the scratch grid, which nothing shows; the next boot sweeps them
 internal/node/nativelocal.go:CleanupOrphanedShells | the next boot's orphan sweep | a failed sweep leaves a tmux no row names running; the next boot kills it
@@ -12,4 +11,3 @@ internal/node/node.go:closeImpl | the exiting process | a close failure at shutd
 internal/server/router.go:workspaceEphemeralCandidates | the boot sweep | an unreadable layout blob reaps nothing at the delete; the boot sweep reaps the ephemerals once no unreadable blob stands
 internal/server/router.go:reapWorkspaceEphemerals | the boot sweep | the reap is best-effort and the user's delete has landed; a scratch row it left is swept at the next boot
 internal/server/shell_api.go:shellReadFrame | the client | the client ended its own stream, so there is no one else to tell
-internal/local/local.go:captureShellTitle | hole | a detach whose title capture fails leaves the tile under its old name, and only the log says so

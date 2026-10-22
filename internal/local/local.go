@@ -418,7 +418,7 @@ func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
 
 // OpenShell streams a tile's live PTY both ways: the first request binds the
 // tile id, then keystrokes and resizes flow up and output flows down.
-func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) error {
+func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) (err error) {
 	if p.shell == nil {
 		return status.Error(codes.Unimplemented, cmp.Or(p.off, "this namespace hosts no live shells"))
 	}
@@ -454,11 +454,11 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 		}
 		return status.Error(codes.Internal, err.Error())
 	}
-	// Detach fires after the stream is ending, so the log is the surface; a
-	// capture that does not land leaves the tile under its current name.
+	// Detach fires before OpenShell returns, so a capture that does not land
+	// is the attachment's end, and the tile keeps its current name.
 	defer p.shell.Release(key, att, stopOld, func() {
-		if err := p.captureShellTitle(key, tileID); err != nil {
-			log.Printf("gridwell: home: shell title capture for tile %s: %v", tileID, err)
+		if cerr := p.captureShellTitle(key, tileID); cerr != nil {
+			err = errors.Join(err, fmt.Errorf("the shell's name was not updated: %w", cerr))
 		}
 	})
 

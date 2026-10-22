@@ -427,20 +427,18 @@ func allowedLogs(t *testing.T, root string) []allowedLog {
 	return out
 }
 
-// logHoles are the listed arms whose owner is hole: a failure the user can
-// see that only logs.
-func logHoles(t *testing.T, root string) int {
-	n := 0
-	for _, a := range allowedLogs(t, root) {
+// No listed arm is owned by hole, a failure the user can see that only logs:
+// the log-holes row fell to its floor, so the count stays at zero.
+func TestNoLogHoles(t *testing.T) {
+	for _, a := range allowedLogs(t, repoRoot(t)) {
 		if a.owner == "hole" {
-			n++
+			t.Errorf("scripts/allowed-logs.txt: %s is a hole: route the failure through a surface, then delete the entry", a.at)
 		}
 	}
-	return n
 }
 
 // A failure that only logs looks to the user like it just disappeared, so
-// every log-only arm names who reclaims it, or is counted as a hole.
+// every log-only arm names who reclaims it.
 func TestEveryLogOnlyArmIsOwned(t *testing.T) {
 	root := repoRoot(t)
 	allowed := allowedLogs(t, root)

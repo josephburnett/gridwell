@@ -1,11 +1,9 @@
 package local_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
-	"log"
 	"strings"
 	"testing"
 
@@ -16,38 +14,37 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
-// The detach seam: OpenShell's Release fires the title capture after the PTY
-// is closed, so a failure there has no stream to travel back on and the log is
-// the surface. These run the whole path — stream, manager, capture, store.
+// The detach seam: OpenShell's Release fires the title capture before
+// OpenShell returns, so a failure there is the attachment's end, which the
+// shell API sends as the exit. These run the whole path: stream, manager,
+// capture, store.
 
-// captureLog is the one line the detach capture writes when it fails.
-const captureLog = "shell title capture"
+// captureFailed is how the attachment's end names a capture that failed.
+const captureFailed = "the shell's name was not updated"
 
 func TestShellTitleCaptureStampsOnDetach(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "vim"
 	p, tileID := shellPluginWithTile(t, fake)
 
-	logs := openShellAndDetach(t, p, tileID)
-
+	if err := openShellAndDetach(t, p, tileID); err != nil {
+		t.Errorf("OpenShell = %v, want a capture that landed to end clean", err)
+	}
 	if got := altOf(t, p, tileID); got != "vim" {
 		t.Errorf("alt = %q, want the captured foreground command %q", got, "vim")
 	}
-	if strings.Contains(logs, captureLog) {
-		t.Errorf("a capture that landed logged: %q", logs)
-	}
 }
 
-func TestShellTitleCaptureLogsAFailedRead(t *testing.T) {
+func TestShellTitleCaptureEndsWithAFailedRead(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "vim"
 	fake.PaneErr = errors.New("tmux: no server running")
 	p, tileID := shellPluginWithTile(t, fake)
 
-	logs := openShellAndDetach(t, p, tileID)
+	err := openShellAndDetach(t, p, tileID)
 
-	if !strings.Contains(logs, captureLog) || !strings.Contains(logs, tileID) || !strings.Contains(logs, "no server running") {
-		t.Errorf("log = %q, want the capture, the tile id %s, and the reason", logs, tileID)
+	if err == nil || !strings.Contains(err.Error(), captureFailed) || !strings.Contains(err.Error(), "no server running") {
+		t.Errorf("OpenShell = %v, want the capture and the reason", err)
 	}
 	if got := altOf(t, p, tileID); got != "shell" {
 		t.Errorf("alt = %q, want the name the tile already had", got)
@@ -57,12 +54,12 @@ func TestShellTitleCaptureLogsAFailedRead(t *testing.T) {
 // The other half of the capture: the store write. The user deletes the tile
 // and empties the trash while the shell is still attached, so the row the
 // capture would stamp is gone by the time it runs.
-func TestShellTitleCaptureLogsAFailedWrite(t *testing.T) {
+func TestShellTitleCaptureEndsWithAFailedWrite(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "vim"
 	p, tileID := shellPluginWithTile(t, fake)
 
-	logs := openShellAndDetach(t, p, tileID, func() {
+	err := openShellAndDetach(t, p, tileID, func() {
 		for range 2 { // to the trash, then out of it
 			if _, err := p.DeleteTile(context.Background(), &gridwellv1.DeleteTileRequest{TileId: tileID}); err != nil {
 				t.Errorf("DeleteTile: %v", err)
@@ -70,8 +67,8 @@ func TestShellTitleCaptureLogsAFailedWrite(t *testing.T) {
 		}
 	})
 
-	if !strings.Contains(logs, captureLog) || !strings.Contains(logs, tileID) || !strings.Contains(logs, "not found") {
-		t.Errorf("log = %q, want the capture, the tile id %s, and the store's reason", logs, tileID)
+	if err == nil || !strings.Contains(err.Error(), captureFailed) || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("OpenShell = %v, want the capture and the store's reason", err)
 	}
 }
 
@@ -97,14 +94,10 @@ func shellPluginWithTile(t *testing.T, fake *shellsvctest.FakeStreamer) (*local.
 }
 
 // openShellAndDetach opens the tile's shell, runs beforeDetach with the tmux
-// live, then ends the stream and returns whatever the detach logged. OpenShell
+// live, then ends the stream and returns how OpenShell ended. OpenShell
 // releases before it returns, so the capture has run by then.
-func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDetach ...func()) string {
+func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDetach ...func()) error {
 	t.Helper()
-	var logbuf bytes.Buffer
-	log.SetOutput(&logbuf)
-	t.Cleanup(func() { log.SetOutput(io.Discard) })
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	up := make(chan *gridwellv1.OpenShellRequest, 2)
@@ -133,11 +126,7 @@ func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDeta
 		fn()
 	}
 	cancel()
-	if err := <-done; err != nil {
-		t.Fatalf("OpenShell: %v", err)
-	}
-	log.SetOutput(io.Discard)
-	return logbuf.String()
+	return <-done
 }
 
 func altOf(t *testing.T, p *local.Plugin, tileID string) string {
