@@ -2,7 +2,11 @@ package boundary
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -36,8 +40,14 @@ func readRatchet(t *testing.T, root string) []ratchetRow {
 		t.Fatal(err)
 	}
 	defer f.Close()
+	return parseRatchet(t, f)
+}
+
+func parseRatchet(t *testing.T, r io.Reader) []ratchetRow {
+	t.Helper()
 	var rows []ratchetRow
-	sc := bufio.NewScanner(f)
+	var err error
+	sc := bufio.NewScanner(r)
 	for n := 1; sc.Scan(); n++ {
 		text := strings.TrimSpace(sc.Text())
 		if text == "" || strings.HasPrefix(text, "#") {
@@ -72,13 +82,76 @@ func readRatchet(t *testing.T, root string) []ratchetRow {
 	return rows
 }
 
+// raisedAboveCommitted names each row recorded above the value the committed
+// ledger holds for it. A row new since then compares to nothing, and a row
+// gone since then reached its floor.
+func raisedAboveCommitted(committed, now []ratchetRow) []string {
+	was := map[string]int{}
+	for _, r := range committed {
+		was[r.name] = r.recorded
+	}
+	var out []string
+	for _, r := range now {
+		if prev, ok := was[r.name]; ok && r.recorded > prev {
+			out = append(out, fmt.Sprintf("ratchet.txt:%d: %s is recorded at %d, above the %d committed before it: a count only falls", r.line, r.name, r.recorded, prev))
+		}
+	}
+	return out
+}
+
+// committedRatchet reads the ledger as HEAD holds it; ok is false when HEAD
+// has none, and the caller is skipped when git cannot answer.
+func committedRatchet(t *testing.T, root string) (rows []ratchetRow, ok bool) {
+	t.Helper()
+	run := func(args ...string) ([]byte, error) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		return cmd.Output()
+	}
+	if _, err := run("rev-parse", "--verify", "HEAD"); err != nil {
+		t.Skipf("git cannot read HEAD here, so the committed ledger is not compared: %v", err)
+	}
+	const path = "HEAD:test/boundary/ratchet.txt"
+	if _, err := run("cat-file", "-e", path); err != nil {
+		return nil, false
+	}
+	out, err := run("show", path)
+	if err != nil {
+		t.Skipf("git show %s: %v", path, err)
+	}
+	return parseRatchet(t, bytes.NewReader(out)), true
+}
+
+func TestRaisedAboveCommitted(t *testing.T) {
+	committed := parseRatchet(t, strings.NewReader("# header\nlines | 100 | - | o | m | d\ngone | 3 | 2 | o | m | d\n"))
+	now := parseRatchet(t, strings.NewReader("# header\nlines | 101 | - | o | m | d\nnew | 9 | 0 | o | m | d\n"))
+	want := []string{"ratchet.txt:2: lines is recorded at 101, above the 100 committed before it: a count only falls"}
+	if got := raisedAboveCommitted(committed, now); !slices.Equal(got, want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	if got := raisedAboveCommitted(now, committed); len(got) != 0 {
+		t.Errorf("a fall passes, got %q", got)
+	}
+}
+
 // TestRatchet holds the ledger exact: a rise is a regression, and a fall the
 // ledger does not record would let the next commit rise back to the old value
-// unseen, so both fail and a diff of ratchet.txt is the progress report.
+// unseen, so both fail and a diff of ratchet.txt is the progress report. The
+// value HEAD recorded is the ceiling, so a rise with the ledger edited to
+// match it fails too.
 func TestRatchet(t *testing.T) {
 	root := repoRoot(t)
 	seen := map[string]bool{}
 	rows := readRatchet(t, root)
+	t.Run("committed", func(t *testing.T) {
+		committed, ok := committedRatchet(t, root)
+		if !ok {
+			return
+		}
+		for _, msg := range raisedAboveCommitted(committed, rows) {
+			t.Error(msg)
+		}
+	})
 	for name := range ratchetCounts {
 		if !slices.ContainsFunc(rows, func(r ratchetRow) bool { return r.name == name }) {
 			t.Errorf("ratchet.txt names no row for the count %s: a count with no row is silent, which is the hole the ledger exists to close; add the row, or move the count to a permanent test of its own", name)
