@@ -161,12 +161,12 @@ export function composeZoom(minWidthZoom: number, userZoom: number): number {
 
 // How far in CSS px a right-button press must move to become a pane gesture. It
 // mirrors dragThreshold in client/wasm/main.go so the two feel identical.
-const RIGHT_DRAG_THRESHOLD = 4;
+export const RIGHT_DRAG_THRESHOLD = 4;
 
 // The minimum hold in ms before a distance-exceeding move counts as a gesture,
 // so a trackpad tap that drifts is still a click. Mirrored in
 // urlview-preload.ts, which cannot import; gesture-threshold.test.ts lints it.
-const RIGHT_DRAG_TIME_MS = 200;
+export const RIGHT_DRAG_TIME_MS = 200;
 
 // The distance in CSS px past which the time gate does not apply, so a fast
 // flick is a gesture and not a click.

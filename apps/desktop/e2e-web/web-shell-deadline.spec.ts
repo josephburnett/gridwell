@@ -5,8 +5,8 @@ import { test, expect } from './fixtures';
 // conn and owns its deadlines through context. No other spec idles a live shell
 // past 10s, so a refactor that put it back on the API's request deadline is
 // caught only here. The roughly 11s of real time is the test and must not be
-// shortened; a browser-mode spec cannot import the Go constant, so this comment
-// is the tie.
+// shortened. A spec cannot import the Go value, so
+// TestShellDeadlineSpecTracksWebAPIServer pins HEADER_TIMEOUT_MS to it.
 
 const HEADER_TIMEOUT_MS = 10_000; // server.WebAPIServer ReadHeaderTimeout
 const HOLD_MS = HEADER_TIMEOUT_MS + 1_000;

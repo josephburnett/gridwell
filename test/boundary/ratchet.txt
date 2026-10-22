@@ -9,6 +9,5 @@
 # name | recorded | floor | owner | mechanism | decision
 kind-switch | 79 | 0 | api/rpc/types.go | a capability on the kind table, read at the site | CLAUDE.md, How to work 10 (2026-10-21)
 unimplemented-embeds | 3 | 0 | internal/namespace/unimplemented.go | every verb answered explicitly, a refusal naming its reason included | CLAUDE.md, How to work 10 (2026-10-21)
-copied-constants | 2 | 0 | the identifier the comment names | read the value from its owner, or pin it with a drift test | CLAUDE.md, How to work 1
 packages | 83 | - | the production tree (directories holding a non-test Go file of scripts/comment-share.sh's list) | merge, never split | CLAUDE.md, How to work 8
 lines | 57918 | - | the production tree (scripts/comment-share.sh's list) | derive, never restate | CLAUDE.md, How to work 1

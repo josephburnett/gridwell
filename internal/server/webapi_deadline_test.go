@@ -18,6 +18,11 @@ import (
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,4 +117,26 @@ func TestWebAPIHoldsAConnectStreamPastAnyDeadline(t *testing.T) {
 	awaitEvent("after the hold")
 
 	fmt.Printf("web API deadline: a Connect server stream held %s past the API's deadlines stayed live OK\n", hold)
+}
+
+// The browser-mode shell spec holds a shell past the web API's header timeout,
+// and a spec cannot import Go, so its HEADER_TIMEOUT_MS is pinned to
+// WebAPIServer here: a change to either fails until the other follows.
+func TestShellDeadlineSpecTracksWebAPIServer(t *testing.T) {
+	spec := filepath.Join("..", "..", "apps", "desktop", "e2e-web", "web-shell-deadline.spec.ts")
+	data, err := os.ReadFile(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`const HEADER_TIMEOUT_MS = ([0-9_]+);`).FindSubmatch(data)
+	if m == nil {
+		t.Fatalf("%s declares no HEADER_TIMEOUT_MS", spec)
+	}
+	ms, err := strconv.Atoi(strings.ReplaceAll(string(m[1]), "_", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := time.Duration(ms)*time.Millisecond, WebAPIServer(nil).ReadHeaderTimeout; got != want {
+		t.Errorf("%s HEADER_TIMEOUT_MS is %v, WebAPIServer's ReadHeaderTimeout is %v: set the spec to the server's value", spec, got, want)
+	}
 }

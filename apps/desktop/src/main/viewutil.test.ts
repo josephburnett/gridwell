@@ -18,6 +18,8 @@ import {
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   classifyRightPress,
+  RIGHT_DRAG_THRESHOLD,
+  RIGHT_DRAG_TIME_MS,
   toContentPoint,
   sanitizeUserAgent,
   shouldSurfaceFailLoad,
@@ -124,8 +126,8 @@ test('URL_MIN_LAYOUT_WIDTH pins the production zoom-to-fit threshold', () => {
 // gesture regardless of duration, and a hold-and-drag exceeding both small
 // thresholds is a gesture too.
 test('classifyRightPress requires both distance and time to classify as drag', () => {
-  const dist = 4; // px — viewutil's RIGHT_DRAG_THRESHOLD (drift-linted against the canvas)
-  const time = 200; // ms — viewutil's RIGHT_DRAG_TIME_MS
+  const dist = RIGHT_DRAG_THRESHOLD;
+  const time = RIGHT_DRAG_TIME_MS;
 
   // Neither condition met: a click.
   assert.ok(!classifyRightPress(0, 0, 0, dist, time), 'zero movement, zero time → click');

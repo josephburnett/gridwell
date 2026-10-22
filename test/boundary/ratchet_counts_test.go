@@ -267,6 +267,14 @@ var (
 	tsConstLine = regexp.MustCompile(`^[\t ]*(?:export[\t ]+)?const[\t ]+([A-Za-z_$][\w$]*)[\t ]*(?::[\t ]*\w+[\t ]*)?=[\t ]*[0-9][0-9_]*(?:\.[0-9_]+)?[\t ]*;?[\t ]*(?://(.*))?$`)
 )
 
+// TestNoCopiedConstants: a test or harness value copied from production reads
+// its owner or is pinned to it, so the owner cannot change under it unseen.
+func TestNoCopiedConstants(t *testing.T) {
+	for _, at := range copiedConstants(t, repoRoot(t)) {
+		t.Errorf("%s by hand: read the value from its owner, or pin it with a drift test that spells both names", at)
+	}
+}
+
 // copiedConstants are the numeric constants in tests and harnesses whose
 // comment says they copy a production identifier, with no drift test (a test
 // file whose code spells both names) pinning the copy to its owner.
