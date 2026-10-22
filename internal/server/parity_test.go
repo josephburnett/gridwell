@@ -154,7 +154,6 @@ const (
 const (
 	hPluginMove     = "internal/pluginhost/adapter.go:778: MoveTile refuses another grid of the same plugin; home moves a tile to any of its grids, and CLAUDE.md names only the cross-plugin move"
 	hPluginWriteURL = "client/urlview/unload.go:19: a plugin url's address is never written, so it does not follow where the user went as home's does"
-	hGoneGrid       = "internal/pluginhost/adapter.go:471: a grid its source no longer lists reads as an empty grid, where home's gone grid reads refused (internal/local/local.go:174); neither reads dead"
 )
 
 var parityTable = []parityCell{
@@ -336,7 +335,7 @@ var parityTable = []parityCell{
 	{kDoor, opFind, onFar, same, "", checkFind},
 	{kDoor, opUpdate, onPlugin, same, "", checkUpdate},
 	{kDoor, opUpdate, onFar, same, "", checkUpdate},
-	{kDoor, opDead, onPlugin, hole, hGoneGrid, nil},
+	{kDoor, opDead, onPlugin, same, "", checkDead},
 	{kDoor, opDead, onFar, same, "", checkDead},
 	{kDoorHome, opCreate, onPlugin, na, naPluginGrids, nil},
 	{kDoorHome, opCreate, onFar, same, "", checkCreate},

@@ -415,20 +415,23 @@ func (a *Adapter) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*g
 	return &gridwellv1.SetViewResponse{}, nil
 }
 
-// noteLinks records the grids one live listing's link entries point into.
-// A shown grid's links read their targets' content, so a change there is a
-// change to what it shows: the targets' grids join the scope.
+// noteLinks records one live listing's doors (goneGrid) and the grids its
+// links point into. A shown grid's links read their targets' content, so a
+// change there is a change to what it shows: the targets' grids join the scope.
 func (a *Adapter) noteLinks(gridKey string, entries []*pluginv1.Entry) {
 	var into []string
+	a.scopeMu.Lock()
+	defer a.scopeMu.Unlock()
 	for _, e := range entries {
 		if lt := e.GetLinkTarget(); lt != nil && lt.Grid != gridKey {
 			into = append(into, lt.Grid)
 		}
+		if e.ChildGrid != "" {
+			a.doors[e.ChildGrid] = entryRef{gridKey, e.Key}
+		}
 	}
 	slices.Sort(into)
 	into = slices.Compact(into)
-	a.scopeMu.Lock()
-	defer a.scopeMu.Unlock()
 	if slices.Equal(into, a.links[gridKey]) {
 		return
 	}
@@ -584,21 +587,20 @@ func (a *Adapter) entryTile(ctx context.Context, gridKey string, e *pluginv1.Ent
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range rows {
-		if r.Key != e.Key {
-			continue
-		}
-		if pagePreviewStale(e, r.Tile) {
-			if err := a.mem.DropURLPreview(r.ID); err != nil {
-				return nil, err
-			}
-			r.PreviewBlobId = 0
-		}
-		tiles, err := buildTiles(rpc.EntryGridID(gridKey), gridKey, []store.ExtTile{r}, entries, a.mem.GridKey)
-		if err != nil {
+	i := slices.IndexFunc(rows, func(r store.ExtTile) bool { return r.Key == e.Key })
+	if i < 0 {
+		return nil, nil
+	}
+	r := rows[i]
+	if pagePreviewStale(e, r.Tile) {
+		if err := a.mem.DropURLPreview(r.ID); err != nil {
 			return nil, err
 		}
-		return tiles[0], nil
+		r.PreviewBlobId = 0
 	}
-	return nil, nil
+	tiles, err := buildTiles(rpc.EntryGridID(gridKey), gridKey, []store.ExtTile{r}, entries, a.mem.GridKey)
+	if err != nil {
+		return nil, err
+	}
+	return tiles[0], nil
 }

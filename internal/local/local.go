@@ -174,9 +174,12 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 }
 
 // GetGrid stamps what every home grid is: it takes new tiles and its bodies
-// take edits.
+// take edits. An id with no row is dead, as GetTile's.
 func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	r, err := p.st.GetGrid(ctx, req.GridId)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, gwerr.DeadLink("", "home: no grid %q", req.GridId)
+	}
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}

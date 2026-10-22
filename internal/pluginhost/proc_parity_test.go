@@ -21,6 +21,7 @@ import (
 	"connectrpc.com/connect"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -220,7 +221,7 @@ func shellWithChild(t *testing.T) (sh *exec.Cmd, child string) {
 // A process is under its parent's grid now. Kill an intermediate sh and its
 // child reparents: the next read of the sh's grid sweeps the child's placed
 // row, and the @info row of the dead sh, rather than keeping both for as long
-// as the child lives.
+// as the child lives, and answers the grid dead, its door being gone.
 func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 	sh, child := shellWithChild(t)
 	v2 := pluginProcNode(t)
@@ -248,23 +249,25 @@ func TestProcReparentedChildAndDeadInfoSweep(t *testing.T) {
 	if info.TextPresentation != rpc.TextPresentationBoth {
 		t.Errorf("@info presents %q; want %q", info.TextPresentation, rpc.TextPresentationBoth)
 	}
+	var placed []*gridwellv1.Tile
 	for i, tile := range []*gridwellv1.Tile{info, tileNamed(g.Tiles, child)} {
-		if _, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
+		moved, err := v2.MoveTile(ctx, claimtest.Claimed(t, v2, &gridwellv1.MoveTileRequest{
 			TileId: tile.Id, GridId: door.ChildGridId, X: int64(4 + 2*i), Y: 4, W: 1, H: 1,
-		})); err != nil {
+		}))
+		if err != nil {
 			t.Fatal(err)
 		}
+		placed = append(placed, moved)
 	}
 
 	_ = sh.Process.Kill()
 	_, _ = sh.Process.Wait()
-	g, err = v2.GetGrid(ctx, door.ChildGridId)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := v2.GetGrid(ctx, door.ChildGridId); !gwerr.IsDeadLink(err) {
+		t.Fatalf("the dead sh's grid answered %v, want dead", err)
 	}
-	for _, label := range []string{child, "@info"} {
-		if tile := tileNamed(g.Tiles, label); tile.Id != "" {
-			t.Errorf("%s is still in the dead sh's grid: %+v", label, tile)
+	for _, tile := range placed {
+		if _, err := v2.GetTile(ctx, tile.Id); !gwerr.IsDeadLink(err) {
+			t.Errorf("%s is still in the dead sh's grid: %v", tile.AltText, err)
 		}
 	}
 }

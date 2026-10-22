@@ -158,11 +158,9 @@ func (g *findGrids) hit(gkey, key string, path []*gridwellv1.Tile, snippet strin
 	if err != nil {
 		return nil, err
 	}
-	for i, row := range s.rows {
-		if row.Key == key {
-			return &findHit{row: row.ID, result: &gridwellv1.FindResult{
-				Tile: s.tiles[i], Path: path, Snippet: snippet, Score: score}}, nil
-		}
+	if i := s.at(key); i >= 0 {
+		return &findHit{row: s.rows[i].ID, result: &gridwellv1.FindResult{
+			Tile: s.tiles[i], Path: path, Snippet: snippet, Score: score}}, nil
 	}
 	return nil, nil
 }
