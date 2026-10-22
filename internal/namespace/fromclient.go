@@ -10,7 +10,41 @@ import (
 	"io"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+// Rebound is recv answering first before it: a stream whose bind a hop
+// rewrote.
+func Rebound[T any](first T, recv func() (T, error)) func() (T, error) {
+	sent := false
+	return func() (T, error) {
+		if sent {
+			return recv()
+		}
+		sent = true
+		return first, nil
+	}
+}
+
+// Assembled is first's data and every chunk recv answers after it, once the
+// stream ends cleanly: a broken stream errors, so its owner commits nothing.
+func Assembled(first *pb.WriteContentRequest, recv func() (*pb.WriteContentRequest, error)) ([]byte, error) {
+	data := append([]byte(nil), first.Data...)
+	for {
+		msg, err := recv()
+		if errors.Is(err, io.EOF) {
+			return data, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		if data = append(data, msg.Data...); len(data) > rpc.MaxContentBytes {
+			return nil, status.Error(codes.InvalidArgument, "write: content too large")
+		}
+	}
+}
 
 // FromClient adapts a gridwell.v1 client to the in-process interface.
 func FromClient(c pb.GridwellClient) Namespace { return fromClient{c} }

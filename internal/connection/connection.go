@@ -844,14 +844,7 @@ func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	// the request is the caller's own message (namespace.Namespace).
 	rewritten := proto.Clone(first).(*gridwellv1.WriteContentRequest)
 	rewritten.TileId = local
-	sentFirst := false
-	resp, err := fw.client.WriteContent(ctx, func() (*gridwellv1.WriteContentRequest, error) {
-		if !sentFirst {
-			sentFirst = true
-			return rewritten, nil
-		}
-		return recv()
-	})
+	resp, err := fw.client.WriteContent(ctx, namespace.Rebound(rewritten, recv))
 	if err != nil {
 		return nil, err
 	}
@@ -870,14 +863,7 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 	// Copy before rewriting the bind: the caller still owns `first`.
 	rewritten := proto.Clone(first).(*gridwellv1.OpenShellRequest)
 	rewritten.TileId = local
-	sentBind := false
-	return fw.client.OpenShell(ctx, func() (*gridwellv1.OpenShellRequest, error) {
-		if !sentBind {
-			sentBind = true
-			return rewritten, nil
-		}
-		return recv()
-	}, send)
+	return fw.client.OpenShell(ctx, namespace.Rebound(rewritten, recv), send)
 }
 
 // Subscribe streams every connection's prefixed remote events and their

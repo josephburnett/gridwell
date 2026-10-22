@@ -152,8 +152,7 @@ const (
 
 // The holes, where the code makes a difference no decision names.
 const (
-	hPluginMove     = "internal/pluginhost/adapter.go:778: MoveTile refuses another grid of the same plugin; home moves a tile to any of its grids, and CLAUDE.md names only the cross-plugin move"
-	hPluginWriteURL = "client/urlview/unload.go:19: a plugin url's address is never written, so it does not follow where the user went as home's does"
+	hPluginMove = "internal/pluginhost/adapter.go:778: MoveTile refuses another grid of the same plugin; home moves a tile to any of its grids, and CLAUDE.md names only the cross-plugin move"
 )
 
 var parityTable = []parityCell{
@@ -219,7 +218,7 @@ var parityTable = []parityCell{
 	{kURL, opFraming, onFar, na, naFraming, nil},
 	{kURL, opRead, onPlugin, same, "", checkRead},
 	{kURL, opRead, onFar, same, "", checkRead},
-	{kURL, opWrite, onPlugin, hole, hPluginWriteURL, nil},
+	{kURL, opWrite, onPlugin, same, "", checkWrite},
 	{kURL, opWrite, onFar, same, "", checkWrite},
 	{kURL, opServe, onPlugin, decided, dPluginPage, nil},
 	{kURL, opServe, onFar, same, "", checkServe},

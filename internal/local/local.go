@@ -247,19 +247,9 @@ func (p *Plugin) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	if tileID == "" {
 		return nil, status.Error(codes.InvalidArgument, "write: first message must bind tile_id")
 	}
-	data := append([]byte(nil), first.Data...)
-	for {
-		msg, err := recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, err // broken stream: no commit, old value intact
-		}
-		data = append(data, msg.Data...)
-		if int64(len(data)) > store.MaxBlobBytes {
-			return nil, status.Error(codes.InvalidArgument, "write: content too large")
-		}
+	data, err := namespace.Assembled(first, recv)
+	if err != nil {
+		return nil, err
 	}
 	tile, err := p.st.WriteContent(ctx, tileID, version, data)
 	if err != nil {

@@ -1,9 +1,6 @@
 package gwerr
 
 import (
-	"errors"
-
-	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -22,32 +19,9 @@ func SourceDisabled(namespace, reason string) error {
 	return st.Err()
 }
 
-// IsSourceDisabled reports that err is SourceDisabled's answer, read off a
-// gRPC status or a Connect error alike. A plain FailedPrecondition (a stale
-// save) carries no detail and is not one.
+// IsSourceDisabled reports that err is SourceDisabled's answer. A plain
+// FailedPrecondition (a stale save) carries no detail and is not one.
 func IsSourceDisabled(err error) bool {
-	if err == nil {
-		return false
-	}
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		for _, d := range ce.Details() {
-			if v, derr := d.Value(); derr == nil {
-				if _, ok := v.(*pb.SourceDisabled); ok {
-					return true
-				}
-			}
-		}
-		return false
-	}
-	st, ok := status.FromError(err)
-	if !ok {
-		return false
-	}
-	for _, d := range st.Details() {
-		if _, ok := d.(*pb.SourceDisabled); ok {
-			return true
-		}
-	}
-	return false
+	_, ok := detail[*pb.SourceDisabled](err)
+	return ok
 }

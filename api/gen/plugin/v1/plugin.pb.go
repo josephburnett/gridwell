@@ -479,7 +479,8 @@ type Entry struct {
 	// Any other value is refused by the node.
 	TextPresentation string `protobuf:"bytes,6,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
 	StatusDetail     string `protobuf:"bytes,7,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
-	// url entries: the address itself.
+	// url entries: the address itself, until the user navigates elsewhere in
+	// the tile: the node keeps where they landed, and you are not told.
 	UrlString string `protobuf:"bytes,8,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
 	// placement_hint, when set, is where the entry prefers to land first, such
 	// as a calendar putting an event at its date. A hint that meets an occupied

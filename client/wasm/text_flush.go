@@ -102,13 +102,14 @@ func (a *App) beaconTileContent(cid string, t *gridwellv1.Tile, data []byte) boo
 }
 
 // takesContent reports that row t accepts this client's content write: an
-// editable text body, or an address urlview.Owns.
+// editable text body, or any url's address but a served page's
+// (urlview.WriteAddress).
 func (a *App) takesContent(t *gridwellv1.Tile) bool {
 	switch {
 	case rpc.TextDocument(t):
 		return !a.tileReadOnly(t)
 	case rpc.WebContent(t):
-		return a.ownsURLRow(t)
+		return !rpc.PageContent(t)
 	}
 	return false
 }

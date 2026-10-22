@@ -53,14 +53,7 @@ func (s *Server) shellRoute(tileID string) (ns namespace.Namespace, local string
 func (s *Server) openShellBound(ctx context.Context, ns namespace.Namespace, local string, first *pb.OpenShellRequest,
 	recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
 	bind := &pb.OpenShellRequest{TileId: local, Data: first.Data, Resize: first.Resize}
-	sentBind := false
-	return ns.OpenShell(ctx, func() (*pb.OpenShellRequest, error) {
-		if !sentBind {
-			sentBind = true
-			return bind, nil
-		}
-		return recv()
-	}, send)
+	return ns.OpenShell(ctx, namespace.Rebound(bind, recv), send)
 }
 
 // openShellRoute is the shell route whole: refusal, resolution, bind.

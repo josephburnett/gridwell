@@ -30,9 +30,9 @@ type urlView struct {
 	// anchor and path are captured at go-live for the freeze.
 	anchor string
 	path   []string
-	// owns is urlview.Owns for the row: whether its address, title and
-	// trail are the node's to write.
-	owns bool
+	// owns is urlview.Owns for the row: whether its title and trail are the
+	// node's to write. page is a served page, which has no address to write.
+	owns, page bool
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
@@ -103,10 +103,10 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	if p == nil || !a.engage(a.urlSurface(), p, t.Id, t.Id) {
 		return
 	}
-	v := a.urlViewIn(p, t.Id, a.ownsURLRow(t))
+	v := a.urlViewIn(p, t.Id, a.ownsURLRow(t), rpc.PageContent(t))
 	v.gen = a.urlGens.Next()
 	a.local(p.ID).urlView = v
-	if v.owns {
+	if !v.page {
 		a.seedURLAddress(t)
 	}
 	addr := a.webAddress(t)
@@ -121,9 +121,9 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 }
 
 // urlViewIn is the handle for tileID live in pane p.
-func (a *App) urlViewIn(p *pane.Pane, tileID string, owns bool) *urlView {
+func (a *App) urlViewIn(p *pane.Pane, tileID string, owns, page bool) *urlView {
 	v := &urlView{tileID: tileID, paneID: p.ID, descentID: p.ContentID(), anchor: p.Anchor(),
-		path: slices.Clone(p.Path()), owns: owns}
+		path: slices.Clone(p.Path()), owns: owns, page: page}
 	return v
 }
 
@@ -146,14 +146,14 @@ func (a *App) seedURLAddress(t *gridwellv1.Tile) {
 // content when urlview.WriteAddress says so, for the content flush to post.
 func (a *App) noteLandedAddress(v *urlView, landed string) {
 	stored, ok := a.c.TileContent(v.tileID)
-	if !ok && v.owns {
+	if !ok && !v.page {
 		// The entry aged out under a newer row; that row is the basis.
 		if t := a.cachedTileByID(v.tileID); t != nil {
 			a.seedURLAddress(t)
 			stored = []byte(t.UrlString)
 		}
 	}
-	if !urlview.WriteAddress(v.owns, landed, string(stored)) {
+	if !urlview.WriteAddress(v.page, landed, string(stored)) {
 		return
 	}
 	a.putEditedContent(v.tileID, []byte(landed))
@@ -168,7 +168,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	}
 	old := from.urlView
 	from.urlView = nil
-	v := a.urlViewIn(to, old.tileID, old.owns)
+	v := a.urlViewIn(to, old.tileID, old.owns, old.page)
 	v.navDirty, v.lastURL, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.lastURL, old.lastTitle, old.gen, old.reloadOwed
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))

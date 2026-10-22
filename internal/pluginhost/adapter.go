@@ -394,7 +394,6 @@ func buildTiles(gridID, gridKey string, tiles []store.ExtTile, entries []*plugin
 			pt.TextPresentation = e.TextPresentation
 			pt.PreviewBlobId = previewKey(pt.PreviewBlobId, e.PreviewStamp)
 			pt.StatusDetail = e.StatusDetail
-			pt.UrlString = e.UrlString
 		}
 		out = append(out, pt)
 	}
@@ -793,7 +792,7 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 // SetTile terminates the framing, capture and rename arms at the store. A
 // rename is the user's name on the node's row (store.Namespace.Rename) and
 // the plugin is never told; a url writeback keeps only its screenshot (the
-// address is the plugin's).
+// title and trail are the plugin's).
 func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	if req.Rename != "" {
 		id, err := a.mint(ctx, req.TileId)
@@ -801,15 +800,12 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 			return nil, err
 		}
 		changed, err := a.mem.Rename(id, req.Version, req.Rename)
-		if err != nil {
-			return nil, gwerr.ToStatus(err)
-		}
-		return a.changedTile(ctx, id, changed)
+		return a.changedTile(ctx, id, changed, err)
 	}
 	if t := req.GetTile(); rpc.KindOf(t.GetKind()).Content == rpc.ContentAddress && req.ContentZoom == nil && req.UrlFrozen == nil {
 		if t.UrlString != "" || t.AltText != "" || t.UrlHistory != "" {
 			return nil, status.Error(codes.InvalidArgument,
-				"plugin: a url tile's address, title and history are its plugin's; the writeback carries the screenshot alone")
+				"plugin: a url tile's title and history are its plugin's and its address is content; the writeback carries the screenshot alone")
 		}
 		if len(req.Preview) == 0 {
 			return nil, status.Error(codes.InvalidArgument, "plugin: a url writeback with no screenshot writes nothing")
@@ -844,15 +840,16 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
 	}
-	if err != nil {
-		return nil, gwerr.ToStatus(err)
-	}
-	return a.changedTile(ctx, id, changed)
+	return a.changedTile(ctx, id, changed, err)
 }
 
 // changedTile reads back a write to one tile row that changes no listing and,
-// when it changed the row, announces it, so a client applies it in place.
-func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool) (*gridwellv1.TileResponse, error) {
+// when it changed the row, announces it, so a client applies it in place. A
+// write the store refused answers its error.
+func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool, err error) (*gridwellv1.TileResponse, error) {
+	if err != nil {
+		return nil, gwerr.ToStatus(err)
+	}
 	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
 	if err != nil {
 		return nil, err
@@ -899,7 +896,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err != nil {
 		return nil, err
 	}
-	resp, err := a.changedTile(ctx, id, changed)
+	resp, err := a.changedTile(ctx, id, changed, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1005,8 +1002,8 @@ func (a *Adapter) selection(gkey string, gid int64) ([]string, error) {
 	return out, nil
 }
 
-// ReadContent answers a url's content as its address under its entry's
-// stamp, as home does (store.ReadContent); only a body is the plugin's.
+// ReadContent answers a url's content as its address under its row's version,
+// as home does (store.ReadContent); only a body is the plugin's.
 func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
 	ref, err := a.resolveTile(req.TileId)
 	if err != nil {
@@ -1017,7 +1014,7 @@ func (a *Adapter) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRe
 		return err
 	}
 	if t := s.tileForKey(ref.key); t != nil && rpc.WebContent(t) {
-		return send(&gridwellv1.ContentChunk{Data: []byte(t.UrlString), MediaType: rpc.AddressMediaType, ContentStamp: t.ContentStamp})
+		return send(&gridwellv1.ContentChunk{Data: []byte(t.UrlString), MediaType: rpc.AddressMediaType, Version: t.Version, ContentStamp: t.ContentStamp})
 	}
 	cs, err := a.cp.ReadContent(ctx, &pluginv1.ReadContentRequest{Key: ref.key})
 	if err != nil {
@@ -1049,7 +1046,9 @@ func relay[P, W any](recv func() (P, error), wire func(P) W, send func(W) error)
 // it was read under; the version a plugin row lacks is not read. It commits
 // only at the caller's clean close, answers the row as GetTile serves it
 // carrying the written bytes' stamp, and tells it as the home tells its own
-// writes, a TileChanged, flagged because the row's version cannot say so.
+// writes, a TileChanged, flagged because the row's version cannot say so. A
+// url's address is the node's row's, kept and latched as a rename is
+// (store.Namespace.SetAddress), and the plugin is never told.
 func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
 	first, err := recv()
 	if err != nil {
@@ -1058,6 +1057,10 @@ func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.Wri
 	ref, err := a.resolveTile(first.TileId)
 	if err != nil {
 		return nil, err
+	}
+	// A row the listing cannot answer is the plugin's to refuse.
+	if t, err := a.tileByID(ctx, first.TileId); err == nil && rpc.WebContent(t) {
+		return a.writeAddress(ctx, first, recv)
 	}
 	wrote, err := ask(&a.lacks, "WriteContent", func() (*pluginv1.WriteContentResponse, error) {
 		// Cancelled unless the stream closes cleanly, so the plugin never
@@ -1100,6 +1103,19 @@ func (a *Adapter) WriteContent(ctx context.Context, recv func() (*gridwellv1.Wri
 		TileChanged: &gridwellv1.TileChanged{Tile: proto.CloneOf(t), ContentChanged: true},
 	}})
 	return &gridwellv1.TileResponse{Tile: t}, nil
+}
+
+func (a *Adapter) writeAddress(ctx context.Context, first *gridwellv1.WriteContentRequest, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
+	data, err := namespace.Assembled(first, recv)
+	if err != nil {
+		return nil, err
+	}
+	id, err := a.mint(ctx, first.TileId)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := a.mem.SetAddress(id, first.Version, string(data))
+	return a.changedTile(ctx, id, changed, err)
 }
 
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {

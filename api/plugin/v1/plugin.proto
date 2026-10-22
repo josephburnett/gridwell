@@ -129,7 +129,8 @@ message Entry {
   // Any other value is refused by the node.
   string text_presentation = 6;
   string status_detail     = 7;
-  // url entries: the address itself.
+  // url entries: the address itself, until the user navigates elsewhere in
+  // the tile: the node keeps where they landed, and you are not told.
   string url_string = 8;
   // placement_hint, when set, is where the entry prefers to land first, such
   // as a calendar putting an event at its date. A hint that meets an occupied

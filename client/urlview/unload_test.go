@@ -32,34 +32,34 @@ func TestDecideUnloadURLStateTable(t *testing.T) {
 }
 
 // The address is content and the verdict is the one place that says when a
-// landed address becomes a write, wherever the row sits: never for a row the
-// node does not own, never for what the store refuses, and never for
-// the address already stored.
+// landed address becomes a write, wherever the row sits, a plugin's url
+// included: never for a served page, never for what the store refuses, and
+// never for the address already stored.
 func TestWriteAddress(t *testing.T) {
 	const a, b = "https://a.test/", "https://b.test/p"
 	cases := []struct {
 		name           string
-		owns           bool
+		page           bool
 		landed, stored string
 		want           bool
 	}{
-		{"an owned row writes where it landed", true, b, a, true},
-		{"landing where the row points writes nothing", true, a, a, false},
-		{"an unowned row writes nothing", false, b, a, false},
-		{"a non-http landing writes nothing", true, "about:blank", a, false},
-		{"an error page writes nothing", true, "chrome-error://chromewebdata/", a, false},
-		{"no landing writes nothing", true, "", a, false},
-		{"an unconfigured row takes its first address", true, b, "", true},
+		{"a url writes where it landed", false, b, a, true},
+		{"landing where the row points writes nothing", false, a, a, false},
+		{"a served page writes nothing", true, b, a, false},
+		{"a non-http landing writes nothing", false, "about:blank", a, false},
+		{"an error page writes nothing", false, "chrome-error://chromewebdata/", a, false},
+		{"no landing writes nothing", false, "", a, false},
+		{"an unconfigured row takes its first address", false, b, "", true},
 	}
 	for _, c := range cases {
-		if got := WriteAddress(c.owns, c.landed, c.stored); got != c.want {
+		if got := WriteAddress(c.page, c.landed, c.stored); got != c.want {
 			t.Errorf("%s: = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
 
-// A served page's address is its plugin's, and so is any row in an
-// unwritable grid; a grid not yet read is attempted.
+// A served page's title and trail are its plugin's, and so are any row's in
+// an unwritable grid; a grid not yet read is attempted.
 func TestOwns(t *testing.T) {
 	cases := []struct {
 		name                  string

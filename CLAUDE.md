@@ -465,7 +465,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   row as home keeps one (`alt_text`, `alt_user` latched), claiming and
   bumping the version, and no later label replaces; `plugin.v1` has no name
   write and the plugin is never told (`pluginhost.SetTile`). A text tile's
-  name stays its source's, since its presentation reads it.
+  name stays its source's, since its presentation reads it. Its url's
+  address follows the user, as home's does (2026-10-21): where a navigation
+  lands is written to the node's row the same way, latched (`url_user`), and
+  the plugin is never told (`store.Namespace.SetAddress`); a served page has
+  no address of its own and writes nothing.
   A delete is handed to the plugin, which says what
   deleting means (fs removes the file, gitlab marks the todo done, a
   read-only projection refuses), and the row retires only when the listing

@@ -26,33 +26,33 @@ func DeadLink(namespace, format string, args ...any) error {
 	return st.Err()
 }
 
-// IsDeadLink reports that err is DeadLink's answer, read off a gRPC status or a
-// Connect error alike, so the node and the browser share one reading.
+// IsDeadLink reports that err is DeadLink's answer.
 func IsDeadLink(err error) bool {
-	if err == nil {
-		return false
-	}
+	_, ok := detail[*pb.DeadLink](err)
+	return ok
+}
+
+// detail is err's detail of type D, read off a gRPC status or a Connect error
+// alike, so the node and the browser share one reading.
+func detail[D any](err error) (D, bool) {
+	var found []any
 	var ce *connect.Error
 	if errors.As(err, &ce) {
 		for _, d := range ce.Details() {
 			if v, derr := d.Value(); derr == nil {
-				if _, ok := v.(*pb.DeadLink); ok {
-					return true
-				}
+				found = append(found, v)
 			}
 		}
-		return false
+	} else if st, ok := status.FromError(err); ok && err != nil {
+		found = st.Details()
 	}
-	st, ok := status.FromError(err)
-	if !ok || st.Code() != codes.NotFound {
-		return false
-	}
-	for _, d := range st.Details() {
-		if _, ok := d.(*pb.DeadLink); ok {
-			return true
+	for _, d := range found {
+		if v, ok := d.(D); ok {
+			return v, true
 		}
 	}
-	return false
+	var none D
+	return none, false
 }
 
 // ConnectDetails carries a status's verdict details (DeadLink,

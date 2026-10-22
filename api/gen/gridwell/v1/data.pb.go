@@ -136,7 +136,7 @@ type Grid struct {
 	SourceLabel string `protobuf:"bytes,15,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
 	// accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
 	// offers its primitives and a swatch drops into it, and its url rows'
-	// addresses are the node's to write. The owning namespace stamps it on
+	// titles and trails are the node's to write. The owning namespace stamps it on
 	// every grid it serves, true for the home and false for a plugin, which
 	// creates nothing; transit carries it verbatim. It is absent only from a
 	// node built before it split from writable, whose one bit said both, and

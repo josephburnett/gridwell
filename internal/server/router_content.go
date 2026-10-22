@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
 // The router's content streams and the placement verb. Reads route through
@@ -57,14 +58,7 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	}
 	bound := proto.CloneOf(first)
 	bound.TileId = local
-	sentBind := false
-	resp, err := c.WriteContent(ctx, func() (*pb.WriteContentRequest, error) {
-		if !sentBind {
-			sentBind = true
-			return bound, nil
-		}
-		return recv()
-	})
+	resp, err := c.WriteContent(ctx, namespace.Rebound(bound, recv))
 	return rt.tileResp(uuid, transit, resp, err)
 }
 
