@@ -1,0 +1,24 @@
+# Every clock the production tree starts, as "path:anchor | class | reason".
+# The node learns of a change by being told, so a clock runs only as one of
+# four things: a debounce coalesces a burst, a backoff paces a retry, a bound
+# caps a wait something else ends, and a poll asks a source that cannot tell.
+# The anchor is a line number, the enclosing Go function, or a word on the
+# timer's line or the line above it. test/boundary/timers_test.go enforces it.
+internal/plugin/supervisor.go:sleep | poll | watchInterval, the exit watch: go-plugin has no exit signal; the respawn backoff waits here too
+internal/namespace/refollow.go:wait | backoff | Refollow's doubling wait before re-dialing a stream
+internal/connection/connection.go:bootDialWait | bound | how long boot waits on a connection's first dial
+internal/sourcecache/prefetch.go:prefetchPause | bound | the gap between a prefetch walk's RPCs, so it never crowds out the user's reads
+internal/local/shelldriver/shelldriver_unix.go:sigtermGrace | bound | how long a shell gets after SIGTERM before SIGKILL
+client/retry/retry.go:Wait | poll | Interval.Wait, the outbox backstop: re-posts what a reconnect did not
+client/retry/events.go:sleep | backoff | the event stream's pause before re-subscribing
+client/wasm/main.go:backoff | backoff | the boot handshake's doubling retry
+client/wasm/main.go:setTimeoutMs | debounce | the shim's debounce.Schedule, which every client debounce arms
+client/wasm/build.go:handOverBeforeReload | poll | the trace hand-over before a reload, within handOverBound
+client/wasm/touch.go:HoldMs | bound | the long-press hold: a touch held this long becomes the right button
+apps/desktop/src/main/sidecar.ts:arm | debounce | the sidecar's silence deadline, re-armed on every line it prints
+apps/desktop/src/main/webviews.ts:focusSettle | debounce | the live view's focus settle
+apps/desktop/src/main/viewtrace.ts:WINDOW_SETTLE_MS | debounce | the window-state record after a resize or move settles
+apps/desktop/src/main/trace.ts:TRACE_FLUSH_MS | debounce | the trace flush's clock half, so a lone record posts within the window
+apps/desktop/src/main/quit.ts:setTimer | bound | QUIT_FLUSH_WATCHDOG_MS: quit goes ahead if the windows never close
+apps/desktop/src/main/capture.ts:finish | bound | settleWithin, the capture watchdog
+apps/desktop/src/main/capture.ts:setTimer | poll | MirrorPump: a live view does not say when its pixels change

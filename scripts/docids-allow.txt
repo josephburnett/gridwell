@@ -1,0 +1,24 @@
+# doc-identifiers exemptions (test/boundary/ratchet.txt): "<doc> <token>", a
+# backticked token shaped like pkg.Name or Name() that is not a symbol of this
+# tree. Every entry says why.
+# Proto package names, not Go packages:
+ARCHITECTURE.md plugin.v1
+ARCHITECTURE.md gridwell.v1
+CLAUDE.md plugin.v1
+docs/ids.md plugin.v1
+docs/plugin-authoring.md plugin.v1
+# A server.yaml key:
+ARCHITECTURE.md web.bind
+docs/mcp.md web.bind
+# A trace record's kv field:
+ARCHITECTURE.md kv.schema
+# Another program's API (the DOM, Playwright, Node, Electron, gRPC's
+# ServerStream on a stream value):
+ARCHITECTURE.md window.close()
+docs/flake-ledger.md expect.poll
+docs/flake-ledger.md os.tmpdir()
+docs/flake-ledger.md forcefullyCrashRenderer()
+docs/plugin-authoring.md stream.SendHeader
+# The plugins repository's memo package, which this tree does not hold:
+docs/plugin-standard.md memo.Changes
+docs/plugin-standard.md memo.Life
