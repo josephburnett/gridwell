@@ -405,19 +405,19 @@ var parityTable = []parityCell{
 	{kDoorPlugin, opDead, onPlugin, na, naPluginDoor, nil},
 	{kDoorPlugin, opDead, onFar, same, "", checkDead},
 	{kDoorFar, opCreate, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opCreate, onFar, same, "", nil},
+	{kDoorFar, opCreate, onFar, same, "", checkCreate},
 	{kDoorFar, opMove, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opMove, onFar, same, "", nil},
+	{kDoorFar, opMove, onFar, same, "", checkMove},
 	{kDoorFar, opCopy, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opCopy, onFar, same, "", nil},
+	{kDoorFar, opCopy, onFar, same, "", checkCopy},
 	{kDoorFar, opLink, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opLink, onFar, same, "", nil},
+	{kDoorFar, opLink, onFar, same, "", checkLink},
 	{kDoorFar, opDelete, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opDelete, onFar, same, "", nil},
+	{kDoorFar, opDelete, onFar, same, "", checkDelete},
 	{kDoorFar, opRename, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opRename, onFar, same, "", nil},
+	{kDoorFar, opRename, onFar, same, "", checkRename},
 	{kDoorFar, opDescend, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opDescend, onFar, same, "", nil},
+	{kDoorFar, opDescend, onFar, same, "", checkDescend},
 	{kDoorFar, opFreeze, onPlugin, na, naLive, nil},
 	{kDoorFar, opFreeze, onFar, na, naLive, nil},
 	{kDoorFar, opScreenshot, onPlugin, na, naLive, nil},
@@ -427,7 +427,7 @@ var parityTable = []parityCell{
 	{kDoorFar, opScroll, onPlugin, na, naScroll, nil},
 	{kDoorFar, opScroll, onFar, na, naScroll, nil},
 	{kDoorFar, opFraming, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opFraming, onFar, same, "", nil},
+	{kDoorFar, opFraming, onFar, same, "", checkFraming},
 	{kDoorFar, opRead, onPlugin, na, naContent, nil},
 	{kDoorFar, opRead, onFar, na, naContent, nil},
 	{kDoorFar, opWrite, onPlugin, na, naContent, nil},
@@ -435,11 +435,11 @@ var parityTable = []parityCell{
 	{kDoorFar, opServe, onPlugin, na, naServe, nil},
 	{kDoorFar, opServe, onFar, na, naServe, nil},
 	{kDoorFar, opFind, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opFind, onFar, same, "", nil},
+	{kDoorFar, opFind, onFar, same, "", checkFind},
 	{kDoorFar, opUpdate, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opUpdate, onFar, same, "", nil},
+	{kDoorFar, opUpdate, onFar, same, "", checkUpdate},
 	{kDoorFar, opDead, onPlugin, na, naPluginGrids, nil},
-	{kDoorFar, opDead, onFar, same, "", nil},
+	{kDoorFar, opDead, onFar, same, "", checkDead},
 }
 
 // parityCount is the ledger's count: every hole, and every same cell still
@@ -603,52 +603,101 @@ const (
 	parityFarPluginUUID = "pparfar"
 )
 
-// parityFix is two nodes, each with its home and a paritySource, the local
-// one reaching the far one through a connection, and a client subscribed at
-// the local web API showing every grid the cells use.
+// parityFix is three nodes in a chain, the local one reaching the far one
+// through a connection and the far one reaching a third the same way, the
+// first two each with its home and a paritySource, and a client subscribed at
+// the local web API showing every grid the cells use. The third node is what
+// a far home's door opens when the far node holds it.
 type parityFix struct {
 	t       *testing.T
 	ctx     context.Context
 	cl      *rpc.Client
 	raw     gridwellv1connect.GridwellClient
 	h       *transportHarness
+	third   *farNode
 	src     map[string]*paritySource // by the qualified namespace of its grids
 	root    map[parityOwner]string   // the grid each owner's tiles sit on
 	away    map[parityOwner]string   // another grid of the same owner
-	plugins []*gridwellv1.PluginInfo
-	token   string
-	events  chan *gridwellv1.Event
-	breaks  map[string]func() // per tile, what breaks the path to it
-	marks   int
+	farHome map[parityOwner]string   // the far home a door on the owner's grid opens
+	// undeclare takes out the connections of the node holding the owner's
+	// tiles, answering what declares them again.
+	undeclare map[parityOwner]func() func()
+	nodes     map[string]parityNode // each node by the prefix it is reached through, "" the local one
+	plugins   []*gridwellv1.PluginInfo
+	token     string
+	events    chan *gridwellv1.Event
+	breaks    map[string]func() // per tile, what breaks the path to it
+	mends     map[string]func() // per tile, what mends a break the next run needs whole
+	marks     int
 }
+
+// parityNode is one node of the chain as its own user reaches it.
+type parityNode struct {
+	cl *rpc.Client
+}
+
+// The connection the local node reaches the far one by, and the far one
+// reaches the third by.
+const (
+	parityConn      = localNodeID + "/geneva/"
+	parityThirdConn = parityConn + "rnode1/zurich/"
+)
 
 func newParityFix(t *testing.T) *parityFix {
 	local, far := newParitySource(), newParitySource()
+	third := newFarNode(t, "cnode1")
+	undeclare := map[parityOwner]func() func(){}
+	at := func(o parityOwner) func(*plugin.Registry, *store.Store) {
+		return func(reg *plugin.Registry, st *store.Store) {
+			undeclare[o] = func() func() { return undeclareConnections(t, reg, st) }
+		}
+	}
 	h := buildTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, nil,
-		func(reg *plugin.Registry, st *store.Store) { registerParitySource(t, reg, st, parityPluginUUID, local) },
+		func(reg *plugin.Registry, st *store.Store) {
+			registerParitySource(t, reg, st, parityPluginUUID, local)
+			at(onHome)(reg, st)
+		},
 		func(reg *plugin.Registry, st *store.Store) {
 			registerParitySource(t, reg, st, parityFarPluginUUID, far)
-		})
+		},
+		connectTo(t, "zurich", third, at(onFar)))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
-	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h,
+	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h, third: third, undeclare: undeclare,
 		raw:    gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON()),
-		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){},
-		root: map[parityOwner]string{}, away: map[parityOwner]string{}}
+		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){}, mends: map[string]func(){},
+		root: map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
+		nodes: map[string]parityNode{"": {h.localCl}, parityConn: {h.remoteCl}, parityThirdConn: {third.cl}}}
 	lp, err := f.cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn := localNodeID + "/geneva/"
-	f.src = map[string]*paritySource{parityPluginUUID: local, conn + parityFarPluginUUID: far}
+	f.src = map[string]*paritySource{parityPluginUUID: local, parityConn + parityFarPluginUUID: far}
 	f.plugins, f.token = lp.Plugins, lp.ContentToken
 	f.root[onHome], f.root[onFar] = lp.HomeGridId, connectionRows(lp)[0].RootGridId
 	f.root[onPlugin] = rpc.QualifyID(parityPluginUUID, rpc.EntryGridID("all"))
 	f.away[onPlugin] = rpc.QualifyID(parityPluginUUID, rpc.EntryGridID("other"))
+	// The far node's + menu, read through the connection, lands its own
+	// connection on the third node's home.
+	farMenu, err := f.cl.HandshakeNS(ctx, strings.TrimSuffix(parityConn, "/"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows := connectionRows(farMenu); len(rows) != 1 || rows[0].RootGridId == "" {
+		t.Fatalf("the far node's connection rows = %+v, want zurich landed", rows)
+	} else {
+		f.farHome[onHome], f.farHome[onFar] = f.root[onFar], rows[0].RootGridId
+	}
 	for _, o := range []parityOwner{onHome, onFar} {
 		f.away[o] = f.create(o, &gridwellv1.Tile{Kind: rpc.KindDoor, X: 9, Y: 9, W: 1, H: 1, AltText: "Away"}, nil).ChildGridId
 	}
-	shown := []string{}
+	// The third home holds what the far one does, so a door onto either
+	// opens the same listing.
+	if _, err := third.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: third.root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 9, Y: 9, W: 1, H: 1, AltText: "Away"}}); err != nil {
+		t.Fatal(err)
+	}
+	shown := []string{f.farHome[onFar]}
 	for _, o := range []parityOwner{onHome, onPlugin, onFar} {
 		shown = append(shown, f.root[o], f.away[o])
 	}
@@ -755,16 +804,16 @@ func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 	case kDoorPlugin:
 		ns := parityPluginUUID
 		if o == onFar {
-			ns = localNodeID + "/geneva/" + parityFarPluginUUID
+			ns = parityConn + parityFarPluginUUID
 		}
 		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: rpc.QualifyID(ns, rpc.EntryGridID("inner"))}), nil)
 		f.breaks[made.Id] = func() { f.src[ns].dropGrid("inner") }
 		return made
 	case kDoorFar:
-		if o != onHome {
-			f.t.Fatalf("no fixture holds a far home's door on %s", o)
-		}
-		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: f.root[onFar]}), nil)
+		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: f.farHome[o]}), nil)
+		// Undeclaring the holding node's connection breaks the first hop
+		// past it; the next run needs that hop whole.
+		f.breaks[made.Id] = func() { f.mends[made.Id] = f.undeclare[o]() }
 		return made
 	}
 	f.breaks[made.Id] = f.destroyer(made.Id)
@@ -1368,18 +1417,14 @@ func checkCopy(f *parityFix, o parityOwner, k parityKind) observable {
 // a tile more on the grid it opens.
 func (f *parityFix) change(t *gridwellv1.Tile) {
 	f.t.Helper()
-	conn := localNodeID + "/geneva/"
 	if rpc.IsDoorKind(t.Kind) {
 		if src := f.src[rpc.NamespaceOf(t.ChildGridId)]; src != nil {
 			gkey, _, _, _ := rpc.SplitEntryID(rpc.LocalOf(t.ChildGridId))
 			src.add(gkey, &pluginv1.Entry{Key: "more", Kind: rpc.KindText, Label: "More", PlacementHint: &pluginv1.PlacementHint{X: 3, Y: 3, W: 1, H: 1}})
 			return
 		}
-		cl, grid := f.cl, t.ChildGridId
-		if bare, far := strings.CutPrefix(grid, conn); far {
-			cl, grid = f.h.remoteCl, bare
-		}
-		if _, err := cl.CreateWithContent(f.ctx, &gridwellv1.CreateTileRequest{GridId: grid,
+		n, grid := f.holder(t.ChildGridId)
+		if _, err := n.cl.CreateWithContent(f.ctx, &gridwellv1.CreateTileRequest{GridId: grid,
 			Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 3, Y: 3, W: 1, H: 1}}, []byte("More")); err != nil {
 			f.t.Fatal(err)
 		}
@@ -1390,17 +1435,25 @@ func (f *parityFix) change(t *gridwellv1.Tile) {
 		src.edit(key, parityEdits[parityKind(t.Kind)])
 		return
 	}
-	cl, id := f.cl, t.Id
-	if bare, far := strings.CutPrefix(id, conn); far {
-		cl, id = f.h.remoteCl, bare
-	}
-	_, _, basis, err := cl.ReadContent(f.ctx, id)
+	n, id := f.holder(t.Id)
+	_, _, basis, err := n.cl.ReadContent(f.ctx, id)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	if _, err := cl.WriteContent(f.ctx, id, basis, []byte(parityEdits[parityKind(t.Kind)])); err != nil {
+	if _, err := n.cl.WriteContent(f.ctx, id, basis, []byte(parityEdits[parityKind(t.Kind)])); err != nil {
 		f.t.Fatal(err)
 	}
+}
+
+// holder is the node holding id, and id in its frame.
+func (f *parityFix) holder(id string) (parityNode, string) {
+	n, at := f.nodes[""], id
+	for prefix, w := range f.nodes {
+		if bare, ok := strings.CutPrefix(id, prefix); ok && len(bare) < len(at) {
+			n, at = w, bare
+		}
+	}
+	return n, at
 }
 
 // checkUpdate opens a view of the tile, has the source change it, and sees
@@ -1453,6 +1506,9 @@ func checkDead(f *parityFix, o parityOwner, k parityKind) observable {
 	}
 	unbroken, _ := f.content(link)
 	f.breaks[t.Id]()
+	if mend := f.mends[t.Id]; mend != nil {
+		defer mend()
+	}
 	// The break reaches a plugin's listing by its Watch, so the read is
 	// asked until it answers something else.
 	deadline := time.Now().Add(10 * time.Second)

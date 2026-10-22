@@ -120,32 +120,10 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 	t.Helper()
 	ctx := context.Background()
 
-	h := &transportHarness{dialErr: dialErr, remoteShell: shellsvctest.New(), cut: make(chan struct{})}
-
-	remoteStore, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = remoteStore.Close() })
-	remoteClient := local.New(remoteStore, shellsvc.NewManager(h.remoteShell))
-	remoteReg := plugin.NewRegistry()
-	remoteReg.Register("rnode1", "home", remoteClient, nil)
-	remoteReg.SetLabel("rnode1", "home")
-	for _, r := range remote {
-		r(remoteReg, remoteStore)
-	}
-	remoteSrv := servertest.New(t, remoteReg, server.Config{ID: "rnode1"})
-	remoteHTTP := httptest.NewUnstartedServer(nil)
-	remoteHTTP.Config = server.ConnectionAPIServer(remoteSrv.ConnectionHandler())
-	remoteHTTP.Start()
-	t.Cleanup(remoteHTTP.Close)
-	h.farAPI = remoteHTTP
-	grpcConn, err := dial.ClientConn(strings.TrimPrefix(remoteHTTP.URL, "http://"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = grpcConn.Close() })
-	remoteExport := gridwellv1.NewGridwellClient(grpcConn)
+	far := newFarNode(t, "rnode1", remote...)
+	h := &transportHarness{dialErr: dialErr, remoteShell: far.shell, cut: make(chan struct{}),
+		farAPI: far.api, remoteCl: far.cl, rootBare: rpc.LocalOf(far.root)}
+	remoteExport := far.export
 
 	// The local node's own store owns the connections table.
 	connStore, err := store.Open(t.TempDir() + "/gridwell.db")
@@ -191,13 +169,94 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 	h.localHTTP = localHTTP
 	h.localURL = localHTTP.URL
-	remoteWeb := servertest.Serve(t, remoteSrv)
-	h.remoteCl = rpc.NewClient(remoteWeb.Client(), remoteWeb.URL, connect.WithProtoJSON())
-	h.rootBare, err = remoteStore.RootGridID(ctx)
+	return h
+}
+
+// farNode is a node as a connection dials it: its home over an in-memory
+// store on the fake PTY backend, whatever more registers beside it, and its
+// connection and web APIs served as the node serves them.
+type farNode struct {
+	shell  *shellsvctest.FakeStreamer
+	api    *httptest.Server // the connection API
+	export gridwellv1.GridwellClient
+	web    *httptest.Server
+	cl     *rpc.Client // its own web API
+	root   string      // its home's root grid, qualified in its own frame
+}
+
+func newFarNode(t *testing.T, id string, more ...func(*plugin.Registry, *store.Store)) *farNode {
+	t.Helper()
+	n := &farNode{shell: shellsvctest.New()}
+	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return h
+	t.Cleanup(func() { _ = st.Close() })
+	reg := plugin.NewRegistry()
+	reg.Register(id, "home", local.New(st, shellsvc.NewManager(n.shell)), nil)
+	reg.SetLabel(id, "home")
+	for _, r := range more {
+		r(reg, st)
+	}
+	srv := servertest.New(t, reg, server.Config{ID: id})
+	n.api = httptest.NewUnstartedServer(nil)
+	n.api.Config = server.ConnectionAPIServer(srv.ConnectionHandler())
+	n.api.Start()
+	t.Cleanup(n.api.Close)
+	conn, err := dial.ClientConn(strings.TrimPrefix(n.api.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	n.export = gridwellv1.NewGridwellClient(conn)
+	n.web = servertest.Serve(t, srv)
+	n.cl = rpc.NewClient(n.web.Client(), n.web.URL, connect.WithProtoJSON())
+	root, err := st.RootGridID(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	n.root = rpc.QualifyID(id, root)
+	return n
+}
+
+// connectTo registers on a node one connection, name, landing on far in
+// process as buildTransportHarness connects the local node, so a test can
+// stand up a chain of three nodes. at, when set, is handed the node's
+// registry and store once the connection is declared.
+func connectTo(t *testing.T, name string, far *farNode, at func(*plugin.Registry, *store.Store)) func(*plugin.Registry, *store.Store) {
+	return func(reg *plugin.Registry, st *store.Store) {
+		t.Helper()
+		transport, err := connection.New(st, func(dial.Config) (namespace.Namespace, func(), error) {
+			return namespace.FromClient(far.export), func() {}, nil
+		}, "", []config.ConnectionConfig{{Name: name, Addr: "/s"}}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = transport.Close() })
+		transport.ConnectAll(context.Background())
+		reg.SetTransport(transport, nil)
+		if at != nil {
+			at(reg, st)
+		}
+	}
+}
+
+// undeclareConnections takes every connection out of the node reg serves, as a restart
+// whose server.yaml declares none, so an id through one reads dead. The func
+// it answers declares them again; a stream already following them goes on.
+func undeclareConnections(t *testing.T, reg *plugin.Registry, st *store.Store) func() {
+	t.Helper()
+	declared, ok := reg.Transport()
+	if !ok {
+		t.Fatal("the node declares no connections to take out")
+	}
+	none, err := connection.New(st, nil, "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = none.Close() })
+	reg.SetTransport(none, nil)
+	return func() { reg.SetTransport(declared, nil) }
 }
 
 func TestConnectionThroughTheChain(t *testing.T) {
