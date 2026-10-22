@@ -6,6 +6,7 @@ package node
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/josephburnett/gridwell/internal/local"
@@ -16,19 +17,19 @@ import (
 
 // newHome builds the home over st. Shell tiles are tmuxes on a private
 // per-node socket (gridwell-<id>), so they survive restarts. A host without
-// tmux comes up with no live shells, never as a dead node.
+// tmux comes up with no live shells, never as a dead node, and a shell opened
+// there is refused with why.
 func newHome(st *store.Store, id, shell string) *local.Plugin {
 	socket := "gridwell"
 	if id != "" {
 		socket = "gridwell-" + id
 	}
-	var mgr *shellsvc.Manager
+	var p *local.Plugin
 	if ctrl, _, terr := tmux.New(socket, "", shell); terr != nil {
-		log.Printf("gridwell: home: tmux init: %v (live shells disabled on this host)", terr)
+		p = local.WithoutShells(st, fmt.Errorf("tmux init: %w", terr))
 	} else {
-		mgr = shellsvc.NewManager(shellsvc.NewLive(ctrl))
+		p = local.New(st, shellsvc.NewManager(shellsvc.NewLive(ctrl)))
 	}
-	p := local.New(st, mgr)
 	// Scratch tiles are deleted on ascent; this sweep is the crash net. Before
 	// the orphan sweep, so a swept shell's tmux reads as orphaned there.
 	if swept, err := p.CleanupScratch(context.Background()); err != nil {

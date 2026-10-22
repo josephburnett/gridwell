@@ -3,6 +3,7 @@
 package local
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 type Plugin struct {
 	st    *store.Store
 	shell *shellsvc.Manager // nil means this instance hosts no live shells
+	off   string            // why shell is nil, when the host could not start one
 }
 
 var _ namespace.Namespace = (*Plugin)(nil)
@@ -33,6 +35,11 @@ var _ namespace.Namespace = (*Plugin)(nil)
 // unimplemented and DeleteTile skips reaping.
 func New(st *store.Store, shell *shellsvc.Manager) *Plugin {
 	return &Plugin{st: st, shell: shell}
+}
+
+// WithoutShells is a home on a host whose tmux would not start, for why.
+func WithoutShells(st *store.Store, why error) *Plugin {
+	return &Plugin{st: st, off: "live shells are off on this host: " + why.Error()}
 }
 
 // CleanupOrphanedShells kills tmuxes no shell row names any more: the
@@ -211,22 +218,14 @@ func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReq
 	if err != nil {
 		return gwerr.ToStatus(err)
 	}
-	first := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
-	if len(data) <= rpc.ContentChunkBytes {
-		first.Data = data
-		return send(first)
-	}
-	first.Data = data[:rpc.ContentChunkBytes]
-	if err := send(first); err != nil {
-		return err
-	}
-	for off := rpc.ContentChunkBytes; off < len(data); off += rpc.ContentChunkBytes {
-		end := min(off+rpc.ContentChunkBytes, len(data))
-		if err := send(&gridwellv1.ContentChunk{Data: data[off:end]}); err != nil {
+	chunk := &gridwellv1.ContentChunk{MediaType: mediaType, Version: version}
+	for off := 0; ; off += rpc.ContentChunkBytes {
+		chunk.Data = data[off:min(off+rpc.ContentChunkBytes, len(data))]
+		if err := send(chunk); err != nil || off+rpc.ContentChunkBytes >= len(data) {
 			return err
 		}
+		chunk = &gridwellv1.ContentChunk{}
 	}
-	return nil
 }
 
 func (p *Plugin) ServeContent(context.Context, *gridwellv1.ServeContentRequest, func(*gridwellv1.ServeContentChunk) error) error {
@@ -421,7 +420,7 @@ func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
 // tile id, then keystrokes and resizes flow up and output flows down.
 func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) error {
 	if p.shell == nil {
-		return status.Error(codes.Unimplemented, "this namespace hosts no live shells")
+		return status.Error(codes.Unimplemented, cmp.Or(p.off, "this namespace hosts no live shells"))
 	}
 	first, err := recv()
 	if err != nil {

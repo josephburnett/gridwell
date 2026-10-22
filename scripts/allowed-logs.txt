@@ -12,5 +12,4 @@ internal/node/node.go:closeImpl | the exiting process | a close failure at shutd
 internal/server/router.go:workspaceEphemeralCandidates | the boot sweep | an unreadable layout blob reaps nothing at the delete; the boot sweep reaps the ephemerals once no unreadable blob stands
 internal/server/router.go:reapWorkspaceEphemerals | the boot sweep | the reap is best-effort and the user's delete has landed; a scratch row it left is swept at the next boot
 internal/server/shell_api.go:shellReadFrame | the client | the client ended its own stream, so there is no one else to tell
-internal/node/nativelocal.go:tmux | hole | tmux will not start, so the host has no live shells; opening a shell is refused as hosting none, and why (the tmux error) is only in the log
 internal/local/local.go:captureShellTitle | hole | a detach whose title capture fails leaves the tile under its old name, and only the log says so
