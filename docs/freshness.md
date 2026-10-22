@@ -121,8 +121,9 @@ caps.
 
 **5. The server fan-in** — `internal/server/router.go`. `Subscribe` starts
 one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
-retries `Info` with backoff and hands off to `fanInEvents`, which re-dials
-the namespace's stream forever and reports the down/up transitions as
+runs a `namespace.Refollow` whose every attempt asks `Info` and then follows
+the namespace's stream; `Refollow` re-dials it with backoff until the
+subscription ends and reports the down/up transitions as
 `EventPluginHealth` through `reportHealth` — down on the first failure, up
 on recovery, never once per retry. Every namespace sends its header once it
 is attached (`namespace.Namespace.Subscribe`'s `send(nil)`), and a stream is
@@ -291,8 +292,8 @@ correcting with no user gesture.
    the same event, so the next read passes through and the verdict surfaces
    rather than a ghost answering forever.
 8. `Layer.Subscribe` is serving that channel alongside the teed stream of
-   the connection behind it. Its subscriber is `router.go:fanInEvents`, started by `watchPlugin`
-   for the transport with `transit=true`.
+   the connection behind it. Its subscriber is the `namespace.Follow` inside the `watchPlugin`
+   that `router.Subscribe` starts for the transport with `transit=true`.
 9. `qualifyEvent` prepends the node id. The connection segment is already on
    the id, because the cache's own ids are `<conn>/<remote-id>`.
 10. `router.Subscribe`'s loop sends it. `App.startSSE` runs `events.Route`'s
@@ -483,7 +484,7 @@ The version interlock, the outbox park, and the drain.
    A placement claims where the press saw the tile (`rpc.PlacementOf` of
    the drag's snapshot), not a version, so the interlock in step 5 cannot
    order two placements; a stale one is refused, snaps back and re-reads the
-   grid. `cache.Place` holds the placement against every older row
+   grid. `cache.Cache.Move` holds the placement against every older row
    instead, until the stream carries it (the stream is ordered, so nothing
    older follows) or, once the write has landed, a grid read answers.
 9. The drain. `retry.Events` sets `gap` on any stream error and on a clean
@@ -504,7 +505,7 @@ The version interlock, the outbox park, and the drain.
 
 **An event gap loses events.** `Subscribe` has no cursor. A break on either
 side — the client's stream (`retry.Events`' `gap`) or the server's re-dial
-(`fanInEvents`) — loses whatever happened in the window, and nothing replays
+(`namespace.Refollow`) — loses whatever happened in the window, and nothing replays
 it. The cure is blunt resync: `retryKick(true, cache.EverySource)` refetches
 every known grid. Blunt on purpose, and only here — the gap names no source,
 so there is nothing to scope it to. A health flap DOES name one, and resyncs

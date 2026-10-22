@@ -489,6 +489,14 @@ var (
 	}
 )
 
+// TestEveryDocIdentifierResolves: a doc that names a symbol names one the
+// tree declares, so a rename cannot leave a doc pointing at nothing.
+func TestEveryDocIdentifierResolves(t *testing.T) {
+	for _, at := range unresolvedDocIdentifiers(t, repoRoot(t)) {
+		t.Errorf("%s names no symbol: rename it to the one that exists, or list it in scripts/docids-allow.txt with why it is not one", at)
+	}
+}
+
 // unresolvedDocIdentifiers are the backticked doc symbols nothing declares,
 // once per doc, less the tokens scripts/docids-allow.txt names as not being
 // symbols. A pkg that names a package, this tree's or one it imports, must

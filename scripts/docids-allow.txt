@@ -1,4 +1,4 @@
-# doc-identifiers exemptions (test/boundary/ratchet.txt): "<doc> <token>", a
+# TestEveryDocIdentifierResolves exemptions (test/boundary): "<doc> <token>", a
 # backticked token shaped like pkg.Name or Name() that is not a symbol of this
 # tree. Every entry says why.
 # Proto package names, not Go packages:

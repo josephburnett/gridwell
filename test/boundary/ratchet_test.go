@@ -16,7 +16,6 @@ var ratchetCounts = map[string]func(t *testing.T, root string) int{
 	"kind-switch":          length(kindSwitches),
 	"unimplemented-embeds": length(unimplementedEmbeds),
 	"copied-constants":     length(copiedConstants),
-	"doc-identifiers":      length(unresolvedDocIdentifiers),
 	"packages":             length(productionPackages),
 	"lines":                productionLines,
 }
