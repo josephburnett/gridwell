@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
@@ -31,7 +32,7 @@ import (
 //   - a solid door becomes a new door plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
 //   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
-//   - a plugin's door copies as a link to its grid (rpc.CopiesAsLink);
+//   - a plugin's door or served page copies as a link to it (rpc.CopiesAsLink);
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is cross-plugin link semantics in bytes;
@@ -91,11 +92,9 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
 
 	switch {
-	case rpc.IsDoorKind(q.Kind) && q.Link:
-		// The link names the shared child, qualified.
-		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
-	case rt.copiesAsLink(ctx, q):
-		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
+	case rpc.IsDoorKind(q.Kind) && q.Link || rt.copiesAsLink(ctx, q):
+		// A door's link names the shared child, qualified.
+		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, cmp.Or(q.ChildGridId, q.Id))
 	case rpc.IsDoorKind(q.Kind):
 		created, err := rt.deepCopyDoor(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
 		// Degrade only when nothing was created. Degrading with a partial in
@@ -119,13 +118,13 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 		"cross-plugin copy: unsupported tile kind %q", t.Kind)
 }
 
-// copiesAsLink is rpc.CopiesAsLink over the router's read of the grid q
-// opens, the stamp the client drew its ghost from (transit-normalized,
+// copiesAsLink is rpc.CopiesAsLink over the router's read of the grid a door
+// q opens, the stamp the client drew its ghost from (transit-normalized,
 // disabled-stamped). A grid that does not answer says nothing here: the door
 // arm reads it again and degrades to a link if it is dark.
 func (rt *router) copiesAsLink(ctx context.Context, q *pb.Tile) bool {
 	if !rpc.IsDoorKind(q.Kind) || q.Link {
-		return false
+		return rpc.CopiesAsLink(q, true)
 	}
 	g, err := rt.GetGrid(ctx, &pb.GetGridRequest{GridId: q.ChildGridId})
 	return err == nil && rpc.CopiesAsLink(q, g.GetGrid().GetAcceptsTiles())

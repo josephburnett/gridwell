@@ -515,6 +515,7 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	door := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~a"}
 	link := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~b", Link: true}
 	text := &gridwellv1.Tile{Kind: rpc.KindText}
+	page := &gridwellv1.Tile{Kind: rpc.KindURL, ServesPage: true}
 	cases := []struct {
 		name           string
 		rows           []*gridwellv1.Tile
@@ -528,6 +529,8 @@ func TestCarryCopiesAsLink(t *testing.T) {
 		// A plugin's text copies its bytes, so a carry holding one is a
 		// copy, and the server links the doors in it row by row.
 		{"a plugin door with a plugin text", []*gridwellv1.Tile{door, text}, false, true, false},
+		{"a served page, wherever it sits", []*gridwellv1.Tile{page}, true, true, true},
+		{"a plugin door with a served page", []*gridwellv1.Tile{door, page}, false, true, true},
 		{"a link door is a link already", []*gridwellv1.Tile{link}, false, true, false},
 		{"nothing carried", nil, false, true, false},
 	}

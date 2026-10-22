@@ -590,6 +590,61 @@ func TestCopyPluginDoorOntoHomeLinks(t *testing.T) {
 	}
 }
 
+// TestCopyServedPageOntoHomeLinks: a hey thread, a url entry whose plugin
+// serves its page and which holds no address, right-dragged onto home lands
+// a link to it (CLAUDE.md, 2026-10-21), never a url tile with no address.
+func TestCopyServedPageOntoHomeLinks(t *testing.T) {
+	ctx := context.Background()
+	reg := plugin.NewRegistry()
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	_, homeRoot := registerPrimaryLocaldb(t, reg, st)
+	client := newPluginClient(t, "hey", fakeHeyCLI(t).Config(nil))
+	const heyUUID = "uh1"
+	reg.Register(heyUUID, "hey", client, nil)
+	hs := serveWeb(t, mustNew(t, reg, Config{}))
+	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
+	info, err := client.Info(ctx, &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var page *gridwellv1.Tile
+	for _, e := range info.PluginGrids {
+		g, err := cl.GetGrid(ctx, heyUUID+"/"+e.GridId)
+		if err != nil {
+			t.Fatalf("grid %q: %v", e.Label, err)
+		}
+		for _, tl := range g.Tiles {
+			if tl.ServesPage {
+				page = tl
+			}
+		}
+	}
+	if page == nil {
+		t.Fatal("no thread tile serves a page")
+	}
+
+	copied, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{
+		TileId: page.Id, DestGridId: homeRoot, X: 3, Y: 3,
+	})
+	if err != nil {
+		t.Fatalf("copy of a served page: %v", err)
+	}
+	if copied.LinkTargetId != page.Id || copied.Kind != rpc.KindURL {
+		t.Errorf("copy of a served page = kind %q target %q, want a url link to %q",
+			copied.Kind, copied.LinkTargetId, page.Id)
+	}
+	if u := rpc.UUIDOf(copied.Id); u == heyUUID {
+		t.Errorf("the copy landed in the plugin %q, want home", u)
+	}
+	if !rpc.CopiesAsLink(page, true) {
+		t.Error("rpc.CopiesAsLink says the page copies, so the ghost would show a copy the node never makes")
+	}
+}
+
 // TestCopyWorkspaceAcrossPluginsNeverArranged: a workspace tile with no layout blob
 // copies as an empty workspace (no Data round trip to fail on).
 func TestCopyWorkspaceAcrossPluginsNeverArranged(t *testing.T) {

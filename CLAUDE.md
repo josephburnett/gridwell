@@ -474,6 +474,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   copies (2026-10-20): copied into another namespace, home or a far node's,
   it lands as the link to its grid a left-drag makes, and the ghost shows
   the link before the drop; a plugin's text or url still copies its bytes.
+  A url entry whose plugin serves its page copies as a link too
+  (2026-10-21): it has no address to copy, and the page is the plugin's.
   A door is a plugin's when the grid it opens takes no new tiles
   (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
   so a disabled source's door links too, as a dark one does.

@@ -327,12 +327,13 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 }
 
 // CopiesAsLink reports that a copy of t into another namespace is LinkOf(t):
-// t is a door, not a link, onto a grid that takes no new tiles
-// (Grid.accepts_tiles of the grid it opens or stands on, one namespace's
-// either way). That is a plugin's grid, whose door never copies (CLAUDE.md,
-// 2026-10-20), or a disabled source's, which reads as dark and so links too.
+// t, not a link, is a page its plugin serves or a door onto a grid that takes
+// no new tiles (Grid.accepts_tiles of the grid it opens or stands on). That is
+// a plugin's (CLAUDE.md, 2026-10-20 and 2026-10-21), or a disabled source's,
+// which reads as dark and so links too.
 func CopiesAsLink(t *pb.Tile, acceptsTiles bool) bool {
-	return IsDoorKind(t.GetKind()) && !t.GetLink() && !acceptsTiles
+	return !t.GetLink() && t.GetLinkTargetId() == "" &&
+		(PageContent(t) || IsDoorKind(t.GetKind()) && !acceptsTiles)
 }
 
 // ShellTmux names the tmux a shell tile attaches: the tmux its
