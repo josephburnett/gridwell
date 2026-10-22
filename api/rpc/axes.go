@@ -28,7 +28,7 @@ var Flags = []Flag{
 	{"plugin.v1.InfoResponse.writable", true, "as Grid.writable, which it becomes", "the plugin's text bodies take writes"},
 	{"plugin.v1.InfoResponse.host_content", false, "", "becomes Grid.host_content"},
 	{"plugin.v1.InfoResponse.move", true, "the decided move cells, both variants run in plugin_move_test.go", "a move to another grid"},
-	{"plugin.v1.ListResponse.authoritative", true, "", "a key absent from the listing is gone, so a link to it is dead"},
+	{"plugin.v1.ListResponse.authoritative", true, "variant a listing that is not authoritative: see it dead held to home, by Probe", "a key absent from the listing is gone, so a link to it is dead"},
 	{"plugin.v1.ListResponse.unreachable", true, "", "a cached answer retires nothing, so nothing reads dead"},
 	{"plugin.v1.Entry.serves_page", true, "as Tile.serves_page, which it becomes", "becomes Tile.serves_page"},
 	{"plugin.v1.Entry.read_only", true, "as Tile.read_only, which it becomes", "becomes Tile.read_only"},

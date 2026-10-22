@@ -970,7 +970,7 @@ type paritySource struct {
 	changes chan *pluginv1.Change
 	moves   bool // declares and answers Move (plugin_move_test.go)
 	// What a variant declares otherwise (parity_variant_test.go).
-	unwritable, unwatched bool
+	unwritable, unwatched, partial bool
 }
 
 func newParitySource() *paritySource {
@@ -1001,7 +1001,7 @@ func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.I
 func (s *paritySource) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	resp := &pluginv1.ListResponse{Authoritative: true}
+	resp := &pluginv1.ListResponse{Authoritative: !s.partial}
 	for _, e := range s.grids[req.Grid] {
 		resp.Entries = append(resp.Entries, proto.CloneOf(e))
 	}

@@ -30,6 +30,7 @@ var (
 	vReadOnly    = parityVariant{"a read-only entry", func(s *paritySource) { s.grids["all"][0].ReadOnly = parityReadOnly }}
 	vNotWritable = parityVariant{"a plugin that is not writable", func(s *paritySource) { s.unwritable = true }}
 	vNoWatch     = parityVariant{"a plugin with watch off", func(s *paritySource) { s.unwatched = true }}
+	vPartial     = parityVariant{"a listing that is not authoritative", func(s *paritySource) { s.partial = true }}
 )
 
 // The decisions the variants are held to, quoted.
@@ -54,6 +55,7 @@ var parityVariantTable = []parityVariantCell{
 	{vNotWritable, parityCell{kText, opWrite, onFar, decided, dReadOnly, nil}, holdsReadOnly(false)},
 	{vNotWritable, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
 	{vNoWatch, parityCell{kURL, opUpdate, onPlugin, decided, dLiveOff, nil}, holdsLiveOff},
+	{vPartial, parityCell{kText, opDead, onPlugin, same, "", checkDead}, nil},
 }
 
 // parityVariantNS is the plugin a decided cell's owner reaches: the local
