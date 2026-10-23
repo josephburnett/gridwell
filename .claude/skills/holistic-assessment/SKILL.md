@@ -43,9 +43,14 @@ so the code cannot argue for itself.
    sources is written as "unspecified" — that is a finding too. This
    document is the bar the code is held to. The checker never edits it.
 
-2. **Read a trace of ordinary use.** Ask the user for a fresh trace dump
-   (the Dump logs row) of a few minutes of real use, or use one they
-   supplied. Tabulate it: every rpc by verb and outcome, every error code,
+2. **Read a trace of ordinary use.** First check the node: the dump's file
+   name carries the build the node runs (`trace-<time>-<commit>.jsonl`, see
+   `tracewire.BuildCommit`), and it must equal `git rev-parse --short HEAD`
+   of a clean tree, with no `+dirty`. If it does not, REFUSE TO RUN and say
+   so: a trace from another build is a false reading of the tree being
+   assessed, and lens 13 cannot be judged from it. Tell the user to rebuild
+   and restart the serve (2026-10-22). Then ask for a fresh trace dump (the
+   Dump logs row) of a few minutes of real use. Tabulate it: every rpc by verb and outcome, every error code,
    every repeated ask of one id, every id whose shape is wrong (a doubled
    segment, an empty namespace), every event followed by a refetch, every
    plugin log line. Each anomaly is a finding until a decision in CLAUDE.md
