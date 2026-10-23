@@ -318,7 +318,7 @@ func (a *App) installWebviewListeners() {
 		// The window-level keydown never fires while a live view owns OS
 		// keyboard focus, so main relays the chord keyed by pane.
 		{"onZoomKey", func(ev js.Value) {
-			a.zoomKeyRelays++
+			a.e2e.zoomKeyRelays++
 			a.contentZoomKeyFromView(jsString(ev.Get("paneId")), jsString(ev.Get("key")))
 		}},
 		// Esc while a parked view holds OS keyboard focus; see cancelGesture.

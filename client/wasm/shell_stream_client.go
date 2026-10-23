@@ -563,7 +563,7 @@ func (a *App) mirrorShell(conn *shellStreamConn) {
 	if conn.closed {
 		return
 	}
-	a.shellMirrorPasses++
+	a.e2e.shellMirrorPasses++
 	if jpeg := snapshotShellCanvas(conn.container); jpeg != nil {
 		a.views.urlPreview.PutWildcard(conn.tileID, jpeg, func() { a.draw() })
 	}

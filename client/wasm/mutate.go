@@ -259,7 +259,7 @@ func jsonBeacon(build func() (string, []byte)) func() (string, []byte, string) {
 // visit's retire follows it (see deleteEphemeralTile), or empty.
 func (a *App) postFramingPersist(label, gid, id, chain string,
 	call func(ctx context.Context) error, beacon func() (string, []byte, string)) {
-	a.persist.persistPosts[label]++
+	a.e2e.persistPosts[label]++
 	a.post(write{label: label, gid: gid, id: id, chain: chain, optimistic: true, call: call, beacon: beacon})
 }
 

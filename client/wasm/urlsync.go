@@ -39,7 +39,7 @@ func (a *App) scheduleFramingSave(fp pane.Fingerprint) {
 // animating pane's viewport changes on every draw of it. persistFraming still
 // owns the mid-transition refusal, for the draw an event lands in.
 func (a *App) flushFramingSave() {
-	a.persist.framingFlushes++
+	a.e2e.framingFlushes++
 	// One active surface per grid: among panes showing the same grid only
 	// the focused one writes. pane.FramingWriters is the rule.
 	var pgs []pane.PaneGrid

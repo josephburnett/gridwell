@@ -1031,3 +1031,11 @@ func rootName(e ast.Expr) string {
 		}
 	}
 }
+
+// TestOneE2EStruct holds every e2e attribution counter to the one e2e struct
+// on App, which testhook.go alone reads.
+func TestOneE2EStruct(t *testing.T) {
+	if got := e2eFields(t, repoRoot(t)); len(got) != 0 {
+		t.Errorf("e2e-only state kept outside App.e2e; move it into the e2e struct in client/wasm/testhook.go:\n  %s", strings.Join(got, "\n  "))
+	}
+}

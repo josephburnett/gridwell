@@ -522,7 +522,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 						painted = append(painted, n.Id)
 					}
 				}
-				a.selectionPainted[p.ID] = painted
+				a.e2e.selectionPainted[p.ID] = painted
 				a.drawBand(pscreen, p)
 				// The fading outline on the tile this pane most recently ascended out of.
 				if tr, ok := a.traces[p.ID]; ok {
@@ -824,7 +824,7 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	if !shown {
 		return
 	}
-	a.bannerTexts[n.Id] = text
+	a.e2e.bannerTexts[n.Id] = text
 	withClip(a.cctx, ix, iy, iw, ih, func() {
 		fillRectC(a.cctx, ix, iy, iw, bannerH, a.pal.SourceLabelBg)
 		drawLabel(a.cctx, text, ix+4, iy+bannerH/2, labelOpts{

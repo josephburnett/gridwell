@@ -21,6 +21,29 @@ import (
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
+// e2e is what a spec reads to attribute a behaviour to its stage, and this
+// file is its only reader: the shim writes it and decides nothing from it.
+type e2e struct {
+	shellMirrorPasses  int
+	zoomKeyRelays      int            // brackets the IPC hop a zoom chord takes
+	renderedPanePaints map[string]int // an unfocused pane painting its raster
+	textPreviews       map[string]textPreview
+	// paintedText is what a text preview last painted, by tile id for a grid
+	// preview and "pane:"+id for a descent: the wrapped source lines, or
+	// "raster:" and the rasterized document.
+	paintedText   map[string]string
+	lastRasterSVG string
+	bannerTexts   map[string]string // the last banner line each tile drew
+	// selectionPainted is the tiles each pane last drew with the selection border.
+	selectionPainted map[string][]string
+	// oneShotsArmed and oneShotsLive are the evidence that no js.Func
+	// outlives its call; drawsArmed separates draws, whose count is the
+	// host's to decide.
+	oneShotsArmed, oneShotsLive, drawsArmed int
+	persistPosts                            map[string]int
+	framingFlushes                          int
+}
+
 // window.__gridwellTest, a read-only introspection surface for the Electron
 // e2e tests (apps/desktop/e2e). It is compiled into the normal wasm binary
 // but installs nothing unless the page carries ?e2e=1. Accessors read
@@ -83,7 +106,7 @@ func (a *App) installTestHook() {
 		}),
 		// Shell mirror snapshots taken since boot; the snapshot itself lands in
 		// a cache nothing else reports.
-		"shellMirrors": js.FuncOf(func(js.Value, []js.Value) any { return a.shellMirrorPasses }),
+		"shellMirrors": js.FuncOf(func(js.Value, []js.Value) any { return a.e2e.shellMirrorPasses }),
 		"workspace":    js.FuncOf(a.thWorkspace),
 		"bar":          js.FuncOf(a.thBar),
 		// What the bar circle is offering the focused pane, by name, so a spec
@@ -118,7 +141,7 @@ func (a *App) installTestHook() {
 		}),
 		"traces":        js.FuncOf(a.thTraces),
 		"shellRenderer": js.FuncOf(a.thShellRenderer),
-		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.zoomKeyRelays }),
+		"zoomKeyRelays": js.FuncOf(func(js.Value, []js.Value) any { return a.e2e.zoomKeyRelays }),
 		// Whether a left border-drag resize is armed, polled instead of
 		// sleeping between the forwarded press and the canvas half of the
 		// drag. Arming is also what parks the live view.
@@ -143,8 +166,8 @@ func (a *App) installTestHook() {
 		// dispatches by label, so a spec names which stage went quiet
 		// instead of timing out on the far-end effect.
 		"persistPosts": js.FuncOf(func(js.Value, []js.Value) any {
-			out := map[string]any{"framingFlushes": a.persist.framingFlushes}
-			for label, n := range a.persist.persistPosts {
+			out := map[string]any{"framingFlushes": a.e2e.framingFlushes}
+			for label, n := range a.e2e.persistPosts {
 				out[label] = n
 			}
 			return out
@@ -164,7 +187,7 @@ func (a *App) installTestHook() {
 		// animation arms one per draw, so "armed grew and live came back to
 		// zero" is the assertion; see oneShot.
 		"oneShots": js.FuncOf(func(js.Value, []js.Value) any {
-			return map[string]any{"armed": oneShotsArmed, "live": oneShotsLive, "draws": drawsArmed}
+			return map[string]any{"armed": a.e2e.oneShotsArmed, "live": a.e2e.oneShotsLive, "draws": a.e2e.drawsArmed}
 		}),
 		// The two layout persisters' settle windows, pending or not. A live
 		// mirror arms timers of its own, so oneShots cannot single them out.
@@ -207,7 +230,7 @@ func (a *App) installTestHook() {
 		// a raster.
 		"textPreviews": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
-			for id, f := range a.textPreviews {
+			for id, f := range a.e2e.textPreviews {
 				preview := map[string]any{"kind": "raw", "rawAfterRaster": f.rawAfterRaster}
 				if d := f.draw; d != nil {
 					preview["kind"] = "raster"
@@ -220,10 +243,10 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
-		// What each text preview last painted; see App.paintedText.
+		// What each text preview last painted; see e2e.paintedText.
 		"paintedText": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
-			for k, v := range a.paintedText {
+			for k, v := range a.e2e.paintedText {
 				out[k] = v
 			}
 			return out
@@ -231,7 +254,7 @@ func (a *App) installTestHook() {
 		// The last banner line each tile drew: tilepreview.BannerText as painted.
 		"bannerTexts": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
-			for id, t := range a.bannerTexts {
+			for id, t := range a.e2e.bannerTexts {
 				out[id] = t
 			}
 			return out
@@ -239,7 +262,7 @@ func (a *App) installTestHook() {
 		// The tiles each pane last drew with the selection border.
 		"selectionPainted": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
-			for paneID, ids := range a.selectionPainted {
+			for paneID, ids := range a.e2e.selectionPainted {
 				list := make([]any, len(ids))
 				for i, id := range ids {
 					list[i] = id
@@ -255,7 +278,7 @@ func (a *App) installTestHook() {
 				out[id] = map[string]any{
 					"ready":      st.Ready,
 					"failed":     st.Failed,
-					"panePaints": a.renderedPanePaints[id],
+					"panePaints": a.e2e.renderedPanePaints[id],
 				}
 			}
 			return out

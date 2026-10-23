@@ -73,9 +73,8 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 					ContentW: a.renderedContentWidth(p),
 				}
 				if a.drawRenderedPreview(n, frame, x, y, w, h, 0) {
-					// e2e attribution, read by the renderedPreviews testhook.
-					a.renderedPanePaints[n.Id]++
-					a.paintedText["pane:"+p.ID] = "raster:" + a.lastRasterSVG
+					a.e2e.renderedPanePaints[n.Id]++
+					a.e2e.paintedText["pane:"+p.ID] = "raster:" + a.e2e.lastRasterSVG
 					return
 				}
 			}
@@ -83,7 +82,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 				lines := a.drawMarkdownText(a.cctx, string(body), originX, originY,
 					a.textContentWidth(p), h+p.TextScrollY*scale, scale, 0, a.memoWrap(n))
 				a.noteTextPreview(n.Id, nil, 0)
-				a.paintedText["pane:"+p.ID] = strings.Join(lines, "\n")
+				a.e2e.paintedText["pane:"+p.ID] = strings.Join(lines, "\n")
 			}
 		} else {
 			a.tileBody(n) // warm the cache so the overlay has content when shown
@@ -116,7 +115,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 			if n.TextMode == rpc.TextModeRendered {
 				drawn = a.drawRenderedPreview(n, frame, x, y, w, h, topInset)
 				if drawn {
-					a.paintedText[n.Id] = "raster:" + a.lastRasterSVG
+					a.e2e.paintedText[n.Id] = "raster:" + a.e2e.lastRasterSVG
 				}
 			}
 			if !drawn {
@@ -125,7 +124,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 						x-scrollX*scale, y+topInset-scrollY*scale,
 						frame.ContentW, h-topInset+scrollY*scale, scale, 0, a.memoWrap(n))
 					a.noteTextPreview(n.Id, nil, 0)
-					a.paintedText[n.Id] = strings.Join(lines, "\n")
+					a.e2e.paintedText[n.Id] = strings.Join(lines, "\n")
 				}
 			}
 		}

@@ -177,35 +177,17 @@ type App struct {
 	subscription     subscription.Tracker
 	subscriptionKick chan struct{}
 
-	// shellMirrorPasses counts shell mirror snapshots, for e2e.
-	shellMirrorPasses int
-
 	// traces holds the per-pane ascent-trace highlight, session-ephemeral.
 	traces map[string]traceState
 
 	overlays overlayState
-
-	// zoomKeyRelays counts relayed zoom chords, for e2e: it brackets the IPC hop.
-	zoomKeyRelays int
 
 	urlGens urlview.Gens
 
 	// writes counts dispatched mutations that have not settled.
 	writes inflight.Writes
 
-	// renderedPanePaints is e2e attribution: an unfocused pane paints raster.
-	renderedPanePaints map[string]int
-	textPreviews       map[string]textPreview
-	// paintedText is e2e attribution: what a text preview last painted, by tile
-	// id for a grid preview and "pane:"+id for a descent: the wrapped source
-	// lines, or "raster:" and the rasterized document.
-	paintedText   map[string]string
-	lastRasterSVG string
-	// bannerTexts is e2e attribution: the last banner line each tile drew.
-	bannerTexts map[string]string
-	// selectionPainted is e2e attribution: the tiles each pane last drew with
-	// the selection border.
-	selectionPainted map[string][]string
+	e2e e2e
 
 	// backstop is the outbox re-post cadence, retry.Backstop until the e2e
 	// lowers it to bound one.
@@ -308,22 +290,17 @@ func newFetchState() fetchState {
 // oneShot hands the host a callback it calls once. An unreleased js.Func
 // stays in syscall/js's funcs map for the life of the page.
 func oneShot(fn func()) js.Func {
-	oneShotsArmed++
-	oneShotsLive++
+	app.e2e.oneShotsArmed++
+	app.e2e.oneShotsLive++
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
-		oneShotsLive--
+		app.e2e.oneShotsLive--
 		cb.Release()
 		fn()
 		return nil
 	})
 	return cb
 }
-
-// oneShotsArmed, oneShotsLive and drawsArmed are the e2e evidence that no
-// js.Func outlives its call; drawsArmed separates draws, whose count is
-// the host's to decide.
-var oneShotsArmed, oneShotsLive, drawsArmed int
 
 // listen adds a DOM listener and returns the remover, which also releases the
 // js.Func: a surface opened and closed repeatedly must not leak one per open.
@@ -360,10 +337,6 @@ type persistState struct {
 	// doorWheelPending batches a scroll burst into one SetFraming per tile.
 	doorWheelPending map[string]doorWheelDrift
 
-	// persistPosts and framingFlushes are e2e-only.
-	persistPosts   map[string]int
-	framingFlushes int
-
 	// out records unacknowledged writes in order; retryKick and unload drain it.
 	out *outbox.Outbox
 }
@@ -375,7 +348,6 @@ func newPersistState(a *App) persistState {
 		sched:            newScheduler(a),
 		contentSaves:     outbox.NewSaveQueue(),
 		doorWheelPending: map[string]doorWheelDrift{},
-		persistPosts:     map[string]int{},
 		out:              outbox.New(),
 	}
 }
@@ -597,28 +569,31 @@ func main() {
 	tr := trace.New(trace.DefaultCapacity, session)
 	gate := nodebuild.New(tracewire.BuildCommit(), func(node string) { app.otherBuild(node) })
 	app = &App{
-		doc:                js.Global().Get("document"),
-		win:                js.Global().Get("window"),
-		origin:             origin,
-		cl:                 rpc.NewDefaultClient(origin, session, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
-		gate:               gate,
-		c:                  cache.New(),
-		subscriptionKick:   make(chan struct{}, 1),
-		locals:             map[string]*paneLocal{},
-		menu:               menu.New(),
-		errs:               errsurface.New(),
-		tr:                 tr,
-		caps:               caps.Derive(bridgeCaps(), false),
-		fetch:              newFetchState(),
-		shellAlive:         map[string]bool{},
-		shellAliveProbing:  map[string][]func(bool){},
-		traces:             map[string]traceState{},
-		renderedPanePaints: map[string]int{},
-		textPreviews:       map[string]textPreview{},
-		paintedText:        map[string]string{},
-		bannerTexts:        map[string]string{},
-		selectionPainted:   map[string][]string{},
-		backstop:           retry.NewInterval(retry.Backstop),
+		doc:               js.Global().Get("document"),
+		win:               js.Global().Get("window"),
+		origin:            origin,
+		cl:                rpc.NewDefaultClient(origin, session, connect.WithInterceptors(trace.Interceptor(tr, time.Now), gate.Interceptor())),
+		gate:              gate,
+		c:                 cache.New(),
+		subscriptionKick:  make(chan struct{}, 1),
+		locals:            map[string]*paneLocal{},
+		menu:              menu.New(),
+		errs:              errsurface.New(),
+		tr:                tr,
+		caps:              caps.Derive(bridgeCaps(), false),
+		fetch:             newFetchState(),
+		shellAlive:        map[string]bool{},
+		shellAliveProbing: map[string][]func(bool){},
+		traces:            map[string]traceState{},
+		e2e: e2e{
+			renderedPanePaints: map[string]int{},
+			textPreviews:       map[string]textPreview{},
+			paintedText:        map[string]string{},
+			bannerTexts:        map[string]string{},
+			selectionPainted:   map[string][]string{},
+			persistPosts:       map[string]int{},
+		},
+		backstop: retry.NewInterval(retry.Backstop),
 	}
 	// Before anything can draw: the settle timers close over the App.
 	app.persist = newPersistState(app)
@@ -894,7 +869,7 @@ func (a *App) scheduleDraw(why string) {
 	if !a.persist.sched.drawAsks.Ask(why) {
 		return
 	}
-	drawsArmed++
+	a.e2e.drawsArmed++
 	js.Global().Call("requestAnimationFrame", oneShot(func() {
 		asks := a.persist.sched.drawAsks.Take()
 		perf := js.Global().Get("performance")

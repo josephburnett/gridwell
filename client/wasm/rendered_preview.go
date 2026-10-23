@@ -106,7 +106,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 	if !ok {
 		return js.Value{}, 0, false
 	}
-	a.lastRasterSVG = sr.svg
+	a.e2e.lastRasterSVG = sr.svg
 	return sr.img, madeAt, true
 }
 
@@ -137,14 +137,14 @@ type textPreview struct {
 }
 
 func (a *App) noteTextPreview(tileID string, d *markdown.RasterDraw, rasterW float64) {
-	f := a.textPreviews[tileID]
+	f := a.e2e.textPreviews[tileID]
 	f.draw, f.rasterW = d, rasterW
 	if d != nil {
 		f.sawRaster = true
 	} else if f.sawRaster {
 		f.rawAfterRaster++
 	}
-	a.textPreviews[tileID] = f
+	a.e2e.textPreviews[tileID] = f
 }
 
 // renderedRasterFailed is rasterprev.Cache's verdict on a document that never
