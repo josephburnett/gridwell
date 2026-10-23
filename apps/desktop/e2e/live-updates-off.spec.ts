@@ -1,5 +1,6 @@
-import { test, expect } from './fixtures';
+import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
+import { dumpNow } from './trace';
 
 // A source that lists but cannot watch is not dark: the node says so as
 // EventPluginHealth.live_updates_off on a healthy event, and the client shows
@@ -8,7 +9,9 @@ import { tileAt } from './oracle';
 // still answer, is internal/server/live_updates_off_seam_test.go: no OS lever
 // makes the shipped fs plugin refuse a watch while it still lists, so the
 // page's Subscribe is the lever here, one held stream per stage. Nothing tells
-// the client such a source's changes, so a move onto its grid reads it.
+// the client such a source's changes, so a move onto its grid reads it. Each
+// stage's stream ends, and a client whose stream is down reads on every move
+// (cache.NoteStream), so "told again" is asked of the real stream opened last.
 
 // envelope frames one Connect streaming message: a flag byte, a big-endian
 // length, the JSON payload. Flag 2 is the end of the stream.
@@ -20,9 +23,9 @@ function envelope(flag: number, payload: object): Buffer {
   return Buffer.concat([head, body]);
 }
 
-test('a refused watch is one notice of its own, costs no resync, and clears when the watch opens', async ({ gw, window }) => {
+test('a refused watch is one notice of its own, costs no resync, and clears when the watch opens', async ({ gw, home, window }) => {
   const cad = await gw.cadences();
-  const home = (await gw.plugins()).find((p) => p.label === 'home')!;
+  const homePlugin = (await gw.plugins()).find((p) => p.label === 'home')!;
   const landed = await gw.focused();
   const cx = Math.round(landed.cx);
   const cy = Math.round(landed.cy);
@@ -34,11 +37,12 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     await gw.ascendViaCrumb();
     await gw.waitIdle();
   };
-  const health = (h: object) => envelope(0, { pluginHealth: { pluginUuid: home.uuid, ...h } });
+  const health = (h: object) => envelope(0, { pluginHealth: { pluginUuid: homePlugin.uuid, ...h } });
   const refused = 'the OS refused another change watch';
 
   // Each stage answers one Subscribe and ends it; the reconnect waits for the
-  // next stage, so its stream-gap resync never lands inside a stage.
+  // next stage, so its stream-gap resync never lands inside a stage. The one
+  // after the last waits on release and reaches the node.
   const stages = [
     [health({ healthy: true, liveUpdatesOff: refused })],
     [health({ healthy: false, detail: 'gone', liveUpdatesOff: refused })],
@@ -78,8 +82,8 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     return errs.notices;
   };
   const of = (ns: Notice[], key: string) => ns.filter((n) => n.source === key);
-  const live = 'live:' + home.uuid;
-  const dark = 'plugin:' + home.uuid;
+  const live = 'live:' + homePlugin.uuid;
+  const dark = 'plugin:' + homePlugin.uuid;
 
   try {
     await window.reload();
@@ -118,6 +122,16 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
       .toBe(0);
     // Past the settle window the dark spell's recovery resync rides on.
     await window.waitForTimeout(cad.healthSettleMs * 2);
+    await gw.waitIdle();
+    reads.length = 0;
+    release();
+    const token = await loginToken(gw.origin, homePassword(home));
+    const opens = async () => {
+      const { cid, lines } = await dumpNow(window, gw.origin, token);
+      return lines.filter((r) => r.origin === 'client' && r.cid === cid && r.src === 'events' && r.kind === 'open').length;
+    };
+    await expect.poll(opens, { message: 'the real stream opens', timeout: 20_000 }).toBe(stages.length + 1);
+    await expect.poll(() => reads.includes(landed.gridID), { message: 'its stream-gap resync reads the held grid' }).toBe(true);
     await gw.waitIdle();
     reads.length = 0;
     await roundTrip();
