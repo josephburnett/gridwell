@@ -22,12 +22,10 @@ var allowedUntested = map[string]string{
 	"snapMs": "the drag ghost's flight to its landing cell: too short for a spec to press inside it reliably, so ghost-landing.spec.ts presses inside snapBackMs",
 }
 
-// A declared duration is a promise about timing, and lens 8 of the holistic
-// assessment found the same class broken in four runs: a cadence spelled in
-// production that nothing waits on, so its value can change and every gate
-// stays green. The lens had no enforcement, so each round of fixes decayed.
-// This is the enforcement: every duration declared in the production tree has
-// to appear, by name, in a test.
+// A declared duration is a promise about timing: a cadence spelled in
+// production that nothing waits on can change and every gate stays green. So
+// every duration declared in the production tree has to appear, by name, in a
+// test.
 //
 // The find is the identifier. A client/wasm value the page only reaches
 // through window.__gridwellTest counts when a spec spells either the

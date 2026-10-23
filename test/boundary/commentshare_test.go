@@ -10,8 +10,8 @@ import (
 
 // commentShareCeiling is the most of the production tree, by bytes, that may
 // be comments. The 2026-09-07 sweep brought it from 54% to the number below;
-// the holistic assessment reads the whole tree into one context, and comments
-// restated at every call site are what pushed it past that context.
+// a reader holds a package in one sitting, and comments restated at every
+// call site are what push it past that.
 const commentShareCeiling = 40
 
 // TestCommentShareStaysUnderCeiling runs scripts/comment-share.sh, the one

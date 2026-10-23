@@ -1,7 +1,6 @@
 #!/bin/sh
-# comment-share: comment bytes as a share of source bytes, over the tree the
-# holistic assessment reads: production Go and TS, with no tests, generated
-# code or harnesses. A comment line starts with //, /* or *.
+# comment-share: comment bytes as a share of source bytes, over the
+# production tree: Go and TS, with no tests, generated code or harnesses. A comment line starts with //, /* or *.
 #
 #   scripts/comment-share.sh            the tree total
 #   scripts/comment-share.sh --files    every file, largest comment share first

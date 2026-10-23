@@ -20,8 +20,8 @@ never bumps `version`, and there is no cross-plugin move.
 ## The promises
 
 The rule above is the first of these. Each is one sentence a user could
-check without reading code, and each has a lens in the holistic assessment
-that enumerates the cases rather than reading for them. A difference the
+check without reading code, and each is held by counts the build runs
+(`test/boundary`) rather than by reading for it. A difference the
 code makes that no promise or decision here allows is a hole, whatever the
 comment beside it says.
 
@@ -45,8 +45,8 @@ comment beside it says.
 The promises are about behaviour. These are about the code, and each is
 held by a mechanism the build runs, or says that it is not yet. A principle
 with no mechanism is a wish; the ledger (How to work 10) is where a wish
-becomes a count, and the holistic assessment's only job is to find the next
-one (2026-10-21).
+becomes a count, and the assessment's (`.claude/skills/assessment`) only
+job is to find the next one (2026-10-21, 2026-10-22).
 
 1. **Things stay as you left them.** Reading never mutates, every user
    write claims what it saw, and a file a released build wrote opens in
@@ -247,7 +247,7 @@ what each one is called.
     ceiling; the rise is entered in `test/boundary/debt.txt` with the
     decision, counted by the `debt` row, and paying it back by deriving is
     the next row of work, not later (2026-10-22). A row at its floor is deleted and its
-    count stays as a permanent test. The holistic assessment finds a class
+    count stays as a permanent test. The assessment finds a class
     the ledger does not measure and adds it as a row with a count; a
     finding with no count is a note, not a row. There is nothing more to do
     when the ledger is empty (2026-10-21).
