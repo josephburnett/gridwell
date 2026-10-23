@@ -21,6 +21,7 @@ var ratchetCounts = map[string]func(t *testing.T, root string) int{
 	"lines":           productionLines,
 	"debt":            debtCount,
 	"unheard-by-code": length(unheardByCode),
+	"info-readers":    length(infoReaders),
 }
 
 func length(offenders func(*testing.T, string) []string) func(*testing.T, string) int {

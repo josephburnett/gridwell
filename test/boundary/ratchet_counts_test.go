@@ -727,3 +727,62 @@ func unheardByCode(t *testing.T, root string) []string {
 	})
 	return out
 }
+
+// infoReaders are the production reads of a plugin's declaration that do not
+// come from one held copy: each call that asks the plugin API for Info, and
+// each memo outside internal/pluginhost, a struct field mapping to an
+// InfoResponse, that keeps an answer with a freshness of its own.
+func infoReaders(t *testing.T, root string) []string {
+	var out []string
+	productionGo(t, root, func(rel string, fset *token.FileSet, f *ast.File) {
+		plugin := importName(f, repoModule+"/api/gen/plugin/v1")
+		names := map[string]bool{}
+		for _, path := range []string{"/api/gen/plugin/v1", "/api/gen/gridwell/v1"} {
+			if name := importName(f, repoModule+path); name != "" {
+				names[name] = true
+			}
+		}
+		inHost := strings.HasPrefix(filepath.ToSlash(rel), "internal/pluginhost/")
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.CallExpr:
+				sel, ok := n.Fun.(*ast.SelectorExpr)
+				if plugin == "" || !ok || sel.Sel.Name != "Info" || len(n.Args) != 2 {
+					return true
+				}
+				if lit, ok := n.Args[1].(*ast.UnaryExpr); ok {
+					if cl, ok := lit.X.(*ast.CompositeLit); ok && isSelector(cl.Type, plugin, "InfoRequest") {
+						out = append(out, fmt.Sprintf("%s:%d: asks Info", rel, fset.Position(n.Pos()).Line))
+					}
+				}
+			case *ast.StructType:
+				for _, field := range n.Fields.List {
+					m, ok := field.Type.(*ast.MapType)
+					if inHost || !ok {
+						continue
+					}
+					v := m.Value
+					if star, ok := v.(*ast.StarExpr); ok {
+						v = star.X
+					}
+					if sel, ok := v.(*ast.SelectorExpr); ok && sel.Sel.Name == "InfoResponse" {
+						if x, ok := sel.X.(*ast.Ident); ok && names[x.Name] {
+							out = append(out, fmt.Sprintf("%s:%d: memoizes Info", rel, fset.Position(field.Pos()).Line))
+						}
+					}
+				}
+			}
+			return true
+		})
+	})
+	return out
+}
+
+func isSelector(e ast.Expr, pkg, name string) bool {
+	sel, ok := e.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != name {
+		return false
+	}
+	x, ok := sel.X.(*ast.Ident)
+	return ok && x.Name == pkg
+}
