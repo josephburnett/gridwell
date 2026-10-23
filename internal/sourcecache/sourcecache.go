@@ -7,6 +7,7 @@
 package sourcecache
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -163,23 +164,9 @@ type Layer struct {
 	order foldOrder
 }
 
-// sourceOf names the source an id belongs to: the connection segment of a
-// chained id. An unchained id belongs to the one unnamed source.
-func sourceOf(id string) string {
-	if first, _, ok := rpc.SplitID(id); ok {
-		return first
-	}
-	return ""
-}
-
 // sourceOfNS names the source a namespace chain belongs to. A namespace is
 // the chain, so a single segment names the connection rather than nothing.
-func sourceOfNS(ns string) string {
-	if first, _, ok := rpc.SplitID(ns); ok {
-		return first
-	}
-	return ns
-}
+func sourceOfNS(ns string) string { return cmp.Or(rpc.UUIDOf(ns), ns) }
 
 // setDark is the one writer of c.dark, for a failed call and the source's own
 // health alike; reason says why it is dark, and announce is whether the client
@@ -237,11 +224,11 @@ func (c *Layer) noteReach(ctx context.Context, err error, source string, grid fu
 // noteReachGrid and noteReachTile are noteReach for the two shapes of call.
 // The tile's grid is looked up only on the transition, hence the closure.
 func (c *Layer) noteReachGrid(ctx context.Context, err error, gridID string) {
-	c.noteReach(ctx, err, sourceOf(gridID), func() string { return gridID })
+	c.noteReach(ctx, err, rpc.UUIDOf(gridID), func() string { return gridID })
 }
 
 func (c *Layer) noteReachTile(ctx context.Context, err error, tileID string) {
-	c.noteReach(ctx, err, sourceOf(tileID), func() string {
+	c.noteReach(ctx, err, rpc.UUIDOf(tileID), func() string {
 		var gridID string
 		if qerr := c.db.QueryRowContext(ctx, `SELECT grid_id FROM tiles WHERE id = ?`, tileID).Scan(&gridID); qerr != nil {
 			return "" // nothing cached names this tile: no grid to re-read
@@ -493,7 +480,7 @@ func keepFraming(fresh, old *pb.HandshakeResponse) {
 func (c *Layer) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if cached, fetchedAt, hit := c.loadGrid(ctx, in.GridId); hit {
 		how := "hit"
-		if time.Since(time.Unix(fetchedAt, 0)) >= c.window() || c.isDark(sourceOf(in.GridId)) {
+		if time.Since(time.Unix(fetchedAt, 0)) >= c.window() || c.isDark(rpc.UUIDOf(in.GridId)) {
 			how = "cached"
 			c.revalidateGrid(in.GridId)
 		}
@@ -516,7 +503,7 @@ func traceGrid(kind, verdict, gridID string) {
 		key = "verdict"
 	}
 	trace.Emit("sourcecache", kind, kind+" "+verdict, map[string]string{
-		"source": sourceOf(gridID), "grid": gridID, key: verdict})
+		"source": rpc.UUIDOf(gridID), "grid": gridID, key: verdict})
 }
 
 // getGridLive reads one grid from the source and caches the answer unless a

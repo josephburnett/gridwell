@@ -117,7 +117,7 @@ func (c *Layer) prefetch(ctx context.Context, source string) {
 		// A root belongs to the source its id names, so one source's walk is a
 		// filter over the same declaration rather than a second way of
 		// asking. A key deeper than a connection segment owns no root here.
-		if id == "" || (source != "" && sourceOf(id) != source) {
+		if id == "" || (source != "" && rpc.UUIDOf(id) != source) {
 			return
 		}
 		roots = append(roots, id)

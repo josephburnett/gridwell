@@ -274,7 +274,7 @@ func TestARootFramingWriteDarkensItsOwnSourceOnly(t *testing.T) {
 	if cc.isDark("") {
 		t.Error("a failed root write darkened the source of every unchained grid")
 	}
-	if !cc.isDark(sourceOf(farHome)) {
-		t.Errorf("a failed root write left its own source %q light", sourceOf(farHome))
+	if !cc.isDark(rpc.UUIDOf(farHome)) {
+		t.Errorf("a failed root write left its own source %q light", rpc.UUIDOf(farHome))
 	}
 }
