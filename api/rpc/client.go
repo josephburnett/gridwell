@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http"
@@ -44,19 +45,12 @@ func NewDefaultClient(baseURL, session string, opts ...connect.ClientOption) *Cl
 }
 
 func (c *Client) GetGrid(ctx context.Context, gridID string) (*pb.GetGridResponse, error) {
-	r, err := c.cl.GetGrid(ctx, connect.NewRequest(&pb.GetGridRequest{GridId: gridID}))
-	if err != nil {
-		return nil, err
-	}
-	return r.Msg, nil
+	return msg(c.cl.GetGrid(ctx, connect.NewRequest(&pb.GetGridRequest{GridId: gridID})))
 }
 
 func (c *Client) GetTilePreview(ctx context.Context, tileID string) ([]byte, error) {
-	r, err := c.cl.GetTilePreview(ctx, connect.NewRequest(&pb.GetTilePreviewRequest{TileId: tileID}))
-	if err != nil {
-		return nil, err
-	}
-	return r.Msg.Jpeg, nil
+	m, err := msg(c.cl.GetTilePreview(ctx, connect.NewRequest(&pb.GetTilePreviewRequest{TileId: tileID})))
+	return m.GetJpeg(), err
 }
 
 func (c *Client) Handshake(ctx context.Context) (*pb.HandshakeResponse, error) {
@@ -66,27 +60,25 @@ func (c *Client) Handshake(ctx context.Context) (*pb.HandshakeResponse, error) {
 // HandshakeNS is the routed plugin list. ns "" answers for the node this client
 // talks to; a chain answers for the node it names, re-qualified per hop.
 func (c *Client) HandshakeNS(ctx context.Context, ns string) (*pb.HandshakeResponse, error) {
-	r, err := c.cl.Handshake(ctx, connect.NewRequest(&pb.HandshakeRequest{Namespace: ns}))
+	return msg(c.cl.Handshake(ctx, connect.NewRequest(&pb.HandshakeRequest{Namespace: ns})))
+}
+
+func (c *Client) GetTile(ctx context.Context, tileID string) (*pb.Tile, error) {
+	return tileResp(c.cl.GetTile(ctx, connect.NewRequest(&pb.GetTileRequest{TileId: tileID})))
+}
+
+// msg is a call's answer, or its error.
+func msg[T any](r *connect.Response[T], err error) (*T, error) {
 	if err != nil {
 		return nil, err
 	}
 	return r.Msg, nil
 }
 
-func (c *Client) GetTile(ctx context.Context, tileID string) (*pb.Tile, error) {
-	r, err := c.cl.GetTile(ctx, connect.NewRequest(&pb.GetTileRequest{TileId: tileID}))
-	if err != nil {
-		return nil, err
-	}
-	return r.Msg.Tile, nil
-}
-
-// tileResp mirrors the server's tileResp.
+// tileResp is the tile a call answers, or its error.
 func tileResp(r *connect.Response[pb.TileResponse], err error) (*pb.Tile, error) {
-	if err != nil {
-		return nil, err
-	}
-	return r.Msg.Tile, nil
+	m, err := msg(r, err)
+	return m.GetTile(), err
 }
 
 // CreateTile is the one create: tile.kind selects the meaningful fields.
@@ -112,11 +104,8 @@ func (c *Client) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile,
 // SetFraming is the one framing write, routed on whichever target the request
 // names. Returns nil for a root grid, which has no tile row.
 func (c *Client) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.Tile, error) {
-	resp, err := c.cl.SetFraming(ctx, connect.NewRequest(req))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg.GetTile(), nil
+	m, err := msg(c.cl.SetFraming(ctx, connect.NewRequest(req)))
+	return m.GetTile(), err
 }
 
 // SetSelection adds tiles to a grid's selection and takes tiles out of it.
@@ -155,29 +144,16 @@ func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, m
 // the complete new value.
 func (c *Client) WriteContent(ctx context.Context, tileID string, claim ContentBasis, data []byte) (*pb.Tile, error) {
 	stream := c.cl.WriteContent(ctx)
-	end := min(ContentChunkBytes, len(data))
-	if err := stream.Send(&pb.WriteContentRequest{TileId: tileID, Version: claim.Version, ContentStamp: claim.Stamp, Data: data[:end]}); err != nil {
-		_, cerr := stream.CloseAndReceive()
-		if cerr != nil {
-			return nil, cerr
-		}
-		return nil, err
-	}
-	for off := end; off < len(data); off += ContentChunkBytes {
-		e := min(off+ContentChunkBytes, len(data))
-		if err := stream.Send(&pb.WriteContentRequest{Data: data[off:e]}); err != nil {
+	req := &pb.WriteContentRequest{TileId: tileID, Version: claim.Version, ContentStamp: claim.Stamp}
+	for off := 0; off == 0 || off < len(data); off += ContentChunkBytes {
+		req.Data = data[off:min(off+ContentChunkBytes, len(data))]
+		if err := stream.Send(req); err != nil {
 			_, cerr := stream.CloseAndReceive()
-			if cerr != nil {
-				return nil, cerr
-			}
-			return nil, err
+			return nil, cmp.Or(cerr, err)
 		}
+		req = &pb.WriteContentRequest{}
 	}
-	resp, err := stream.CloseAndReceive()
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg.Tile, nil
+	return tileResp(stream.CloseAndReceive())
 }
 
 // MoveTile is the single placement writeback: one verb owns (grid, x, y, w,
@@ -195,11 +171,8 @@ func (c *Client) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Til
 
 // ShellTmuxAlive reports whether the tile's tmux still exists.
 func (c *Client) ShellTmuxAlive(ctx context.Context, tileID string) (bool, error) {
-	r, err := c.cl.ShellTmuxAlive(ctx, connect.NewRequest(&pb.ShellTmuxAliveRequest{TileId: tileID}))
-	if err != nil {
-		return false, err
-	}
-	return r.Msg.Alive, nil
+	m, err := msg(c.cl.ShellTmuxAlive(ctx, connect.NewRequest(&pb.ShellTmuxAliveRequest{TileId: tileID})))
+	return m.GetAlive(), err
 }
 
 // RenameTile is a real user edit, so the server latches alt_user and automatic
@@ -227,11 +200,7 @@ func (c *Client) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb
 	if err := unclaimed(req); err != nil {
 		return nil, err
 	}
-	resp, err := c.cl.DeleteTile(ctx, connect.NewRequest(req))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
+	return msg(c.cl.DeleteTile(ctx, connect.NewRequest(req)))
 }
 
 // unclaimed refuses here what the API would: see UnclaimedWrite.
