@@ -31,7 +31,7 @@ tree, and reading it again confirms them at the cost of a window.
    with no `+dirty`. Otherwise stop and say so: a trace from another build
    is a false reading. Tell the user to rebuild and restart the serve; never
    restart it yourself (2026-10-22). `make check` is green at HEAD, so every
-   counted class is at its recorded value before the search starts.
+   counted class is at its recorded value before the hunt starts.
 
 2. **Write the expectations without the code.** Spawn one agent that is
    given ONLY `CLAUDE.md`, `api/gridwell/v1/data.proto`,
@@ -77,7 +77,7 @@ tree, and reading it again confirms them at the cost of a window.
    one class no count finds yet, and it is the only reason an agent reads
    a package end to end.
 
-6. **Search by principle.** For each principle in CLAUDE.md, the count that
+6. **Hunt by principle.** For each principle in CLAUDE.md, the count that
    already holds it and where a new instance hides. Look only where the
    count does not.
    - *Things stay as you left them.* Held by the store contract, the claim
