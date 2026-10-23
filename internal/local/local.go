@@ -251,11 +251,7 @@ func (p *Plugin) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	if err != nil {
 		return nil, err
 	}
-	tile, err := p.st.WriteContent(ctx, tileID, version, data)
-	if err != nil {
-		return nil, gwerr.ToStatus(err)
-	}
-	return &gridwellv1.TileResponse{Tile: tile}, nil
+	return tileResp(p.st.WriteContent(ctx, tileID, version, data))
 }
 
 // CreateTile is the single create: tile.kind selects the typed store create.
