@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -785,4 +786,240 @@ func isSelector(e ast.Expr, pkg, name string) bool {
 	}
 	x, ok := sel.X.(*ast.Ident)
 	return ok && x.Name == pkg
+}
+
+// e2eSaysFor is a comment saying the state it documents exists for the e2e.
+var e2eSaysFor = regexp.MustCompile(`\b(?:is|are)(?: the)? e2e\b|\bfor e2e\b`)
+
+// e2eFields are the shim's package vars and the fields of App and the structs
+// it holds by value, kept for the e2e outside the one e2e struct testhook.go
+// reads: each says so in its comment or its type's, or is only written outside
+// testhook.go, save reads that feed another such field, and is read by
+// testhook.go or feeds one.
+func e2eFields(t *testing.T, root string) []string {
+	type decl struct {
+		at, typ string
+		says    bool
+	}
+	type use struct {
+		testhook, write bool
+		feeds           map[string]bool // the names written by the assignment this read sits in
+	}
+	decls := map[string][]decl{}
+	typeDocs := map[string]string{}
+	uses := map[string][]use{}
+	structs := map[string]func(){} // a struct's name to adding its fields
+	holds := map[string][]string{} // a struct's name to the types it holds by value
+	productionGo(t, root, func(rel string, fset *token.FileSet, f *ast.File) {
+		if filepath.ToSlash(filepath.Dir(rel)) != "client/wasm" {
+			return
+		}
+		hook := filepath.Base(rel) == "testhook.go"
+		text := func(groups ...*ast.CommentGroup) string {
+			var b strings.Builder
+			for _, g := range groups {
+				b.WriteString(g.Text())
+			}
+			return b.String()
+		}
+		typeName := func(e ast.Expr) string {
+			for {
+				switch x := e.(type) {
+				case *ast.StarExpr:
+					e = x.X
+				case *ast.MapType:
+					e = x.Value
+				case *ast.ArrayType:
+					e = x.Elt
+				case *ast.Ident:
+					return x.Name
+				default:
+					return ""
+				}
+			}
+		}
+		addFields := func(st *ast.StructType) {
+			for _, field := range st.Fields.List {
+				for _, n := range field.Names {
+					if n.Name == "e2e" {
+						continue
+					}
+					doc := text(field.Doc, field.Comment)
+					decls[n.Name] = append(decls[n.Name], decl{fmt.Sprintf("%s:%d", rel, fset.Position(n.Pos()).Line), typeName(field.Type), !hook && e2eSaysFor.MatchString(doc)})
+				}
+			}
+		}
+		for _, d := range f.Decls {
+			gen, ok := d.(*ast.GenDecl)
+			if !ok {
+				continue
+			}
+			for _, s := range gen.Specs {
+				switch s := s.(type) {
+				case *ast.TypeSpec:
+					typeDocs[s.Name.Name] = text(gen.Doc, s.Doc)
+					if st, ok := s.Type.(*ast.StructType); ok && s.Name.Name != "e2e" && !hook {
+						structs[s.Name.Name] = func() { addFields(st) }
+						for _, field := range st.Fields.List {
+							if id, ok := field.Type.(*ast.Ident); ok && !slices.ContainsFunc(field.Names, func(n *ast.Ident) bool { return n.Name == "e2e" }) {
+								holds[s.Name.Name] = append(holds[s.Name.Name], id.Name)
+							}
+						}
+					}
+				case *ast.ValueSpec:
+					if gen.Tok != token.VAR || hook {
+						continue
+					}
+					doc := text(gen.Doc, s.Doc, s.Comment)
+					for _, n := range s.Names {
+						decls[n.Name] = append(decls[n.Name], decl{fmt.Sprintf("%s:%d", rel, fset.Position(n.Pos()).Line), typeName(s.Type), e2eSaysFor.MatchString(doc)})
+					}
+				}
+			}
+		}
+		// Uses, classified by the node a reference climbs to.
+		var stack []ast.Node
+		ast.Inspect(f, func(n ast.Node) bool {
+			if n == nil {
+				stack = stack[:len(stack)-1]
+				return false
+			}
+			stack = append(stack, n)
+			var name string
+			switch x := n.(type) {
+			case *ast.SelectorExpr:
+				name = x.Sel.Name
+			case *ast.Ident:
+				if len(stack) > 1 {
+					if sel, ok := stack[len(stack)-2].(*ast.SelectorExpr); ok && sel.Sel == x {
+						return true
+					}
+					if _, ok := stack[len(stack)-2].(*ast.Field); ok {
+						return true
+					}
+					if _, ok := stack[len(stack)-2].(*ast.ValueSpec); ok {
+						return true
+					}
+				}
+				name = x.Name
+			}
+			if name == "" {
+				return true
+			}
+			u := use{testhook: hook}
+			var cur ast.Node = n
+			i := len(stack) - 2
+			for ; i >= 0; i-- {
+				switch p := stack[i].(type) {
+				case *ast.IndexExpr:
+					if p.X == cur {
+						cur = p
+						continue
+					}
+				case *ast.ParenExpr:
+					cur = p
+					continue
+				}
+				break
+			}
+			if i >= 0 {
+				switch p := stack[i].(type) {
+				case *ast.AssignStmt:
+					u.write = slices.Contains(p.Lhs, cur.(ast.Expr))
+				case *ast.IncDecStmt:
+					u.write = p.X == cur
+				case *ast.KeyValueExpr:
+					u.write = p.Key == cur
+				}
+			}
+			if !u.write {
+				for j := len(stack) - 2; j >= 0; j-- {
+					if as, ok := stack[j].(*ast.AssignStmt); ok {
+						u.feeds = map[string]bool{}
+						for _, l := range as.Lhs {
+							u.feeds[rootName(l)] = true
+						}
+						break
+					}
+				}
+			}
+			uses[name] = append(uses[name], u)
+			return true
+		})
+	})
+	for todo, seen := []string{"App"}, map[string]bool{}; len(todo) > 0; todo = todo[1:] {
+		if add, ok := structs[todo[0]]; ok && !seen[todo[0]] {
+			seen[todo[0]] = true
+			add()
+			todo = append(todo, holds[todo[0]]...)
+		}
+	}
+	counted := map[string]bool{}
+	for name, ds := range decls {
+		if len(ds) != 1 {
+			continue // a name declared twice cannot be told apart by name
+		}
+		if ds[0].says || e2eSaysFor.MatchString(typeDocs[ds[0].typ]) {
+			counted[name] = true
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for name, ds := range decls {
+			if len(ds) != 1 || counted[name] {
+				continue
+			}
+			read := false
+			only := true
+			for _, u := range uses[name] {
+				switch {
+				case u.testhook:
+					read = true
+				case u.write:
+				case func() bool {
+					for w := range u.feeds {
+						if counted[w] {
+							return true
+						}
+					}
+					return false
+				}():
+					read = true
+				default:
+					only = false
+				}
+			}
+			if read && only {
+				counted[name] = true
+				changed = true
+			}
+		}
+	}
+	var out []string
+	for name := range counted {
+		out = append(out, decls[name][0].at+": "+name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// rootName is the field or variable an assignment's target writes through,
+// as a.m[k] writes m.
+func rootName(e ast.Expr) string {
+	for {
+		switch x := e.(type) {
+		case *ast.IndexExpr:
+			e = x.X
+		case *ast.ParenExpr:
+			e = x.X
+		case *ast.StarExpr:
+			e = x.X
+		case *ast.SelectorExpr:
+			return x.Sel.Name
+		case *ast.Ident:
+			return x.Name
+		default:
+			return ""
+		}
+	}
 }
