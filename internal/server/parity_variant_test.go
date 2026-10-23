@@ -60,6 +60,7 @@ var parityVariantTable = []parityVariantCell{
 	{vNotWritable, parityCell{kText, opWrite, onFar, decided, dReadOnly, nil}, holdsReadOnly(false)},
 	{vNotWritable, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
 	{vNoWatch, parityCell{kURL, opUpdate, onPlugin, decided, dLiveOff, nil}, holdsLiveOff},
+	{vNoWatch, parityCell{kURL, opUpdate, onFar, decided, dLiveOff, nil}, holdsLiveOff},
 	{vPartial, parityCell{kText, opDead, onPlugin, same, "", checkDead}, nil},
 	{vCached, parityCell{kText, opDead, onPlugin, decided, dCached, nil}, holdsCached},
 	{vCached, parityCell{kText, opDead, onFar, decided, dCached, nil}, holdsCached},

@@ -292,3 +292,78 @@ func TestAConnectionIsBackOnlyOnceTheFarNodeListens(t *testing.T) {
 		}
 	}
 }
+
+// replayingFar is a far node whose every stream opens with its plugin's
+// standing health, as the far node's own Subscribe replays it, and ends when
+// drop is sent.
+type replayingFar struct {
+	namespace.Namespace
+	standing atomic.Pointer[gridwellv1.Event]
+	drop     chan struct{}
+}
+
+func (f *replayingFar) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+	if err := send(nil); err != nil {
+		return err
+	}
+	if ev := f.standing.Load(); ev != nil {
+		if err := send(ev); err != nil {
+			return err
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-f.drop:
+		return status.Error(codes.Unavailable, "tunnel down")
+	}
+}
+
+// opening is every event a stream opened now hears before it goes quiet.
+func opening(t *testing.T, s *Server) []*gridwellv1.Event {
+	t.Helper()
+	var out []*gridwellv1.Event
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	_ = s.Subscribe(ctx, &gridwellv1.SubscribeRequest{}, func(ev *gridwellv1.Event) error {
+		if ev != nil {
+			out = append(out, ev)
+		}
+		return nil
+	})
+	return out
+}
+
+// A far plugin's health is a state too: the far node tells it once on the
+// stream, so a client subscribing after it was told hears it from the
+// connection's opening replay, and once the far node re-establishes without
+// it, hears nothing.
+func TestASubscriberArrivingLateIsToldAFarPluginsStandingHealth(t *testing.T) {
+	was := namespace.DefaultBackoff
+	t.Cleanup(func() { namespace.DefaultBackoff = was })
+	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
+
+	s := newTestServer(t, openStore(t))
+	events, unsub := s.hub.Subscribe()
+	t.Cleanup(unsub)
+	far := &replayingFar{drop: make(chan struct{})}
+	far.standing.Store(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
+		PluginUuid: "pfar", Healthy: true, LiveUpdatesOff: "the plugin declares no watch"}}})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go s.fanInRemote(ctx, "rtb", far)
+	nextHealth(t, events, "rtb/pfar")
+
+	got := opening(t, s)
+	if len(got) != 1 || got[0].GetPluginHealth().GetPluginUuid() != "rtb/pfar" || got[0].GetPluginHealth().GetLiveUpdatesOff() == "" {
+		t.Fatalf("opening replay = %v, want the far plugin's live updates off", got)
+	}
+
+	far.standing.Store(nil)
+	far.drop <- struct{}{}
+	for h := nextHealth(t, events, "rtb"); !h.GetHealthy(); h = nextHealth(t, events, "rtb") {
+	}
+	if got := opening(t, s); len(got) != 0 {
+		t.Errorf("after the far node re-established without it, opening replay = %v, want none", got)
+	}
+}

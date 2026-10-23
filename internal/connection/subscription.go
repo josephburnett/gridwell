@@ -51,9 +51,6 @@ func (s *Server) farOf(name string) *farSubscription {
 }
 
 func (s *Server) farLocked(name string) *farSubscription {
-	if s.far == nil {
-		s.far = map[string]*farSubscription{}
-	}
 	f, ok := s.far[name]
 	if !ok {
 		f = &farSubscription{session: rand.Text(), kick: make(chan struct{}, 1)}

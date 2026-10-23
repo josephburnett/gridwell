@@ -9,9 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,10 @@ type Server struct {
 	// while the refusal stands: its plugins watch nothing shown here. Written
 	// only by noteLiveOff. Never persisted.
 	liveOff map[string]string
+	// farHealth is each far namespace's standing health by its id here, for a
+	// late Subscribe; note forgets a connection's on the down every re-establish
+	// follows, and the far node's replay (pluginhost Adapter.Subscribe) refills it.
+	farHealth map[string]*gridwellv1.Event
 	// off reads which connections the user disabled, by name; the record is
 	// plugin.Registry's (SwitchedOff). Nil disables none.
 	off func(name string) bool
@@ -131,7 +136,7 @@ func New(st *store.Store, dialer Dialer, home string, conns []config.ConnectionC
 	ctx := context.Background()
 	s := &Server{st: st, dial: dialer, home: home, conns: map[string]*Conn{},
 		live: map[string]*liveConn{}, health: map[string]connState{}, liveOff: map[string]string{},
-		hub: eventhub.New(rpc.EventKey)}
+		farHealth: map[string]*gridwellv1.Event{}, far: map[string]*farSubscription{}, hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
 		retiredSet[r] = true
@@ -224,15 +229,13 @@ func (s *Server) ConnectAll(ctx context.Context) {
 	for _, name := range s.order {
 		c := s.conns[name]
 		done := make(chan error, 1)
-		go func() { _, err := s.learnRoot(c); done <- err }()
+		var root string
+		go func() { r, err := s.learnRoot(c); root = r; done <- err }()
 		select {
 		case err := <-done:
 			if err != nil {
 				log.Printf("gridwell: connection %q (%s): %v", c.Cfg.Label, name, err)
 			} else {
-				s.mu.Lock()
-				root := c.RemoteRoot
-				s.mu.Unlock()
 				log.Printf("gridwell: connection %q (%s): connected — root %s", c.Cfg.Label, name, root)
 			}
 		case <-time.After(bootDialWait):
@@ -251,10 +254,6 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 	for _, name := range s.order {
 		c := s.conns[name]
 		s.kickRootFetch(c)
-		label := c.Cfg.Label
-		if label == "" {
-			label = name
-		}
 		s.mu.Lock()
 		root := c.RemoteRoot
 		lc := s.live[name]
@@ -280,7 +279,7 @@ func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
 				cancel()
 			}
 		}
-		out = append(out, rpc.ConnectionRow(name, label, rootGridID, status, view))
+		out = append(out, rpc.ConnectionRow(name, cmp.Or(c.Cfg.Label, name), rootGridID, status, view))
 	}
 	return out
 }
@@ -412,18 +411,16 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	if err == nil && s.dial == nil {
 		err = errors.New("no dialer")
 	}
-	if err != nil {
-		s.mu.Unlock()
-		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
-		s.note(name, connState{detail: err.Error()})
-		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
+	code, client, closer := codes.FailedPrecondition, namespace.Namespace(nil), func() {}
+	if err == nil {
+		code = codes.Unavailable
+		client, closer, err = s.dial(cfg)
 	}
-	client, closer, err := s.dial(cfg)
 	if err != nil {
 		s.mu.Unlock()
 		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
 		s.note(name, connState{detail: err.Error()})
-		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: %v", name, err)
+		return nil, status.Errorf(code, "connection: connection %q: %v", name, err)
 	}
 	trace.Emit("connection", "dial", "dial ok", kv)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -458,25 +455,20 @@ func (s *Server) learnRoot(c *Conn) (string, error) {
 	ctx, cancel := context.WithTimeout(lc.ctx, learnRootWait)
 	defer cancel()
 	info, err := lc.client.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		s.note(name, connState{detail: status.Convert(err).Message()})
-		return "", err
+	if err == nil && info.RootGridId == "" {
+		err = errors.New("the connected node declared no home")
 	}
-	if info.RootGridId == "" {
-		err := errors.New("the connected node declared no home")
-		s.note(name, connState{detail: err.Error()})
+	if err == nil && root == "" {
+		err = s.st.SetConnectionRoot(ctx, name, info.RootGridId)
+	}
+	if err != nil {
+		// kickRootFetch drops this error, so the row is the only place that
+		// can say why.
+		s.note(name, connState{detail: status.Convert(err).Message()})
 		return "", err
 	}
 	if root != "" && info.RootGridId != root {
 		return "", s.noteLandingMismatch(name, root, info.RootGridId)
-	}
-	if root == "" {
-		if err := s.st.SetConnectionRoot(ctx, name, info.RootGridId); err != nil {
-			// kickRootFetch drops this error, so the row is the only place
-			// that can say why.
-			s.note(name, connState{detail: err.Error()})
-			return "", err
-		}
 	}
 	s.mu.Lock()
 	lc.verified = true
@@ -547,6 +539,7 @@ func (s *Server) note(name string, st connState) bool {
 		delete(s.health, name)
 	} else {
 		s.health[name] = st
+		maps.DeleteFunc(s.farHealth, func(id string, _ *gridwellv1.Event) bool { return id == name || strings.HasPrefix(id, name+"/") })
 	}
 	ev := s.healthEvent(name, st)
 	s.mu.Unlock()
@@ -609,25 +602,34 @@ func (s *Server) stateLocked(name string) connState {
 }
 
 // healthNow is every connection the transport cannot reach or whose share the
-// far node refused, in name order.
+// far node refused, in name order, then every far namespace's standing health.
 func (s *Server) healthNow() []*gridwellv1.Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	names := make([]string, 0, len(s.health)+len(s.liveOff))
-	for name := range s.health {
-		names = append(names, name)
-	}
-	for name := range s.liveOff {
-		if _, down := s.health[name]; !down {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	out := make([]*gridwellv1.Event, 0, len(names))
-	for _, name := range names {
+	names := append(slices.Collect(maps.Keys(s.health)), slices.Collect(maps.Keys(s.liveOff))...)
+	slices.Sort(names)
+	var out []*gridwellv1.Event
+	for _, name := range slices.Compact(names) {
 		out = append(out, s.healthEvent(name, s.stateLocked(name)))
 	}
+	for _, id := range slices.Sorted(maps.Keys(s.farHealth)) {
+		out = append(out, s.farHealth[id])
+	}
 	return out
+}
+
+// relay publishes one far event, keeping it while it is standing health.
+func (s *Server) relay(ev *gridwellv1.Event) {
+	if h := ev.GetPluginHealth(); h != nil {
+		s.mu.Lock()
+		if h.Healthy && h.LiveUpdatesOff == "" {
+			delete(s.farHealth, h.PluginUuid)
+		} else {
+			s.farHealth[h.PluginUuid] = ev
+		}
+		s.mu.Unlock()
+	}
+	s.hub.Publish(ev)
 }
 
 // fanInRemote forwards a connection's remote change events, prefixed, and
@@ -643,7 +645,7 @@ func (s *Server) fanInRemote(ctx context.Context, ns string, client namespace.Na
 			s.farOf(ns).poke()
 			return namespace.Follow(ctx, client, &gridwellv1.SubscribeRequest{Session: s.farOf(ns).session},
 				func(ev *gridwellv1.Event) error {
-					s.hub.Publish(rpc.TransitQualifyEvent(ns, ev))
+					s.relay(rpc.TransitQualifyEvent(ns, ev))
 					return nil
 				}, established)
 		},
@@ -732,7 +734,7 @@ func (s *Server) liveHops() []forward {
 	for ns, lc := range s.live {
 		hops = append(hops, forward{ns, lc.client})
 	}
-	sort.Slice(hops, func(i, j int) bool { return hops[i].ns < hops[j].ns })
+	slices.SortFunc(hops, func(a, b forward) int { return cmp.Compare(a.ns, b.ns) })
 	return hops
 }
 
@@ -872,9 +874,10 @@ func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShe
 }
 
 // Subscribe streams every connection's prefixed remote events and their
-// health, opening with what is dark or without live updates right now: a
-// transition fires once, so a late client would otherwise never hear of it. Attach first,
-// then read the record, so a racing transition is not lost.
+// health, opening with what is dark or without live updates right now, a
+// connection's own and every far namespace's: a transition fires once, so a
+// late client would otherwise never hear of it. Attach first, then read the
+// record, so a racing transition is not lost.
 func (s *Server) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := s.hub.Subscribe()
 	defer cancel()
