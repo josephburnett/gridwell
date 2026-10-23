@@ -19,7 +19,7 @@ export interface Tile {
 }
 
 export interface GridSnapshot {
-  grid?: { id: string; version?: number | string; selection?: string[] };
+  grid?: { id: string; version?: number | string; selection?: string[]; moves?: boolean };
   tiles?: Tile[];
 }
 
