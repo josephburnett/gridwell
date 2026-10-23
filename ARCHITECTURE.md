@@ -132,9 +132,10 @@ source's name for those bytes) from the plugin's `Entry` through
 `pluginhost.buildTiles`.
 `Grid.host_content` (these rows project host state) and
 `Grid.glyph` (the grid's icon) come from the owning plugin's
-`Info` through `pluginhost/adapter.go`; they are what the client reads
-instead of knowing a plugin's kind, which is why a dark plugin fails the
-read rather than serving a grid with a glyph nobody declared. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
+`Info`, which the adapter holds as the plugin last answered it
+(`pluginhost.Adapter.info`) and every reader, the server's included, reads
+from there; they are what the client reads
+instead of knowing a plugin's kind. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
 
 ## The router
 
@@ -189,9 +190,10 @@ is alive): one that dies is respawned with a backoff, the down and up reach
 the notice row as that namespace's health event, and while it is down its calls
 fail honestly — nothing answers for it. One that is up but cannot serve what
 its config declares refuses `Info` with the reason: it is listed broken with
-that sentence and none of its entries, each subscriber's fan-in asks again on
-its backoff, and the up that ends the refusal reaches the notice row like any
-other. While it is up, and only if its
+that sentence and none of its entries, its `Watch` loop asks again on its
+backoff, and the up that ends the refusal reaches the notice row like any
+other. A respawned process answers `Info` afresh: the adapter forgets the
+held answer when the supervisor reports it up. While it is up, and only if its
 `InfoResponse.watch` declares one and some client shows one of its grids (a
 pane's grid, or a door's preview on screen: `pane.Showing`), the node holds
 one `Watch` stream to it (`pluginhost.Start`), scoped to the

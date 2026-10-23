@@ -90,6 +90,12 @@ type Adapter struct {
 
 	lacks absentVerbs
 
+	// decl is the plugin's last answered Info, or declErr its refusal, and
+	// every reader reads it (info); a process coming up forgets the last one's.
+	declMu  sync.Mutex
+	decl    *pluginv1.InfoResponse
+	declErr error
+
 	// moving keeps a listing from retiring the row a Move is rekeying: the
 	// old grid lists the key no more, and the new one does not hold the row.
 	moving sync.RWMutex
@@ -102,7 +108,14 @@ var _ namespace.Namespace = (*Adapter)(nil)
 func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapter {
 	a := &Adapter{cp: cp, mem: mem, sup: sup, hub: eventhub.New(rpc.EventKey), moved: make(chan struct{}), doors: map[string]entryRef{}}
 	if sup != nil {
-		sup.OnHealth(func(bool, string) { a.lacks.forget() })
+		sup.OnHealth(func(up bool, _ string) {
+			a.lacks.forget()
+			if up {
+				a.declMu.Lock()
+				a.decl, a.declErr = nil, nil
+				a.declMu.Unlock()
+			}
+		})
 	}
 	return a
 }
@@ -111,7 +124,7 @@ func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapte
 // a grid id and its persisted framing. It declares no root: a plugin is not a
 // place.
 func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
-	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
+	ci, err := a.info(ctx, false)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +144,25 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 		resp.PluginGrids = append(resp.PluginGrids, out)
 	}
 	return resp, nil
+}
+
+// info is the held declaration, asked for fresh or when none is held. A call
+// its caller gave up, or one to a process that is not up, says nothing about
+// the declaration, so the answer before it stands.
+func (a *Adapter) info(ctx context.Context, fresh bool) (*pluginv1.InfoResponse, error) {
+	a.declMu.Lock()
+	ci, err := a.decl, a.declErr
+	a.declMu.Unlock()
+	if !fresh && (ci != nil || err != nil) {
+		return ci, err
+	}
+	ci, err = a.cp.Info(ctx, &pluginv1.InfoRequest{})
+	if !gwerr.IsAbandoned(ctx, err) && a.processUp() {
+		a.declMu.Lock()
+		a.decl, a.declErr = ci, err
+		a.declMu.Unlock()
+	}
+	return ci, err
 }
 
 // declaredGrids is the one place root_grid is still read: a plugin that
@@ -474,10 +506,11 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	}
 	since := a.servedGen(rpc.EntryGridID(gkey))
 	// A transport failure is "not right now", not a verdict: nothing retires.
+	// Whether the process or its source failed is the supervisor's fact.
 	dark := false
 	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Grid: gkey})
 	if err != nil {
-		if gwerr.IsAbandoned(ctx, err) || !gwerr.IsTransport(err) {
+		if gwerr.IsAbandoned(ctx, err) || !gwerr.IsTransport(err) || !a.processUp() {
 			return nil, err
 		}
 		dark, resp = true, &pluginv1.ListResponse{}
@@ -538,7 +571,7 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// host_content, glyph, writable and move ride the grid: a grid reached through
 	// a door to another namespace has no local row. source_label is the listing's own, so it is
 	// as fresh as the rows. A plugin creates no tiles.
-	ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
+	ci, err := a.info(ctx, false)
 	if err != nil {
 		return nil, err
 	}
@@ -775,7 +808,7 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 		}
 	}
 	if toKey != ref.gridKey {
-		ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
+		ci, err := a.info(ctx, false)
 		if err != nil {
 			return nil, err
 		}

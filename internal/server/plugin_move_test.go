@@ -66,7 +66,7 @@ func (f *parityFix) wantMoves(grid string, want bool) {
 // A plugin that declares no move refuses a move to another of its grids with
 // the reason, here and through a connection; one that declares it moves the
 // entry, the row keeping what the node holds on it, and every open view of
-// either grid is told.
+// either grid is told. A declaration is a process's, so each is its own fixture.
 func TestAPluginEntryMovesOnlyWhenThePluginMoves(t *testing.T) {
 	f := newParityFix(t)
 	f.wantMoves(f.away[onHome], true)
@@ -79,12 +79,13 @@ func TestAPluginEntryMovesOnlyWhenThePluginMoves(t *testing.T) {
 			t.Fatalf("%s: undeclared move = %v, want refused with the reason", ns, err)
 		}
 		f.wantMoves(all, false)
-		if _, err := f.cl.SetContentZoom(f.ctx, tl.Id, 1.5); err != nil {
+	}
+
+	f = newParityFix(t, func(s *paritySource) { s.moves = true })
+	for ns := range f.src {
+		if _, err := f.cl.SetContentZoom(f.ctx, f.body(rpc.QualifyID(ns, rpc.EntryGridID("all"))).Id, 1.5); err != nil {
 			t.Fatal(err)
 		}
-		f.src[ns].mu.Lock()
-		f.src[ns].moves = true
-		f.src[ns].mu.Unlock()
 	}
 	f.settle(onPlugin)
 	f.settle(onFar)

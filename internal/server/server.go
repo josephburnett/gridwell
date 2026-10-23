@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -67,13 +66,6 @@ type Server struct {
 	// defaultShellWriteTimeout.
 	shellWriteTimeout time.Duration
 
-	// infoCache memoizes each plugin's first successful Info handshake by uuid,
-	// because its facts are stable for the plugin's lifetime and without it a
-	// slow remote makes every menu open pay pluginInfoTimeout. Failures are
-	// never cached.
-	infoMu    sync.Mutex
-	infoCache map[string]*pb.InfoResponse
-
 	subscription *subscription.Book
 
 	// shells is every open /shell attachment and the session it rides under.
@@ -98,7 +90,6 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 		pluginReg:         reg,
 		mux:               http.NewServeMux(),
 		shellWriteTimeout: defaultShellWriteTimeout,
-		infoCache:         map[string]*pb.InfoResponse{},
 		build:             tracewire.BuildCommit(),
 		switchedOff:       eventhub.New(rpc.EventKey),
 	}
@@ -207,39 +198,17 @@ func (s *Server) homeScratch(ctx context.Context) (string, error) {
 	return rpc.QualifyID(hu, info.ScratchGridId), nil
 }
 
-// pluginInfo serves repeat calls from the per-uuid cache. The live call is
-// bounded by pluginInfoTimeout so a hung plugin degrades to an error rather
-// than a stall; concurrent misses may both call Info, which is harmless.
+// pluginInfo is a namespace's Info, bounded by pluginInfoTimeout so a hung
+// one degrades to an error rather than a stall; a plugin's is held by its
+// adapter (pluginhost.Adapter.info).
 func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
-	s.infoMu.Lock()
-	info, ok := s.infoCache[uuid]
-	s.infoMu.Unlock()
-	if ok {
-		return info, nil
-	}
 	c, found := s.routeClient(uuid)
 	if !found {
 		return nil, errors.New("no plugin " + uuid)
 	}
 	ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
 	defer cancel()
-	info, err := c.Info(ictx, &pb.InfoRequest{})
-	if err != nil {
-		return nil, err
-	}
-	s.infoMu.Lock()
-	s.infoCache[uuid] = info
-	s.infoMu.Unlock()
-	return info, nil
-}
-
-// invalidateInfoCache drops the cached Info for uuid. The root_view_* fields
-// are part of Info but change on every ascent out of a plugin root, so
-// SetFraming's root arm calls it.
-func (s *Server) invalidateInfoCache(uuid string) {
-	s.infoMu.Lock()
-	delete(s.infoCache, uuid)
-	s.infoMu.Unlock()
+	return c.Info(ictx, &pb.InfoRequest{})
 }
 
 func (s *Server) routes() {

@@ -511,8 +511,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 }
 
 // SetFraming is the one framing write. Unimplemented (a plugin that keeps no
-// framing) is not an error; a root write invalidates the Info cache, which
-// carries the framing.
+// framing) is not an error.
 func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	f, err := rpc.FramingOf(req)
 	if err != nil {
@@ -545,7 +544,6 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 		return nil, err
 	}
 	if root {
-		rt.srv.invalidateInfoCache(uuid)
 		return &pb.SetFramingResponse{}, nil
 	}
 	t := resp.GetTile()

@@ -275,7 +275,7 @@ func (g *findGrids) rows(req *gridwellv1.FindRequest) ([]findHit, error) {
 // node holds rows for, which are the ones the user has touched: the find
 // never walks the source. ok is false when no such way down reaches it.
 func (g *findGrids) chain(target string) (path []*gridwellv1.Tile, ok bool, err error) {
-	ci, err := g.a.cp.Info(g.ctx, &pluginv1.InfoRequest{})
+	ci, err := g.a.info(g.ctx, false)
 	if err != nil {
 		return nil, false, err
 	}

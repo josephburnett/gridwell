@@ -24,13 +24,23 @@ import (
 )
 
 // darkableCP forwards to a live plugin until dark is set, after which every
-// unary call answers Unavailable: what a crashed plugin subprocess looks like
-// to the adapter. That is distinct from a dark source, where the process
-// answers and only the directory read fails.
+// unary call answers Unavailable and, as its supervisor, it reports the
+// process down: what a crashed plugin subprocess looks like to the adapter.
+// That is distinct from a dark source, where the process answers and only the
+// directory read fails.
 type darkableCP struct {
 	pluginv1.PluginClient
 	dark atomic.Bool
 }
+
+func (d *darkableCP) Health() (bool, string) {
+	if d.dark.Load() {
+		return false, "plugin process dark"
+	}
+	return true, ""
+}
+
+func (d *darkableCP) OnHealth(func(bool, string)) func() { return func() {} }
 
 func (d *darkableCP) Info(ctx context.Context, req *pluginv1.InfoRequest, opts ...grpc.CallOption) (*pluginv1.InfoResponse, error) {
 	if d.dark.Load() {
@@ -70,7 +80,7 @@ func TestADarkPluginFailsHonestlyAndKeepsTheNodesRows(t *testing.T) {
 	cp := plugintest.Spawn(t, "fs", map[string]string{"root": root})
 	dc := &darkableCP{PluginClient: cp}
 	reg := plugin.NewRegistry()
-	reg.Register(fsUUID, "fs", pluginhost.New(dc, memStore.Namespace("p1"), nil), nil)
+	reg.Register(fsUUID, "fs", pluginhost.New(dc, memStore.Namespace("p1"), dc), nil)
 	srv := servertest.New(t, reg, server.Config{})
 	hs := servertest.Serve(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

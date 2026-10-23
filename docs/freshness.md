@@ -43,8 +43,8 @@ source's health by the same `noteSource`, and it retires nothing, since a
 cached answer is not a verdict even when it claims `authoritative`. Retirement needs a verdict — an
 authoritative listing sweeps by `store.Namespace.Sweep`, a live non-authoritative one
 sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
-itself gone — fails the read outright at `cp.Info`, because the declared
-facts are the plugin's own and nothing can supply them. A source that
+itself gone — fails the read outright, because the declared facts and the
+entries are the plugin's own and nothing can supply them. A source that
 changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
 node holds one stream per subprocess while some client's view (`SetView`)
 shows one of its grids, scoped to the grids shown and those their link entries point into,

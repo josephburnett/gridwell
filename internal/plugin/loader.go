@@ -28,8 +28,8 @@ var bootInfoWait = 5 * time.Second
 // bootInfo is the launch gate: a plugin that does not answer Info inside
 // bootInfoWait does not come up, because one that never answers must not hold
 // the boot. A refusal is an answer: that plugin comes up, its row broken with
-// the reason, and the node asks again until it serves. The answer itself is
-// discarded: the router reads declarations per request.
+// the reason, and the node asks again until it serves. The answer is the
+// adapter's to hold (pluginhost.Adapter.info).
 func bootInfo(ns namespace.Namespace) error {
 	ctx, cancel := context.WithTimeout(context.Background(), bootInfoWait)
 	defer cancel()

@@ -107,7 +107,7 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 		Down:  func(string) {},
 		Up:    func() { a.noteWatch("") },
 		Attempt: func(ctx context.Context, established func()) error {
-			ci, err := a.cp.Info(ctx, &pluginv1.InfoRequest{})
+			ci, err := a.info(ctx, true)
 			if err != nil {
 				return err
 			}

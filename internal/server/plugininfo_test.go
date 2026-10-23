@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -153,7 +154,7 @@ func TestBuildPluginInfo_RootViewForwardedFromInfo(t *testing.T) {
 }
 
 // countingInfoPlugin is a minimal plugin that counts Info calls and can fail
-// the first one — the seam for the Info cache tests.
+// the first one.
 type countingInfoPlugin struct {
 	namespacetest.Unimplemented
 	calls     atomic.Int32
@@ -168,30 +169,8 @@ func (p *countingInfoPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoRes
 	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
-// TestListPluginsCachesInfo: repeat Handshake calls serve the handshake from
-// the per-uuid cache — the plugin is asked exactly once. Before the cache,
-// every menu open re-handshook every plugin (up to pluginInfoTimeout each
-// for a slow remote).
-func TestListPluginsCachesInfo(t *testing.T) {
-	fake := &countingInfoPlugin{}
-	client := fake
-	reg := plugin.NewRegistry()
-	reg.Register("u-1", "test", client, nil)
-	srv := mustNew(t, reg, Config{})
-	h := newConnectHandler(newRouter(srv))
-
-	for i := 0; i < 3; i++ {
-		if _, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{})); err != nil {
-			t.Fatalf("Handshake #%d: %v", i+1, err)
-		}
-	}
-	if got := fake.calls.Load(); got != 1 {
-		t.Errorf("Info called %d times across 3 Handshake, want 1 (cached)", got)
-	}
-}
-
-// TestListPluginsRetriesFailedInfo: a failed handshake is NOT negatively
-// cached — the next call retries and the plugin recovers its listing.
+// TestListPluginsRetriesFailedInfo: a failed Info lists a degraded row, and
+// the next Handshake asks the namespace again and lists it whole.
 func TestListPluginsRetriesFailedInfo(t *testing.T) {
 	fake := &countingInfoPlugin{failFirst: true}
 	client := fake
@@ -216,7 +195,34 @@ func TestListPluginsRetriesFailedInfo(t *testing.T) {
 		t.Errorf("retry after a failed Info should recover, got root %q, want u-1/1", got)
 	}
 	if got := fake.calls.Load(); got != 2 {
-		t.Errorf("Info called %d times, want 2 (fail, then successful retry, then cache)", got)
+		t.Errorf("Info called %d times, want 2 (fail, then the answer)", got)
+	}
+}
+
+// hungInfoPlugin answers Info only when its caller gives up.
+type hungInfoPlugin struct{ namespacetest.Unimplemented }
+
+func (hungInfoPlugin) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A namespace whose Info never answers lists broken once pluginInfoTimeout
+// runs out, and the rest of the menu is not held behind it.
+func TestAHungInfoListsBrokenAfterTheTimeout(t *testing.T) {
+	reg := plugin.NewRegistry()
+	reg.Register("u-hung", "test", hungInfoPlugin{}, nil)
+	h := newConnectHandler(newRouter(mustNew(t, reg, Config{})))
+	start := time.Now()
+	r, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took < pluginInfoTimeout || took > pluginInfoTimeout+2*time.Second {
+		t.Errorf("Handshake took %v, want it bounded by pluginInfoTimeout (%v)", took, pluginInfoTimeout)
+	}
+	if r.Msg.Plugins[0].InfoError == "" {
+		t.Error("a hung Info lists no InfoError")
 	}
 }
 

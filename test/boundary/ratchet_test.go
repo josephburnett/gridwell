@@ -21,7 +21,6 @@ var ratchetCounts = map[string]func(t *testing.T, root string) int{
 	"lines":           productionLines,
 	"debt":            debtCount,
 	"unheard-by-code": length(unheardByCode),
-	"info-readers":    length(infoReaders),
 	"e2e-fields":      length(e2eFields),
 }
 

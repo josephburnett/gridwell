@@ -779,6 +779,14 @@ func infoReaders(t *testing.T, root string) []string {
 	return out
 }
 
+// TestOneInfoReader holds a plugin's declaration to one asker, the adapter's
+// held answer (pluginhost.Adapter.info), which every other reader reads.
+func TestOneInfoReader(t *testing.T) {
+	if got := infoReaders(t, repoRoot(t)); len(got) != 1 || !strings.HasPrefix(got[0], "internal/pluginhost/") {
+		t.Errorf("the plugin's Info is read from %d places, want the adapter's one: %q", len(got), got)
+	}
+}
+
 func isSelector(e ast.Expr, pkg, name string) bool {
 	sel, ok := e.(*ast.SelectorExpr)
 	if !ok || sel.Sel.Name != name {
