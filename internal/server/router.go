@@ -539,7 +539,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	}
 	resp, err := c.SetFraming(ctx, rpc.PeelRequest(rt.hop(ref, transit), out))
 	if err != nil {
-		if isUnimplemented(err) {
+		if status.Code(err) == gcodes.Unimplemented { // a namespace that keeps no framing
 			return &pb.SetFramingResponse{}, nil
 		}
 		return nil, err
@@ -767,18 +767,6 @@ func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, hea
 	case events <- rpc.HealthEvent(uuid, healthy, detail):
 	case <-ctx.Done():
 	}
-}
-
-// isUnimplemented is how a namespace's "method not supported" becomes a silent
-// no-op, as with SetFraming on a plugin that keeps no framing.
-func isUnimplemented(err error) bool {
-	if err == nil {
-		return false
-	}
-	if st, ok := status.FromError(err); ok {
-		return st.Code() == gcodes.Unimplemented
-	}
-	return false
 }
 
 // Info describes this node to a connecting node, on the connection API only.

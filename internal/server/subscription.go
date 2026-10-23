@@ -73,7 +73,7 @@ func (s *Server) spreadSubscription(union []string) {
 	// A refusal is the namespace's own news, on its stream (namespace.Namespace).
 	for _, n := range s.namespaces() {
 		_, err := n.NS.SetView(context.Background(), &pb.SetViewRequest{ShownGridIds: shares[owner{n.UUID, n.Transit}]})
-		if err != nil && !isUnimplemented(err) {
+		if err != nil && status.Code(err) != gcodes.Unimplemented {
 			trace.Emit("view", "refused", err.Error(), map[string]string{"ns": n.UUID})
 		}
 	}
