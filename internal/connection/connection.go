@@ -399,11 +399,11 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	}
 	if s.closed {
 		s.mu.Unlock()
-		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: the node is shutting down", name)
+		return nil, gwerr.Unheard("connection: connection %q: the node is shutting down", name)
 	}
 	if s.switchedOff(name) {
 		s.mu.Unlock()
-		return nil, status.Errorf(codes.Unavailable, "connection: connection %q: %s", name, rpc.DisabledDetail)
+		return nil, gwerr.Unheard("connection: connection %q: %s", name, rpc.DisabledDetail)
 	}
 	kv := map[string]string{"conn": name}
 	trace.Emit("connection", "dial", "dial", kv)
@@ -411,16 +411,19 @@ func (s *Server) ensureLive(c *Conn) (*liveConn, error) {
 	if err == nil && s.dial == nil {
 		err = errors.New("no dialer")
 	}
-	code, client, closer := codes.FailedPrecondition, namespace.Namespace(nil), func() {}
+	dialed, client, closer := false, namespace.Namespace(nil), func() {}
 	if err == nil {
-		code = codes.Unavailable
+		dialed = true
 		client, closer, err = s.dial(cfg)
 	}
 	if err != nil {
 		s.mu.Unlock()
 		trace.Emit("connection", "dial", "dial failed: "+err.Error(), kv)
 		s.note(name, connState{detail: err.Error()})
-		return nil, status.Errorf(code, "connection: connection %q: %v", name, err)
+		if dialed {
+			return nil, gwerr.Unheard("connection: connection %q: %v", name, err)
+		}
+		return nil, status.Errorf(codes.FailedPrecondition, "connection: connection %q: %v", name, err)
 	}
 	trace.Emit("connection", "dial", "dial ok", kv)
 	ctx, cancel := context.WithCancel(context.Background())

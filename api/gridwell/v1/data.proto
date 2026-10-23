@@ -672,6 +672,11 @@ message SourceDisabled {
   string namespace = 1;
 }
 
+// Answered is the detail the connection API stamps on every error it returns:
+// the far node spoke, whatever the code. gwerr.Answered writes it and
+// gwerr.Received reads it, at the dial.
+message Answered {}
+
 // CreateTileRequest creates one tile of any kind. There is no version: the
 // tile does not exist yet. tile.kind selects which fields are meaningful:
 //   door  → child_grid_id set makes a door to another namespace pointing at a grid in

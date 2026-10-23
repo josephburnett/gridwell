@@ -20,3 +20,6 @@ client/trace/interceptor.go interceptor.WrapStreamingHandler
 client/nodebuild/nodebuild.go interceptor.WrapUnary
 client/nodebuild/nodebuild.go interceptor.WrapStreamingClient
 client/nodebuild/nodebuild.go interceptor.WrapStreamingHandler
+
+# grpc's status package reads an error's status through its GRPCStatus method.
+api/gwerr/gwerr.go unheard.GRPCStatus

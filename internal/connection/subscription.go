@@ -106,8 +106,8 @@ func (s *Server) tellFar(ctx context.Context, name string, client namespace.Name
 			case ctx.Err() != nil:
 			case err == nil:
 				s.noteLiveOff(name, "")
-			case status.Code(err) == codes.Unimplemented, gwerr.IsTransport(err):
-				// A transport failure is the stream's news (fanInRemote).
+			case status.Code(err) == codes.Unimplemented, gwerr.IsUnheard(err):
+				// An unheard call is the stream's news (fanInRemote).
 			default:
 				s.noteLiveOff(name, "what is shown could not be watched: "+status.Convert(err).Message())
 			}

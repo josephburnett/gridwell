@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
@@ -264,13 +265,30 @@ var connectBackoff = backoff.Config{
 // wear, so the ssh bridge and the direct socket cannot drift apart, plus only
 // what the caller's transport needs. A test that dials a connection API uses
 // it too (test/boundary pins it), so it crosses the API the node crosses.
+// Its errors pass gwerr.Received, the one verdict on whether the far node spoke.
 func ClientConn(target string, transport ...grpc.DialOption) (*grpc.ClientConn, error) {
 	return grpc.NewClient(target, append([]grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepaliveParams),
 		grpc.WithConnectParams(grpc.ConnectParams{Backoff: connectBackoff}),
+		grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			return gwerr.Received(invoker(ctx, method, req, reply, cc, opts...))
+		}),
+		grpc.WithChainStreamInterceptor(func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			s, err := streamer(ctx, desc, cc, method, opts...)
+			if err != nil {
+				return nil, gwerr.Received(err)
+			}
+			return receivedStream{s}, nil
+		}),
 	}, transport...)...)
 }
+
+// receivedStream's RecvMsg carries the stream's verdict; SendMsg says only
+// io.EOF, which sends the caller to RecvMsg for it.
+type receivedStream struct{ grpc.ClientStream }
+
+func (s receivedStream) RecvMsg(m any) error { return gwerr.Received(s.ClientStream.RecvMsg(m)) }
 
 // Dial returns a client of the remote node's export plus a closer. The client
 // speaks the remote's qualified ids verbatim, and the transit qualification

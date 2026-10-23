@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -188,19 +189,20 @@ func grpcCode(err error) string {
 	return status.Code(err).String()
 }
 
-// traceUnary and traceStream are the connection API's half.
+// traceUnary and traceStream are the connection API's half, and stamp what it
+// returns as this node's answer (gwerr.Answered).
 func traceUnary(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	s := rpcSpan(requestIDOf(ctx), info.FullMethod, req)
 	resp, err := handler(ctx, req)
 	s.end(err, grpcCode(err))
-	return resp, err
+	return resp, gwerr.Answered(err)
 }
 
 func traceStream(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	s := rpcSpan(requestIDOf(ss.Context()), info.FullMethod, nil)
 	err := handler(srv, sawStream{ss, s})
 	s.end(err, grpcCode(err))
-	return err
+	return gwerr.Answered(err)
 }
 
 // requestIDOf reads the header off gRPC metadata, which lowercases it.

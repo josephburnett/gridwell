@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,7 +11,9 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // refusingFar refuses every share until accepting is set, as a far node whose
@@ -18,10 +21,18 @@ import (
 type refusingFar struct {
 	namespacetest.Unimplemented
 	accepting atomic.Bool
+	refusal   atomic.Pointer[error] // nil is "database is locked"
+	asked     chan struct{}         // told of each share, when set
 }
 
 func (f *refusingFar) SetView(context.Context, *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
+	if f.asked != nil {
+		defer func() { f.asked <- struct{}{} }()
+	}
 	if !f.accepting.Load() {
+		if err := f.refusal.Load(); err != nil {
+			return nil, *err
+		}
 		return nil, status.Error(codes.Internal, "database is locked")
 	}
 	return &gridwellv1.SetViewResponse{}, nil
@@ -70,6 +81,54 @@ func TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff(t *testing.T) {
 	if !h.GetHealthy() || h.GetLiveUpdatesOff() != "" {
 		t.Fatalf("after a share landed: %v, want healthy with live updates on", h)
 	}
+}
+
+// A share the far node answered Unavailable is still its refusal, so live
+// updates are off; a share it never heard is the stream's news and says
+// nothing here.
+func TestOnlyAnAnsweredShareRefusalTurnsLiveUpdatesOff(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		off  bool
+	}{
+		{"answered Unavailable", status.Error(codes.Unavailable, "the far plugin is not answering"), true},
+		{"unheard", gwerr.Unheard("tunnel down"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newTestServer(t, openStore(t))
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			far := &refusingFar{asked: make(chan struct{}, 4)}
+			far.refusal.Store(&tc.err)
+			mark := traceSeq()
+			if _, err := s.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{"geneva/p/1"}}); err != nil {
+				t.Fatal(err)
+			}
+			go s.tellFar(ctx, "geneva", far)
+			<-far.asked
+			// The next share is asked only once the first answer is noted.
+			if _, err := s.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{"geneva/p/2"}}); err != nil {
+				t.Fatal(err)
+			}
+			<-far.asked
+			off := false
+			for _, rec := range trace.Default().Snapshot() {
+				off = off || rec.Seq > mark && rec.Src == "connection" && strings.Contains(rec.Msg, status.Convert(tc.err).Message())
+			}
+			if off != tc.off {
+				t.Errorf("live updates off for %v = %v, want %v", tc.err, off, tc.off)
+			}
+		})
+	}
+}
+
+func traceSeq() uint64 {
+	recs := trace.Default().Snapshot()
+	if len(recs) == 0 {
+		return 0
+	}
+	return recs[len(recs)-1].Seq
 }
 
 func nextHealth(t *testing.T, events <-chan *gridwellv1.Event, conn string) *gridwellv1.EventPluginHealth {

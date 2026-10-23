@@ -7,8 +7,12 @@ package gwerr
 import (
 	"context"
 	"errors"
+	"io"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
 // Sentinel errors. A plugin may return one wrapped, so callers use
@@ -122,8 +126,51 @@ func IsTransport(err error) bool {
 
 // IsAbandoned reports that a call failed because its own caller gave up. That
 // says nothing about the far side, neither dark nor answering, so no layer
-// records reachability or evicts on it. Check it before IsTransport, which
-// also counts the Canceled such a call surfaces as.
+// records reachability or evicts on it. Check it before IsTransport or
+// IsUnheard, which also count the Canceled such a call surfaces as.
 func IsAbandoned(ctx context.Context, err error) bool {
 	return err != nil && ctx.Err() != nil
+}
+
+// Answered is err stamped as the serving node's answer, which the connection
+// API puts on every error it returns. A far node of an older build stamps
+// nothing, so every error from it reads unheard until it is upgraded, as its
+// missing stream header reads dark (namespace.Follow).
+func Answered(err error) error {
+	if _, stamped := detail[*pb.Answered](err); stamped || err == nil {
+		return err
+	}
+	st, ok := status.FromError(err)
+	if !ok {
+		st = status.FromContextError(err)
+	}
+	if sd, derr := st.WithDetails(&pb.Answered{}); derr == nil {
+		st = sd
+	}
+	return st.Err()
+}
+
+// Received is the dial's verdict on what came back: unstamped is unheard, its
+// status kept. io.EOF, a stream's end, passes as it is.
+func Received(err error) error {
+	if _, stamped := detail[*pb.Answered](err); stamped || err == nil || err == io.EOF {
+		return err
+	}
+	return unheard{err}
+}
+
+// unheard is an error the far node never spoke for. It stays inside the node:
+// a gRPC hop sends only its status, and the next hop heard this node.
+type unheard struct{ error }
+
+func (u unheard) GRPCStatus() *status.Status { return status.Convert(u.error) }
+
+// Unheard is the transport's Unavailable for a far node it could not ask.
+func Unheard(format string, args ...any) error {
+	return unheard{status.Errorf(codes.Unavailable, format, args...)}
+}
+
+// IsUnheard reports that the far node never spoke for err.
+func IsUnheard(err error) bool {
+	return errors.As(err, new(unheard))
 }
