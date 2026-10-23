@@ -16,12 +16,7 @@ import (
 // state. Captures carry no claim and no bump; the address the page landed on
 // is content, WriteContent's url arm.
 func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, title, history string) (*gridwellv1.Tile, error) {
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "SetURLState", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	return s.tileWrite(ctx, "SetURLState", tileIDStr, func(tx *sql.Tx, tileID int64) error {
 		if _, err := s.loadForWrite(ctx, tx, tileID, rpc.KindURL, ErrNotURLTile); err != nil {
 			return err
 		}
@@ -38,24 +33,15 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 				return err
 			}
 		}
-		if history != "" {
-			// Empty is skipped like the JPEG, so a partial capture cannot
-			// clobber a good stored history.
-			if _, err := tx.ExecContext(ctx,
-				`UPDATE tiles SET url_history = ?, updated_at = ? WHERE id = ?`,
-				history, s.now().Unix(), tileID); err != nil {
-				return err
-			}
+		if history == "" {
+			return nil
 		}
-
-		var err error
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		// Empty is skipped like the JPEG, so a partial capture cannot clobber a
+		// good stored history.
+		_, err := tx.ExecContext(ctx, `UPDATE tiles SET url_history = ?, updated_at = ? WHERE id = ?`,
+			history, s.now().Unix(), tileID)
 		return err
 	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 // SetURLPreview is a plugin url tile's screenshot, the preview half of home's
@@ -157,12 +143,7 @@ const contentZoomSet = `content_zoom = ?`
 // claim and no bump. Doors are refused: their view_zoom is the grid viewport,
 // a different fact with its own writer.
 func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoom rpc.ContentZoom) (*gridwellv1.Tile, error) {
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "SetContentZoom", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	return s.tileWrite(ctx, "SetContentZoom", tileIDStr, func(tx *sql.Tx, tileID int64) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
@@ -170,15 +151,11 @@ func (s *Store) SetContentZoom(ctx context.Context, tileIDStr string, contentZoo
 		if rpc.IsDoorKind(n.Kind) {
 			return fmt.Errorf("%w: a door has no content zoom", ErrInvalidArgument)
 		}
-		if _, err := tx.ExecContext(ctx,
+		_, err = tx.ExecContext(ctx,
 			`UPDATE tiles SET `+contentZoomSet+`, updated_at = ? WHERE id = ?`,
-			contentZoom.Float(), s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+			contentZoom.Float(), s.now().Unix(), tileID)
 		return err
 	})
-	return out, err
 }
 
 // boolToInt maps a bool onto SQLite's 0 and 1 integer convention.

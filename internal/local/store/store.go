@@ -398,6 +398,24 @@ func (s *Store) withMutation(ctx context.Context, verb string, fn func(tx *sql.T
 // errUnchanged rolls back a row write that left its row as it found it.
 var errUnchanged = errors.New("store: write changed nothing")
 
+// tileWrite is withTileWrite on the tile tileIDStr names, answering its row as
+// the write left it: framing, a capture, the freeze.
+func (s *Store) tileWrite(ctx context.Context, verb, tileIDStr string, write func(tx *sql.Tx, tileID int64) error) (*gridwellv1.Tile, error) {
+	tileID, err := parseID(tileIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
+	}
+	var out *gridwellv1.Tile
+	err = s.withTileWrite(ctx, verb, tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		if err := write(tx, tileID); err != nil {
+			return err
+		}
+		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+		return err
+	})
+	return out, err
+}
+
 // withTileWrite is withRowWrite on one existing tile row: framing, layout, a
 // capture.
 func (s *Store) withTileWrite(ctx context.Context, verb string, tileID int64, fn func(tx *sql.Tx, events *[]*gridwellv1.Event) error) error {

@@ -34,12 +34,7 @@ func (s *Store) CreateShell(ctx context.Context, gridID string, x, y, w, h int64
 // no version claim and makes no bump; a shell's real concurrency primitive is
 // the live PTY, one per tile at a time.
 func (s *Store) SetShellPreview(ctx context.Context, tileIDStr string, jpeg []byte) (*gridwellv1.Tile, error) {
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "SetShellPreview", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	return s.tileWrite(ctx, "SetShellPreview", tileIDStr, func(tx *sql.Tx, tileID int64) error {
 		n, err := s.loadTile(ctx, tx, tileID)
 		if err != nil {
 			return err
@@ -69,8 +64,6 @@ func (s *Store) SetShellPreview(ctx context.Context, tileIDStr string, jpeg []by
 				}
 			}
 		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
-		return err
+		return nil
 	})
-	return out, err
 }

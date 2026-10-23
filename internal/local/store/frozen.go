@@ -18,19 +18,9 @@ import (
 // wire field are named url_frozen, from before a shell could be frozen;
 // neither can be renamed.
 func (s *Store) SetFrozen(ctx context.Context, tileIDStr string, frozen bool, claim *bool) (*gridwellv1.Tile, error) {
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "SetFrozen", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		if err := s.setFrozenTx(ctx, tx, "", tileID, frozen, claim); err != nil {
-			return err
-		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
-		return err
+	return s.tileWrite(ctx, "SetFrozen", tileIDStr, func(tx *sql.Tx, tileID int64) error {
+		return s.setFrozenTx(ctx, tx, "", tileID, frozen, claim)
 	})
-	return out, err
 }
 
 // SetFrozen is the standing freeze on a plugin's tile, the write home's rows

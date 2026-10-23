@@ -319,12 +319,7 @@ const (
 // SetTextScroll updates a text tile's scroll and its rendered or text
 // mode. Like SetFraming this is framing, not content: no claim, no bump.
 func (s *Store) SetTextScroll(ctx context.Context, tileIDStr string, textX, textY, textW, textH int64, textMode string) (*gridwellv1.Tile, error) {
-	tileID, err := parseID(tileIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
-	}
-	var out *gridwellv1.Tile
-	err = s.withTileWrite(ctx, "SetTextScroll", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	return s.tileWrite(ctx, "SetTextScroll", tileIDStr, func(tx *sql.Tx, tileID int64) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, rpc.KindText, ErrNotTextTile)
 		if err != nil {
 			return err
@@ -336,25 +331,17 @@ func (s *Store) SetTextScroll(ctx context.Context, tileIDStr string, textX, text
 			_, err := tx.ExecContext(ctx,
 				`UPDATE tiles SET `+textScrollSet+`, updated_at = ? WHERE id = ?`,
 				textX, textY, textW, textH, s.now().Unix(), tileID)
-			if err != nil {
-				return err
-			}
-			out, err = s.emitTileChanged(ctx, tx, tileID, events)
 			return err
 		}
 		var textModeArg any
 		if textMode != "" {
 			textModeArg = textMode
 		}
-		if _, err := tx.ExecContext(ctx,
+		_, err = tx.ExecContext(ctx,
 			`UPDATE tiles SET `+textScrollSet+textModeSet+`, updated_at = ? WHERE id = ?`,
-			textX, textY, textW, textH, textModeArg, s.now().Unix(), tileID); err != nil {
-			return err
-		}
-		out, err = s.emitTileChanged(ctx, tx, tileID, events)
+			textX, textY, textW, textH, textModeArg, s.now().Unix(), tileID)
 		return err
 	})
-	return out, err
 }
 
 // DeleteTile is the user's discard gesture, in two stages. A tile on an
