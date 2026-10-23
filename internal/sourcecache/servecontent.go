@@ -28,33 +28,15 @@ var (
 // status-200 answers are cached: an error page is a verdict, and verdicts
 // are never served from cache.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	var status int64
-	var mediaType string
-	var data []byte
-	var gotChunk, oversized bool
-	err := c.Namespace.ServeContent(ctx, in, func(ch *pb.ServeContentChunk) error {
-		gotChunk = true
-		if status == 0 && ch.GetStatus() != 0 {
-			status = ch.GetStatus()
-			mediaType = ch.GetMediaType()
-		}
-		if !oversized {
-			data = append(data, ch.GetData()...)
-			if len(data) > serveContentEntryCap {
-				oversized = true
-				data = nil
-			}
-		}
-		return send(ch)
-	})
+	first, data, flowed, fits, err := tee(func(f func(*pb.ServeContentChunk) error) error { return c.Namespace.ServeContent(ctx, in, f) }, send, serveContentEntryCap)
 	c.noteReachTile(ctx, err, in.GetTileId())
 	if err == nil {
-		if !oversized && status == 200 {
-			c.storeServeContent(ctx, in.GetTileId(), in.GetSubpath(), status, mediaType, data)
+		if fits && first.GetStatus() == 200 {
+			c.storeServeContent(ctx, in.GetTileId(), in.GetSubpath(), first.GetStatus(), first.GetMediaType(), data)
 		}
 		return nil
 	}
-	if !gotChunk && gwerr.IsTransport(err) {
+	if !flowed && gwerr.IsTransport(err) {
 		if st, mt, cached, ok := c.loadServeContent(ctx, in.GetTileId(), in.GetSubpath()); ok {
 			return sendChunked(cached, func(b []byte, first bool) error {
 				if first {

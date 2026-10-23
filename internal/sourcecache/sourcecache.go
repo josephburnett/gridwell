@@ -830,42 +830,19 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 // ReadContent tees the live stream, storing only at a clean end. A transport
 // failure falls back to the cached body only before any chunk has flowed.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
-	var mediaType, stamp string
-	var version int64
-	var data []byte
-	var gotChunk, oversized bool
 	r := c.order.begin()
 	defer r.end()
-	err := c.Namespace.ReadContent(ctx, in, func(ch *pb.ContentChunk) error {
-		gotChunk = true
-		// Chunk 1 carries media_type, version and stamp, sent even for empty
-		// content.
-		if mediaType == "" && ch.GetMediaType() != "" {
-			mediaType = ch.GetMediaType()
-		}
-		if version == 0 && ch.GetVersion() != 0 {
-			version = ch.GetVersion()
-		}
-		if stamp == "" && ch.GetContentStamp() != "" {
-			stamp = ch.GetContentStamp()
-		}
-		if !oversized {
-			data = append(data, ch.GetData()...)
-			if len(data) > rpc.MaxContentBytes {
-				oversized = true
-				data = nil
-			}
-		}
-		return send(ch)
-	})
+	first, data, flowed, fits, err := tee(func(f func(*pb.ContentChunk) error) error { return c.Namespace.ReadContent(ctx, in, f) }, send, rpc.MaxContentBytes)
 	c.noteReachTile(ctx, err, in.TileId)
 	if err == nil {
-		if !oversized {
-			r.install([]string{in.TileId}, func() { c.storeContent(ctx, in.TileId, mediaType, version, stamp, data) })
+		if fits {
+			r.install([]string{in.TileId}, func() {
+				c.storeContent(ctx, in.TileId, first.GetMediaType(), first.GetVersion(), first.GetContentStamp(), data)
+			})
 		}
 		return nil
 	}
-	if !gotChunk && gwerr.IsTransport(err) {
+	if !flowed && gwerr.IsTransport(err) {
 		if mt, ver, st, cached, ok := c.loadContent(ctx, in.TileId); ok {
 			return sendChunked(cached, func(b []byte, first bool) error {
 				if first {
@@ -876,6 +853,25 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 		}
 	}
 	return err
+}
+
+// tee relays a live body into send, keeping chunk 1, which alone carries the
+// metadata, and the bytes while they fit limit. flowed is whether any chunk did.
+func tee[C interface{ GetData() []byte }](read func(func(C) error) error, send func(C) error, limit int) (first C, data []byte, flowed, fits bool, err error) {
+	fits = true
+	err = read(func(ch C) error {
+		if !flowed {
+			first, flowed = ch, true
+		}
+		if fits {
+			data = append(data, ch.GetData()...)
+			if fits = len(data) <= limit; !fits {
+				data = nil
+			}
+		}
+		return send(ch)
+	})
+	return first, data, flowed, fits, err
 }
 
 // sendChunked replays a cached body in the live chunk shape, so a caller
