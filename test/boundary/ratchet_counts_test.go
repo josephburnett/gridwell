@@ -689,3 +689,12 @@ func TestParityIsZero(t *testing.T) {
 		t.Errorf("internal/server/parity_test.go counts %d: write the check for each same cell, and fill each hole with a decision in CLAUDE.md or a fix that makes it same", n)
 	}
 }
+
+// TestNoUncarriedFlags holds every wire flag that changes behaviour to a
+// parity dimension that varies on it (rpc.Flags); a new flag is a column
+// nobody filled until a cell varies on it.
+func TestNoUncarriedFlags(t *testing.T) {
+	if n := axesUncovered(t, repoRoot(t)); n != 0 {
+		t.Errorf("api/rpc/axes.go has %d flags no parity cell varies on: give each a variant in internal/server/parity_test.go, or reclassify it as presentation with the reason", n)
+	}
+}
