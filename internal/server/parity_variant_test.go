@@ -24,19 +24,24 @@ type parityVariant struct {
 	declare func(*paritySource)
 }
 
-const parityReadOnly = "a summary stands in for the bytes"
+const (
+	parityReadOnly = "a summary stands in for the bytes"
+	parityCached   = "the source is not answering, so this is the cache"
+)
 
 var (
 	vReadOnly    = parityVariant{"a read-only entry", func(s *paritySource) { s.grids["all"][0].ReadOnly = parityReadOnly }}
 	vNotWritable = parityVariant{"a plugin that is not writable", func(s *paritySource) { s.unwritable = true }}
 	vNoWatch     = parityVariant{"a plugin with watch off", func(s *paritySource) { s.unwatched = true }}
 	vPartial     = parityVariant{"a listing that is not authoritative", func(s *paritySource) { s.partial = true }}
+	vCached      = parityVariant{"a listing answered from cache", func(s *paritySource) { s.unreachable = parityCached }}
 )
 
 // The decisions the variants are held to, quoted.
 const (
 	dReadOnly = "so an edit is refused before it is typed"
 	dLiveOff  = "a source with live updates off is read on every move"
+	dCached   = "the read succeeds from what it caches and says so in `ListResponse.unreachable`"
 )
 
 type parityVariantCell struct {
@@ -56,6 +61,8 @@ var parityVariantTable = []parityVariantCell{
 	{vNotWritable, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
 	{vNoWatch, parityCell{kURL, opUpdate, onPlugin, decided, dLiveOff, nil}, holdsLiveOff},
 	{vPartial, parityCell{kText, opDead, onPlugin, same, "", checkDead}, nil},
+	{vCached, parityCell{kText, opDead, onPlugin, decided, dCached, nil}, holdsCached},
+	{vCached, parityCell{kText, opDead, onFar, decided, dCached, nil}, holdsCached},
 }
 
 // parityVariantNS is the plugin a decided cell's owner reaches: the local
@@ -198,6 +205,41 @@ func holdsLiveOff(f *parityFix, ns string) error {
 	_, after, err := f.entry(ns, "Site")
 	if err != nil || after.UrlString != parityEdits[kURL] {
 		return fmt.Errorf("the read on a move answers %v, %v", after, err)
+	}
+	return nil
+}
+
+// holdsCached proves a listing from the plugin's cache serves its rows,
+// tells the source's health with the reason, and retires nothing, whatever
+// authority it claims: a link to an entry the cached listing leaves out
+// never reads dead.
+func holdsCached(f *parityFix, ns string) error {
+	g, tl, err := f.entry(ns, "Body")
+	if err != nil {
+		return err
+	}
+	if err := f.awaitHealth(g.Id, func(c *cache.Cache, h *gridwellv1.EventPluginHealth) bool {
+		return !h.Healthy && h.Detail == parityCached && c.SourceDark(g.Id)
+	}); err != nil {
+		return fmt.Errorf("the cache is never told as the source's health: %v", err)
+	}
+	link, err := f.cl.CreateTile(f.ctx, &gridwellv1.CreateTileRequest{GridId: f.root[onHome],
+		Tile: &gridwellv1.Tile{Kind: tl.Kind, X: 0, Y: 7, W: 1, H: 1, LinkTargetId: tl.Id}})
+	if err != nil {
+		return err
+	}
+	f.src[ns].remove(rpc.LocalOf(tl.Id))
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if _, err := f.cl.GetGrid(f.ctx, g.Id); err != nil {
+			return fmt.Errorf("the cached listing answered %v", err)
+		}
+		row, err := f.cl.GetTile(f.ctx, link.Id)
+		if err != nil {
+			return err
+		}
+		if d := f.draw(row); !strings.HasPrefix(d, "dead=false") {
+			return fmt.Errorf("the link draws %s", d)
+		}
 	}
 	return nil
 }

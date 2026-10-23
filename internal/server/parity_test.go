@@ -971,6 +971,7 @@ type paritySource struct {
 	moves   bool // declares and answers Move (plugin_move_test.go)
 	// What a variant declares otherwise (parity_variant_test.go).
 	unwritable, unwatched, partial bool
+	unreachable                    string
 }
 
 func newParitySource() *paritySource {
@@ -1001,7 +1002,7 @@ func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.I
 func (s *paritySource) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	resp := &pluginv1.ListResponse{Authoritative: !s.partial}
+	resp := &pluginv1.ListResponse{Authoritative: !s.partial, Unreachable: s.unreachable}
 	for _, e := range s.grids[req.Grid] {
 		resp.Entries = append(resp.Entries, proto.CloneOf(e))
 	}
@@ -1079,6 +1080,10 @@ func (s *paritySource) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pl
 	defer s.mu.Unlock()
 	if e, g := s.entry(req.Key); e != nil && (req.Grid == "" || req.Grid == g) {
 		return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_PRESENT}, nil
+	}
+	if s.unreachable != "" {
+		// A source answered from cache cannot say a key is gone.
+		return &pluginv1.ProbeResponse{}, nil
 	}
 	return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_GONE}, nil
 }
