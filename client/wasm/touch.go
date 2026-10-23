@@ -117,6 +117,10 @@ func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 			a.dispatchMouse(a.canvas, "mouseup", act, 0)
 		case touchgest.Wheel:
 			a.dispatchWheel(act.Pos.X, act.Pos.Y, act.DeltaY)
+		case touchgest.Select: // see touchgest.Select
+			if rd := a.rightDrag; rd != nil && rd.tileNode != nil {
+				a.toggleSelected(rd.tilePane, rd.tileNode)
+			}
 		}
 	}
 }
@@ -140,7 +144,6 @@ func (a *App) dispatchMouse(target js.Value, typ string, act touchgest.Action, b
 	init.Set("clientY", act.Pos.Y)
 	init.Set("button", act.Button)
 	init.Set("buttons", buttons)
-	init.Set("shiftKey", act.Shift)
 	init.Set("bubbles", true)
 	init.Set("cancelable", true)
 	ev := js.Global().Get("MouseEvent").New(typ, init)

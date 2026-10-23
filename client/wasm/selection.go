@@ -83,7 +83,7 @@ func (a *App) postSelection(gid string) {
 	})
 }
 
-// toggleSelected is a shift-click on tile n in pane p.
+// toggleSelected is a shift-click or a touch hold on tile n in pane p.
 func (a *App) toggleSelected(p *pane.Pane, n *gridwellv1.Tile) {
 	a.setSelection(p, "toggle", gesture.Toggle(a.selectionShown(p), n.Id))
 }

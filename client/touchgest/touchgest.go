@@ -6,14 +6,14 @@
 //	long-press (hold)  → right button      (the whole right-drag vocabulary:
 //	                                        ascend circle, copy, resize,
 //	                                        split, swap)
-//	long-press, lifted → shift + left click (select toggle)
-//	  without moving
+//	long-press, lifted → Select, then      (toggles the tile the right
+//	  without moving       right release    press holds; nothing elsewhere)
 //	two-finger tap     → middle click      (ascend)
 //	two-finger pinch   → wheel at midpoint (zoom; spread = wheel-up = zoom in)
 //	two-finger scroll  → wheel at midpoint (doc scroll, matching a trackpad)
 //
 // It is js-free. client/wasm/touch.go feeds it timestamped events and
-// dispatches the returned Actions as synthetic MouseEvent and WheelEvent.
+// dispatches every returned Action but Select as a synthetic DOM event.
 package touchgest
 
 import "math"
@@ -28,17 +28,18 @@ const (
 	MouseMove
 	MouseUp
 	Wheel
+	// Select is a long-press lifted in place, sent before its right release:
+	// it toggles the tile the right press holds and is nothing anywhere else.
+	Select
 )
 
 // Action is one synthetic input event for the shell to dispatch. Button
-// follows MouseEvent.button (0 left, 1 middle, 2 right); DeltaY is Wheel only;
-// Shift is MouseEvent.shiftKey.
+// follows MouseEvent.button (0 left, 1 middle, 2 right); DeltaY is Wheel only.
 type Action struct {
 	Kind   Kind
 	Pos    Point
 	Button int
 	DeltaY float64
-	Shift  bool
 }
 
 // Tunables. Times are milliseconds (event.timeStamp domain), distances CSS px.
@@ -237,15 +238,11 @@ func (m *Machine) End(remaining []Point, t float64) []Action {
 	case dragLeft:
 		return []Action{{Kind: MouseUp, Pos: m.last, Button: 0}}
 	case dragRight:
-		up := []Action{{Kind: MouseUp, Pos: m.last, Button: 2}}
+		up := Action{Kind: MouseUp, Pos: m.last, Button: 2}
 		if m.strayed {
-			return up
+			return []Action{up}
 		}
-		// The right press went nowhere, so the hold was a select: a phone has
-		// no shift key to hold.
-		return append(up,
-			Action{Kind: MouseDown, Pos: m.origin, Button: 0, Shift: true},
-			Action{Kind: MouseUp, Pos: m.origin, Button: 0, Shift: true})
+		return []Action{{Kind: Select, Pos: m.origin}, up}
 	case twoDown, twoLift:
 		if t-m.twoT0 <= TwoTapMs && m.accDist < SlopPx && m.accTrav < SlopPx {
 			return []Action{

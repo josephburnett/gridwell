@@ -36,8 +36,8 @@ export async function longPressDrag(page: Page, from: Pt, to: Pt, holdMs = 550):
   await s.detach();
 }
 
-// Holds one finger past HoldMs and lifts it where it landed: touchgest's select
-// toggle, the touch form of a shift-click.
+// Holds one finger past HoldMs and lifts it where it landed: a right click, and
+// on a tile touchgest's Select toggle.
 export async function longPress(page: Page, at: Pt, holdMs = 550): Promise<void> {
   const s = await session(page);
   await s.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: at.x, y: at.y }] });

@@ -189,3 +189,16 @@ test('touch: a long-press lifted in place toggles the tile in its grid\'s select
   await gw.waitIdle();
   await expect.poll(selection, { message: 'a second hold toggled it out' }).toEqual([]);
 });
+
+// A long-press is the right button and nothing more, wherever it lands: on
+// the circle it opens the circle's menu, and no left press follows to open the
+// + menu over it.
+test('touch: a long-press on the circle opens its menu and nothing else', async ({ gw, window }) => {
+  await gw.enterPlugin('home');
+  await longPress(window, await gw.circleCenter());
+  const popover = window.locator('#gw-circle-menu');
+  await popover.waitFor({ timeout: 5_000 });
+  await gw.waitIdle();
+  await expect(popover.locator('[data-gw-choice="dump"]'), 'the menu still stands').toBeVisible();
+  expect((await gw.menu()).open, 'the hold opened no + menu').toBe(false);
+});
