@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { moveTile, tileAt } from '../e2e/oracle';
+import { moveTile, tileAt, updateText } from '../e2e/oracle';
 
 // The event stream has no cursor, so a change made while it is broken is told
 // by nothing; the stream that re-opens owes a re-read of everything shown
@@ -63,4 +63,42 @@ test('stream break: a change made in the gap reaches the view with no later even
     .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices
       .some((n: any) => n.source === 'events'), { message: 'the stream is back' })
     .toBe(false);
+});
+
+// While the stream is down nothing tells this client of a write, so a body it
+// holds may be behind: a descent reads it again rather than showing the held
+// bytes, before any stream re-opens to resync (cache.NoteStream).
+test('stream break: a descent shows a body written in the gap while the stream is still down', async ({ gw, window }) => {
+  await window.addInitScript(gate);
+  await window.reload();
+  await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  const t = tileAt(await gw.getGrid(f.gridID), 'text', cx, cy)!;
+  expect(t, 'markdown tile created').toBeTruthy();
+  await gw.descendCell(cx, cy);
+  await gw.typeText('held here');
+  await gw.ascendViaCrumb();
+  await expect.poll(async () => gw.getTileContent(t.id!), { timeout: 10_000 }).toBe('held here');
+  await gw.waitIdle();
+
+  await window.evaluate(() => (window as any).__breakStream());
+  await expect
+    .poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices
+      .some((n: any) => n.source === 'events'), { message: 'the client saw its stream break' })
+    .toBe(true);
+  // Another device rewrites the body while this client hears nothing.
+  const row = (await gw.getGrid(f.gridID)).tiles!.find((n) => n.id === t.id)!;
+  await updateText(gw.origin, t.id!, Number((row as { version?: number | string }).version ?? 0), 'written elsewhere');
+
+  await gw.descendCell(cx, cy);
+  await expect.poll(async () => gw.textareaValue(), { timeout: 10_000 }).toBe('written elsewhere');
+  expect((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices
+    .some((n: any) => n.source === 'events'), 'the stream is still down').toBe(true);
+  await gw.ascendViaCrumb();
+  await window.evaluate(() => (window as any).__mendStream());
 });

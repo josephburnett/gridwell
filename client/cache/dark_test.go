@@ -1,6 +1,10 @@
 package cache
 
-import "testing"
+import (
+	"testing"
+
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+)
 
 // A grid is served from cache when the source serving it is not answering. That is one
 // fact — the source's health — and the bar's chip is its projection onto one
@@ -132,5 +136,28 @@ func TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent(t *testing.T) {
 	c.NoteLiveUpdates(fsPl, true)
 	if !c.Current()[fsPl+"/1"] {
 		t.Error("the plugin's grid stayed not current after its live updates came back")
+	}
+}
+
+// While this client's own stream is not established no change is told to it,
+// whatever its sources say, so nothing it holds is current; the stream that
+// opens again makes it so, and its resync re-reads what the gap swallowed.
+func TestNothingIsCurrentWhileThisClientsStreamIsDown(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: node + "/7"}, nil)
+	if c.Current()[node+"/7"] {
+		t.Fatal("a grid is current before any stream opened")
+	}
+	c.NoteStream(true)
+	if !c.Current()[node+"/7"] {
+		t.Fatal("a held grid is not current while the stream is open")
+	}
+	c.NoteStream(false)
+	if len(c.Current()) != 0 {
+		t.Fatalf("Current() = %v while the stream is down, want nothing", c.Current())
+	}
+	c.NoteStream(true)
+	if !c.Current()[node+"/7"] {
+		t.Fatal("the held grid stayed not current after the stream opened again")
 	}
 }

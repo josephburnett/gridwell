@@ -94,8 +94,8 @@ func (a *App) runNavEffect(e nav.Effect) {
 		}
 	case nav.EffFetchGrid:
 		a.fetchGrid(a.navGridID(e))
-	case nav.EffFetchTileContent:
-		a.fetchTileContent(e.TileID)
+	case nav.EffFetchTileContent, nav.EffReadTileContent:
+		a.fetchTileContent(e.TileID, e.Kind == nav.EffReadTileContent)
 	case nav.EffDropTileContent:
 		a.c.DropTileContent(e.ContentID)
 	case nav.EffAwait:

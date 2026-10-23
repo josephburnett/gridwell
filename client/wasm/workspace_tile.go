@@ -21,7 +21,7 @@ func (a *App) workspaceLayout(n *gridwellv1.Tile) (*pane.Tree, bool) {
 	return a.views.paneLayouts.Tree(n.Id, n.BlobId, a.c.BodyGen(n.Id), func() ([]byte, bool) {
 		body, ok := a.c.TileContent(n.Id)
 		if !ok {
-			a.fetchTileContent(n.Id)
+			a.fetchTileContent(n.Id, false)
 		}
 		return body, ok
 	})

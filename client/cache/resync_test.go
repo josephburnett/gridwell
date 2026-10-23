@@ -32,6 +32,7 @@ func seedSources(t *testing.T) *Cache {
 	} {
 		c.PutGrid(&gridwellv1.Grid{Id: id}, nil)
 	}
+	c.NoteStream(true)
 	return c
 }
 

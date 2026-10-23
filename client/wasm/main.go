@@ -1008,13 +1008,17 @@ func (a *App) startSSE() {
 		},
 		Opened: func(resync bool) {
 			a.emit(traceevent.EventsOpen(resync))
+			a.c.NoteStream(true)
 			a.resolveErr(errsurface.EventsSource)
 			if resync {
 				// The gap swallowed events without saying whose, so nothing scopes.
 				a.retryKick(true, cache.EverySource)
 			}
 		},
-		Ended: func(err error) { a.emit(traceevent.EventsEnd(err)) },
+		Ended: func(err error) {
+			a.emit(traceevent.EventsEnd(err))
+			a.c.NoteStream(false)
+		},
 		Broken: func() {
 			a.reportErr(errsurface.Error, errsurface.EventsSource, "live updates disconnected — retrying")
 		},
@@ -1131,7 +1135,7 @@ func (a *App) reask(grids, tiles, contents []string, drawn ...[]string) {
 		a.fetchTileByID(id)
 	}
 	for _, id := range contents {
-		a.fetchTileContent(id)
+		a.fetchTileContent(id, false)
 	}
 }
 

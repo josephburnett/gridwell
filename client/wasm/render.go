@@ -849,14 +849,15 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 	return a.pal.Muted
 }
 
-// fetchTileContent never doubles an in-flight fetch, or a stale reply could
-// land after a fresher one, and never asks for bytes this client's own write
-// is about to file.
-func (a *App) fetchTileContent(tileID string) {
+// fetchTileContent asks for a body the cache does not hold, or with again one
+// it does. It never doubles an in-flight fetch, or a stale reply could land
+// after a fresher one, and never asks for bytes this client's own write is
+// about to file.
+func (a *App) fetchTileContent(tileID string, again bool) {
 	if tileID == "" {
 		return
 	}
-	if _, ok := a.c.TileContent(tileID); ok || a.c.Writing(tileID) {
+	if _, ok := a.c.TileContent(tileID); (ok && !again) || a.c.Writing(tileID) {
 		return
 	}
 	// A leaf link in an undeclared namespace is not asked; see fetchGrid.
@@ -901,7 +902,7 @@ func (a *App) tileBody(n *gridwellv1.Tile) ([]byte, bool) {
 	if b, ok := a.c.TileContent(rpc.ContentID(n)); ok {
 		return b, true
 	}
-	a.fetchTileContent(rpc.ContentID(n))
+	a.fetchTileContent(rpc.ContentID(n), false)
 	return nil, false
 }
 

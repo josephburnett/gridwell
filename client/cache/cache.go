@@ -25,6 +25,7 @@ type Cache struct {
 	// unwatched is the sources that answer but whose changes nothing tells
 	// this client (live_updates_off), keyed the same way.
 	unwatched map[string]bool
+	told      bool // this client's event stream is established; see NoteStream
 	// content is the one body store, keyed by tile id because blob ids are
 	// not routable and editing one copy must leave a sibling alone.
 	content map[string]*contentEntry
@@ -455,15 +456,23 @@ func servedByAny(gridID string, sources map[string]bool) bool {
 	return false
 }
 
+// NoteStream folds in whether this client's event stream is established, from
+// its header (retry.Events.Opened) until it ends: only then is a change told.
+func (c *Cache) NoteStream(open bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.told = open
+}
+
 // Current is every held grid whose source is answering and whose changes are
-// told. The event stream keeps those true, so a reader asking for one again
-// asks what it was told.
+// told, so none while this client's stream is down. The event stream keeps
+// those true, so a reader asking for one again asks what it was told.
 func (c *Cache) Current() map[string]bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[string]bool, len(c.grids))
 	for id := range c.grids {
-		if !c.darkLocked(id) && !servedByAny(id, c.unwatched) {
+		if c.told && !c.darkLocked(id) && !servedByAny(id, c.unwatched) {
 			out[id] = true
 		}
 	}

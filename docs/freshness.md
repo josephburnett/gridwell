@@ -232,7 +232,9 @@ request the network swallowed held its key for the life of the page and the
 preview it fed never loaded, never retried, and never said a word.
 `retry.Reconnect` marks a gap on any stream break and tells `retry.Events`,
 the loop `App.startSSE` runs, to fire `retryKick(true, cache.EverySource)` on
-the next stream that opens. A stream is open at its header, which the node
+the next stream that opens. Until it opens the client holds nothing current
+(`Cache.NoteStream`), so a navigation reads what it lands on, and the
+"events" notice stands (`errsurface.Sticky`). A stream is open at its header, which the node
 sends once every namespace's stream has settled (`router.Subscribe`), not at
 its first event: a gap's resync must not wait for news the gap may have been
 the last of. The kick is unconditional, never skipped for a grid the cache
@@ -574,7 +576,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
 | A tile row that leaves the cache, by refresh, eviction or `TileRemoved`, takes the body, stamp, preview and served bodies kept under its id, unless another row still names it | `sourcecache/gc_test.go` |
 | The client's own arm: `GridChanged` clears `fetch.grids`' latches and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
-| Navigation asks for a grid or a row only when the cache does not hold it current (`cache.Current`): a descent, an ascent, a level change and a re-engagement onto a held grid read nothing, unless its source is dark or has live updates off | `client/nav/current_test.go`, `client/cache/dark_test.go:TestAGridIsCurrentWhenHeldFromAnAnsweringSource`, `TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent`, `apps/desktop/e2e/read-once.spec.ts`, `apps/desktop/e2e/live-updates-off.spec.ts` |
+| Navigation asks for a grid or a row only when the cache does not hold it current (`cache.Current`): a descent, an ascent, a level change and a re-engagement onto a held grid read nothing, unless its source is dark or has live updates off, or this client's own stream is down (`Cache.NoteStream`), when nothing is current and a descent into a text tile reads its held body again | `client/nav/current_test.go`, `client/nav/descend_test.go:TestDescendPlans`, `client/cache/dark_test.go:TestAGridIsCurrentWhenHeldFromAnAnsweringSource`, `TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent`, `TestNothingIsCurrentWhileThisClientsStreamIsDown`, `apps/desktop/e2e/read-once.spec.ts`, `apps/desktop/e2e/live-updates-off.spec.ts`, `apps/desktop/e2e-web/web-stream-break.spec.ts` ("a descent shows a body written in the gap while the stream is still down") |
 
 ### Trace (b)
 

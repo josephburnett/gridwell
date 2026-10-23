@@ -65,6 +65,7 @@ const (
 	// planner.fetchGrid.
 	EffFetchGrid
 	EffFetchTileContent // warms a tile's body: TileID
+	EffReadTileContent  // reads a body even when one is held, shown until the answer: TileID
 	EffDropTileContent  // drops a cached body before refetching it: ContentID
 	EffAwait            // starts an async read to resume with: Token, Request
 

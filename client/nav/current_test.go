@@ -239,6 +239,7 @@ func TestReEngageReadsTheCachedRowWhenItIsCurrent(t *testing.T) {
 func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
 	c := cache.New()
 	c.PutGrid(&gridwellv1.Grid{Id: "pl1/2"}, nil)
+	c.NoteStream(true)
 	door := &gridwellv1.Tile{Id: "pl1/w", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "pl1/2"}
 	descend := func() Plan {
@@ -287,5 +288,36 @@ func TestEnteringALevelReadsTheCachedRowWhenCurrent(t *testing.T) {
 	}
 	if !asked {
 		t.Fatal("a row whose grid is not current was not asked for")
+	}
+}
+
+// Across the seam: a body held while this client's stream is down may be
+// behind, because nothing told it the writes made meanwhile, so a descent
+// reads it again and shows the held bytes only until the answer lands.
+func TestADescentReadsAHeldBodyWhileTheStreamIsDown(t *testing.T) {
+	c := cache.New()
+	text := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
+	c.PutGrid(&gridwellv1.Grid{Id: "g1"}, []*gridwellv1.Tile{text})
+	c.PutFetchedContent("t1", []byte("held"), rpc.ContentBasis{}, c.AskContent("t1"))
+	c.NoteStream(true)
+	descend := func() []EffectKind {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Door = &DoorWorld{}
+		w.Current = c.Current()
+		var got []EffectKind
+		for _, e := range New().Do(descendGesture("pane1", text), w).Effects {
+			if e.Kind == EffFetchTileContent || e.Kind == EffReadTileContent {
+				got = append(got, e.Kind)
+			}
+		}
+		return got
+	}
+
+	if got := descend(); !sameKinds(got, []EffectKind{EffFetchTileContent}) {
+		t.Fatalf("with the stream open the body is %v, want only warmed", got)
+	}
+	c.NoteStream(false)
+	if got := descend(); !sameKinds(got, []EffectKind{EffReadTileContent}) {
+		t.Fatalf("with the stream down the body is %v, want read again", got)
 	}
 }

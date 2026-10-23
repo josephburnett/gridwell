@@ -97,7 +97,9 @@ func TestDescendPlans(t *testing.T) {
 		name string
 		door *gridwellv1.Tile
 		dw   DoorWorld
-		want []EffectKind
+		// current is whether the cache holds g1 current.
+		current bool
+		want    []EffectKind
 	}{{
 		name: "door",
 		door: door,
@@ -110,16 +112,22 @@ func TestDescendPlans(t *testing.T) {
 		want: []EffectKind{EffCancelTransition, EffFlushFraming, EffCloseMenu,
 			EffFetchGrid, EffStartTransition},
 	}, {
-		name: "content text",
-		door: text,
+		name:    "content text",
+		door:    text,
+		current: true,
 		want: []EffectKind{EffCancelTransition, EffFlushFraming,
 			EffFetchTileContent, EffStartTransition},
+	}, {
+		name: "content text off a grid not current reads the body again",
+		door: text,
+		want: []EffectKind{EffCancelTransition, EffFlushFraming,
+			EffReadTileContent, EffStartTransition},
 	}, {
 		name: "content read only drops then fetches",
 		door: text,
 		dw:   DoorWorld{ReadOnly: true},
 		want: []EffectKind{EffCancelTransition, EffFlushFraming,
-			EffDropTileContent, EffFetchGrid, EffFetchTileContent,
+			EffDropTileContent, EffFetchGrid, EffReadTileContent,
 			EffStartTransition},
 	}, {
 		name: "content url has no blob",
@@ -149,6 +157,9 @@ func TestDescendPlans(t *testing.T) {
 			w := baseWorld(gridPane("pane1", "g1"))
 			dw := c.dw
 			w.Door = &dw
+			if c.current {
+				w.Current = currentOf("g1")
+			}
 			plan := New().Do(descendGesture("pane1", c.door), w)
 			if !sameKinds(kinds(plan), c.want) {
 				t.Fatalf("effects = %v, want %v", kinds(plan), c.want)

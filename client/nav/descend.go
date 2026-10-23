@@ -143,7 +143,12 @@ func (m *Machine) descendContent(p PaneView, file *gridwellv1.Tile, w World, pl 
 			pl.add(Effect{Kind: EffDropTileContent, ContentID: rpc.ContentID(file)})
 			pl.fetchPaneGrid(w, p.ID, p.GridID)
 		}
-		pl.add(Effect{Kind: EffFetchTileContent, TileID: file.Id})
+		// Nothing told this client of a write to a body held off a grid not current.
+		read := Effect{Kind: EffFetchTileContent, TileID: file.Id}
+		if !w.current(file.GridId) {
+			read.Kind = EffReadTileContent
+		}
+		pl.add(read)
 	}
 
 	base := p.Stack.Copy()
