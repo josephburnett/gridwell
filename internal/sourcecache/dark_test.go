@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/local"
@@ -49,7 +50,7 @@ func TestBothDirectionsLearnTheSameDarkness(t *testing.T) {
 			seedDark(byCall, tc.from)
 			var callErr error
 			if tc.to {
-				callErr = status.Error(codes.Unavailable, "tunnel down")
+				callErr = gwerr.Unheard("tunnel down")
 			}
 			byCall.noteReachGrid(context.Background(), callErr, "conn/g1")
 
@@ -250,7 +251,7 @@ type halfOpen struct {
 }
 
 func (halfOpen) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
-	return nil, status.Error(codes.Unavailable, "tunnel down")
+	return nil, gwerr.Unheard("tunnel down")
 }
 
 // Discovering darkness announces the grid at hand, because this layer found

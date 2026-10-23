@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 )
@@ -39,7 +40,7 @@ func (f *framingSource) setDown(down bool) {
 	f.down = down
 }
 
-func (f *framingSource) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
+func (f *framingSource) offline() error { return gwerr.Unheard("tunnel down") }
 
 func (f *framingSource) Handshake(_ context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	if f.dark() {

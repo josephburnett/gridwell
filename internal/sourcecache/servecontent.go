@@ -36,7 +36,7 @@ func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, se
 		}
 		return nil
 	}
-	if !flowed && gwerr.IsTransport(err) {
+	if !flowed && gwerr.IsUnheard(err) {
 		if st, mt, cached, ok := c.loadServeContent(ctx, in.GetTileId(), in.GetSubpath()); ok {
 			return sendChunked(cached, func(b []byte, first bool) error {
 				if first {

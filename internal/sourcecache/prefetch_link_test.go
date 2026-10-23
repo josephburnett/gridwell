@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
@@ -25,7 +26,7 @@ type linkFar struct {
 	dark bool
 }
 
-func (u *linkFar) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
+func (u *linkFar) offline() error { return gwerr.Unheard("tunnel down") }
 
 // Handshake is where the walk's roots come from: what this namespace answers
 // for itself is its connection and the landing it learned.

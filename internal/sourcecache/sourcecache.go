@@ -2,8 +2,8 @@
 // answered: a read-through layer over ~/.gridwell/cache.db in front of the
 // transport, holding marshaled protos keyed by id. A grid read serves first
 // and refreshes behind (GetGrid); every other read falls back to the
-// cached answer on a transport failure only, so an answered "gone" is
-// never masked.
+// cached answer only when the far node went unheard (gwerr.IsUnheard), so
+// anything it answered, "gone" or Unavailable, is never masked.
 package sourcecache
 
 import (
@@ -219,14 +219,14 @@ func (c *Layer) isDark(source string) bool {
 }
 
 // noteReach records one pass-through outcome as this layer's reachability of
-// the source the call named. A coded refusal is an answer, so only a transport
-// failure is darkness, and an abandoned call is nothing. It announces, because
-// nobody else watched the call.
+// the source the call named. Any error the far node answered is an answer, so
+// only an unheard call is darkness, and an abandoned call is nothing. It
+// announces, because nobody else watched the call.
 func (c *Layer) noteReach(ctx context.Context, err error, source string, grid func() string) {
 	if gwerr.IsAbandoned(ctx, err) {
 		return
 	}
-	dark := err != nil && gwerr.IsTransport(err)
+	dark := err != nil && gwerr.IsUnheard(err)
 	reason := ""
 	if dark {
 		reason = err.Error()
@@ -424,7 +424,7 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 		})
 		return resp, nil
 	}
-	if !gwerr.IsTransport(err) {
+	if !gwerr.IsUnheard(err) {
 		return nil, err
 	}
 	cached, ok := c.loadPluginList(ctx, in.GetNamespace())
@@ -541,8 +541,8 @@ func (c *Layer) getGridLive(ctx context.Context, gridID string) (resp *pb.GetGri
 
 // revalidateGrid refreshes one cached grid in the background, single-flight
 // per grid id on the layer's context. A change is stored and announced; an
-// answer a fold overtook, or a transport failure, changes nothing; a verdict
-// evicts.
+// answer a fold overtook, or an unheard call, changes nothing; an answered
+// error evicts.
 func (c *Layer) revalidateGrid(gridID string) {
 	c.revalMu.Lock()
 	if c.revalInflight[gridID] {
@@ -572,7 +572,7 @@ func (c *Layer) revalidateGrid(gridID string) {
 			} else {
 				traceGrid("revalidate", "same", gridID)
 			}
-		case !gwerr.IsAbandoned(ctx, err) && !gwerr.IsTransport(err):
+		case !gwerr.IsAbandoned(ctx, err) && !gwerr.IsUnheard(err):
 			// An answered error is an answer: the cached grid must not
 			// outlive the source's verdict.
 			traceGrid("revalidate", "evicted", gridID)
@@ -755,7 +755,7 @@ func (c *Layer) GetTile(ctx context.Context, in *pb.GetTileRequest) (*pb.TileRes
 		r.install([]string{in.TileId, t.GetId()}, func() { c.upsertTile(ctx, t) })
 		return resp, nil
 	}
-	if !gwerr.IsTransport(err) {
+	if !gwerr.IsUnheard(err) {
 		return nil, err
 	}
 	var tb []byte
@@ -817,7 +817,7 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 		}
 		return resp, nil
 	}
-	if !gwerr.IsTransport(err) {
+	if !gwerr.IsUnheard(err) {
 		return nil, err
 	}
 	var jpeg []byte
@@ -827,8 +827,8 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 	return &pb.GetTilePreviewResponse{Jpeg: jpeg}, nil
 }
 
-// ReadContent tees the live stream, storing only at a clean end. A transport
-// failure falls back to the cached body only before any chunk has flowed.
+// ReadContent tees the live stream, storing only at a clean end. An unheard
+// call falls back to the cached body only before any chunk has flowed.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	r := c.order.begin()
 	defer r.end()
@@ -842,7 +842,7 @@ func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send
 		}
 		return nil
 	}
-	if !flowed && gwerr.IsTransport(err) {
+	if !flowed && gwerr.IsUnheard(err) {
 		if mt, ver, st, cached, ok := c.loadContent(ctx, in.TileId); ok {
 			return sendChunked(cached, func(b []byte, first bool) error {
 				if first {

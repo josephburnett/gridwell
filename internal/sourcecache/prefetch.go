@@ -153,8 +153,8 @@ func (w *walker) pause() bool {
 }
 
 // walkGrid warms one grid and recurses into its children. False means abort:
-// the source is dark, the context is done, or a cap tripped. A coded refusal
-// skips the branch and returns true.
+// the source went unheard, the context is done, or a cap tripped. An answered
+// error skips the branch and returns true.
 func (w *walker) walkGrid(gridID string) bool {
 	if w.seenGrids[gridID] || len(w.seenGrids) >= prefetchMaxGrids {
 		return len(w.seenGrids) < prefetchMaxGrids
@@ -167,13 +167,13 @@ func (w *walker) walkGrid(gridID string) bool {
 	// warm nothing.
 	resp, _, err := w.c.getGridLive(w.ctx, gridID)
 	if err != nil {
-		return !gwerr.IsTransport(err) // dark aborts; a refusal skips this branch
+		return !gwerr.IsUnheard(err) // unheard aborts; an answer skips this branch
 	}
 	// The + menu context for this grid's node, once per namespace.
 	if ns := resp.GetGrid().GetNodeNs(); !w.seenNs[ns] {
 		w.seenNs[ns] = true
 		if w.pause() {
-			if _, err := w.c.Handshake(w.ctx, &pb.HandshakeRequest{Namespace: ns}); err != nil && gwerr.IsTransport(err) {
+			if _, err := w.c.Handshake(w.ctx, &pb.HandshakeRequest{Namespace: ns}); err != nil && gwerr.IsUnheard(err) {
 				return false
 			}
 		} else {
@@ -207,7 +207,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	}
 	// A 0 key is no preview (pb.Tile.preview_blob_id), so there is nothing to ask.
 	if t.GetPreviewBlobId() != 0 {
-		if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsTransport(err) {
+		if _, err := w.c.GetTilePreview(w.ctx, &pb.GetTilePreviewRequest{TileId: t.GetId()}); err != nil && gwerr.IsUnheard(err) {
 			return false
 		}
 	}
@@ -251,7 +251,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 		}
 		tr, err := w.c.GetTile(w.ctx, &pb.GetTileRequest{TileId: target})
 		if err != nil {
-			return !gwerr.IsTransport(err)
+			return !gwerr.IsUnheard(err)
 		}
 		if tt := tr.GetTile(); tt != nil {
 			tt2 := proto.Clone(tt).(*pb.Tile)
@@ -263,7 +263,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 }
 
 // drain runs one content read to warm the cache and reports the bytes seen.
-// ok is false when the source went dark before a single chunk, so the walk
+// ok is false when the source went unheard before a single chunk, so the walk
 // aborts; a failure after bytes have flowed ends only this branch.
 func drain(read func(count func(int)) error) (n int, ok bool) {
 	first := true
@@ -272,7 +272,7 @@ func drain(read func(count func(int)) error) (n int, ok bool) {
 		n += size
 	})
 	if err != nil {
-		return n, !(first && gwerr.IsTransport(err))
+		return n, !(first && gwerr.IsUnheard(err))
 	}
 	return n, true
 }

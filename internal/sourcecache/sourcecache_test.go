@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -99,7 +100,7 @@ func (d *darkable) fallen() <-chan struct{} {
 	return d.fell
 }
 
-func (d *darkable) offline() error { return status.Error(codes.Unavailable, "tunnel down") }
+func (d *darkable) offline() error { return gwerr.Unheard("tunnel down") }
 
 func (d *darkable) Info(ctx context.Context, in *pb.InfoRequest) (*pb.InfoResponse, error) {
 	if d.dark() {
@@ -326,7 +327,7 @@ func (d *halfDark) ReadContent(ctx context.Context, in *pb.ReadContentRequest, s
 	if err := send(&pb.ContentChunk{MediaType: "text/markdown", Version: 1, Data: []byte("half a ")}); err != nil {
 		return err
 	}
-	return status.Error(codes.Unavailable, "tunnel down mid-body")
+	return gwerr.Unheard("tunnel down mid-body")
 }
 
 // TestHalfDeliveredStreamIsNeverSpliced: once a chunk has flowed, a

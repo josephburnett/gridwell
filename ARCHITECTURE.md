@@ -283,15 +283,16 @@ one background revalidation kicked past the freshness window or once the
 connection is known dark — so a remote round trip never sits on the read
 path. Nothing on the answer says it is cached: that is the source's health,
 and the client derives it there (`client/cache.SourceDark`). Darkness is
-learned from any pass-through call that fails transport-shaped and from the
+learned from any pass-through call the far node did not answer
+(`gwerr.IsUnheard`, the dial's verdict) and from the
 connection's own health on the stream the layer relays, cleared by the next
 answer; the discovery announces the grid at hand, and the client re-reads
 what it is showing when a source's health changes either way. A
 revalidation that finds drift emits a `GridChanged` on the layer's own
 event stream, served alongside the connection's own, and the client's
 refetch serves the correction; a verdict evicts the cached grid so it
-surfaces on the next read. Other reads pass through and cache, and on a
-transport-class failure serve the cached answer. Writes always pass
+surfaces on the next read. Other reads pass through and cache, and when the
+far node went unheard serve the cached answer. Writes always pass
 through, and their responses fold into the cached rows.
 Prefetch is a per-seam option only the transport takes, rooted at the
 connections the fronted namespace's own handshake declares. A dark node is

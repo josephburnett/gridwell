@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
@@ -34,7 +35,7 @@ type contentBody struct {
 
 func (d *contentFake) ServeContent(_ context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	if d.dark {
-		return status.Error(codes.Unavailable, "tunnel down")
+		return gwerr.Unheard("tunnel down")
 	}
 	b, ok := d.bodies[in.GetTileId()+"|"+in.GetSubpath()]
 	if !ok {
@@ -166,13 +167,13 @@ type pageFake struct {
 // walk begins.
 func (p *pageFake) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	if p.dark {
-		return nil, status.Error(codes.Unavailable, "tunnel down")
+		return nil, gwerr.Unheard("tunnel down")
 	}
 	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "1", "", rpc.View{})}}, nil
 }
 func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {
 	if p.dark {
-		return nil, status.Error(codes.Unavailable, "tunnel down")
+		return nil, gwerr.Unheard("tunnel down")
 	}
 	return &pb.GetGridResponse{
 		Grid:  &pb.Grid{Id: in.GetGridId(), HostContent: true},
@@ -181,7 +182,7 @@ func (p *pageFake) GetGrid(_ context.Context, in *pb.GetGridRequest) (*pb.GetGri
 }
 func (p *pageFake) GetTilePreview(context.Context, *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	if p.dark {
-		return nil, status.Error(codes.Unavailable, "tunnel down")
+		return nil, gwerr.Unheard("tunnel down")
 	}
 	return &pb.GetTilePreviewResponse{}, nil
 }

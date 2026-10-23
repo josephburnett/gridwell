@@ -17,8 +17,13 @@ the plugin or connection reads. Freshness is decided on the way back.
 node's store. It has no freshness rule of its own, and everything else
 caches it. What it owes the node is an honest failure: a transport-shaped
 error means "not right now", any coded error is a verdict. `api/gwerr`'s
-`IsTransport` is the one classifier that separates them, and every layer
-below branches on it.
+`IsTransport` reads that code where it is the speaker's contract, a
+plugin's and the router's. Whether a far node spoke at all is the
+connection hop's fact, not a code's: the connection API stamps every error
+it returns `gwerr.Answered`, the dial (`dial.ClientConn`, `gwerr.Received`)
+reads one that came back unstamped as unheard, and the source cache reads
+`gwerr.IsUnheard`. A far node of an older build stamps nothing, so every
+error from it reads unheard until it is upgraded.
 
 **2. The plugin overlay** — `internal/pluginhost/adapter.go`. A grid is a
 JOIN: the plugin's `List` supplies the entries, `store.Namespace.Overlay`
@@ -99,12 +104,13 @@ Nothing on the answer says it is cached — that is the source's health, and
 the client derives it from there (`client/cache.SourceDark`). Darkness is
 `Layer.dark`, keyed by
 connection segment (`sourceOf`), learned from two directions that are the
-same fact — `noteReach`, from any pass-through call that failed
-transport-shaped, and `applyEvent`'s health arm, from the connection's own
+same fact — `noteReach`, from any pass-through call the far node did not
+answer (`gwerr.IsUnheard`), and `applyEvent`'s health arm, from the connection's own
 health on the stream this layer relays — and written through one function,
 `setDark`, whose transition back to light is also what re-warms that source.
 Every other read passes through and caches, falling back to the cached
-answer on a transport-class failure only. Writes always pass through and fold
+answer only when the far node went unheard; an error it answered, Unavailable
+included, is its answer and passes through. Writes always pass through and fold
 their responses into the cached rows (`foldWrite`), except to a source
 the user disabled, whose writes the router refuses before they reach this
 layer (`gwerr.SourceDisabled`, `server/disabled.go`). The relayed stream
@@ -288,7 +294,7 @@ correcting with no user gesture.
 7. The answer is stored by `storeGrid` — the grid row and the whole
    tile set in one transaction, tiles upserted. If `!gridRespEqual(old, resp)`,
    `emitGridChanged(gridID)` goes onto the layer's own subscriber channels. A
-   verdict instead (`err != nil && !gwerr.IsTransport(err)`) → `evictGrid` and
+   verdict instead (an error the far node answered, `!gwerr.IsUnheard(err)`) → `evictGrid` and
    the same event, so the next read passes through and the verdict surfaces
    rather than a ghost answering forever.
 8. `Layer.Subscribe` is serving that channel alongside the teed stream of
@@ -325,8 +331,8 @@ learns from two directions through it. The map is the same fact either way;
 the one thing the directions do not share is whether the client has to be
 told, which is `setDark`'s `announce` argument and the caller's to state.
 
-**Down, discovered by the cache — direction one.** Any pass-through call that
-fails transport-shaped: `Layer.GetTile`, `GetTilePreview`, `ReadContent`,
+**Down, discovered by the cache — direction one.** Any pass-through call the
+far node did not answer (`gwerr.IsUnheard`): `Layer.GetTile`, `GetTilePreview`, `ReadContent`,
 `ServeContent`, and every write verb call `noteReachTile`/`noteReachGrid` →
 `noteReach` → `setDark(source, true, announce)`. It announces, because this
 layer discovered the transition alone and nobody else watched the call fail:
