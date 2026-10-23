@@ -61,22 +61,22 @@ const liveUpdatesPrefix = "live:"
 func LiveUpdatesSource(uuid string) string { return liveUpdatesPrefix + uuid }
 
 // BuildSource keys the notice that the node runs another build than this
-// page (client/nodebuild); BuildStuckSource the one that a reload cannot
-// fix, apart so only the first carries Reload.
+// page (client/nodebuild), BuildStuckSource one a reload cannot fix (so only
+// the first carries Reload), EventsSource that this client's stream is down.
 const (
 	BuildSource      = "build"
 	BuildStuckSource = "build:stuck"
+	EventsSource     = "events"
 )
 
 // Sticky names an ongoing condition, reported once on the transition, that
-// would otherwise expire while still true. Plugin health and live updates
-// resolve on the event that ends them; the backend notice can only be
-// dismissed; the build notices last as long as the page. This table is the
-// one owner; report sites do not choose.
+// would otherwise expire while still true. Plugin health, live updates and
+// the event stream resolve on the event that ends them; the backend notice
+// can only be dismissed; the build notices last as long as the page. This
+// table is the one owner; report sites do not choose.
 func Sticky(source string) bool {
-	return source == "electron:backend" || source == BuildSource || source == BuildStuckSource ||
-		strings.HasPrefix(source, pluginHealthPrefix) ||
-		strings.HasPrefix(source, liveUpdatesPrefix)
+	return source == "electron:backend" || source == BuildSource || source == BuildStuckSource || source == EventsSource ||
+		strings.HasPrefix(source, pluginHealthPrefix) || strings.HasPrefix(source, liveUpdatesPrefix)
 }
 
 // Action is what a notice's button does. A notice with one is not dismissed

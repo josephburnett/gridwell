@@ -1008,15 +1008,16 @@ func (a *App) startSSE() {
 		},
 		Opened: func(resync bool) {
 			a.emit(traceevent.EventsOpen(resync))
-			a.resolveErr("events")
+			a.resolveErr(errsurface.EventsSource)
 			if resync {
 				// The gap swallowed events without saying whose, so nothing scopes.
 				a.retryKick(true, cache.EverySource)
 			}
 		},
 		Ended: func(err error) { a.emit(traceevent.EventsEnd(err)) },
-		// Until this reconnects, everything on screen is silently going stale.
-		Broken: func() { a.reportErr(errsurface.Error, "events", "live updates disconnected — retrying") },
+		Broken: func() {
+			a.reportErr(errsurface.Error, errsurface.EventsSource, "live updates disconnected — retrying")
+		},
 		Event: func(ev *gridwellv1.Event) {
 			a.emit(traceevent.EventRecv(ev))
 			if a.c.Apply(ev) {

@@ -165,9 +165,10 @@ func TestSticky(t *testing.T) {
 		{"electron:backend", true},
 		{BuildSource, true},
 		{BuildStuckSource, true},
+		// The stream is down until it opens again, however long the tab sleeps.
+		{EventsSource, true},
 		// One-shot events fade once they stop recurring.
 		{"rpc:MoveTile", false},
-		{"events", false},     // the event retry loop re-reports every second while down
 		{"door:files", false}, // a click answer rather than a condition, so it fades
 		{"electron:webview", false},
 		{"electron:session", false},
@@ -214,7 +215,7 @@ func TestReReportRefreshesDeadline(t *testing.T) {
 }
 
 func TestStickySourcesNeverExpire(t *testing.T) {
-	for _, src := range []string{"plugin:abc", "electron:backend"} {
+	for _, src := range []string{"plugin:abc", "electron:backend", EventsSource} {
 		s := New()
 		s.Report(Error, src, "down", t0)
 		if len(s.Expire(t0.Add(100*ExpireAfter))) > 0 {
