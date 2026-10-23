@@ -698,3 +698,32 @@ func TestNoUncarriedFlags(t *testing.T) {
 		t.Errorf("api/rpc/axes.go has %d flags no parity cell varies on: give each a variant in internal/server/parity_test.go, or reclassify it as presentation with the reason", n)
 	}
 }
+
+// unheardByCode are the production calls of gwerr.IsTransport outside
+// api/gwerr: each decides that the far side did not answer from a status
+// code, which an answered Unavailable relayed from a far node also carries.
+func unheardByCode(t *testing.T, root string) []string {
+	var out []string
+	productionGo(t, root, func(rel string, fset *token.FileSet, f *ast.File) {
+		if strings.HasPrefix(filepath.ToSlash(rel), "api/gwerr/") {
+			return
+		}
+		name := importName(f, repoModule+"/api/gwerr")
+		if name == "" {
+			return
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "IsTransport" {
+				if x, ok := sel.X.(*ast.Ident); ok && x.Name == name {
+					out = append(out, fmt.Sprintf("%s:%d", rel, fset.Position(call.Pos()).Line))
+				}
+			}
+			return true
+		})
+	})
+	return out
+}
