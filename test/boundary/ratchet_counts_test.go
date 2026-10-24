@@ -657,6 +657,12 @@ func parityCells(t *testing.T, root string) int {
 	return loggedCount(t, root, "./internal/server/", "TestParity", "parity count")
 }
 
+// streamAxisReads is the client's read decisions no stream-axis row runs
+// with this client's stream open and down, as TestStreamAxis/count logs it.
+func streamAxisReads(t *testing.T, root string) int {
+	return loggedCount(t, root, "./client/nav/", "TestStreamAxis", "stream axis count")
+}
+
 // axesUncovered is the flags rpc.Flags classes axis with no parity carrier,
 // as TestFlags/count logs it.
 func axesUncovered(t *testing.T, root string) int {

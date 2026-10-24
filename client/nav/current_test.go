@@ -30,124 +30,141 @@ func gridFetches(p Plan) int {
 	return n
 }
 
-func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
-	door := &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
+var (
+	currencyDoor = &gridwellv1.Tile{Id: "w1", Kind: rpc.KindDoor, GridId: "g1",
 		X: 2, Y: 3, W: 4, H: 4, ChildGridId: "g2"}
-	text := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
+	currencyText = &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 0, Y: 0, W: 3, H: 2}
+)
 
-	cases := []struct {
-		name string
-		grid string // the grid the plan would ask for
-		plan func(t *testing.T, current map[string]bool) Plan
-	}{{
-		name: "descending into a door",
-		grid: "g2",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(gridPane("pane1", "g1"))
-			w.Door = &DoorWorld{}
-			w.Current = current
-			return New().Do(descendGesture("pane1", door), w)
-		},
-	}, {
-		name: "descending into a read-only text tile",
-		grid: "g1",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(gridPane("pane1", "g1"))
-			w.Door = &DoorWorld{ReadOnly: true}
-			w.Current = current
-			return New().Do(descendGesture("pane1", text), w)
-		},
-	}, {
-		name: "an instant ascent out of a child grid",
-		grid: "g1",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(doorPane("pane1"))
-			w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
-				DoorTile: doorRow(), LandingGridID: "g1"}
-			w.Current = current
-			return New().Do(ascendGesture("pane1", 1, false), w)
-		},
-	}, {
-		name: "an animated ascent's landing",
-		grid: "g1",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(doorPane("pane1"))
-			w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
-				DoorTile: doorRow(), LandingGridID: "g1"}
-			w.Current = current
-			m := New()
-			tr := only(t, m.Do(ascendGesture("pane1", 1, true), w), EffStartTransition)
-			landed := baseWorld(gridPane("pane1", "g1"))
-			landed.Current = current
-			return m.Land(tr.Land, landed)
-		},
-	}, {
-		name: "an ascent landing back on content",
-		grid: "g1",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(contentPane("pane1", "t1"))
-			w.Leave = &LeaveWorld{DescendedTile: text, LandingGridID: "g1"}
-			w.Current = current
-			m := New()
-			tr := only(t, m.Do(ascendGesture("pane1", 1, true), w), EffStartTransition)
-			landed := baseWorld(contentPane("pane1", "t0"))
-			landed.Current = current
-			return m.Land(tr.Land, landed)
-		},
-	}, {
-		name: "leaving a level that parked no tree",
-		grid: "g1",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := levelWorld(false)
-			w.Current = current
-			return New().Do(leaveGesture(1), w)
-		},
-	}, {
-		name: "the post-reload re-centre on a workspace tile",
-		grid: "g9",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			m := New()
-			plan := m.Do(leaveGesture(1), levelWorld(false))
-			after := baseWorld(gridPane("pane1", "g1"))
-			aw := only(t, m.Do(*plan.Next, after), EffAwait)
-			after.Current = current
-			row := &gridwellv1.Tile{Id: "pt1", GridId: "g9", X: 2, Y: 3, W: 4, H: 4}
-			return m.Resume(aw.Token, Result{OK: true, Tile: row}, after)
-		},
-	}, {
-		name: "a healed restore re-anchoring",
-		grid: "elsewhere",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			m := New()
-			tok := healAwait(t, m, urlRowIn("elsewhere"))
-			w := baseWorld(engagedPane("pane1"))
-			w.Current = current
-			return m.Resume(tok, Result{OK: true, Doors: []*gridwellv1.Tile{
-				{Id: "w9", GridId: "root9"}}}, w)
-		},
-	}, {
-		name: "a restore onto a grid it did not have to read",
-		grid: "p1/3",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := restoreWorld(map[string]map[string]RestoreTile{
-				"p1/1": {"p1/10": doorIn("p1/2")},
-				"p1/2": {"p1/20": doorIn("p1/3")},
-				"p1/3": {},
-			})
-			w.Current = current
-			return New().Do(bootGesture("/10/20"), w)
-		},
-	}, {
-		name: "engaging a freshly installed tree's leaves",
-		grid: "g1",
-		plan: func(t *testing.T, current map[string]bool) Plan {
-			w := baseWorld(gridPane("pane1", "g1"))
-			w.Current = current
-			return New().Do(Gesture{Kind: GestureEngageLeaves}, w)
-		},
-	}}
+// currencyCase is one planner read of a grid: fn is the planner function
+// that decides it, as streamAxis keys its rows.
+type currencyCase struct {
+	name string
+	fn   string
+	grid string // the grid the plan would ask for
+	plan func(t *testing.T, current map[string]bool) Plan
+}
 
-	for _, c := range cases {
+var currencyCases = []currencyCase{{
+	name: "descending into a door",
+	fn:   "descendGrid",
+	grid: "g2",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Door = &DoorWorld{}
+		w.Current = current
+		return New().Do(descendGesture("pane1", currencyDoor), w)
+	},
+}, {
+	name: "descending into a read-only text tile",
+	fn:   "descendContent",
+	grid: "g1",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Door = &DoorWorld{ReadOnly: true}
+		w.Current = current
+		return New().Do(descendGesture("pane1", currencyText), w)
+	},
+}, {
+	name: "an instant ascent out of a child grid",
+	fn:   "landOnFrame",
+	grid: "g1",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(doorPane("pane1"))
+		w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
+			DoorTile: doorRow(), LandingGridID: "g1"}
+		w.Current = current
+		return New().Do(ascendGesture("pane1", 1, false), w)
+	},
+}, {
+	name: "an animated ascent's landing",
+	fn:   "landOnFrame",
+	grid: "g1",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(doorPane("pane1"))
+		w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true,
+			DoorTile: doorRow(), LandingGridID: "g1"}
+		w.Current = current
+		m := New()
+		tr := only(t, m.Do(ascendGesture("pane1", 1, true), w), EffStartTransition)
+		landed := baseWorld(gridPane("pane1", "g1"))
+		landed.Current = current
+		return m.Land(tr.Land, landed)
+	},
+}, {
+	name: "an ascent landing back on content",
+	fn:   "landOnFrame",
+	grid: "g1",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(contentPane("pane1", "t1"))
+		w.Leave = &LeaveWorld{DescendedTile: currencyText, LandingGridID: "g1"}
+		w.Current = current
+		m := New()
+		tr := only(t, m.Do(ascendGesture("pane1", 1, true), w), EffStartTransition)
+		landed := baseWorld(contentPane("pane1", "t0"))
+		landed.Current = current
+		return m.Land(tr.Land, landed)
+	},
+}, {
+	name: "leaving a level that parked no tree",
+	fn:   "leaveLevels",
+	grid: "g1",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := levelWorld(false)
+		w.Current = current
+		return New().Do(leaveGesture(1), w)
+	},
+}, {
+	name: "the post-reload re-centre on a workspace tile",
+	fn:   "levelRecentre",
+	grid: "g9",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		m := New()
+		plan := m.Do(leaveGesture(1), levelWorld(false))
+		after := baseWorld(gridPane("pane1", "g1"))
+		aw := only(t, m.Do(*plan.Next, after), EffAwait)
+		after.Current = current
+		row := &gridwellv1.Tile{Id: "pt1", GridId: "g9", X: 2, Y: 3, W: 4, H: 4}
+		return m.Resume(aw.Token, Result{OK: true, Tile: row}, after)
+	},
+}, {
+	name: "a healed restore re-anchoring",
+	fn:   "landHealed",
+	grid: "elsewhere",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		m := New()
+		tok := healAwait(t, m, urlRowIn("elsewhere"))
+		w := baseWorld(engagedPane("pane1"))
+		w.Current = current
+		return m.Resume(tok, Result{OK: true, Doors: []*gridwellv1.Tile{
+			{Id: "w9", GridId: "root9"}}}, w)
+	},
+}, {
+	name: "a restore onto a grid it did not have to read",
+	fn:   "finishRestore",
+	grid: "p1/3",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := restoreWorld(map[string]map[string]RestoreTile{
+			"p1/1": {"p1/10": doorIn("p1/2")},
+			"p1/2": {"p1/20": doorIn("p1/3")},
+			"p1/3": {},
+		})
+		w.Current = current
+		return New().Do(bootGesture("/10/20"), w)
+	},
+}, {
+	name: "engaging a freshly installed tree's leaves",
+	fn:   "engageLeaves",
+	grid: "g1",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Current = current
+		return New().Do(Gesture{Kind: GestureEngageLeaves}, w)
+	},
+}}
+
+func TestAPlanAsksForAGridOnlyWhenItIsNotCurrent(t *testing.T) {
+	for _, c := range currencyCases {
 		t.Run(c.name+": held current, nothing asked", func(t *testing.T) {
 			if n := gridFetches(c.plan(t, currentOf(c.grid))); n != 0 {
 				t.Fatalf("asked for %d grids the cache holds current", n)
