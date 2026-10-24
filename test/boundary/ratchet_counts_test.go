@@ -663,6 +663,12 @@ func streamAxisReads(t *testing.T, root string) int {
 	return loggedCount(t, root, "./client/nav/", "TestStreamAxis", "stream axis count")
 }
 
+// deviceAxisCells is the surface and gesture cells where touch is not shown
+// to give the mouse's one action, as TestDeviceAxis/count logs it.
+func deviceAxisCells(t *testing.T, root string) int {
+	return loggedCount(t, root, "./client/touchgest/", "TestDeviceAxis", "device axis count")
+}
+
 // axesUncovered is the flags rpc.Flags classes axis with no parity carrier,
 // as TestFlags/count logs it.
 func axesUncovered(t *testing.T, root string) int {
