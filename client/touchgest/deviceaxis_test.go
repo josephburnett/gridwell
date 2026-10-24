@@ -220,7 +220,7 @@ func deviceSurfaces() []surface {
 				return fmt.Sprint("click ", gesture.DecideTileClick(gesture.ClickInput{Door: true})), true
 			}, door), `"on touch a long-press lifted in place toggles" (2026-10-15)`},
 		{"grid background", "input.go", inGrid(gesture.Input{InGridView: true}, nil, gesture.WheelInput{}), ""},
-		{"content face", "input.go", func(r record) (string, bool) {
+		{"live content", "input.go", func(r record) (string, bool) {
 			switch {
 			case r.button < 0:
 				return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{TextFocused: true, InContentBox: true, ZoomOut: r.zoomOut})), true
