@@ -109,7 +109,7 @@ what each one is called.
 | entry | One thing a plugin lists: its key and its content. | A plugin's grid. |
 | key | A plugin's own name for one thing it serves. | An id, which the node mints. |
 | source | A plugin or a connection, as what a grid's rows come from (`source_label`, `DisableSource`); also the tile a copy was made from. The directory, service or node a plugin or connection represents has no word of its own: name the thing. | |
-| cache | What a source last answered (`cache.db`, `sourcecache`, a plugin's `state_dir`), served while it does not answer. Disposable, rewarmed by use. | Stale. |
+| cache | What a source last answered (`cache.db`, `sourcecache`, a plugin's cache in its `state_dir`), served while it does not answer. Disposable, rewarmed by use. | Stale. |
 
 **Tiles**
 
@@ -433,10 +433,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into the repo root, so
   check out the plugins repo beside this one.
 - A plugin serves keys and content; the node owns ids and layout. A plugin
-  holds no node fact, and keeps its own cache of its source in the private
-  directory the node hands it at spawn (`~/.gridwell/plugins/<id>`, as
-  `state_dir`), under `cache.db`'s contract: disposable, safe to delete,
-  rewarmed by use. Nothing deletes one automatically. A connection is
+  holds no node fact. The private directory the node hands it at spawn
+  (`~/.gridwell/plugins/<id>`, as `state_dir`) is the plugin's own and
+  durable: its cache of its source and whatever its features keep. Nothing
+  deletes one, ever (2026-10-25). A connection is
   config: an immutable name, a label, how to dial. Retiring a name is
   forever, and EXPLICIT: `retired_names:` is the one owner, and the stored
   `deleted` flag is only that list mirrored. Boot never retires a name

@@ -5,8 +5,8 @@ third-party plugin should meet it too. `docs/plugin-authoring.md` says how the
 plugin API works; this says what a good plugin does at it.
 
 A plugin serves keys and content; the node owns ids and layout. It holds no
-node fact. It answers in its own stable keys, keeps its own cache of its
-source in `state_dir` under `cache.db`'s contract, and everything else it
+node fact. It answers in its own stable keys, keeps its cache of its
+source and its own durable data in `state_dir`, and everything else it
 gets from the node comes from what it declared on the wire. The rules below
 apply the promises in `CLAUDE.md` one hop further, inside the plugin.
 

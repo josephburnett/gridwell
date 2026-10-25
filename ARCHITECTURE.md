@@ -207,9 +207,9 @@ per stamp: a second tell under the stamp last told is no change
 plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
 a database. It does get a private directory, `~/.gridwell/plugins/<id>`, named to
-it as `state_dir` at spawn: its own cache of its source, under cache.db's
-contract — disposable, safe to delete, rewarmed by use, and never deleted by
-the node. The node mints ids against those keys and
+it as `state_dir` at spawn: its own and durable, holding its cache of its
+source and whatever its features keep, never deleted by the node. The node
+mints ids against those keys and
 keeps the arrangement as a namespace of its own store
 (`internal/pluginhost/adapter.go`). An entry may be a link to another of the
 plugin's entries (`Entry.link_target`, the target's grid and key): the
