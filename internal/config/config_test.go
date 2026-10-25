@@ -5,8 +5,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 func write(t *testing.T, dir, yml string) string {
@@ -320,5 +323,53 @@ func TestExpandHomeGrammar(t *testing.T) {
 	}
 	if cfg.Plugins[0].Config["root"] != home {
 		t.Fatalf("bare ~ = %q, want %q", cfg.Plugins[0].Config["root"], home)
+	}
+}
+
+// Routes load in the order written and survive a mint's save as written.
+func TestRoutesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	src := "plugins:\n  - kind: labcode\nroutes:\n  - match: \"https://gitlab.com/*/-/merge_requests/*\" # reviews\n    plugin: lab0001\n  - match: \"https://gitlab.com/*\"\n    outside: true\n"
+	p := write(t, dir, src)
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []rpc.Route{
+		{Match: "https://gitlab.com/*/-/merge_requests/*", Plugin: "lab0001"},
+		{Match: "https://gitlab.com/*", Outside: true},
+	}
+	if !slices.Equal(cfg.Routes, want) {
+		t.Fatalf("routes = %+v, want %+v", cfg.Routes, want)
+	}
+	Mint(cfg)
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	if !strings.Contains(string(raw), "# reviews") {
+		t.Errorf("the save lost the routes as written:\n%s", raw)
+	}
+	back, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(back.Routes, want) {
+		t.Fatalf("routes after save = %+v, want %+v", back.Routes, want)
+	}
+}
+
+func TestLoadRefusesABadRoute(t *testing.T) {
+	cases := map[string]string{
+		"routes:\n  - match: \"https://*\"\n    plugin: p1\n    outside: true\n": "routes[0]: a route sends an address to a plugin or outside, not both",
+		"routes:\n  - match: \"https://*\"\n":                                    "routes[0]: a route needs a plugin or outside",
+		"routes:\n  - outside: true\n  - plugin: p1\n":                           "routes[0]: match is required",
+		"routes:\n  - match: \"https://*\"\n    browser: true\n":                 "not found",
+	}
+	for yml, want := range cases {
+		_, err := Load(write(t, t.TempDir(), yml))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want a refusal saying %q", yml, err, want)
+		}
 	}
 }

@@ -23,3 +23,7 @@ client/nodebuild/nodebuild.go interceptor.WrapStreamingHandler
 
 # grpc's status package reads an error's status through its GRPCStatus method.
 api/gwerr/gwerr.go unheard.GRPCStatus
+
+# The route verdict lands before its readers: the client's link funnel and
+# the node's presented-by stamp. The funnel's commit removes this line.
+api/rpc/route.go Decide

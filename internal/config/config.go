@@ -18,6 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/josephburnett/gridwell/api/idshape"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // ServerConfig is ~/.gridwell/server.yaml.
@@ -47,6 +48,9 @@ type ServerConfig struct {
 	RetiredNames []string `yaml:"retired_names,omitempty"`
 	// Plugins are the content plugins: separate binaries speaking plugin.v1.
 	Plugins []PluginConfig `yaml:"plugins,omitempty"`
+	// Routes send a url tile's address to a plugin that presents it or
+	// outside, first taker wins; rpc.Decide reads them.
+	Routes []rpc.Route `yaml:"routes,omitempty"`
 
 	// WebPassword is not a yaml fact: BuildConfig reads it from the file.
 	WebPassword string `yaml:"-"`
@@ -201,6 +205,11 @@ func Parse(data []byte) (*ServerConfig, error) {
 		switch cfg.Plugins[i].Kind {
 		case "home", "remote", "local", "localdb", "ssh":
 			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin: the node's id is `id:` and its connections are `connections:` — a server.yaml that still lists them here is the shape v0.1.0 was the last release to convert", i, cfg.Plugins[i].Kind)
+		}
+	}
+	for i, r := range cfg.Routes {
+		if err := r.Check(); err != nil {
+			return nil, fmt.Errorf("routes[%d]: %w", i, err)
 		}
 	}
 	if err := expandPaths(&cfg); err != nil {
