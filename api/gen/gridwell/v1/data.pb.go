@@ -1590,7 +1590,10 @@ func (x *WriteContentRequest) GetContentStamp() string {
 // resource such as "img/cat.png" whose meaning the plugin defines. method ""
 // means GET. Chunk 1 carries status, media_type and headers; later chunks
 // carry data only. A plugin that does not serve web content leaves the RPC
-// unimplemented and the content API answers 404.
+// unimplemented and the content API answers 404. A url tile a plugin
+// presents (Tile.presented_by) is that plugin's to serve, asked with tile_id
+// "": the subpath is the site address without its scheme, or under "_/" the
+// plugin's own assets.
 type ServeContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`

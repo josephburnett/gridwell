@@ -7,3 +7,4 @@ low-water | 57482
 2026-10-25 | a plugin presents a site's addresses: the content API carries a whole request and its answer | 74
 2026-10-25 | a plugin presents a site's addresses: InfoResponse.presents and the one glob rule (rpc.MatchAddress) | 27
 2026-10-25 | a plugin presents a site's addresses: Tile.presented_by derived by the router, the handshake's routes and presents, and an undeclared route plugin refused | 76
+2026-10-25 | a plugin presents a site's addresses: the content API routes a presented tile's page to its plugin (pageRoute) | 31

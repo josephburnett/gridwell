@@ -8,7 +8,9 @@ package server_test
 
 import (
 	"context"
+	"io"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -138,7 +140,8 @@ func TestAHomeURLTileIsPresentedWhereARouteAndADeclarationTakeIt(t *testing.T) {
 }
 
 // A far node's url tile arrives presented by the far node's verdict, its
-// plugin named from here; the near node, which has no routes, adds nothing.
+// plugin named from here, and its page is the far plugin's; the near node,
+// which has no routes, adds nothing.
 func TestAFarURLTileArrivesPresentedByTheFarNodesVerdict(t *testing.T) {
 	ctx := context.Background()
 	far := newFarNodeWith(t, server.Config{ID: "rnode1", Routes: presentedRoutes}, registerPresenter(t, &presenter{}))
@@ -161,5 +164,60 @@ func TestAFarURLTileArrivesPresentedByTheFarNodesVerdict(t *testing.T) {
 	}
 	if len(g.Tiles) != 1 || g.Tiles[0].PresentedBy != localNodeID+"/geneva/"+presenterID {
 		t.Fatalf("far tiles = %v, want one presented by %s/geneva/%s", g.Tiles, localNodeID, presenterID)
+	}
+	page := strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), g.Tiles[0].Id), "/")
+	if code, body := get(t, hs, page+"/example.test/a"); code != 200 || body != "presented example.test/a" {
+		t.Errorf("the far page = %d %q, want the far plugin's", code, body)
+	}
+}
+
+func (p *presenter) request() *pluginv1.ServeContentRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.got
+}
+
+// get answers status and body of the content API at path.
+func get(t *testing.T, hs *httptest.Server, path string) (int, string) {
+	t.Helper()
+	res, err := hs.Client().Get(hs.URL + path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(body)
+}
+
+// A presented tile's page is its plugin's: asked by no key, with the site
+// address as the subpath, the plugin's 404 the page's answer. A link to it
+// serves through the same hop, and a tile no route takes has no page.
+func TestAPresentedTileIsServedByItsPlugin(t *testing.T) {
+	impl := &presenter{}
+	cl, hs, root := presentingNode(t, impl)
+	presented := createURL(t, cl, root, 0, "http://example.test/a")
+	plain := createURL(t, cl, root, 1, "http://plain.test/a")
+	link, err := cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: root,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 2, Y: 0, W: 1, H: 1, LinkTargetId: presented.Id}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := func(id string) string {
+		return strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), id), "/")
+	}
+	if code, body := get(t, hs, page(presented.Id)+"/example.test/a?x=1"); code != 200 || body != "presented example.test/a" {
+		t.Errorf("the presented page = %d %q, want the plugin's", code, body)
+	}
+	if got := impl.request(); got.GetKey() != "" || got.GetSubpath() != "example.test/a" || got.GetQuery() != "x=1" {
+		t.Errorf("the plugin was asked key %q subpath %q query %q, want no key and the address", got.GetKey(), got.GetSubpath(), got.GetQuery())
+	}
+	if code, body := get(t, hs, page(presented.Id)+"/example.test/missing"); code != 404 || body != "no such page" {
+		t.Errorf("a page the plugin has not = %d %q, want its own 404", code, body)
+	}
+	if code, body := get(t, hs, page(link.Id)+"/example.test/b"); code != 200 || body != "presented example.test/b" {
+		t.Errorf("through the link = %d %q, want the plugin's", code, body)
+	}
+	if code, _ := get(t, hs, page(plain.Id)+"/plain.test/a"); code != 404 {
+		t.Errorf("a tile no route takes = %d, want 404", code)
 	}
 }

@@ -1026,7 +1026,10 @@ func (x *WriteContentResponse) GetContentStamp() string {
 // GET, HEAD or POST, and subpath "" is the entry's root page. method "" means
 // GET. Sandboxing happens at the node, which keeps its own credentials
 // (the cookie, the bearer) out of headers and owns the response headers it
-// sets itself; see gridwell.v1 ServeContentChunk.
+// sets itself; see gridwell.v1 ServeContentChunk. key "" is an address you
+// present (InfoResponse.presents): subpath is the site address without its
+// scheme, such as "gitlab.com/g/p/-/merge_requests/7", and a subpath under
+// "_/" is yours for your page's assets.
 type ServeContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`

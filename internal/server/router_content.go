@@ -15,7 +15,7 @@ import (
 )
 
 // The router's content streams and the placement verb. Reads route through
-// contentRoute; writes take plain id routing.
+// contentRoute, a page through pageRoute; writes take plain id routing.
 
 // ReadContent streams a tile's bytes from the namespace that owns it. Chunks
 // carry no ids, so nothing needs re-qualification on the way back.
@@ -31,7 +31,7 @@ func (rt *router) ReadContent(ctx context.Context, req *pb.ReadContentRequest, s
 // local API and the request rides this verb through the tunnel, which is how
 // a far node's pages are served.
 func (rt *router) ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	c, local, err := rt.srv.contentRoute(ctx, req.TileId)
+	c, local, err := rt.srv.pageRoute(ctx, req.TileId)
 	if err != nil {
 		return err
 	}

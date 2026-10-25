@@ -19,38 +19,65 @@ import (
 // never resolve, because a link owns no content and the store refuses a write
 // to a link row.
 func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, error) {
+	c, local, _, err := s.contentRow(ctx, qualifiedID)
+	return c, local, err
+}
+
+// pageRoute is contentRoute for a page: a url tile a plugin presents is that
+// plugin's to serve, asked with no key, the subpath its site address. A far
+// row is its own node's to judge, behind the hop.
+func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, error) {
+	c, local, row, err := s.contentRow(ctx, qualifiedID)
+	if err != nil || row == nil {
+		return c, local, err
+	}
+	if s.stampPresented(ctx, row); row.PresentedBy == "" {
+		return c, local, nil
+	}
+	p, found := s.routeClient(row.PresentedBy)
+	if !found {
+		return nil, "", undeclared(row.PresentedBy)
+	}
+	return p, "", nil
+}
+
+// contentRow is contentRoute and the row that owns the content, nil when a
+// hop forwards it.
+func (s *Server) contentRow(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
 	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
-		return nil, "", status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
+		return nil, "", nil, status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
 	}
 	c, local, uuid, transit, found := s.resolve(qualifiedID)
 	if !found {
-		return nil, "", undeclared(qualifiedID)
+		return nil, "", nil, undeclared(qualifiedID)
 	}
 	if transit {
-		return c, local, nil
+		return c, local, nil, nil
 	}
 	tr, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 	target := rpc.QualifyLinkTarget(uuid, tr.GetTile().GetLinkTargetId())
 	if target == "" {
-		return c, local, nil
+		return c, local, tr.GetTile(), nil
 	}
 	// The target is spelled from this node, so it routes like any other id,
 	// through resolve. Peeling the first segment by hand would answer home for
 	// a connection-chained target, which the transport owns.
 	tc, tlocal, _, ttransit, found := s.resolve(target)
 	if !found {
-		return nil, "", undeclared(target)
+		return nil, "", nil, undeclared(target)
 	}
 	// The target is checked as a directly addressed id is, so its owner's
 	// verdict on a gone key is the answer whichever id the read named. A
 	// transit target is the far router's to check.
-	if !ttransit {
-		if _, err := tc.GetTile(ctx, &pb.GetTileRequest{TileId: tlocal}); err != nil {
-			return nil, "", err
-		}
+	if ttransit {
+		return tc, tlocal, nil, nil
 	}
-	return tc, tlocal, nil
+	ttr, err := tc.GetTile(ctx, &pb.GetTileRequest{TileId: tlocal})
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return tc, tlocal, ttr.GetTile(), nil
 }

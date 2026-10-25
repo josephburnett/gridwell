@@ -4,7 +4,7 @@ package server
 //
 //	/content/<content-token>/<qualified-tile-id>/<subpath>
 //
-// becomes one ServeContent RPC routed through contentRoute, so links resolve
+// becomes one ServeContent RPC routed through pageRoute, so links resolve
 // and transit hops forward exactly like ReadContent; it carries the method,
 // query, headers and body, and each answered chunk is flushed to the page as
 // it comes. The API owns the URL grammar, the token gate and the headers in
@@ -143,7 +143,7 @@ func (s *Server) contentAPI() http.Handler {
 			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		c, local, err := s.contentRoute(r.Context(), tileID)
+		c, local, err := s.pageRoute(r.Context(), tileID)
 		if err != nil {
 			refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
 			return

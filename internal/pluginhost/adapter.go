@@ -1197,11 +1197,15 @@ func (a *Adapter) writeAddress(ctx context.Context, first *gridwellv1.WriteConte
 }
 
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
-	ref, err := a.resolveTile(req.TileId)
-	if err != nil {
-		return err
+	// No tile is an address the plugin presents (server.pageRoute): no key.
+	var ref tileRef
+	if req.TileId != "" {
+		var err error
+		if ref, err = a.resolveTile(req.TileId); err != nil {
+			return err
+		}
 	}
-	_, err = ask(&a.lacks, "ServeContent", func() (struct{}, error) {
+	_, err := ask(&a.lacks, "ServeContent", func() (struct{}, error) {
 		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: ref.key, Subpath: req.Subpath,
 			Method: req.Method, Query: req.Query, Body: req.Body,
 			Headers: headers(req.Headers, func(n, v string) *pluginv1.Header { return &pluginv1.Header{Name: n, Value: v} })})
