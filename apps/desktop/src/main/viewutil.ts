@@ -15,9 +15,10 @@ export function allowPermission(permission: string): boolean {
   return permission !== 'openExternal';
 }
 
-// The url a denied popup opens in the pane below, or null: a non-web protocol
-// would re-enter the path allowPermission blocks.
-export function openBelowUrl(target: string): string | null {
+// The address itself when it is http(s), else null: a non-web protocol would
+// reach the OS handler allowPermission keeps every page from. A denied popup
+// opens below and the open-outside verb opens only what this passes.
+export function webUrl(target: string): string | null {
   return /^https?:\/\//i.test(target) ? target : null;
 }
 

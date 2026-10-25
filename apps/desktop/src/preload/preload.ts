@@ -12,6 +12,7 @@ import {
   ChoiceMenuArgs,
   MirroredArgs,
   MoveArgs,
+  OpenOutsideArgs,
   RemoveArgs,
   PaneRef,
   ReloadArgs,
@@ -102,6 +103,10 @@ const api = {
   // TraceClient.handOver. The args are bridgeVerb's and carry nothing.
   handOverTrace(_args: object): Promise<string> {
     return ipcRenderer.invoke(CH.handOverTrace);
+  },
+  // Hands an http(s) address to the default browser; anything else rejects.
+  openOutside(args: OpenOutsideArgs): Promise<void> {
+    return ipcRenderer.invoke(CH.openOutside, args);
   },
 
   ...listeners,

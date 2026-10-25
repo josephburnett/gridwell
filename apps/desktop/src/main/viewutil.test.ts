@@ -9,7 +9,7 @@ import {
   minWidthZoomFactor,
   composeZoom,
   allowPermission,
-  openBelowUrl,
+  webUrl,
   serializeHistory,
   parseHistory,
   reviveNavigation,
@@ -290,13 +290,13 @@ test('allowPermission denies exactly openExternal', () => {
 
 // Only web urls open below. Forwarding a non-web protocol would re-enter the
 // external-protocol path, so it opens nowhere.
-test('openBelowUrl forwards web urls and drops everything else', () => {
-  assert.equal(openBelowUrl('https://example.com/x'), 'https://example.com/x');
-  assert.equal(openBelowUrl('HTTP://example.com'), 'HTTP://example.com');
-  assert.equal(openBelowUrl('zoommtg://zoom.us/join?confno=1'), null);
-  assert.equal(openBelowUrl('mailto:a@b.c'), null);
-  assert.equal(openBelowUrl('about:blank'), null);
-  assert.equal(openBelowUrl(''), null);
+test('webUrl forwards web urls and drops everything else', () => {
+  assert.equal(webUrl('https://example.com/x'), 'https://example.com/x');
+  assert.equal(webUrl('HTTP://example.com'), 'HTTP://example.com');
+  assert.equal(webUrl('zoommtg://zoom.us/join?confno=1'), null);
+  assert.equal(webUrl('mailto:a@b.c'), null);
+  assert.equal(webUrl('about:blank'), null);
+  assert.equal(webUrl(''), null);
 });
 
 // The revive tie-break. url_string is user-editable through WriteContent

@@ -20,7 +20,7 @@ import {
   renderProcessGoneMessage,
   pageClosedMessage,
   zoomChordKey,
-  openBelowUrl,
+  webUrl,
   toContentPoint,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
@@ -279,7 +279,7 @@ export class WebviewRegistry {
     const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
-      const below = openBelowUrl(target);
+      const below = webUrl(target);
       this.trace(viewOpenRequested(e.paneId, target, !!below));
       if (below) {
         this.cb.onOpenBelow?.({ paneId: e.paneId, url: below });

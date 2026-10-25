@@ -1,4 +1,4 @@
-import { ipcMain, BaseWindow, Menu, MenuItemConstructorOptions, WebContents } from 'electron';
+import { ipcMain, BaseWindow, Menu, MenuItemConstructorOptions, shell, WebContents } from 'electron';
 import {
   CH,
   EV,
@@ -18,12 +18,14 @@ import {
   ChoiceMenuArgs,
   MirroredArgs,
   MoveArgs,
+  OpenOutsideArgs,
 } from './ipc';
 import { toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 import { handOverTrace, logLine, trace } from './trace';
 import { menuChose, menuOpened } from './viewtrace';
+import { openOutside } from './outside';
 
 // The renderer's declared choices, as a trace record names them; webviews.ts
 // names the live view's page menu.
@@ -126,6 +128,8 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.handOverTrace, (): Promise<string> => handOverTrace());
+
+  ipcMain.handle(CH.openOutside, (_e, a: OpenOutsideArgs): Promise<void> => openOutside(a.url, (url) => shell.openExternal(url), trace));
 }
 
 // forwarder pushes a registry callback's event onto its EV channel unchanged;

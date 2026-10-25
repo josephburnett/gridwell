@@ -28,6 +28,8 @@ export const CH = {
   move: 'gw:move', // MoveArgs → void; rejects when fromPaneId holds no view
   handOverTrace: 'gw:handOverTrace', // void → string: '' once the node holds
                                      // main's trace records, else why not.
+  openOutside: 'gw:openOutside', // OpenOutsideArgs → void; rejects with why
+                                 // the default browser did not open it.
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget). The view swallows the
@@ -78,6 +80,11 @@ export interface ForwardedRightdown {
 
 export interface PaneRef {
   paneId: string;
+}
+
+// An address a route sends to the default browser (outside.ts).
+export interface OpenOutsideArgs {
+  url: string;
 }
 
 // The pane's view loads url again: its page's source changed it.

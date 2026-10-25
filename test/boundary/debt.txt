@@ -2,3 +2,4 @@
 # The debt row of ratchet.txt counts the lines above low-water; at 0 that row, the low-water line and the paid entries go, and the next rise brings them back.
 low-water | 57482
 2026-10-25 | routing rules send an address to a plugin or outside (Joe): the routes key and rpc.Decide | 66
+2026-10-25 | routing rules send an address to a plugin or outside (Joe): the desktop's open-outside verb | 62

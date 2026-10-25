@@ -389,3 +389,12 @@ func jsString(v js.Value) string {
 	}
 	return v.String()
 }
+
+// openOutside hands addr to the default browser: main's open-outside verb on
+// the desktop, whose refusal surfaces through bridgeCall, and a new tab in a
+// plain browser, where the browser is the default one.
+func (a *App) openOutside(addr string) {
+	if !a.bridgeVerb("openOutside", map[string]any{"url": addr}, nil, nil) {
+		js.Global().Get("window").Call("open", addr, "_blank", "noopener")
+	}
+}

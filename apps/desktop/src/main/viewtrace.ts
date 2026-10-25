@@ -4,6 +4,7 @@
 
 import type { Bounds } from './ipc';
 import type { TraceEvent } from './trace';
+import { webUrl } from './viewutil';
 
 // One src per owner, as the node's emitters do: the dump is read by grepping
 // these. The registry's notices carry VIEW too, under the origin prefix a
@@ -47,14 +48,23 @@ export function viewNavInPage(paneId: string, tileId: string, url: string): Trac
   return view('nav-page', paneId, url, { tile: tileId });
 }
 
+// An address as a record carries it: whole when http(s), else only its
+// scheme, since a data: or javascript: address is page content.
+function shownAddress(url: string): string {
+  return webUrl(url) ?? /^[a-z][a-z0-9+.-]*:/i.exec(url)?.[0] ?? '';
+}
+
 // A window.open or target=_blank, which never opens a window: below is whether
 // it became a split below, and a webContents that is no live view (the
-// canvas) names no pane. msg is the address the page asked for, or only the
-// scheme of one that is not http(s), since a data: or javascript: address is
-// page content.
+// canvas) names no pane. msg is the address the page asked for.
 export function viewOpenRequested(paneId: string | undefined, url: string, below: boolean): TraceEvent {
-  const msg = /^https?:\/\//i.test(url) ? url : (/^[a-z][a-z0-9+.-]*:/i.exec(url)?.[0] ?? '');
-  return { src: VIEW, kind: 'open', msg, kv: { ...(paneId ? { view: paneId } : {}), below: String(below) } };
+  return { src: VIEW, kind: 'open', msg: shownAddress(url), kv: { ...(paneId ? { view: paneId } : {}), below: String(below) } };
+}
+
+// The open-outside verb's verdict on an address a route sent to the default
+// browser. It names no pane: nothing opens in one.
+export function viewOpenedOutside(url: string, verdict: 'opened' | 'refused' | 'failed'): TraceEvent {
+  return { src: VIEW, kind: 'outside', msg: shownAddress(url), kv: { verdict } };
 }
 
 // A page's permission request and viewutil.allowPermission's verdict, so a
