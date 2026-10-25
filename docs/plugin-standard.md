@@ -790,7 +790,9 @@ address, so a link to an address you present must be one you can show.
 subpath, the plugin's 404 stands) and
 `TestAFarURLTileArrivesPresentedByTheFarNodesVerdict`.
 
-**Today.** N/A for the six shipped plugins: none presents yet.
+**Today.** pages presents the addresses its `presents` config names
+(`pages/site.Present`: `<host>/<key>` is the doc's page, `_/<key>/<name>`
+its asset). The other five present nothing.
 
 ## Checklist
 
@@ -798,7 +800,7 @@ Tick each before you ship. At `729ba73` the shipped plugins ticked every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
 hey); 3 and gitlab's 17 are met since memo v0.4.2. Rules 18 to 21 were
 added later: 18 is met by fs, proc, gitlab and hey, 19 by fs alone, 20
-by fs, gitlab, gmail and hey, and 21 applies to none yet. The rules' Today
+by fs, gitlab, gmail and hey, and 21 by pages alone. The rules' Today
 lines say what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
