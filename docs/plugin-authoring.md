@@ -127,6 +127,26 @@ it comes back as `ServeContent` on the same key with that name as the
 node keeps its screenshot, its standing freeze and its zoom, and you store
 none of them.
 
+`ServeContent` carries the page's whole request, not only a GET: the
+method (GET, HEAD or POST; "" means GET), the raw query, the request's
+headers less the node's credentials, and the body. Answer the status, the
+media type and any headers of your own on the first chunk, and stream the
+rest; each chunk reaches the page as you send it. The node's own headers,
+the sandbox CSP among them, are never yours: a header naming one is
+dropped.
+
+A plugin may present a site instead of, or beside, serving entries:
+declare in `presents` the globs of the site addresses you can show, such
+as `https://gitlab.com/*/-/merge_requests/*` (`*` is any run of
+characters, `/` included). A route in `server.yaml` sends a url tile's
+address to you only when one of them matches it, and the tile stays the
+user's url tile, so you own no tile and need no grid. Its page is
+`ServeContent` with an empty `key` and the address without its scheme as
+the `subpath` (`gitlab.com/g/p/-/merge_requests/7`), the query as the
+query; a link inside your page to another address you present is that
+address under the same prefix, and the node writes where the user went
+back to the tile. Serve your page's own assets under the subpath `_/`.
+
 ## Links
 
 One thing listed in several of your grids — a mail thread in a box and

@@ -98,6 +98,7 @@ what each one is called.
 | `~/.gridwell` | The node's directory: `server.yaml`, `gridwell.db`, `cache.db`, `web-password`, `~/.gridwell/plugins/<id>`. | A home. |
 | API | One interface the node serves, or in the plugin's case dials: the web API (the browser's calls), the connection API (the socket a connection dials), the plugin API (what a plugin serves the node), the MCP API (agents), the shell API (the WebSocket), the content API (a plugin's pages), the trace API. The web, connection and MCP APIs each decode onto the one router. | A door, which is a tile. |
 | connection | A config row to a far node: an immutable name, a label, how to dial. | |
+| route | One rule of `server.yaml`'s ordered `routes`: a glob over an address, and a plugin that presents it or outside. | A place; a link's path. |
 
 **Namespaces**
 
@@ -108,6 +109,7 @@ what each one is called.
 | plugin | A subprocess that serves keys and content and declares its grids; the node owns the ids and the layout, and mints a plugin's grid when it is touched. | A home. |
 | entry | One thing a plugin lists: its key and its content. | A plugin's grid. |
 | key | A plugin's own name for one thing it serves. | An id, which the node mints. |
+| presents | A plugin's declaration of the site addresses it can show a page for (`InfoResponse.presents`). | Serves a page, which is an entry's. |
 | source | A plugin or a connection, as what a grid's rows come from (`source_label`, `DisableSource`); also the tile a copy was made from. The directory, service or node a plugin or connection represents has no word of its own: name the thing. | |
 | cache | What a source last answered (`cache.db`, `sourcecache`, a plugin's cache in its `state_dir`), served while it does not answer. Disposable, rewarmed by use. | Stale. |
 
@@ -280,8 +282,8 @@ These were decided deliberately. Do not reverse one without a new decision.
 **Data**
 
 - The node is one process with one directory, `~/.gridwell`: one id, one
-  `server.yaml` (`id`, `web`, `federation`, `connections`, `plugins`), one
-  `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
+  `server.yaml` (`id`, `web`, `federation`, `connections`, `plugins`,
+  `routes`), one `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
 - The store mints the node's singleton grids (root, scratch, trash) when it
   opens, never on a read; reading never mutates has no exception
   (2026-09-30).
@@ -584,6 +586,22 @@ These were decided deliberately. Do not reverse one without a new decision.
   delete it to rotate). The connection API is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays
   `federation.sock`: an existing `~/.gridwell` already has them written down.
+- A plugin may present a site (2026-10-25). It declares the addresses it
+  can show as globs over the whole address (`InfoResponse.presents`), and
+  `routes` in `server.yaml`, in order, send an address to a plugin or
+  outside: the first rule whose glob matches takes it, a plugin's rule only
+  for an address that plugin declares, else it falls through; no taker is a
+  plain url tile, and a route naming an undeclared plugin is refused at
+  parse. A presented url tile stays a url tile of the node holding it, home's
+  or a far node's: its content is the site address, that node derives
+  `presented_by` on every answer (`rpc.Decide`), its page is the address
+  without its scheme under the tile's (`rpc.PresentedPageURL`), and an
+  in-page navigation is written back as the site address, a location outside
+  the page writing nothing (`urlview.Landed`). The content API carries a
+  whole request and flushes its answer, and the node's own headers are
+  never the plugin's (`server.nodeHeaders`). An outside address opens in the
+  default browser from the link funnel and creates nothing. Nothing names a
+  plugin kind: every behaviour rides the declaration and the rule.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
   interchangeable with the cookie. It is either a text tile or a url tile: a

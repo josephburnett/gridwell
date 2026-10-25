@@ -766,13 +766,39 @@ a cache. At the node,
 **Today.** Meets: fs, which answers none; gitlab, gmail and hey, which
 find their cache only. N/A: proc and pages, which serve no `Find`.
 
+## 21. Present only what you can show
+
+**Rule.** Declare in `presents` only addresses you can answer a page for,
+and answer every request one of them makes: a whole request arrives
+(method, query, headers, body), so answer it with its status and headers,
+streaming the body. Keep your page's assets under the subpath `_/`, and
+answer an address you cannot show with your own 404 (Joe, 2026-10-25).
+
+**Why.** "A tile behaves the same wherever its content comes from." A route
+sends an address to you only when your declaration matches it, else it
+falls through to the next rule and the tile stays the site, so a pattern
+wider than what you can show turns a working url tile into a broken page.
+A link out of your page is written back to the user's tile as the site
+address, so a link to an address you present must be one you can show.
+
+**Example.** A review plugin declares
+`presents: ["https://gitlab.com/*/-/merge_requests/*"]` and serves
+`gitlab.com/g/p/-/merge_requests/7` with its assets at `_/app.js`.
+
+**Test.** At the node, `internal/server/presented_seam_test.go`:
+`TestAPresentedTileIsServedByItsPlugin` (no key, the address as the
+subpath, the plugin's 404 stands) and
+`TestAFarURLTileArrivesPresentedByTheFarNodesVerdict`.
+
+**Today.** N/A for the six shipped plugins: none presents yet.
+
 ## Checklist
 
 Tick each before you ship. At `729ba73` the shipped plugins ticked every box
 but four: 3 (gitlab, gmail), 14 (gmail), 16 (proc, gitlab) and 17 (gitlab,
-hey); 3 and gitlab's 17 are met since memo v0.4.2. Rules 18 to 20 were
-added later: 18 is met by fs, proc, gitlab and hey, 19 by fs alone, and 20
-by fs, gitlab, gmail and hey. The rules' Today
+hey); 3 and gitlab's 17 are met since memo v0.4.2. Rules 18 to 21 were
+added later: 18 is met by fs, proc, gitlab and hey, 19 by fs alone, 20
+by fs, gitlab, gmail and hey, and 21 applies to none yet. The rules' Today
 lines say what remains.
 
 - [ ] 1. `Info` declares every capability implemented, and a test pins it.
@@ -795,3 +821,4 @@ lines say what remains.
 - [ ] 18. A content change in place is an `EntryChanged` with the entry re-read; `GridChanged` only for a listing that may have moved.
 - [ ] 19. A body you take back is declared `writable`, named by `content_stamp`, refused on a stale stamp with `FailedPrecondition`, and answered with the written bytes' stamp; a text entry you would refuse declares `read_only` with the reason.
 - [ ] 20. `Find` reads only your cache; a file tree answers `Unimplemented` with the reason.
+- [ ] 21. `presents` declares only what you can show; a whole request is answered with its headers, assets under `_/`.

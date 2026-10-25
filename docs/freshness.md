@@ -123,7 +123,12 @@ accepted `SetSelection` land the whole set on the cached grid
 (`Layer.reselect`). A write the source did not accept is cached nowhere. `prefetch.go` warms
 every source on Subscribe and one source when it comes back;
 `servecontent.go` gives the `/content/` API the same treatment under its own
-caps.
+caps, for a plain GET only: a POST, a query or request headers it has no
+column for would answer a later read with what that read did not ask, so
+those always reach the source. A presented tile's page rides the same API,
+and what it shows is the plugin's answer; the tile's address is written
+only by a navigation the user makes in it, as the site address
+(`urlview.Landed`).
 
 **5. The server fan-in** — `internal/server/router.go`. `Subscribe` starts
 one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
