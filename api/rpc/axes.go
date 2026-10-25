@@ -19,6 +19,7 @@ var Flags = []Flag{
 	{"gridwell.v1.Tile.link", true, "kind: the doors to a home, a plugin and a far grid are links; link and see it dead make a leaf one", "delete unlinks and copy links"},
 	{"gridwell.v1.Tile.url_frozen", true, "operation: freeze sets it and reads it back", "descent keeps the preview instead of going live"},
 	{"gridwell.v1.Tile.serves_page", true, "operation: serve a page, and the decided url copy cell on a plugin", "the address is the node's /content/ API, and a copy links"},
+	{"gridwell.v1.Tile.presented_by", false, "", "the view opens at the plugin's page for the address; a presented tile is a url tile in every operation"},
 	{"gridwell.v1.Tile.named", true, "operation: rename sets it, and the decided url screenshot cell on a plugin", "no capture or listing replaces the name"},
 	{"gridwell.v1.Tile.read_only", true, "variant a read-only entry: the decided text write cells, here and through the connection", "a body write is refused before it is typed"},
 	{"gridwell.v1.Grid.writable", true, "variant a plugin that is not writable: the decided text write cells, and the url write held to home", "the grid's text bodies take writes"},

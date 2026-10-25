@@ -51,6 +51,9 @@ type Config struct {
 	// Dir is the node's directory node.Options names; the trace API writes its
 	// dumps under it. Empty refuses a dump rather than guessing a directory.
 	Dir string
+	// Routes is server.yaml's; the handshake carries it and stampPresented
+	// reads it.
+	Routes []*pb.Route
 }
 
 // Server routes every operation through the registry by the first segment of

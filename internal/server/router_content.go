@@ -61,7 +61,7 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	bound := proto.CloneOf(first)
 	bound.TileId = local
 	resp, err := c.WriteContent(ctx, namespace.Rebound(bound, recv))
-	return rt.tileResp(uuid, transit, resp, err)
+	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
 // MoveTile is the single placement writeback.
@@ -77,5 +77,5 @@ func (rt *router) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.Ti
 		return nil, err
 	}
 	resp, err := c.MoveTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
-	return rt.tileResp(uuid, transit, resp, err)
+	return rt.tileResp(ctx, uuid, transit, resp, err)
 }

@@ -113,7 +113,7 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 func isIDField(fd protoreflect.FieldDescriptor) bool {
 	name := string(fd.Name())
 	return fd.Kind() == protoreflect.StringKind &&
-		(name == "id" || strings.HasSuffix(name, "_id") || name == "shell_tmux")
+		(name == "id" || strings.HasSuffix(name, "_id") || name == "shell_tmux" || name == "presented_by")
 }
 
 // shell_tmux is optional like a link, empty meaning the tile's own id,

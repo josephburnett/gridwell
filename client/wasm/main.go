@@ -79,13 +79,11 @@ type App struct {
 	// plugins is the Handshake's menu-row list, in config order.
 	plugins []*gridwellv1.PluginInfo
 
-	// routes is what the link funnel asks rpc.Decide with: the node's routes,
-	// the presents each plugin declares and the glob both are read by. Empty
-	// until the handshake carries them, so every visit makes a tile.
+	// routes is what the link funnel asks rpc.Decide with: the node's routes
+	// and the presents each plugin declares, from the handshake (takeMenu).
 	routes struct {
-		rules    []rpc.Route
+		rules    []*gridwellv1.Route
 		presents map[string][]string
-		match    rpc.Matcher
 	}
 
 	// home is the qualified grid id "/" means; every "empty anchor" reader
@@ -670,6 +668,13 @@ func main() {
 	select {}
 }
 
+// takeMenu keeps what a handshake of this node says of its plugins and
+// routes.
+func (a *App) takeMenu(h *gridwellv1.HandshakeResponse) {
+	a.plugins = h.Plugins
+	a.routes.rules, a.routes.presents = rpc.Routing(h)
+}
+
 // bootstrap loads the plugin list, then starts the rest of the client.
 func (a *App) bootstrap() {
 	// The handshake retries until it lands, or one blip empties the page.
@@ -694,7 +699,7 @@ func (a *App) bootstrap() {
 		time.Sleep(backoff.Next())
 	}
 	a.emit(traceevent.NodeBuild(plugins.Build))
-	a.plugins = plugins.Plugins
+	a.takeMenu(plugins)
 	// shells_disabled folds into caps at boot, the one owner of what this client
 	// can do.
 	a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)

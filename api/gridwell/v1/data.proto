@@ -270,6 +270,13 @@ message Tile {
   // listing replaces it. Stored as the store's alt_user; only a rename sets
   // it, a copy carries it, and CreateTile honours it. SetTile ignores it.
   bool named = 41;
+
+  // presented_by is the namespace of the plugin presenting this url tile's
+  // address in place of the site, "" for none: the verdict of the routes of
+  // the node holding the row over the plugins' presents (rpc.Decide); the
+  // tile opens at the plugin's page for it. Wire-only, derived, never a
+  // stored column.
+  string presented_by = 42;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -597,6 +604,8 @@ message PluginInfo {
   // from a plugin's (rpc.IsConnectionRow): rootless, it is waiting, not
   // nothing.
   bool connection = 14;
+  // presents mirrors InfoResponse.presents, for the client's route verdict.
+  repeated string presents = 15;
 }
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
 // connection set, rpc.ConnectionRow's shape, because the + menu is one
@@ -648,6 +657,19 @@ message HandshakeResponse {
   // for an unstamped build, for the client's log. Nothing depends on it: the
   // web API refuses a page of another build on every call (OtherBuild).
   string build = 14;
+  // routes is server.yaml's, in order, for the link funnel's verdict
+  // (rpc.Decide), which must be made before any tile exists. Node-local:
+  // zeroed on forward.
+  repeated Route routes = 15;
+}
+
+// Route is one rule of server.yaml's ordered routes: match is a glob over the
+// whole address, and exactly one of plugin (a plugin's id) and outside is
+// set (rpc.CheckRoute). Its yaml keys are its field names.
+message Route {
+  string match   = 1;
+  string plugin  = 2;
+  bool   outside = 3;
 }
 
 

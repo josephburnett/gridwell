@@ -115,7 +115,7 @@ func (a *App) fetchLocalMenu(ctx context.Context, done func() bool) {
 	case err != nil:
 		a.surfaceRPCError("Handshake", err)
 	default:
-		a.plugins = lp.Plugins
+		a.takeMenu(lp)
 		a.draw()
 	}
 	if owed {

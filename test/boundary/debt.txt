@@ -6,3 +6,4 @@ low-water | 57482
 2026-10-25 | routing rules send an address to a plugin or outside (Joe): the client's link funnel asks the outside verdict | 26
 2026-10-25 | a plugin presents a site's addresses: the content API carries a whole request and its answer | 74
 2026-10-25 | a plugin presents a site's addresses: InfoResponse.presents and the one glob rule (rpc.MatchAddress) | 27
+2026-10-25 | a plugin presents a site's addresses: Tile.presented_by derived by the router, the handshake's routes and presents, and an undeclared route plugin refused | 76

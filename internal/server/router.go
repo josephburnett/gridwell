@@ -65,22 +65,33 @@ func (rt *router) hop(routed string, transit bool) rpc.Hop {
 }
 
 // tileResp applies the transit rule when the owning plugin is a connection.
-func (rt *router) tileResp(uuid string, transit bool, resp *pb.TileResponse, err error) (*pb.TileResponse, error) {
+func (rt *router) tileResp(ctx context.Context, uuid string, transit bool, resp *pb.TileResponse, err error) (*pb.TileResponse, error) {
 	if err != nil {
 		return nil, err
 	}
 	t := resp.GetTile()
 	if t != nil {
-		t = qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
+		t = rt.qualifyOut(ctx, transit, uuid, []*pb.Tile{t})[0]
 	}
 	return &pb.TileResponse{Tile: t}, nil
 }
 
-// qualifyEvent re-applies a plugin's uuid to a change event's ids; the walk is
-// rpc.QualifyEventIDs.
-func qualifyEvent(uuid string, transit bool, ev *pb.Event) *pb.Event {
+// qualifyOut is qualifyTilesFor for an answer leaving the router: a row this
+// node holds takes its derived facts too (stampPresented); a far row arrives
+// with its own node's.
+func (rt *router) qualifyOut(ctx context.Context, transit bool, uuid string, tiles []*pb.Tile) []*pb.Tile {
+	out := qualifyTilesFor(transit, uuid, tiles)
+	if !transit {
+		rt.srv.stampPresented(ctx, out...)
+	}
+	return out
+}
+
+// qualifyEvent re-applies a plugin's uuid to a change event's ids, each row
+// as qualifyOut leaves it; the walk is rpc.QualifyEventIDs.
+func (rt *router) qualifyEvent(ctx context.Context, uuid string, transit bool, ev *pb.Event) *pb.Event {
 	return rpc.QualifyEventIDs(uuid, ev, func(t *pb.Tile) *pb.Tile {
-		return qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
+		return rt.qualifyOut(ctx, transit, uuid, []*pb.Tile{t})[0]
 	})
 }
 
@@ -113,7 +124,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			}
 		}
 	}
-	tiles := qualifyTilesFor(transit, uuid, resp.Tiles)
+	tiles := rt.qualifyOut(ctx, transit, uuid, resp.Tiles)
 	rt.srv.stampDisabled(req.GridId, g, tiles)
 	return &pb.GetGridResponse{Grid: g, Tiles: tiles}, nil
 }
@@ -189,6 +200,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
 		Build:        rt.srv.build,
 		Plugins:      out,
+		Routes:       rt.srv.cfg.Routes,
 	}
 	// Home is the node's own store, where "/" lands.
 	for _, p := range out {
@@ -208,6 +220,7 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(uuid, info.RootGridId), rpc.QualifyPluginGrids(uuid, info.PluginGrids)
 		out.Label, out.Glyph = cmp.Or(configLabel, info.DisplayName), info.Glyph
 		out.RootViewCx, out.RootViewCy, out.RootViewZoom = info.RootViewCx, info.RootViewCy, info.RootViewZoom
+		out.Presents = info.Presents
 	} else if infoErr != nil {
 		out.InfoError = infoRefusal(infoErr)
 	}
@@ -235,7 +248,7 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 		return nil, err
 	}
 	resp, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
-	out, err := rt.tileResp(uuid, transit, resp, err)
+	out, err := rt.tileResp(ctx, uuid, transit, resp, err)
 	if err == nil {
 		rt.srv.stampDisabledTile(out.GetTile())
 	}
@@ -261,7 +274,7 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		if err != nil {
 			return nil, err
 		}
-		return qualifyFind(transit, uuid, resp), nil
+		return rt.qualifyFind(ctx, transit, uuid, resp), nil
 	}
 	out := &pb.FindResponse{}
 	for _, n := range rt.srv.namespaces() {
@@ -270,16 +283,16 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
 		resp, err := n.NS.Find(pctx, rpc.PeelRequest(hop, m))
 		cancel()
-		q := qualifyFind(n.Transit, n.UUID, rpc.FindHop(resp, err))
+		q := rt.qualifyFind(ctx, n.Transit, n.UUID, rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
-func qualifyFind(transit bool, uuid string, resp *pb.FindResponse) *pb.FindResponse {
+func (rt *router) qualifyFind(ctx context.Context, transit bool, uuid string, resp *pb.FindResponse) *pb.FindResponse {
 	return rpc.QualifyFindResponse(uuid, resp, func(ts []*pb.Tile) []*pb.Tile {
-		return qualifyTilesFor(transit, uuid, ts)
+		return rt.qualifyOut(ctx, transit, uuid, ts)
 	})
 }
 
@@ -306,7 +319,7 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
-	return rt.tileResp(uuid, transit, resp, err)
+	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
 // mintLinks canonicalizes the ids a tile is about to store, so a document
@@ -361,7 +374,7 @@ func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Ti
 		return rt.copyAcrossPlugins(ctx, m, c, local, uuid, transit)
 	}
 	resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
-	return rt.tileResp(uuid, transit, resp, err)
+	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
 // copyAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
@@ -383,7 +396,7 @@ func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, 
 		return nil, status.Errorf(gcodes.Aborted,
 			"deep copy incomplete (the partial copy remains, delete it if unwanted): %v", err)
 	}
-	return rt.tileResp(dstUUID, dstTransit, out, err)
+	return rt.tileResp(ctx, dstUUID, dstTransit, out, err)
 }
 
 // readAllContent drains a namespace's ReadContent stream into one value.
@@ -411,7 +424,7 @@ func (rt *router) SetTile(ctx context.Context, req *pb.SetTileRequest) (*pb.Tile
 		return nil, err
 	}
 	resp, err := c.SetTile(ctx, rpc.PeelRequest(rt.hop(req.TileId, transit), req))
-	return rt.tileResp(uuid, transit, resp, err)
+	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
 func (rt *router) DeleteTile(ctx context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
@@ -548,7 +561,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 	}
 	t := resp.GetTile()
 	if t != nil {
-		t = qualifyTilesFor(transit, uuid, []*pb.Tile{t})[0]
+		t = rt.qualifyOut(ctx, transit, uuid, []*pb.Tile{t})[0]
 	}
 	return &pb.SetFramingResponse{Tile: t}, nil
 }
@@ -643,11 +656,11 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 		settled := sync.OnceFunc(settling.Done)
 		if n.Transit {
 			// The transport has no handshake to ask.
-			go watchPlugin(subCtx, n.UUID, true, n.NS,
+			go rt.watchPlugin(subCtx, n.UUID, true, n.NS,
 				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
 			continue
 		}
-		go watchPlugin(subCtx, n.UUID, false, n.NS,
+		go rt.watchPlugin(subCtx, n.UUID, false, n.NS,
 			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events, settled)
 	}
 	listening := make(chan struct{})
@@ -729,7 +742,7 @@ func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest)
 // ends. The Info fetch rides namespace.Refollow's loop, so a plugin slow to
 // start is not excluded for good. settled is called once the first attempt is
 // established or has failed, or ctx has ended.
-func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
+func (rt *router) watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
 	defer settled()
 	namespace.Refollow{
 		Label: "subscribe: plugin " + uuid,
@@ -742,7 +755,7 @@ func watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Na
 			}
 			return namespace.Follow(ctx, ns, &pb.SubscribeRequest{},
 				func(ev *pb.Event) error {
-					q := qualifyEvent(uuid, transit, ev)
+					q := rt.qualifyEvent(ctx, uuid, transit, ev)
 					// The hubs below key by the namespace's own id; this is
 					// the one record holding both keys.
 					trace.Emit("router", "event", "qualify", map[string]string{

@@ -48,6 +48,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"content_stamp":     "the owning plugin's name for the bytes behind a claimless row, as its listing answered it",
 				"status_detail":     "the owning plugin's current trouble with this tile (an ssh door's last dial error)",
 				"read_only":         "the owning plugin's reason this text body takes no edits",
+				"presented_by":      "the routes' verdict over a url tile's address, derived by the router",
 			},
 		},
 	}

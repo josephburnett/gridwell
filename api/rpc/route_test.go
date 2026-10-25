@@ -3,6 +3,8 @@ package rpc
 import (
 	"strings"
 	"testing"
+
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
 // prefixGlob stands in for the presents matcher: a trailing * matches any
@@ -19,7 +21,7 @@ func TestDecideTakesTheFirstRouteThatTakesTheAddress(t *testing.T) {
 		"labcode": {"https://gitlab.com/x/-/merge_requests/*"},
 		"pages":   {"http://example.test/*"},
 	}
-	routes := []Route{
+	routes := []*pb.Route{
 		{Match: "https://gitlab.com/*", Plugin: "labcode"},
 		{Match: "https://gitlab.com/*", Outside: true},
 		{Match: "http://example.test/*", Plugin: "pages"},
@@ -50,22 +52,43 @@ func TestDecideTakesTheFirstRouteThatTakesTheAddress(t *testing.T) {
 
 func TestCheckRefusesARouteWithBothOrNeither(t *testing.T) {
 	cases := []struct {
-		r      Route
+		r      *pb.Route
 		refuse string
 	}{
-		{Route{Match: "https://*", Plugin: "p"}, ""},
-		{Route{Match: "https://*", Outside: true}, ""},
-		{Route{Match: "https://*", Plugin: "p", Outside: true}, "not both"},
-		{Route{Match: "https://*"}, "with neither"},
-		{Route{Plugin: "p"}, "match is required"},
+		{&pb.Route{Match: "https://*", Plugin: "p"}, ""},
+		{&pb.Route{Match: "https://*", Outside: true}, ""},
+		{&pb.Route{Match: "https://*", Plugin: "p", Outside: true}, "not both"},
+		{&pb.Route{Match: "https://*"}, "with neither"},
+		{&pb.Route{Plugin: "p"}, "match is required"},
 	}
 	for _, c := range cases {
-		err := c.r.Check()
+		err := CheckRoute(c.r)
 		if c.refuse == "" && err != nil {
 			t.Errorf("%+v: refused %v", c.r, err)
 		}
 		if c.refuse != "" && (err == nil || !strings.Contains(err.Error(), c.refuse)) {
 			t.Errorf("%+v: got %v, want a refusal saying %q", c.r, err, c.refuse)
 		}
+	}
+}
+
+// The handshake carries the routes in order and each plugin's presents, so
+// the client's verdict is the node's.
+func TestRoutingReadsTheHandshake(t *testing.T) {
+	routes := []*pb.Route{{Match: "https://gitlab.com/*/-/merge_requests/*", Plugin: "lab0001"}, {Match: "https://gitlab.com/*", Outside: true}}
+	h := &pb.HandshakeResponse{Routes: routes, Plugins: []*pb.PluginInfo{
+		{Uuid: "home0001"}, {Uuid: "lab0001", Presents: []string{"https://gitlab.com/*/-/merge_requests/*"}}}}
+	gotRoutes, presents := Routing(h)
+	if len(gotRoutes) != 2 || gotRoutes[0] != routes[0] || gotRoutes[1] != routes[1] {
+		t.Fatalf("routes = %v, want %v in order", gotRoutes, routes)
+	}
+	if len(presents) != 1 || len(presents["lab0001"]) != 1 {
+		t.Fatalf("presents = %v, want lab0001's alone", presents)
+	}
+	if v := Decide("https://gitlab.com/g/p/-/merge_requests/7", gotRoutes, presents, MatchAddress); v.Plugin != "lab0001" {
+		t.Errorf("a merge request: %+v, want lab0001 before the outside rule", v)
+	}
+	if v := Decide("https://gitlab.com/g/p/-/issues/7", gotRoutes, presents, MatchAddress); !v.Outside {
+		t.Errorf("an issue: %+v, want outside", v)
 	}
 }

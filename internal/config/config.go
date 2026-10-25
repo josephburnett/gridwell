@@ -17,6 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
@@ -50,7 +51,7 @@ type ServerConfig struct {
 	Plugins []PluginConfig `yaml:"plugins,omitempty"`
 	// Routes send a url tile's address to a plugin that presents it or
 	// outside, first taker wins; rpc.Decide reads them.
-	Routes []rpc.Route `yaml:"routes,omitempty"`
+	Routes []*pb.Route `yaml:"routes,omitempty"`
 
 	// WebPassword is not a yaml fact: BuildConfig reads it from the file.
 	WebPassword string `yaml:"-"`
@@ -207,9 +208,16 @@ func Parse(data []byte) (*ServerConfig, error) {
 			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin: the node's id is `id:` and its connections are `connections:` — a server.yaml that still lists them here is the shape v0.1.0 was the last release to convert", i, cfg.Plugins[i].Kind)
 		}
 	}
+	declared := map[string]bool{}
+	for _, p := range cfg.Plugins {
+		declared[p.ID] = p.ID != ""
+	}
 	for i, r := range cfg.Routes {
-		if err := r.Check(); err != nil {
+		if err := rpc.CheckRoute(r); err != nil {
 			return nil, fmt.Errorf("routes[%d]: %w", i, err)
+		}
+		if r.Plugin != "" && !declared[r.Plugin] {
+			return nil, fmt.Errorf("routes[%d]: plugin %q is not an id under plugins:, so the route would send its addresses nowhere", i, r.Plugin)
 		}
 	}
 	if err := expandPaths(&cfg); err != nil {

@@ -188,6 +188,13 @@ type farNode struct {
 
 func newFarNode(t *testing.T, id string, more ...func(*plugin.Registry, *store.Store)) *farNode {
 	t.Helper()
+	return newFarNodeWith(t, server.Config{ID: id}, more...)
+}
+
+// newFarNodeWith is newFarNode serving cfg.
+func newFarNodeWith(t *testing.T, cfg server.Config, more ...func(*plugin.Registry, *store.Store)) *farNode {
+	t.Helper()
+	id := cfg.ID
 	n := &farNode{shell: shellsvctest.New()}
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -200,7 +207,7 @@ func newFarNode(t *testing.T, id string, more ...func(*plugin.Registry, *store.S
 	for _, r := range more {
 		r(reg, st)
 	}
-	srv := servertest.New(t, reg, server.Config{ID: id})
+	srv := servertest.New(t, reg, cfg)
 	n.api = httptest.NewUnstartedServer(nil)
 	n.api.Config = server.ConnectionAPIServer(srv.ConnectionHandler())
 	n.api.Start()

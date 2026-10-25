@@ -195,6 +195,10 @@ func TestQualifyGrid(t *testing.T) {
 
 // TestQualifyEvent qualifies the ids carried by each of the three event kinds.
 func TestQualifyEvent(t *testing.T) {
+	rt := &router{srv: &Server{}}
+	qualifyEvent := func(uuid string, transit bool, ev *pb.Event) *pb.Event {
+		return rt.qualifyEvent(t.Context(), uuid, transit, ev)
+	}
 	grid := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "1"}}})
 	if grid.GetGridChanged().GridId != "u/1" {
 		t.Errorf("GridChanged id = %q", grid.GetGridChanged().GridId)

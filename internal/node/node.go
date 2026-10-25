@@ -162,6 +162,7 @@ func Start(opts Options) (*Node, error) {
 		StaticFS:      opts.StaticFS,
 		Password:      cfg.WebPassword,
 		DisableShells: cfg.DisableShells,
+		Routes:        cfg.Routes,
 		Dir:           opts.Dir,
 	})
 	if err != nil {

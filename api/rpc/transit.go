@@ -13,8 +13,9 @@ import (
 
 // tileIDFields is every id a Tile carries, the one list both directions walk.
 // An optional id stays empty rather than qualifying to a bare prefix. A ref
-// names something elsewhere, a door's child or a leaf link's target: a leaf
-// keeps it qualified, because arriving qualified is what makes it a link.
+// names something elsewhere, a door's child, a leaf link's target or the
+// presenting plugin: a leaf keeps it qualified, because arriving qualified is
+// what makes it a link.
 var tileIDFields = []struct {
 	field         func(*pb.Tile) *string
 	optional, ref bool
@@ -24,6 +25,7 @@ var tileIDFields = []struct {
 	{func(t *pb.Tile) *string { return &t.ChildGridId }, true, true},
 	{func(t *pb.Tile) *string { return &t.LinkTargetId }, true, true},
 	{func(t *pb.Tile) *string { return &t.ShellTmux }, true, false},
+	{func(t *pb.Tile) *string { return &t.PresentedBy }, true, true},
 }
 
 func qualifyField(prefix string, id *string, optional bool) {
