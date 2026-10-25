@@ -76,6 +76,12 @@ message InfoResponse {
   // A plugin that sets it and answers Unimplemented is refused the same way,
   // with that answer as the reason. A mailbox leaves it unset.
   bool move = 9;
+  // presents: the site addresses this plugin can serve a page for in place of
+  // the site, as glob patterns over the whole address, such as
+  // "https://gitlab.com/*/-/merge_requests/*" (rpc.MatchAddress has the one
+  // rule). A routing rule sends an address to the plugin only when one of
+  // these matches it. A presenting plugin may declare no grids.
+  repeated string presents = 10;
 }
 
 // PluginGrid mirrors the gridwell.v1 shape with grid keys for targets: one of

@@ -78,3 +78,32 @@ func TestTheDeclarationIsAskedOncePerProcess(t *testing.T) {
 		t.Fatalf("the plugin was asked Info %d times, want once more for the new process", n)
 	}
 }
+
+// presentingPlugin declares the site addresses it presents and no grids.
+type presentingPlugin struct{ oneEntryPlugin }
+
+func (presentingPlugin) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	return &pluginv1.InfoResponse{Kind: "presenter", Presents: []string{"https://example.test/*"}}, nil
+}
+
+// The addresses a plugin presents ride its held declaration to the node,
+// with no grid to carry them.
+func TestInfoCarriesWhatAPluginPresents(t *testing.T) {
+	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = memStore.Close() })
+	cp, closer, err := plugintest.Loopback(presentingPlugin{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(closer)
+	info, err := New(cp, memStore.Namespace("p1"), nil).Info(context.Background(), &gridwellv1.InfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.GetPresents(); len(got) != 1 || got[0] != "https://example.test/*" || len(info.GetPluginGrids()) != 0 {
+		t.Errorf("Info = presents %q, %d grids; want the declared pattern and none", got, len(info.GetPluginGrids()))
+	}
+}

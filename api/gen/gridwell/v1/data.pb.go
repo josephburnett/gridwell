@@ -832,7 +832,10 @@ type InfoResponse struct {
 	// plugin_grids is the grids the plugin declares as (+) menu rows; see
 	// PluginGrid. The serving node stamps them onto every grid the plugin
 	// serves.
-	PluginGrids   []*PluginGrid `protobuf:"bytes,17,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
+	PluginGrids []*PluginGrid `protobuf:"bytes,17,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
+	// presents is the plugin's declared site addresses, as plugin.v1 declares
+	// them; home and a connection answer none.
+	Presents      []string `protobuf:"bytes,18,rep,name=presents,proto3" json:"presents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -919,6 +922,13 @@ func (x *InfoResponse) GetGlyph() string {
 func (x *InfoResponse) GetPluginGrids() []*PluginGrid {
 	if x != nil {
 		return x.PluginGrids
+	}
+	return nil
+}
+
+func (x *InfoResponse) GetPresents() []string {
+	if x != nil {
+		return x.Presents
 	}
 	return nil
 }
@@ -4718,7 +4728,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tread_only\x18( \x01(\tR\breadOnly\x12\x14\n" +
 	"\x05named\x18) \x01(\bR\x05namedJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
-	"\vInfoRequest\"\xed\x02\n" +
+	"\vInfoRequest\"\x89\x03\n" +
 	"\fInfoResponse\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
@@ -4731,7 +4741,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x12:\n" +
-	"\fplugin_grids\x18\x11 \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGridsJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
+	"\fplugin_grids\x18\x11 \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12\x1a\n" +
+	"\bpresents\x18\x12 \x03(\tR\bpresentsJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
 	"J\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +

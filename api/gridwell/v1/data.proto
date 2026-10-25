@@ -318,6 +318,9 @@ message InfoResponse {
   // PluginGrid. The serving node stamps them onto every grid the plugin
   // serves.
   repeated PluginGrid plugin_grids = 17;
+  // presents is the plugin's declared site addresses, as plugin.v1 declares
+  // them; home and a connection answer none.
+  repeated string presents = 18;
 }
 
 // Probe reports the definitive presence of one tile, for non-authoritative

@@ -176,7 +176,13 @@ type InfoResponse struct {
 	// the node refuses a move to another grid with the reason and never asks.
 	// A plugin that sets it and answers Unimplemented is refused the same way,
 	// with that answer as the reason. A mailbox leaves it unset.
-	Move          bool `protobuf:"varint,9,opt,name=move,proto3" json:"move,omitempty"`
+	Move bool `protobuf:"varint,9,opt,name=move,proto3" json:"move,omitempty"`
+	// presents: the site addresses this plugin can serve a page for in place of
+	// the site, as glob patterns over the whole address, such as
+	// "https://gitlab.com/*/-/merge_requests/*" (rpc.MatchAddress has the one
+	// rule). A routing rule sends an address to the plugin only when one of
+	// these matches it. A presenting plugin may declare no grids.
+	Presents      []string `protobuf:"bytes,10,rep,name=presents,proto3" json:"presents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -272,6 +278,13 @@ func (x *InfoResponse) GetMove() bool {
 		return x.Move
 	}
 	return false
+}
+
+func (x *InfoResponse) GetPresents() []string {
+	if x != nil {
+		return x.Presents
+	}
+	return nil
 }
 
 // PluginGrid mirrors the gridwell.v1 shape with grid keys for targets: one of
@@ -2087,7 +2100,7 @@ var File_plugin_v1_plugin_proto protoreflect.FileDescriptor
 const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\x16plugin/v1/plugin.proto\x12\tplugin.v1\"\r\n" +
-	"\vInfoRequest\"\x8e\x02\n" +
+	"\vInfoRequest\"\xaa\x02\n" +
 	"\fInfoResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x14\n" +
@@ -2097,7 +2110,9 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\bwritable\x18\x06 \x01(\bR\bwritable\x12+\n" +
 	"\x05grids\x18\a \x03(\v2\x15.plugin.v1.PluginGridR\x05grids\x12!\n" +
 	"\fhost_content\x18\b \x01(\bR\vhostContent\x12\x12\n" +
-	"\x04move\x18\t \x01(\bR\x04move\"n\n" +
+	"\x04move\x18\t \x01(\bR\x04move\x12\x1a\n" +
+	"\bpresents\x18\n" +
+	" \x03(\tR\bpresents\"n\n" +
 	"\n" +
 	"PluginGrid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +

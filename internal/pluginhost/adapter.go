@@ -128,7 +128,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 	if err != nil {
 		return nil, err
 	}
-	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph}
+	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph, Presents: ci.Presents}
 	for _, m := range declaredGrids(ci) {
 		out := &gridwellv1.PluginGrid{
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
