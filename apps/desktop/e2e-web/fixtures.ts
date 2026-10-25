@@ -24,6 +24,8 @@ type Fixtures = {
   // Mirrors the Electron fixture's option: plugins seedHome registers beyond
   // the node's own home.
   extraPlugins: PluginSpec[];
+  // Raw server.yaml sections seedHome appends, as the Electron fixture's.
+  extraYaml: string;
 };
 
 // One running `gridwell serve`. token is what a logged-in browser's cookie
@@ -127,10 +129,11 @@ export async function authenticate(page: Page, served: Served): Promise<void> {
 
 export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
+  extraYaml: ['', { option: true }],
 
   // A throwaway node directory, as the Electron suite seeds one, on an ephemeral port.
-  serve: async ({ extraPlugins }, use) => {
-    const home = seedHome(extraPlugins);
+  serve: async ({ extraPlugins, extraYaml }, use) => {
+    const home = seedHome(extraPlugins, extraYaml);
     const served = await spawnServe(home, await freePort());
     await use(served);
     await stopServe(served.child);
