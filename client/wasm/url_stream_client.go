@@ -33,11 +33,13 @@ type urlView struct {
 	// owns is urlview.Owns for the row: whether its title and trail are the
 	// node's to write. page is a served page, which has no address to write.
 	owns, page bool
+	// presented is the row's page when a plugin presents it (urlview.Landed).
+	presented string
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
-	// lastURL is where an ephemeral visit's page is now, for the promote
-	// gesture.
+	// lastURL is the address an ephemeral visit's page is at now
+	// (urlview.Landed), for the promote gesture.
 	lastURL string
 	// lastTitle is for the unload beacon, which cannot wait for the bridge.
 	lastTitle string
@@ -69,8 +71,15 @@ func (a *App) webAddress(t *gridwellv1.Tile) string {
 	if s != contentrow.Ready || !rpc.WebContent(row) {
 		return ""
 	}
-	return urlview.Address(rpc.PageContent(row),
-		rpc.PageURL(a.origin, a.contentToken, row.Id), row.UrlString)
+	return urlview.Address(row, rpc.PageURL(a.origin, a.contentToken, row.Id))
+}
+
+// presentedPage is row's page when a plugin presents it, "" otherwise.
+func (a *App) presentedPage(row *gridwellv1.Tile) string {
+	if row.PresentedBy == "" {
+		return ""
+	}
+	return rpc.PageURL(a.origin, a.contentToken, row.Id)
 }
 
 // openURLStream goes live; what that does to the row is
@@ -104,7 +113,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 		return
 	}
 	v := a.urlViewIn(p, t.Id, a.ownsURLRow(t), rpc.PageContent(t))
-	v.gen = a.urlGens.Next()
+	v.gen, v.presented = a.urlGens.Next(), a.presentedPage(t)
 	a.local(p.ID).urlView = v
 	if !v.page {
 		a.seedURLAddress(t)
@@ -142,8 +151,9 @@ func (a *App) seedURLAddress(t *gridwellv1.Tile) {
 	a.c.PutFetchedContent(t.Id, []byte(t.UrlString), rpc.BasisOf(t), a.c.AskContent(t.Id))
 }
 
-// noteLandedAddress makes the address v's page landed on its row's pending
-// content when urlview.WriteAddress says so, for the content flush to post.
+// noteLandedAddress makes the address v's page landed on (urlview.Landed)
+// where the view is now, and its row's pending content when
+// urlview.WriteAddress says so, for the content flush to post.
 func (a *App) noteLandedAddress(v *urlView, landed string) {
 	stored, ok := a.c.TileContent(v.tileID)
 	if !ok && !v.page {
@@ -153,10 +163,14 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 			stored = []byte(t.UrlString)
 		}
 	}
-	if !urlview.WriteAddress(v.page, landed, string(stored)) {
+	site, ok := urlview.Landed(v.presented, string(stored), landed)
+	if !ok {
 		return
 	}
-	a.putEditedContent(v.tileID, []byte(landed))
+	v.lastURL = site
+	if urlview.WriteAddress(v.page, site, string(stored)) {
+		a.putEditedContent(v.tileID, []byte(site))
+	}
 }
 
 // moveURLView hands the view fromID holds to pane to, page and all: no close,
@@ -169,7 +183,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	old := from.urlView
 	from.urlView = nil
 	v := a.urlViewIn(to, old.tileID, old.owns, old.page)
-	v.navDirty, v.lastURL, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.lastURL, old.lastTitle, old.gen, old.reloadOwed
+	v.navDirty, v.lastURL, v.lastTitle, v.gen, v.reloadOwed, v.presented = old.navDirty, old.lastURL, old.lastTitle, old.gen, old.reloadOwed, old.presented
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
 	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)

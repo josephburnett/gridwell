@@ -20,8 +20,8 @@ func Owns(page, gridAcceptsTiles, gridKnown bool) bool {
 	return !page && (gridAcceptsTiles || !gridKnown)
 }
 
-// WriteAddress decides whether the address a live view landed on is written
-// to its row as content, like a typed one, wherever the row is: home's, a
+// WriteAddress decides whether the address a live view landed on (Landed)
+// is written to its row as content, like a typed one, wherever the row is: home's, a
 // plugin's or a far node's. A served page has no address of its own, and a
 // visit that goes nowhere leaves the row byte-identical.
 func WriteAddress(page bool, landed, stored string) bool {

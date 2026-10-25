@@ -1177,7 +1177,7 @@ func (f *parityFix) content(t *gridwellv1.Tile) (string, error) {
 	case k.Descends == rpc.DescendGrid:
 		return f.listing(t.ChildGridId)
 	case k.Content == rpc.ContentAddress:
-		return urlview.Address(rpc.PageContent(t), rpc.PageURL("", f.token, t.Id), t.UrlString), nil
+		return urlview.Address(t, rpc.PageURL("", f.token, t.Id)), nil
 	case k.Content != rpc.ContentNone:
 		data, _, _, err := f.cl.ReadContent(f.ctx, t.Id)
 		return string(data), err
@@ -1603,7 +1603,7 @@ func checkServe(f *parityFix, o parityOwner, k parityKind) observable {
 		if !rpc.PageContent(t) {
 			continue
 		}
-		resp, err := f.h.localHTTP.Client().Get(urlview.Address(true, rpc.PageURL(f.h.localURL, f.token, t.Id), t.UrlString))
+		resp, err := f.h.localHTTP.Client().Get(urlview.Address(t, rpc.PageURL(f.h.localURL, f.token, t.Id)))
 		if err != nil {
 			return observable{Outcome: clientsync.Of(err).String()}
 		}

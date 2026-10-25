@@ -397,3 +397,40 @@ func TestEveryKindHasARow(t *testing.T) {
 		t.Error("an unknown kind reads a row that can do something")
 	}
 }
+
+// A presented tile's page and its site address convert both ways by one
+// rule, and only a location inside the tile's page names a site address.
+func TestPresentedPageURLAndBack(t *testing.T) {
+	const page = "http://127.0.0.1:9/content/tok/n1/12/"
+	for site, want := range map[string]string{
+		"http://example.test/a?x=1#f":               page + "example.test/a?x=1#f",
+		"https://gitlab.com/g/p/-/merge_requests/7": page + "gitlab.com/g/p/-/merge_requests/7",
+		"example.test/a":                            "",
+		"https://":                                  "",
+	} {
+		got := PresentedPageURL(page, site)
+		if got != want {
+			t.Errorf("PresentedPageURL(%q) = %q, want %q", site, got, want)
+			continue
+		}
+		if back, ok := PresentedSite(page, site, got); want != "" && (!ok || back != site) {
+			t.Errorf("PresentedSite(%q) = %q %v, want %q back", got, back, ok, site)
+		}
+	}
+	const site = "https://example.test/a"
+	for name, location := range map[string]string{
+		"another tile's page":        "http://127.0.0.1:9/content/tok/n1/13/example.test/b",
+		"a tile whose id it extends": "http://127.0.0.1:9/content/tok/n1/123/example.test/b",
+		"the plugin's assets":        page + "_/app.js",
+		"another origin":             "https://example.test/b",
+		"the page itself":            page,
+		"the page's query":           page + "?x=1",
+	} {
+		if got, ok := PresentedSite(page, site, location); ok {
+			t.Errorf("%s: PresentedSite = %q, want no site address", name, got)
+		}
+	}
+	if got, ok := PresentedSite(page, site, page+"example.test/b?y=2"); !ok || got != "https://example.test/b?y=2" {
+		t.Errorf("an in-page navigation = %q %v, want it in the site's scheme", got, ok)
+	}
+}

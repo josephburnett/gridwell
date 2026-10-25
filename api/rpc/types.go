@@ -288,6 +288,34 @@ func PageURL(origin, contentToken, tileID string) string {
 	return origin + "/content/" + contentToken + "/" + tileID + "/"
 }
 
+// PresentedAssets is the subpath under a presented tile's page that its
+// plugin keeps for the page's own assets.
+const PresentedAssets = "_/"
+
+// PresentedPageURL is where a url tile a plugin presents opens: its site
+// address without the scheme, under the tile's page (PageURL), so the
+// subpath the plugin is asked for is the address. "" for an address with no
+// scheme.
+func PresentedPageURL(page, site string) string {
+	_, rest, ok := strings.Cut(site, "://")
+	if !ok || rest == "" {
+		return ""
+	}
+	return page + rest
+}
+
+// PresentedSite is PresentedPageURL's inverse: the site address, in site's
+// scheme, that a location inside page names. False for a location outside
+// page, the page itself, or the plugin's assets.
+func PresentedSite(page, site, location string) (string, bool) {
+	scheme, _, ok := strings.Cut(site, "://")
+	rest, inside := strings.CutPrefix(location, page)
+	if !ok || !inside || rest == "" || strings.HasPrefix(rest, PresentedAssets) || strings.ContainsAny(rest[:1], "?#") {
+		return "", false
+	}
+	return scheme + "://" + rest, true
+}
+
 // The text_presentation vocabulary: whether a plugin's text body is a
 // document. There is no document-only value, because the user can always
 // reach the source bytes.
