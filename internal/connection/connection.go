@@ -835,7 +835,9 @@ func (s *Server) ServeContent(ctx context.Context, req *gridwellv1.ServeContentR
 	if err != nil {
 		return err
 	}
-	return fw.client.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: local, Subpath: req.Subpath}, send)
+	bound := proto.CloneOf(req)
+	bound.TileId = local
+	return fw.client.ServeContent(ctx, bound, send)
 }
 
 func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {

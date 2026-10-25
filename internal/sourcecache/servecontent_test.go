@@ -31,6 +31,7 @@ type contentBody struct {
 	status    int64
 	mediaType string
 	data      []byte
+	headers   []*pb.Header
 }
 
 func (d *contentFake) ServeContent(_ context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
@@ -44,7 +45,7 @@ func (d *contentFake) ServeContent(_ context.Context, in *pb.ServeContentRequest
 	// The live chunk shape: chunk 1 carries status + media type.
 	return sendChunked(b.data, func(chunk []byte, first bool) error {
 		if first {
-			return send(&pb.ServeContentChunk{Status: b.status, MediaType: b.mediaType, Data: chunk})
+			return send(&pb.ServeContentChunk{Status: b.status, MediaType: b.mediaType, Data: chunk, Headers: b.headers})
 		}
 		return send(&pb.ServeContentChunk{Data: chunk})
 	})
@@ -231,5 +232,34 @@ func TestServeContentCachesAnEmptyBody(t *testing.T) {
 	}
 	if st != 200 || mt != "text/plain" || len(data) != 0 {
 		t.Fatalf("dark serve = %d %q %q, want 200 text/plain and no bytes", st, mt, data)
+	}
+}
+
+// Only a plain GET is the page at its subpath: a POST, a query or an answer
+// carrying headers is not what a later read of that subpath would get, so
+// none is stored, and a dark source answers none of them from the cache.
+func TestServeContentCachesOnlyAPlainGet(t *testing.T) {
+	cc, fake := contentFixture(t)
+	fake.bodies["7|page"] = contentBody{status: 200, mediaType: "text/html", data: []byte("page")}
+	fake.bodies["7|hdr"] = contentBody{status: 200, mediaType: "text/html", data: []byte("hdr"),
+		headers: []*pb.Header{{Name: "Location", Value: "elsewhere"}}}
+	reads := map[string]*pb.ServeContentRequest{
+		"post":    {TileId: "7", Subpath: "page", Method: "POST", Body: []byte("x")},
+		"query":   {TileId: "7", Subpath: "page", Query: "a=1"},
+		"headers": {TileId: "7", Subpath: "hdr"},
+	}
+	for name, in := range reads {
+		if err := cc.ServeContent(context.Background(), in, func(*pb.ServeContentChunk) error { return nil }); err != nil {
+			t.Fatalf("%s live: %v", name, err)
+		}
+	}
+	if _, _, _, err := serveContentAPI(cc, "7", "page"); err != nil { // the plain GET stores
+		t.Fatal(err)
+	}
+	fake.dark = true
+	for name, in := range reads {
+		if err := cc.ServeContent(context.Background(), in, func(*pb.ServeContentChunk) error { return nil }); status.Code(err) != codes.Unavailable {
+			t.Errorf("%s while dark = %v, want the transport error, never a cached answer", name, err)
+		}
 	}
 }

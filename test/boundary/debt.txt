@@ -4,3 +4,4 @@ low-water | 57482
 2026-10-25 | routing rules send an address to a plugin or outside (Joe): the routes key and rpc.Decide | 66
 2026-10-25 | routing rules send an address to a plugin or outside (Joe): the desktop's open-outside verb | 62
 2026-10-25 | routing rules send an address to a plugin or outside (Joe): the client's link funnel asks the outside verdict | 26
+2026-10-25 | a plugin presents a site's addresses: the content API carries a whole request and its answer | 74

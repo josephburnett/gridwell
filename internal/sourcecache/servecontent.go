@@ -25,13 +25,19 @@ var (
 )
 
 // ServeContent tees the served body the way ReadContent tees a tile's. Only
-// status-200 answers are cached: an error page is a verdict, and verdicts
-// are never served from cache.
+// a plain GET's status-200 answer with no headers is cached, and only a plain
+// GET is answered from it: an error page is a verdict, and verdicts are never
+// served from cache; a POST, a query or the headers a row has no column for
+// would answer a later read with what it did not ask.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	first, data, flowed, fits, err := tee(func(f func(*pb.ServeContentChunk) error) error { return c.Namespace.ServeContent(ctx, in, f) }, send, serveContentEntryCap)
 	c.noteReachTile(ctx, err, in.GetTileId())
+	plain := (in.GetMethod() == "" || in.GetMethod() == "GET") && in.GetQuery() == ""
+	if !plain {
+		return err
+	}
 	if err == nil {
-		if fits && first.GetStatus() == 200 {
+		if fits && first.GetStatus() == 200 && len(first.GetHeaders()) == 0 {
 			c.storeServeContent(ctx, in.GetTileId(), in.GetSubpath(), first.GetStatus(), first.GetMediaType(), data)
 		}
 		return nil

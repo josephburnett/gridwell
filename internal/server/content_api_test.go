@@ -171,16 +171,6 @@ func TestContentAPITokenGate(t *testing.T) {
 	if res, _ := get(t, noRedirect(hs), hs.URL+"/", ContentToken("pw")); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("content token as auth cookie = %d, want 401 (domain separation)", res.StatusCode)
 	}
-
-	// GET-only surface.
-	res, err := hs.Client().Post(hs.URL+"/content/"+ContentToken("pw")+"/"+tileID+"/", "text/plain", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("POST = %d, want 405", res.StatusCode)
-	}
 }
 
 // TestContentAPIResolvesLeafLink: a home link to an fs image serves the

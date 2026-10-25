@@ -1202,15 +1202,30 @@ func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContent
 		return err
 	}
 	_, err = ask(&a.lacks, "ServeContent", func() (struct{}, error) {
-		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: ref.key, Subpath: req.Subpath})
+		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: ref.key, Subpath: req.Subpath,
+			Method: req.Method, Query: req.Query, Body: req.Body,
+			Headers: headers(req.Headers, func(n, v string) *pluginv1.Header { return &pluginv1.Header{Name: n, Value: v} })})
 		if err != nil {
 			return struct{}{}, err
 		}
 		return struct{}{}, relay(cs.Recv, func(c *pluginv1.ServeContentChunk) *gridwellv1.ServeContentChunk {
-			return &gridwellv1.ServeContentChunk{Status: c.Status, MediaType: c.MediaType, Data: c.Data}
+			return &gridwellv1.ServeContentChunk{Status: c.Status, MediaType: c.MediaType, Data: c.Data,
+				Headers: headers(c.Headers, func(n, v string) *gridwellv1.Header { return &gridwellv1.Header{Name: n, Value: v} })}
 		}, send)
 	})
 	return err
+}
+
+// headers carries header lines across the two APIs' Header messages.
+func headers[F interface {
+	GetName() string
+	GetValue() string
+}, T any](from []F, to func(name, value string) T) []T {
+	out := make([]T, 0, len(from))
+	for _, h := range from {
+		out = append(out, to(h.GetName(), h.GetValue()))
+	}
+	return out
 }
 
 // GetTilePreview answers the preview previewKey named.

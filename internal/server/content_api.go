@@ -1,27 +1,29 @@
 package server
 
-// The HTTP /content/ API: plugins serving web content. A GET of
+// The HTTP /content/ API: plugins serving web content. A GET, HEAD or POST of
 //
 //	/content/<content-token>/<qualified-tile-id>/<subpath>
 //
 // becomes one ServeContent RPC routed through contentRoute, so links resolve
-// and transit hops forward exactly like ReadContent. The API owns the URL
-// grammar, the token gate and the sandbox header; the plugin owns what the
-// bytes mean.
+// and transit hops forward exactly like ReadContent; it carries the method,
+// query, headers and body, and each answered chunk is flushed to the page as
+// it comes. The API owns the URL grammar, the token gate and the headers in
+// nodeHeaders; the plugin owns what the bytes mean and every other header.
 //
 // Every response carries the contentSandbox CSP, so the page runs with an
-// opaque origin: no cookies, no storage, no reach into the RPC surface. The
-// server stamps the header, and plugins never write HTTP headers at all.
+// opaque origin: no cookies, no storage, no reach into the RPC surface.
 //
 // A sandboxed page and the desktop's native views cannot present the auth
 // cookie, so the API is exempt from that gate and carries its own capability
 // in the path, where relative subresource URLs inherit it. Leaked, that token
-// opens only this read-only API; changed, every old content URL dies with it.
+// opens this API alone, which reaches only what plugins serve as pages;
+// changed, every old content URL dies with it.
 
 import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,6 +43,23 @@ const contentPathPrefix = "/content/"
 // popup and opens the address below as a fresh view; no sandboxed window is
 // ever created, so nothing needs allow-popups-to-escape-sandbox.
 const contentSandbox = "sandbox allow-scripts allow-popups"
+
+// contentBodyCap bounds a request body, which rides one message: under the
+// 4 MiB gRPC message default of every hop that carries it.
+const contentBodyCap = 3 << 20
+
+// nodeHeaders are the response headers the node writes and a plugin's
+// answer never does: the sandbox and nosniff hold the page, the chunk's
+// media_type is the content type, a cookie would land on the node's own
+// origin beside its credential, and the node frames the stream.
+var nodeHeaders = map[string]bool{
+	"Content-Security-Policy": true, "X-Content-Type-Options": true, "Content-Type": true,
+	"Set-Cookie": true, "Content-Length": true, "Transfer-Encoding": true, "Connection": true,
+}
+
+// credentialHeaders are the request headers that carry the web API's
+// credentials, which never reach a plugin.
+var credentialHeaders = map[string]bool{"Cookie": true, "Authorization": true}
 
 // ContentToken is the one derivation of the API's path capability. Its domain
 // prefix differs from AuthToken's, so neither token replays as the other.
@@ -94,7 +113,7 @@ func parseContentPath(path string) (token, tileID, subpath string, needSlash, ok
 func (s *Server) contentAPI() http.Handler {
 	want := []byte(ContentToken(s.cfg.Password))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPost {
 			refusedWeb(contentPathPrefix, http.StatusMethodNotAllowed, "method "+r.Method, nil)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -118,38 +137,68 @@ func (s *Server) contentAPI() http.Handler {
 			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
 			return
 		}
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, contentBodyCap))
+		if err != nil {
+			refusedWeb(path, http.StatusRequestEntityTooLarge, err.Error(), nil)
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		c, local, err := s.contentRoute(r.Context(), tileID)
 		if err != nil {
 			refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
 			return
 		}
-		// The first chunk carries the status and media type, so headers are
-		// written from inside the stream: a failure before it is an HTTP
+		req := &pb.ServeContentRequest{TileId: local, Subpath: subpath, Method: r.Method, Query: r.URL.RawQuery, Body: body}
+		for name, values := range r.Header {
+			if credentialHeaders[name] {
+				continue
+			}
+			for _, v := range values {
+				req.Headers = append(req.Headers, &pb.Header{Name: name, Value: v})
+			}
+		}
+		rc := http.NewResponseController(w)
+		// The first chunk carries the status, media type and headers, so they
+		// are written from inside the stream: a failure before it is an HTTP
 		// status, one after it can only truncate the body.
 		wroteHeader := false
-		serr := c.ServeContent(r.Context(), &pb.ServeContentRequest{TileId: local, Subpath: subpath},
-			func(chunk *pb.ServeContentChunk) error {
-				if !wroteHeader {
-					wroteHeader = true
-					h := w.Header()
-					h.Set("Content-Security-Policy", contentSandbox)
-					h.Set("X-Content-Type-Options", "nosniff")
-					if mt := chunk.GetMediaType(); mt != "" {
-						h.Set("Content-Type", mt)
-					}
-					code := int(chunk.GetStatus())
-					if code == 0 {
-						code = http.StatusOK
-					}
-					w.WriteHeader(code)
+		serr := c.ServeContent(r.Context(), req, func(chunk *pb.ServeContentChunk) error {
+			if !wroteHeader {
+				wroteHeader = true
+				writeContentHeaders(w.Header(), chunk, path)
+				code := int(chunk.GetStatus())
+				if code == 0 {
+					code = http.StatusOK
 				}
-				_, werr := w.Write(chunk.GetData())
-				return werr
-			})
+				w.WriteHeader(code)
+			}
+			if _, err := w.Write(chunk.GetData()); err != nil {
+				return err
+			}
+			return rc.Flush()
+		})
 		if serr != nil && !wroteHeader {
 			refusedWeb(path, httpStatusError(w, serr), serr.Error(), nil)
 		}
 	})
+}
+
+// writeContentHeaders writes the node's headers and then the plugin's, and
+// a plugin header that names one of nodeHeaders is dropped with a record.
+func writeContentHeaders(h http.Header, chunk *pb.ServeContentChunk, path string) {
+	h.Set("Content-Security-Policy", contentSandbox)
+	h.Set("X-Content-Type-Options", "nosniff")
+	if mt := chunk.GetMediaType(); mt != "" {
+		h.Set("Content-Type", mt)
+	}
+	for _, ph := range chunk.GetHeaders() {
+		name := http.CanonicalHeaderKey(ph.GetName())
+		if nodeHeaders[name] {
+			trace.Emit("webapi", "dropped", "a plugin header the node owns", map[string]string{"path": path, "header": name})
+			continue
+		}
+		h.Add(name, ph.GetValue())
+	}
 }
 
 // httpStatusError maps a routing or RPC failure onto the API's HTTP surface

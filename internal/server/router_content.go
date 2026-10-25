@@ -35,7 +35,9 @@ func (rt *router) ServeContent(ctx context.Context, req *pb.ServeContentRequest,
 	if err != nil {
 		return err
 	}
-	return c.ServeContent(ctx, &pb.ServeContentRequest{TileId: local, Subpath: req.Subpath}, send)
+	bound := proto.CloneOf(req)
+	bound.TileId = local
+	return c.ServeContent(ctx, bound, send)
 }
 
 // WriteContent preserves commit-at-close: the owner commits only after a clean
