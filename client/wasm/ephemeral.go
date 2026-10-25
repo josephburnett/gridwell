@@ -78,9 +78,25 @@ func (a *App) visitEphemeral(p *pane.Pane, label string, tile *gridwellv1.Tile) 
 		})
 }
 
+// visitEphemeralURL is where every link opened inside Gridwell lands. An
+// address an outside route takes opens in the default browser and makes no
+// tile.
 func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
+	if a.sentOutside(url) {
+		return
+	}
 	a.visitEphemeral(p, "CreateURL",
 		&gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: url})
+}
+
+// sentOutside opens url in the default browser when an outside route takes
+// it, and says whether it did.
+func (a *App) sentOutside(url string) bool {
+	if !rpc.Decide(url, a.routes.rules, a.routes.presents, a.routes.match).Outside {
+		return false
+	}
+	a.openOutside(url)
+	return true
 }
 
 // certainlyEphemeral: t is a scratch-grid tile of the pane's grid, and that
@@ -132,10 +148,11 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 
 // openLinkBelow handles a link opened out of a live tile: an ephemeral visit
 // in the pane pane.SplitBelowForOpen names, below the page it came from or in
-// its place, so the link is never silently dropped.
+// its place, so the link is never silently dropped. It asks the outside
+// verdict before the split, so a link sent outside splits nothing.
 func (a *App) openLinkBelow(paneID, url string) {
 	p := a.tree.FindPane(paneID)
-	if p == nil {
+	if p == nil || a.sentOutside(url) {
 		return
 	}
 	// Without a scratch grid the split would only birth a pane with nothing

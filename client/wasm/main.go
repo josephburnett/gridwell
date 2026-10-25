@@ -79,6 +79,15 @@ type App struct {
 	// plugins is the Handshake's menu-row list, in config order.
 	plugins []*gridwellv1.PluginInfo
 
+	// routes is what the link funnel asks rpc.Decide with: the node's routes,
+	// the presents each plugin declares and the glob both are read by. Empty
+	// until the handshake carries them, so every visit makes a tile.
+	routes struct {
+		rules    []rpc.Route
+		presents map[string][]string
+		match    rpc.Matcher
+	}
+
 	// home is the qualified grid id "/" means; every "empty anchor" reader
 	// resolves through it.
 	home string
