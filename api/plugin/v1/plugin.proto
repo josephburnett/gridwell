@@ -233,16 +233,30 @@ message WriteContentResponse {
   string content_stamp = 1;
 }
 
-// ServeContent is the content API's plugin half. GET-only, and subpath ""
-// is the entry's root page. Sandboxing happens at the node.
+// ServeContent is the content API's plugin half: one HTTP request of a
+// GET, HEAD or POST, and subpath "" is the entry's root page. method "" means
+// GET. Sandboxing happens at the node, which keeps its own credentials
+// (the cookie, the bearer) out of headers and owns the response headers it
+// sets itself; see gridwell.v1 ServeContentChunk.
 message ServeContentRequest {
   string key     = 1;
   string subpath = 2;
+  string method  = 3;
+  string query   = 4; // the raw query string, without its "?"
+  repeated Header headers = 5;
+  bytes  body    = 6;
 }
 message ServeContentChunk {
   int64  status     = 1; // chunk 1 only; HTTP status
   string media_type = 2; // chunk 1 only
   bytes  data       = 3;
+  repeated Header headers = 4; // chunk 1 only
+}
+
+// Header is one HTTP header line: a name repeated for each of its values.
+message Header {
+  string name  = 1;
+  string value = 2;
 }
 
 message GetPreviewRequest {

@@ -405,27 +405,39 @@ message WriteContentRequest {
 }
 
 // ServeContent is the RPC carrier behind the server's HTTP /content/ endpoint.
-// A GET of /content/<token>/<tile-id>/<subpath> becomes one ServeContent call
-// routed to the tile's owning plugin, through transit hops as ReadContent is,
-// and the response streams back as the HTTP body. A plugin can present any
-// content as web content this way, from an image file to a whole HTML page with
-// its relative subresources. The server sandboxes the browser side with a CSP
-// sandbox: opaque origin, no cookies, no RPC reach, so a plugin-served page can
-// never act on the user's Gridwell.
+// A GET, HEAD or POST of /content/<token>/<tile-id>/<subpath> becomes one
+// ServeContent call routed to the tile's owning plugin, through transit hops as
+// ReadContent is, and the response streams back as the HTTP body. A plugin can
+// present any content as web content this way, from an image file to a whole
+// HTML page with its relative subresources and its forms. The server sandboxes
+// the browser side with a CSP sandbox: opaque origin, no cookies, no RPC reach,
+// so a plugin-served page can never act on the user's Gridwell.
 //
-// GET-only. subpath "" is the tile's root page; a non-empty subpath is a
-// page-relative resource such as "img/cat.png" whose meaning the plugin
-// defines. Chunk 1 carries status and media_type; later chunks carry data only.
-// A plugin that does not serve web content leaves the RPC unimplemented and the
-// content API answers 404.
+// subpath "" is the tile's root page; a non-empty subpath is a page-relative
+// resource such as "img/cat.png" whose meaning the plugin defines. method ""
+// means GET. Chunk 1 carries status, media_type and headers; later chunks
+// carry data only. A plugin that does not serve web content leaves the RPC
+// unimplemented and the content API answers 404.
 message ServeContentRequest {
   string tile_id = 1;
   string subpath = 2;
+  string method = 3;
+  string query = 4; // the raw query string, without its "?"
+  repeated Header headers = 5;
+  bytes body = 6;
 }
 message ServeContentChunk {
   int64 status = 1;      // chunk 1 only; HTTP status code
   string media_type = 2; // chunk 1 only
   bytes data = 3;
+  // chunk 1 only; written after the node's own, never in place of one.
+  repeated Header headers = 4;
+}
+
+// Header is one HTTP header line: a name repeated for each of its values.
+message Header {
+  string name = 1;
+  string value = 2;
 }
 
 // MoveTile is the single placement writeback. Placement is one fact,
