@@ -35,7 +35,16 @@ var (
 	vNoWatch     = parityVariant{"a plugin with watch off", func(s *paritySource) { s.unwatched = true }}
 	vPartial     = parityVariant{"a listing that is not authoritative", func(s *paritySource) { s.partial = true }}
 	vCached      = parityVariant{"a listing answered from cache", func(s *paritySource) { s.unreachable = parityCached }}
+	vPresented   = parityVariant{"a url tile a plugin presents", func(s *paritySource) { s.presents = []string{"https://example.com/*"} }}
 )
+
+// parityRoutes send the fixture's url addresses to each node's own source,
+// which presents them only in vPresented: the local node has no pparfar and
+// the far one no pparity, so each falls through to its own.
+var parityRoutes = []*gridwellv1.Route{
+	{Match: "https://example.com/*", Plugin: parityPluginUUID},
+	{Match: "https://example.com/*", Plugin: parityFarPluginUUID},
+}
 
 // The decisions the variants are held to, quoted.
 const (
@@ -64,6 +73,11 @@ var parityVariantTable = []parityVariantCell{
 	{vPartial, parityCell{kText, opDead, onPlugin, same, "", checkDead}, nil},
 	{vCached, parityCell{kText, opDead, onPlugin, decided, dCached, nil}, holdsCached},
 	{vCached, parityCell{kText, opDead, onFar, decided, dCached, nil}, holdsCached},
+	{vPresented, parityCell{kURL, opDescend, onPlugin, same, "", checkDescend}, nil},
+	{vPresented, parityCell{kURL, opDescend, onFar, same, "", checkDescend}, nil},
+	{vPresented, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
+	{vPresented, parityCell{kURL, opWrite, onFar, same, "", checkWrite}, nil},
+	{vPresented, parityCell{kURL, opCopy, onFar, same, "", checkCopy}, nil},
 }
 
 // parityVariantNS is the plugin a decided cell's owner reaches: the local

@@ -111,18 +111,19 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
 	front func(namespace.Namespace) namespace.Namespace, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
 	t.Helper()
-	return buildTransportHarness(t, conns, dialErr, front, nil, remote...)
+	return buildTransportHarness(t, conns, dialErr, front, nil, nil, remote...)
 }
 
 // buildTransportHarness is newFrontedTransportHarness with near, when set,
-// registering more of the local node beside its home.
+// registering more of the local node beside its home, and both nodes
+// serving routes.
 func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
 	front func(namespace.Namespace) namespace.Namespace, near func(*plugin.Registry, *store.Store),
-	remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
+	routes []*gridwellv1.Route, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
 	t.Helper()
 	ctx := context.Background()
 
-	far := newFarNode(t, "rnode1", remote...)
+	far := newFarNodeWith(t, server.Config{ID: "rnode1", Routes: routes}, remote...)
 	h := &transportHarness{dialErr: dialErr, remoteShell: far.shell, localShell: shellsvctest.New(), cut: make(chan struct{}),
 		farAPI: far.api, remoteCl: far.cl, remoteWeb: far.web, rootBare: rpc.LocalOf(far.root)}
 	remoteExport := far.export
@@ -166,7 +167,7 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 	if near != nil {
 		near(localReg, localStore)
 	}
-	localSrv := servertest.New(t, localReg, server.Config{ID: localNodeID})
+	localSrv := servertest.New(t, localReg, server.Config{ID: localNodeID, Routes: routes})
 	localHTTP := servertest.Serve(t, localSrv)
 	h.localCl = rpc.NewClient(localHTTP.Client(), localHTTP.URL, connect.WithProtoJSON())
 	h.localHTTP = localHTTP

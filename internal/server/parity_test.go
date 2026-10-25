@@ -555,19 +555,20 @@ func parityOracle(t *testing.T, c parityCell, home, got observable) {
 // parityFacts is the row as the client draws and reads it, ids aside.
 func parityFacts(t *gridwellv1.Tile) map[string]string {
 	out := map[string]string{
-		"kind":    t.Kind,
-		"link":    fmt.Sprint(t.Link),
-		"name":    t.AltText,
-		"named":   fmt.Sprint(t.Named),
-		"place":   fmt.Sprint(t.X, t.Y, t.W, t.H),
-		"grid":    t.GridId,
-		"url":     t.UrlString,
-		"history": t.UrlHistory,
-		"frozen":  fmt.Sprint(t.UrlFrozen),
-		"preview": fmt.Sprint(t.PreviewBlobId != 0),
-		"framing": fmt.Sprint(t.ViewCx, t.ViewCy, t.ViewZoom),
-		"scroll":  fmt.Sprint(t.TextX, t.TextY, t.TextMode),
-		"zoom":    fmt.Sprint(t.ContentZoom),
+		"kind":      t.Kind,
+		"link":      fmt.Sprint(t.Link),
+		"name":      t.AltText,
+		"named":     fmt.Sprint(t.Named),
+		"place":     fmt.Sprint(t.X, t.Y, t.W, t.H),
+		"grid":      t.GridId,
+		"url":       t.UrlString,
+		"history":   t.UrlHistory,
+		"frozen":    fmt.Sprint(t.UrlFrozen),
+		"preview":   fmt.Sprint(t.PreviewBlobId != 0),
+		"framing":   fmt.Sprint(t.ViewCx, t.ViewCy, t.ViewZoom),
+		"scroll":    fmt.Sprint(t.TextX, t.TextY, t.TextMode),
+		"zoom":      fmt.Sprint(t.ContentZoom),
+		"presented": fmt.Sprint(t.PresentedBy != ""),
 	}
 	if rpc.IsBodyKind(t.Kind) {
 		// The basis a save of the body claims; a url's content is its address.
@@ -671,7 +672,7 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 		func(reg *plugin.Registry, st *store.Store) {
 			registerParitySource(t, reg, st, parityPluginUUID, local)
 			at(onHome)(reg, st)
-		},
+		}, parityRoutes,
 		func(reg *plugin.Registry, st *store.Store) {
 			registerParitySource(t, reg, st, parityFarPluginUUID, far)
 		},
@@ -972,6 +973,7 @@ type paritySource struct {
 	// What a variant declares otherwise (parity_variant_test.go).
 	unwritable, unwatched, partial bool
 	unreachable                    string
+	presents                       []string
 }
 
 func newParitySource() *paritySource {
@@ -995,7 +997,7 @@ func newParitySource() *paritySource {
 func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves,
+	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves, Presents: s.presents,
 		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
 }
 
@@ -1177,7 +1179,9 @@ func (f *parityFix) content(t *gridwellv1.Tile) (string, error) {
 	case k.Descends == rpc.DescendGrid:
 		return f.listing(t.ChildGridId)
 	case k.Content == rpc.ContentAddress:
-		return urlview.Address(t, rpc.PageURL("", f.token, t.Id)), nil
+		// A presented page is under the tile's own, whose id is the owner's.
+		page := rpc.PageURL("", f.token, t.Id)
+		return strings.Replace(urlview.Address(t, page), page, "<page>/", 1), nil
 	case k.Content != rpc.ContentNone:
 		data, _, _, err := f.cl.ReadContent(f.ctx, t.Id)
 		return string(data), err
