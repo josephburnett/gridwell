@@ -3,17 +3,21 @@ package server_test
 // A url tile whose address a route sends to a plugin that presents it is
 // stamped presented_by on every answer, by the node holding the row: home's
 // here, and a far node's through the connection. The presenter is in-process
-// (plugintest.Loopback), because no shipped binary declares presents until
-// the api module is tagged with it.
+// (plugintest.Loopback), so a test can script its answers, except where the
+// process itself is the case: the shipped pages binary, stopped or killed.
 
 import (
 	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -483,5 +487,231 @@ func TestAFarURLTileArrivesBrokenByTheFarNodesVerdict(t *testing.T) {
 	}
 	if tl := g.Tiles[0]; tl.PresentedBy != localNodeID+"/geneva/"+presenterID || tl.BrokenReason != unmounted {
 		t.Errorf("far tile: presented_by %q broken %q, want the far verdict", tl.PresentedBy, tl.BrokenReason)
+	}
+}
+
+// registerSupervised registers the shipped pages binary, presenting
+// example.test, under its supervisor as the loader does (plugin.LoadInto).
+func registerSupervised(t *testing.T) func(*plugin.Registry, *store.Store) {
+	return func(reg *plugin.Registry, st *store.Store) {
+		t.Helper()
+		sup, err := plugin.Supervise(presenterID, "pages", plugintest.Binary(t, "pages"), map[string]string{
+			"uuid": presenterID, "kind": "pages", "state_dir": t.TempDir(), "presents": "http://example.test/*",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, stop := pluginhost.Start(pluginv1.NewPluginClient(sup), st.Namespace(presenterID), sup, "plugin "+presenterID+" watch")
+		closer := func() { stop(); sup.Close() }
+		t.Cleanup(closer)
+		reg.Register(presenterID, "pages", a, closer)
+		reg.Switch(presenterID, "site", sup.Disable)
+	}
+}
+
+// pagesPID is the pid of the one pages subprocess this test spawned. The
+// supervisor exposes no handle to its process, so a signal goes by pid.
+func pagesPID(t *testing.T) int {
+	t.Helper()
+	out, err := exec.Command("pgrep", "-P", strconv.Itoa(os.Getpid()), "-f", "gridwell-plugin-pages").Output()
+	if err != nil {
+		t.Fatalf("pgrep for the pages subprocess: %v", err)
+	}
+	pids := strings.Fields(string(out))
+	if len(pids) != 1 {
+		t.Fatalf("pgrep found %d pages children, want the one this test spawned: %q", len(pids), out)
+	}
+	pid, err := strconv.Atoi(pids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pid
+}
+
+// readFast is the url tile at address on grid, read in well under
+// pluginInfoTimeout: a verdict reads the plugin's state and asks nothing.
+func readFast(t *testing.T, cl *rpc.Client, grid, address string) *gridwellv1.Tile {
+	t.Helper()
+	start := time.Now()
+	tl := urlRow(t, cl, grid, address)
+	if took := time.Since(start); took > server.PluginInfoTimeout/6 {
+		t.Errorf("a read took %v, want it well under pluginInfoTimeout (%v)", took, server.PluginInfoTimeout)
+	}
+	return tl
+}
+
+// awaitTile reads the tile until want holds, within pluginInfoTimeout and a
+// second: the probe's bound.
+func awaitTile(t *testing.T, cl *rpc.Client, grid, address, what string, want func(*gridwellv1.Tile) bool) {
+	t.Helper()
+	deadline := time.Now().Add(server.PluginInfoTimeout + time.Second)
+	for got := readFast(t, cl, grid, address); !want(got); got = readFast(t, cl, grid, address) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: presented_by %q broken %q", what, got.PresentedBy, got.BrokenReason)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A url tile a route sends to a plugin whose process is stopped reads broken
+// once a call goes unanswered: the page, opened and given up on, kicks one
+// probe, and its Info unanswered by pluginInfoTimeout is the verdict. No read
+// waits on the process. Once it runs again, the next read probes it and the
+// tile is presented again, with no restart.
+func TestAURLTileWhosePluginsProcessIsStoppedIsBrokenUntilItAnswers(t *testing.T) {
+	cl, hs, root := presentingNodeWith(t, registerSupervised(t))
+	created := createURL(t, cl, root, 0, "http://example.test/a")
+	if created.PresentedBy != presenterID || created.BrokenReason != "" {
+		t.Fatalf("created: presented_by %q broken %q, want presented", created.PresentedBy, created.BrokenReason)
+	}
+	health := presenterHealth(t, cl)
+	pid := pagesPID(t)
+	if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGCONT) })
+	if got := readFast(t, cl, root, "http://example.test/a"); got.BrokenReason != "" {
+		t.Errorf("stopped, nothing asked yet: broken %q, want presented", got.BrokenReason)
+	}
+
+	page := strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), created.Id), "/")
+	opener := *hs.Client()
+	opener.Timeout = 300 * time.Millisecond
+	if res, err := opener.Get(hs.URL + page + "/example.test/a"); err == nil {
+		res.Body.Close()
+		t.Fatalf("the stopped plugin's page answered %d", res.StatusCode)
+	}
+	awaitTile(t, cl, root, "http://example.test/a", "stopped", func(tl *gridwellv1.Tile) bool {
+		return tl.PresentedBy == presenterID && strings.Contains(tl.BrokenReason, "not responding")
+	})
+	if h := awaitHealth(t, health, false); !strings.Contains(h.Detail, "not responding") {
+		t.Errorf("stopped: health %+v, want the plugin told not responding", h)
+	}
+
+	if err := syscall.Kill(pid, syscall.SIGCONT); err != nil {
+		t.Fatal(err)
+	}
+	awaitTile(t, cl, root, "http://example.test/a", "running again", func(tl *gridwellv1.Tile) bool {
+		return tl.PresentedBy == presenterID && tl.BrokenReason == ""
+	})
+	awaitHealth(t, health, true)
+}
+
+// awaitHealth is the presenter's next health event saying healthy, within
+// the probe's bound.
+func awaitHealth(t *testing.T, health <-chan *gridwellv1.EventPluginHealth, healthy bool) *gridwellv1.EventPluginHealth {
+	t.Helper()
+	deadline := time.After(server.PluginInfoTimeout + time.Second)
+	for {
+		select {
+		case h := <-health:
+			if h.Healthy == healthy {
+				return h
+			}
+		case <-deadline:
+			t.Fatalf("no health event saying healthy=%v", healthy)
+		}
+	}
+}
+
+// presenterHealth is the presenter's health events on the client's stream,
+// opened before it returns.
+func presenterHealth(t *testing.T, cl *rpc.Client) <-chan *gridwellv1.EventPluginHealth {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stream, err := cl.Subscribe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make(chan *gridwellv1.EventPluginHealth, 16)
+	go func() {
+		defer stream.Close()
+		for {
+			ev, ok, err := stream.Recv()
+			if !ok || err != nil {
+				return
+			}
+			if h := ev.GetPluginHealth(); h != nil && h.PluginUuid == presenterID {
+				out <- h
+			}
+		}
+	}()
+	return out
+}
+
+// countingPresenter is the presenter counting every Info it is asked.
+type countingPresenter struct {
+	*presenter
+	infos atomic.Int32
+}
+
+func (p *countingPresenter) Info(ctx context.Context, req *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	p.infos.Add(1)
+	return p.presenter.Info(ctx, req)
+}
+
+// A plugin that answers is asked nothing by the verdict: grid answers holding
+// a tile it presents read its state.
+func TestAnAnsweringPluginIsAskedNoInfoByTheVerdict(t *testing.T) {
+	impl := &countingPresenter{presenter: &presenter{}}
+	cl, _, root := presentingNodeWith(t, func(reg *plugin.Registry, st *store.Store) {
+		cp, closer, err := plugintest.Loopback(impl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(closer)
+		reg.Register(presenterID, "pages", pluginhost.New(cp, st.Namespace(presenterID), nil), nil)
+	})
+	createURL(t, cl, root, 0, "http://example.test/a")
+	asked := impl.infos.Load()
+	for range 5 {
+		if got := urlRow(t, cl, root, "http://example.test/a"); got.PresentedBy != presenterID || got.BrokenReason != "" {
+			t.Fatalf("presented_by %q broken %q, want presented", got.PresentedBy, got.BrokenReason)
+		}
+	}
+	if _, err := cl.Handshake(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := impl.infos.Load() - asked; n != 0 {
+		t.Errorf("the verdict asked the answering plugin's Info %d times over five reads and a handshake", n)
+	}
+}
+
+// A url tile a route sends to a plugin whose process died reads broken with
+// the supervisor's reason until the respawn answers, and presented after.
+func TestAURLTileWhosePluginsProcessDiedIsBrokenUntilTheRespawn(t *testing.T) {
+	cl, _, root := presentingNodeWith(t, registerSupervised(t))
+	createURL(t, cl, root, 0, "http://example.test/a")
+	pid := pagesPID(t)
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	broken := ""
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		got := urlRow(t, cl, root, "http://example.test/a")
+		if broken == "" && got.BrokenReason != "" {
+			if got.PresentedBy != presenterID {
+				t.Errorf("down: presented_by %q, want %s", got.PresentedBy, presenterID)
+			}
+			broken = got.BrokenReason
+		}
+		if broken != "" && got.BrokenReason == "" {
+			if got.PresentedBy != presenterID {
+				t.Errorf("respawned: presented_by %q, want %s", got.PresentedBy, presenterID)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after the kill: broken seen %q, last presented_by %q broken %q; want broken, then presented", broken, got.PresentedBy, got.BrokenReason)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !strings.Contains(broken, "not responding") {
+		t.Errorf("down: broken %q, want the plugin not responding", broken)
+	}
+	if newPID := pagesPID(t); newPID == pid {
+		t.Errorf("pid after the respawn = %d, want a new process", newPID)
 	}
 }

@@ -10,6 +10,7 @@ package server
 import (
 	"context"
 	"strings"
+	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -33,9 +34,8 @@ func (s *Server) stampPresented(ctx context.Context, tiles ...*pb.Tile) {
 }
 
 // routedDeclared is what each plugin a route names declares, read as the
-// handshake reads its row (rpc.DeclaredBy). A disabled plugin is asked
-// nothing: the registry's sentence is its verdict. One the node does not
-// declare has no row, so its route falls through as the handshake's does.
+// handshake reads its row (rpc.DeclaredBy). One the node does not declare has
+// no row, so its route falls through as the handshake's does.
 func (s *Server) routedDeclared(ctx context.Context) map[string]rpc.Declared {
 	declared := map[string]rpc.Declared{}
 	for _, r := range s.cfg.Routes {
@@ -45,14 +45,29 @@ func (s *Server) routedDeclared(ctx context.Context) map[string]rpc.Declared {
 		if _, ok := s.routeClient(r.Plugin); !ok {
 			continue
 		}
-		row := &pb.PluginInfo{Disabled: s.pluginReg.DisabledReason(r.Plugin)}
-		if row.Disabled == "" {
+		row := &pb.PluginInfo{Unanswered: s.unanswered(r.Plugin)}
+		if row.Unanswered == "" {
 			info, err := s.pluginInfo(ctx, r.Plugin)
 			row = buildPluginInfo(r.Plugin, "", "", info, err)
 		}
 		declared[r.Plugin] = rpc.DeclaredBy(row)
 	}
 	return declared
+}
+
+// unanswered is why plugin uuid does not answer now, "" while it does: the
+// user's switch, or the adapter's state (pluginhost.Adapter.Answering),
+// which asks nothing and probes, bounded by pluginInfoTimeout, a plugin not
+// answering. Home holds no such state and answers whoever asks it.
+func (s *Server) unanswered(uuid string) string {
+	if reason := s.pluginReg.DisabledReason(uuid); reason != "" {
+		return reason
+	}
+	c, _ := s.routeClient(uuid)
+	if a, ok := c.(interface{ Answering(time.Duration) string }); ok {
+		return a.Answering(pluginInfoTimeout)
+	}
+	return ""
 }
 
 // leavesPage is the site address a request under row's page names when it is

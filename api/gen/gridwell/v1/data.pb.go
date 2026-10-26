@@ -2504,10 +2504,11 @@ type PluginInfo struct {
 	Connection bool `protobuf:"varint,14,opt,name=connection,proto3" json:"connection,omitempty"`
 	// presents mirrors InfoResponse.presents, for the client's route verdict.
 	Presents []string `protobuf:"bytes,15,rep,name=presents,proto3" json:"presents,omitempty"`
-	// disabled is the sentence of a plugin the user switched off until the node
-	// restarts (plugin.Registry.DisabledReason), "" while it is on: the route
-	// verdict reads its presents as unknown (rpc.DeclaredBy).
-	Disabled      string `protobuf:"bytes,16,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	// unanswered is why a plugin a route names does not answer now, "" while
+	// it does: switched off, its process down, or its last call unanswered
+	// (pluginhost.Adapter.Answering). The route verdict reads its presents as
+	// unknown (rpc.DeclaredBy).
+	Unanswered    string `protobuf:"bytes,16,opt,name=unanswered,proto3" json:"unanswered,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2619,9 +2620,9 @@ func (x *PluginInfo) GetPresents() []string {
 	return nil
 }
 
-func (x *PluginInfo) GetDisabled() string {
+func (x *PluginInfo) GetUnanswered() string {
 	if x != nil {
-		return x.Disabled
+		return x.Unanswered
 	}
 	return ""
 }
@@ -4981,7 +4982,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xa3\x03\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xa7\x03\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
@@ -5001,8 +5002,10 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x0e \x01(\bR\n" +
 	"connection\x12\x1a\n" +
-	"\bpresents\x18\x0f \x03(\tR\bpresents\x12\x1a\n" +
-	"\bdisabled\x18\x10 \x01(\tR\bdisabledJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\bpresents\x18\x0f \x03(\tR\bpresents\x12\x1e\n" +
+	"\n" +
+	"unanswered\x18\x10 \x01(\tR\n" +
+	"unansweredJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
 	"\x0eConnectionInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +

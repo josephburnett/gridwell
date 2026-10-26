@@ -192,7 +192,10 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
 		row := buildPluginInfo(n.UUID, n.Kind, label, info, err)
-		row.Disabled = rt.srv.pluginReg.DisabledReason(n.UUID)
+		// Only a route reads it (rpc.DeclaredBy), and reading it may probe.
+		if slices.ContainsFunc(rt.srv.cfg.Routes, func(r *pb.Route) bool { return r.Plugin == n.UUID }) {
+			row.Unanswered = rt.srv.unanswered(n.UUID)
+		}
 		out = append(out, row)
 	}
 	resp := &pb.HandshakeResponse{

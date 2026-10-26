@@ -359,9 +359,11 @@ func (s *watchStream) stop() {
 func (a *Adapter) follow(ctx, apply context.Context, scope []string, opened func() error) error {
 	stream, err := a.cp.Watch(ctx, &pluginv1.WatchRequest{Grids: scope})
 	if err != nil {
+		a.heard(ctx, err)
 		return err
 	}
 	if md, _ := stream.Header(); md != nil {
+		a.heard(ctx, nil)
 		if err := opened(); err != nil {
 			return err
 		}

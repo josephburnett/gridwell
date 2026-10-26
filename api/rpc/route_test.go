@@ -82,18 +82,18 @@ func TestDecideReadsAnUnknownDeclarationAsBroken(t *testing.T) {
 	}
 }
 
-// A switched-off plugin's declaration is unknown whatever it last declared,
-// and an Info refusal is unknown; a row with neither declares what it
-// presents.
-func TestDeclaredByReadsTheSwitchBeforeTheDeclaration(t *testing.T) {
+// A plugin that does not answer now declares nothing whatever it last
+// declared, and an Info refusal is unknown; a row with neither declares
+// what it presents.
+func TestDeclaredByReadsWhetherThePluginAnswersBeforeTheDeclaration(t *testing.T) {
 	cases := []struct {
 		name string
 		row  *pb.PluginInfo
 		want Declared
 	}{
 		{"answered", &pb.PluginInfo{Presents: []string{"a"}}, Declared{Presents: []string{"a"}}},
+		{"unanswered, a declaration held", &pb.PluginInfo{Presents: []string{"a"}, Unanswered: "plugin not responding: context deadline exceeded"}, Declared{Presents: []string{"a"}, Unknown: "plugin not responding: context deadline exceeded"}},
 		{"refused", &pb.PluginInfo{InfoError: "no root"}, Declared{Unknown: "no root"}},
-		{"disabled", &pb.PluginInfo{Presents: []string{"a"}, Disabled: "site is disabled"}, Declared{Presents: []string{"a"}, Unknown: "site is disabled"}},
 	}
 	for _, c := range cases {
 		if got := DeclaredBy(c.row); got.Unknown != c.want.Unknown || len(got.Presents) != len(c.want.Presents) {
@@ -130,7 +130,7 @@ func TestRoutingReadsTheHandshake(t *testing.T) {
 	routes := []*pb.Route{{Match: "https://gitlab.com/*/-/merge_requests/*", Plugin: "lab0001"}, {Match: "https://gitlab.com/*", Outside: true}}
 	h := &pb.HandshakeResponse{Routes: routes, Plugins: []*pb.PluginInfo{
 		{Uuid: "home0001"}, {Uuid: "lab0001", Presents: []string{"https://gitlab.com/*/-/merge_requests/*"}},
-		{Uuid: "off0001", Disabled: "off is disabled until the node restarts"}}}
+		{Uuid: "off0001", Unanswered: "off is disabled until the node restarts"}}}
 	gotRoutes, declared := Routing(h)
 	if len(gotRoutes) != 2 || gotRoutes[0] != routes[0] || gotRoutes[1] != routes[1] {
 		t.Fatalf("routes = %v, want %v in order", gotRoutes, routes)

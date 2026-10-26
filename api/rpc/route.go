@@ -31,17 +31,18 @@ type Verdict struct {
 }
 
 // Declared is what a plugin a route names declares: Presents from its
-// answered Info, or Unknown, why the declaration is not known, its Info's
-// refusal or the user's switch.
+// answered Info, or Unknown, why the declaration is not known: the plugin
+// does not answer now, or its Info refused.
 type Declared struct {
 	Presents []string
 	Unknown  string
 }
 
 // DeclaredBy is a plugin row's declaration, as both the node and the handshake
-// read it: a switched-off plugin's is unknown, whatever it last declared.
+// read it: a plugin that does not answer now declares nothing, whatever it
+// last declared (PluginInfo.unanswered).
 func DeclaredBy(p *pb.PluginInfo) Declared {
-	return Declared{Presents: p.GetPresents(), Unknown: cmp.Or(p.GetDisabled(), p.GetInfoError())}
+	return Declared{Presents: p.GetPresents(), Unknown: cmp.Or(p.GetUnanswered(), p.GetInfoError())}
 }
 
 // Matcher reports whether a glob matches a whole address.

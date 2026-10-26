@@ -617,10 +617,11 @@ message PluginInfo {
   bool connection = 14;
   // presents mirrors InfoResponse.presents, for the client's route verdict.
   repeated string presents = 15;
-  // disabled is the sentence of a plugin the user switched off until the node
-  // restarts (plugin.Registry.DisabledReason), "" while it is on: the route
-  // verdict reads its presents as unknown (rpc.DeclaredBy).
-  string disabled = 16;
+  // unanswered is why a plugin a route names does not answer now, "" while
+  // it does: switched off, its process down, or its last call unanswered
+  // (pluginhost.Adapter.Answering). The route verdict reads its presents as
+  // unknown (rpc.DeclaredBy).
+  string unanswered = 16;
 }
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
 // connection set, rpc.ConnectionRow's shape, because the + menu is one
