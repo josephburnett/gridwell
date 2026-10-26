@@ -113,7 +113,7 @@ and `status_detail` come from the plugin's `Entry` through
 /content/ API, and only a url entry may say so) comes from the `Entry` too,
 and a plugin row also keeps it in its snapshot beside kind, label and
 `url_string` (`store.snapshotOf`), so a row its source does not list right
-now still presents as the page it was. A plugin tile's `preview_blob_id` is
+now still shows as the page it was. A plugin tile's `preview_blob_id` is
 `pluginhost.previewKey`'s: the node's screenshot of the tile once one exists,
 else the plugin's picture keyed below zero. A served page that changes in
 place retires an unfrozen screenshot (`pluginhost.pagePreviewStale`). `Grid.scratch_grid_id` and
@@ -217,7 +217,7 @@ keeps the arrangement as a namespace of its own store
 (`internal/pluginhost/adapter.go`). An entry may be a link to another of the
 plugin's entries (`Entry.link_target`, the target's grid and key): the
 store keeps it as a link row whose `link_target_id` is the target's bare
-entry address (`rpc.EntryTileID`), the leaf spells that in its own namespace
+entry address (`rpc.EntryTileID`), the leaf qualifies that in its own namespace
 on the way out (`rpc.QualifyLinkTarget`), and every read through it resolves
 the target as any link does, with nothing minted for the target until it is
 touched. A content row whose entry becomes a link is converted in place. The

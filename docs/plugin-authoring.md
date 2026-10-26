@@ -114,7 +114,7 @@ entry's `status_detail` is one emoji about its state — ✅ done, ● unread,
 ★ starred — sent only when there is something to notice, and empty for the
 normal state. The client draws it before the tile's name wherever the name is
 drawn, so a long name clips and the emoji never does: a note on the name,
-never a second name. An entry with `serves_page` presents its `ServeContent` HTML on
+never a second name. An entry with `serves_page` shows its `ServeContent` HTML on
 descent, sandboxed by the node: scripts run, and on the desktop a
 `target=_blank` link opens its address in a new pane below. It is a `url` entry, and only a `url` entry:
 serving a page is what that entry's address is, and the node refuses the
@@ -202,7 +202,7 @@ could have:
   or picture stamp. The node lists the grid and tells the clients showing it only
   if the answer moved, so a `GridChanged` that moves nothing costs you one
   `List` and the user nothing; the listing that follows retires a gone key by
-  the usual rule, so list honestly.
+  the usual rule, so list what the source has.
 - `EntryChanged{grid, entry}`: one entry's content changed in place — a
   file's bytes written, a picture redrawn — with the entry re-read, exactly
   as `List` would answer it now, its `content_stamp` moved with the bytes. A
