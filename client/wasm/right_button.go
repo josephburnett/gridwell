@@ -378,24 +378,7 @@ func (a *App) commitRightCopy(d *dragState, sx, sy float64) {
 	// one decision off d.intent.
 	in, t, dropX, dropY := a.dropInputAt(d, sx, sy, true /* placement */)
 
-	switch a.commitVerdict(in, d, t, dropX, dropY) {
-	case dragdrop.DropDelete:
-		// The source pane's + button is a trashcan during any drag.
-		a.runDeleteTile(d, nil)
-		a.ghost = nil
-		a.draw()
-		return
-	case dragdrop.DropRejected:
-		// No target, the same cell, or an occupied one: snap back.
-		a.cancelDragSnapBack(d)
-		return
-	case dragdrop.DropLink:
-		// Ctrl was held at the press: the destination gains a link and the
-		// source stays put, whatever namespace it landed in. The one link commit
-		// the cross-namespace left-drag also uses.
-		a.landGhostAtCell(t, dropX, dropY)
-		a.commitLinkDrop(d, t, dropX, dropY)
-		a.draw()
+	if a.commitShared(a.commitVerdict(in, d, t, dropX, dropY), d, t, dropX, dropY) {
 		return
 	}
 

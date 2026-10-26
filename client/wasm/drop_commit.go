@@ -16,7 +16,7 @@ import (
 // one commit path, so the mouseup the handler saw and the release
 // recoverLostRelease infers cannot land two ways. The verdict is
 // dragdrop.DecideDrop's; commitRightCopy is the right button's twin and
-// shares the landing and snap-back below.
+// shares commitShared, the landing and the snap-back below.
 
 // Animation durations in milliseconds. snapMs is a var so a spec can hold a
 // drop's landing open (setSnapMs).
@@ -94,31 +94,8 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		a.scheduleURLUpdate()
 		a.draw()
 		return true
-
-	case dragdrop.DropDelete:
-		// The trashcan resolves against the bar button, not the grid under
-		// the cursor, so it works wherever the cursor happens to be.
-		a.runDeleteTile(d, nil)
-		a.ghost = nil
-		a.draw()
-		return true
-
-	case dragdrop.DropRejected:
-		// Snap back without a doomed round trip.
-		a.cancelDragSnapBack(d)
-		return true
-
-	case dragdrop.DropLink:
-		// A cross-namespace left-drag links, because there is no
-		// cross-plugin move.
-		if a.ghost != nil {
-			// The sources were hidden for a would-be move, but they stay.
-			a.ghost.hidden = nil
-			a.ghost.hiddenPaneID = ""
-		}
-		a.landGhostAtCell(t, dropX, dropY)
-		a.commitLinkDrop(d, t, dropX, dropY)
-		a.draw()
+	}
+	if a.commitShared(verdict, d, t, dropX, dropY) {
 		return true
 	}
 
@@ -126,6 +103,32 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	a.landGhostAtCell(t, dropX, dropY)
 	a.commitMove(d, t, dropX, dropY)
 	a.draw()
+	return true
+}
+
+// commitShared commits the verdicts both buttons' drags share, reporting
+// whether verdict was one: the trashcan, which resolves against the bar
+// button wherever the cursor is; a snap back with no doomed round trip; and a
+// link, made by a ctrl + right-drag or a cross-namespace left-drag, which
+// leaves the sources a would-be move hid where they are.
+func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTarget, dropX, dropY int64) bool {
+	switch verdict {
+	case dragdrop.DropDelete:
+		a.runDeleteTile(d, nil)
+		a.ghost = nil
+		a.draw()
+	case dragdrop.DropRejected:
+		a.cancelDragSnapBack(d)
+	case dragdrop.DropLink:
+		if a.ghost != nil {
+			a.ghost.hidden, a.ghost.hiddenPaneID = nil, ""
+		}
+		a.landGhostAtCell(t, dropX, dropY)
+		a.commitLinkDrop(d, t, dropX, dropY)
+		a.draw()
+	default:
+		return false
+	}
 	return true
 }
 
