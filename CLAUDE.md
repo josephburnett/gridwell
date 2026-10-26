@@ -167,7 +167,7 @@ what each one is called.
 | dark | A source declared but not answering right now: a connection that will not dial, or a plugin whose directory or service stopped answering while its process still does. Its grids serve from cache, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
 | disabled | A plugin or connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
-| broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
+| broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. A url tile a route sends to a plugin that does not answer is broken too (`Tile.broken_reason`). | Dark. |
 | told | A source whose changes reach the node as they happen (`EventPluginHealth.told`): it declares Watch and nothing has failed. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
 | unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
 | notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
@@ -622,8 +622,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   page has no address to move, so a presented address opens below it. The
   node answers a document request under a presented tile for an address its
   plugin does not take with a redirect to the site (`server.leavesPage`), so
-  a browser tab follows the same rule. Nothing names a plugin kind: every
-  behaviour rides the declaration and the rule.
+  a browser tab follows the same rule. A route to a plugin that does not
+  answer, its `Info` failed or timed out or the user disabled it, makes the
+  tile broken with the reason (`Tile.broken_reason`), never the plain site:
+  one tint, nothing loaded in its place, an open view closed and a descent
+  going live on nothing, until the plugin answers (2026-10-25). Nothing names
+  a plugin kind: every behaviour rides the declaration and the rule.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
   interchangeable with the cookie. It is either a text tile or a url tile: a

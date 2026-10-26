@@ -787,7 +787,11 @@ to an address the routes send to you it stays your page, and to any other
 the tile leaves for the site, another plugin's page or the default browser
 without asking you. A browser tab cannot be asked first, so the node
 answers a document request under your page for an address you do not take
-with a redirect to the site itself.
+with a redirect to the site itself. While your `Info` fails or times out, or
+the user has disabled you, what you present is unknown, so a route to you
+takes every address its glob matches broken with the reason
+(`Tile.broken_reason`): the tile loads nothing until you answer, never the
+site in your place.
 
 **Example.** A review plugin declares
 `presents: ["https://gitlab.com/*/-/merge_requests/*"]` and serves
@@ -796,8 +800,10 @@ with a redirect to the site itself.
 **Test.** At the node, `internal/server/presented_seam_test.go`:
 `TestAPresentedTileIsServedByItsPlugin` (no key, the address as the
 subpath, the plugin's 404 stands),
-`TestAFarURLTileArrivesPresentedByTheFarNodesVerdict` and
-`TestADocumentItsPluginDoesNotTakeRedirectsToTheSite`.
+`TestAFarURLTileArrivesPresentedByTheFarNodesVerdict`,
+`TestADocumentItsPluginDoesNotTakeRedirectsToTheSite`,
+`TestAURLTileWhosePluginRefusesInfoIsBrokenUntilItAnswers` and
+`TestAURLTileWhosePluginIsDisabledIsBrokenAndThePluginIsNotAsked`.
 
 **Today.** pages presents the addresses its `presents` config names
 (`pages/site.Present`: `<host>/<key>` is the doc's page, `_/<key>/<name>`

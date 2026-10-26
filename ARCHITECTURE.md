@@ -665,6 +665,7 @@ copy:
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | where a live page's navigation goes, and what its view loads next | `rpc.Decide`, copied in `routes.ts` (pinned by `api/rpc/testdata/routes.json`); `urlview.View` |
 | whether a page request under a presented tile leaves for the site | `server.leavesPage` |
+| whether a presented tile is broken, and what a broken one loads | `rpc.Decide` over `rpc.DeclaredBy` (`Tile.broken_reason`); `urlview.Opens` |
 | which preview a plugin tile wears | `pluginhost.previewKey` |
 | what a tile's banner reads | `tilepreview.BannerText` (the plugin's status emoji, then the name) |
 | does a tile draw as host state, and which hue its banner wears | `tilepreview.Outside`, `tilepreview.BannerHue` |
