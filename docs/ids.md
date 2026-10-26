@@ -1,7 +1,7 @@
 # The anatomy of an id
 
 An id is a chain of segments joined by `/`, read left to right. Each hop
-peels one segment; the segment's shape says what it is:
+takes one segment; the segment's shape says what it is:
 
 | Shape | Example | Means |
 |---|---|---|
@@ -59,14 +59,14 @@ that names it.
 Digits are never reused. A `~` id is as stable as the plugin's key (keys
 are forever, per the plugin contract).
 
-A plugin thing — tile or grid — keeps its `~` name FOR GOOD. The first
+A plugin thing — tile or grid — keeps its `~` name for good. The first
 durable fact the user makes about it mints a row in the plugin's namespace
 of the store, and that row is where the placement, the framing and the
 tombstone live, but it never becomes a name: the listing answers the
 address, a write answers the address, and `child_grid_id` and
 `link_target_id` hold the address verbatim.
 
-That is because a client STANDS on these ids. A pane holds its anchor grid
+That is because a client stands on these ids. A pane holds its anchor grid
 id and its content tile id, and the URL projects both; renaming either
 under the user's hand — which minting did, the moment a descent's own
 reframe wrote — left the pane naming something the listing does not
@@ -76,7 +76,7 @@ cannot do that: it names the thing by what it is.
 Row ids stay resolvable as addresses forever, in both directions
 (`Adapter.resolveTile`, `Adapter.resolveGrid`), so a link stored under
 the older rule keeps naming the thing it named; re-storing one canonicalizes
-it forward (`namespace.Minter`). What a retirement burns is the ROW: a
+it forward (`namespace.Minter`). What a retirement destroys is the row: a
 recreated key comes back at the same address with a fresh row, holding none
 of the arrangement the retired one held, and every link stored against
 that row stays dead.

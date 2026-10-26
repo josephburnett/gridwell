@@ -27,8 +27,8 @@ version.
 
 ## Cadence
 
-Alpha builds are patch bumps: `v0.1.0`, `v0.1.1`, `v0.1.2`. **No GitHub
-release object is created before 1.0** — the workflow has no publish step,
+Alpha builds are patch bumps: `v0.1.0`, `v0.1.1`, `v0.1.2`. No GitHub
+release object is created before 1.0: the workflow has no publish step,
 deliberately. Artifacts live on the run.
 
 A tag that failed to build is not spent: fix, commit, then
@@ -57,7 +57,7 @@ The Linux AppImage is the reference build — everything works there.
 
 **macOS.** The bundle is ad-hoc signed (`mac.identity: "-"` in
 `apps/desktop/package.json`). Unsigned refuses to launch on Apple Silicon at
-all, so this is not optional. It is *not* notarized, so Gatekeeper stops the
+all, so this is not optional. It is not notarized, so Gatekeeper stops the
 first launch. Either right-click → Open and then "Open Anyway" in System
 Settings → Privacy & Security, or:
 

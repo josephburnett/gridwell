@@ -19,7 +19,7 @@ here.
 | Concept | What it does |
 |---|---|
 | **door to another namespace** | A door onto a grid in another namespace — a far home, a plugin's grid, a file tree. Derived from the ids alone (`rpc.IsDoorToOtherNamespace`), never stored. |
-| **leaf link** | One content tile shown in two places: `link_target_id` plus one owning row. The same document, over there, without a copy. |
+| **leaf link** | One content tile shown in two places: `link_target_id` plus one owning row. The same document shown elsewhere, without a copy. |
 | **dead link** | A link whose path ends in nothing: a namespace some hop no longer declares, or a target its namespace says is gone. Grey, inert, no notice, still deletable. Separates "gone" from "not answering". |
 | **childless link** | A link that names no namespace yet — the + menu swatch and the drag ghost, drawn before there is a grid to point at. |
 
@@ -46,7 +46,7 @@ here.
 |---|---|
 | **dead** (`client/deadlink`) | The namespace is not declared, or it answered that the key is gone (`gwerr.DeadLink`). Nothing is said, and nothing is asked again until the declaration or that namespace's listing changes, so neither can storm the notice row. |
 | **dark** (`internal/sourcecache` and `internal/pluginhost`, health events) | Declared, not answering right now — a connection that will not dial, or a plugin whose directory or service stopped answering while its process still does. Fetched, reported, recovers on its own. It is one fact: a grid served by a dark source is served from cache, not answered live, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
-| **disabled** (`plugin.Registry.Disable`, `EventPluginHealth.disabled`) | A plugin or connection the user switched off from its health notice, until the node restarts. It reads exactly as dark — the cache where there is one, the read failing where there is none — but nothing tries it again and no notice stands, and it is read-only: a write is refused (`gwerr.SourceDisabled`) and dropped, never retried, and its rows say why (`Tile.read_only`). Held in the node's memory only: `server.yaml` and `gridwell.db` never hear of it, so a restart brings the source back. |
+| **disabled** (`plugin.Registry.Disable`, `EventPluginHealth.disabled`) | A plugin or connection the user switched off from its health notice, until the node restarts. It reads exactly as dark — the cache where there is one, the read failing where there is none — but nothing tries it again and no notice stands, and it is read-only: a write is refused (`gwerr.SourceDisabled`) and dropped, never retried, and its rows say why (`Tile.read_only`). Held in the node's memory only: `server.yaml` and `gridwell.db` never record it, so a restart brings the source back. |
 | **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
 | **broken** (`pluginhealth.Broken`) | A door that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For`, `a.gridWritable` and `a.gridAcceptsTiles` all return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
@@ -92,7 +92,7 @@ class, and the word says who started the write.
 A plugin says whether its text is a document; the user can always see the
 source. That is why there are two values and not three: a declaration that
 rendered a body with no way back to its bytes is retired, and `acceptEntries`
-reads the retired word as `both` so an old plugin binary keeps presenting.
+reads the retired word as `both`, so an old plugin binary's text still renders.
 
 `client/textedit` owns the first two presentation rules (`ToggleVisible`,
 `PresentationHTML`), so `make check` executes them.

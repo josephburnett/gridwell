@@ -36,7 +36,7 @@ Every tile and grid has an id, a path such as `k3x9a2b/12` (a tile at home)
 or `k3x9a2b/laptop/m4q8z1c/7` (a tile on a far node, through the connection
 named `laptop`). Every answer names tiles by that id. Pass it back exactly.
 Grids and tiles are numbered apart, so a grid and a tile may share a
-spelling; each argument says which it takes.
+number; each argument says which it takes.
 
 ## Claims
 
@@ -105,7 +105,7 @@ changed, newest first.
 ## Refusals
 
 A refused call is a tool error, and a refused item's verdict is text; each
-starts with what kind of no it is, then the node's reason:
+starts with the kind of refusal, then the node's reason:
 
 - `conflict:` the claim is stale (something changed since you read), or the
   cells are taken. Nothing was written.
