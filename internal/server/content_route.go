@@ -14,24 +14,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// contentRoute resolves the namespace and local id that serve a tile's content.
-// It is the one link-resolution point, so every caller inherits the resolution
-// instead of reimplementing it. Two facts keep it a single step: resolution
-// happens only where the link row lives, so a transit-owned id forwards as-is;
-// and a link never targets another link, so there is no chain to walk. Writes
-// never resolve, because a link owns no content and the store refuses a write
-// to a link row.
-func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, error) {
-	c, local, _, err := s.contentRow(ctx, qualifiedID)
-	return c, local, err
-}
-
 // pageRoute is contentRoute for a page: a url tile a plugin presents is that
 // plugin's to serve, asked with no key, the subpath its site address, and a
 // broken one is refused with its reason, so nothing loads in its place. A far
 // row is its own node's to judge, behind the hop, and comes back nil.
 func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
-	c, local, row, err := s.contentRow(ctx, qualifiedID)
+	c, local, row, err := s.contentRoute(ctx, qualifiedID)
 	if err != nil || row == nil {
 		return c, local, nil, err
 	}
@@ -70,9 +58,15 @@ func (s *Server) servePage(ctx context.Context, req *pb.ServeContentRequest, sen
 	return c.ServeContent(ctx, bound, send)
 }
 
-// contentRow is contentRoute and the row that owns the content, nil when a
-// hop forwards it.
-func (s *Server) contentRow(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
+// contentRoute resolves the namespace and local id that serve a tile's content.
+// It is the one link-resolution point, so every caller inherits the resolution
+// instead of reimplementing it. Two facts keep it a single step: resolution
+// happens only where the link row lives, so a transit-owned id forwards as-is;
+// and a link never targets another link, so there is no chain to walk. Writes
+// never resolve, because a link owns no content and the store refuses a write
+// to a link row. The row is the one that owns the content, nil when a hop
+// forwards it.
+func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
 	if _, _, ok := rpc.SplitID(qualifiedID); !ok {
 		return nil, "", nil, status.Errorf(gcodes.InvalidArgument, "unqualified id %q", qualifiedID)
 	}

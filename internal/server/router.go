@@ -141,7 +141,7 @@ func infoDeclarationError(gridID, uuid string, err error) error {
 
 func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
 	// A leaf link's preview is its target's, resolved at the serving node.
-	c, local, err := rt.srv.contentRoute(ctx, req.TileId)
+	c, local, _, err := rt.srv.contentRoute(ctx, req.TileId)
 	if err != nil {
 		return nil, err
 	}

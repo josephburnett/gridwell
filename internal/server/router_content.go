@@ -20,7 +20,7 @@ import (
 // ReadContent streams a tile's bytes from the namespace that owns it. Chunks
 // carry no ids, so nothing needs re-qualification on the way back.
 func (rt *router) ReadContent(ctx context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
-	c, local, err := rt.srv.contentRoute(ctx, req.TileId)
+	c, local, _, err := rt.srv.contentRoute(ctx, req.TileId)
 	if err != nil {
 		return err
 	}
