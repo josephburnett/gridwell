@@ -623,10 +623,17 @@ These were decided deliberately. Do not reverse one without a new decision.
   node answers a document request under a presented tile for an address its
   plugin does not take with a redirect to the site (`server.leavesPage`), so
   a browser tab follows the same rule. A route to a plugin that does not
-  answer, its `Info` failed or timed out or the user disabled it, makes the
-  tile broken with the reason (`Tile.broken_reason`), never the plain site:
-  one tint, nothing loaded in its place, an open view closed and a descent
-  going live on nothing, until the plugin answers (2026-10-25). Nothing names
+  answer makes the tile broken with the reason (`Tile.broken_reason`), never
+  the plain site: one tint, nothing loaded in its place, an open view closed
+  and a descent going live on nothing, until the plugin answers (2026-10-25).
+  Not answering is one fact, whatever the cause: the user disabled it, its
+  `Info` refused, its process down, or a call it left unanswered, a hung
+  process's among them, whatever it last declared. The verdict reads the
+  plugin's state, which every call to the process keeps and its health
+  event tells, and asks nothing; a plugin not answering is probed once, by
+  one bounded `Info`, while something shows a tile it presents
+  (`pluginhost.Adapter.Answering`, 2026-10-26). A dark plugin still answers,
+  and serves its pages from what it holds, so its tiles stay presented. Nothing names
   a plugin kind: every behaviour rides the declaration and the rule.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never

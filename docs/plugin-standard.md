@@ -787,11 +787,14 @@ to an address the routes send to you it stays your page, and to any other
 the tile leaves for the site, another plugin's page or the default browser
 without asking you. A browser tab cannot be asked first, so the node
 answers a document request under your page for an address you do not take
-with a redirect to the site itself. While your `Info` fails or times out, or
-the user has disabled you, what you present is unknown, so a route to you
-takes every address its glob matches broken with the reason
-(`Tile.broken_reason`): the tile loads nothing until you answer, never the
-site in your place.
+with a redirect to the site itself. While you do not answer, what you present
+is unknown, whatever you declared last: your `Info` refused, a call left
+unanswered, your process down or hung, or the user has disabled you. The
+node reads that from your calls and asks nothing; while you do not answer
+it probes you with one bounded `Info` when something shows your tiles. A route to you then takes every address its glob matches broken with
+the reason (`Tile.broken_reason`): the tile loads nothing until you answer,
+never the site in your place. While your source is dark you still answer,
+so your pages stay yours to serve from what you hold.
 
 **Example.** A review plugin declares
 `presents: ["https://gitlab.com/*/-/merge_requests/*"]` and serves

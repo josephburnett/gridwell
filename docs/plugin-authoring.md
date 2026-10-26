@@ -150,10 +150,11 @@ before the page moves, so a subpath you do not present never reaches you
 as a page: on the desktop the tile leaves for the site, another plugin's
 page or the default browser, and in a browser tab the node redirects the
 document to the site. Serve your page's own assets under the subpath `_/`;
-an asset or a fetch under your page is always yours. While your `Info`
-fails, or the user has disabled you, the tiles your routes take read
-broken with the reason and load nothing until you answer: the site is never
-shown in your place.
+an asset or a fetch under your page is always yours. While you do not
+answer, your `Info` refused, a call left unanswered, your process down or
+hung, or the user has disabled you, the tiles your routes take read broken
+with the reason and load nothing until you answer: the site is never shown
+in your place.
 
 ## Links
 
