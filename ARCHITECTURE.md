@@ -52,7 +52,7 @@ pointer from being changed under another reader.
 A segment has one of three shapes, and `rpc.ShapeOf` is the one classifier
 every reader shares. Plugin and node ids are 7-char lowercase base36 with a
 leading letter (`idshape.NewShortID`); a tile is a store row id in decimal
-digits, or a KEY FORM — `~` followed by the plugin key's unpadded base64url
+digits, or a key form — `~` followed by the plugin key's unpadded base64url
 (`rpc.KeyTileID`), which names a tile by what it is rather than by a row.
 The leading byte separates all three, so a URL path and the router's peel
 both tell a namespace segment from a tile id with no lookup. Ids are never
@@ -61,9 +61,9 @@ reassigned.
 A link is such a path stored on a tile (`link_target_id` for a leaf, a
 qualified `child_grid_id` for a door). The node holding it resolves only the
 first segment, one of its own plugins or connections, and forwards the rest,
-so a link reaches anything a chain of one-way connections from the HOLDING
+so a link reaches anything a chain of one-way connections from the holding
 node reaches, at any depth, and never against an arrow. A link written
-into another node's grid is therefore spelled from that node: behind the same
+into another node's grid is therefore a path from that node: behind the same
 connection it is forwarded as sent and the node there decides; where it parts
 (`rpc.HeldAcross`), the router walks the handshakes it can see into a
 connection graph (`rpc.Reach`) and rewrites it as the holder's own route to
@@ -183,12 +183,12 @@ tiles, shells, and the event stream. Shells run in tmux on a private
 socket, so they survive restarts.
 
 **Plugins** speak `plugin.v1`. They live in their own repository,
-`github.com/josephburnett/gridwell-plugins` — the shipped fs, proc, gitlab
-and pages plugins and anyone else's alike, on the same footing. Each runs as a
+`github.com/josephburnett/gridwell-plugins`; the shipped fs, proc, gitlab
+and pages plugins are plugins like anyone else's. Each runs as a
 supervised subprocess (`internal/plugin`, the one owner of whether a plugin
 is alive): one that dies is respawned with a backoff, the down and up reach
 the notice row as that namespace's health event, and while it is down its calls
-fail honestly — nothing answers for it. One that is up but cannot serve what
+fail, and nothing answers for it. One that is up but cannot serve what
 its config declares refuses `Info` with the reason: it is listed broken with
 that sentence and none of its entries, its `Watch` loop asks again on its
 backoff, and the up that ends the refusal reaches the notice row like any
@@ -230,7 +230,7 @@ from the plugin's side.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a
 label, how to dial. The transport dials each at boot, lands on the far node's
-home, and keeps that landing and nothing else. Retirement is EXPLICIT:
+home, and keeps that landing and nothing else. Retirement is explicit:
 `retired_names:` is its one owner, a retired name never returns, and the
 stored `deleted` flag is only that list mirrored onto the rows. Dropping a
 connection's stanza retires nothing — the row and its landing stay, the
@@ -239,7 +239,7 @@ back brings them all live again.
 The landing is checked, not merely learned: every transport asks the far node
 where it lands before it is used, and an answer that differs from the stored
 one refuses the connection — the stored landing is never overwritten, the row
-carries the reason, and every read through the name fails loudly until the
+carries the reason, and every read through the name fails with it until the
 operator retires the name or restores the target.
 A connection is a row in the + menu and, when dragged, an ordinary link
 tile. `Server.resolve` peels the node id, the transport peels the connection
@@ -302,7 +302,7 @@ answered by the cache. A dark *source* (the plugin answers, its directory
 or API does not) is answered by the durable rows, so a move made during the
 outage still lands, and the adapter publishes it as that namespace's health,
 the same event the supervisor uses for the subprocess; a dark *plugin* has
-nothing to answer from and fails honestly.
+nothing to answer from and fails.
 
 ### The store
 
@@ -346,7 +346,7 @@ Every `client/*` package except `client/wasm` is pure Go with unit tests —
 `ls client/` is the list. The two exceptions are decided: a `_js.go` file
 behind a build tag where a package must touch the browser directly
 (`preview`'s image decoder), and `shellws`, which has no unit test because
-one would assert against a second spelling of the protocol.
+one would assert against a second copy of the protocol.
 `client/wasm` is the shim: canvas, DOM, and the RPC calls. `make check`
 compiles the shim but executes none of it; the gates that do see it are in
 `CLAUDE.md`'s Gates table. A decision that lives only in the shim is a defect
@@ -436,7 +436,7 @@ it cannot move the viewport.
 
 **Transitions** are per pane (`client/transition`): at most one animation per
 pane, and two panes animate without either voiding the other. A transition
-that is displaced or cleared LANDS — its destination place is installed and
+that is displaced or cleared lands — its destination place is installed and
 its landing runs — so the frame push a descent animates towards is never
 conditional on the animation finishing. `Set.Cancel` is that one way; the
 only drop without a landing is a pane that is closing.
@@ -575,7 +575,7 @@ and answers the path and the count. A dump is a reading: it clears nothing.
 `kv["req"]` is the join. The client stamps `Gridwell-Request` on the calls a
 gesture makes, and both APIs' interceptors emit a start and an end record
 carrying it and `kv.id`, the tile or grid the request names (`rpc.EntityOf`,
-one spelling for both; a stream's entry record waits for the request it
+one form for both; a stream's entry record waits for the request it
 sends), with the duration and, on a failure, the code; a request naming a
 client session carries it as `kv.session`, and a select its `add`, `remove`,
 `clear`, `recurse` and `all`. The MCP API's tool calls are the same pair,
@@ -586,7 +586,7 @@ store write (one record at `withMutation`, the transaction every mutation runs
 in, naming its rows as `kv.keys` whether it wrote, changed nothing or was
 refused), every publish, delivery and coalesce in `eventhub` (keyed by the
 namespace's own id), and the router's `router/event` as it qualifies each
-event (`key`, `local`, `ns`, one record holding both spellings); the plugin
+event (`key`, `local`, `ns`, one record holding both forms); the plugin
 supervisor's spawns and liveness transitions, each dial and connection health
 transition, the shell API's refusals, opens and closes (`shellapi/pty`, with
 `tile`, `session` and `tmux`) and its join of a shell key to the session
@@ -673,7 +673,7 @@ copy:
 | which namespace an id names | `rpc.OwnerNamespaceOf` |
 | who owns this qualified id | `Server.resolve` + `server.router` |
 | which node runs a copy | `rpc.SharedOwner` |
-| how a link is spelled on the node holding it | `rpc.Reach.Respell`, applied by `router.spellLinks` |
+| how a link is written on the node holding it | `rpc.Reach.Respell`, applied by `router.spellLinks` |
 | is this link dead | `deadlink.DeadTile` over the handshake roster and the dead verdicts heard |
 | is this answer the dead verdict | `gwerr.DeadLink` / `gwerr.IsDeadLink` |
 | does this page run the node's build, and what it does when not | `Server.otherBuild`; `gwerr.OtherBuild`; `nodebuild.Decide`, `nodebuild.Notice` |
@@ -683,7 +683,7 @@ copy:
 | this event stream is established | `namespace.Follow` |
 | what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/subscription.Tracker` |
 | what each session shows, and which grids the clients are showing | `subscription.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
-| how a plugin entry is addressed, and a link to one spelled | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
+| how a plugin entry is addressed, and a link to one written | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
 | the trace line, its API and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |
 
@@ -698,9 +698,9 @@ Remaining seams with more than one writer, ranked by risk:
 4. Text scroll of a rendered descent — the canvas wheel handler and the
    overlay's scroll listener both write `TextScrollY`.
 
-Note: the persisted layout blob (`api/panelayout`) still spells a content
+Note: the persisted layout blob (`api/panelayout`) still names a content
 frame `text_focus`. The bytes are frozen; read it as "the content tile this
-pane is inside" and do not spread the word.
+pane is inside" and do not use the word elsewhere.
 
 ## Invariants
 
@@ -720,7 +720,7 @@ pane is inside" and do not spread the word.
 | Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place`, `setHidden` and `move`; `url-focus-steal.spec.ts`, the capture harness |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
-| User state survives an unreachable source | the rows the user TOUCHED answer (an untouched entry has no row and is absent until the source speaks); fs/proc sweep rules |
+| User state survives an unreachable source | the rows the user touched answer (an untouched entry has no row and is absent until the source answers); fs/proc sweep rules |
 | A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored links |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 

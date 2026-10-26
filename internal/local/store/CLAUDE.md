@@ -7,15 +7,15 @@ ids (`ns`, `key` → id), layout, framing, the user's bytes, connections,
 tombstones. What a connection last answered is cache and lives in `cache.db`
 (`internal/sourcecache`), never here.
 
-A plugin row is minted LAZILY: listing a source mints nothing (`Overlay` is
+A plugin row is minted lazily: listing a source mints nothing (`Overlay` is
 a read-only join, `Mint` the one INSERT), so a row exists only for an entry
 the user has touched — moved, resized, framed, or pointed a link at.
 A listing writes only to rows that exist: `Refresh` keeps a touched row's
 outage snapshot at what the source last said, and `Sweep` tombstones a row
 whose key an authoritative listing no longer names.
-The consequence for an outage: the rows the user touched answer an
-unreachable source, unchanged; an untouched entry has no row and is simply
-absent until the source speaks again. An entry with a `link_target` is a
+In an outage the rows the user touched answer an unreachable source,
+unchanged; an untouched entry has no row and is absent until the source
+answers again. An entry with a `link_target` is a
 link row (`link_target_id` holds the target's entry address), and a content
 row whose entry becomes a link is converted in place by `Refresh`, keeping
 its id and placement.
@@ -30,7 +30,7 @@ intact.
 - Never rename, retype, or repurpose a column or table.
 - Evolution is additive by default: new columns with a default, new tables,
   new indexes.
-- Dead storage may be retired. The bar is evidence: grep every read and show
+- Dead storage may be retired. The evidence is a grep of every read showing
   that no reader decides anything on it (a pass-through is not a reader).
   The step is a rebuild migration that preserves every surviving row and
   the `sqlite_sequence` seeds. A row the new shape cannot hold is converted,
@@ -64,7 +64,7 @@ intact.
 ## Adding a column
 
 1. `columns.go`: append one entry — `name`, `ddl`, `comment`, `since: N`,
-   and a `bind` if it is on the wire. Do not spell the name anywhere else.
+   and a `bind` if it is on the wire. Do not write the name anywhere else.
 2. `migrations.go`: bump `schemaVersion`; append
    `{to: N, run: addColumn("ALTER TABLE … ADD COLUMN …")}`.
 3. `migration_harness_test.go`: append one `migrationFixture{version: N,
