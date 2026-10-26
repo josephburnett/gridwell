@@ -157,3 +157,19 @@ func TestReachesCoversTheSourceItselfAndEveryNodeBehindIt(t *testing.T) {
 		t.Errorf("ServedBy(%q, %q) = true; a namespace is not something it serves", conn, conn)
 	}
 }
+
+// A presenter's flap is news about every grid holding a tile it presents,
+// whoever serves the grid: the tile's verdict, broken or presented, is the
+// presenter's health. Through a connection the presenter is named one hop
+// deeper, as its health is.
+func TestAPresentersFlapResyncsTheGridsHoldingItsTiles(t *testing.T) {
+	c := seedSources(t)
+	c.PutGrid(&gridwellv1.Grid{Id: node + "/9"}, []*gridwellv1.Tile{{Id: node + "/10", GridId: node + "/9", PresentedBy: fsPl}})
+	c.PutGrid(&gridwellv1.Grid{Id: farHome + "/2"}, []*gridwellv1.Tile{{Id: farHome + "/3", GridId: farHome + "/2", PresentedBy: farPl}})
+	if got, want := c.ResyncSet(fsPl), []string{fsPl + "/1", fsPl + "/12", node + "/9"}; !slices.Equal(got, want) {
+		t.Errorf("ResyncSet(%q) = %v, want %v", fsPl, got, want)
+	}
+	if got, want := c.ResyncSet(farPl), []string{farHome + "/2", farPl + "/4"}; !slices.Equal(got, want) {
+		t.Errorf("ResyncSet(%q) = %v, want %v", farPl, got, want)
+	}
+}

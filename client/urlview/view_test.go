@@ -56,6 +56,20 @@ func TestViewFollow(t *testing.T) {
 		{"a served page follows nothing", View{Site: "http://example.test/b"}, presented, ""},
 		{"a served row follows nothing", View{Page: page, Moving: page}, &pb.Tile{Kind: rpc.KindURL, ServesPage: true}, ""},
 	}
+	// A row that reads broken where the view is, or where it is moving, loads
+	// nothing: the view closes, and the site never stands in.
+	broken := &pb.Tile{Kind: rpc.KindURL, UrlString: "http://example.test/b", PresentedBy: "pre0001", BrokenReason: "plugin not responding"}
+	for _, v := range []View{
+		{Page: page, Site: "http://example.test/b", Shows: "pre0001"},
+		{Page: page, Site: "http://plain.test/a", Moving: "http://example.test/b"},
+	} {
+		if after, load, ok := v.Follow(broken); !ok || load != "" || after != (View{Page: page, Site: broken.UrlString, Shows: "pre0001"}) {
+			t.Errorf("%+v following a broken row: %+v loads %q %v, want closed", v, after, load, ok)
+		}
+	}
+	if _, _, ok := (View{Page: page, Site: "http://plain.test/a", Moving: "http://plain.test/x"}).Follow(broken); ok {
+		t.Error("a broken row older than the move closed the view")
+	}
 	for _, c := range cases {
 		after, load, ok := c.v.Follow(c.row)
 		if ok != (c.load != "") || load != c.load {
@@ -65,5 +79,20 @@ func TestViewFollow(t *testing.T) {
 		if ok && after != (View{Page: page, Site: c.row.UrlString, Shows: c.row.PresentedBy}) {
 			t.Errorf("%s: after the follow the view is %+v", c.name, after)
 		}
+	}
+}
+
+// A url tile that reads broken opens nothing and says why, named as the tile
+// is; any other opens.
+func TestOpensRefusesABrokenTile(t *testing.T) {
+	if _, ok := Opens(&pb.Tile{Kind: rpc.KindURL, UrlString: "http://example.test/a", PresentedBy: "pre0001"}); !ok {
+		t.Error("a presented tile does not open")
+	}
+	notice, ok := Opens(&pb.Tile{Kind: rpc.KindURL, AltText: "Hello", UrlString: "http://example.test/a", PresentedBy: "pre0001", BrokenReason: "site is disabled until the node restarts"})
+	if ok || notice != "Hello: site is disabled until the node restarts" {
+		t.Errorf("a broken tile: Opens = %q %v, want refused with its name and the reason", notice, ok)
+	}
+	if notice, _ := Opens(&pb.Tile{Kind: rpc.KindURL, UrlString: "http://example.test/a", BrokenReason: "down"}); notice != "http://example.test/a: down" {
+		t.Errorf("an unnamed broken tile says %q, want its address", notice)
 	}
 }

@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test, expect, homePassword, loginToken } from './fixtures';
-import { tileAt } from './oracle';
+import { disableSource, tileAt } from './oracle';
 import { dumpViaAPI } from './trace';
 import { PAGES, presentedYaml } from './presented';
 
@@ -216,4 +216,73 @@ test('a link inside a live page goes where the routes send it, and the tile foll
   } finally {
     site.close();
   }
+});
+
+// A url tile whose address a route sends to a plugin that does not answer
+// reads broken (CLAUDE.md, 2026-10-25): disabled from its notice, the pages
+// plugin is asked nothing, the open view closes rather than load the site, and
+// a descent goes live on nothing, the reason in a notice. Disabled lasts until
+// the node restarts; the way back, once the plugin answers, is
+// presented_seam_test.go's.
+test('a presented tile whose plugin is disabled reads broken and loads nothing, never the site', async ({
+  electronApp,
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const top = f.id;
+  // A view closing under the read is no view.
+  const urlIn = () =>
+    electronApp.evaluate((_e, id: string) => {
+      try {
+        return ((globalThis as any).__gwRegistry.webContentsFor(id)?.getURL() as string) ?? '';
+      } catch {
+        return '';
+      }
+    }, top);
+  const row = async () => tileAt(await gw.getGrid(f.gridID), 'url', cx, cy);
+  const anyLoaded = () =>
+    electronApp.evaluate(({ webContents }) =>
+      webContents.getAllWebContents().some((w) => w.getURL().includes('example.test')),
+    );
+
+  await gw.openMenu();
+  await gw.dragCreate('url', cx, cy);
+  await gw.descendCell(cx, cy);
+  await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+  await window.fill('#gw-url-input', 'http://example.test/hello');
+  await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
+  await expect.poll(urlIn, { timeout: 15_000 }).toMatch(/\/content\/[0-9a-f]{64}\/.+\/example\.test\/hello$/);
+  const presenter = String((await row())?.presentedBy ?? '');
+  expect(presenter, 'presented before the switch').toContain(PAGES);
+  await gw.waitIdle();
+
+  // (1) The switch: the row reads broken with the registry's sentence, the
+  // open view closes, and the notice says why.
+  await disableSource(gw.origin, presenter);
+  await expect
+    .poll(async () => String((await row())?.brokenReason ?? ''), { message: 'the row reads broken', timeout: 15_000 })
+    .toContain('disabled');
+  const broken = (await row())!;
+  expect(broken.presentedBy, 'presented_by still names the plugin').toBe(presenter);
+  expect(broken.urlString, 'the address is untouched').toBe('http://example.test/hello');
+  await expect.poll(urlIn, { message: 'the open view closed', timeout: 15_000 }).toBe('');
+  const notice = async () =>
+    ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).find(
+      (n: any) => n.source === 'door:' + presenter,
+    );
+  await expect.poll(async () => (await notice())?.message ?? '', { timeout: 10_000 }).toContain(String(broken.brokenReason));
+
+  // (2) A descent goes live on nothing.
+  await gw.middleClickPane();
+  await gw.waitIdle();
+  await gw.descendCell(cx, cy);
+  await gw.waitIdle();
+  await window.waitForTimeout(1_000);
+  expect(await urlIn(), 'a descent placed no view').toBe('');
+  expect(await anyLoaded(), 'nothing in the app loaded the site or the page').toBe(false);
+  expect((await row())?.urlString, 'and the tile still names the site').toBe('http://example.test/hello');
 });

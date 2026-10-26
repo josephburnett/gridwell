@@ -418,6 +418,9 @@ type paneLocal struct {
 	pane.SessionState
 	urlView   *urlView
 	shellConn *shellStreamConn
+	// awaits is the url row whose go-live a broken verdict refused, placed
+	// when a read of it opens (followURLRow).
+	awaits string
 }
 
 func (a *App) shellConnFor(paneID string) *shellStreamConn {
@@ -761,6 +764,11 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 	}
 	if r.Store {
 		a.c.PutGrid(resp.Grid, resp.Tiles)
+		// A resync is how a presenter's health reaches its tiles
+		// (cache.ResyncSet), so a read is followed as an event is.
+		for _, t := range resp.Tiles {
+			a.followURLRow(t)
+		}
 	}
 	return err
 }

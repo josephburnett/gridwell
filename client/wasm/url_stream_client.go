@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/contentzoom"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
@@ -104,8 +105,12 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 }
 
 // placeURLView puts the content-owning row t live in pane paneID; engage
-// decides whether to keep, move or place the view.
+// decides whether to keep, move or place the view. A broken row places
+// nothing and says why (urlview.Opens), and the pane waits for it to answer.
 func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
+	if a.refuseBroken(paneID, t) {
+		return
+	}
 	p := a.tree.FindPane(paneID)
 	if p == nil || !a.engage(a.urlSurface(), p, t.Id, t.Id) {
 		return
@@ -198,9 +203,19 @@ func (a *App) routeURLView(paneID, site string) {
 }
 
 // followURLRow loads, in every live view of row t, what urlview.View.Follow
-// says the row asks of it.
+// says the row asks of it, closing one it says loads nothing; and places t in
+// a pane waiting for it once it opens.
 func (a *App) followURLRow(t *gridwellv1.Tile) {
 	for paneID, pl := range a.locals {
+		if pl.awaits == t.Id {
+			if _, opens := urlview.Opens(t); opens {
+				pl.awaits = ""
+				if p := a.tree.FindPane(paneID); p != nil && a.descendedContentID(p) == t.Id {
+					a.placeURLView(paneID, t)
+				}
+			}
+			continue
+		}
 		v := pl.urlView
 		if v == nil || v.tileID != t.Id {
 			continue
@@ -212,8 +227,42 @@ func (a *App) followURLRow(t *gridwellv1.Tile) {
 		v.view = view
 		a.emit(traceevent.URLFollow(paneID, v.tileID, view.Shows))
 		urlConsole("follow pane=%s tile=%s url=%s", paneID, v.tileID, addr)
+		if addr == "" {
+			// Closed unfrozen: the plugin's absence is no look of the
+			// tile's to keep.
+			a.closeURLStream(paneID, false)
+			a.refuseBroken(paneID, t)
+			continue
+		}
 		a.bridgeReload(paneID, addr, view.Site)
 	}
+}
+
+// refuseBroken reports why row t opens nothing in pane paneID and has the
+// pane wait for it (paneLocal.awaits); false when it opens.
+func (a *App) refuseBroken(paneID string, t *gridwellv1.Tile) bool {
+	notice, opens := urlview.Opens(t)
+	if opens {
+		if pl, ok := a.localIf(paneID); ok && pl.awaits == t.Id {
+			pl.awaits = ""
+		}
+		return false
+	}
+	a.reportErr(errsurface.Error, "door:"+t.PresentedBy, notice)
+	a.local(paneID).awaits = t.Id
+	return true
+}
+
+// descendedContentID is the row whose content pane p is descended into: a
+// link's target, else the descended row's own; "" on a grid.
+func (a *App) descendedContentID(p *pane.Pane) string {
+	if p.ContentID() == "" {
+		return ""
+	}
+	if t, ok := a.descendedTile(p); ok {
+		return rpc.ContentID(t)
+	}
+	return p.ContentID()
 }
 
 // moveURLView hands the view fromID holds to pane to, page and all: no close,

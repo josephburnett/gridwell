@@ -1,6 +1,7 @@
 package urlview
 
 import (
+	"cmp"
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -41,14 +42,31 @@ func (v View) Land(stored, location string, presenter func(site string) string) 
 
 // Follow is what v loads when its row reads t: the row's own (Address) when
 // the row names the address v is moving to, or the address v is at with
-// another taker than the one v shows, and v after; false to stay.
+// another taker than the one v shows, and v after; false to stay. A row
+// there that reads broken loads nothing, "": the view closes (Opens).
 func (v View) Follow(t *pb.Tile) (View, string, bool) {
 	if !rpc.WebContent(t) || rpc.PageContent(t) || t.UrlString == "" || v.Page == "" {
 		return v, "", false
 	}
-	if v.Moving != "" && t.UrlString != v.Moving ||
-		v.Moving == "" && (t.UrlString != v.Site || t.PresentedBy == v.Shows) {
+	if v.Moving != "" && t.UrlString != v.Moving || v.Moving == "" && t.UrlString != v.Site {
 		return v, "", false
 	}
-	return View{Page: v.Page, Site: t.UrlString, Shows: t.PresentedBy}, Address(t, v.Page), true
+	after := View{Page: v.Page, Site: t.UrlString, Shows: t.PresentedBy}
+	if _, opens := Opens(t); !opens {
+		return after, "", true
+	}
+	if v.Moving == "" && t.PresentedBy == v.Shows {
+		return v, "", false
+	}
+	return after, Address(t, v.Page), true
+}
+
+// Opens says whether going live on url tile t loads a page, and when not the
+// notice that says why: a tile a route sends to a plugin that does not answer
+// reads broken and loads nothing until it answers, the site least of all.
+func Opens(t *pb.Tile) (notice string, ok bool) {
+	if t.BrokenReason == "" {
+		return "", true
+	}
+	return cmp.Or(t.AltText, t.UrlString) + ": " + t.BrokenReason, false
 }

@@ -480,19 +480,30 @@ func (c *Cache) Current() map[string]bool {
 	return out
 }
 
-// ResyncSet is every cached grid served through source, sorted: one owner for
-// both directions of a health transition.
+// ResyncSet is every cached grid served through source, or holding a url tile
+// source presents, sorted: one owner for both directions of a health
+// transition. A presented tile's verdict is its presenter's health
+// (Tile.broken_reason), whoever serves its row.
 func (c *Cache) ResyncSet(source string) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make([]string, 0, len(c.grids))
-	for id := range c.grids {
-		if ServedBy(id, source) {
+	for id, g := range c.grids {
+		if ServedBy(id, source) || presentsIn(g, source) {
 			out = append(out, id)
 		}
 	}
 	sort.Strings(out)
 	return out
+}
+
+func presentsIn(g *Grid, source string) bool {
+	for _, t := range g.Tiles {
+		if t.PresentedBy != "" && Reaches(t.PresentedBy, source) {
+			return true
+		}
+	}
+	return false
 }
 
 // KnownGridIDs returns the set of grid ids the cache currently holds.
