@@ -68,7 +68,7 @@ func TestRoutesFixture(t *testing.T) {
 	}
 	for _, c := range f.Decide.Cases {
 		want := Verdict{Plugin: c.Plugin, Outside: c.Outside, Broken: c.Broken}
-		if got := Decide(c.Address, routes, declared, MatchAddress); got != want {
+		if got := Decide(c.Address, routes, declared); got != want {
 			t.Errorf("%s: Decide(%q) = %+v, want %+v", c.Why, c.Address, got, want)
 		}
 	}

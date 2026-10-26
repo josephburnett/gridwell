@@ -149,7 +149,7 @@ func TestAHomeURLTileIsPresentedWhereARouteAndADeclarationTakeIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	routes, presents := rpc.Routing(h)
-	if v := rpc.Decide("http://example.test/a", routes, presents, rpc.MatchAddress); len(routes) != 2 || v.Plugin != presenterID {
+	if v := rpc.Decide("http://example.test/a", routes, presents); len(routes) != 2 || v.Plugin != presenterID {
 		t.Errorf("the handshake's routes %v and presents %v decide %+v, want the presenter", routes, presents, v)
 	}
 }
@@ -459,7 +459,7 @@ func TestAURLTileWhosePluginIsDisabledIsBrokenAndThePluginIsNotAsked(t *testing.
 		t.Fatal(err)
 	}
 	routes, declared := rpc.Routing(h)
-	if v := rpc.Decide("http://example.test/a", routes, declared, rpc.MatchAddress); v.Plugin != presenterID || v.Broken != reason {
+	if v := rpc.Decide("http://example.test/a", routes, declared); v.Plugin != presenterID || v.Broken != reason {
 		t.Errorf("the handshake decides %+v, want the node's broken verdict", v)
 	}
 }

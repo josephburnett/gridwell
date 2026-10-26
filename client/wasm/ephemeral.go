@@ -92,7 +92,7 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 // sentOutside opens url in the default browser when an outside route takes
 // it, and says whether it did.
 func (a *App) sentOutside(url string) bool {
-	if !rpc.Decide(url, a.routes.rules, a.routes.declared, rpc.MatchAddress).Outside {
+	if !rpc.Decide(url, a.routes.rules, a.routes.declared).Outside {
 		return false
 	}
 	a.openOutside(url)

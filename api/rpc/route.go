@@ -45,18 +45,15 @@ func DeclaredBy(p *pb.PluginInfo) Declared {
 	return Declared{Presents: p.GetPresents(), Unknown: cmp.Or(p.GetUnanswered(), p.GetInfoError())}
 }
 
-// Matcher reports whether a glob matches a whole address.
-type Matcher func(pattern, address string) bool
-
-// Decide is the first route whose glob matches address and, for a plugin's
-// route, which that plugin presents (one of its patterns in presents, by
-// plugin id, matches too). A plugin's route over an address it does not
-// present falls through to the next; one to a plugin whose declaration is
-// unknown takes the address broken, since what it would present is unknown
-// and the site is not its stand-in.
-func Decide(address string, routes []*pb.Route, declared map[string]Declared, match Matcher) Verdict {
+// Decide is the first route whose glob matches address (MatchAddress) and,
+// for a plugin's route, which that plugin presents (one of its patterns in
+// presents, by plugin id, matches too). A plugin's route over an address it
+// does not present falls through to the next; one to a plugin whose
+// declaration is unknown takes the address broken, since what it would
+// present is unknown and the site is not its stand-in.
+func Decide(address string, routes []*pb.Route, declared map[string]Declared) Verdict {
 	for _, r := range routes {
-		if !match(r.Match, address) {
+		if !MatchAddress(r.Match, address) {
 			continue
 		}
 		if r.Outside {
@@ -67,7 +64,7 @@ func Decide(address string, routes []*pb.Route, declared map[string]Declared, ma
 			return Verdict{Plugin: r.Plugin, Broken: d.Unknown}
 		}
 		for _, p := range d.Presents {
-			if match(p, address) {
+			if MatchAddress(p, address) {
 				return Verdict{Plugin: r.Plugin}
 			}
 		}

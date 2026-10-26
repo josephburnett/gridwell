@@ -28,7 +28,7 @@ func (s *Server) stampPresented(ctx context.Context, tiles ...*pb.Tile) {
 		if declared == nil {
 			declared = s.routedDeclared(ctx)
 		}
-		v := rpc.Decide(t.UrlString, s.cfg.Routes, declared, rpc.MatchAddress)
+		v := rpc.Decide(t.UrlString, s.cfg.Routes, declared)
 		t.PresentedBy, t.BrokenReason = v.Plugin, v.Broken
 	}
 }
@@ -86,7 +86,7 @@ func (s *Server) leavesPage(ctx context.Context, row *pb.Tile, req *pb.ServeCont
 	if !ok {
 		return "", rpc.Verdict{}, false
 	}
-	v := rpc.Decide(site, s.cfg.Routes, s.routedDeclared(ctx), rpc.MatchAddress)
+	v := rpc.Decide(site, s.cfg.Routes, s.routedDeclared(ctx))
 	return site, v, v.Plugin != row.PresentedBy || v.Broken != ""
 }
 

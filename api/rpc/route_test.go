@@ -7,15 +7,6 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// prefixGlob stands in for the presents matcher: a trailing * matches any
-// rest, anything else matches only itself.
-func prefixGlob(pattern, address string) bool {
-	if p, ok := strings.CutSuffix(pattern, "*"); ok {
-		return strings.HasPrefix(address, p)
-	}
-	return pattern == address
-}
-
 func TestDecideTakesTheFirstRouteThatTakesTheAddress(t *testing.T) {
 	declared := map[string]Declared{
 		"labcode": {Presents: []string{"https://gitlab.com/x/-/merge_requests/*"}},
@@ -41,11 +32,11 @@ func TestDecideTakesTheFirstRouteThatTakesTheAddress(t *testing.T) {
 		{"the glob is over the whole address", "ftp://gitlab.com/x", Verdict{}},
 	}
 	for _, c := range cases {
-		if got := Decide(c.address, routes, declared, prefixGlob); got != c.want {
+		if got := Decide(c.address, routes, declared); got != c.want {
 			t.Errorf("%s: Decide(%q) = %+v, want %+v", c.name, c.address, got, c.want)
 		}
 	}
-	if got := Decide("https://gitlab.com/x", nil, declared, prefixGlob); got != (Verdict{}) {
+	if got := Decide("https://gitlab.com/x", nil, declared); got != (Verdict{}) {
 		t.Errorf("no routes: Decide = %+v, want a plain url tile", got)
 	}
 }
@@ -76,7 +67,7 @@ func TestDecideReadsAnUnknownDeclarationAsBroken(t *testing.T) {
 		{"a route its glob does not match is never asked", "https://elsewhere.test/a", Verdict{Outside: true}},
 	}
 	for _, c := range cases {
-		if got := Decide(c.address, routes, declared, prefixGlob); got != c.want {
+		if got := Decide(c.address, routes, declared); got != c.want {
 			t.Errorf("%s: Decide(%q) = %+v, want %+v", c.name, c.address, got, c.want)
 		}
 	}
@@ -138,10 +129,10 @@ func TestRoutingReadsTheHandshake(t *testing.T) {
 	if len(declared) != 2 || len(declared["lab0001"].Presents) != 1 || declared["off0001"].Unknown == "" {
 		t.Fatalf("declared = %v, want lab0001's presents and off0001 unknown", declared)
 	}
-	if v := Decide("https://gitlab.com/g/p/-/merge_requests/7", gotRoutes, declared, MatchAddress); v.Plugin != "lab0001" {
+	if v := Decide("https://gitlab.com/g/p/-/merge_requests/7", gotRoutes, declared); v.Plugin != "lab0001" {
 		t.Errorf("a merge request: %+v, want lab0001 before the outside rule", v)
 	}
-	if v := Decide("https://gitlab.com/g/p/-/issues/7", gotRoutes, declared, MatchAddress); !v.Outside {
+	if v := Decide("https://gitlab.com/g/p/-/issues/7", gotRoutes, declared); !v.Outside {
 		t.Errorf("an issue: %+v, want outside", v)
 	}
 }
