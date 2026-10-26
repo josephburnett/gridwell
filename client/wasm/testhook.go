@@ -566,15 +566,7 @@ func (a *App) thPreviewSigs(js.Value, []js.Value) any {
 	if p == nil {
 		return map[string]any{}
 	}
-	g, ok := a.c.Grid(a.gridIDForPane(p))
-	if !ok {
-		return map[string]any{}
-	}
-	out := map[string]any{}
-	for id, t := range g.Tiles {
-		out[id] = tileSig(t) + a.childSig(t.ChildGridId)
-	}
-	return out
+	return a.gridSigs(a.gridIDForPane(p))
 }
 
 // thGridSigs is thPreviewSigs for an explicit grid id, with no gesture.
@@ -585,13 +577,15 @@ func (a *App) thGridSigs(_ js.Value, args []js.Value) any {
 	if len(args) != 1 {
 		return map[string]any{}
 	}
-	g, ok := a.c.Grid(args[0].String())
-	if !ok {
-		return map[string]any{}
-	}
+	return a.gridSigs(args[0].String())
+}
+
+func (a *App) gridSigs(gridID string) map[string]any {
 	out := map[string]any{}
-	for id, t := range g.Tiles {
-		out[id] = tileSig(t) + a.childSig(t.ChildGridId)
+	if g, ok := a.c.Grid(gridID); ok {
+		for id, t := range g.Tiles {
+			out[id] = tileSig(t) + a.childSig(t.ChildGridId)
+		}
 	}
 	return out
 }
