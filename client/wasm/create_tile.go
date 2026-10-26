@@ -26,11 +26,17 @@ func (a *App) createTile(label, gid string, req *gridwellv1.CreateTileRequest,
 	}, onSuccess)
 }
 
-// createDoorAtCell creates an unnamed door; naming happens from inside,
-// through the bar title.
-func (a *App) createDoorAtCell(gid string, cellX, cellY int64) {
-	a.createTile("CreateDoor", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
+// createAt is the create of every primitive but markdown: an empty tile of
+// kind at a cell, none of them descending: a door is unnamed and named from inside,
+// through the bar title; a url has no address, which its first descent
+// prompts for; a shell's first descent creates its private tmux, and
+// re-descending reattaches to it; a workspace has no layout blob, so it is
+// never-arranged and its first descent installs the default single pane.
+func createAt(label, kind string) func(a *App, gid string, cellX, cellY int64) {
+	return func(a *App, gid string, cellX, cellY int64) {
+		a.createTile(label, gid, &gridwellv1.CreateTileRequest{GridId: gid,
+			Tile: &gridwellv1.Tile{Kind: kind, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
+	}
 }
 
 func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {
@@ -39,13 +45,6 @@ func (a *App) createTextAtCell(gid string, data []byte, cellX, cellY int64) {
 	a.postTileMutate("CreateText", gid, func(ctx context.Context) (*gridwellv1.Tile, error) {
 		return a.cl.CreateWithContent(ctx, req, data)
 	}, nil)
-}
-
-// createURLAtCell lands an address-less url tile. The first descent prompts
-// for the address and writes it as the tile's content.
-func (a *App) createURLAtCell(gid string, cellX, cellY int64) {
-	a.createTile("CreateURL", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }
 
 // openConfigureURL prompts for a bare url tile's address on its first
@@ -90,13 +89,4 @@ func (a *App) openConfigureURL(p *pane.Pane, t *gridwellv1.Tile) {
 	}, func() {
 		a.draw()
 	})
-}
-
-// createShellAtCell lands a shell tile. The first descent creates its private
-// tmux, and re-descending reattaches to the same one.
-func (a *App) createShellAtCell(gid string, cellX, cellY int64) {
-	// No auto-descent, like every other primitive. DecideAutoLive's
-	// fresh-shell arm creates the tmux on the first descent.
-	a.createTile("CreateShell", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindShell, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }

@@ -183,7 +183,7 @@ func init() {
 			kind: tplDoor, name: "door",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindDoor, W: 1, H: 1},
 			glyph:  func(a *App, x, y, w, h float64) { drawDoorGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder) },
-			create: func(a *App, gid string, cellX, cellY int64) { a.createDoorAtCell(gid, cellX, cellY) },
+			create: createAt("CreateDoor", rpc.KindDoor),
 		},
 		{
 			kind: tplMarkdown, name: "markdown",
@@ -195,21 +195,21 @@ func init() {
 			kind: tplURL, name: "url",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindURL, W: 1, H: 1},
 			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, a.pal.URLLine) },
-			create: func(a *App, gid string, cellX, cellY int64) { a.createURLAtCell(gid, cellX, cellY) },
+			create: createAt("CreateURL", rpc.KindURL),
 			click:  func(a *App, p *pane.Pane) { a.visitURLFromMenu(p) },
 		},
 		{
 			kind: tplShell, name: "shell",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
 			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder) },
-			create: func(a *App, gid string, cellX, cellY int64) { a.createShellAtCell(gid, cellX, cellY) },
+			create: createAt("CreateShell", rpc.KindShell),
 			click:  func(a *App, p *pane.Pane) { a.visitShellFromMenu(p) },
 		},
 		{
 			kind: tplWorkspace, name: "workspace",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindWorkspace, W: 1, H: 1, AltText: "workspace"},
 			glyph:  func(a *App, x, y, w, h float64) { drawWorkspaceGlyph(a.cctx, x, y, w, h, a.pal.WorkspaceBorder) },
-			create: func(a *App, gid string, cellX, cellY int64) { a.createWorkspaceAtCell(gid, cellX, cellY) },
+			create: createAt("CreateWorkspace", rpc.KindWorkspace),
 		},
 	}
 	primitiveKinds = make([]templateKind, len(primitives))

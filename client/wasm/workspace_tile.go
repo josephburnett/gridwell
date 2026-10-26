@@ -9,7 +9,6 @@ package main
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
@@ -91,11 +90,4 @@ func (a *App) drawPaneLeafPreview(leaf panepreview.Leaf) {
 			a.drawChildPreview(g, v.Cx(), v.Cy(), cx, cy, cell, r.X, r.Y, r.W, r.H, nil)
 		}
 	})
-}
-
-// createWorkspaceAtCell lands an unnamed workspace tile with no layout blob, so it is
-// never-arranged and the first descent installs the default single pane.
-func (a *App) createWorkspaceAtCell(gid string, cellX, cellY int64) {
-	a.createTile("CreateWorkspace", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindWorkspace, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
 }
