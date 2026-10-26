@@ -242,17 +242,20 @@ func (r Region) IsSwap() bool { return r == RegionSwap }
 // Side is the edge a resize or split region names, SideTop for anything else,
 // so callers test IsResize or IsSplit first.
 func (r Region) Side() Side {
-	switch r {
-	case RegionResizeTop, RegionSplitTop:
-		return SideTop
-	case RegionResizeBottom, RegionSplitBottom:
-		return SideBottom
-	case RegionResizeLeft, RegionSplitLeft:
-		return SideLeft
-	case RegionResizeRight, RegionSplitRight:
-		return SideRight
+	for s, rs := range sideRegions {
+		if r == rs.resize || r == rs.split {
+			return Side(s)
+		}
 	}
 	return SideTop
+}
+
+// sideRegions is each side's resize and split region, by Side.
+var sideRegions = [...]struct{ resize, split Region }{
+	SideTop:    {RegionResizeTop, RegionSplitTop},
+	SideBottom: {RegionResizeBottom, RegionSplitBottom},
+	SideLeft:   {RegionResizeLeft, RegionSplitLeft},
+	SideRight:  {RegionResizeRight, RegionSplitRight},
 }
 
 // ClassifyRegion is the region under (sx, sy) in pane rect r, resize first,
@@ -280,33 +283,14 @@ func ClassifyRegion(r Rect, bandPx, sx, sy float64) Region {
 		side = SideRight
 	}
 	if minD < bandPx {
-		switch side {
-		case SideTop:
-			return RegionResizeTop
-		case SideBottom:
-			return RegionResizeBottom
-		case SideLeft:
-			return RegionResizeLeft
-		case SideRight:
-			return RegionResizeRight
-		}
+		return sideRegions[side].resize
 	}
 	// The inner third of the whole pane, not of the post-band area.
 	if sx >= r.X+r.W/3 && sx < r.X+2*r.W/3 &&
 		sy >= r.Y+r.H/3 && sy < r.Y+2*r.H/3 {
 		return RegionSwap
 	}
-	switch side {
-	case SideTop:
-		return RegionSplitTop
-	case SideBottom:
-		return RegionSplitBottom
-	case SideLeft:
-		return RegionSplitLeft
-	case SideRight:
-		return RegionSplitRight
-	}
-	return RegionNone
+	return sideRegions[side].split
 }
 
 // MinPanePx is the minimum size of a pane side, across every way a pane can
