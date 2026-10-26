@@ -492,27 +492,22 @@ func Drop(v dragdrop.DropAction, at DropAt) Event {
 	return e
 }
 
-// dropName is the table over DecideDrop's verdicts.
+// dropNames is the table over DecideDrop's verdicts.
+var dropNames = map[dragdrop.DropAction]string{
+	dragdrop.DropNavigate:       "navigate",
+	dragdrop.DropNavigateSplit:  "navigate in a split",
+	dragdrop.DropCreateTemplate: "create",
+	dragdrop.DropPanEnd:         "pan end",
+	dragdrop.DropDelete:         "delete",
+	dragdrop.DropRejected:       "rejected",
+	dragdrop.DropMove:           "move",
+	dragdrop.DropCopy:           "copy",
+	dragdrop.DropLink:           "link",
+}
+
 func dropName(v dragdrop.DropAction) string {
-	switch v {
-	case dragdrop.DropNavigate:
-		return "navigate"
-	case dragdrop.DropNavigateSplit:
-		return "navigate in a split"
-	case dragdrop.DropCreateTemplate:
-		return "create"
-	case dragdrop.DropPanEnd:
-		return "pan end"
-	case dragdrop.DropDelete:
-		return "delete"
-	case dragdrop.DropRejected:
-		return "rejected"
-	case dragdrop.DropMove:
-		return "move"
-	case dragdrop.DropCopy:
-		return "copy"
-	case dragdrop.DropLink:
-		return "link"
+	if name, ok := dropNames[v]; ok {
+		return name
 	}
 	return "unnamed verdict " + strconv.Itoa(int(v))
 }
