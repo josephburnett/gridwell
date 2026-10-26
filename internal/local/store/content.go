@@ -61,29 +61,21 @@ func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version i
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "WriteContent/url", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := s.claimContentVersion(ctx, tx, tileID, version)
-		if err != nil {
-			return err
-		}
+	return s.claimContentVersion(ctx, "WriteContent/url", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
 		if rpc.KindOf(n.Kind).Content != rpc.ContentAddress {
-			return fmt.Errorf("%w: not a url tile", ErrInvalidArgument)
+			return nil, fmt.Errorf("%w: not a url tile", ErrInvalidArgument)
 		}
 		if n.UrlString == urlString {
 			// A no-op write never mutates.
-			out = n
-			return nil
+			return n, nil
 		}
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET url_string = ?, updated_at = ? WHERE id = ?`,
 			urlString, s.now().Unix(), tileID); err != nil {
-			return err
+			return nil, err
 		}
-		out, err = s.finishContentEdit(ctx, tx, tileID, events)
-		return err
+		return s.finishContentEdit(ctx, tx, tileID, events)
 	})
-	return out, err
 }
 
 // ReadContent is the single content-bytes read: the bytes paired with the row
@@ -126,20 +118,13 @@ func (s *Store) RenameTile(ctx context.Context, tileID string, version int64, al
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "RenameTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := s.claimContentVersion(ctx, tx, id, version)
-		if err != nil {
-			return err
-		}
+	return s.claimContentVersion(ctx, "RenameTile", id, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
 		if !rpc.KindOf(n.Kind).TypedName {
-			return fmt.Errorf("%w: a text tile's name derives from its first line; rename the content instead", ErrInvalidArgument)
+			return nil, fmt.Errorf("%w: a text tile's name derives from its first line; rename the content instead", ErrInvalidArgument)
 		}
 		if err := s.setAltTx(ctx, tx, id, alt, true, events); err != nil {
-			return err
+			return nil, err
 		}
-		out, err = s.loadTile(ctx, tx, id)
-		return err
+		return s.loadTile(ctx, tx, id)
 	})
-	return out, err
 }

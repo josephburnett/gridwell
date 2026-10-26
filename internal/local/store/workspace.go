@@ -61,30 +61,19 @@ func (s *Store) SetWorkspaceLayout(ctx context.Context, tileID, version int64, d
 	if int64(len(data)) > MaxBlobBytes {
 		return nil, fmt.Errorf("%w: layout too large", ErrInvalidArgument)
 	}
-	var out *gridwellv1.Tile
-	err := s.withMutation(ctx, "SetWorkspaceLayout", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := s.claimContentVersion(ctx, tx, tileID, version)
-		if err != nil {
-			return err
-		}
+	return s.claimContentVersion(ctx, "SetWorkspaceLayout", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
 		if rpc.KindOf(n.Kind).Content != rpc.ContentLayout {
-			return ErrNotWorkspace
+			return nil, ErrNotWorkspace
 		}
 		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, panelayout.LayoutMediaType)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !changed {
-			out = n
-			return nil
+			return n, nil
 		}
-		out, err = s.finishContentEdit(ctx, tx, tileID, events)
-		return err
+		return s.finishContentEdit(ctx, tx, tileID, events)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 // WorkspaceEphemeralRefs returns the local tile ids any workspace tile's layout

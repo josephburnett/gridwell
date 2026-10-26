@@ -73,36 +73,27 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "WriteContent/text", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := s.claimContentVersion(ctx, tx, tileID, version)
-		if err != nil {
-			return err
-		}
+	return s.claimContentVersion(ctx, "WriteContent/text", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
 		if rpc.KindOf(n.Kind).Content != rpc.ContentBody {
-			return ErrNotTextTile
+			return nil, ErrNotTextTile
 		}
-
 		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, mediaMarkdown)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !changed {
 			// A no-op write never mutates: re-saving unchanged bytes must not
 			// bump the version or fan a TileChanged, and alt_text, a pure
 			// function of the content, is unchanged too.
-			out, err = s.loadTile(ctx, tx, tileID)
-			return err
+			return s.loadTile(ctx, tx, tileID)
 		}
 		// alt_text is a deterministic function of the content.
 		alt := doctype.AltFromSource(string(data))
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE tiles SET alt_text = ?, updated_at = ? WHERE id = ?`,
 			alt, s.now().Unix(), tileID); err != nil {
-			return err
+			return nil, err
 		}
-		out, err = s.finishContentEdit(ctx, tx, tileID, events)
-		return err
+		return s.finishContentEdit(ctx, tx, tileID, events)
 	})
-	return out, err
 }

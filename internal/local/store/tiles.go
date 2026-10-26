@@ -15,20 +15,31 @@ import (
 // rpc.MaxContentBytes.
 const MaxBlobBytes = rpc.MaxContentBytes
 
-// claimContentVersion verifies the caller's content claim against the row. It
-// is the store's only optimistic-concurrency check, and "version is the claim
-// for content and nothing else" is enforced by who can reach it: WriteContent's
-// text, url and workspace arms, and RenameTile.
-func (s *Store) claimContentVersion(ctx context.Context, q gridReader, tileID, claimed int64) (*gridwellv1.Tile, error) {
-	t, err := s.loadTile(ctx, q, tileID)
+// claimContentVersion runs write as one mutation named verb on row tileID,
+// handed the row once the caller's content claim has been checked against it,
+// and answers the tile write returns. It is the store's only
+// optimistic-concurrency check, and "version is the claim for content and
+// nothing else" is enforced by who can reach it: WriteContent's text, url and
+// workspace arms, and RenameTile.
+func (s *Store) claimContentVersion(ctx context.Context, verb string, tileID, claimed int64,
+	write func(tx *sql.Tx, t *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error)) (*gridwellv1.Tile, error) {
+	var out *gridwellv1.Tile
+	err := s.withMutation(ctx, verb, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		t, err := s.loadTile(ctx, tx, tileID)
+		if err != nil {
+			return err
+		}
+		if t.Version != claimed {
+			return fmt.Errorf("%w: tile %d at version %d, claimed %d",
+				ErrVersionConflict, tileID, t.Version, claimed)
+		}
+		out, err = write(tx, t, events)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-	if t.Version != claimed {
-		return nil, fmt.Errorf("%w: tile %d at version %d, claimed %d",
-			ErrVersionConflict, tileID, t.Version, claimed)
-	}
-	return t, nil
+	return out, nil
 }
 
 // DeleteClaim verifies a delete's claim against row t: the content version and
