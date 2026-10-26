@@ -203,7 +203,10 @@ publishes the plugin's `GridChanged` as the gridwell `GridChanged` a
 write would have, once the node has listed the grid and found it moved, and an
 `EntryChanged` as that entry's `TileChanged` flagged `content_changed`, once
 per stamp: a second tell under the stamp last told is no change
-(`Adapter.fresh`). A
+(`Adapter.fresh`). One that declares no `watch` is complete as declared: it
+gets no stream and no notice, and its health says only that its changes are
+not told (`EventPluginHealth.told`), so a client reads its grids on every
+move. A
 plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
 a database. It does get a private directory, `~/.gridwell/plugins/<id>`, named to

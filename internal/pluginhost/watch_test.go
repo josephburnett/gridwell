@@ -179,16 +179,18 @@ func TestWatchChangesArriveAsGridChanges(t *testing.T) {
 	}
 }
 
-// A plugin that does not declare Watch is healthy and never asked, the
-// declaration being the owner, not an Unimplemented answer; its live updates
-// are off, said once, so a client reads its grids on every move.
-func TestWatchUndeclaredIsNeverAsked(t *testing.T) {
+// A plugin that does not declare Watch is complete as declared: never asked,
+// the declaration being the owner, not an Unimplemented answer, and no
+// failure, so no live updates off and no notice. Its changes are not told,
+// said once, so a client reads its grids on every move.
+func TestWatchUndeclaredIsNeverAskedAndIsNoFailure(t *testing.T) {
 	p := &watchPlugin{undeclared: true, serve: func(int32, context.Context, func(*pluginv1.Change) error) error {
 		return status.Error(codes.Unimplemented, "method Watch not implemented")
 	}}
 	a, seen := watching(t, p, nil)
-	if off := await(t, seen).GetPluginHealth(); off == nil || !off.Healthy || off.LiveUpdatesOff == "" {
-		t.Fatalf("first event = %v, want healthy with live updates off", off)
+	h := await(t, seen).GetPluginHealth()
+	if h == nil || !h.Healthy || h.LiveUpdatesOff != "" || h.Told == nil || h.GetTold() {
+		t.Fatalf("first event = %v, want healthy and not told, with no live updates off", h)
 	}
 	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
 	if n := p.calls.Load(); n != 0 {
@@ -197,8 +199,8 @@ func TestWatchUndeclaredIsNeverAsked(t *testing.T) {
 	if evs := collect(seen); len(evs) != 0 {
 		t.Errorf("a plugin that does not watch announced %v after saying so", evs)
 	}
-	if s := a.source(); s.dark {
-		t.Errorf("source dark (%q), want healthy", s.detail)
+	if s := a.source(); s.dark || s.liveOff != "" {
+		t.Errorf("source %+v, want light with no failure", s)
 	}
 }
 
@@ -212,7 +214,7 @@ func TestWatchDeclaredButUnimplementedTurnsLiveUpdatesOff(t *testing.T) {
 	}}
 	a, seen := watching(t, p, nil)
 	off := await(t, seen).GetPluginHealth()
-	if off == nil || !off.Healthy || !strings.Contains(off.LiveUpdatesOff, "does not implement") {
+	if off == nil || !off.Healthy || !strings.Contains(off.LiveUpdatesOff, "does not implement") || off.Told == nil || off.GetTold() {
 		t.Fatalf("first event = %v, want healthy with live updates off naming the broken declaration", off)
 	}
 	time.Sleep(1500 * time.Millisecond) // past the first Refollow backoff
@@ -383,8 +385,8 @@ func TestWatchVerdictTurnsLiveUpdatesOff(t *testing.T) {
 	}
 	a, seen := watching(t, p, nil)
 	off := await(t, seen).GetPluginHealth()
-	if off == nil || !off.Healthy || !strings.Contains(off.LiveUpdatesOff, "refused another change watch") {
-		t.Fatalf("first event = %v, want healthy with the refusal as live updates off", off)
+	if off == nil || !off.Healthy || !strings.Contains(off.LiveUpdatesOff, "refused another change watch") || off.Told == nil || off.GetTold() {
+		t.Fatalf("first event = %v, want healthy and not told, with the refusal as live updates off", off)
 	}
 	if s := a.source(); s.dark {
 		t.Errorf("source dark (%q), want a refused watch to leave it light", s.detail)
@@ -392,8 +394,8 @@ func TestWatchVerdictTurnsLiveUpdatesOff(t *testing.T) {
 	if got := a.source().liveOff; got != off.LiveUpdatesOff {
 		t.Errorf("a subscriber arriving now is owed %q, want the refusal", got)
 	}
-	if on := await(t, seen).GetPluginHealth(); on == nil || !on.Healthy || on.LiveUpdatesOff != "" {
-		t.Fatalf("second event = %v, want live updates back on", on)
+	if on := await(t, seen).GetPluginHealth(); on == nil || !on.Healthy || on.LiveUpdatesOff != "" || !on.GetTold() {
+		t.Fatalf("second event = %v, want told again", on)
 	}
 	if got := a.source().liveOff; got != "" {
 		t.Errorf("live updates off (%q) once accepted, want on", got)

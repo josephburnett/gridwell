@@ -20,7 +20,7 @@ const outage = "hey cannot reach app.hey.com, so this is the mailbox as last see
 // cachingSource lists "doc" and "other" live. Told to answer from its cache, it answers
 // only "other" from the cache with unreachable set and claims authority anyway,
 // and its probe calls every key gone: a node that took either for a verdict
-// would retire "doc".
+// would retire "doc". It declares Watch, so its health is its listings' alone.
 type cachingSource struct {
 	pluginv1.UnimplementedPluginServer
 
@@ -35,7 +35,7 @@ func (p *cachingSource) fromCache(why string) {
 }
 
 func (p *cachingSource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "mem", DisplayName: "mem",
+	return &pluginv1.InfoResponse{Kind: "mem", DisplayName: "mem", Watch: true,
 		Grids: []*pluginv1.PluginGrid{{Id: "r", Grid: "r"}}}, nil
 }
 

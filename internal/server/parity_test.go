@@ -33,6 +33,7 @@ import (
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/deadlink"
@@ -637,6 +638,7 @@ type parityFix struct {
 	marks     int
 	healthMu  sync.Mutex
 	health    map[string]*gridwellv1.EventPluginHealth // the last health each source told
+	heard     *cache.Cache                             // every health told, folded as a client folds it
 }
 
 // parityNode is one node of the chain as its own user reaches it.
@@ -682,8 +684,8 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h, third: third, undeclare: undeclare,
 		raw:    gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON()),
 		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){}, mends: map[string]func(){},
-		health: map[string]*gridwellv1.EventPluginHealth{},
-		root:   map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
+		health: map[string]*gridwellv1.EventPluginHealth{}, heard: cache.New(),
+		root: map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
 		nodes: map[string]parityNode{"": {h.localCl, h.localHTTP, h.localShell},
 			parityConn: {h.remoteCl, h.remoteWeb, h.remoteShell}, parityThirdConn: {third.cl, third.web, third.shell}}}
 	lp, err := f.cl.Handshake(ctx)
@@ -738,6 +740,8 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 			if h := ev.GetPluginHealth(); h != nil {
 				f.healthMu.Lock()
 				f.health[h.PluginUuid] = h
+				f.heard.NoteHealth(h.PluginUuid, h.Healthy)
+				f.heard.NoteTold(h)
 				f.healthMu.Unlock()
 			}
 			select {

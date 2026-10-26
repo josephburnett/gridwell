@@ -215,10 +215,10 @@ into one per grid and one per entry. A change nobody is looking at costs
 no listing, and naming a grid the node has never listed is harmless.
 
 `InfoResponse.watch` is the declaration. Leave it unset and the node never
-asks, and tells the user your live updates are off, so a client reads your
-grids on every move instead of waiting to be told. Set it and answer
-Unimplemented and the node says the same for the process's life: the
-handshake said otherwise. A stream that ends or fails transport-shaped is re-opened
+asks: your plugin is complete as declared, the user sees no notice, and a
+client reads your grids on every move instead of waiting to be told. Set it
+and answer Unimplemented and the user is told your live updates are off for
+the process's life: the handshake said otherwise. A stream that ends or fails transport-shaped is re-opened
 with backoff while you are up; do not end a stream on purpose. Any other coded
 error is shown to the user as live updates off, in your words, until a
 re-opened stream is open. Neither makes your source dark: your listings still

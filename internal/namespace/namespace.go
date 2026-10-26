@@ -86,6 +86,6 @@ type Namespace interface {
 	// session's whole view (subscription.Book); from the node to one of its
 	// namespaces it is that namespace's whole share of the union as
 	// shown_grid_ids, with no session, and one it cannot take it tells on its
-	// own stream as EventPluginHealth.live_updates_off.
+	// own stream as EventPluginHealth.live_updates_off, told false.
 	SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error)
 }

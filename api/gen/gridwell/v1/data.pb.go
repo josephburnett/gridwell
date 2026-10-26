@@ -4532,13 +4532,18 @@ type EventPluginHealth struct {
 	PluginUuid string                 `protobuf:"bytes,1,opt,name=plugin_uuid,json=pluginUuid,proto3" json:"plugin_uuid,omitempty"`
 	Healthy    bool                   `protobuf:"varint,2,opt,name=healthy,proto3" json:"healthy,omitempty"`
 	Detail     string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
-	// Why the source cannot tell the node of its changes, empty while it can.
-	// It is not health: the listings still answer live, so it rides a healthy
-	// event too, and a change of it alone is a transition.
+	// Why the source failed to tell the node of its changes, empty while
+	// nothing has: a notice. It is not health: the listings still answer live,
+	// so it rides a healthy event too, and a change of it alone is a
+	// transition.
 	LiveUpdatesOff string `protobuf:"bytes,4,opt,name=live_updates_off,json=liveUpdatesOff,proto3" json:"live_updates_off,omitempty"`
 	// The user switched this source off until the node restarts
 	// (DisableSource): healthy is false and nothing will try it again.
-	Disabled      bool `protobuf:"varint,5,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	Disabled bool `protobuf:"varint,5,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	// Whether the source's changes are told right now, the one fact a client's
+	// cache reads to hold its grids current (cache.Current). Absent is an event
+	// that does not know, and leaves what was told before.
+	Told          *bool `protobuf:"varint,6,opt,name=told,proto3,oneof" json:"told,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4604,6 +4609,13 @@ func (x *EventPluginHealth) GetLiveUpdatesOff() string {
 func (x *EventPluginHealth) GetDisabled() bool {
 	if x != nil {
 		return x.Disabled
+	}
+	return false
+}
+
+func (x *EventPluginHealth) GetTold() bool {
+	if x != nil && x.Told != nil {
+		return *x.Told
 	}
 	return false
 }
@@ -5088,14 +5100,16 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fcontent_changed\x18\x02 \x01(\bR\x0econtentChanged\"?\n" +
 	"\vTileRemoved\x12\x17\n" +
 	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\xac\x01\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\xce\x01\n" +
 	"\x11EventPluginHealth\x12\x1f\n" +
 	"\vplugin_uuid\x18\x01 \x01(\tR\n" +
 	"pluginUuid\x12\x18\n" +
 	"\ahealthy\x18\x02 \x01(\bR\ahealthy\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12(\n" +
 	"\x10live_updates_off\x18\x04 \x01(\tR\x0eliveUpdatesOff\x12\x1a\n" +
-	"\bdisabled\x18\x05 \x01(\bR\bdisabled\"\xb9\x03\n" +
+	"\bdisabled\x18\x05 \x01(\bR\bdisabled\x12\x17\n" +
+	"\x04told\x18\x06 \x01(\bH\x00R\x04told\x88\x01\x01B\a\n" +
+	"\x05_told\"\xb9\x03\n" +
 	"\x05Event\x12=\n" +
 	"\fgrid_changed\x18\x01 \x01(\v2\x18.gridwell.v1.GridChangedH\x00R\vgridChanged\x12=\n" +
 	"\ftile_changed\x18\x02 \x01(\v2\x18.gridwell.v1.TileChangedH\x00R\vtileChanged\x12=\n" +
@@ -5303,6 +5317,7 @@ func file_gridwell_v1_data_proto_init() {
 	}
 	file_gridwell_v1_data_proto_msgTypes[0].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[42].OneofWrappers = []any{}
+	file_gridwell_v1_data_proto_msgTypes[60].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[61].OneofWrappers = []any{
 		(*Event_GridChanged)(nil),
 		(*Event_TileChanged)(nil),

@@ -129,8 +129,7 @@ test('a presented url tile opens its plugin page, writes back the site address, 
     'nothing in the app loaded the outside address',
   ).toBe(false);
 
-  // pages declares no Watch, so its live-updates-off notice stands from boot
-  // whatever this spec does (pluginhost.listenProcess).
+  // pages declares no Watch, which is no failure, so no notice.
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
-  expect(e.notices.filter((n: any) => n.source !== `live:${PAGES}`), 'no notices').toHaveLength(0);
+  expect(e.notices, 'no notices').toHaveLength(0);
 });

@@ -13,6 +13,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
@@ -334,10 +335,10 @@ func opening(t *testing.T, s *Server) []*gridwellv1.Event {
 	return out
 }
 
-// A far plugin's health is a state too: the far node tells it once on the
-// stream, so a client subscribing after it was told hears it from the
-// connection's opening replay, and once the far node re-establishes without
-// it, hears nothing.
+// A far plugin's health is a state too, and that its changes are not told is
+// part of it: the far node tells it once on the stream, so a client
+// subscribing after it was told hears it from the connection's opening replay,
+// and once the far node re-establishes without it, hears nothing.
 func TestASubscriberArrivingLateIsToldAFarPluginsStandingHealth(t *testing.T) {
 	was := namespace.DefaultBackoff
 	t.Cleanup(func() { namespace.DefaultBackoff = was })
@@ -348,15 +349,15 @@ func TestASubscriberArrivingLateIsToldAFarPluginsStandingHealth(t *testing.T) {
 	t.Cleanup(unsub)
 	far := &replayingFar{drop: make(chan struct{})}
 	far.standing.Store(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
-		PluginUuid: "pfar", Healthy: true, LiveUpdatesOff: "the plugin declares no watch"}}})
+		PluginUuid: "pfar", Healthy: true, Told: proto.Bool(false)}}})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go s.fanInRemote(ctx, "rtb", far)
 	nextHealth(t, events, "rtb/pfar")
 
 	got := opening(t, s)
-	if len(got) != 1 || got[0].GetPluginHealth().GetPluginUuid() != "rtb/pfar" || got[0].GetPluginHealth().GetLiveUpdatesOff() == "" {
-		t.Fatalf("opening replay = %v, want the far plugin's live updates off", got)
+	if len(got) != 1 || got[0].GetPluginHealth().GetPluginUuid() != "rtb/pfar" || got[0].GetPluginHealth().Told == nil || got[0].GetPluginHealth().GetTold() {
+		t.Fatalf("opening replay = %v, want the far plugin not told", got)
 	}
 
 	far.standing.Store(nil)

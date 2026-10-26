@@ -3,6 +3,8 @@ package events
 import (
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -61,10 +63,12 @@ func TestRouteTable(t *testing.T) {
 	}
 }
 
-// A health event carries two facts with two notices: the source's darkness and
-// whether it can tell the node of its changes (live_updates_off). Each notice
-// follows its own field, so they come and go independently, and only a move of
-// the healthy bit resyncs: a source that lists but cannot watch still answers.
+// A health event carries two failures with two notices: the source's darkness
+// and its failure to tell the node of its changes (live_updates_off). Each
+// notice follows its own field, so they come and go independently, and only a
+// move of the healthy bit resyncs: a source that lists but cannot watch still
+// answers. That a source's changes are not told (told) is no failure and no
+// notice: it is the cache's (cache.NoteTold).
 func TestReactHealthTable(t *testing.T) {
 	const (
 		dark = "plugin:n/c"
@@ -91,6 +95,9 @@ func TestReactHealthTable(t *testing.T) {
 			HealthReaction{
 				Dark:    StickyNotice{Source: dark},
 				LiveOff: StickyNotice{Source: live, Message: "fs: live updates off — too many watches"}}},
+		{"a source that declares no watch is not told and says nothing", false, true,
+			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true, Told: proto.Bool(false)},
+			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}}},
 		{"the watch opening takes that notice down and resyncs nothing", false, false,
 			&pb.EventPluginHealth{PluginUuid: "n/c", Healthy: true},
 			HealthReaction{Dark: StickyNotice{Source: dark}, LiveOff: StickyNotice{Source: live}}},

@@ -168,6 +168,7 @@ what each one is called.
 | disabled | A plugin or connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
 | broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
+| told | A source whose changes reach the node as they happen (`EventPluginHealth.told`): it declares Watch and nothing has failed. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
 | unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
 | notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
 
@@ -399,7 +400,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   tells a namespace segment from a tile id.
 - Navigation asks for a grid or a row only when the cache does not hold it
   current: held, from a source that is answering and whose changes are told
-  (`cache.Current`; a source with live updates off is read on every move). The
+  (`cache.Current`, from `EventPluginHealth.told`; a source whose changes are
+  not told is read on every move). The
   event stream keeps those true, so coming back to one reads nothing; a stream
   gap still re-reads every held grid. The planner decides
   (`nav` `planner.fetchGrid`), never the executor (2026-10-14).
@@ -500,10 +502,17 @@ These were decided deliberately. Do not reverse one without a new decision.
   old key reads dead: a key is the source's address, and a link means the
   thing at that address, so a source that renames a key, by its own change
   or by our move, has retired the old one (2026-10-22).
-- A source that lists but cannot watch is not dark: its listings stay live
-  and the refusal is one notice (`EventPluginHealth.live_updates_off`); dark
-  comes only from a listing the source did not answer, and a read the caller
-  abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
+- A source that lists but cannot watch is not dark: its listings stay live;
+  dark comes only from a listing the source did not answer, and a read the
+  caller abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
+  A plugin that declares no Watch is complete as declared: it is never asked
+  and shows no notice. Whether a source's changes are told right now is one
+  fact, `EventPluginHealth.told`, which the adapter derives from its held
+  declaration and its stream's failures, and it is the one fact the client's
+  cache reads (`cache.Current`). `live_updates_off` is only a failure — a
+  declared Watch answered Unimplemented, a stream refused with a code that is
+  not transport's, a share of the subscription that could not be taken — and
+  only a failure is a notice (2026-10-25).
 - A plugin's cache answers when a refresh fails: the read succeeds from
   what it caches and says so in `ListResponse.unreachable` (the reason,
   empty when live), which the node reports as the source's health while it

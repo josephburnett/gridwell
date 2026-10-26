@@ -3,6 +3,8 @@ package cache
 import (
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
@@ -116,26 +118,35 @@ func TestAGridIsCurrentWhenHeldFromAnAnsweringSource(t *testing.T) {
 	}
 }
 
-// A source that lists but cannot watch is not dark, but nothing will tell this
-// client its changes, so its grids are not current: every look reads them.
-func TestAGridFromASourceWithLiveUpdatesOffIsNotCurrent(t *testing.T) {
+// told is a source's word on whether its changes reach this client: a
+// source that is not told is not dark, but its grids are not current, so
+// every look reads them, while a told one's are held; an event that does not
+// say leaves what was told.
+func TestAGridFromASourceThatIsNotToldIsNotCurrent(t *testing.T) {
 	c := seedSources(t)
-	c.NoteLiveUpdates(fsPl, false)
+	health := func(told *bool) *gridwellv1.EventPluginHealth {
+		return &gridwellv1.EventPluginHealth{PluginUuid: fsPl, Healthy: true, Told: told}
+	}
+	c.NoteTold(health(proto.Bool(false)))
 	cur := c.Current()
 	for _, id := range []string{fsPl + "/1", fsPl + "/12"} {
 		if cur[id] {
-			t.Errorf("%s has no live updates and is current", id)
+			t.Errorf("%s is not told and is current", id)
 		}
 		if c.SourceDark(id) {
 			t.Errorf("%s still lists, so it is not dark", id)
 		}
 	}
 	if !cur[node+"/7"] || !cur[farHome+"/1"] {
-		t.Error("another source's live updates went off with the plugin's")
+		t.Error("another source went untold with the plugin")
 	}
-	c.NoteLiveUpdates(fsPl, true)
+	c.NoteTold(health(nil))
+	if c.Current()[fsPl+"/1"] {
+		t.Error("an event that does not say made the plugin's grid current")
+	}
+	c.NoteTold(health(proto.Bool(true)))
 	if !c.Current()[fsPl+"/1"] {
-		t.Error("the plugin's grid stayed not current after its live updates came back")
+		t.Error("the plugin's grid stayed not current once told")
 	}
 }
 

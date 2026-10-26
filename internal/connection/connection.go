@@ -582,10 +582,11 @@ func (s *Server) noteLiveOff(name, reason string) {
 }
 
 // healthEvent is name's health as a client hears it: st, and whether the far
-// node refused this node's share. Under mu.
+// node refused this node's share, when its changes are not told. Under mu.
 func (s *Server) healthEvent(name string, st connState) *gridwellv1.Event {
 	ev := rpc.HealthEvent(name, st.up, st.detail)
 	ev.GetPluginHealth().LiveUpdatesOff = s.liveOff[name]
+	ev.GetPluginHealth().Told = proto.Bool(s.liveOff[name] == "")
 	return ev
 }
 
@@ -621,11 +622,12 @@ func (s *Server) healthNow() []*gridwellv1.Event {
 	return out
 }
 
-// relay publishes one far event, keeping it while it is standing health.
+// relay publishes one far event, keeping it while it is standing health: a
+// dark source, a failure to tell, or changes not told.
 func (s *Server) relay(ev *gridwellv1.Event) {
 	if h := ev.GetPluginHealth(); h != nil {
 		s.mu.Lock()
-		if h.Healthy && h.LiveUpdatesOff == "" {
+		if h.Healthy && h.LiveUpdatesOff == "" && (h.Told == nil || h.GetTold()) {
 			delete(s.farHealth, h.PluginUuid)
 		} else {
 			s.farHealth[h.PluginUuid] = ev

@@ -59,7 +59,7 @@ type Adapter struct {
 
 	// The source's state as the listings and the Watch stream found it, held
 	// only to announce its transitions; setSource is the one writer. liveOff
-	// is the Watch stream's verdict and subscriptionOff SetView's, neither of
+	// is the Watch stream's failure and subscriptionOff SetView's, neither of
 	// them darkness: a source that lists but cannot watch still answers live.
 	srcMu           sync.Mutex
 	srcDark         bool
@@ -92,6 +92,7 @@ type Adapter struct {
 
 	// decl is the plugin's last answered Info, or declErr its refusal, and
 	// every reader reads it (info); a process coming up forgets the last one's.
+	// Its watch derives told, so info writes it through setSource.
 	declMu  sync.Mutex
 	decl    *pluginv1.InfoResponse
 	declErr error
@@ -158,9 +159,11 @@ func (a *Adapter) info(ctx context.Context, fresh bool) (*pluginv1.InfoResponse,
 	}
 	ci, err = a.cp.Info(ctx, &pluginv1.InfoRequest{})
 	if !gwerr.IsAbandoned(ctx, err) && a.processUp() {
-		a.declMu.Lock()
-		a.decl, a.declErr = ci, err
-		a.declMu.Unlock()
+		a.setSource(func() {
+			a.declMu.Lock()
+			a.decl, a.declErr = ci, err
+			a.declMu.Unlock()
+		})
 	}
 	return ci, err
 }
@@ -207,9 +210,8 @@ func (a *Adapter) gridFraming(gkey string) (rpc.View, error) {
 
 // Subscribe serves this namespace's event stream: health of the subprocess and
 // the source, GridChanged, GridFramingChanged and TileChanged. A subscriber
-// arriving mid-outage, or while live updates are off, is told at once; a
-// healthy plugin announces nothing, because a health event costs the client a
-// full resync.
+// arriving mid-outage, after a failure to tell, or to a source whose changes
+// are not told, is told at once; a healthy, told plugin announces nothing.
 func (a *Adapter) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, detach := a.hub.Subscribe()
 	defer detach()
@@ -262,9 +264,9 @@ func (a *Adapter) setSource(edit func()) {
 	edit()
 	now := a.sourceLocked()
 	a.srcMu.Unlock()
-	if (now.dark != was.dark || now.liveOff != was.liveOff) && a.processUp() {
+	if now != was && a.processUp() {
 		a.trace("health", now.line(), map[string]string{
-			"dark": strconv.FormatBool(now.dark), "liveOff": now.liveOff, "detail": now.detail})
+			"dark": strconv.FormatBool(now.dark), "liveOff": now.liveOff, "detail": now.detail, "told": strconv.FormatBool(!now.untold)})
 		a.hub.Publish(now.event())
 	}
 }
@@ -287,9 +289,9 @@ func (a *Adapter) processUp() bool {
 }
 
 // sourceState is the source as one health event tells it; the zero value is a
-// light source with live updates on.
+// light source whose changes are told, or whose declaration is not yet held.
 type sourceState struct {
-	dark            bool
+	dark, untold    bool
 	detail, liveOff string
 }
 
@@ -307,6 +309,7 @@ func (s sourceState) line() string {
 func (s sourceState) event() *gridwellv1.Event {
 	ev := rpc.HealthEvent("", !s.dark, s.detail)
 	ev.GetPluginHealth().LiveUpdatesOff = s.liveOff
+	ev.GetPluginHealth().Told = proto.Bool(!s.untold)
 	return ev
 }
 
@@ -316,11 +319,15 @@ func (a *Adapter) source() sourceState {
 	return a.sourceLocked()
 }
 
+// sourceLocked is told while a held declaration of Watch has no failure since.
 func (a *Adapter) sourceLocked() sourceState {
 	s := sourceState{dark: a.srcDark, liveOff: cmp.Or(a.liveOff, a.subscriptionOff)}
 	if s.dark {
 		s.detail = a.srcDetail
 	}
+	a.declMu.Lock()
+	s.untold = s.liveOff != "" || a.decl != nil && !a.decl.Watch
+	a.declMu.Unlock()
 	return s
 }
 

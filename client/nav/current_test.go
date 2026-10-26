@@ -3,6 +3,8 @@ package nav
 import (
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
@@ -251,9 +253,9 @@ func TestReEngageReadsTheCachedRowWhenItIsCurrent(t *testing.T) {
 	}
 }
 
-// Across the seam: a source that lists but cannot watch is not dark, yet no
-// event carries its changes, so a descent onto its held grid still reads it.
-func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
+// Across the seam: a source that is not told is not dark, yet no event
+// carries its changes, so a descent onto its held grid still reads it.
+func TestADescentOntoAGridWhoseSourceIsNotToldReadsIt(t *testing.T) {
 	c := cache.New()
 	c.PutGrid(&gridwellv1.Grid{Id: "pl1/2"}, nil)
 	c.NoteStream(true)
@@ -269,13 +271,13 @@ func TestADescentOntoAGridWithLiveUpdatesOffReadsIt(t *testing.T) {
 	if n := gridFetches(descend()); n != 0 {
 		t.Fatalf("asked for %d grids while the source's changes are told", n)
 	}
-	c.NoteLiveUpdates("pl1", false)
+	c.NoteTold(&gridwellv1.EventPluginHealth{PluginUuid: "pl1", Healthy: true, Told: proto.Bool(false)})
 	if f := only(t, descend(), EffFetchGrid); f.GridID != "pl1/2" {
 		t.Fatalf("fetched %+v, want the grid nothing tells this client about", f)
 	}
-	c.NoteLiveUpdates("pl1", true)
+	c.NoteTold(&gridwellv1.EventPluginHealth{PluginUuid: "pl1", Healthy: true, Told: proto.Bool(true)})
 	if n := gridFetches(descend()); n != 0 {
-		t.Fatalf("asked for %d grids once live updates came back", n)
+		t.Fatalf("asked for %d grids once told", n)
 	}
 }
 

@@ -22,10 +22,10 @@ type Cache struct {
 	// dark is the sources whose latest health event said they are not
 	// answering, keyed by that event's uuid.
 	dark map[string]bool
-	// unwatched is the sources that answer but whose changes nothing tells
-	// this client (live_updates_off), keyed the same way.
-	unwatched map[string]bool
-	told      bool // this client's event stream is established; see NoteStream
+	// untold is the sources whose latest word on it said their changes are
+	// not told (EventPluginHealth.told), keyed the same way.
+	untold map[string]bool
+	told   bool // this client's event stream is established; see NoteStream
 	// content is the one body store, keyed by tile id because blob ids are
 	// not routable and editing one copy must leave a sibling alone.
 	content map[string]*contentEntry
@@ -113,7 +113,7 @@ func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
 // New returns an empty cache.
 func New() *Cache {
 	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{},
-		dark: map[string]bool{}, unwatched: map[string]bool{}, holds: map[string]*hold{}, writing: map[string]*ownWrite{},
+		dark: map[string]bool{}, untold: map[string]bool{}, holds: map[string]*hold{}, writing: map[string]*ownWrite{},
 		sel: map[string]*selHold{}}
 }
 
@@ -420,19 +420,20 @@ func (c *Cache) NoteHealth(uuid string, healthy bool) (wasDark bool) {
 	return wasDark
 }
 
-// NoteLiveUpdates folds in whether a source's changes reach this client
-// (EventPluginHealth.live_updates_off empty), told on every health event.
-func (c *Cache) NoteLiveUpdates(uuid string, live bool) {
-	if uuid == EverySource {
+// NoteTold folds in whether a health event's source tells its changes
+// (EventPluginHealth.told); an event that does not say changes nothing.
+func (c *Cache) NoteTold(h *gridwellv1.EventPluginHealth) {
+	uuid := h.GetPluginUuid()
+	if uuid == EverySource || h.Told == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if live {
-		delete(c.unwatched, uuid)
+	if h.GetTold() {
+		delete(c.untold, uuid)
 		return
 	}
-	c.unwatched[uuid] = true
+	c.untold[uuid] = true
 }
 
 // SourceDark reports that the source serving gridID is not answering, so this
@@ -472,7 +473,7 @@ func (c *Cache) Current() map[string]bool {
 	defer c.mu.Unlock()
 	out := make(map[string]bool, len(c.grids))
 	for id := range c.grids {
-		if c.told && !c.darkLocked(id) && !servedByAny(id, c.unwatched) {
+		if c.told && !c.darkLocked(id) && !servedByAny(id, c.untold) {
 			out[id] = true
 		}
 	}

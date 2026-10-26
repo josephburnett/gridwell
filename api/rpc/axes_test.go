@@ -19,6 +19,7 @@ var flagMessages = []protoreflect.MessageDescriptor{
 	(&pluginv1.PluginGrid{}).ProtoReflect().Descriptor(),
 	(&pluginv1.ListResponse{}).ProtoReflect().Descriptor(),
 	(&pluginv1.Entry{}).ProtoReflect().Descriptor(),
+	(&gridwellv1.EventPluginHealth{}).ProtoReflect().Descriptor(),
 }
 
 // TestFlags fails on a bool or enum field Flags does not class, which is a

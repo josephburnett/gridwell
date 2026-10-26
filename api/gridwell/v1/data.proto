@@ -1006,13 +1006,18 @@ message EventPluginHealth {
   string plugin_uuid = 1;
   bool healthy       = 2;
   string detail       = 3;
-  // Why the source cannot tell the node of its changes, empty while it can.
-  // It is not health: the listings still answer live, so it rides a healthy
-  // event too, and a change of it alone is a transition.
+  // Why the source failed to tell the node of its changes, empty while
+  // nothing has: a notice. It is not health: the listings still answer live,
+  // so it rides a healthy event too, and a change of it alone is a
+  // transition.
   string live_updates_off = 4;
   // The user switched this source off until the node restarts
   // (DisableSource): healthy is false and nothing will try it again.
   bool disabled = 5;
+  // Whether the source's changes are told right now, the one fact a client's
+  // cache reads to hold its grids current (cache.Current). Absent is an event
+  // that does not know, and leaves what was told before.
+  optional bool told = 6;
 }
 
 // Event carries one of the change kinds. The variant tag is the discriminator.

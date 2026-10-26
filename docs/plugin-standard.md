@@ -23,7 +23,9 @@ and test the declaration.
 **Why.** "A tile behaves the same wherever its content comes from." The node
 never switches on a plugin kind; every behavior rides a wire declaration
 (CLAUDE.md, Node). A `Watch` the plugin never declares is never opened, so its
-grids go stale while the code that would have told the node sits unused.
+grids are read on every move while the code that would have told the node sits
+unused. Declaring none is no failure: the node shows no notice for it, and
+only says its changes are not told (`EventPluginHealth.told`).
 
 **Example.** `fs/plugin/plugin.go:Info`:
 

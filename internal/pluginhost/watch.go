@@ -93,15 +93,20 @@ func (a *Adapter) goListen(ctx context.Context, label string, fn func(context.Co
 }
 
 // listenProcess is one subprocess's stream, re-opened by namespace.Refollow.
-// A process that declares no InfoResponse.watch, or declares it and answers
-// Unimplemented, has live updates off for its life; a transport failure
-// re-opens quietly, being the supervisor's news, and any other code is live
-// updates off until a stream opens. None is darkness (Adapter.liveOff).
+// Info is asked again on the backoff while it is refused, so a fix lands
+// without a restart. A process that declares no InfoResponse.watch is
+// complete as declared and never asked (Adapter.sourceLocked derives its
+// told); one that declares it and answers Unimplemented has live updates off
+// for its life. Either ends the follow. A transport failure re-opens quietly,
+// being the supervisor's news, and any other code is live updates off until a
+// stream opens. None is darkness.
 //
 // The stream is opened with the scope and only while it is not empty. Every
 // open, first, after a drop, or for a moved scope, is the one path in
 // followScope.
 func (a *Adapter) listenProcess(ctx context.Context, label string) {
+	ctx, done := context.WithCancel(ctx)
+	defer done()
 	namespace.Refollow{
 		Label: label,
 		Down:  func(string) {},
@@ -112,18 +117,15 @@ func (a *Adapter) listenProcess(ctx context.Context, label string) {
 				return err
 			}
 			if !ci.Watch {
-				a.noteWatch("the plugin declares no live updates")
-				<-ctx.Done()
+				done()
 				return nil
 			}
 			err = a.followScope(ctx, established)
 			switch {
 			case ctx.Err() != nil:
-				return err
 			case status.Code(err) == codes.Unimplemented:
 				a.noteWatch("the plugin declares live updates but does not implement them: " + status.Convert(err).Message())
-				<-ctx.Done()
-				return nil
+				done()
 			case err != nil && !gwerr.IsTransport(err):
 				a.noteWatch(status.Convert(err).Message())
 			}

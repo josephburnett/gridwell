@@ -13,8 +13,8 @@ type Flag struct {
 }
 
 // Flags is every bool and enum field on Tile, Grid, PluginGrid, InfoResponse,
-// ListResponse and Entry, and the strings whose emptiness is the flag; the
-// test walks the descriptors against it.
+// ListResponse, Entry and EventPluginHealth, and the strings whose emptiness
+// is the flag; the test walks the descriptors against it.
 var Flags = []Flag{
 	{"gridwell.v1.Tile.link", true, "kind: the doors to a home, a plugin and a far grid are links; link and see it dead make a leaf one", "delete unlinks and copy links"},
 	{"gridwell.v1.Tile.url_frozen", true, "operation: freeze sets it and reads it back", "descent keeps the preview instead of going live"},
@@ -33,5 +33,9 @@ var Flags = []Flag{
 	{"plugin.v1.ListResponse.unreachable", true, "variant a listing answered from cache: the decided see it dead cells, here and through the connection", "a cached answer retires nothing, so nothing reads dead"},
 	{"plugin.v1.Entry.serves_page", true, "as Tile.serves_page, which it becomes", "becomes Tile.serves_page"},
 	{"plugin.v1.Entry.read_only", true, "as Tile.read_only, which it becomes", "becomes Tile.read_only"},
+	{"gridwell.v1.EventPluginHealth.healthy", true, "variant a listing answered from cache: the decided see it dead cells, here and through the connection", "a dark source's grids serve from cache and are never current (cache.Current)"},
+	{"gridwell.v1.EventPluginHealth.told", true, "variant a plugin with watch off: the decided url update cell, here and through the connection", "a source's held grids are current, or read on every move (cache.Current)"},
+	{"gridwell.v1.EventPluginHealth.disabled", false, "", "a dark source says nothing more: no notice stands (events.ReactHealth)"},
+	{"gridwell.v1.EventPluginHealth.live_updates_off", false, "", "a notice says why the source failed to tell its changes (events.ReactHealth)"},
 	{"gridwell.v1.Grid.moves", true, "the decided move cells, as plugin.v1.InfoResponse.move, which it becomes; plugin_move_test.go reads it", "a left-drag to another grid is a move, or refused (dragdrop.MoveForbidden)"},
 }

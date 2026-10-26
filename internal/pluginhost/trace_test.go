@@ -52,10 +52,18 @@ func awaitTraced(t *testing.T, mark uint64, kind string, ok func(tracewire.Recor
 }
 
 // cacheAnswering lists "r" from its cache with the reason set while
-// unreachable is.
+// unreachable is. It declares Watch, so its health is its listings' alone.
 type cacheAnswering struct {
 	oneEntryPlugin
 	unreachable string
+}
+
+func (p *cacheAnswering) Info(ctx context.Context, req *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	resp, err := p.oneEntryPlugin.Info(ctx, req)
+	if err == nil {
+		resp.Watch = true
+	}
+	return resp, err
 }
 
 func (p *cacheAnswering) List(context.Context, *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {

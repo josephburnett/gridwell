@@ -55,8 +55,8 @@ func TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff(t *testing.T) {
 	go s.tellFar(ctx, "geneva", far)
 
 	h := nextHealth(t, events, "geneva")
-	if !h.GetHealthy() || h.GetLiveUpdatesOff() == "" {
-		t.Fatalf("after the refusal: %v, want healthy with live updates off", h)
+	if !h.GetHealthy() || h.GetLiveUpdatesOff() == "" || h.Told == nil || h.GetTold() {
+		t.Fatalf("after the refusal: %v, want healthy and not told, with live updates off", h)
 	}
 	// A stream opened now hears it in the opening replay.
 	var replay []*gridwellv1.Event
@@ -78,8 +78,8 @@ func TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	h = nextHealth(t, events, "geneva")
-	if !h.GetHealthy() || h.GetLiveUpdatesOff() != "" {
-		t.Fatalf("after a share landed: %v, want healthy with live updates on", h)
+	if !h.GetHealthy() || h.GetLiveUpdatesOff() != "" || !h.GetTold() {
+		t.Fatalf("after a share landed: %v, want healthy and told", h)
 	}
 }
 

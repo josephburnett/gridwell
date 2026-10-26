@@ -49,7 +49,7 @@ var parityRoutes = []*gridwellv1.Route{
 // The decisions the variants are held to, quoted.
 const (
 	dReadOnly = "so an edit is refused before it is typed"
-	dLiveOff  = "a source with live updates off is read on every move"
+	dUntold   = "a source whose changes are not told is read on every move"
 	dCached   = "the read succeeds from what it caches and says so in `ListResponse.unreachable`"
 )
 
@@ -68,8 +68,8 @@ var parityVariantTable = []parityVariantCell{
 	{vNotWritable, parityCell{kText, opWrite, onPlugin, decided, dReadOnly, nil}, holdsReadOnly(false)},
 	{vNotWritable, parityCell{kText, opWrite, onFar, decided, dReadOnly, nil}, holdsReadOnly(false)},
 	{vNotWritable, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
-	{vNoWatch, parityCell{kURL, opUpdate, onPlugin, decided, dLiveOff, nil}, holdsLiveOff},
-	{vNoWatch, parityCell{kURL, opUpdate, onFar, decided, dLiveOff, nil}, holdsLiveOff},
+	{vNoWatch, parityCell{kURL, opUpdate, onPlugin, decided, dUntold, nil}, holdsUntold},
+	{vNoWatch, parityCell{kURL, opUpdate, onFar, decided, dUntold, nil}, holdsUntold},
 	{vPartial, parityCell{kText, opDead, onPlugin, same, "", checkDead}, nil},
 	{vCached, parityCell{kText, opDead, onPlugin, decided, dCached, nil}, holdsCached},
 	{vCached, parityCell{kText, opDead, onFar, decided, dCached, nil}, holdsCached},
@@ -175,25 +175,24 @@ func holdsReadOnly(entry bool) func(f *parityFix, ns string) error {
 }
 
 // awaitHealth waits for the last health the source serving gridID told to
-// pass ok, as the client's cache folds it.
+// pass ok, given the client's cache with every health told folded in.
 func (f *parityFix) awaitHealth(gridID string, ok func(*cache.Cache, *gridwellv1.EventPluginHealth) bool) error {
 	deadline := time.Now().Add(10 * time.Second)
+	f.heard.NoteStream(true)
 	for {
-		c := cache.New()
+		if g, err := f.cl.GetGrid(f.ctx, gridID); err == nil {
+			f.heard.PutGrid(g.Grid, g.Tiles)
+		}
 		var last *gridwellv1.EventPluginHealth
 		f.healthMu.Lock()
 		for uuid, h := range f.health {
-			c.NoteHealth(uuid, h.Healthy)
-			c.NoteLiveUpdates(uuid, h.GetLiveUpdatesOff() == "")
 			if cache.ServedBy(gridID, uuid) {
 				last = h
 			}
 		}
+		passed := last != nil && ok(f.heard, last)
 		f.healthMu.Unlock()
-		if g, err := f.cl.GetGrid(f.ctx, gridID); err == nil {
-			c.PutGrid(g.Grid, g.Tiles)
-		}
-		if last != nil && ok(c, last) {
+		if passed {
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -203,17 +202,18 @@ func (f *parityFix) awaitHealth(gridID string, ok func(*cache.Cache, *gridwellv1
 	}
 }
 
-// holdsLiveOff proves a source that cannot tell says so, so the client's
-// cache holds none of its grids current and a move reads the change.
-func holdsLiveOff(f *parityFix, ns string) error {
+// holdsUntold proves a source that declares no watch says its changes are not
+// told, and no failure, so the client's cache holds none of its grids current,
+// no notice stands, and a move reads the change.
+func holdsUntold(f *parityFix, ns string) error {
 	g, tl, err := f.entry(ns, "Site")
 	if err != nil {
 		return err
 	}
 	if err := f.awaitHealth(g.Id, func(c *cache.Cache, h *gridwellv1.EventPluginHealth) bool {
-		return h.Healthy && h.GetLiveUpdatesOff() != "" && !c.Current()[g.Id]
+		return h.Healthy && h.Told != nil && !h.GetTold() && h.LiveUpdatesOff == "" && !c.Current()[g.Id]
 	}); err != nil {
-		return fmt.Errorf("live updates off is never said: %v", err)
+		return fmt.Errorf("that its changes are not told is never said: %v", err)
 	}
 	_, key, _, _ := rpc.SplitEntryID(rpc.LocalOf(tl.Id))
 	f.src[ns].edit(key, parityEdits[kURL])
