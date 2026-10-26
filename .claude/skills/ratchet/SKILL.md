@@ -53,7 +53,8 @@ each, so the session stays responsive and judges by the ledger diff.
    Remove the worktree and branch. Dismiss the agent.
 
 5. **Pay the debt.** While the `debt` row is above zero, the next row is
-   paying it back by deriving, not a new row (CLAUDE.md How to work 10).
+   paying it back, by the ways the lines row names, not a new row
+   (CLAUDE.md How to work 10).
 
 6. **Find the next row.** When no row is above its floor, run
    `/assessment`. It adds rows or notes; the loop continues with the rows.

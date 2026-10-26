@@ -246,11 +246,21 @@ what each one is called.
     the count by the mechanism the row names and no other, and record the
     new value in the same commit. A count lowered by another means is
     refused like a rise, and a change that lowers one row by raising
-    another is refused by the build. A decision Joe makes may raise a
-    ceiling; the rise is entered in `test/boundary/debt.txt` with the
-    decision, counted by the `debt` row, and paying it back by deriving is
-    the next row of work (2026-10-22). A row at its floor is deleted and its
-    count stays as a permanent test. The assessment finds a class
+    another is refused by the build. A class row falls by the one
+    mechanism it names. A ceiling (`lines`, `packages`) falls by any
+    change that keeps every decided behaviour: a fact read from the one
+    place that holds it instead of written out again, branches that differ
+    only in their data folded into one table, a decision made in several
+    places moved to one owner, a special case absorbed by the general one,
+    two concepts merged where no decided behaviour tells them apart, and a
+    path nothing uses deleted. Removing a behaviour this file decides is a
+    new decision, never a simplification (2026-10-26). A decision Joe makes
+    may raise a ceiling; the rise is entered in `test/boundary/debt.txt`
+    with the decision, counted by the `debt` row, and paying it back, by
+    those same ways, is the next row of work (2026-10-22). When what is
+    left is behaviour Joe decided and none of it is written twice, Joe sets
+    the low-water mark where the code is, and the row clears (2026-10-26).
+    A row at its floor is deleted and its count stays as a permanent test. The assessment finds a class
     the ledger does not measure and adds it as a row with a count; a
     finding with no count is a note, not a row. There is nothing more to do
     when the ledger is empty (2026-10-21).
