@@ -9,6 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
+	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/textedit"
 )
@@ -19,7 +20,7 @@ import (
 // rasterizes its output through an SVG foreignObject image, which holds no
 // form control (markdown.PictureXHTML). Rasterization is async, so raw source
 // paints until the tile's first image decodes. rasterprev.Cache owns every
-// caching decision; this file is the blob-and-Image glue.
+// caching decision, and preview.LoadImage the image load.
 
 // renderedPreviewMaxH caps the rasterized document height in CSS px. Beyond
 // it a preview falls back to raw source: previews are a glance, not a
@@ -29,49 +30,17 @@ const renderedPreviewMaxH = 4000.0
 // svgRasterizer is rasterprev.Rasterizer's only implementation.
 type svgRasterizer struct{}
 
-// Rasterize allocates an onload and an onerror js.Func, both released once
-// either fires.
+// Rasterize loads svg through preview.LoadImage.
 func (svgRasterizer) Rasterize(svg string, onReady func(rasterprev.Raster), onError func()) {
-	blob := js.Global().Get("Blob").New(
-		js.ValueOf([]any{svg}), js.ValueOf(map[string]any{"type": "image/svg+xml"}))
-	url := js.Global().Get("URL").Call("createObjectURL", blob).String()
-	img := js.Global().Get("Image").New()
-	var onload, onerror js.Func
-	release := func() { onload.Release(); onerror.Release() }
-	onload = js.FuncOf(func(js.Value, []js.Value) any {
-		release()
-		onReady(&svgRaster{img: img, url: url, svg: svg})
-		return nil
-	})
-	onerror = js.FuncOf(func(js.Value, []js.Value) any {
-		release()
-		js.Global().Get("URL").Call("revokeObjectURL", url)
-		onError()
-		return nil
-	})
-	img.Set("onload", onload)
-	img.Set("onerror", onerror)
-	img.Set("src", url)
+	blob := js.Global().Get("Blob").New(js.ValueOf([]any{svg}), js.ValueOf(map[string]any{"type": "image/svg+xml"}))
+	preview.LoadImage(blob, func(img *preview.JSImage) { onReady(&svgRaster{img, svg}) }, onError)
 }
 
-// svgRaster wraps a loaded HTMLImageElement and the object URL behind it.
+// svgRaster is a loaded SVG image and the svg it was made of, for
+// paintedText.
 type svgRaster struct {
-	img     js.Value
-	url     string
-	svg     string // for paintedText
-	revoked bool
-}
-
-// Truthy is false after Revoke, the object URL being gone.
-func (r *svgRaster) Truthy() bool { return r != nil && !r.revoked && r.img.Truthy() }
-
-// Revoke releases the createObjectURL. It is idempotent.
-func (r *svgRaster) Revoke() {
-	if r == nil || r.revoked {
-		return
-	}
-	r.revoked = true
-	js.Global().Get("URL").Call("revokeObjectURL", r.url)
+	*preview.JSImage
+	svg string
 }
 
 // renderedRasterFor returns a loaded raster for tile n near logical width
@@ -107,7 +76,7 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 		return js.Value{}, 0, false
 	}
 	a.e2e.lastRasterSVG = sr.svg
-	return sr.img, madeAt, true
+	return sr.Val(), madeAt, true
 }
 
 // drawRenderedPreview crops the tile's raster into the box; see

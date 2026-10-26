@@ -10,8 +10,7 @@ type JSDecoder struct{}
 
 func NewJSDecoder() JSDecoder { return JSDecoder{} }
 
-// Decode allocates an onload and an onerror js.Func, both released once either
-// fires.
+// Decode loads the bytes as a JPEG through LoadImage.
 func (JSDecoder) Decode(bytes []byte, onReady func(Image), onError func()) {
 	if len(bytes) == 0 {
 		if onError != nil {
@@ -21,29 +20,34 @@ func (JSDecoder) Decode(bytes []byte, onReady func(Image), onError func()) {
 	}
 	u8 := js.Global().Get("Uint8Array").New(len(bytes))
 	js.CopyBytesToJS(u8, bytes)
-	blobOpts := js.Global().Get("Object").New()
-	blobOpts.Set("type", "image/jpeg")
-	parts := js.Global().Get("Array").New()
-	parts.Call("push", u8)
-	blob := js.Global().Get("Blob").New(parts, blobOpts)
-	objectURL := js.Global().Get("URL").Call("createObjectURL", blob).String()
+	blob := js.Global().Get("Blob").New(js.ValueOf([]any{u8}), js.ValueOf(map[string]any{"type": "image/jpeg"}))
+	LoadImage(blob, func(img *JSImage) {
+		if onReady == nil {
+			// With no consumer, revoke here so the object URL does not leak.
+			img.Revoke()
+			return
+		}
+		onReady(img)
+	}, onError)
+}
 
+// LoadImage is the one Blob, createObjectURL and new Image() chain, for a
+// JPEG preview and a rendered SVG alike: onReady fires on the JS event loop
+// with the loaded image, and a failed load revokes its object URL before
+// onError. It allocates an onload and an onerror js.Func, both released once
+// either fires.
+func LoadImage(blob js.Value, onReady func(*JSImage), onError func()) {
+	objectURL := js.Global().Get("URL").Call("createObjectURL", blob).String()
 	img := js.Global().Get("Image").New()
 	var onload, onerr js.Func
+	release := func() { onload.Release(); onerr.Release() }
 	onload = js.FuncOf(func(js.Value, []js.Value) any {
-		onload.Release()
-		onerr.Release()
-		if onReady != nil {
-			onReady(&JSImage{val: img, objectURL: objectURL})
-		} else {
-			// With no consumer, revoke here so the object URL does not leak.
-			js.Global().Get("URL").Call("revokeObjectURL", objectURL)
-		}
+		release()
+		onReady(&JSImage{val: img, objectURL: objectURL})
 		return nil
 	})
 	onerr = js.FuncOf(func(js.Value, []js.Value) any {
-		onload.Release()
-		onerr.Release()
+		release()
 		js.Global().Get("URL").Call("revokeObjectURL", objectURL)
 		if onError != nil {
 			onError()
