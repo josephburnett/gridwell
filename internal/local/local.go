@@ -317,17 +317,10 @@ func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) 
 // empty-fields-skip rule never turns ambiguous.
 func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	ops := 0
-	if req.Rename != "" {
-		ops++
-	}
-	if req.ContentZoom != nil {
-		ops++
-	}
-	if req.UrlFrozen != nil {
-		ops++
-	}
-	if req.Tile != nil {
-		ops++
+	for _, set := range []bool{req.Rename != "", req.ContentZoom != nil, req.UrlFrozen != nil, req.Tile != nil} {
+		if set {
+			ops++
+		}
 	}
 	if ops > 1 {
 		return nil, status.Error(codes.InvalidArgument,
