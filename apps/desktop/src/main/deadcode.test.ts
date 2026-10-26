@@ -27,6 +27,12 @@ const srcDir = join(desktop, 'src');
 // ALLOWED: "<file relative to src>:<export>" → why the export is kept with no
 // non-test reader. Keep it short; every entry is a standing exception.
 const ALLOWED: Record<string, string> = {
+  'main/routes.ts:matchAddress':
+    'the forced copy of rpc.MatchAddress; routeNavigation reads it, and its test runs it against api/rpc/testdata/routes.json',
+  'main/routes.ts:decide':
+    'the forced copy of rpc.Decide; routeNavigation reads it, and its test runs it against api/rpc/testdata/routes.json',
+  'main/routes.ts:presentedSite':
+    'the forced copy of rpc.PresentedSite; routeNavigation reads it, and its test runs it against api/rpc/testdata/routes.json',
   'main/viewutil.ts:parseHistory':
     'the pure validator behind reviveNavigation; its clamping and rejection cases are unit-tested directly',
   'main/viewutil.ts:classifyRightPress':

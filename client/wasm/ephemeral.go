@@ -193,8 +193,8 @@ func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, c
 		return
 	}
 	url := t.UrlString
-	if v := a.urlViewFor(op.ID); v != nil && v.lastURL != "" {
-		url = v.lastURL
+	if v := a.urlViewFor(op.ID); v != nil && v.view.Site != "" {
+		url = v.view.Site
 	}
 	destID := destPaneID
 	oldID := t.Id

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, net, session } from 'electron';
+import { app, BrowserWindow, dialog, net, session, shell } from 'electron';
 import { startSidecar, Sidecar } from './sidecar';
 import { createRootWindow } from './window';
 import { WebviewRegistry } from './webviews';
@@ -10,7 +10,8 @@ import { applyUserDataOverride } from './userdata';
 import { sidecarExitMessage } from './sidecar-messages';
 import { AUTH_COOKIE_NAME, AUTH_COOKIE_MAX_AGE_S } from './authconst';
 import { QuitFlush } from './quit';
-import { permissionDecided, viewOpenRequested } from './viewtrace';
+import { permissionDecided, viewOpenRequested, VIEW } from './viewtrace';
+import { openOutside } from './outside';
 import { bootEvent, flushTrace, logLine, startTrace, stopTrace, trace, TRACE_PATH } from './trace';
 
 // See userdata.ts. The e2e fixture also passes --user-data-dir as a Chromium
@@ -106,6 +107,13 @@ async function boot(): Promise<void> {
     onZoomKey: forwarder(rootWC, EV.zoomKey),
     onEscapeKey: forwarder(rootWC, EV.escapeKey),
     onViewGone: forwarder(rootWC, EV.viewGone),
+    onRouteMove: forwarder(rootWC, EV.routeMove),
+    // The routes' outside verdict on a live page's navigation; openOutside
+    // traces it, and a browser that did not open says so.
+    onOutside: (url) =>
+      void openOutside(url, (u) => shell.openExternal(u), trace).catch((err: unknown) =>
+        sendError(rootWC, `electron:${VIEW}`, `the default browser did not open ${url}: ${String(err)}`, 'error'),
+      ),
     // Give focus back to the root renderer, where the user was typing.
     onFocusStolen: () => rootWC.focus(),
   });

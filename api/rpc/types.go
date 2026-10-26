@@ -282,10 +282,13 @@ func QualifyLinkTarget(holder, target string) string {
 	return QualifyID(holder, target)
 }
 
+// ContentPath is where the node's content API is mounted.
+const ContentPath = "/content/"
+
 // PageURL mirrors the server's parseContentPath. The trailing slash is
 // load-bearing: relative subresource URLs resolve against the directory.
 func PageURL(origin, contentToken, tileID string) string {
-	return origin + "/content/" + contentToken + "/" + tileID + "/"
+	return origin + ContentPath + contentToken + "/" + tileID + "/"
 }
 
 // PresentedAssets is the subpath under a presented tile's page that its

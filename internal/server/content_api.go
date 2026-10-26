@@ -36,7 +36,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-const contentPathPrefix = "/content/"
+const contentPathPrefix = rpc.ContentPath
 
 // contentSandbox is the CSP every API response carries. allow-popups lets a
 // target=_blank link reach the desktop's window-open handler, which denies the

@@ -669,10 +669,11 @@ func main() {
 }
 
 // takeMenu keeps what a handshake of this node says of its plugins and
-// routes.
+// routes, and hands the routes to main.
 func (a *App) takeMenu(h *gridwellv1.HandshakeResponse) {
 	a.plugins = h.Plugins
 	a.routes.rules, a.routes.presents = rpc.Routing(h)
+	a.bridgeSetRoutes()
 }
 
 // bootstrap loads the plugin list, then starts the rest of the client.
@@ -1053,6 +1054,9 @@ func (a *App) startSSE() {
 			}
 			if plan.Reload != "" {
 				a.owePageReload(plan.Reload)
+			}
+			if plan.Follow != nil {
+				a.followURLRow(plan.Follow)
 			}
 			if plan.ClearLatch != "" {
 				a.fetch.grids.Change(plan.ClearLatch)

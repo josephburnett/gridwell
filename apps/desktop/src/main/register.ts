@@ -26,6 +26,7 @@ import { WebviewRegistry } from './webviews';
 import { handOverTrace, logLine, trace } from './trace';
 import { menuChose, menuOpened } from './viewtrace';
 import { openOutside } from './outside';
+import type { Routing } from './routes';
 
 // The renderer's declared choices, as a trace record names them; webviews.ts
 // names the live view's page menu.
@@ -66,7 +67,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.hidden ?? false, a.focused ?? false, a.gen ?? 0);
+    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.hidden ?? false, a.focused ?? false, a.gen ?? 0, { page: a.page ?? '', site: a.site ?? '' });
   });
 
   ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {
@@ -94,7 +95,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.reload, (_e, a: ReloadArgs): void => {
-    registry.reload(a.paneId, a.url);
+    registry.reload(a.paneId, a.url, a.site);
   });
 
   ipcMain.handle(CH.showMenu, (_e, a: PaneRef): void => {
@@ -128,6 +129,10 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.handOverTrace, (): Promise<string> => handOverTrace());
+
+  ipcMain.handle(CH.setRoutes, (_e, a: Routing): void => {
+    registry.setRoutes(a);
+  });
 
   ipcMain.handle(CH.openOutside, (_e, a: OpenOutsideArgs): Promise<void> => openOutside(a.url, (url) => shell.openExternal(url), trace));
 }

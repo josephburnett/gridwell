@@ -2,7 +2,8 @@ import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } fr
 import type { MenuItemConstructorOptions } from 'electron';
 import * as path from 'node:path';
 import type { WebContentsViewConstructorOptions } from 'electron';
-import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent } from './ipc';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent, RouteMoveEvent } from './ipc';
+import { routeNavigation, type NavVerdict, type Routing, type ViewRoute } from './routes';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -43,6 +44,7 @@ import {
   viewNavInPage,
   viewOpenRequested,
   viewRevived,
+  viewRouted,
   viewShown,
   viewStealBounced,
 } from './viewtrace';
@@ -83,6 +85,9 @@ interface Entry {
   // Bumped by every show, hide and move, so a park still waiting on its frame
   // can tell it was overtaken.
   parkGen: number;
+  // What its navigations are routed by; the renderer sets it at place and
+  // reload.
+  route: ViewRoute;
 }
 
 // How a view ended outside remove(). close is whether its webContents is still
@@ -110,6 +115,9 @@ interface RegistryCallbacks {
   onFocusStolen?: (ev: { paneId: string }) => void;
   // A view ended outside remove(); see retire().
   onViewGone?: (ev: ViewGoneEvent) => void;
+  // The routes' verdicts on a navigation the page did not make (route()).
+  onRouteMove?: (ev: RouteMoveEvent) => void;
+  onOutside?: (url: string) => void;
 }
 
 // How a view is made, injected so webviews.test.ts runs the registry under
@@ -135,6 +143,8 @@ export class WebviewRegistry {
 
   private readonly newView: NewView;
   private readonly trace: Emit;
+  // The renderer's last handshake's routes; null before the first.
+  private routing: Routing | null = null;
 
   constructor(win: BaseWindow, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o), emit: Emit = trace) {
     this.win = win;
@@ -189,7 +199,7 @@ export class WebviewRegistry {
       {
         copyText: (t) => clipboard.writeText(t),
         copyLink: (u) => clipboard.writeText(u),
-        openLink: (u) => void wc.loadURL(u),
+        openLink: (u) => this.openLink(paneId, u),
         cut: () => wc.cut(),
         paste: () => wc.paste(),
         back: () => this.goBack(paneId),
@@ -249,7 +259,7 @@ export class WebviewRegistry {
 
   // The view is a child of the window's contentView, so it paints above the
   // root canvas renderer. Later bounds arrive through setBounds.
-  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', hidden = false, focused = false, gen = 0): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', hidden = false, focused = false, gen = 0, route: ViewRoute = { page: '', site: '' }): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = SESSION_PARTITION;
     const stale = this.entries.get(paneId);
@@ -276,7 +286,7 @@ export class WebviewRegistry {
     // off the canvas overlay; focused feeds the steal guard from the first
     // frame, because addChildView and loadURL hand the new widget OS focus even
     // on an unfocused pane.
-    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, focusSettle: null, captureStreak: FRESH, parkGen: 0, route };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = webUrl(target);
@@ -285,6 +295,14 @@ export class WebviewRegistry {
         this.cb.onOpenBelow?.({ paneId: e.paneId, url: below });
       }
       return { action: 'deny' };
+    });
+    // A link followed or a form sent inside the page, and a server's redirect,
+    // go where the routes send them before the page moves (route()).
+    view.webContents.on('will-navigate', (ev) => {
+      if (this.route(e, ev.url, 'navigate').kind !== 'stay') ev.preventDefault();
+    });
+    view.webContents.on('will-redirect', (ev) => {
+      if (ev.isMainFrame && this.route(e, ev.url, 'redirect').kind !== 'stay') ev.preventDefault();
     });
     // window.ts handles F11 on the canvas, but a focused live view owns OS
     // keyboard focus, so that handler never sees the key. The zoom chord is
@@ -543,12 +561,44 @@ export class WebviewRegistry {
     if (nav.canGoBack()) nav.goBack();
   }
 
-  // reload loads url in the pane's view again, the navigation place makes,
-  // for a page its source changed (urlview.PageMoved).
-  reload(paneId: string, url: string): void {
+  // reload loads url in the pane's view, the navigation place makes, for a
+  // page its source changed (urlview.PageMoved) or a row that now names
+  // another taker, whose site the tile's address is then.
+  reload(paneId: string, url: string, site?: string): void {
     const e = this.entries.get(paneId);
     if (!e) return;
+    if (site !== undefined) e.route = { ...e.route, site };
     void e.view.webContents.loadURL(url);
+  }
+
+  // openLink is the menu's Open Link, which loads in the page and so is
+  // routed as a link the page follows.
+  openLink(paneId: string, url: string): void {
+    const e = this.entries.get(paneId);
+    if (e && this.route(e, url, 'menu').kind === 'stay') void e.view.webContents.loadURL(url);
+  }
+
+  setRoutes(routing: Routing): void {
+    this.routing = routing;
+  }
+
+  // route is the routes' verdict on e's page going to target, acted on: a
+  // site outside opens in the default browser, another taker's moves the
+  // tile in the renderer, and a served page opens one below. The caller holds
+  // the page for any verdict but stay.
+  private route(e: Entry, target: string, how: string): NavVerdict {
+    let current = e.url;
+    try {
+      current = e.view.webContents.getURL() || e.url;
+    } catch {
+      // A view gone under the event routes from the address main last saw.
+    }
+    const v = routeNavigation(target, current, e.route, this.routing);
+    this.trace(viewRouted(e.paneId, e.tileId, how, target, v.kind));
+    if (v.kind === 'outside') this.cb.onOutside?.(v.site);
+    if (v.kind === 'move') this.cb.onRouteMove?.({ paneId: e.paneId, tileId: e.tileId, url: v.site });
+    if (v.kind === 'below') this.cb.onOpenBelow?.({ paneId: e.paneId, url: v.site });
+    return v;
   }
 
   async removeAll(): Promise<void> {

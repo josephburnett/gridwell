@@ -10,6 +10,8 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 )
 
+var urlRow = &pb.Tile{Id: "n/5", GridId: "n/1", Kind: rpc.KindURL, UrlString: "http://example.test/a", PresentedBy: "pre0001"}
+
 func TestRouteTable(t *testing.T) {
 	cases := []struct {
 		name string
@@ -35,6 +37,9 @@ func TestRouteTable(t *testing.T) {
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{ContentChanged: true,
 				Tile: &pb.Tile{Id: "p/~dA", GridId: "p/~Yw", Kind: rpc.KindURL, ServesPage: true}}}},
 			Plan{ClearContent: "p/~dA", Reload: "p/~dA", DropPreviews: "p/~dA"}},
+		{"a changed url row is one its live views may follow",
+			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: urlRow}}},
+			Plan{ClearContent: "n/5", Follow: urlRow}},
 		{"a frozen one keeps its preview and has no live view",
 			&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{ContentChanged: true,
 				Tile: &pb.Tile{Id: "p/~dA", GridId: "p/~Yw", Kind: rpc.KindURL, ServesPage: true, PreviewBlobId: 7, UrlFrozen: true}}}},

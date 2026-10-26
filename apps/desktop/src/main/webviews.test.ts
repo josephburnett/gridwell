@@ -5,7 +5,7 @@ import type { BaseWindow, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
 import { viewCreated } from './viewtrace';
 import { FOCUS_SETTLE_MS } from './focusguard';
-import type { ErrorEvent, NavEvent, ViewGoneEvent } from './ipc';
+import type { ErrorEvent, NavEvent, OpenBelowEvent, RouteMoveEvent, ViewGoneEvent } from './ipc';
 import type { TraceEvent } from './trace';
 
 // The registry against a fake view, for the paths the capture harness cannot
@@ -87,6 +87,9 @@ interface Rig {
   escapes: string[];
   children: Set<FakeView>;
   records: TraceEvent[];
+  moves: RouteMoveEvent[];
+  outside: string[];
+  below: OpenBelowEvent[];
 }
 
 function rig(): Rig {
@@ -98,6 +101,9 @@ function rig(): Rig {
   const escapes: string[] = [];
   const children = new Set<FakeView>();
   const records: TraceEvent[] = [];
+  const moves: RouteMoveEvent[] = [];
+  const outside: string[] = [];
+  const below: OpenBelowEvent[] = [];
   const win = {
     contentView: {
       addChildView: (v: FakeView) => children.add(v),
@@ -115,6 +121,9 @@ function rig(): Rig {
       onNav: (ev) => navs.push(ev),
       onFocusStolen: (ev) => steals.push(ev.paneId),
       onEscapeKey: (ev) => escapes.push(ev.paneId),
+      onRouteMove: (ev) => moves.push(ev),
+      onOutside: (url) => outside.push(url),
+      onOpenBelow: (ev) => below.push(ev),
     },
     () => {
       const v = new FakeView();
@@ -123,7 +132,7 @@ function rig(): Rig {
     },
     (ev) => records.push(ev),
   );
-  return { reg, views, errors, gone, navs, steals, escapes, children, records };
+  return { reg, views, errors, gone, navs, steals, escapes, children, records, moves, outside, below };
 }
 
 const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
@@ -510,4 +519,92 @@ test('every window.open a view asks for is denied and traced, with whether it we
     kinds(r, 'open').map((ev) => [ev.kv?.view, ev.kv?.below, ev.msg]),
     [['p1', 'true', 'https://y.test/'], ['p1', 'false', 'data:']],
   );
+});
+
+// A live page's navigation is routed before the page moves (routes.ts): the
+// registry holds the page for every verdict but stay, and says where it went.
+const PAGE = 'http://127.0.0.1:9/content/tok/n1/12/';
+const ROUTING = {
+  routes: [
+    { match: 'http://example.test/*', plugin: 'pages' },
+    { match: 'http://outside.test/*', outside: true },
+  ],
+  presents: { pages: ['http://example.test/*'] },
+};
+
+// navigate fires what Chromium fires before a page moves, and answers whether
+// the registry held it.
+function navigate(wc: FakeWC, event: 'will-navigate' | 'will-redirect', url: string, isMainFrame = true): boolean {
+  let held = false;
+  wc.emit(event, { url, isMainFrame, preventDefault: () => (held = true) });
+  return held;
+}
+
+async function presentedView(r: Rig): Promise<FakeWC> {
+  r.reg.setRoutes(ROUTING);
+  await r.reg.place('p1', 'n1/12', PAGE + 'example.test/a', BOUNDS, 0, '', false, true, 1, { page: PAGE, site: 'http://example.test/a' });
+  return r.views[0].webContents!;
+}
+
+function routed(r: Rig): string[][] {
+  return kinds(r, 'route').map((ev) => [ev.kv!.how, ev.msg, ev.kv!.verdict]);
+}
+
+test('a navigation the presenter takes moves in place; one outside opens outside and the page stays', async () => {
+  const r = rig();
+  const wc = await presentedView(r);
+  assert.equal(navigate(wc, 'will-navigate', PAGE + 'example.test/b'), false, 'the presenter\'s own move was held');
+  assert.equal(navigate(wc, 'will-navigate', 'http://outside.test/x'), true, 'an outside address loaded in the page');
+  assert.deepEqual(r.outside, ['http://outside.test/x']);
+  assert.deepEqual(r.moves, []);
+  assert.deepEqual(routed(r), [
+    ['navigate', PAGE + 'example.test/b', 'stay'],
+    ['navigate', 'http://outside.test/x', 'outside'],
+  ]);
+});
+
+test('a navigation to another taker is held and the renderer moves the tile there', async () => {
+  const r = rig();
+  const wc = await presentedView(r);
+  assert.equal(navigate(wc, 'will-navigate', PAGE + 'plain.test/x'), true, 'an address the plugin does not take loaded in its page');
+  assert.deepEqual(r.moves, [{ paneId: 'p1', tileId: 'n1/12', url: 'http://plain.test/x' }]);
+  // The renderer loads the site and says so; the site's own moves then stay,
+  // and a presented address goes back to the plugin's page.
+  r.reg.reload('p1', 'http://plain.test/x', 'http://plain.test/x');
+  assert.equal(navigate(wc, 'will-navigate', 'http://plain.test/y'), false, 'the site\'s own move was held');
+  assert.equal(navigate(wc, 'will-navigate', 'http://example.test/b'), true, 'a presented address loaded the site');
+  assert.deepEqual(r.moves.map((m) => m.url), ['http://plain.test/x', 'http://example.test/b']);
+});
+
+test('a main-frame redirect is routed as a navigation is, a frame\'s is not', async () => {
+  const r = rig();
+  const wc = await presentedView(r);
+  assert.equal(navigate(wc, 'will-redirect', 'http://outside.test/x', false), false, 'a frame\'s redirect was routed');
+  assert.equal(navigate(wc, 'will-redirect', 'http://plain.test/x'), true);
+  assert.deepEqual(r.moves.map((m) => m.url), ['http://plain.test/x']);
+  assert.deepEqual(routed(r), [['redirect', 'http://plain.test/x', 'move']]);
+});
+
+test('the menu\'s Open Link is routed: it loads only what stays', async () => {
+  const r = rig();
+  const wc = await presentedView(r);
+  const loads = wc.loads;
+  r.reg.openLink('p1', 'http://outside.test/x');
+  assert.equal(wc.loads, loads, 'an outside address loaded in the page');
+  assert.deepEqual(r.outside, ['http://outside.test/x']);
+  r.reg.openLink('p1', PAGE + 'example.test/c');
+  assert.equal(wc.loads, loads + 1);
+  assert.equal(wc.url, PAGE + 'example.test/c');
+});
+
+test('a served page opens a presented address below; before any routes nothing is held', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'n1/12', PAGE, BOUNDS, 0, '', false, true, 1, { page: PAGE, site: '' });
+  const wc = r.views[0].webContents!;
+  assert.equal(navigate(wc, 'will-navigate', 'http://outside.test/x'), false, 'held before the renderer handed over its routes');
+  r.reg.setRoutes(ROUTING);
+  assert.equal(navigate(wc, 'will-navigate', 'http://example.test/b'), true);
+  assert.deepEqual(r.below, [{ paneId: 'p1', url: 'http://example.test/b' }]);
+  assert.equal(navigate(wc, 'will-navigate', 'http://plain.test/x'), false, 'a served page\'s link to the plain web was held');
+  assert.deepEqual(r.moves, []);
 });

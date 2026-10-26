@@ -30,27 +30,30 @@ func TestAddress(t *testing.T) {
 	}
 }
 
-// A presented tile's view lands on its page, and the address it names is the
-// site's; anywhere outside the page names none, so nothing is written.
+// A view's location inside its tile's page names the site address it is the
+// page of, one elsewhere on the node names none, and any other names itself,
+// presented or not: the routes decided before the page moved there.
 func TestLanded(t *testing.T) {
 	const stored = "http://example.test/a"
 	cases := []struct {
-		name, presented, location string
-		want                      string
-		ok                        bool
+		name, page, location string
+		want                 string
+		ok                   bool
 	}{
-		{"a plain url lands where it is", "", "https://b.test/p", "https://b.test/p", true},
-		{"a presented page names its site address", page, page + "example.test/b?y=2", "http://example.test/b?y=2", true},
+		{"a plain url lands where it is", page, "https://b.test/p", "https://b.test/p", true},
+		{"a served page names wherever it is", "", "https://b.test/p", "https://b.test/p", true},
+		{"a page names its site address", page, page + "example.test/b?y=2", "http://example.test/b?y=2", true},
 		{"another tile's page names nothing", page, "https://host/content/tok/p2/example.test/b", "", false},
 		{"the plugin's assets name nothing", page, page + "_/app.js", "", false},
-		{"another origin names nothing", page, "https://example.test/b", "", false},
+		{"the site itself names itself", page, "https://example.test/b", "https://example.test/b", true},
+		{"the node outside its content API is a site", page, "https://host/wasm_exec.js?x", "https://host/wasm_exec.js?x", true},
 	}
 	for _, c := range cases {
-		got, ok := Landed(c.presented, stored, c.location)
+		got, ok := Landed(c.page, stored, c.location)
 		if got != c.want || ok != c.ok {
 			t.Errorf("%s: Landed = %q %v, want %q %v", c.name, got, ok, c.want, c.ok)
 		}
-		if ok && c.presented != "" && !WriteAddress(false, got, stored) {
+		if ok && !WriteAddress(false, got, stored) {
 			t.Errorf("%s: the site address %q is not written", c.name, got)
 		}
 	}

@@ -1,3 +1,5 @@
+import * as http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
 import { dumpViaAPI } from './trace';
@@ -132,4 +134,86 @@ test('a presented url tile opens its plugin page, writes back the site address, 
   // pages declares no Watch, which is no failure, so no notice.
   const e = await window.evaluate(() => (window as any).__gridwellTest.errors());
   expect(e.notices, 'no notices').toHaveLength(0);
+});
+
+// A link followed inside a live page is routed before the page moves (CLAUDE.md,
+// 2026-10-25): from the plugin's page an outside address opens in the default
+// browser and the page stays, one the plugin does not take loads the site in
+// the tile, and from the site a presented address loads the plugin's page,
+// the tile's address following each move the routes let it make.
+test('a link inside a live page goes where the routes send it, and the tile follows', async ({ electronApp, gw, window }) => {
+  const site = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.end(`<title>Plain site</title><a id="topresented" href="http://example.test/hello">back to the plugin</a> ${req.url}`);
+  });
+  await new Promise<void>((r) => site.listen(0, '127.0.0.1', () => r()));
+  const plain = `http://127.0.0.1:${(site.address() as AddressInfo).port}/plain`;
+  try {
+    await gw.enterPlugin('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx);
+    const cy = Math.round(f.cy);
+    const top = f.id;
+    const inPane = (js: string) =>
+      electronApp.evaluate(
+        (_e, a: { id: string; js: string }) =>
+          (globalThis as any).__gwRegistry.webContentsFor(a.id)?.executeJavaScript(a.js, true) ?? null,
+        { id: top, js },
+      );
+    const urlIn = () =>
+      electronApp.evaluate((_e, id: string) => ((globalThis as any).__gwRegistry.webContentsFor(id)?.getURL() as string) ?? '', top);
+    const follow = (id: string, href: string) =>
+      inPane(
+        `document.body.insertAdjacentHTML('beforeend', '<a id="${id}" href="${href}">${id}</a>');` +
+          `document.getElementById('${id}').click()`,
+      );
+    const row = async () => tileAt(await gw.getGrid(f.gridID), 'url', cx, cy);
+    const pageOf = /\/content\/[0-9a-f]{64}\/.+\/example\.test\/hello$/;
+
+    await gw.openMenu();
+    await gw.dragCreate('url', cx, cy);
+    await gw.descendCell(cx, cy);
+    await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+    await window.fill('#gw-url-input', 'http://example.test/hello');
+    await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
+    await expect.poll(urlIn, { timeout: 15_000 }).toMatch(pageOf);
+    await expect.poll(() => inPane('document.title'), { timeout: 15_000 }).toBe('Hello, world');
+    await gw.waitIdle();
+    const panes = (await gw.panes()).length;
+
+    // (1) Outside: the default browser, and the page and the tile stay.
+    await electronApp.evaluate(({ shell }) => {
+      const g = globalThis as any;
+      g.__gwOutside = [];
+      (shell as any).openExternal = async (u: string) => {
+        g.__gwOutside.push(u);
+      };
+    });
+    await follow('gwout', 'http://outside.test/x');
+    await expect
+      .poll(() => electronApp.evaluate(() => (globalThis as any).__gwOutside as string[]), { timeout: 10_000 })
+      .toEqual(['http://outside.test/x']);
+    await gw.waitIdle();
+    expect(await urlIn(), 'the page stayed').toMatch(pageOf);
+    expect((await row())?.urlString, 'the tile stayed').toBe('http://example.test/hello');
+
+    // (2) An address the plugin does not take: the site, in the tile.
+    await follow('gwplain', plain);
+    await expect.poll(urlIn, { message: 'the view loads the site', timeout: 15_000 }).toBe(plain);
+    await expect.poll(async () => (await row())?.urlString ?? '', { message: 'the tile follows', timeout: 15_000 }).toBe(plain);
+    expect((await row())?.presentedBy ?? '', 'no plugin presents it').toBe('');
+    await expect.poll(() => inPane('document.title'), { timeout: 15_000 }).toBe('Plain site');
+
+    // (3) From the site, a presented address: the plugin's page, in the tile.
+    await inPane(`document.getElementById('topresented').click()`);
+    await expect.poll(urlIn, { message: 'the view loads the plugin page', timeout: 15_000 }).toMatch(pageOf);
+    await expect
+      .poll(async () => (await row())?.urlString ?? '', { message: 'the tile follows', timeout: 15_000 })
+      .toBe('http://example.test/hello');
+    expect((await row())?.presentedBy).toContain(PAGES);
+    await expect.poll(() => inPane('document.title'), { timeout: 15_000 }).toBe('Hello, world');
+    expect((await gw.panes()).length, 'no link opened a pane').toBe(panes);
+  } finally {
+    site.close();
+  }
 });

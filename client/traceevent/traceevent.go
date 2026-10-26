@@ -268,6 +268,12 @@ func URLReload(paneID, tileID string) Event {
 	return Event{Src: SrcURL, Kind: "reload", Msg: "live view reloads its changed page", KV: kv("pane", paneID, "tile", tileID)}
 }
 
+// URLFollow is a live view loading what its row now says
+// (urlview.View.Follow): presented names the taker, "" for the site.
+func URLFollow(paneID, tileID, presented string) Event {
+	return Event{Src: SrcURL, Kind: "follow", Msg: "live view follows its row", KV: kv("pane", paneID, "tile", tileID, "presented", presented)}
+}
+
 // URLMove is a live view handed to another pane with its page.
 func URLMove(fromPaneID, toPaneID, tileID string) Event {
 	return Event{Src: SrcURL, Kind: "move", Msg: "live view moves",

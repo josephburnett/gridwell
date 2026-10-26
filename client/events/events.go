@@ -36,6 +36,9 @@ type Plan struct {
 	// Health is a namespace's health event; ReactHealth says what to do about
 	// it.
 	Health *pb.EventPluginHealth
+	// Follow is a changed url row whose live views may load what it now says
+	// (urlview.View.Follow).
+	Follow *pb.Tile
 	// Reframe is a root grid's new framing, applied to its doors by
 	// rpc.Reframe. It asks for no fetch: the listing did not change.
 	Reframe *pb.GridFramingChanged
@@ -49,6 +52,9 @@ func Route(ev *pb.Event) Plan {
 	case *pb.Event_TileChanged:
 		if t := p.TileChanged.GetTile(); t != nil {
 			plan := Plan{ClearContent: rpc.ContentID(t)}
+			if rpc.WebContent(t) && t.UrlString != "" {
+				plan.Follow = t
+			}
 			m := urlview.PageMoved(t, p.TileChanged.GetContentChanged())
 			if m.Reload {
 				plan.Reload = rpc.ContentID(t)

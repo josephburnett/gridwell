@@ -30,6 +30,8 @@ export const CH = {
                                      // main's trace records, else why not.
   openOutside: 'gw:openOutside', // OpenOutsideArgs → void; rejects with why
                                  // the default browser did not open it.
+  setRoutes: 'gw:setRoutes', // routes.Routing → void: the handshake's, which
+                             // main routes a live page's navigations by.
 } as const;
 
 // Live url view's preload → main (send, fire-and-forget). The view swallows the
@@ -55,6 +57,7 @@ export const EV = {
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
   escapeKey: 'gw:escape-key', // EscapeKeyEvent — Esc pressed while a parked live view owns focus
   viewGone: 'gw:view-gone', // ViewGoneEvent — a live view ended outside a remove
+  routeMove: 'gw:route-move', // RouteMoveEvent — the routes sent a navigation to another taker
 } as const;
 
 // Physical screen coordinates, independent of the page's zoomFactor.
@@ -87,10 +90,12 @@ export interface OpenOutsideArgs {
   url: string;
 }
 
-// The pane's view loads url again: its page's source changed it.
+// The pane's view loads url: its page's source changed it, or its row now
+// names another taker. site, when given, is the tile's address it shows.
 export interface ReloadArgs {
   paneId: string;
   url: string;
+  site?: string;
 }
 
 // One choice in a menu the renderer declared. client/circlemenu owns the rows;
@@ -126,6 +131,10 @@ export interface PlaceArgs {
   history?: string;
   // client/urlview.Gen, which ViewGoneEvent echoes.
   gen?: number;
+  // What main routes the view's navigations by (routes.ViewRoute); absent
+  // routes nothing.
+  page?: string;
+  site?: string;
 }
 
 // A live view handed to another pane with its page: the takeover that neither
@@ -194,6 +203,15 @@ export interface NavEvent {
 // The renderer splits the pane and opens the link as an ephemeral visit.
 export interface OpenBelowEvent {
   paneId: string;
+  url: string;
+}
+
+// The routes sent a navigation of the pane's page to another taker than the
+// page's, so main held the page and the renderer moves the tile to url, the
+// site address.
+export interface RouteMoveEvent {
+  paneId: string;
+  tileId: string;
   url: string;
 }
 

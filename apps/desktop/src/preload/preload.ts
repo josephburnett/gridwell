@@ -18,6 +18,7 @@ import {
   ReloadArgs,
   FreezeResult,
 } from '../main/ipc';
+import type { Routing } from '../main/routes';
 
 // The main-to-renderer pushes, listener name → channel. EV in ipc.ts says what
 // each one carries; nothing here reads a payload, because only
@@ -36,6 +37,7 @@ const LISTENERS = {
   onZoomKey: EV.zoomKey,
   onEscapeKey: EV.escapeKey,
   onViewGone: EV.viewGone,
+  onRouteMove: EV.routeMove,
   onError: EV.error,
 } as const;
 
@@ -107,6 +109,12 @@ const api = {
   // Hands an http(s) address to the default browser; anything else rejects.
   openOutside(args: OpenOutsideArgs): Promise<void> {
     return ipcRenderer.invoke(CH.openOutside, args);
+  },
+
+  // The handshake's routes and presents, which main routes a live page's
+  // navigations by before the page moves.
+  setRoutes(args: Routing): Promise<void> {
+    return ipcRenderer.invoke(CH.setRoutes, args);
   },
 
   ...listeners,

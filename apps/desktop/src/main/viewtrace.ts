@@ -61,6 +61,13 @@ export function viewOpenRequested(paneId: string | undefined, url: string, below
   return { src: VIEW, kind: 'open', msg: shownAddress(url), kv: { ...(paneId ? { view: paneId } : {}), below: String(below) } };
 }
 
+// A live page's navigation as the routes judged it before the page moved
+// (routes.routeNavigation): how is what asked it, a navigation, a redirect or
+// the menu's Open Link, and verdict is where it went. msg is the address.
+export function viewRouted(paneId: string, tileId: string, how: string, url: string, verdict: string): TraceEvent {
+  return view('route', paneId, shownAddress(url), { tile: tileId, how, verdict });
+}
+
 // The open-outside verb's verdict on an address a route sent to the default
 // browser. It names no pane: nothing opens in one.
 export function viewOpenedOutside(url: string, verdict: 'opened' | 'refused' | 'failed'): TraceEvent {

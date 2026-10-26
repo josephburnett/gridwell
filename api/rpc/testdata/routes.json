@@ -1,0 +1,245 @@
+{
+  "comment": "The cases rpc.MatchAddress, rpc.Decide and rpc.PresentedSite answer, run by api/rpc/routes_fixture_test.go against the owners and by apps/desktop/src/main/routes.test.ts against the desktop's forced copy (routes.ts), so the two cannot drift.",
+  "match": [
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "https://gitlab.com/group/project/-/merge_requests/12",
+      "want": true
+    },
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "https://gitlab.com/group/sub/project/-/merge_requests/12",
+      "want": true,
+      "why": "* crosses /"
+    },
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "https://gitlab.com/group/project/-/merge_requests/12/diffs?view=inline",
+      "want": true
+    },
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "https://gitlab.com/group/project/-/issues/12",
+      "want": false
+    },
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "http://gitlab.com/group/project/-/merge_requests/12",
+      "want": false,
+      "why": "the scheme is literal"
+    },
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "https://gitlab.com.evil.test/x/-/merge_requests/1",
+      "want": false
+    },
+    {
+      "pattern": "https://gitlab.com/*/-/merge_requests/*",
+      "address": "https://evil.test/?https://gitlab.com/x/-/merge_requests/1",
+      "want": false,
+      "why": "anchored at the start"
+    },
+    {
+      "pattern": "https://example.test/*",
+      "address": "https://example.test/",
+      "want": true,
+      "why": "* matches nothing too"
+    },
+    {
+      "pattern": "https://example.test/*",
+      "address": "https://example.test",
+      "want": false
+    },
+    {
+      "pattern": "https://example.test/a",
+      "address": "https://example.test/a",
+      "want": true
+    },
+    {
+      "pattern": "https://example.test/a",
+      "address": "https://example.test/ab",
+      "want": false,
+      "why": "anchored at the end"
+    },
+    {
+      "pattern": "https://example.test/a?b",
+      "address": "https://example.test/a?b",
+      "want": true,
+      "why": "? is literal"
+    },
+    {
+      "pattern": "https://example.test/a?b",
+      "address": "https://example.test/axb",
+      "want": false
+    },
+    {
+      "pattern": "*",
+      "address": "anything at all",
+      "want": true
+    },
+    {
+      "pattern": "*a*b*",
+      "address": "xxaxxbxx",
+      "want": true
+    },
+    {
+      "pattern": "*a*b*",
+      "address": "xxbxxaxx",
+      "want": false
+    },
+    {
+      "pattern": "*a*a*",
+      "address": "xxaxx",
+      "want": false,
+      "why": "each part is found after the last"
+    },
+    {
+      "pattern": "",
+      "address": "",
+      "want": true
+    },
+    {
+      "pattern": "",
+      "address": "x",
+      "want": false
+    }
+  ],
+  "decide": {
+    "routes": [
+      {
+        "match": "https://gitlab.com/*",
+        "plugin": "labcode"
+      },
+      {
+        "match": "https://gitlab.com/*",
+        "outside": true
+      },
+      {
+        "match": "http://example.test/*",
+        "plugin": "pages"
+      },
+      {
+        "match": "http://example.test/*",
+        "plugin": "labcode"
+      },
+      {
+        "match": "https://elsewhere.test/*",
+        "plugin": "undeclared"
+      },
+      {
+        "match": "https://*",
+        "outside": true
+      }
+    ],
+    "presents": {
+      "labcode": [
+        "https://gitlab.com/*/-/merge_requests/*"
+      ],
+      "pages": [
+        "http://example.test/*"
+      ]
+    },
+    "cases": [
+      {
+        "address": "https://gitlab.com/x/-/merge_requests/7",
+        "plugin": "labcode",
+        "why": "a plugin route over an address its plugin presents"
+      },
+      {
+        "address": "https://gitlab.com/x/-/issues/7",
+        "outside": true,
+        "why": "a plugin route its plugin does not present falls through"
+      },
+      {
+        "address": "http://example.test/a",
+        "plugin": "pages",
+        "why": "the first plugin route that presents wins"
+      },
+      {
+        "address": "https://elsewhere.test/a",
+        "outside": true,
+        "why": "a route to a plugin that declares nothing falls through"
+      },
+      {
+        "address": "http://plain.test/a",
+        "why": "no route matches: a plain url tile"
+      },
+      {
+        "address": "ftp://gitlab.com/x",
+        "why": "the glob is over the whole address"
+      }
+    ]
+  },
+  "site": [
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p1/example.test/b?y=2",
+      "want": "http://example.test/b?y=2",
+      "ok": true,
+      "why": "a location inside the page names its site address, in the tile's scheme"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "https://example.test/a",
+      "location": "https://host/content/tok/p1/example.test/b",
+      "want": "https://example.test/b",
+      "ok": true
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p1/",
+      "ok": false,
+      "why": "the page itself"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p1/_/app.js",
+      "ok": false,
+      "why": "the plugin's assets"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p1/?q",
+      "ok": false,
+      "why": "a query on the page itself"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p1/#h",
+      "ok": false
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p2/example.test/b",
+      "ok": false,
+      "why": "another tile's page"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://host/content/tok/p12/example.test/b",
+      "ok": false,
+      "why": "a tile whose id extends this one's"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "http://example.test/a",
+      "location": "https://example.test/b",
+      "ok": false,
+      "why": "outside the page"
+    },
+    {
+      "page": "https://host/content/tok/p1/",
+      "site": "",
+      "location": "https://host/content/tok/p1/example.test/b",
+      "ok": false,
+      "why": "a tile with no address has no scheme to name a site in"
+    }
+  ]
+}
