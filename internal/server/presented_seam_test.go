@@ -9,6 +9,7 @@ package server_test
 import (
 	"context"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -219,5 +220,95 @@ func TestAPresentedTileIsServedByItsPlugin(t *testing.T) {
 	}
 	if code, _ := get(t, hs, page(plain.Id)+"/plain.test/a"); code != 404 {
 		t.Errorf("a tile no route takes = %d, want 404", code)
+	}
+}
+
+// navigate asks the content API at path as a browser tab asks for a document
+// (headers name the request's kind), and answers the status and where it
+// redirects, without following.
+func navigate(t *testing.T, hs *httptest.Server, path string, headers map[string]string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, hs.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	cl := *hs.Client()
+	cl.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := cl.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	return res.StatusCode, res.Header.Get("Location")
+}
+
+var (
+	document = map[string]string{"Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate"}
+	script   = map[string]string{"Sec-Fetch-Dest": "script", "Sec-Fetch-Mode": "no-cors", "Accept": "*/*"}
+	// A browser on a page that is no secure context sends no fetch metadata.
+	insecure = map[string]string{"Accept": "text/html,application/xhtml+xml"}
+)
+
+// A browser tab follows the rule a desktop view keeps by asking first: a
+// document under a presented tile's page for an address its plugin does not
+// take is a redirect to the site, and the plugin is never asked; what its
+// plugin takes, a sub-resource and the plugin's own assets stay its.
+func TestADocumentItsPluginDoesNotTakeRedirectsToTheSite(t *testing.T) {
+	impl := &presenter{}
+	cl, hs, root := presentingNode(t, impl)
+	presented := createURL(t, cl, root, 0, "http://example.test/a")
+	page := strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), presented.Id), "/")
+	cases := []struct {
+		name, path string
+		headers    map[string]string
+		code       int
+		location   string
+	}{
+		{"a document the plugin takes", "/example.test/b", document, 200, ""},
+		{"a document no route takes", "/plain.test/x?y=1", document, http.StatusSeeOther, "http://plain.test/x?y=1"},
+		{"a document a route sends to a plugin that does not present it", "/other.test/a", document, http.StatusSeeOther, "http://other.test/a"},
+		{"a document with no fetch metadata", "/plain.test/x", insecure, http.StatusSeeOther, "http://plain.test/x"},
+		{"a sub-resource is the plugin's", "/plain.test/x", script, 200, ""},
+		{"the plugin's assets are its", "/_/app.js", document, 200, ""},
+	}
+	for _, c := range cases {
+		code, location := navigate(t, hs, page+c.path, c.headers)
+		if code != c.code || location != c.location {
+			t.Errorf("%s: %d %q, want %d %q", c.name, code, location, c.code, c.location)
+		}
+	}
+	if got := impl.request().GetSubpath(); got != "_/app.js" {
+		t.Errorf("the plugin was last asked for %q: a redirected document reached it", got)
+	}
+}
+
+// A far tile's page is its own node's to judge, so the redirect comes back
+// through the connection.
+func TestAFarDocumentItsPluginDoesNotTakeRedirectsToTheSite(t *testing.T) {
+	ctx := context.Background()
+	far := newFarNodeWith(t, server.Config{ID: "rnode1", Routes: presentedRoutes}, registerPresenter(t, &presenter{}))
+	createURL(t, far.cl, far.root, 0, "http://example.test/a")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	connectTo(t, "geneva", far, nil)(reg, st)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	g, err := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()).GetGrid(ctx, localNodeID+"/geneva/"+far.root)
+	if err != nil || len(g.Tiles) != 1 {
+		t.Fatalf("far grid = %v %v", g, err)
+	}
+	page := strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), g.Tiles[0].Id), "/")
+	if code, location := navigate(t, hs, page+"/plain.test/x", document); code != http.StatusSeeOther || location != "http://plain.test/x" {
+		t.Errorf("a far document = %d %q, want a redirect to the site", code, location)
+	}
+	if code, _ := navigate(t, hs, page+"/example.test/b", document); code != 200 {
+		t.Errorf("a far document its plugin takes = %d, want the plugin's", code)
 	}
 }

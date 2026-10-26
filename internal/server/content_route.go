@@ -2,13 +2,16 @@ package server
 
 import (
 	"context"
+	"net/http"
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // contentRoute resolves the namespace and local id that serve a tile's content.
@@ -25,20 +28,38 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 
 // pageRoute is contentRoute for a page: a url tile a plugin presents is that
 // plugin's to serve, asked with no key, the subpath its site address. A far
-// row is its own node's to judge, behind the hop.
-func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, error) {
+// row is its own node's to judge, behind the hop, and comes back nil.
+func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
 	c, local, row, err := s.contentRow(ctx, qualifiedID)
 	if err != nil || row == nil {
-		return c, local, err
+		return c, local, nil, err
 	}
 	if s.stampPresented(ctx, row); row.PresentedBy == "" {
-		return c, local, nil
+		return c, local, row, nil
 	}
 	p, found := s.routeClient(row.PresentedBy)
 	if !found {
-		return nil, "", undeclared(row.PresentedBy)
+		return nil, "", nil, undeclared(row.PresentedBy)
 	}
-	return p, "", nil
+	return p, "", row, nil
+}
+
+// servePage answers one page request from whoever serves it (pageRoute),
+// unless it is a document under a presented tile for an address its plugin
+// does not take (leavesPage): that is a redirect to the site, so a browser
+// tab, which nothing can ask first, follows the routes as a desktop view does.
+func (s *Server) servePage(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
+	c, local, row, err := s.pageRoute(ctx, req.TileId)
+	if err != nil {
+		return err
+	}
+	if site, ok := s.leavesPage(ctx, row, req); ok {
+		trace.Emit("webapi", "left", "a document its plugin does not take", map[string]string{"tile": req.TileId, "site": site})
+		return send(&pb.ServeContentChunk{Status: http.StatusSeeOther, Headers: []*pb.Header{{Name: "Location", Value: site}}})
+	}
+	bound := proto.CloneOf(req)
+	bound.TileId = local
+	return c.ServeContent(ctx, bound, send)
 }
 
 // contentRow is contentRoute and the row that owns the content, nil when a

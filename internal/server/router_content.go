@@ -15,7 +15,7 @@ import (
 )
 
 // The router's content streams and the placement verb. Reads route through
-// contentRoute, a page through pageRoute; writes take plain id routing.
+// contentRoute, a page through servePage; writes take plain id routing.
 
 // ReadContent streams a tile's bytes from the namespace that owns it. Chunks
 // carry no ids, so nothing needs re-qualification on the way back.
@@ -31,13 +31,7 @@ func (rt *router) ReadContent(ctx context.Context, req *pb.ReadContentRequest, s
 // local API and the request rides this verb through the tunnel, which is how
 // a far node's pages are served.
 func (rt *router) ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	c, local, err := rt.srv.pageRoute(ctx, req.TileId)
-	if err != nil {
-		return err
-	}
-	bound := proto.CloneOf(req)
-	bound.TileId = local
-	return c.ServeContent(ctx, bound, send)
+	return rt.srv.servePage(ctx, req, send)
 }
 
 // WriteContent preserves commit-at-close: the owner commits only after a clean

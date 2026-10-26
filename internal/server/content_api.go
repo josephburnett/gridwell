@@ -4,7 +4,7 @@ package server
 //
 //	/content/<content-token>/<qualified-tile-id>/<subpath>
 //
-// becomes one ServeContent RPC routed through pageRoute, so links resolve
+// becomes one ServeContent RPC routed through servePage, so links resolve
 // and transit hops forward exactly like ReadContent; it carries the method,
 // query, headers and body, and each answered chunk is flushed to the page as
 // it comes. The API owns the URL grammar, the token gate and the headers in
@@ -143,12 +143,7 @@ func (s *Server) contentAPI() http.Handler {
 			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		c, local, err := s.pageRoute(r.Context(), tileID)
-		if err != nil {
-			refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
-			return
-		}
-		req := &pb.ServeContentRequest{TileId: local, Subpath: subpath, Method: r.Method, Query: r.URL.RawQuery, Body: body}
+		req := &pb.ServeContentRequest{TileId: tileID, Subpath: subpath, Method: r.Method, Query: r.URL.RawQuery, Body: body}
 		for name, values := range r.Header {
 			if credentialHeaders[name] {
 				continue
@@ -162,7 +157,7 @@ func (s *Server) contentAPI() http.Handler {
 		// are written from inside the stream: a failure before it is an HTTP
 		// status, one after it can only truncate the body.
 		wroteHeader := false
-		serr := c.ServeContent(r.Context(), req, func(chunk *pb.ServeContentChunk) error {
+		serr := s.servePage(r.Context(), req, func(chunk *pb.ServeContentChunk) error {
 			if !wroteHeader {
 				wroteHeader = true
 				writeContentHeaders(w.Header(), chunk, path)

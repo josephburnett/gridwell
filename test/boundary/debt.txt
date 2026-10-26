@@ -11,3 +11,4 @@ low-water | 57482
 2026-10-25 | a plugin presents a site's addresses: the client opens a presented tile at its page and writes back the site address (rpc.PresentedPageURL, rpc.PresentedSite, urlview.Landed) | 61
 2026-10-25 | Joe 2026-10-25: a declared no-Watch is not a failure; told is the cache's one input: EventPluginHealth.told derived by the adapter and the connection, and classed in rpc.Flags | 16
 2026-10-25 | a link inside a live page is routed before the page moves (Joe): main decides will-navigate with the handshake's routes (routes.ts, a forced copy pinned by api/rpc/testdata/routes.json), and the open view follows its row (urlview.View) | 363
+2026-10-25 | a link inside a live page is routed before the page moves (Joe): the content API redirects a document its presented tile's plugin does not take to the site (servePage, leavesPage) | 57
