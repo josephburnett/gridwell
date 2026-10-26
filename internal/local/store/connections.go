@@ -41,16 +41,7 @@ func (s *Store) Connections(ctx context.Context) ([]ConnectionRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []ConnectionRow
-	for rows.Next() {
-		r, err := scanConnection(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
+	return collect(rows, func(rows *sql.Rows) (ConnectionRow, error) { return scanConnection(rows) })
 }
 
 func (s *Store) writeConnection(ctx context.Context, verb, name string, fn func(tx *sql.Tx) error) error {

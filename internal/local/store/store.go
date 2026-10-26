@@ -343,6 +343,12 @@ func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error
 	return out, rows.Err()
 }
 
+func scanID(rows *sql.Rows) (int64, error) {
+	var id int64
+	err := rows.Scan(&id)
+	return id, err
+}
+
 // withTx runs fn inside a transaction.
 func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)

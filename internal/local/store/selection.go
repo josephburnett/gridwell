@@ -156,17 +156,8 @@ func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]
 		if err != nil {
 			return nil, err
 		}
-		var kids []int64
-		for rows.Next() {
-			var k int64
-			if err := rows.Scan(&k); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			kids = append(kids, k)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
+		kids, err := collect(rows, scanID)
+		if err != nil {
 			return nil, err
 		}
 		for _, k := range kids {
@@ -327,17 +318,8 @@ func clearAllTx(ctx context.Context, tx *sql.Tx, ns string) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	var changed []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		changed = append(changed, id)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	changed, err := collect(rows, scanID)
+	if err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE ns = ? AND selection != ''`, ns); err != nil {
