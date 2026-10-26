@@ -130,7 +130,8 @@ column for would answer a later read with what that read did not ask, so
 those always reach the source. A presented tile's page rides the same API,
 and what it shows is the plugin's answer; the tile's address is written
 only by a navigation the user makes in it, as the site address
-(`urlview.Landed`).
+(`urlview.Landed`), and a document request for an address its plugin does
+not take is a redirect to the site, never the plugin's (`server.leavesPage`).
 
 **5. The server fan-in** — `internal/server/router.go`. `Subscribe` starts
 one `watchPlugin` per namespace plus one for the transport. `watchPlugin`

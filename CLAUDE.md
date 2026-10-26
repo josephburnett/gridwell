@@ -605,13 +605,25 @@ These were decided deliberately. Do not reverse one without a new decision.
   parse. A presented url tile stays a url tile of the node holding it, home's
   or a far node's: its content is the site address, that node derives
   `presented_by` on every answer (`rpc.Decide`), its page is the address
-  without its scheme under the tile's (`rpc.PresentedPageURL`), and an
-  in-page navigation is written back as the site address, a location outside
-  the page writing nothing (`urlview.Landed`). The content API carries a
+  without its scheme under the tile's (`rpc.PresentedPageURL`), and where a
+  live view lands is written back as the site address: inside the tile's page
+  the one it is the page of, elsewhere in the node's content API nothing
+  (`urlview.Landed`). The content API carries a
   whole request and flushes its answer, and the node's own headers are
   never the plugin's (`server.nodeHeaders`). An outside address opens in the
-  default browser from the link funnel and creates nothing. Nothing names a
-  plugin kind: every behaviour rides the declaration and the rule.
+  default browser from the link funnel and creates nothing. A link followed
+  inside a live page is routed before the page moves, as any link is. On the
+  desktop main is asked first and decides with the handshake's routes
+  (`routes.routeNavigation`), a forced copy of `rpc.Decide` pinned by one
+  fixture (`api/rpc/testdata/routes.json`). An address with another taker
+  moves the tile there, written as a landed address and loaded as the row
+  then says (`urlview.View.Follow`); outside opens the default browser and
+  the page stays; the current taker's own move proceeds untouched. A served
+  page has no address to move, so a presented address opens below it. The
+  node answers a document request under a presented tile for an address its
+  plugin does not take with a redirect to the site (`server.leavesPage`), so
+  a browser tab follows the same rule. Nothing names a plugin kind: every
+  behaviour rides the declaration and the rule.
 - Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
   Every response is sandboxed and gated by the content token, which is never
   interchangeable with the cookie. It is either a text tile or a url tile: a

@@ -782,6 +782,12 @@ falls through to the next rule and the tile stays the site, so a pattern
 wider than what you can show turns a working url tile into a broken page.
 A link out of your page is written back to the user's tile as the site
 address, so a link to an address you present must be one you can show.
+A link inside your page is routed before the page moves, as any link is:
+to an address the routes send to you it stays your page, and to any other
+the tile leaves for the site, another plugin's page or the default browser
+without asking you. A browser tab cannot be asked first, so the node
+answers a document request under your page for an address you do not take
+with a redirect to the site itself.
 
 **Example.** A review plugin declares
 `presents: ["https://gitlab.com/*/-/merge_requests/*"]` and serves
@@ -789,8 +795,9 @@ address, so a link to an address you present must be one you can show.
 
 **Test.** At the node, `internal/server/presented_seam_test.go`:
 `TestAPresentedTileIsServedByItsPlugin` (no key, the address as the
-subpath, the plugin's 404 stands) and
-`TestAFarURLTileArrivesPresentedByTheFarNodesVerdict`.
+subpath, the plugin's 404 stands),
+`TestAFarURLTileArrivesPresentedByTheFarNodesVerdict` and
+`TestADocumentItsPluginDoesNotTakeRedirectsToTheSite`.
 
 **Today.** pages presents the addresses its `presents` config names
 (`pages/site.Present`: `<host>/<key>` is the doc's page, `_/<key>/<name>`

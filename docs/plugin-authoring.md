@@ -145,7 +145,12 @@ user's url tile, so you own no tile and need no grid. Its page is
 the `subpath` (`gitlab.com/g/p/-/merge_requests/7`), the query as the
 query; a link inside your page to another address you present is that
 address under the same prefix, and the node writes where the user went
-back to the tile. Serve your page's own assets under the subpath `_/`.
+back to the tile. A link inside your page goes where the routes send it
+before the page moves, so a subpath you do not present never reaches you
+as a page: on the desktop the tile leaves for the site, another plugin's
+page or the default browser, and in a browser tab the node redirects the
+document to the site. Serve your page's own assets under the subpath `_/`;
+an asset or a fetch under your page is always yours.
 
 ## Links
 

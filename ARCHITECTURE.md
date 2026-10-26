@@ -544,7 +544,13 @@ so a right-click moves focus like every other press. A view whose webContents
 ends outside `remove()` — a page that called `window.close()` — is retired at
 once (`retire`): its entry goes, every later call for the pane is a no-op, and
 the renderer hears `onViewGone` and drops its handle, so the pane shows the
-tile's frozen preview. The browser's cookies and storage are one Electron
+tile's frozen preview. A navigation the page itself starts (a link, a form,
+a redirect, the menu's Open Link) is asked of main before the page moves:
+`routes.routeNavigation` decides from the handshake's routes, which the
+renderer hands over (`setRoutes`), and the view's page and site. The current
+taker's own move proceeds; outside opens the default browser; another taker
+holds the page and tells the renderer (`onRouteMove`), which writes the site
+address and loads what the row then says (`urlview.View.Follow`). The browser's cookies and storage are one Electron
 partition (`persist:gridwell`), shared by every live url tile, local or far; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
 
@@ -657,6 +663,8 @@ copy:
 | what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; the grid row, in every pane (`Grid.selection`) |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
+| where a live page's navigation goes, and what its view loads next | `rpc.Decide`, copied in `routes.ts` (pinned by `api/rpc/testdata/routes.json`); `urlview.View` |
+| whether a page request under a presented tile leaves for the site | `server.leavesPage` |
 | which preview a plugin tile wears | `pluginhost.previewKey` |
 | what a tile's banner reads | `tilepreview.BannerText` (the plugin's status emoji, then the name) |
 | does a tile draw as host state, and which hue its banner wears | `tilepreview.Outside`, `tilepreview.BannerHue` |
@@ -696,6 +704,9 @@ Remaining seams with more than one writer, ranked by risk:
    `syncURLViews`; the math is extracted to `viewutil.ts`.
 2. The drag threshold — `dragThreshold` in Go plus forced copies in
    `viewutil.ts` and the sandboxed `urlview-preload.ts`; drift-linted.
+   The routes — `rpc.MatchAddress`, `rpc.Decide` and `rpc.PresentedSite`
+   plus their copy in `routes.ts`, which main answers `will-navigate` with
+   synchronously; both run `api/rpc/testdata/routes.json`.
 3. The `SetTile` kind→operation mapping — the proto, home's switch and the
    plugin adapter's.
 4. Text scroll of a rendered descent — the canvas wheel handler and the
