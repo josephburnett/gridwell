@@ -20,10 +20,13 @@ type routesFixture struct {
 			Match, Plugin string
 			Outside       bool
 		}
-		Presents map[string][]string
-		Cases    []struct {
-			Address, Plugin, Why string
-			Outside              bool
+		Declared map[string]struct {
+			Presents []string
+			Unknown  string
+		}
+		Cases []struct {
+			Address, Plugin, Broken, Why string
+			Outside                      bool
 		}
 	}
 	Site []struct {
@@ -59,9 +62,13 @@ func TestRoutesFixture(t *testing.T) {
 	for _, r := range f.Decide.Routes {
 		routes = append(routes, &pb.Route{Match: r.Match, Plugin: r.Plugin, Outside: r.Outside})
 	}
+	declared := map[string]Declared{}
+	for id, d := range f.Decide.Declared {
+		declared[id] = Declared{Presents: d.Presents, Unknown: d.Unknown}
+	}
 	for _, c := range f.Decide.Cases {
-		want := Verdict{Plugin: c.Plugin, Outside: c.Outside}
-		if got := Decide(c.Address, routes, f.Decide.Presents, MatchAddress); got != want {
+		want := Verdict{Plugin: c.Plugin, Outside: c.Outside, Broken: c.Broken}
+		if got := Decide(c.Address, routes, declared, MatchAddress); got != want {
 			t.Errorf("%s: Decide(%q) = %+v, want %+v", c.Why, c.Address, got, want)
 		}
 	}

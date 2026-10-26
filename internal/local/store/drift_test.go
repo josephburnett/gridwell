@@ -49,6 +49,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"status_detail":     "the owning plugin's current trouble with this tile (an ssh door's last dial error)",
 				"read_only":         "the owning plugin's reason this text body takes no edits",
 				"presented_by":      "the routes' verdict over a url tile's address, derived by the router",
+				"broken_reason":     "why the presenting plugin cannot present now, derived by the router beside presented_by",
 			},
 		},
 	}

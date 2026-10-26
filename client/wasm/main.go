@@ -80,10 +80,10 @@ type App struct {
 	plugins []*gridwellv1.PluginInfo
 
 	// routes is what the link funnel asks rpc.Decide with: the node's routes
-	// and the presents each plugin declares, from the handshake (takeMenu).
+	// and what each plugin declares, from the handshake (takeMenu).
 	routes struct {
 		rules    []*gridwellv1.Route
-		presents map[string][]string
+		declared map[string]rpc.Declared
 	}
 
 	// home is the qualified grid id "/" means; every "empty anchor" reader
@@ -672,7 +672,7 @@ func main() {
 // routes, and hands the routes to main.
 func (a *App) takeMenu(h *gridwellv1.HandshakeResponse) {
 	a.plugins = h.Plugins
-	a.routes.rules, a.routes.presents = rpc.Routing(h)
+	a.routes.rules, a.routes.declared = rpc.Routing(h)
 	a.bridgeSetRoutes()
 }
 

@@ -27,6 +27,10 @@ type parityVariant struct {
 const (
 	parityReadOnly = "a summary stands in for the bytes"
 	parityCached   = "the source is not answering, so this is the cache"
+	// A plugin whose Info refuses serves no grid of its own, so the variant's
+	// cells are home's twins on the far node, whose routes send their url to
+	// a far plugin refusing the same.
+	parityUnanswered = "the site's source is not mounted"
 )
 
 var (
@@ -36,6 +40,7 @@ var (
 	vPartial     = parityVariant{"a listing that is not authoritative", func(s *paritySource) { s.partial = true }}
 	vCached      = parityVariant{"a listing answered from cache", func(s *paritySource) { s.unreachable = parityCached }}
 	vPresented   = parityVariant{"a url tile a plugin presents", func(s *paritySource) { s.presents = []string{"https://example.com/*"} }}
+	vUnanswered  = parityVariant{"a url tile whose plugin does not answer", func(s *paritySource) { s.refusesInfo = parityUnanswered }}
 )
 
 // parityRoutes send the fixture's url addresses to each node's own source,
@@ -78,6 +83,7 @@ var parityVariantTable = []parityVariantCell{
 	{vPresented, parityCell{kURL, opWrite, onPlugin, same, "", checkWrite}, nil},
 	{vPresented, parityCell{kURL, opWrite, onFar, same, "", checkWrite}, nil},
 	{vPresented, parityCell{kURL, opCopy, onFar, same, "", checkCopy}, nil},
+	{vUnanswered, parityCell{kURL, opDescend, onFar, same, "", checkDescend}, nil},
 }
 
 // parityVariantNS is the plugin a decided cell's owner reaches: the local

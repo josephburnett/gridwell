@@ -13,15 +13,23 @@ interface Route {
   outside?: boolean;
 }
 
-// The handshake's routes and each plugin's presents (rpc.Routing).
+// What a plugin declares (rpc.Declared): its presents, or why they are
+// unknown.
+interface Declared {
+  presents?: string[];
+  unknown?: string;
+}
+
+// The handshake's routes and each plugin's declaration (rpc.Routing).
 export interface Routing {
   routes: Route[];
-  presents: Record<string, string[]>;
+  declared: Record<string, Declared>;
 }
 
 interface Verdict {
   plugin: string;
   outside: boolean;
+  broken: string;
 }
 
 export function matchAddress(pattern: string, address: string): boolean {
@@ -40,12 +48,13 @@ export function matchAddress(pattern: string, address: string): boolean {
 export function decide(address: string, r: Routing): Verdict {
   for (const route of r.routes) {
     if (!matchAddress(route.match, address)) continue;
-    if (route.outside) return { plugin: '', outside: true };
+    if (route.outside) return { plugin: '', outside: true, broken: '' };
     const plugin = route.plugin ?? '';
-    const presents = Object.prototype.hasOwnProperty.call(r.presents, plugin) ? r.presents[plugin] : [];
-    if (presents.some((p) => matchAddress(p, address))) return { plugin, outside: false };
+    const d: Declared = Object.prototype.hasOwnProperty.call(r.declared, plugin) ? r.declared[plugin] : {};
+    if (d.unknown) return { plugin, outside: false, broken: d.unknown };
+    if ((d.presents ?? []).some((p) => matchAddress(p, address))) return { plugin, outside: false, broken: '' };
   }
-  return { plugin: '', outside: false };
+  return { plugin: '', outside: false, broken: '' };
 }
 
 export function presentedSite(page: string, site: string, location: string): string | null {
@@ -92,7 +101,8 @@ function siteOf(u: string, view: ViewRoute): string | null {
 
 // routeNavigation is where a view at current going to target goes, by the
 // routes. No routing yet, before the renderer's first handshake, lets
-// everything stay, as before routes existed.
+// everything stay, as before routes existed. A site a broken plugin takes
+// never loads in the view: the tile moves to it, and its row reads broken.
 export function routeNavigation(target: string, current: string, view: ViewRoute, routing: Routing | null): NavVerdict {
   if (!routing || view.page === '') return STAY;
   const site = siteOf(target, view);
@@ -100,6 +110,7 @@ export function routeNavigation(target: string, current: string, view: ViewRoute
   const v = decide(site, routing);
   if (v.outside) return { kind: 'outside', site };
   if (view.site === '') return v.plugin ? { kind: 'below', site } : STAY;
+  if (v.broken) return { kind: 'move', site };
   const inPage = current.startsWith(view.page);
   const shows = inPage ? decide(siteOf(current, view) ?? '', routing).plugin : '';
   const same = target.startsWith(view.page) ? shows !== '' && v.plugin === shows : v.plugin === '' && !inPage;

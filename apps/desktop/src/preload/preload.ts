@@ -111,7 +111,7 @@ const api = {
     return ipcRenderer.invoke(CH.openOutside, args);
   },
 
-  // The handshake's routes and presents, which main routes a live page's
+  // The handshake's routes and declarations, which main routes a live page's
   // navigations by before the page moves.
   setRoutes(args: Routing): Promise<void> {
     return ipcRenderer.invoke(CH.setRoutes, args);

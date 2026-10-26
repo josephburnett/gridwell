@@ -173,7 +173,7 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 
 // presenterOf is the routes' verdict on site: the plugin whose page shows it.
 func (a *App) presenterOf(site string) string {
-	return rpc.Decide(site, a.routes.rules, a.routes.presents, rpc.MatchAddress).Plugin
+	return rpc.Decide(site, a.routes.rules, a.routes.declared, rpc.MatchAddress).Plugin
 }
 
 // routeURLView moves the tile in paneID's view to site, where main's routes

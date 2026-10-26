@@ -277,6 +277,14 @@ message Tile {
   // tile opens at the plugin's page for it. Wire-only, derived, never a
   // stored column.
   string presented_by = 42;
+
+  // broken_reason is why the plugin presented_by names cannot present this
+  // url tile now, "" when it can: a route sends the address to a plugin whose
+  // Info failed or timed out, or that the user disabled (rpc.Decide). The tile
+  // reads broken and loads nothing in place of the plugin's page, the site
+  // least of all, until the plugin answers. Wire-only, derived beside
+  // presented_by, never a stored column.
+  string broken_reason = 43;
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -609,6 +617,10 @@ message PluginInfo {
   bool connection = 14;
   // presents mirrors InfoResponse.presents, for the client's route verdict.
   repeated string presents = 15;
+  // disabled is the sentence of a plugin the user switched off until the node
+  // restarts (plugin.Registry.DisabledReason), "" while it is on: the route
+  // verdict reads its presents as unknown (rpc.DeclaredBy).
+  string disabled = 16;
 }
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
 // connection set, rpc.ConnectionRow's shape, because the + menu is one

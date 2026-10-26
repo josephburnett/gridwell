@@ -241,22 +241,22 @@ func (a *App) bridgeReload(paneID, addr, site string) {
 	a.bridgeVerb("reload", map[string]any{"paneId": paneID, "url": addr, "site": site}, nil, nil)
 }
 
-// bridgeSetRoutes hands main the handshake's routes and presents, which it
-// routes a live page's navigations by before the page moves (routes.ts).
+// bridgeSetRoutes hands main the handshake's routes and declarations, which
+// it routes a live page's navigations by before the page moves (routes.ts).
 func (a *App) bridgeSetRoutes() {
 	rules := make([]any, len(a.routes.rules))
 	for i, r := range a.routes.rules {
 		rules[i] = map[string]any{"match": r.Match, "plugin": r.Plugin, "outside": r.Outside}
 	}
-	presents := map[string]any{}
-	for id, ps := range a.routes.presents {
-		globs := make([]any, len(ps))
-		for i, p := range ps {
+	declared := map[string]any{}
+	for id, d := range a.routes.declared {
+		globs := make([]any, len(d.Presents))
+		for i, p := range d.Presents {
 			globs[i] = p
 		}
-		presents[id] = globs
+		declared[id] = map[string]any{"presents": globs, "unknown": d.Unknown}
 	}
-	a.bridgeVerb("setRoutes", map[string]any{"routes": js.ValueOf(rules), "presents": js.ValueOf(presents)}, nil, nil)
+	a.bridgeVerb("setRoutes", map[string]any{"routes": js.ValueOf(rules), "declared": js.ValueOf(declared)}, nil, nil)
 }
 
 // bridgeShowMenu pops the live view's context menu from the bar circle's

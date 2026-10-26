@@ -20,6 +20,7 @@ var Flags = []Flag{
 	{"gridwell.v1.Tile.url_frozen", true, "operation: freeze sets it and reads it back", "descent keeps the preview instead of going live"},
 	{"gridwell.v1.Tile.serves_page", true, "operation: serve a page, and the decided url copy cell on a plugin", "the address is the node's /content/ API, and a copy links"},
 	{"gridwell.v1.Tile.presented_by", true, "variant a url tile a plugin presents: the url descend, write and copy cells, here and through the connection", "the view opens at the plugin's page for the address, and its navigation is written back as the site address"},
+	{"gridwell.v1.Tile.broken_reason", true, "variant a url tile whose plugin does not answer: the url descend cell, here and through the connection", "the tile reads broken and loads nothing in place of its plugin's page, the site least of all"},
 	{"gridwell.v1.Tile.named", true, "operation: rename sets it, and the decided url screenshot cell on a plugin", "no capture or listing replaces the name"},
 	{"gridwell.v1.Tile.read_only", true, "variant a read-only entry: the decided text write cells, here and through the connection", "a body write is refused before it is typed"},
 	{"gridwell.v1.Grid.writable", true, "variant a plugin that is not writable: the decided text write cells, and the url write held to home", "the grid's text bodies take writes"},

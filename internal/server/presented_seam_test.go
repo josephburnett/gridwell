@@ -13,9 +13,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
@@ -77,6 +81,12 @@ func registerPresenter(t *testing.T, impl *presenter) func(*plugin.Registry, *st
 // on its web API.
 func presentingNode(t *testing.T, impl *presenter) (*rpc.Client, *httptest.Server, string) {
 	t.Helper()
+	return presentingNodeWith(t, registerPresenter(t, impl))
+}
+
+// presentingNodeWith is presentingNode with the presenter register registers.
+func presentingNodeWith(t *testing.T, register func(*plugin.Registry, *store.Store)) (*rpc.Client, *httptest.Server, string) {
+	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +94,7 @@ func presentingNode(t *testing.T, impl *presenter) (*rpc.Client, *httptest.Serve
 	t.Cleanup(func() { _ = st.Close() })
 	reg := plugin.NewRegistry()
 	reg.Register(localNodeID, "home", local.New(st, nil), nil)
-	registerPresenter(t, impl)(reg, st)
+	register(reg, st)
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID, Routes: presentedRoutes}))
 	root, err := st.RootGridID(context.Background())
 	if err != nil {
@@ -310,5 +320,168 @@ func TestAFarDocumentItsPluginDoesNotTakeRedirectsToTheSite(t *testing.T) {
 	}
 	if code, _ := navigate(t, hs, page+"/example.test/b", document); code != 200 {
 		t.Errorf("a far document its plugin takes = %d, want the plugin's", code)
+	}
+}
+
+// unmounted is the sentence a presenter whose source is down refuses Info
+// with.
+const unmounted = "the site's source is not mounted"
+
+// downPresenter is the presenter with an Info that refuses while down, and
+// counts every Info and page it is asked for.
+type downPresenter struct {
+	*presenter
+	down         atomic.Bool
+	infos, pages atomic.Int32
+}
+
+func (p *downPresenter) Info(ctx context.Context, req *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
+	p.infos.Add(1)
+	if p.down.Load() {
+		return nil, status.Error(codes.FailedPrecondition, unmounted)
+	}
+	return p.presenter.Info(ctx, req)
+}
+
+func (p *downPresenter) ServeContent(req *pluginv1.ServeContentRequest, s pluginv1.Plugin_ServeContentServer) error {
+	p.pages.Add(1)
+	return p.presenter.ServeContent(req, s)
+}
+
+// registerDown registers impl as the loader does (pluginhost.Start), so a
+// refused Info is asked again on the fan-in's backoff, with a switch that
+// disables it.
+func registerDown(t *testing.T, impl *downPresenter) func(*plugin.Registry, *store.Store) {
+	return func(reg *plugin.Registry, st *store.Store) {
+		t.Helper()
+		cp, closer, err := plugintest.Loopback(impl)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, stop := pluginhost.Start(cp, st.Namespace(presenterID), nil, "plugin "+presenterID+" watch")
+		t.Cleanup(func() { stop(); closer() })
+		reg.Register(presenterID, "pages", a, nil)
+		reg.Switch(presenterID, "site", func() {})
+	}
+}
+
+// urlRow is the url tile at address on grid, as a read of the grid answers it.
+func urlRow(t *testing.T, cl *rpc.Client, grid, address string) *gridwellv1.Tile {
+	t.Helper()
+	g, err := cl.GetGrid(context.Background(), grid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range g.Tiles {
+		if tl.UrlString == address {
+			return tl
+		}
+	}
+	t.Fatalf("grid %s holds no url tile at %s", grid, address)
+	return nil
+}
+
+// A url tile a route sends to a plugin whose Info refuses reads broken with
+// the plugin's sentence, presented_by still naming it; its page loads
+// nothing, neither the plugin's nor the site, and the plugin is not asked
+// for one. Once Info answers, with no restart, the tile is presented again
+// and its page is the plugin's.
+func TestAURLTileWhosePluginRefusesInfoIsBrokenUntilItAnswers(t *testing.T) {
+	impl := &downPresenter{presenter: &presenter{}}
+	impl.down.Store(true)
+	cl, hs, root := presentingNodeWith(t, registerDown(t, impl))
+	created := createURL(t, cl, root, 0, "http://example.test/a")
+	if created.PresentedBy != presenterID || created.BrokenReason != unmounted {
+		t.Fatalf("created: presented_by %q broken %q, want %s broken with %q", created.PresentedBy, created.BrokenReason, presenterID, unmounted)
+	}
+	if got := urlRow(t, cl, root, "http://example.test/a"); got.PresentedBy != presenterID || got.BrokenReason != unmounted {
+		t.Errorf("read: presented_by %q broken %q, want broken with the reason", got.PresentedBy, got.BrokenReason)
+	}
+	if plain := createURL(t, cl, root, 1, "http://plain.test/a"); plain.PresentedBy != "" || plain.BrokenReason != "" {
+		t.Errorf("a tile no route takes: presented_by %q broken %q, want neither", plain.PresentedBy, plain.BrokenReason)
+	}
+	page := strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), created.Id), "/")
+	if code, body := get(t, hs, page+"/example.test/a"); code == 200 || !strings.Contains(body, unmounted) {
+		t.Errorf("the broken page = %d %q, want a refusal with the reason", code, body)
+	}
+	if code, location := navigate(t, hs, page+"/example.test/b", document); code == http.StatusSeeOther || location != "" {
+		t.Errorf("a document under the broken page = %d %q, want no redirect to the site", code, location)
+	}
+	if n := impl.pages.Load(); n != 0 {
+		t.Errorf("the plugin was asked for %d pages while broken", n)
+	}
+
+	impl.down.Store(false)
+	deadline := time.Now().Add(15 * time.Second)
+	for got := urlRow(t, cl, root, "http://example.test/a"); got.BrokenReason != "" || got.PresentedBy != presenterID; got = urlRow(t, cl, root, "http://example.test/a") {
+		if time.Now().After(deadline) {
+			t.Fatalf("after Info answers: presented_by %q broken %q, want presented", got.PresentedBy, got.BrokenReason)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if code, body := get(t, hs, page+"/example.test/a"); code != 200 || body != "presented example.test/a" {
+		t.Errorf("the page once Info answers = %d %q, want the plugin's", code, body)
+	}
+}
+
+// A disabled plugin is asked nothing: a url tile a route sends to it reads
+// broken with the registry's sentence, and the handshake's row carries it,
+// so the client's verdict is the node's.
+func TestAURLTileWhosePluginIsDisabledIsBrokenAndThePluginIsNotAsked(t *testing.T) {
+	impl := &downPresenter{presenter: &presenter{}}
+	var reg *plugin.Registry
+	cl, hs, root := presentingNodeWith(t, func(r *plugin.Registry, st *store.Store) {
+		reg = r
+		registerDown(t, impl)(r, st)
+	})
+	if err := reg.Disable(presenterID); err != nil {
+		t.Fatal(err)
+	}
+	reason := reg.DisabledReason(presenterID)
+	asked := impl.infos.Load()
+	created := createURL(t, cl, root, 0, "http://example.test/a")
+	if created.PresentedBy != presenterID || created.BrokenReason != reason {
+		t.Errorf("created: presented_by %q broken %q, want %s broken with %q", created.PresentedBy, created.BrokenReason, presenterID, reason)
+	}
+	page := strings.TrimSuffix(rpc.PageURL("", server.ContentToken(servertest.Password), created.Id), "/")
+	if code, body := get(t, hs, page+"/example.test/a"); code == 200 || !strings.Contains(body, reason) {
+		t.Errorf("the disabled page = %d %q, want a refusal with the reason", code, body)
+	}
+	if n := impl.infos.Load() - asked; n != 0 {
+		t.Errorf("the disabled plugin's Info was asked %d times by the stamp", n)
+	}
+	h, err := cl.Handshake(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes, declared := rpc.Routing(h)
+	if v := rpc.Decide("http://example.test/a", routes, declared, rpc.MatchAddress); v.Plugin != presenterID || v.Broken != reason {
+		t.Errorf("the handshake decides %+v, want the node's broken verdict", v)
+	}
+}
+
+// A far url tile whose far plugin refuses Info arrives broken by the far
+// node's verdict, the reason carried through the connection.
+func TestAFarURLTileArrivesBrokenByTheFarNodesVerdict(t *testing.T) {
+	ctx := context.Background()
+	impl := &downPresenter{presenter: &presenter{}}
+	impl.down.Store(true)
+	far := newFarNodeWith(t, server.Config{ID: "rnode1", Routes: presentedRoutes}, registerDown(t, impl))
+	createURL(t, far.cl, far.root, 0, "http://example.test/a")
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	reg := plugin.NewRegistry()
+	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	connectTo(t, "geneva", far, nil)(reg, st)
+	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	g, err := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()).GetGrid(ctx, localNodeID+"/geneva/"+far.root)
+	if err != nil || len(g.Tiles) != 1 {
+		t.Fatalf("far grid = %v %v", g, err)
+	}
+	if tl := g.Tiles[0]; tl.PresentedBy != localNodeID+"/geneva/"+presenterID || tl.BrokenReason != unmounted {
+		t.Errorf("far tile: presented_by %q broken %q, want the far verdict", tl.PresentedBy, tl.BrokenReason)
 	}
 }

@@ -505,7 +505,14 @@ type Tile struct {
 	// the node holding the row over the plugins' presents (rpc.Decide); the
 	// tile opens at the plugin's page for it. Wire-only, derived, never a
 	// stored column.
-	PresentedBy   string `protobuf:"bytes,42,opt,name=presented_by,json=presentedBy,proto3" json:"presented_by,omitempty"`
+	PresentedBy string `protobuf:"bytes,42,opt,name=presented_by,json=presentedBy,proto3" json:"presented_by,omitempty"`
+	// broken_reason is why the plugin presented_by names cannot present this
+	// url tile now, "" when it can: a route sends the address to a plugin whose
+	// Info failed or timed out, or that the user disabled (rpc.Decide). The tile
+	// reads broken and loads nothing in place of the plugin's page, the site
+	// least of all, until the plugin answers. Wire-only, derived beside
+	// presented_by, never a stored column.
+	BrokenReason  string `protobuf:"bytes,43,opt,name=broken_reason,json=brokenReason,proto3" json:"broken_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -774,6 +781,13 @@ func (x *Tile) GetNamed() bool {
 func (x *Tile) GetPresentedBy() string {
 	if x != nil {
 		return x.PresentedBy
+	}
+	return ""
+}
+
+func (x *Tile) GetBrokenReason() string {
+	if x != nil {
+		return x.BrokenReason
 	}
 	return ""
 }
@@ -2489,7 +2503,11 @@ type PluginInfo struct {
 	// nothing.
 	Connection bool `protobuf:"varint,14,opt,name=connection,proto3" json:"connection,omitempty"`
 	// presents mirrors InfoResponse.presents, for the client's route verdict.
-	Presents      []string `protobuf:"bytes,15,rep,name=presents,proto3" json:"presents,omitempty"`
+	Presents []string `protobuf:"bytes,15,rep,name=presents,proto3" json:"presents,omitempty"`
+	// disabled is the sentence of a plugin the user switched off until the node
+	// restarts (plugin.Registry.DisabledReason), "" while it is on: the route
+	// verdict reads its presents as unknown (rpc.DeclaredBy).
+	Disabled      string `protobuf:"bytes,16,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2599,6 +2617,13 @@ func (x *PluginInfo) GetPresents() []string {
 		return x.Presents
 	}
 	return nil
+}
+
+func (x *PluginInfo) GetDisabled() string {
+	if x != nil {
+		return x.Disabled
+	}
+	return ""
 }
 
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
@@ -4798,7 +4823,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xd6\a\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xfb\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -4838,7 +4863,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\rcontent_stamp\x18' \x01(\tR\fcontentStamp\x12\x1b\n" +
 	"\tread_only\x18( \x01(\tR\breadOnly\x12\x14\n" +
 	"\x05named\x18) \x01(\bR\x05named\x12!\n" +
-	"\fpresented_by\x18* \x01(\tR\vpresentedByJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\fpresented_by\x18* \x01(\tR\vpresentedBy\x12#\n" +
+	"\rbroken_reason\x18+ \x01(\tR\fbrokenReasonJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#\"\r\n" +
 	"\vInfoRequest\"\x89\x03\n" +
 	"\fInfoResponse\x12!\n" +
@@ -4955,7 +4981,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"0\n" +
 	"\x10HandshakeRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\x87\x03\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xa3\x03\n" +
 	"\n" +
 	"PluginInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
@@ -4975,7 +5001,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x0e \x01(\bR\n" +
 	"connection\x12\x1a\n" +
-	"\bpresents\x18\x0f \x03(\tR\bpresentsJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\bpresents\x18\x0f \x03(\tR\bpresents\x12\x1a\n" +
+	"\bdisabled\x18\x10 \x01(\tR\bdisabledJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\f\"\xeb\x01\n" +
 	"\x0eConnectionInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +

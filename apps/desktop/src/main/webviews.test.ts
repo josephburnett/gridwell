@@ -529,7 +529,7 @@ const ROUTING = {
     { match: 'http://example.test/*', plugin: 'pages' },
     { match: 'http://outside.test/*', outside: true },
   ],
-  presents: { pages: ['http://example.test/*'] },
+  declared: { pages: { presents: ['http://example.test/*'] } },
 };
 
 // navigate fires what Chromium fires before a page moves, and answers whether

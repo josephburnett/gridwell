@@ -15,7 +15,7 @@ const FIXTURE = resolve(here, '../../../../api/rpc/testdata/routes.json');
 
 interface Fixture {
   match: { pattern: string; address: string; want: boolean; why?: string }[];
-  decide: { routes: Routing['routes']; presents: Record<string, string[]>; cases: { address: string; plugin?: string; outside?: boolean; why?: string }[] };
+  decide: { routes: Routing['routes']; declared: Routing['declared']; cases: { address: string; plugin?: string; outside?: boolean; broken?: string; why?: string }[] };
   site: { page: string; site: string; location: string; want?: string; ok: boolean; why?: string }[];
 }
 
@@ -26,9 +26,13 @@ test('the copy answers every case of the fixture the Go owners answer', () => {
   for (const c of fixture.match) {
     assert.equal(matchAddress(c.pattern, c.address), c.want, `matchAddress(${c.pattern}, ${c.address}) ${c.why ?? ''}`);
   }
-  const routing: Routing = { routes: fixture.decide.routes, presents: fixture.decide.presents };
+  const routing: Routing = { routes: fixture.decide.routes, declared: fixture.decide.declared };
   for (const c of fixture.decide.cases) {
-    assert.deepEqual(decide(c.address, routing), { plugin: c.plugin ?? '', outside: c.outside ?? false }, `decide(${c.address}) ${c.why ?? ''}`);
+    assert.deepEqual(
+      decide(c.address, routing),
+      { plugin: c.plugin ?? '', outside: c.outside ?? false, broken: c.broken ?? '' },
+      `decide(${c.address}) ${c.why ?? ''}`,
+    );
   }
   for (const c of fixture.site) {
     assert.equal(presentedSite(c.page, c.site, c.location), c.ok ? c.want : null, `presentedSite(${c.location}) ${c.why ?? ''}`);
@@ -41,8 +45,13 @@ const ROUTING: Routing = {
     { match: 'http://example.test/*', plugin: 'pages' },
     { match: 'http://other.test/*', plugin: 'labcode' },
     { match: 'http://outside.test/*', outside: true },
+    { match: 'http://down.test/*', plugin: 'down' },
   ],
-  presents: { pages: ['http://example.test/*'], labcode: ['http://other.test/*'] },
+  declared: {
+    pages: { presents: ['http://example.test/*'] },
+    labcode: { presents: ['http://other.test/*'] },
+    down: { unknown: 'plugin not responding' },
+  },
 };
 const presented = { page: PAGE, site: 'http://example.test/a' };
 const plain = { page: PAGE, site: 'http://plain.test/a' };
@@ -66,6 +75,10 @@ test('a navigation goes where the routes send its site address', () => {
     ['a served page leaves for a site with no taker', PAGE, 'http://plain.test/x', served, { kind: 'stay' }],
     ['a served page opens a presented address below', PAGE, 'http://example.test/b', served, { kind: 'below', site: 'http://example.test/b' }],
     ['a served page sends outside outside', PAGE, 'http://outside.test/x', served, { kind: 'outside', site: 'http://outside.test/x' }],
+    ['the site never loads for a broken plugin\'s address', 'http://plain.test/a', 'http://down.test/x', plain, { kind: 'move', site: 'http://down.test/x' }],
+    ['nor from a page', PAGE + 'example.test/a', 'http://down.test/x', presented, { kind: 'move', site: 'http://down.test/x' }],
+    ['nor in the page', PAGE + 'example.test/a', PAGE + 'down.test/x', presented, { kind: 'move', site: 'http://down.test/x' }],
+    ['a served page opens it below, broken', PAGE, 'http://down.test/x', served, { kind: 'below', site: 'http://down.test/x' }],
   ];
   for (const [why, current, target, view, want] of cases) {
     assert.deepEqual(routeNavigation(target, current, view, ROUTING), want, why);

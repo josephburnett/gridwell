@@ -570,6 +570,7 @@ func parityFacts(t *gridwellv1.Tile) map[string]string {
 		"scroll":    fmt.Sprint(t.TextX, t.TextY, t.TextMode),
 		"zoom":      fmt.Sprint(t.ContentZoom),
 		"presented": fmt.Sprint(t.PresentedBy != ""),
+		"broken":    t.BrokenReason,
 	}
 	if rpc.IsBodyKind(t.Kind) {
 		// The basis a save of the body claims; a url's content is its address.
@@ -976,7 +977,7 @@ type paritySource struct {
 	moves   bool // declares and answers Move (plugin_move_test.go)
 	// What a variant declares otherwise (parity_variant_test.go).
 	unwritable, unwatched, partial bool
-	unreachable                    string
+	unreachable, refusesInfo       string
 	presents                       []string
 }
 
@@ -1001,6 +1002,9 @@ func newParitySource() *paritySource {
 func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.refusesInfo != "" {
+		return nil, status.Error(codes.FailedPrecondition, s.refusesInfo)
+	}
 	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves, Presents: s.presents,
 		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
 }

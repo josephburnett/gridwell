@@ -127,17 +127,32 @@
         "plugin": "undeclared"
       },
       {
+        "match": "https://down.test/*",
+        "plugin": "down"
+      },
+      {
+        "match": "https://down.test/*",
+        "outside": true
+      },
+      {
         "match": "https://*",
         "outside": true
       }
     ],
-    "presents": {
-      "labcode": [
-        "https://gitlab.com/*/-/merge_requests/*"
-      ],
-      "pages": [
-        "http://example.test/*"
-      ]
+    "declared": {
+      "labcode": {
+        "presents": [
+          "https://gitlab.com/*/-/merge_requests/*"
+        ]
+      },
+      "pages": {
+        "presents": [
+          "http://example.test/*"
+        ]
+      },
+      "down": {
+        "unknown": "plugin not responding: connection refused"
+      }
     },
     "cases": [
       {
@@ -159,6 +174,12 @@
         "address": "https://elsewhere.test/a",
         "outside": true,
         "why": "a route to a plugin that declares nothing falls through"
+      },
+      {
+        "address": "https://down.test/a",
+        "plugin": "down",
+        "broken": "plugin not responding: connection refused",
+        "why": "a route to a plugin whose declaration is unknown takes the address broken, before any later rule"
       },
       {
         "address": "http://plain.test/a",

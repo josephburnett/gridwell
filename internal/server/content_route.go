@@ -27,7 +27,8 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 }
 
 // pageRoute is contentRoute for a page: a url tile a plugin presents is that
-// plugin's to serve, asked with no key, the subpath its site address. A far
+// plugin's to serve, asked with no key, the subpath its site address, and a
+// broken one is refused with its reason, so nothing loads in its place. A far
 // row is its own node's to judge, behind the hop, and comes back nil.
 func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
 	c, local, row, err := s.contentRow(ctx, qualifiedID)
@@ -36,6 +37,9 @@ func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.N
 	}
 	if s.stampPresented(ctx, row); row.PresentedBy == "" {
 		return c, local, row, nil
+	}
+	if row.BrokenReason != "" {
+		return nil, "", nil, status.Error(gcodes.Unavailable, row.BrokenReason)
 	}
 	p, found := s.routeClient(row.PresentedBy)
 	if !found {
@@ -47,13 +51,17 @@ func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.N
 // servePage answers one page request from whoever serves it (pageRoute),
 // unless it is a document under a presented tile for an address its plugin
 // does not take (leavesPage): that is a redirect to the site, so a browser
-// tab, which nothing can ask first, follows the routes as a desktop view does.
+// tab, which nothing can ask first, follows the routes as a desktop view does,
+// or for an address a plugin that does not answer takes, its reason.
 func (s *Server) servePage(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	c, local, row, err := s.pageRoute(ctx, req.TileId)
 	if err != nil {
 		return err
 	}
-	if site, ok := s.leavesPage(ctx, row, req); ok {
+	if site, v, ok := s.leavesPage(ctx, row, req); ok {
+		if v.Broken != "" {
+			return status.Error(gcodes.Unavailable, v.Broken)
+		}
 		trace.Emit("webapi", "left", "a document its plugin does not take", map[string]string{"tile": req.TileId, "site": site})
 		return send(&pb.ServeContentChunk{Status: http.StatusSeeOther, Headers: []*pb.Header{{Name: "Location", Value: site}}})
 	}

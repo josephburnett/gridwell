@@ -191,7 +191,9 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		label := rt.srv.pluginReg.Label(n.UUID)
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
-		out = append(out, buildPluginInfo(n.UUID, n.Kind, label, info, err))
+		row := buildPluginInfo(n.UUID, n.Kind, label, info, err)
+		row.Disabled = rt.srv.pluginReg.DisabledReason(n.UUID)
+		out = append(out, row)
 	}
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,

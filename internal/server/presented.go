@@ -1,10 +1,11 @@
 package server
 
 // A url tile whose address a route sends to a plugin that presents it is
-// presented by that plugin (Tile.presented_by). The node derives it on every
+// presented by that plugin (Tile.presented_by), and broken (broken_reason)
+// while that plugin's declaration is unknown. The node derives both on every
 // answer leaving the router for a row it holds, home's or a plugin's, from
-// server.yaml's routes and the presents each routed plugin's Info declares;
-// a far row arrives with its own node's verdict. Nothing is stored.
+// server.yaml's routes and what each routed plugin declares (rpc.Decide); a
+// far row arrives with its own node's verdict. Nothing is stored.
 
 import (
 	"context"
@@ -14,52 +15,64 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// stampPresented sets presented_by on each url tile with an address of its
-// own. The presents are asked once per answer, and only when a tile needs
-// them.
+// stampPresented sets presented_by and broken_reason on each url tile with an
+// address of its own. The declarations are read once per answer, and only
+// when a tile needs them.
 func (s *Server) stampPresented(ctx context.Context, tiles ...*pb.Tile) {
-	var presents map[string][]string
+	var declared map[string]rpc.Declared
 	for _, t := range tiles {
 		if !rpc.WebContent(t) || t.UrlString == "" || len(s.cfg.Routes) == 0 {
 			continue
 		}
-		if presents == nil {
-			presents = s.routedPresents(ctx)
+		if declared == nil {
+			declared = s.routedDeclared(ctx)
 		}
-		t.PresentedBy = rpc.Decide(t.UrlString, s.cfg.Routes, presents, rpc.MatchAddress).Plugin
+		v := rpc.Decide(t.UrlString, s.cfg.Routes, declared, rpc.MatchAddress)
+		t.PresentedBy, t.BrokenReason = v.Plugin, v.Broken
 	}
 }
 
-// routedPresents is what each plugin a route names presents, from its Info;
-// a plugin whose Info does not answer presents nothing.
-func (s *Server) routedPresents(ctx context.Context) map[string][]string {
-	presents := map[string][]string{}
+// routedDeclared is what each plugin a route names declares, read as the
+// handshake reads its row (rpc.DeclaredBy). A disabled plugin is asked
+// nothing: the registry's sentence is its verdict. One the node does not
+// declare has no row, so its route falls through as the handshake's does.
+func (s *Server) routedDeclared(ctx context.Context) map[string]rpc.Declared {
+	declared := map[string]rpc.Declared{}
 	for _, r := range s.cfg.Routes {
-		if _, asked := presents[r.Plugin]; r.Plugin != "" && !asked {
-			info, _ := s.pluginInfo(ctx, r.Plugin)
-			presents[r.Plugin] = info.GetPresents()
+		if _, asked := declared[r.Plugin]; r.Plugin == "" || asked {
+			continue
 		}
+		if _, ok := s.routeClient(r.Plugin); !ok {
+			continue
+		}
+		row := &pb.PluginInfo{Disabled: s.pluginReg.DisabledReason(r.Plugin)}
+		if row.Disabled == "" {
+			info, err := s.pluginInfo(ctx, r.Plugin)
+			row = buildPluginInfo(r.Plugin, "", "", info, err)
+		}
+		declared[r.Plugin] = rpc.DeclaredBy(row)
 	}
-	return presents
+	return declared
 }
 
 // leavesPage is the site address a request under row's page names when it is
 // a document (a navigation) and the routes do not send that address to the
-// plugin presenting row. The plugin's assets, a sub-resource and a far row,
-// which its own node judges, never leave.
-func (s *Server) leavesPage(ctx context.Context, row *pb.Tile, req *pb.ServeContentRequest) (string, bool) {
+// plugin presenting row, and the routes' verdict on it. The plugin's assets, a
+// sub-resource and a far row, which its own node judges, never leave.
+func (s *Server) leavesPage(ctx context.Context, row *pb.Tile, req *pb.ServeContentRequest) (string, rpc.Verdict, bool) {
 	if row == nil || row.PresentedBy == "" || !document(req.Headers) {
-		return "", false
+		return "", rpc.Verdict{}, false
 	}
 	location := req.Subpath
 	if req.Query != "" {
 		location += "?" + req.Query
 	}
 	site, ok := rpc.PresentedSite("", row.UrlString, location)
-	if !ok || rpc.Decide(site, s.cfg.Routes, s.routedPresents(ctx), rpc.MatchAddress).Plugin == row.PresentedBy {
-		return "", false
+	if !ok {
+		return "", rpc.Verdict{}, false
 	}
-	return site, true
+	v := rpc.Decide(site, s.cfg.Routes, s.routedDeclared(ctx), rpc.MatchAddress)
+	return site, v, v.Plugin != row.PresentedBy || v.Broken != ""
 }
 
 // document reports a request for a page to show, as its fetch metadata names
