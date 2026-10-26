@@ -55,7 +55,7 @@ and latch after the first pass.
 **Why.** "A plugin that cannot serve the source its config declares refuses
 `Info` with the reason, and is broken with that sentence and no entries until
 the fix lands, which needs no restart" (2026-09-30). The latch is what makes
-a later outage weather (rule 3) rather than a config verdict.
+a later loss of the source an outage (rule 3) rather than a config verdict.
 
 **Example.** `fs/plugin/plugin.go:Info`:
 
@@ -250,8 +250,8 @@ say so: `ListResponse.unreachable` (an additive string, empty when live, the
 reason when served from the cache); the node reports it as the source's health,
 as it does a failed read, and keeps serving the rows.
 
-**Why.** "Nothing is done for nobody" has a twin at the node: "A cached
-grid serves FIRST … Nothing on the answer says it is cached — that is the
+**Why.** "Nothing is done for nobody" holds at the node too: "A cached
+grid serves first … Nothing on the answer says it is cached — that is the
 source's health" (`docs/freshness.md`, layer 4, `internal/sourcecache/`).
 A failed `List` costs the user every entry the node has not minted a row for,
 which is most of a mailbox. Decided for plugins 2026-10-02 (CLAUDE.md, Node).
@@ -624,7 +624,7 @@ seam test asks.
 
 **Rule.** Each plugin's README says what the code does today.
 
-**Why.** "Stale is worse than absent" (CLAUDE.md, Comments). The README is
+**Why.** "A stale comment is worse than none" (CLAUDE.md, Comments). The README is
 what a user configures from.
 
 **Example.** `pages` has no README and needs none: it takes no config.
@@ -704,8 +704,8 @@ the user has not seen, and the stamp is the claim that says which bytes the
 edit was typed over, as a version is for a home row (`docs/freshness.md`,
 trace (c)). The answered stamp is what the next save claims, and the echo's
 stamp is how the client knows its own write and keeps the text. A textarea
-that takes typing and then refuses it is "it just disappeared" with extra
-steps (CLAUDE.md, rule 6); refusing with the reason is for the write the user
+that takes typing and then refuses it is the "it just disappeared" of
+CLAUDE.md rule 6; refusing with the reason is for the write the user
 could not have known would fail.
 
 **Example.** `fs/plugin/plugin.go` (`plugin-edits` branch), `write`:

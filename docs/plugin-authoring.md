@@ -30,8 +30,8 @@ good plugin does at it, rule by rule, with a checklist to tick before you ship.
   repository, `github.com/josephburnett/gridwell-plugins/guest`. A plugin that
   caches its source takes the cache file, the shared walks, the `Watch`
   fan-out and the calendar placement from a third,
-  `github.com/josephburnett/gridwell-plugins/memo`. Not Go? The service is
-  plain gRPC behind hashicorp go-plugin's handshake.
+  `github.com/josephburnett/gridwell-plugins/memo`. In another language, the
+  service is plain gRPC behind hashicorp go-plugin's handshake.
 - **Binary**: `gridwell-plugin-<kind>` beside the `gridwell` binary, on
   `GRIDWELL_PLUGIN_DIR`, on PATH, or named by `binary:` in `server.yaml`.
   Register with a `plugins:` entry (`kind`, optional `label`, your `config`
@@ -70,9 +70,9 @@ there — no such directory, no CLI, a token that does not load — answer `Info
 with an error whose message is one plain sentence saying why. The node shows
 your plugin broken with that sentence and no entries, and asks again until
 the fix lands, with no restart. Latch the first pass: once `Info` has
-answered, a source that goes away is weather — a token revoked or a CLI
-signed out included — and your reads answer `Unavailable`, or from the cache
-with `unreachable` set (see Listings), never a verdict.
+answered, a source that goes away, a token revoked or a CLI signed out
+included, is an outage, and your reads answer `Unavailable`, or from the
+cache with `unreachable` set (see Listings), never a verdict.
 
 **Declare one `grids` row per grid**, each naming its grid
 key. That is how your plugin is reached: each entry becomes a + menu swatch,
@@ -88,8 +88,8 @@ and the swatch reads as the configured instance; set it and the swatch reads
 "<label> (<instance>)". Declaring no entries at all is legal: your plugin is
 listed, contributes nothing to the menu, and is healthy — not an error.
 
-`root_grid` is RETIRED. Leave it empty. The node reads it in one case, so
-a binary built against the older proto keeps presenting: a plugin that
+`root_grid` is retired. Leave it empty. The node reads it in one case, so
+a binary built against the older proto still contributes a grid: a plugin that
 answers a `root_grid` and no `grids` gets one derived grid onto
 it, wearing your own name and glyph. Declare both and the grids win.
 
@@ -99,7 +99,7 @@ it, wearing your own name and glyph. Declare both and the grids win.
 absent from an authoritative listing is gone; absent from a non-authoritative
 one means "not seen this pass", and the node keeps the entry until `Probe`
 answers GONE. `ProbeRequest.grid` names the grid the node is asking
-about: answer whether the key is still in THAT grid, since a key listed in
+about: answer whether the key is still in that grid, since a key listed in
 several (a mail thread in a box and in everything) can leave one and stay in
 another. An empty grid is a node from before grids: answer for the
 plugin as a whole. When a refresh fails but your cache can answer, answer
@@ -273,7 +273,7 @@ picture is not asked for again.
 plugin marks the todo done and the tile stays). The node does not assume. After
 your `Delete` succeeds it asks `Probe` for the same key and retires the id it
 minted only on a definitive GONE — a minted row retires only when its source
-says the key is gone. So answer `Probe` honestly and the user's placement and
+says the key is gone. So answer `Probe` accurately and the user's placement and
 every link to the tile survive a delete that keeps the thing.
 
 ## Gates
