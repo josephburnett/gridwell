@@ -5,8 +5,8 @@ description: Turn the ledger. Take test/boundary/ratchet.txt one row at a time, 
 
 # Ratchet
 
-The ledger (`test/boundary/ratchet.txt`, CLAUDE.md How to work 10) is the
-scoreboard, and this skill is the loop that moves it. Read CLAUDE.md in
+This skill is the loop that moves the ledger (`test/boundary/ratchet.txt`,
+CLAUDE.md How to work 10), one row at a time. Read CLAUDE.md in
 full first, then the ledger and `test/boundary/debt.txt`. The session that
 runs this supervises; the building is done by agents in worktrees, one row
 each, so the session stays responsive and judges by the ledger diff.

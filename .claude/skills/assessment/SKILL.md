@@ -6,7 +6,7 @@ description: Find the next class the ledger does not count. Expectations written
 # Assessment
 
 The ledger (`test/boundary/ratchet.txt`, CLAUDE.md How to work 10) is what
-converges the code: every known class of violation is a count the build
+moves the code: every known class of violation is a count the build
 runs, and a unit of work lowers one row. This skill has one job, the one
 the ledger cannot do for itself: find a class it does not yet count, and
 add it as a row. A finding with a count is a row. A finding with no count
@@ -14,13 +14,14 @@ is a note in the report, and a note that recurs is a sign the class needs
 a count. Nothing here re-judges what a count already holds.
 
 Two kinds of defect exist and they are found differently. A defect of
-shape (a fact spelled twice, a decision in the shim) is found by reading
+shape (a fact written twice, a decision in the shim) is found by reading
 at the owner. A defect of absence (an arm never built, a walk run for
 nobody) cannot be read, because there is nothing to read; it is found by
-holding the code to a bar written before the code was opened, and by
-watching the product run. Steps 2 and 3 find absence; steps 4 and 5 find
-shape. The whole tree is never read into one context: the counts hold the
-tree, and reading it again confirms them at the cost of a window.
+checking the code against expectations written before the code was
+opened, and by watching the product run. Steps 2 and 3 find absence; steps
+4 and 5 find shape. The whole tree is never read into one context: the
+counts hold the tree, and reading it again only confirms them, at the cost
+of a context window.
 
 ## Procedure
 
@@ -34,7 +35,7 @@ tree, and reading it again confirms them at the cost of a window.
    counted class is at its recorded value before the hunt starts.
 
 2. **Write the expectations without the code.** Spawn one agent that is
-   given ONLY `CLAUDE.md`, `api/gridwell/v1/data.proto`,
+   given only `CLAUDE.md`, `api/gridwell/v1/data.proto`,
    `api/plugin/v1/plugin.proto`, `docs/concepts.md` and `docs/freshness.md`,
    and is forbidden to open any other file. It writes `expectations.md`
    into the scratchpad: for every promise, the concrete behaviours that
@@ -49,9 +50,7 @@ tree, and reading it again confirms them at the cost of a window.
    error code, every repeated ask of one id, every id of the wrong shape,
    every event followed by a refetch, every write the user did not make,
    every walk or capture nothing on screen needed, every plugin log line.
-   Each anomaly is a finding until a decision in CLAUDE.md explains it. The
-   trace found the largest defect of runs 11 and 12, and the 2026-09-27
-   trace found four in an hour.
+   Each anomaly is a finding until a decision in CLAUDE.md explains it.
 
 4. **Read at the owners.** Three lists name what to read, and each item is
    read at its owner with its callers (grep), never the tree:
@@ -60,8 +59,8 @@ tree, and reading it again confirms them at the cost of a window.
      decided without a decision;
    - the diff since the last assessment (the last commit whose message
      begins `boundary: the ledger counts`), read whole in one context,
-     because a second spelling of a fact can only have entered there.
-   A comment that explains why something is NOT done is a claim, not a
+     because a second copy of a fact can only have entered there.
+   A comment that explains why something is not done is a claim, not a
    decision; it is a decision only if CLAUDE.md says so, and otherwise it
    names a hole.
 
@@ -72,7 +71,7 @@ tree, and reading it again confirms them at the cost of a window.
    and the owner it believes holds them; and every comment that says why
    something is not done. Cross-check the four lists in one context: one
    fact under two names, a reader naming an owner that does not own it, a
-   harness that re-spells a shape the node runs (the 2026-09-06 connection
+   harness that rewrites a shape the node runs (the 2026-09-06 connection
    API outage was one), and a claim comment with no decision. This is the
    one class no count finds yet, and it is the only reason an agent reads
    a package end to end.
