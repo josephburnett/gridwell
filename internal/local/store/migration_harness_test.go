@@ -289,7 +289,7 @@ func buildDBAtV1(t *testing.T, path string) (*sql.DB, string) {
 	if err := s.setPragmaInt(ctx, "user_version", 1); err != nil {
 		t.Fatalf("stamp user_version: %v", err)
 	}
-	root, err := rootGridID(ctx, db)
+	root, err := singletonGrid(ctx, db, systemKeyRootGridID)
 	if err != nil {
 		t.Fatalf("root grid id: %v", err)
 	}

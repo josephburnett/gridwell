@@ -24,11 +24,7 @@ const systemKeyTrashGridID = "trash_grid_id"
 // TrashGridID returns the trash grid, a singleton like ScratchGridID. Info
 // declares it as a root declared grid.
 func (s *Store) TrashGridID(ctx context.Context) (string, error) {
-	id, err := singletonGrid(ctx, s.db, systemKeyTrashGridID)
-	if err != nil {
-		return "", err
-	}
-	return strconv.FormatInt(id, 10), nil
+	return s.singletonID(ctx, systemKeyTrashGridID)
 }
 
 // deleteBypassesTrash reports a real delete: the tile is in the scratch grid,

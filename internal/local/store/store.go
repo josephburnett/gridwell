@@ -196,7 +196,12 @@ func parseID(s string) (int64, error) {
 
 // RootGridID returns the current root grid id as a decimal string.
 func (s *Store) RootGridID(ctx context.Context) (string, error) {
-	id, err := rootGridID(ctx, s.db)
+	return s.singletonID(ctx, systemKeyRootGridID)
+}
+
+// singletonID is the singleton grid key names, as a decimal string.
+func (s *Store) singletonID(ctx context.Context, key string) (string, error) {
+	id, err := singletonGrid(ctx, s.db, key)
 	if err != nil {
 		return "", err
 	}
@@ -208,11 +213,7 @@ func (s *Store) RootGridID(ctx context.Context) (string, error) {
 // doubles as the visited-url history that feeds autocomplete and a deep link
 // into it still resolves. The id is stored once in system metadata.
 func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
-	id, err := singletonGrid(ctx, s.db, systemKeyScratchGridID)
-	if err != nil {
-		return "", err
-	}
-	return strconv.FormatInt(id, 10), nil
+	return s.singletonID(ctx, systemKeyScratchGridID)
 }
 
 // SetPluginID injects the config id the binary verified against its DB at
@@ -241,7 +242,7 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 // RootFraming returns home's root framing, in the same three columns a plugin
 // grid's root keeps.
 func (s *Store) RootFraming(ctx context.Context) (rpc.View, error) {
-	rootID, err := rootGridID(ctx, s.db)
+	rootID, err := singletonGrid(ctx, s.db, systemKeyRootGridID)
 	if err != nil {
 		return rpc.View{}, err
 	}
@@ -319,17 +320,6 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 		return nil
 	})
 	return err
-}
-
-func rootGridID(ctx context.Context, q gridReader) (int64, error) {
-	v, ok, err := systemValue(ctx, q, systemKeyRootGridID)
-	if err != nil {
-		return 0, err
-	}
-	if !ok {
-		return 0, sql.ErrNoRows
-	}
-	return strconv.ParseInt(v, 10, 64)
 }
 
 // Close releases the underlying database handle.
