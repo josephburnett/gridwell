@@ -37,14 +37,16 @@ function wasmSource(): string {
 }
 
 test('the wasm calls exactly the bridge verbs the preload exposes', () => {
-  const preload = matches(read(PRELOAD), /^ {2}(\w+)\(_?args: /gm);
+  const table = read(PRELOAD).match(/const VERBS = \{([\s\S]*?)\n\} as const;/);
+  assert.ok(table, `no VERBS table found in ${PRELOAD}`);
+  const preload = matches(table![1], /^\s*(\w+):/gm);
   const wasm = matches(wasmSource(), /bridgeVerb\("(\w+)"/g);
 
   assert.equal(preload.length, 14, `expected 14 verbs in ${PRELOAD}, got ${JSON.stringify(preload)}`);
   assert.deepEqual(
     wasm,
     preload,
-    'the bridgeVerb names in client/wasm drifted from the methods preload.ts exposes (the owner); the wasm would call a non-function',
+    'the bridgeVerb names in client/wasm drifted from the VERBS table in preload.ts (the owner); the wasm would call a non-function',
   );
 });
 
