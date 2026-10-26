@@ -44,8 +44,8 @@ comment beside it says.
 
 The promises are about behaviour. These are about the code, and each is
 held by a mechanism the build runs, or says that it is not yet. A principle
-with no mechanism is a wish; the ledger (How to work 10) is where a wish
-becomes a count, and the assessment's (`.claude/skills/assessment`) only
+with no mechanism is not held: the ledger (How to work 10) is where it
+gets a count, and the assessment's (`.claude/skills/assessment`) only
 job is to find the next one (2026-10-21, 2026-10-22).
 
 1. **Things stay as you left them.** Reading never mutates, every user
@@ -53,7 +53,7 @@ job is to find the next one (2026-10-21, 2026-10-22).
    every later build with every user fact intact. Held by the store write
    funnel, the claim refusals and the migration chain with its fixtures.
 2. **One fact, one owner.** Every fact is stored or derived once and read
-   from there; a second spelling is a hole. Held by the tables the code
+   from there; a copy is a hole. Held by the tables the code
    derives from (`columns.go`, the kind table in `api/rpc/types.go`), the
    boundary tests on the API server, dial and store shapes, and the
    copied-constant and doc-name counts. Not yet held for the client's
@@ -70,23 +70,23 @@ job is to find the next one (2026-10-21, 2026-10-22).
    work for nobody. Held by the verb count, the timer list, the log-only
    arm list and the trace budget (`trace-budget.spec.ts`, at zero).
 5. **Small enough to hold whole, and only shrinking.** Lines, packages,
-   comment share and policy-file size are ceilings, so a fix pays for
-   itself. Held by the ledger's ceilings.
+   comment share and policy-file size are ceilings, so a fix removes as
+   much as it adds. Held by the ledger's ceilings.
 6. **Decisions in pure code, everything else glue.** A branch the user can
    see lives where a unit test can call it; the shim and Electron main
    gather inputs and perform effects. Held in part by the boundary tests;
-   the shim is still a reading.
+   the shim is still checked by reading.
 
 ## Vocabulary
 
 One word per thing, and the same word in the UX, the code, the wire and the
-docs. A thing with two spellings is a hole. A word that only restates a
+docs. A thing with two names is a hole. A word that only restates a
 plain phrase goes; use the phrase. A word that leaves goes on
 `scripts/retired-words.txt`, and `scripts/check-vocabulary.sh` fails the
 build where one comes back outside the paths it allows. Identifiers, wire
-names and MCP tool names spell the word (`CopyTile`, `Find`, `MoveTile`;
+names and MCP tool names use the word (`CopyTile`, `Find`, `MoveTile`;
 the MCP tools `copy`, `find`, `move`); a renamed wire field keeps its
-number. The tile kinds, glyphs and text modes are spelled once, in
+number. The tile kinds, glyphs and text modes are listed once, in
 `api/rpc/types.go`, and `test/boundary` pins it. `docs/concepts.md` says what each concept does; this table says
 what each one is called.
 
@@ -199,14 +199,14 @@ what each one is called.
    shapes to copy. A change that leaves the copy-count the same has not
    fixed the class; aim for the design where the bug cannot be written.
    An API's socket and server configuration is one such fact with an
-   owner, not glue each harness rewrites: `server.WebAPIServer` and
+   owner, and no harness rewrites it: `server.WebAPIServer` and
    `server.ConnectionAPIServer` are the two shapes, `dial.ClientConn` is
    the one way to dial a connection API, `test/boundary` pins all three,
    and a harness that builds its own serves or dials an API the node never
    runs.
 2. **Root-cause first.** State the mechanism in one sentence before touching
    anything. If you cannot name it, keep digging. A retry, a `setTimeout`, or
-   a nil-check that hides the nil is a smell, not a fix.
+   a nil-check that hides the nil is not a fix.
 3. **Every bug fix is a test first.** A reproducing test that fails for the
    real reason; a fix for the class, not the instance; a commit message that
    answers "why was this not caught?" and closes the gap. If the code isn't
@@ -225,7 +225,7 @@ what each one is called.
    `sendError`. A rejected optimistic mutation reconciles visibly.
 7. **No client-only state.** Anything the user can change is a server fact,
    written through the store and reflected by an event. The exceptions are
-   decided, not accidental: the session pane tree, each pane's focused tile
+   decided: the session pane tree, each pane's focused tile
    outside a workspace tile, the outer frames of a pane's place, the workspace level stack,
    the browser's own cookies and storage, and the theme — a client view preference, not a fact
    about your things, so it lives in `localStorage` (2026-09-19). Do not add
@@ -237,7 +237,7 @@ what each one is called.
    quietly do something else. Fix a stale comment in the same commit that
    touches the file.
 10. **Simplification is a ledger.** `test/boundary/ratchet.txt` is the
-    scoreboard: one row per measure, each counted by code, with the
+    ledger: one row per measure, each counted by code, with the
     recorded value, its floor, the owner and the mechanism by which the
     count may fall. `make check` fails on a rise and on an unrecorded fall,
     so the ledger is always exact and its diff is the progress report. A
@@ -248,7 +248,7 @@ what each one is called.
     another is refused by the build. A decision Joe makes may raise a
     ceiling; the rise is entered in `test/boundary/debt.txt` with the
     decision, counted by the `debt` row, and paying it back by deriving is
-    the next row of work, not later (2026-10-22). A row at its floor is deleted and its
+    the next row of work (2026-10-22). A row at its floor is deleted and its
     count stays as a permanent test. The assessment finds a class
     the ledger does not measure and adds it as a row with a count; a
     finding with no count is a note, not a row. There is nothing more to do
@@ -261,7 +261,7 @@ consequence a reader would not guess. If the code says it, no comment.
 
 - Once, at the owner. Every other site names the owner
   (`// see textedit.SaveQueueKey`) instead of restating it.
-- No history. What a field was, what was torn out, why a bug was not
+- No history. What a field was, what was removed, why a bug was not
   caught: commit messages and `reserved` own those.
 - No mechanics. Do not narrate what the next lines do.
 - A file or package header is one short paragraph: what it owns.
@@ -269,8 +269,8 @@ consequence a reader would not guess. If the code says it, no comment.
   itself gets none.
 - Past five lines a comment is making an argument. State the conclusion
   and the one fact that forces it.
-- Stale is worse than absent. Leave every comment in a file you touch
-  true.
+- A stale comment is worse than none. Leave every comment in a file you
+  touch true.
 
 `scripts/comment-share.sh` measures it: comment bytes against code bytes,
 per file or for the tree. `test/boundary` holds the tree's ceiling.
@@ -403,7 +403,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   event stream keeps those true, so coming back to one reads nothing; a stream
   gap still re-reads every held grid. The planner decides
   (`nav` `planner.fetchGrid`), never the executor (2026-10-14).
-- A copy is eager and deep. COW was tried and torn out. A copy keeps its
+- A copy is eager and deep. COW was tried and removed. A copy keeps its
   name and whether it was typed, across any namespace boundary as within
   home: a url follows its page title until a rename latches the name, and a
   copy of an unrenamed one still follows it. The row's `alt_user` is the one
@@ -420,14 +420,14 @@ These were decided deliberately. Do not reverse one without a new decision.
 **Node**
 
 - Inside the node a namespace is a Go value (`internal/namespace`). gRPC
-  survives at two hops only: the plugin subprocess and the connection
+  is used at two hops only: the plugin subprocess and the connection
   API. Both node-side APIs decode onto the one router.
 - The plugin API is the third-party way in, and plugins live in their own
-  repository, `github.com/josephburnett/gridwell-plugins` — the shipped fs,
-  proc, pages, gitlab, gmail and hey on the same footing as anyone else's.
+  repository, `github.com/josephburnett/gridwell-plugins`; the shipped fs,
+  proc, pages, gitlab, gmail and hey are plugins like anyone else's.
   This repo owns the plugin API: the proto, `api/gen/plugin/v1`, and the
   go-plugin handshake (`api/compose`).
-  No gridwell package, TEST FILES INCLUDED, imports a plugin implementation
+  No gridwell package, test files included, imports a plugin implementation
   or names that repository in a go.mod, and nothing switches on a plugin
   kind; every plugin behavior rides a wire declaration. `test/boundary`
   enforces it. A test that needs a real plugin spawns the shipped binary
@@ -440,7 +440,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   durable: its cache of its source and whatever its features keep. Nothing
   deletes one, ever (2026-10-25). A connection is
   config: an immutable name, a label, how to dial. Retiring a name is
-  forever, and EXPLICIT: `retired_names:` is the one owner, and the stored
+  forever, and explicit: `retired_names:` is the one owner, and the stored
   `deleted` flag is only that list mirrored. Boot never retires a name
   because the config stopped declaring it — the row and its landing stay,
   its links go dead by the roster, and the stanza brings them back.
@@ -449,9 +449,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   decision). Nodes have homes; a plugin contributes doors. Its grids are
   + menu rows, one per grid it declares (`InfoResponse.grids`, each naming
   the grid's key), and it never wraps them in a synthetic root grid of
-  doors. `root_grid` is RETIRED: the field number is kept forever and the
-  node reads it in one place only — a plugin that answers a root_grid and NO
-  grids gets one derived grid onto it, so an old binary keeps presenting.
+  doors. `root_grid` is retired: the field number is kept forever and the
+  node reads it in one place only — a plugin that answers a root_grid and no
+  grids gets one derived grid onto it, so an old binary still contributes
+  a grid.
   Declare both and the grids win; there is no privileged grid. A plugin that
   declares none
   contributes nothing and is healthy, not broken: `pluginhealth` gives its row
@@ -677,9 +678,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   on a cell the set does not vacate; each tile is its own write with its
   own claim, so a stale one is refused and snaps back alone
   (2026-10-15, `dragdrop.CarryOf`).
-- A link is a path, and a link broken at ANY hop — a namespace this node
+- A link is a path, and a link broken at any hop — a namespace this node
   does not declare, one a node further along the chain does not declare, or
-  a target its namespace says is gone — is DEAD: greyed, inert, still
+  a target its namespace says is gone — is dead: greyed, inert, still
   labelled, still deletable. It is a state, not an error — nothing is asked
   for it and nothing is said about it (`gwerr.DeadLink` is the answer,
   `client/deadlink` the verdict). A gone key listed again is live again under
@@ -758,10 +759,9 @@ and that is where the worst bugs live.
 A feature is not done when its gates are green. It is done when a trace of
 ordinary use (the Dump logs row) has been read and every refused call,
 repeated ask and odd id in it is either fixed or a decision written here.
-The 2026-09-27 trace found four defects nine assessments had missed.
 
-If a change touches the native layer or the shim, `make check` passing means
-nothing. Run the electron or e2e gate and add a spec. The gates rebuild at
+If a change touches the native layer or the shim, `make check` passing says
+nothing about it. Run the electron or e2e gate and add a spec. The gates rebuild at
 start, and `check-e2e` and `check-web` then test the artifacts they copied at
 that moment (`apps/desktop/e2e/runtree.ts`), so a rebuild beside a running one
 cannot change what it tests; the other gates have no such pin, so still do
@@ -772,7 +772,7 @@ you blame a change.
 A dependency or toolchain bump commits under the `deps:` prefix. A `deps:`
 bump or a shim change names the gates it ran in its message: the bump touches
 every seam at once, and nothing in `make check` executes the shim, so in both
-the green a commit earns is only worth the gates behind it.
+cases `make check` alone proves little.
 
 ## Before you commit
 
