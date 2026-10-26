@@ -643,8 +643,8 @@ func main() {
 		// Everything durable rides beacons (unload.go), so it survives the
 		// dying page. An animating transition lands on its destination first.
 		app.flushOnUnload()
-		app.closeAllURLStreams()
-		app.closeAllShellStreams()
+		app.urlSurface().closeAll()
+		app.shellSurface().closeAll()
 		return nil
 	}))
 

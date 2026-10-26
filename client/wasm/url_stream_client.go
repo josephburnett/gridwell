@@ -432,13 +432,6 @@ func (a *App) postFrozen(row *gridwellv1.Tile, frozen bool, after func()) {
 	})
 }
 
-// closeAllURLStreams tears down every live view on beforeunload.
-func (a *App) closeAllURLStreams() {
-	for _, h := range a.urlSurfaces() {
-		a.closeURLStream(h.PaneID, true)
-	}
-}
-
 // syncURLViews tracks every live view to its pane's content box each draw,
 // parking the ones this draw's gesture is in the way of.
 func (a *App) syncURLViews() {

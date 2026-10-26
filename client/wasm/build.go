@@ -43,7 +43,7 @@ func (a *App) otherBuild(node string) {
 
 // reloadPage is errsurface.Reload. The URL is the place the reload lands on,
 // so a pending write goes now. The reload takes the unload path every reload
-// takes (flushOnUnload, closeAllURLStreams); the trace goes first, since it is
+// takes (flushOnUnload, surfaceKind.closeAll); the trace goes first, since it is
 // how the reload is read back.
 func (a *App) reloadPage() {
 	a.writeURLNow()

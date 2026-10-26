@@ -621,14 +621,6 @@ func (a *App) freezeShellPaneByIntent(p *pane.Pane) {
 	})
 }
 
-// closeAllShellStreams runs on beforeunload, ahead of the server's
-// freeze-and-destroy.
-func (a *App) closeAllShellStreams() {
-	for _, h := range a.shellSurfaces() {
-		a.closeShellStream(h.PaneID, true)
-	}
-}
-
 // mouseTrackingMode reads xterm's mouse tracking mode: "none" for none, ""
 // when the terminal cannot answer.
 func mouseTrackingMode(term js.Value) string {
