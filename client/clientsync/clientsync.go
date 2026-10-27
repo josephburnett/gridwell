@@ -38,23 +38,13 @@ const (
 	OutcomeDisabled
 )
 
+var outcomeWords = [...]string{OutcomeOK: "ok", OutcomeConflict: "conflict", OutcomeRejected: "rejected",
+	OutcomeTransport: "transport", OutcomeDead: "dead", OutcomeAbandoned: "abandoned", OutcomeDisabled: "disabled"}
+
 // String is the outcome's one word, for a trace record.
 func (o Outcome) String() string {
-	switch o {
-	case OutcomeOK:
-		return "ok"
-	case OutcomeConflict:
-		return "conflict"
-	case OutcomeRejected:
-		return "rejected"
-	case OutcomeTransport:
-		return "transport"
-	case OutcomeDead:
-		return "dead"
-	case OutcomeAbandoned:
-		return "abandoned"
-	case OutcomeDisabled:
-		return "disabled"
+	if o >= 0 && int(o) < len(outcomeWords) {
+		return outcomeWords[o]
 	}
 	return "outcome " + strconv.Itoa(int(o))
 }
