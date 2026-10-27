@@ -52,21 +52,15 @@ type Input struct {
 	ShellRefreshVisible bool
 }
 
+var modeNames = [...]string{ModeNothing: "nothing", ModeURLBack: "back", ModeGoLive: "golive",
+	ModeURLOpenTab: "opentab", ModeFreeze: "freeze", ModePlus: "plus"}
+
 // String is the mode's name, the one spelling of it outside this package.
 func (m Mode) String() string {
-	switch m {
-	case ModeURLBack:
-		return "back"
-	case ModeGoLive:
-		return "golive"
-	case ModeURLOpenTab:
-		return "opentab"
-	case ModeFreeze:
-		return "freeze"
-	case ModePlus:
-		return "plus"
+	if m < 0 || int(m) >= len(modeNames) {
+		return "nothing"
 	}
-	return "nothing"
+	return modeNames[m]
 }
 
 // Decide is the slot's one verdict.
