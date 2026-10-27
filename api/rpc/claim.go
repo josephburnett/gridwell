@@ -1,6 +1,8 @@
 package rpc
 
 import (
+	"slices"
+
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -28,6 +30,16 @@ func UnclaimedWrite(req proto.Message) string {
 		if r.UrlFrozen != nil && r.ClaimFrozen == nil {
 			return "SetTile url_frozen names no claim_frozen: a freeze claims the freeze it saw"
 		}
+	}
+	return ""
+}
+
+// OneOperation is why every owner refuses req: a SetTile carries exactly one
+// operation, so no owner picks among several. It answers "" for one.
+func OneOperation(req *pb.SetTileRequest) string {
+	ops := []bool{req.Tile != nil, req.Rename != "", req.ContentZoom != nil, req.UrlFrozen != nil}
+	if len(slices.DeleteFunc(ops, func(set bool) bool { return !set })) != 1 {
+		return "set: one operation per call (rename, content_zoom, url_frozen, or tile writeback)"
 	}
 	return ""
 }

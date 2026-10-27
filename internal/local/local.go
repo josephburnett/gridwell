@@ -311,20 +311,12 @@ func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) 
 	return tileResp(p.st.MoveTile(ctx, req))
 }
 
-// SetTile is the single capture writeback: tile.kind selects the one store
-// operation that kind supports. The scalar operations (rename, content_zoom,
-// url_frozen) ride here exactly one per call, refused otherwise, so the
-// empty-fields-skip rule never turns ambiguous.
+// SetTile is the single capture writeback, one operation per call
+// (rpc.OneOperation): for a tile writeback, tile.kind selects the one store
+// operation that kind supports.
 func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
-	ops := 0
-	for _, set := range []bool{req.Rename != "", req.ContentZoom != nil, req.UrlFrozen != nil, req.Tile != nil} {
-		if set {
-			ops++
-		}
-	}
-	if ops > 1 {
-		return nil, status.Error(codes.InvalidArgument,
-			"set: one operation per call (rename, content_zoom, url_frozen, or tile writeback)")
+	if why := rpc.OneOperation(req); why != "" {
+		return nil, status.Error(codes.InvalidArgument, why)
 	}
 	if req.Rename != "" {
 		return tileResp(p.st.RenameTile(ctx, req.TileId, req.Version, req.Rename))
@@ -340,9 +332,6 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 		return tileResp(p.st.SetFrozen(ctx, req.TileId, *req.UrlFrozen, req.ClaimFrozen))
 	}
 	t := req.Tile
-	if t == nil {
-		return nil, status.Error(codes.InvalidArgument, "set: nil tile")
-	}
 	switch k := rpc.KindOf(t.Kind); {
 	case k.Descends == rpc.DescendGrid:
 		return nil, status.Error(codes.InvalidArgument, "set: door framing rides SetFraming")

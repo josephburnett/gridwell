@@ -942,20 +942,15 @@ func (a *Adapter) moveAcross(ctx context.Context, req *gridwellv1.MoveTileReques
 	return a.mem.Move(id, to, landed.Key, req.X, req.Y, req.W, req.H, req.Claim)
 }
 
-// SetTile terminates the framing, capture and rename arms at the store. A
-// rename is the user's name on the node's row (store.Namespace.Rename) and
-// the plugin is never told; a url writeback keeps only its screenshot (the
-// title and trail are the plugin's).
+// SetTile terminates the framing, capture and rename arms at the store, one
+// operation per call (rpc.OneOperation). A rename is the user's name on the
+// node's row (store.Namespace.Rename) and the plugin is never told; a url
+// writeback keeps only its screenshot (the title and trail are the plugin's).
 func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
-	if req.Rename != "" {
-		id, err := a.mint(ctx, req.TileId)
-		if err != nil {
-			return nil, err
-		}
-		changed, err := a.mem.Rename(id, req.Version, req.Rename)
-		return a.changedTile(ctx, id, changed, err)
+	if why := rpc.OneOperation(req); why != "" {
+		return nil, status.Error(codes.InvalidArgument, why)
 	}
-	if t := req.GetTile(); rpc.KindOf(t.GetKind()).Content == rpc.ContentAddress && req.ContentZoom == nil && req.UrlFrozen == nil {
+	if t := req.GetTile(); rpc.KindOf(t.GetKind()).Content == rpc.ContentAddress {
 		if t.UrlString != "" || t.AltText != "" || t.UrlHistory != "" {
 			return nil, status.Error(codes.InvalidArgument,
 				"plugin: a url tile's title and history are its plugin's and its address is content; the writeback carries the screenshot alone")
@@ -978,6 +973,8 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 	}
 	var changed bool
 	switch {
+	case req.Rename != "":
+		changed, err = a.mem.Rename(id, req.Version, req.Rename)
 	case req.ContentZoom != nil:
 		changed, err = a.mem.SetContentZoom(id, zoom)
 	case req.UrlFrozen != nil:
