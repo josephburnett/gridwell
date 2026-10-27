@@ -901,18 +901,7 @@ func (a *Adapter) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest)
 	} else {
 		changed, err = a.moveAcross(ctx, req, ref, id, toKey)
 	}
-	if err != nil {
-		return nil, gwerr.ToStatus(err)
-	}
-	// A placement is part of the grid's answer, so it announces the grid.
-	resp, err := a.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: strconv.FormatInt(id, 10)})
-	if err != nil {
-		return nil, err
-	}
-	if changed {
-		a.emitGridChanged(resp.GetTile().GetGridId())
-	}
-	return resp, nil
+	return a.changedTile(ctx, id, changed, err, true)
 }
 
 // moveAcross is a move to another of the plugin's grids, which the plugin
@@ -990,13 +979,15 @@ func (a *Adapter) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (
 			return nil, status.Errorf(codes.InvalidArgument, "plugin: unsupported SetTile kind %q", t.GetKind())
 		}
 	}
-	return a.changedTile(ctx, id, changed, err)
+	return a.changedTile(ctx, id, changed, err, false)
 }
 
-// changedTile reads back a write to one tile row that changes no listing and,
-// when it changed the row, announces it, so a client applies it in place. A
-// write the store refused answers its error.
-func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool, err error) (*gridwellv1.TileResponse, error) {
+// changedTile reads back a write to one tile row and, when it changed the
+// row, announces it: a placement is part of its grid's answer, so a move
+// announces the grid; any other write changes no listing, so it announces the
+// tile and a client applies it in place. A write the store refused answers
+// its error.
+func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool, err error, placed bool) (*gridwellv1.TileResponse, error) {
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
@@ -1004,7 +995,9 @@ func (a *Adapter) changedTile(ctx context.Context, id int64, changed bool, err e
 	if err != nil {
 		return nil, err
 	}
-	if changed {
+	if changed && placed {
+		a.emitGridChanged(resp.GetTile().GetGridId())
+	} else if changed {
 		a.hub.Publish(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
 			TileChanged: &gridwellv1.TileChanged{Tile: resp.GetTile()},
 		}})
@@ -1046,7 +1039,7 @@ func (a *Adapter) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequ
 	if err != nil {
 		return nil, err
 	}
-	resp, err := a.changedTile(ctx, id, changed, nil)
+	resp, err := a.changedTile(ctx, id, changed, nil, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1265,7 +1258,7 @@ func (a *Adapter) writeAddress(ctx context.Context, first *gridwellv1.WriteConte
 		return nil, err
 	}
 	changed, err := a.mem.SetAddress(id, first.Version, string(data))
-	return a.changedTile(ctx, id, changed, err)
+	return a.changedTile(ctx, id, changed, err, false)
 }
 
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
