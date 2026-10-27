@@ -335,6 +335,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   adds and removes and claims nothing (2026-10-17). Only framing (pan and
   zoom, the text scroll, content zoom), captures and a select carry no claim. A workspace tile's layout counted as framing
   until this decision.
+- A write to a tile carries one operation: a rename, a content zoom, a
+  freeze or a writeback. One carrying more, or none, is refused with the
+  reason before anything lands, by every owner alike, home's, a plugin's or
+  a far node's (`rpc.OneOperation`, 2026-10-26).
 - The selection is a node fact (2026-10-15): the set of a grid's tiles the
   user has in hand lives on that grid's row (`grids.selection`), home's
   grids and a plugin's alike, and a far grid's on the far node. It persists
