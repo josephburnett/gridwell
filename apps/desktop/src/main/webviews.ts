@@ -453,14 +453,10 @@ export class WebviewRegistry {
       this.reportErr(`pane ${toPaneId}: live view replaced (${stale.tileId} → ${e.tileId}) without a close; its final frame is lost`);
       void this.remove(toPaneId).catch(() => {});
     }
-    this.entries.delete(fromPaneId);
+    // The settle and a park waiting on its preview were armed for the old pane.
+    this.take(e);
     e.paneId = toPaneId;
     this.entries.set(toPaneId, e);
-    // The settle and a park waiting on its preview were armed for the old pane.
-    if (e.focusSettle) {
-      clearTimeout(e.focusSettle);
-      e.focusSettle = null;
-    }
     e.parkGen++;
     if (bounds) e.bounds = roundBounds(bounds);
     e.hidden = hidden;
@@ -480,13 +476,7 @@ export class WebviewRegistry {
   async remove(paneId: string): Promise<FreezeResult> {
     const e = this.entries.get(paneId);
     if (!e) return { jpegBase64: '', url: '', title: '', history: '' };
-    this.entries.delete(paneId);
-    // The settle closure holds this view, and firing after close() would throw
-    // uncaught in main.
-    if (e.focusSettle) {
-      clearTimeout(e.focusSettle);
-      e.focusSettle = null;
-    }
+    this.take(e);
 
     // Chromium flushes localStorage lazily, so an abrupt close() can drop a
     // site's unsubmitted comment draft.
@@ -716,6 +706,14 @@ export class WebviewRegistry {
     this.cb.onFocusStolen?.({ paneId: e.paneId });
   }
 
+  // take drops the pane's entry and its focus settle, whose closure holds the
+  // view and would throw uncaught in main firing after close().
+  private take(e: Entry): void {
+    this.entries.delete(e.paneId);
+    if (e.focusSettle) clearTimeout(e.focusSettle);
+    e.focusSettle = null;
+  }
+
   // retire is the one owner of "the view is gone" for a webContents that ended
   // outside remove(): the entry goes at once, so every later call for the pane
   // is a no-op and remove() answers an empty freeze, and the renderer is told
@@ -724,11 +722,7 @@ export class WebviewRegistry {
     const paneId = e.paneId;
     // remove() takes the entry before it closes the view.
     if (this.entries.get(paneId) !== e) return;
-    this.entries.delete(paneId);
-    if (e.focusSettle) {
-      clearTimeout(e.focusSettle);
-      e.focusSettle = null;
-    }
+    this.take(e);
     const url = e.url;
     try {
       this.win.contentView.removeChildView(e.view);

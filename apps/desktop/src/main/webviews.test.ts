@@ -345,6 +345,18 @@ test('a focus grab on an unfocused pane is bounced and traced with its phase', a
   assert.deepEqual(kinds(r, 'steal').map((ev) => ev.kv), [{ view: 'p1', phase: 'settle' }]);
 });
 
+test('a view that ends with its focus settle armed drops the settle with its entry', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, false);
+  const wc = r.views[0].webContents!;
+  wc.focused = true;
+  wc.emit('focus');
+  r.views[0].destroy();
+  await new Promise((res) => setTimeout(res, FOCUS_SETTLE_MS + 30));
+  assert.deepEqual(r.steals, [], 'a settle armed for a retired view still ran');
+  assert.deepEqual(kinds(r, 'steal'), []);
+});
+
 // A key event as before-input-event hands it, with the prevented flag a
 // relay sets.
 function keyDown(wc: FakeWC, key: string): boolean {
