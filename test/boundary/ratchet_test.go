@@ -17,12 +17,11 @@ import (
 // ratchetCounts maps each ledger row to the code that measures it. A row the
 // ledger names and this map does not is a typo or a count deleted too early.
 var ratchetCounts = map[string]func(t *testing.T, root string) int{
-	"packages":        length(productionPackages),
-	"lines":           productionLines,
-	"debt":            debtCount,
-	"unheard-by-code": length(unheardByCode),
-	"stream-axis":     streamAxisReads,
-	"device-axis":     deviceAxisCells,
+	"packages":    length(productionPackages),
+	"lines":       productionLines,
+	"debt":        debtCount,
+	"stream-axis": streamAxisReads,
+	"device-axis": deviceAxisCells,
 }
 
 func length(offenders func(*testing.T, string) []string) func(*testing.T, string) int {

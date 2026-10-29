@@ -741,6 +741,16 @@ func unheardByCode(t *testing.T, root string) []string {
 	return out
 }
 
+// TestUnheardByCodeStaysAtNine holds the readers of a transport status code
+// to the nine at hops where the code is the only fact there is: the plugin
+// subprocess hop, the deep copy, and the router and MCP API (Joe,
+// 2026-10-29). Every other hop reads the dial's answered marker.
+func TestUnheardByCodeStaysAtNine(t *testing.T) {
+	if got := unheardByCode(t, repoRoot(t)); len(got) != 9 {
+		t.Errorf("gwerr.IsTransport is read at %d sites outside api/gwerr, want 9; a new reader decides reachability from a code, read gwerr.IsUnheard instead:\n  %s", len(got), strings.Join(got, "\n  "))
+	}
+}
+
 // infoReaders are the production reads of a plugin's declaration that do not
 // come from one held copy: each call that asks the plugin API for Info, and
 // each memo outside internal/pluginhost, a struct field mapping to an
