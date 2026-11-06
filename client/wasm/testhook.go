@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"slices"
 	"sort"
 	"strings"
 	"syscall/js"
@@ -36,6 +37,8 @@ type e2e struct {
 	bannerTexts   map[string]string // the last banner line each tile drew
 	// selectionPainted is the tiles each pane last drew with the selection border.
 	selectionPainted map[string][]string
+	// crumbsSelected is the tiles whose bar crumbs last drew with it.
+	crumbsSelected []string
 	// oneShotsArmed and oneShotsLive are the evidence that no js.Func
 	// outlives its call; drawsArmed separates draws, whose count is the
 	// host's to decide.
@@ -945,6 +948,8 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			"x": bx + s.X, "w": s.W, "index": s.Index,
 		}
 		nc := chain[s.Index]
+		id, _, _, tile := nc.SelectTarget()
+		e["selected"] = tile && slices.Contains(a.e2e.crumbsSelected, id)
 		if nc.Workspace {
 			e["kind"] = "workspace"
 			e["level"] = nc.WsLevel

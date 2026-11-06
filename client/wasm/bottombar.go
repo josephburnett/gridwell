@@ -105,15 +105,23 @@ func (a *App) drawBottomBar() {
 
 	chain := a.navChain()
 	segs := a.bottomBarSegments(chain)
+	var picked []string
 	for _, s := range segs {
 		shifted := s
 		shifted.X += bx
-		if nc := chain[s.Index]; nc.Workspace {
-			a.drawBoundaryCrumb(nc.WsLevel, shifted, top)
+		nc := chain[s.Index]
+		selected := a.crumbSelected(nc)
+		if selected {
+			id, _, _, _ := nc.SelectTarget()
+			picked = append(picked, id)
+		}
+		if nc.Workspace {
+			a.drawBoundaryCrumb(nc.WsLevel, shifted, top, selected)
 		} else {
-			a.drawChainCrumb(nc.Crumb, shifted, top)
+			a.drawChainCrumb(nc.Crumb, shifted, top, selected)
 		}
 	}
+	a.e2e.crumbsSelected = picked
 	a.drawBarTitle(top)
 	a.drawCachedChip(bx, top, bw)
 	a.drawBarSlot()
@@ -144,7 +152,7 @@ func (a *App) drawCachedChip(bx, top, bw float64) {
 
 // drawBoundaryCrumb paints a workspace tile boundary crumb as a wide named bar,
 // standing out from the preview squares as the obvious rename target.
-func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
+func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64, selected bool) {
 	c := a.cctx
 	band := a.pal.CrumbIdle
 	if level == a.ws.Depth() {
@@ -163,6 +171,9 @@ func (a *App) drawBoundaryCrumb(level int, s wsbar.Segment, top float64) {
 			font: barFont, fill: a.pal.BarInk, baseline: "middle",
 		})
 	})
+	if selected {
+		a.drawSelectionBorder(c, s.X+2, top+3, s.W-4, wsbar.RowH-6)
+	}
 }
 
 // barTitleGeom is the centered current-pane title. Render, hit-test and the
@@ -321,8 +332,9 @@ func (a *App) openURLInNewTab(p *pane.Pane) {
 
 // drawChainCrumb paints one descent-chain square through the same drawer the
 // parent grid uses, so each crumb carries its grid appearance and kind
-// border. The rightmost crumb is the current one and needs no highlight.
-func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
+// border. The rightmost crumb is the current one and needs no highlight. A
+// selected tile's crumb wears the border its tile does.
+func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, selected bool) {
 	c := a.cctx
 	square := min(s.W, wsbar.RowH)
 	side := square - 2
@@ -353,6 +365,9 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64) {
 			c.Set("strokeStyle", a.pal.CrumbIdle)
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+1, y+1, side-2, side-2)
+		}
+		if selected {
+			a.drawSelectionBorder(c, x, y, side, side)
 		}
 	})
 }

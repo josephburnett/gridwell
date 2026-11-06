@@ -233,6 +233,7 @@ export class GridwellDriver {
       tileID?: string;
       glyph?: string;
       closeOnly?: boolean;
+      selected?: boolean;
     }>;
   }> {
     return this.win.evaluate(() => (window as any).__gridwellTest.bar());

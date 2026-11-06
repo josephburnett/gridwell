@@ -52,9 +52,11 @@ test('the node hears which grids the panes and their previews show, and hears th
 
   await gw.descendCell(wx, wy);
   expect((await gw.focused()).gridID).toBe(child);
+  // The bar's crumb for the door is drawn from the root grid's row and
+  // selection, so the root grid stays shown.
   await expect
-    .poll(union, { message: 'descending swaps the grid shown', timeout: 10_000 })
-    .toEqual([child]);
+    .poll(union, { message: "descending shows the door's grid and the grid its crumb sits on", timeout: 10_000 })
+    .toEqual([child, rootGrid].sort());
   await expect
     .poll(view, { message: 'the focused pane is at the grid it descended into', timeout: 10_000 })
     .toBe(`desktop ${child}`);

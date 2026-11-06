@@ -12,7 +12,8 @@ import (
 // The view names every pane on screen in tree order, each with its place as
 // the URL grammar names it, the grid it resolves to and whether it has focus;
 // the workspace level the window is inside, with each pane's bare id in that
-// layout; the label; and Showing, the door previews included. A pane the layout hides is not on screen.
+// layout; the label; and Showing, the door previews and the grids the bar's
+// crumbs sit on included. A pane the layout hides is not on screen.
 func TestView(t *testing.T) {
 	grids := map[string]map[string]*gridwellv1.Tile{
 		"g-w5": {"w1": door("w1", 0, 0, "c/1")},
@@ -39,7 +40,7 @@ func TestView(t *testing.T) {
 	want := &gridwellv1.SetViewRequest{
 		Label:          "desktop",
 		WorkspaceTiles: []string{"home/4", "p/9"},
-		ShownGridIds:   []string{"c/1", "g-w2", "g-w5"},
+		ShownGridIds:   []string{"c/1", "g-w2", "g-w5", "home/1", "n/1", "p/1"},
 		Panes: []*gridwellv1.ViewPane{
 			{Id: first.ID, Anchor: "p/1", Path: []string{"w5"}, GridId: "g-w5"},
 			{Id: second.ID, Anchor: "n/1", Path: []string{"w2"}, ContentId: "t3", GridId: "g-w2", Focused: true},

@@ -10,7 +10,7 @@ func View(t *Tree, levels *Levels, laidOut map[string]Rect, label string, leaf f
 	v := &gridwellv1.SetViewRequest{
 		Label:          label,
 		WorkspaceTiles: levels.tileIDs(),
-		ShownGridIds:   Showing(t, laidOut, leaf, tiles),
+		ShownGridIds:   Showing(t, levels, laidOut, leaf, tiles),
 	}
 	t.Walk(func(p *Pane) {
 		if _, ok := laidOut[p.ID]; !ok {

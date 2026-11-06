@@ -32,15 +32,21 @@ func TestShowing(t *testing.T) {
 			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
 		}, []string{"p/1"}},
-		{"a pane through a door shows the door's grid", func() (*Tree, map[string]Rect) {
+		{"a pane through a door shows the door's grid, and the grid its crumb sits on", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", []string{"w5"}, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
-		}, []string{"g-w5"}},
+		}, []string{"g-w5", "p/1"}},
 		{"a pane in a content tile shows the grid the tile sits in", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", []string{"w5"}, rpc.ViewOf(0, 0, 1))
 			tr.FocusedPane().Push(ContentFrame("f9", Footprint{W: 1, H: 1}, 1, "", 0, 0))
 			return tr, allLaidOut(tr)
-		}, []string{"g-w5"}},
+		}, []string{"g-w5", "p/1"}},
+		{"the focused pane's crumbs show their grids at every depth, and only its", func() (*Tree, map[string]Rect) {
+			tr := TreeAtPlace("", "p/1", []string{"w5", "w6"}, rpc.ViewOf(0, 0, 1))
+			second, _ := tr.Split(Vertical)
+			second.Stack = StackAt("q/1", []string{"w7"}, "")
+			return tr, allLaidOut(tr)
+		}, []string{"g-w5", "g-w6", "g-w7", "p/1"}},
 		{"two panes on one grid are one entry", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
 			second, _ := tr.Split(Vertical)
@@ -62,7 +68,7 @@ func TestShowing(t *testing.T) {
 		{"a door not yet fetched shows as deep as it resolves", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "p/1", []string{"w5", "?"}, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
-		}, []string{"g-w5"}},
+		}, []string{"g-w5", "p/1"}},
 		{"a pane with no place shows nothing", func() (*Tree, map[string]Rect) {
 			tr := TreeAtPlace("", "", nil, rpc.ViewOf(0, 0, 1))
 			return tr, allLaidOut(tr)
@@ -71,7 +77,7 @@ func TestShowing(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			tr, laid := c.build()
-			if got := Showing(tr, laid, fakeLeaf, noTiles); !reflect.DeepEqual(got, c.want) {
+			if got := Showing(tr, &Levels{}, laid, fakeLeaf, noTiles); !reflect.DeepEqual(got, c.want) {
 				t.Errorf("Showing = %v, want %v", got, c.want)
 			}
 		})
@@ -79,15 +85,16 @@ func TestShowing(t *testing.T) {
 }
 
 // Inside a workspace tile the window shows that level's tree; the tree it parked
-// is off screen, so its grids are not shown.
+// is off screen, so its grids are not shown. The bar's workspace crumb shows
+// the grid the workspace tile sits on.
 func TestShowingALevelShowsOnlyItsOwnTree(t *testing.T) {
-	outer := TreeAtPlace("w0:", "outer/1", nil, rpc.ViewOf(0, 0, 1))
+	outer := TreeAtPlace("w0:", "outer/1", []string{"w3"}, rpc.ViewOf(0, 0, 1))
 	var lv Levels
-	lv.Push(Level{OuterTree: outer, TileID: "pt/4", GridID: "outer/1"})
+	lv.Push(Level{OuterTree: outer, OriginPane: outer.Focus, TileID: "pt/4", GridID: "outer/1"})
 	inner := TreeAtPlace("w1:", "inner/1", nil, rpc.ViewOf(0, 0, 1))
-	got := Showing(inner, allLaidOut(inner), fakeLeaf, noTiles)
-	if !reflect.DeepEqual(got, []string{"inner/1"}) || strings.Contains(strings.Join(got, ","), "outer") {
-		t.Errorf("Showing = %v, want only the level in front", got)
+	got := Showing(inner, &lv, allLaidOut(inner), fakeLeaf, noTiles)
+	if !reflect.DeepEqual(got, []string{"inner/1", "outer/1"}) || strings.Contains(strings.Join(got, ","), "g-w3") {
+		t.Errorf("Showing = %v, want the level in front and the workspace tile's grid", got)
 	}
 }
 
@@ -139,7 +146,7 @@ func TestShowingDoorPreviews(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			tr, laid := c.build()
-			if got := Showing(tr, laid, fakeLeaf, tiles); !reflect.DeepEqual(got, c.want) {
+			if got := Showing(tr, &Levels{}, laid, fakeLeaf, tiles); !reflect.DeepEqual(got, c.want) {
 				t.Errorf("Showing = %v, want %v", got, c.want)
 			}
 		})

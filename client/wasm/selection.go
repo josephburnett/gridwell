@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"slices"
 	"syscall/js"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -102,6 +103,12 @@ func (a *App) crumbSelection(nc navCrumb) (gid, tileID string, ok bool) {
 	}
 	gid = a.gridIDForPathFrom(anchor, path)
 	return gid, tileID, gid != ""
+}
+
+// crumbSelected says crumb nc's tile is in its grid's selection.
+func (a *App) crumbSelected(nc navCrumb) bool {
+	gid, id, ok := a.crumbSelection(nc)
+	return ok && slices.Contains(a.c.Selection(gid), id)
 }
 
 // toggleCrumb is a shift-click or a touch hold on crumb nc in the bar riding

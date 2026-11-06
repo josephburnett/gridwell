@@ -13,11 +13,20 @@ import (
 // at, and a pane standing in a content tile shows the grid that tile sits in,
 // since Anchor and Path leave the content frame out. A door on a pane's screen
 // shows its child grid too, one level deep, because the renderer draws that
-// grid as its preview. A parked level's tree is off screen and is not t. leaf
+// grid as its preview. The bar shows the grid each of its tile crumbs sits on,
+// since it draws the crumb from that grid's row and its selection. A parked
+// level's tree is off screen and is not t. leaf
 // resolves a place to its grid id, "" when it cannot yet; tiles is a grid's
 // cached rows, nil when it is not cached.
-func Showing(t *Tree, laidOut map[string]Rect, leaf func(anchor string, path []string) string, tiles func(grid string) map[string]*gridwellv1.Tile) []string {
+func Showing(t *Tree, levels *Levels, laidOut map[string]Rect, leaf func(anchor string, path []string) string, tiles func(grid string) map[string]*gridwellv1.Tile) []string {
 	var out []string
+	for _, nc := range levels.NavChain(t.FocusedPane()) {
+		if _, anchor, path, ok := nc.SelectTarget(); ok {
+			if g := leaf(anchor, path); g != "" {
+				out = append(out, g)
+			}
+		}
+	}
 	t.Walk(func(p *Pane) {
 		r, ok := laidOut[p.ID]
 		if !ok {

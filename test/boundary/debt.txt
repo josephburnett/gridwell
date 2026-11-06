@@ -3,3 +3,4 @@
 low-water | 58287
 2026-11-06 | Copy URL on the circle menu of a live url pane (Joe) | 12
 2026-11-06 | shift + click on a crumb toggles the tile's selection and a selected crumb wears the border (Joe): the bar's select arm in wsbar.RouteClick, which touch's Select reaches too, and pane.NavCrumb.SelectTarget | 68
+2026-11-06 | shift + click on a crumb toggles the tile's selection and a selected crumb wears the border (Joe): the crumb draws the border its tile does, and the view lists the grids the bar's crumbs sit on (pane.Showing) | 36
