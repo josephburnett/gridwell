@@ -43,20 +43,23 @@ type svgRaster struct {
 	svg string
 }
 
-// renderedRasterFor returns a loaded raster for tile n near logical width
-// contentW and the width it was made at, kicking an async rasterization on a
-// miss. While that runs, rasterprev.Cache answers with a neighbouring width's
-// raster; ok is false only when it has none, and the caller paints raw source.
-func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value, float64, bool) {
-	bucket := rasterprev.Bucket(contentW)
+// drawRenderedPreview crops tile n's raster into the box (see
+// markdown.PreviewRasterDraw), kicking an async rasterization on a miss. The
+// raster is made in the device px the frame draws it in. While it runs,
+// rasterprev.Cache answers with a neighbouring width's raster; false means it
+// has none, and the caller paints raw source.
+func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFrame,
+	x, y, w, h, topInset float64) bool {
+	bucket := rasterprev.Bucket(frame.ContentW)
 	k := rasterprev.Key{
 		TileID: n.Id,
 		Bytes:  a.c.BodyGen(rpc.ContentID(n)),
 		Bucket: bucket,
+		Scale:  frame.Scale * a.win.Get("devicePixelRatio").Float(),
 		Org:    markdown.IsOrg(n.AltText),
 		Theme:  a.themeName.String(),
 	}
-	r, madeAt, ok := a.views.renderedPrev.Ensure(k, func() (string, bool) {
+	r, made, _ := a.views.renderedPrev.Ensure(k, func() (string, bool) {
 		body, ok := a.tileBody(n)
 		if !ok {
 			return "", false // blob fetch in flight; the raw path warms it too
@@ -66,33 +69,19 @@ func (a *App) renderedRasterFor(n *gridwellv1.Tile, contentW float64) (js.Value,
 		div := a.doc.Call("createElement", "div")
 		div.Set("innerHTML", textedit.PresentationHTML(n, body))
 		xhtml := js.Global().Get("XMLSerializer").New().Call("serializeToString", div).String()
-		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, a.pal), true
+		return markdown.PreviewSVG(xhtml, bucket, renderedPreviewMaxH, k.Scale, a.pal), true
 	}, func() { a.draw() })
-	if !ok {
-		return js.Value{}, 0, false
-	}
 	sr, ok := r.(*svgRaster)
 	if !ok {
-		return js.Value{}, 0, false
+		return false
 	}
 	a.e2e.lastRasterSVG = sr.svg
-	return sr.Val(), madeAt, true
-}
-
-// drawRenderedPreview crops the tile's raster into the box; see
-// markdown.PreviewRasterDraw. False means the caller paints the raw fallback.
-func (a *App) drawRenderedPreview(n *gridwellv1.Tile, frame markdown.PreviewFrame,
-	x, y, w, h, topInset float64) bool {
-	img, rasterW, ok := a.renderedRasterFor(n, frame.ContentW)
+	d, ok := markdown.PreviewRasterDraw(frame, made.Bucket, renderedPreviewMaxH, made.Scale, x, y, w, h, topInset)
 	if !ok {
 		return false
 	}
-	d, ok := markdown.PreviewRasterDraw(frame, rasterW, renderedPreviewMaxH, x, y, w, h, topInset)
-	if !ok {
-		return false
-	}
-	a.cctx.Call("drawImage", img, d.SX, d.SY, d.SW, d.SH, d.DX, d.DY, d.DW, d.DH)
-	a.noteTextPreview(n.Id, &d, rasterW)
+	a.cctx.Call("drawImage", sr.Val(), d.SX, d.SY, d.SW, d.SH, d.DX, d.DY, d.DW, d.DH)
+	a.noteTextPreview(n.Id, &d, made.Bucket)
 	return true
 }
 

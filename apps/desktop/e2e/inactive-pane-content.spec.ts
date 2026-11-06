@@ -121,84 +121,101 @@ test('an fs file changed on disk shows its new bytes in the pane focus left', as
     .toBe('version two, from disk\n');
 });
 
-// The words that begin each line of a rendered document, and the width its
-// lines are laid out in, measured in the page. Comparing line breaks rather
-// than pixels keeps the check blind to how text is antialiased: the overlay's
-// DOM text and the raster's picture of it may smooth glyphs differently.
-type Layout = { contentW: number; lineStarts: string[] };
+// Where a rendered document's ink lies in the overlay's box: one band per run
+// of rows holding text or a task box, with its top, height and left and right
+// ends, in device px. The focused pane's overlay and the raster painted when
+// focus leaves are measured in the same box on screen, so a line that moves,
+// changes size or wraps elsewhere moves a band, while how either smooths a
+// glyph does not.
+type Band = [top: number, h: number, left: number, right: number];
 
-// The focused pane's overlay, as laid out on screen.
-const overlayLayout = (window: any): Promise<Layout> =>
-  window.evaluate(() => {
-    const el = document.getElementById('gw-rendered-view')!;
-    const cs = getComputedStyle(el);
-    return (window as any).__wrapLayout(el, el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
-  });
-
-// The raster's document laid out off screen exactly as its SVG holds it, the
-// width and inset it was made at included.
-const rasterLayout = (window: any, svg: string): Promise<Layout> =>
-  window.evaluate((svg: string) => {
-    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
-    const root = document.importNode(doc.getElementsByTagNameNS('http://www.w3.org/1999/xhtml', 'div')[0], true) as HTMLElement;
-    const host = document.createElement('div');
-    host.style.cssText = 'position:absolute;left:-20000px;top:0;visibility:hidden';
-    host.appendChild(root);
-    document.body.appendChild(host);
-    try {
-      const cs = getComputedStyle(root);
-      return (window as any).__wrapLayout(root, root.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
-    } finally {
-      host.remove();
-    }
-  }, svg);
-
-const installWrapLayout = (window: any) =>
-  window.evaluate(() => {
-    (window as any).__wrapLayout = (el: HTMLElement, contentW: number) => {
-      const lineStarts: string[] = [];
-      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      let last = -Infinity;
-      let i = 0;
-      for (let n = walk.nextNode() as Text | null; n; n = walk.nextNode() as Text | null) {
-        if (n.parentElement?.closest('style')) continue;
-        for (const m of n.data.matchAll(/\S+/g)) {
-          const r = document.createRange();
-          r.setStart(n, m.index!);
-          r.setEnd(n, m.index! + m[0].length);
-          const top = r.getClientRects()[0].top;
-          if (top > last + 1) lineStarts.push(`${i}:${m[0]}`);
-          last = Math.max(last, top);
-          i++;
+async function inkBands(window: any, box: { x: number; y: number; w: number; h: number }): Promise<Band[]> {
+  const png = (await window.screenshot({ clip: { x: box.x, y: box.y, width: box.w, height: box.h } })).toString('base64');
+  return window.evaluate(async (png: string) => {
+    const img = await createImageBitmap(await (await fetch('data:image/png;base64,' + png)).blob());
+    const c = new OffscreenCanvas(img.width, img.height);
+    const ctx = c.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const d = ctx.getImageData(0, 0, img.width, img.height).data;
+    const ink = (i: number) => Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 90;
+    const bands: Band[] = [];
+    let band: Band | null = null;
+    for (let y = 0; y < img.height; y++) {
+      let left = -1;
+      let right = -1;
+      for (let x = 0; x < img.width; x++) {
+        if (ink((y * img.width + x) * 4)) {
+          if (left < 0) left = x;
+          right = x;
         }
       }
-      return { contentW, lineStarts };
-    };
-  });
+      if (left < 0) {
+        band = null;
+        continue;
+      }
+      if (!band) bands.push((band = [y, 0, left, right]));
+      band[1]++;
+      band[2] = Math.min(band[2], left);
+      band[3] = Math.max(band[3], right);
+    }
+    return bands;
+  }, png);
+}
 
-test('a rendered pane wraps the same lines focused or not', async ({ gw, window }) => {
-  const para =
-    'The quick brown fox jumps over the lazy dog, again and again, until the paragraph wraps across ' +
-    'several lines of the pane, and then some more words so that a narrower layout breaks them elsewhere.';
-  // Long enough to scroll, so the overlay keeps its scrollbar. The task list
-  // pins that the overlay's checkbox and the picture's stand-in are one size.
-  const { left, right } = await splitOnText(
-    gw,
-    `# Heading\n\n- [ ] ${para}\n- [x] ${para}\n\n` + `${para}\n\n`.repeat(12),
-  );
+// A document long enough to scroll, so the overlay keeps its scrollbar gutter,
+// with three tasks, one done, one wrapping across lines.
+const para =
+  'The quick brown fox jumps over the lazy dog, again and again, until the paragraph wraps across ' +
+  'several lines of the pane, and then some more words so that a narrower layout breaks them elsewhere.';
+const todo = `# Todo\n\n- [ ] alpha\n- [x] beta\n- [ ] ${para}\n\n` + `${para}\n\n`.repeat(12);
+
+async function sameFocusedOrNot(gw: any, window: any, zoomSteps: number) {
+  const { left, right } = await splitOnText(gw, todo);
   await gw.toggleTextMode(); // rendered
-  await expect(window.locator('#gw-rendered-view')).toBeVisible();
+  for (let i = 0; i < zoomSteps; i++) {
+    await window.keyboard.press('Control+=');
+    await gw.waitIdle();
+  }
+  const view = window.locator('#gw-rendered-view');
+  await expect(view).toBeVisible();
+  // The paste left the document scrolled to its end; the tasks are at the top.
+  await view.evaluate((el: HTMLElement) => el.scrollTo(0, 0));
   await gw.waitIdle();
-  await installWrapLayout(window);
-  const focused = await overlayLayout(window);
+  // The overlay's box less its scrollbar, which the raster has no picture of.
+  const box = await view.evaluate((el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    return { x: Math.ceil(r.left), y: Math.ceil(r.top), w: Math.floor(el.clientWidth) - 1, h: Math.floor(el.clientHeight) - 1 };
+  });
+  const focused = await inkBands(window, box);
 
   await gw.focusPane(await paneById(gw, right.id));
+  await expect(view).toBeHidden();
   await expect
     .poll(async () => (await painted(window))['pane:' + left.id] ?? '', { timeout: 10_000 })
     .toMatch(/^raster:/);
-  const unfocused = await rasterLayout(window, (await painted(window))['pane:' + left.id].slice('raster:'.length));
+  await gw.waitIdle();
+  const unfocused = await inkBands(window, box);
 
-  expect(focused.lineStarts.length, 'the document wraps').toBeGreaterThan(12 * 2);
-  expect(focused.lineStarts, 'the pane re-wrapped when focus left it').toEqual(unfocused.lineStarts);
-  expect(focused.contentW, 'the overlay lays out at the raster width').toBeCloseTo(unfocused.contentW, 0);
+  expect(focused.length, 'the box shows the heading, the tasks and wrapped lines').toBeGreaterThan(8);
+  expect(unfocused, 'the pane moved its lines when focus left it').toEqual(focused);
+}
+
+test('a rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
+  await sameFocusedOrNot(gw, window, 0);
+});
+
+test('a content-zoomed rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
+  await sameFocusedOrNot(gw, window, 2);
+});
+
+test.describe('at a Retina pixel density', () => {
+  test.use({ forceDeviceScaleFactor: 2 });
+
+  test('a rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
+    await sameFocusedOrNot(gw, window, 0);
+  });
+
+  test('a content-zoomed rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
+    await sameFocusedOrNot(gw, window, 2);
+  });
 });

@@ -37,13 +37,14 @@ func Bucket(contentW float64) float64 {
 
 // Key identifies one raster. Bytes is the generation of the body it is made from
 // (cache.BodyGen), so new bytes, a plugin's or an edit's, are never taken for
-// the old picture's; Org is part of the identity
-// because it picks the renderer, and Theme because the document is rasterized
-// in the colors on screen.
+// the old picture's; Scale is its px per logical px (markdown.PreviewSVG);
+// Org is part of the identity because it picks the renderer, and Theme
+// because the document is rasterized in the colors on screen.
 type Key struct {
 	TileID string
 	Bytes  uint64
 	Bucket float64
+	Scale  float64
 	Org    bool
 	Theme  string
 }
@@ -84,10 +85,10 @@ func (e *entry) release() {
 	e.dropPrev()
 }
 
-// onlyBytesDiffer reports that a and b picture other bytes of one document in
-// one renderer and theme at one width.
-func onlyBytesDiffer(a, b Key) bool {
-	a.Bytes = b.Bytes
+// standsInFor reports that a pictures b's document in one renderer and theme
+// at one width, of other bytes or at another scale.
+func standsInFor(a, b Key) bool {
+	a.Bytes, a.Scale = b.Bytes, b.Scale
 	return a == b
 }
 
@@ -106,22 +107,22 @@ func NewCache(ras Rasterizer, onErr func(tileID string)) *Cache {
 	return &Cache{ras: ras, onErr: onErr, entries: map[slot]*entry{}}
 }
 
-// Ensure returns k's raster and the width it was made at, starting a
+// Ensure returns k's raster and the key it was made for, starting a
 // rasterization on a miss. While k's is in flight it answers with the nearest
-// ready bucket of the same tile, bytes, renderer and theme, so a zoom that
-// crosses a bucket keeps showing the document, or else with the picture k's
-// slot held before, so an edit does not flash raw source; with neither, and
-// once k failed, ok is false and the caller paints raw source. build supplies the SVG and
+// ready bucket of the same tile, bytes, renderer and theme at any scale, so a
+// zoom that crosses a bucket keeps showing the document, or else with the
+// picture k's slot held before, so an edit does not flash raw source; with
+// neither, and once k failed, ok is false and the caller paints raw source. build supplies the SVG and
 // reports false when the tile's bytes have not loaded yet, which caches
 // nothing. onReady may be nil and fires when a raster lands.
-func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Raster, float64, bool) {
+func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Raster, Key, bool) {
 	s := slot{tileID: k.TileID, bucket: k.Bucket}
 	if e, ok := c.entries[s]; ok && e.Ident == k {
 		if e.Ready() {
-			return e.Res, k.Bucket, true
+			return e.Res, k, true
 		}
 		if e.Failed && e.FailIdent == k {
-			return nil, 0, false
+			return nil, Key{}, false
 		}
 		return c.standIn(k)
 	}
@@ -145,10 +146,10 @@ func (c *Cache) Ensure(k Key, build func() (string, bool), onReady func()) (Rast
 	// The slot's last picture of this document stands in until k lands or
 	// fails, and no longer.
 	switch {
-	case e.Ready() && onlyBytesDiffer(e.Ident, k):
+	case e.Ready() && standsInFor(e.Ident, k):
 		e.dropPrev()
 		e.prev, e.prevKey, e.Res = e.Res, e.Ident, nil
-	case e.prev != nil && onlyBytesDiffer(e.prevKey, k):
+	case e.prev != nil && standsInFor(e.prevKey, k):
 	default:
 		e.dropPrev()
 	}
@@ -188,13 +189,13 @@ func (c *Cache) current(s slot) *resload.Entry[Key] {
 }
 
 // standIn is the ready raster nearest k's bucket among those identical to k
-// in all else, the narrower winning a tie because it cannot clip, or else the
-// picture k's own slot held before k.
-func (c *Cache) standIn(k Key) (Raster, float64, bool) {
+// in all but bucket and scale, the narrower winning a tie because it cannot
+// clip, or else the picture k's own slot held before k.
+func (c *Cache) standIn(k Key) (Raster, Key, bool) {
 	var best *entry
 	for _, e := range c.entries {
 		id := e.Ident
-		id.Bucket = k.Bucket
+		id.Bucket, id.Scale = k.Bucket, k.Scale
 		if id != k || !e.Ready() {
 			continue
 		}
@@ -203,12 +204,12 @@ func (c *Cache) standIn(k Key) (Raster, float64, bool) {
 		}
 	}
 	if best != nil {
-		return best.Res, best.Ident.Bucket, true
+		return best.Res, best.Ident, true
 	}
 	if e, ok := c.entries[slot{tileID: k.TileID, bucket: k.Bucket}]; ok && e.prev != nil && e.Loading(k) {
-		return e.prev, e.prevKey.Bucket, true
+		return e.prev, e.prevKey, true
 	}
-	return nil, 0, false
+	return nil, Key{}, false
 }
 
 func closer(a, b, want float64) bool {

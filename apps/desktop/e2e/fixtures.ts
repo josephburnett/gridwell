@@ -151,6 +151,9 @@ type Fixtures = {
   // second writable space a cross-namespace spec needs.
   extraNodes: string[];
   extraYaml: string;
+  // Set with test.use({ forceDeviceScaleFactor: 2 }) for a window at a Retina
+  // display's pixel density; 0 keeps the display's own.
+  forceDeviceScaleFactor: number;
 };
 
 // The fixture launches the same `electron .` entry `make launch` uses, so the
@@ -163,6 +166,7 @@ export const test = base.extend<Fixtures>({
   extraPlugins: [[], { option: true }],
   extraNodes: [[], { option: true }],
   extraYaml: ['', { option: true }],
+  forceDeviceScaleFactor: [0, { option: true }],
 
   home: async ({ extraPlugins, extraNodes, extraYaml }, use) => {
     // Far nodes come up before the local node, so its boot-time connect learns
@@ -181,7 +185,7 @@ export const test = base.extend<Fixtures>({
     for (const n of far) await stopFarNode(n);
   },
 
-  electronApp: async ({ home }, use) => {
+  electronApp: async ({ home, forceDeviceScaleFactor }, use) => {
     // Created before launch, so the flag below is valid.
     const electronDir = path.join(home, 'electron');
     fs.mkdirSync(electronDir, { recursive: true });
@@ -190,7 +194,11 @@ export const test = base.extend<Fixtures>({
       // Node.js main script runs; Playwright intercepts app.isReady(), so
       // index.ts's setPath would come too late. The flag must precede the app
       // path ('.'), because Electron treats everything after it as app args.
-      args: [`--user-data-dir=${electronDir}`, '.'],
+      args: [
+        `--user-data-dir=${electronDir}`,
+        ...(forceDeviceScaleFactor ? [`--force-device-scale-factor=${forceDeviceScaleFactor}`] : []),
+        '.',
+      ],
       cwd: DESKTOP_DIR,
       env: {
         // Strip the live app's plugin env vars, which go-plugin re-appends at

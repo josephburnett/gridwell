@@ -127,11 +127,10 @@ func (a *App) refreshRenderedOverlay() {
 	// The CSS is em-relative, so content zoom rides the base font size. The
 	// document lays out at its raster's width, so the pane wraps the same
 	// lines when focus leaves it and the raster is drawn instead.
-	scale := a.textScaleFor(p)
-	s.Set("fontSize", pxf(14*scale))
-	top, right, bottom, left := markdown.RenderedInset(w-a.overlays.renderedGutter,
-		rasterprev.Bucket(a.renderedContentWidth(p)), scale)
-	s.Set("padding", pxf(top)+" "+pxf(right)+" "+pxf(bottom)+" "+pxf(left))
+	padding, fontSize := markdown.RenderedBox(w-a.overlays.renderedGutter,
+		rasterprev.Bucket(a.renderedContentWidth(p)), a.textScaleFor(p))
+	s.Set("padding", padding)
+	s.Set("fontSize", fontSize)
 	s.Set("display", "block")
 
 	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +

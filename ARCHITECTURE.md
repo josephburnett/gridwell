@@ -450,9 +450,11 @@ control; a click flips the source marker through the normal edit path. Every
 other view paints soft-wrapped source on canvas at the same columns as the
 textarea, so nothing reflows on focus. Previews render at constant scale from
 the tile's own facts alone. A rendered preview is a raster made at a width
-bucket and drawn at that scale, never stretched to the box: the box clips
-it or leaves a margin (`markdown.PreviewRasterDraw`), and
-while a new bucket rasterizes, the nearest ready one of the same version
+bucket, in the device px its text is drawn in, with the overlay's padding and
+font size (`markdown.RenderedBox`), so a pane lays its lines out the same
+focused or not. It is drawn at the text's scale, never stretched to the box:
+the box clips it or leaves a margin (`markdown.PreviewRasterDraw`), and while
+a new bucket or scale rasterizes, the nearest ready one of the same version
 stands in (`rasterprev.Cache`).
 
 **The bar.** One bar at the bottom of the window (`client/wsbar`,

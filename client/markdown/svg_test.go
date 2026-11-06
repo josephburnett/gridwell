@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -29,7 +30,7 @@ func TestRenderedCSSScopes(t *testing.T) {
 
 func TestPreviewSVGShape(t *testing.T) {
 	light := theme.Of(theme.Light)
-	svg := PreviewSVG("<p xmlns=\"http://www.w3.org/1999/xhtml\">hi</p>", 320, 4000, light)
+	svg := PreviewSVG("<p xmlns=\"http://www.w3.org/1999/xhtml\">hi</p>", 320, 4000, 1, light)
 	for _, want := range []string{
 		`width="320"`, `height="4000"`,
 		`<foreignObject`, `class="gw-md-root"`,
@@ -79,7 +80,7 @@ func TestPreviewSVGHoldsNoFormControl(t *testing.T) {
 		{"attribute order", `<p><input type="checkbox" checked="checked" disabled=""/> x <INPUT TYPE='checkbox'> y</p>`, 1, 1},
 		{"other input", `<p><input type="text" value="v"/>z</p>`, 0, 0},
 	} {
-		svg := PreviewSVG(c.xhtml, 320, 4000, dark)
+		svg := PreviewSVG(c.xhtml, 320, 4000, 1, dark)
 		body := svg[strings.Index(svg, "</style>"):]
 		if strings.Contains(strings.ToLower(body), "<input") {
 			t.Errorf("%s: the picture holds a form control:\n%s", c.name, body)
@@ -139,6 +140,22 @@ func TestRenderedCSSDrawsTheCheckboxAndItsStandInAlike(t *testing.T) {
 	for i, p := range pairs {
 		if !seen[i] {
 			t.Errorf("no rule draws %q", p.input)
+		}
+	}
+}
+
+// The raster sets its text at the size the overlay sets it at the same scale,
+// inside the overlay's inset, so content zoom never stretches a smaller
+// document to fit.
+func TestPreviewSVGLaysOutAtTheOverlaysScale(t *testing.T) {
+	svg := PreviewSVG("<p>hi</p>", 320, 4000, 1.21, theme.Of(theme.Dark))
+	padding, fontSize := RenderedBox(320*1.21, 320, 1.21)
+	for _, want := range []string{
+		`width="388"`, `height="4840"`, fmt.Sprintf("width:%gpx", 320*1.21),
+		"padding:" + padding, "font-size:" + fontSize,
+	} {
+		if !strings.Contains(svg, want) {
+			t.Errorf("svg missing %q:\n%s", want, svg)
 		}
 	}
 }

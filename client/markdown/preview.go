@@ -34,19 +34,20 @@ func PreviewFrameOf(innerW, fixedScale, contentZoom float64, storedX, storedY in
 	}
 }
 
-// RasterDraw is one drawImage call: a source rect in the raster's logical px
-// and the dest rect on canvas.
+// RasterDraw is one drawImage call: a source rect in the raster's own px and
+// the dest rect on canvas.
 type RasterDraw struct {
 	SX, SY, SW, SH float64
 	DX, DY, DW, DH float64
 }
 
-// PreviewRasterDraw crops a raster rasterW by rasterH logical px into the
-// box below topInset, at frame.Scale and never at the box's width over the
-// raster's, so the letters keep their size whatever width the raster was made
-// at: the box clips a wider raster and leaves a margin beside a narrower one.
-// False means the scroll is past the raster.
-func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, x, y, w, h, topInset float64) (RasterDraw, bool) {
+// PreviewRasterDraw crops a raster of rasterW by rasterH logical px, made at
+// rasterScale px per logical px (see PreviewSVG), into the box below
+// topInset, at frame.Scale and never at the box's width over the raster's, so
+// the letters keep their size whatever width the raster was made at: the box
+// clips a wider raster and leaves a margin beside a narrower one. False means
+// the scroll is past the raster.
+func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, rasterScale, x, y, w, h, topInset float64) (RasterDraw, bool) {
 	s := frame.Scale
 	sx, sy := frame.ScrollX, frame.ScrollY
 	if s <= 0 || sx < 0 || sy < 0 || sx >= rasterW || sy >= rasterH {
@@ -58,7 +59,7 @@ func PreviewRasterDraw(frame PreviewFrame, rasterW, rasterH, x, y, w, h, topInse
 		return RasterDraw{}, false
 	}
 	return RasterDraw{
-		SX: sx, SY: sy, SW: sw, SH: sh,
+		SX: sx * rasterScale, SY: sy * rasterScale, SW: sw * rasterScale, SH: sh * rasterScale,
 		DX: x, DY: y + topInset, DW: sw * s, DH: sh * s,
 	}, true
 }

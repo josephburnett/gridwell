@@ -240,17 +240,17 @@ func TestStandInAcrossBucketsNeverAcrossBytes(t *testing.T) {
 	ras.resolve(0)
 
 	r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil)
-	if !ok || r.(*fakeRaster).svg != "v1@128" || w != 128 {
+	if !ok || r.(*fakeRaster).svg != "v1@128" || w.Bucket != 128 {
 		t.Fatalf("in flight at 192: %v %v %v, want the nearest ready bucket, 128", r, w, ok)
 	}
-	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w != 128 || r.(*fakeRaster).svg != "v1@128" {
+	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w.Bucket != 128 || r.(*fakeRaster).svg != "v1@128" {
 		t.Fatalf("second draw in flight: %v %v %v, want the stand-in again", r, w, ok)
 	}
 	if ras.calls != 3 {
 		t.Errorf("Rasterize calls = %d, want 3: a stand-in does not re-ask", ras.calls)
 	}
 	ras.resolve(0)
-	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w != 192 || r.(*fakeRaster).svg != "v1@192" {
+	if r, w, ok := c.Ensure(key(1, 192), svgOK("v1@192"), nil); !ok || w.Bucket != 192 || r.(*fakeRaster).svg != "v1@192" {
 		t.Fatalf("landed: %v %v %v, want 192's own raster", r, w, ok)
 	}
 
@@ -259,7 +259,7 @@ func TestStandInAcrossBucketsNeverAcrossBytes(t *testing.T) {
 		t.Fatalf("v2 in flight served %v: a stand-in crosses bytes only in its own slot", r.(*fakeRaster).svg)
 	}
 	ras.resolve(0)
-	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2@128"), nil); !ok || w != 256 || r.(*fakeRaster).svg != "v2@256" {
+	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2@128"), nil); !ok || w.Bucket != 256 || r.(*fakeRaster).svg != "v2@256" {
 		t.Fatalf("v2 at 128 in flight: %v %v %v, want v2's 256", r, w, ok)
 	}
 
@@ -268,6 +268,24 @@ func TestStandInAcrossBucketsNeverAcrossBytes(t *testing.T) {
 	other.Theme = "light"
 	if _, _, ok := c.Ensure(other, svgOK("light"), nil); ok {
 		t.Error("a stand-in must never cross themes")
+	}
+}
+
+// A content zoom keeps drawing the document from the scale it was made at
+// until the new scale's raster lands, which then answers alone.
+func TestStandInAcrossScales(t *testing.T) {
+	ras := &fakeRasterizer{}
+	c := NewCache(ras, nil)
+	c.Ensure(key(1, 128), svgOK("x1"), nil)
+	ras.resolve(0)
+	zoomed := key(1, 128)
+	zoomed.Scale = 1.21
+	if r, made, ok := c.Ensure(zoomed, svgOK("x1.21"), nil); !ok || made != key(1, 128) || r.(*fakeRaster).svg != "x1" {
+		t.Fatalf("in flight at 1.21: %v %+v %v, want the first scale's raster standing in", r, made, ok)
+	}
+	ras.resolve(0)
+	if r, made, ok := c.Ensure(zoomed, svgOK("x1.21"), nil); !ok || made != zoomed || r.(*fakeRaster).svg != "x1.21" {
+		t.Fatalf("landed: %v %+v %v, want 1.21's own raster", r, made, ok)
 	}
 }
 
@@ -292,7 +310,7 @@ func TestStandInTieGoesToTheNarrower(t *testing.T) {
 	c.Ensure(key(1, 256), svgOK("256"), nil)
 	ras.resolve(0)
 	ras.resolve(0)
-	if _, w, ok := c.Ensure(key(1, 192), svgOK("192"), nil); !ok || w != 128 {
+	if _, w, ok := c.Ensure(key(1, 192), svgOK("192"), nil); !ok || w.Bucket != 128 {
 		t.Errorf("tie: width %v ok %v, want 128, which cannot clip", w, ok)
 	}
 }
@@ -307,7 +325,7 @@ func TestASlotsLastPictureStandsInOnlyWhileItsSuccessorIsInFlight(t *testing.T) 
 	c.Ensure(key(1, 128), svgOK("v1"), nil)
 	v1 := ras.resolve(0)
 
-	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2"), nil); !ok || w != 128 || r != v1 {
+	if r, w, ok := c.Ensure(key(2, 128), svgOK("v2"), nil); !ok || w.Bucket != 128 || r != v1 {
 		t.Fatalf("v2 in flight: %v %v %v, want v1 standing in", r, w, ok)
 	}
 	// A third edit before the second lands keeps the last landed picture.

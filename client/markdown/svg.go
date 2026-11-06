@@ -15,9 +15,10 @@ import (
 // substituted rather than named as custom properties, because the preview
 // raster is an SVG document of its own and inherits none from the page. The
 // task box is drawn here for the overlay's input and the picture's stand-in
-// alike (see PictureXHTML), so the overlay and the picture lay a task list out the same.
+// alike (see PictureXHTML). geometricPrecision keeps glyph metrics unrounded,
+// which the page and the raster's image would round apart.
 const renderedCSSRules = `
-@SCOPE@ { color: @FG@; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; }
+@SCOPE@ { color: @FG@; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; line-height: 1.5; text-rendering: geometricPrecision; }
 @SCOPE@ h1 { font-size: 1.7em; margin: 0.6em 0 0.4em; }
 @SCOPE@ h2 { font-size: 1.35em; margin: 0.6em 0 0.35em; }
 @SCOPE@ h3, @SCOPE@ h4 { font-size: 1.15em; margin: 0.5em 0 0.3em; }
@@ -55,10 +56,7 @@ func RenderedCSS(sel string, p theme.Palette) string {
 
 // RenderedPadX and RenderedPadY are the rendered document's inset at scale 1,
 // in px, in the overlay and the raster alike.
-const (
-	RenderedPadX = 10.0
-	RenderedPadY = 6.0
-)
+const RenderedPadX, RenderedPadY = 10.0, 6.0
 
 // RenderedInset is the rendered overlay's padding in px at scale, for a box
 // boxW px wide whose document lays out at layoutW logical px, the width its
@@ -70,22 +68,34 @@ func RenderedInset(boxW, layoutW, scale float64) (top, right, bottom, left float
 	return top, right, bottom, left
 }
 
+// RenderedBox is the rendered document's CSS padding and font-size at scale,
+// in a box boxW px wide laid out at layoutW logical px. The overlay and the
+// raster both set these strings: text stretched or rounded lays out elsewhere.
+func RenderedBox(boxW, layoutW, scale float64) (padding, fontSize string) {
+	top, right, bottom, left := RenderedInset(boxW, layoutW, scale)
+	return fmt.Sprintf("%gpx %gpx %gpx %gpx", top, right, bottom, left), fmt.Sprintf("%gpx", 14*scale)
+}
+
 // PreviewSVG wraps a rendered body in an SVG foreignObject, which rasterizes
 // styled HTML without a second layout engine, so RenderHTML stays the one
 // renderer. xhtml must be well-formed XML, goldmark's HTML5 output leaving
 // <br> and <img> unclosed, so the wasm caller serializes through
-// XMLSerializer. The base font size is 14px at scale 1. The raster is made in
-// the theme on screen, so switching theme re-rasterizes rather than leaving a
-// dark document on a pale grid; rasterprev.Key carries the theme that decides.
-// The body passes through PictureXHTML first.
-func PreviewSVG(xhtml string, w, h float64, p theme.Palette) string {
+// XMLSerializer. The image is w by h logical px at scale px each: the text
+// scale times the device pixel ratio, because the page lays the overlay out
+// in device px and a raster laid out in fewer sets its lines elsewhere. It is
+// made in the theme on screen, so switching theme re-rasterizes rather than
+// leaving a dark document on a pale grid; rasterprev.Key carries the theme
+// that decides. The body passes through PictureXHTML first.
+func PreviewSVG(xhtml string, w, h, scale float64, p theme.Palette) string {
+	padding, fontSize := RenderedBox(w*scale, w, scale)
 	return fmt.Sprintf(
 		`<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f">`+
 			`<foreignObject width="100%%" height="100%%">`+
 			`<div xmlns="http://www.w3.org/1999/xhtml" class="gw-md-root" `+
-			`style="width:%.0fpx;box-sizing:border-box;padding:%gpx %gpx;font-size:14px;background:%s">`+
+			`style="width:%gpx;box-sizing:border-box;padding:%s;font-size:%s;background:%s">`+
 			`<style>%s</style>%s</div></foreignObject></svg>`,
-		w, h, w, RenderedPadY, RenderedPadX, p.FileInnerBg, RenderedCSS(".gw-md-root", p), PictureXHTML(xhtml))
+		math.Ceil(w*scale), math.Ceil(h*scale), w*scale, padding, fontSize,
+		p.FileInnerBg, RenderedCSS(".gw-md-root", p), PictureXHTML(xhtml))
 }
 
 var (
