@@ -140,7 +140,6 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 	if !ok {
 		return
 	}
-	// Without this a right-drag over a live URL view strands the menu.
 	a.focusToPane(p)
 	// IntentCopy: a content descent can only arm pane gestures, which ignore it.
 	a.onRightDown(p, r, sx, sy, dragdrop.IntentCopy, false)

@@ -259,9 +259,8 @@ func (a *App) bridgeSetRoutes() {
 	a.bridgeVerb("setRoutes", map[string]any{"routes": js.ValueOf(rules), "declared": js.ValueOf(declared)}, nil, nil)
 }
 
-// bridgeShowMenu pops the live view's context menu from the bar circle's
-// right-click. A page that hijacks contextmenu makes the in-page menu
-// unreachable, and the circle sits outside the view's rect.
+// bridgeShowMenu pops the live view's pane menu from the bar circle's
+// right-click, the one way to it: a right-click on the page is the page's.
 func (a *App) bridgeShowMenu(paneID string) {
 	a.bridgeVerb("showMenu", map[string]any{"paneId": paneID}, nil, nil)
 }
@@ -331,7 +330,7 @@ func (a *App) installWebviewListeners() {
 		{"onRouteMove", func(ev js.Value) {
 			a.routeURLView(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
 		}},
-		// "Freeze Page" in a live view's context menu.
+		// "Freeze Page" in the circle's menu over a live view.
 		{"onFreezeURL", func(ev js.Value) {
 			a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
 		}},

@@ -1,8 +1,9 @@
 // Injected into every live url WebContentsView, where it tells a right-click
-// from a right-drag. Nothing is suppressed on right-down: only once the cursor
-// passes the drag threshold with the button still held is the gesture forwarded
-// and the would-be context menu suppressed. Middle is always ascend; left,
-// wheel, keyboard and selection stay with the page.
+// from a right-drag. Nothing is suppressed on right-down: once the cursor
+// passes the drag threshold with the button still held, the gesture is
+// forwarded and the page sees no contextmenu; a release short of that hands
+// the page its contextmenu. Middle is always ascend; left, wheel, keyboard and
+// selection stay with the page.
 //
 // This runs inside arbitrary web pages, so the view stays sandboxed, and a
 // sandboxed isolated preload may not require local modules. That is why the
@@ -27,6 +28,12 @@ let rightDragged = false;
 let rightStartX = 0;
 let rightStartY = 0;
 let rightDownTime = 0;
+// A contextmenu that came while the button was down, held until the release
+// says whether it was a click.
+let menuHeld = false;
+// Set while the held contextmenu is handed to the page, so the listener below
+// lets it through.
+let handingOver = false;
 
 // Capture phase at the window, so this fires before the page's own listeners.
 // screenX and screenY are physical screen pixels, unaffected by zoomFactor.
@@ -40,6 +47,7 @@ window.addEventListener(
       rightStartX = e.screenX;
       rightStartY = e.screenY;
       rightDownTime = Date.now();
+      menuHeld = false;
     } else if (e.button === 1) {
       e.preventDefault();
       e.stopPropagation();
@@ -85,7 +93,30 @@ window.addEventListener(
 window.addEventListener(
   'mouseup',
   (e: MouseEvent) => {
-    if (e.button === 2) rightDown = false;
+    if (e.button !== 2) return;
+    rightDown = false;
+    if (!menuHeld || rightDragged) return;
+    menuHeld = false;
+    // Handed over inside the release's own dispatch, before the page's mouseup
+    // listeners, which is the order a press-time contextmenu has anyway.
+    const target = document.elementFromPoint(e.clientX, e.clientY) ?? document.documentElement;
+    handingOver = true;
+    try {
+      target.dispatchEvent(
+        new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          button: 2,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          screenX: e.screenX,
+          screenY: e.screenY,
+        }),
+      );
+    } finally {
+      handingOver = false;
+    }
   },
   true,
 );
@@ -140,13 +171,18 @@ window.addEventListener(
   true,
 );
 
-// Preventing the page's `contextmenu` stops Chromium emitting the webContents
-// `context-menu`, so webviews.ts pops no menu mid-gesture. On Linux and Windows
-// `contextmenu` fires on right-button-up, after the drag has been detected.
+// Chromium fires contextmenu on the press on some platforms and on the release
+// on others. One that comes while the button is down is held, and handed to the
+// page on a release without a drag; one that comes after a drag never reaches
+// it. Stopping it also stops Chromium emitting the webContents `context-menu`.
 window.addEventListener(
   'contextmenu',
   (e: Event) => {
-    if (rightDragged) e.preventDefault();
+    if (handingOver) return;
+    if (rightDown) menuHeld = true;
+    else if (!rightDragged) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
   },
   true,
 );

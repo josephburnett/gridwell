@@ -1,15 +1,15 @@
 import { test, expect } from './fixtures';
 
-// Right-clicking a live url pane focuses it before any menu item can run, so
-// the menu acts in the pane the bar rides. A live url view swallows the
+// Right-clicking a live url pane focuses it, as any press in a pane does,
+// though the click itself is the page's. A live url view swallows the
 // renderer's mouse events and urlview-preload forwards a right press only once
 // it has become a drag, so the focus cannot come from the canvas: the registry
 // sees the press on the view's webContents, main relays it as EV.rightPress,
 // and the wasm routes it into focusToPane, the one owner of "a click in an
 // unfocused pane moves focus". The spec crosses that seam with a real right
-// press inside the view's own webContents and the real Reload item.
+// press inside the view's own webContents.
 
-test('right-clicking a live url pane focuses it before the menu can act', async ({
+test('right-clicking a live url pane focuses it and pops no menu', async ({
   electronApp,
   gw,
   window,
@@ -42,22 +42,18 @@ test('right-clicking a live url pane focuses it before the menu can act', async 
   const otherPaneId = (await gw.focused()).id;
   expect(otherPaneId, 'the split moved focus off the url pane').not.toBe(urlPaneId);
 
-  // Intercept Menu.popup: a real native popup would never be dismissed under
-  // xvfb.
   await electronApp.evaluate(({ Menu }) => {
     const g = globalThis as any;
-    g.__gwCtxOrigPopup = Menu.prototype.popup;
-    g.__gwCtxMenu = null;
-    (Menu.prototype as any).popup = function (this: any) {
-      g.__gwCtxMenu = this;
-      return undefined;
+    g.__gwFocusOrigPopup = Menu.prototype.popup;
+    g.__gwFocusPopups = 0;
+    (Menu.prototype as any).popup = function () {
+      g.__gwFocusPopups++;
     };
   });
 
   try {
     // A right press inside the view's own webContents, which the canvas never
-    // sees. The preload does not suppress a plain click, so Chromium emits
-    // context-menu and the registry pops the menu.
+    // sees.
     await electronApp.evaluate(async ({ webContents }, m) => {
       const wc = webContents.getAllWebContents().find((w) => w.getURL().includes(m));
       if (!wc) throw new Error('live view webContents not found');
@@ -69,13 +65,6 @@ test('right-clicking a live url pane focuses it before the menu can act', async 
     }, marker);
 
     await expect
-      .poll(() => electronApp.evaluate(() => Boolean((globalThis as any).__gwCtxMenu)), {
-        timeout: 10_000,
-      })
-      .toBe(true);
-
-    // The menu opened, so the pane it acts in already has focus.
-    await expect
       .poll(() => gw.focused().then((p) => p.id), { timeout: 5_000 })
       .toBe(urlPaneId);
 
@@ -84,27 +73,16 @@ test('right-clicking a live url pane focuses it before the menu can act', async 
     const bar = await window.evaluate(() => (window as any).__gridwellTest.bar());
     expect(bar.left, 'the bar rides the newly focused pane').toBeCloseTo(urlPane.x, 0);
     expect(bar.width, 'and spans it').toBeCloseTo(urlPane.w, 0);
-
-    // Reload runs in the pane the right-click focused.
-    const labels = await electronApp.evaluate(() =>
-      (globalThis as any).__gwCtxMenu.items.map((i: any) => i.label).filter((l: string) => l),
-    );
-    expect(labels, 'the in-page menu carries the navigation block').toContain('Reload');
-    await electronApp.evaluate(() => {
-      const item = (globalThis as any).__gwCtxMenu.items.find((i: any) => i.label === 'Reload');
-      if (!item) throw new Error('Reload item missing');
-      item.click();
-    });
-    await gw.waitIdle();
-    expect((await gw.focused()).id, 'Reload ran in the pane the right-click focused').toBe(
-      urlPaneId,
-    );
+    expect(
+      await electronApp.evaluate(() => (globalThis as any).__gwFocusPopups),
+      'Gridwell popped a menu over the page',
+    ).toBe(0);
   } finally {
     await electronApp.evaluate(({ Menu }) => {
       const g = globalThis as any;
-      if (g.__gwCtxOrigPopup) (Menu.prototype as any).popup = g.__gwCtxOrigPopup;
-      delete g.__gwCtxOrigPopup;
-      delete g.__gwCtxMenu;
+      if (g.__gwFocusOrigPopup) (Menu.prototype as any).popup = g.__gwFocusOrigPopup;
+      delete g.__gwFocusOrigPopup;
+      delete g.__gwFocusPopups;
     });
   }
 });

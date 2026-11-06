@@ -1,13 +1,11 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The bar circle's right-click pops the live url view's context menu, Freeze
-// Page included. A page can hijack contextmenu inside the view and make the
-// in-page menu unreachable, but the circle sits in the bar's band, below every
-// pane and outside every view's bounds, so a right-click there reaches the
-// canvas whatever the page does. The seam runs from the canvas right-click
-// through the bottomBarClick slot arm, the bridgeShowMenu IPC,
-// registry.showMenu, and the same urlContextMenuTemplate the in-page path uses.
+// The bar circle's right-click pops the live url pane's menu, Freeze Page
+// included. It is the one menu over a live url pane, since a right-click on
+// the page is the page's. The seam runs from the canvas right-click through
+// the bottomBarClick slot arm, the bridgeShowMenu IPC, registry.showMenu, and
+// urlContextMenuTemplate.
 
 test('right-clicking the bar circle over a live url pops the context menu; Freeze Page freezes', async ({
   electronApp,

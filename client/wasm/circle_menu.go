@@ -11,7 +11,7 @@ import (
 
 // The circle slot's right-click. circlemenu.For says which menu the slot's
 // verdict stands for; this dispatches it to one of two renderers. The live
-// url view's menu is the host's, because its rows are the page's. Everything
+// url view's menu is the host's, because its rows act on the host's view. Everything
 // else is a list of declared choices, rendered natively where the host has a
 // menu and as a DOM popover where it has not.
 

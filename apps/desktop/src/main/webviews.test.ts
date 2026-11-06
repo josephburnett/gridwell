@@ -615,18 +615,6 @@ test('a main-frame redirect is routed as a navigation is, a frame\'s is not', as
   assert.deepEqual(routed(r), [['redirect', 'http://plain.test/x', 'move']]);
 });
 
-test('the menu\'s Open Link is routed: it loads only what stays', async () => {
-  const r = rig();
-  const wc = await presentedView(r);
-  const loads = wc.loads;
-  r.reg.openLink('p1', 'http://outside.test/x');
-  assert.equal(wc.loads, loads, 'an outside address loaded in the page');
-  assert.deepEqual(r.outside, ['http://outside.test/x']);
-  r.reg.openLink('p1', PAGE + 'example.test/c');
-  assert.equal(wc.loads, loads + 1);
-  assert.equal(wc.url, PAGE + 'example.test/c');
-});
-
 test('a served page opens a presented address below; before any routes nothing is held', async () => {
   const r = rig();
   await r.reg.place('p1', 'n1/12', PAGE, BOUNDS, 0, '', false, true, 1, { page: PAGE, site: '' });

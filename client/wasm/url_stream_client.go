@@ -382,7 +382,7 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	})
 }
 
-// freezeURLPaneByIntent runs the context menu's "Freeze Page". The intent lands
+// freezeURLPaneByIntent runs the circle menu's "Freeze Page". The intent lands
 // on the descended row, the one DecideAutoLive reads.
 func (a *App) freezeURLPaneByIntent(paneID string) {
 	p := a.tree.FindPane(paneID)

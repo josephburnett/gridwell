@@ -1,4 +1,4 @@
-import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
+import { BaseWindow, WebContentsView, Menu, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions, MouseInputEvent } from 'electron';
 import * as path from 'node:path';
 import type { WebContentsViewConstructorOptions } from 'electron';
@@ -49,7 +49,7 @@ import {
   viewStealBounced,
 } from './viewtrace';
 
-// The live view's page menu, as a trace record names it; register.ts names the
+// The live view's pane menu, as a trace record names it; register.ts names the
 // other one.
 const URL_MENU = 'url';
 
@@ -166,40 +166,17 @@ export class WebviewRegistry {
     this.win.setFullScreen(!this.win.isFullScreen());
   }
 
-  // contextmenu.ts owns which items appear; this binds them to the clipboard
-  // and webContents.
-  private showContextMenu(
-    paneId: string,
-    view: WebContentsView,
-    params: {
-      linkURL: string;
-      selectionText: string;
-      isEditable: boolean;
-      editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
-    },
-  ): void {
+  // The bar circle's right-click pops the pane's menu; contextmenu.ts owns
+  // which items appear, and this binds them to the view's webContents.
+  showMenu(paneId: string): void {
+    const e = this.entries.get(paneId);
+    if (!e) return;
     this.trace(menuOpened(URL_MENU, paneId));
-    const wc = view.webContents;
+    const wc = e.view.webContents;
     const nav = wc.navigationHistory;
     const template = urlContextMenuTemplate(
+      { canGoBack: nav.canGoBack(), canGoForward: nav.canGoForward() },
       {
-        linkURL: params.linkURL,
-        selectionText: params.selectionText,
-        isEditable: params.isEditable,
-        editFlags: {
-          canCut: params.editFlags.canCut,
-          canCopy: params.editFlags.canCopy,
-          canPaste: params.editFlags.canPaste,
-        },
-        canGoBack: nav.canGoBack(),
-        canGoForward: nav.canGoForward(),
-      },
-      {
-        copyText: (t) => clipboard.writeText(t),
-        copyLink: (u) => clipboard.writeText(u),
-        openLink: (u) => this.openLink(paneId, u),
-        cut: () => wc.cut(),
-        paste: () => wc.paste(),
         back: () => this.goBack(paneId),
         forward: () => {
           if (nav.canGoForward()) nav.goForward();
@@ -207,24 +184,9 @@ export class WebviewRegistry {
         reload: () => wc.reload(),
         freeze: () => this.cb.onFreezeURL?.({ paneId }),
         chose: (label) => this.trace(menuChose(URL_MENU, label, paneId)),
-        failed: (message) => this.reportErr(`pane ${paneId}: ${message}`),
       },
     );
-    const menu = Menu.buildFromTemplate(template as MenuItemConstructorOptions[]);
-    menu.popup({ window: this.win });
-  }
-
-  // The bar circle's path onto the same menu, with no in-page context. A page
-  // can hijack contextmenu; this path always reaches it.
-  showMenu(paneId: string): void {
-    const e = this.entries.get(paneId);
-    if (!e) return;
-    this.showContextMenu(paneId, e.view, {
-      linkURL: '',
-      selectionText: '',
-      isEditable: false,
-      editFlags: { canCut: false, canCopy: false, canPaste: false },
-    });
+    Menu.buildFromTemplate(template as MenuItemConstructorOptions[]).popup({ window: this.win });
   }
 
   has(paneId: string): boolean {
@@ -328,8 +290,6 @@ export class WebviewRegistry {
         event.preventDefault();
       }
     });
-    // The preload suppresses this for a right-drag, so this is a real click.
-    view.webContents.on('context-menu', (_event, params) => this.showContextMenu(e.paneId, view, params));
     this.entries.set(paneId, e);
     this.trace(viewCreated(paneId, tileId, url));
     this.win.contentView.addChildView(view);
@@ -559,13 +519,6 @@ export class WebviewRegistry {
     void e.view.webContents.loadURL(url);
   }
 
-  // openLink is the menu's Open Link, which loads in the page and so is
-  // routed as a link the page follows.
-  openLink(paneId: string, url: string): void {
-    const e = this.entries.get(paneId);
-    if (e && this.route(e, url, 'menu').kind === 'stay') void e.view.webContents.loadURL(url);
-  }
-
   setRoutes(routing: Routing): void {
     this.routing = routing;
   }
@@ -689,9 +642,8 @@ export class WebviewRegistry {
       },
     );
 
-    // A dead renderer leaves a blank view whose only Reload is a context menu
-    // it can no longer raise, so the view is gone and the next descent places
-    // a new one.
+    // A dead renderer leaves a blank view, so the view is gone and the next
+    // descent places a new one.
     e.view.webContents.on('render-process-gone', (_event, details) =>
       this.retire(e, { reason: details.reason, message: (url) => renderProcessGoneMessage(url, details.reason), severity: 'error', close: true }),
     );

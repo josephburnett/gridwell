@@ -3,7 +3,7 @@
 // "HARNESS PASS" or "HARNESS FAIL: ..." and exits 0 or 1.
 //
 //   npm run build && xvfb-run -a electron dist/harness/capture-harness.js
-import { app, BaseWindow, BrowserWindow, Menu, WebContentsView } from 'electron';
+import { app, BaseWindow, BrowserWindow, ipcMain, Menu, WebContentsView } from 'electron';
 import type { WebContents } from 'electron';
 import * as fs from 'node:fs';
 import * as http from 'node:http';
@@ -12,7 +12,7 @@ import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { captureAttempt, describeAttempt } from '../main/capture';
 import { registerWebviewIpc } from '../main/register';
-import type { ErrorEvent, FrameEvent, NavEvent } from '../main/ipc';
+import { VIEW, type ErrorEvent, type FrameEvent, type NavEvent, type ViewRightdown } from '../main/ipc';
 import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
 import { FOCUS_SETTLE_MS } from '../main/focusguard';
 import { hostWindow } from './host';
@@ -330,6 +330,76 @@ app.whenReady().then(async () => {
   console.log(`touch scroll ok: finger up 200px → scrollY 1000 → ${scrollY}`);
   await reg3.remove('pane3');
   rootWin.destroy();
+
+  // ── a right press is the page's unless it becomes a drag ────────────────
+  // Chromium fires contextmenu at the press here and on macOS, and at the
+  // release on Windows. Both orders are driven in the page as events, then a
+  // real press through the input pipeline. The page logs what reaches it.
+  const rightDowns: ViewRightdown[] = [];
+  const onRightdown = (_e: unknown, p: ViewRightdown) => rightDowns.push(p);
+  ipcMain.on(VIEW.rightdown, onRightdown);
+  const regRt = new WebviewRegistry(win, {});
+  await regRt.place('paneRt', 'u1/46', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await waitForFirstFrame(regRt, 'paneRt', 'right press scenario');
+  const wcRt = regRt.webContentsFor('paneRt')!;
+  await wcRt.executeJavaScript(`(() => {
+    window.__gwLog = [];
+    for (const t of ['mousedown', 'mouseup', 'contextmenu']) {
+      document.addEventListener(t, (e) => window.__gwLog.push(t + ' ' + e.clientX + ',' + e.clientY));
+    }
+  })()`);
+  const pageLog = async (want: number): Promise<string[]> => {
+    const log: string[] = [];
+    const by = Date.now() + 3000;
+    while (log.length < want && Date.now() < by) {
+      log.push(...((await wcRt.executeJavaScript('window.__gwLog.splice(0)')) as string[]));
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    // Long enough for a contextmenu that should not come to arrive.
+    await new Promise((r) => setTimeout(r, 200));
+    return log.concat((await wcRt.executeJavaScript('window.__gwLog.splice(0)')) as string[]);
+  };
+  const at = (t: string, x: number, buttons: number) =>
+    `document.body.dispatchEvent(new MouseEvent('${t}', { bubbles: true, cancelable: true, button: 2,
+      buttons: ${buttons}, clientX: ${x}, clientY: 60, screenX: ${x + 1000}, screenY: 1060 }))`;
+  await wcRt.executeJavaScript(at('mousedown', 60, 2) + ';' + at('contextmenu', 60, 2));
+  const pressLog = await pageLog(1);
+  await wcRt.executeJavaScript(at('mouseup', 60, 0));
+  const releaseLog = await pageLog(2);
+  if (JSON.stringify(pressLog) !== JSON.stringify(['mousedown 60,60'])) {
+    fail(`a contextmenu at the press reached the page before the release: ${JSON.stringify(pressLog)}`);
+  }
+  if (JSON.stringify(releaseLog) !== JSON.stringify(['contextmenu 60,60', 'mouseup 60,60'])) {
+    fail(`a right-click did not hand the page its contextmenu at the release: ${JSON.stringify(releaseLog)}`);
+  }
+  await wcRt.executeJavaScript(
+    [at('mousedown', 60, 2), at('contextmenu', 60, 2), at('mousemove', 120, 2), at('mouseup', 120, 0)].join(';'),
+  );
+  const dragLog = await pageLog(2);
+  if (JSON.stringify(dragLog) !== JSON.stringify(['mousedown 60,60', 'mouseup 120,60'])) {
+    fail(`a right-drag let its contextmenu reach the page: ${JSON.stringify(dragLog)}`);
+  }
+  if (JSON.stringify(rightDowns) !== JSON.stringify([{ sx: 1060, sy: 1060 }])) {
+    fail(`a right-drag did not send its press point once: ${JSON.stringify(rightDowns)}`);
+  }
+  // A contextmenu after the release was never held, so it passes untouched.
+  await wcRt.executeJavaScript(
+    [at('mousedown', 70, 2), at('mouseup', 70, 0), at('contextmenu', 70, 0)].join(';'),
+  );
+  const lateLog = await pageLog(3);
+  if (JSON.stringify(lateLog) !== JSON.stringify(['mousedown 70,60', 'mouseup 70,60', 'contextmenu 70,60'])) {
+    fail(`a contextmenu after a right-click's release did not reach the page once: ${JSON.stringify(lateLog)}`);
+  }
+  // The page reads the point at the view's min-width zoom of one half.
+  wcRt.sendInputEvent({ type: 'mouseDown', x: 80, y: 70, button: 'right', clickCount: 1 });
+  wcRt.sendInputEvent({ type: 'mouseUp', x: 80, y: 70, button: 'right', clickCount: 1 });
+  const realLog = await pageLog(3);
+  if (JSON.stringify(realLog) !== JSON.stringify(['mousedown 160,140', 'contextmenu 160,140', 'mouseup 160,140'])) {
+    fail(`a real right-click did not reach the page with one contextmenu: ${JSON.stringify(realLog)}`);
+  }
+  ipcMain.removeListener(VIEW.rightdown, onRightdown);
+  await regRt.remove('paneRt');
+  console.log('right press ok: a click hands the page one contextmenu at the release, a drag none');
 
   // ── a view placed on an unfocused pane may not keep OS focus ────────────
   // A pane goes live on paths that are not a gesture on the focused pane, such
@@ -785,11 +855,10 @@ app.whenReady().then(async () => {
   console.log('nav-gap ok: a tick inside a navigation is skipped, and the mirror comes back after it');
 
   // ── a crashed renderer retires its view, and the pane can go live again ─
-  // A dead renderer leaves a blank view no context menu can reload, so it is
-  // gone by the same path as a page that closed itself: the entry goes, the
-  // renderer is told by the gen it placed, the webContents is closed, and one
-  // notice, naming the page, says why. A new place on the pane is a live view
-  // again.
+  // A dead renderer leaves a blank view, so it is gone by the same path as a
+  // page that closed itself: the entry goes, the renderer is told by the gen it
+  // placed, the webContents is closed, and one notice, naming the page, says
+  // why. A new place on the pane is a live view again.
   // webviews.test.ts owns the registry's capture-streak wiring.
   const crashErrs: ErrorEvent[] = [];
   const crashGone: string[] = [];

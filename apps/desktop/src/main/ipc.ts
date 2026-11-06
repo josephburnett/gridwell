@@ -19,8 +19,7 @@ export const CH = {
   goBack: 'gw:goBack',     // PaneRef → void
   reload: 'gw:reload',     // ReloadArgs → void
   showMenu: 'gw:showMenu', // PaneRef → void. The bar circle's right-click
-                           // over a live url, which works even when the page
-                           // hijacks contextmenu.
+                           // over a live url: the pane's menu.
   choiceMenu: 'gw:choiceMenu', // ChoiceMenuArgs → string | null (the chosen id,
                                // null if dismissed). The renderer declares the
                                // rows; main knows nothing of what they mean.

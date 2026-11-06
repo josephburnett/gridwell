@@ -3,27 +3,14 @@
 
 import { ChoiceItem } from './ipc';
 
-// ContextParams is the subset of Electron's ContextMenuParams the menu needs,
-// plus the two navigation flags, which live on webContents.
+// The navigation flags, which live on webContents.
 interface ContextParams {
-  linkURL: string;
-  selectionText: string;
-  isEditable: boolean;
-  // editFlags mirror document.queryCommandEnabled for the edit actions.
-  editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
   canGoBack: boolean;
   canGoForward: boolean;
 }
 
-// webviews.ts wires these to the clipboard and the view's webContents.
+// webviews.ts wires these to the view's webContents.
 interface ContextActions {
-  // Electron's clipboard is asynchronous, so a copy can fail after the menu is
-  // gone; the row reports that through failed.
-  copyText(text: string): Promise<void>;
-  copyLink(url: string): Promise<void>;
-  openLink(url: string): void;
-  cut(): void;
-  paste(): void;
   back(): void;
   forward(): void;
   reload(): void;
@@ -33,7 +20,6 @@ interface ContextActions {
   // Every row reports the label it ran under, so one caller can say what the
   // user picked without the builder knowing what any item means.
   chose(label: string): void;
-  failed(message: string): void;
 }
 
 // The subset of MenuItemConstructorOptions this builder emits, declared here so
@@ -46,44 +32,24 @@ interface MenuTemplateItem {
   click?: () => void;
 }
 
-// Chromium's order: link, then text and edit, then navigation. Items that do
-// not apply are omitted, except the navigation block, which disables instead.
+// The live view's pane menu, which the bar circle pops. Back and Forward
+// disable instead of vanishing.
 export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): MenuTemplateItem[] {
-  const items: MenuTemplateItem[] = [];
-  // One wrapper, so no row can be added that runs without being reported, or
-  // whose asynchronous action can fail without being reported.
-  const row = (label: string, run: () => void | Promise<void>, enabled?: boolean): MenuTemplateItem => ({
+  // One wrapper, so no row can be added that runs without being reported.
+  const row = (label: string, run: () => void, enabled?: boolean): MenuTemplateItem => ({
     label,
     ...(enabled === undefined ? {} : { enabled }),
     click: () => {
       a.chose(label);
-      const done = run();
-      if (done instanceof Promise) done.catch((err: unknown) => a.failed(`${label} failed: ${String(err)}`));
+      run();
     },
   });
-
-  if (p.linkURL) {
-    items.push(row('Open Link', () => a.openLink(p.linkURL)));
-    items.push(row('Copy Link Address', () => a.copyLink(p.linkURL)));
-    items.push({ type: 'separator' });
-  }
-
-  if (p.isEditable) {
-    items.push(row('Cut', () => a.cut(), p.editFlags.canCut));
-    items.push(row('Copy', () => a.copyText(p.selectionText), p.editFlags.canCopy));
-    items.push(row('Paste', () => a.paste(), p.editFlags.canPaste));
-    items.push({ type: 'separator' });
-  } else if (p.selectionText) {
-    items.push(row('Copy', () => a.copyText(p.selectionText)));
-    items.push({ type: 'separator' });
-  }
-
-  items.push(row('Back', () => a.back(), p.canGoBack));
-  items.push(row('Forward', () => a.forward(), p.canGoForward));
-  items.push(row('Reload', () => a.reload()));
-  items.push(row('Freeze Page', () => a.freeze()));
-
-  return items;
+  return [
+    row('Back', () => a.back(), p.canGoBack),
+    row('Forward', () => a.forward(), p.canGoForward),
+    row('Reload', () => a.reload()),
+    row('Freeze Page', () => a.freeze()),
+  ];
 }
 
 // A menu of choices the renderer declared. It knows nothing about what is being

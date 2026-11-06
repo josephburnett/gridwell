@@ -17,129 +17,30 @@ function spyActions() {
       (calls[name] ??= []).push(args[0]);
     };
   const actions: ContextActions = {
-    copyText: (t: string) => {
-      rec('copyText')(t);
-      return Promise.resolve();
-    },
-    copyLink: (u: string) => {
-      rec('copyLink')(u);
-      return Promise.resolve();
-    },
-    openLink: rec('openLink'),
-    cut: rec('cut'),
-    paste: rec('paste'),
     back: rec('back'),
     forward: rec('forward'),
     reload: rec('reload'),
     freeze: rec('freeze'),
     chose: rec('chose'),
-    failed: rec('failed'),
   };
   return { actions, calls };
 }
 
-function baseParams(over: Partial<ContextParams> = {}): ContextParams {
-  return {
-    linkURL: '',
-    selectionText: '',
-    isEditable: false,
-    editFlags: { canCut: false, canCopy: false, canPaste: false },
-    canGoBack: false,
-    canGoForward: false,
-    ...over,
-  };
-}
+const NO_HISTORY: ContextParams = { canGoBack: false, canGoForward: false };
 
 const labels = (t: ReturnType<typeof urlContextMenuTemplate>) =>
   t.filter((i) => i.label).map((i) => i.label);
 
-// The navigation block is always present and disables instead of vanishing, so
-// every menu ends with Back / Forward / Reload.
-test('navigation items are always present', () => {
+// The pane's menu is the navigation block and Freeze Page, whatever the view
+// holds.
+test('the url menu is Back, Forward, Reload and Freeze Page', () => {
   const { actions } = spyActions();
-  const t = urlContextMenuTemplate(baseParams(), actions);
-  assert.deepEqual(labels(t), ['Back', 'Forward', 'Reload', 'Freeze Page']);
+  assert.deepEqual(labels(urlContextMenuTemplate(NO_HISTORY, actions)), ['Back', 'Forward', 'Reload', 'Freeze Page']);
 });
 
-// A right-click over a link must offer "Copy Link Address", and clicking it
-// must copy that exact href.
-test('a link yields Open Link + Copy Link Address that copy the href', () => {
-  const { actions, calls } = spyActions();
-  const url = 'https://example.com/target?x=1';
-  const t = urlContextMenuTemplate(baseParams({ linkURL: url }), actions);
-
-  assert.deepEqual(labels(t), ['Open Link', 'Copy Link Address', 'Back', 'Forward', 'Reload', 'Freeze Page']);
-
-  const copy = t.find((i) => i.label === 'Copy Link Address');
-  assert.ok(copy?.click, 'Copy Link Address must have a click handler');
-  copy!.click!();
-  assert.deepEqual(calls.copyLink, [url]);
-
-  const open = t.find((i) => i.label === 'Open Link');
-  open!.click!();
-  assert.deepEqual(calls.openLink, [url]);
-});
-
-// The clipboard write settles after the menu has closed, so a refused copy
-// has nowhere to go but the failed action.
-test('a copy the clipboard refuses is reported with its row', async () => {
-  const { actions, calls } = spyActions();
-  actions.copyLink = () => Promise.reject(new Error('clipboard busy'));
-  const t = urlContextMenuTemplate(baseParams({ linkURL: 'https://example.com/' }), actions);
-  t.find((i) => i.label === 'Copy Link Address')!.click!();
-  await new Promise<void>((res) => setImmediate(res));
-  assert.deepEqual(calls.failed, ['Copy Link Address failed: Error: clipboard busy']);
-});
-
-// No link means no link items, so the menu never shows a dead "Copy Link
-// Address".
-test('no link omits the link items', () => {
-  const { actions } = spyActions();
-  const t = urlContextMenuTemplate(baseParams(), actions);
-  assert.ok(!labels(t).includes('Copy Link Address'));
-  assert.ok(!labels(t).includes('Open Link'));
-});
-
-// A text selection over non-editable content offers Copy of that text.
-test('selection over non-editable content offers Copy of the selection', () => {
-  const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(baseParams({ selectionText: 'hello world' }), actions);
-  const copy = t.find((i) => i.label === 'Copy');
-  assert.ok(copy, 'Copy should be present for a selection');
-  copy!.click!();
-  assert.deepEqual(calls.copyText, ['hello world']);
-});
-
-// An editable field offers Cut / Copy / Paste, each enabled by its editFlag.
-test('editable content offers Cut/Copy/Paste gated by editFlags', () => {
-  const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(
-    baseParams({
-      isEditable: true,
-      selectionText: 'sel',
-      editFlags: { canCut: true, canCopy: true, canPaste: false },
-    }),
-    actions,
-  );
-  const cut = t.find((i) => i.label === 'Cut');
-  const copy = t.find((i) => i.label === 'Copy');
-  const paste = t.find((i) => i.label === 'Paste');
-  assert.equal(cut?.enabled, true);
-  assert.equal(copy?.enabled, true);
-  assert.equal(paste?.enabled, false, 'Paste disabled when canPaste is false');
-
-  cut!.click!();
-  paste!.click!();
-  copy!.click!();
-  assert.equal(calls.cut?.length, 1);
-  assert.equal(calls.paste?.length, 1, 'a disabled item still has its handler; enablement is enforced by Electron');
-  assert.deepEqual(calls.copyText, ['sel']);
-});
-
-// Navigation enablement follows canGoBack / canGoForward; the actions fire.
 test('Back/Forward enablement tracks the history flags', () => {
   const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(baseParams({ canGoBack: true, canGoForward: false }), actions);
+  const t = urlContextMenuTemplate({ canGoBack: true, canGoForward: false }, actions);
   assert.equal(t.find((i) => i.label === 'Back')?.enabled, true);
   assert.equal(t.find((i) => i.label === 'Forward')?.enabled, false);
 
@@ -154,7 +55,7 @@ test('Back/Forward enablement tracks the history flags', () => {
 // the `gridwell clear-browser-data` CLI and no menu item.
 test('Freeze Page appears on every live view and fires the action', () => {
   const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(baseParams(), actions);
+  const t = urlContextMenuTemplate(NO_HISTORY, actions);
   const item = t.find((i) => i.label === 'Freeze Page');
   assert.ok(item, 'a live view offers Freeze Page');
   item!.click!();
@@ -217,10 +118,7 @@ test('a choice that declares no state is an action row, not an unchecked radio',
 // unreported.
 test('every url menu row reports its own label before it acts', () => {
   const { actions, calls } = spyActions();
-  const t = urlContextMenuTemplate(
-    baseParams({ linkURL: 'https://x.test/a', isEditable: true }),
-    actions,
-  );
+  const t = urlContextMenuTemplate({ canGoBack: true, canGoForward: true }, actions);
   const rows = t.filter((i) => i.label);
   for (const r of rows) r.click!();
   assert.deepEqual(calls.chose, rows.map((r) => r.label));
