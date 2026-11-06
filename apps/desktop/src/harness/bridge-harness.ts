@@ -79,18 +79,14 @@ app.whenReady().then(async () => {
   win.contentView.addChildView(root);
   root.setBounds({ x: 0, y: 0, width: 800, height: 600 });
 
-  // The announce has to land before the menu is up, because once it is up an
-  // item can run, and it would run in a pane that never took focus.
-  // showContextMenu is the funnel both menu paths pass through. Menu.popup is
-  // stubbed, because a native menu under xvfb would never be dismissed.
-  const order: string[] = [];
+  // Menu.popup is stubbed, because a native menu under xvfb would never be
+  // dismissed.
+  let popups = 0;
   const realPopup = Menu.prototype.popup;
   Menu.prototype.popup = function stubPopup(this: Menu): void {
-    order.push('popup');
+    popups++;
   };
-  const registry = new WebviewRegistry(win, {
-    onContextMenu: (ev) => order.push(`focus:${ev.paneId}`),
-  });
+  const registry = new WebviewRegistry(win, {});
   const mirrored: string[][] = [];
   registerWebviewIpc(registry, root.webContents, win, (paneIds) => mirrored.push(paneIds));
 
@@ -124,11 +120,8 @@ app.whenReady().then(async () => {
 
       registry.showMenu('p1');
       Menu.prototype.popup = realPopup;
-      const got = order.join(',');
-      if (got !== 'focus:p1,popup') {
-        fail(`the context menu must announce its pane before it pops; got [${got}]`);
-      }
-      console.log('bridge ok: the context menu announced pane p1 before popping');
+      if (popups !== 1) fail(`the circle's menu popped ${popups} times`);
+      console.log('bridge ok: the circle\'s menu popped once for pane p1');
       return;
     }
     if (!message.startsWith('BRIDGE_RESULT ')) return;

@@ -53,7 +53,7 @@ export const EV = {
   error: 'gw:error', // ErrorEvent — see ErrorEvent below
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window or ctrl-click link
   freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture
-  menuPane: 'gw:menu-pane', // ContextMenuEvent — a live view's context menu is opening on this pane
+  rightPress: 'gw:right-press', // PaneRef — a right press over a live url view, which moves pane focus there
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
   escapeKey: 'gw:escape-key', // EscapeKeyEvent — Esc pressed while a parked live view owns focus
   viewGone: 'gw:view-gone', // ViewGoneEvent — a live view ended outside a remove
@@ -218,13 +218,6 @@ export interface RouteMoveEvent {
 // The renderer tears the view down with the usual freeze writeback and
 // persists the standing frozen intent.
 export interface FreezeURLEvent {
-  paneId: string;
-}
-
-// A context menu is about to open on this pane, so the renderer moves focus
-// there first. The native view swallows the right-press until it becomes a
-// drag, so this is the only word of a plain one.
-export interface ContextMenuEvent {
   paneId: string;
 }
 

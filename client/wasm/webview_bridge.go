@@ -335,11 +335,9 @@ func (a *App) installWebviewListeners() {
 		{"onFreezeURL", func(ev js.Value) {
 			a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
 		}},
-		// The view swallows a plain right-press, so this is the only signal
-		// that focus must move to the pane the menu acts in, before it can
-		// act.
-		{"onContextMenu", func(ev js.Value) {
-			a.onForwardedContextMenu(jsString(ev.Get("paneId")))
+		// The view takes a plain right press, so this is the only word of it.
+		{"onRightPress", func(ev js.Value) {
+			a.onForwardedRightPress(jsString(ev.Get("paneId")))
 		}},
 		// The window-level keydown never fires while a live view owns OS
 		// keyboard focus, so main relays the chord keyed by pane.

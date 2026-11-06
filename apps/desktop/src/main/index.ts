@@ -103,7 +103,7 @@ async function boot(): Promise<void> {
     onError: (ev) => sendError(rootWC, ev.source, ev.message, ev.severity),
     onOpenBelow: forwarder(rootWC, EV.openBelow),
     onFreezeURL: forwarder(rootWC, EV.freezeUrl),
-    onContextMenu: forwarder(rootWC, EV.menuPane),
+    onRightPress: forwarder(rootWC, EV.rightPress),
     onZoomKey: forwarder(rootWC, EV.zoomKey),
     onEscapeKey: forwarder(rootWC, EV.escapeKey),
     onViewGone: forwarder(rootWC, EV.viewGone),

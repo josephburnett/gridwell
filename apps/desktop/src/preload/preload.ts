@@ -17,7 +17,7 @@ const LISTENERS = {
   onLeftForward: EV.leftForward,
   onOpenBelow: EV.openBelow,
   onFreezeURL: EV.freezeUrl,
-  onContextMenu: EV.menuPane,
+  onRightPress: EV.rightPress,
   onZoomKey: EV.zoomKey,
   onEscapeKey: EV.escapeKey,
   onViewGone: EV.viewGone,

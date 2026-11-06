@@ -3,11 +3,11 @@ import { test, expect } from './fixtures';
 // Right-clicking a live url pane focuses it before any menu item can run, so
 // the menu acts in the pane the bar rides. A live url view swallows the
 // renderer's mouse events and urlview-preload forwards a right press only once
-// it has become a drag, so the focus cannot come from the canvas:
-// WebviewRegistry.showContextMenu announces the pane, main relays it as
-// EV.menuPane, and the wasm routes it into focusToPane, the one owner of
-// "a click in an unfocused pane moves focus". The spec crosses that seam with a
-// real right press inside the view's own webContents and the real Reload item.
+// it has become a drag, so the focus cannot come from the canvas: the registry
+// sees the press on the view's webContents, main relays it as EV.rightPress,
+// and the wasm routes it into focusToPane, the one owner of "a click in an
+// unfocused pane moves focus". The spec crosses that seam with a real right
+// press inside the view's own webContents and the real Reload item.
 
 test('right-clicking a live url pane focuses it before the menu can act', async ({
   electronApp,

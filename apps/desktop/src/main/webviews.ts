@@ -1,8 +1,8 @@
 import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
-import type { MenuItemConstructorOptions } from 'electron';
+import type { MenuItemConstructorOptions, MouseInputEvent } from 'electron';
 import * as path from 'node:path';
 import type { WebContentsViewConstructorOptions } from 'electron';
-import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ContextMenuEvent, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent, RouteMoveEvent } from './ipc';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, PaneRef, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent, RouteMoveEvent } from './ipc';
 import { routeNavigation, type NavVerdict, type Routing, type ViewRoute } from './routes';
 import {
   SESSION_PARTITION,
@@ -107,8 +107,9 @@ interface RegistryCallbacks {
   onError?: (ev: ErrorEvent) => void;
   onOpenBelow?: (ev: OpenBelowEvent) => void;
   onFreezeURL?: (ev: FreezeURLEvent) => void;
-  // Both paths into the menu announce through here.
-  onContextMenu?: (ev: ContextMenuEvent) => void;
+  // The view takes a right press and the preload forwards only a drag, so
+  // this is the renderer's only word of a plain one.
+  onRightPress?: (ev: PaneRef) => void;
   onZoomKey?: (ev: ZoomKeyEvent) => void;
   onEscapeKey?: (ev: EscapeKeyEvent) => void;
   // focusguard.ts owns the verdict that a focus grab was a steal.
@@ -177,9 +178,6 @@ export class WebviewRegistry {
       editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
     },
   ): void {
-    // Before the pop, so this pane is focused by the time any item runs, and a
-    // dismissed menu has still moved focus, as a left-click does.
-    this.cb.onContextMenu?.({ paneId });
     this.trace(menuOpened(URL_MENU, paneId));
     const wc = view.webContents;
     const nav = wc.navigationHistory;
@@ -610,6 +608,7 @@ export class WebviewRegistry {
     // isPressInput excludes the registry's own mouseWheel injection.
     e.view.webContents.on('input-event', (_event, input) => {
       if (isPressInput(input.type)) e.presses++;
+      if (input.type === 'mouseDown' && (input as MouseInputEvent).button === 'right') this.cb.onRightPress?.({ paneId: e.paneId });
     });
     // A page-initiated navigation makes Chromium focus the new document's
     // widget, and the grab can re-land asynchronously after any one navigation
