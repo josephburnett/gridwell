@@ -35,13 +35,17 @@ func (a *App) selectionShown(p *pane.Pane) []string {
 	return a.c.Selection(a.gridIDForPane(p))
 }
 
-// setSelection applies sel to the selection of the grid p shows, drawn at
-// once and written to the grid row through postSelection.
+// setSelection applies sel to the selection of the grid p shows.
 func (a *App) setSelection(p *pane.Pane, how string, sel gesture.Select) {
 	if p.ContentID() != "" {
 		return
 	}
-	gid := a.gridIDForPane(p)
+	a.selectOn(p.ID, a.gridIDForPane(p), how, sel)
+}
+
+// selectOn applies sel to grid gid's selection from a press in pane paneID,
+// drawn at once and written to the grid row through postSelection.
+func (a *App) selectOn(paneID, gid, how string, sel gesture.Select) {
 	if g, ok := a.c.Grid(gid); ok {
 		sel = sel.OnGrid(func(id string) bool { _, ok := g.Tiles[id]; return ok })
 	}
@@ -51,7 +55,7 @@ func (a *App) setSelection(p *pane.Pane, how string, sel gesture.Select) {
 	}
 	a.c.Select(gid, sel.Add, sel.Remove)
 	a.postSelection(gid)
-	a.emit(traceevent.Select(how, p.ID, gid, len(a.selectionShown(p))))
+	a.emit(traceevent.Select(how, paneID, gid, len(a.c.Selection(gid))))
 	a.draw()
 }
 
@@ -86,6 +90,26 @@ func (a *App) postSelection(gid string) {
 // toggleSelected is a shift-click or a touch hold on tile n in pane p.
 func (a *App) toggleSelected(p *pane.Pane, n *gridwellv1.Tile) {
 	a.setSelection(p, "toggle", gesture.Toggle(a.selectionShown(p), n.Id))
+}
+
+// crumbSelection is the tile the bar's crumb nc stands for and the grid it
+// sits on, which the crumb's toggle and its border both read; ok is false for
+// a crumb that stands for a grid or whose grid does not resolve yet.
+func (a *App) crumbSelection(nc navCrumb) (gid, tileID string, ok bool) {
+	tileID, anchor, path, ok := nc.SelectTarget()
+	if !ok {
+		return "", "", false
+	}
+	gid = a.gridIDForPathFrom(anchor, path)
+	return gid, tileID, gid != ""
+}
+
+// toggleCrumb is a shift-click or a touch hold on crumb nc in the bar riding
+// pane paneID.
+func (a *App) toggleCrumb(paneID string, nc navCrumb) {
+	if gid, id, ok := a.crumbSelection(nc); ok {
+		a.selectOn(paneID, gid, "toggle", gesture.Toggle(a.c.Selection(gid), id))
+	}
 }
 
 // armBand starts a sweep at the pressed cell.

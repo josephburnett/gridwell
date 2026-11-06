@@ -73,3 +73,38 @@ func TestNavChainRootCrumbAlwaysHasAGlyph(t *testing.T) {
 		t.Fatalf("glyphless root crumb = %+v, want the empty crumb", got)
 	}
 }
+
+// A select press on a crumb toggles the tile the crumb stands for on the grid
+// that tile sits on: a chain crumb's row is where the bar draws it from, a
+// workspace tile's is the grid it was entered from. The root and a grid crumb
+// stand for no tile.
+func TestNavCrumbSelectTarget(t *testing.T) {
+	outer := NewTree()
+	op := outer.FocusedPane()
+	op.Stack = StackAt("u1/0", nil, "")
+	var s Levels
+	s.Push(Level{OuterTree: outer, OriginPane: op.ID, TileID: "pt1", GridID: "u1/0"})
+	live := &Pane{Stack: StackAt("u2/0", []string{"d1", "d2"}, "")}
+	type target struct {
+		tile, anchor string
+		path         []string
+		ok           bool
+	}
+	want := []target{
+		{},
+		{"pt1", "u1/0", nil, true},
+		{},
+		{"d1", "u2/0", nil, true},
+		{"d2", "u2/0", []string{"d1"}, true},
+	}
+	got := s.NavChain(live)
+	if len(got) != len(want) {
+		t.Fatalf("chain = %+v", got)
+	}
+	for i, nc := range got {
+		tile, anchor, path, ok := nc.SelectTarget()
+		if g := (target{tile, anchor, path, ok}); !reflect.DeepEqual(g, want[i]) {
+			t.Errorf("crumb %d (%+v): SelectTarget = %+v, want %+v", i, nc, g, want[i])
+		}
+	}
+}

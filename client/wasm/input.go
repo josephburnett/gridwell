@@ -402,7 +402,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	// A left-click on a workspace tile crumb goes there, closing everything deeper,
 	// the one gesture that crosses the level boundary; a right-click renames.
-	if a.bottomBarClick(sx, sy, args[0].Get("button").Int()) {
+	if a.bottomBarClick(sx, sy, args[0].Get("button").Int(), modsOf(args[0])) {
 		args[0].Call("preventDefault")
 		return nil
 	}
@@ -805,8 +805,11 @@ func (a *App) splitBelowForOpen(p *pane.Pane) (target *pane.Pane, split bool) {
 }
 
 func mouseXY(ev js.Value, canvas js.Value) (float64, float64) {
+	return canvasXY(ev.Get("clientX").Float(), ev.Get("clientY").Float(), canvas)
+}
+
+// canvasXY takes a client point to canvas coordinates.
+func canvasXY(clientX, clientY float64, canvas js.Value) (float64, float64) {
 	rect := canvas.Call("getBoundingClientRect")
-	x := ev.Get("clientX").Float() - rect.Get("left").Float()
-	y := ev.Get("clientY").Float() - rect.Get("top").Float()
-	return x, y
+	return clientX - rect.Get("left").Float(), clientY - rect.Get("top").Float()
 }

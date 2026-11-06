@@ -202,3 +202,38 @@ test('touch: a long-press on the circle opens its menu and nothing else', async 
   await expect(popover.locator('[data-gw-choice="dump"]'), 'the menu still stands').toBeVisible();
   expect((await gw.menu()).open, 'the hold opened no + menu').toBe(false);
 });
+
+// On a crumb in the bar the same hold toggles the tile the crumb stands for,
+// through the verdict a shift-click there reaches, and the pane stays put.
+test('touch: a long-press lifted in place on a door crumb toggles the door in its grid\'s selection', async ({
+  gw,
+  window,
+}) => {
+  await gw.enterPlugin('home');
+  const f0 = await gw.focused();
+  const cx = Math.round(f0.cx);
+  const cy = Math.round(f0.cy);
+  await gw.openMenu();
+  await gw.dragCreate('door', cx, cy);
+  const door = tileAt(await gw.getGrid(f0.gridID), 'door', cx, cy)!;
+  expect(door, 'door created').toBeTruthy();
+  await gw.descendCell(cx, cy);
+  await expect.poll(async () => (await gw.focused()).gridID).not.toBe(f0.gridID);
+  const f1 = await gw.focused();
+  const b = await gw.bar();
+  const seg = b.segments.find((s) => s.tileID === door.id)!;
+  expect(seg, 'the bar has the door crumb').toBeTruthy();
+  const pt = { x: seg.x + seg.w / 2, y: b.top + b.height / 2 };
+  const selection = async () => (await gw.getGrid(f0.gridID)).grid?.selection ?? [];
+
+  await longPress(window, pt);
+  await gw.waitIdle();
+  await expect.poll(selection, { message: 'the hold selected the door' }).toEqual([door.id]);
+  const p = await gw.focused();
+  expect(p.gridID, 'the hold did not ascend').toBe(f1.gridID);
+  expect(p.placeDepth, 'the hold did not ascend').toBe(f1.placeDepth);
+
+  await longPress(window, pt);
+  await gw.waitIdle();
+  await expect.poll(selection, { message: 'a second hold toggled it out' }).toEqual([]);
+});

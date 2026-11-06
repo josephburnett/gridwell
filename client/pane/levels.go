@@ -200,16 +200,30 @@ func ForgetSaved(top *Level, encoded []byte) {
 // focused pane's frames end to end.
 type NavCrumb struct {
 	// Workspace marks a window-level boundary: WsLevel is the 1-based nesting
-	// depth and TileID the workspace tile, the preview square and rename target.
+	// depth, TileID the workspace tile, the preview square and rename target,
+	// and GridID the grid that tile sits on (Level.GridID).
 	Workspace bool
 	WsLevel   int
 	TileID    string
+	GridID    string
 	// Crumb is the live tree's focused pane's frame-stack entry; a click
 	// ascends to it in place.
 	Crumb Crumb
 	// CloseOnly is the leading root crumb inside a workspace tile. Its click pops to
 	// the session and is never an in-tree ascent.
 	CloseOnly bool
+}
+
+// SelectTarget is the tile a select press on nc toggles and the place of the
+// grid it sits on; ok is false for a crumb that stands for a grid.
+func (nc NavCrumb) SelectTarget() (tileID, anchor string, path []string, ok bool) {
+	switch {
+	case nc.Workspace:
+		return nc.TileID, nc.GridID, nil, nc.TileID != "" && nc.GridID != ""
+	case nc.CloseOnly || nc.Crumb.TileID == "":
+		return "", "", nil, false
+	}
+	return nc.Crumb.TileID, nc.Crumb.ParentAnchor, nc.Crumb.ParentPath, true
 }
 
 // NavChain assembles the chain for pane p, outermost first. Parked trees' tile
@@ -238,7 +252,7 @@ func (s *Levels) NavChain(p *Pane) []NavCrumb {
 		out = append(out, root)
 		for k := 1; k <= depth; k++ {
 			if f := s.At(k); f != nil {
-				out = append(out, NavCrumb{Workspace: true, WsLevel: k, TileID: f.TileID})
+				out = append(out, NavCrumb{Workspace: true, WsLevel: k, TileID: f.TileID, GridID: f.GridID})
 			}
 		}
 	}

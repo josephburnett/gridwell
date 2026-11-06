@@ -15,6 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -382,14 +383,14 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *gridwellv1.Tile {
 // says where the press goes; this gathers the world facts and runs the effect.
 // They are gathered on the ZoneBar arm alone, so a press anywhere else in the
 // window never walks the caches.
-func (a *App) bottomBarClick(sx, sy float64, button int) bool {
+func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) bool {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok {
 		return false
 	}
 	p := a.tree.FocusedPane()
-	in := wsbar.Click{Button: button, X: sx - bx, BarW: bw,
-		Zone: wsbar.Where(sx, sy, bx, top, bw)}
+	in := wsbar.Click{Button: button, Shift: mods.Shift, Ctrl: mods.Ctrl, Meta: mods.Meta,
+		X: sx - bx, BarW: bw, Zone: wsbar.Where(sx, sy, bx, top, bw)}
 	var visit *gridwellv1.Tile
 	if in.Zone == wsbar.ZoneBar {
 		in.Chain = a.navChain()
@@ -431,6 +432,9 @@ func (a *App) bottomBarClick(sx, sy float64, button int) bool {
 			Count: a.ws.PopCountTo(in.Chain[hit.Segment.Index].WsLevel)})
 	case wsbar.ActionPromote:
 		a.startPromoteDrag(p, visit, hit.Segment, bx, top, sx, sy)
+	case wsbar.ActionSelect:
+		// A tile crumb is drawn only under a focused pane (NavChain).
+		a.toggleCrumb(p.ID, in.Chain[hit.Segment.Index])
 	case wsbar.ActionAscend:
 		// Only the focused pane's own frame stack yields an ascending crumb
 		// (pane.Levels.NavChain), so there is a pane here. How many ascents

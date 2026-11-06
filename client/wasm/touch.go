@@ -6,6 +6,7 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/client/touchgest"
+	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
 // Bridges touch input to the mouse-driven gesture pipeline. Classification
@@ -118,6 +119,11 @@ func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 		case touchgest.Wheel:
 			a.dispatchWheel(act.Pos.X, act.Pos.Y, act.DeltaY)
 		case touchgest.Select: // see touchgest.Select
+			// In the bar it is the mouse's shift + left press, through the
+			// bar's verdict.
+			if sx, sy := canvasXY(act.Pos.X, act.Pos.Y, a.canvas); a.bottomBarClick(sx, sy, 0, traceevent.Mods{Shift: true}) {
+				continue
+			}
 			if rd := a.rightDrag; rd != nil && rd.tileNode != nil {
 				a.toggleSelected(rd.tilePane, rd.tileNode)
 			}

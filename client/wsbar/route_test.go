@@ -1,6 +1,7 @@
 package wsbar
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/josephburnett/gridwell/client/pane"
@@ -17,9 +18,9 @@ func barClick(button int, x float64) Click {
 			{Index: 2, X: BoundaryW + RowH, W: RowH},
 		},
 		Chain: []pane.NavCrumb{
-			{Workspace: true, WsLevel: 1},
-			{Crumb: pane.Crumb{TileID: "w1"}},
-			{Crumb: pane.Crumb{TileID: "w2"}},
+			{Workspace: true, WsLevel: 1, TileID: "ws", GridID: "g/0"},
+			{Crumb: pane.Crumb{TileID: "w1", ParentAnchor: "g/1"}},
+			{Crumb: pane.Crumb{TileID: "w2", ParentAnchor: "g/1", ParentPath: []string{"w1"}}},
 		},
 		TitleX: 200, TitleW: 80, TitleOK: true,
 	}
@@ -155,5 +156,60 @@ func TestRouteClickCloseOnly(t *testing.T) {
 	in.Chain[1].CloseOnly = true
 	if got := RouteClick(in); got.Action != ActionLeaveLevels {
 		t.Fatalf("RouteClick(close-only crumb) = %v, want %v", got.Action, ActionLeaveLevels)
+	}
+}
+
+// Shift alone with the left button selects, as on a grid: on a crumb that
+// stands for a tile it toggles that tile, never ascending or leaving a level,
+// and anywhere else in the band it does nothing, so a touch Select, which
+// arrives as this press, acts only where it toggles.
+func TestRouteClickSelect(t *testing.T) {
+	shift := func(in Click) Click { in.Shift = true; return in }
+	grid := barClick(0, BoundaryW+2)
+	grid.Chain = slices.Clone(grid.Chain)
+	grid.Chain[1] = pane.NavCrumb{Crumb: pane.Crumb{Anchor: "g/1", ParentAnchor: "g/1"}}
+	closeOnly := barClick(0, 10)
+	closeOnly.Chain = slices.Clone(closeOnly.Chain)
+	closeOnly.Chain[0] = pane.NavCrumb{CloseOnly: true, Crumb: pane.Crumb{Anchor: "g/0", ParentAnchor: "g/0"}}
+	visit := barClick(0, BoundaryW+RowH+2)
+	visit.Promote = true
+	cases := []struct {
+		name string
+		in   Click
+		want Action
+		tile string // the tile the crumb's SelectTarget names, for a toggle
+	}{
+		{"shift on a door crumb toggles its tile", shift(barClick(0, BoundaryW+2)), ActionSelect, "w1"},
+		{"shift on the current crumb toggles its tile, not the visit's drag", shift(visit), ActionSelect, "w2"},
+		{"shift on a workspace tile crumb toggles the workspace tile", shift(barClick(0, 10)), ActionSelect, "ws"},
+		{"shift on a grid crumb does nothing", shift(grid), ActionNone, ""},
+		{"shift on the close-only root does nothing", shift(closeOnly), ActionNone, ""},
+		{"shift on the title does nothing", shift(barClick(0, 210)), ActionNone, ""},
+		{"shift on the slot does nothing", shift(barClick(0, 380)), ActionNone, ""},
+		{"shift beside the bar does nothing", Click{Zone: ZoneBand, Shift: true}, ActionNone, ""},
+		{"shift outside the band is the pane's", Click{Zone: ZoneOutside, Shift: true}, ActionPass, ""},
+	}
+	for _, c := range cases {
+		got := RouteClick(c.in)
+		tile := ""
+		if got.Action == ActionSelect {
+			tile, _, _, _ = c.in.Chain[got.Segment.Index].SelectTarget()
+		}
+		if got.Action != c.want || tile != c.tile {
+			t.Errorf("%s: RouteClick = %+v (tile %q), want %v on %q", c.name, got, tile, c.want, c.tile)
+		}
+	}
+	// Shift with ctrl or cmd is another gesture's chord, so the crumb ascends as
+	// without it.
+	for _, chord := range []func(*Click){func(c *Click) { c.Ctrl = true }, func(c *Click) { c.Meta = true }} {
+		in := shift(barClick(0, BoundaryW+2))
+		chord(&in)
+		if got := RouteClick(in); got.Action != ActionAscend {
+			t.Errorf("shift with a chord on a crumb: RouteClick = %v, want %v", got.Action, ActionAscend)
+		}
+	}
+	// Shift with any other button is that button's press.
+	if got := RouteClick(shift(barClick(2, 10))); got.Action != ActionWorkspaceRename {
+		t.Errorf("shift + right on a workspace tile crumb = %v, want %v", got.Action, ActionWorkspaceRename)
 	}
 }

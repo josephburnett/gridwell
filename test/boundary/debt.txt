@@ -2,3 +2,4 @@
 # The debt row of ratchet.txt counts the lines above low-water; at 0 that row, the low-water line and the paid entries go, and the next rise brings them back.
 low-water | 58287
 2026-11-06 | Copy URL on the circle menu of a live url pane (Joe) | 12
+2026-11-06 | shift + click on a crumb toggles the tile's selection and a selected crumb wears the border (Joe): the bar's select arm in wsbar.RouteClick, which touch's Select reaches too, and pane.NavCrumb.SelectTarget | 68

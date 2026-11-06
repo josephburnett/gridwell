@@ -39,18 +39,24 @@ const (
 	ActionAscend
 	// ActionFocusColumn focuses the pane BandFocus names, which takes the bar.
 	ActionFocusColumn
+	// ActionSelect toggles Segment's tile in its grid's selection; see
+	// pane.NavCrumb.SelectTarget.
+	ActionSelect
 )
 
 // Click is the world state a press reads. X is relative to the bar's left
 // edge, as Layout's segments are.
 type Click struct {
 	// Button is the DOM button: 0 left, 1 middle, 2 right.
-	Button   int
-	X        float64
-	Zone     Zone
-	BarW     float64
-	Segments []Segment
-	Chain    []pane.NavCrumb
+	Button int
+	// Shift, Ctrl and Meta are the keys held; touch's Select arrives as a
+	// shift + left press (touchgest.Select).
+	Shift, Ctrl, Meta bool
+	X                 float64
+	Zone              Zone
+	BarW              float64
+	Segments          []Segment
+	Chain             []pane.NavCrumb
 	// Title is the centered title's span, the right button's target;
 	// ok=false when it did not fit.
 	TitleX, TitleW float64
@@ -74,10 +80,21 @@ type Hit struct {
 // left press anywhere between the crumbs and the slot is a press on the name,
 // so the zoom handle is as wide as the space the name is centered in; rename
 // stays on the drawn text, so an edit is never offered off the name it edits.
+// A select press (shift alone with the left button, as on a grid) toggles a
+// tile crumb's tile and does nothing anywhere else in the band.
 func RouteClick(in Click) Hit {
-	switch in.Zone {
-	case ZoneOutside:
+	switch {
+	case in.Zone == ZoneOutside:
 		return Hit{Action: ActionPass}
+	case in.Button == 0 && in.Shift && !in.Ctrl && !in.Meta:
+		if s, ok := At(in.Segments, in.X); ok && in.Zone == ZoneBar {
+			if _, _, _, ok := in.Chain[s.Index].SelectTarget(); ok {
+				return Hit{Action: ActionSelect, Segment: s}
+			}
+		}
+		return Hit{Action: ActionNone}
+	}
+	switch in.Zone {
 	case ZoneBand:
 		if in.Button == 0 {
 			return Hit{Action: ActionFocusColumn}

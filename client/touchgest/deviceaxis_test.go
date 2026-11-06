@@ -5,8 +5,8 @@ package touchgest_test
 // output, the mouse's the events a mouse sends, and each is fed to the pure
 // verdict that routes the surface's presses, which must give touch exactly
 // the one action it gives the mouse. A cell no pure verdict can run, or one
-// whose events carry Select, whose arm is client/wasm/touch.go's, is not
-// same. The count, the cells not same, the mouse gestures with no touch form
+// whose events carry Select on a surface whose Select arm is
+// client/wasm/touch.go's, is not same. The count, the cells not same, the mouse gestures with no touch form
 // and no decision, and the surfaces and bar actions no row names, is
 // recorded by test/boundary off TestDeviceAxis/count.
 
@@ -94,10 +94,11 @@ var mouseOnly = []struct{ gesture, decision string }{
 	{"ctrl + right-drag links", ""},
 }
 
-// record is what a verdict reads of a gesture: the button of its press and
-// whether it moved, or the direction of its wheel.
+// record is what a verdict reads of a gesture: the button of its press,
+// whether shift was held and whether it moved, or the direction of its wheel.
 type record struct {
 	button  int // -1 for a wheel
+	shift   bool
 	moved   bool
 	zoomOut bool
 	selects bool
@@ -137,20 +138,23 @@ func recordOf(as []tg.Action) (record, error) {
 type verdict func(r record) (action string, ok bool)
 
 // surface is one place a press lands: listener is the client/wasm file whose
-// listener takes it, and selects the CLAUDE.md line deciding what Select does
-// there, if any.
+// listener takes it, selects the CLAUDE.md line deciding what Select does
+// there, if any, and selectRouted whether the shim hands touch's Select to
+// route as the mouse's shift + left press.
 type surface struct {
-	name     string
-	listener string
-	route    verdict
-	selects  string
+	name         string
+	listener     string
+	route        verdict
+	selects      string
+	selectRouted bool
 }
 
 func shimOnly(record) (string, bool) { return "", false }
 
 // barRegion routes through wsbar.RouteClick at x on a 400-wide bar holding a
 // workspace tile crumb, two chain crumbs, the last one an ephemeral visit, and
-// a title at 200..280; a wheel over the bar is gesture.ClassifyWheel's.
+// a title at 200..280; a wheel over the bar is gesture.ClassifyWheel's. Every
+// bar surface's Select is routed (bottomBarSelect).
 func barRegion(zone wsbar.Zone, x float64) verdict {
 	return func(r record) (string, bool) {
 		if r.button < 0 {
@@ -160,16 +164,16 @@ func barRegion(zone wsbar.Zone, x float64) verdict {
 			return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{OverBar: true})), true
 		}
 		h := wsbar.RouteClick(wsbar.Click{
-			Button: r.button, X: x, Zone: zone, BarW: 400,
+			Button: r.button, Shift: r.shift, X: x, Zone: zone, BarW: 400,
 			Segments: []wsbar.Segment{
 				{Index: 0, X: 0, W: wsbar.BoundaryW},
 				{Index: 1, X: wsbar.BoundaryW, W: wsbar.RowH},
 				{Index: 2, X: wsbar.BoundaryW + wsbar.RowH, W: wsbar.RowH},
 			},
 			Chain: []pane.NavCrumb{
-				{Workspace: true, WsLevel: 1},
-				{Crumb: pane.Crumb{TileID: "w1"}},
-				{Crumb: pane.Crumb{TileID: "w2"}},
+				{Workspace: true, WsLevel: 1, TileID: "ws", GridID: "g/0"},
+				{Crumb: pane.Crumb{TileID: "w1", ParentAnchor: "g/1"}},
+				{Crumb: pane.Crumb{TileID: "w2", ParentAnchor: "g/1", ParentPath: []string{"w1"}}},
 			},
 			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true, Promote: true,
 		})
@@ -201,25 +205,25 @@ func inGrid(in gesture.Input, click func() (string, bool), wheel gesture.WheelIn
 func deviceSurfaces() []surface {
 	door := gesture.WheelInput{OverEnterableDoor: true, DoorCoverage: 0.1}
 	return []surface{
-		{"notice row", "input.go", shimOnly, ""},
-		{"bar: + circle", "input.go", barRegion(wsbar.ZoneBar, 380), ""},
-		{"bar: title", "input.go", barRegion(wsbar.ZoneBar, 210), ""},
-		{"bar: name beside the title", "input.go", barRegion(wsbar.ZoneBar, 190), ""},
-		{"bar: workspace tile crumb", "input.go", barRegion(wsbar.ZoneBar, 10), ""},
-		{"bar: crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+2), ""},
-		{"bar: ephemeral visit crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+wsbar.RowH+2), ""},
-		{"band beside the bar", "input.go", barRegion(wsbar.ZoneBand, 0), ""},
-		{"+ menu", "input.go", shimOnly, ""},
+		{"notice row", "input.go", shimOnly, "", false},
+		{"bar: + circle", "input.go", barRegion(wsbar.ZoneBar, 380), "", true},
+		{"bar: title", "input.go", barRegion(wsbar.ZoneBar, 210), "", true},
+		{"bar: name beside the title", "input.go", barRegion(wsbar.ZoneBar, 190), "", true},
+		{"bar: workspace tile crumb", "input.go", barRegion(wsbar.ZoneBar, 10), "", true},
+		{"bar: crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+2), "", true},
+		{"bar: ephemeral visit crumb", "input.go", barRegion(wsbar.ZoneBar, wsbar.BoundaryW+wsbar.RowH+2), "", true},
+		{"band beside the bar", "input.go", barRegion(wsbar.ZoneBand, 0), "", true},
+		{"+ menu", "input.go", shimOnly, "", false},
 		{"pane edge", "input.go", inGrid(gesture.Input{InGridView: true, Region: pane.RegionSplitTop},
 			func() (string, bool) {
 				arm, _ := gesture.ResizeAffordance(pane.DividerGrab{HasVert: true})
 				return fmt.Sprint("resize ", arm), true
-			}, gesture.WheelInput{}), ""},
+			}, gesture.WheelInput{}), "", false},
 		{"door tile", "input.go", inGrid(gesture.Input{InGridView: true, OverTile: true, InTileCenter: true},
 			func() (string, bool) {
 				return fmt.Sprint("click ", gesture.DecideTileClick(gesture.ClickInput{Door: true})), true
-			}, door), `"on touch a long-press lifted in place toggles" (2026-10-15)`},
-		{"grid background", "input.go", inGrid(gesture.Input{InGridView: true}, nil, gesture.WheelInput{}), ""},
+			}, door), `"on touch a long-press lifted in place toggles" (2026-10-15)`, false},
+		{"grid background", "input.go", inGrid(gesture.Input{InGridView: true}, nil, gesture.WheelInput{}), "", false},
 		{"live content", "input.go", func(r record) (string, bool) {
 			switch {
 			case r.button < 0:
@@ -228,13 +232,13 @@ func deviceSurfaces() []surface {
 				return fmt.Sprint("land ", gesture.Land(gesture.SurfaceRawText, true)), true
 			}
 			return "", false
-		}, ""},
-		{"circle menu", "circle_menu.go", shimOnly, ""},
-		{"editing textarea", "overlay_mouse.go", shimOnly, ""},
-		{"text mode toggle", "text_overlay.go", shimOnly, ""},
-		{"rendered view", "rendered_overlay.go", shimOnly, ""},
-		{"shell terminal", "shell_stream_client.go", shimOnly, ""},
-		{"url prompt", "url_modal.go", shimOnly, ""},
+		}, "", false},
+		{"circle menu", "circle_menu.go", shimOnly, "", false},
+		{"editing textarea", "overlay_mouse.go", shimOnly, "", false},
+		{"text mode toggle", "text_overlay.go", shimOnly, "", false},
+		{"rendered view", "rendered_overlay.go", shimOnly, "", false},
+		{"shell terminal", "shell_stream_client.go", shimOnly, "", false},
+		{"url prompt", "url_modal.go", shimOnly, "", false},
 	}
 }
 
@@ -248,6 +252,14 @@ func cell(s surface, g deviceGesture) string {
 	tr, err := recordOf(g.touch(tg.New()))
 	if err != nil {
 		return "the finger's events: " + err.Error()
+	}
+	if tr.selects && s.selectRouted {
+		// The Select is the mouse's shift + left press, through one verdict;
+		// what is left of the gesture is compared as any other.
+		if _, ok := s.route(record{button: 0, shift: true}); !ok {
+			return "touch's Select reaches no verdict"
+		}
+		tr.selects = false
 	}
 	if tr.selects {
 		if s.selects != "" {
@@ -332,7 +344,7 @@ func TestDeviceAxis(t *testing.T) {
 			holes = append(holes, "client/wasm/"+file+": a press listener no surface names")
 		}
 	}
-	for a := wsbar.ActionNone; a <= wsbar.ActionFocusColumn; a++ {
+	for a := wsbar.ActionNone; a <= wsbar.ActionSelect; a++ {
 		// Pass hands the press to the surfaces under the bar, which are rows.
 		if a != wsbar.ActionPass && !barActions[a] {
 			holes = append(holes, fmt.Sprintf("wsbar action %d: no cell reaches it", a))
