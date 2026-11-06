@@ -65,6 +65,13 @@ export function presentedSite(page: string, site: string, location: string): str
   return site.slice(0, i) + '://' + rest;
 }
 
+// shownAddress is the address a view at location shows: inside its page the
+// site address it is the page of, else the location itself.
+export function shownAddress(location: string, view: ViewRoute): string {
+  if (view.page === '' || !location.startsWith(view.page)) return location;
+  return presentedSite(view.page, view.site, location) ?? location;
+}
+
 // What main holds of one live view to route it: page is the tile's page on
 // the node (rpc.PageURL), site the tile's address, '' for a page its plugin
 // serves, which has no address to move.

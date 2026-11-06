@@ -9,8 +9,10 @@ interface ContextParams {
   canGoForward: boolean;
 }
 
-// webviews.ts wires these to the view's webContents.
+// webviews.ts wires these to the view's webContents and the clipboard.
 interface ContextActions {
+  // Copies the address the view shows when the row is chosen.
+  copyURL(): void;
   back(): void;
   forward(): void;
   reload(): void;
@@ -45,6 +47,7 @@ export function urlContextMenuTemplate(p: ContextParams, a: ContextActions): Men
     },
   });
   return [
+    row('Copy URL', () => a.copyURL()),
     row('Back', () => a.back(), p.canGoBack),
     row('Forward', () => a.forward(), p.canGoForward),
     row('Reload', () => a.reload()),

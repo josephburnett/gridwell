@@ -1,9 +1,9 @@
-import { BaseWindow, WebContentsView, Menu, session, WebContents } from 'electron';
+import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } from 'electron';
 import type { MenuItemConstructorOptions, MouseInputEvent } from 'electron';
 import * as path from 'node:path';
 import type { WebContentsViewConstructorOptions } from 'electron';
 import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, PaneRef, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent, RouteMoveEvent } from './ipc';
-import { routeNavigation, type NavVerdict, type Routing, type ViewRoute } from './routes';
+import { routeNavigation, shownAddress, type NavVerdict, type Routing, type ViewRoute } from './routes';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -167,7 +167,8 @@ export class WebviewRegistry {
   }
 
   // The bar circle's right-click pops the pane's menu; contextmenu.ts owns
-  // which items appear, and this binds them to the view's webContents.
+  // which items appear, and this binds them to the view's webContents and the
+  // clipboard.
   showMenu(paneId: string): void {
     const e = this.entries.get(paneId);
     if (!e) return;
@@ -177,6 +178,7 @@ export class WebviewRegistry {
     const template = urlContextMenuTemplate(
       { canGoBack: nav.canGoBack(), canGoForward: nav.canGoForward() },
       {
+        copyURL: () => clipboard.writeText(shownAddress(wc.getURL(), e.route)),
         back: () => this.goBack(paneId),
         forward: () => {
           if (nav.canGoForward()) nav.goForward();

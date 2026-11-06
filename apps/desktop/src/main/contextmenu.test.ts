@@ -17,6 +17,7 @@ function spyActions() {
       (calls[name] ??= []).push(args[0]);
     };
   const actions: ContextActions = {
+    copyURL: rec('copyURL'),
     back: rec('back'),
     forward: rec('forward'),
     reload: rec('reload'),
@@ -31,11 +32,19 @@ const NO_HISTORY: ContextParams = { canGoBack: false, canGoForward: false };
 const labels = (t: ReturnType<typeof urlContextMenuTemplate>) =>
   t.filter((i) => i.label).map((i) => i.label);
 
-// The pane's menu is the navigation block and Freeze Page, whatever the view
-// holds.
-test('the url menu is Back, Forward, Reload and Freeze Page', () => {
+// The pane's menu is Copy URL, the navigation block and Freeze Page, whatever
+// the view holds.
+test('the url menu is Copy URL, Back, Forward, Reload and Freeze Page', () => {
   const { actions } = spyActions();
-  assert.deepEqual(labels(urlContextMenuTemplate(NO_HISTORY, actions)), ['Back', 'Forward', 'Reload', 'Freeze Page']);
+  assert.deepEqual(labels(urlContextMenuTemplate(NO_HISTORY, actions)), ['Copy URL', 'Back', 'Forward', 'Reload', 'Freeze Page']);
+});
+
+test('Copy URL is always enabled and fires the action', () => {
+  const { actions, calls } = spyActions();
+  const item = urlContextMenuTemplate(NO_HISTORY, actions).find((i) => i.label === 'Copy URL')!;
+  assert.equal(item.enabled, undefined);
+  item.click!();
+  assert.equal(calls.copyURL?.length, 1);
 });
 
 test('Back/Forward enablement tracks the history flags', () => {

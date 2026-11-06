@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { decide, matchAddress, presentedSite, routeNavigation, type Routing } from './routes';
+import { decide, matchAddress, presentedSite, routeNavigation, shownAddress, type Routing } from './routes';
 
 // routes.ts is a forced copy of rpc.MatchAddress, rpc.Decide and
 // rpc.PresentedSite. The cases live once, in api/rpc/testdata/routes.json,
@@ -87,4 +87,14 @@ test('a navigation goes where the routes send its site address', () => {
 
 test('before the first handshake nothing is routed', () => {
   assert.deepEqual(routeNavigation('http://outside.test/x', 'http://plain.test/a', plain, null), { kind: 'stay' });
+});
+
+test('a view shows its site address inside its page, else where it is', () => {
+  const cases: [string, string, { page: string; site: string }, string][] = [
+    ['a presented page shows the site it is the page of', PAGE + 'example.test/b?q=1', presented, 'http://example.test/b?q=1'],
+    ['a plain site shows itself', 'http://plain.test/b', plain, 'http://plain.test/b'],
+    ['a view with no page shows itself', 'http://plain.test/b', { page: '', site: '' }, 'http://plain.test/b'],
+    ['a served page has no site address', PAGE + 'next', served, PAGE + 'next'],
+  ];
+  for (const [why, location, view, want] of cases) assert.equal(shownAddress(location, view), want, why);
 });

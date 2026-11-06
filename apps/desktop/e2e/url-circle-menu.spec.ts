@@ -1,13 +1,13 @@
 import { test, expect } from './fixtures';
 import { tileAt } from './oracle';
 
-// The bar circle's right-click pops the live url pane's menu, Freeze Page
-// included. It is the one menu over a live url pane, since a right-click on
-// the page is the page's. The seam runs from the canvas right-click through
+// The bar circle's right-click pops the live url pane's menu, Copy URL and
+// Freeze Page included. It is the one menu over a live url pane, since a
+// right-click on the page is the page's. The seam runs from the canvas right-click through
 // the bottomBarClick slot arm, the bridgeShowMenu IPC, registry.showMenu, and
 // urlContextMenuTemplate.
 
-test('right-clicking the bar circle over a live url pops the context menu; Freeze Page freezes', async ({
+test('right-clicking the bar circle over a live url pops the context menu; Copy URL copies, Freeze Page freezes', async ({
   electronApp,
   gw,
   window,
@@ -25,11 +25,13 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
   await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?circle=1`);
   await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
-  const live = () =>
-    electronApp.evaluate(({ webContents }) =>
-      webContents.getAllWebContents().some((w) => w.getURL().includes('circle=1')),
+  // The live view's address, if one shows tag; '' if none does.
+  const live = (tag: string) =>
+    electronApp.evaluate(
+      ({ webContents }, tag) => webContents.getAllWebContents().find((w) => w.getURL().includes(tag))?.getURL() ?? '',
+      tag,
     );
-  await expect.poll(live, { timeout: 15_000 }).toBe(true);
+  await expect.poll(() => live('circle=1'), { timeout: 15_000 }).not.toBe('');
 
   // A native popup would block under xvfb, so Menu.popup is intercepted and the
   // menu stashed for the poll below.
@@ -65,6 +67,20 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
       'Freeze Page',
     );
     expect(labels, 'the circle menu carries the navigation block').toContain('Reload');
+    expect(labels[0], 'Copy URL is the first row').toBe('Copy URL');
+
+    // The page moves after the menu opened, as a followed link does, and Copy
+    // URL copies where it is when the row is chosen.
+    await electronApp.evaluate(({ webContents }) => {
+      const w = webContents.getAllWebContents().find((w) => w.getURL().includes('circle=1'));
+      void w!.executeJavaScript(`location.href = location.href.replace('circle=1', 'circle=2')`);
+    });
+    await expect.poll(() => live('circle=2'), { timeout: 15_000 }).not.toBe('');
+    await electronApp.evaluate(({ clipboard }) => clipboard.writeText(''));
+    await electronApp.evaluate(() => {
+      (globalThis as any).__gwCircleMenu.items.find((i: any) => i.label === 'Copy URL').click();
+    });
+    expect(await electronApp.evaluate(({ clipboard }) => clipboard.readText())).toBe(await live('circle=2'));
 
     // Freeze Page tears the live view down and persists the frozen intent on
     // the tile.
@@ -74,7 +90,7 @@ test('right-clicking the bar circle over a live url pops the context menu; Freez
       if (!item) throw new Error('Freeze Page item missing');
       item.click();
     });
-    await expect.poll(live, { timeout: 15_000 }).toBe(false);
+    await expect.poll(() => live('circle=2'), { timeout: 15_000 }).toBe('');
     await expect
       .poll(async () => {
         const t = tileAt(await gw.getGrid(grid), 'url', cx, cy);
