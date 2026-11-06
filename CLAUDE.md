@@ -374,7 +374,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   never one it only touches; Esc with no drag in flight clears the focused
   grid's set; on touch a long-press lifted in place toggles. Shift is the
   only select key, since ctrl and cmd are the split's
-  (`gesture.ClassifySelect`). A select is drawn on the press and reconciles
+  (`gesture.ClassifySelect`). Shift + left-click on a crumb in the bar
+  toggles the tile the crumb stands for, a door, a content tile or a
+  workspace tile, on the grid it sits on, through the same toggle, and
+  does not ascend; a crumb that stands for a grid toggles nothing; on
+  touch a long-press lifted on the crumb is the same toggle
+  (`wsbar.RouteClick`, `pane.NavCrumb.SelectTarget`, 2026-11-06). A
+  selected tile's crumb wears the border, so the view lists the grids the
+  bar's crumbs sit on (`pane.Showing`). A select is drawn on the press and reconciles
   on the verdict like a move; every selected tile wears the yellow border
   (`theme.Palette.Selection`) in every open view (2026-10-15).
 - A tile row keeps three times, one owner each, in unix seconds on home's
