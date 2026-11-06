@@ -132,6 +132,28 @@ func TestIsMissingErrMatchesTmuxMessages(t *testing.T) {
 	}
 }
 
+// TestIsNoServerErrMatchesTmuxMessages: every wording a tmux gives for a server
+// that is not there, including the one a server exiting as the client connects
+// gives right after its last session was killed.
+func TestIsNoServerErrMatchesTmuxMessages(t *testing.T) {
+	cases := []string{
+		"no server running on /tmp/tmux-1000/default",
+		"error connecting to /tmp/tmux-1000/default (No such file or directory)",
+		"server exited unexpectedly",
+	}
+	for _, msg := range cases {
+		if !isNoServerErr([]byte(msg), errors.New("exit 1")) {
+			t.Errorf("isNoServerErr(%q) = false; want true", msg)
+		}
+	}
+	if isNoServerErr([]byte("permission denied"), errors.New("exit 1")) {
+		t.Error(`isNoServerErr("permission denied") = true; want false`)
+	}
+	if isNoServerErr([]byte("server exited unexpectedly"), nil) {
+		t.Error("isNoServerErr with nil err = true; want false")
+	}
+}
+
 // TestConfigFileWrittenWithExpectedDirectives: the on-disk config
 // is what enforces the no-status-bar, 50k-scrollback, no-escape-
 // delay behavior. If it ever drifts (e.g. we forget to set status

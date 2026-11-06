@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -343,15 +344,14 @@ func isMissingErr(out []byte, err error) bool {
 		strings.Contains(low, "no sessions")
 }
 
-// isNoServerErr matches both tmux 3.x wordings for a server not running yet.
+// isNoServerErr matches every tmux 3.x wording for a server that is not there, one exiting as has-session connects included.
 func isNoServerErr(out []byte, err error) bool {
 	if err == nil {
 		return false
 	}
 	low := strings.ToLower(string(out))
-	return strings.Contains(low, "no server running") ||
-		strings.Contains(low, "error connecting to ") ||
-		strings.Contains(low, "no such file or directory")
+	return slices.ContainsFunc([]string{"no server running", "error connecting to ", "no such file or directory", "server exited unexpectedly"},
+		func(w string) bool { return strings.Contains(low, w) })
 }
 
 // filterEnv drops TMUX; see run.
