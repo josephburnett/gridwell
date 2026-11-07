@@ -468,6 +468,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   because the config stopped declaring it — the row and its landing stay,
   its links go dead by the roster, and the stanza brings them back.
   Secrets stay host-local file paths.
+- A trace dump carries the node's `server.yaml` (2026-11-07): the bytes on
+  disk at dump time, comments and order kept, appended after the ring's
+  records in the one `.jsonl`, so a reader of a dump sees the node's routes,
+  connections and plugins without asking. The yaml holds paths to secrets,
+  never a secret, and the web password is a file of its own that no dump
+  reads.
 - A plugin is not a place (2026-09-06, reversing the `root_grid`
   decision). Nodes have homes; a plugin contributes doors. Its grids are
   + menu rows, one per grid it declares (`InfoResponse.grids`, each naming
