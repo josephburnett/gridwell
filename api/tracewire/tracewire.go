@@ -48,7 +48,7 @@ const (
 )
 
 // DumpResponse is what DumpPath answers: where the node wrote its ring and
-// how many records it held.
+// how many records the file holds, the config's included.
 type DumpResponse struct {
 	Path    string `json:"path"`
 	Records int    `json:"records"`
@@ -77,6 +77,18 @@ type Record struct {
 	CID    string            `json:"cid,omitempty"`
 	CT     int64             `json:"ct,omitempty"`
 }
+
+// A dump ends with the node's server.yaml as it was on disk at the dump:
+// SrcConfig records after the ring's, with no seq, since they are not in the
+// ring (trace.Ring.Dump). The file is KindConfigChunk records, kv "i" counting
+// from 0, whose msgs concatenated are its bytes, cut only between runes
+// (jq -j 'select(.src=="config" and .kind=="chunk") | .msg'); a file the node
+// could not read is one KindConfigUnread record whose msg is the reason.
+const (
+	SrcConfig        = "config"
+	KindConfigChunk  = "chunk"
+	KindConfigUnread = "unread"
+)
 
 // KindBoot is the one record each origin writes when it starts, naming the
 // build that wrote everything after it.

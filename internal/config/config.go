@@ -150,13 +150,13 @@ func DumpsDir(dir string) string {
 	return filepath.Join(dir, "dumps")
 }
 
-// DefaultPath is ~/.gridwell/server.yaml.
+// File is the node's config, ~/.gridwell/server.yaml.
+func File(dir string) string { return filepath.Join(dir, "server.yaml") }
+
+// DefaultPath is File of Dir.
 func DefaultPath() (string, error) {
 	dir, err := Dir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "server.yaml"), nil
+	return File(dir), err
 }
 
 // retiredKeys makes a stale file fail with the fix, not a decoder message.
@@ -428,7 +428,7 @@ func PasswordFile(dir string) string { return filepath.Join(dir, "web-password")
 // what a backup must carry, the password included so every browser stays
 // logged in. It is the one list.
 func DurableFiles(dir string) []string {
-	return []string{filepath.Join(dir, "server.yaml"), PasswordFile(dir)}
+	return []string{File(dir), PasswordFile(dir)}
 }
 
 // EnsurePasswordFile returns the node's web password, minting 128 random

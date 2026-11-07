@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -153,9 +154,11 @@ func DumpName(now time.Time, commit string) string {
 	return name + ".jsonl"
 }
 
-// Dump writes the ring to <dir>/DumpName in seq order and returns the absolute
-// path. The ring is not cleared: a dump is a reading, not a handover.
-func (r *Ring) Dump(dir string, now time.Time) (path string, n int, err error) {
+// Dump writes the ring to <dir>/DumpName in seq order, then tail stamped now,
+// and returns the absolute path. The ring is not cleared: a dump is a reading,
+// not a handover. tail is not the ring's, so it has no seq: one past the
+// ring's last would also name the ring's next record.
+func (r *Ring) Dump(dir string, now time.Time, tail ...tracewire.Record) (path string, n int, err error) {
 	if dir == "" {
 		return "", 0, fmt.Errorf("trace: no dump directory")
 	}
@@ -172,6 +175,10 @@ func (r *Ring) Dump(dir string, now time.Time) (path string, n int, err error) {
 	}
 	w := bufio.NewWriter(f)
 	records := r.Snapshot()
+	for _, rec := range tail {
+		rec.T = now.UTC().UnixMilli()
+		records = append(records, rec)
+	}
 	for _, rec := range records {
 		blob, err := json.Marshal(rec)
 		if err != nil {
@@ -189,6 +196,28 @@ func (r *Ring) Dump(dir string, now time.Time) (path string, n int, err error) {
 		return "", 0, err
 	}
 	return path, len(records), nil
+}
+
+// ConfigRecords is the file at path as tracewire.SrcConfig records: its
+// bytes in chunks of at most MaxMsg, or the one reason it could not be read.
+func ConfigRecords(path string) []tracewire.Record {
+	rec := tracewire.Record{Origin: tracewire.OriginNode, Src: tracewire.SrcConfig, Kind: tracewire.KindConfigUnread}
+	blob, err := os.ReadFile(path)
+	if err == nil && !utf8.Valid(blob) {
+		// A msg is a JSON string, which cannot carry a byte that is not UTF-8.
+		err = fmt.Errorf("%s: not UTF-8", path)
+	}
+	if err != nil {
+		rec.Msg = capMsg(err.Error())
+		return []tracewire.Record{rec}
+	}
+	rec.Kind = tracewire.KindConfigChunk
+	var out []tracewire.Record
+	for rest := string(blob); len(out) == 0 || rest != ""; rest = rest[len(rec.Msg):] {
+		rec.Msg, rec.KV = capMsg(rest), map[string]string{"i": strconv.Itoa(len(out))}
+		out = append(out, rec)
+	}
+	return out
 }
 
 // capMsg truncates to tracewire.MaxMsg, dropping a rune the cut split so the

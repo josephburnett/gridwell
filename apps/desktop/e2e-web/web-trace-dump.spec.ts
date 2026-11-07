@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { readDump, joinedRequests, bootOrigins, describe as describeDump } from '../e2e/trace';
 
@@ -61,4 +62,10 @@ test('the circle popover dumps the trace and names the file', async ({ gw, serve
     joinedRequests(lines).length,
     `no request id names both a client and a node rpc record; ${describeDump(lines)}`,
   ).toBeGreaterThan(0);
+  // The dump ends with server.yaml's bytes in chunks (api/tracewire.SrcConfig).
+  const config = lines.slice(lines.findIndex((r) => r.src === 'config'));
+  expect(
+    config.map((r) => (r.kind === 'chunk' ? r.msg : `<${r.src}/${r.kind}>`)).join(''),
+    "the dump ends with this node's server.yaml",
+  ).toBe(fs.readFileSync(path.join(serve.home, 'server.yaml'), 'utf8'));
 });

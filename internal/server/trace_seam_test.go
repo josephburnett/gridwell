@@ -65,6 +65,9 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 	var client, start, end tracewire.Record
 	var lastSeq uint64
 	for _, rec := range readDump(t, out.Path) {
+		if rec.Src == tracewire.SrcConfig {
+			continue
+		}
 		if rec.Seq <= lastSeq {
 			t.Fatalf("the dump is out of order: seq %d after %d", rec.Seq, lastSeq)
 		}

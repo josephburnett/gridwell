@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -181,5 +182,69 @@ func TestTraceAPIRefusesAGarbledSendClock(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(msg), tracewire.ClockHeader) {
 		t.Errorf("a garbled clock answered %d %q, want a 400 naming the header", res.StatusCode, msg)
+	}
+}
+
+// A dump carries the node's server.yaml as it is on disk, after the ring, so a reader of the dump has the routes, connections and
+// plugins without asking; a node with no file says so and still dumps.
+func TestTraceDumpCarriesServerYAML(t *testing.T) {
+	cl, base, dir := traceServer(t)
+	dump := func() []tracewire.Record {
+		t.Helper()
+		res, err := cl.Post(base+tracewire.DumpPath, "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out tracewire.DumpResponse
+		if res.StatusCode != http.StatusOK || json.NewDecoder(res.Body).Decode(&out) != nil || out.Path == "" {
+			t.Fatalf("POST /trace/dump = %d %+v, want 200 with a path", res.StatusCode, out)
+		}
+		return readDump(t, out.Path)
+	}
+	tail := func(records []tracewire.Record) []tracewire.Record {
+		t.Helper()
+		i := len(records)
+		for i > 0 && records[i-1].Src == tracewire.SrcConfig {
+			i--
+		}
+		for j, rec := range records[:i] {
+			if rec.Src == tracewire.SrcConfig {
+				t.Fatalf("config record %d sits among the ring's: %+v", j, rec)
+			}
+		}
+		for _, rec := range records[i:] {
+			if rec.Seq != 0 {
+				t.Fatalf("a config record took a seq from the ring: %+v", rec)
+			}
+		}
+		return records[i:]
+	}
+
+	got := tail(dump())
+	if len(got) != 1 || got[0].Kind != tracewire.KindConfigUnread || got[0].Msg == "" {
+		t.Errorf("a node with no server.yaml dumped %+v, want one %s record with the reason", got, tracewire.KindConfigUnread)
+	}
+
+	yaml := "# Joe's node\nid: k3f9x2a\n\nroutes:\n" +
+		strings.Repeat("  - glob: \"https://gitlab.example.com/*\"\n    plugin: p1234567 # ünïcode\n", 40)
+	if len(yaml) <= tracewire.MaxMsg {
+		t.Fatal("the fixture must be longer than one record's msg")
+	}
+	if err := os.WriteFile(config.File(dir), []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var joined strings.Builder
+	for i, rec := range tail(dump()) {
+		if rec.Kind != tracewire.KindConfigChunk || rec.KV["i"] != strconv.Itoa(i) {
+			t.Fatalf("config record %d is %+v, want chunk %d", i, rec, i)
+		}
+		joined.WriteString(rec.Msg)
+	}
+	if joined.String() != yaml {
+		t.Errorf("the chunks join to %d bytes, not the file's %d exactly", joined.Len(), len(yaml))
+	}
+	if blob, _ := os.ReadFile(config.File(dir)); string(blob) != yaml {
+		t.Error("the dump changed server.yaml")
 	}
 }

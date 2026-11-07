@@ -2,8 +2,9 @@ package server
 
 // The /trace API: the node's diagnostic ring, on the gated browser mux
 // beside /shell. A client posts its own records as JSON lines and a dump
-// writes the whole ring to ~/.gridwell/dumps. Nothing here is a node fact — the
-// ring answers no read, survives no restart, and dumping does not clear it.
+// writes the whole ring, then server.yaml, to ~/.gridwell/dumps. Nothing here
+// is a node fact — the ring answers no read, survives no restart, and dumping
+// does not clear it.
 
 import (
 	"encoding/json"
@@ -46,7 +47,8 @@ func (s *Server) traceAPI() http.Handler {
 	})
 }
 
-// traceDumpAPI writes the ring out and answers where it went.
+// traceDumpAPI writes the ring out, then server.yaml as it is on disk, and
+// answers where it went.
 func (s *Server) traceDumpAPI() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -57,7 +59,7 @@ func (s *Server) traceDumpAPI() http.Handler {
 			http.Error(w, "trace: this server was built with no directory to dump into", http.StatusInternalServerError)
 			return
 		}
-		path, n, err := trace.Default().Dump(config.DumpsDir(s.cfg.Dir), time.Now())
+		path, n, err := trace.Default().Dump(config.DumpsDir(s.cfg.Dir), time.Now(), trace.ConfigRecords(config.File(s.cfg.Dir))...)
 		if err != nil {
 			http.Error(w, "trace: "+err.Error(), http.StatusInternalServerError)
 			return

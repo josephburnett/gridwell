@@ -115,9 +115,16 @@ test('Dump logs writes one file holding both halves of the trace', async ({
     `no request id names both a client and a node rpc record; ${describeDump(lines)}`,
   ).toBeGreaterThan(0);
 
-  // Seq is the node's stamp and the one total order a reader follows.
-  const seqs = lines.map((r) => r.seq ?? 0);
+  // Seq is the node's stamp and the one total order a reader follows. The
+  // node's server.yaml ends the file as config records, which are not the
+  // ring's and carry no seq.
+  const ring = lines.filter((r) => r.src !== 'config');
+  const seqs = ring.map((r) => r.seq ?? 0);
   expect(seqs, "the dump is written in the node's own order").toEqual(
     [...seqs].sort((a, b) => a - b),
   );
+  expect(
+    lines.slice(ring.length).map((r) => r.src),
+    'the config records come after every record of the ring',
+  ).toEqual(Array(lines.length - ring.length).fill('config'));
 });
