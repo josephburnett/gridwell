@@ -169,7 +169,7 @@ const para =
   'several lines of the pane, and then some more words so that a narrower layout breaks them elsewhere.';
 const todo = `# Todo\n\n- [ ] alpha\n- [x] beta\n- [ ] ${para}\n\n` + `${para}\n\n`.repeat(12);
 
-async function sameFocusedOrNot(gw: any, window: any, zoomSteps: number) {
+async function sameFocusedOrNot(gw: any, window: any, zoomSteps: number, atTop = true) {
   const { left, right } = await splitOnText(gw, todo);
   await gw.toggleTextMode(); // rendered
   for (let i = 0; i < zoomSteps; i++) {
@@ -179,7 +179,7 @@ async function sameFocusedOrNot(gw: any, window: any, zoomSteps: number) {
   const view = window.locator('#gw-rendered-view');
   await expect(view).toBeVisible();
   // The paste left the document scrolled to its end; the tasks are at the top.
-  await view.evaluate((el: HTMLElement) => el.scrollTo(0, 0));
+  if (atTop) await view.evaluate((el: HTMLElement) => el.scrollTo(0, 0));
   await gw.waitIdle();
   // The overlay's box less its scrollbar, which the raster has no picture of.
   const box = await view.evaluate((el: HTMLElement) => {
@@ -206,6 +206,10 @@ test('a rendered pane lays its lines out the same focused or not', async ({ gw, 
 
 test('a content-zoomed rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
   await sameFocusedOrNot(gw, window, 2);
+});
+
+test('a content-zoomed rendered pane scrolled down shows the same lines focused or not', async ({ gw, window }) => {
+  await sameFocusedOrNot(gw, window, 2, false);
 });
 
 test.describe('at a Retina pixel density', () => {

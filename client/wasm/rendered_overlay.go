@@ -80,8 +80,8 @@ func (a *App) ensureRenderedView() {
 		if p == nil || p.ContentID() == "" || p.TextMode != rpc.TextModeRendered {
 			return nil
 		}
-		a.scrollText(p, a.overlays.renderedView.Get("scrollLeft").Float(),
-			a.overlays.renderedView.Get("scrollTop").Float())
+		v, s := a.overlays.renderedView, a.textScaleFor(p)
+		a.scrollText(p, v.Get("scrollLeft").Float()/s, v.Get("scrollTop").Float()/s)
 		return nil
 	})
 	div.Call("addEventListener", "scroll", scrollCb)
@@ -127,19 +127,19 @@ func (a *App) refreshRenderedOverlay() {
 	// The CSS is em-relative, so content zoom rides the base font size. The
 	// document lays out at its raster's width, so the pane wraps the same
 	// lines when focus leaves it and the raster is drawn instead.
-	padding, fontSize := markdown.RenderedBox(w-a.overlays.renderedGutter,
-		rasterprev.Bucket(a.renderedContentWidth(p)), a.textScaleFor(p))
+	scale := a.textScaleFor(p)
+	padding, fontSize := markdown.RenderedBox(w-a.overlays.renderedGutter, rasterprev.Bucket(a.renderedContentWidth(p)), scale)
 	s.Set("padding", padding)
 	s.Set("fontSize", fontSize)
 	s.Set("display", "block")
 
 	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +
-		strconv.FormatBool(markdown.IsOrg(t.AltText))
+		strconv.FormatBool(markdown.IsOrg(t.AltText)) + "\x00" + strconv.FormatFloat(scale, 'g', -1, 64)
 	if key != a.overlays.lastRenderedKey {
 		div.Set("innerHTML", textedit.PresentationHTML(shown, body))
 		a.overlays.lastRenderedKey = key
-		div.Set("scrollTop", p.TextScrollY)
-		div.Set("scrollLeft", p.TextScrollX)
+		div.Set("scrollTop", p.TextScrollY*scale)
+		div.Set("scrollLeft", p.TextScrollX*scale)
 	}
 	a.overlays.renderedReady = true
 }

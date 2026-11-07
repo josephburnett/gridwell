@@ -176,7 +176,7 @@ func (a *App) ensureFileTextarea() {
 		if p == nil || p.ContentID() == "" || p.ContentID() != a.overlays.lastTextareaTileID {
 			return nil
 		}
-		a.scrollText(p, p.TextScrollX, a.overlays.textTextarea.Get("scrollTop").Float())
+		a.scrollText(p, p.TextScrollX, a.overlays.textTextarea.Get("scrollTop").Float()/a.textScaleFor(p))
 		return nil
 	})
 	ta.Call("addEventListener", "scroll", a.overlays.textTextareaScrollCb)
@@ -368,7 +368,7 @@ func (a *App) refreshFileOverlay() {
 	a.overlays.lastTextareaTileID = dec.NewLastTileID
 	// Reflect saved scroll in; on later calls the user's own scroll wins.
 	if ta.Get("scrollTop").Float() == 0 && p.TextScrollY > 0 {
-		ta.Set("scrollTop", p.TextScrollY)
+		ta.Set("scrollTop", p.TextScrollY*a.textScaleFor(p))
 	}
 }
 
