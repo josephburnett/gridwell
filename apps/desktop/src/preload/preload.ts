@@ -13,6 +13,8 @@ const LISTENERS = {
   onFrame: EV.frame,
   onNav: EV.nav,
   onRightForward: EV.rightForward,
+  onRightMoveForward: EV.rightMoveForward,
+  onRightUpForward: EV.rightUpForward,
   onMiddleForward: EV.middleForward,
   onLeftForward: EV.leftForward,
   onOpenBelow: EV.openBelow,

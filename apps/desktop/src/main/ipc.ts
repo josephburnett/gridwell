@@ -47,6 +47,8 @@ export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
   rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live url view
+  rightMoveForward: 'gw:right-move-forward', // ForwardedRightdown — a move of that drag, which the view keeps
+  rightUpForward: 'gw:right-up-forward',     // ForwardedRightdown — its release
   middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live url view (ascend)
   leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live url view (focus intent)
   error: 'gw:error', // ErrorEvent — see ErrorEvent below

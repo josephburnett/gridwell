@@ -1,4 +1,4 @@
-import type { Bounds, ForwardedRightdown, ViewRightdown } from './ipc';
+import { EV, type Bounds, type ForwardedRightdown, type ViewRightdown } from './ipc';
 
 // The decisions a live url view obeys, apart from webviews.ts so they run under
 // `node --test` with no Electron import.
@@ -183,6 +183,15 @@ export function toContentPoint(
 ): ForwardedRightdown {
   const cb = win.getContentBounds();
   return { x: p.sx - cb.x, y: p.sy - cb.y };
+}
+
+// forwardedDragStep is what one of a live view's input events is to a
+// right-drag forwarded from it: the channel to re-aim it at the canvas on, and
+// whether the drag is over, at its release or a press after a lost one.
+export function forwardedDragStep(type: string, button?: string): { to?: string; over: boolean } {
+  if (type === 'mouseMove') return { to: EV.rightMoveForward, over: false };
+  if (type === 'mouseUp' && button === 'right') return { to: EV.rightUpForward, over: true };
+  return { over: type === 'mouseDown' };
 }
 
 // classifyRightPress returns true for a drag. urlview-preload.ts inlines the

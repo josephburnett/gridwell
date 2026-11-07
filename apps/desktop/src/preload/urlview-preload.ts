@@ -81,8 +81,8 @@ window.addEventListener(
       (d2 > RIGHT_DRAG_THRESHOLD * RIGHT_DRAG_THRESHOLD &&
         Date.now() - rightDownTime >= RIGHT_DRAG_TIME_MS)
     ) {
-      // The original press point, so main classifies the gesture where it
-      // began, then parks the view for the rest of the drag.
+      // The original press point, so the renderer classifies the gesture
+      // where it began. Main follows the rest of it (register.ts).
       rightDragged = true;
       ipcRenderer.send(VIEW_RIGHTDOWN, { sx: rightStartX, sy: rightStartY });
     }

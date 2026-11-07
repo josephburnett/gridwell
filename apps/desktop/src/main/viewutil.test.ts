@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EV } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -18,6 +19,7 @@ import {
   URL_MIN_LAYOUT_WIDTH,
   PARK_COORD,
   classifyRightPress,
+  forwardedDragStep,
   RIGHT_DRAG_THRESHOLD,
   RIGHT_DRAG_TIME_MS,
   toContentPoint,
@@ -362,4 +364,12 @@ test('toContentPoint subtracts the window chrome, not the view or the zoom', () 
   // A press above or left of the content area stays negative rather than
   // clamping: the canvas decides what an out-of-bounds press means.
   assert.deepEqual(toContentPoint(win, { sx: 0, sy: 0 }), { x: -10, y: -40 });
+});
+
+test('forwardedDragStep follows a forwarded right-drag to its right release', () => {
+  assert.deepEqual(forwardedDragStep('mouseMove'), { to: EV.rightMoveForward, over: false });
+  assert.deepEqual(forwardedDragStep('mouseUp', 'right'), { to: EV.rightUpForward, over: true });
+  assert.deepEqual(forwardedDragStep('mouseUp', 'left'), { over: false }, 'another button coming up is not the release');
+  assert.deepEqual(forwardedDragStep('mouseDown', 'right'), { over: true }, 'a new press means the release was lost');
+  assert.deepEqual(forwardedDragStep('mouseWheel'), { over: false });
 });

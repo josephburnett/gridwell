@@ -310,6 +310,13 @@ func (a *App) installWebviewListeners() {
 		{"onRightForward", func(ev js.Value) {
 			a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
 		}},
+		// The rest of that drag, which the view keeps; a canvas duplicate is harmless.
+		{"onRightMoveForward", func(ev js.Value) {
+			a.onRightMove(ev.Get("x").Float(), ev.Get("y").Float())
+		}},
+		{"onRightUpForward", func(ev js.Value) {
+			a.finishRightDrag(ev.Get("x").Float(), ev.Get("y").Float())
+		}},
 		// The ascend gesture, which the native view swallows, forwarded in
 		// canvas coords.
 		{"onMiddleForward", func(ev js.Value) {

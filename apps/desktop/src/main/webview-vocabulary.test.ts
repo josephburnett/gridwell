@@ -56,7 +56,7 @@ test('the wasm subscribes exactly the listeners the preload table declares', () 
   const preload = matches(table![1], /^\s*(\w+):/gm);
   const wasm = matches(wasmSource(), /\{"(\w+)", func\(ev js\.Value\)/g);
 
-  assert.equal(preload.length, 13, `expected 13 listeners in ${PRELOAD}, got ${JSON.stringify(preload)}`);
+  assert.equal(preload.length, 15, `expected 15 listeners in ${PRELOAD}, got ${JSON.stringify(preload)}`);
   assert.deepEqual(
     wasm,
     preload,

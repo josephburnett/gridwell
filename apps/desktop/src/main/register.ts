@@ -1,4 +1,4 @@
-import { ipcMain, BaseWindow, Menu, MenuItemConstructorOptions, shell, WebContents } from 'electron';
+import { ipcMain, BaseWindow, InputEvent, Menu, MenuItemConstructorOptions, MouseInputEvent, shell, WebContents } from 'electron';
 import {
   CH,
   EV,
@@ -20,7 +20,7 @@ import {
   MoveArgs,
   OpenOutsideArgs,
 } from './ipc';
-import { toContentPoint } from './viewutil';
+import { forwardedDragStep, toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
 import { WebviewRegistry } from './webviews';
 import { handOverTrace, logLine, trace } from './trace';
@@ -59,6 +59,18 @@ export function registerWebviewIpc(
       safeSend(rootWC, outbound, toContentPoint(win, p));
     });
   }
+
+  // The view that took a right-drag's press keeps the rest of it, parked or
+  // not, and its page sees none of it outside its bounds; see forwardedDragStep.
+  ipcMain.on(VIEW.rightdown, ({ sender: view }): void => {
+    const onInput = (_e: unknown, ie: InputEvent): void => {
+      const m = ie as Partial<MouseInputEvent>;
+      const { to, over } = forwardedDragStep(ie.type, m.button);
+      if (to) safeSend(rootWC, to, toContentPoint(win, { sx: m.globalX ?? 0, sy: m.globalY ?? 0 }));
+      if (over) view.off('input-event', onInput);
+    };
+    view.on('input-event', onInput);
+  });
 
   // The registry injects an equivalent mouseWheel back into the view, because
   // Chromium will not gesture-scroll raw touches there.

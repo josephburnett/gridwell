@@ -157,13 +157,13 @@ func (a *App) installTestHook() {
 			}
 			return len(a.leftResize.axes)
 		}),
-		// The armed right-button gesture, "" for none, so a spec can tell
-		// "never armed" from "armed but did not commit".
-		"rightDragKind": js.FuncOf(func(js.Value, []js.Value) any {
-			if a.rightDrag == nil {
-				return ""
+		// The armed right-button gesture and the point its preview is drawn
+		// at, null for none.
+		"rightDrag": js.FuncOf(func(js.Value, []js.Value) any {
+			if rd := a.rightDrag; rd != nil {
+				return map[string]any{"kind": fmt.Sprint(rd.kind), "x": rd.curX, "y": rd.curY}
 			}
-			return fmt.Sprint(a.rightDrag.kind)
+			return nil
 		}),
 		// Settle-persist counters: flush passes plus optimistic-persist
 		// dispatches by label, so a spec names which stage went quiet
