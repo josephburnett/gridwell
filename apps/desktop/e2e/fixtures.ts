@@ -154,6 +154,9 @@ type Fixtures = {
   // Set with test.use({ forceDeviceScaleFactor: 2 }) for a window at a Retina
   // display's pixel density; 0 keeps the display's own.
   forceDeviceScaleFactor: number;
+  // Set with test.use({ fontconfig: path }) to launch on that fontconfig
+  // file; '' keeps the host's.
+  fontconfig: string;
 };
 
 // The fixture launches the same `electron .` entry `make launch` uses, so the
@@ -167,6 +170,7 @@ export const test = base.extend<Fixtures>({
   extraNodes: [[], { option: true }],
   extraYaml: ['', { option: true }],
   forceDeviceScaleFactor: [0, { option: true }],
+  fontconfig: ['', { option: true }],
 
   home: async ({ extraPlugins, extraNodes, extraYaml }, use) => {
     // Far nodes come up before the local node, so its boot-time connect learns
@@ -185,7 +189,7 @@ export const test = base.extend<Fixtures>({
     for (const n of far) await stopFarNode(n);
   },
 
-  electronApp: async ({ home, forceDeviceScaleFactor }, use) => {
+  electronApp: async ({ home, forceDeviceScaleFactor, fontconfig }, use) => {
     // Created before launch, so the flag below is valid.
     const electronDir = path.join(home, 'electron');
     fs.mkdirSync(electronDir, { recursive: true });
@@ -210,6 +214,7 @@ export const test = base.extend<Fixtures>({
           ),
         ),
         GRIDWELL_E2E: '1',
+        ...(fontconfig ? { FONTCONFIG_FILE: fontconfig } : {}),
         ...homeEnv(home),
         ...treeEnv(),
       },

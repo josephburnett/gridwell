@@ -46,6 +46,9 @@ func (a *App) ensureRenderedView() {
 	// A gutter that is always kept is one the raster can leave too, so a
 	// document long enough to scroll wraps as a short one does.
 	s.Set("scrollbarGutter", "stable")
+	// An image never has subpixel (LCD) text and Chromium draws none on a
+	// will-change layer, so the overlay smooths glyphs as the raster does.
+	s.Set("willChange", "transform")
 
 	// Links never navigate the app page: an http(s) link opens as an
 	// ephemeral visit below, the one live-link vocabulary, and everything
@@ -113,12 +116,8 @@ func (a *App) refreshRenderedOverlay() {
 	}
 	body, ok := a.tileBody(t)
 	shown, state := a.askContentRow(t)
-	if !ok || state != contentrow.Ready {
+	if !ok || state != contentrow.Ready || r.W <= 0 || r.H <= 0 {
 		hide() // the canvas paints raw source until the fetch lands
-		return
-	}
-	if r.W <= 0 || r.H <= 0 {
-		hide()
 		return
 	}
 	x, y, w, h := textInnerBox(r)

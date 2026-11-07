@@ -125,8 +125,8 @@ test('an fs file changed on disk shows its new bytes in the pane focus left', as
 // of rows holding text or a task box, with its top, height and left and right
 // ends, in device px. The focused pane's overlay and the raster painted when
 // focus leaves are measured in the same box on screen, so a line that moves,
-// changes size or wraps elsewhere moves a band, while how either smooths a
-// glyph does not.
+// changes size or wraps elsewhere moves a band. Grayscale smoothing against
+// subpixel (LCD) smoothing moves a band's ends by a pixel too.
 type Band = [top: number, h: number, left: number, right: number];
 
 async function inkBands(window: any, box: { x: number; y: number; w: number; h: number }): Promise<Band[]> {
@@ -221,5 +221,13 @@ test.describe('at a Retina pixel density', () => {
 
   test('a content-zoomed rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
     await sameFocusedOrNot(gw, window, 2);
+  });
+});
+
+test.describe('with subpixel text', () => {
+  test.use({ fontconfig: path.join(__dirname, 'lcd-text.conf') });
+
+  test('a rendered pane lays its lines out the same focused or not', async ({ gw, window }) => {
+    await sameFocusedOrNot(gw, window, 0);
   });
 });
