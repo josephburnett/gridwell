@@ -554,3 +554,41 @@ func TestExtFirstTouchesAtOnceMintOneRow(t *testing.T) {
 		}
 	}
 }
+
+// A clear with recurse on a directory empties every directory under its
+// path, whether or not a door row leads there, and none a symlink door
+// opens elsewhere or a sibling whose name starts the same.
+func TestExtClearRecursesByPathNotByDoors(t *testing.T) {
+	_, d := openExt(t)
+	sets := map[string]int64{}
+	for _, dir := range []string{"/r", "/r/sub", "/r/sub/deep", "/rx", "/other"} {
+		gid, err := d.GridOf(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := d.Mint(gid, Entry{Key: dir + "/a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.SetSelection(gid, SelectOp{Add: []int64{id}}); err != nil {
+			t.Fatal(err)
+		}
+		sets[dir] = gid
+	}
+	// A symlink in /r to /other is a door onto /other's grid.
+	if _, err := d.Mint(sets["/r"], Entry{Key: "/r/link", Kind: "door", Label: "link"}, sets["/other"], 1, 0, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.SetSelection(sets["/r"], SelectOp{Clear: true, Recurse: true}); err != nil {
+		t.Fatal(err)
+	}
+	for dir, want := range map[string]int{"/r": 0, "/r/sub": 0, "/r/sub/deep": 0, "/rx": 1, "/other": 1} {
+		got, err := d.Selection(sets[dir])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != want {
+			t.Errorf("%s holds %d selected after the clear, want %d", dir, len(got), want)
+		}
+	}
+}

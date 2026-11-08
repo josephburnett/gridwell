@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -136,8 +137,34 @@ func setSelectionTx(ctx context.Context, tx *sql.Tx, on side, gridID int64, op S
 	if !op.Recurse {
 		return changed, nil
 	}
-	nested, err := clearNestedTx(ctx, tx, on, gridID)
+	clear := clearNestedTx
+	if on == files {
+		clear = clearUnderTx
+	}
+	nested, err := clear(ctx, tx, on, gridID)
 	return append(changed, nested...), err
+}
+
+// clearUnderTx is clearNestedTx for a directory, by path: every directory
+// under it holds its set on a grid row of its own, whether or not a door row
+// leads there, and a symlink door, which opens a grid elsewhere, leads
+// nowhere.
+func clearUnderTx(ctx context.Context, tx *sql.Tx, _ side, gridID int64) ([]int64, error) {
+	var under string
+	if err := tx.QueryRowContext(ctx, `SELECT key FROM grids WHERE id = ?`, gridID).Scan(&under); err != nil {
+		return nil, err
+	}
+	if !strings.HasSuffix(under, string(filepath.Separator)) {
+		under += string(filepath.Separator)
+	}
+	rows, err := tx.QueryContext(ctx, `UPDATE grids SET selection = '' WHERE key != '' AND selection != ''
+		AND substr(key, 1, length(?1)) = ?1 RETURNING id`, under)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := collect(rows, scanID)
+	slices.Sort(changed)
+	return changed, err
 }
 
 // clearNestedTx empties the set of every grid under gridID's doors, to any

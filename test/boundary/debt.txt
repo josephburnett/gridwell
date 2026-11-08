@@ -12,3 +12,4 @@ low-water | 57236
 2026-11-08 | verification fixes (Joe: a clean and complete change): a move or a trash renames by a call that replaces nothing | 12
 2026-11-08 | verification fixes (Joe: a clean and complete change): what the files keep of a directory is bounded | 10
 2026-11-08 | verification fixes (Joe: a clean and complete change): the node's own directory is outside every root | 17
+2026-11-08 | verification fixes (Joe: a clean and complete change): a clear with recurse on a directory goes by path | 27
