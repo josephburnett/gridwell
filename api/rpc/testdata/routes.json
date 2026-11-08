@@ -1,5 +1,5 @@
 {
-  "comment": "The cases rpc.MatchAddress, rpc.Decide and rpc.PresentedSite answer, run by api/rpc/routes_fixture_test.go against the owners and by apps/desktop/src/main/routes.test.ts against the desktop's forced copy (routes.ts), so the two cannot drift.",
+  "comment": "The cases rpc.MatchAddress, rpc.Decide and rpc.PresentedSite answer,, run by api/rpc/routes_fixture_test.go.",
   "match": [
     {
       "pattern": "https://gitlab.com/*/-/merge_requests/*",

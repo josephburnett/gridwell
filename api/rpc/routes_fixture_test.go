@@ -8,8 +8,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// routesFixture is testdata/routes.json, which the desktop's copy of these
-// rules (apps/desktop/src/main/routes.ts) runs too.
+// routesFixture is testdata/routes.json.
 type routesFixture struct {
 	Match []struct {
 		Pattern, Address, Why string
