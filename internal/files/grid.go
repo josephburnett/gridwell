@@ -247,7 +247,9 @@ func (s *Source) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGrid
 	return &pb.GetGridResponse{Grid: l.grid, Tiles: l.tiles}, nil
 }
 
-// tilePath reads a tile id as its path and the directory listing it.
+// tilePath reads a tile id as its path and the directory listing it. A root
+// inside another root is a tile of the directory holding it; one no root
+// holds is listed by no directory.
 func (s *Source) tilePath(tileID string) (path, dir string, err error) {
 	path, err = pathOf(tileID)
 	if err != nil {
@@ -257,7 +259,7 @@ func (s *Source) tilePath(tileID string) (path, dir string, err error) {
 		return "", "", s.refuse(path, err)
 	}
 	dir = filepath.Dir(path)
-	if s.isRoot(path) || s.inTree(dir) != nil {
+	if dir == path || s.inTree(dir) != nil {
 		return "", "", gwerr.DeadLink("", "files: %s is a root, which no directory lists", path)
 	}
 	return path, dir, nil

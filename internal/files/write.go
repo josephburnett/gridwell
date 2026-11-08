@@ -36,6 +36,9 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 			return nil, err
 		}
 	}
+	if to != dir && s.isRoot(path) {
+		return nil, status.Errorf(codes.InvalidArgument, "files: %s is a root, which is config and is not renamed", path)
+	}
 	if to != dir {
 		return s.moveAcross(req, path, dir, to)
 	}

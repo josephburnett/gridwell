@@ -289,3 +289,47 @@ func TestADarkDirectoryThatGoesIsNoLongerDark(t *testing.T) {
 		t.Errorf("still dark: %+v", h)
 	}
 }
+
+// A root inside another is a door in the outer one like any directory: it is
+// read, moved, framed and selected there. Being config, it is never renamed
+// away nor deleted.
+func TestARootInsideARootIsADoorThere(t *testing.T) {
+	f := newFixture(t)
+	inner := f.mkdir("inner")
+	f.write("inner/a.txt", "a")
+	other := f.mkdir("other")
+	s := New(f.st.Namespace("~"), []Root{{Path: f.root}, {Path: inner}}, nil)
+	defer s.Close()
+	ctx := context.Background()
+	g, err := s.GetGrid(ctx, &pb.GetGridRequest{GridId: idOf(f.root)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	door := tileIn(t, g, inner)
+	if got, err := s.GetTile(ctx, &pb.GetTileRequest{TileId: door.Id}); err != nil || got.Tile.ChildGridId != idOf(inner) {
+		t.Fatalf("GetTile(inner) = %v, %v", got, err)
+	}
+	moved, err := s.MoveTile(ctx, &pb.MoveTileRequest{TileId: door.Id, X: 6, Y: 6, W: 1, H: 1, Claim: rpc.PlacementOf(door)})
+	if err != nil || moved.Tile.X != 6 {
+		t.Fatalf("MoveTile(inner) = %v, %v", moved, err)
+	}
+	if _, err := s.SetFraming(ctx, &pb.SetFramingRequest{TileId: door.Id, Cx: 1, Cy: 1, Zoom: 1}); err != nil {
+		t.Errorf("SetFraming(inner) = %v", err)
+	}
+	if _, err := s.SetSelection(ctx, &pb.SetSelectionRequest{GridId: idOf(f.root), Add: []string{door.Id}}); err != nil {
+		t.Errorf("SetSelection(inner) = %v", err)
+	}
+	if g, _ := s.GetGrid(ctx, &pb.GetGridRequest{GridId: idOf(f.root)}); !slices.Equal(g.Grid.Selection, []string{door.Id}) {
+		t.Errorf("selection = %v", g.Grid.Selection)
+	}
+	_, err = s.MoveTile(ctx, &pb.MoveTileRequest{TileId: door.Id, GridId: idOf(other), X: 0, Y: 0, W: 1, H: 1, Claim: rpc.PlacementOf(moved.Tile)})
+	wantCode(t, "a root renamed away", err, codes.InvalidArgument)
+	_, err = s.DeleteTile(ctx, rpc.DeleteOf(moved.Tile))
+	wantCode(t, "a root deleted", err, codes.InvalidArgument)
+	if _, err := os.Stat(filepath.Join(inner, "a.txt")); err != nil {
+		t.Errorf("the inner root moved: %v", err)
+	}
+	if _, err := s.GetTile(ctx, &pb.GetTileRequest{TileId: idOf(f.root)}); !gwerr.IsDeadLink(err) {
+		t.Errorf("the outer root as a tile = %v, want dead", err)
+	}
+}
