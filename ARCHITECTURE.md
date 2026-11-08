@@ -2,8 +2,9 @@
 
 Gridwell is a personal space made of tiles on an infinite 2D grid. There are
 four primitives: text, url, shell, and door (a tile that holds another grid).
-A workspace tile holds a split-pane layout. Grids nest without limit, and they
-federate across plugins and machines. The one rule: things stay as you left
+A workspace tile holds a split-pane layout. Grids nest without limit, the
+node shows its own directories as grids, and nodes federate across
+machines. The one rule: things stay as you left
 them.
 
 This doc says how the machine works. `CLAUDE.md` says how to change it.
@@ -19,14 +20,15 @@ wasm client         client/wasm + client/*    canvas, panes, gestures, framing
      │ Connect-RPC (+ a WebSocket for shells)
 router              internal/server           stateless; routes by id
      │ Go call (namespace.Namespace)
-namespaces          home · plugins · connections
+namespaces          home · files · connections
      │
 store               internal/local/store      gridwell.db
 ```
 
-Inside the node a namespace is a Go interface (`internal/namespace`). There
-are exactly two gRPC hops, both across a real process boundary: the plugin
-subprocess (`plugin.v1`) and the connection API (`gridwell.v1`). Connect
+Inside the node a namespace is a Go interface (`internal/namespace`): home
+(`internal/local`), the files (`internal/files`) and the transport
+(`internal/connection`). There is exactly one gRPC hop, across a real
+process boundary: the connection API (`gridwell.v1`). Connect
 over HTTP is the web API, and it crosses to the browser; MCP over HTTP is the
 MCP API, and it crosses to an agent (`internal/mcpapi`, `docs/mcp.md`).
 
@@ -40,7 +42,7 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
   files, registered under their owner id `<node>/~` (`rpc.FilesOwner`), handed
   the bare path and answering under the node's id (`rpc.QualifierOf`)
 - the node's own id followed by a letter-leading segment: a connection
-- anything else: a plugin
+- anything else: undeclared, which reads dead (`gwerr.DeadLink`)
 
 The remainder passes through untouched, so any depth of hops routes the
 same way. Ids going out are re-qualified once (`qualifyTilesFor`): a leaf
@@ -53,17 +55,17 @@ Qualification copies, and that copy is what keeps a message shared by
 pointer from being changed under another reader.
 
 A segment has one of three shapes, and `rpc.ShapeOf` is the one classifier
-every reader shares. Plugin and node ids are 7-char lowercase base36 with a
-leading letter (`idshape.NewShortID`); a tile is a store row id in decimal
-digits, or a key form — `~` followed by the plugin key's unpadded base64url
-(`rpc.KeyTileID`), which names a tile by what it is rather than by a row.
+every reader shares. Node ids are 7-char lowercase base36 with a leading
+letter (`idshape.NewShortID`); a tile is a store row id in decimal digits,
+or a key form — `~` followed by a file's absolute path in unpadded base64url
+(`rpc.KeyTileID`), which names a file by what it is rather than by a row.
 The leading byte separates all three, so a URL path and the router's peel
 both tell a namespace segment from a tile id with no lookup. Ids are never
 reassigned.
 
 A link is such a path stored on a tile (`link_target_id` for a leaf, a
 qualified `child_grid_id` for a door). The node holding it resolves only the
-first segment, one of its own plugins or connections, and forwards the rest,
+first segment, home, its files or one of its connections, and forwards the rest,
 so a link reaches anything a chain of one-way connections from the holding
 node reaches, at any depth, and never against an arrow. A link written
 into another node's grid is therefore a path from that node: behind the same
@@ -91,8 +93,8 @@ record shapes. Everything else derives from it:
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Find` |
-| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a plugin's body the source's stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
-| Web content | `ServeContent` — behind `/content/<token>/<tile-id>`, the page's whole bytes and media type. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
+| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a file's body its stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
+| Web content | `ServeContent` — behind `/content/<token>/<tile-id>`, a page file's bytes, streamed in chunks as they are read (no Content-Length), with its media type. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its doors too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `MoveTile`, `CopyTile`, `DeleteTile` |
@@ -115,33 +117,32 @@ ids spell (a child grid that arrived qualified, a leaf's target), and from
 `files.Source.buildTiles` for a symlink's door, the one link whose child is a
 bare path of the same files: only the files know a door's own path from its
 child's, and `qualifyTiles` keeps the bit it is handed. `text_presentation`
-and `status_detail` come from the plugin's `Entry` through
-`pluginhost/adapter.go`. `Tile.serves_page` (this url tile opens at the
-/content/ API, and only a url entry may say so) comes from the `Entry` too,
-and a plugin row also keeps it in its snapshot beside kind, label and
-`url_string` (`store.snapshotOf`), so a row its source does not list right
-now still shows as the page it was. A plugin tile's `preview_blob_id` is
-`pluginhost.previewKey`'s: the node's screenshot of the tile once one exists,
-else the plugin's picture keyed below zero. A served page that changes in
-place retires an unfrozen screenshot (`pluginhost.pagePreviewStale`). `Grid.scratch_grid_id` and
-`source_grids` come from the router's `GetGrid` (or `TransitQualifyGrid` for
-transit), which fails the read when the owner's handshake does not answer.
-`Grid.accepts_tiles` (the + menu, a drop, a url's address) and
-`Grid.writable` (its bodies take edits) are the owning namespace's stamp on
-its own grid — the home's `GetGrid` and `Adapter.synthesize` — carried
-verbatim in transit, where `TransitQualifyGrid` reads an older node's one
-bit for both. `Tile.read_only` (this one body takes none, and why) is the
-entry's, from the plugin's `Entry` through `pluginhost.buildTiles`, and
-`textedit.ReadOnly` reads it beside `Grid.writable`.
-`TileChanged.content_changed` (this claimless row's bytes moved) comes from
-`pluginhost.Adapter.applyEntry` alone, and `Tile.content_stamp` (the
-source's name for those bytes) from the plugin's `Entry` through
-`pluginhost.buildTiles`.
-`Grid.glyph` (the grid's icon) comes from the owning source's
-`Info`, which the adapter holds as the plugin last answered it
-(`pluginhost.Adapter.info`) and every reader, the server's included, reads
-from there; it is what the client reads
-instead of knowing a plugin's kind. Whether a grid is a directory, and its
+and `serves_page` come from the files' read of the file's name
+(`files.fileFacts`): a page file (image, video, audio, PDF) is a url tile
+that serves its page, every other file a text tile, plain or both by its
+extension; `status_detail` has no source today. A file row keeps its kind,
+name and link in its snapshot (`store.snapshotOf`), so a row of a directory
+that will not read still shows as what it was. A file's `preview_blob_id`
+is `files.previewKey`'s: the node's screenshot of the tile once one exists,
+else the image's own picture keyed below zero, and none for an image whose
+header declares more than 40 million pixels. A page file that changes on
+disk retires an unfrozen screenshot (`files.pagePreviewStale`).
+`Grid.scratch_grid_id` and `source_grids` come from the router's `GetGrid`
+(or `TransitQualifyGrid` for transit), which fails the read when the
+owner's `Info` does not answer. `Grid.accepts_tiles` (the + menu, a drop,
+a url's address), `Grid.writable` (its bodies take edits) and `Grid.moves`
+are the owning namespace's stamp on its own grid — home's `GetGrid` and
+the files' (`files.Source.synthesize`: writable, takes no tiles, moves) —
+carried verbatim in transit, where `TransitQualifyGrid` reads an older
+node's one bit for both. `Tile.read_only` (this one body takes none, and
+why) is the files' for a file the node cannot write, or the router's for a
+disabled connection's row, and `textedit.ReadOnly` reads it beside
+`Grid.writable`. `TileChanged.content_changed` (this claimless row's bytes
+moved) comes from the files alone (`files.Source.applyFile`, and their
+`WriteContent`), and `Tile.content_stamp` (`<mtime_ns>-<size>`, the name
+for those bytes) from the files' read.
+`Grid.glyph` (the grid's icon) is the owning source's stamp: the folder on
+every directory, the door or trash on home's grids. Whether a grid is a directory, and its
 path, are its id (`rpc.IsFilesID`, `rpc.FilePath`), never a wire flag. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
 
 ## The router
@@ -176,8 +177,10 @@ because an existing `~/.gridwell` already has them written down.
 ## The node
 
 `server.yaml` names the node: `id`, `web`, `federation`, `connections`,
-`plugins`. A missing file is a fresh node. The node builds its own home and
-transport. `plugins:` lists content plugins only.
+`files`. A missing file is a fresh node. The node builds its home, its
+files and its transport (`node.Start`, `server.Sources`). A file that still
+has `plugins:` or `routes:` is refused at parse with a sentence naming
+`files:`.
 
 Serve mints what is absent, and that is the only config write. A home in the
 layout from before one database per node — a `db/<id>/` directory and no
@@ -189,54 +192,33 @@ a home that had lost everything.
 tiles, shells, and the event stream. Shells run in tmux on a private
 socket, so they survive restarts.
 
-**Plugins** speak `plugin.v1`. They live in their own repository,
-`github.com/josephburnett/gridwell-plugins`; the shipped fs, proc, gitlab
-and pages plugins are plugins like anyone else's. Each runs as a
-supervised subprocess (`internal/plugin`, the one owner of whether a plugin
-is alive): one that dies is respawned with a backoff, the down and up reach
-the notice row as that namespace's health event, and while it is down its calls
-fail, and nothing answers for it. One that is up but cannot serve what
-its config declares refuses `Info` with the reason: it is listed broken with
-that sentence and none of its entries, its `Watch` loop asks again on its
-backoff, and the up that ends the refusal reaches the notice row like any
-other. A respawned process answers `Info` afresh: the adapter forgets the
-held answer when the supervisor reports it up. While it is up, and only if its
-`InfoResponse.watch` declares one and some client shows one of its grids (a
-pane's grid, or a door's preview on screen: `pane.Showing`), the node holds
-one `Watch` stream to it (`pluginhost.Start`), scoped to the
-grids shown (`WatchRequest.grids`, the plugin's share of
-`subscription.Book`'s union, re-opened with the new set when it changes), and
-publishes the plugin's `GridChanged` as the gridwell `GridChanged` a
-write would have, once the node has listed the grid and found it moved, and an
-`EntryChanged` as that entry's `TileChanged` flagged `content_changed`, once
-per stamp: a second tell under the stamp last told is no change
-(`Adapter.fresh`). One that declares no `watch` is complete as declared: it
-gets no stream and no notice, and its health says only that its changes are
-not told (`EventSourceHealth.told`), so a client reads its grids on every
-move. A
-plugin holds no node fact. It answers in its own stable string keys
-and never sees ids, layout, or
-a database. It does get a private directory, `~/.gridwell/plugins/<id>`, named to
-it as `state_dir` at spawn: its own and durable, holding its cache of its
-source and whatever its features keep, never deleted by the node. The node
-mints ids against those keys and
-keeps the arrangement as a namespace of its own store
-(`internal/pluginhost/adapter.go`). An entry may be a link to another of the
-plugin's entries (`Entry.link_target`, the target's grid and key): the
-store keeps it as a link row whose `link_target_id` is the target's bare
-entry address (`rpc.EntryTileID`), the leaf qualifies that in its own namespace
-on the way out (`rpc.QualifyLinkTarget`), and every read through it resolves
-the target as any link does, with nothing minted for the target until it is
-touched. A content row whose entry becomes a link is converted in place. The
-Watch scope also holds the grids a shown grid's links point into, and a
-change to one is announced on every grid linking into it. `Probe` names
-the grid it asks about. A plugin is not a place: it declares its grids in
-`InfoResponse.grids`, and each becomes a + menu swatch onto that grid. It
-has no landing of its own — `root_grid` is retired, read only to derive the
-single grid an older binary implies. The
-host never imports a plugin and never switches on its kind; every plugin
-behavior rides a wire declaration. `docs/plugin-authoring.md` is the contract
-from the plugin's side.
+**Files** (`internal/files`) are the directories `files:` declares, each a
+`{root, label}`, shown as grids. One `files.Source` holds every root and is
+one namespace, owner id `<node>/~`, with one roster row labelled files
+carrying one swatch per root. A file or a directory is named by its
+absolute path (`rpc.KeyTileID`), and the files read disk and their store
+rows directly: a directory is a door; a page file (image, video, audio,
+PDF) is a url tile whose page the node serves; every other file, SVG, HTML,
+CSS, JavaScript and JSON included, is a text tile. A file never placed sits
+where its place in the listing derives (`store.FileRows.Overlay`); the
+facts the user makes about it (placement, framing, a typed name, a frozen
+preview) are rows minted on touch, keyed by the path. A write claims the
+file's stamp, `<mtime_ns>-<size>`, and a stale one is refused as the version
+conflict; a file the node cannot write is read-only with the reason; a
+permission the disk refuses is PermissionDenied, an unreadable page 403 at
+the content API. Delete moves the file to the OS trash. A move to another
+directory renames it on disk and rewrites the row's key, keeping its id; a
+move to another source is refused (`rpc.MoveAcross`). A symlink is a link:
+to a directory, a door onto the target's grid; to a file, a link tile whose
+target is the target's path id; dead when the target is gone or outside
+every root. A path outside every root is dead. Find on the files locates by
+`id:` and applies the node's row filters; a text query answers empty. The
+files watch, with fsnotify, only the directories some session shows and
+those their symlinks land in, debounced 200 ms, and tell each change as a
+`GridChanged` or a `TileChanged` (`docs/freshness.md`); `told` is whether
+that watch is healthy. A root or directory that will not read is dark: its
+grid answers what its rows hold and the files' health event, keyed
+`<node>/~`, says so. The files are never disabled.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a
 label, how to dial. The transport dials each at boot, lands on the far node's
@@ -260,7 +242,7 @@ subscribes after the machine died is told, and the cache in front of it
 stamps what it caches. The transport is also one client of each far node:
 its share of the subscription is cut by connection and told to that node
 as a `SetView` of grids alone, labelled `node`, under the session of the
-connection's own event stream (`connection.tellFar`), so a far plugin watches what is on screen here.
+connection's own event stream (`connection.tellFar`), so a far node's files watch what is on screen here.
 
 **Disabled** is the one health a user sets, and only on a connection.
 `DisableSource` names it as its health event does, and `connection.Server`
@@ -270,7 +252,7 @@ the switch closes the connection's transport and refuses every later dial. The r
 whatever a layer underneath says (`Server.asSwitched`). The source then reads
 as dark, nothing tries it again, and a restart brings it back, because
 nothing about it was written. It is read-only meanwhile, decided in the
-router for plugins and connections alike (`server/disabled.go`): a write to
+router (`server/disabled.go`): a write to
 it is refused with `gwerr.SourceDisabled`, a verdict the client drops rather
 than parks, and a grid it serves is stamped unwritable with every row
 `read_only` and the reason, so the editor refuses before a key is typed.
@@ -288,8 +270,8 @@ answering for it.
 **Cache** (`internal/sourcecache`) is the one read-through cache, in front
 of the one seam that crosses a network — the transport — in one disposable
 file (`cache.db`). A cache is worth its cost only across a network: home is
-the durable store, and a plugin is a subprocess on this machine, so both are
-read live. A cached grid serves first, exactly as it was cached, with
+the durable store and the files are this machine's disk, so both are read
+live. A cached grid serves first, exactly as it was cached, with
 one background revalidation kicked past the freshness window or once the
 connection is known dark — so a remote round trip never sits on the read
 path. Nothing on the answer says it is cached: that is the source's health,
@@ -307,17 +289,15 @@ far node went unheard serve the cached answer. Writes always pass
 through, and their responses fold into the cached rows.
 Prefetch is a per-seam option only the transport takes, rooted at the
 connections the fronted namespace's own handshake declares. A dark node is
-answered by the cache. A dark *source* (the plugin answers, its directory
-or API does not) is answered by the durable rows, so a move made during the
-outage still lands, and the adapter publishes it as that namespace's health,
-the same event the supervisor uses for the subprocess; a dark *plugin* has
-nothing to answer from and fails.
+answered by the cache. A dark directory is answered by the durable rows, so
+a move made during the outage still lands, and the files publish it as
+their health.
 
 ### The store
 
 One database, `gridwell.db`. It holds node facts only: the ids the node
-minted (`ns`, `key` → id), layout, framing, the user's bytes, connections,
-tombstones. What a connection last answered lives in `cache.db`. The
+minted (home's rows, and the files' rows keyed by path, `key` → id),
+layout, framing, the user's bytes, connections, tombstones. What a connection last answered lives in `cache.db`. The
 format contract is `internal/local/store/CLAUDE.md`.
 
 **Framing** is one shape: a float center in the grid's own coordinates plus
@@ -389,13 +369,13 @@ A debounced settle persister does the same without waiting for an ascent.
 
 **Content.** A cache entry ({bytes, base, dirty}, keyed by tile id) owns a
 text tile's body; its base (`rpc.ContentBasis`) is the version the bytes
-were read at, or for a plugin row, which has none, the source's stamp.
+were read at, or for a file's row, which has none, the file's stamp.
 Keystrokes mirror into it; every flush goes through `text_flush.go` by tile
 id, never through the DOM. A stale save 409s and reconciles visibly.
 `cache.Apply` drops events older than the cached row and spares a dirty
-body. A plugin row's stamp (`Tile.content_stamp`) says whether a body is
-behind it, and where the source names none, its event says when its bytes
-moved (`TileChanged.content_changed`).
+body. A file row's stamp (`Tile.content_stamp`) says whether a body is
+behind it, and its event says when its bytes moved
+(`TileChanged.content_changed`).
 
 **Outbox.** `client/outbox` is the ordered record of writes the server has
 not answered: framing, captures, layout, unsaved bytes. One reconcile rule
@@ -403,17 +383,16 @@ not answered: framing, captures, layout, unsaved bytes. One reconcile rule
 the retry kick on reconnect and the unload flush by `sendBeacon`. It holds
 order and retry, never a copy of a value. `client/wasm/mutate.go` has two
 paths: `postWriteContent` (the one write that claims a basis, a version or a
-plugin's stamp) and
+file's stamp) and
 `write`/`do` (everything else).
 
 **Dead links.** A link is a path of hops. When any hop stops declaring the
-next namespace — a plugin dropped from `server.yaml`, a connection stanza
-removed, a connection name retired, here or on any node along the way — the
-link is dead. So is a link whose last hop answers but whose target is gone: a
-plugin key its source says is gone (`pluginhost.Adapter.absent`: an
-authoritative listing that omits it, or a probe that says GONE, never a dark
-source or a probe that cannot say), or a home tile destroyed out of the
-trash. `contentRoute` checks a link's target with `GetTile` as it checks a
+next namespace — the files' roots dropped from `server.yaml`, a connection
+stanza removed, a connection name retired, here or on any node along the
+way — the link is dead. So is a link whose last hop answers but whose
+target is gone: a path outside every root, a file the files say is gone (a
+directory that read and does not list it, never one that will not read),
+or a home tile destroyed out of the trash. `contentRoute` checks a link's target with `GetTile` as it checks a
 directly read id, so the owner's verdict is the answer whichever id the read
 named. The first hop is judged here: `client/deadlink` reads the
 handshake roster the + menu is built from, asks the router's own peel
@@ -427,13 +406,13 @@ draws the link dead while that latch stands. A dead link is drawn grey and
 inert, is not fetched for again until its latch clears, raises no notice, and
 does not descend; it can still be selected, read, and deleted. A pane already
 standing in a place that goes dead is not a link and is not drawn dead, so its
-by-id read says so (`clientsync.PlaceReadSurfaces`). Dead is not dark: a declared plugin
-that is down and a declared connection that will not answer are health, a
+by-id read says so (`clientsync.PlaceReadSurfaces`). Dead is not dark: a root
+that will not read and a declared connection that will not answer are health, a
 transport-class answer, never the dead verdict. Dead is not always forever,
 either: a retired connection name never returns, but a namespace merely
 undeclared is dead only while it is undeclared — declare it again and every
 link through it is live again, unchanged; the dead latch clears on the same
-health change and reconnect that clear every read latch. A gone key listed
+health change and reconnect that clear every read latch. A gone path listed
 again is live again under the same id: a `GridChanged` in its namespace
 re-asks that namespace's dead verdicts (`events.Plan.Revive`,
 `inflight.Reads.ReviveIf`).
@@ -567,7 +546,7 @@ nothing reads it back, and deleting it loses nothing the user owns.
 
 A record is one JSON object on one line, `api/tracewire.Record`, which the
 node and the client both read: `seq` and `t` are the node's stamps, then
-`origin` (node, client, electron, plugin), `src`, `kind`, `msg` capped at 1024
+`origin` (node, client, electron), `src`, `kind`, `msg` capped at 1024
 bytes, a small `kv`, and the emitter's `cid` and `ct`. A client's `cid` is the
 session it names itself by on `SetView` and `Subscribe` (`rpc.NewSession`), so
 its records join the node's `view/set`. `seq` is receipt order.
@@ -599,9 +578,8 @@ store write (one record at `withMutation`, the transaction every mutation runs
 in, naming its rows as `kv.keys` whether it wrote, changed nothing or was
 refused), every publish, delivery and coalesce in `eventhub` (keyed by the
 namespace's own id), and the router's `router/event` as it qualifies each
-event (`key`, `local`, `ns`, one record holding both forms); the plugin
-supervisor's spawns and liveness transitions, each dial and connection health
-transition, the shell API's refusals, opens and closes (`shellapi/pty`, with
+event (`key`, `local`, `ns`, one record holding both forms); each dial and
+connection health transition, the shell API's refusals, opens and closes (`shellapi/pty`, with
 `tile`, `session` and `tmux`) and its join of a shell key to the session
 holding it (`shellapi/holder`); each session's view as it arrives
 (`view/set`), its streams opening and closing, going away, expiring after
@@ -613,9 +591,7 @@ verdict on an all-clear (`selection/clear`); every request the web API
 refuses before a span could, a page of another build (`webapi/build`) and a
 bad credential, content token, trace batch or shell attach
 (`webapi/refused`, `path` and `status`, never the secret); and — through
-`log.SetOutput` in serve — every `log.Printf` the node already made. A plugin
-subprocess's stderr does not pass through that log, so the spawn hands it a
-writer of its own.
+`log.SetOutput` in serve — every `log.Printf` the node already made.
 
 Each origin writes one `boot` record when it starts (`tracewire.KindBoot`):
 the node its version, commit, go version and home; the client its commit,
@@ -632,16 +608,13 @@ release's verdict is the `drag/drop` record's. Esc letting go of a drag is a
 `gesture/cancel` record naming the pane.
 
 Where a read was answered from and whether a source is reachable are
-records too, naming the plugin or source by id: a plugin source's health
-transitions (`pluginhost/health`), a read the plugin answered from its own
-cache (`pluginhost/serve`), each Watch stream the node opens and closes on a
-plugin (`pluginhost/watch`) and each change a plugin tells on one
-(`pluginhost/changed`); and in the connection cache, each source going dark
+records too, naming the source by id: the files' health transitions
+(`files/health`, dark and told); and in the connection cache, each source going dark
 or light with the reason (`sourcecache/dark`), how each grid read was
 answered (`sourcecache/serve`: hit, cached or miss), what each refresh behind
 found (`sourcecache/revalidate`) and each prefetch walk's start and breadth
-(`sourcecache/prefetch`). Every re-dialed stream, a plugin's Watch or a
-connection's events, records its outage and its recovery once each
+(`sourcecache/prefetch`). Every re-dialed stream, a namespace's events
+followed by the node's fan-in or a connection's, records its outage and its recovery once each
 (`namespace/stream`, `down` and `up`), however many retries lie between. Each migration step `gridwell.db` runs at
 open is a `store/migrate` record with its versions and the rows it wrote,
 and the node's `boot` record names the schema the binary holds it at
@@ -667,8 +640,8 @@ copy:
 | what a press does to the selection, and where the set lives | `gesture.ClassifySelect`, `Toggle`, `Sweep`, `Clear`; the grid row, in every pane (`Grid.selection`) |
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
-| which preview a plugin tile wears | `pluginhost.previewKey` |
-| what a tile's banner reads | `tilepreview.BannerText` (the plugin's status emoji, then the name) |
+| which preview a file's tile wears | `files.previewKey` |
+| what a tile's banner reads | `tilepreview.BannerText` (the source's status emoji, then the name) |
 | does a tile draw as host state, and which hue its banner wears | `tilepreview.Outside`, `tilepreview.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |
@@ -696,7 +669,7 @@ copy:
 | this event stream is established | `namespace.Follow` |
 | what this client shows, and when the node is owed it | `pane.View` (panes, places, focus, `pane.Showing`); `client/subscription.Tracker` |
 | what each session shows, and which grids the clients are showing | `subscription.Book`, fed by `SetView`, counted by the `Subscribe` stream, read by `Server.Sessions` |
-| how a plugin entry is addressed, and a link to one written | `rpc.EntryTileID`; `rpc.QualifyLinkTarget` |
+| how a file is addressed, and a link to one written | `rpc.KeyTileID`; `rpc.QualifyLinkTarget` |
 | the trace line, its API and its header | `api/tracewire` |
 | what the node did | `trace.Default` (`internal/trace`) |
 
@@ -707,7 +680,7 @@ Remaining seams with more than one writer, ranked by risk:
 2. The drag threshold — `dragThreshold` in Go plus forced copies in
    `viewutil.ts` and the sandboxed `urlview-preload.ts`; drift-linted.
 3. The `SetTile` kind→operation mapping — the proto, home's switch and the
-   plugin adapter's.
+   files'.
 4. Text scroll of a rendered descent — the canvas wheel handler and the
    overlay's scroll listener both write `TextScrollY`.
 
@@ -733,8 +706,8 @@ pane is inside" and do not use the word elsewhere.
 | Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place`, `setHidden` and `move`; `url-focus-steal.spec.ts`, the capture harness |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
-| User state survives an unreachable source | the rows the user touched answer (an untouched entry has no row and is absent until the source answers); fs/proc sweep rules |
-| A minted row retires only when its source says the key is gone | an authoritative listing's `Sweep`, or a GONE `Probe` — on the listing path and after a `Delete` alike, so a plugin whose delete transforms rather than removes keeps its placement and its stored links |
+| User state survives an unreachable source | the rows the user touched answer (an untouched file has no row and is absent until its directory reads); a directory that will not read sweeps nothing |
+| A minted row retires only when its source says the path is gone | a listing that read and does not name it (`store.FileRows.Sweep`), or a delete that moved the file to the trash |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 
 ## Module boundaries

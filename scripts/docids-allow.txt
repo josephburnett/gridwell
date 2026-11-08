@@ -2,7 +2,6 @@
 # backticked token shaped like pkg.Name or Name() that is not a symbol of this
 # tree. Every entry says why.
 # Proto package names, not Go packages:
-ARCHITECTURE.md plugin.v1
 ARCHITECTURE.md gridwell.v1
 # A server.yaml key:
 ARCHITECTURE.md web.bind
@@ -18,4 +17,3 @@ docs/flake-ledger.md forcefullyCrashRenderer()
 # The plugins repository's memo package, which this tree does not hold:
 # Symbols of the plugin system, deleted in P3 of the files-native change, that
 # ARCHITECTURE.md still names; P4 rewrites it and deletes these lines:
-ARCHITECTURE.md rpc.EntryTileID
