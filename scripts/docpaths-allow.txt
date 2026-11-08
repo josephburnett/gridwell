@@ -38,5 +38,4 @@ docs/freshness.md internal/server/plugin_watch_seam_test.go
 docs/freshness.md internal/server/proc_content_change_seam_test.go
 docs/freshness.md internal/server/selection_plugin_seam_test.go
 docs/freshness.md internal/server/subscription_refused_seam_test.go
-docs/ids.md internal/pluginhost
 ARCHITECTURE.md internal/plugin
