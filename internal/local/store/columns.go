@@ -217,10 +217,8 @@ one time. Storage-only. Added at schema v19, additive.`,
 	},
 	{
 		name: "url_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 22,
-		comment: `url_user=1 marks a file url row's url_string as the user's, the
-address a navigation landed on (FileRows.SetAddress), which no listing
-replaces, as alt_user keeps a typed name. Storage-only. Added at schema
-v22, additive.`,
+		comment: `url_user is dead storage: a file's url row is a page, which has no
+address to latch, so nothing writes or reads it. Added at schema v22.`,
 		noCopy: "a copy lands in home, where no listing replaces an address",
 	},
 }

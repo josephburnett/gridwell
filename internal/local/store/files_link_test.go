@@ -102,12 +102,12 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 	isLinkTo(t, "the re-targeted row", fileByKey(t, stored, "t1"), rpc.KeyTileID("everything"+"/"+"t9"))
 
 	// And an entry that stops being a link converts back, under the same id.
-	if err := d.Refresh(gid, []Entry{{Key: "t1", Kind: rpc.KindURL, Label: "t1", URL: "https://x"}}); err != nil {
+	if err := d.Refresh(gid, []Entry{{Key: "t1", Kind: rpc.KindURL, Label: "t1"}}); err != nil {
 		t.Fatal(err)
 	}
 	stored, _ = d.tiles(gid)
 	back := fileByKey(t, stored, "t1")
-	if back.ID != id || back.LinkTargetId != "" || back.UrlString != "https://x" {
+	if back.ID != id || back.LinkTargetId != "" || back.UrlString != "" {
 		t.Fatalf("converted back = %+v", back)
 	}
 }

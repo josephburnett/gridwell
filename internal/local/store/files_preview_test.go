@@ -168,12 +168,12 @@ func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 	}
 
 	// The snapshot follows what the source last said, both ways.
-	addressed := Entry{Key: "a.html", Kind: rpc.KindURL, Label: "a.html", URL: "https://a"}
+	addressed := Entry{Key: "a.html", Kind: rpc.KindURL, Label: "a.html"}
 	if err := d.Refresh(gid, []Entry{addressed}); err != nil {
 		t.Fatal(err)
 	}
 	tiles, _ = d.Overlay(gid, nil)
-	if got := fileByKey(t, tiles, "a.html"); got.ServesPage || got.UrlString != "https://a" {
+	if got := fileByKey(t, tiles, "a.html"); got.ServesPage {
 		t.Fatalf("the snapshot kept a page the source stopped serving: %+v", got.Tile)
 	}
 	if err := d.Refresh(gid, []Entry{pageEntry("a.html")}); err != nil {

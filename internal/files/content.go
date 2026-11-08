@@ -36,8 +36,8 @@ func sendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk)
 }
 
 // ReadContent answers a text file's body with its stamp, taken before the
-// read so bytes written during it read as a stamp they do not match. A url
-// tile's content is its row's address, as home's is.
+// read so bytes written during it read as a stamp they do not match. A page
+// file has no address, so its content is the empty address.
 func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	t, err := s.tileByPath(req.TileId)
 	if err != nil {
@@ -66,9 +66,9 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 // WriteContent replaces a text file's bytes whole, by a temp file in its
 // directory renamed over it, so a reader sees the old bytes or the new and a
 // broken stream writes nothing. It claims the stamp the bytes were read
-// under, and a file whose stamp has moved is refused as a conflict. A url
-// tile's address is its row's, which a page file refuses, and a link is
-// refused, as a link row is at home.
+// under, and a file whose stamp has moved is refused as a conflict. A page
+// file has no body (unwritable), and a link is refused, as a link row is at
+// home.
 func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRequest, error)) (*pb.TileResponse, error) {
 	first, err := recv()
 	if err != nil {
@@ -86,14 +86,6 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 		return nil, err
 	}
 	path, _ := pathOf(first.TileId)
-	if rpc.WebContent(t) {
-		id, err := s.mint(first.TileId)
-		if err != nil {
-			return nil, err
-		}
-		changed, err := s.mem.SetAddress(id, first.Version, string(data))
-		return s.changedTile(path, changed, err, false)
-	}
 	if len(data) > bodyCap {
 		return nil, status.Errorf(codes.InvalidArgument, "files: %s: a body is at most %d MiB", path, bodyCap>>20)
 	}

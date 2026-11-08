@@ -14,8 +14,8 @@ package store
 // Sweep write only to rows that exist. An entry with a LinkTarget is a link
 // row, its link_target_id the target's namespace-relative address, which the
 // router qualifies on the way out. A row's typed name is the user's, as on
-// home's rows: alt_text with alt_user latched, which no listing overwrites;
-// so is a url's landed address, with url_user latched.
+// home's rows: alt_text with alt_user latched, which no listing overwrites.
+// A file's url row is a page, which has no address, so its url_string is ''.
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -34,7 +33,6 @@ import (
 // owns its content; Child is a door's grid key.
 type Entry struct {
 	Key, Label, Kind string
-	URL              string
 	ServesPage       bool
 	LinkTarget       string
 	Child            string
@@ -65,12 +63,11 @@ func (on side) of(col string) string {
 
 // FileTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
-// a door's minted child grid, 0 for a leaf. URLUser is the row's url_user.
+// a door's minted child grid, 0 for a leaf.
 type FileTile struct {
 	ID          int64
 	Key         string
 	ChildGridID int64
-	URLUser     bool
 	*gridwellv1.Tile
 }
 
@@ -111,8 +108,7 @@ func (n *FileRows) TileKey(tileID int64) (gridID int64, key string, tombstoned b
 }
 
 // Overlay joins one listing with the stored arrangement and writes
-// nothing. Rows contribute id, placement, framing, a typed name and a landed
-// address; the listing contributes every other content fact. Rows the listing does not mention follow at the end from
+// nothing. Rows contribute id, placement, framing and a typed name; the listing contributes every other content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
 // gridID 0 means an untouched grid: every entry is derived.
 func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
@@ -153,9 +149,6 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
 			if !r.Named {
 				r.AltText = e.Label
 			}
-			if !r.URLUser {
-				r.UrlString = snapshotOf(e).url.String
-			}
 			if r.LinkTargetId != "" {
 				r.UrlString, r.ServesPage, r.PreviewBlobId = "", false, 0
 			}
@@ -163,7 +156,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
 			continue
 		}
 		out = append(out, FileTile{Key: e.Key, Tile: &gridwellv1.Tile{Kind: entryKind(e), AltText: e.Label,
-			UrlString: snapshotOf(e).url.String, LinkTargetId: e.LinkTarget, X: x, Y: y, W: 1, H: 1}})
+			LinkTargetId: e.LinkTarget, X: x, Y: y, W: 1, H: 1}})
 	}
 	for _, r := range stored {
 		if !matched[r.Key] {
@@ -187,8 +180,7 @@ func entryKind(e Entry) string {
 // link holds only its target: the rest are the target's.
 type entrySnapshot struct {
 	kind string
-	url  sql.NullString // a url row's address, NULL on every other kind and on a link
-	user bool           // url is the user's landed address, url_user
+	url  sql.NullString // '' on a url row, NULL on every other kind and on a link
 	page bool
 	link sql.NullString
 }
@@ -200,7 +192,7 @@ func snapshotOf(e Entry) entrySnapshot {
 		return s
 	}
 	if s.kind == "url" {
-		s.url = sql.NullString{String: e.URL, Valid: true}
+		s.url = sql.NullString{Valid: true}
 		s.page = e.ServesPage
 	}
 	return s
@@ -261,10 +253,7 @@ func (n *FileRows) Refresh(gridID int64, entries []Entry) error {
 			continue
 		}
 		s := snapshotOf(e)
-		if s.user = r.URLUser && s.url.Valid; s.user {
-			s.url.String = r.UrlString
-		}
-		if r.Kind == s.kind && (r.Named || r.AltText == e.Label) && r.UrlString == s.url.String && r.URLUser == s.user &&
+		if r.Kind == s.kind && (r.Named || r.AltText == e.Label) && r.UrlString == s.url.String &&
 			r.ServesPage == s.page && r.LinkTargetId == s.link.String {
 			continue
 		}
@@ -292,8 +281,7 @@ func (n *FileRows) Refresh(gridID int64, entries []Entry) error {
 // convert writes a row's new snapshot and child, the grid only a door holds.
 // A row that becomes a link gives up what the tiles CHECK lets only an owner
 // hold, its screenshot and its text mode, since a link's preview is its
-// target's. A typed name stays, and so
-// does a landed address while the row is still a url.
+// target's. A typed name stays.
 func (n *FileRows) convert(r FileTile, label string, s entrySnapshot, child sql.NullInt64) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
@@ -308,9 +296,9 @@ func (n *FileRows) convert(r FileTile, label string, s entrySnapshot, child sql.
 			}
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?,
-			alt_text = CASE WHEN alt_user = 1 THEN alt_text ELSE ? END, url_string = ?, url_user = ?, serves_page = ?,
+			alt_text = CASE WHEN alt_user = 1 THEN alt_text ELSE ? END, url_string = ?, serves_page = ?,
 			link_target_id = ?, child_grid_id = ?, updated_at = ? WHERE id = ? AND key != '' AND tombstoned = 0`,
-			s.kind, label, s.url, s.user, s.page, s.link, child, n.s.now().Unix(), r.ID)
+			s.kind, label, s.url, s.page, s.link, child, n.s.now().Unix(), r.ID)
 		return err
 	})
 }
@@ -361,15 +349,14 @@ func (n *FileRows) lookupID(query string, args ...any) (id int64, ok bool, err e
 // tiles lists the live rows of a grid, by id, the stored columns through the
 // one descriptor and the key beside them.
 func (n *FileRows) tiles(gridID int64) ([]FileTile, error) {
-	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key, url_user FROM tiles
+	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key FROM tiles
 		WHERE key != '' AND grid_id = ? AND tombstoned = 0 ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
 	return collect(rows, func(rows *sql.Rows) (FileTile, error) {
 		var key string
-		var user bool
-		t, err := scanTile(rows, &key, &user)
+		t, err := scanTile(rows, &key)
 		if err != nil {
 			return FileTile{}, err
 		}
@@ -384,7 +371,7 @@ func (n *FileRows) tiles(gridID int64) ([]FileTile, error) {
 				return FileTile{}, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
 			}
 		}
-		return FileTile{ID: id, Key: key, ChildGridID: child, URLUser: user, Tile: t}, nil
+		return FileTile{ID: id, Key: key, ChildGridID: child, Tile: t}, nil
 	})
 }
 
@@ -473,25 +460,6 @@ func (n *FileRows) Rename(tileID, version int64, name string) (changed bool, err
 			return "", nil, nil
 		}
 		return `alt_text = ?, alt_user = 1`, name, nil
-	})
-}
-
-// SetAddress is where a navigation in an entry's url landed, kept on its row
-// and never told to the source, as home's writeURLContent keeps one: http or
-// https only. A served page has no address of its own and is refused.
-func (n *FileRows) SetAddress(tileID, version int64, address string) (changed bool, err error) {
-	address = strings.TrimSpace(address)
-	if !rpc.HTTPAddress(address) {
-		return false, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
-	}
-	return n.userContent("WriteContent/url", tileID, version, func(t *gridwellv1.Tile) (string, any, error) {
-		if !rpc.WebContent(t) || t.ServesPage || t.LinkTargetId != "" {
-			return "", nil, fmt.Errorf("%w: a %s tile here has no address of its own", ErrInvalidArgument, t.Kind)
-		}
-		if t.UrlString == address {
-			return "", nil, nil
-		}
-		return `url_string = ?, url_user = 1`, address, nil
 	})
 }
 

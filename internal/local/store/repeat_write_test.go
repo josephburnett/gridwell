@@ -116,7 +116,7 @@ func TestARepeatedFileRowWriteWritesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := d.Mint(gid, Entry{Key: "u", Kind: rpc.KindURL, Label: "u", URL: "https://example.com/"}, 0, 2, 0, 1, 1)
+	page, err := d.Mint(gid, Entry{Key: "u", Kind: rpc.KindURL, Label: "u", ServesPage: true}, 0, 2, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
