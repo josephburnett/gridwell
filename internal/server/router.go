@@ -54,7 +54,7 @@ func (rt *router) route(id string) (ns namespace.Namespace, local, uuid string, 
 	}
 	c, local, uuid, transit, found := rt.srv.resolve(id)
 	if !found {
-		return nil, "", "", false, undeclared(id)
+		return nil, "", "", false, rt.srv.undeclared(id)
 	}
 	return c, local, uuid, transit, nil
 }
@@ -98,7 +98,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	if err != nil {
 		return nil, err
 	}
-	// plugin_grids is the owning plugin's fact, from its Info; scratch_grid_id
+	// plugin_grids is the owning source's fact, from its Info; scratch_grid_id
 	// is the node's, from home's. In transit both are the remote node's stamp.
 	var g *pb.Grid
 	if transit {
@@ -108,9 +108,10 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 		if g != nil {
 			// The declared facts have no other source, so a handshake that does
 			// not answer fails the read rather than present wrong ones.
-			info, ierr := rt.srv.pluginInfo(ctx, uuid)
+			owner := rpc.OwnerNamespaceOf(req.GridId, rt.srv.cfg.ID)
+			info, ierr := rt.srv.pluginInfo(ctx, owner)
 			if ierr != nil {
-				return nil, infoDeclarationError(req.GridId, uuid, ierr)
+				return nil, infoDeclarationError(req.GridId, owner, ierr)
 			}
 			g.PluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
 			if g.ScratchGridId, ierr = rt.srv.homeScratch(ctx); ierr != nil {
@@ -160,7 +161,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			c, found = rt.srv.pluginReg.Transport()
 		}
 		if !found {
-			return nil, gwerr.DeadLink(hop, "no plugin %q", hop)
+			return nil, gwerr.DeadLink(hop, "no source %q", hop)
 		}
 		resp, err := c.Handshake(ctx, &pb.HandshakeRequest{Namespace: rest})
 		if err != nil {
@@ -204,13 +205,15 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	return resp, nil
 }
 
-// buildPluginInfo assembles a menu PluginInfo from the config and the plugin's
-// Info, nil when Info failed with infoErr the reason: the plugin is still
-// listed, and InfoError tells broken from healthy-but-rootless.
+// buildPluginInfo assembles a menu PluginInfo from the config and the source's
+// Info, nil when Info failed with infoErr the reason: the source is still
+// listed, and InfoError tells broken from healthy-but-rootless. uuid is the
+// row's owner id; its grids are qualified as its answers are (rpc.QualifierOf).
 func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
 	out := &pb.PluginInfo{Uuid: uuid, Label: configLabel}
 	if info != nil {
-		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(uuid, info.RootGridId), rpc.QualifyPluginGrids(uuid, info.PluginGrids)
+		prefix := rpc.QualifierOf(uuid)
+		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(prefix, info.RootGridId), rpc.QualifyPluginGrids(prefix, info.PluginGrids)
 		out.Label, out.Glyph = cmp.Or(configLabel, info.DisplayName), info.Glyph
 		out.RootViewCx, out.RootViewCy, out.RootViewZoom = info.RootViewCx, info.RootViewCy, info.RootViewZoom
 	} else if infoErr != nil {
@@ -272,10 +275,10 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 	for _, n := range rt.srv.namespaces() {
 		pctx, cancel := context.WithTimeout(ctx, rpc.FindHopTimeout)
 		// No routed id narrows a fan-out, so the hop is the namespace's own.
-		hop := rpc.Hop{Seg: n.UUID, Via: n.UUID, Transit: n.Transit}
+		hop := rpc.Hop{Seg: n.prefix(), Via: n.UUID, Transit: n.Transit}
 		resp, err := n.NS.Find(pctx, rpc.PeelRequest(hop, m))
 		cancel()
-		q := rt.qualifyFind(ctx, n.Transit, n.UUID, rpc.FindHop(resp, err))
+		q := rt.qualifyFind(ctx, n.Transit, n.prefix(), rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
@@ -648,11 +651,10 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 		settled := sync.OnceFunc(settling.Done)
 		if n.Transit {
 			// The transport has no handshake to ask.
-			go rt.watchPlugin(subCtx, n.UUID, true, n.NS,
-				func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
+			go rt.watchPlugin(subCtx, n, func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
 			continue
 		}
-		go rt.watchPlugin(subCtx, n.UUID, false, n.NS,
+		go rt.watchPlugin(subCtx, n,
 			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events, settled)
 	}
 	listening := make(chan struct{})
@@ -730,28 +732,30 @@ func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest)
 	return &pb.DisableSourceResponse{}, nil
 }
 
-// watchPlugin fans plugin uuid's events into the client's stream until ctx
-// ends. The Info fetch rides namespace.Refollow's loop, so a plugin slow to
-// start is not excluded for good. settled is called once the first attempt is
-// established or has failed, or ctx has ended.
-func (rt *router) watchPlugin(ctx context.Context, uuid string, transit bool, ns namespace.Namespace, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
+// watchPlugin fans namespace n's events into the client's stream until ctx
+// ends, qualified with n.prefix(); the health it reports itself is keyed by
+// n.UUID, as a health event n sends names itself under its prefix. The Info
+// fetch rides namespace.Refollow's loop, so a source slow to start is not
+// excluded for good. settled is called once the first attempt is established
+// or has failed, or ctx has ended.
+func (rt *router) watchPlugin(ctx context.Context, n namespaceRow, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
 	defer settled()
 	namespace.Refollow{
-		Label: "subscribe: plugin " + uuid,
+		Label: "subscribe: source " + n.UUID,
 		// Settled first: until every source has, nothing drains events.
-		Down: func(detail string) { settled(); reportHealth(ctx, events, uuid, false, detail) },
-		Up:   func() { reportHealth(ctx, events, uuid, true, "") },
+		Down: func(detail string) { settled(); reportHealth(ctx, events, n.UUID, false, detail) },
+		Up:   func() { reportHealth(ctx, events, n.UUID, true, "") },
 		Attempt: func(ctx context.Context, established func()) error {
 			if _, err := infoOf(ctx); err != nil {
 				return err
 			}
-			return namespace.Follow(ctx, ns, &pb.SubscribeRequest{},
+			return namespace.Follow(ctx, n.NS, &pb.SubscribeRequest{},
 				func(ev *pb.Event) error {
-					q := rt.qualifyEvent(ctx, uuid, transit, ev)
+					q := rt.qualifyEvent(ctx, n.prefix(), n.Transit, ev)
 					// The hubs below key by the namespace's own id; this is
 					// the one record holding both keys.
 					trace.Emit("router", "event", "qualify", map[string]string{
-						"key": rpc.EventKey(q), "local": rpc.EventKey(ev), "ns": uuid})
+						"key": rpc.EventKey(q), "local": rpc.EventKey(ev), "ns": n.UUID})
 					select {
 					case events <- q:
 						return nil
@@ -787,7 +791,7 @@ func (rt *router) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse
 func (rt *router) Probe(ctx context.Context, req *pb.ProbeRequest) (*pb.ProbeResponse, error) {
 	c, local, ok := rt.srv.clientForID(req.TileId)
 	if !ok {
-		return nil, undeclared(req.TileId)
+		return nil, rt.srv.undeclared(req.TileId)
 	}
 	return c.Probe(ctx, &pb.ProbeRequest{TileId: local})
 }

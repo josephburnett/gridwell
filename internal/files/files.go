@@ -277,7 +277,9 @@ func (s *Source) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send fun
 	return namespace.Relay(ctx, ch, send)
 }
 
-// health is the files as one health event tells them; the zero value is
+// health is the files as one health event tells them, naming them by their
+// own segment, the key form of the empty path, which the router qualifies with
+// the node like every id they answer (rpc.FilesOwner); the zero value is
 // every directory read and the watch told.
 type health struct {
 	dark            bool
@@ -285,7 +287,7 @@ type health struct {
 }
 
 func (h health) event() *pb.Event {
-	ev := rpc.HealthEvent("", !h.dark, h.detail)
+	ev := rpc.HealthEvent(rpc.KeyTileID(""), !h.dark, h.detail)
 	ev.GetPluginHealth().LiveUpdatesOff = h.liveOff
 	ev.GetPluginHealth().Told = proto.Bool(h.liveOff == "")
 	return ev

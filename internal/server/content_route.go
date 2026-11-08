@@ -36,7 +36,7 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	}
 	c, local, uuid, transit, found := s.resolve(qualifiedID)
 	if !found {
-		return nil, "", nil, undeclared(qualifiedID)
+		return nil, "", nil, s.undeclared(qualifiedID)
 	}
 	if transit {
 		return c, local, nil, nil
@@ -54,7 +54,7 @@ func (s *Server) contentRoute(ctx context.Context, qualifiedID string) (namespac
 	// a connection-chained target, which the transport owns.
 	tc, tlocal, _, ttransit, found := s.resolve(target)
 	if !found {
-		return nil, "", nil, undeclared(target)
+		return nil, "", nil, s.undeclared(target)
 	}
 	// The target is checked as a directly addressed id is, so its owner's
 	// verdict on a gone key is the answer whichever id the read named. A

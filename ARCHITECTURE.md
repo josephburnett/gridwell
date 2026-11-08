@@ -36,6 +36,9 @@ An id is a chain of segments, one per hop: `<node>/<conn>/<remote-node>/<tile>`.
 `Server.resolve` peels the first segment and routes on its shape:
 
 - the node's own id followed by digits: home
+- the node's own id followed by a key form, `~<base64url of a path>`: the
+  files, registered under their owner id `<node>/~` (`rpc.FilesOwner`), handed
+  the bare path and answering under the node's id (`rpc.QualifierOf`)
 - the node's own id followed by a letter-leading segment: a connection
 - anything else: a plugin
 
@@ -107,7 +110,11 @@ No request carries a descent path. The server derives location from rows it
 owns. The browser's cookies and storage, and networks, never cross the wire.
 
 Wire-only fields are derived in exactly one place each. `Tile.link`
-(this tile is a link) comes from `server.qualifyTiles`. `text_presentation`
+(this tile is a link) comes from `server.qualifyTiles` for every link its
+ids spell (a child grid that arrived qualified, a leaf's target), and from
+`files.Source.buildTiles` for a symlink's door, the one link whose child is a
+bare path of the same files: only the files know a door's own path from its
+child's, and `qualifyTiles` keeps the bit it is handed. `text_presentation`
 and `status_detail` come from the plugin's `Entry` through
 `pluginhost/adapter.go`. `Tile.serves_page` (this url tile opens at the
 /content/ API, and only a url entry may say so) comes from the `Entry` too,

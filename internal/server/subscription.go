@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/subscription"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -56,8 +57,10 @@ func viewLine(v *pb.SetViewRequest) string {
 }
 
 // spreadSubscription hands every namespace its share of union, an empty one
-// included, since a share that emptied must stop being watched. A grid whose
-// namespace this node does not declare is nobody's to watch.
+// included, since a share that emptied must stop being watched. A share is
+// keyed as namespaceRow keys it: the owner id, and the transport's under the
+// node's own. A grid whose namespace this node does not declare is nobody's
+// to watch.
 func (s *Server) spreadSubscription(union []string) {
 	traceUnion(union)
 	type owner struct {
@@ -67,6 +70,9 @@ func (s *Server) spreadSubscription(union []string) {
 	shares := map[owner][]string{}
 	for _, id := range union {
 		if _, local, uuid, transit, ok := s.resolve(id); ok {
+			if !transit {
+				uuid = rpc.OwnerNamespaceOf(id, s.cfg.ID)
+			}
 			shares[owner{uuid, transit}] = append(shares[owner{uuid, transit}], local)
 		}
 	}

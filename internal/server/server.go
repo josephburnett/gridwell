@@ -136,12 +136,11 @@ func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string,
 	return c, local, uuid, false, found
 }
 
-// undeclared is the answer for an id whose first namespace this node does not
-// declare: the dead verdict (gwerr.DeadLink), whichever hop of a chain this
-// node is.
-func undeclared(id string) error {
-	ns := rpc.UUIDOf(id)
-	return gwerr.DeadLink(ns, "no plugin %q for %q", ns, id)
+// undeclared is the answer for an id whose owner this node does not declare:
+// the dead verdict (gwerr.DeadLink), whichever hop of a chain this node is.
+func (s *Server) undeclared(id string) error {
+	ns := rpc.OwnerNamespaceOf(id, s.cfg.ID)
+	return gwerr.DeadLink(ns, "no source %q for %q", ns, id)
 }
 
 // clientForID resolves the namespace that owns a qualified id, and the local
@@ -151,17 +150,23 @@ func (s *Server) clientForID(id string) (ns namespace.Namespace, local string, o
 	return c, local, found
 }
 
-// namespaceRow is one namespace this node declares. Kind is the registry's
-// configured kind, empty for the transport, whose rows carry their own.
+// namespaceRow is one namespace this node declares. UUID is its owner id
+// (rpc.OwnerNamespaceOf), which keys its roster row, its health and its share
+// of the subscription. Kind is the registry's configured kind, empty for the
+// transport, whose rows carry their own.
 type namespaceRow struct {
 	UUID, Kind string
 	NS         namespace.Namespace
 	Transit    bool
 }
 
+// prefix is what the namespace's answers are qualified with: the node's id
+// for the files (rpc.QualifierOf).
+func (n namespaceRow) prefix() string { return rpc.QualifierOf(n.UUID) }
+
 // namespaces enumerates what this node declares, in the one order every
-// fan-out takes: the registered plugins as configured, then the transport
-// under the node's own id, which is the id a connection's rows re-qualify
+// fan-out takes: home, the files and the plugins as registered, then the
+// transport under the node's own id, which is the id a connection's rows re-qualify
 // through and the only transit namespace. A node without an id declares no
 // connections.
 func (s *Server) namespaces() []namespaceRow {
@@ -206,13 +211,13 @@ func (s *Server) homeScratch(ctx context.Context) (string, error) {
 	return rpc.QualifyID(hu, info.ScratchGridId), nil
 }
 
-// pluginInfo is a namespace's Info, bounded by pluginInfoTimeout so a hung
-// one degrades to an error rather than a stall; a plugin's is held by its
-// adapter (pluginhost.Adapter.info).
+// pluginInfo is the Info of the namespace whose owner id is uuid, bounded by
+// pluginInfoTimeout so a hung one degrades to an error rather than a stall; a
+// plugin's is held by its adapter (pluginhost.Adapter.info).
 func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
 	c, found := s.routeClient(uuid)
 	if !found {
-		return nil, errors.New("no plugin " + uuid)
+		return nil, errors.New("no source " + uuid)
 	}
 	ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
 	defer cancel()

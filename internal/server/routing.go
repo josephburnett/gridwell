@@ -24,7 +24,9 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 // arrived already qualified is a cross-plugin link, so the door is a link
 // and is left alone; surfacing that here as Tile.link gives render and
 // store one "is a link" signal. A bare uuid comparison would miss a
-// same-namespace link door, which "arrived qualified" catches.
+// same-namespace link door, which "arrived qualified" catches. A symlink's
+// door arrives bare and already marked by the files (files.Source.buildTiles),
+// and the copy keeps the mark.
 func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
 	for i, t := range tiles {
