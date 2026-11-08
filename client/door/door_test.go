@@ -139,7 +139,6 @@ func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
 		want   string
 	}{
 		{"declared folder", "ufs/1", &gridwellv1.Grid{Id: "ufs/1", Glyph: rpc.GlyphFolder}, rpc.GlyphFolder},
-		{"declared process", "up/1", &gridwellv1.Grid{Id: "up/1", Glyph: rpc.GlyphProcess}, rpc.GlyphProcess},
 		{"declares nothing is owned content", "ugl/1", &gridwellv1.Grid{Id: "ugl/1"}, rpc.GlyphDoor},
 		{"a root entry outranks the grid", "ufs/9", &gridwellv1.Grid{Id: "ufs/9", Glyph: rpc.GlyphFolder}, rpc.GlyphTrash},
 		{"far content wears the door", "n1/conn/x/1", &gridwellv1.Grid{Id: "n1/conn/x/1", NodeNs: "n1/conn"}, rpc.GlyphFolder},

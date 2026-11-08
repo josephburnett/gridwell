@@ -135,30 +135,6 @@ func drawFolderGlyph(c js.Value, x, y, w, h float64, color string) {
 	endGlyph(c)
 }
 
-// drawProcessGlyph paints a process tree: a parent node and two children
-// connected by lines.
-func drawProcessGlyph(c js.Value, x, y, w, h float64, color string) {
-	beginGlyph(c, w, h, color)
-	cx, cy, half := glyphBox(x, y, w, h)
-	parentY := cy - half*0.72
-	childY := cy + half*0.72
-	dx := half * 0.78
-	nodeR := half * 0.26
-	// Connectors first, so the nodes sit on top.
-	for _, d := range []float64{-dx, dx} {
-		c.Call("beginPath")
-		c.Call("moveTo", cx, parentY)
-		c.Call("lineTo", cx+d, childY)
-		c.Call("stroke")
-	}
-	for _, p := range [][2]float64{{cx, parentY}, {cx - dx, childY}, {cx + dx, childY}} {
-		c.Call("beginPath")
-		c.Call("arc", p[0], p[1], nodeR, 0.0, 2*math.Pi)
-		c.Call("fill")
-	}
-	endGlyph(c)
-}
-
 // drawShellGlyph paints a terminal prompt: a chevron followed by a cursor
 // block.
 func drawShellGlyph(c js.Value, x, y, w, h float64, color string) {

@@ -195,8 +195,6 @@ func (a *App) drawSourceGlyph(glyph string, x, y, w, h float64) {
 	switch glyph {
 	case rpc.GlyphFolder:
 		drawFolderGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
-	case rpc.GlyphProcess:
-		drawProcessGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphDoor:
 		drawDoorGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
 	case rpc.GlyphTrash:

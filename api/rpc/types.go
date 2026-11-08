@@ -222,11 +222,10 @@ func IsBodyKind(kind string) bool { return KindOf(kind).Content.InBlob() }
 // unknown name falling back to the globe. A row declaring nothing takes
 // the grid glyph instead (client/door.RowGlyph).
 const (
-	GlyphFolder  = "folder"
-	GlyphProcess = "process"
-	GlyphDoor    = "door"
-	GlyphTrash   = "trash"
-	GlyphGlobe   = "globe"
+	GlyphFolder = "folder"
+	GlyphDoor   = "door"
+	GlyphTrash  = "trash"
+	GlyphGlobe  = "globe"
 )
 
 // Text-tile display modes.
