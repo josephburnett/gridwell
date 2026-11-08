@@ -44,8 +44,9 @@ type Source struct {
 	hub   *eventhub.Hub[*pb.Event]
 	watch *watcher
 
-	// dark is, per directory, why its last read failed; liveOff is why the
-	// watch is not told. setHealth is their one writer.
+	// dark is, per directory, why its last read failed, until it leaves the
+	// view (rescope); liveOff is why the watch is not told. setHealth is
+	// their one writer.
 	healthMu sync.Mutex
 	dark     map[string]string
 	liveOff  string

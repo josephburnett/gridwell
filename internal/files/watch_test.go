@@ -224,3 +224,31 @@ func TestAViewChecksWhatItAdds(t *testing.T) {
 	f.show(f.root)
 	await(t, ev, "the change before the watch", gridChanged(f.root))
 }
+
+// Dark follows the view: an unreadable directory a session showed and left
+// darkens the files no longer.
+func TestADarkDirectoryLeftIsNoLongerDark(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+	f := newFixture(t)
+	locked := f.mkdir("locked")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	ev := f.events()
+	f.grid(f.root)
+	f.grid(locked)
+	f.show(f.root, locked)
+	if h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); h.Healthy {
+		t.Fatalf("health = %+v", h)
+	}
+	f.show(f.root)
+	if h := await(t, ev, "light", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); !h.Healthy {
+		t.Errorf("health = %+v", h)
+	}
+	if h := f.s.health(); h.dark {
+		t.Errorf("still dark: %+v", h)
+	}
+}

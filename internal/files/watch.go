@@ -94,14 +94,22 @@ func (s *Source) scopeLocked() []string {
 }
 
 // rescope watches scope and answers the directories it added; the watch's
-// verdict is the files' told.
+// verdict is the files' told, and dark follows the view, so a directory
+// that leaves it darkens the files no more.
 func (s *Source) rescope(scope []string) []string {
 	added, err := s.watch.set(scope)
 	why := ""
 	if err != nil {
 		why = err.Error()
 	}
-	s.noteWatch(why)
+	s.setHealth(func() {
+		s.liveOff = why
+		for d := range s.dark {
+			if !slices.Contains(scope, d) {
+				delete(s.dark, d)
+			}
+		}
+	})
 	return added
 }
 
