@@ -447,3 +447,54 @@ func TestATextFileIsNotRenamed(t *testing.T) {
 		t.Errorf("name = %q", got.AltText)
 	}
 }
+
+// A placed door's row follows what its name becomes on disk: a symlink to a
+// directory whose target is removed lists as a dead link and comes back as
+// the door when the target does, and a directory replaced by a file lists as
+// the file, the row keeping its id and placement throughout.
+func TestAPlacedDoorRowFollowsItsKind(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	target := f.mkdir("target")
+	f.write("target/a.md", "a")
+	hall := f.path("hall")
+	if err := os.Symlink(target, hall); err != nil {
+		t.Fatal(err)
+	}
+	dir := f.mkdir("dir")
+	for _, p := range []string{hall, dir} {
+		if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(p), X: 7, Y: int64(len(p)), W: 1, H: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	placed := func(p, kind string) *pb.Tile {
+		t.Helper()
+		tl := tileIn(t, f.grid(f.root), p)
+		if tl.Kind != kind || tl.X != 7 || tl.Y != int64(len(p)) {
+			t.Fatalf("%s = %s at %d,%d, want a %s where it was placed", p, tl.Kind, tl.X, tl.Y, kind)
+		}
+		return tl
+	}
+
+	if err := os.RemoveAll(target); err != nil {
+		t.Fatal(err)
+	}
+	if l := placed(hall, rpc.KindText); l.LinkTargetId != idOf(target) || l.ChildGridId != "" {
+		t.Fatalf("the dangling symlink = link %q child %q, want a link to %s", l.LinkTargetId, l.ChildGridId, target)
+	}
+	if _, err := f.s.GetTile(ctx, &pb.GetTileRequest{TileId: idOf(target)}); !gwerr.IsDeadLink(err) {
+		t.Fatalf("its target reads %v, want dead", err)
+	}
+	f.mkdir("target")
+	if d := placed(hall, rpc.KindDoor); d.ChildGridId != idOf(target) || !d.Link {
+		t.Fatalf("the symlink back = child %q link %v, want the door onto %s", d.ChildGridId, d.Link, target)
+	}
+
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	f.write("dir", "now a file")
+	if tl := placed(dir, rpc.KindText); tl.ChildGridId != "" {
+		t.Fatalf("the directory turned file still opens %q", tl.ChildGridId)
+	}
+}

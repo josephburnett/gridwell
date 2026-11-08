@@ -25,7 +25,6 @@ import (
 // facts read off disk on every read.
 type listed struct {
 	store.Entry
-	child        string // a door's directory
 	target       string // a symlink to a file: where it lands, "" outside every root
 	stamp        string // a text file's content stamp
 	readOnly     string
@@ -39,7 +38,7 @@ func (s *Source) entryOf(e diskEntry) listed {
 	out := listed{Entry: store.Entry{Key: e.path, Label: e.name}}
 	switch e.kind {
 	case diskDir:
-		out.Kind, out.child = rpc.KindDoor, e.path
+		out.Kind, out.Child = rpc.KindDoor, e.path
 	case diskLink:
 		s.linkFacts(&out, e)
 	default:
@@ -73,7 +72,7 @@ func (s *Source) linkFacts(out *listed, e diskEntry) {
 	at, held := s.spell(e.target)
 	switch {
 	case held && e.targetKind == diskDir:
-		out.Kind, out.child = rpc.KindDoor, at
+		out.Kind, out.Child = rpc.KindDoor, at
 		return
 	case held && e.targetKind == diskFile:
 		fileFacts(out, at)
@@ -181,7 +180,7 @@ func (s *Source) buildTiles(dir string, rows []store.ExtTile, entries []listed) 
 		t := proto.CloneOf(r.Tile)
 		t.Id, t.GridId, t.ChildGridId = idOf(r.Key), idOf(dir), ""
 		e, ok := byKey[r.Key]
-		child := e.child
+		child := e.Child
 		if !ok && r.ChildGridID != 0 {
 			var err error
 			if child, err = s.mem.GridKey(r.ChildGridID); err != nil {
@@ -338,8 +337,8 @@ func (s *Source) mint(tileID string) (int64, error) {
 		return 0, err
 	}
 	var child int64
-	if e.child != "" {
-		if child, err = s.mem.GridOf(e.child); err != nil {
+	if e.Child != "" {
+		if child, err = s.mem.GridOf(e.Child); err != nil {
 			return 0, err
 		}
 	}
@@ -388,7 +387,7 @@ func sumOf(l *listing) listingSum {
 	h := sha256.New()
 	for _, e := range l.entries {
 		fmt.Fprintf(h, "%q %q %q %t %q %q %q %q %d\n", e.Key, e.Label, e.Kind, e.ServesPage, e.LinkTarget,
-			e.child, e.readOnly, e.presentation, e.preview)
+			e.Child, e.readOnly, e.presentation, e.preview)
 	}
 	var out listingSum
 	h.Sum(out[:0])

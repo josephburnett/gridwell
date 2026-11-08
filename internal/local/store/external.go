@@ -31,12 +31,14 @@ import (
 
 // Entry is one thing a source lists in a grid: its key and the content facts
 // the source owns. LinkTarget is the address of the thing it links to, ""
-// when it owns its content; Hint, when set, is where it asks to sit.
+// when it owns its content; Child is a door's grid key; Hint, when set, is
+// where it asks to sit.
 type Entry struct {
 	Key, Label, Kind string
 	URL              string
 	ServesPage       bool
 	LinkTarget       string
+	Child            string
 	Hint             *Hint
 }
 
@@ -246,12 +248,14 @@ func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h in
 }
 
 // Refresh updates a row's content snapshot to what the listing just said,
-// writing only where a value differs. child_grid_id is deliberately not
-// refreshed: re-pointing a stored link because a listing changed is how
-// a link starts naming something the user never linked. A link target is
-// different, being the source's own content fact rather than the user's, and
-// an entry that becomes a link converts its row in place, keeping its id,
-// placement and framing (convert).
+// writing only where a value differs. A door's child_grid_id is
+// deliberately not refreshed: re-pointing a stored link because a listing
+// changed is how a link starts naming something the user never linked. A
+// link target is different, being the source's own content fact rather than
+// the user's, and an entry that becomes a link or another kind converts its
+// row in place, keeping its id, placement and framing (convert): a row that
+// stops being a door gives up its grid, and one that becomes a door takes
+// its entry's, since the tiles CHECK lets only a door hold one.
 func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
 	if gridID == 0 || len(entries) == 0 {
 		return nil
@@ -277,18 +281,33 @@ func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
 			r.ServesPage == s.page && r.LinkTargetId == s.link.String {
 			continue
 		}
-		if err := n.convert(r, e.Label, s); err != nil {
+		child := sql.NullInt64{Int64: r.ChildGridID, Valid: r.ChildGridID != 0}
+		switch {
+		case s.kind != "door" || s.link.Valid:
+			child = sql.NullInt64{}
+		case !child.Valid:
+			if e.Child == "" {
+				return fmt.Errorf("store: refresh %q: a door names no grid", e.Key)
+			}
+			id, err := n.GridOf(e.Child)
+			if err != nil {
+				return err
+			}
+			child = sql.NullInt64{Int64: id, Valid: true}
+		}
+		if err := n.convert(r, e.Label, s, child); err != nil {
 			return fmt.Errorf("store: refresh %q: %w", e.Key, err)
 		}
 	}
 	return nil
 }
 
-// convert writes a row's new snapshot. A row that becomes a link gives up
-// what the tiles CHECK lets only an owner hold, its screenshot and its text
-// mode, since a link's preview is its target's. A typed name stays, and so
+// convert writes a row's new snapshot and child, the grid only a door holds.
+// A row that becomes a link gives up what the tiles CHECK lets only an owner
+// hold, its screenshot and its text mode, since a link's preview is its
+// target's. A typed name stays, and so
 // does a landed address while the row is still a url.
-func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
+func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot, child sql.NullInt64) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
 			if _, err := tx.ExecContext(ctx, `UPDATE tiles SET preview_blob_id = NULL, text_mode = NULL
@@ -303,8 +322,8 @@ func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot) error {
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?,
 			alt_text = CASE WHEN alt_user = 1 THEN alt_text ELSE ? END, url_string = ?, url_user = ?, serves_page = ?,
-			link_target_id = ?, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`,
-			s.kind, label, s.url, s.user, s.page, s.link, n.s.now().Unix(), r.ID, n.ns)
+			link_target_id = ?, child_grid_id = ?, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`,
+			s.kind, label, s.url, s.user, s.page, s.link, child, n.s.now().Unix(), r.ID, n.ns)
 		return err
 	})
 }

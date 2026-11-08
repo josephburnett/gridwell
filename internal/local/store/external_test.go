@@ -670,3 +670,38 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 		t.Fatalf("after a link and back = %q latched %v, want the listing's address: a link holds none", got.UrlString, got.URLUser)
 	}
 }
+
+// A door row whose entry becomes a link, a symlink to a directory whose
+// target is gone, gives up its child grid with its kind, so the refresh
+// lands and the grid still lists; a link row has no child grid of its own,
+// and one that becomes a door again takes its entry's.
+func TestExtDoorRowBecomingALinkGivesUpItsChildGrid(t *testing.T) {
+	_, d := openExt(t)
+	gid, _ := d.GridOf("root")
+	child, _ := d.GridOf("hall")
+	door := Entry{Key: "h", Kind: "door", Label: "h"}
+	if _, err := d.Mint(gid, door, child, 0, 0, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	link := []Entry{{Key: "h", Kind: "text", Label: "h", LinkTarget: rpc.KeyTileID("/gone")}}
+	if err := d.Refresh(gid, link); err != nil {
+		t.Fatalf("refresh to a link: %v", err)
+	}
+	got, err := d.Overlay(gid, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := extByKey(t, got, "h"); h.Kind != "text" || h.LinkTargetId != rpc.KeyTileID("/gone") || h.ChildGridID != 0 {
+		t.Fatalf("row = kind %q link %q child %d, want a text link with no child grid", h.Kind, h.LinkTargetId, h.ChildGridID)
+	}
+	door.Child = "hall"
+	if err := d.Refresh(gid, []Entry{door}); err != nil {
+		t.Fatalf("refresh back to a door: %v", err)
+	}
+	if got, err = d.Overlay(gid, []Entry{door}); err != nil {
+		t.Fatal(err)
+	}
+	if h := extByKey(t, got, "h"); h.Kind != "door" || h.LinkTargetId != "" || h.ChildGridID != child {
+		t.Fatalf("row = kind %q link %q child %d, want the door onto grid %d", h.Kind, h.LinkTargetId, h.ChildGridID, child)
+	}
+}
