@@ -323,13 +323,13 @@ func (s *Source) healthLocked() health {
 	return h
 }
 
-// setHealth applies one edit and announces a transition.
+// setHealth applies one edit and announces a transition, in its order.
 func (s *Source) setHealth(edit func()) {
 	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
 	was := s.healthLocked()
 	edit()
 	now := s.healthLocked()
-	s.healthMu.Unlock()
 	if now == was {
 		return
 	}
