@@ -324,7 +324,7 @@ func (s *Source) Probe(_ context.Context, req *pb.ProbeRequest) (*pb.ProbeRespon
 	switch {
 	case err == nil:
 		presence = pb.ProbeResponse_PRESENCE_PRESENT
-	case gone(err), errors.Is(err, errOutside), status.Code(err) == codes.InvalidArgument:
+	case gone(err), errors.Is(err, errOutside), gwerr.IsDeadLink(err):
 		presence = pb.ProbeResponse_PRESENCE_GONE
 	}
 	return &pb.ProbeResponse{Presence: presence}, nil

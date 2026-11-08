@@ -23,3 +23,20 @@ func TestFilesAnotherSpellingOfAPathIsDead(t *testing.T) {
 		t.Fatalf("GetTile(%q) = %v, want dead", strings.ReplaceAll(other, "\n", `\n`), err)
 	}
 }
+
+// An id whose path the OS cannot name, a NUL inside it, or one that is not an
+// absolute path at all, names nothing: dead, never an error, whichever verb
+// asks.
+func TestFilesAnIdNamingNoPathIsDead(t *testing.T) {
+	root := t.TempDir()
+	n := newFilesNode(t, root)
+	for _, path := range []string{root + "/a\x00b", "notes.md", ""} {
+		id := fileID(path)
+		if _, err := n.cl.GetGrid(n.ctx, id); !gwerr.IsDeadLink(err) {
+			t.Errorf("GetGrid(%q) = %v, want dead", path, err)
+		}
+		if _, err := n.cl.GetTile(n.ctx, id); !gwerr.IsDeadLink(err) {
+			t.Errorf("GetTile(%q) = %v, want dead", path, err)
+		}
+	}
+}

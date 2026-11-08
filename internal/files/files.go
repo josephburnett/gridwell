@@ -111,11 +111,11 @@ var errOutside = errors.New("is outside every root")
 
 func idOf(path string) string { return rpc.KeyTileID(path) }
 
-// pathOf reads an id as the absolute path it names.
+// pathOf reads an id as the absolute path it names, dead when it names none.
 func pathOf(id string) (string, error) {
 	p, ok := rpc.TileKey(id)
-	if !ok || !filepath.IsAbs(p) || filepath.Clean(p) != p {
-		return "", status.Errorf(codes.InvalidArgument, "files: %q names no path", id)
+	if !ok || !filepath.IsAbs(p) || filepath.Clean(p) != p || strings.ContainsRune(p, 0) {
+		return "", gwerr.DeadLink("", "files: %q names no path", id)
 	}
 	return p, nil
 }

@@ -91,8 +91,8 @@ func TestAMintedPlacementSurvivesARelisting(t *testing.T) {
 	}
 }
 
-// A path no root holds, or one reached through a symlinked directory, is
-// dead; so is a file or directory that is gone.
+// A path no root holds, one reached through a symlinked directory, or an id
+// naming no path is dead; so is a file or directory that is gone.
 func TestWhatTheTreeDoesNotHoldIsDead(t *testing.T) {
 	f := newFixture(t)
 	f.write("dir/inner.txt", "x")
@@ -113,8 +113,9 @@ func TestWhatTheTreeDoesNotHoldIsDead(t *testing.T) {
 	if _, err := f.s.GetGrid(ctx, &pb.GetGridRequest{GridId: idOf(f.path("dir/inner.txt"))}); !gwerr.IsDeadLink(err) {
 		t.Errorf("a file read as a grid = %v, want dead", err)
 	}
-	_, err := f.s.GetGrid(ctx, &pb.GetGridRequest{GridId: "12"})
-	wantCode(t, "a row id", err, codes.InvalidArgument)
+	if _, err := f.s.GetGrid(ctx, &pb.GetGridRequest{GridId: "12"}); !gwerr.IsDeadLink(err) {
+		t.Errorf("a row id, which names no path = %v, want dead", err)
+	}
 }
 
 // A symlink is a link: to a file a link tile naming the file's path, to a
