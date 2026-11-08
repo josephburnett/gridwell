@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"slices"
@@ -73,6 +74,18 @@ type Source struct {
 	// old directory lists the path no more, and the new one does not hold
 	// the row yet.
 	moving sync.RWMutex
+
+	// writing serializes the saves of each file, by where its bytes live: a
+	// save holds its file's stripe from its claim to its rename.
+	writing [64]sync.Mutex
+}
+
+func (s *Source) lockPath(real string) (unlock func()) {
+	h := fnv.New32a()
+	h.Write([]byte(real))
+	m := &s.writing[h.Sum32()%uint32(len(s.writing))]
+	m.Lock()
+	return m.Unlock
 }
 
 var _ namespace.Namespace = (*Source)(nil)

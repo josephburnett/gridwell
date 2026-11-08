@@ -8,10 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
@@ -43,6 +46,35 @@ func writeAll(ns namespace.Namespace, id, stamp string, data []byte) (*pb.TileRe
 		sent = true
 		return &pb.WriteContentRequest{TileId: id, Data: data, ContentStamp: stamp}, nil
 	})
+}
+
+// Writers claiming the same stamp at once are one write and conflicts: the
+// claim and the rename are one step, so no save lands over another unseen.
+func TestWritersClaimingOneStampLandOnce(t *testing.T) {
+	f := newFixture(t)
+	p := f.write("race.txt", "start")
+	id := idOf(p)
+	for round := range 20 {
+		_, first := read(t, f.s, id)
+		var landed atomic.Int32
+		var wg sync.WaitGroup
+		for w := range 8 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				body := bytes.Repeat([]byte{'a' + byte(w)}, 10+round*8+w)
+				if _, err := writeAll(f.s, id, first.ContentStamp, body); err == nil {
+					landed.Add(1)
+				} else if status.Code(err) != codes.FailedPrecondition {
+					t.Errorf("a writer: %v, want ok or the conflict", err)
+				}
+			}()
+		}
+		wg.Wait()
+		if n := landed.Load(); n != 1 {
+			t.Fatalf("round %d: %d writes claiming one stamp landed, want 1", round, n)
+		}
+	}
 }
 
 // One file through the namespace's own verbs: listed, touched, written under

@@ -105,11 +105,14 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 }
 
 // write puts data in place of path's file if claimed is its stamp, and
-// answers the stamp of the bytes written.
+// answers the stamp of the bytes written. The claim holds until the rename
+// (lockPath), and the stamp is read again just before it, so neither another
+// save nor another process's write is overwritten unseen.
 func (s *Source) write(path, claimed string, data []byte) (string, error) {
 	real, err := s.content(path)
 	var fi os.FileInfo
 	if err == nil {
+		defer s.lockPath(real)()
 		fi, err = os.Stat(real)
 	}
 	switch {
@@ -123,18 +126,25 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 	if err := unwritable(filepath.Base(real), fi.Size()); err != nil {
 		return "", status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
 	}
-	if now := contentStamp(fi.ModTime(), fi.Size()); claimed != now {
-		return "", status.Errorf(codes.FailedPrecondition, "files: %s changed on disk since it was read", path)
+	stale := func(fi os.FileInfo) error {
+		if contentStamp(fi.ModTime(), fi.Size()) != claimed {
+			return status.Errorf(codes.FailedPrecondition, "files: %s changed on disk since it was read", path)
+		}
+		return nil
+	}
+	if err := stale(fi); err != nil {
+		return "", err
 	}
 	// The rename would replace a file its mode refuses writes to.
 	if err := denied(real); err != nil {
 		return "", diskRefusal("written", path, err)
 	}
-	return replace(real, fi.Mode().Perm(), data, path)
+	return replace(real, fi.Mode().Perm(), data, path, stale)
 }
 
-// replace writes data beside real and renames it over real.
-func replace(real string, perm os.FileMode, data []byte, path string) (string, error) {
+// replace writes data beside real and renames it over real, unless stale
+// refuses what real is just before.
+func replace(real string, perm os.FileMode, data []byte, path string, stale func(os.FileInfo) error) (string, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".gridwell-*")
 	if err != nil {
 		return "", diskRefusal("written", path, err)
@@ -155,11 +165,17 @@ func replace(real string, perm os.FileMode, data []byte, path string) (string, e
 	if err == nil {
 		err = os.Chmod(tmp.Name(), perm)
 	}
-	var fi os.FileInfo
+	var fi, now os.FileInfo
 	if err == nil {
 		fi, err = os.Stat(tmp.Name())
 	}
 	if err == nil {
+		now, err = os.Stat(real)
+	}
+	if err == nil {
+		if err := stale(now); err != nil {
+			return "", err
+		}
 		err = os.Rename(tmp.Name(), real)
 	}
 	if err != nil {

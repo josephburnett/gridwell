@@ -5,3 +5,4 @@ low-water | 57236
 2026-11-08 | verification fixes (Joe: a clean and complete change): a link written into a directory hears the directory's refusal, not a missing route | 1
 2026-11-08 | verification fixes (Joe: a clean and complete change): an uncached grid's bar and notice name its roster row by door.RowLabel | 2
 2026-11-08 | verification fixes (Joe: a clean and complete change): a handshake to the files' owner routes to the files | 2
+2026-11-08 | verification fixes (Joe: a clean and complete change): a save holds its file's lock from its claim to its rename, and reads the stamp again before it | 29
