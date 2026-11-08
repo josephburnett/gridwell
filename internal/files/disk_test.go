@@ -2,10 +2,13 @@ package files
 
 import (
 	"bytes"
+	"encoding/binary"
+	"hash/crc32"
 	"image"
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -90,6 +93,34 @@ func TestAnImagesPictureIsBounded(t *testing.T) {
 	}
 	if previewJPEG(filepath.Join(filepath.Dir(p), "notes.md")) != nil {
 		t.Error("a text file has a picture")
+	}
+}
+
+// A small file declaring a vast image has no picture, and decoding none of
+// it costs nothing: the pixel budget is read from its header.
+func TestAnImagePastThePixelBudgetIsNotDecoded(t *testing.T) {
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewGray(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	b := buf.Bytes()
+	// IHDR's width and height, then its CRC over the chunk type and data.
+	binary.BigEndian.PutUint32(b[16:], 8000)
+	binary.BigEndian.PutUint32(b[20:], 8000)
+	binary.BigEndian.PutUint32(b[29:], crc32.ChecksumIEEE(b[12:29]))
+	p := filepath.Join(t.TempDir(), "bomb.png")
+	if err := os.WriteFile(p, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	got := previewJPEG(p)
+	runtime.ReadMemStats(&after)
+	if got != nil {
+		t.Error("an image past the budget has a picture")
+	}
+	if n := after.TotalAlloc - before.TotalAlloc; n > 8<<20 {
+		t.Errorf("previewJPEG allocated %d MiB for a %d-byte file", n>>20, len(b))
 	}
 }
 

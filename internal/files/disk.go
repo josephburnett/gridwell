@@ -324,6 +324,10 @@ const (
 	// previewFileCap skips a file too large to decode on every paint; past
 	// it the tile shows its name.
 	previewFileCap = 64 << 20
+	// previewPixelCap bounds what a decode allocates, a few bytes a pixel,
+	// since a small file may declare any size: a 40-megapixel photo has a
+	// picture, and past it the tile shows its name.
+	previewPixelCap = 40_000_000
 )
 
 // previewJPEG is an image file's picture, nil for any file that is not an
@@ -337,6 +341,9 @@ func previewJPEG(path string) []byte {
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
+		return nil
+	}
+	if c, _, err := image.DecodeConfig(bytes.NewReader(data)); err != nil || int64(c.Width)*int64(c.Height) > previewPixelCap {
 		return nil
 	}
 	img, _, err := image.Decode(bytes.NewReader(data))
