@@ -479,7 +479,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	//    hidden behind it, and the learned root is the remote's home.
 	child := awaitConnRoot(t, localOrigin, "cmconn1")
 	if strings.Count(child, "/") != 3 {
-		t.Fatalf("root = %q, want the four-segment <ssh>/<conn>/<rplugin>/<grid>", child)
+		t.Fatalf("root = %q, want the four-segment <node>/<conn>/<far node>/<grid>", child)
 	}
 
 	// 2. A connection has no door row on the wire, so "<id>/0" names a
