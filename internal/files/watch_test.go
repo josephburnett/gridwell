@@ -2,8 +2,10 @@ package files
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"syscall"
 	"testing"
 	"time"
@@ -50,6 +52,24 @@ func quiet(t *testing.T, ch <-chan *pb.Event, what string, match func(*pb.Event)
 			}
 		case <-deadline:
 			return
+		}
+	}
+}
+
+// awaitAll answers once every match has accepted an event, in any order.
+func awaitAll(t *testing.T, ch <-chan *pb.Event, matches map[string]func(*pb.Event) bool) {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for len(matches) > 0 {
+		select {
+		case ev := <-ch:
+			for what, m := range matches {
+				if m(ev) {
+					delete(matches, what)
+				}
+			}
+		case <-deadline:
+			t.Fatalf("none of %v within 5s", slices.Collect(maps.Keys(matches)))
 		}
 	}
 }
@@ -115,7 +135,10 @@ func TestAVanishedDirectoryIsToldAndWatchedAgain(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
-	await(t, ev, "the vanished directory", gridChanged(dir))
+	// The root's listing moved too; a mkdir inside its window would leave it
+	// as it was, owing nothing.
+	awaitAll(t, ev, map[string]func(*pb.Event) bool{
+		"the vanished directory": gridChanged(dir), "the root without it": gridChanged(f.root)})
 	f.mkdir("dir")
 	await(t, ev, "the root's new name", gridChanged(f.root))
 	deadline := time.Now().Add(5 * time.Second)
