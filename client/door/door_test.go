@@ -212,3 +212,26 @@ func TestByRootResolvesADeclaredEntry(t *testing.T) {
 		t.Error("an empty grid id must resolve to nothing")
 	}
 }
+
+// The files row is no place of its own: each root is one swatch, in config
+// order, wearing the folder, and a directory not yet cached takes the files
+// row's glyph.
+func TestFilesRowPlacesAreItsRoots(t *testing.T) {
+	a, b := rpc.QualifyID("n1", rpc.KeyTileID("/srv/a")), rpc.QualifyID("n1", rpc.KeyTileID("/srv/b"))
+	files := &gridwellv1.PluginInfo{Uuid: rpc.FilesOwner("n1"), Label: "files", Glyph: rpc.GlyphFolder,
+		PluginGrids: []*gridwellv1.PluginGrid{{Id: "/srv/a", Label: "A", Glyph: rpc.GlyphFolder, GridId: a},
+			{Id: "/srv/b", Label: "B", Glyph: rpc.GlyphFolder, GridId: b}}}
+	places := PlacesOf(files)
+	if len(places) != 2 || places[0].Plugin.RootGridId != a || places[1].Plugin.RootGridId != b ||
+		places[0].Plugin.Label != "A (files)" || RowGlyph(places[0].Plugin) != rpc.GlyphFolder {
+		t.Fatalf("places = %v", places)
+	}
+	roster := []*gridwellv1.PluginInfo{{Uuid: "n1", Label: "home", RootGridId: "n1/1"}, files}
+	sub := rpc.QualifyID("n1", rpc.KeyTileID("/srv/a/sub"))
+	if got := GlyphFor(sub, nil, roster); got != rpc.GlyphFolder {
+		t.Errorf("an uncached directory's glyph = %q, want the files row's folder", got)
+	}
+	if got := GlyphFor("n1/9", nil, roster); got != rpc.GlyphDoor {
+		t.Errorf("an uncached home grid's glyph = %q, want home's door", got)
+	}
+}

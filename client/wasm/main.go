@@ -1273,7 +1273,7 @@ func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
 	// The client's one copy of which sources are not answering or not told.
 	wasDark := a.c.NoteHealth(h.PluginUuid, h.Healthy)
 	a.c.NoteTold(h)
-	r := events.ReactHealth(h, label, wasDark, pluginhealth.Disableable(a.plugins, a.home, h.PluginUuid))
+	r := events.ReactHealth(h, label, wasDark, pluginhealth.Disableable(a.plugins, h.PluginUuid))
 	for _, n := range []events.StickyNotice{r.Dark, r.LiveOff} {
 		if n.Message == "" {
 			a.resolveErr(n.Source)

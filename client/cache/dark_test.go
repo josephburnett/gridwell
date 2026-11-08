@@ -6,6 +6,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // A grid is served from cache when the source serving it is not answering. That is one
@@ -170,5 +171,16 @@ func TestNothingIsCurrentWhileThisClientsStreamIsDown(t *testing.T) {
 	c.NoteStream(true)
 	if !c.Current()[node+"/7"] {
 		t.Fatal("the held grid stayed not current after the stream opened again")
+	}
+}
+
+// The files' health is keyed by their owner id, so a dark root darkens the
+// directories and never a home grid.
+func TestDarkFilesDarkenDirectoriesOnly(t *testing.T) {
+	c := New()
+	dir := "n1/" + rpc.KeyTileID("/srv/notes")
+	c.NoteHealth(rpc.FilesOwner("n1"), false)
+	if !c.SourceDark(dir) || c.SourceDark("n1/7") {
+		t.Errorf("dark files: directory dark=%v, home dark=%v; want true, false", c.SourceDark(dir), c.SourceDark("n1/7"))
 	}
 }

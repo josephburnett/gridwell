@@ -140,10 +140,19 @@ func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.Plugin
 		}
 		return rpc.GlyphDoor
 	}
-	if pl, ok := byUUID(rpc.UUIDOf(gridID), plugins); ok {
+	if pl, ok := byUUID(rowOf(gridID), plugins); ok {
 		return RowGlyph(pl)
 	}
 	return rpc.GlyphDoor
+}
+
+// rowOf is the roster row an uncached grid's glyph falls back to: the files'
+// for a directory (rpc.SourceOf), else its first segment's.
+func rowOf(gridID string) string {
+	if rpc.IsFilesID(gridID) {
+		return rpc.SourceOf(gridID)
+	}
+	return rpc.UUIDOf(gridID)
 }
 
 // Place is one grid a menu row is a door onto: the row that names it, a

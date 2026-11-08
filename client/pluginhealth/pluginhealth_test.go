@@ -169,14 +169,15 @@ func TestUnrootedLink(t *testing.T) {
 func TestDisableable(t *testing.T) {
 	roster := []*gridwellv1.PluginInfo{
 		{Uuid: "n1", Label: "home", RootGridId: "n1/1"},
-		{Uuid: "pfs", Label: "files"},
+		{Uuid: rpc.FilesOwner("n1"), Label: "files", Glyph: rpc.GlyphFolder},
 		rpc.ConnectionRow("n1/away", "away", "", "dial refused", rpc.View{}),
 	}
+	// Only a connection is switched off; the files are dark or told.
 	for uuid, want := range map[string]bool{
-		"pfs": true, "n1/away": true,
-		"n1": false, "n1/away/far1": false, "n1/away/far1/pfs": false, "gone": false,
+		"n1/away": true,
+		"n1":      false, rpc.FilesOwner("n1"): false, "n1/away/far1": false, "n1/away/far1/pfs": false, "gone": false,
 	} {
-		if got := Disableable(roster, "n1/1", uuid); got != want {
+		if got := Disableable(roster, uuid); got != want {
 			t.Errorf("Disableable(%q) = %v, want %v", uuid, got, want)
 		}
 	}

@@ -135,3 +135,20 @@ func TestDeadTile(t *testing.T) {
 		t.Error("an owned door is not a link and has no dead verdict")
 	}
 }
+
+// A path is the files' to judge: dead by the roster only when the node
+// declares no files, never because home is declared.
+func TestAPathIsDeadOnlyWithoutAFilesRow(t *testing.T) {
+	path := node + "/" + rpc.KeyTileID("/srv/notes/a.md")
+	without := []*gridwellv1.PluginInfo{{Uuid: node, Label: "home"}}
+	if !Dead(path, without, node) {
+		t.Error("a path on a node with no files row reads live")
+	}
+	with := append(without, &gridwellv1.PluginInfo{Uuid: rpc.FilesOwner(node), Label: "files"})
+	if Dead(path, with, node) {
+		t.Error("a path on a node with a files row reads dead by the roster")
+	}
+	if Dead(node+"/7", without, node) {
+		t.Error("a home row reads dead")
+	}
+}

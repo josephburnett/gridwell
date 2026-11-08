@@ -11,3 +11,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): the node builds the files over the roots files: declares and registers them under <node>/~, while the plugin host still stands | 21
 2026-11-07 | files native (Joe): rpc.IsFilesID and rpc.FilePath read a directory and its path off its id, while the plugin host still stands | 13
 2026-11-07 | files native (Joe): a directory wears the orange outside colour at the grid level, while the plugin host still stands | 3
+2026-11-07 | files native (Joe): the client's roster reads the files row: an uncached directory takes its folder, and only a connection is disableable, while the plugin host still stands | 6
