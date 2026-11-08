@@ -22,3 +22,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): a directory a link brings into the watch is listed, while the plugin host still stands | 6
 2026-11-07 | files native (Joe): files.New refuses a relative root, while the plugin host still stands | 11
 2026-11-07 | files native (Joe): only a stale claim is the conflict among the files' refusals, while the plugin host still stands | 7
+2026-11-07 | files native (Joe): a find on a gone directory finds nothing, while the plugin host still stands | 4

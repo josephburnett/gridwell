@@ -32,19 +32,23 @@ func (s *Source) Find(_ context.Context, req *pb.FindRequest) (*pb.FindResponse,
 	var hits []findHit
 	var err error
 	if req.GridId != "" {
-		dir, derr := s.dirOf(req.GridId)
-		if derr != nil {
-			return nil, derr
-		}
-		// A directory no held way reaches lists with paths that start at it.
+		var dir string
 		var above []*pb.Tile
-		if above, _, err = g.chain(dir); err == nil {
+		// A directory no held way reaches lists with paths that start at it.
+		if dir, err = s.dirOf(req.GridId); err == nil {
+			above, _, err = g.chain(dir)
+		}
+		if err == nil {
 			hits, err = g.walk(dir, above, req.Recurse, map[string]bool{})
 		}
 	} else {
 		hits, err = g.rows(req)
 	}
-	if err != nil {
+	switch {
+	case gwerr.IsDeadLink(err):
+		// A directory gone, or outside every root, holds no rows to filter.
+		return &pb.FindResponse{}, nil
+	case err != nil:
 		return nil, err
 	}
 	return s.filterHits(req, hits, true)

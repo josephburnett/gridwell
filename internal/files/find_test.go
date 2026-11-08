@@ -63,3 +63,16 @@ func TestFindLocatesAndFilters(t *testing.T) {
 		t.Errorf("an empty query with no filter = %v", got)
 	}
 }
+
+// A find on a directory that is gone finds nothing, as on one outside every
+// root: a filter over no rows.
+func TestFindOnAGoneDirectoryIsEmpty(t *testing.T) {
+	f := newFixture(t)
+	for _, dir := range []string{f.path("gone"), f.base} {
+		for _, recurse := range []bool{false, true} {
+			if got := f.find(&pb.FindRequest{GridId: idOf(dir), Recurse: recurse, Kind: rpc.KindText}); len(got) != 0 {
+				t.Errorf("Find(%s, recurse %v) = %v", dir, recurse, got)
+			}
+		}
+	}
+}
