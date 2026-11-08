@@ -45,6 +45,8 @@ type ServerConfig struct {
 	// reused and its links stay dangling rather than re-routed. Boot
 	// mirrors it onto the rows and retires no other way.
 	RetiredNames []string `yaml:"retired_names,omitempty"`
+	// Files are the roots the node shows as grids, in config order.
+	Files []FilesRoot `yaml:"files,omitempty"`
 	// Plugins are the content plugins: separate binaries speaking plugin.v1.
 	Plugins []PluginConfig `yaml:"plugins,omitempty"`
 
@@ -91,6 +93,13 @@ type ConnectionConfig struct {
 	Addr       string `yaml:"addr,omitempty"`
 	Key        string `yaml:"key,omitempty"`
 	KnownHosts string `yaml:"known_hosts,omitempty"`
+}
+
+// FilesRoot is one directory files: declares. Root is absolute once Parse
+// has expanded a tilde; an empty Label is the root's base name.
+type FilesRoot struct {
+	Root  string `yaml:"root"`
+	Label string `yaml:"label,omitempty"`
 }
 
 // PluginConfig describes one content plugin. ID is the segment on every
@@ -159,7 +168,7 @@ var retiredKeys = map[string]string{
 	"bind":     "is `web: {bind: …}`",
 	"password": "is the web-password file beside this config (delete it to rotate)",
 	"node_id":  "is the layout Gridwell used before one database per node; v0.1.0 is the last release that converts a node written that way",
-	"routes":   "is gone (2026-11-07): a url tile opens its own address; delete the key",
+	"routes":   "is gone (2026-11-07): a url tile opens its own address, and the node's files are `files:`; delete the key",
 }
 
 // Load reads path and fills in defaults. A missing file wraps fs.ErrNotExist.
@@ -205,6 +214,9 @@ func Parse(data []byte) (*ServerConfig, error) {
 		}
 	}
 	if err := expandPaths(&cfg); err != nil {
+		return nil, err
+	}
+	if err := validateRoots(cfg.Files); err != nil {
 		return nil, err
 	}
 	if err := validateIDs(&cfg); err != nil {
@@ -371,6 +383,24 @@ func validateIDs(cfg *ServerConfig) error {
 	return nil
 }
 
+// validateRoots refuses a root that is not one absolute directory path,
+// since a relative one would name a different directory under each working
+// directory, and a root declared twice.
+func validateRoots(roots []FilesRoot) error {
+	seen := map[string]bool{}
+	for i, r := range roots {
+		if !filepath.IsAbs(r.Root) {
+			return fmt.Errorf("files[%d]: root %q must be an absolute path (or start with ~/)", i, r.Root)
+		}
+		p := filepath.Clean(r.Root)
+		if seen[p] {
+			return fmt.Errorf("files[%d]: root %q is declared twice", i, r.Root)
+		}
+		seen[p] = true
+	}
+	return nil
+}
+
 // expandPaths applies ExpandHome to every path server.yaml can spell with a
 // tilde. The user's home directory is asked for once, and only a path that
 // needs it fails when there is none.
@@ -391,6 +421,11 @@ func expandPaths(cfg *ServerConfig) error {
 	}
 	if cfg.StaticDir, err = expand(cfg.StaticDir); err != nil {
 		return err
+	}
+	for i := range cfg.Files {
+		if cfg.Files[i].Root, err = expand(cfg.Files[i].Root); err != nil {
+			return err
+		}
 	}
 	for i := range cfg.Plugins {
 		if cfg.Plugins[i].Binary, err = expand(cfg.Plugins[i].Binary); err != nil {

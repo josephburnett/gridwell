@@ -330,3 +330,67 @@ func TestRoutesAreRefused(t *testing.T) {
 		t.Fatalf("Parse(routes:) = %v, want the retired key's fix", err)
 	}
 }
+
+// files: loads in config order, a tilde expanded and an empty label kept
+// empty for the files to name by the base name.
+func TestFilesLoad(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	cfg, err := Parse([]byte("files:\n  - root: /srv/notes\n    label: Notes\n  - root: ~/docs\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []FilesRoot{{Root: "/srv/notes", Label: "Notes"}, {Root: filepath.Join(home, "docs")}}
+	if len(cfg.Files) != 2 || cfg.Files[0] != want[0] || cfg.Files[1] != want[1] {
+		t.Fatalf("files = %+v, want %+v", cfg.Files, want)
+	}
+}
+
+// Minting the node id writes the id alone: the files stanza survives Save
+// as the user spelled it, tilde and comment included.
+func TestFilesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	p := write(t, dir, "# my roots\nfiles:\n  - root: ~/docs # the docs\n    label: Docs\n")
+	cfg, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !Mint(cfg) {
+		t.Fatal("Mint must mint the absent node id")
+	}
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# my roots", "root: ~/docs # the docs", "label: Docs"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("saved file lost %q:\n%s", want, data)
+		}
+	}
+	again, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again.Files) != 1 || again.Files[0] != cfg.Files[0] || again.ID != cfg.ID {
+		t.Fatalf("reloaded = %+v, want %+v", again, cfg)
+	}
+}
+
+// A root that is not one absolute path, or is declared twice, is refused.
+func TestFilesRefusals(t *testing.T) {
+	for yml, want := range map[string]string{
+		"files:\n  - root: docs\n":              "absolute",
+		"files:\n  - root: \"\"\n":              "absolute",
+		"files:\n  - label: x\n":                "absolute",
+		"files:\n  - root: /a\n  - root: /a/\n": "twice",
+		"files:\n  - root: /a\n    kind: fs\n":  "not found",
+		"routes:\n  - match: x\n":               "`files:`",
+	} {
+		_, err := Parse([]byte(yml))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: err = %v, want a refusal mentioning %q", yml, err, want)
+		}
+	}
+}
