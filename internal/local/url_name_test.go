@@ -22,7 +22,7 @@ func TestAURLCreatedNamedKeepsItsNameThroughACapture(t *testing.T) {
 		{"their title", false, "Page title"},
 		{"mine", true, "mine"},
 	} {
-		p := openPlugin(t)
+		p := openHome(t)
 		created, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootGrid(t, p),
 			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, W: 1, H: 1,
 				UrlString: "https://example.com", AltText: c.name, Named: c.named}})
@@ -50,7 +50,7 @@ func TestAURLCreatedNamedKeepsItsNameThroughACapture(t *testing.T) {
 // Every kind created with a name carries whether it was typed onto the row.
 func TestEveryNamedCreateLatches(t *testing.T) {
 	ctx := context.Background()
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	const far = "aabbccddaabbccddaabbccddaabbccdd/7"
 	for i, tl := range []*gridwellv1.Tile{
@@ -77,7 +77,7 @@ func TestEveryNamedCreateLatches(t *testing.T) {
 // A SetTile cannot latch a name: only the rename does.
 func TestSetTileCannotLatchAName(t *testing.T) {
 	ctx := context.Background()
-	p := openPlugin(t)
+	p := openHome(t)
 	created, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootGrid(t, p),
 		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, W: 1, H: 1, UrlString: "https://example.com"}})
 	if err != nil {

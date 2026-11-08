@@ -12,7 +12,7 @@ import (
 // id, not the bootstrap-minted system.plugin_uuid, which qualified links
 // would never match.
 func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "plugin.db")
+	dbPath := filepath.Join(t.TempDir(), "gridwell.db")
 	// Stamp the config id into the DB, as registration does.
 	if err := dbmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 // A mismatched config id must refuse to open: the DB's stored identity is
 // authoritative and a wrong spawn must fail loudly rather than adopt.
 func TestOpenVerifiedRefusesMismatch(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "plugin.db")
+	dbPath := filepath.Join(t.TempDir(), "gridwell.db")
 	if err := dbmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
 	}

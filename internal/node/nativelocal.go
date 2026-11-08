@@ -1,8 +1,8 @@
 package node
 
 // The node's home: its own content over its store, with the shell manager, a
-// private per-node tmux server, and the boot sweeps. It is not a plugin; the
-// node constructs it from its own config.
+// private per-node tmux server, and the boot sweeps, constructed
+// from the node's own config.
 
 import (
 	"context"
@@ -19,12 +19,12 @@ import (
 // per-node socket (gridwell-<id>), so they survive restarts. A host without
 // tmux comes up with no live shells, never as a dead node, and a shell opened
 // there is refused with why.
-func newHome(st *store.Store, id, shell string) *local.Plugin {
+func newHome(st *store.Store, id, shell string) *local.Home {
 	socket := "gridwell"
 	if id != "" {
 		socket = "gridwell-" + id
 	}
-	var p *local.Plugin
+	var p *local.Home
 	if ctrl, _, terr := tmux.New(socket, "", shell); terr != nil {
 		p = local.WithoutShells(st, fmt.Errorf("tmux init: %w", terr))
 	} else {

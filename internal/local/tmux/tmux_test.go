@@ -408,7 +408,7 @@ func mustExec(t *testing.T, run any, extra ...string) {
 	time.Sleep(20 * time.Millisecond)
 }
 
-// TestArgsCreateUsesConfiguredShell: the `shell:` plugin config key picks the
+// TestArgsCreateUsesConfiguredShell: the `shell:` config key picks the
 // login shell for newly-created tmuxes (issue #86) — the argv's final
 // element, where the hardcoded "bash" used to live.
 func TestArgsCreateUsesConfiguredShell(t *testing.T) {

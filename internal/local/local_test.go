@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/tmux"
 )
 
-func openPlugin(t *testing.T) *local.Plugin {
+func openHome(t *testing.T) *local.Home {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -26,7 +26,7 @@ func openPlugin(t *testing.T) *local.Plugin {
 }
 
 // rootGrid returns the default root grid id from Info.
-func rootGrid(t *testing.T, p *local.Plugin) string {
+func rootGrid(t *testing.T, p *local.Home) string {
 	t.Helper()
 	info, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
@@ -40,7 +40,7 @@ func rootGrid(t *testing.T, p *local.Plugin) string {
 
 // createText is a CreateTile helper for a text tile, its body written after
 // the create so the tile carries a written version.
-func createText(t *testing.T, p *local.Plugin, gridID string, data []byte) *gridwellv1.Tile {
+func createText(t *testing.T, p *local.Home, gridID string, data []byte) *gridwellv1.Tile {
 	t.Helper()
 	cr, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{
 		GridId: gridID,
@@ -64,7 +64,7 @@ func createText(t *testing.T, p *local.Plugin, gridID string, data []byte) *grid
 }
 
 func TestInfo(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	resp, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestInfo(t *testing.T) {
 }
 
 func TestGetGrid_ReturnsGrid(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 	resp, err := p.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: root})
@@ -91,7 +91,7 @@ func TestGetGrid_ReturnsGrid(t *testing.T) {
 }
 
 func TestProbe_Present(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	tile := createText(t, p, rootGrid(t, p), []byte("hello"))
 	pr, err := p.Probe(ctx, &gridwellv1.ProbeRequest{TileId: tile.Id})
@@ -104,7 +104,7 @@ func TestProbe_Present(t *testing.T) {
 }
 
 func TestProbe_Gone(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	pr, err := p.Probe(context.Background(), &gridwellv1.ProbeRequest{TileId: "999999"})
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestProbe_Gone(t *testing.T) {
 }
 
 func TestCreateDoor_ThenGetGrid(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 
@@ -146,7 +146,7 @@ func TestCreateDoor_ThenGetGrid(t *testing.T) {
 }
 
 func TestDeleteTile_RemovesTile(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	tile := createText(t, p, rootGrid(t, p), []byte("bye"))
 	// Delete is two-stage: the first delete parks the tile in the trash. It
@@ -177,7 +177,7 @@ func TestDeleteTile_RemovesTile(t *testing.T) {
 }
 
 func TestShellTmuxAlive_NoShellHost(t *testing.T) {
-	p := openPlugin(t) // shell is nil
+	p := openHome(t) // shell is nil
 	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: "1"})
 	if err != nil {
 		t.Fatal(err)
@@ -204,7 +204,7 @@ func (f *fakeStreamer) ListLive() ([]string, error)        { return nil, nil }
 func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
 
 // probedShell is a home hosting s, plus the id of one shell tile to probe.
-func probedShell(t *testing.T, s shellsvc.Streamer) (*local.Plugin, string) {
+func probedShell(t *testing.T, s shellsvc.Streamer) (*local.Home, string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -245,7 +245,7 @@ func TestShellTmuxAlive_InfrastructureErrorSurfaces(t *testing.T) {
 // A door CreateTile with no child_grid_id allocates an interior child grid;
 // with a qualified one it stores a door to another namespace holding the link verbatim.
 func TestCreateDoor_InteriorVsExit(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 
@@ -267,14 +267,14 @@ func TestCreateDoor_InteriorVsExit(t *testing.T) {
 		GridId: root,
 		Tile: &gridwellv1.Tile{
 			Kind: "door", X: 2, Y: 0, W: 1, H: 1,
-			ChildGridId: "other-plugin-uuid/9", AltText: "far",
+			ChildGridId: "other-node-uuid/9", AltText: "far",
 		},
 	})
 	if err != nil {
 		t.Fatalf("far CreateTile: %v", err)
 	}
-	if far.Tile.ChildGridId != "other-plugin-uuid/9" {
-		t.Errorf("door to another namespace child = %q, want verbatim cross-plugin ref", far.Tile.ChildGridId)
+	if far.Tile.ChildGridId != "other-node-uuid/9" {
+		t.Errorf("door to another namespace child = %q, want the verbatim qualified ref", far.Tile.ChildGridId)
 	}
 	if far.Tile.AltText != "far" {
 		t.Errorf("door to another namespace label = %q, want far", far.Tile.AltText)
@@ -285,7 +285,7 @@ func TestCreateDoor_InteriorVsExit(t *testing.T) {
 // content read. ReadContent chunks the same value, and the stream-level
 // contract is pinned in content_stream_test.go.
 func TestReadContent_ReturnsBody(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	txt := createText(t, p, rootGrid(t, p), []byte("# hello"))
 	data, _, _, err := p.Store().ReadContent(ctx, txt.Id)
@@ -301,7 +301,7 @@ func TestReadContent_ReturnsBody(t *testing.T) {
 // text tile is refused: its name derives from its first line, so a rename
 // there would be clobbered by the next edit.
 func TestGetTileAndRename(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 	txt := createText(t, p, root, []byte("# hi"))
@@ -338,7 +338,7 @@ func TestGetTileAndRename(t *testing.T) {
 // bump version. It pins the version rule the store operations behind
 // SetFraming and SetTile carry.
 func TestDoorFramingNoVersionBump(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	root := rootGrid(t, p)
 
@@ -368,7 +368,7 @@ func TestDoorFramingNoVersionBump(t *testing.T) {
 // the left-off viewport on entry with no extra round-trip. A root write must
 // not bump a content version.
 func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	const eps = 1e-9
 
@@ -415,7 +415,7 @@ func TestInfoRootFramingSeedAndWriteback(t *testing.T) {
 // scratch-grid tile, so an ascent that never ran — a crash, a hard kill —
 // does not leak ephemeral visits.
 func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	scratch := scratchGrid(t, p)
 
@@ -462,7 +462,7 @@ func TestCleanupScratchSweepsEphemeralTiles(t *testing.T) {
 // sweeps, and once the workspace tile is deleted the reference dies with the blob
 // and the next sweep reclaims it.
 func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	scratch := scratchGrid(t, p)
 
@@ -536,8 +536,8 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	}
 }
 
-// scratchGrid returns the plugin's scratch grid id from Info.
-func scratchGrid(t *testing.T, p *local.Plugin) string {
+// scratchGrid returns home's scratch grid id from Info.
+func scratchGrid(t *testing.T, p *local.Home) string {
 	t.Helper()
 	info, err := p.Info(context.Background(), &gridwellv1.InfoRequest{})
 	if err != nil {
@@ -553,7 +553,7 @@ func scratchGrid(t *testing.T, p *local.Plugin) string {
 // keeps the view it was left at exactly as home's own root does: frame the
 // trash grid, ask again, and the entry carries it while the root stays put.
 func TestTheTrashcanEntryKeepsItsFraming(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	ctx := context.Background()
 	before, err := p.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {

@@ -21,30 +21,30 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Plugin wraps store.Store as a namespace.Namespace and owns the shell PTY
+// Home wraps store.Store as a namespace.Namespace and owns the shell PTY
 // lifecycle.
-type Plugin struct {
+type Home struct {
 	st    *store.Store
 	shell *shellsvc.Manager // nil means this instance hosts no live shells
 	off   string            // why shell is nil, when the host could not start one
 }
 
-var _ namespace.Namespace = (*Plugin)(nil)
+var _ namespace.Namespace = (*Home)(nil)
 
 // New wraps an open store. A nil shell hosts no live shells: OpenShell is
 // unimplemented and DeleteTile skips reaping.
-func New(st *store.Store, shell *shellsvc.Manager) *Plugin {
-	return &Plugin{st: st, shell: shell}
+func New(st *store.Store, shell *shellsvc.Manager) *Home {
+	return &Home{st: st, shell: shell}
 }
 
 // WithoutShells is a home on a host whose tmux would not start, for why.
-func WithoutShells(st *store.Store, why error) *Plugin {
-	return &Plugin{st: st, off: "live shells are off on this host: " + why.Error()}
+func WithoutShells(st *store.Store, why error) *Home {
+	return &Home{st: st, off: "live shells are off on this host: " + why.Error()}
 }
 
 // CleanupOrphanedShells kills tmuxes no shell row names any more: the
 // bounded leak from a delete that raced a crash. Called once at startup.
-func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
+func (p *Home) CleanupOrphanedShells(ctx context.Context) (int, error) {
 	if p.shell == nil {
 		return 0, nil
 	}
@@ -58,7 +58,7 @@ func (p *Plugin) CleanupOrphanedShells(ctx context.Context) (int, error) {
 // sparing any a workspace tile's layout blob references. If any pane blob is
 // unreadable it reaps nothing: a wrongly-killed shell is unrecoverable and a
 // delayed sweep is not. Runs before CleanupOrphanedShells.
-func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
+func (p *Home) CleanupScratch(ctx context.Context) (int, error) {
 	scratch, err := p.st.ScratchGridID(ctx)
 	if err != nil {
 		return 0, err
@@ -89,11 +89,11 @@ func (p *Plugin) CleanupScratch(ctx context.Context) (int, error) {
 }
 
 // Close closes the underlying store.
-func (p *Plugin) Close() error { return p.st.Close() }
+func (p *Home) Close() error { return p.st.Close() }
 
 // Info is the whole handshake: identity, the singleton root grid, and its
 // viewport.
-func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
+func (p *Home) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
 	id, err := p.st.RootGridID(ctx)
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
@@ -136,17 +136,17 @@ func (p *Plugin) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwell
 	}, nil
 }
 
-func (p *Plugin) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
+func (p *Home) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "home has no handshake of its own: the node enumerates the + menu, and home's row comes from its Info")
 }
 
-func (p *Plugin) SetView(context.Context, *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
+func (p *Home) SetView(context.Context, *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "home tells every change it writes, so what is shown scopes nothing")
 }
 
 // SetFraming persists a grid's framing on a door tile or, for a root, the
 // grid row. It never bumps a content version.
-func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
+func (p *Home) SetFraming(ctx context.Context, req *gridwellv1.SetFramingRequest) (*gridwellv1.SetFramingResponse, error) {
 	t, err := p.st.SetFraming(ctx, req)
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
@@ -155,14 +155,14 @@ func (p *Plugin) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 }
 
 // SetSelection is a select of a home grid. It never bumps a version.
-func (p *Plugin) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
+func (p *Home) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRequest) (*gridwellv1.SetSelectionResponse, error) {
 	if err := p.st.SetSelection(ctx, req); err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
 	return &gridwellv1.SetSelectionResponse{}, nil
 }
 
-func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
+func (p *Home) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {
 	_, err := p.st.GetTile(ctx, req.TileId)
 	if errors.Is(err, store.ErrNotFound) {
 		return &gridwellv1.ProbeResponse{Presence: gridwellv1.ProbeResponse_PRESENCE_GONE}, nil
@@ -175,7 +175,7 @@ func (p *Plugin) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 
 // GetGrid stamps what every home grid is: it takes new tiles, its bodies
 // take edits and its tiles move to another grid. An id with no row is dead, as GetTile's.
-func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
+func (p *Home) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
 	r, err := p.st.GetGrid(ctx, req.GridId)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, gwerr.DeadLink("", "home: no grid %q", req.GridId)
@@ -187,7 +187,7 @@ func (p *Plugin) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 	return r, nil
 }
 
-func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
+func (p *Home) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	jpeg, err := p.st.GetTilePreview(ctx, req.TileId)
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
@@ -197,7 +197,7 @@ func (p *Plugin) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePrev
 
 // GetTile reads a single tile's metadata. An id with no row is dead: home
 // never reassigns an id.
-func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
+func (p *Home) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
 	t, err := p.st.GetTile(ctx, req.TileId)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, gwerr.DeadLink("", "home: no tile %q", req.TileId)
@@ -206,7 +206,7 @@ func (p *Plugin) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*
 }
 
 // Find is the one generic find verb; the store owns the semantics.
-func (p *Plugin) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
+func (p *Home) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwellv1.FindResponse, error) {
 	res, err := p.st.Find(ctx, req)
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
@@ -216,7 +216,7 @@ func (p *Plugin) Find(ctx context.Context, req *gridwellv1.FindRequest) (*gridwe
 
 // ReadContent streams a tile's content bytes. Chunk 1 carries media_type and
 // the row version, the caller's save basis, even for empty content.
-func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
+func (p *Home) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
 	data, mediaType, version, err := p.st.ReadContent(ctx, req.TileId)
 	if err != nil {
 		return gwerr.ToStatus(err)
@@ -231,14 +231,14 @@ func (p *Plugin) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReq
 	}
 }
 
-func (p *Plugin) ServeContent(context.Context, *gridwellv1.ServeContentRequest, func(*gridwellv1.ServeContentChunk) error) error {
-	return status.Error(codes.Unimplemented, "home serves no pages: the content API serves a plugin's url entries only")
+func (p *Home) ServeContent(context.Context, *gridwellv1.ServeContentRequest, func(*gridwellv1.ServeContentChunk) error) error {
+	return status.Error(codes.Unimplemented, "home serves no pages: the content API serves the files' page files only")
 }
 
 // WriteContent assembles the client stream and commits once, at clean close,
 // so a broken stream leaves the old value intact. The first message binds
 // tile_id and claims the version; accumulation is capped at the blob limit.
-func (p *Plugin) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
+func (p *Home) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
 	first, err := recv()
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "write: empty stream")
@@ -255,7 +255,7 @@ func (p *Plugin) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 }
 
 // CreateTile is the single create: tile.kind selects the typed store create.
-func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
+func (p *Home) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
 	t := req.Tile
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
@@ -301,20 +301,20 @@ func (p *Plugin) CreateTile(ctx context.Context, req *gridwellv1.CreateTileReque
 	}
 }
 
-func (p *Plugin) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
+func (p *Home) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
 	return tileResp(p.st.CopyTile(ctx, req))
 }
 
 // MoveTile is the single placement writeback; the store derives the
 // door-into-own-subtree refusal itself.
-func (p *Plugin) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
+func (p *Home) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
 	return tileResp(p.st.MoveTile(ctx, req))
 }
 
 // SetTile is the single capture writeback, one operation per call
 // (rpc.OneOperation): for a tile writeback, tile.kind selects the one store
 // operation that kind supports.
-func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
+func (p *Home) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
 	if why := rpc.OneOperation(req); why != "" {
 		return nil, status.Error(codes.InvalidArgument, why)
 	}
@@ -356,7 +356,7 @@ func (p *Plugin) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*
 // names. A host with no shells, or a row that is gone, answers dead, which is a
 // verdict; a tmux that cannot be asked is not, and answering dead for it would
 // hide the refresh affordance with nothing said.
-func (p *Plugin) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
+func (p *Home) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
 	if p.shell == nil {
 		return &gridwellv1.ShellTmuxAliveResponse{Alive: false}, nil
 	}
@@ -376,7 +376,7 @@ func (p *Plugin) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAl
 
 // tmuxOf is the tmux a shell tile names (rpc.ShellTmux), refusing a
 // row that is not there or is not an owned shell.
-func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
+func (p *Home) tmuxOf(ctx context.Context, tileID string) (string, error) {
 	t, err := p.st.GetTile(ctx, tileID)
 	if err != nil {
 		return "", gwerr.ToStatus(err)
@@ -389,7 +389,7 @@ func (p *Plugin) tmuxOf(ctx context.Context, tileID string) (string, error) {
 
 // OpenShell streams a tile's live PTY both ways: the first request binds the
 // tile id, then keystrokes and resizes flow up and output flows down.
-func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) (err error) {
+func (p *Home) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) (err error) {
 	if p.shell == nil {
 		return status.Error(codes.Unimplemented, cmp.Or(p.off, "this namespace hosts no live shells"))
 	}
@@ -479,7 +479,7 @@ func (p *Plugin) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenSh
 // captureShellTitle stamps the label of the tile the tmux was opened from
 // with the tmux's foreground command on detach, as a url tile captures the
 // page title.
-func (p *Plugin) captureShellTitle(key, tileID string) error {
+func (p *Home) captureShellTitle(key, tileID string) error {
 	cmd, err := p.shell.PaneCommand(key)
 	if err != nil {
 		return fmt.Errorf("read the foreground command: %w", err)
@@ -490,7 +490,7 @@ func (p *Plugin) captureShellTitle(key, tileID string) error {
 	return p.st.SetTileAlt(context.Background(), tileID, cmd, false)
 }
 
-func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
+func (p *Home) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
 	// The key is read first: a destroy takes the row that names it.
 	key := ""
 	if p.shell != nil {
@@ -515,7 +515,7 @@ func (p *Plugin) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 
 // endTmux kills key's tmux once no row names it, answering why one was
 // left running.
-func (p *Plugin) endTmux(ctx context.Context, key string) string {
+func (p *Home) endTmux(ctx context.Context, key string) string {
 	n, err := p.st.ShellTmuxNamers(ctx, key)
 	if err != nil {
 		return "could not tell whether the shell's tmux is still named: " + err.Error()
@@ -529,7 +529,7 @@ func (p *Plugin) endTmux(ctx context.Context, key string) string {
 	return ""
 }
 
-func (p *Plugin) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
+func (p *Home) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
 	ch, cancel := p.st.SubscribeEvents()
 	defer cancel()
 	if err := send(nil); err != nil {

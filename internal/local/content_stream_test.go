@@ -17,7 +17,7 @@ import (
 
 func homeNamespace(t *testing.T) (namespace.Namespace, string) {
 	t.Helper()
-	p := openPlugin(t)
+	p := openHome(t)
 	return p, rootGrid(t, p)
 }
 

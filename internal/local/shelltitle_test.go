@@ -25,7 +25,7 @@ const captureFailed = "the shell's name was not updated"
 func TestShellTitleCaptureStampsOnDetach(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "vim"
-	p, tileID := shellPluginWithTile(t, fake)
+	p, tileID := shellHomeWithTile(t, fake)
 
 	if err := openShellAndDetach(t, p, tileID); err != nil {
 		t.Errorf("OpenShell = %v, want a capture that landed to end clean", err)
@@ -39,7 +39,7 @@ func TestShellTitleCaptureEndsWithAFailedRead(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "vim"
 	fake.PaneErr = errors.New("tmux: no server running")
-	p, tileID := shellPluginWithTile(t, fake)
+	p, tileID := shellHomeWithTile(t, fake)
 
 	err := openShellAndDetach(t, p, tileID)
 
@@ -57,7 +57,7 @@ func TestShellTitleCaptureEndsWithAFailedRead(t *testing.T) {
 func TestShellTitleCaptureEndsWithAFailedWrite(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "vim"
-	p, tileID := shellPluginWithTile(t, fake)
+	p, tileID := shellHomeWithTile(t, fake)
 
 	err := openShellAndDetach(t, p, tileID, func() {
 		for range 2 { // to the trash, then out of it
@@ -72,9 +72,9 @@ func TestShellTitleCaptureEndsWithAFailedWrite(t *testing.T) {
 	}
 }
 
-// shellPluginWithTile is a home over an in-memory store hosting the fake's
+// shellHomeWithTile is a home over an in-memory store hosting the fake's
 // shells, plus one shell tile on the root grid.
-func shellPluginWithTile(t *testing.T, fake *shellsvctest.FakeStreamer) (*local.Plugin, string) {
+func shellHomeWithTile(t *testing.T, fake *shellsvctest.FakeStreamer) (*local.Home, string) {
 	t.Helper()
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -96,7 +96,7 @@ func shellPluginWithTile(t *testing.T, fake *shellsvctest.FakeStreamer) (*local.
 // openShellAndDetach opens the tile's shell, runs beforeDetach with the tmux
 // live, then ends the stream and returns how OpenShell ended. OpenShell
 // releases before it returns, so the capture has run by then.
-func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDetach ...func()) error {
+func openShellAndDetach(t *testing.T, p *local.Home, tileID string, beforeDetach ...func()) error {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -129,7 +129,7 @@ func openShellAndDetach(t *testing.T, p *local.Plugin, tileID string, beforeDeta
 	return <-done
 }
 
-func altOf(t *testing.T, p *local.Plugin, tileID string) string {
+func altOf(t *testing.T, p *local.Home, tileID string) string {
 	t.Helper()
 	got, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: tileID})
 	if err != nil {

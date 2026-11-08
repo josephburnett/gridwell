@@ -19,7 +19,7 @@ import (
 // that one tmux, the tile it was opened from is the one its detach
 // relabels, and the tmux lives until the last row naming it is destroyed.
 
-func copyShell(t *testing.T, p *local.Plugin, srcID string, x int64) string {
+func copyShell(t *testing.T, p *local.Home, srcID string, x int64) string {
 	t.Helper()
 	ctx := context.Background()
 	src, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: srcID})
@@ -48,7 +48,7 @@ func (a attached) detach(t *testing.T) error {
 
 // attach opens tileID's shell and waits for the fake's echo, so the tmux is
 // held when it returns. A refused open returns the refusal instead.
-func attach(t *testing.T, p *local.Plugin, tileID string) (attached, error) {
+func attach(t *testing.T, p *local.Home, tileID string) (attached, error) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	up := make(chan *gridwellv1.OpenShellRequest, 2)
@@ -86,7 +86,7 @@ func attach(t *testing.T, p *local.Plugin, tileID string) (attached, error) {
 func TestACopiedShellStartsAndSharesItsSourcesTmux(t *testing.T) {
 	fake := shellsvctest.New()
 	fake.PaneCmd = "top"
-	p, a := shellPluginWithTile(t, fake)
+	p, a := shellHomeWithTile(t, fake)
 	b := copyShell(t, p, a, 2)
 
 	sb, err := attach(t, p, b)
@@ -120,7 +120,7 @@ func TestACopiedShellStartsAndSharesItsSourcesTmux(t *testing.T) {
 // and reuses its PTY.
 func TestASecondTileOnOneTmuxTakesItOver(t *testing.T) {
 	fake := shellsvctest.New()
-	p, a := shellPluginWithTile(t, fake)
+	p, a := shellHomeWithTile(t, fake)
 	b := copyShell(t, p, a, 2)
 
 	first, err := attach(t, p, a)
@@ -145,7 +145,7 @@ func TestASecondTileOnOneTmuxTakesItOver(t *testing.T) {
 // naming it; one never started is created by whichever tile opens it first.
 func TestAStartedTmuxIsNeverFabricatedBehindAPreview(t *testing.T) {
 	fake := shellsvctest.New()
-	p, a := shellPluginWithTile(t, fake)
+	p, a := shellHomeWithTile(t, fake)
 	b := copyShell(t, p, a, 2)
 	if _, err := p.SetTile(context.Background(), &gridwellv1.SetTileRequest{TileId: a,
 		Tile: &gridwellv1.Tile{Kind: "shell"}, Preview: []byte("preview")}); err != nil {
@@ -164,7 +164,7 @@ func TestAStartedTmuxIsNeverFabricatedBehindAPreview(t *testing.T) {
 // liveness probe answers dead.
 func TestAMissingShellRowRefusesAndSpawnsNothing(t *testing.T) {
 	fake := shellsvctest.New()
-	p, _ := shellPluginWithTile(t, fake)
+	p, _ := shellHomeWithTile(t, fake)
 	_, err := attach(t, p, "999")
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("OpenShell on a missing row = %v, want NotFound", err)
@@ -181,7 +181,7 @@ func TestAMissingShellRowRefusesAndSpawnsNothing(t *testing.T) {
 // A copy's probe asks its tmux, not its own id.
 func TestACopyProbesTheTmuxItNames(t *testing.T) {
 	fake := shellsvctest.New()
-	p, a := shellPluginWithTile(t, fake)
+	p, a := shellHomeWithTile(t, fake)
 	b := copyShell(t, p, a, 2)
 	fake.SetAlive(a, true)
 	resp, err := p.ShellTmuxAlive(context.Background(), &gridwellv1.ShellTmuxAliveRequest{TileId: b})
@@ -196,7 +196,7 @@ func TestACopyProbesTheTmuxItNames(t *testing.T) {
 func TestATmuxDiesWithTheLastRowNamingIt(t *testing.T) {
 	ctx := context.Background()
 	fake := shellsvctest.New()
-	p, a := shellPluginWithTile(t, fake)
+	p, a := shellHomeWithTile(t, fake)
 	b := copyShell(t, p, a, 2)
 	fake.SetAlive(a, true)
 	del := func(id string) {

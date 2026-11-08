@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 )
 
-func createTile(t *testing.T, p *local.Plugin, gridID string, tile *gridwellv1.Tile, data []byte) *gridwellv1.Tile {
+func createTile(t *testing.T, p *local.Home, gridID string, tile *gridwellv1.Tile, data []byte) *gridwellv1.Tile {
 	t.Helper()
 	r, err := p.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: gridID, Tile: tile, Content: data})
 	if err != nil {
@@ -20,7 +20,7 @@ func createTile(t *testing.T, p *local.Plugin, gridID string, tile *gridwellv1.T
 	return r.Tile
 }
 
-func getTile(t *testing.T, p *local.Plugin, id string) *gridwellv1.Tile {
+func getTile(t *testing.T, p *local.Home, id string) *gridwellv1.Tile {
 	t.Helper()
 	r, err := p.GetTile(context.Background(), &gridwellv1.GetTileRequest{TileId: id})
 	if err != nil {
@@ -34,7 +34,7 @@ func getTile(t *testing.T, p *local.Plugin, id string) *gridwellv1.Tile {
 // write is a user content edit, so no arm may bump;
 // store/version_rule_test.go is the whole table.
 func TestSetTileDispatchVersionSemantics(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
@@ -96,7 +96,7 @@ func TestSetTileDispatchVersionSemantics(t *testing.T) {
 // TestSetAndCreateRejectBadKinds: the dispatch surfaces a clear error for a
 // nil tile and an unknown kind rather than silently doing nothing.
 func TestSetAndCreateRejectBadKinds(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
@@ -123,8 +123,8 @@ func TestSetAndCreateRejectBadKinds(t *testing.T) {
 
 // Copying through the namespace yields an independent tile, with a new row id
 // and a new child grid, so the eager-copy rule holds across the RPC boundary.
-func TestCopyTileThroughPlugin(t *testing.T) {
-	p := openPlugin(t)
+func TestCopyTileThroughHome(t *testing.T) {
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
@@ -143,11 +143,11 @@ func TestCopyTileThroughPlugin(t *testing.T) {
 	}
 }
 
-// TestDeleteDoorToOtherNamespaceThroughPluginNoCascade: deleting a door to another namespace via the plugin
-// removes the tile but does not touch the remote grid it referenced — the
-// plugin's delete honors the shared-link semantics end to end.
-func TestDeleteDoorToOtherNamespaceThroughPluginNoCascade(t *testing.T) {
-	p := openPlugin(t)
+// TestDeleteDoorToOtherNamespaceThroughHomeNoCascade: deleting a door to another namespace
+// through home removes the tile but does not touch the remote grid it
+// referenced — home's delete honors the shared-link semantics end to end.
+func TestDeleteDoorToOtherNamespaceThroughHomeNoCascade(t *testing.T) {
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
@@ -171,11 +171,11 @@ func TestDeleteDoorToOtherNamespaceThroughPluginNoCascade(t *testing.T) {
 	}
 }
 
-// The workspace kind's plugin-level contract: CreateTile makes the metadata row,
+// The workspace kind's namespace-level contract: CreateTile makes the metadata row,
 // the layout follows through WriteContent with no bump, and SetTile refuses
 // the kind, so the mapping stays total.
 func TestWorkspaceDispatch(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 

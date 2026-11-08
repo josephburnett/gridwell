@@ -11,7 +11,7 @@ import (
 // writeback, one operation per call.
 
 func TestSetTileRenameArm(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
@@ -59,7 +59,7 @@ func TestSetTileRenameArm(t *testing.T) {
 }
 
 func TestSetTileContentZoomArm(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 	zoom := func(v float64) *float64 { return &v }
@@ -92,7 +92,7 @@ func TestSetTileContentZoomArm(t *testing.T) {
 // version bump; set and clear both round-trip; it reaches every kind that can
 // go live, url and shell alike; and it is refused off them.
 func TestSetTileFrozenArm(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 	frozen := func(v bool) *bool { return &v }
@@ -158,7 +158,7 @@ func TestSetTileFrozenArm(t *testing.T) {
 }
 
 func TestSetTileOneOperationPerCall(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 	zoom := func(v float64) *float64 { return &v }
@@ -181,7 +181,7 @@ func TestSetTileOneOperationPerCall(t *testing.T) {
 }
 
 func TestMoveTileDispatch(t *testing.T) {
-	p := openPlugin(t)
+	p := openHome(t)
 	root := rootGrid(t, p)
 	ctx := context.Background()
 
