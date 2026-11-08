@@ -75,8 +75,7 @@ cannot do that: it names the thing by what it is.
 
 Row ids stay resolvable as addresses forever, in both directions
 (`Adapter.resolveTile`, `Adapter.resolveGrid`), so a link stored under
-the older rule keeps naming the thing it named; re-storing one canonicalizes
-it forward (`namespace.Minter`). What a retirement destroys is the row: a
+the older rule keeps naming the thing it named. What a retirement destroys is the row: a
 recreated key comes back at the same address with a fresh row, holding none
 of the arrangement the retired one held, and every link stored against
 that row stays dead.

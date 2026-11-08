@@ -201,12 +201,9 @@ type copyDst struct {
 
 // createCopy stores one copy row with the bytes it is born with. The create
 // goes straight to the destination namespace rather than back through
-// CreateTile, so the link it may carry is canonicalized, spelled for its
-// holder and peeled into dst's frame here instead; see router.CreateTile.
+// CreateTile, so the link it may carry is spelled for its holder and peeled
+// into dst's frame here instead; see router.CreateTile.
 func (rt *router) createCopy(ctx context.Context, dst copyDst, dstGrid string, tile *pb.Tile, content []byte) (*pb.TileResponse, error) {
-	if err := rt.mintLinks(ctx, tile); err != nil {
-		return nil, err
-	}
 	if err := rt.spellLinks(ctx, dst.holder, tile); err != nil {
 		return nil, err
 	}

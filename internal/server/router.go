@@ -308,49 +308,11 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	if err := rt.refuseDisabled(m.GridId); err != nil {
 		return nil, err
 	}
-	if err := rt.mintLinks(ctx, m.Tile); err != nil {
-		return nil, err
-	}
 	if err := rt.spellLinks(ctx, m.GridId, m.Tile); err != nil {
 		return nil, err
 	}
 	resp, err := c.CreateTile(ctx, rpc.PeelRequest(rt.hop(m.GridId, transit), m))
 	return rt.tileResp(ctx, uuid, transit, resp, err)
-}
-
-// mintLinks canonicalizes the ids a tile is about to store, so a document
-// reached through a link never wears a second name.
-func (rt *router) mintLinks(ctx context.Context, t *pb.Tile) error {
-	if t == nil {
-		return nil
-	}
-	child, err := rt.mintRef(ctx, t.ChildGridId)
-	if err != nil {
-		return err
-	}
-	target, err := rt.mintRef(ctx, t.LinkTargetId)
-	if err != nil {
-		return err
-	}
-	t.ChildGridId, t.LinkTargetId = child, target
-	return nil
-}
-
-// mintRef canonicalizes one qualified link; an id nothing derives
-// answers itself.
-func (rt *router) mintRef(ctx context.Context, id string) (string, error) {
-	if id == "" {
-		return "", nil
-	}
-	c, local, uuid, _, ok := rt.srv.resolve(id)
-	if !ok {
-		return id, nil
-	}
-	minted, err := namespace.MintRef(ctx, c, local)
-	if err != nil {
-		return "", err
-	}
-	return rpc.QualifyID(uuid, minted), nil
 }
 
 // CopyTile runs at the nearest node that sees both ends (rpc.SharedOwner);
