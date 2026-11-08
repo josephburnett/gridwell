@@ -63,6 +63,9 @@ func (rt *router) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.Ti
 	if err := refuseUnclaimed(req); err != nil {
 		return nil, err
 	}
+	if rpc.MovesAcross(req) {
+		return nil, status.Error(gcodes.InvalidArgument, rpc.MoveAcross)
+	}
 	c, _, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err

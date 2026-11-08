@@ -75,3 +75,14 @@ func CopyWrites(c *pb.Tile, preview []byte) []*pb.SetTileRequest {
 	}
 	return out
 }
+
+// MoveAcross is the refusal of a move onto another source's grid than its
+// tile's (SourceOf): a source places only its own rows, so the router refuses
+// it before either source is asked, for home, the files and a far node alike.
+const MoveAcross = "a move to another source is refused"
+
+// MovesAcross reports a move whose grid is another source's than its tile's;
+// a move naming no grid stays where it is.
+func MovesAcross(req *pb.MoveTileRequest) bool {
+	return req.GetGridId() != "" && SourceOf(req.GetGridId()) != SourceOf(req.GetTileId())
+}

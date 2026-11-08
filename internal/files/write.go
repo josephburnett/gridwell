@@ -32,7 +32,7 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 	to := dir
 	if req.GridId != "" {
 		if rpc.ShapeOf(req.GridId) != rpc.ShapeKey {
-			return nil, status.Error(codes.InvalidArgument, "files: a move to another source is refused")
+			return nil, status.Error(codes.InvalidArgument, "files: "+rpc.MoveAcross)
 		}
 		if to, err = s.dirOf(req.GridId); err != nil {
 			return nil, err
