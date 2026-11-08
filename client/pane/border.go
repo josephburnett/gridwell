@@ -11,7 +11,7 @@ type BorderColors struct {
 	URL, URLFaded             string
 	URLLive, URLLiveFaded     string
 	Shell, ShellFaded         string
-	Host, HostFaded           string
+	Directory, DirectoryFaded string
 	Ephemeral, EphemeralFaded string
 }
 
@@ -25,10 +25,10 @@ type BorderInput struct {
 	TileKind     string
 	Focused      bool // the keyboard-focused pane in the split tree
 	URLLive      bool // a live native view renders into this pane
-	// InHostGrid is whether the viewed grid is a directory. It drives the
-	// Host family for a read-only host text tile; the grid view itself stays
-	// FamilyGrid, because every grid is a grid.
-	InHostGrid bool
+	// InDirectory is whether the viewed grid is a directory
+	// (cache.Grid.Directory). It drives the Directory family for the grid and
+	// for a text tile in it; a url or shell tile in one keeps its kind's.
+	InDirectory bool
 	// Ephemeral is the descended tile living in the scratch grid, so it is
 	// deleted on ascent. Only meaningful with HasTextFocus and TileKnown.
 	Ephemeral bool
@@ -40,12 +40,12 @@ type BorderInput struct {
 type Family int
 
 const (
-	FamilyGrid    Family = iota // any grid, at any depth, in any plugin
-	FamilyText                  // a descent into a text tile
-	FamilyURL                   // a descent into a url tile, frozen
-	FamilyURLLive               // a descent into a url tile with a live view
-	FamilyShell                 // a descent into a shell tile
-	FamilyHost                  // a read-only text tile in a host-content grid
+	FamilyGrid      Family = iota // any grid of home's or a far node's, at any depth
+	FamilyText                    // a descent into a text tile
+	FamilyURL                     // a descent into a url tile, frozen
+	FamilyURLLive                 // a descent into a url tile with a live view
+	FamilyShell                   // a descent into a shell tile
+	FamilyDirectory               // a directory, or a text tile in one: outside the system
 	// FamilyEphemeral is a descent into a scratch-grid tile. It beats the kind
 	// color, because ascending deletes the tile.
 	FamilyEphemeral
@@ -67,13 +67,15 @@ func FamilyOf(s BorderInput) Family {
 			case k.Live == rpc.DescentShell:
 				return FamilyShell
 			case k.Content == rpc.ContentBody:
-				if s.InHostGrid {
-					return FamilyHost
+				if s.InDirectory {
+					return FamilyDirectory
 				}
 				return FamilyText
 			}
 		}
-		return FamilyGrid
+	}
+	if s.InDirectory {
+		return FamilyDirectory
 	}
 	return FamilyGrid
 }
@@ -89,8 +91,8 @@ func BorderColor(s BorderInput, c BorderColors) string {
 		return focused(s, c.URL, c.URLFaded)
 	case FamilyShell:
 		return focused(s, c.Shell, c.ShellFaded)
-	case FamilyHost:
-		return focused(s, c.Host, c.HostFaded)
+	case FamilyDirectory:
+		return focused(s, c.Directory, c.DirectoryFaded)
 	case FamilyText:
 		return focused(s, c.Text, c.TextFaded)
 	}

@@ -27,8 +27,8 @@ const (
 	// HueDoor is every door, a door to another namespace included: a
 	// cross-plugin door is dashed, never recolored.
 	HueDoor
-	// HueHost is host content in the text family: the plugin border.
-	HueHost
+	// HueDirectory is a row of a directory: the outside colour.
+	HueDirectory
 	HueURL
 	HueText
 )
@@ -42,7 +42,7 @@ func BannerHue(t *gridwellv1.Tile, outside bool) Hue {
 	case rpc.IsDoorToOtherNamespace(t):
 		return HueDoor
 	case outside:
-		return HueHost
+		return HueDirectory
 	case k.Descends == rpc.DescendGrid:
 		return HueDoor
 	case k.Live == rpc.DescentURL:

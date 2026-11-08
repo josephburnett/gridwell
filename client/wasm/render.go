@@ -495,7 +495,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 				}
 			} else {
-				inHost := g.Directory()
+				inDirectory := g.Directory()
 				picked := map[string]bool{}
 				for _, id := range a.selectionShown(p) {
 					picked[id] = true
@@ -512,7 +512,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					w := float64(n.W) * cellSize
 					h := float64(n.H) * cellSize
 					nn := n
-					outside := tilepreview.Outside(nn, inHost)
+					outside := tilepreview.Outside(nn, inDirectory)
 					dashed := isLinkTile(nn)
 					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
 					a.drawPluginHealthTint(nn, left, top, w, h)
@@ -839,8 +839,8 @@ func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
 		return a.pal.ShellBorder
 	case tilepreview.HueDoor:
 		return a.pal.FocusBorder
-	case tilepreview.HueHost:
-		return a.pal.PluginBorder
+	case tilepreview.HueDirectory:
+		return a.pal.DirectoryBorder
 	case tilepreview.HueURL:
 		return a.pal.URLLine
 	case tilepreview.HueText:
@@ -914,7 +914,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 	hidden dragdrop.Carry,
 ) {
 	c := a.cctx
-	childInHost := child.Directory()
+	childInDirectory := child.Directory()
 	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
 		if hidden.Has(n.Id) {
@@ -930,7 +930,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		}
 		nn := n
 		// url and shell children skip their JPEGs, so a door's interior reads uniformly.
-		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tilepreview.Outside(nn, childInHost), borderPx, false)
+		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tilepreview.Outside(nn, childInDirectory), borderPx, false)
 	}
 }
 
@@ -951,7 +951,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 	case k.Content == rpc.ContentBody:
 		fill, line = a.pal.MarkdownFill, a.pal.MarkdownLine
 		if outside {
-			fill, line = a.pal.PluginFill, a.pal.PluginBorder
+			fill, line = a.pal.DirectoryFill, a.pal.DirectoryBorder
 		}
 	case k.Content == rpc.ContentLayout:
 		fill, line = a.pal.WorkspaceFill, a.pal.WorkspaceBorder
@@ -1021,7 +1021,7 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 		}
 	}
 	if gridOK && g.Directory() {
-		in.InHostGrid = true
+		in.InDirectory = true
 	}
 	return in
 }
@@ -1038,8 +1038,8 @@ func (a *App) paneBorderColors() pane.BorderColors {
 		URLLiveFaded:   a.pal.URLLiveLineFaded,
 		Shell:          a.pal.ShellBorder,
 		ShellFaded:     a.pal.ShellBorderFaded,
-		Host:           a.pal.PluginBorder,
-		HostFaded:      a.pal.PluginBorderFaded,
+		Directory:      a.pal.DirectoryBorder,
+		DirectoryFaded: a.pal.DirectoryBorderFaded,
 		Ephemeral:      a.pal.EphemeralBorder,
 		EphemeralFaded: a.pal.EphemeralBorderFaded,
 	}

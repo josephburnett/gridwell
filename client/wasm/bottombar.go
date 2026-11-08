@@ -59,8 +59,8 @@ func (a *App) barTheme() (band, button string) {
 		return a.pal.URLFill, a.pal.URLLiveLine
 	case pane.FamilyShell:
 		return a.pal.ShellFill, a.pal.ShellBorder
-	case pane.FamilyHost:
-		return a.pal.BarPluginBand, a.pal.PluginBorder
+	case pane.FamilyDirectory:
+		return a.pal.BarDirectoryBand, a.pal.DirectoryBorder
 	case pane.FamilyEphemeral:
 		return a.pal.BarEphemeralBand, a.pal.EphemeralBorder
 	}

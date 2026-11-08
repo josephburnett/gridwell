@@ -13,13 +13,17 @@ func door(child string) *gridwellv1.Tile {
 
 func TestOutside(t *testing.T) {
 	cases := []struct {
-		name   string
-		tile   *gridwellv1.Tile
-		inHost bool
-		want   bool
+		name        string
+		tile        *gridwellv1.Tile
+		inDirectory bool
+		want        bool
 	}{
 		{"a text tile in a Gridwell grid", &gridwellv1.Tile{Kind: rpc.KindText}, false, false},
-		{"a text tile in a host-content grid", &gridwellv1.Tile{Kind: rpc.KindText}, true, true},
+		{"a file in a directory", &gridwellv1.Tile{Kind: rpc.KindText}, true, true},
+		{"a home door into a directory",
+			&gridwellv1.Tile{Kind: rpc.KindDoor, Link: true, GridId: "n1/1", ChildGridId: "n1/" + rpc.KeyTileID("/srv")}, false, true},
+		{"a directory's door into its subdirectory",
+			&gridwellv1.Tile{Kind: rpc.KindDoor, GridId: "n1/" + rpc.KeyTileID("/srv"), ChildGridId: "n1/" + rpc.KeyTileID("/srv/a")}, true, true},
 		{"a shell anywhere", &gridwellv1.Tile{Kind: rpc.KindShell}, false, true},
 		{"an interior door", door("n1/2"), false, false},
 		{"a door to another namespace into another namespace", door("p9/2"), false, true},
@@ -32,7 +36,7 @@ func TestOutside(t *testing.T) {
 		{"a workspace tile", &gridwellv1.Tile{Kind: rpc.KindWorkspace}, false, false},
 	}
 	for _, c := range cases {
-		if got := Outside(c.tile, c.inHost); got != c.want {
+		if got := Outside(c.tile, c.inDirectory); got != c.want {
 			t.Errorf("%s: Outside = %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -48,8 +52,8 @@ func TestBannerHue(t *testing.T) {
 		{"shell wins over outside", &gridwellv1.Tile{Kind: rpc.KindShell}, true, HueShell},
 		{"door to another namespace stays a door", door("p9/2"), true, HueDoor},
 		{"interior door", door("n1/2"), false, HueDoor},
-		{"host text is the plugin hue", &gridwellv1.Tile{Kind: rpc.KindText}, true, HueHost},
-		{"host url is the plugin hue too", &gridwellv1.Tile{Kind: rpc.KindURL}, true, HueHost},
+		{"a file's text is the directory hue", &gridwellv1.Tile{Kind: rpc.KindText}, true, HueDirectory},
+		{"a page file is the directory hue too", &gridwellv1.Tile{Kind: rpc.KindURL}, true, HueDirectory},
 		{"text", &gridwellv1.Tile{Kind: rpc.KindText}, false, HueText},
 		{"url", &gridwellv1.Tile{Kind: rpc.KindURL}, false, HueURL},
 		{"pane has no hue of its own", &gridwellv1.Tile{Kind: rpc.KindWorkspace}, false, HueMuted},
@@ -68,8 +72,8 @@ func TestBannerHueAgreesWithOutside(t *testing.T) {
 		{Kind: rpc.KindShell}, {Kind: rpc.KindText}, {Kind: rpc.KindURL}, door("n1/2"), door("p9/2"),
 	} {
 		hue := BannerHue(tile, Outside(tile, false))
-		if hue == HueHost {
-			t.Errorf("%v: a Gridwell-owned row wears the host hue", tile)
+		if hue == HueDirectory {
+			t.Errorf("%v: a Gridwell-owned row wears the directory hue", tile)
 		}
 	}
 }

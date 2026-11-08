@@ -70,11 +70,12 @@ type Palette struct {
 	FocusBorder    string
 	// FocusBorderFaded outlines a descended but unfocused pane.
 	FocusBorderFaded string
-	// PluginBorder reads as a boundary, not a grid you can place in.
-	PluginBorder      string
-	PluginBorderFaded string
-	// PluginFill is host content's body, so it does not read as editable.
-	PluginFill string
+	// DirectoryBorder is the outside colour, orange: a directory, its door
+	// and a pane on one read as outside the system (2026-11-07).
+	DirectoryBorder      string
+	DirectoryBorderFaded string
+	// DirectoryFill is a file's body in a directory.
+	DirectoryFill string
 	// Grid lines are uniformly blue: every grid is a grid, whatever owns it.
 	GridLineInterior string
 	// Each kind has its own identity: text olive green, url purple.
@@ -148,7 +149,7 @@ type Palette struct {
 	// kind's fill, so they have no field of their own.
 	BarGridBand      string
 	BarTextBand      string
-	BarPluginBand    string
+	BarDirectoryBand string
 	BarEphemeralBand string
 	// BarInk is the bar's own lettering, over a band of any family.
 	BarInk string
@@ -203,9 +204,9 @@ var dark = Palette{
 	FocusBorder:      "#4a6fff",
 	FocusBorderFaded: "#2c3d70",
 
-	PluginBorder:      "#7a6a4a",
-	PluginBorderFaded: "#4a4233",
-	PluginFill:        "#2a2419",
+	DirectoryBorder:      "#d9822b",
+	DirectoryBorderFaded: "#7a4c1f",
+	DirectoryFill:        "#2e1f10",
 
 	GridLineInterior: "#1c2540",
 
@@ -257,7 +258,7 @@ var dark = Palette{
 
 	BarGridBand:      "#151b2e",
 	BarTextBand:      "#1b2213",
-	BarPluginBand:    "#241e12",
+	BarDirectoryBand: "#2a1a0c",
 	BarEphemeralBand: "#1d1f24",
 	BarInk:           "#dff4f4",
 	CircleRim:        "#dff4f4",
@@ -302,9 +303,9 @@ var light = Palette{
 	FocusBorder:      "#4a6fff",
 	FocusBorderFaded: "#a9b8ff",
 
-	PluginBorder:      "#8a7748",
-	PluginBorderFaded: "#c3b890",
-	PluginFill:        "#f3ecdc",
+	DirectoryBorder:      "#c8650f",
+	DirectoryBorderFaded: "#e8b98a",
+	DirectoryFill:        "#fbeee0",
 
 	GridLineInterior: "#d6dcec",
 
@@ -356,7 +357,7 @@ var light = Palette{
 
 	BarGridBand:      "#e3e9f8",
 	BarTextBand:      "#eef4e0",
-	BarPluginBand:    "#f5efe2",
+	BarDirectoryBand: "#fbe9d6",
 	BarEphemeralBand: "#eceef2",
 	BarInk:           "#1d2e2e",
 	CircleRim:        "#ffffff",

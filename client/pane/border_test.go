@@ -14,8 +14,8 @@ func testColors() BorderColors {
 		URLLiveFaded:   "URL_LIVE_FADED",
 		Shell:          "SHELL",
 		ShellFaded:     "SHELL_FADED",
-		Host:           "HOST",
-		HostFaded:      "HOST_FADED",
+		Directory:      "DIRECTORY",
+		DirectoryFaded: "DIRECTORY_FADED",
 		Ephemeral:      "EPHEMERAL",
 		EphemeralFaded: "EPHEMERAL_FADED",
 	}
@@ -118,18 +118,23 @@ func TestBorderColorUnknownKindFallback(t *testing.T) {
 	}
 }
 
-func TestBorderColorHostGridIsBlue(t *testing.T) {
-	// Viewing a host-content grid is still viewing a grid.
+func TestBorderColorDirectoryIsTheOutsideColour(t *testing.T) {
+	// A directory is outside the system, so a pane on one wears its colour
+	// (2026-11-07), and a url tile descended into in one is still a url.
 	in := BorderInput{
 		DescentDepth: 1,
-		InHostGrid:   true,
+		InDirectory:  true,
 	}
-	if got := BorderColor(in, testColors()); got != "FOCUS_FADED" {
-		t.Errorf("host grid + not focused: got %q, want FOCUS_FADED", got)
+	if got := BorderColor(in, testColors()); got != "DIRECTORY_FADED" {
+		t.Errorf("directory + not focused: got %q, want DIRECTORY_FADED", got)
 	}
 	in.Focused = true
-	if got := BorderColor(in, testColors()); got != "FOCUS" {
-		t.Errorf("source grid + focused: got %q, want FOCUS", got)
+	if got := BorderColor(in, testColors()); got != "DIRECTORY" {
+		t.Errorf("directory + focused: got %q, want DIRECTORY", got)
+	}
+	page := BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", InDirectory: true, Focused: true}
+	if got := BorderColor(page, testColors()); got != "URL" {
+		t.Errorf("url in a directory + focused: got %q, want URL", got)
 	}
 }
 
@@ -150,22 +155,21 @@ func TestBorderColorShellTile(t *testing.T) {
 	}
 }
 
-func TestBorderColorTextInHostGridIsHost(t *testing.T) {
-	// A text tile inside a host-content grid is a read-only view onto host
-	// state, so the editable color would lie. A url tile in one is still a url.
+func TestBorderColorTextInADirectoryIsTheOutsideColour(t *testing.T) {
+	// A text tile inside a directory is a file, outside the system.
 	in := BorderInput{
 		HasTextFocus: true,
 		DescentDepth: 1,
 		TileKnown:    true,
 		TileKind:     "text",
-		InHostGrid:   true,
+		InDirectory:  true,
 		Focused:      true,
 	}
-	if got := BorderColor(in, testColors()); got != "HOST" {
+	if got := BorderColor(in, testColors()); got != "DIRECTORY" {
 		t.Errorf("text-in-host-grid + focused: got %q, want HOST", got)
 	}
 	in.Focused = false
-	if got := BorderColor(in, testColors()); got != "HOST_FADED" {
+	if got := BorderColor(in, testColors()); got != "DIRECTORY_FADED" {
 		t.Errorf("text-in-source-grid + not focused: got %q, want HOST_FADED", got)
 	}
 }
@@ -214,7 +218,9 @@ func TestFamilyOf(t *testing.T) {
 	}{
 		{"grid", BorderInput{}, FamilyGrid},
 		{"text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text"}, FamilyText},
-		{"host text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InHostGrid: true}, FamilyHost},
+		{"a file's text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", InDirectory: true}, FamilyDirectory},
+		{"a directory", BorderInput{InDirectory: true}, FamilyDirectory},
+		{"a page file keeps the url family", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", InDirectory: true}, FamilyURL},
 		{"url frozen", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url"}, FamilyURL},
 		{"url live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true}, FamilyURLLive},
 		{"shell", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell"}, FamilyShell},
