@@ -18,8 +18,8 @@ const (
 
 // Swatch carries no coordinate, because a click has no destination.
 type Swatch struct {
-	// IsPlugin marks a plugin, connection or declared-root row.
-	IsPlugin bool
+	// IsSwatch marks a source, connection or declared-root row.
+	IsSwatch bool
 	// Promote marks the bar's current-visit crumb, dragged as a template.
 	Promote bool
 	// Visits marks a primitive whose table row declares a click behavior.
@@ -31,7 +31,7 @@ type Swatch struct {
 // before Visits.
 func ClickOn(s Swatch) ClickTarget {
 	switch {
-	case s.IsPlugin:
+	case s.IsSwatch:
 		return ClickEnter
 	case s.Promote:
 		return ClickNothing

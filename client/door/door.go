@@ -10,26 +10,25 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// GridName is what a row's declared grid is called everywhere it is shown. An
-// entry stands alone with no plugin row above it, so it says whose it is,
-// most specific first so a clipped name still tells entries apart:
-// "Feed (hey)". Every entry of every row is named this way.
-func GridName(row, entry string) string {
+// GridName is what a row's grid is called everywhere it is shown. A grid's
+// swatch stands alone with no row above it, so it says whose it is, most
+// specific first so a clipped name still tells two apart: "Docs (files)".
+// Every grid of every row is named this way.
+func GridName(row, grid string) string {
 	switch {
-	case entry == "":
+	case grid == "":
 		return row
 	case row == "":
-		return entry
+		return grid
 	}
-	return entry + " (" + row + ")"
+	return grid + " (" + row + ")"
 }
 
-// GridPlugin shapes one of a row's SourceGrids as a pseudo-row, so every
-// downstream flow takes the ordinary row path. It is a door and not a
-// declarer, so it carries none of the row's entries, which would show every
-// grid twice; its framing is the entry's, so a grid reopens where
-// it was left.
-func GridPlugin(pl *gridwellv1.SourceInfo, e *gridwellv1.SourceGrid) *gridwellv1.SourceInfo {
+// GridRow shapes one of a row's SourceGrids as a pseudo-row, so every
+// downstream flow takes the ordinary row path. It carries none of the row's
+// grids, which would show every grid twice; its framing is the grid's, so a
+// grid reopens where it was left.
+func GridRow(pl *gridwellv1.SourceInfo, e *gridwellv1.SourceGrid) *gridwellv1.SourceInfo {
 	pseudo := proto.Clone(pl).(*gridwellv1.SourceInfo)
 	pseudo.RootGridId = e.GridId
 	pseudo.RootViewCx, pseudo.RootViewCy, pseudo.RootViewZoom = e.ViewCx, e.ViewCy, e.ViewZoom
@@ -49,7 +48,7 @@ const (
 	None     Kind = iota
 	Tile          // a real tile row, renamable where you stand
 	Declared      // a declared SourceGrid's pseudo swatch
-	Root          // a row's own swatch, for a row that is a place. A plugin has none.
+	Root          // a row's own swatch, for a row that is a place. The files have none.
 )
 
 // DoorInto finds the door tile whose child grid is anchor.
@@ -65,21 +64,21 @@ func DoorInto(anchor string, tiles map[string]*gridwellv1.Tile) (*gridwellv1.Til
 // Find resolves the door into the level rooted at anchor, most specific
 // first: the parent level's door whose child is anchor, a SourceGrid declaring
 // it, then the row rooted at it. None leaves callers their fallback.
-func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gridwellv1.SourceInfo) (*gridwellv1.Tile, Kind) {
+func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, sources []*gridwellv1.SourceInfo) (*gridwellv1.Tile, Kind) {
 	if anchor == "" {
 		return nil, None
 	}
 	if t, ok := DoorInto(anchor, parentTiles); ok {
 		return t, Tile
 	}
-	for _, pl := range plugins {
+	for _, pl := range sources {
 		for _, e := range pl.SourceGrids {
 			if e.GridId == anchor {
-				return rpc.PluginDoorTile(GridPlugin(pl, e)), Declared
+				return rpc.PluginDoorTile(GridRow(pl, e)), Declared
 			}
 		}
 	}
-	for _, pl := range plugins {
+	for _, pl := range sources {
 		if pl.RootGridId == anchor {
 			return rpc.PluginDoorTile(pl), Root
 		}
@@ -90,9 +89,9 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gri
 // GridGlyph is the glyph a declared grid declares for gridID, or "". It is the
 // one override the grid cannot carry: the trash grid is an ordinary local
 // grid, and only the declaration knows its glyph.
-func GridGlyph(gridID string, plugins []*gridwellv1.SourceInfo) string {
-	for i := range plugins {
-		for _, e := range plugins[i].SourceGrids {
+func GridGlyph(gridID string, sources []*gridwellv1.SourceInfo) string {
+	for i := range sources {
+		for _, e := range sources[i].SourceGrids {
 			if e.GridId == gridID && e.Glyph != "" {
 				return e.Glyph
 			}
@@ -114,18 +113,18 @@ func RowGlyph(pl *gridwellv1.SourceInfo) string {
 
 // GlyphFor is a grid's identity glyph, from declarations only, most specific
 // first: a SourceGrid naming it, a row rooted exactly here, the cached grid's
-// own glyph, the glyph of the door to another namespace, then the plugin row's
+// own glyph, the glyph of the door to another namespace, then the source row's
 // glyph by namespace. A
 // row rooted here wins over the grid's own glyph because a connection's root
 // is the far node's home grid, which declares the far node's glyph. The door to
 // another namespace is looked up by exact uuid, since the node's own id prefixes
 // "<id>/<conn>". There is always an answer, a crumb with no glyph being a blank
 // square.
-func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.SourceInfo) string {
-	if g := GridGlyph(gridID, plugins); g != "" {
+func GlyphFor(gridID string, grid *gridwellv1.Grid, sources []*gridwellv1.SourceInfo) string {
+	if g := GridGlyph(gridID, sources); g != "" {
 		return g
 	}
-	if pl, ok := ByRoot(gridID, plugins); ok {
+	if pl, ok := ByRoot(gridID, sources); ok {
 		return RowGlyph(pl)
 	}
 	if grid != nil {
@@ -133,14 +132,14 @@ func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.Source
 			return grid.Glyph
 		}
 		if grid.NodeNs != "" {
-			if pl, ok := byUUID(grid.NodeNs, plugins); ok {
+			if pl, ok := byUUID(grid.NodeNs, sources); ok {
 				return RowGlyph(pl)
 			}
 			return rpc.GlyphGlobe
 		}
 		return rpc.GlyphDoor
 	}
-	if pl, ok := byUUID(rowOf(gridID), plugins); ok {
+	if pl, ok := byUUID(rowOf(gridID), sources); ok {
 		return RowGlyph(pl)
 	}
 	return rpc.GlyphDoor
@@ -155,12 +154,12 @@ func rowOf(gridID string) string {
 	return rpc.UUIDOf(gridID)
 }
 
-// Place is one grid a menu row is a door onto: the row that names it, a
-// pseudo-row for an entry, and the entry it was declared by, nil for the
-// row's own grid.
+// Place is one grid a menu row is a door onto: the row that names it, or a
+// pseudo-row for one of its SourceGrids, and that grid, nil for the row's
+// own grid.
 type Place struct {
-	Plugin *gridwellv1.SourceInfo
-	Grid   *gridwellv1.SourceGrid
+	Row  *gridwellv1.SourceInfo
+	Grid *gridwellv1.SourceGrid
 }
 
 // PlacesOf enumerates the doors one menu row declares, in declaration
@@ -169,22 +168,22 @@ type Place struct {
 func PlacesOf(pl *gridwellv1.SourceInfo) []Place {
 	out := make([]Place, 0, 1+len(pl.SourceGrids))
 	if pl.RootGridId != "" {
-		out = append(out, Place{Plugin: pl})
+		out = append(out, Place{Row: pl})
 	}
 	for _, e := range pl.SourceGrids {
 		if e.GridId == "" {
 			continue
 		}
-		out = append(out, Place{Plugin: GridPlugin(pl, e), Grid: e})
+		out = append(out, Place{Row: GridRow(pl, e), Grid: e})
 	}
 	return out
 }
 
 // Places is PlacesOf over a whole menu, rows in order and each row's places
 // directly after it.
-func Places(plugins []*gridwellv1.SourceInfo) []Place {
-	out := make([]Place, 0, len(plugins))
-	for _, pl := range plugins {
+func Places(sources []*gridwellv1.SourceInfo) []Place {
+	out := make([]Place, 0, len(sources))
+	for _, pl := range sources {
 		out = append(out, PlacesOf(pl)...)
 	}
 	return out
@@ -193,20 +192,20 @@ func Places(plugins []*gridwellv1.SourceInfo) []Place {
 // ByRoot finds the door rooted exactly at gridID. Rooted, not by
 // namespace: a connection row's uuid "<id>/<conn>" is not a prefix of its
 // root "<id>/<conn>/<remote-home>/<n>".
-func ByRoot(gridID string, plugins []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo, bool) {
+func ByRoot(gridID string, sources []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo, bool) {
 	if gridID == "" {
 		return nil, false
 	}
-	for _, p := range Places(plugins) {
-		if p.Plugin.RootGridId == gridID {
-			return p.Plugin, true
+	for _, p := range Places(sources) {
+		if p.Row.RootGridId == gridID {
+			return p.Row, true
 		}
 	}
 	return nil, false
 }
 
-func byUUID(u string, plugins []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo, bool) {
-	for _, pl := range plugins {
+func byUUID(u string, sources []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo, bool) {
+	for _, pl := range sources {
 		if pl.Uuid == u {
 			return pl, true
 		}

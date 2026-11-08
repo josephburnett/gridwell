@@ -125,7 +125,7 @@ func (a *App) installTestHook() {
 		// the one observable of a view preference whose only other evidence
 		// is canvas pixels.
 		"theme":         js.FuncOf(func(js.Value, []js.Value) any { return a.themeName.String() }),
-		"plugins":       js.FuncOf(a.thPlugins),
+		"sources":       js.FuncOf(a.thSources),
 		"menu":          js.FuncOf(a.thMenu),
 		"ghost":         js.FuncOf(a.thGhost),
 		"cellCenter":    js.FuncOf(a.thCellCenter),
@@ -503,7 +503,7 @@ func (a *App) thShellViews(js.Value, []js.Value) any {
 }
 
 // thShellVisitURL fires the focused shell's url-click path, what xterm's link
-// plugin activate callback does, because a terminal cell cannot be hit-tested
+// source activate callback does, because a terminal cell cannot be hit-tested
 // from the canvas. Mutates state.
 func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 	if len(args) >= 1 && args[0].Type() == js.TypeString {
@@ -719,15 +719,15 @@ func (a *App) paneSelection(p *pane.Pane) []any {
 	return stringsToAny(g.Meta.GetSelection())
 }
 
-// thPlugins returns the configured menu rows: identity, the row's own grid
+// thSources returns the configured menu rows: identity, the row's own grid
 // where it has one, declared grids, sourcehealth class. Empty until
-// Handshake lands; the driver polls. A plugin names no grid of its own, so
+// Handshake lands; the driver polls. A source names no grid of its own, so
 // rootGridID is empty for one and its grids are where a spec finds a
 // grid. scratchGridID is the root grid's stamp, empty until that grid is
 // cached, as scratch.For reads it.
-func (a *App) thPlugins(js.Value, []js.Value) any {
-	out := make([]any, 0, len(a.plugins))
-	for i, pl := range a.plugins {
+func (a *App) thSources(js.Value, []js.Value) any {
+	out := make([]any, 0, len(a.sources))
+	for i, pl := range a.sources {
 		scratchGridID := ""
 		if g, ok := a.c.Grid(pl.RootGridId); ok {
 			scratchGridID = g.Meta.ScratchGridId
@@ -749,10 +749,10 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 			"label":         pl.Label,
 			"uuid":          pl.Uuid,
 			"rootGridID":    pl.RootGridId,
-			"pluginGrids":   entries,
+			"sourceGrids":   entries,
 			"scratchGridID": scratchGridID,
 			"infoError":     pl.InfoError,
-			"status":        pluginStatusName(pl),
+			"status":        sourceStatusName(pl),
 			"rootViewCx":    pl.RootViewCx,
 			"rootViewCy":    pl.RootViewCy,
 			"rootViewZoom":  pl.RootViewZoom,
@@ -761,9 +761,9 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 	return out
 }
 
-// pluginStatusName is the stable string for a row's sourcehealth class,
-// shared by thPlugins/thMenu; "" for a row sourcehealth does not classify.
-func pluginStatusName(pl *gridwellv1.SourceInfo) string {
+// sourceStatusName is the stable string for a row's sourcehealth class,
+// shared by thSources/thMenu; "" for a row sourcehealth does not classify.
+func sourceStatusName(pl *gridwellv1.SourceInfo) string {
 	st, classified := sourcehealth.Classify(pl)
 	if !classified {
 		return ""
@@ -778,7 +778,7 @@ func pluginStatusName(pl *gridwellv1.SourceInfo) string {
 }
 
 // thMenu returns the + menu for the focused pane. The rects are
-// the ones menuTileIndexAt hit-tests, so a click at an entry's center lands
+// the ones menuTileIndexAt hit-tests, so a click at an item's center lands
 // on that swatch.
 func (a *App) thMenu(js.Value, []js.Value) any {
 	p, _, ok := a.focusedPaneRect()
@@ -793,28 +793,28 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		tx, ty, tw, th := a.menuTileRect(p, i)
 		e := map[string]any{
 			"index":    i,
-			"isPlugin": item.isPlugin,
+			"isSwatch": item.isSwatch,
 			"x":        tx,
 			"y":        ty,
 			"w":        tw,
 			"h":        th,
 		}
-		if item.isPlugin {
-			e["connection"] = rpc.IsConnectionRow(item.plugin)
-			e["label"] = item.plugin.Label
-			e["uuid"] = item.plugin.Uuid
-			e["rootGridID"] = item.plugin.RootGridId
-			e["status"] = pluginStatusName(item.plugin)
+		if item.isSwatch {
+			e["connection"] = rpc.IsConnectionRow(item.source)
+			e["label"] = item.source.Label
+			e["uuid"] = item.source.Uuid
+			e["rootGridID"] = item.source.RootGridId
+			e["status"] = sourceStatusName(item.source)
 			// The exact selector drawMenuItem renders.
-			e["glyph"] = door.RowGlyph(item.plugin)
+			e["glyph"] = door.RowGlyph(item.source)
 		} else {
 			e["kind"] = templateKindName(item.primitive)
 		}
 		// A declared grid reports its identity, but the label stays
 		// door.GridName's, the one the banner draws: a second name for
 		// one door would let a spec pin the wrong one.
-		if item.entry != nil {
-			e["entry"] = item.entry.Id
+		if item.grid != nil {
+			e["sourceGrid"] = item.grid.Id
 		}
 		entries = append(entries, e)
 	}
@@ -824,13 +824,13 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		"plusX": px,
 		"plusY": py,
 		"items": entries,
-		// The plugin section's chevron strip. The rect is the one
+		// The source section's chevron strip. The rect is the one
 		// pointInMenuToggle hit-tests, so a click at its center works the
 		// control.
 		"toggle": map[string]any{
 			"present":  show.Toggle,
 			"chevron":  show.Chevron.String(),
-			"expanded": show.Plugins,
+			"expanded": show.Swatches,
 			"x":        tr.X,
 			"y":        tr.Y,
 			"w":        tr.W,
@@ -965,7 +965,7 @@ func (a *App) thBar(js.Value, []js.Value) any {
 			e["closeOnly"] = nc.CloseOnly
 			if nc.Crumb.Anchor != "" {
 				// The exact selector drawChainCrumb renders.
-				e["glyph"] = a.pluginGlyph(nc.Crumb.Anchor)
+				e["glyph"] = a.sourceGlyph(nc.Crumb.Anchor)
 			}
 		}
 		out = append(out, e)

@@ -138,7 +138,7 @@ func TestAHeldRowTakesWhatThePlacementDidNotSet(t *testing.T) {
 	}
 }
 
-// A plugin mints the row a placement writes into, so its answer names another
+// A source mints the row a placement writes into, so its answer names another
 // id and no echo will ever name this one: the answer releases the hold.
 func TestAnAnswerUnderAMintedIdReleasesTheHold(t *testing.T) {
 	c := New()

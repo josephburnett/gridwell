@@ -34,7 +34,7 @@ func (a *App) flushDirtyText() {
 // an async save on a dying page loses a debounce window of typing.
 func (a *App) flushTileContent(tileID string) {
 	// A leaf link's edits save under its target's id, so the write routes to
-	// the plugin that owns the bytes rather than the link row, which the
+	// the source that owns the bytes rather than the link row, which the
 	// store refuses.
 	cid := a.contentKey(tileID)
 	data, dirty := a.c.DirtyContent(cid)

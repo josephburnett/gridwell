@@ -13,7 +13,7 @@ import (
 func TestClassifyTable(t *testing.T) {
 	// The one shape a root's swatch takes, rooted at the grid rather
 	// than at the files.
-	grid := door.GridPlugin(&gridwellv1.SourceInfo{Label: "files"},
+	grid := door.GridRow(&gridwellv1.SourceInfo{Label: "files"},
 		&gridwellv1.SourceGrid{Id: "/docs", Label: "Docs", GridId: "u/2"})
 	cases := []struct {
 		name   string

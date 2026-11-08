@@ -101,7 +101,7 @@ type Attach struct {
 	TileID string
 	// Session is "" from a client that names none, such as a seam test.
 	Session string
-	// Cols/Rows are 0 when absent or unparseable; the serving plugin
+	// Cols/Rows are 0 when absent or unparseable; the serving source
 	// substitutes its defaults, so the API never invents a size.
 	Cols int
 	Rows int

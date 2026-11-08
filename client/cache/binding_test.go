@@ -135,7 +135,7 @@ func TestARowHasOneHomeInTheCache(t *testing.T) {
 	}
 }
 
-// A plugin row carries no claim, version 0 and no blob, so its event is the
+// A source row carries no claim, version 0 and no blob, so its event is the
 // only news that its bytes moved: a TileChanged that says content_changed
 // drops the clean body it names, a dirty one stays for its save to reconcile,
 // and a framing event, a client's own patch or a refetch of the same row ages
@@ -202,7 +202,7 @@ func TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo(t *testing.T) {
 	})
 }
 
-// A body's generation names the bytes the cache holds, not the row: a plugin
+// A body's generation names the bytes the cache holds, not the row: a source
 // body read again after its event said it moved gets a new one at the same
 // version, and so does every edit, so a picture or wrap keyed by it is never
 // one of other bytes; a save of the bytes already held keeps it.
@@ -251,7 +251,7 @@ func TestAGenerationNamesTheBytesNotTheRow(t *testing.T) {
 
 // A row whose source names its bytes (Tile.content_stamp) is aged by the
 // stamp, as a home row is by its version: the echo of bytes the body already
-// holds, told or not, keeps it, so text typed into a plugin body is never
+// holds, told or not, keeps it, so text typed into a source body is never
 // dropped by its own save's echo; another stamp, by event or by refetch, drops
 // a clean body; and a row that moved stamp while a read was out refuses the
 // reply.

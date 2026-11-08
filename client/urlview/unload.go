@@ -14,7 +14,7 @@ type Capture struct {
 }
 
 // Owns reports that a url row's title and trail are the node's to write, not
-// a plugin's: its grid accepts tiles (Grid.accepts_tiles). A grid not yet
+// a source's: its grid accepts tiles (Grid.accepts_tiles). A grid not yet
 // read is attempted: the server's verdict is the authority.
 func Owns(page, gridAcceptsTiles, gridKnown bool) bool {
 	return !page && (gridAcceptsTiles || !gridKnown)
@@ -22,7 +22,7 @@ func Owns(page, gridAcceptsTiles, gridKnown bool) bool {
 
 // WriteAddress decides whether the address a live view landed on (Landed)
 // is written to its row as content, like a typed one, wherever the row is: home's, a
-// plugin's or a far node's. A served page has no address of its own, and a
+// source's or a far node's. A served page has no address of its own, and a
 // visit that goes nowhere leaves the row byte-identical.
 func WriteAddress(page bool, landed, stored string) bool {
 	return !page && rpc.HTTPAddress(landed) && landed != stored

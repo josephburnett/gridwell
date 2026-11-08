@@ -25,7 +25,7 @@ const (
 	HueMuted Hue = iota
 	HueShell
 	// HueDoor is every door, a door to another namespace included: a
-	// cross-plugin door is dashed, never recolored.
+	// cross-source door is dashed, never recolored.
 	HueDoor
 	// HueDirectory is a row of a directory: the outside colour.
 	HueDirectory

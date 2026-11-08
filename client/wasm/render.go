@@ -227,12 +227,12 @@ func primitiveFor(k templateKind) (primitive, bool) {
 	return primitive{}, false
 }
 
-// menuItem is a configured plugin or a built-in primitive.
+// menuItem is a configured source or a built-in primitive.
 type menuItem struct {
-	isPlugin  bool
-	plugin    *gridwellv1.SourceInfo // when isPlugin (also set for a root ENTRY's owner)
-	primitive templateKind           // when !isPlugin
-	entry     *gridwellv1.SourceGrid
+	isSwatch  bool
+	source    *gridwellv1.SourceInfo // when isSwatch (for a grid's swatch, its pseudo-row)
+	primitive templateKind           // when !isSwatch
+	grid      *gridwellv1.SourceGrid
 	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
 	promotePane string
 }
@@ -246,29 +246,29 @@ func (a *App) menuItems(p *pane.Pane) []menuItem {
 
 // menuView returns the items and the section decision; see menu.Show.
 func (a *App) menuView(p *pane.Pane) ([]menuItem, menu.Shown) {
-	plugins, primitives := a.menuGroups(p)
+	sources, primitives := a.menuGroups(p)
 	show := menu.Show(menu.Section{
-		Plugins:    len(plugins),
+		Swatches:   len(sources),
 		Primitives: len(primitives),
-		Expanded:   a.menu.PluginsExpanded(),
+		Expanded:   a.menu.StripOpen(),
 	})
-	if !show.Plugins {
-		plugins = nil
+	if !show.Swatches {
+		sources = nil
 	}
-	return append(plugins, primitives...), show
+	return append(sources, primitives...), show
 }
 
 // menuGroups is unfiltered by the fold, so menu.Show counts what the
 // node declares.
-func (a *App) menuGroups(p *pane.Pane) (plugins, primitives []menuItem) {
+func (a *App) menuGroups(p *pane.Pane) (sources, primitives []menuItem) {
 	// The menu belongs to the pane's node; "", local or uncached, is the handshake.
 	ctx := a.menuCtx(p)
-	// menu.Doors owns the composition. Every swatch is a pseudo-plugin, so
+	// menu.Doors owns the composition. Every swatch is a pseudo-source, so
 	// every downstream flow is one path.
-	sw := menu.Doors(ctx.plugins)
+	sw := menu.Doors(ctx.sources)
 	items := make([]menuItem, 0, len(sw))
 	for _, s := range sw {
-		items = append(items, menuItem{isPlugin: true, plugin: s.Plugin, entry: s.Grid})
+		items = append(items, menuItem{isSwatch: true, source: s.Row, grid: s.Grid})
 	}
 	prims := make([]menuItem, 0, len(primitiveKinds))
 	acceptsTiles, _ := a.gridAcceptsTiles(a.gridIDForPane(p))
@@ -287,7 +287,7 @@ func (a *App) menuGroups(p *pane.Pane) (plugins, primitives []menuItem) {
 func menuTopRow(items []menuItem) int {
 	n := 0
 	for _, it := range items {
-		if it.isPlugin {
+		if it.isSwatch {
 			n++
 		}
 	}
@@ -733,7 +733,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	showPreview := haveChild && previewCell >= 0.5
 
 	if rpc.IsDoorToOtherNamespace(n) && !showPreview {
-		a.drawPluginGlyph(a.pluginGlyph(n.ChildGridId), x, y, w, h)
+		a.drawSourceGlyph(a.sourceGlyph(n.ChildGridId), x, y, w, h)
 	} else {
 		withClip(a.cctx, x, y, w, h, func() {
 			// Aligned so the child point the door's framing centers on lands at the
@@ -774,7 +774,7 @@ func (a *App) tileReadOnly(n *gridwellv1.Tile) bool {
 }
 
 // isLinkTile reports a link: trashing one unlinks it. Link is the
-// one signal; a uuid comparison would miss a same-plugin link door.
+// one signal; a uuid comparison would miss a same-source link door.
 func isLinkTile(n *gridwellv1.Tile) bool {
 	return n.Link
 }
@@ -1117,7 +1117,7 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 		return
 	}
 	name := gid
-	if pl, ok := a.pluginByUUID(rpc.UUIDOf(gid)); ok && pl.Label != "" {
+	if pl, ok := a.sourceByUUID(rpc.UUIDOf(gid)); ok && pl.Label != "" {
 		name = pl.Label
 	}
 	label := pane.GridNotice(name, a.fetch.grids.Failed(gid))

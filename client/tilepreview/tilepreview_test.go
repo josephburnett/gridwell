@@ -28,7 +28,7 @@ func TestOutside(t *testing.T) {
 		{"an interior door", door("n1/2"), false, false},
 		{"a door to another namespace into another namespace", door("p9/2"), false, true},
 		{"a door onto a far home's grid", door("n1/geneva/n2/5"), false, true},
-		{"a far door onto the far node's plugin grid",
+		{"a far door onto the far node's source grid",
 			&gridwellv1.Tile{Kind: rpc.KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/fs/~L2hvbWU"}, false, true},
 		{"a far door onto another far home grid",
 			&gridwellv1.Tile{Kind: rpc.KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/n2/8"}, false, false},

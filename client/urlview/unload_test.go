@@ -16,7 +16,7 @@ func TestDecideUnloadURLStateTable(t *testing.T) {
 		// a url view like any other.
 		{"a navigated view writes its title", true, true, Capture{Title: "t"}, true},
 		// The unload has no frame, and an unowned row's title is its
-		// plugin's, so it has nothing left to write.
+		// source's, so it has nothing left to write.
 		{"unowned row writes nothing at unload", false, true, Capture{}, false},
 		{"no navigation since place", true, false, Capture{}, false},
 	}
@@ -32,7 +32,7 @@ func TestDecideUnloadURLStateTable(t *testing.T) {
 }
 
 // The address is content and the verdict is the one place that says when a
-// landed address becomes a write, wherever the row sits, a plugin's url
+// landed address becomes a write, wherever the row sits, a source's url
 // included: never for a served page, never for what the store refuses, and
 // never for the address already stored.
 func TestWriteAddress(t *testing.T) {
@@ -58,7 +58,7 @@ func TestWriteAddress(t *testing.T) {
 	}
 }
 
-// A served page's title and trail are its plugin's, and so are any row's in
+// A served page's title and trail are its source's, and so are any row's in
 // an unwritable grid; a grid not yet read is attempted.
 func TestOwns(t *testing.T) {
 	cases := []struct {
@@ -68,7 +68,7 @@ func TestOwns(t *testing.T) {
 	}{
 		{"an internet tile in a writable grid", false, true, true, true},
 		{"a served page", true, true, true, false},
-		{"a plugin's url entry", false, false, true, false},
+		{"a source's url entry", false, false, true, false},
 		{"a link target whose grid is unread", false, false, false, true},
 	}
 	for _, c := range cases {

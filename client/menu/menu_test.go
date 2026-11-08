@@ -201,46 +201,46 @@ func TestTransferFocusForwardedPathClosesMenu(t *testing.T) {
 }
 
 // The door section is folded on every opening, however the last was left.
-func TestPluginsCollapsedOnEveryOpen(t *testing.T) {
+func TestStripFoldedOnEveryOpen(t *testing.T) {
 	s := New()
 	s.Open("p1")
-	if s.PluginsExpanded() {
-		t.Fatal("a freshly opened menu must have the plugin section folded")
+	if s.StripOpen() {
+		t.Fatal("a freshly opened menu must have the source section folded")
 	}
-	if !s.TogglePlugins() {
-		t.Fatal("TogglePlugins must report the section open")
+	if !s.ToggleStrip() {
+		t.Fatal("ToggleStrip must report the section open")
 	}
-	if !s.PluginsExpanded() {
-		t.Fatal("PluginsExpanded must follow the toggle")
+	if !s.StripOpen() {
+		t.Fatal("StripOpen must follow the toggle")
 	}
 	s.Close()
-	if s.PluginsExpanded() {
+	if s.StripOpen() {
 		t.Fatal("Close must drop the fold, so no stale state survives the menu")
 	}
 	s.Open("p1")
-	if s.PluginsExpanded() {
+	if s.StripOpen() {
 		t.Fatal("reopening the same pane's menu must start folded again")
 	}
-	s.TogglePlugins()
+	s.ToggleStrip()
 	s.Open("p2") // the menu moved to another pane
-	if s.PluginsExpanded() {
+	if s.StripOpen() {
 		t.Fatal("opening on another pane must start folded")
 	}
 }
 
 // Toggling the section changes only the fold and the stale hover.
-func TestTogglePluginsTouchesOnlyTheFold(t *testing.T) {
+func TestToggleStripTouchesOnlyTheFold(t *testing.T) {
 	s := New()
 	s.Open("p1")
 	s.SetHover(3)
-	s.TogglePlugins()
+	s.ToggleStrip()
 	if !s.OpenOn("p1") {
-		t.Fatal("TogglePlugins must leave the menu open on its pane")
+		t.Fatal("ToggleStrip must leave the menu open on its pane")
 	}
 	if s.Hover() != -1 {
 		t.Fatalf("Hover = %d, want -1: the swatch list under the pointer changed", s.Hover())
 	}
-	if s.TogglePlugins() {
+	if s.ToggleStrip() {
 		t.Fatal("a second toggle must fold the section back")
 	}
 	if !s.OpenOn("p1") {

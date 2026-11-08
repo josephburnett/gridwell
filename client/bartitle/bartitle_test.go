@@ -96,7 +96,7 @@ func TestDecide(t *testing.T) {
 			Verdict{Rename: RenameParent, Label: unnamed, Editable: true, Muted: true},
 		},
 		{
-			"an uncached parent shows the plugin's declared label",
+			"an uncached parent shows the source's declared label",
 			Input{ConfigLabel: "fs"},
 			Verdict{Label: "fs", Muted: true},
 		},
@@ -144,7 +144,7 @@ func TestDecideSourceLabel(t *testing.T) {
 		{"a grid names its source after its door",
 			Input{AtAnchor: true, Door: door.Declared, DoorName: "Inbox (hey)", SourceLabel: "Inbox · 12 unread"},
 			"Inbox (hey) — Inbox · 12 unread"},
-		{"a door row inside a plugin grid names its directory",
+		{"a door row inside a source grid names its directory",
 			Input{Parent: true, ParentName: "src", SourceLabel: "/srv/src"},
 			"src — /srv/src"},
 		{"a nameless grid still says its source",

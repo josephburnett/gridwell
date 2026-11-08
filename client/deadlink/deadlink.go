@@ -27,7 +27,7 @@ func TargetID(t *gridwellv1.Tile) string {
 }
 
 // Dead reports that id names a namespace absent from rows, the handshake's
-// plugins. It
+// sources. It
 // answers false whenever it cannot know: a bare id, an empty roster, or a
 // chain through a declared connection, the far node's to judge.
 func Dead(id string, rows []*gridwellv1.SourceInfo, nodeID string) bool {

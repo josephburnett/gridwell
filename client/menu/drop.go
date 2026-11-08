@@ -30,7 +30,7 @@ type Release struct {
 	Target bool
 	// Occupied is whether the snapped cells already hold a tile.
 	Occupied bool
-	// Door marks a plugin, connection or declared-root swatch.
+	// Door marks a source, connection or declared-root swatch.
 	Door bool
 	// Enterable is sourcehealth.Classify == Enterable. DropOn reads it on the
 	// door arm alone, so the caller may leave it false elsewhere.

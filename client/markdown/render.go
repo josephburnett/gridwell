@@ -66,7 +66,7 @@ var htmlPolicy = func() *bluemonday.Policy {
 func IsOrg(name string) bool { return doctype.IsOrg(name) }
 
 // Renderable and IsOrg re-export internal/doctype, the neutral home both sides
-// of the plugin seam import, so classification and the render pipeline cannot
+// of the source seam import, so classification and the render pipeline cannot
 // disagree.
 func Renderable(name string) bool { return doctype.Renderable(name) }
 

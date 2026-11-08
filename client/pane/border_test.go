@@ -21,14 +21,14 @@ func testColors() BorderColors {
 	}
 }
 
-func TestBorderColorPluginRootGridIsBlue(t *testing.T) {
-	// A pane at a plugin's root grid (no descent, not the door) is a
+func TestBorderColorSourceRootGridIsBlue(t *testing.T) {
+	// A pane at a source's root grid (no descent, not the door) is a
 	// grid like any other — blue, not brown.
 	if got := BorderColor(BorderInput{}, testColors()); got != "FOCUS_FADED" {
-		t.Errorf("plugin root grid + not focused: got %q, want FOCUS_FADED", got)
+		t.Errorf("source root grid + not focused: got %q, want FOCUS_FADED", got)
 	}
 	if got := BorderColor(BorderInput{Focused: true}, testColors()); got != "FOCUS" {
-		t.Errorf("plugin root grid + focused: got %q, want FOCUS", got)
+		t.Errorf("source root grid + focused: got %q, want FOCUS", got)
 	}
 }
 

@@ -20,7 +20,7 @@ func textIn(stored string, scrollY int64) RestoreTile {
 		TextMode: stored, TextY: scrollY}
 }
 
-// restoreWorld is a one-pane world whose home is the plugin root p1/1, with
+// restoreWorld is a one-pane world whose home is the source root p1/1, with
 // the given grids cached. The pane sits there at (0, 0) zoom 1. Ids are
 // namespace-qualified as they are on the wire: the address carries them bare
 // and the machine re-qualifies with the anchor's namespace.

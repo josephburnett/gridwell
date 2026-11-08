@@ -41,23 +41,23 @@ func TestAGridIsServedFromCacheWhenItsSourceIsDark(t *testing.T) {
 	}
 }
 
-// Darkness is per source: a plugin going dark says nothing about the grids
+// Darkness is per source: a source going dark says nothing about the grids
 // another source answers for, and says it about every grid of its own.
 func TestDarknessNamesOneSource(t *testing.T) {
 	c := seedSources(t)
 	c.NoteHealth(fsPl, false)
 	if !c.SourceDark(fsPl+"/1") || !c.SourceDark(fsPl+"/12") {
-		t.Error("both of the plugin's grids are cached")
+		t.Error("both of the source's grids are cached")
 	}
 	if c.SourceDark(farHome + "/1") {
-		t.Error("a local plugin's darkness reached a grid through the connection")
+		t.Error("a local source's darkness reached a grid through the connection")
 	}
 
 	// Two sources dark at once, and each one clears alone.
 	c.NoteHealth(conn, false)
 	c.NoteHealth(fsPl, true)
 	if c.SourceDark(fsPl + "/1") {
-		t.Error("the plugin came back")
+		t.Error("the source came back")
 	}
 	if !c.SourceDark(farHome + "/1") {
 		t.Error("the connection is still dark")
@@ -139,15 +139,15 @@ func TestAGridFromASourceThatIsNotToldIsNotCurrent(t *testing.T) {
 		}
 	}
 	if !cur[node+"/7"] || !cur[farHome+"/1"] {
-		t.Error("another source went untold with the plugin")
+		t.Error("another source went untold with the source")
 	}
 	c.NoteTold(health(nil))
 	if c.Current()[fsPl+"/1"] {
-		t.Error("an event that does not say made the plugin's grid current")
+		t.Error("an event that does not say made the source's grid current")
 	}
 	c.NoteTold(health(proto.Bool(true)))
 	if !c.Current()[fsPl+"/1"] {
-		t.Error("the plugin's grid stayed not current once told")
+		t.Error("the source's grid stayed not current once told")
 	}
 }
 

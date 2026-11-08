@@ -160,7 +160,7 @@ func TestSticky(t *testing.T) {
 		want   bool
 	}{
 		// Ongoing conditions with a heal signal stay until resolved.
-		{"plugin:0b6f3a", true},
+		{"source:0b6f3a", true},
 		{"live:0b6f3a", true},
 		{"electron:backend", true},
 		{BuildSource, true},
@@ -215,7 +215,7 @@ func TestReReportRefreshesDeadline(t *testing.T) {
 }
 
 func TestStickySourcesNeverExpire(t *testing.T) {
-	for _, src := range []string{"plugin:abc", "electron:backend", EventsSource} {
+	for _, src := range []string{"source:abc", "electron:backend", EventsSource} {
 		s := New()
 		s.Report(Error, src, "down", t0)
 		if len(s.Expire(t0.Add(100*ExpireAfter))) > 0 {
@@ -230,14 +230,14 @@ func TestStickySourcesNeverExpire(t *testing.T) {
 
 func TestExpireRemovesOnlyExpired(t *testing.T) {
 	s := New()
-	s.Report(Error, "plugin:abc", "down", t0) // sticky
+	s.Report(Error, "source:abc", "down", t0) // sticky
 	s.Report(Error, "old", "x", t0)
 	s.Report(Error, "fresh", "y", t0.Add(ExpireAfter/2))
 	if gone := s.Expire(t0.Add(ExpireAfter)); len(gone) != 1 || gone[0] != "old" {
 		t.Fatalf("Expire answered %v, want the one source it took down", gone)
 	}
 	got := s.Notices()
-	if len(got) != 2 || got[0].Source != "fresh" || got[1].Source != "plugin:abc" {
+	if len(got) != 2 || got[0].Source != "fresh" || got[1].Source != "source:abc" {
 		t.Fatalf("wrong survivors: %+v", got)
 	}
 }
@@ -247,7 +247,7 @@ func TestNextDeadline(t *testing.T) {
 	if _, ok := s.NextDeadline(t0); ok {
 		t.Fatalf("empty surface has no deadline")
 	}
-	s.Report(Error, "plugin:abc", "down", t0) // sticky: no deadline
+	s.Report(Error, "source:abc", "down", t0) // sticky: no deadline
 	if _, ok := s.NextDeadline(t0); ok {
 		t.Fatalf("sticky-only surface has no deadline")
 	}
@@ -297,7 +297,7 @@ func TestActionOf(t *testing.T) {
 	}{
 		{BuildSource, Reload, "Reload"},
 		{BuildStuckSource, NoAction, ""},
-		{"plugin:0b6f3a", NoAction, ""},
+		{"source:0b6f3a", NoAction, ""},
 		{"electron:backend", NoAction, ""},
 		{"rpc:MoveTile", NoAction, ""},
 	} {

@@ -7,7 +7,7 @@ package menu
 // Section counts the door swatches the node declares and the primitives the
 // grid takes, zero on a read-only grid.
 type Section struct {
-	Plugins    int
+	Swatches   int
 	Primitives int
 	Expanded   bool
 }
@@ -35,23 +35,23 @@ func (c Chevron) String() string {
 }
 
 type Shown struct {
-	Plugins bool
-	Toggle  bool
-	Chevron Chevron
+	Swatches bool
+	Toggle   bool
+	Chevron  Chevron
 }
 
 // Show gives two states no toggle, there being nothing to fold: a node that
 // declares no doors has no section, and a read-only grid offers no
 // primitives, so folding would leave the popover empty.
 func Show(s Section) Shown {
-	if s.Plugins <= 0 {
+	if s.Swatches <= 0 {
 		return Shown{}
 	}
 	if s.Primitives <= 0 {
-		return Shown{Plugins: true}
+		return Shown{Swatches: true}
 	}
 	if s.Expanded {
-		return Shown{Plugins: true, Toggle: true, Chevron: ChevronDown}
+		return Shown{Swatches: true, Toggle: true, Chevron: ChevronDown}
 	}
 	return Shown{Toggle: true, Chevron: ChevronUp}
 }

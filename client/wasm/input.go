@@ -412,7 +412,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		if a.pointInMenu(mp, sx, sy) {
 			// Not a swatch, so no drag arms; it changes only the menu.
 			if a.pointInMenuToggle(mp, sx, sy) {
-				a.menu.TogglePlugins()
+				a.menu.ToggleStrip()
 				a.draw()
 				return nil
 			}
@@ -776,7 +776,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (rpc
 // synthetic door inverted, at pane size s. A root's framing rides its
 // SourceInfo; false when it has none.
 func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool) {
-	pl, found := a.pluginByRoot(anchor)
+	pl, found := a.sourceByRoot(anchor)
 	if !found {
 		return rpc.Framing{}, false
 	}

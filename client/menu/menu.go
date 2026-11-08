@@ -34,13 +34,13 @@ func (s *State) PaneID() string {
 // Hover is the hovered menu-item index, or -1.
 func (s *State) Hover() int { return s.hover }
 
-// PluginsExpanded is live state rather than a preference, so every opening
+// StripOpen is live state rather than a preference, so every opening
 // starts folded.
-func (s *State) PluginsExpanded() bool { return s.expanded }
+func (s *State) StripOpen() bool { return s.expanded }
 
-// TogglePlugins flips the door section and returns the new state. Hover is
+// ToggleStrip flips the door section and returns the new state. Hover is
 // dropped, because the swatch list under the pointer has changed.
-func (s *State) TogglePlugins() bool {
+func (s *State) ToggleStrip() bool {
 	s.expanded = !s.expanded
 	s.hover = noHover
 	return s.expanded

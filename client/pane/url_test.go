@@ -68,7 +68,7 @@ func TestEncodeStripsTrailingZeros(t *testing.T) {
 	}
 }
 
-// EncodeURL strips plugin UUID prefix so URLs stay readable.
+// EncodeURL strips source UUID prefix so URLs stay readable.
 func TestEncodeStripsUUIDPrefix(t *testing.T) {
 	got := EncodeURL(URLState{TileIDs: []string{"abc-uuid/3", "abc-uuid/4"}})
 	if got != "/3/4" {
@@ -356,7 +356,7 @@ func TestBootViewport(t *testing.T) {
 	}
 }
 
-// TestEncodeAnchorAsPath: the anchor is leading path segments — a plugin id
+// TestEncodeAnchorAsPath: the anchor is leading path segments — a source id
 // is just another part of the path. The anchor is already a slash-joined
 // qualified grid id, so it drops straight in, and tile ids follow.
 func TestEncodeAnchorAsPath(t *testing.T) {
@@ -509,8 +509,8 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 		t.Fatalf("workspace URL must carry nothing else: %+v", s)
 	}
 	// A chained (remote) workspace tile id survives the round trip.
-	s2, err := DecodeURL(EncodeURL(URLState{Workspace: "ssh-uuid/plugin-uuid/9"}))
-	if err != nil || s2.Workspace != "ssh-uuid/plugin-uuid/9" {
+	s2, err := DecodeURL(EncodeURL(URLState{Workspace: "ssh-uuid/source-uuid/9"}))
+	if err != nil || s2.Workspace != "ssh-uuid/source-uuid/9" {
 		t.Fatalf("chained workspace: %+v err=%v", s2, err)
 	}
 }
@@ -523,7 +523,7 @@ func TestWorkspaceURLRoundTrip(t *testing.T) {
 func TestKeyFormURLRoundTrip(t *testing.T) {
 	deep := rpc.KeyTileID("/home/joe/notes/a b.md")
 	for _, st := range []URLState{
-		// A key-form content leaf under a plugin anchor.
+		// A key-form content leaf under a source anchor.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{"3", rpc.KeyTileID("/home/joe/x")}},
 		// A key-form DOOR mid-path, descending on into a row id.
 		{Anchor: "k3x9m2q/1", TileIDs: []string{rpc.KeyTileID("/home/joe"), "4"}},
@@ -549,7 +549,7 @@ func TestKeyFormURLRoundTrip(t *testing.T) {
 
 // A key form is a TILE segment, never a namespace hop: the anchor boundary
 // stops at it. "/~<key>" is a tile in the home grid, and "/k3x9m2q/~<key>"
-// names the plugin's key-form grid, not a two-hop namespace chain.
+// names the source's key-form grid, not a two-hop namespace chain.
 func TestKeyFormIsNeverANamespaceSegment(t *testing.T) {
 	key := rpc.KeyTileID("/home/joe/x")
 	got, err := DecodeURL("/" + key)

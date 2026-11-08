@@ -80,10 +80,10 @@ func (a *App) parentDoor(p *pane.Pane) (*gridwellv1.Tile, bool) {
 	return t, true
 }
 
-// declaredLabel is the plugin declaration's label for the pane's grid.
+// declaredLabel is the source declaration's label for the pane's grid.
 func (a *App) declaredLabel(p *pane.Pane) string {
 	want := rpc.UUIDOf(a.gridIDForPane(p))
-	for _, pl := range a.allPlugins() {
+	for _, pl := range a.allSources() {
 		if pl.Uuid == want && pl.Label != "" {
 			return pl.Label
 		}
@@ -113,7 +113,7 @@ func (a *App) doorFind(p *pane.Pane) (*gridwellv1.Tile, door.Kind) {
 			}
 		}
 	}
-	return door.Find(p.Anchor(), parent, a.allPlugins())
+	return door.Find(p.Anchor(), parent, a.allSources())
 }
 
 // togglePaneZoom is the left-click on the bar's centered title.

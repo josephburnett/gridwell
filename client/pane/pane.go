@@ -345,7 +345,7 @@ func (p *Pane) RelocateTo(dest *Pane, tileID string, foot Footprint, zoom float6
 
 // GridNotice is the one wording for a pane whose grid is not cached: the wait
 // while a fetch is in flight, or the failure once one failed. name is the
-// plugin's label when known, else the grid id.
+// source's label when known, else the grid id.
 func GridNotice(name string, failed bool) string {
 	if failed {
 		return name + " unavailable"

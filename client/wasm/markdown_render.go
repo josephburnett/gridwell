@@ -132,7 +132,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 
 	// A host file the markdown renderer can show is text-green like any
 	// document, and one it cannot is muted grey. markdown.Renderable is the
-	// same rule the fs plugin serves bodies by, so the color never lies.
+	// same rule the files serve bodies by, so the color never lies.
 	outlineColor := a.pal.MarkdownLine
 	if outside && !markdown.Renderable(n.AltText) {
 		outlineColor = a.pal.Muted

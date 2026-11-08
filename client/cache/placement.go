@@ -62,7 +62,7 @@ func (c *Cache) Move(tileID string, p Placement) *Moving {
 }
 
 // Landed folds the write's answer in for what it set, then lets a read
-// decide the layout. An answer under another id is a plugin's minted row,
+// decide the layout. An answer under another id is a source's minted row,
 // whose echo will never name this one, so the hold ends there.
 func (pl *Moving) Landed(resp *gridwellv1.Tile) {
 	if pl == nil || resp == nil {

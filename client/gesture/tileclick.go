@@ -29,12 +29,12 @@ type ClickInput struct {
 	// URL is rpc.KindURL and URLEmpty its typed address being blank.
 	URL      bool
 	URLEmpty bool
-	// Page is rpc.PageContent: the owning plugin serves this url tile's page,
+	// Page is rpc.PageContent: the owning source serves this url tile's page,
 	// so the node derives the address and there is none for the user to type.
 	Page bool
 	// AcceptsTiles is the tile's Grid.accepts_tiles, unknown reading as
 	// false. Only such a grid's url rows hold an address the node writes, so
-	// a plugin's is never asked for one.
+	// a source's is never asked for one.
 	AcceptsTiles bool
 	// LeafLink is rpc.LeafLink: the address lives on the target, so a link
 	// never prompts for one.

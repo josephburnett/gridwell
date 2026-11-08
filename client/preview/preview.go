@@ -30,7 +30,7 @@ type Cache struct {
 
 // localCaptureID keys bytes captured locally before the server's key for them
 // was known. Get matches it against any non-zero expected key. It sits below
-// every key the node hands out, a plugin picture's negative ones included.
+// every key the node hands out, a source picture's negative ones included.
 const localCaptureID int64 = math.MinInt64
 
 // NewCache requires a non-nil dec. onDecErr fires once per failed decode with

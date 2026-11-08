@@ -15,7 +15,7 @@ import (
 )
 
 // Deadline is the outside bound on any one client RPC: long enough for a
-// plugin's first listing over a slow link, short enough that a request lost
+// source's first listing over a slow link, short enough that a request lost
 // to a dead socket becomes a visible failure.
 const Deadline = 30 * time.Second
 

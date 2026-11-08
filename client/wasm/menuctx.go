@@ -3,7 +3,7 @@
 package main
 
 // The + menu belongs to the node a pane is inside. A context is one node's
-// plugin list plus its shells flag, keyed by the pane's grid's node_ns ("" is
+// source list plus its shells flag, keyed by the pane's grid's node_ns ("" is
 // this node, the boot handshake). Remote contexts are fetched through the
 // routed Handshake, and every context is asked again on a health transition
 // (refetchMenus).
@@ -16,9 +16,9 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
-// menuContext is one node's menu: its plugins and its shell policy.
+// menuContext is one node's menu: its sources and its shell policy.
 type menuContext struct {
-	plugins        []*gridwellv1.SourceInfo
+	sources        []*gridwellv1.SourceInfo
 	shellsDisabled bool
 	// fetched marks a completed load; a.fetch.menus owns asking.
 	fetched bool
@@ -40,11 +40,11 @@ func (a *App) gridNodeNS(gridID string) string {
 }
 
 // menuCtx returns the context for pane p, kicking a background fetch for a
-// remote context not yet loaded. The "" context is a.plugins, always present.
+// remote context not yet loaded. The "" context is a.sources, always present.
 func (a *App) menuCtx(p *pane.Pane) *menuContext {
 	ns := a.paneNodeNS(p)
 	if ns == "" {
-		return &menuContext{plugins: a.plugins, shellsDisabled: !a.caps.Shells, fetched: true}
+		return &menuContext{sources: a.sources, shellsDisabled: !a.caps.Shells, fetched: true}
 	}
 	mc, ok := a.views.menuCtxs[ns]
 	if !ok {
@@ -75,16 +75,16 @@ func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 		return
 	}
 	mc := a.views.menuCtxs[ns]
-	mc.plugins = lp.Sources
+	mc.sources = lp.Sources
 	mc.shellsDisabled = lp.ShellsDisabled
 	mc.fetched = true
 	a.draw()
 }
 
-// refetchMenus asks every node's plugin list again after a health transition
+// refetchMenus asks every node's source list again after a health transition
 // or a stream gap. A transition changes a row of the menu that lists the
 // source, which is the node above it rather than one the source reaches, so
-// no menu is left out: a plugin whose refusal ended gets its entries back,
+// no menu is left out: a source whose refusal ended gets its entries back,
 // and one that began refusing loses them. The local list is asked now, since
 // dead-link verdicts read it; a remote one on its next draw.
 func (a *App) refetchMenus() {
@@ -101,7 +101,7 @@ func (a *App) askLocalMenu() {
 	}
 }
 
-// fetchLocalMenu re-reads this node's plugin list. The rest of the boot
+// fetchLocalMenu re-reads this node's source list. The rest of the boot
 // handshake (caps, the content token, home) is immutable and stays. An ask
 // refused while this one was in flight came from a newer transition, so it is
 // asked again.

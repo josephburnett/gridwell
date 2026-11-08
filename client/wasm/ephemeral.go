@@ -99,7 +99,7 @@ func (a *App) possiblyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 }
 
 // deleteEphemeralTile removes an ended ephemeral visit, and for a
-// shell the plugin kills its tmux too. Unlike the trashcan delete it
+// shell the source kills its tmux too. Unlike the trashcan delete it
 // parks, because an ephemeral row is off-grid and a lost cleanup is invisible
 // until the startup sweep. A visit writes its address like any url view, which
 // bumps the version, so the delete rides the row's chain behind the closing

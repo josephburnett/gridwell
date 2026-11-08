@@ -173,7 +173,7 @@ func ReactSave(o Outcome) Reaction {
 	return Reaction{}
 }
 
-// IsUnimplemented reports a plugin's answer that it does not serve this call.
+// IsUnimplemented reports a source's answer that it does not serve this call.
 // It is a capability, never a failure to surface.
 func IsUnimplemented(err error) bool {
 	var ce *connect.Error

@@ -199,8 +199,8 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 // MoveForbidden reports whether the server would reject a left-drag to
 // another grid of the same namespace: either end is known not to move its
 // tiles (Grid.moves). An end not yet read is left to the server.
-func MoveForbidden(sameGrid, crossPlugin, srcMoves, srcKnown, dstMoves, dstKnown bool) bool {
-	if sameGrid || crossPlugin {
+func MoveForbidden(sameGrid, crossSource, srcMoves, srcKnown, dstMoves, dstKnown bool) bool {
+	if sameGrid || crossSource {
 		return false
 	}
 	return srcKnown && !srcMoves || dstKnown && !dstMoves
@@ -265,9 +265,9 @@ type DropInput struct {
 	SameGrid           bool
 	SameCell           bool
 	Occupied           bool
-	// CrossPlugin: the grids are in different id namespaces, so a left-drag
+	// CrossSource: the grids are in different id namespaces, so a left-drag
 	// verdicts DropLink and a right-drag stays DropCopy, unless CopiesAsLink.
-	CrossPlugin bool
+	CrossSource bool
 	// CopiesAsLink is CarryCopiesAsLink over what the drag carries.
 	CopiesAsLink bool
 }
@@ -320,15 +320,15 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropCreateTemplate, ""
 	case in.Forbidden:
 		return DropRejected, "forbidden"
-	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossPlugin):
+	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource):
 		return DropRejected, "target refuses tiles"
 	case in.SameCell:
 		return DropRejected, "same cell"
 	case in.Occupied:
 		return DropRejected, "occupied"
-	case in.Intent == IntentCopy && !(in.CrossPlugin && in.CopiesAsLink):
+	case in.Intent == IntentCopy && !(in.CrossSource && in.CopiesAsLink):
 		return DropCopy, ""
-	case in.Intent == IntentLink || in.CrossPlugin:
+	case in.Intent == IntentLink || in.CrossSource:
 		return DropLink, ""
 	default:
 		return DropMove, ""
@@ -341,7 +341,7 @@ type GhostPlan struct {
 	TargetCellSize float64 // size the ghost lerps toward
 	Fragmentation  float64 // 1 shatters into the trashcan
 	Forbidden      bool    // draw the no-entry badge
-	// Link draws the dashed ghost and chain badge. Without it a cross-plugin
+	// Link draws the dashed ghost and chain badge. Without it a cross-source
 	// left-drag would look like a move and the survivor read as a duplicate.
 	Link   bool
 	Cursor string // CSS cursor: "" or "not-allowed"

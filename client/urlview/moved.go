@@ -17,7 +17,7 @@ type Moved struct {
 	DropCapture bool
 }
 
-// PageMoved reads one TileChanged. Only a page its plugin serves is told it
+// PageMoved reads one TileChanged. Only a page its source serves is told it
 // moved; a page on the web has nobody to say so. A frozen tile keeps the
 // screenshot the user took and has no live view.
 func PageMoved(t *gridwellv1.Tile, contentChanged bool) Moved {

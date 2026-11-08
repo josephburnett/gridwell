@@ -314,13 +314,13 @@ func TestReactRead(t *testing.T) {
 			t.Errorf("outcome %v: got %v, want %v", o, got, want)
 		}
 	}
-	// The two a body read meets: the plugin's not_found for a file gone from
-	// disk, and a dark plugin's unavailable.
-	gone := connect.NewError(connect.CodeNotFound, errors.New("plugin: no tile ~Zm9v"))
+	// The two a body read meets: the source's not_found for a file gone from
+	// disk, and a dark source's unavailable.
+	gone := connect.NewError(connect.CodeNotFound, errors.New("source: no tile ~Zm9v"))
 	if got := ReactRead(Of(gone)); got != inflight.Refused {
 		t.Errorf("not_found: got %v, want Refused", got)
 	}
-	dark := connect.NewError(connect.CodeUnavailable, errors.New("plugin down"))
+	dark := connect.NewError(connect.CodeUnavailable, errors.New("source down"))
 	if got := ReactRead(Of(dark)); got != inflight.Unreachable {
 		t.Errorf("unavailable: got %v, want Unreachable", got)
 	}

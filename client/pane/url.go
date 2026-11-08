@@ -3,7 +3,7 @@
 //
 //	/                                home, default viewport
 //	/3/4/5                           descended through tiles 3, 4, 5 (home)
-//	/k3x9m2q/1/~L2hvbWUvam9l         plugin k3x9m2q, grid 1, key-form tile
+//	/k3x9m2q/1/~L2hvbWUvam9l         source k3x9m2q, grid 1, key-form tile
 //	/ssh4321/remote9/1/4/7           chained remote anchor, then tiles
 //	/3/4/5?x=12.5&y=-3&z=1.5         grid leaf, viewport center + zoom
 //	/3/4/5/9?c=24&r=10               content leaf in text mode, cursor

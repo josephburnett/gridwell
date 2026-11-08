@@ -56,7 +56,7 @@ func TestDecodeJPEGDataURL(t *testing.T) {
 
 // Descending engages: a url opens, an alive or fresh shell opens, a dead
 // shell stays frozen, a host without the capability stays silently frozen,
-// and unknown aliveness probes. A url tile whose plugin serves its page is a
+// and unknown aliveness probes. A url tile whose source serves its page is a
 // url descent like any other. The user's standing freeze beats every one of
 // those, for either family.
 func TestDecideAutoLive(t *testing.T) {

@@ -141,9 +141,9 @@ func (a *App) navWorldForRestore() nav.World {
 	// Which door the address names is the machine's to decode, so every
 	// one is resolved. door.Places is ByRoot's answer set.
 	if p := a.tree.FocusedPane(); p != nil {
-		for _, pd := range door.Places(a.allPlugins()) {
-			if f, ok := a.persistedGridView(p, pd.Plugin.RootGridId, nil); ok {
-				rw.RootViews[pd.Plugin.RootGridId] = f
+		for _, pd := range door.Places(a.allSources()) {
+			if f, ok := a.persistedGridView(p, pd.Row.RootGridId, nil); ok {
+				rw.RootViews[pd.Row.RootGridId] = f
 			}
 		}
 	}
@@ -208,9 +208,9 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 	// A door with no target: ask sourcehealth why, so the click says
 	// something. The id is bare on a menu row and node-qualified on a link
 	// tile, so both shapes are tried.
-	pl, ok := a.pluginByUUID(tile.Id)
+	pl, ok := a.sourceByUUID(tile.Id)
 	if !ok {
-		pl, ok = a.pluginByUUID(rpc.LocalOf(tile.Id))
+		pl, ok = a.sourceByUUID(rpc.LocalOf(tile.Id))
 	}
 	if !ok {
 		return d

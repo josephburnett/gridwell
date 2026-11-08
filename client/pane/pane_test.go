@@ -114,7 +114,7 @@ func TestPortalRoundTrip(t *testing.T) {
 	p.TextMode, p.TextScrollY, p.TextZoom = "text", 2.0, 1.2
 	p.MenuOpen = true
 
-	// Jump into another plugin at its root.
+	// Jump into another source at its root.
 	p.Push(viewed(Frame{GridID: "fs-uuid/1", Door: "lnk"}, 0, 0, 1))
 	if p.Anchor() != "fs-uuid/1" || len(p.Path()) != 0 || p.ContentID() != "" {
 		t.Fatalf("after portal: anchor=%q path=%v content=%q", p.Anchor(), p.Path(), p.ContentID())

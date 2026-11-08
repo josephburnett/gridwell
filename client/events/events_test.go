@@ -74,7 +74,7 @@ func TestRouteTable(t *testing.T) {
 // notice: it is the cache's (cache.NoteTold).
 func TestReactHealthTable(t *testing.T) {
 	const (
-		dark = "plugin:n/c"
+		dark = "source:n/c"
 		live = "live:n/c"
 	)
 	cases := []struct {

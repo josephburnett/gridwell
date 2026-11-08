@@ -36,7 +36,7 @@ func Bucket(contentW float64) float64 {
 }
 
 // Key identifies one raster. Bytes is the generation of the body it is made from
-// (cache.BodyGen), so new bytes, a plugin's or an edit's, are never taken for
+// (cache.BodyGen), so new bytes, a source's or an edit's, are never taken for
 // the old picture's; Scale is its px per logical px (markdown.PreviewSVG);
 // Org is part of the identity because it picks the renderer, and Theme
 // because the document is rasterized in the colors on screen.

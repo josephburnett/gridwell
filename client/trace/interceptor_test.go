@@ -141,7 +141,7 @@ func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
 	c := New(64, "cid7abc")
 	var ms int64
 	i := interceptor{c: c, now: tick(&ms)}
-	verdict := connect.NewError(connect.CodeNotFound, errors.New("plugin: no tile"))
+	verdict := connect.NewError(connect.CodeNotFound, errors.New("source: no tile"))
 
 	refused := &tracedConn{
 		StreamingClientConn: &fakeStream{recv: []error{verdict, verdict}},
@@ -170,7 +170,7 @@ func TestAStreamSpanEndsWithTheErrorItsReceiveSaw(t *testing.T) {
 	if len(recs) != 6 {
 		t.Fatalf("%d records, want three spans:\n%v", len(recs), recs)
 	}
-	if recs[1].Msg != "ReadContent error: not_found: plugin: no tile" || recs[1].KV["code"] != "not_found" {
+	if recs[1].Msg != "ReadContent error: not_found: source: no tile" || recs[1].KV["code"] != "not_found" {
 		t.Errorf("the refused stream reads %q with code %q", recs[1].Msg, recs[1].KV["code"])
 	}
 	if recs[3].Msg != "ReadContent ok" {

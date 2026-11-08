@@ -13,7 +13,7 @@ const (
 	gone = "z9gonee"
 )
 
-// roster is the handshake's shape: home, one plugin, one connection whose UUID
+// roster is the handshake's shape: home, one source, one connection whose UUID
 // is "<node>/<name>".
 func roster() []*gridwellv1.SourceInfo {
 	return []*gridwellv1.SourceInfo{
@@ -29,11 +29,11 @@ func TestDeadIsDeclaredNessAndNothingElse(t *testing.T) {
 		id   string
 		dead bool
 	}{
-		{"a declared plugin's grid", fs + "/1", false},
-		{"a declared plugin's key-form tile", fs + "/" + rpc.KeyTileID("/home/joe"), false},
+		{"a declared source's grid", fs + "/1", false},
+		{"a declared source's key-form tile", fs + "/" + rpc.KeyTileID("/home/joe"), false},
 		{"the node's own home grid", node + "/7", false},
 		{"a declared connection", node + "/laptop/far9xyz/1", false},
-		{"a plugin removed from server.yaml", gone + "/1", true},
+		{"a source removed from server.yaml", gone + "/1", true},
 		{"a connection name no longer declared", node + "/oldbox/far9xyz/1", true},
 		{"a bare, unqualified id", "7", false},
 		{"no id at all", "", false},
@@ -45,7 +45,7 @@ func TestDeadIsDeclaredNessAndNothingElse(t *testing.T) {
 	}
 }
 
-// Deeper segments name the far node's plugins, which this roster never lists.
+// Deeper segments name the far node's sources, which this roster never lists.
 func TestAFarNodesNamespacesAreNotThisNodesToJudge(t *testing.T) {
 	for _, id := range []string{
 		node + "/laptop/" + gone + "/1",
@@ -128,7 +128,7 @@ func TestDeadTile(t *testing.T) {
 	}
 	live := &gridwellv1.Tile{Kind: rpc.KindDoor, Link: true, ChildGridId: fs + "/1"}
 	if DeadTile(live, roster(), node, nil) {
-		t.Error("a link into a declared plugin is alive, whatever that plugin's health")
+		t.Error("a link into a declared source is alive, whatever that source's health")
 	}
 	owned := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: gone + "/1"}
 	if DeadTile(owned, roster(), node, nil) {

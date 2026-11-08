@@ -41,13 +41,13 @@ func TestDecideTileClick(t *testing.T) {
 			want: ClickDescend,
 		},
 		{
-			name: "a plugin-served page has no address to ask for",
+			name: "a source-served page has no address to ask for",
 			in: ClickInput{ContentDescent: true, URL: true, URLEmpty: true,
 				Page: true},
 			want: ClickDescend,
 		},
 		{
-			name: "ctrl on a plugin-served page splits below",
+			name: "ctrl on a source-served page splits below",
 			in: ClickInput{ContentDescent: true, URL: true, URLEmpty: true,
 				Page: true, SplitNav: true},
 			want: ClickDescendSplit,

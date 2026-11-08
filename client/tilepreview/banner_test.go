@@ -8,7 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// The status is the plugin's mark on the tile, never a second name: it can
+// The status is the source's mark on the tile, never a second name: it can
 // only ride a name, and it leads, so the right-edge clip takes the name's tail
 // first.
 func TestBannerText(t *testing.T) {
@@ -20,7 +20,7 @@ func TestBannerText(t *testing.T) {
 	}{
 		{"an empty status draws the name only",
 			&gridwellv1.Tile{Kind: rpc.KindText, AltText: "notes.md"}, "notes.md"},
-		{"the plugin's emoji leads the name",
+		{"the source's emoji leads the name",
 			&gridwellv1.Tile{Kind: rpc.KindText, AltText: "Ada: lunch?", StatusDetail: "●"}, "● Ada: lunch?"},
 		{"a long name keeps the emoji where no clip reaches",
 			&gridwellv1.Tile{Kind: rpc.KindText, AltText: long, StatusDetail: "✅"}, "✅ " + long},

@@ -214,8 +214,8 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Stack = StackAt(prefix+"plugin-uuid/1",
-		[]string{prefix + "plugin-uuid/4", prefix + "plugin-uuid/9"}, prefix+"plugin-uuid/12")
+	p.Stack = StackAt(prefix+"source-uuid/1",
+		[]string{prefix + "source-uuid/4", prefix + "source-uuid/9"}, prefix+"source-uuid/12")
 	p.SetView(0, 0, 2)
 
 	data, skipped, err := EncodeLayout(tr, rel)
@@ -241,7 +241,7 @@ func TestLayoutPrefixRelativity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode via other chain: %v", err)
 	}
-	if op := other.FocusedPane(); op.Anchor() != "tunnel-z/plugin-uuid/1" {
+	if op := other.FocusedPane(); op.Anchor() != "tunnel-z/source-uuid/1" {
 		t.Fatalf("other-chain anchor: %q", op.Anchor())
 	}
 }
@@ -258,14 +258,14 @@ func TestLayoutLeafOutsidePrefix(t *testing.T) {
 
 	tr := NewTree()
 	inside := tr.FocusedPane()
-	inside.Stack = StackAt(prefix+"plugin/1", nil, "")
+	inside.Stack = StackAt(prefix+"source/1", nil, "")
 	inside.SetView(5, 6, 2)
 	outside, err := tr.Split(Vertical)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// reachable by the reader, not by the owner
-	outside.Stack = StackAt("local-plugin/1", []string{"local-plugin/3"}, "")
+	outside.Stack = StackAt("local-source/1", []string{"local-source/3"}, "")
 	outside.SetView(9, 0, 3)
 
 	data, skipped, err := EncodeLayout(tr, rel)
@@ -341,12 +341,12 @@ func TestLayoutLooseArrangementState(t *testing.T) {
 // down from the root, namespace crossings included. A crossing frame owns its
 // target grid id, so the blob must carry it: without it the restored stack
 // begins at the crossing, and the bar's chain has no root crumb and no way
-// back out of the plugin.
+// back out of the source.
 func TestLayoutKeepsEveryLevelFromTheRoot(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
-	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 0, 0, 1))
+	p.Stack = StackAt("source/1", []string{"source/4"}, "")
+	p.Push(viewed(Frame{GridID: "other/1", Door: "source/9"}, 0, 0, 1))
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
@@ -366,8 +366,8 @@ func TestLayoutKeepsEveryLevelFromTheRoot(t *testing.T) {
 		t.Fatalf("restored leaf place = %q %v, want other/1 []", gp.Anchor(), gp.Path())
 	}
 	crumbs := gp.Crumbs()
-	if len(crumbs) != 3 || crumbs[0].Anchor != "plugin/1" ||
-		crumbs[1].TileID != "plugin/4" || crumbs[2].Anchor != "other/1" {
+	if len(crumbs) != 3 || crumbs[0].Anchor != "source/1" ||
+		crumbs[1].TileID != "source/4" || crumbs[2].Anchor != "other/1" {
 		t.Fatalf("restored chain = %+v", crumbs)
 	}
 }
@@ -409,10 +409,10 @@ func TestLayoutRestoresTheWholePlace(t *testing.T) {
 func TestLayoutKeepsEveryFramesView(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Stack = NewStack("plugin/1")
+	p.Stack = NewStack("source/1")
 	p.SetView(11, 22, 3)
-	p.Push(viewed(Frame{Door: "plugin/4"}, -5, 6.5, 0.75))
-	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 1.25, 2, 1.5))
+	p.Push(viewed(Frame{Door: "source/4"}, -5, 6.5, 0.75))
+	p.Push(viewed(Frame{GridID: "other/1", Door: "source/9"}, 1.25, 2, 1.5))
 
 	data, _, err := EncodeLayout(tr, nil)
 	if err != nil {
@@ -497,7 +497,7 @@ func TestLayoutWithoutViewsFallsBackToTheRow(t *testing.T) {
 func TestLayoutOmitsPlaceWhenTheProjectionHoldsIt(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Stack = StackAt("plugin/1", []string{"plugin/4", "plugin/7"}, "plugin/12")
+	p.Stack = StackAt("source/1", []string{"source/4", "source/7"}, "source/12")
 	p.SetView(0, 0, 1)
 
 	data, _, err := EncodeLayout(tr, nil)
@@ -517,8 +517,8 @@ func TestLayoutOmitsPlaceWhenTheProjectionHoldsIt(t *testing.T) {
 func TestEncoderAlwaysWritesTextFocus(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
-	p.Stack = NewStack("plugin/1")
-	p.Push(viewed(Frame{GridID: "other/1", Door: "plugin/9"}, 0, 0, 1))
+	p.Stack = NewStack("source/1")
+	p.Push(viewed(Frame{GridID: "other/1", Door: "source/9"}, 0, 0, 1))
 	p.Push(Frame{Door: "other/12", Content: true})
 	if p.ProjectionHolds() {
 		t.Fatal("fixture no longer forces Place; pick a deeper place")
@@ -611,13 +611,13 @@ func TestLayoutHoldsNoTextState(t *testing.T) {
 	build := func(cx, cy, zoom float64, mode string, sx, sy, tz float64) *Tree {
 		tr := NewTree()
 		g := tr.FocusedPane()
-		g.Stack = StackAt("plugin/1", []string{"plugin/4"}, "")
+		g.Stack = StackAt("source/1", []string{"source/4"}, "")
 		g.SetView(cx, cy, zoom)
 		c, err := tr.Split(Vertical)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Stack = StackAt("plugin/1", nil, "plugin/12")
+		c.Stack = StackAt("source/1", nil, "source/12")
 		c.SetView(cx, cy, zoom)
 		c.TextMode, c.TextScrollX, c.TextScrollY, c.TextZoom = mode, sx, sy, tz
 		return tr

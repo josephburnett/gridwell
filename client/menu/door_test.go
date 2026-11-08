@@ -12,14 +12,14 @@ import (
 func names(sw []door.Place) []string {
 	out := make([]string, 0, len(sw))
 	for _, s := range sw {
-		out = append(out, s.Plugin.Label)
+		out = append(out, s.Row.Label)
 	}
 	return out
 }
 
 // One swatch per declared door: a row that names a grid of its own, plus
-// every declared grid it declares. A plugin names no grid of its own, so only
-// its grids appear, and a plugin that declares nothing shows nothing.
+// every declared grid it declares. A source names no grid of its own, so only
+// its grids appear, and a source that declares nothing shows nothing.
 func TestDoorsTable(t *testing.T) {
 	entry := func(id, label, grid string) *gridwellv1.SourceGrid {
 		return &gridwellv1.SourceGrid{Id: id, Label: label, GridId: grid}
@@ -34,7 +34,7 @@ func TestDoorsTable(t *testing.T) {
 			SourceGrids: []*gridwellv1.SourceGrid{entry("trash", "trash", "n1/9")}}},
 		want: []string{"home", "trash (home)"},
 	}, {
-		name: "a plugin with three grids is three swatches and no row",
+		name: "a source with three grids is three swatches and no row",
 		rows: []*gridwellv1.SourceInfo{{Uuid: "hey", Label: "hey", SourceGrids: []*gridwellv1.SourceGrid{
 			entry("imbox", "Imbox", "hey/1"),
 			entry("feed", "Feed", "hey/2"),
@@ -42,18 +42,18 @@ func TestDoorsTable(t *testing.T) {
 		}}},
 		want: []string{"Imbox (hey)", "Feed (hey)", "Paper Trail (hey)"},
 	}, {
-		name: "a single-grid plugin declares no entry label and reads as itself",
+		name: "a single-grid source declares no entry label and reads as itself",
 		rows: []*gridwellv1.SourceInfo{{Uuid: "fs", Label: "files",
 			SourceGrids: []*gridwellv1.SourceGrid{entry(".", "", "fs/1")}}},
 		want: []string{"files"},
 	}, {
-		name: "a plugin that declares nothing contributes nothing",
+		name: "a source that declares nothing contributes nothing",
 		rows: []*gridwellv1.SourceInfo{{Uuid: "fs", Label: "files"}},
 		want: []string{},
 	}, {
 		name: "a failure is still a swatch, so it can be seen and asked about",
 		rows: []*gridwellv1.SourceInfo{{Uuid: "fs", Label: "files",
-			InfoError: "plugin not responding: boom"}},
+			InfoError: "source not responding: boom"}},
 		want: []string{"files"},
 	}, {
 		name: "a connection is a place, answered or not",
@@ -102,8 +102,8 @@ func TestEverySwatchNamesADoorOrAFailure(t *testing.T) {
 		{Uuid: "hey", Label: "hey", SourceGrids: []*gridwellv1.SourceGrid{{Id: "feed", Label: "Feed", GridId: "hey/2"}}},
 	}
 	for _, s := range Doors(rows) {
-		if s.Plugin.RootGridId == "" {
-			t.Errorf("swatch %q names no grid to descend into", s.Plugin.Label)
+		if s.Row.RootGridId == "" {
+			t.Errorf("swatch %q names no grid to descend into", s.Row.Label)
 		}
 	}
 }
@@ -120,11 +120,11 @@ func TestEntrySwatchDoesNotCarryTheRowsEntries(t *testing.T) {
 		t.Fatalf("swatches = %q, want the two grids", names(sw))
 	}
 	for _, s := range sw {
-		if len(s.Plugin.SourceGrids) != 0 {
-			t.Errorf("%q carries %d entries of its own", s.Plugin.Label, len(s.Plugin.SourceGrids))
+		if len(s.Row.SourceGrids) != 0 {
+			t.Errorf("%q carries %d entries of its own", s.Row.Label, len(s.Row.SourceGrids))
 		}
 		if s.Grid == nil {
-			t.Errorf("%q must name the entry it came from", s.Plugin.Label)
+			t.Errorf("%q must name the entry it came from", s.Row.Label)
 		}
 	}
 }

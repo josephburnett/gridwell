@@ -117,8 +117,8 @@ func (a *App) menuTileRect(p *pane.Pane, i int) (x, y, w, h float64) {
 	return tr.X, tr.Y, tr.W, tr.H
 }
 
-// drawMenu paints the creation popover: the plugin section's disclosure
-// strip when there is one, plugins on top, then the primitives.
+// drawMenu paints the creation popover: the source section's disclosure
+// strip when there is one, sources on top, then the primitives.
 func (a *App) drawMenu(p *pane.Pane) {
 	mx, my, mw, mh := a.menuRect(p)
 	fillRectC(a.cctx, mx, my, mw, mh, a.pal.MenuBg)
@@ -136,7 +136,7 @@ func (a *App) drawMenu(p *pane.Pane) {
 	}
 }
 
-// drawMenuToggle paints the plugin section's chevron strip, its chevron
+// drawMenuToggle paints the source section's chevron strip, its chevron
 // pointing the way the press moves the section. A band and never a swatch, so
 // nothing invites the drag a template tile takes.
 func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
@@ -164,15 +164,15 @@ func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
 // that has no content yet.
 func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	n := menuItemGhostNode(item)
-	if item.isPlugin {
-		// A plugin swatch is the linked door it drops into a grid, dashed
-		// because a cross-plugin link can be unlinked. Drawn identically
+	if item.isSwatch {
+		// A source swatch is the linked door it drops into a grid, dashed
+		// because a cross-source link can be unlinked. Drawn identically
 		// here, as the drag ghost, and once dropped.
 		fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
 		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, true /* dashed */, false /* selected */)
-		a.drawPluginGlyph(door.RowGlyph(item.plugin), x, y, w, h)
+		a.drawSourceGlyph(door.RowGlyph(item.source), x, y, w, h)
 		a.drawTileBannerLabel(n, x, y, w, h, false)
-		// A broken or waiting plugin gets the same health tint its link
+		// A broken or waiting source gets the same health tint its link
 		// tiles do.
 		a.drawSourceHealthTint(n, x, y, w, h)
 	} else {
@@ -187,11 +187,11 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	}
 }
 
-// drawPluginGlyph is the name-to-pixels half of a declared identity glyph.
+// drawSourceGlyph is the name-to-pixels half of a declared identity glyph.
 // Which name a row wears is door.RowGlyph's and door.GlyphFor's, so the menu
 // swatch and the bar crumb cannot default differently. Never a kind switch:
-// the client must not know its plugins.
-func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
+// the client must not know its sources.
+func (a *App) drawSourceGlyph(glyph string, x, y, w, h float64) {
 	switch glyph {
 	case rpc.GlyphFolder:
 		drawFolderGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
@@ -208,8 +208,8 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	}
 }
 
-// drawSourceHealthTint overlays a plugin link tile with its
-// sourcehealth-decided tint. Only this node's own plugins have local health,
+// drawSourceHealthTint overlays a source link tile with its
+// sourcehealth-decided tint. Only this node's own sources have local health,
 // so a remote node's tiles surface their state through descent errors.
 func (a *App) drawSourceHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	// A link with no target is not enterable wherever it lives. The descent
@@ -218,8 +218,8 @@ func (a *App) drawSourceHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 		// A row this node cannot classify gets the neutral dimming too,
 		// because not knowing yet is exactly the waiting look.
 		color := a.pal.DoorWaitingTint
-		// The local plugin list knows more: a failure gets the alarm tint.
-		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {
+		// The local source list knows more: a failure gets the alarm tint.
+		if pl, ok := a.sourceByUUID(rpc.LocalOf(n.Id)); ok {
 			if st, classified := sourcehealth.Classify(pl); classified && st == sourcehealth.Broken {
 				color = a.pal.DoorBrokenTint
 			}

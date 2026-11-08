@@ -3,7 +3,7 @@ package textedit
 import "github.com/josephburnett/gridwell/api/rpc"
 
 // SaveClaim is the one rule for the basis a text content write claims,
-// whatever flush posts it: a version, or for a plugin's body the source's
+// whatever flush posts it: a version, or for a source's body the source's
 // stamp. A claim asserts which bytes the edit was based on, so SaveBasis wins
 // whenever there is one: the row moves on a foreign writer's event without
 // this client seeing the new bytes. The row stands in only when the content

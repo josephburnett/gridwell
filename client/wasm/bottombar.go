@@ -349,7 +349,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, select
 			// A root crumb: the namespace's identity glyph, the same drawing
 			// as its menu swatch.
 			fillRectC(c, x, y, side, side, a.pal.Bg)
-			a.drawPluginGlyph(a.pluginGlyph(cr.Anchor), x, y, side, side)
+			a.drawSourceGlyph(a.sourceGlyph(cr.Anchor), x, y, side, side)
 			c.Set("strokeStyle", a.pal.FocusBorder)
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)

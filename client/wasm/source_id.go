@@ -18,13 +18,13 @@ func (a *App) nodeID() string { return rpc.UUIDOf(a.home) }
 // deadlink's. Every fetch path consults it first, so a dead link costs no RPC,
 // raises no verdict, and surfaces no error.
 func (a *App) deadNamespace(id string) bool {
-	return deadlink.Dead(id, a.plugins, a.nodeID())
+	return deadlink.Dead(id, a.sources, a.nodeID())
 }
 
 // deadLink reports that a tile's link is dead at some hop (deadlink.DeadTile):
 // the one thing the renderer, the descent guard and the fetch paths all read.
 func (a *App) deadLink(n *gridwellv1.Tile) bool {
-	return deadlink.DeadTile(n, a.plugins, a.nodeID(), a.answeredDead)
+	return deadlink.DeadTile(n, a.sources, a.nodeID(), a.answeredDead)
 }
 
 // answeredDead reports that a read of id heard the dead verdict and that it
@@ -36,8 +36,8 @@ func (a *App) answeredDead(id string) bool {
 
 // gridWritable reports Grid.writable, whether the grid's bodies take edits,
 // and whether that is known. Both grid facts travel on the grid, because a
-// uuid lookup against the local plugin list cannot answer for a remote
-// plugin reached through a connection. An uncached grid answers (false,
+// uuid lookup against the local source list cannot answer for a remote
+// source reached through a connection. An uncached grid answers (false,
 // false), never a guess, and each caller picks its own default where the
 // reason is visible.
 func (a *App) gridWritable(gridID string) (writable, known bool) {
@@ -63,24 +63,24 @@ func (a *App) gridMeta(gridID string) (*gridwellv1.Grid, bool) {
 	return g.Meta, true
 }
 
-// pluginByRoot returns the door rooted at gridID, a menu row's own grid
+// sourceByRoot returns the door rooted at gridID, a menu row's own grid
 // or one of its declared entries'. The rule is door.ByRoot's; this resolves
 // the declaration list it reads.
-func (a *App) pluginByRoot(gridID string) (*gridwellv1.SourceInfo, bool) {
-	return door.ByRoot(gridID, a.allPlugins())
+func (a *App) sourceByRoot(gridID string) (*gridwellv1.SourceInfo, bool) {
+	return door.ByRoot(gridID, a.allSources())
 }
 
 // cacheDoorFraming reconciles the handshake's copy of a door's framing,
 // after this client's own root-grid reframe commits and when another's
 // arrives as an event; rpc.Reframe owns which rows that is.
 func (a *App) cacheDoorFraming(gridID string, f rpc.Framing) bool {
-	return rpc.Reframe(gridID, f, a.allPlugins())
+	return rpc.Reframe(gridID, f, a.allSources())
 }
 
-// pluginByUUID returns the plugin with the given, possibly chain-qualified,
+// sourceByUUID returns the source with the given, possibly chain-qualified,
 // namespace. A chain-qualified uuid cannot collide with a local one.
-func (a *App) pluginByUUID(u string) (*gridwellv1.SourceInfo, bool) {
-	for _, p := range a.allPlugins() {
+func (a *App) sourceByUUID(u string) (*gridwellv1.SourceInfo, bool) {
+	for _, p := range a.allSources() {
 		if p.Uuid == u {
 			return p, true
 		}
@@ -88,20 +88,20 @@ func (a *App) pluginByUUID(u string) (*gridwellv1.SourceInfo, bool) {
 	return nil, false
 }
 
-// pluginGlyph returns the identity glyph for the plugin owning a qualified
+// sourceGlyph returns the identity glyph for the source owning a qualified
 // grid id. The rule is door.GlyphFor's; this resolves the cached grid and the
 // declaration list it reads.
-func (a *App) pluginGlyph(gridID string) string {
+func (a *App) sourceGlyph(gridID string) string {
 	meta, _ := a.gridMeta(gridID)
-	return door.GlyphFor(gridID, meta, a.allPlugins())
+	return door.GlyphFor(gridID, meta, a.allSources())
 }
 
-// allPlugins is the boot handshake's list plus each fetched remote menu
+// allSources is the boot handshake's list plus each fetched remote menu
 // context, for declaration scans that must see remote declarations too.
-func (a *App) allPlugins() []*gridwellv1.SourceInfo {
-	out := a.plugins
+func (a *App) allSources() []*gridwellv1.SourceInfo {
+	out := a.sources
 	for _, ctx := range a.views.menuCtxs {
-		out = append(out[:len(out):len(out)], ctx.plugins...)
+		out = append(out[:len(out):len(out)], ctx.sources...)
 	}
 	return out
 }

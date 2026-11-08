@@ -24,8 +24,8 @@ func TestSaveClaim(t *testing.T) {
 		{"owner row, no basis", true, v(7), v(0), false, v(7)},
 		{"link row, no basis", false, v(7), v(0), false, v(0)},
 		{"no row, no basis", false, v(0), v(0), false, v(0)},
-		// A plugin body claims the stamp it was read under, never the row's.
-		{"plugin row, basis", true, rpc.ContentBasis{Stamp: "row"}, rpc.ContentBasis{Stamp: "read"}, true,
+		// A source body claims the stamp it was read under, never the row's.
+		{"source row, basis", true, rpc.ContentBasis{Stamp: "row"}, rpc.ContentBasis{Stamp: "read"}, true,
 			rpc.ContentBasis{Stamp: "read"}},
 	}
 	for _, c := range cases {

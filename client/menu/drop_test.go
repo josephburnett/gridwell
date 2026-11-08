@@ -35,7 +35,7 @@ func TestDropOn(t *testing.T) {
 	}
 }
 
-// A link is the one thing that may cross nodes, since a link out of a plugin
+// A link is the one thing that may cross nodes, since a link out of a source
 // is how the far grid is reached at all.
 func TestDropOnDoorCrossesNodes(t *testing.T) {
 	in := Release{Target: true, Door: true, Enterable: true, AcceptsTiles: true}

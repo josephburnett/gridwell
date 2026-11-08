@@ -152,7 +152,7 @@ func (c *Cache) nextGenLocked() uint64 {
 
 // BodyGen is the generation of the bytes cached for a tile, 0 when none are:
 // what every picture or wrap of the body is keyed by, so it moves whenever the
-// bytes do, an unsaved edit included. A row's version cannot serve: a plugin
+// bytes do, an unsaved edit included. A row's version cannot serve: a source
 // row's never moves, and an edit moves no one's.
 func (c *Cache) BodyGen(tileID string) uint64 {
 	c.mu.Lock()

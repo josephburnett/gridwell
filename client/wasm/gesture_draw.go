@@ -471,7 +471,7 @@ func (a *App) drawGhostNoEntryBadge(c js.Value, cx, cy, size float64) {
 }
 
 // drawGhostLinkBadge paints the chain-link glyph over a ghost whose drop
-// would create a cross-plugin link, so the ghost teaches that a left-drag
+// would create a cross-source link, so the ghost teaches that a left-drag
 // links rather than copies.
 func (a *App) drawGhostLinkBadge(c js.Value, cx, cy, size float64) {
 	stroke := size * 0.10

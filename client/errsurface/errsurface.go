@@ -40,18 +40,18 @@ type Notice struct {
 // recurring failure stays up while it recurs.
 const ExpireAfter = 10 * time.Second
 
-// pluginHealthPrefix keys a namespace's health notice; SourceHealthSource
+// sourceHealthPrefix keys a namespace's health notice; SourceHealthSource
 // spells it and Sticky reads it.
-const pluginHealthPrefix = "plugin:"
+const sourceHealthPrefix = "source:"
 
 // SourceHealthSource is the source a namespace's health notice lives under,
 // one per uuid, so a flapping source updates its row in place.
-func SourceHealthSource(uuid string) string { return pluginHealthPrefix + uuid }
+func SourceHealthSource(uuid string) string { return sourceHealthPrefix + uuid }
 
 // HealthUUID is the namespace a health notice's source names, false for any
 // other source.
 func HealthUUID(source string) (string, bool) {
-	return strings.CutPrefix(source, pluginHealthPrefix)
+	return strings.CutPrefix(source, sourceHealthPrefix)
 }
 
 const liveUpdatesPrefix = "live:"
@@ -70,13 +70,13 @@ const (
 )
 
 // Sticky names an ongoing condition, reported once on the transition, that
-// would otherwise expire while still true. Plugin health, live updates and
+// would otherwise expire while still true. Row health, live updates and
 // the event stream resolve on the event that ends them; the backend notice
 // can only be dismissed; the build notices last as long as the page. This
 // table is the one owner; report sites do not choose.
 func Sticky(source string) bool {
 	return source == "electron:backend" || source == BuildSource || source == BuildStuckSource || source == EventsSource ||
-		strings.HasPrefix(source, pluginHealthPrefix) || strings.HasPrefix(source, liveUpdatesPrefix)
+		strings.HasPrefix(source, sourceHealthPrefix) || strings.HasPrefix(source, liveUpdatesPrefix)
 }
 
 // Action is what a notice's button does. A notice with one is not dismissed

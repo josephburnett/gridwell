@@ -57,15 +57,15 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 }
 
 // menuItemGhostNode synthesizes the 1x1 tile the ghost renderer paints, so
-// an in-flight item takes the same draw path as a real tile. A plugin item
-// carries the plugin's uuid as its id, so the health tint and the
+// an in-flight item takes the same draw path as a real tile. A source item
+// carries the source's uuid as its id, so the health tint and the
 // not-enterable descent guard can name it. Every answer is caller-owned:
 // primitives share one template apiece, and a caller placing the ghost at a
 // cell would otherwise leave those coordinates on the next gesture's swatch.
 func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
-	if item.isPlugin {
-		t := rpc.PluginDoorTile(item.plugin)
-		t.Id = item.plugin.Uuid
+	if item.isSwatch {
+		t := rpc.PluginDoorTile(item.source)
+		t.Id = item.source.Uuid
 		return t
 	}
 	if pr, ok := primitiveFor(item.primitive); ok {
@@ -84,7 +84,7 @@ func (a *App) clickTemplate(d *dragState) {
 	}
 	pr, _ := primitiveFor(d.item.primitive)
 	switch menu.ClickOn(menu.Swatch{
-		IsPlugin: d.item.isPlugin,
+		IsSwatch: d.item.isSwatch,
 		Promote:  d.item.promotePane != "",
 		Visits:   pr.click != nil,
 	}) {
@@ -141,7 +141,7 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 // that routed this call, so the create lands exactly where DecideDrop said it
 // may, and dropTargetAt owns what is legal.
 func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
-	r := menu.Release{Target: t != nil, Door: d.item.isPlugin,
+	r := menu.Release{Target: t != nil, Door: d.item.isSwatch,
 		Promote: d.item.primitive == tplURL && d.item.promotePane != ""}
 	if r.Target {
 		// The target's grid is the open door's child when the cursor promoted
@@ -151,7 +151,7 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
 		if r.Door {
-			st, classified := sourcehealth.Classify(d.item.plugin)
+			st, classified := sourcehealth.Classify(d.item.source)
 			r.Enterable = classified && st == sourcehealth.Enterable
 		}
 	}
@@ -169,7 +169,7 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		// connection row drops the same way with its chained root already
 		// qualified.
 		a.landGhostAtCell(t, dropX, dropY)
-		a.createPluginLinkAtCell(t.gridID, d.item.plugin, dropX, dropY)
+		a.createSourceLinkAtCell(t.gridID, d.item.source, dropX, dropY)
 	case menu.DropPromote:
 		// The ephemeral url off the bar's crumb becomes a persistent tile and
 		// the pane relocates onto it.
@@ -186,10 +186,10 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 	a.menu.Close()
 }
 
-// createPluginLinkAtCell creates a door to another namespace link to the plugin's qualified
-// root grid, seeding its framing from the plugin's persisted root view so the
+// createSourceLinkAtCell creates a door to another namespace link to the source's qualified
+// root grid, seeding its framing from the source's persisted root view so the
 // preview shows what descent will show.
-func (a *App) createPluginLinkAtCell(gid string, pl *gridwellv1.SourceInfo, cellX, cellY int64) {
+func (a *App) createSourceLinkAtCell(gid string, pl *gridwellv1.SourceInfo, cellX, cellY int64) {
 	a.createTile("CreateDoor", gid, &gridwellv1.CreateTileRequest{GridId: gid,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: cellX, Y: cellY, W: 1, H: 1,
 			ChildGridId: pl.RootGridId, AltText: pl.Label,

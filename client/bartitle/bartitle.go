@@ -70,7 +70,7 @@ type Verdict struct {
 
 // Text is what the bar draws. The name comes first because the bar clips a
 // long title from the right (wsbar.TitleSpan), so a narrow bar loses the
-// source before the name. The dash keeps it apart from the "·" plugins use
+// source before the name. The dash keeps it apart from the "·" sources use
 // inside their labels.
 func (v Verdict) Text() string {
 	if v.Source == "" {

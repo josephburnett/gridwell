@@ -229,7 +229,7 @@ func TestExpandedSectionLayout(t *testing.T) {
 	tr := l.ToggleRect()
 	bottom := l.TileRect(3)
 	if tr.Y < top.Y+top.H {
-		t.Errorf("strip Y %v is not below the plugin row ending at %v", tr.Y, top.Y+top.H)
+		t.Errorf("strip Y %v is not below the source row ending at %v", tr.Y, top.Y+top.H)
 	}
 	if bottom.Y < tr.Y+tr.H {
 		t.Errorf("primitives row Y %v is not below the strip ending at %v", bottom.Y, tr.Y+tr.H)

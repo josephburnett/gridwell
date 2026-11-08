@@ -25,10 +25,10 @@ func seedSources(t *testing.T) *Cache {
 	c := New()
 	for _, id := range []string{
 		node + "/7",    // this node's home store
-		fsPl + "/1",    // a local plugin
+		fsPl + "/1",    // a local source
 		farHome + "/1", // the far node's home, through the connection
-		farPl + "/4",   // a far node's plugin, one hop deeper still
-		fsPl + "/12",   // a second grid of the local plugin
+		farPl + "/4",   // a far node's source, one hop deeper still
+		fsPl + "/12",   // a second grid of the local source
 	} {
 		c.PutGrid(&gridwellv1.Grid{Id: id}, nil)
 	}
@@ -47,13 +47,13 @@ func TestAFlapResyncsOnlyTheGridsItsSourceServes(t *testing.T) {
 	}
 	for _, id := range got {
 		if !ServedBy(id, fsPl) {
-			t.Errorf("%s is in the plugin's resync set but not served by it", id)
+			t.Errorf("%s is in the source's resync set but not served by it", id)
 		}
 	}
 	// The other sources' grids are untouched: nothing about them changed.
 	for _, other := range []string{node + "/7", farHome + "/1", farPl + "/4"} {
 		if slices.Contains(got, other) {
-			t.Errorf("one plugin's flap resynced %s, a grid it does not serve", other)
+			t.Errorf("one source's flap resynced %s, a grid it does not serve", other)
 		}
 	}
 }
@@ -101,13 +101,13 @@ func TestServedBy(t *testing.T) {
 		source string
 		want   bool
 	}{
-		{"a local plugin's grid", fsPl + "/1", fsPl, true},
-		{"a local plugin's key-form tile", fsPl + "/" + rpc.KeyTileID("/home/joe"), fsPl, true},
-		{"another plugin's grid", "zz9zzzz/1", fsPl, false},
+		{"a local source's grid", fsPl + "/1", fsPl, true},
+		{"a local source's key-form tile", fsPl + "/" + rpc.KeyTileID("/home/joe"), fsPl, true},
+		{"another source's grid", "zz9zzzz/1", fsPl, false},
 		{"a segment that merely starts the same", fsPl + "x/1", fsPl, false},
 		{"the source's own name is not a grid it serves", fsPl, fsPl, false},
 		{"the far node's home through the connection", farHome + "/1", conn, true},
-		{"the far node's plugin through the connection", farPl + "/4", conn, true},
+		{"the far node's source through the connection", farPl + "/4", conn, true},
 		{"the connection does not serve this node's home", node + "/7", conn, false},
 		{"this node's home serves its own grid", node + "/7", node, true},
 		{"the files serve a directory", node + "/" + rpc.KeyTileID("/srv/notes"), rpc.FilesOwner(node), true},
@@ -138,7 +138,7 @@ func TestReachesCoversTheSourceItselfAndEveryNodeBehindIt(t *testing.T) {
 	}{
 		{"a node's own menu is that node's fact", conn, conn, true},
 		{"the far node behind the connection", farHome, conn, true},
-		{"a far plugin behind the connection", farPl, conn, true},
+		{"a far source behind the connection", farPl, conn, true},
 		{"the connection is not behind the far node", conn, farHome, false},
 		{"a different connection", node + "/other", conn, false},
 		{"a segment that merely starts the same", conn + "x", conn, false},

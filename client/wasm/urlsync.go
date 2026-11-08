@@ -221,7 +221,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		if len(p.Path()) > 0 || p.ContentID() != "" {
 			return
 		}
-		pl, ok := a.pluginByRoot(p.Anchor())
+		pl, ok := a.sourceByRoot(p.Anchor())
 		if !ok {
 			return
 		}
@@ -258,7 +258,7 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 // they moved: see textedit.ScrollMoved. Inside a workspace tile a settle takes only
 // the mode to the row (textedit.RowScroll). A read-only host tile scrolls like any other,
 // because where the user left the scroll is the node's fact even when the
-// body is the plugin's.
+// body is the source's.
 func (a *App) persistTextScroll(p *pane.Pane) {
 	file, ok := a.descendedTile(p)
 	if !ok || p.ViewPending || !rpc.TextDocument(file) {

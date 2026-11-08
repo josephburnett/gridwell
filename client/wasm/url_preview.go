@@ -146,7 +146,7 @@ func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dash
 }
 
 // urlTileLabel is what a url tile reads before its preview arrives: its
-// address, or its name when the plugin serves the page and there is no address
+// address, or its name when the source serves the page and there is no address
 // to show.
 func urlTileLabel(n *gridwellv1.Tile) string {
 	if n.UrlString != "" {

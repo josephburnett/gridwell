@@ -155,14 +155,14 @@ func TestGetWithMismatchedBlobIDReturnsNotOK(t *testing.T) {
 	}
 }
 
-// A plugin picture keys below zero (files.previewKey), and the first
+// A source picture keys below zero (files.previewKey), and the first
 // screenshot replaces it with a blob id. Its entry must then miss, whatever
 // its stamp, or the picture would stand in for the screenshot forever.
-func TestAPluginPictureIsNotALocalCapture(t *testing.T) {
+func TestAFilesPictureIsNotALocalCapture(t *testing.T) {
 	for _, stamp := range []int64{1, 1790562723} {
 		d := &fakeDecoder{}
 		c := NewCache(d, nil)
-		c.Put("42", -stamp, []byte("the plugin's picture"), nil)
+		c.Put("42", -stamp, []byte("the source's picture"), nil)
 		d.resolveAll()
 		if _, ok := c.Get("42", -stamp); !ok {
 			t.Fatalf("stamp %d: the picture misses its own key", stamp)

@@ -76,8 +76,8 @@ type App struct {
 
 	cl *rpc.Client
 
-	// plugins is the Handshake's menu-row list, in config order.
-	plugins []*gridwellv1.SourceInfo
+	// sources is the Handshake's menu-row list, in config order.
+	sources []*gridwellv1.SourceInfo
 
 	// home is the qualified grid id "/" means; every "empty anchor" reader
 	// resolves through it.
@@ -251,7 +251,7 @@ type viewCaches struct {
 	// paneLayouts memoizes the decode, keyed by cache.BodyGen.
 	paneLayouts *panepreview.Layouts
 
-	// menuCtxs is keyed by the grid-stamped node_ns; "" is a.plugins, a.caps.
+	// menuCtxs is keyed by the grid-stamped node_ns; "" is a.sources, a.caps.
 	menuCtxs map[string]*menuContext
 }
 
@@ -541,7 +541,7 @@ type dragState struct {
 	originScreenX float64
 	originScreenY float64
 
-	// item is a menu drag's grabbed entry: a primitive to create or a plugin
+	// item is a menu drag's grabbed entry: a primitive to create or a source
 	// to link as a door to another namespace.
 	isTemplate bool
 	item       menuItem
@@ -661,42 +661,42 @@ func main() {
 	select {}
 }
 
-// takeMenu keeps what a handshake of this node says of its plugins.
+// takeMenu keeps what a handshake of this node says of its sources.
 func (a *App) takeMenu(h *gridwellv1.HandshakeResponse) {
-	a.plugins = h.Sources
+	a.sources = h.Sources
 }
 
-// bootstrap loads the plugin list, then starts the rest of the client.
+// bootstrap loads the source list, then starts the rest of the client.
 func (a *App) bootstrap() {
 	// The handshake retries until it lands, or one blip empties the page.
 	backoff := retry.Backoff{First: retry.HandshakeFirst, Max: retry.HandshakeMax}
-	var plugins *gridwellv1.HandshakeResponse
+	var sources *gridwellv1.HandshakeResponse
 	for {
 		// Bounded: an unbounded handshake the network swallows never returns.
 		err := func() error {
 			ctx, cancel := inflight.Bounded()
 			defer cancel()
 			var err error
-			plugins, err = a.cl.Handshake(ctx)
+			sources, err = a.cl.Handshake(ctx)
 			return err
 		}()
 		if err == nil {
 			a.resolveErr("rpc:Handshake")
 			break
 		}
-		// Say why, or an empty landing page reads as "my plugins vanished".
-		a.reportErr(errsurface.Error, "rpc:Handshake", "plugin list failed — retrying: "+rpcErrText(err))
+		// Say why, or an empty landing page reads as "my sources vanished".
+		a.reportErr(errsurface.Error, "rpc:Handshake", "source list failed — retrying: "+rpcErrText(err))
 		a.draw()
 		time.Sleep(backoff.Next())
 	}
-	a.emit(traceevent.NodeBuild(plugins.Build))
-	a.takeMenu(plugins)
+	a.emit(traceevent.NodeBuild(sources.Build))
+	a.takeMenu(sources)
 	// shells_disabled folds into caps at boot, the one owner of what this client
 	// can do.
-	a.caps = caps.Derive(bridgeCaps(), plugins.ShellsDisabled)
+	a.caps = caps.Derive(bridgeCaps(), sources.ShellsDisabled)
 	// Boot-time, immutable, read only by webAddress.
-	a.contentToken = plugins.ContentToken
-	a.home = rpc.HomeGrid(plugins)
+	a.contentToken = sources.ContentToken
+	a.home = rpc.HomeGrid(sources)
 	a.afterBootstrap()
 }
 
@@ -1267,13 +1267,13 @@ func (a *App) resolveErr(source string) {
 // notices at once, the resync once the health holds.
 func (a *App) reportSourceHealth(h *gridwellv1.EventSourceHealth) {
 	label := h.Uuid
-	if pl, ok := a.pluginByUUID(h.Uuid); ok && pl.Label != "" {
+	if pl, ok := a.sourceByUUID(h.Uuid); ok && pl.Label != "" {
 		label = pl.Label
 	}
 	// The client's one copy of which sources are not answering or not told.
 	wasDark := a.c.NoteHealth(h.Uuid, h.Healthy)
 	a.c.NoteTold(h)
-	r := events.ReactHealth(h, label, wasDark, sourcehealth.Disableable(a.plugins, h.Uuid))
+	r := events.ReactHealth(h, label, wasDark, sourcehealth.Disableable(a.sources, h.Uuid))
 	for _, n := range []events.StickyNotice{r.Dark, r.LiveOff} {
 		if n.Message == "" {
 			a.resolveErr(n.Source)

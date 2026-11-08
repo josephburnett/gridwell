@@ -319,7 +319,7 @@ func TestDecideDropBareClickAlwaysNavigates(t *testing.T) {
 
 // Rejected before the RPC, so no reconcile notice follows.
 func TestDecideDropTargetRefusesTiles(t *testing.T) {
-	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true, CrossPlugin: true}
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true, CrossSource: true}
 	if got := DecideDrop(base); got != DropRejected {
 		t.Errorf("left-drag link onto read-only grid = %v, want DropRejected", got)
 	}
@@ -348,14 +348,14 @@ func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	if got := DecideDrop(cp); got != DropRejected {
 		t.Errorf("same-grid copy on read-only grid = %v, want DropRejected (creation)", got)
 	}
-	// A plugin that moves (fs) takes a left-drag to another of its grids,
+	// The files move, so a left-drag goes to another of their grids,
 	// though they take no new tiles; across a namespace it is a link.
 	across := rearrange
 	across.SameGrid = false
 	if got := DecideDrop(across); got != DropMove {
 		t.Errorf("cross-grid move in one read-only namespace = %v, want DropMove", got)
 	}
-	across.CrossPlugin = true
+	across.CrossSource = true
 	if got := DecideDrop(across); got != DropRejected {
 		t.Errorf("cross-namespace left-drag onto a read-only grid = %v, want DropRejected (a link creates)", got)
 	}
@@ -367,7 +367,7 @@ func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name               string
 		sameGrid           bool
-		crossPlugin        bool
+		crossSource        bool
 		srcMoves, srcKnown bool
 		dstMoves, dstKnown bool
 		want               bool
@@ -380,11 +380,11 @@ func TestMoveForbidden(t *testing.T) {
 		{"to a grid not yet read", false, false, true, true, false, false, false},
 		// A drag across an id namespace is a link, so the stamps are exempt
 		// and TargetRefusesTiles gates the destination.
-		{"cross-plugin left-drag is a link, not forbidden", false, true, false, true, false, true, false},
+		{"cross-source left-drag is a link, not forbidden", false, true, false, true, false, true, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := MoveForbidden(c.sameGrid, c.crossPlugin, c.srcMoves, c.srcKnown, c.dstMoves, c.dstKnown); got != c.want {
+			if got := MoveForbidden(c.sameGrid, c.crossSource, c.srcMoves, c.srcKnown, c.dstMoves, c.dstKnown); got != c.want {
 				t.Errorf("MoveForbidden = %v, want %v", got, c.want)
 			}
 		})
@@ -483,7 +483,7 @@ func TestDecideDrop(t *testing.T) {
 		// Crossing a namespace with the modifier held reaches the same
 		// verdict a plain left-drag does.
 		{"ctrl right drag across a namespace -> link",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, CrossPlugin: true}, DropLink},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, CrossSource: true}, DropLink},
 		// A link lands a new row, so the source cell is a real neighbor
 		// and a read-only grid refuses it.
 		{"ctrl right drag onto occupied -> rejected",
@@ -498,22 +498,22 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", OverDelete: true, Intent: IntentLink}, DropDelete},
 
 		// A cross-namespace left-drag is a link.
-		{"cross-plugin left drag -> link",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true}, DropLink},
-		{"cross-plugin right drag -> copy (copy, not link)",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy}, DropCopy},
-		// A plugin's door never copies: a right-drag of one across a
+		{"cross-source left drag -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true}, DropLink},
+		{"cross-source right drag -> copy (copy, not link)",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy}, DropCopy},
+		// A source's door never copies: a right-drag of one across a
 		// namespace is the link a left-drag makes (CLAUDE.md, 2026-10-20).
-		{"cross-plugin right drag of a plugin door -> link",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Intent: IntentCopy, CopiesAsLink: true}, DropLink},
-		{"right drag of a plugin door in its own namespace -> copy",
+		{"cross-source right drag of a source door -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, CopiesAsLink: true}, DropLink},
+		{"right drag of a source door in its own namespace -> copy",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, CopiesAsLink: true}, DropCopy},
-		{"cross-plugin link onto occupied -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, Occupied: true}, DropRejected},
-		{"cross-plugin link onto read-only target -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossPlugin: true, TargetRefusesTiles: true}, DropRejected},
-		{"cross-plugin drop over delete still deletes",
-			DropInput{Started: true, TileID: "7", OverDelete: true, CrossPlugin: true}, DropDelete},
+		{"cross-source link onto occupied -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Occupied: true}, DropRejected},
+		{"cross-source link onto read-only target -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, TargetRefusesTiles: true}, DropRejected},
+		{"cross-source drop over delete still deletes",
+			DropInput{Started: true, TileID: "7", OverDelete: true, CrossSource: true}, DropDelete},
 	}
 	for _, c := range cases {
 		if got := DecideDrop(c.in); got != c.want {
@@ -533,15 +533,15 @@ func TestCarryCopiesAsLink(t *testing.T) {
 		accepts, known bool
 		want           bool
 	}{
-		{"a plugin's door", []*gridwellv1.Tile{door}, false, true, true},
-		{"two plugin doors", []*gridwellv1.Tile{door, door}, false, true, true},
+		{"a source's door", []*gridwellv1.Tile{door}, false, true, true},
+		{"two source doors", []*gridwellv1.Tile{door, door}, false, true, true},
 		{"a home door", []*gridwellv1.Tile{door}, true, true, false},
 		{"a grid not yet read: the server decides", []*gridwellv1.Tile{door}, false, false, false},
-		// A plugin's text copies its bytes, so a carry holding one is a
+		// A source's text copies its bytes, so a carry holding one is a
 		// copy, and the server links the doors in it row by row.
-		{"a plugin door with a plugin text", []*gridwellv1.Tile{door, text}, false, true, false},
+		{"a source door with a source text", []*gridwellv1.Tile{door, text}, false, true, false},
 		{"a served page, wherever it sits", []*gridwellv1.Tile{page}, true, true, true},
-		{"a plugin door with a served page", []*gridwellv1.Tile{door, page}, false, true, true},
+		{"a source door with a served page", []*gridwellv1.Tile{door, page}, false, true, true},
 		{"a link door is a link already", []*gridwellv1.Tile{link}, false, true, false},
 		{"nothing carried", nil, false, true, false},
 	}
@@ -670,7 +670,7 @@ func TestWhyRejectedNamesTheArm(t *testing.T) {
 	}{
 		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
 		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
-		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.CrossPlugin = true, true; return in }, "target refuses tiles"},
+		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.CrossSource = true, true; return in }, "target refuses tiles"},
 		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
 		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
 		{func(in DropInput) DropInput { return in }, ""},

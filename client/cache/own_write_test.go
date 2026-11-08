@@ -73,7 +73,7 @@ func TestAForeignChangeDuringAWriteStillAgesTheBody(t *testing.T) {
 }
 
 // proto0 is the row before tc's change: version 1 for a home row, the same
-// claimless row for a plugin's.
+// claimless row for a source's.
 func proto0(n *gridwellv1.Tile) *gridwellv1.Tile {
 	seed := &gridwellv1.Tile{Id: n.Id, GridId: n.GridId, Kind: n.Kind}
 	if n.Version > 0 {

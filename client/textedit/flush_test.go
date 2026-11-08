@@ -12,7 +12,7 @@ func TestDecideFlush(t *testing.T) {
 		{"uncached row is fetched", false, false, false, FlushFetchRow},
 		{"refused row is reported", false, false, true, FlushNoRow},
 		// A row's writability is a server fact that can change under bytes
-		// already typed: a plugin grid that answers read-only, or a grid that
+		// already typed: a source grid that answers read-only, or a grid that
 		// falls out of the cache. Before this arm the sweep returned here, so
 		// the entry stayed parked dirty and re-ran the same no-op forever
 		// with nothing said.

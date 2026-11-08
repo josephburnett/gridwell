@@ -111,7 +111,7 @@ func linkBySwatch(t *testing.T, cl *rpc.Client, rowUUID, destGrid string, x, y i
 	if len(places) != 1 {
 		t.Fatalf("link %s: %d swatches in %+v, want one", rowUUID, len(places), lp.Sources)
 	}
-	row := places[0].Plugin
+	row := places[0].Row
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: destGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: x, Y: y, W: 1, H: 1, ChildGridId: row.RootGridId, AltText: row.Label, ViewCx: row.RootViewCx, ViewCy: row.RootViewCy, ViewZoom: row.RootViewZoom}})
 	if err != nil {
 		t.Fatalf("link %s: %v", rowUUID, err)
@@ -130,7 +130,7 @@ func TestMenuAndDoorLabelAgree(t *testing.T) {
 	var menuLabel string
 	for _, p := range lp.Sources {
 		if p.Uuid == rpc.FilesOwner(f.node) {
-			menuLabel = door.PlacesOf(p)[0].Plugin.Label
+			menuLabel = door.PlacesOf(p)[0].Row.Label
 		}
 	}
 	if menuLabel == "" {

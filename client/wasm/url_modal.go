@@ -15,13 +15,13 @@ import (
 const maxURLSuggestions = 8
 
 // urlSuggestCandidates collects the address and captured title of every
-// cached url tile in the given plugin. Scoped to one plugin, so autocomplete
+// cached url tile in the given source. Scoped to one source, so autocomplete
 // offers only the space you are creating in, and bound to the cache, so grids
 // not opened this session do not contribute.
-func (a *App) urlSuggestCandidates(pluginUUID string) []urlnorm.Candidate {
+func (a *App) urlSuggestCandidates(sourceUUID string) []urlnorm.Candidate {
 	var out []urlnorm.Candidate
 	a.forEachCachedGrid(func(gid string, g *cache.Grid) bool {
-		if rpc.UUIDOf(gid) != pluginUUID {
+		if rpc.UUIDOf(gid) != sourceUUID {
 			return true
 		}
 		for _, t := range g.Tiles {
