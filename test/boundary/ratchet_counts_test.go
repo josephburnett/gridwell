@@ -449,7 +449,7 @@ var (
 	backticked = regexp.MustCompile("`([^`\n]+)`")
 	// docSymbol is `pkg.Name`, `pkg.Name()`, `Name()` or `file.go:Name`. A
 	// bare `Name` is not read: most are another program's (`localStorage`,
-	// `WebContentsView`) or the plugins repository's.
+	// `WebContentsView`).
 	docSymbol = regexp.MustCompile(`^(?:([a-z][a-z0-9]*)\.|((?:[\w-]+/)*[\w-]+\.(?:go|ts)):)?([A-Za-z_][A-Za-z0-9_]*)(\(\))?$`)
 	// snakeCase is a column, a config key or a wire field, never a symbol.
 	snakeCase = regexp.MustCompile(`^[a-z0-9]+(?:_[a-z0-9]+)+$`)

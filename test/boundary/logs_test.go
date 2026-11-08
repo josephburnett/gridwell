@@ -15,7 +15,7 @@ import (
 // trace.Emit is no surface, since a record is diagnostics.
 
 // logFunc matches a log function a package builds for itself, as the shim's
-// shellLog, urlLog and urlConsole, or a plugin's Logf.
+// shellLog, urlLog and urlConsole, or a package's Logf.
 var logFunc = regexp.MustCompile(`(?:Log|[Ll]ogf|Console)$`)
 
 // notLogPkgs spell a Log that is no log: math.Log, traceevent.Log's record.

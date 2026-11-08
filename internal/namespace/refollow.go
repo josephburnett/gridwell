@@ -1,9 +1,8 @@
 package namespace
 
 // Refollow is the loop around Follow: the stream ended, wait, dial it again,
-// and say so. The node's plugin fan-in, a connection's fan-in and a plugin's
-// Watch stream are its callers, so what "waiting" and "saying so" mean is
-// decided once here rather than spelled out again on each side.
+// and say so. The node's fan-in and a connection's fan-in are its callers,
+// so what "waiting" and "saying so" mean is decided once here.
 
 import (
 	"context"

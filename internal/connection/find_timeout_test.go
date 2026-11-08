@@ -32,7 +32,7 @@ func (answeringFindClient) Find(context.Context, *gridwellv1.FindRequest) (*grid
 }
 
 // One hung connection must not stall the whole federated find: each hop is
-// bounded by rpc.FindHopTimeout, the same owner the server's per-plugin
+// bounded by rpc.FindHopTimeout, the same owner the server's per-source
 // fan-out reads. Without the bound, a hanging hop holds the caller's unbounded
 // context forever.
 func TestFindFanOutBoundsEachHop(t *testing.T) {

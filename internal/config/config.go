@@ -147,7 +147,7 @@ var retiredKeys = map[string]string{
 	"password": "is the web-password file beside this config (delete it to rotate)",
 	"node_id":  "is the layout Gridwell used before one database per node; v0.1.0 is the last release that converts a node written that way",
 	"routes":   "is gone (2026-11-07): a url tile opens its own address, and the node's files are `files:`; delete the key",
-	"plugins":  "is gone (2026-11-07): the node shows a directory itself, as a root under `files:` ({root, label}), and has no plugins; delete the key",
+	"plugins":  "is gone (2026-11-07): the node shows a directory itself, as a root under `files:` ({root, label}); delete the key",
 }
 
 // Load reads path and fills in defaults. A missing file wraps fs.ErrNotExist.

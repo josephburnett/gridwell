@@ -188,7 +188,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	awaitConnHealth(t, health, "partconn1", false)
 
 	// The offline deep copy: right-drag the remote door into the local
-	// plugin while the connection is dark. Cached text becomes a real copy and
+	// home while the connection is dark. Cached text becomes a real copy and
 	// never-read text becomes a link to the original.
 	copyResp := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": door["id"], "version": 0, "destGridId": homeRoot, "x": 5, "y": 5,

@@ -1,5 +1,5 @@
-// Package namespace is the node's in-process interface. One namespace, home
-// store, plugin adapter or connection, is a Go value the router calls directly,
+// Package namespace is the node's in-process interface. One namespace, home,
+// the files or a connection, is a Go value the router calls directly,
 // and Server and FromClient here carry the same method set across the
 // connection API, one side each. The four gRPC stream shapes become Go control
 // flow, decided once so no implementation invents its own:

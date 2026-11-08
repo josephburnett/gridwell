@@ -2,7 +2,7 @@ package connection
 
 // The transport is one client of each far node: what this node's clients
 // show there is cut by connection and told to that node under the
-// connection's own session, so a far plugin watches what is on screen here.
+// connection's own session, so a far node's sources watch what is on screen here.
 
 import (
 	"context"

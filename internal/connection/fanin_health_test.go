@@ -29,7 +29,7 @@ func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeReque
 }
 
 // A connection whose event stream dies must say so: the fan-in publishes an
-// EventSourceHealth down transition, the same contract the node's plugin
+// EventSourceHealth down transition, the same contract the node's own
 // fan-in keeps. Retrying silently presents as tiles that stopped updating
 // with no evidence.
 func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
@@ -45,7 +45,7 @@ func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 	case ev := <-events:
 		ph := ev.GetSourceHealth()
 		if ph == nil {
-			t.Fatalf("first event = %+v, want a plugin-health transition", ev)
+			t.Fatalf("first event = %+v, want a source-health transition", ev)
 		}
 		if ph.Healthy || ph.Uuid != "rtb" || ph.Detail == "" {
 			t.Fatalf("want an unhealthy rtb transition with a reason, got %+v", ph)
@@ -180,7 +180,7 @@ func (c *flakySubscribeClient) Subscribe(ctx context.Context, _ *gridwellv1.Subs
 }
 
 // A connection's fan-in waits namespace.DefaultBackoff, the same policy the
-// node's plugin fan-in waits, and reports the outage once however many
+// node's own fan-in waits, and reports the outage once however many
 // re-dials it takes. Lowering the policy is what proves the loop reads it.
 func TestFanInRemoteRetriesOnTheDeclaredBackoff(t *testing.T) {
 	was := namespace.DefaultBackoff
@@ -294,7 +294,7 @@ func TestAConnectionIsBackOnlyOnceTheFarNodeListens(t *testing.T) {
 	}
 }
 
-// replayingFar is a far node whose every stream opens with its plugin's
+// replayingFar is a far node whose every stream opens with its sources'
 // standing health, as the far node's own Subscribe replays it, and ends when
 // drop is sent.
 type replayingFar struct {
@@ -335,7 +335,7 @@ func opening(t *testing.T, s *Server) []*gridwellv1.Event {
 	return out
 }
 
-// A far plugin's health is a state too, and that its changes are not told is
+// A far source's health is a state too, and that its changes are not told is
 // part of it: the far node tells it once on the stream, so a client
 // subscribing after it was told hears it from the connection's opening replay,
 // and once the far node re-establishes without it, hears nothing.
@@ -357,7 +357,7 @@ func TestASubscriberArrivingLateIsToldAFarPluginsStandingHealth(t *testing.T) {
 
 	got := opening(t, s)
 	if len(got) != 1 || got[0].GetSourceHealth().GetUuid() != "rtb/pfar" || got[0].GetSourceHealth().Told == nil || got[0].GetSourceHealth().GetTold() {
-		t.Fatalf("opening replay = %v, want the far plugin not told", got)
+		t.Fatalf("opening replay = %v, want the far source not told", got)
 	}
 
 	far.standing.Store(nil)

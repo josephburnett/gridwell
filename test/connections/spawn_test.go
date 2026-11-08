@@ -237,7 +237,7 @@ func TestConnectionSpawn(t *testing.T) {
 	sshRoot := awaitConnRoot(t, localOrigin, "fedconn1")
 
 	// 2. The landing is the remote's home, where a direct client of that
-	//    node boots, and its + menu is the routed plugin list.
+	//    node boots, and its + menu is the routed source list.
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	if pe, ok := ng["grid"].(map[string]any)["proxyEndpoint"]; ok && pe != "" {
 		t.Fatalf("transit grid still carries a proxyEndpoint %v — the network-context surface should be gone", pe)
@@ -249,7 +249,7 @@ func TestConnectionSpawn(t *testing.T) {
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
 	mp := menu["sources"].([]any)
 	if len(mp) != 1 {
-		t.Fatalf("routed menu has %d plugins through the tunnel, want the remote's home alone", len(mp))
+		t.Fatalf("routed menu has %d sources through the tunnel, want the remote's home alone", len(mp))
 	}
 	workChild, _ := mp[0].(map[string]any)["rootGridId"].(string)
 	if workChild != sshRoot {
@@ -578,9 +578,9 @@ func sshConnectionYAML(t *testing.T, name string, creds dialtest.Creds, remoteAd
 `, name, sshHost, sshPort, creds.KeyPath, creds.KnownHostsPath, remoteAddr)
 }
 
-// awaitConnRoot polls the plugin list until the named connection's menu row
+// awaitConnRoot polls the source list until the named connection's menu row
 // carries its learned root, which means the tunnel answered. A connection is
-// a plugins row marked connection, rpc.ConnectionRow's shape.
+// a roster row marked connection, rpc.ConnectionRow's shape.
 func awaitConnRoot(t *testing.T, origin, name string) string {
 	t.Helper()
 	deadline := time.After(30 * time.Second)

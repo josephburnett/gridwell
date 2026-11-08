@@ -54,20 +54,20 @@ func TestDirectConnectSpawn(t *testing.T) {
 	}
 
 	// Asking with the home grid's node_ns answers the remote node's
-	// plugins, which is the + menu a pane inside this node shows.
+	// sources, which is the + menu a pane inside this node shows.
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
 	mp := menu["sources"].([]any)
 	if len(mp) != 1 {
-		t.Fatalf("routed menu = %d plugins, want the remote's one", len(mp))
+		t.Fatalf("routed menu = %d sources, want the remote's one", len(mp))
 	}
 	if lbl := mp[0].(map[string]any)["label"]; lbl != "home" {
-		t.Fatalf("routed menu plugin = %v, want the remote's home", lbl)
+		t.Fatalf("routed menu row = %v, want the remote's home", lbl)
 	}
 	if root, _ := mp[0].(map[string]any)["rootGridId"].(string); root != sshRoot {
 		t.Fatalf("routed menu root = %q, want the landing %q", root, sshRoot)
 	}
 	if tok, _ := menu["contentToken"].(string); tok != "" {
-		t.Fatal("node-local fields must be zeroed on a routed plugin list")
+		t.Fatal("node-local fields must be zeroed on a routed source list")
 	}
 
 	txt := rpc(t, localOrigin, "CreateTile", map[string]any{

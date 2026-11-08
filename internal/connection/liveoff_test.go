@@ -40,7 +40,7 @@ func (f *refusingFar) SetView(context.Context, *gridwellv1.SetViewRequest) (*gri
 
 // A far node that refuses this node's share watches nothing shown here, so
 // the refusal is the connection's live updates off: on its healthy health
-// event as a plugin's is, replayed to a stream that opens later, and cleared
+// event as the files' is, replayed to a stream that opens later, and cleared
 // once a share lands.
 func TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff(t *testing.T) {
 	s := newTestServer(t, openStore(t))
@@ -92,7 +92,7 @@ func TestOnlyAnAnsweredShareRefusalTurnsLiveUpdatesOff(t *testing.T) {
 		err  error
 		off  bool
 	}{
-		{"answered Unavailable", status.Error(codes.Unavailable, "the far plugin is not answering"), true},
+		{"answered Unavailable", status.Error(codes.Unavailable, "the far node is not answering"), true},
 		{"unheard", gwerr.Unheard("tunnel down"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

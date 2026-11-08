@@ -50,7 +50,7 @@ type TileOut struct {
 	Tile        Tile    `json:"tile"`
 	Body        *string `json:"body,omitempty"`
 	BodyVersion *int64  `json:"body_version,omitempty" jsonschema:"the version the body was read at, the claim write_text takes"`
-	BodyStamp   string  `json:"body_stamp,omitempty" jsonschema:"a plugin's name for the body's bytes, its claim in place of a version"`
+	BodyStamp   string  `json:"body_stamp,omitempty" jsonschema:"the files' name for the body's bytes, its claim in place of a version"`
 	URL         string  `json:"url,omitempty"`
 	ShellTmux   string  `json:"shell_tmux,omitempty"`
 	Layout      *Layout `json:"layout,omitempty" jsonschema:"a workspace tile's panes"`
