@@ -11,6 +11,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // TestQualifyTilesQualifiesIDs: a plugin returns bare ids; the server prefixes
@@ -321,13 +322,13 @@ func TestAsConnectError(t *testing.T) {
 // The router's namespace/tile split is rpc.OwnerNamespaceOf's, the same rule the
 // URL grammar reads a path with — one classifier, so an address that the bar
 // says is a home tile can never route to the transport instead. Under the
-// node's own segment: a tile shape (row id or key form) is the home store, a
+// node's own segment: a row id is the home store, a key form is the files, a
 // namespace shape is a connection. The peel itself is pinned in
 // api/rpc/segment_test.go; this pins that resolve routes by it.
 func TestResolveRoutesByTheNamespacePeel(t *testing.T) {
 	const node = "n1abcde"
-	home := []string{"", "1", "7/3", "42", rpc.KeyTileID("/home/joe/x"),
-		rpc.KeyTileID("/home/joe") + "/3"}
+	home := []string{"", "1", "7/3", "42"}
+	files := []string{rpc.KeyTileID("/home/joe/x"), rpc.KeyTileID("/home/joe") + "/3"}
 	conn := []string{"laptop", "laptop/1", "ssh4321/remote9/1", "k3x9m2q",
 		// A '~' segment that is not a well-formed key form is a namespace
 		// segment, here as everywhere.
@@ -337,9 +338,27 @@ func TestResolveRoutesByTheNamespacePeel(t *testing.T) {
 			t.Errorf("OwnerNamespaceOf(%q) = %q, want the node itself (the home store)", local, got)
 		}
 	}
+	for _, local := range files {
+		if got := rpc.OwnerNamespaceOf(rpc.QualifyID(node, local), node); got != rpc.FilesOwner(node) {
+			t.Errorf("OwnerNamespaceOf(%q) = %q, want the files (%s)", local, got, rpc.FilesOwner(node))
+		}
+	}
 	for _, local := range conn {
-		if got := rpc.OwnerNamespaceOf(rpc.QualifyID(node, local), node); got == node {
+		if got := rpc.OwnerNamespaceOf(rpc.QualifyID(node, local), node); got == node || got == rpc.FilesOwner(node) {
 			t.Errorf("OwnerNamespaceOf(%q) = %q, want a connection chain", local, got)
 		}
+	}
+	// resolve hands the files their bare path and qualifies their answers
+	// with the node, never with the owner id the registry keys them by.
+	reg := plugin.NewRegistry()
+	reg.Register(rpc.FilesOwner(node), "files", nil, nil)
+	srv, err := New(reg, Config{ID: node, Password: "pw"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := rpc.KeyTileID("/home/joe")
+	_, local, uuid, transit, ok := srv.resolve(rpc.QualifyID(node, dir))
+	if !ok || local != dir || uuid != node || transit {
+		t.Errorf("resolve(files) = (%q, %q, transit %v, ok %v), want (%q, %q, false, true)", local, uuid, transit, ok, dir, node)
 	}
 }

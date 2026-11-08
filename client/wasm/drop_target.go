@@ -195,15 +195,15 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 	}, true
 }
 
-// dropCrossNamespace reports whether the source and destination grids live
-// in different id namespaces, which is what makes a left-drag a link and
-// refuses a solid door's right-drag. The one reader of rpc.NamespaceOf here,
-// so nothing else can disagree about what cross-plugin means.
+// dropCrossNamespace reports whether the source and destination grids are of
+// different sources (rpc.SourceOf), which is what makes a left-drag a link and
+// refuses a solid door's right-drag; home and the files are two however their
+// ids share a node.
 func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 	if d == nil || t == nil {
 		return false
 	}
-	return rpc.NamespaceOf(d.srcGridID) != rpc.NamespaceOf(t.gridID)
+	return rpc.SourceOf(d.srcGridID) != rpc.SourceOf(t.gridID)
 }
 
 // dropForbiddenForMove gathers dragdrop.MoveForbidden's inputs for a left-drag.

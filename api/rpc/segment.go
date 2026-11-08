@@ -71,8 +71,9 @@ func IsTileSegment(seg string) bool {
 // qualified id to: Server.resolve's peel as a value, so a client and a node
 // cannot disagree about whether a link names a namespace this node
 // declares. The answer is the first segment, except under the node's own id,
-// where a second namespace segment is a connection name and belongs to it. ""
-// for a bare id. Not NamespaceOf, which answers store identity instead.
+// where a second namespace segment is a connection name and belongs to it,
+// and a key form is a path the node's files own (FilesOwner). "" for a bare
+// id. Not NamespaceOf, which answers store identity instead.
 func OwnerNamespaceOf(id, nodeID string) string {
 	first, rest, ok := SplitID(id)
 	if !ok {
@@ -85,10 +86,48 @@ func OwnerNamespaceOf(id, nodeID string) string {
 	if i := strings.IndexByte(rest, '/'); i >= 0 {
 		second = rest[:i]
 	}
-	if second == "" || IsTileSegment(second) {
+	switch ShapeOf(second) {
+	case ShapeKey:
+		return FilesOwner(first)
+	case ShapeRow:
+		return first
+	}
+	if second == "" {
 		return first
 	}
 	return first + "/" + second
+}
+
+// FilesOwner is the owner id of the files of the node or chain ns: the key
+// form of the empty path under it, "<node>/~". It routes, keys the files'
+// health and names their roster row; their ids are qualified with ns itself
+// (QualifierOf).
+func FilesOwner(ns string) string { return QualifyID(ns, KeyTileID("")) }
+
+// QualifierOf is the chain an owner's answers are qualified with: the owner
+// itself, or for the files the node they are under, since a path's id is
+// "<node>/~<path>" and never "<node>/~/~<path>".
+func QualifierOf(owner string) string {
+	if ns, files := strings.CutSuffix(owner, "/"+keyTilePrefix); files {
+		return ns
+	}
+	return owner
+}
+
+// IsFilesID reports whether a qualified id names a file or a directory: its
+// own segment is a path's key form, wherever the chain holds it.
+func IsFilesID(id string) bool {
+	return NamespaceOf(id) != "" && ShapeOf(LocalOf(id)) == ShapeKey
+}
+
+// SourceOf is the source a qualified id belongs to: its namespace chain, or
+// for a file or directory the files of that chain (FilesOwner), so home and
+// the files are two sources however their ids share a node.
+func SourceOf(id string) string {
+	if IsFilesID(id) {
+		return FilesOwner(NamespaceOf(id))
+	}
+	return NamespaceOf(id)
 }
 
 // SharedOwner is the namespace both a and b route to at the node nodeID, or ""
@@ -104,8 +143,12 @@ func SharedOwner(a, b, nodeID string) string {
 
 // ChainedThrough reports whether a qualified id is served through the
 // namespace chain ns: a prefix on a segment boundary, so "n1/laptop" is
-// chained through neither "n1x" nor itself. Whoever asks which ids a source
-// answers for needs the whole chain, which OwnerNamespaceOf does not give.
+// chained through neither "n1x" nor itself, and for the files' owner every
+// path directly under its node. Whoever asks which ids a source answers for
+// needs the whole chain, which OwnerNamespaceOf does not give.
 func ChainedThrough(id, ns string) bool {
+	if chain := QualifierOf(ns); chain != ns {
+		return IsFilesID(id) && NamespaceOf(id) == chain
+	}
 	return ns != "" && strings.HasPrefix(id, ns+"/")
 }

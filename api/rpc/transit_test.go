@@ -244,6 +244,17 @@ func TestHopPeelsOnlyWhatChainsThroughIt(t *testing.T) {
 		t.Errorf("connection hop peeled another connection's id: %q", got)
 	}
 
+	files := InboundHop("n1/~L3Nydg", "n1", false)
+	for id, want := range map[string]string{
+		"n1/~L3Nydi9h": "~L3Nydi9h",
+		"n1/9":         "n1/9",
+		"n1/rtb/far/2": "n1/rtb/far/2",
+	} {
+		if got := files.PeelID(id); got != want {
+			t.Errorf("files hop PeelID(%q) = %q, want %q", id, got, want)
+		}
+	}
+
 	leaf := InboundHop("n1/5", "n1", false)
 	got := leaf.PeelTile(&pb.Tile{Id: "n1/6", GridId: "n1/5", ChildGridId: "n1/9", LinkTargetId: "plug/3"})
 	want := &pb.Tile{Id: "6", GridId: "5", ChildGridId: "n1/9", LinkTargetId: "plug/3"}

@@ -105,10 +105,12 @@ func (s *Server) routeClient(uuid string) (namespace.Namespace, bool) {
 }
 
 // resolve is the routing lookup every API goes through: the namespace owning a
-// qualified id, the local id it understands, the uuid to re-qualify with, and
-// whether it is transit. "<id>/<digits>" is the home store; "<id>/<letters>/…"
-// is a connection, whose local id keeps the connection segment for the
-// transport to peel; anything else is a plugin by uuid.
+// qualified id (rpc.OwnerNamespaceOf), the local id it understands, the uuid
+// its answers are re-qualified with, and whether it is transit.
+// "<id>/<digits>" is the home store; "<id>/~<path>" is the files, registered
+// under rpc.FilesOwner and answering bare paths qualified with the node's id;
+// "<id>/<letters>/…" is a connection, whose local id keeps the connection
+// segment for the transport to peel; anything else is a plugin by uuid.
 //
 // The transport is the only transit namespace, structurally: a plugin's ids are
 // its own, since the node mints them, while a connection's arrive already
@@ -118,9 +120,15 @@ func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string,
 	if !split {
 		return nil, "", "", false, false
 	}
-	// rpc.OwnerNamespaceOf is the peel, shared with every other reader of an
-	// id, so the router and the address bar cannot disagree.
-	if s.cfg.ID != "" && rpc.OwnerNamespaceOf(id, s.cfg.ID) != uuid {
+	owner := uuid
+	if s.cfg.ID != "" {
+		owner = rpc.OwnerNamespaceOf(id, s.cfg.ID)
+	}
+	if rpc.QualifierOf(owner) == uuid && owner != uuid {
+		c, found := s.pluginReg.Get(owner)
+		return c, local, uuid, false, found
+	}
+	if owner != uuid {
 		t, has := s.pluginReg.Transport()
 		return t, local, uuid, true, has
 	}

@@ -140,6 +140,12 @@ func TestIsDoorToOtherNamespace(t *testing.T) {
 			&pb.Tile{Kind: KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/fs/~L2hvbWU"}, true},
 		{"far link door onto another grid of the far home is not a door to another namespace",
 			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/n2/8"}, false},
+		{"home door into a directory is a door to another source",
+			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/3", ChildGridId: "n1/~L3Nydg"}, true},
+		{"directory door into its subdirectory is not a door to another source",
+			&pb.Tile{Kind: KindDoor, GridId: "n1/~L3Nydg", ChildGridId: "n1/~L3Nydi9h"}, false},
+		{"directory door onto a home grid is a door to another source",
+			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/~L3Nydg", ChildGridId: "n1/8"}, true},
 		{"home link door onto another home grid is not a door to another namespace",
 			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/3", ChildGridId: "n1/8"}, false},
 	}

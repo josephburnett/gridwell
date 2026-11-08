@@ -223,13 +223,18 @@ func TestOwnerNamespaceOfIsTheRoutersPeel(t *testing.T) {
 		// The node's own store: a tile segment under the node is home.
 		{node + "/1", node},
 		{node + "/7/3", node},
-		{node + "/" + KeyTileID("/home/joe"), node},
+		// The node's files: a key form under the node is a path, and the
+		// files own every one (FilesOwner), not home.
+		{node + "/" + KeyTileID("/home/joe"), node + "/~"},
+		{node + "/" + KeyTileID("/home/joe/a.md"), node + "/~"},
+		{node + "/~", node + "/~"},
 		// A connection: a namespace segment under the node.
 		{node + "/laptop", node + "/laptop"},
 		{node + "/laptop/1", node + "/laptop"},
 		// Transit: the far node's own namespaces stay in its frame.
 		{node + "/laptop/far9xyz/1", node + "/laptop"},
 		{node + "/laptop/far9xyz/deeper/1", node + "/laptop"},
+		{node + "/laptop/far9xyz/" + KeyTileID("/srv"), node + "/laptop"},
 		// A bare id names no namespace.
 		{"1", ""},
 		{"", ""},
@@ -257,6 +262,10 @@ func TestSharedOwnerPartsWhereTheOwnersDiffer(t *testing.T) {
 		{node + "/toa/far1/1", node + "/toa/far1/toc/far3/2", node + "/toa"},
 		{node + "/1", node + "/2", node},
 		{node + "/1", node + "/toa/far1/1", ""},
+		// Home and the files are two owners on one node, so a copy between
+		// them is made here; two paths share the files.
+		{node + "/1", node + "/" + KeyTileID("/srv/a"), ""},
+		{node + "/" + KeyTileID("/srv/a"), node + "/" + KeyTileID("/srv/b"), node + "/~"},
 		{"p9xyzab/1", "p9xyzab/2", "p9xyzab"},
 		{"p9xyzab/1", "q9xyzab/1", ""},
 		{"p9xyzab/1", node + "/1", ""},
@@ -293,6 +302,13 @@ func TestChainedThroughIsTheWholeChainNotOneNodesPeel(t *testing.T) {
 		{node + "/laptop/far9xyz/1", node + "/laptop", true},
 		{node + "/laptop/far9xyz/1", node + "/laptop/far9xyz", true},
 		{node + "/laptop/rp9plug/4", node + "/laptop/far9xyz", false},
+		// The files' owner holds every path under its node and nothing
+		// else: no home row, no deeper chain's path.
+		{node + "/" + KeyTileID("/srv/a"), node + "/~", true},
+		{node + "/1", node + "/~", false},
+		{node + "/laptop/far9xyz/" + KeyTileID("/srv/a"), node + "/~", false},
+		{node + "/laptop/far9xyz/" + KeyTileID("/srv/a"), node + "/laptop/far9xyz/~", true},
+		{"n1abcdex/" + KeyTileID("/srv/a"), node + "/~", false},
 		// A bare id belongs to no chain, and no id is behind no namespace.
 		{"1", node, false},
 		{node + "/1", "", false},
@@ -301,6 +317,39 @@ func TestChainedThroughIsTheWholeChainNotOneNodesPeel(t *testing.T) {
 	for _, c := range cases {
 		if got := ChainedThrough(c.id, c.ns); got != c.want {
 			t.Errorf("ChainedThrough(%q, %q) = %v, want %v", c.id, c.ns, got, c.want)
+		}
+	}
+}
+
+// A file or directory is named by a key-form last segment, wherever it is
+// held; its source is the files of the chain it sits under, which is not
+// home's however the ids share a node.
+func TestFilesIDs(t *testing.T) {
+	dir := KeyTileID("/srv/notes")
+	cases := []struct {
+		id, source string
+		files      bool
+	}{
+		{"n1/" + dir, "n1/~", true},
+		{"n1/geneva/n2/" + dir, "n1/geneva/n2/~", true},
+		{"n1/7", "n1", false},
+		{"n1/geneva/n2/7", "n1/geneva/n2", false},
+		{"n1", "", false},
+	}
+	for _, c := range cases {
+		if got := IsFilesID(c.id); got != c.files {
+			t.Errorf("IsFilesID(%q) = %v, want %v", c.id, got, c.files)
+		}
+		if got := SourceOf(c.id); got != c.source {
+			t.Errorf("SourceOf(%q) = %q, want %q", c.id, got, c.source)
+		}
+	}
+	if got := FilesOwner("n1"); got != "n1/~" {
+		t.Errorf("FilesOwner = %q, want n1/~", got)
+	}
+	for owner, want := range map[string]string{"n1/~": "n1", "n1": "n1", "n1/geneva": "n1/geneva", "n1/geneva/n2/~": "n1/geneva/n2"} {
+		if got := QualifierOf(owner); got != want {
+			t.Errorf("QualifierOf(%q) = %q, want %q", owner, got, want)
 		}
 	}
 }
