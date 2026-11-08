@@ -4,7 +4,6 @@
 # Proto package names, not Go packages:
 ARCHITECTURE.md plugin.v1
 ARCHITECTURE.md gridwell.v1
-CLAUDE.md plugin.v1
 docs/ids.md plugin.v1
 # A server.yaml key:
 ARCHITECTURE.md web.bind

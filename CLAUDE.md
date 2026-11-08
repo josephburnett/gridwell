@@ -108,7 +108,8 @@ what each one is called.
 | files | The node's second source: the directories `server.yaml`'s `files:` declares, shown as grids (`internal/files`). | Home, which holds the rows the user made. |
 | root | One directory `files:` declares, with its label: a swatch in the + menu. | Home's root grid, where a client lands. |
 | directory | A folder under a root, shown as a grid; its door sits in its parent's grid and wears the outside tint. | A grid of home's. |
-| source | The files or a connection, as what a grid's rows come from; also the tile a copy was made from. The directory or node a source represents has no word of its own: name the thing. | |
+| source | Home, the files or a connection, as what a grid's rows come from (`SourceInfo`, `EventSourceHealth`); also the tile a copy was made from. The directory or node a source represents has no word of its own: name the thing. | |
+| roster | The handshake's list of a node's sources, one `SourceInfo` row each (`HandshakeResponse.sources`): home, the files, then each connection. | The + menu, which draws its swatches from it. |
 | cache | What a connection last answered (`cache.db`, `sourcecache`), served while it does not answer. Disposable, rewarmed by use. | Stale; a file's rows, which are node facts. |
 
 **Tiles**
@@ -442,12 +443,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`internal/local`), the files (`internal/files`) and each connection.
   gRPC is used at one hop only, the connection API. Both node-side APIs
   decode onto the one router.
-- There are no plugins (2026-11-07, reversing the plugin API of
-  2026-08-15). Besides home the node reads two kinds of source, its files
+- The node runs no code but its own (2026-11-07, reversing the third-party
+  API of 2026-08-15). Besides home it reads two kinds of source, its files
   and its connections, both Go values behind `namespace.Namespace`. Nothing
-  is spawned, no `plugin.v1` is spoken, and nothing under
-  `~/.gridwell/plugins` is created or read, or deleted. A behaviour the files
-  have is the node's code, not a declaration on a wire.
+  is spawned, and nothing under `~/.gridwell/plugins` is created, read or
+  deleted. A behaviour the files have is the node's code, not a declaration
+  on a wire.
 - Under the node an id has two shapes and no third (2026-11-07):
   `<node>/<digits>` is a home row, `<node>/~<base64url of an absolute path>`
   is a file or a directory (`rpc.KeyTileID`, `rpc.TileKey`), and
@@ -472,13 +473,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   store's file rows directly (2026-11-07). A directory's grid takes no new
   tiles: a file is made on disk. A directory is a door; an image,
   video, audio or PDF file, a page file, is a url tile whose page the node
-  serves, since none of them runs a script; every other file, HTML, CSS, JavaScript and
-  JSON included, is a text tile, plain or both by its extension. A file
+  serves, since none of them runs a script; every other file, HTML, CSS,
+  JavaScript, JSON and SVG (which can carry a script) included, is a text
+  tile, plain or both by its extension. A file
   never placed sits at the placement its place in the listing derives. A
   write to a file claims its content stamp, `<mtime_ns>-<size>`, and a
   stale stamp is refused as a version conflict; a file the node cannot
-  write is read-only with the reason. An image file's
-  preview carries a stamp, so a changed file redraws. Delete moves the file
+  write is read-only with the reason. An image file's preview carries a
+  stamp, so a changed file redraws; an image whose header declares more
+  than 40 million pixels gets no preview, and its tile shows its name. Delete moves the file
   to the OS trash. Move renames within the files and rewrites the row's key,
   keeping its id; a move to another source is refused. Find on the files
   locates by `id:` and applies the node's row filters, and a text query
@@ -520,16 +523,19 @@ These were decided deliberately. Do not reverse one without a new decision.
   root or directory that will not read is dark: its grid serves what its
   rows hold and says so through the health event, as a dark connection's
   serves its cache. Nothing walks a directory nobody shows.
-- The node's old plugin rows are dropped (2026-11-07): one rebuild
-  migration deletes every tiles and grids row of a namespace other than
-  home's and retires the `ns` column. This is the one decided exception to
-  converting a row the new shape cannot hold; the files start fresh.
+- The node's rows of every namespace but home's are dropped (2026-11-07):
+  one rebuild migration deletes every tiles and grids row of a namespace
+  other than home's and retires the `ns` column. This is the one decided
+  exception to converting a row the new shape cannot hold; the files start
+  fresh.
 - The handshake's roster carries one row per source, home, the files and
   each connection, and the health event one per source, the files' keyed
   `<node>/~`; their messages are
   named for sources and keep their field numbers (2026-11-07). The
-  repository says plugin only in a `reserved` comment, a migration's
-  comment and `scripts/retired-words.txt`.
+  repository says plugin only where `scripts/retired-words.txt` allows it:
+  a `reserved` comment, a migration, a stored spelling (the `plugin_uuid`
+  system key, the `plugins:` key the config refuses) and a historical
+  ledger.
 - A connection is config: an immutable name, a label, how to dial.
   Retiring a name is forever, and explicit: `retired_names:` is the one
   owner, and the stored `deleted` flag is only that list mirrored. Boot
@@ -618,8 +624,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   `federation.sock`: an existing `~/.gridwell` already has them written down.
 - The node serves a page file's page through its content API
   (2026-11-07): a GET or HEAD of `/content/<token>/<qualified tile id>`
-  answers the whole file with its media type, `nosniff` and the sandbox
-  CSP, and nothing else: no subpath, no POST, no request headers carried.
+  streams the file in chunks as it is read, with its media type, `nosniff`
+  and the sandbox CSP and no `Content-Length`, so a video plays as it
+  arrives and no page is held whole; nothing else: no subpath, no POST, no
+  request headers carried. A permission the disk refuses answers 403.
   The token in the path stays, because the desktop's url views run in their
   own partition and cannot present the web cookie, and it is never
   interchangeable with the cookie. ServeContent is the bytes and media type
@@ -782,7 +790,7 @@ and that is where the worst bugs live.
 | `make check-electron` | the `WebContentsView` bridge under xvfb | the live url path, `webviews.ts`, the preload |
 | `make check-e2e` | the full app as a black box | any `apps/desktop` change, anything under `client/wasm` or `web/`, the native layer, cross-seam behavior |
 | `make check-web` | the browser-mode client: caps, touch, shells | `client/caps`, `client/touchgest`, `client/wasm/touch.go`, the browser-serving path and its shell API |
-| `make check-connections` | the real binaries through a real ssh tunnel | the serve spawn, the dialer, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
+| `make check-connections` | the real binaries through a real ssh tunnel | the files and the dialer, the export, id routing; a dependency or toolchain bump — grpc, x/net, or the go line is every seam at once, so run it locally before pushing, plus the native gates for a desktop (npm) dependency |
 
 A feature is not done when its gates are green. It is done when a trace of
 ordinary use (the Dump logs row) has been read and every refused call,
