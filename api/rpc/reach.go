@@ -33,7 +33,7 @@ type ReachEdge struct {
 // after its own uuid. A row that never learned its landing is no edge.
 func ReachEdges(lp *pb.HandshakeResponse) []ReachEdge {
 	var out []ReachEdge
-	for _, p := range lp.GetPlugins() {
+	for _, p := range lp.GetSources() {
 		if !IsConnectionRow(p) {
 			continue
 		}

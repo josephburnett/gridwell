@@ -559,12 +559,12 @@ func TestTheTrashcanEntryKeepsItsFraming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	if len(before.PluginGrids) != 1 || before.PluginGrids[0].GridId == "" {
-		t.Fatalf("entries = %+v, want the trashcan", before.PluginGrids)
+	if len(before.SourceGrids) != 1 || before.SourceGrids[0].GridId == "" {
+		t.Fatalf("entries = %+v, want the trashcan", before.SourceGrids)
 	}
-	trash := before.PluginGrids[0].GridId
-	if before.PluginGrids[0].ViewZoom != 0 {
-		t.Fatalf("a fresh trash grid was never visited: %+v", before.PluginGrids[0])
+	trash := before.SourceGrids[0].GridId
+	if before.SourceGrids[0].ViewZoom != 0 {
+		t.Fatalf("a fresh trash grid was never visited: %+v", before.SourceGrids[0])
 	}
 	if _, err := p.SetFraming(ctx, &gridwellv1.SetFramingRequest{
 		RootGridId: trash, Cx: 4, Cy: -1.5, Zoom: 2,
@@ -575,7 +575,7 @@ func TestTheTrashcanEntryKeepsItsFraming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Info: %v", err)
 	}
-	e := after.PluginGrids[0]
+	e := after.SourceGrids[0]
 	if e.ViewCx != 4 || e.ViewCy != -1.5 || e.ViewZoom != 2 {
 		t.Errorf("trash entry = %+v, want the framing it was left at", e)
 	}

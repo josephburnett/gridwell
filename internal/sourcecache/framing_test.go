@@ -94,10 +94,10 @@ func framingFixture(t *testing.T) (*Layer, *framingSource) {
 	t.Helper()
 	src := &framingSource{
 		lists: map[string]*pb.HandshakeResponse{
-			"": {Plugins: []*pb.PluginInfo{rpc.ConnectionRow("conn", "Far", farHome, "", rpc.View{})}},
-			"conn": {HomeGridId: farHome, Plugins: []*pb.PluginInfo{
+			"": {Sources: []*pb.SourceInfo{rpc.ConnectionRow("conn", "Far", farHome, "", rpc.View{})}},
+			"conn": {HomeGridId: farHome, Sources: []*pb.SourceInfo{
 				{Uuid: "conn/r", RootGridId: farHome},
-				{Uuid: "conn/p", PluginGrids: []*pb.PluginGrid{
+				{Uuid: "conn/p", SourceGrids: []*pb.SourceGrid{
 					{Id: "feed", GridId: farFeed}, {Id: "other", GridId: farOther},
 				}},
 			}},
@@ -131,11 +131,11 @@ func cached(t *testing.T, cc *Layer, src *framingSource, ns string) *pb.Handshak
 	return resp
 }
 
-func rowFraming(pl *pb.PluginInfo) rpc.View {
+func rowFraming(pl *pb.SourceInfo) rpc.View {
 	return rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom)
 }
 
-func entryFraming(e *pb.PluginGrid) rpc.View {
+func entryFraming(e *pb.SourceGrid) rpc.View {
 	return rpc.ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)
 }
 
@@ -152,7 +152,7 @@ func TestAFramingEventReframesTheCachedDoors(t *testing.T) {
 		cc.applyEvent(ctx, rpc.FramingEvent(farFeed, g))
 	}
 
-	rows := cached(t, cc, src, "").GetPlugins()
+	rows := cached(t, cc, src, "").GetSources()
 	if got := rowFraming(rows[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the connection row = %+v, want %+v", got, f)
 	}
@@ -160,7 +160,7 @@ func TestAFramingEventReframesTheCachedDoors(t *testing.T) {
 	if got := rowFraming(rpc.HomeRow(far)); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the far home row = %+v, want %+v", got, f)
 	}
-	entries := far.GetPlugins()[1].GetPluginGrids()
+	entries := far.GetSources()[1].GetSourceGrids()
 	if got := entryFraming(entries[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("the grid entry = %+v, want %+v", got, g)
 	}
@@ -178,7 +178,7 @@ func TestAnAcceptedRootFramingIsCached(t *testing.T) {
 		RootGridId: farHome, Cx: f.Cx(), Cy: f.Cy(), Zoom: f.Zoom()}); err != nil {
 		t.Fatalf("SetFraming: %v", err)
 	}
-	if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
+	if got := rowFraming(cached(t, cc, src, "").GetSources()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the connection row = %+v, want %+v", got, f)
 	}
 	if got := rowFraming(rpc.HomeRow(cached(t, cc, src, "conn"))); !got.SameAs(rpc.Saved(f)) {
@@ -239,24 +239,24 @@ func TestSilenceKeepsTheCachedFramingAndAnAnswerReplacesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
+	if got := rowFraming(resp.GetSources()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("a row answering no framing = %+v, want the cached %+v", got, f)
 	}
-	if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(f)) {
+	if got := rowFraming(cached(t, cc, src, "").GetSources()[0]); !got.SameAs(rpc.Saved(f)) {
 		t.Errorf("the silence was cached over the framing: %+v", got)
 	}
 
 	g := mkFraming(1, 1, 2)
 	src.mu.Lock()
-	src.lists[""].Plugins[0].RootViewCx, src.lists[""].Plugins[0].RootViewCy, src.lists[""].Plugins[0].RootViewZoom = g.Cx(), g.Cy(), g.Zoom()
+	src.lists[""].Sources[0].RootViewCx, src.lists[""].Sources[0].RootViewCy, src.lists[""].Sources[0].RootViewZoom = g.Cx(), g.Cy(), g.Zoom()
 	src.mu.Unlock()
 	if resp, err = cc.Handshake(ctx, &pb.HandshakeRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := rowFraming(resp.GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
+	if got := rowFraming(resp.GetSources()[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("the source's answer = %+v, want %+v", got, g)
 	}
-	if got := rowFraming(cached(t, cc, src, "").GetPlugins()[0]); !got.SameAs(rpc.Saved(g)) {
+	if got := rowFraming(cached(t, cc, src, "").GetSources()[0]); !got.SameAs(rpc.Saved(g)) {
 		t.Errorf("cached after the answer = %+v, want %+v", got, g)
 	}
 }

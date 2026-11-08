@@ -233,7 +233,7 @@ func (wideFar) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoR
 }
 
 func (wideFar) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
-	return &gridwellv1.HandshakeResponse{Plugins: []*gridwellv1.PluginInfo{
+	return &gridwellv1.HandshakeResponse{Sources: []*gridwellv1.SourceInfo{
 		rpc.ConnectionRow("geneva", "Geneva", wideRoot, "", rpc.View{})}}, nil
 }
 

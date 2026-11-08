@@ -98,7 +98,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 	if err != nil {
 		return nil, err
 	}
-	// plugin_grids is the owning source's fact, from its Info; scratch_grid_id
+	// source_grids is the owning source's fact, from its Info; scratch_grid_id
 	// is the node's, from home's. In transit both are the remote node's stamp.
 	var g *pb.Grid
 	if transit {
@@ -113,7 +113,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			if ierr != nil {
 				return nil, infoDeclarationError(req.GridId, owner, ierr)
 			}
-			g.PluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
+			g.SourceGrids = rpc.QualifySourceGrids(uuid, info.SourceGrids)
 			if g.ScratchGridId, ierr = rt.srv.homeScratch(ctx); ierr != nil {
 				return nil, infoDeclarationError(req.GridId, rt.srv.cfg.ID, ierr)
 			}
@@ -173,7 +173,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		}
 		return rpc.TransitQualifyPluginList(hop, resp), nil
 	}
-	var out []*pb.PluginInfo
+	var out []*pb.SourceInfo
 	for _, n := range rt.srv.namespaces() {
 		if n.Transit {
 			// One row per connection, from the transport's own handshake
@@ -182,12 +182,12 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, rpc.TransitQualifyPluginList(n.UUID, tr).Plugins...)
+			out = append(out, rpc.TransitQualifyPluginList(n.UUID, tr).Sources...)
 			continue
 		}
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
-		out = append(out, buildPluginInfo(n.UUID, n.Label, info, err))
+		out = append(out, buildSourceInfo(n.UUID, n.Label, info, err))
 	}
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
@@ -195,7 +195,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		// cookie-authenticated mux.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
 		Build:        rt.srv.build,
-		Plugins:      out,
+		Sources:      out,
 	}
 	// Home is the node's own store, where "/" lands.
 	for _, p := range out {
@@ -206,16 +206,16 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	return resp, nil
 }
 
-// buildPluginInfo assembles a menu PluginInfo from the row's label and the
+// buildSourceInfo assembles a menu SourceInfo from the row's label and the
 // source's Info, nil when Info failed with infoErr the reason: the source is
 // still listed, and InfoError tells broken from healthy-but-rootless. uuid is
 // the row's owner id; its grids are qualified as its answers are
 // (rpc.QualifierOf).
-func buildPluginInfo(uuid, label string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
-	out := &pb.PluginInfo{Uuid: uuid, Label: label}
+func buildSourceInfo(uuid, label string, info *pb.InfoResponse, infoErr error) *pb.SourceInfo {
+	out := &pb.SourceInfo{Uuid: uuid, Label: label}
 	if info != nil {
 		prefix := rpc.QualifierOf(uuid)
-		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(prefix, info.RootGridId), rpc.QualifyPluginGrids(prefix, info.PluginGrids)
+		out.RootGridId, out.SourceGrids = rpc.QualifyOptionalID(prefix, info.RootGridId), rpc.QualifySourceGrids(prefix, info.SourceGrids)
 		out.Glyph = info.Glyph
 		out.RootViewCx, out.RootViewCy, out.RootViewZoom = info.RootViewCx, info.RootViewCy, info.RootViewZoom
 	} else if infoErr != nil {
@@ -627,7 +627,7 @@ func (rt *router) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequ
 
 // Subscribe fans every watching namespace's events (Info.watch) into the
 // client's, re-qualified. Failures heal through namespace.Refollow and are
-// told as EventPluginHealth; a disabled source is told so first, and only so
+// told as EventSourceHealth; a disabled source is told so first, and only so
 // after (asSwitched). Once every namespace's stream has settled the node is
 // listening, and only then: the header goes out, which is what a client's
 // Subscribe returns on and its resync waits for (retry.Events), and its
@@ -708,8 +708,8 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 // fan-in failing, it is disabled, and a row it changes takes no edits
 // (stampDisabled).
 func (s *Server) asSwitched(ev *pb.Event) *pb.Event {
-	if h := ev.GetPluginHealth(); h != nil && s.nsDisabledReason(h.GetPluginUuid()) != "" {
-		return rpc.DisabledEvent(h.GetPluginUuid())
+	if h := ev.GetSourceHealth(); h != nil && s.nsDisabledReason(h.GetUuid()) != "" {
+		return rpc.DisabledEvent(h.GetUuid())
 	}
 	if t := ev.GetTileChanged().GetTile(); t != nil {
 		if _, reason := s.disabledReason(t.GetId()); reason != "" {
@@ -773,7 +773,7 @@ func (rt *router) watchPlugin(ctx context.Context, n namespaceRow, infoOf func(c
 	}.Run(ctx)
 }
 
-// reportHealth pushes an EventPluginHealth down the path a namespace's own
+// reportHealth pushes an EventSourceHealth down the path a namespace's own
 // events take. Best-effort against ctx ending mid-send.
 func reportHealth(ctx context.Context, events chan<- *pb.Event, uuid string, healthy bool, detail string) {
 	select {

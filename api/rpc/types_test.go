@@ -157,7 +157,7 @@ func TestIsDoorToOtherNamespace(t *testing.T) {
 }
 
 func TestPluginDoorTile(t *testing.T) {
-	pl := &pb.PluginInfo{Label: "files", RootGridId: "fs-uuid/1",
+	pl := &pb.SourceInfo{Label: "files", RootGridId: "fs-uuid/1",
 		RootViewCx: 3, RootViewCy: -2, RootViewZoom: 0.5}
 	got := PluginDoorTile(pl)
 	// The load-bearing invariants the swatch preview depends on: the tile is
@@ -227,11 +227,11 @@ func TestKindPartition(t *testing.T) {
 // position, so a rooted first row is not a home. It is the one boot, URL and
 // connection landing derivation.
 func TestHomeGrid(t *testing.T) {
-	first := &pb.PluginInfo{Uuid: "p1", RootGridId: "p1/1"}
-	if got := HomeGrid(&pb.HandshakeResponse{HomeGridId: "n/1", Plugins: []*pb.PluginInfo{first}}); got != "n/1" {
+	first := &pb.SourceInfo{Uuid: "p1", RootGridId: "p1/1"}
+	if got := HomeGrid(&pb.HandshakeResponse{HomeGridId: "n/1", Sources: []*pb.SourceInfo{first}}); got != "n/1" {
 		t.Errorf("HomeGrid = %q, want the handshake's home_grid_id", got)
 	}
-	if got := HomeGrid(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{first}}); got != "" {
+	if got := HomeGrid(&pb.HandshakeResponse{Sources: []*pb.SourceInfo{first}}); got != "" {
 		t.Errorf("HomeGrid = %q, want \"\": a rooted row is not a home", got)
 	}
 	if got := HomeGrid(nil); got != "" {
@@ -242,16 +242,16 @@ func TestHomeGrid(t *testing.T) {
 // TestHomeRow: the home's framing is read from the row rooted at
 // home_grid_id, never from a row's position or a copy on the handshake.
 func TestHomeRow(t *testing.T) {
-	other := &pb.PluginInfo{Uuid: "p", RootGridId: "n/2", RootViewZoom: 9}
-	home := &pb.PluginInfo{Uuid: "n", RootGridId: "n/1", RootViewCx: 3, RootViewCy: 4, RootViewZoom: 2}
-	l := &pb.HandshakeResponse{HomeGridId: "n/1", Plugins: []*pb.PluginInfo{other, home}}
+	other := &pb.SourceInfo{Uuid: "p", RootGridId: "n/2", RootViewZoom: 9}
+	home := &pb.SourceInfo{Uuid: "n", RootGridId: "n/1", RootViewCx: 3, RootViewCy: 4, RootViewZoom: 2}
+	l := &pb.HandshakeResponse{HomeGridId: "n/1", Sources: []*pb.SourceInfo{other, home}}
 	if got := HomeRow(l); got != home {
 		t.Errorf("HomeRow = %v, want the row rooted at home_grid_id", got)
 	}
-	if got := HomeRow(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{other}}); got != nil {
+	if got := HomeRow(&pb.HandshakeResponse{Sources: []*pb.SourceInfo{other}}); got != nil {
 		t.Errorf("HomeRow = %v, want nil: no home_grid_id names no row", got)
 	}
-	if got := HomeRow(&pb.HandshakeResponse{HomeGridId: "n/3", Plugins: []*pb.PluginInfo{other}}); got != nil {
+	if got := HomeRow(&pb.HandshakeResponse{HomeGridId: "n/3", Sources: []*pb.SourceInfo{other}}); got != nil {
 		t.Errorf("HomeRow = %v, want nil: a home no row is rooted at", got)
 	}
 }
@@ -362,10 +362,10 @@ func TestDescentOf(t *testing.T) {
 // declared entry's alike, and on nothing else. Writing what is already there
 // changes nothing, so the pane that made the write never sees its own echo.
 func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
-	menu := []*pb.PluginInfo{
+	menu := []*pb.SourceInfo{
 		{Uuid: "loc", RootGridId: "loc/1",
-			PluginGrids: []*pb.PluginGrid{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
-		{Uuid: "p", PluginGrids: []*pb.PluginGrid{{Id: "feed", GridId: "p/~ZmVlZA"}}},
+			SourceGrids: []*pb.SourceGrid{{Id: "trash", GridId: "loc/9"}, {Id: "same", GridId: "loc/1"}}},
+		{Uuid: "p", SourceGrids: []*pb.SourceGrid{{Id: "feed", GridId: "p/~ZmVlZA"}}},
 	}
 	f, _ := NewFraming(1.5, -2, 0.75)
 	if !Reframe("loc/1", f, menu) {
@@ -374,17 +374,17 @@ func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 	if pl := menu[0]; pl.RootViewCx != 1.5 || pl.RootViewCy != -2 || pl.RootViewZoom != 0.75 {
 		t.Errorf("the row rooted at the grid = %+v", pl)
 	}
-	if e := menu[0].PluginGrids[1]; e.ViewCx != 1.5 || e.ViewCy != -2 || e.ViewZoom != 0.75 {
+	if e := menu[0].SourceGrids[1]; e.ViewCx != 1.5 || e.ViewCy != -2 || e.ViewZoom != 0.75 {
 		t.Errorf("the entry declaring the grid = %+v", e)
 	}
-	if e := menu[0].PluginGrids[0]; e.ViewZoom != 0 {
+	if e := menu[0].SourceGrids[0]; e.ViewZoom != 0 {
 		t.Errorf("another grid's entry moved: %+v", e)
 	}
 	if Reframe("loc/1", f, menu) {
 		t.Error("an equal framing reported a change")
 	}
-	if !Reframe("p/~ZmVlZA", f, menu) || menu[1].PluginGrids[0].ViewZoom != 0.75 {
-		t.Errorf("a plugin grid's entry = %+v", menu[1].PluginGrids[0])
+	if !Reframe("p/~ZmVlZA", f, menu) || menu[1].SourceGrids[0].ViewZoom != 0.75 {
+		t.Errorf("a plugin grid's entry = %+v", menu[1].SourceGrids[0])
 	}
 	if Reframe("x/1", f, menu) || Reframe("", f, menu) {
 		t.Error("a grid no door roots reported a change")

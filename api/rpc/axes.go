@@ -12,8 +12,8 @@ type Flag struct {
 	Carrier, Why string
 }
 
-// Flags is every bool and enum field on Tile, Grid, PluginGrid, InfoResponse
-// and EventPluginHealth, and the strings whose emptiness is the flag; the
+// Flags is every bool and enum field on Tile, Grid, SourceGrid, InfoResponse
+// and EventSourceHealth, and the strings whose emptiness is the flag; the
 // test walks the descriptors against it.
 var Flags = []Flag{
 	{"gridwell.v1.Tile.link", true, "kind: the doors to a home grid, a directory and a far home are links, a directory's symlink among them; link and see it dead make a leaf one", "delete unlinks and copy links"},
@@ -23,9 +23,9 @@ var Flags = []Flag{
 	{"gridwell.v1.Tile.read_only", true, "variant a read-only file: the decided text write cells, here and through the connection; variant a disabled source: the decided far text write cell", "a body write is refused before it is typed"},
 	{"gridwell.v1.Grid.writable", true, "variant a disabled source: the decided far text write cell reads it false, and the files' cell true", "the grid's text bodies take writes"},
 	{"gridwell.v1.Grid.accepts_tiles", true, "owner: true on a home, false on the files, and the decided create and door copy cells", "create, a swatch drop and a door's copy"},
-	{"gridwell.v1.EventPluginHealth.healthy", true, "variant a directory that will not read: the decided see it dead cells, here and through the connection", "a dark source's grids serve from cache and are never current (cache.Current)"},
-	{"gridwell.v1.EventPluginHealth.told", true, "variant a far node refusing the share: the decided far url update cell", "a source's held grids are current, or read on every move (cache.Current)"},
-	{"gridwell.v1.EventPluginHealth.disabled", false, "", "a dark source says nothing more: no notice stands (events.ReactHealth)"},
-	{"gridwell.v1.EventPluginHealth.live_updates_off", false, "", "a notice says why the source failed to tell its changes (events.ReactHealth)"},
+	{"gridwell.v1.EventSourceHealth.healthy", true, "variant a directory that will not read: the decided see it dead cells, here and through the connection", "a dark source's grids serve from cache and are never current (cache.Current)"},
+	{"gridwell.v1.EventSourceHealth.told", true, "variant a far node refusing the share: the decided far url update cell", "a source's held grids are current, or read on every move (cache.Current)"},
+	{"gridwell.v1.EventSourceHealth.disabled", false, "", "a dark source says nothing more: no notice stands (events.ReactHealth)"},
+	{"gridwell.v1.EventSourceHealth.live_updates_off", false, "", "a notice says why the source failed to tell its changes (events.ReactHealth)"},
 	{"gridwell.v1.Grid.moves", true, "variant a disabled source: the decided far text write cell reads it false; parity_move_test.go reads it true on home, the files and a far home", "a left-drag to another grid is a move, or refused (dragdrop.MoveForbidden)"},
 }

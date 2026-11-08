@@ -407,9 +407,9 @@ func TestResolveAndDismissReportWhetherTheNoticesChanged(t *testing.T) {
 // every other source carry none of their own.
 func TestDisableIsOfferedNotImpliedBySource(t *testing.T) {
 	s := New()
-	src := PluginHealthSource("node1/away")
+	src := SourceHealthSource("node1/away")
 	s.Offer(Error, src, "away: live updates stopped — dial refused", Disable, t0)
-	s.Report(Error, PluginHealthSource("node1/rtb/far1"), "far: live updates stopped", t0)
+	s.Report(Error, SourceHealthSource("node1/rtb/far1"), "far: live updates stopped", t0)
 	s.Report(Error, LiveUpdatesSource("node1/away"), "away: live updates off", t0)
 	if ActionOf(src) != NoAction {
 		t.Fatal("a health source implies a button by itself; it must be offered")

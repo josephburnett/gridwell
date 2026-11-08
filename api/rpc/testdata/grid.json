@@ -4,7 +4,11 @@
   "id": "Id-771",
   "moves": true,
   "nodeNs": "NodeNs-650",
-  "pluginGrids": [
+  "scratchGridId": "ScratchGridId-474",
+  "selection": [
+    "Selection-813"
+  ],
+  "sourceGrids": [
     {
       "glyph": "Glyph-357",
       "gridId": "GridId-289",
@@ -14,10 +18,6 @@
       "viewCy": 768.5,
       "viewZoom": 63.5
     }
-  ],
-  "scratchGridId": "ScratchGridId-474",
-  "selection": [
-    "Selection-813"
   ],
   "version": "488",
   "writable": true

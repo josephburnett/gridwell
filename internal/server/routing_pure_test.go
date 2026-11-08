@@ -220,39 +220,39 @@ func TestQualifyEvent(t *testing.T) {
 		t.Errorf("TileRemoved = %+v", rem.GetTileRemoved())
 	}
 
-	// PluginHealth carries a source's owner id, which is an id like any
+	// SourceHealth carries a source's owner id, which is an id like any
 	// other: each hop prepends one segment. A far node's fan-in re-serves its
 	// own sources' health transitions; without the prepend they arrive addressed
 	// by a bare remote uuid that names nothing on this side of the connection, so
 	// the "live updates stopped" notice attaches to nothing (or, worse, could
 	// collide with a local source key). Regression: qualifyEvent's switch
 	// omitted this variant and passed it through verbatim.
-	health := qualifyEvent("ssh1", true, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		PluginUuid: "rp", Healthy: false, Detail: "stream ended",
+	health := qualifyEvent("ssh1", true, &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
+		Uuid: "rp", Healthy: false, Detail: "stream ended",
 	}}})
-	if got := health.GetPluginHealth().GetPluginUuid(); got != "ssh1/rp" {
-		t.Errorf("transit PluginHealth uuid = %q, want ssh1/rp (chain rule: one segment per hop)", got)
+	if got := health.GetSourceHealth().GetUuid(); got != "ssh1/rp" {
+		t.Errorf("transit SourceHealth uuid = %q, want ssh1/rp (chain rule: one segment per hop)", got)
 	}
-	if health.GetPluginHealth().Healthy || health.GetPluginHealth().Detail != "stream ended" {
-		t.Errorf("PluginHealth payload mutated beyond the uuid: %+v", health.GetPluginHealth())
+	if health.GetSourceHealth().Healthy || health.GetSourceHealth().Detail != "stream ended" {
+		t.Errorf("SourceHealth payload mutated beyond the uuid: %+v", health.GetSourceHealth())
 	}
 	// An EMPTY uuid names the namespace the event rode in from: the cache
 	// layer reports its own store health without knowing its registry uuid,
 	// and the fan-in's prefix is exactly that uuid. A bare prepend would
 	// mint "u/" — a name that resolves to nothing.
-	own := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
+	own := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
 		Healthy: false, Detail: "cache cannot store",
 	}}})
-	if got := own.GetPluginHealth().GetPluginUuid(); got != "u" {
-		t.Errorf("self PluginHealth uuid = %q, want the fan-in's own %q", got, "u")
+	if got := own.GetSourceHealth().GetUuid(); got != "u" {
+		t.Errorf("self SourceHealth uuid = %q, want the fan-in's own %q", got, "u")
 	}
 
 	// The chain rule is uniform for a leaf namespace too: every id in a response gets this hop prepended.
-	leafHealth := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		PluginUuid: "x", Healthy: true,
+	leafHealth := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
+		Uuid: "x", Healthy: true,
 	}}})
-	if got := leafHealth.GetPluginHealth().GetPluginUuid(); got != "u/x" {
-		t.Errorf("leaf PluginHealth uuid = %q, want u/x", got)
+	if got := leafHealth.GetSourceHealth().GetUuid(); got != "u/x" {
+		t.Errorf("leaf SourceHealth uuid = %q, want u/x", got)
 	}
 }
 

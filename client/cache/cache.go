@@ -23,7 +23,7 @@ type Cache struct {
 	// answering, keyed by that event's uuid.
 	dark map[string]bool
 	// untold is the sources whose latest word on it said their changes are
-	// not told (EventPluginHealth.told), keyed the same way.
+	// not told (EventSourceHealth.told), keyed the same way.
 	untold map[string]bool
 	told   bool // this client's event stream is established; see NoteStream
 	// content is the one body store, keyed by tile id because blob ids are
@@ -421,9 +421,9 @@ func (c *Cache) NoteHealth(uuid string, healthy bool) (wasDark bool) {
 }
 
 // NoteTold folds in whether a health event's source tells its changes
-// (EventPluginHealth.told); an event that does not say changes nothing.
-func (c *Cache) NoteTold(h *gridwellv1.EventPluginHealth) {
-	uuid := h.GetPluginUuid()
+// (EventSourceHealth.told); an event that does not say changes nothing.
+func (c *Cache) NoteTold(h *gridwellv1.EventSourceHealth) {
+	uuid := h.GetUuid()
 	if uuid == EverySource || h.Told == nil {
 		return
 	}

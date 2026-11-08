@@ -121,7 +121,7 @@ type rooted struct {
 }
 
 func (r rooted) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", r.root, "", rpc.View{})}}, nil
+	return &pb.HandshakeResponse{Sources: []*pb.SourceInfo{rpc.ConnectionRow("u1", "", r.root, "", rpc.View{})}}, nil
 }
 
 // A source going dark and coming back is one record each with the reason, and

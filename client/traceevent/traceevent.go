@@ -216,12 +216,12 @@ func payloadOf(ev *pb.Event) (name, id string) {
 		return "grid framing changed", p.GridFramingChanged.GetGridId()
 	case *pb.Event_SelectionChanged:
 		return "selection changed", p.SelectionChanged.GetGridId()
-	case *pb.Event_PluginHealth:
+	case *pb.Event_SourceHealth:
 		h := "namespace unhealthy"
-		if p.PluginHealth.GetHealthy() {
+		if p.SourceHealth.GetHealthy() {
 			h = "namespace healthy"
 		}
-		return h, p.PluginHealth.GetPluginUuid()
+		return h, p.SourceHealth.GetUuid()
 	}
 	return "unknown payload", ""
 }

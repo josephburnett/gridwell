@@ -181,14 +181,14 @@ func TestFilesRosterRowAndRootGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lp.Plugins) < 2 || lp.Plugins[0].Uuid != localNodeID || lp.Plugins[1].Uuid != rpc.FilesOwner(localNodeID) {
-		t.Fatalf("roster = %v, want home then the files", lp.Plugins)
+	if len(lp.Sources) < 2 || lp.Sources[0].Uuid != localNodeID || lp.Sources[1].Uuid != rpc.FilesOwner(localNodeID) {
+		t.Fatalf("roster = %v, want home then the files", lp.Sources)
 	}
-	row := lp.Plugins[1]
-	if row.Label != "files" || row.Glyph != rpc.GlyphFolder || row.RootGridId != "" || len(row.PluginGrids) != 2 {
+	row := lp.Sources[1]
+	if row.Label != "files" || row.Glyph != rpc.GlyphFolder || row.RootGridId != "" || len(row.SourceGrids) != 2 {
 		t.Fatalf("files row = %v", row)
 	}
-	for i, g := range row.PluginGrids {
+	for i, g := range row.SourceGrids {
 		if g.GridId != n.roots[i] || g.Glyph != rpc.GlyphFolder || g.Label != filepath.Base([]string{a, b}[i]) {
 			t.Errorf("root %d = %v, want grid %s", i, g, n.roots[i])
 		}
@@ -197,8 +197,8 @@ func TestFilesRosterRowAndRootGrid(t *testing.T) {
 	if got.Grid.Id != n.roots[0] || got.Grid.Glyph != rpc.GlyphFolder || got.Grid.GetAcceptsTiles() {
 		t.Errorf("root grid = %v", got.Grid)
 	}
-	if len(got.Grid.PluginGrids) != 2 || got.Grid.PluginGrids[0].GridId != n.roots[0] {
-		t.Errorf("root grid's declared grids = %v, want the files' roots", got.Grid.PluginGrids)
+	if len(got.Grid.SourceGrids) != 2 || got.Grid.SourceGrids[0].GridId != n.roots[0] {
+		t.Errorf("root grid's declared grids = %v, want the files' roots", got.Grid.SourceGrids)
 	}
 	if len(got.Tiles) != 1 || got.Tiles[0].Id != fileID(filepath.Join(a, "notes.md")) || got.Tiles[0].GridId != n.roots[0] {
 		t.Fatalf("root tiles = %v", got.Tiles)
@@ -219,10 +219,10 @@ func TestFilesDarkRootHealthIsKeyedByTheFilesOwner(t *testing.T) {
 		t.Fatalf("a dark root's grid must answer: %v", err)
 	}
 	ev := await(t, events, "dark health", func(ev *gridwellv1.Event) bool {
-		h := ev.GetPluginHealth()
+		h := ev.GetSourceHealth()
 		return h != nil && !h.Healthy
 	})
-	if h := ev.GetPluginHealth(); h.PluginUuid != rpc.FilesOwner(localNodeID) || h.Detail == "" {
+	if h := ev.GetSourceHealth(); h.Uuid != rpc.FilesOwner(localNodeID) || h.Detail == "" {
 		t.Fatalf("health = %v, want dark keyed %s with the root named", h, rpc.FilesOwner(localNodeID))
 	}
 	if err := os.Mkdir(gone, 0o755); err != nil {
@@ -230,10 +230,10 @@ func TestFilesDarkRootHealthIsKeyedByTheFilesOwner(t *testing.T) {
 	}
 	n.grid(n.roots[0])
 	ev = await(t, events, "light health", func(ev *gridwellv1.Event) bool {
-		h := ev.GetPluginHealth()
+		h := ev.GetSourceHealth()
 		return h != nil && h.Healthy
 	})
-	if h := ev.GetPluginHealth(); h.PluginUuid != rpc.FilesOwner(localNodeID) {
+	if h := ev.GetSourceHealth(); h.Uuid != rpc.FilesOwner(localNodeID) {
 		t.Fatalf("health = %v, want light keyed %s", h, rpc.FilesOwner(localNodeID))
 	}
 }

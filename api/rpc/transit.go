@@ -174,7 +174,7 @@ func TransitQualifyGrid(prefix string, g *pb.Grid) *pb.Grid {
 	out.Selection = QualifyIDs(prefix, g.Selection)
 	out.ScratchGridId = QualifyOptionalID(prefix, g.ScratchGridId)
 	out.NodeNs = QualifyNS(prefix, g.NodeNs)
-	out.PluginGrids = QualifyPluginGrids(prefix, g.PluginGrids)
+	out.SourceGrids = QualifySourceGrids(prefix, g.SourceGrids)
 	return out
 }
 
@@ -222,16 +222,16 @@ func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb
 		r := proto.CloneOf(p.TileRemoved)
 		r.GridId, r.TileId = QualifyID(prefix, r.GridId), QualifyID(prefix, r.TileId)
 		return &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: r}}
-	case *pb.Event_PluginHealth:
+	case *pb.Event_SourceHealth:
 		// An empty uuid means the namespace this event rode in from: the
 		// cache layer reports its own store health without knowing the uuid
 		// the registry gave it, and the prefix is exactly that uuid.
-		h := proto.Clone(p.PluginHealth).(*pb.EventPluginHealth)
-		h.PluginUuid = prefix
-		if p.PluginHealth.PluginUuid != "" {
-			h.PluginUuid = QualifyID(prefix, p.PluginHealth.PluginUuid)
+		h := proto.Clone(p.SourceHealth).(*pb.EventSourceHealth)
+		h.Uuid = prefix
+		if p.SourceHealth.Uuid != "" {
+			h.Uuid = QualifyID(prefix, p.SourceHealth.Uuid)
 		}
-		return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: h}}
+		return &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: h}}
 	}
 	return ev
 }
@@ -255,26 +255,26 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 		return nil
 	}
 	out := &pb.HandshakeResponse{ShellsDisabled: resp.ShellsDisabled, HomeGridId: QualifyOptionalID(prefix, resp.HomeGridId)}
-	for _, p := range resp.Plugins {
+	for _, p := range resp.Sources {
 		q := proto.CloneOf(p)
 		q.Uuid, q.RootGridId = QualifyID(prefix, p.Uuid), QualifyOptionalID(prefix, p.RootGridId)
-		q.PluginGrids = QualifyPluginGrids(prefix, p.PluginGrids)
-		out.Plugins = append(out.Plugins, q)
+		q.SourceGrids = QualifySourceGrids(prefix, p.SourceGrids)
+		out.Sources = append(out.Sources, q)
 	}
 	for _, c := range resp.Connections {
-		out.Plugins = append(out.Plugins, ConnectionRow(QualifyID(prefix, c.Uuid), c.Label, QualifyOptionalID(prefix, c.RootGridId),
+		out.Sources = append(out.Sources, ConnectionRow(QualifyID(prefix, c.Uuid), c.Label, QualifyOptionalID(prefix, c.RootGridId),
 			c.StatusDetail, ViewOf(c.RootViewCx, c.RootViewCy, c.RootViewZoom)))
 	}
 	return out
 }
 
-// QualifyPluginGrids prepends one hop segment to a plugin's declared grid
+// QualifySourceGrids prepends one hop segment to a plugin's declared grid
 // targets, returning fresh values so a hop never mutates what it forwards.
-func QualifyPluginGrids(prefix string, in []*pb.PluginGrid) []*pb.PluginGrid {
+func QualifySourceGrids(prefix string, in []*pb.SourceGrid) []*pb.SourceGrid {
 	if len(in) == 0 {
 		return nil
 	}
-	out := make([]*pb.PluginGrid, len(in))
+	out := make([]*pb.SourceGrid, len(in))
 	for i, e := range in {
 		q := proto.CloneOf(e)
 		q.GridId = QualifyOptionalID(prefix, q.GridId)

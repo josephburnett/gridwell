@@ -40,8 +40,8 @@ func eventName(ev *gridwellv1.Event) string {
 		return "tile_changed"
 	case *gridwellv1.Event_TileRemoved:
 		return "tile_removed"
-	case *gridwellv1.Event_PluginHealth:
-		return "plugin_health"
+	case *gridwellv1.Event_SourceHealth:
+		return "source_health"
 	}
 	return ""
 }

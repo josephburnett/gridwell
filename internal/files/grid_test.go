@@ -189,7 +189,7 @@ func TestARootBehindASymlinkServes(t *testing.T) {
 		t.Fatal("no tile")
 	}
 	info, err := s.Info(context.Background(), &pb.InfoRequest{})
-	if err != nil || len(info.PluginGrids) != 1 || info.PluginGrids[0].Label != "rootlink" {
+	if err != nil || len(info.SourceGrids) != 1 || info.SourceGrids[0].Label != "rootlink" {
 		t.Fatalf("Info = %v, %v", info, err)
 	}
 }
@@ -228,7 +228,7 @@ func TestARootThatWillNotReadIsDark(t *testing.T) {
 	if got := tileIn(t, resp, a); got.X != 3 {
 		t.Errorf("the dark root's row = %+v", got)
 	}
-	h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth()
+	h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth()
 	if h.Healthy || h.Detail == "" || !h.GetTold() {
 		t.Errorf("health = %+v", h)
 	}
@@ -239,7 +239,7 @@ func TestARootThatWillNotReadIsDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.grid(f.root)
-	if h := await(t, ev, "light", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); !h.Healthy {
+	if h := await(t, ev, "light", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); !h.Healthy {
 		t.Errorf("health = %+v", h)
 	}
 	if got := tileIn(t, f.grid(f.root), a); got.X != 3 {

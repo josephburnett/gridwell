@@ -7,9 +7,9 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-var plugins = []*gridwellv1.PluginInfo{
+var plugins = []*gridwellv1.SourceInfo{
 	{Uuid: "loc", Label: "home", Glyph: "door", RootGridId: "loc/1",
-		PluginGrids: []*gridwellv1.PluginGrid{{Id: "trash", Label: "trash", Glyph: "trash", GridId: "loc/9"}}},
+		SourceGrids: []*gridwellv1.SourceGrid{{Id: "trash", Label: "trash", Glyph: "trash", GridId: "loc/9"}}},
 	// A connection menu row: a chained uuid whose root is the remote home.
 	{Uuid: "sshc/ns1", Label: "rtb", RootGridId: "sshc/ns1/rp1/root7"},
 }
@@ -81,14 +81,14 @@ func TestFindMissesCleanly(t *testing.T) {
 // glyph cannot mean one thing at one call site and another at the next.
 func TestRowGlyphIsTheSameInTheMenuAndInTheBar(t *testing.T) {
 	conn := rpc.ConnectionRow("n2/rtb", "", "n2/rtb/rp/1", "", rpc.View{})
-	rows := []*gridwellv1.PluginInfo{
+	rows := []*gridwellv1.SourceInfo{
 		{Uuid: "ufs", Glyph: rpc.GlyphFolder, RootGridId: "ufs/1"},
 		{Uuid: "ugl", RootGridId: "ugl/1"}, // the gitlab shape: declares nothing
 		conn,
 	}
 	for _, tc := range []struct {
 		name string
-		row  *gridwellv1.PluginInfo
+		row  *gridwellv1.SourceInfo
 		grid *gridwellv1.Grid
 		want string
 	}{
@@ -125,10 +125,10 @@ func TestEntryGlyph(t *testing.T) {
 // The grid's glyph comes from what its plugin declared, never from a kind the
 // client recognizes. A plugin that declares nothing takes the door.
 func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
-	plugins := []*gridwellv1.PluginInfo{
+	plugins := []*gridwellv1.SourceInfo{
 		{Uuid: "ufs", Glyph: rpc.GlyphFolder, RootGridId: "ufs/1"},
 		{Uuid: "ugl", RootGridId: "ugl/1"},
-		{Uuid: "n1/conn", Glyph: rpc.GlyphFolder, PluginGrids: []*gridwellv1.PluginGrid{
+		{Uuid: "n1/conn", Glyph: rpc.GlyphFolder, SourceGrids: []*gridwellv1.SourceGrid{
 			{GridId: "ufs/9", Glyph: rpc.GlyphTrash},
 		}},
 	}
@@ -158,14 +158,14 @@ func TestGlyphForReadsDeclarationsOnly(t *testing.T) {
 // A declared grid's pseudo-row takes the entry's view, never the declaring
 // row's, so a grid lands where it was left.
 func TestEntryPluginCarriesTheEntrysFraming(t *testing.T) {
-	row := &gridwellv1.PluginInfo{Uuid: "hey", Label: "hey", RootViewCx: 9, RootViewCy: 9, RootViewZoom: 9}
-	e := &gridwellv1.PluginGrid{Id: "feed", Label: "Feed", GridId: "hey/2",
+	row := &gridwellv1.SourceInfo{Uuid: "hey", Label: "hey", RootViewCx: 9, RootViewCy: 9, RootViewZoom: 9}
+	e := &gridwellv1.SourceGrid{Id: "feed", Label: "Feed", GridId: "hey/2",
 		ViewCx: 3.5, ViewCy: -2.25, ViewZoom: 1.75}
 	got := GridPlugin(row, e)
 	if got.RootViewCx != 3.5 || got.RootViewCy != -2.25 || got.RootViewZoom != 1.75 {
 		t.Errorf("view = %v/%v/%v, want the entry's", got.RootViewCx, got.RootViewCy, got.RootViewZoom)
 	}
-	blank := GridPlugin(row, &gridwellv1.PluginGrid{Id: "imbox", GridId: "hey/1"})
+	blank := GridPlugin(row, &gridwellv1.SourceGrid{Id: "imbox", GridId: "hey/1"})
 	if blank.RootViewZoom != 0 {
 		t.Errorf("an unvisited entry must carry no view, got zoom %v", blank.RootViewZoom)
 	}
@@ -174,18 +174,18 @@ func TestEntryPluginCarriesTheEntrysFraming(t *testing.T) {
 func TestPlacesOf(t *testing.T) {
 	cases := []struct {
 		name string
-		row  *gridwellv1.PluginInfo
+		row  *gridwellv1.SourceInfo
 		want []string
 	}{
 		{"a home, then its trashcan", plugins[0], []string{"loc/1", "loc/9"}},
 		{"a connection's far home", plugins[1], []string{"sshc/ns1/rp1/root7"}},
-		{"a plugin is its grids", &gridwellv1.PluginInfo{Uuid: "hey", Label: "hey",
-			PluginGrids: []*gridwellv1.PluginGrid{{Id: "imbox", GridId: "hey/1"}, {Id: "feed", GridId: "hey/2"}}},
+		{"a plugin is its grids", &gridwellv1.SourceInfo{Uuid: "hey", Label: "hey",
+			SourceGrids: []*gridwellv1.SourceGrid{{Id: "imbox", GridId: "hey/1"}, {Id: "feed", GridId: "hey/2"}}},
 			[]string{"hey/1", "hey/2"}},
-		{"an entry with no grid is not a door", &gridwellv1.PluginInfo{Uuid: "hey", Label: "hey",
-			PluginGrids: []*gridwellv1.PluginGrid{{Id: "feed"}}}, nil},
+		{"an entry with no grid is not a door", &gridwellv1.SourceInfo{Uuid: "hey", Label: "hey",
+			SourceGrids: []*gridwellv1.SourceGrid{{Id: "feed"}}}, nil},
 		{"a row that declares nothing is a door onto nothing",
-			&gridwellv1.PluginInfo{Uuid: "fs", Label: "files"}, nil},
+			&gridwellv1.SourceInfo{Uuid: "fs", Label: "files"}, nil},
 	}
 	for _, c := range cases {
 		got := PlacesOf(c.row)
@@ -218,15 +218,15 @@ func TestByRootResolvesADeclaredEntry(t *testing.T) {
 // row's glyph.
 func TestFilesRowPlacesAreItsRoots(t *testing.T) {
 	a, b := rpc.QualifyID("n1", rpc.KeyTileID("/srv/a")), rpc.QualifyID("n1", rpc.KeyTileID("/srv/b"))
-	files := &gridwellv1.PluginInfo{Uuid: rpc.FilesOwner("n1"), Label: "files", Glyph: rpc.GlyphFolder,
-		PluginGrids: []*gridwellv1.PluginGrid{{Id: "/srv/a", Label: "A", Glyph: rpc.GlyphFolder, GridId: a},
+	files := &gridwellv1.SourceInfo{Uuid: rpc.FilesOwner("n1"), Label: "files", Glyph: rpc.GlyphFolder,
+		SourceGrids: []*gridwellv1.SourceGrid{{Id: "/srv/a", Label: "A", Glyph: rpc.GlyphFolder, GridId: a},
 			{Id: "/srv/b", Label: "B", Glyph: rpc.GlyphFolder, GridId: b}}}
 	places := PlacesOf(files)
 	if len(places) != 2 || places[0].Plugin.RootGridId != a || places[1].Plugin.RootGridId != b ||
 		places[0].Plugin.Label != "A (files)" || RowGlyph(places[0].Plugin) != rpc.GlyphFolder {
 		t.Fatalf("places = %v", places)
 	}
-	roster := []*gridwellv1.PluginInfo{{Uuid: "n1", Label: "home", RootGridId: "n1/1"}, files}
+	roster := []*gridwellv1.SourceInfo{{Uuid: "n1", Label: "home", RootGridId: "n1/1"}, files}
 	sub := rpc.QualifyID("n1", rpc.KeyTileID("/srv/a/sub"))
 	if got := GlyphFor(sub, nil, roster); got != rpc.GlyphFolder {
 		t.Errorf("an uncached directory's glyph = %q, want the files row's folder", got)

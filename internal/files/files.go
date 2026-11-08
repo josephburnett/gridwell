@@ -231,7 +231,7 @@ func (s *Source) content(path string) (string, error) {
 func (s *Source) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
 	resp := &pb.InfoResponse{DisplayName: "files", Glyph: rpc.GlyphFolder}
 	for _, r := range s.roots {
-		g := &pb.PluginGrid{Id: r.Path, Label: r.Label, Glyph: rpc.GlyphFolder, GridId: idOf(r.Path)}
+		g := &pb.SourceGrid{Id: r.Path, Label: r.Label, Glyph: rpc.GlyphFolder, GridId: idOf(r.Path)}
 		gid, ok, err := s.mem.LookupGrid(r.Path)
 		if err != nil {
 			return nil, err
@@ -243,7 +243,7 @@ func (s *Source) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error
 			}
 			g.ViewCx, g.ViewCy, g.ViewZoom = v.Wire()
 		}
-		resp.PluginGrids = append(resp.PluginGrids, g)
+		resp.SourceGrids = append(resp.SourceGrids, g)
 	}
 	return resp, nil
 }
@@ -297,8 +297,8 @@ type health struct {
 
 func (h health) event() *pb.Event {
 	ev := rpc.HealthEvent(rpc.KeyTileID(""), !h.dark, h.detail)
-	ev.GetPluginHealth().LiveUpdatesOff = h.liveOff
-	ev.GetPluginHealth().Told = proto.Bool(h.liveOff == "")
+	ev.GetSourceHealth().LiveUpdatesOff = h.liveOff
+	ev.GetSourceHealth().Told = proto.Bool(h.liveOff == "")
 	return ev
 }
 

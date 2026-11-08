@@ -11,8 +11,8 @@ import (
 // fills (QualifyEventIDs), so a layer that does not know the uuid the registry
 // gave it still reports.
 func HealthEvent(uuid string, healthy bool, detail string) *pb.Event {
-	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		PluginUuid: uuid, Healthy: healthy, Detail: detail,
+	return &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
+		Uuid: uuid, Healthy: healthy, Detail: detail,
 	}}}
 }
 
@@ -28,7 +28,7 @@ func DisabledReason(label string) string { return label + " is " + DisabledDetai
 // rest of the node's life.
 func DisabledEvent(uuid string) *pb.Event {
 	ev := HealthEvent(uuid, false, DisabledDetail)
-	ev.GetPluginHealth().Disabled = true
+	ev.GetSourceHealth().Disabled = true
 	return ev
 }
 
@@ -103,8 +103,8 @@ func EventKey(ev *pb.Event) string {
 		// TileRemoved for the source then TileChanged for the destination,
 		// for the same tile id, and both must reach the consumer.
 		return "r/" + p.TileRemoved.GetGridId() + "/" + p.TileRemoved.GetTileId()
-	case *pb.Event_PluginHealth:
-		return "h/" + p.PluginHealth.GetPluginUuid()
+	case *pb.Event_SourceHealth:
+		return "h/" + p.SourceHealth.GetUuid()
 	}
 	return ""
 }

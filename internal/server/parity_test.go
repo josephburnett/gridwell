@@ -625,14 +625,14 @@ type parityFix struct {
 	// tiles, answering what declares them again.
 	undeclare map[parityOwner]func() func()
 	nodes     map[string]parityNode // each node by the prefix it is reached through, "" the local one
-	roster    []*gridwellv1.PluginInfo
+	roster    []*gridwellv1.SourceInfo
 	token     string
 	events    chan *gridwellv1.Event
 	breaks    map[string]func() // per tile, what breaks the path to it
 	mends     map[string]func() // per tile, what mends a break the next run needs whole
 	marks     int
 	healthMu  sync.Mutex
-	health    map[string]*gridwellv1.EventPluginHealth // the last health each source told
+	health    map[string]*gridwellv1.EventSourceHealth // the last health each source told
 	heard     *cache.Cache                             // every health told, folded as a client folds it
 }
 
@@ -734,7 +734,7 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h, third: third, undeclare: undeclare, disk: disks,
 		raw:    gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON()),
 		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){}, mends: map[string]func(){},
-		health: map[string]*gridwellv1.EventPluginHealth{}, heard: cache.New(),
+		health: map[string]*gridwellv1.EventSourceHealth{}, heard: cache.New(),
 		root: map[parityOwner]string{}, away: map[parityOwner]string{}, farHome: map[parityOwner]string{},
 		nodes: map[string]parityNode{"": {h.localCl, h.localHTTP, h.localShell},
 			parityConn: {h.remoteCl, h.remoteWeb, h.remoteShell}, parityThirdConn: {third.cl, third.web, third.shell}}}
@@ -742,7 +742,7 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.roster, f.token = lp.Plugins, lp.ContentToken
+	f.roster, f.token = lp.Sources, lp.ContentToken
 	f.root[onHome], f.root[onFar] = lp.HomeGridId, connectionRows(lp)[0].RootGridId
 	f.root[onFiles], f.away[onFiles] = f.fileID("", disks[""].main), f.fileID("", disks[""].away)
 	// The far node's + menu, read through the connection, lands its own
@@ -788,10 +788,10 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 			if err != nil || !ok {
 				return
 			}
-			if h := ev.GetPluginHealth(); h != nil {
+			if h := ev.GetSourceHealth(); h != nil {
 				f.healthMu.Lock()
-				f.health[h.PluginUuid] = h
-				f.heard.NoteHealth(h.PluginUuid, h.Healthy)
+				f.health[h.Uuid] = h
+				f.heard.NoteHealth(h.Uuid, h.Healthy)
 				f.heard.NoteTold(h)
 				f.healthMu.Unlock()
 			}

@@ -98,8 +98,8 @@ func TestDialReachesRemoteNodeThroughRealSSH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tunneled Handshake: %v", err)
 	}
-	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "home" || lp.Plugins[1].Uuid != rpc.FilesOwner("ur1") {
-		t.Fatalf("remote rows = %+v, want home, then the files", lp.Plugins)
+	if len(lp.Sources) != 2 || lp.Sources[0].Label != "home" || lp.Sources[1].Uuid != rpc.FilesOwner("ur1") {
+		t.Fatalf("remote rows = %+v, want home, then the files", lp.Sources)
 	}
 
 	// Write at the remote's home; read back directly on the remote: the

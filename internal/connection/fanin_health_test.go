@@ -29,7 +29,7 @@ func (deadSubscribeClient) Subscribe(context.Context, *gridwellv1.SubscribeReque
 }
 
 // A connection whose event stream dies must say so: the fan-in publishes an
-// EventPluginHealth down transition, the same contract the node's plugin
+// EventSourceHealth down transition, the same contract the node's plugin
 // fan-in keeps. Retrying silently presents as tiles that stopped updating
 // with no evidence.
 func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
@@ -43,11 +43,11 @@ func TestFanInRemotePublishesHealthOnStreamDeath(t *testing.T) {
 
 	select {
 	case ev := <-events:
-		ph := ev.GetPluginHealth()
+		ph := ev.GetSourceHealth()
 		if ph == nil {
 			t.Fatalf("first event = %+v, want a plugin-health transition", ev)
 		}
-		if ph.Healthy || ph.PluginUuid != "rtb" || ph.Detail == "" {
+		if ph.Healthy || ph.Uuid != "rtb" || ph.Detail == "" {
 			t.Fatalf("want an unhealthy rtb transition with a reason, got %+v", ph)
 		}
 	case <-time.After(3 * time.Second):
@@ -72,7 +72,7 @@ func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
 	// fan-in retries in silence, so nothing will ever publish it again.
 	select {
 	case ev := <-first:
-		if ph := ev.GetPluginHealth(); ph == nil || ph.Healthy {
+		if ph := ev.GetSourceHealth(); ph == nil || ph.Healthy {
 			t.Fatalf("first event = %+v, want the down transition", ev)
 		}
 	case <-time.After(3 * time.Second):
@@ -97,11 +97,11 @@ func TestASubscriberArrivingAfterTheOutageIsToldOfIt(t *testing.T) {
 	}()
 	select {
 	case ev := <-late:
-		ph := ev.GetPluginHealth()
+		ph := ev.GetSourceHealth()
 		if ph == nil {
 			t.Fatalf("first event to the late subscriber = %+v, want the connection's health", ev)
 		}
-		if ph.Healthy || ph.PluginUuid != "rtb" || ph.Detail == "" {
+		if ph.Healthy || ph.Uuid != "rtb" || ph.Detail == "" {
 			t.Fatalf("want rtb dark with a reason, got %+v", ph)
 		}
 	case <-time.After(3 * time.Second):
@@ -148,11 +148,11 @@ func TestASubscriberIsToldOfAConnectionThatCannotDial(t *testing.T) {
 	}()
 	select {
 	case ev := <-events:
-		ph := ev.GetPluginHealth()
+		ph := ev.GetSourceHealth()
 		if ph == nil {
 			t.Fatalf("first event = %+v, want the connection's health", ev)
 		}
-		if ph.Healthy || ph.PluginUuid != "rtb" || ph.Detail == "" {
+		if ph.Healthy || ph.Uuid != "rtb" || ph.Detail == "" {
 			t.Fatalf("want rtb dark with a reason, got %+v", ph)
 		}
 	case <-time.After(3 * time.Second):
@@ -200,7 +200,7 @@ func TestFanInRemoteRetriesOnTheDeclaredBackoff(t *testing.T) {
 	for {
 		select {
 		case ev := <-events:
-			ph := ev.GetPluginHealth()
+			ph := ev.GetSourceHealth()
 			if ph == nil {
 				continue
 			}
@@ -276,7 +276,7 @@ func TestAConnectionIsBackOnlyOnceTheFarNodeListens(t *testing.T) {
 	for back := false; !back; {
 		select {
 		case ev := <-events:
-			back = ev.GetPluginHealth().GetHealthy()
+			back = ev.GetSourceHealth().GetHealthy()
 		case <-deadline:
 			t.Fatal("the far node came back and the connection never said so")
 		}
@@ -348,15 +348,15 @@ func TestASubscriberArrivingLateIsToldAFarPluginsStandingHealth(t *testing.T) {
 	events, unsub := s.hub.Subscribe()
 	t.Cleanup(unsub)
 	far := &replayingFar{drop: make(chan struct{})}
-	far.standing.Store(&gridwellv1.Event{Payload: &gridwellv1.Event_PluginHealth{PluginHealth: &gridwellv1.EventPluginHealth{
-		PluginUuid: "pfar", Healthy: true, Told: proto.Bool(false)}}})
+	far.standing.Store(&gridwellv1.Event{Payload: &gridwellv1.Event_SourceHealth{SourceHealth: &gridwellv1.EventSourceHealth{
+		Uuid: "pfar", Healthy: true, Told: proto.Bool(false)}}})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go s.fanInRemote(ctx, "rtb", far)
 	nextHealth(t, events, "rtb/pfar")
 
 	got := opening(t, s)
-	if len(got) != 1 || got[0].GetPluginHealth().GetPluginUuid() != "rtb/pfar" || got[0].GetPluginHealth().Told == nil || got[0].GetPluginHealth().GetTold() {
+	if len(got) != 1 || got[0].GetSourceHealth().GetUuid() != "rtb/pfar" || got[0].GetSourceHealth().Told == nil || got[0].GetSourceHealth().GetTold() {
 		t.Fatalf("opening replay = %v, want the far plugin not told", got)
 	}
 

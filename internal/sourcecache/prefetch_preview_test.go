@@ -23,7 +23,7 @@ type previewFar struct {
 }
 
 func (u *previewFar) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.View{})}}, nil
+	return &pb.HandshakeResponse{Sources: []*pb.SourceInfo{rpc.ConnectionRow("u1", "", "u1/g1", "", rpc.View{})}}, nil
 }
 
 func (u *previewFar) GetGrid(context.Context, *pb.GetGridRequest) (*pb.GetGridResponse, error) {

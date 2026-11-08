@@ -248,7 +248,7 @@ func TestFramingOnARootAndOnADoor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := info.PluginGrids[0]
+	g := info.SourceGrids[0]
 	if g.GridId != idOf(f.root) || g.Label != "notes" || g.Glyph != rpc.GlyphFolder || g.ViewCx != 3 || g.ViewCy != 4 || g.ViewZoom != 2 {
 		t.Errorf("Info grid = %+v", g)
 	}

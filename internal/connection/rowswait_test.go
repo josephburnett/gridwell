@@ -31,7 +31,7 @@ type framedClient struct{ landingClient }
 func (framedClient) Handshake(context.Context, *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	return &gridwellv1.HandshakeResponse{
 		HomeGridId: "rnode1/7",
-		Plugins:    []*gridwellv1.PluginInfo{{RootGridId: "rnode1/7", RootViewCx: 3, RootViewCy: 4, RootViewZoom: 2}},
+		Sources:    []*gridwellv1.SourceInfo{{RootGridId: "rnode1/7", RootViewCx: 3, RootViewCy: 4, RootViewZoom: 2}},
 	}, nil
 }
 
@@ -68,7 +68,7 @@ func TestRowsAnswerAtTheHandshakeBoundWhenTheFarNodeHangs(t *testing.T) {
 
 	type outcome struct {
 		took time.Duration
-		rows []*gridwellv1.PluginInfo
+		rows []*gridwellv1.SourceInfo
 	}
 	done := make(chan outcome, 1)
 	start := time.Now()

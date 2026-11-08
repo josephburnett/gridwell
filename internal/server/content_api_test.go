@@ -209,10 +209,10 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	}
 	// The files' one root is the door this frames: the files row is no
 	// place, so it has no root of its own to aim at.
-	if len(pl.Plugins[1].PluginGrids) != 1 || pl.Plugins[1].PluginGrids[0].ViewZoom != 0 {
-		t.Fatalf("fresh row = %+v, want one grid never visited (zoom 0)", pl.Plugins[1])
+	if len(pl.Sources[1].SourceGrids) != 1 || pl.Sources[1].SourceGrids[0].ViewZoom != 0 {
+		t.Fatalf("fresh row = %+v, want one grid never visited (zoom 0)", pl.Sources[1])
 	}
-	landing := pl.Plugins[1].PluginGrids[0].GridId
+	landing := pl.Sources[1].SourceGrids[0].GridId
 
 	path, body := rpc.SetFramingBeacon(&gridwellv1.SetFramingRequest{
 		RootGridId: landing, Cx: 3, Cy: 4, Zoom: 0.5,
@@ -229,7 +229,7 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := pl2.Plugins[1].PluginGrids[0]
+	got := pl2.Sources[1].SourceGrids[0]
 	if got.ViewCx != 3 || got.ViewCy != 4 || got.ViewZoom != 0.5 {
 		t.Errorf("door view after beacon = (%v,%v,%v), want (3,4,0.5)",
 			got.ViewCx, got.ViewCy, got.ViewZoom)

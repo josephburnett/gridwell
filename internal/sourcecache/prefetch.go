@@ -122,7 +122,7 @@ func (c *Layer) prefetch(ctx context.Context, source string) {
 		}
 		roots = append(roots, id)
 	}
-	for _, p := range hs.GetPlugins() {
+	for _, p := range hs.GetSources() {
 		add(p.GetRootGridId())
 	}
 	for _, g := range roots {

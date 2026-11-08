@@ -40,13 +40,13 @@ type Notice struct {
 // recurring failure stays up while it recurs.
 const ExpireAfter = 10 * time.Second
 
-// pluginHealthPrefix keys a namespace's health notice; PluginHealthSource
+// pluginHealthPrefix keys a namespace's health notice; SourceHealthSource
 // spells it and Sticky reads it.
 const pluginHealthPrefix = "plugin:"
 
-// PluginHealthSource is the source a namespace's health notice lives under,
+// SourceHealthSource is the source a namespace's health notice lives under,
 // one per uuid, so a flapping source updates its row in place.
-func PluginHealthSource(uuid string) string { return pluginHealthPrefix + uuid }
+func SourceHealthSource(uuid string) string { return pluginHealthPrefix + uuid }
 
 // HealthUUID is the namespace a health notice's source names, false for any
 // other source.

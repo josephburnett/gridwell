@@ -103,13 +103,13 @@ func linkBySwatch(t *testing.T, cl *rpc.Client, rowUUID, destGrid string, x, y i
 		t.Fatalf("Handshake: %v", err)
 	}
 	var places []door.Place
-	for _, p := range lp.Plugins {
+	for _, p := range lp.Sources {
 		if p.Uuid == rowUUID {
 			places = door.PlacesOf(p)
 		}
 	}
 	if len(places) != 1 {
-		t.Fatalf("link %s: %d swatches in %+v, want one", rowUUID, len(places), lp.Plugins)
+		t.Fatalf("link %s: %d swatches in %+v, want one", rowUUID, len(places), lp.Sources)
 	}
 	row := places[0].Plugin
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: destGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: x, Y: y, W: 1, H: 1, ChildGridId: row.RootGridId, AltText: row.Label, ViewCx: row.RootViewCx, ViewCy: row.RootViewCy, ViewZoom: row.RootViewZoom}})
@@ -128,13 +128,13 @@ func TestMenuAndDoorLabelAgree(t *testing.T) {
 		t.Fatalf("Handshake: %v", err)
 	}
 	var menuLabel string
-	for _, p := range lp.Plugins {
+	for _, p := range lp.Sources {
 		if p.Uuid == rpc.FilesOwner(f.node) {
 			menuLabel = door.PlacesOf(p)[0].Plugin.Label
 		}
 	}
 	if menuLabel == "" {
-		t.Fatalf("the files' swatch has no label: %+v", lp.Plugins)
+		t.Fatalf("the files' swatch has no label: %+v", lp.Sources)
 	}
 	tile := linkBySwatch(t, f.cl, rpc.FilesOwner(f.node), f.home, 0, 0)
 	if tile.AltText != menuLabel {
@@ -313,7 +313,7 @@ func TestListPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	plugins := list.Plugins
+	plugins := list.Sources
 	// Home, then the files.
 	if len(plugins) != 2 {
 		t.Fatalf("got %d rows, want 2: %+v", len(plugins), plugins)
@@ -341,7 +341,7 @@ func TestListPlugins(t *testing.T) {
 
 // homeScratchOf reads the scratch grid stamped on the home row's grid, the
 // one place the fact is served.
-func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.PluginInfo) string {
+func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.SourceInfo) string {
 	t.Helper()
 	g, err := cl.GetGrid(context.Background(), home.RootGridId)
 	if err != nil {
@@ -365,7 +365,7 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	scratch := homeScratchOf(t, cl, plugins.Plugins[0])
+	scratch := homeScratchOf(t, cl, plugins.Sources[0])
 	// Empty path + scratch grid: a normal create here would fail path validation
 	// (the scratch grid is off-grid); the scratch route bypasses it.
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/ephemeral"}})
@@ -401,7 +401,7 @@ func TestDirectoryGridCarriesHomeScratch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	homeScratch := homeScratchOf(t, f.cl, hs.Plugins[0])
+	homeScratch := homeScratchOf(t, f.cl, hs.Sources[0])
 	g, err := f.cl.GetGrid(ctx, f.grid)
 	if err != nil {
 		t.Fatalf("GetGrid files root: %v", err)
@@ -478,7 +478,7 @@ func TestFramingRoundTripsByteIdenticalAcrossTheSeam(t *testing.T) {
 		t.Fatal(err)
 	}
 	rootRow := false
-	for _, pl := range hs.Plugins {
+	for _, pl := range hs.Sources {
 		if pl.RootGridId != root {
 			continue
 		}

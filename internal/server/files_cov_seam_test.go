@@ -51,8 +51,8 @@ func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
 		t.Error("a file nobody touched was moved under a dark root")
 	}
 	events := n.subscribe()
-	h := await(t, events, "the outage", func(ev *gridwellv1.Event) bool { return ev.GetPluginHealth() != nil }).GetPluginHealth()
-	if h.Healthy || h.PluginUuid != rpc.FilesOwner(localNodeID) || !h.GetTold() {
+	h := await(t, events, "the outage", func(ev *gridwellv1.Event) bool { return ev.GetSourceHealth() != nil }).GetSourceHealth()
+	if h.Healthy || h.Uuid != rpc.FilesOwner(localNodeID) || !h.GetTold() {
 		t.Errorf("health = %v, want dark and still told", h)
 	}
 	if err := os.Chmod(root, 0o755); err != nil {

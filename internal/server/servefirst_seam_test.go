@@ -33,7 +33,7 @@ func (f *farConnection) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse
 // Handshake is what the transport declares about itself: one connection, its
 // landing already learned. The router's handshake reads the rows from here.
 func (f *farConnection) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow(farConn, "Geneva", farRoot, "", rpc.View{})}}, nil
+	return &pb.HandshakeResponse{Sources: []*pb.SourceInfo{rpc.ConnectionRow(farConn, "Geneva", farRoot, "", rpc.View{})}}, nil
 }
 
 const (
@@ -185,9 +185,9 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 }
 
 // connectionRows is the handshake's connection rows, by their declared kind.
-func connectionRows(l *pb.HandshakeResponse) []*pb.PluginInfo {
-	var out []*pb.PluginInfo
-	for _, pl := range l.GetPlugins() {
+func connectionRows(l *pb.HandshakeResponse) []*pb.SourceInfo {
+	var out []*pb.SourceInfo
+	for _, pl := range l.GetSources() {
 		if rpc.IsConnectionRow(pl) {
 			out = append(out, pl)
 		}

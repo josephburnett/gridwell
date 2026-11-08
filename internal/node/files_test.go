@@ -31,10 +31,10 @@ func TestFilesDeclaredInConfigAreServed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lp.Plugins) < 2 || lp.Plugins[1].Uuid != rpc.FilesOwner(cfg.ID) {
-		t.Fatalf("roster = %v, want the files second", lp.Plugins)
+	if len(lp.Sources) < 2 || lp.Sources[1].Uuid != rpc.FilesOwner(cfg.ID) {
+		t.Fatalf("roster = %v, want the files second", lp.Sources)
 	}
-	grids := lp.Plugins[1].PluginGrids
+	grids := lp.Sources[1].SourceGrids
 	if len(grids) != 2 || grids[0].Label != "Docs" || grids[1].Label != filepath.Base(b) ||
 		grids[0].GridId != rpc.QualifyID(cfg.ID, rpc.KeyTileID(a)) {
 		t.Fatalf("roots = %v", grids)
@@ -62,7 +62,7 @@ func TestNoFilesNoRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range lp.Plugins {
+	for _, p := range lp.Sources {
 		if p.Uuid == rpc.FilesOwner(cfg.ID) {
 			t.Fatalf("a node with no files: has a files row %v", p)
 		}

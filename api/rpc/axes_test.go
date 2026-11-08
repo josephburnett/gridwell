@@ -12,9 +12,9 @@ import (
 var flagMessages = []protoreflect.MessageDescriptor{
 	(&gridwellv1.Tile{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.Grid{}).ProtoReflect().Descriptor(),
-	(&gridwellv1.PluginGrid{}).ProtoReflect().Descriptor(),
+	(&gridwellv1.SourceGrid{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.InfoResponse{}).ProtoReflect().Descriptor(),
-	(&gridwellv1.EventPluginHealth{}).ProtoReflect().Descriptor(),
+	(&gridwellv1.EventSourceHealth{}).ProtoReflect().Descriptor(),
 }
 
 // TestFlags fails on a bool or enum field Flags does not class, which is a

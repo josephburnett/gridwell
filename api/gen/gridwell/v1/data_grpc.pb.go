@@ -63,9 +63,9 @@ const (
 // APIs decode onto it.
 type GridwellClient interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
-	// Info is the whole handshake: identity plus the default root. Handshake
-	// enumerates a node's plugins; the transport calls it on a remote to learn
-	// that node's namespaces.
+	// Info is a source's identity plus its default root. Handshake enumerates
+	// a node's sources; the transport calls it on a far node to learn that
+	// node's namespaces.
 	Info(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
 	Probe(ctx context.Context, in *ProbeRequest, opts ...grpc.CallOption) (*ProbeResponse, error)
 	Handshake(ctx context.Context, in *HandshakeRequest, opts ...grpc.CallOption) (*HandshakeResponse, error)
@@ -370,9 +370,9 @@ func (c *gridwellClient) DisableSource(ctx context.Context, in *DisableSourceReq
 // APIs decode onto it.
 type GridwellServer interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
-	// Info is the whole handshake: identity plus the default root. Handshake
-	// enumerates a node's plugins; the transport calls it on a remote to learn
-	// that node's namespaces.
+	// Info is a source's identity plus its default root. Handshake enumerates
+	// a node's sources; the transport calls it on a far node to learn that
+	// node's namespaces.
 	Info(context.Context, *InfoRequest) (*InfoResponse, error)
 	Probe(context.Context, *ProbeRequest) (*ProbeResponse, error)
 	Handshake(context.Context, *HandshakeRequest) (*HandshakeResponse, error)

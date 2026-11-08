@@ -230,9 +230,9 @@ func primitiveFor(k templateKind) (primitive, bool) {
 // menuItem is a configured plugin or a built-in primitive.
 type menuItem struct {
 	isPlugin  bool
-	plugin    *gridwellv1.PluginInfo // when isPlugin (also set for a root ENTRY's owner)
+	plugin    *gridwellv1.SourceInfo // when isPlugin (also set for a root ENTRY's owner)
 	primitive templateKind           // when !isPlugin
-	entry     *gridwellv1.PluginGrid
+	entry     *gridwellv1.SourceGrid
 	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
 	promotePane string
 }
@@ -515,7 +515,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					outside := tilepreview.Outside(nn, inDirectory)
 					dashed := isLinkTile(nn)
 					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
-					a.drawPluginHealthTint(nn, left, top, w, h)
+					a.drawSourceHealthTint(nn, left, top, w, h)
 					a.drawDeadLink(nn, left, top, w, h)
 					if picked[n.Id] {
 						a.drawSelectionBorder(a.cctx, left, top, w, h)

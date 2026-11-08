@@ -15,8 +15,8 @@ const (
 
 // roster is the handshake's shape: home, one plugin, one connection whose UUID
 // is "<node>/<name>".
-func roster() []*gridwellv1.PluginInfo {
-	return []*gridwellv1.PluginInfo{
+func roster() []*gridwellv1.SourceInfo {
+	return []*gridwellv1.SourceInfo{
 		{Uuid: node, Label: "home"},
 		{Uuid: fs, Label: "files"},
 		{Uuid: node + "/laptop", Connection: true, Label: "laptop"},
@@ -63,7 +63,7 @@ func TestAnEmptyRosterJudgesNothing(t *testing.T) {
 	if Dead(gone+"/1", nil, node) {
 		t.Error("an empty roster must judge nothing: the handshake has not landed yet")
 	}
-	if Dead(gone+"/1", []*gridwellv1.PluginInfo{}, node) {
+	if Dead(gone+"/1", []*gridwellv1.SourceInfo{}, node) {
 		t.Error("an empty roster must judge nothing")
 	}
 }
@@ -140,11 +140,11 @@ func TestDeadTile(t *testing.T) {
 // declares no files, never because home is declared.
 func TestAPathIsDeadOnlyWithoutAFilesRow(t *testing.T) {
 	path := node + "/" + rpc.KeyTileID("/srv/notes/a.md")
-	without := []*gridwellv1.PluginInfo{{Uuid: node, Label: "home"}}
+	without := []*gridwellv1.SourceInfo{{Uuid: node, Label: "home"}}
 	if !Dead(path, without, node) {
 		t.Error("a path on a node with no files row reads live")
 	}
-	with := append(without, &gridwellv1.PluginInfo{Uuid: rpc.FilesOwner(node), Label: "files"})
+	with := append(without, &gridwellv1.SourceInfo{Uuid: rpc.FilesOwner(node), Label: "files"})
 	if Dead(path, with, node) {
 		t.Error("a path on a node with a files row reads dead by the roster")
 	}

@@ -34,7 +34,7 @@ func TestShellTmuxAcrossAConnection(t *testing.T) {
 	localOrigin, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 	farRoot := awaitConnRoot(t, localOrigin, "shconn")
 	var homeRoot string
-	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["plugins"].([]any) {
+	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["sources"].([]any) {
 		if pm := p.(map[string]any); pm["label"] == "home" {
 			homeRoot, _ = pm["rootGridId"].(string)
 		}

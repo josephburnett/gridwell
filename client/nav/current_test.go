@@ -271,11 +271,11 @@ func TestADescentOntoAGridWhoseSourceIsNotToldReadsIt(t *testing.T) {
 	if n := gridFetches(descend()); n != 0 {
 		t.Fatalf("asked for %d grids while the source's changes are told", n)
 	}
-	c.NoteTold(&gridwellv1.EventPluginHealth{PluginUuid: "pl1", Healthy: true, Told: proto.Bool(false)})
+	c.NoteTold(&gridwellv1.EventSourceHealth{Uuid: "pl1", Healthy: true, Told: proto.Bool(false)})
 	if f := only(t, descend(), EffFetchGrid); f.GridID != "pl1/2" {
 		t.Fatalf("fetched %+v, want the grid nothing tells this client about", f)
 	}
-	c.NoteTold(&gridwellv1.EventPluginHealth{PluginUuid: "pl1", Healthy: true, Told: proto.Bool(true)})
+	c.NoteTold(&gridwellv1.EventSourceHealth{Uuid: "pl1", Healthy: true, Told: proto.Bool(true)})
 	if n := gridFetches(descend()); n != 0 {
 		t.Fatalf("asked for %d grids once told", n)
 	}

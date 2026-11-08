@@ -179,18 +179,18 @@ func TestHealthIsToldOnTransitionsAndTraced(t *testing.T) {
 	}
 	f.grid(f.root)
 	ev := f.events()
-	if h := await(t, ev, "the outage, to a late subscriber", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); h.Healthy || h.Detail == "" {
+	if h := await(t, ev, "the outage, to a late subscriber", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); h.Healthy || h.Detail == "" {
 		t.Fatalf("health = %+v", h)
 	}
 	if err := os.Rename(moved, f.root); err != nil {
 		t.Fatal(err)
 	}
 	f.grid(f.root)
-	if h := await(t, ev, "the recovery", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); !h.Healthy {
+	if h := await(t, ev, "the recovery", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); !h.Healthy {
 		t.Fatalf("health = %+v", h)
 	}
 	f.grid(f.root)
-	quiet(t, ev, "a healthy listing told again", func(e *pb.Event) bool { return e.GetPluginHealth() != nil })
+	quiet(t, ev, "a healthy listing told again", func(e *pb.Event) bool { return e.GetSourceHealth() != nil })
 	recs := healthTraced(mark)
 	if len(recs) != 2 || recs[0].KV["dark"] != "true" || recs[0].KV["detail"] == "" || recs[1].KV["dark"] != "false" {
 		t.Errorf("health records = %v, want dark with its detail, then light", recs)

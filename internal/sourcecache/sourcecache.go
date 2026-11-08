@@ -437,9 +437,9 @@ func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeRes
 // under.
 func doorGrids(l *pb.HandshakeResponse) []string {
 	var ids []string
-	for _, pl := range l.GetPlugins() {
+	for _, pl := range l.GetSources() {
 		ids = append(ids, pl.GetRootGridId())
-		for _, e := range pl.GetPluginGrids() {
+		for _, e := range pl.GetSourceGrids() {
 			ids = append(ids, e.GetGridId())
 		}
 	}
@@ -455,18 +455,18 @@ func keepFraming(fresh, old *pb.HandshakeResponse) {
 			known[gridID] = v
 		}
 	}
-	for _, pl := range old.GetPlugins() {
+	for _, pl := range old.GetSources() {
 		keep(pl.GetRootGridId(), rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()))
-		for _, e := range pl.GetPluginGrids() {
+		for _, e := range pl.GetSourceGrids() {
 			keep(e.GetGridId(), rpc.ViewOf(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()))
 		}
 	}
 	unset := func(cx, cy, zoom float64) bool { return rpc.ViewOf(cx, cy, zoom).SameAs(rpc.View{}) }
-	for _, pl := range fresh.GetPlugins() {
+	for _, pl := range fresh.GetSources() {
 		if v, ok := known[pl.GetRootGridId()]; ok && unset(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom()) {
 			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = v.Wire()
 		}
-		for _, e := range pl.GetPluginGrids() {
+		for _, e := range pl.GetSourceGrids() {
 			if v, ok := known[e.GetGridId()]; ok && unset(e.GetViewCx(), e.GetViewCy(), e.GetViewZoom()) {
 				e.ViewCx, e.ViewCy, e.ViewZoom = v.Wire()
 			}
@@ -985,11 +985,11 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 	case *pb.Event_SelectionChanged:
 		ids := p.SelectionChanged.GetTileIds()
 		c.reselect(ctx, p.SelectionChanged.GetGridId(), func([]string) []string { return ids })
-	case *pb.Event_PluginHealth:
+	case *pb.Event_SourceHealth:
 		// The source's supervisor says whether it can be reached. A key deeper
 		// than a connection segment is a far plugin, not the machine. No
 		// announce: the event itself is relayed onward.
-		c.setDark(p.PluginHealth.GetPluginUuid(), !p.PluginHealth.GetHealthy(), p.PluginHealth.GetDetail(), false, nil)
+		c.setDark(p.SourceHealth.GetUuid(), !p.SourceHealth.GetHealthy(), p.SourceHealth.GetDetail(), false, nil)
 	}
 }
 
@@ -1141,7 +1141,7 @@ func (c *Layer) reframeRows(ctx context.Context, gridID string, f rpc.Framing) {
 			return
 		}
 		l := &pb.HandshakeResponse{}
-		if proto.Unmarshal(b, l) != nil || !rpc.Reframe(gridID, f, l.Plugins) {
+		if proto.Unmarshal(b, l) != nil || !rpc.Reframe(gridID, f, l.Sources) {
 			continue
 		}
 		if nb, merr := proto.Marshal(l); merr == nil {

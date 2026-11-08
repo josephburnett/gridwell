@@ -9,7 +9,7 @@
 //
 // The symptom is a flap rather than the client's stream ending, because the
 // local node's fanInRemote re-dials with backoff and publishes an
-// EventPluginHealth with Healthy false when the API cuts its tunneled stream.
+// EventSourceHealth with Healthy false when the API cuts its tunneled stream.
 // The hold is derived from server.ConnectionAPIServer, so it tracks a
 // re-added deadline on its own; the API declares none today, so it is the
 // one-second floor.
@@ -69,13 +69,13 @@ func TestConnectionAPIHoldsATunneledStreamPastAnyDeadline(t *testing.T) {
 	}
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
 	var remoteHomeRoot string
-	for _, p := range menu["plugins"].([]any) {
+	for _, p := range menu["sources"].([]any) {
 		if pm := p.(map[string]any); pm["label"] == "home" {
 			remoteHomeRoot, _ = pm["rootGridId"].(string)
 		}
 	}
 	if remoteHomeRoot == "" {
-		t.Fatalf("the routed menu lacks the remote home: %v", menu["plugins"])
+		t.Fatalf("the routed menu lacks the remote home: %v", menu["sources"])
 	}
 
 	// A text tile on the remote home that a foreign writer edits directly
@@ -171,9 +171,9 @@ holdLoop:
 			if !ok {
 				t.Fatalf("the connecting node's stream channel closed during the %s hold", hold)
 			}
-			if h := ev.GetPluginHealth(); h != nil && !h.Healthy {
+			if h := ev.GetSourceHealth(); h != nil && !h.Healthy {
 				t.Fatalf("the connection API cut the fan-in stream %s into the hold: health-down for %q: %s",
-					time.Since(start).Round(100*time.Millisecond), h.PluginUuid, h.Detail)
+					time.Since(start).Round(100*time.Millisecond), h.Uuid, h.Detail)
 			}
 		case err := <-ended:
 			t.Fatalf("the connecting node's stream ended %s into the hold: %v", time.Since(start).Round(100*time.Millisecond), err)

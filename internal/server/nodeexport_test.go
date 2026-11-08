@@ -70,7 +70,7 @@ func homeRoot(t *testing.T, c namespace.Namespace) string {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	for _, p := range lp.Plugins {
+	for _, p := range lp.Sources {
 		if p.RootGridId != "" {
 			return p.RootGridId
 		}

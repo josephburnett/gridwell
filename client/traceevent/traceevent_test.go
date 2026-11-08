@@ -222,8 +222,8 @@ func TestEveryEventPayloadIsNamed(t *testing.T) {
 		{&pb.Event{Payload: &pb.Event_GridChanged{GridChanged: &pb.GridChanged{GridId: "g7abcde"}}}, "grid changed", "g7abcde"},
 		{&pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{GridId: "g7abcde"}}}, "grid framing changed", "g7abcde"},
 		{&pb.Event{Payload: &pb.Event_SelectionChanged{SelectionChanged: &pb.SelectionChanged{GridId: "g7abcde"}}}, "selection changed", "g7abcde"},
-		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde"}}}, "namespace unhealthy", "n7abcde"},
-		{&pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "n7abcde", Healthy: true}}}, "namespace healthy", "n7abcde"},
+		{&pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{Uuid: "n7abcde"}}}, "namespace unhealthy", "n7abcde"},
+		{&pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{Uuid: "n7abcde", Healthy: true}}}, "namespace healthy", "n7abcde"},
 	}
 	// The closed set is the proto's, so a payload the wire gains and this
 	// table does not fails here instead of reaching a dump as "unknown

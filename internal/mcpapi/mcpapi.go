@@ -98,7 +98,7 @@ func (d *toolset) grid(ctx context.Context, id string) (GridOut, error) {
 	}
 	out := GridOut{Grid: gridOf(g.GetGrid()), Tiles: []Tile{}}
 	for _, t := range g.GetTiles() {
-		out.Tiles = append(out.Tiles, tileOf(t, hs.GetPlugins(), d.node))
+		out.Tiles = append(out.Tiles, tileOf(t, hs.GetSources(), d.node))
 	}
 	return out, nil
 }

@@ -56,7 +56,7 @@ func TestDirectConnectSpawn(t *testing.T) {
 	// Asking with the home grid's node_ns answers the remote node's
 	// plugins, which is the + menu a pane inside this node shows.
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
-	mp := menu["plugins"].([]any)
+	mp := menu["sources"].([]any)
 	if len(mp) != 1 {
 		t.Fatalf("routed menu = %d plugins, want the remote's one", len(mp))
 	}

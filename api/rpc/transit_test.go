@@ -25,7 +25,7 @@ func TestTransitQualifyGrid(t *testing.T) {
 		AcceptsTiles:  proto.Bool(false),
 		Moves:         proto.Bool(true),
 		Glyph:         "folder",
-		PluginGrids:   []*pb.PluginGrid{{Id: "find", GridId: "far/7"}},
+		SourceGrids:   []*pb.SourceGrid{{Id: "find", GridId: "far/7"}},
 	}
 	out := TransitQualifyGrid("hop", in)
 	if out.Id != "hop/far/7" || out.ScratchGridId != "hop/far/9" || out.NodeNs != "hop/farnode" {
@@ -34,10 +34,10 @@ func TestTransitQualifyGrid(t *testing.T) {
 	if !out.Writable || out.GetAcceptsTiles() || !out.GetMoves() || out.Glyph != "folder" {
 		t.Fatalf("stamped facts must ride verbatim: %+v", out)
 	}
-	if len(out.PluginGrids) != 1 || out.PluginGrids[0].GridId != "hop/far/7" {
-		t.Fatalf("declared grid roots not prepended: %+v", out.PluginGrids)
+	if len(out.SourceGrids) != 1 || out.SourceGrids[0].GridId != "hop/far/7" {
+		t.Fatalf("declared grid roots not prepended: %+v", out.SourceGrids)
 	}
-	if in.Id != "far/7" || in.PluginGrids[0].GridId != "far/7" {
+	if in.Id != "far/7" || in.SourceGrids[0].GridId != "far/7" {
 		t.Fatalf("input mutated: %+v", in)
 	}
 	if TransitQualifyGrid("hop", nil) != nil {
@@ -64,7 +64,7 @@ func TestTransitQualifyGridReadsAnOlderNodesOneBitForBothFacts(t *testing.T) {
 // in ConnectionRow's shape, qualified like the rows beside it, after them.
 func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 	out := TransitQualifyPluginList("hop", &pb.HandshakeResponse{
-		Plugins: []*pb.PluginInfo{{Uuid: "n1", RootGridId: "n1/1"}},
+		Sources: []*pb.SourceInfo{{Uuid: "n1", RootGridId: "n1/1"}},
 		Connections: []*pb.ConnectionInfo{
 			{Uuid: "n1/rtb", Label: "rtb", RootGridId: "n1/rtb/r/1", RootViewCx: 2, RootViewCy: 3, RootViewZoom: 0.5},
 			{Uuid: "n1/far", Label: "far", StatusDetail: "dial refused"},
@@ -73,16 +73,16 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 	if len(out.Connections) != 0 {
 		t.Fatalf("the retired list must not be forwarded, got %+v", out.Connections)
 	}
-	if len(out.Plugins) != 3 || out.Plugins[0].Uuid != "hop/n1" {
-		t.Fatalf("plugins = %+v, want home then the two connection rows", out.Plugins)
+	if len(out.Sources) != 3 || out.Sources[0].Uuid != "hop/n1" {
+		t.Fatalf("plugins = %+v, want home then the two connection rows", out.Sources)
 	}
-	var rows []*pb.PluginInfo
-	for _, pl := range out.Plugins {
+	var rows []*pb.SourceInfo
+	for _, pl := range out.Sources {
 		if IsConnectionRow(pl) {
 			rows = append(rows, pl)
 		}
 	}
-	want := []*pb.PluginInfo{
+	want := []*pb.SourceInfo{
 		ConnectionRow("hop/n1/rtb", "rtb", "hop/n1/rtb/r/1", "", ViewOf(2, 3, 0.5)),
 		ConnectionRow("hop/n1/far", "far", "", "dial refused", View{}),
 	}
@@ -97,7 +97,7 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 }
 
 // isIDField is the wire's naming for a qualified id within a request or a
-// Tile, plus shell_tmux, a tile id by another name. PluginGrid's "id" is not
+// Tile, plus shell_tmux, a tile id by another name. SourceGrid's "id" is not
 // one, so the rule is not read wire-wide.
 func isIDField(fd protoreflect.FieldDescriptor) bool {
 	name := string(fd.Name())
@@ -285,14 +285,14 @@ func TestQualifyEventIDsPrefixesEveryGridID(t *testing.T) {
 // A health event gains the hop's segment on its uuid and carries every other
 // field verbatim, so a far source's state reads here as it did there.
 func TestQualifyEventIDsKeepsTheWholeHealth(t *testing.T) {
-	h := &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		PluginUuid: "p1", Healthy: true, Detail: "d", LiveUpdatesOff: "too many watches"}}}
-	got := TransitQualifyEvent("u", h).GetPluginHealth()
-	want := &pb.EventPluginHealth{PluginUuid: "u/p1", Healthy: true, Detail: "d", LiveUpdatesOff: "too many watches"}
+	h := &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
+		Uuid: "p1", Healthy: true, Detail: "d", LiveUpdatesOff: "too many watches"}}}
+	got := TransitQualifyEvent("u", h).GetSourceHealth()
+	want := &pb.EventSourceHealth{Uuid: "u/p1", Healthy: true, Detail: "d", LiveUpdatesOff: "too many watches"}
 	if !proto.Equal(got, want) {
 		t.Errorf("health event = %v, want %v", got, want)
 	}
-	if h.GetPluginHealth().PluginUuid != "p1" {
+	if h.GetSourceHealth().Uuid != "p1" {
 		t.Error("qualification mutated its input")
 	}
 }

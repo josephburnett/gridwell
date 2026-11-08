@@ -35,8 +35,8 @@ func TestAnUnopenableCacheSurfacesAsHealth(t *testing.T) {
 	if !strings.Contains(h.Detail, "source cache") {
 		t.Errorf("health detail = %q, want the cache named in it", h.Detail)
 	}
-	if h.PluginUuid != cfg.ID {
-		t.Errorf("health uuid = %q, want the transport's %q, or the client cannot key the notice", h.PluginUuid, cfg.ID)
+	if h.Uuid != cfg.ID {
+		t.Errorf("health uuid = %q, want the transport's %q, or the client cannot key the notice", h.Uuid, cfg.ID)
 	}
 }
 
@@ -67,7 +67,7 @@ func serveNode(t *testing.T, dir string) *config.ServerConfig {
 
 // firstUnhealthy subscribes on the connection API as any client does and
 // returns the first unhealthy report, or nil if the window closes first.
-func firstUnhealthy(t *testing.T, cfg *config.ServerConfig, within time.Duration) *gridwellv1.EventPluginHealth {
+func firstUnhealthy(t *testing.T, cfg *config.ServerConfig, within time.Duration) *gridwellv1.EventSourceHealth {
 	t.Helper()
 	conn, err := dial.ClientConn("unix:" + cfg.Federation.Socket)
 	if err != nil {
@@ -85,7 +85,7 @@ func firstUnhealthy(t *testing.T, cfg *config.ServerConfig, within time.Duration
 		if err != nil {
 			return nil
 		}
-		if h := ev.GetPluginHealth(); h != nil && !h.Healthy {
+		if h := ev.GetSourceHealth(); h != nil && !h.Healthy {
 			return h
 		}
 	}

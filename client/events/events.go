@@ -35,7 +35,7 @@ type Plan struct {
 	Revive string
 	// Health is a namespace's health event; ReactHealth says what to do about
 	// it.
-	Health *pb.EventPluginHealth
+	Health *pb.EventSourceHealth
 	// Reframe is a root grid's new framing, applied to its doors by
 	// rpc.Reframe. It asks for no fetch: the listing did not change.
 	Reframe *pb.GridFramingChanged
@@ -63,8 +63,8 @@ func Route(ev *pb.Event) Plan {
 		return Plan{ClearLatch: id, Fetch: id, Revive: rpc.SourceOf(id)}
 	case *pb.Event_GridFramingChanged:
 		return Plan{Reframe: p.GridFramingChanged}
-	case *pb.Event_PluginHealth:
-		return Plan{Health: p.PluginHealth}
+	case *pb.Event_SourceHealth:
+		return Plan{Health: p.SourceHealth}
 	}
 	return Plan{}
 }
@@ -93,10 +93,10 @@ type StickyNotice struct {
 // whether the client held it dark before (cache.NoteHealth), and whether the
 // user may switch it off (pluginhealth.Disableable). A disabled source is
 // dark and says nothing more: the user asked for exactly that.
-func ReactHealth(h *pb.EventPluginHealth, label string, wasDark, disableable bool) HealthReaction {
-	uuid := h.GetPluginUuid()
+func ReactHealth(h *pb.EventSourceHealth, label string, wasDark, disableable bool) HealthReaction {
+	uuid := h.GetUuid()
 	r := HealthReaction{
-		Dark:    StickyNotice{Source: errsurface.PluginHealthSource(uuid)},
+		Dark:    StickyNotice{Source: errsurface.SourceHealthSource(uuid)},
 		LiveOff: StickyNotice{Source: errsurface.LiveUpdatesSource(uuid)},
 	}
 	if !h.GetHealthy() && !h.GetDisabled() {

@@ -94,11 +94,11 @@ func (rt *router) reach(ctx context.Context) (rpc.Reach, error) {
 	for depth := 0; len(queue) > 0 && depth < maxReachHops; depth++ {
 		var next []visit
 		for _, v := range queue {
-			for _, row := range v.lp.GetPlugins() {
+			for _, row := range v.lp.GetSources() {
 				if !rpc.IsConnectionRow(row) {
 					continue
 				}
-				edges := rpc.ReachEdges(&pb.HandshakeResponse{Plugins: []*pb.PluginInfo{row}})
+				edges := rpc.ReachEdges(&pb.HandshakeResponse{Sources: []*pb.SourceInfo{row}})
 				if len(edges) == 0 {
 					continue
 				}

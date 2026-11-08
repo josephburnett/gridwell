@@ -15,7 +15,7 @@ import (
 
 // Doors composes the section in handshake order, each row's declared
 // entries directly after it.
-func Doors(rows []*gridwellv1.PluginInfo) []door.Place {
+func Doors(rows []*gridwellv1.SourceInfo) []door.Place {
 	out := make([]door.Place, 0, len(rows))
 	for i := range rows {
 		row := rows[i]

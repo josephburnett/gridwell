@@ -774,7 +774,7 @@ func (a *App) persistedGridView(p *pane.Pane, anchor string, path []string) (rpc
 
 // storedRootView is the read side of persistFraming's root arm, the same 1x1
 // synthetic door inverted, at pane size s. A root's framing rides its
-// PluginInfo; false when it has none.
+// SourceInfo; false when it has none.
 func (a *App) storedRootView(anchor string, s zoomtrans.Size) (rpc.Framing, bool) {
 	pl, found := a.pluginByRoot(anchor)
 	if !found {

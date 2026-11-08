@@ -148,7 +148,7 @@ func farRoot(ctx context.Context, t *testing.T, cl *rpc.Client, ns string) strin
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, p := range lp.GetPlugins() {
+		for _, p := range lp.GetSources() {
 			if p.GetUuid() == ns && p.GetRootGridId() != "" && p.GetInfoError() == "" {
 				return p.GetRootGridId()
 			}

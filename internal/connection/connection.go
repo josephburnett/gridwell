@@ -277,8 +277,8 @@ func (s *Server) ConnectAll(ctx context.Context) {
 // Rows lists the declared connections as the handshake answers them, in
 // config order (rpc.ConnectionRow). A dark one contributes zero framing, which
 // the source cache reads as silence (sourcecache.keepFraming).
-func (s *Server) Rows(ctx context.Context) []*gridwellv1.PluginInfo {
-	out := make([]*gridwellv1.PluginInfo, 0, len(s.order))
+func (s *Server) Rows(ctx context.Context) []*gridwellv1.SourceInfo {
+	out := make([]*gridwellv1.SourceInfo, 0, len(s.order))
 	for _, name := range s.order {
 		c := s.conns[name]
 		s.kickRootFetch(c)
@@ -613,8 +613,8 @@ func (s *Server) noteLiveOff(name, reason string) {
 // node refused this node's share, when its changes are not told. Under mu.
 func (s *Server) healthEvent(name string, st connState) *gridwellv1.Event {
 	ev := rpc.HealthEvent(name, st.up, st.detail)
-	ev.GetPluginHealth().LiveUpdatesOff = s.liveOff[name]
-	ev.GetPluginHealth().Told = proto.Bool(s.liveOff[name] == "")
+	ev.GetSourceHealth().LiveUpdatesOff = s.liveOff[name]
+	ev.GetSourceHealth().Told = proto.Bool(s.liveOff[name] == "")
 	return ev
 }
 
@@ -653,12 +653,12 @@ func (s *Server) healthNow() []*gridwellv1.Event {
 // relay publishes one far event, keeping it while it is standing health: a
 // dark source, a failure to tell, or changes not told.
 func (s *Server) relay(ev *gridwellv1.Event) {
-	if h := ev.GetPluginHealth(); h != nil {
+	if h := ev.GetSourceHealth(); h != nil {
 		s.mu.Lock()
 		if h.Healthy && h.LiveUpdatesOff == "" && (h.Told == nil || h.GetTold()) {
-			delete(s.farHealth, h.PluginUuid)
+			delete(s.farHealth, h.Uuid)
 		} else {
-			s.farHealth[h.PluginUuid] = ev
+			s.farHealth[h.Uuid] = ev
 		}
 		s.mu.Unlock()
 	}
@@ -695,7 +695,7 @@ func (s *Server) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.Inf
 func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest) (*gridwellv1.HandshakeResponse, error) {
 	ns := req.GetNamespace()
 	if ns == "" {
-		return &gridwellv1.HandshakeResponse{Plugins: s.Rows(ctx)}, nil
+		return &gridwellv1.HandshakeResponse{Sources: s.Rows(ctx)}, nil
 	}
 	first, rest, ok := rpc.SplitID(ns)
 	if !ok {

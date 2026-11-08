@@ -61,7 +61,7 @@ func TestSetFramingRefusesWhatIsNotAViewAcrossTheSeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, pl := range hs.Plugins {
+	for _, pl := range hs.Sources {
 		if pl.RootGridId == root {
 			if got := rpc.ViewOf(pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom); got != rpc.Saved(good) {
 				t.Errorf("the root's framing after the refusals = %+v, want %+v", got, good)

@@ -732,8 +732,8 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 		if g, ok := a.c.Grid(pl.RootGridId); ok {
 			scratchGridID = g.Meta.ScratchGridId
 		}
-		entries := make([]any, 0, len(pl.PluginGrids))
-		for _, e := range pl.PluginGrids {
+		entries := make([]any, 0, len(pl.SourceGrids))
+		for _, e := range pl.SourceGrids {
 			entries = append(entries, map[string]any{
 				"id":       e.Id,
 				"label":    door.GridName(pl.Label, e.Label),
@@ -763,7 +763,7 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 
 // pluginStatusName is the stable string for a row's pluginhealth class,
 // shared by thPlugins/thMenu; "" for a row pluginhealth does not classify.
-func pluginStatusName(pl *gridwellv1.PluginInfo) string {
+func pluginStatusName(pl *gridwellv1.SourceInfo) string {
 	st, classified := pluginhealth.Classify(pl)
 	if !classified {
 		return ""

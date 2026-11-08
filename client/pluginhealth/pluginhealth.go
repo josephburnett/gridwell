@@ -29,7 +29,7 @@ const (
 // asks a second question about the row. ok is false for a row that is no
 // door and no failure — every healthy plugin, since a plugin is not a place
 // — and nothing draws or reports such a row.
-func Classify(pl *gridwellv1.PluginInfo) (Status, bool) {
+func Classify(pl *gridwellv1.SourceInfo) (Status, bool) {
 	switch {
 	case pl.InfoError != "":
 		return Broken, true
@@ -50,14 +50,14 @@ func UnrootedLink(t *gridwellv1.Tile) bool {
 
 // BrokenReason is what the server recorded. Only the click report reads it;
 // every Broken row draws the same.
-func BrokenReason(pl *gridwellv1.PluginInfo) string { return pl.InfoError }
+func BrokenReason(pl *gridwellv1.SourceInfo) string { return pl.InfoError }
 
 // ClickNotice is errsurface.Surface.Report's arguments for clicking a
 // non-enterable door tile; false for Enterable, which descends instead.
 // The source keys on the uuid because two connections can share a label, and
 // on "door:" because "plugin:" is errsurface's sticky namespace and a
 // click notice should expire.
-func ClickNotice(pl *gridwellv1.PluginInfo) (sev errsurface.Severity, source, message string, ok bool) {
+func ClickNotice(pl *gridwellv1.SourceInfo) (sev errsurface.Severity, source, message string, ok bool) {
 	st, known := Classify(pl)
 	if !known {
 		return 0, "", "", false
@@ -75,7 +75,7 @@ func ClickNotice(pl *gridwellv1.PluginInfo) (sev errsurface.Severity, source, me
 // notice: a connection row of this node's own roster, never home, the files,
 // which are dark or told and never disabled (2026-11-07), or a source a far
 // node declares. The node is the authority and refuses anything else.
-func Disableable(roster []*gridwellv1.PluginInfo, uuid string) bool {
+func Disableable(roster []*gridwellv1.SourceInfo, uuid string) bool {
 	for _, pl := range roster {
 		if pl.GetUuid() == uuid {
 			return rpc.IsConnectionRow(pl)

@@ -189,7 +189,7 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 // createPluginLinkAtCell creates a door to another namespace link to the plugin's qualified
 // root grid, seeding its framing from the plugin's persisted root view so the
 // preview shows what descent will show.
-func (a *App) createPluginLinkAtCell(gid string, pl *gridwellv1.PluginInfo, cellX, cellY int64) {
+func (a *App) createPluginLinkAtCell(gid string, pl *gridwellv1.SourceInfo, cellX, cellY int64) {
 	a.createTile("CreateDoor", gid, &gridwellv1.CreateTileRequest{GridId: gid,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: cellX, Y: cellY, W: 1, H: 1,
 			ChildGridId: pl.RootGridId, AltText: pl.Label,

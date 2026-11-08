@@ -42,7 +42,7 @@ func (p *countingInfo) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse,
 	if p.failFirst && n == 1 {
 		return nil, errors.New("transient info failure")
 	}
-	return &pb.InfoResponse{DisplayName: "T", PluginGrids: []*pb.PluginGrid{{Id: "/r", Label: "r", GridId: rpc.KeyTileID("/r")}}}, nil
+	return &pb.InfoResponse{DisplayName: "T", SourceGrids: []*pb.SourceGrid{{Id: "/r", Label: "r", GridId: rpc.KeyTileID("/r")}}}, nil
 }
 
 // TestHandshakeRetriesFailedInfo: a failed Info lists a degraded row, and
@@ -56,14 +56,14 @@ func TestHandshakeRetriesFailedInfo(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Degraded entry: listed, with its failure and no door (info was nil).
-	if row := r1.Msg.Plugins[0]; row.InfoError == "" || len(row.PluginGrids) != 0 {
+	if row := r1.Msg.Sources[0]; row.InfoError == "" || len(row.SourceGrids) != 0 {
 		t.Errorf("failed Info should list a degraded entry, got %v", row)
 	}
 	r2, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row := r2.Msg.Plugins[0]; row.InfoError != "" || len(row.PluginGrids) != 1 || row.PluginGrids[0].GridId != rpc.QualifyID(infoNode, rpc.KeyTileID("/r")) {
+	if row := r2.Msg.Sources[0]; row.InfoError != "" || len(row.SourceGrids) != 1 || row.SourceGrids[0].GridId != rpc.QualifyID(infoNode, rpc.KeyTileID("/r")) {
 		t.Errorf("retry after a failed Info should recover, got %v", row)
 	}
 	if got := fake.calls.Load(); got != 2 {
@@ -91,7 +91,7 @@ func TestAHungInfoListsBrokenAfterTheTimeout(t *testing.T) {
 	if took := time.Since(start); took < pluginInfoTimeout || took > pluginInfoTimeout+2*time.Second {
 		t.Errorf("Handshake took %v, want it bounded by pluginInfoTimeout (%v)", took, pluginInfoTimeout)
 	}
-	if r.Msg.Plugins[0].InfoError == "" {
+	if r.Msg.Sources[0].InfoError == "" {
 		t.Error("a hung Info lists no InfoError")
 	}
 }
@@ -107,7 +107,7 @@ func (alwaysFailInfo) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, 
 }
 
 // TestHandshakeSurfacesInfoErrorOverTheWire crosses the seam a pure
-// buildPluginInfo unit test cannot reach: server -> Connect wire (proto-JSON)
+// buildSourceInfo unit test cannot reach: server -> Connect wire (proto-JSON)
 // -> rpc.Client.Handshake. InfoError must survive that round trip so the
 // wasm client can classify a broken namespace (client/pluginhealth).
 func TestHandshakeSurfacesInfoErrorOverTheWire(t *testing.T) {
@@ -118,11 +118,11 @@ func TestHandshakeSurfacesInfoErrorOverTheWire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	if len(plugins.Plugins) != 1 {
-		t.Fatalf("got %d rows, want 1: %+v", len(plugins.Plugins), plugins.Plugins)
+	if len(plugins.Sources) != 1 {
+		t.Fatalf("got %d rows, want 1: %+v", len(plugins.Sources), plugins.Sources)
 	}
-	p := plugins.Plugins[0]
-	if p.RootGridId != "" || len(p.PluginGrids) != 0 {
+	p := plugins.Sources[0]
+	if p.RootGridId != "" || len(p.SourceGrids) != 0 {
 		t.Errorf("broken row = %v, want no door", p)
 	}
 	if p.InfoError == "" {
@@ -146,9 +146,9 @@ func (p *infoFlake) Info(ctx context.Context, req *pb.InfoRequest) (*pb.InfoResp
 	return p.Namespace.Info(ctx, req)
 }
 
-// TestGetGridFailsWhenOwnerInfoFails crosses the read seam a buildPluginInfo
+// TestGetGridFailsWhenOwnerInfoFails crosses the read seam a buildSourceInfo
 // unit test cannot reach: server -> Connect wire -> rpc.Client.GetGrid. Grid
-// plugin_grids comes from the owning namespace's Info and scratch_grid_id
+// source_grids comes from the owning namespace's Info and scratch_grid_id
 // from home's, from nowhere else, so a failed handshake must fail the read. The
 // alternative — answering the grid with the fields unset — is a grid with no
 // doors and no ephemeral visits, and that flips back on the next read,
@@ -181,7 +181,7 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 	if err == nil {
 		g := resp.GetGrid()
 		t.Fatalf("GetGrid answered while the owner's Info was failing: writable=%v scratch=%q declared grids=%d",
-			g.GetWritable(), g.GetScratchGridId(), len(g.GetPluginGrids()))
+			g.GetWritable(), g.GetScratchGridId(), len(g.GetSourceGrids()))
 	}
 	if !strings.Contains(err.Error(), "namespace not responding") {
 		t.Errorf("GetGrid error = %v, want it to carry the handshake failure", err)
@@ -195,9 +195,9 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 		t.Fatalf("GetGrid after recovery: %v", err)
 	}
 	g := resp.GetGrid()
-	if !g.GetWritable() || g.GetScratchGridId() == "" || len(g.GetPluginGrids()) == 0 {
+	if !g.GetWritable() || g.GetScratchGridId() == "" || len(g.GetSourceGrids()) == 0 {
 		t.Errorf("recovered grid: writable=%v scratch=%q declared grids=%d, want the home namespace's full declarations",
-			g.GetWritable(), g.GetScratchGridId(), len(g.GetPluginGrids()))
+			g.GetWritable(), g.GetScratchGridId(), len(g.GetSourceGrids()))
 	}
 }
 

@@ -66,7 +66,7 @@ func (a *App) gridMeta(gridID string) (*gridwellv1.Grid, bool) {
 // pluginByRoot returns the door rooted at gridID, a menu row's own grid
 // or one of its declared entries'. The rule is door.ByRoot's; this resolves
 // the declaration list it reads.
-func (a *App) pluginByRoot(gridID string) (*gridwellv1.PluginInfo, bool) {
+func (a *App) pluginByRoot(gridID string) (*gridwellv1.SourceInfo, bool) {
 	return door.ByRoot(gridID, a.allPlugins())
 }
 
@@ -79,7 +79,7 @@ func (a *App) cacheDoorFraming(gridID string, f rpc.Framing) bool {
 
 // pluginByUUID returns the plugin with the given, possibly chain-qualified,
 // namespace. A chain-qualified uuid cannot collide with a local one.
-func (a *App) pluginByUUID(u string) (*gridwellv1.PluginInfo, bool) {
+func (a *App) pluginByUUID(u string) (*gridwellv1.SourceInfo, bool) {
 	for _, p := range a.allPlugins() {
 		if p.Uuid == u {
 			return p, true
@@ -98,7 +98,7 @@ func (a *App) pluginGlyph(gridID string) string {
 
 // allPlugins is the boot handshake's list plus each fetched remote menu
 // context, for declaration scans that must see remote declarations too.
-func (a *App) allPlugins() []*gridwellv1.PluginInfo {
+func (a *App) allPlugins() []*gridwellv1.SourceInfo {
 	out := a.plugins
 	for _, ctx := range a.views.menuCtxs {
 		out = append(out[:len(out):len(out)], ctx.plugins...)

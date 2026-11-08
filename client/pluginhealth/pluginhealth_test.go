@@ -13,28 +13,28 @@ import (
 func TestClassifyTable(t *testing.T) {
 	// The one shape a plugin's grid swatch takes, rooted at the
 	// grid rather than at the plugin.
-	grid := door.GridPlugin(&gridwellv1.PluginInfo{Label: "Mail"},
-		&gridwellv1.PluginGrid{Id: "feed", Label: "Feed", GridId: "u/2"})
+	grid := door.GridPlugin(&gridwellv1.SourceInfo{Label: "Mail"},
+		&gridwellv1.SourceGrid{Id: "feed", Label: "Feed", GridId: "u/2"})
 	cases := []struct {
 		name   string
-		pl     *gridwellv1.PluginInfo
+		pl     *gridwellv1.SourceInfo
 		want   Status
 		wantOK bool
 	}{
-		{"home", &gridwellv1.PluginInfo{Label: "Home", RootGridId: "u/1"}, Enterable, true},
+		{"home", &gridwellv1.SourceInfo{Label: "Home", RootGridId: "u/1"}, Enterable, true},
 		{"rooted connection", rpc.ConnectionRow("c1", "", "c1/1", "", rpc.View{}), Enterable, true},
 		{"a plugin's grid swatch", grid, Enterable, true},
-		{"info failed", &gridwellv1.PluginInfo{Label: "Files", InfoError: "plugin not responding: connection refused"}, Broken, true},
+		{"info failed", &gridwellv1.SourceInfo{Label: "Files", InfoError: "plugin not responding: connection refused"}, Broken, true},
 		// A plugin contributes doors rather than being one, so a rootless
 		// plugin row is not a health state and gets no status at all.
-		{"answered, entries and no root", &gridwellv1.PluginInfo{Label: "Mail",
-			PluginGrids: []*gridwellv1.PluginGrid{{Id: "feed", Label: "Feed", GridId: "u/2"}}}, 0, false},
-		{"answered, nothing declared", &gridwellv1.PluginInfo{Label: "Files"}, 0, false},
+		{"answered, entries and no root", &gridwellv1.SourceInfo{Label: "Mail",
+			SourceGrids: []*gridwellv1.SourceGrid{{Id: "feed", Label: "Feed", GridId: "u/2"}}}, 0, false},
+		{"answered, nothing declared", &gridwellv1.SourceInfo{Label: "Files"}, 0, false},
 		{"connection not answered yet", rpc.ConnectionRow("c1", "rtb", "", "", rpc.View{}), Waiting, true},
 		{"connection that failed to dial", rpc.ConnectionRow("c1", "rtb", "",
 			"dial tcp 127.0.0.1:1: connection refused", rpc.View{}), Broken, true},
 		// A recorded error outranks a root: the error is the newer fact.
-		{"rooted but errored", &gridwellv1.PluginInfo{Label: "Files", RootGridId: "u/1", InfoError: "boom"}, Broken, true},
+		{"rooted but errored", &gridwellv1.SourceInfo{Label: "Files", RootGridId: "u/1", InfoError: "boom"}, Broken, true},
 	}
 	for _, c := range cases {
 		got, ok := Classify(c.pl)
@@ -47,7 +47,7 @@ func TestClassifyTable(t *testing.T) {
 // A caller that drops ok must not read an unclassified row as Enterable and
 // open a door that is not there.
 func TestUnclassifiedStatusIsNotEnterable(t *testing.T) {
-	if st, _ := Classify(&gridwellv1.PluginInfo{Label: "Files"}); st == Enterable {
+	if st, _ := Classify(&gridwellv1.SourceInfo{Label: "Files"}); st == Enterable {
 		t.Error("the unclassified Status is Enterable; no status must be the zero value")
 	}
 }
@@ -55,7 +55,7 @@ func TestUnclassifiedStatusIsNotEnterable(t *testing.T) {
 // Every kind of failure collapses into Broken; the recorded text is what
 // distinguishes them.
 func TestBrokenIsOneStatusWithTheReasonInTheText(t *testing.T) {
-	failed := &gridwellv1.PluginInfo{Uuid: "u1", Label: "Files", InfoError: "plugin not responding: boom"}
+	failed := &gridwellv1.SourceInfo{Uuid: "u1", Label: "Files", InfoError: "plugin not responding: boom"}
 	dialed := rpc.ConnectionRow("u2", "Files", "",
 		"dial tcp 127.0.0.1:1: connection refused", rpc.View{})
 	f, fok := Classify(failed)
@@ -82,15 +82,15 @@ func TestBrokenIsOneStatusWithTheReasonInTheText(t *testing.T) {
 // A plugin with no door of its own is not an error, so a click says
 // nothing.
 func TestClickNotice_UnclassifiedRow_NotOk(t *testing.T) {
-	pl := &gridwellv1.PluginInfo{Uuid: "u1", Label: "Mail",
-		PluginGrids: []*gridwellv1.PluginGrid{{Id: "feed", Label: "Feed", GridId: "u1/2"}}}
+	pl := &gridwellv1.SourceInfo{Uuid: "u1", Label: "Mail",
+		SourceGrids: []*gridwellv1.SourceGrid{{Id: "feed", Label: "Feed", GridId: "u1/2"}}}
 	if _, _, _, ok := ClickNotice(pl); ok {
 		t.Error("a plugin with no door of its own must report nothing")
 	}
 }
 
 func TestClickNotice_Enterable_NotOk(t *testing.T) {
-	pl := &gridwellv1.PluginInfo{Label: "Home", RootGridId: "u/1"}
+	pl := &gridwellv1.SourceInfo{Label: "Home", RootGridId: "u/1"}
 	_, _, _, ok := ClickNotice(pl)
 	if ok {
 		t.Error("ClickNotice for an enterable plugin must return ok=false (caller should descend)")
@@ -98,7 +98,7 @@ func TestClickNotice_Enterable_NotOk(t *testing.T) {
 }
 
 func TestClickNotice_KeyedByUUID(t *testing.T) {
-	pl := &gridwellv1.PluginInfo{Uuid: "uux1", Label: "Files", InfoError: "plugin not responding: boom"}
+	pl := &gridwellv1.SourceInfo{Uuid: "uux1", Label: "Files", InfoError: "plugin not responding: boom"}
 	_, source, _, ok := ClickNotice(pl)
 	if !ok {
 		t.Fatal("ClickNotice for a broken plugin must return ok=true")
@@ -111,7 +111,7 @@ func TestClickNotice_KeyedByUUID(t *testing.T) {
 // Repeated clicks on one plugin share a source key, so errsurface updates one
 // row rather than scrolling the notice row.
 func TestClickNotice_SourceKeyedByLabelCoalesces(t *testing.T) {
-	pl := &gridwellv1.PluginInfo{Label: "Files", InfoError: "boom"}
+	pl := &gridwellv1.SourceInfo{Label: "Files", InfoError: "boom"}
 	_, s1, _, _ := ClickNotice(pl)
 	_, s2, _, _ := ClickNotice(pl)
 	if s1 != s2 {
@@ -167,7 +167,7 @@ func TestUnrootedLink(t *testing.T) {
 // health also wears) and a source further along a connection are not this
 // node's to stop.
 func TestDisableable(t *testing.T) {
-	roster := []*gridwellv1.PluginInfo{
+	roster := []*gridwellv1.SourceInfo{
 		{Uuid: "n1", Label: "home", RootGridId: "n1/1"},
 		{Uuid: rpc.FilesOwner("n1"), Label: "files", Glyph: rpc.GlyphFolder},
 		rpc.ConnectionRow("n1/away", "away", "", "dial refused", rpc.View{}),

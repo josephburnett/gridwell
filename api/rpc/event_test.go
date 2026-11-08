@@ -30,8 +30,8 @@ func TestEventKey(t *testing.T) {
 		ev:   &pb.Event{Payload: &pb.Event_TileRemoved{TileRemoved: &pb.TileRemoved{GridId: "g1", TileId: "t1"}}},
 		want: "r/g1/t1",
 	}, {
-		name: "plugin_health",
-		ev:   &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{PluginUuid: "u1"}}},
+		name: "source_health",
+		ev:   &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{Uuid: "u1"}}},
 		want: "h/u1",
 	}, {
 		name: "grid_framing_changed",

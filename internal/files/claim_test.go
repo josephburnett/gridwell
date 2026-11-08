@@ -20,7 +20,7 @@ func collect(ch <-chan *pb.Event) []*pb.Event {
 	for {
 		select {
 		case ev := <-ch:
-			if ev.GetPluginHealth() == nil {
+			if ev.GetSourceHealth() == nil {
 				out = append(out, ev)
 			}
 		case <-deadline:
@@ -188,13 +188,13 @@ func TestEachRootKeepsItsOwnFraming(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := s.Info(ctx, &pb.InfoRequest{})
-	if err != nil || len(info.PluginGrids) != 2 {
+	if err != nil || len(info.SourceGrids) != 2 {
 		t.Fatalf("Info = %v, %v", info, err)
 	}
-	if g := info.PluginGrids[0]; g.ViewCx != 0 || g.ViewZoom != 0 {
+	if g := info.SourceGrids[0]; g.ViewCx != 0 || g.ViewZoom != 0 {
 		t.Errorf("the unframed root = %+v", g)
 	}
-	if g := info.PluginGrids[1]; g.ViewCx != 3 || g.ViewCy != 4 || g.ViewZoom != 2 {
+	if g := info.SourceGrids[1]; g.ViewCx != 3 || g.ViewCy != 4 || g.ViewZoom != 2 {
 		t.Errorf("the framed root = %+v", g)
 	}
 }

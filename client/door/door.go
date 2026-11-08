@@ -24,16 +24,16 @@ func GridName(row, entry string) string {
 	return entry + " (" + row + ")"
 }
 
-// GridPlugin shapes one of a row's PluginGrids as a pseudo-row, so every
+// GridPlugin shapes one of a row's SourceGrids as a pseudo-row, so every
 // downstream flow takes the ordinary row path. It is a door and not a
 // declarer, so it carries none of the row's entries, which would show every
 // grid twice; its framing is the entry's, so a grid reopens where
 // it was left.
-func GridPlugin(pl *gridwellv1.PluginInfo, e *gridwellv1.PluginGrid) *gridwellv1.PluginInfo {
-	pseudo := proto.Clone(pl).(*gridwellv1.PluginInfo)
+func GridPlugin(pl *gridwellv1.SourceInfo, e *gridwellv1.SourceGrid) *gridwellv1.SourceInfo {
+	pseudo := proto.Clone(pl).(*gridwellv1.SourceInfo)
 	pseudo.RootGridId = e.GridId
 	pseudo.RootViewCx, pseudo.RootViewCy, pseudo.RootViewZoom = e.ViewCx, e.ViewCy, e.ViewZoom
-	pseudo.PluginGrids = nil
+	pseudo.SourceGrids = nil
 	pseudo.Label = GridName(pl.Label, e.Label)
 	if e.Glyph != "" {
 		pseudo.Glyph = e.Glyph
@@ -48,7 +48,7 @@ type Kind int
 const (
 	None     Kind = iota
 	Tile          // a real tile row, renamable where you stand
-	Declared      // a declared PluginGrid's pseudo swatch
+	Declared      // a declared SourceGrid's pseudo swatch
 	Root          // a row's own swatch, for a row that is a place. A plugin has none.
 )
 
@@ -63,9 +63,9 @@ func DoorInto(anchor string, tiles map[string]*gridwellv1.Tile) (*gridwellv1.Til
 }
 
 // Find resolves the door into the level rooted at anchor, most specific
-// first: the parent level's door whose child is anchor, a PluginGrid declaring
+// first: the parent level's door whose child is anchor, a SourceGrid declaring
 // it, then the row rooted at it. None leaves callers their fallback.
-func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gridwellv1.PluginInfo) (*gridwellv1.Tile, Kind) {
+func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gridwellv1.SourceInfo) (*gridwellv1.Tile, Kind) {
 	if anchor == "" {
 		return nil, None
 	}
@@ -73,7 +73,7 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gri
 		return t, Tile
 	}
 	for _, pl := range plugins {
-		for _, e := range pl.PluginGrids {
+		for _, e := range pl.SourceGrids {
 			if e.GridId == anchor {
 				return rpc.PluginDoorTile(GridPlugin(pl, e)), Declared
 			}
@@ -90,9 +90,9 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, plugins []*gri
 // GridGlyph is the glyph a declared grid declares for gridID, or "". It is the
 // one override the grid cannot carry: the trash grid is an ordinary local
 // grid, and only the declaration knows its glyph.
-func GridGlyph(gridID string, plugins []*gridwellv1.PluginInfo) string {
+func GridGlyph(gridID string, plugins []*gridwellv1.SourceInfo) string {
 	for i := range plugins {
-		for _, e := range plugins[i].PluginGrids {
+		for _, e := range plugins[i].SourceGrids {
 			if e.GridId == gridID && e.Glyph != "" {
 				return e.Glyph
 			}
@@ -105,7 +105,7 @@ func GridGlyph(gridID string, plugins []*gridwellv1.PluginInfo) string {
 // crumb of the grid it roots, so a glyph cannot mean one thing in the menu and
 // another in the bar. A connection declares the globe at rpc.ConnectionRow, so
 // nothing here switches on a kind.
-func RowGlyph(pl *gridwellv1.PluginInfo) string {
+func RowGlyph(pl *gridwellv1.SourceInfo) string {
 	if pl.Glyph != "" {
 		return pl.Glyph
 	}
@@ -113,7 +113,7 @@ func RowGlyph(pl *gridwellv1.PluginInfo) string {
 }
 
 // GlyphFor is a grid's identity glyph, from declarations only, most specific
-// first: a PluginGrid naming it, a row rooted exactly here, the cached grid's
+// first: a SourceGrid naming it, a row rooted exactly here, the cached grid's
 // own glyph, the glyph of the door to another namespace, then the plugin row's
 // glyph by namespace. A
 // row rooted here wins over the grid's own glyph because a connection's root
@@ -121,7 +121,7 @@ func RowGlyph(pl *gridwellv1.PluginInfo) string {
 // another namespace is looked up by exact uuid, since the node's own id prefixes
 // "<id>/<conn>". There is always an answer, a crumb with no glyph being a blank
 // square.
-func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.PluginInfo) string {
+func GlyphFor(gridID string, grid *gridwellv1.Grid, plugins []*gridwellv1.SourceInfo) string {
 	if g := GridGlyph(gridID, plugins); g != "" {
 		return g
 	}
@@ -159,19 +159,19 @@ func rowOf(gridID string) string {
 // pseudo-row for an entry, and the entry it was declared by, nil for the
 // row's own grid.
 type Place struct {
-	Plugin *gridwellv1.PluginInfo
-	Grid   *gridwellv1.PluginGrid
+	Plugin *gridwellv1.SourceInfo
+	Grid   *gridwellv1.SourceGrid
 }
 
 // PlacesOf enumerates the doors one menu row declares, in declaration
 // order. It is the one enumeration, read by client/menu, ByRoot and the
 // framing restore, so what a door is cannot be answered three ways.
-func PlacesOf(pl *gridwellv1.PluginInfo) []Place {
-	out := make([]Place, 0, 1+len(pl.PluginGrids))
+func PlacesOf(pl *gridwellv1.SourceInfo) []Place {
+	out := make([]Place, 0, 1+len(pl.SourceGrids))
 	if pl.RootGridId != "" {
 		out = append(out, Place{Plugin: pl})
 	}
-	for _, e := range pl.PluginGrids {
+	for _, e := range pl.SourceGrids {
 		if e.GridId == "" {
 			continue
 		}
@@ -182,7 +182,7 @@ func PlacesOf(pl *gridwellv1.PluginInfo) []Place {
 
 // Places is PlacesOf over a whole menu, rows in order and each row's places
 // directly after it.
-func Places(plugins []*gridwellv1.PluginInfo) []Place {
+func Places(plugins []*gridwellv1.SourceInfo) []Place {
 	out := make([]Place, 0, len(plugins))
 	for _, pl := range plugins {
 		out = append(out, PlacesOf(pl)...)
@@ -193,7 +193,7 @@ func Places(plugins []*gridwellv1.PluginInfo) []Place {
 // ByRoot finds the door rooted exactly at gridID. Rooted, not by
 // namespace: a connection row's uuid "<id>/<conn>" is not a prefix of its
 // root "<id>/<conn>/<remote-home>/<n>".
-func ByRoot(gridID string, plugins []*gridwellv1.PluginInfo) (*gridwellv1.PluginInfo, bool) {
+func ByRoot(gridID string, plugins []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo, bool) {
 	if gridID == "" {
 		return nil, false
 	}
@@ -205,7 +205,7 @@ func ByRoot(gridID string, plugins []*gridwellv1.PluginInfo) (*gridwellv1.Plugin
 	return nil, false
 }
 
-func byUUID(u string, plugins []*gridwellv1.PluginInfo) (*gridwellv1.PluginInfo, bool) {
+func byUUID(u string, plugins []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo, bool) {
 	for _, pl := range plugins {
 		if pl.Uuid == u {
 			return pl, true

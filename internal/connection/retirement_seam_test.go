@@ -61,14 +61,14 @@ func TestConnectionSurvivesRemoveThenRestore(t *testing.T) {
 	// The stored link a door to it leaves behind: a link tile into the
 	// connection's namespace, as the user's grid holds it.
 	ref := &gridwellv1.Tile{Link: true, LinkTargetId: nodeID + "/rtb/rnode1/7"}
-	roster := func(s *Server) []*gridwellv1.PluginInfo {
-		var out []*gridwellv1.PluginInfo
+	roster := func(s *Server) []*gridwellv1.SourceInfo {
+		var out []*gridwellv1.SourceInfo
 		for _, r := range s.Rows(ctx) {
-			out = append(out, &gridwellv1.PluginInfo{Uuid: rpc.QualifyID(nodeID, r.Uuid), RootGridId: r.RootGridId})
+			out = append(out, &gridwellv1.SourceInfo{Uuid: rpc.QualifyID(nodeID, r.Uuid), RootGridId: r.RootGridId})
 		}
 		// A node always declares its own home, so the roster is never empty
 		// and deadlink always has a declaration to answer from.
-		return append(out, &gridwellv1.PluginInfo{Uuid: nodeID})
+		return append(out, &gridwellv1.SourceInfo{Uuid: nodeID})
 	}
 
 	// Boot 1: declared, landing learned, link live.

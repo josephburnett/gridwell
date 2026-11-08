@@ -49,20 +49,19 @@ message Grid {
   // which node a pane is inside: the client keys its per-pane + menu context
   // by it and routes Handshake with it. Wire-only, never persisted.
   string node_ns = 10;
-  // plugin_grids is the grids the owning plugin declares as (+) menu rows,
+  // source_grids is the (+) menu rows of the source that owns this grid,
   // stamped on this grid. Stamped from Info by the serving node, and verbatim
   // through transit with grid_id prefixed per hop. Wire-only.
-  repeated PluginGrid plugin_grids = 11;
+  repeated SourceGrid source_grids = 11;
   // A directory is told by its id's shape (rpc.IsFilesID), never by a flag
   // (2026-11-07).
   reserved 13; // host_content
-  // glyph is the owning plugin's declared identity glyph for this grid, from
-  // the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
-  // client falls back to the door glyph or the glyph of the door to another
-  // namespace). It
-  // travels on the GRID because a plugin-list lookup cannot answer for a
-  // grid reached through a door to another namespace. Stamped by the adapter, verbatim in
-  // transit. Wire-only, never persisted.
+  // glyph is the owning source's identity glyph for this grid, from the same
+  // vocabulary as InfoResponse.glyph ("" = none, and the client falls back to
+  // the door glyph or the glyph of the door to another namespace). It travels
+  // on the GRID because a lookup in the roster cannot answer for a grid
+  // reached through a door to another namespace. Stamped by the owning
+  // source, verbatim in transit. Wire-only, never persisted.
   string glyph = 14;
   // A directory's path is its id (rpc.FilePath), so the bar reads it there
   // (2026-11-07).
@@ -70,8 +69,8 @@ message Grid {
   // accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
   // offers its primitives and a swatch drops into it, and its url rows'
   // titles and trails are the node's to write. The owning namespace stamps it on
-  // every grid it serves, true for the home and false for a plugin, which
-  // creates nothing; transit carries it verbatim. It is absent only from a
+  // every grid it serves, true for the home and false for the files, which
+  // create nothing; transit carries it verbatim. It is absent only from a
   // node built before it split from writable, whose one bit said both, and
   // rpc.TransitQualifyGrid reads that bit for it. Wire-only.
   optional bool accepts_tiles = 16;
@@ -89,20 +88,19 @@ message Grid {
   optional bool moves = 18;
 }
 
-// PluginGrid is one declared (+) menu row: a door onto one grid a namespace
-// declares, such as the home's trashcan or a mail plugin's Feed. Declared in Info,
-// stamped per grid by the serving node, and passed verbatim
-// through transit hops, where grid_id gains the hop prefix like every id. The
-// swatch behaves like a menu row's over grid_id: click descends, drag drops an
-// door to another namespace link.
-message PluginGrid {
-  string id           = 1; // identity within the plugin
+// SourceGrid is one (+) menu row: a door onto one grid a source offers, such
+// as the home's trashcan or a root of the files. Answered in Info, stamped per
+// grid by the serving node, and passed verbatim through transit hops, where
+// grid_id gains the hop prefix like every id. The swatch behaves like a menu
+// row's over grid_id: click descends, drag drops a link to the grid.
+message SourceGrid {
+  string id           = 1; // identity within the source
   string label        = 2; // swatch label, verbatim
   string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default glyph)
   reserved 4, 5, 6; // color, kind, param_schema
   string grid_id      = 7; // the target grid, qualified per hop
   // view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
-  // meaning as PluginInfo.root_view_*. A door carries the framing of the
+  // meaning as SourceInfo.root_view_*. A door carries the framing of the
   // grid behind it, so re-entering the grid lands where it was left. All
   // three are absent when never visited (rpc.ViewOf), and the client
   // substitutes its calibrated default.
@@ -152,19 +150,19 @@ message Tile {
   // preview (in the blobs table; hash-deduped across copies).
   string url_string = 20;
   // preview_blob_id is the preview's cache key, 0 for none, and GetTilePreview
-  // answers it. A plugin tile with no screenshot yet keys its plugin's
+  // answers it. A file's tile with no screenshot yet keys the image's own
   // picture below zero; the client only compares keys.
   int64 preview_blob_id = 21;
 
   reserved 22, 23, 24; // fs_path, pid, source_key
 
   // alt_text is the canonical display label, rendered verbatim by the
-  // client. Stamped at insert time (for plugin-owned tiles, the entry name;
-  // for a door to another namespace, the label of the plugin it leads to).
+  // client. Stamped at insert time (for a file, its file name; for a door to
+  // another namespace, the label of the source it leads to).
   string alt_text = 25;
 
   // link reports that this door is a link: its child_grid_id is a
-  // qualified cross-plugin link rather than a bare local child grid. It
+  // qualified link to another's grid rather than a bare local child grid. It
   // is the one signal for that. The client renders a dashed border from it,
   // and delete and copy treat a qualified child_grid_id as unlink-only and
   // share, never cascade. The server sets it in qualifyTiles, from a child
@@ -186,7 +184,7 @@ message Tile {
   string url_history = 28;
 
   // link_target_id makes a leaf tile (text, url, shell, workspace) a link: a
-  // qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
+  // qualified "<namespace>/<tile-id>" link to the tile that owns the
   // content. The link row stores no blob, no url and no preview, and readers
   // resolve bytes, preview and tmux through the target id, which the router
   // routes anywhere, including through transit chains that prepend one hop
@@ -208,31 +206,29 @@ message Tile {
   reserved 31; // configure_plugin_id
 
   // serves_page: this url tile opens at the address the node derives for its
-  // /content/ API, /content/<content-token>/<tile-id>/, where the owning
-  // plugin answers ServeContent. It stands in place of a url_string of its
+  // /content/ API, /content/<content-token>/<tile-id>, where the owning
+  // source answers ServeContent. It stands in place of a url_string of its
   // own, and it is built at render time from the current origin and never
-  // persisted, because ports are ephemeral. Url tiles only: the plugin entry
-  // API refuses the declaration on every other kind, so a text tile never
-  // serves one. Plugin-declared, derived from the content itself, such as the
-  // filename's media type in fs. Never a stored column.
+  // persisted, because ports are ephemeral. Url tiles only: the files set it
+  // on a page file, from its file name's media type. Never a stored column.
   bool serves_page = 32;
 
-  // text_presentation is the owning plugin's declaration of how a text tile's
+  // text_presentation is the owning source's statement of how a text tile's
   // body presents: "plain" for monospace with no markdown interpretation, or
   // "both" for rendered by default with a toggle to the raw source. There is
   // no document-only value: the user can always reach the source bytes. "" is
-  // no declaration and the stored user text_mode rules, as for the home's own
-  // documents. Plugin-derived from the content itself, such as the filename or
-  // a sniff in fs. Wire-only, never a stored column.
+  // none and the stored user text_mode rules, as for the home's own
+  // documents. The files derive it from the file name's extension.
+  // Wire-only, never a stored column.
   string text_presentation = 33;
 
   reserved 34; // menu_entry
 
-  // status_detail is the owning plugin's one emoji about this tile's state,
+  // status_detail is the owning source's one emoji about this tile's state,
   // set only when there is something to notice, which nothing outside that
-  // plugin can derive. The client draws it before the name
-  // (tilepreview.BannerText) and never instead of it. Plugin-declared through
-  // the Entry, wire-only: never a stored column, never set by clients.
+  // source can derive. The client draws it before the name
+  // (tilepreview.BannerText) and never instead of it. Wire-only: never a
+  // stored column, never set by clients.
   string status_detail = 35;
 
   // shell_tmux names the tmux a shell tile attaches: the id of the tile
@@ -265,23 +261,21 @@ message Tile {
   reserved 43; // broken_reason
 }
 
-// ─── Plugin / node lifecycle ──────────────────────────────────────────────
-// The same RPCs are exposed by a node, a plugin process, and a remote node
-// reached over a connection. The client talks to its own node; the node
-// routes to plugins and forwards through connections.
+// ─── Node lifecycle ───────────────────────────────────────────────────────
+// The same RPCs are exposed by a node and by a far node reached over a
+// connection. The client talks to its own node; the node routes to home and
+// the files and forwards through connections.
 
-// Info is the whole plugin handshake: a plugin loaded from server.yaml is
-// already there, so Info reports its identity and its default root grid. There
-// is no Attach or Detach. The gRPC connection, opened at load and closed at
-// unload, is the only lifecycle.
+// Info is a source's identity and its default root grid. There is no Attach
+// or Detach: a source the node declares is already there.
 message InfoRequest {}
 message InfoResponse {
   reserved 1; // kind
   string display_name   = 2;
   reserved 3; // schema_version
   reserved 4; // watch
-  // root_grid_id is the home's root grid. A plugin declares none, since a
-  // plugin is not a place; a connection answers the far home's.
+  // root_grid_id is the home's root grid. The files answer none, since a
+  // root is a grid and not a place; a connection answers the far home's.
   string root_grid_id   = 5;
   reserved 6; // network
   reserved 7; // has_session
@@ -289,10 +283,10 @@ message InfoResponse {
   // scratch_grid_id is home's off-grid grid for ephemeral visits, where
   // descending into a url places no tile; the node stamps it on every grid
   // it serves as Grid.scratch_grid_id. Never rendered, never linked; it
-  // persists as visited-url history. A plugin answers none.
+  // persists as visited-url history. The files answer none.
   string scratch_grid_id = 8;
   reserved 9; // writable; the namespace stamps Grid.accepts_tiles and Grid.writable
-  // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
+  // root_view_cx/cy/zoom is the source's root grid's last-saved viewport: the
   // center in grid coordinates and the intrinsic zoom. The home fills it from
   // its root grid row; a root never visited leaves all three absent.
   // The client seeds the door framing from it so re-entry restores the
@@ -302,15 +296,13 @@ message InfoResponse {
   double root_view_zoom = 12;
   reserved 14; // instance_grid_id
   reserved 15; // transit
-  // glyph is the plugin's identity glyph for the menu and the ghost:
-  // "folder", "process", "door", or "" for the generic globe. The client reads
-  // the declaration and never switches on the kind, and an unknown value falls
-  // back to the globe, so a third-party plugin degrades politely.
+  // glyph is the source's identity glyph for the menu and the ghost:
+  // "folder", "door", or "" for the generic globe. An unknown value falls
+  // back to the globe.
   string glyph = 16;
-  // plugin_grids is the grids the plugin declares as (+) menu rows; see
-  // PluginGrid. The serving node stamps them onto every grid the plugin
-  // serves.
-  repeated PluginGrid plugin_grids = 17;
+  // source_grids is the source's (+) menu rows; see SourceGrid. The serving
+  // node stamps them onto every grid the source serves.
+  repeated SourceGrid source_grids = 17;
   reserved 18; // presents
 }
 
@@ -365,8 +357,8 @@ message GetTilePreviewResponse {
 // the tile row version the bytes belong to, which is the client's save basis,
 // so bytes and version are paired at the owner. Later chunks carry data only.
 // On a leaf-link tile the serving node resolves through link_target_id, the one
-// resolution point, so callers never reimplement link semantics. A plugin whose
-// bodies are not version-edited sends version 0 and, in its place, the
+// resolution point, so callers never reimplement link semantics. The files,
+// whose bodies are not version-edited, send version 0 and, in its place, the
 // bytes' content_stamp (Tile.content_stamp).
 message ReadContentRequest {
   string tile_id = 1;
@@ -387,7 +379,7 @@ message ContentChunk {
 // the user's bytes, each claiming and bumping. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
 //
-// A row with no version (a plugin's) claims content_stamp instead, the stamp
+// A row with no version (a file's) claims content_stamp instead, the stamp
 // its bytes were read under (ContentChunk.content_stamp), which its source
 // checks as the store checks a version; the response row carries the stamp
 // of the bytes written. A versioned row's owner ignores it.
@@ -401,8 +393,8 @@ message WriteContentRequest {
 // ServeContent is the RPC carrier behind the server's HTTP /content/ API: a
 // GET or HEAD of /content/<token>/<tile-id> becomes one call routed to the
 // tile's owner, through transit hops as ReadContent is. The answer is the
-// tile's whole page: its media type on chunk 1 and its bytes across the
-// chunks, which only frame the message size. The server sandboxes the browser
+// tile's whole page, streamed: its media type on chunk 1 and its bytes across
+// the chunks as they are read, so a page is never held whole. The server sandboxes the browser
 // side with a CSP sandbox: opaque origin, no cookies, no RPC reach. An owner
 // with no page for the tile answers NotFound or leaves the RPC unimplemented,
 // and the content API answers 404.
@@ -422,7 +414,7 @@ message ServeContentChunk {
 // the same as the tile's current grid for a pure resize. The server refuses
 // overlap, and refuses moving a door into its own subtree by walking
 // ancestors from grid_id, with no client-supplied path. Placement never crosses
-// a plugin boundary; there is no cross-plugin move, only link or copy.
+// a source boundary; there is no move across sources, only link or copy.
 //
 // claim is the placement the writer saw. A tile no longer there is refused
 // with the version conflict, the placement on disk standing. The APIs refuse
@@ -455,33 +447,31 @@ message GetTileRequest {
   string tile_id = 1;
 }
 
-// Find is the one generic find verb. Every plugin may implement it, and
-// Unimplemented means no results. The query is free text with a small selector
-// grammar owned by one shared parser (rpc.ParseFindQuery): id:<tile-id> is an
-// exact-id lookup, and anything else is plugin-interpreted text matching
-// against names, bodies, addresses, or whatever the plugin's data means. Each
-// result carries the tile plus its containing-door chain from the plugin's root
-// grid, outermost first and empty at the root, so a hit can be navigated to and
-// its crumbs previewed. snippet and score are optional context and ranking for
-// merged displays.
+// Find is the one generic find verb, and Unimplemented means no results. The
+// query is free text with a small selector grammar owned by one shared parser
+// (rpc.ParseFindQuery): id:<tile-id> is an exact-id lookup, and anything else
+// is text matched against names, bodies and addresses; the files answer a text
+// query empty. Each result carries the tile plus its containing-door chain
+// from its source's root grid, outermost first and empty at the root, so a hit
+// can be navigated to and its crumbs previewed. snippet and score are optional
+// context and ranking for merged displays.
 //
-// On the server surface, scope routes to one namespace and the plugin that owns
-// that qualified id answers, and an id: lookup or a grid_id routes on its id the
-// same way; otherwise an empty scope fans out to every configured plugin in
-// config order. A transit hop forwards the query to the remote node, which
+// On the server surface, scope routes to one namespace and the source that
+// owns that qualified id answers, and an id: lookup or a grid_id routes on its
+// id the same way; otherwise an empty scope fans out to home, the files and
+// every connection. A transit hop forwards the query to the remote node, which
 // fans out again, so an unscoped find recurses through every connected node
 // and results come back qualified like every other id.
 //
 // The filters narrow every hit and AND together. They are the node's, applied
-// to the rows it holds, never a plugin's: the plugin API has none. A query may
+// to the rows it holds. A query may
 // be empty when a filter is given, and then every tile passing the filters is
 // a hit, the newest first by the time filtered on (created when none is).
 message FindRequest {
   string query = 1;
-  // limit caps the results per answering plugin; 0 means the plugin's
-  // default.
+  // limit caps the results per answering source; 0 means its default.
   int32 limit = 2;
-  // scope: server surface only (plugins receive their own namespace's
+  // scope: server surface only (a source receives its own namespace's
   // queries with scope already consumed).
   string scope = 3;
   // grid_id keeps the hits on this grid.
@@ -498,8 +488,8 @@ message FindRequest {
   TimeRange content_changed = 8;
   // selected keeps the hits in their grid's selection, the node fact.
   bool selected = 9;
-  // kind keeps the hits of this kind: text, url, shell, door or workspace. An
-  // entry with no row has its kind, so it passes or fails like a row.
+  // kind keeps the hits of this kind: text, url, shell, door or workspace. A
+  // file with no row has its kind, so it passes or fails like a row.
   string kind = 10;
 }
 
@@ -522,63 +512,64 @@ message FindResponse {
   repeated FindSkip skipped = 2;
 }
 // FindSkip names one namespace a fan-out went without, qualified like a
-// health event's plugin_uuid, and why.
+// health event's uuid, and why.
 message FindSkip {
   string namespace = 1;
   string reason    = 2;
 }
 
-// Handshake enumerates the plugins a node hosts, in config order. The client
-// builds the + menu from it. A leaf plugin returns an empty list.
+// Handshake enumerates a node's sources: home, the files and each connection.
+// The client builds the + menu from it.
 message HandshakeRequest {
   // namespace routes the request. "" answers for this node, which is the
   // boot handshake; a namespace chain ("<transit>" or "<transit>/<conn>/…")
   // peels one segment per hop and forwards to the node it names, so the +
-  // menu inside a remote pane shows that node's plugins exactly as a direct
+  // menu inside a remote pane shows that node's sources exactly as a direct
   // client would see them. Each hop re-qualifies the response's grid ids
   // with its prefix, like every other transit response, and node-local
   // fields (content token, node identity and view) are zeroed on forward:
   // they answer only for the node you asked directly.
   string namespace = 1;
 }
-message PluginInfo {
-  string uuid          = 1;   // the plugin's namespace; child grids are <uuid>/<id>
-  reserved 2;                 // kind; a plugin's kind is config, and nothing switches on it
+// SourceInfo is one row of the roster: home, the files or a connection.
+message SourceInfo {
+  string uuid          = 1;   // the source's owner id (rpc.OwnerNamespaceOf)
+  reserved 2;                 // kind; nothing switches on it
   string label         = 3;   // display name
   reserved 4;                 // writable; Grid.accepts_tiles and Grid.writable are the facts
-  string root_grid_id  = 5;   // qualified <uuid>/<id> of the plugin's default root
+  string root_grid_id  = 5;   // qualified id of the source's default root
                               // grid; click-enter descends here
   reserved 6;                 // scratch_grid_id; Grid.scratch_grid_id is the fact
-  // root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
+  // root_view_cx/cy/zoom is the source's root grid's last-saved viewport,
   // forwarded verbatim from InfoResponse. Absent when never visited; the
-  // client substitutes the default calibrated zoom on enterPlugin.
+  // client substitutes the default calibrated zoom.
   double root_view_cx   = 7;
   double root_view_cy   = 8;
   double root_view_zoom = 9;
-  // info_error is set when the plugin's Info handshake failed or timed out,
+  // info_error is set when the source's Info failed or timed out,
   // distinguishing broken from healthy but rootless, which otherwise
   // present identically as root_grid_id == "". Empty when Info succeeded,
   // whether or not it declared a root.
   string info_error = 10;
   reserved 11; // instance_grid_id
-  // glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
+  // glyph mirrors InfoResponse.glyph for the client's source glyphs: the
   // menu swatch and the drag ghost. "" is the generic globe.
   string glyph = 12;
-  // plugin_grids mirrors InfoResponse.plugin_grids with grid targets
-  // qualified for the receiver: they join the plugin's row in the (+) menu.
-  repeated PluginGrid plugin_grids = 13;
+  // source_grids mirrors InfoResponse.source_grids with grid targets
+  // qualified for the receiver: they are the row's swatches in the (+) menu.
+  repeated SourceGrid source_grids = 13;
   // connection marks the row a connection, the one row the client tells
-  // from a plugin's (rpc.IsConnectionRow): rootless, it is waiting, not
+  // from the others (rpc.IsConnectionRow): rootless, it is waiting, not
   // nothing.
   bool connection = 14;
   reserved 15; // presents
   reserved 16; // unanswered
 }
-// ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
+// ConnectionInfo is RETIRED (2026-09-18): a connection is a roster row with
 // connection set, rpc.ConnectionRow's shape, because the + menu is one
 // uniform set of rows and this message was a second spelling of one member
 // of it. The message and field 13 are kept forever and read in one place,
-// rpc.TransitQualifyPluginList, so a node built before the fold keeps
+// rpc.TransitQualifySourceList, so a node built before the fold keeps
 // presenting its connections; nothing writes them.
 message ConnectionInfo {
   string uuid          = 1;
@@ -592,14 +583,14 @@ message ConnectionInfo {
 message HandshakeResponse {
   reserved 2, 3, 6, 7, 8;   // a node grid's identity and viewport
   reserved 10, 11, 12;      // the home row's root_view_*, once copied here
-  // plugins: the node's home (first) and its content plugins.
-  repeated PluginInfo plugins = 1;
+  // sources: the node's home (first), its files, then each connection.
+  repeated SourceInfo sources = 1;
   // home_grid_id is where a client lands ("/"): the home's root grid,
   // qualified. It is a field, never derived from row order; the row rooted
   // there carries the home's framing.
   string home_grid_id   = 9;
-  // connections is RETIRED; see ConnectionInfo. A connection is a plugins
-  // row with kind "connection", after the home and the content plugins.
+  // connections is RETIRED; see ConnectionInfo. A connection is a sources
+  // row with connection set, after the home and the files.
   repeated ConnectionInfo connections = 13;
   // shells_disabled: this node refuses shell tiles outright, from server.yaml's
   // disable_shells. The client removes the shell primitive from the + menu,
@@ -612,7 +603,7 @@ message HandshakeResponse {
   // Pages served there run sandboxed with an opaque origin, so neither their
   // subresource requests nor the desktop's native views carry the auth cookie.
   // The token rides in the path instead, as
-  // /content/<content_token>/<tile-id>/<subpath>. It is derived from the server
+  // /content/<content_token>/<tile-id>. It is derived from the server
   // password by sha256 under its own domain prefix, so it can never double as
   // the auth cookie; it is handed out only on this authenticated handshake and
   // checked against the current password as the cookie is. It is a node-level
@@ -670,14 +661,14 @@ message Answered {}
 
 // CreateTileRequest creates one tile of any kind. There is no version: the
 // tile does not exist yet. tile.kind selects which fields are meaningful:
-//   door  → child_grid_id set makes a door to another namespace pointing at a grid in
-//           another plugin, a qualified "<uuid>/<grid-id>"; empty allocates
-//           a fresh interior child grid. alt_text is the door's label.
+//   door  → child_grid_id set makes a link to a grid of another namespace,
+//           a qualified "<namespace>/<grid-id>"; empty allocates a fresh
+//           interior child grid. alt_text is the door's label.
 //   text  → content is the body.
 //   pane  → content is the layout; empty is never arranged.
 //   url   → url_string.
 //   shell → no extra fields.
-// A plugin that does not accept creates leaves this unimplemented.
+// A source that does not accept creates, the files, leaves this unimplemented.
 message CreateTileRequest {
   reserved 1; // path
   string grid_id = 2;
@@ -799,15 +790,15 @@ message DeleteTileResponse {
 // InvalidArgument with the reason (rpc.FramingOf); never visited is no write.
 //
 // Exactly one target is set, and that target also routes the call to the owning
-// plugin. tile_id names the door tile a grid was entered through, onto its
+// source. tile_id names the door tile a grid was entered through, onto its
 // own grid, into another namespace or as a link, each door keeping its own
 // framing; root_grid_id names a root grid, which has no door to carry it.
 //
 // Framing carries no version claim and makes no version bump; it is
-// last-writer-wins, and the node keeps a plugin row's as it keeps home's.
+// last-writer-wins, and the node keeps a file row's as it keeps home's.
 message SetFramingRequest {
-  string tile_id      = 1;  // qualified "<plugin-uuid>/<id>"; the door
-  string root_grid_id = 2;  // qualified "<plugin-uuid>/<id>"; a root grid
+  string tile_id      = 1;  // qualified "<namespace>/<id>"; the door
+  string root_grid_id = 2;  // qualified "<namespace>/<id>"; a root grid
   reserved 3; // version
   double cx           = 4;
   double cy           = 5;
@@ -827,7 +818,7 @@ message SetFramingResponse {
 // nested under the grid's doors, to any depth, within the grid's namespace, in
 // one write; recurse without clear is refused. all, only with clear and no
 // grid, add, remove or recurse, empties every grid's set the node holds: home
-// and each plugin namespace, and, asked at the web API, each live
+// and the files, and, asked at the web API, each live
 // connection's far node, whose sets are its rows (rpc.SelectRefusal). A
 // selection is not content: no version moves, the grid's or any tile's.
 message SetSelectionRequest {
@@ -898,8 +889,9 @@ message ViewPane {
   reserved 7; // layout_pane_id
 }
 
-// DisableSource switches off a plugin or connection this node declares,
-// named as its health event names it, until the node restarts. It is held in
+// DisableSource switches off a connection this node declares, named as its
+// health event names it, until the node restarts. The files are never
+// disabled. It is held in
 // memory only: server.yaml and gridwell.db are untouched, and the source reads
 // as dark meanwhile.
 message DisableSourceRequest {
@@ -913,7 +905,7 @@ message GridChanged {
 }
 
 // GridFramingChanged carries a root grid's new framing, the three numbers
-// SetFraming wrote to its row, in PluginGrid's field names. It is apart from
+// SetFraming wrote to its row, in SourceGrid's field names. It is apart from
 // GridChanged because a framing write changes no listing: the client applies
 // it to the doors rooted at grid_id and fetches nothing. A door's framing
 // lives on its tile and rides TileChanged.
@@ -934,7 +926,7 @@ message SelectionChanged {
 message TileChanged {
   Tile tile = 1;
   // content_changed: the bytes behind this row changed though nothing on the
-  // row says so. A row with no claim (a plugin's: version 0, no blob) has no
+  // row says so. A row with no claim (a file's: version 0, no blob) has no
   // fact that orders its bytes, so the event is the change, and a client drops
   // a clean body it holds for the row. Set only by the node that learned it
   // from its source; a framing or capture write on the same row leaves it
@@ -947,14 +939,15 @@ message TileRemoved {
   string tile_id = 2;
 }
 
-// EventPluginHealth reports a transition in a plugin's event-stream health, as
-// the router's fan-in sees it (watchPlugin in internal/server/router.go,
-// over namespace.Refollow). It is emitted on the down transition, with
-// healthy=false and detail carrying the dial, recv or Info error that caused
-// it, and again on recovery with healthy=true and detail="". Only on a change
-// of state, so a flapping plugin does not spam the client.
-message EventPluginHealth {
-  string plugin_uuid = 1;
+// EventSourceHealth reports a transition in a source's health, as the
+// router's fan-in sees it (watchSource in internal/server/router.go, over
+// namespace.Refollow), keyed by the source's owner id. It is emitted on the
+// down transition, with healthy=false and detail carrying the dial, recv,
+// read or Info error that caused it, and again on recovery with healthy=true
+// and detail="". Only on a change of state, so a flapping source does not
+// spam the client.
+message EventSourceHealth {
+  string uuid = 1;
   bool healthy       = 2;
   string detail       = 3;
   // Why the source failed to tell the node of its changes, empty while
@@ -962,7 +955,7 @@ message EventPluginHealth {
   // so it rides a healthy event too, and a change of it alone is a
   // transition.
   string live_updates_off = 4;
-  // The user switched this source off until the node restarts
+  // The user switched this connection off until the node restarts
   // (DisableSource): healthy is false and nothing will try it again.
   bool disabled = 5;
   // Whether the source's changes are told right now, the one fact a client's
@@ -977,7 +970,7 @@ message Event {
     GridChanged grid_changed = 1;
     TileChanged tile_changed = 2;
     TileRemoved tile_removed = 3;
-    EventPluginHealth plugin_health = 4;
+    EventSourceHealth source_health = 4;
     GridFramingChanged grid_framing_changed = 5;
     SelectionChanged selection_changed = 6;
   }
@@ -987,9 +980,9 @@ message Event {
 // APIs decode onto it.
 service Gridwell {
   // ── Lifecycle ───────────────────────────────────────────────────────────
-  // Info is the whole handshake: identity plus the default root. Handshake
-  // enumerates a node's plugins; the transport calls it on a remote to learn
-  // that node's namespaces.
+  // Info is a source's identity plus its default root. Handshake enumerates
+  // a node's sources; the transport calls it on a far node to learn that
+  // node's namespaces.
   rpc Info(InfoRequest)               returns (InfoResponse);
   rpc Probe(ProbeRequest)             returns (ProbeResponse);
   rpc Handshake(HandshakeRequest) returns (HandshakeResponse);

@@ -61,7 +61,7 @@ version to say its bytes did. A page the plugin serves that changed this way
 is not the page its screenshot shows, so the row gives the screenshot up and
 its preview is the plugin's picture until the next capture, unless the user
 froze it (`pagePreviewStale`). A coded refusal is not darkness: the listings
-still answer, so it rides a healthy `EventPluginHealth` as
+still answer, so it rides a healthy `EventSourceHealth` as
 `live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
 re-opened stream is open. Every health event the adapter tells carries
 `told`, whether the source's changes reach the node right now: a held
@@ -90,7 +90,7 @@ cached, not only announced when it changes, and every way a connection
 fails is the same record: a refused dial, a failed learn, a dead stream
 (`fanInRemote`, looping `namespace.Follow`) and a moved landing all go
 through `note`, the one writer of `s.health`, which publishes one
-`EventPluginHealth` per transition, not one per retry. `Server.Subscribe`
+`EventSourceHealth` per transition, not one per retry. `Server.Subscribe`
 opens with `healthNow()`, so a subscriber attaching after the machine died is
 told. Landing is checked, not learned: `learnRoot` refuses a connection
 whose far node answers a home other than the stored one
@@ -133,7 +133,7 @@ one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
 runs a `namespace.Refollow` whose every attempt asks `Info` and then follows
 the namespace's stream; `Refollow` re-dials it with backoff until the
 subscription ends and reports the down/up transitions as
-`EventPluginHealth` through `reportHealth` — down on the first failure, up
+`EventSourceHealth` through `reportHealth` — down on the first failure, up
 on recovery, never once per retry. Every namespace sends its header once it
 is attached (`namespace.Namespace.Subscribe`'s `send(nil)`), and a stream is
 established by that header or its first event, never by time
@@ -350,7 +350,7 @@ news again.
 
 **Down, discovered by the cache — direction two.** The transport's health event
 arrives on the stream this layer relays and lands in `Layer.applyEvent`'s
-`Event_PluginHealth` arm → `setDark(uuid, !healthy, no announce)`.
+`Event_SourceHealth` arm → `setDark(uuid, !healthy, no announce)`.
 At this layer the uuid is the bare connection segment, which is exactly
 `sourceOf` of every id chained through it. It does not announce: the same
 event is relayed onward to the very client that would be told, in this same
@@ -369,8 +369,8 @@ connection are not dead — `client/deadlink` answers from the node's
 declaration, and a declared connection that will not answer is health, not
 deadness.
 
-**On the client.** `App.startSSE` routes a `PluginHealth` event to
-`App.reportPluginHealth`, which folds the event into `Cache.NoteHealth`
+**On the client.** `App.startSSE` routes a `SourceHealth` event to
+`App.reportSourceHealth`, which folds the event into `Cache.NoteHealth`
 — the client's one copy of which sources are not answering — and its `told`
 into `Cache.NoteTold`, the one fact `cache.Current` reads for whether a
 source's changes are told; an event that does not say leaves it. Every grid served
@@ -394,7 +394,7 @@ say nothing (`clientsync.OutcomeAbandoned`).
 publishes the recovery, and `learnRoot` publishes one too on a first or
 healed landing. `Layer.applyEvent` clears `dark[conn]`; the next successful
 pass-through call would have cleared it anyway through `noteReach`.
-`App.reportPluginHealth` clears the darkness, so the chip goes, resolves the
+`App.reportSourceHealth` clears the darkness, so the chip goes, resolves the
 notice, and arms the same settled `retryKick(true, h.PluginUUID)`, which cancels this source's
 in-flight fetches, clears its latches, and refetches `Cache.ResyncSet` of it —
 every cached grid chained through it, and nobody else's. Those reads hit the
@@ -581,7 +581,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Refresh after a blind window replaces the whole tile set | `sourcecache_test.go:TestRefreshReconcilesWhatChangedWhileBlind` |
 | A tile row that leaves the cache, by refresh, eviction or `TileRemoved`, takes the body, stamp, preview and served bodies kept under its id, unless another row still names it | `sourcecache/gc_test.go` |
 | The client's own arm: `GridChanged` clears `fetch.grids`' latches and calls `fetchGrid` | `internal/server/servefirst_seam_test.go:TestServeFirstEventReachesTheClient`, `client/events/events_test.go:TestRouteTable` |
-| Navigation asks for a grid or a row only when the cache does not hold it current (`cache.Current`): a descent, an ascent, a level change and a re-engagement onto a held grid read nothing, unless its source is dark or not told (`EventPluginHealth.told`), or this client's own stream is down (`Cache.NoteStream`), when nothing is current and a descent into a text tile reads its held body again | `client/nav/current_test.go`, `client/nav/descend_test.go:TestDescendPlans`, `client/cache/dark_test.go:TestAGridIsCurrentWhenHeldFromAnAnsweringSource`, `TestAGridFromASourceThatIsNotToldIsNotCurrent`, `TestNothingIsCurrentWhileThisClientsStreamIsDown`, `apps/desktop/e2e/read-once.spec.ts`, `apps/desktop/e2e/live-updates-off.spec.ts`, `apps/desktop/e2e-web/web-stream-break.spec.ts` ("a descent shows a body written in the gap while the stream is still down") |
+| Navigation asks for a grid or a row only when the cache does not hold it current (`cache.Current`): a descent, an ascent, a level change and a re-engagement onto a held grid read nothing, unless its source is dark or not told (`EventSourceHealth.told`), or this client's own stream is down (`Cache.NoteStream`), when nothing is current and a descent into a text tile reads its held body again | `client/nav/current_test.go`, `client/nav/descend_test.go:TestDescendPlans`, `client/cache/dark_test.go:TestAGridIsCurrentWhenHeldFromAnAnsweringSource`, `TestAGridFromASourceThatIsNotToldIsNotCurrent`, `TestNothingIsCurrentWhileThisClientsStreamIsDown`, `apps/desktop/e2e/read-once.spec.ts`, `apps/desktop/e2e/live-updates-off.spec.ts`, `apps/desktop/e2e-web/web-stream-break.spec.ts` ("a descent shows a body written in the gap while the stream is still down") |
 
 ### Trace (b)
 
@@ -607,7 +607,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the cached grid, and the chip says so") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
-| The client's health arms: `reportPluginHealth` folds the transition in and kicks in both directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the notice row on recovery, and the chip appears and later clears with no gesture either time |
+| The client's health arms: `reportSourceHealth` folds the transition in and kicks in both directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the notice row on recovery, and the chip appears and later clears with no gesture either time |
 | A refused Watch is its own sticky notice beside the dark one, each clears on its own field, and the field alone resyncs nothing | `client/events/events_test.go:TestReactHealthTable`, `client/events/resync_test.go`; live, `apps/desktop/e2e/live-updates-off.spec.ts` |
 | A flap resyncs the flapping source's grids and nobody else's, including a chain through it | `client/cache/resync_test.go:TestAFlapResyncsOnlyTheGridsItsSourceServes`, `TestAConnectionsFlapOwnsEveryGridChainedThroughIt`; the chain rule at its owner, `api/rpc/segment_test.go:TestChainedThroughIsTheWholeChainNotOneNodesPeel` |
 | The gap paths keep their breadth: `cache.EverySource` is the whole cache | `client/cache/resync_test.go:TestEverySourceIsTheWholeCache` |

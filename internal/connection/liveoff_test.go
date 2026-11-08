@@ -69,7 +69,7 @@ func TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff(t *testing.T) {
 		}
 		return nil
 	})
-	if len(replay) != 1 || replay[0].GetPluginHealth().GetPluginUuid() != "geneva" || replay[0].GetPluginHealth().GetLiveUpdatesOff() == "" {
+	if len(replay) != 1 || replay[0].GetSourceHealth().GetUuid() != "geneva" || replay[0].GetSourceHealth().GetLiveUpdatesOff() == "" {
 		t.Errorf("opening replay = %v, want the connection's live updates off", replay)
 	}
 
@@ -131,12 +131,12 @@ func traceSeq() uint64 {
 	return recs[len(recs)-1].Seq
 }
 
-func nextHealth(t *testing.T, events <-chan *gridwellv1.Event, conn string) *gridwellv1.EventPluginHealth {
+func nextHealth(t *testing.T, events <-chan *gridwellv1.Event, conn string) *gridwellv1.EventSourceHealth {
 	t.Helper()
 	for {
 		select {
 		case ev := <-events:
-			if h := ev.GetPluginHealth(); h != nil && h.GetPluginUuid() == conn {
+			if h := ev.GetSourceHealth(); h != nil && h.GetUuid() == conn {
 				return h
 			}
 		case <-time.After(5 * time.Second):

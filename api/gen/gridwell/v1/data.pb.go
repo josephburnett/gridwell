@@ -107,23 +107,22 @@ type Grid struct {
 	// which node a pane is inside: the client keys its per-pane + menu context
 	// by it and routes Handshake with it. Wire-only, never persisted.
 	NodeNs string `protobuf:"bytes,10,opt,name=node_ns,json=nodeNs,proto3" json:"node_ns,omitempty"`
-	// plugin_grids is the grids the owning plugin declares as (+) menu rows,
+	// source_grids is the (+) menu rows of the source that owns this grid,
 	// stamped on this grid. Stamped from Info by the serving node, and verbatim
 	// through transit with grid_id prefixed per hop. Wire-only.
-	PluginGrids []*PluginGrid `protobuf:"bytes,11,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
-	// glyph is the owning plugin's declared identity glyph for this grid, from
-	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
-	// client falls back to the door glyph or the glyph of the door to another
-	// namespace). It
-	// travels on the GRID because a plugin-list lookup cannot answer for a
-	// grid reached through a door to another namespace. Stamped by the adapter, verbatim in
-	// transit. Wire-only, never persisted.
+	SourceGrids []*SourceGrid `protobuf:"bytes,11,rep,name=source_grids,json=sourceGrids,proto3" json:"source_grids,omitempty"`
+	// glyph is the owning source's identity glyph for this grid, from the same
+	// vocabulary as InfoResponse.glyph ("" = none, and the client falls back to
+	// the door glyph or the glyph of the door to another namespace). It travels
+	// on the GRID because a lookup in the roster cannot answer for a grid
+	// reached through a door to another namespace. Stamped by the owning
+	// source, verbatim in transit. Wire-only, never persisted.
 	Glyph string `protobuf:"bytes,14,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	// accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
 	// offers its primitives and a swatch drops into it, and its url rows'
 	// titles and trails are the node's to write. The owning namespace stamps it on
-	// every grid it serves, true for the home and false for a plugin, which
-	// creates nothing; transit carries it verbatim. It is absent only from a
+	// every grid it serves, true for the home and false for the files, which
+	// create nothing; transit carries it verbatim. It is absent only from a
 	// node built before it split from writable, whose one bit said both, and
 	// rpc.TransitQualifyGrid reads that bit for it. Wire-only.
 	AcceptsTiles *bool `protobuf:"varint,16,opt,name=accepts_tiles,json=acceptsTiles,proto3,oneof" json:"accepts_tiles,omitempty"`
@@ -208,9 +207,9 @@ func (x *Grid) GetNodeNs() string {
 	return ""
 }
 
-func (x *Grid) GetPluginGrids() []*PluginGrid {
+func (x *Grid) GetSourceGrids() []*SourceGrid {
 	if x != nil {
-		return x.PluginGrids
+		return x.SourceGrids
 	}
 	return nil
 }
@@ -243,20 +242,19 @@ func (x *Grid) GetMoves() bool {
 	return false
 }
 
-// PluginGrid is one declared (+) menu row: a door onto one grid a namespace
-// declares, such as the home's trashcan or a mail plugin's Feed. Declared in Info,
-// stamped per grid by the serving node, and passed verbatim
-// through transit hops, where grid_id gains the hop prefix like every id. The
-// swatch behaves like a menu row's over grid_id: click descends, drag drops an
-// door to another namespace link.
-type PluginGrid struct {
+// SourceGrid is one (+) menu row: a door onto one grid a source offers, such
+// as the home's trashcan or a root of the files. Answered in Info, stamped per
+// grid by the serving node, and passed verbatim through transit hops, where
+// grid_id gains the hop prefix like every id. The swatch behaves like a menu
+// row's over grid_id: click descends, drag drops a link to the grid.
+type SourceGrid struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // identity within the plugin
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // identity within the source
 	Label  string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
 	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default glyph)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
-	// meaning as PluginInfo.root_view_*. A door carries the framing of the
+	// meaning as SourceInfo.root_view_*. A door carries the framing of the
 	// grid behind it, so re-entering the grid lands where it was left. All
 	// three are absent when never visited (rpc.ViewOf), and the client
 	// substitutes its calibrated default.
@@ -267,20 +265,20 @@ type PluginGrid struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PluginGrid) Reset() {
-	*x = PluginGrid{}
+func (x *SourceGrid) Reset() {
+	*x = SourceGrid{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PluginGrid) String() string {
+func (x *SourceGrid) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PluginGrid) ProtoMessage() {}
+func (*SourceGrid) ProtoMessage() {}
 
-func (x *PluginGrid) ProtoReflect() protoreflect.Message {
+func (x *SourceGrid) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -292,54 +290,54 @@ func (x *PluginGrid) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PluginGrid.ProtoReflect.Descriptor instead.
-func (*PluginGrid) Descriptor() ([]byte, []int) {
+// Deprecated: Use SourceGrid.ProtoReflect.Descriptor instead.
+func (*SourceGrid) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *PluginGrid) GetId() string {
+func (x *SourceGrid) GetId() string {
 	if x != nil {
 		return x.Id
 	}
 	return ""
 }
 
-func (x *PluginGrid) GetLabel() string {
+func (x *SourceGrid) GetLabel() string {
 	if x != nil {
 		return x.Label
 	}
 	return ""
 }
 
-func (x *PluginGrid) GetGlyph() string {
+func (x *SourceGrid) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
 	}
 	return ""
 }
 
-func (x *PluginGrid) GetGridId() string {
+func (x *SourceGrid) GetGridId() string {
 	if x != nil {
 		return x.GridId
 	}
 	return ""
 }
 
-func (x *PluginGrid) GetViewCx() float64 {
+func (x *SourceGrid) GetViewCx() float64 {
 	if x != nil {
 		return x.ViewCx
 	}
 	return 0
 }
 
-func (x *PluginGrid) GetViewCy() float64 {
+func (x *SourceGrid) GetViewCy() float64 {
 	if x != nil {
 		return x.ViewCy
 	}
 	return 0
 }
 
-func (x *PluginGrid) GetViewZoom() float64 {
+func (x *SourceGrid) GetViewZoom() float64 {
 	if x != nil {
 		return x.ViewZoom
 	}
@@ -381,15 +379,15 @@ type Tile struct {
 	// preview (in the blobs table; hash-deduped across copies).
 	UrlString string `protobuf:"bytes,20,opt,name=url_string,json=urlString,proto3" json:"url_string,omitempty"`
 	// preview_blob_id is the preview's cache key, 0 for none, and GetTilePreview
-	// answers it. A plugin tile with no screenshot yet keys its plugin's
+	// answers it. A file's tile with no screenshot yet keys the image's own
 	// picture below zero; the client only compares keys.
 	PreviewBlobId int64 `protobuf:"varint,21,opt,name=preview_blob_id,json=previewBlobId,proto3" json:"preview_blob_id,omitempty"`
 	// alt_text is the canonical display label, rendered verbatim by the
-	// client. Stamped at insert time (for plugin-owned tiles, the entry name;
-	// for a door to another namespace, the label of the plugin it leads to).
+	// client. Stamped at insert time (for a file, its file name; for a door to
+	// another namespace, the label of the source it leads to).
 	AltText string `protobuf:"bytes,25,opt,name=alt_text,json=altText,proto3" json:"alt_text,omitempty"`
 	// link reports that this door is a link: its child_grid_id is a
-	// qualified cross-plugin link rather than a bare local child grid. It
+	// qualified link to another's grid rather than a bare local child grid. It
 	// is the one signal for that. The client renders a dashed border from it,
 	// and delete and copy treat a qualified child_grid_id as unlink-only and
 	// share, never cascade. The server sets it in qualifyTiles, from a child
@@ -408,7 +406,7 @@ type Tile struct {
 	// partial capture cannot clobber it, mirroring the preview-JPEG rule.
 	UrlHistory string `protobuf:"bytes,28,opt,name=url_history,json=urlHistory,proto3" json:"url_history,omitempty"`
 	// link_target_id makes a leaf tile (text, url, shell, workspace) a link: a
-	// qualified "<plugin-uuid>/<tile-id>" link to the tile that owns the
+	// qualified "<namespace>/<tile-id>" link to the tile that owns the
 	// content. The link row stores no blob, no url and no preview, and readers
 	// resolve bytes, preview and tmux through the target id, which the router
 	// routes anywhere, including through transit chains that prepend one hop
@@ -426,27 +424,25 @@ type Tile struct {
 	// url_frozen arm only, and it never bumps version.
 	UrlFrozen bool `protobuf:"varint,30,opt,name=url_frozen,json=urlFrozen,proto3" json:"url_frozen,omitempty"`
 	// serves_page: this url tile opens at the address the node derives for its
-	// /content/ API, /content/<content-token>/<tile-id>/, where the owning
-	// plugin answers ServeContent. It stands in place of a url_string of its
+	// /content/ API, /content/<content-token>/<tile-id>, where the owning
+	// source answers ServeContent. It stands in place of a url_string of its
 	// own, and it is built at render time from the current origin and never
-	// persisted, because ports are ephemeral. Url tiles only: the plugin entry
-	// API refuses the declaration on every other kind, so a text tile never
-	// serves one. Plugin-declared, derived from the content itself, such as the
-	// filename's media type in fs. Never a stored column.
+	// persisted, because ports are ephemeral. Url tiles only: the files set it
+	// on a page file, from its file name's media type. Never a stored column.
 	ServesPage bool `protobuf:"varint,32,opt,name=serves_page,json=servesPage,proto3" json:"serves_page,omitempty"`
-	// text_presentation is the owning plugin's declaration of how a text tile's
+	// text_presentation is the owning source's statement of how a text tile's
 	// body presents: "plain" for monospace with no markdown interpretation, or
 	// "both" for rendered by default with a toggle to the raw source. There is
 	// no document-only value: the user can always reach the source bytes. "" is
-	// no declaration and the stored user text_mode rules, as for the home's own
-	// documents. Plugin-derived from the content itself, such as the filename or
-	// a sniff in fs. Wire-only, never a stored column.
+	// none and the stored user text_mode rules, as for the home's own
+	// documents. The files derive it from the file name's extension.
+	// Wire-only, never a stored column.
 	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
-	// status_detail is the owning plugin's one emoji about this tile's state,
+	// status_detail is the owning source's one emoji about this tile's state,
 	// set only when there is something to notice, which nothing outside that
-	// plugin can derive. The client draws it before the name
-	// (tilepreview.BannerText) and never instead of it. Plugin-declared through
-	// the Entry, wire-only: never a stored column, never set by clients.
+	// source can derive. The client draws it before the name
+	// (tilepreview.BannerText) and never instead of it. Wire-only: never a
+	// stored column, never set by clients.
 	StatusDetail string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// shell_tmux names the tmux a shell tile attaches: the id of the tile
 	// that started it, set on a copy so every copy shares its source's tmux.
@@ -735,10 +731,8 @@ func (x *Tile) GetNamed() bool {
 	return false
 }
 
-// Info is the whole plugin handshake: a plugin loaded from server.yaml is
-// already there, so Info reports its identity and its default root grid. There
-// is no Attach or Detach. The gRPC connection, opened at load and closed at
-// unload, is the only lifecycle.
+// Info is a source's identity and its default root grid. There is no Attach
+// or Detach: a source the node declares is already there.
 type InfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -778,15 +772,15 @@ func (*InfoRequest) Descriptor() ([]byte, []int) {
 type InfoResponse struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	DisplayName string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	// root_grid_id is the home's root grid. A plugin declares none, since a
-	// plugin is not a place; a connection answers the far home's.
+	// root_grid_id is the home's root grid. The files answer none, since a
+	// root is a grid and not a place; a connection answers the far home's.
 	RootGridId string `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"`
 	// scratch_grid_id is home's off-grid grid for ephemeral visits, where
 	// descending into a url places no tile; the node stamps it on every grid
 	// it serves as Grid.scratch_grid_id. Never rendered, never linked; it
-	// persists as visited-url history. A plugin answers none.
+	// persists as visited-url history. The files answer none.
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
-	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport: the
+	// root_view_cx/cy/zoom is the source's root grid's last-saved viewport: the
 	// center in grid coordinates and the intrinsic zoom. The home fills it from
 	// its root grid row; a root never visited leaves all three absent.
 	// The client seeds the door framing from it so re-entry restores the
@@ -794,15 +788,13 @@ type InfoResponse struct {
 	RootViewCx   float64 `protobuf:"fixed64,10,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,11,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,12,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	// glyph is the plugin's identity glyph for the menu and the ghost:
-	// "folder", "process", "door", or "" for the generic globe. The client reads
-	// the declaration and never switches on the kind, and an unknown value falls
-	// back to the globe, so a third-party plugin degrades politely.
+	// glyph is the source's identity glyph for the menu and the ghost:
+	// "folder", "door", or "" for the generic globe. An unknown value falls
+	// back to the globe.
 	Glyph string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	// plugin_grids is the grids the plugin declares as (+) menu rows; see
-	// PluginGrid. The serving node stamps them onto every grid the plugin
-	// serves.
-	PluginGrids   []*PluginGrid `protobuf:"bytes,17,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
+	// source_grids is the source's (+) menu rows; see SourceGrid. The serving
+	// node stamps them onto every grid the source serves.
+	SourceGrids   []*SourceGrid `protobuf:"bytes,17,rep,name=source_grids,json=sourceGrids,proto3" json:"source_grids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -886,9 +878,9 @@ func (x *InfoResponse) GetGlyph() string {
 	return ""
 }
 
-func (x *InfoResponse) GetPluginGrids() []*PluginGrid {
+func (x *InfoResponse) GetSourceGrids() []*SourceGrid {
 	if x != nil {
-		return x.PluginGrids
+		return x.SourceGrids
 	}
 	return nil
 }
@@ -1328,8 +1320,8 @@ func (x *GetTilePreviewResponse) GetJpeg() []byte {
 // the tile row version the bytes belong to, which is the client's save basis,
 // so bytes and version are paired at the owner. Later chunks carry data only.
 // On a leaf-link tile the serving node resolves through link_target_id, the one
-// resolution point, so callers never reimplement link semantics. A plugin whose
-// bodies are not version-edited sends version 0 and, in its place, the
+// resolution point, so callers never reimplement link semantics. The files,
+// whose bodies are not version-edited, send version 0 and, in its place, the
 // bytes' content_stamp (Tile.content_stamp).
 type ReadContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1452,7 +1444,7 @@ func (x *ContentChunk) GetContentStamp() string {
 // the user's bytes, each claiming and bumping. Not accepted on link tiles, because a content operation writes through
 // the target the caller names explicitly.
 //
-// A row with no version (a plugin's) claims content_stamp instead, the stamp
+// A row with no version (a file's) claims content_stamp instead, the stamp
 // its bytes were read under (ContentChunk.content_stamp), which its source
 // checks as the store checks a version; the response row carries the stamp
 // of the bytes written. A versioned row's owner ignores it.
@@ -1527,8 +1519,8 @@ func (x *WriteContentRequest) GetContentStamp() string {
 // ServeContent is the RPC carrier behind the server's HTTP /content/ API: a
 // GET or HEAD of /content/<token>/<tile-id> becomes one call routed to the
 // tile's owner, through transit hops as ReadContent is. The answer is the
-// tile's whole page: its media type on chunk 1 and its bytes across the
-// chunks, which only frame the message size. The server sandboxes the browser
+// tile's whole page, streamed: its media type on chunk 1 and its bytes across
+// the chunks as they are read, so a page is never held whole. The server sandboxes the browser
 // side with a CSP sandbox: opaque origin, no cookies, no RPC reach. An owner
 // with no page for the tile answers NotFound or leaves the RPC unimplemented,
 // and the content API answers 404.
@@ -1633,7 +1625,7 @@ func (x *ServeContentChunk) GetData() []byte {
 // the same as the tile's current grid for a pure resize. The server refuses
 // overlap, and refuses moving a door into its own subtree by walking
 // ancestors from grid_id, with no client-supplied path. Placement never crosses
-// a plugin boundary; there is no cross-plugin move, only link or copy.
+// a source boundary; there is no move across sources, only link or copy.
 //
 // claim is the placement the writer saw. A tile no longer there is refused
 // with the version conflict, the placement on disk standing. The APIs refuse
@@ -1855,34 +1847,32 @@ func (x *GetTileRequest) GetTileId() string {
 	return ""
 }
 
-// Find is the one generic find verb. Every plugin may implement it, and
-// Unimplemented means no results. The query is free text with a small selector
-// grammar owned by one shared parser (rpc.ParseFindQuery): id:<tile-id> is an
-// exact-id lookup, and anything else is plugin-interpreted text matching
-// against names, bodies, addresses, or whatever the plugin's data means. Each
-// result carries the tile plus its containing-door chain from the plugin's root
-// grid, outermost first and empty at the root, so a hit can be navigated to and
-// its crumbs previewed. snippet and score are optional context and ranking for
-// merged displays.
+// Find is the one generic find verb, and Unimplemented means no results. The
+// query is free text with a small selector grammar owned by one shared parser
+// (rpc.ParseFindQuery): id:<tile-id> is an exact-id lookup, and anything else
+// is text matched against names, bodies and addresses; the files answer a text
+// query empty. Each result carries the tile plus its containing-door chain
+// from its source's root grid, outermost first and empty at the root, so a hit
+// can be navigated to and its crumbs previewed. snippet and score are optional
+// context and ranking for merged displays.
 //
-// On the server surface, scope routes to one namespace and the plugin that owns
-// that qualified id answers, and an id: lookup or a grid_id routes on its id the
-// same way; otherwise an empty scope fans out to every configured plugin in
-// config order. A transit hop forwards the query to the remote node, which
+// On the server surface, scope routes to one namespace and the source that
+// owns that qualified id answers, and an id: lookup or a grid_id routes on its
+// id the same way; otherwise an empty scope fans out to home, the files and
+// every connection. A transit hop forwards the query to the remote node, which
 // fans out again, so an unscoped find recurses through every connected node
 // and results come back qualified like every other id.
 //
 // The filters narrow every hit and AND together. They are the node's, applied
-// to the rows it holds, never a plugin's: the plugin API has none. A query may
+// to the rows it holds. A query may
 // be empty when a filter is given, and then every tile passing the filters is
 // a hit, the newest first by the time filtered on (created when none is).
 type FindRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Query string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
-	// limit caps the results per answering plugin; 0 means the plugin's
-	// default.
+	// limit caps the results per answering source; 0 means its default.
 	Limit int32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	// scope: server surface only (plugins receive their own namespace's
+	// scope: server surface only (a source receives its own namespace's
 	// queries with scope already consumed).
 	Scope string `protobuf:"bytes,3,opt,name=scope,proto3" json:"scope,omitempty"`
 	// grid_id keeps the hits on this grid.
@@ -1899,8 +1889,8 @@ type FindRequest struct {
 	ContentChanged *TimeRange `protobuf:"bytes,8,opt,name=content_changed,json=contentChanged,proto3" json:"content_changed,omitempty"`
 	// selected keeps the hits in their grid's selection, the node fact.
 	Selected bool `protobuf:"varint,9,opt,name=selected,proto3" json:"selected,omitempty"`
-	// kind keeps the hits of this kind: text, url, shell, door or workspace. An
-	// entry with no row has its kind, so it passes or fails like a row.
+	// kind keeps the hits of this kind: text, url, shell, door or workspace. A
+	// file with no row has its kind, so it passes or fails like a row.
 	Kind          string `protobuf:"bytes,10,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2183,7 +2173,7 @@ func (x *FindResponse) GetSkipped() []*FindSkip {
 }
 
 // FindSkip names one namespace a fan-out went without, qualified like a
-// health event's plugin_uuid, and why.
+// health event's uuid, and why.
 type FindSkip struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
@@ -2236,14 +2226,14 @@ func (x *FindSkip) GetReason() string {
 	return ""
 }
 
-// Handshake enumerates the plugins a node hosts, in config order. The client
-// builds the + menu from it. A leaf plugin returns an empty list.
+// Handshake enumerates a node's sources: home, the files and each connection.
+// The client builds the + menu from it.
 type HandshakeRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// namespace routes the request. "" answers for this node, which is the
 	// boot handshake; a namespace chain ("<transit>" or "<transit>/<conn>/…")
 	// peels one segment per hop and forwards to the node it names, so the +
-	// menu inside a remote pane shows that node's plugins exactly as a direct
+	// menu inside a remote pane shows that node's sources exactly as a direct
 	// client would see them. Each hop re-qualifies the response's grid ids
 	// with its prefix, like every other transit response, and node-local
 	// fields (content token, node identity and view) are zeroed on forward:
@@ -2290,50 +2280,51 @@ func (x *HandshakeRequest) GetNamespace() string {
 	return ""
 }
 
-type PluginInfo struct {
+// SourceInfo is one row of the roster: home, the files or a connection.
+type SourceInfo struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
-	Uuid       string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the plugin's namespace; child grids are <uuid>/<id>
+	Uuid       string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                                 // the source's owner id (rpc.OwnerNamespaceOf)
 	Label      string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`                               // display name
-	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified <uuid>/<id> of the plugin's default root
-	// root_view_cx/cy/zoom is the plugin root grid's last-saved viewport,
+	RootGridId string                 `protobuf:"bytes,5,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified id of the source's default root
+	// root_view_cx/cy/zoom is the source's root grid's last-saved viewport,
 	// forwarded verbatim from InfoResponse. Absent when never visited; the
-	// client substitutes the default calibrated zoom on enterPlugin.
+	// client substitutes the default calibrated zoom.
 	RootViewCx   float64 `protobuf:"fixed64,7,opt,name=root_view_cx,json=rootViewCx,proto3" json:"root_view_cx,omitempty"`
 	RootViewCy   float64 `protobuf:"fixed64,8,opt,name=root_view_cy,json=rootViewCy,proto3" json:"root_view_cy,omitempty"`
 	RootViewZoom float64 `protobuf:"fixed64,9,opt,name=root_view_zoom,json=rootViewZoom,proto3" json:"root_view_zoom,omitempty"`
-	// info_error is set when the plugin's Info handshake failed or timed out,
+	// info_error is set when the source's Info failed or timed out,
 	// distinguishing broken from healthy but rootless, which otherwise
 	// present identically as root_grid_id == "". Empty when Info succeeded,
 	// whether or not it declared a root.
 	InfoError string `protobuf:"bytes,10,opt,name=info_error,json=infoError,proto3" json:"info_error,omitempty"`
-	// glyph mirrors InfoResponse.glyph for the client's plugin glyphs: the
+	// glyph mirrors InfoResponse.glyph for the client's source glyphs: the
 	// menu swatch and the drag ghost. "" is the generic globe.
 	Glyph string `protobuf:"bytes,12,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	// plugin_grids mirrors InfoResponse.plugin_grids with grid targets
-	// qualified for the receiver: they join the plugin's row in the (+) menu.
-	PluginGrids []*PluginGrid `protobuf:"bytes,13,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
+	// source_grids mirrors InfoResponse.source_grids with grid targets
+	// qualified for the receiver: they are the row's swatches in the (+) menu.
+	SourceGrids []*SourceGrid `protobuf:"bytes,13,rep,name=source_grids,json=sourceGrids,proto3" json:"source_grids,omitempty"`
 	// connection marks the row a connection, the one row the client tells
-	// from a plugin's (rpc.IsConnectionRow): rootless, it is waiting, not
+	// from the others (rpc.IsConnectionRow): rootless, it is waiting, not
 	// nothing.
 	Connection    bool `protobuf:"varint,14,opt,name=connection,proto3" json:"connection,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PluginInfo) Reset() {
-	*x = PluginInfo{}
+func (x *SourceInfo) Reset() {
+	*x = SourceInfo{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PluginInfo) String() string {
+func (x *SourceInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PluginInfo) ProtoMessage() {}
+func (*SourceInfo) ProtoMessage() {}
 
-func (x *PluginInfo) ProtoReflect() protoreflect.Message {
+func (x *SourceInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2345,86 +2336,86 @@ func (x *PluginInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PluginInfo.ProtoReflect.Descriptor instead.
-func (*PluginInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use SourceInfo.ProtoReflect.Descriptor instead.
+func (*SourceInfo) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *PluginInfo) GetUuid() string {
+func (x *SourceInfo) GetUuid() string {
 	if x != nil {
 		return x.Uuid
 	}
 	return ""
 }
 
-func (x *PluginInfo) GetLabel() string {
+func (x *SourceInfo) GetLabel() string {
 	if x != nil {
 		return x.Label
 	}
 	return ""
 }
 
-func (x *PluginInfo) GetRootGridId() string {
+func (x *SourceInfo) GetRootGridId() string {
 	if x != nil {
 		return x.RootGridId
 	}
 	return ""
 }
 
-func (x *PluginInfo) GetRootViewCx() float64 {
+func (x *SourceInfo) GetRootViewCx() float64 {
 	if x != nil {
 		return x.RootViewCx
 	}
 	return 0
 }
 
-func (x *PluginInfo) GetRootViewCy() float64 {
+func (x *SourceInfo) GetRootViewCy() float64 {
 	if x != nil {
 		return x.RootViewCy
 	}
 	return 0
 }
 
-func (x *PluginInfo) GetRootViewZoom() float64 {
+func (x *SourceInfo) GetRootViewZoom() float64 {
 	if x != nil {
 		return x.RootViewZoom
 	}
 	return 0
 }
 
-func (x *PluginInfo) GetInfoError() string {
+func (x *SourceInfo) GetInfoError() string {
 	if x != nil {
 		return x.InfoError
 	}
 	return ""
 }
 
-func (x *PluginInfo) GetGlyph() string {
+func (x *SourceInfo) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
 	}
 	return ""
 }
 
-func (x *PluginInfo) GetPluginGrids() []*PluginGrid {
+func (x *SourceInfo) GetSourceGrids() []*SourceGrid {
 	if x != nil {
-		return x.PluginGrids
+		return x.SourceGrids
 	}
 	return nil
 }
 
-func (x *PluginInfo) GetConnection() bool {
+func (x *SourceInfo) GetConnection() bool {
 	if x != nil {
 		return x.Connection
 	}
 	return false
 }
 
-// ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
+// ConnectionInfo is RETIRED (2026-09-18): a connection is a roster row with
 // connection set, rpc.ConnectionRow's shape, because the + menu is one
 // uniform set of rows and this message was a second spelling of one member
 // of it. The message and field 13 are kept forever and read in one place,
-// rpc.TransitQualifyPluginList, so a node built before the fold keeps
+// rpc.TransitQualifySourceList, so a node built before the fold keeps
 // presenting its connections; nothing writes them.
 type ConnectionInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -2520,14 +2511,14 @@ func (x *ConnectionInfo) GetStatusDetail() string {
 
 type HandshakeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// plugins: the node's home (first) and its content plugins.
-	Plugins []*PluginInfo `protobuf:"bytes,1,rep,name=plugins,proto3" json:"plugins,omitempty"`
+	// sources: the node's home (first), its files, then each connection.
+	Sources []*SourceInfo `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
 	// home_grid_id is where a client lands ("/"): the home's root grid,
 	// qualified. It is a field, never derived from row order; the row rooted
 	// there carries the home's framing.
 	HomeGridId string `protobuf:"bytes,9,opt,name=home_grid_id,json=homeGridId,proto3" json:"home_grid_id,omitempty"`
-	// connections is RETIRED; see ConnectionInfo. A connection is a plugins
-	// row with kind "connection", after the home and the content plugins.
+	// connections is RETIRED; see ConnectionInfo. A connection is a sources
+	// row with connection set, after the home and the files.
 	Connections []*ConnectionInfo `protobuf:"bytes,13,rep,name=connections,proto3" json:"connections,omitempty"`
 	// shells_disabled: this node refuses shell tiles outright, from server.yaml's
 	// disable_shells. The client removes the shell primitive from the + menu,
@@ -2540,7 +2531,7 @@ type HandshakeResponse struct {
 	// Pages served there run sandboxed with an opaque origin, so neither their
 	// subresource requests nor the desktop's native views carry the auth cookie.
 	// The token rides in the path instead, as
-	// /content/<content_token>/<tile-id>/<subpath>. It is derived from the server
+	// /content/<content_token>/<tile-id>. It is derived from the server
 	// password by sha256 under its own domain prefix, so it can never double as
 	// the auth cookie; it is handed out only on this authenticated handshake and
 	// checked against the current password as the cookie is. It is a node-level
@@ -2585,9 +2576,9 @@ func (*HandshakeResponse) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *HandshakeResponse) GetPlugins() []*PluginInfo {
+func (x *HandshakeResponse) GetSources() []*SourceInfo {
 	if x != nil {
-		return x.Plugins
+		return x.Sources
 	}
 	return nil
 }
@@ -2872,15 +2863,15 @@ func (*Answered) Descriptor() ([]byte, []int) {
 // CreateTileRequest creates one tile of any kind. There is no version: the
 // tile does not exist yet. tile.kind selects which fields are meaningful:
 //
-//	door  → child_grid_id set makes a door to another namespace pointing at a grid in
-//	        another plugin, a qualified "<uuid>/<grid-id>"; empty allocates
-//	        a fresh interior child grid. alt_text is the door's label.
+//	door  → child_grid_id set makes a link to a grid of another namespace,
+//	        a qualified "<namespace>/<grid-id>"; empty allocates a fresh
+//	        interior child grid. alt_text is the door's label.
 //	text  → content is the body.
 //	pane  → content is the layout; empty is never arranged.
 //	url   → url_string.
 //	shell → no extra fields.
 //
-// A plugin that does not accept creates leaves this unimplemented.
+// A source that does not accept creates, the files, leaves this unimplemented.
 type CreateTileRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	GridId string                 `protobuf:"bytes,2,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"`
@@ -3368,16 +3359,16 @@ func (x *DeleteTileResponse) GetTmuxLeft() string {
 // InvalidArgument with the reason (rpc.FramingOf); never visited is no write.
 //
 // Exactly one target is set, and that target also routes the call to the owning
-// plugin. tile_id names the door tile a grid was entered through, onto its
+// source. tile_id names the door tile a grid was entered through, onto its
 // own grid, into another namespace or as a link, each door keeping its own
 // framing; root_grid_id names a root grid, which has no door to carry it.
 //
 // Framing carries no version claim and makes no version bump; it is
-// last-writer-wins, and the node keeps a plugin row's as it keeps home's.
+// last-writer-wins, and the node keeps a file row's as it keeps home's.
 type SetFramingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`               // qualified "<plugin-uuid>/<id>"; the door
-	RootGridId    string                 `protobuf:"bytes,2,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified "<plugin-uuid>/<id>"; a root grid
+	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`               // qualified "<namespace>/<id>"; the door
+	RootGridId    string                 `protobuf:"bytes,2,opt,name=root_grid_id,json=rootGridId,proto3" json:"root_grid_id,omitempty"` // qualified "<namespace>/<id>"; a root grid
 	Cx            float64                `protobuf:"fixed64,4,opt,name=cx,proto3" json:"cx,omitempty"`
 	Cy            float64                `protobuf:"fixed64,5,opt,name=cy,proto3" json:"cy,omitempty"`
 	Zoom          float64                `protobuf:"fixed64,6,opt,name=zoom,proto3" json:"zoom,omitempty"`
@@ -3504,7 +3495,7 @@ func (x *SetFramingResponse) GetTile() *Tile {
 // nested under the grid's doors, to any depth, within the grid's namespace, in
 // one write; recurse without clear is refused. all, only with clear and no
 // grid, add, remove or recurse, empties every grid's set the node holds: home
-// and each plugin namespace, and, asked at the web API, each live
+// and the files, and, asked at the web API, each live
 // connection's far node, whose sets are its rows (rpc.SelectRefusal). A
 // selection is not content: no version moves, the grid's or any tile's.
 type SetSelectionRequest struct {
@@ -3899,8 +3890,9 @@ func (x *ViewPane) GetFocused() bool {
 	return false
 }
 
-// DisableSource switches off a plugin or connection this node declares,
-// named as its health event names it, until the node restarts. It is held in
+// DisableSource switches off a connection this node declares, named as its
+// health event names it, until the node restarts. The files are never
+// disabled. It is held in
 // memory only: server.yaml and gridwell.db are untouched, and the source reads
 // as dark meanwhile.
 type DisableSourceRequest struct {
@@ -4029,7 +4021,7 @@ func (x *GridChanged) GetGridId() string {
 }
 
 // GridFramingChanged carries a root grid's new framing, the three numbers
-// SetFraming wrote to its row, in PluginGrid's field names. It is apart from
+// SetFraming wrote to its row, in SourceGrid's field names. It is apart from
 // GridChanged because a framing write changes no listing: the client applies
 // it to the doors rooted at grid_id and fetches nothing. A door's framing
 // lives on its tile and rides TileChanged.
@@ -4159,7 +4151,7 @@ type TileChanged struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Tile  *Tile                  `protobuf:"bytes,1,opt,name=tile,proto3" json:"tile,omitempty"`
 	// content_changed: the bytes behind this row changed though nothing on the
-	// row says so. A row with no claim (a plugin's: version 0, no blob) has no
+	// row says so. A row with no claim (a file's: version 0, no blob) has no
 	// fact that orders its bytes, so the event is the change, and a client drops
 	// a clean body it holds for the row. Set only by the node that learned it
 	// from its source; a framing or capture write on the same row leaves it
@@ -4265,23 +4257,24 @@ func (x *TileRemoved) GetTileId() string {
 	return ""
 }
 
-// EventPluginHealth reports a transition in a plugin's event-stream health, as
-// the router's fan-in sees it (watchPlugin in internal/server/router.go,
-// over namespace.Refollow). It is emitted on the down transition, with
-// healthy=false and detail carrying the dial, recv or Info error that caused
-// it, and again on recovery with healthy=true and detail="". Only on a change
-// of state, so a flapping plugin does not spam the client.
-type EventPluginHealth struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	PluginUuid string                 `protobuf:"bytes,1,opt,name=plugin_uuid,json=pluginUuid,proto3" json:"plugin_uuid,omitempty"`
-	Healthy    bool                   `protobuf:"varint,2,opt,name=healthy,proto3" json:"healthy,omitempty"`
-	Detail     string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+// EventSourceHealth reports a transition in a source's health, as the
+// router's fan-in sees it (watchSource in internal/server/router.go, over
+// namespace.Refollow), keyed by the source's owner id. It is emitted on the
+// down transition, with healthy=false and detail carrying the dial, recv,
+// read or Info error that caused it, and again on recovery with healthy=true
+// and detail="". Only on a change of state, so a flapping source does not
+// spam the client.
+type EventSourceHealth struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Uuid    string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`
+	Healthy bool                   `protobuf:"varint,2,opt,name=healthy,proto3" json:"healthy,omitempty"`
+	Detail  string                 `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
 	// Why the source failed to tell the node of its changes, empty while
 	// nothing has: a notice. It is not health: the listings still answer live,
 	// so it rides a healthy event too, and a change of it alone is a
 	// transition.
 	LiveUpdatesOff string `protobuf:"bytes,4,opt,name=live_updates_off,json=liveUpdatesOff,proto3" json:"live_updates_off,omitempty"`
-	// The user switched this source off until the node restarts
+	// The user switched this connection off until the node restarts
 	// (DisableSource): healthy is false and nothing will try it again.
 	Disabled bool `protobuf:"varint,5,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	// Whether the source's changes are told right now, the one fact a client's
@@ -4292,20 +4285,20 @@ type EventPluginHealth struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *EventPluginHealth) Reset() {
-	*x = EventPluginHealth{}
+func (x *EventSourceHealth) Reset() {
+	*x = EventSourceHealth{}
 	mi := &file_gridwell_v1_data_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *EventPluginHealth) String() string {
+func (x *EventSourceHealth) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*EventPluginHealth) ProtoMessage() {}
+func (*EventSourceHealth) ProtoMessage() {}
 
-func (x *EventPluginHealth) ProtoReflect() protoreflect.Message {
+func (x *EventSourceHealth) ProtoReflect() protoreflect.Message {
 	mi := &file_gridwell_v1_data_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4317,47 +4310,47 @@ func (x *EventPluginHealth) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use EventPluginHealth.ProtoReflect.Descriptor instead.
-func (*EventPluginHealth) Descriptor() ([]byte, []int) {
+// Deprecated: Use EventSourceHealth.ProtoReflect.Descriptor instead.
+func (*EventSourceHealth) Descriptor() ([]byte, []int) {
 	return file_gridwell_v1_data_proto_rawDescGZIP(), []int{58}
 }
 
-func (x *EventPluginHealth) GetPluginUuid() string {
+func (x *EventSourceHealth) GetUuid() string {
 	if x != nil {
-		return x.PluginUuid
+		return x.Uuid
 	}
 	return ""
 }
 
-func (x *EventPluginHealth) GetHealthy() bool {
+func (x *EventSourceHealth) GetHealthy() bool {
 	if x != nil {
 		return x.Healthy
 	}
 	return false
 }
 
-func (x *EventPluginHealth) GetDetail() string {
+func (x *EventSourceHealth) GetDetail() string {
 	if x != nil {
 		return x.Detail
 	}
 	return ""
 }
 
-func (x *EventPluginHealth) GetLiveUpdatesOff() string {
+func (x *EventSourceHealth) GetLiveUpdatesOff() string {
 	if x != nil {
 		return x.LiveUpdatesOff
 	}
 	return ""
 }
 
-func (x *EventPluginHealth) GetDisabled() bool {
+func (x *EventSourceHealth) GetDisabled() bool {
 	if x != nil {
 		return x.Disabled
 	}
 	return false
 }
 
-func (x *EventPluginHealth) GetTold() bool {
+func (x *EventSourceHealth) GetTold() bool {
 	if x != nil && x.Told != nil {
 		return *x.Told
 	}
@@ -4372,7 +4365,7 @@ type Event struct {
 	//	*Event_GridChanged
 	//	*Event_TileChanged
 	//	*Event_TileRemoved
-	//	*Event_PluginHealth
+	//	*Event_SourceHealth
 	//	*Event_GridFramingChanged
 	//	*Event_SelectionChanged
 	Payload       isEvent_Payload `protobuf_oneof:"payload"`
@@ -4444,10 +4437,10 @@ func (x *Event) GetTileRemoved() *TileRemoved {
 	return nil
 }
 
-func (x *Event) GetPluginHealth() *EventPluginHealth {
+func (x *Event) GetSourceHealth() *EventSourceHealth {
 	if x != nil {
-		if x, ok := x.Payload.(*Event_PluginHealth); ok {
-			return x.PluginHealth
+		if x, ok := x.Payload.(*Event_SourceHealth); ok {
+			return x.SourceHealth
 		}
 	}
 	return nil
@@ -4487,8 +4480,8 @@ type Event_TileRemoved struct {
 	TileRemoved *TileRemoved `protobuf:"bytes,3,opt,name=tile_removed,json=tileRemoved,proto3,oneof"`
 }
 
-type Event_PluginHealth struct {
-	PluginHealth *EventPluginHealth `protobuf:"bytes,4,opt,name=plugin_health,json=pluginHealth,proto3,oneof"`
+type Event_SourceHealth struct {
+	SourceHealth *EventSourceHealth `protobuf:"bytes,4,opt,name=source_health,json=sourceHealth,proto3,oneof"`
 }
 
 type Event_GridFramingChanged struct {
@@ -4505,7 +4498,7 @@ func (*Event_TileChanged) isEvent_Payload() {}
 
 func (*Event_TileRemoved) isEvent_Payload() {}
 
-func (*Event_PluginHealth) isEvent_Payload() {}
+func (*Event_SourceHealth) isEvent_Payload() {}
 
 func (*Event_GridFramingChanged) isEvent_Payload() {}
 
@@ -4523,7 +4516,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x12:\n" +
-	"\fplugin_grids\x18\v \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12\x14\n" +
+	"\fsource_grids\x18\v \x03(\v2\x17.gridwell.v1.SourceGridR\vsourceGrids\x12\x14\n" +
 	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12(\n" +
 	"\raccepts_tiles\x18\x10 \x01(\bH\x00R\facceptsTiles\x88\x01\x01\x12\x1c\n" +
 	"\tselection\x18\x11 \x03(\tR\tselection\x12\x19\n" +
@@ -4532,7 +4525,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x06_movesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10\"\xc2\x01\n" +
 	"\n" +
-	"PluginGrid\x12\x0e\n" +
+	"SourceGrid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x14\n" +
 	"\x05glyph\x18\x03 \x01(\tR\x05glyph\x12\x17\n" +
@@ -4594,7 +4587,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x12:\n" +
-	"\fplugin_grids\x18\x11 \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGridsJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
+	"\fsource_grids\x18\x11 \x03(\v2\x17.gridwell.v1.SourceGridR\vsourceGridsJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
 	"J\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x12\x10\x13\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
@@ -4687,7 +4680,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x10HandshakeRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\xf7\x02\n" +
 	"\n" +
-	"PluginInfo\x12\x12\n" +
+	"SourceInfo\x12\x12\n" +
 	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
@@ -4701,7 +4694,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"info_error\x18\n" +
 	" \x01(\tR\tinfoError\x12\x14\n" +
 	"\x05glyph\x18\f \x01(\tR\x05glyph\x12:\n" +
-	"\fplugin_grids\x18\r \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12\x1e\n" +
+	"\fsource_grids\x18\r \x03(\v2\x17.gridwell.v1.SourceGridR\vsourceGrids\x12\x1e\n" +
 	"\n" +
 	"connection\x18\x0e \x01(\bR\n" +
 	"connectionJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\v\x10\fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xeb\x01\n" +
@@ -4717,7 +4710,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eroot_view_zoom\x18\x06 \x01(\x01R\frootViewZoom\x12#\n" +
 	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xc1\x02\n" +
 	"\x11HandshakeResponse\x121\n" +
-	"\aplugins\x18\x01 \x03(\v2\x17.gridwell.v1.PluginInfoR\aplugins\x12 \n" +
+	"\asources\x18\x01 \x03(\v2\x17.gridwell.v1.SourceInfoR\asources\x12 \n" +
 	"\fhome_grid_id\x18\t \x01(\tR\n" +
 	"homeGridId\x12=\n" +
 	"\vconnections\x18\r \x03(\v2\x1b.gridwell.v1.ConnectionInfoR\vconnections\x12'\n" +
@@ -4824,10 +4817,9 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fcontent_changed\x18\x02 \x01(\bR\x0econtentChanged\"?\n" +
 	"\vTileRemoved\x12\x17\n" +
 	"\agrid_id\x18\x01 \x01(\tR\x06gridId\x12\x17\n" +
-	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\xce\x01\n" +
-	"\x11EventPluginHealth\x12\x1f\n" +
-	"\vplugin_uuid\x18\x01 \x01(\tR\n" +
-	"pluginUuid\x12\x18\n" +
+	"\atile_id\x18\x02 \x01(\tR\x06tileId\"\xc1\x01\n" +
+	"\x11EventSourceHealth\x12\x12\n" +
+	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12\x18\n" +
 	"\ahealthy\x18\x02 \x01(\bR\ahealthy\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12(\n" +
 	"\x10live_updates_off\x18\x04 \x01(\tR\x0eliveUpdatesOff\x12\x1a\n" +
@@ -4838,7 +4830,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\fgrid_changed\x18\x01 \x01(\v2\x18.gridwell.v1.GridChangedH\x00R\vgridChanged\x12=\n" +
 	"\ftile_changed\x18\x02 \x01(\v2\x18.gridwell.v1.TileChangedH\x00R\vtileChanged\x12=\n" +
 	"\ftile_removed\x18\x03 \x01(\v2\x18.gridwell.v1.TileRemovedH\x00R\vtileRemoved\x12E\n" +
-	"\rplugin_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventPluginHealthH\x00R\fpluginHealth\x12S\n" +
+	"\rsource_health\x18\x04 \x01(\v2\x1e.gridwell.v1.EventSourceHealthH\x00R\fsourceHealth\x12S\n" +
 	"\x14grid_framing_changed\x18\x05 \x01(\v2\x1f.gridwell.v1.GridFramingChangedH\x00R\x12gridFramingChanged\x12L\n" +
 	"\x11selection_changed\x18\x06 \x01(\v2\x1d.gridwell.v1.SelectionChangedH\x00R\x10selectionChangedB\t\n" +
 	"\apayload2\xf8\f\n" +
@@ -4887,7 +4879,7 @@ var file_gridwell_v1_data_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_gridwell_v1_data_proto_goTypes = []any{
 	(ProbeResponse_Presence)(0),    // 0: gridwell.v1.ProbeResponse.Presence
 	(*Grid)(nil),                   // 1: gridwell.v1.Grid
-	(*PluginGrid)(nil),             // 2: gridwell.v1.PluginGrid
+	(*SourceGrid)(nil),             // 2: gridwell.v1.SourceGrid
 	(*Tile)(nil),                   // 3: gridwell.v1.Tile
 	(*InfoRequest)(nil),            // 4: gridwell.v1.InfoRequest
 	(*InfoResponse)(nil),           // 5: gridwell.v1.InfoResponse
@@ -4914,7 +4906,7 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*FindResponse)(nil),           // 26: gridwell.v1.FindResponse
 	(*FindSkip)(nil),               // 27: gridwell.v1.FindSkip
 	(*HandshakeRequest)(nil),       // 28: gridwell.v1.HandshakeRequest
-	(*PluginInfo)(nil),             // 29: gridwell.v1.PluginInfo
+	(*SourceInfo)(nil),             // 29: gridwell.v1.SourceInfo
 	(*ConnectionInfo)(nil),         // 30: gridwell.v1.ConnectionInfo
 	(*HandshakeResponse)(nil),      // 31: gridwell.v1.HandshakeResponse
 	(*TileResponse)(nil),           // 32: gridwell.v1.TileResponse
@@ -4944,12 +4936,12 @@ var file_gridwell_v1_data_proto_goTypes = []any{
 	(*SelectionChanged)(nil),       // 56: gridwell.v1.SelectionChanged
 	(*TileChanged)(nil),            // 57: gridwell.v1.TileChanged
 	(*TileRemoved)(nil),            // 58: gridwell.v1.TileRemoved
-	(*EventPluginHealth)(nil),      // 59: gridwell.v1.EventPluginHealth
+	(*EventSourceHealth)(nil),      // 59: gridwell.v1.EventSourceHealth
 	(*Event)(nil),                  // 60: gridwell.v1.Event
 }
 var file_gridwell_v1_data_proto_depIdxs = []int32{
-	2,  // 0: gridwell.v1.Grid.plugin_grids:type_name -> gridwell.v1.PluginGrid
-	2,  // 1: gridwell.v1.InfoResponse.plugin_grids:type_name -> gridwell.v1.PluginGrid
+	2,  // 0: gridwell.v1.Grid.source_grids:type_name -> gridwell.v1.SourceGrid
+	2,  // 1: gridwell.v1.InfoResponse.source_grids:type_name -> gridwell.v1.SourceGrid
 	0,  // 2: gridwell.v1.ProbeResponse.presence:type_name -> gridwell.v1.ProbeResponse.Presence
 	10, // 3: gridwell.v1.OpenShellRequest.resize:type_name -> gridwell.v1.PTYSize
 	1,  // 4: gridwell.v1.GetGridResponse.grid:type_name -> gridwell.v1.Grid
@@ -4962,8 +4954,8 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	3,  // 11: gridwell.v1.FindResult.path:type_name -> gridwell.v1.Tile
 	25, // 12: gridwell.v1.FindResponse.results:type_name -> gridwell.v1.FindResult
 	27, // 13: gridwell.v1.FindResponse.skipped:type_name -> gridwell.v1.FindSkip
-	2,  // 14: gridwell.v1.PluginInfo.plugin_grids:type_name -> gridwell.v1.PluginGrid
-	29, // 15: gridwell.v1.HandshakeResponse.plugins:type_name -> gridwell.v1.PluginInfo
+	2,  // 14: gridwell.v1.SourceInfo.source_grids:type_name -> gridwell.v1.SourceGrid
+	29, // 15: gridwell.v1.HandshakeResponse.sources:type_name -> gridwell.v1.SourceInfo
 	30, // 16: gridwell.v1.HandshakeResponse.connections:type_name -> gridwell.v1.ConnectionInfo
 	3,  // 17: gridwell.v1.TileResponse.tile:type_name -> gridwell.v1.Tile
 	3,  // 18: gridwell.v1.CreateTileRequest.tile:type_name -> gridwell.v1.Tile
@@ -4975,7 +4967,7 @@ var file_gridwell_v1_data_proto_depIdxs = []int32{
 	54, // 24: gridwell.v1.Event.grid_changed:type_name -> gridwell.v1.GridChanged
 	57, // 25: gridwell.v1.Event.tile_changed:type_name -> gridwell.v1.TileChanged
 	58, // 26: gridwell.v1.Event.tile_removed:type_name -> gridwell.v1.TileRemoved
-	59, // 27: gridwell.v1.Event.plugin_health:type_name -> gridwell.v1.EventPluginHealth
+	59, // 27: gridwell.v1.Event.source_health:type_name -> gridwell.v1.EventSourceHealth
 	55, // 28: gridwell.v1.Event.grid_framing_changed:type_name -> gridwell.v1.GridFramingChanged
 	56, // 29: gridwell.v1.Event.selection_changed:type_name -> gridwell.v1.SelectionChanged
 	4,  // 30: gridwell.v1.Gridwell.Info:input_type -> gridwell.v1.InfoRequest
@@ -5041,7 +5033,7 @@ func file_gridwell_v1_data_proto_init() {
 		(*Event_GridChanged)(nil),
 		(*Event_TileChanged)(nil),
 		(*Event_TileRemoved)(nil),
-		(*Event_PluginHealth)(nil),
+		(*Event_SourceHealth)(nil),
 		(*Event_GridFramingChanged)(nil),
 		(*Event_SelectionChanged)(nil),
 	}

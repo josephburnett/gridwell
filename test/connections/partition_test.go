@@ -32,7 +32,7 @@ func awaitConnHealth(t *testing.T, health <-chan *gridwellv1.Event, conn string,
 	for {
 		select {
 		case ev := <-health:
-			if h := ev.GetPluginHealth(); h != nil && strings.Contains(h.PluginUuid, conn) && h.Healthy == want {
+			if h := ev.GetSourceHealth(); h != nil && strings.Contains(h.Uuid, conn) && h.Healthy == want {
 				return
 			}
 		case <-deadline:
@@ -73,7 +73,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 	personalChild := awaitConnRoot(t, localOrigin, "partconn1")
 	lp := rpc(t, localOrigin, "Handshake", map[string]any{})
 	var homeRoot string
-	for _, p := range lp["plugins"].([]any) {
+	for _, p := range lp["sources"].([]any) {
 		pm := p.(map[string]any)
 		if pm["label"] == "home" {
 			homeRoot, _ = pm["rootGridId"].(string)
@@ -99,7 +99,7 @@ func TestConnectionPartitionServesCache(t *testing.T) {
 			if !ok || rerr != nil {
 				return
 			}
-			if ev.GetPluginHealth() != nil {
+			if ev.GetSourceHealth() != nil {
 				select {
 				case health <- ev:
 				default:

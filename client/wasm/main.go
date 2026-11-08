@@ -77,7 +77,7 @@ type App struct {
 	cl *rpc.Client
 
 	// plugins is the Handshake's menu-row list, in config order.
-	plugins []*gridwellv1.PluginInfo
+	plugins []*gridwellv1.SourceInfo
 
 	// home is the qualified grid id "/" means; every "empty anchor" reader
 	// resolves through it.
@@ -663,7 +663,7 @@ func main() {
 
 // takeMenu keeps what a handshake of this node says of its plugins.
 func (a *App) takeMenu(h *gridwellv1.HandshakeResponse) {
-	a.plugins = h.Plugins
+	a.plugins = h.Sources
 }
 
 // bootstrap loads the plugin list, then starts the rest of the client.
@@ -1069,7 +1069,7 @@ func (a *App) startSSE() {
 				}
 			}
 			if plan.Health != nil {
-				a.reportPluginHealth(plan.Health)
+				a.reportSourceHealth(plan.Health)
 			}
 		},
 	}
@@ -1263,17 +1263,17 @@ func (a *App) resolveErr(source string) {
 	}
 }
 
-// reportPluginHealth runs events.ReactHealth's plan for a health event: the
+// reportSourceHealth runs events.ReactHealth's plan for a health event: the
 // notices at once, the resync once the health holds.
-func (a *App) reportPluginHealth(h *gridwellv1.EventPluginHealth) {
-	label := h.PluginUuid
-	if pl, ok := a.pluginByUUID(h.PluginUuid); ok && pl.Label != "" {
+func (a *App) reportSourceHealth(h *gridwellv1.EventSourceHealth) {
+	label := h.Uuid
+	if pl, ok := a.pluginByUUID(h.Uuid); ok && pl.Label != "" {
 		label = pl.Label
 	}
 	// The client's one copy of which sources are not answering or not told.
-	wasDark := a.c.NoteHealth(h.PluginUuid, h.Healthy)
+	wasDark := a.c.NoteHealth(h.Uuid, h.Healthy)
 	a.c.NoteTold(h)
-	r := events.ReactHealth(h, label, wasDark, pluginhealth.Disableable(a.plugins, h.PluginUuid))
+	r := events.ReactHealth(h, label, wasDark, pluginhealth.Disableable(a.plugins, h.Uuid))
 	for _, n := range []events.StickyNotice{r.Dark, r.LiveOff} {
 		if n.Message == "" {
 			a.resolveErr(n.Source)

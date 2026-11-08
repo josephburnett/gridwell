@@ -167,14 +167,14 @@ func holdsReadOnly(f *parityFix, prefix string) error {
 
 // awaitHealth waits for the last health the source serving gridID told to
 // pass ok, given the client's cache with every health told folded in.
-func (f *parityFix) awaitHealth(gridID string, ok func(*cache.Cache, *gridwellv1.EventPluginHealth) bool) error {
+func (f *parityFix) awaitHealth(gridID string, ok func(*cache.Cache, *gridwellv1.EventSourceHealth) bool) error {
 	deadline := time.Now().Add(10 * time.Second)
 	f.heard.NoteStream(true)
 	for {
 		if g, err := f.cl.GetGrid(f.ctx, gridID); err == nil {
 			f.heard.PutGrid(g.Grid, g.Tiles)
 		}
-		var last *gridwellv1.EventPluginHealth
+		var last *gridwellv1.EventSourceHealth
 		f.healthMu.Lock()
 		for uuid, h := range f.health {
 			if cache.ServedBy(gridID, uuid) {
@@ -218,7 +218,7 @@ func holdsDark(f *parityFix, prefix string) error {
 	if err := os.Remove(filepath.Join(main, "Body.md")); err != nil {
 		return err
 	}
-	if err := f.awaitHealth(g.Id, func(c *cache.Cache, h *gridwellv1.EventPluginHealth) bool {
+	if err := f.awaitHealth(g.Id, func(c *cache.Cache, h *gridwellv1.EventSourceHealth) bool {
 		return !h.Healthy && strings.Contains(h.Detail, main) && c.SourceDark(g.Id)
 	}); err != nil {
 		return fmt.Errorf("the dark directory is never told as the files' health: %v", err)
@@ -310,7 +310,7 @@ func holdsNeverDisabled(f *parityFix, _ string) error {
 func holdsUntold(f *parityFix, _ string) error {
 	grid := f.root[onFar]
 	tl := f.tile(onFar, kURL)
-	if err := f.awaitHealth(grid, func(c *cache.Cache, h *gridwellv1.EventPluginHealth) bool {
+	if err := f.awaitHealth(grid, func(c *cache.Cache, h *gridwellv1.EventSourceHealth) bool {
 		return h.Healthy && h.Told != nil && !h.GetTold() && h.LiveUpdatesOff != "" && !c.Current()[grid]
 	}); err != nil {
 		return fmt.Errorf("that its changes are not told is never said: %v", err)

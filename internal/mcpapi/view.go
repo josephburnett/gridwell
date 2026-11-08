@@ -118,7 +118,7 @@ func verdictOf(err error) string {
 // first hop this node does not declare reads dead, the verdict the client
 // draws (deadlink.DeadTile); a deeper break is the far node's to answer when
 // the link is read.
-func tileOf(t *pb.Tile, roster []*pb.PluginInfo, node string) Tile {
+func tileOf(t *pb.Tile, roster []*pb.SourceInfo, node string) Tile {
 	out := Tile{ID: t.GetId(), Kind: t.GetKind(), Name: t.GetAltText(), Grid: t.GetGridId(),
 		X: t.GetX(), Y: t.GetY(), W: t.GetW(), H: t.GetH(), Version: t.GetVersion(),
 		Link: deadlink.TargetID(t), ReadOnly: t.GetReadOnly()}

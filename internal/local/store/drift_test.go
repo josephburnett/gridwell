@@ -32,8 +32,8 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"moves":           "stamped by the owning namespace: its tiles move to another of its grids — a per-grid capability, never persisted",
 				"scratch_grid_id": "stamped by the serving node, qualified per hop",
 				"node_ns":         "the namespace chain of the node serving the grid, from the receiver's perspective",
-				"plugin_grids":    "stamped by the serving node from the owning plugin's Info",
-				"glyph":           "likewise — the owning plugin's declared identity glyph for the grid",
+				"source_grids":    "stamped by the serving node from the owning source's Info",
+				"glyph":           "likewise — the owning source's identity glyph for the grid",
 			},
 		},
 		{
@@ -42,10 +42,10 @@ func TestDescriptorMatchesProto(t *testing.T) {
 			onWire:  wireNames(tilesColumns),
 			wireOnly: map[string]string{
 				"link":              `derived by the router from a qualified child_grid_id — the one authoritative "is a link" signal`,
-				"text_presentation": "declared by the owning plugin: how its text body presents",
-				"content_stamp":     "the owning plugin's name for the bytes behind a claimless row, as its listing answered it",
-				"status_detail":     "the owning plugin's current trouble with this tile (an ssh door's last dial error)",
-				"read_only":         "the owning plugin's reason this text body takes no edits",
+				"text_presentation": "stated by the owning source: how its text body presents",
+				"content_stamp":     "the owning source's name for the bytes behind a claimless row, as its listing answered it",
+				"status_detail":     "the owning source's current trouble with this tile",
+				"read_only":         "the owning source's reason this text body takes no edits",
 			},
 		},
 	}

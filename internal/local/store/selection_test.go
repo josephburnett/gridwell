@@ -240,7 +240,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 
 // A plugin's grid keeps its selection on the node's row for it, like its
 // framing, and a retired row leaves the set.
-func TestPluginGridSelection(t *testing.T) {
+func TestSourceGridSelection(t *testing.T) {
 	s := newTestStore(t)
 	n := s.Files()
 	gid, err := n.GridOf("inbox")

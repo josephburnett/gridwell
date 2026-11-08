@@ -160,13 +160,13 @@ func webClient(t *testing.T, origin, password string) *rpc.Client {
 }
 
 // healthOf streams every health event about ns until ctx ends.
-func healthOf(ctx context.Context, t *testing.T, cl *rpc.Client, ns string) <-chan *gridwellv1.EventPluginHealth {
+func healthOf(ctx context.Context, t *testing.T, cl *rpc.Client, ns string) <-chan *gridwellv1.EventSourceHealth {
 	t.Helper()
 	stream, err := cl.Subscribe(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := make(chan *gridwellv1.EventPluginHealth, 64)
+	out := make(chan *gridwellv1.EventSourceHealth, 64)
 	go func() {
 		defer stream.Close()
 		for {
@@ -174,7 +174,7 @@ func healthOf(ctx context.Context, t *testing.T, cl *rpc.Client, ns string) <-ch
 			if !ok || err != nil {
 				return
 			}
-			if h := ev.GetPluginHealth(); h != nil && h.PluginUuid == ns {
+			if h := ev.GetSourceHealth(); h != nil && h.Uuid == ns {
 				out <- h
 			}
 		}

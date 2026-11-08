@@ -310,8 +310,8 @@ func (g *gridReads) awaitCount(t *testing.T, id string, want int, why string) {
 // health is one connection's health as it arrives on the stream this layer
 // relays: the uuid is the source key, one segment for a connection.
 func health(source string, healthy bool) *pb.Event {
-	return &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-		PluginUuid: source, Healthy: healthy,
+	return &pb.Event{Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
+		Uuid: source, Healthy: healthy,
 	}}}
 }
 
@@ -321,8 +321,8 @@ func awaitHealth(t *testing.T, events <-chan *pb.Event, conn string, want bool) 
 	for {
 		select {
 		case ev := <-events:
-			h := ev.GetPluginHealth()
-			if h != nil && h.GetPluginUuid() == conn && h.GetHealthy() == want {
+			h := ev.GetSourceHealth()
+			if h != nil && h.GetUuid() == conn && h.GetHealthy() == want {
 				return
 			}
 		case <-time.After(30 * time.Second):

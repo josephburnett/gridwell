@@ -95,7 +95,7 @@ func (v View) SameAs(w View) bool {
 // Reframe writes a root grid's framing onto every door rooted at gridID, a
 // row's own and a declared entry's alike, and reports whether any value moved
 // by SameAs.
-func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {
+func Reframe(gridID string, f Framing, plugins []*pb.SourceInfo) bool {
 	if gridID == "" {
 		return false
 	}
@@ -105,7 +105,7 @@ func Reframe(gridID string, f Framing, plugins []*pb.PluginInfo) bool {
 			pl.RootViewCx, pl.RootViewCy, pl.RootViewZoom = f.cx, f.cy, f.zoom
 			changed = true
 		}
-		for _, e := range pl.PluginGrids {
+		for _, e := range pl.SourceGrids {
 			if e.GridId == gridID && !Saved(f).SameAs(ViewOf(e.ViewCx, e.ViewCy, e.ViewZoom)) {
 				e.ViewCx, e.ViewCy, e.ViewZoom = f.cx, f.cy, f.zoom
 				changed = true

@@ -157,7 +157,7 @@ func LocalOf(id string) string {
 
 // PluginDoorTile is the synthetic door to another namespace tile a plugin is rendered as
 // outside a real grid: the drag ghost and the menu swatch.
-func PluginDoorTile(pl *pb.PluginInfo) *pb.Tile {
+func PluginDoorTile(pl *pb.SourceInfo) *pb.Tile {
 	return &pb.Tile{
 		Kind:        KindDoor,
 		W:           1,
@@ -175,9 +175,9 @@ func PluginDoorTile(pl *pb.PluginInfo) *pb.Tile {
 // row marked connection, its landing as the root and the last dial failure
 // as InfoError. A pending connection is rootless, so health reads it as
 // waiting, not broken.
-func ConnectionRow(uuid, label, rootGridID, statusDetail string, view View) *pb.PluginInfo {
+func ConnectionRow(uuid, label, rootGridID, statusDetail string, view View) *pb.SourceInfo {
 	cx, cy, zoom := view.Wire()
-	return &pb.PluginInfo{
+	return &pb.SourceInfo{
 		Uuid: uuid, Connection: true, Label: label, Glyph: GlyphGlobe,
 		RootGridId: rootGridID, InfoError: statusDetail,
 		RootViewCx: cx, RootViewCy: cy, RootViewZoom: zoom,
@@ -186,7 +186,7 @@ func ConnectionRow(uuid, label, rootGridID, statusDetail string, view View) *pb.
 
 // IsConnectionRow is the one fact that tells a connection row from a plugin
 // row; never the shape of the uuid.
-func IsConnectionRow(pl *pb.PluginInfo) bool { return pl.GetConnection() }
+func IsConnectionRow(pl *pb.SourceInfo) bool { return pl.GetConnection() }
 
 // HomeGrid is the qualified grid id "/" means: the handshake's home_grid_id,
 // a field and never a row's position. "" is a node that learned no home.
@@ -196,12 +196,12 @@ func HomeGrid(l *pb.HandshakeResponse) string {
 
 // HomeRow is the plugins row rooted at HomeGrid, the one owner of the home's
 // framing; nil when the node learned no home.
-func HomeRow(l *pb.HandshakeResponse) *pb.PluginInfo {
+func HomeRow(l *pb.HandshakeResponse) *pb.SourceInfo {
 	home := HomeGrid(l)
 	if home == "" {
 		return nil
 	}
-	for _, p := range l.GetPlugins() {
+	for _, p := range l.GetSources() {
 		if p.GetRootGridId() == home {
 			return p
 		}

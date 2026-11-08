@@ -125,8 +125,8 @@ func TestAGridIsCurrentWhenHeldFromAnAnsweringSource(t *testing.T) {
 // say leaves what was told.
 func TestAGridFromASourceThatIsNotToldIsNotCurrent(t *testing.T) {
 	c := seedSources(t)
-	health := func(told *bool) *gridwellv1.EventPluginHealth {
-		return &gridwellv1.EventPluginHealth{PluginUuid: fsPl, Healthy: true, Told: told}
+	health := func(told *bool) *gridwellv1.EventSourceHealth {
+		return &gridwellv1.EventSourceHealth{Uuid: fsPl, Healthy: true, Told: told}
 	}
 	c.NoteTold(health(proto.Bool(false)))
 	cur := c.Current()

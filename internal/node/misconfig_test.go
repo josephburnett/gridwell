@@ -183,9 +183,9 @@ func TestStartRefusesTheOldPerNamespaceLayout(t *testing.T) {
 }
 
 // connectionRows is the handshake's connection rows, by their declared kind.
-func connectionRows(l *pb.HandshakeResponse) []*pb.PluginInfo {
-	var out []*pb.PluginInfo
-	for _, pl := range l.GetPlugins() {
+func connectionRows(l *pb.HandshakeResponse) []*pb.SourceInfo {
+	var out []*pb.SourceInfo
+	for _, pl := range l.GetSources() {
 		if rpc.IsConnectionRow(pl) {
 			out = append(out, pl)
 		}

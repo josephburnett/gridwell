@@ -375,7 +375,7 @@ func TestFilesFramingOnRootAndDoor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if g := lp.Plugins[1].PluginGrids[0]; g.ViewCx != 3 || g.ViewCy != 2 || g.ViewZoom != 0.5 {
+	if g := lp.Sources[1].SourceGrids[0]; g.ViewCx != 3 || g.ViewCy != 2 || g.ViewZoom != 0.5 {
 		t.Errorf("root framing on the roster = %v", g)
 	}
 	sub := filepath.Join(root, "sub")

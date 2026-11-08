@@ -933,11 +933,11 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 	if _, err := cc.GetGrid(ctx, &pb.GetGridRequest{GridId: root}); err != nil {
 		t.Fatalf("a broken cache must never fail the live read: %v", err)
 	}
-	waitHealth := func(wantHealthy bool, what string) *pb.EventPluginHealth {
+	waitHealth := func(wantHealthy bool, what string) *pb.EventSourceHealth {
 		for {
 			select {
 			case ev := <-evs:
-				if h := ev.GetPluginHealth(); h != nil && h.GetHealthy() == wantHealthy {
+				if h := ev.GetSourceHealth(); h != nil && h.GetHealthy() == wantHealthy {
 					return h
 				}
 			case <-time.After(5 * time.Second):
@@ -946,8 +946,8 @@ func TestCacheStoreFailureSurfacesAsHealth(t *testing.T) {
 		}
 	}
 	down := waitHealth(false, "the failing store never surfaced as health")
-	if down.GetPluginUuid() != "" {
-		t.Errorf("uuid = %q, want empty (the fan-in fills the namespace)", down.GetPluginUuid())
+	if down.GetUuid() != "" {
+		t.Errorf("uuid = %q, want empty (the fan-in fills the namespace)", down.GetUuid())
 	}
 	if !strings.Contains(down.GetDetail(), "cannot store") {
 		t.Errorf("detail = %q, want the cache failure named", down.GetDetail())

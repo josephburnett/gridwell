@@ -59,8 +59,8 @@ func TestBothDirectionsLearnTheSameDarkness(t *testing.T) {
 			byHealth, healths := darkFixture(t)
 			seedDark(byHealth, tc.from)
 			byHealth.applyEvent(context.Background(), &pb.Event{
-				Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
-					PluginUuid: "conn", Healthy: !tc.to,
+				Payload: &pb.Event_SourceHealth{SourceHealth: &pb.EventSourceHealth{
+					Uuid: "conn", Healthy: !tc.to,
 				}},
 			})
 

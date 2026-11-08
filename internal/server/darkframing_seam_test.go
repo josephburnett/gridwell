@@ -135,6 +135,6 @@ func TestAFarGridReopensWhereItWasLeftWhileDark(t *testing.T) {
 	}
 }
 
-func framingOf(pl *gridwellv1.PluginInfo) rpc.View {
+func framingOf(pl *gridwellv1.SourceInfo) rpc.View {
 	return rpc.ViewOf(pl.GetRootViewCx(), pl.GetRootViewCy(), pl.GetRootViewZoom())
 }

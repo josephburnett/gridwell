@@ -30,7 +30,7 @@ func TargetID(t *gridwellv1.Tile) string {
 // plugins. It
 // answers false whenever it cannot know: a bare id, an empty roster, or a
 // chain through a declared connection, the far node's to judge.
-func Dead(id string, rows []*gridwellv1.PluginInfo, nodeID string) bool {
+func Dead(id string, rows []*gridwellv1.SourceInfo, nodeID string) bool {
 	if id == "" || len(rows) == 0 {
 		return false
 	}
@@ -49,7 +49,7 @@ func Dead(id string, rows []*gridwellv1.PluginInfo, nodeID string) bool {
 // DeadTile reports that a link is dead: its target's namespace is undeclared
 // here, or answered is true for its target, meaning a read heard the dead
 // verdict from whichever hop broke (gwerr.IsDeadLink). answered may be nil.
-func DeadTile(t *gridwellv1.Tile, rows []*gridwellv1.PluginInfo, nodeID string, answered func(id string) bool) bool {
+func DeadTile(t *gridwellv1.Tile, rows []*gridwellv1.SourceInfo, nodeID string, answered func(id string) bool) bool {
 	id := TargetID(t)
 	if id != "" && answered != nil && answered(id) {
 		return true

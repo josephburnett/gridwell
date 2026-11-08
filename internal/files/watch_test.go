@@ -182,13 +182,13 @@ func TestToldFollowsTheWatch(t *testing.T) {
 	ev := f.events()
 	f.s.watch.add = func(*fsnotify.Watcher, string) error { return syscall.ENOSPC }
 	f.show(f.root)
-	h := await(t, ev, "not told", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth()
+	h := await(t, ev, "not told", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth()
 	if h.GetTold() || h.LiveUpdatesOff == "" || !h.Healthy {
 		t.Errorf("health = %+v", h)
 	}
 	f.s.watch.add = (*fsnotify.Watcher).Add
 	f.show(f.root)
-	h = await(t, ev, "told", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth()
+	h = await(t, ev, "told", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth()
 	if !h.GetTold() || h.LiveUpdatesOff != "" {
 		t.Errorf("health = %+v", h)
 	}
@@ -243,11 +243,11 @@ func TestADarkDirectoryLeftIsNoLongerDark(t *testing.T) {
 	f.grid(f.root)
 	f.grid(locked)
 	f.show(f.root, locked)
-	if h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); h.Healthy {
+	if h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); h.Healthy {
 		t.Fatalf("health = %+v", h)
 	}
 	f.show(f.root)
-	if h := await(t, ev, "light", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth(); !h.Healthy {
+	if h := await(t, ev, "light", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); !h.Healthy {
 		t.Errorf("health = %+v", h)
 	}
 	if h := f.s.health(); h.dark {
@@ -315,7 +315,7 @@ func TestToldRecoversAfterATransientFailure(t *testing.T) {
 	fsw := f.s.watch.fsw
 	f.s.watch.mu.Unlock()
 	f.s.watch.eventError(fsw, errors.New("queue broke"))
-	h := await(t, ev, "not told", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth()
+	h := await(t, ev, "not told", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth()
 	if h.GetTold() {
 		t.Fatalf("health = %+v", h)
 	}

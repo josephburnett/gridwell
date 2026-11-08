@@ -174,7 +174,7 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 		a.drawTileBannerLabel(n, x, y, w, h, false)
 		// A broken or waiting plugin gets the same health tint its link
 		// tiles do.
-		a.drawPluginHealthTint(n, x, y, w, h)
+		a.drawSourceHealthTint(n, x, y, w, h)
 	} else {
 		outside := tilepreview.Outside(n, false)
 		a.drawNode(a.cctx, n, x, y, w, h, false, outside, tileBorderPx, false)
@@ -208,10 +208,10 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 	}
 }
 
-// drawPluginHealthTint overlays a plugin link tile with its
+// drawSourceHealthTint overlays a plugin link tile with its
 // pluginhealth-decided tint. Only this node's own plugins have local health,
 // so a remote node's tiles surface their state through descent errors.
-func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
+func (a *App) drawSourceHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	// A link with no target is not enterable wherever it lives. The descent
 	// guard explains on click.
 	if pluginhealth.UnrootedLink(n) {

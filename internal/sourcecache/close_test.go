@@ -32,7 +32,7 @@ type gated struct {
 // Handshake is the walk's doorstep: what a namespace answers for itself is
 // where its content begins, and the walk starts at the root declared here.
 func (g *gated) Handshake(context.Context, *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
-	return &pb.HandshakeResponse{Plugins: []*pb.PluginInfo{rpc.ConnectionRow("u1", "", g.root, "", rpc.View{})}}, nil
+	return &pb.HandshakeResponse{Sources: []*pb.SourceInfo{rpc.ConnectionRow("u1", "", g.root, "", rpc.View{})}}, nil
 }
 
 func (g *gated) GetGrid(ctx context.Context, in *pb.GetGridRequest) (*pb.GetGridResponse, error) {

@@ -317,7 +317,7 @@ func TestConnectionThroughTheChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if menu.HomeGridId != wantRoot || len(menu.Plugins) != 1 || menu.Plugins[0].Uuid != localNodeID+"/geneva/rnode1" {
+	if menu.HomeGridId != wantRoot || len(menu.Sources) != 1 || menu.Sources[0].Uuid != localNodeID+"/geneva/rnode1" {
 		t.Fatalf("routed menu = %+v", menu)
 	}
 	if menu.ContentToken != "" {
@@ -435,7 +435,7 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 	defer cancel()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
 
-	health := make(chan *gridwellv1.EventPluginHealth, 8)
+	health := make(chan *gridwellv1.EventSourceHealth, 8)
 	apiErr := make(chan error, 1)
 	// The down transition is published once, so be listening before causing it.
 	es, err := h.localCl.Subscribe(ctx)
@@ -450,7 +450,7 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 				apiErr <- err
 				return
 			}
-			if h := ev.GetPluginHealth(); h != nil {
+			if h := ev.GetSourceHealth(); h != nil {
 				health <- h
 			}
 		}
@@ -463,9 +463,9 @@ func TestConnectionHealthArrivesQualified(t *testing.T) {
 			if ph.Healthy {
 				continue // the transport's own fan-in settling, not the outage
 			}
-			if ph.PluginUuid != localNodeID+"/geneva" {
+			if ph.Uuid != localNodeID+"/geneva" {
 				t.Fatalf("health uuid = %q, want %s/geneva — the client cannot address a connection it was told about by its bare name",
-					ph.PluginUuid, localNodeID)
+					ph.Uuid, localNodeID)
 			}
 			if ph.Detail == "" {
 				t.Error("a health-down with no detail tells the user nothing about why")
@@ -679,9 +679,9 @@ func TestLeafLinkToConnectionTargetResolves(t *testing.T) {
 }
 
 // connectionRows is the handshake's connection rows, by their declared kind.
-func connectionRows(l *gridwellv1.HandshakeResponse) []*gridwellv1.PluginInfo {
-	var out []*gridwellv1.PluginInfo
-	for _, pl := range l.GetPlugins() {
+func connectionRows(l *gridwellv1.HandshakeResponse) []*gridwellv1.SourceInfo {
+	var out []*gridwellv1.SourceInfo
+	for _, pl := range l.GetSources() {
 		if rpc.IsConnectionRow(pl) {
 			out = append(out, pl)
 		}

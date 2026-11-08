@@ -166,7 +166,7 @@ what each one is called.
 | disabled | A connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). The files are never disabled. | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
 | broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
-| told | A source whose changes reach the node as they happen (`EventPluginHealth.told`): a connection whose stream is up, or files whose watch is healthy. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
+| told | A source whose changes reach the node as they happen (`EventSourceHealth.told`): a connection whose stream is up, or files whose watch is healthy. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
 | unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
 | notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
 
@@ -417,7 +417,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   tells a namespace segment from a tile id.
 - Navigation asks for a grid or a row only when the cache does not hold it
   current: held, from a source that is answering and whose changes are told
-  (`cache.Current`, from `EventPluginHealth.told`; a source whose changes are
+  (`cache.Current`, from `EventSourceHealth.told`; a source whose changes are
   not told is read on every move). The
   event stream keeps those true, so coming back to one reads nothing; a stream
   gap still re-reads every held grid. The planner decides
@@ -545,7 +545,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A source that answers is not dark; dark comes only from a read the
   source did not answer, and a read the caller abandoned says nothing about
   it (`gwerr.IsAbandoned`) (2026-10-02). Whether a source's changes are told
-  right now is one fact, `EventPluginHealth.told`, and it is the one fact the
+  right now is one fact, `EventSourceHealth.told`, and it is the one fact the
   client's cache reads (`cache.Current`). A declaration is never a notice;
   only a failure is (2026-10-25).
 - The connection cache walks a far node's whole source on every subscribe

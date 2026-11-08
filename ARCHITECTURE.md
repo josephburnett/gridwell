@@ -124,7 +124,7 @@ now still shows as the page it was. A plugin tile's `preview_blob_id` is
 `pluginhost.previewKey`'s: the node's screenshot of the tile once one exists,
 else the plugin's picture keyed below zero. A served page that changes in
 place retires an unfrozen screenshot (`pluginhost.pagePreviewStale`). `Grid.scratch_grid_id` and
-`plugin_grids` come from the router's `GetGrid` (or `TransitQualifyGrid` for
+`source_grids` come from the router's `GetGrid` (or `TransitQualifyGrid` for
 transit), which fails the read when the owner's handshake does not answer.
 `Grid.accepts_tiles` (the + menu, a drop, a url's address) and
 `Grid.writable` (its bodies take edits) are the owning namespace's stamp on
@@ -212,7 +212,7 @@ write would have, once the node has listed the grid and found it moved, and an
 per stamp: a second tell under the stamp last told is no change
 (`Adapter.fresh`). One that declares no `watch` is complete as declared: it
 gets no stream and no notice, and its health says only that its changes are
-not told (`EventPluginHealth.told`), so a client reads its grids on every
+not told (`EventSourceHealth.told`), so a client reads its grids on every
 move. A
 plugin holds no node fact. It answers in its own stable string keys
 and never sees ids, layout, or
@@ -266,7 +266,7 @@ connection's own event stream (`connection.tellFar`), so a far plugin watches wh
 `DisableSource` names it as its health event does, and `connection.Server`
 is the one owner of which were switched off, in memory for the process's
 life (`connection.Server.Disable`, read by the server as `Sources.Switches`):
-the switch closes the connection's transport and refuses every later dial. The router tells it on every stream as `EventPluginHealth.disabled`
+the switch closes the connection's transport and refuses every later dial. The router tells it on every stream as `EventSourceHealth.disabled`
 whatever a layer underneath says (`Server.asSwitched`). The source then reads
 as dark, nothing tries it again, and a restart brings it back, because
 nothing about it was written. It is read-only meanwhile, decided in the

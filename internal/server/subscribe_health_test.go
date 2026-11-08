@@ -45,9 +45,9 @@ func (p *flakyWatch) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send
 	return nil
 }
 
-// recvHealth reads events off stream until it sees an EventPluginHealth (skip
+// recvHealth reads events off stream until it sees an EventSourceHealth (skip
 // any grid/tile events, though none are expected here) or the deadline hits.
-func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventPluginHealth {
+func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventSourceHealth {
 	t.Helper()
 	for {
 		ev, ok, err := stream.Recv()
@@ -57,7 +57,7 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventPluginHealth {
 		if !ok {
 			t.Fatal("stream ended before a health event arrived")
 		}
-		if h := ev.GetPluginHealth(); h != nil {
+		if h := ev.GetSourceHealth(); h != nil {
 			return h
 		}
 	}
@@ -65,8 +65,8 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventPluginHealth {
 
 // TestSubscribeFanInReportsHealthDownAndRecovery kills a namespace's event
 // stream once and asserts the client's Subscribe stream receives an
-// EventPluginHealth(healthy=false) transition followed by
-// EventPluginHealth(healthy=true) on the retry that succeeds — proving
+// EventSourceHealth(healthy=false) transition followed by
+// EventSourceHealth(healthy=true) on the retry that succeeds — proving
 // the fan-in's backoff loop tells the client about the outage
 // instead of the client silently going stale with tiles that stop updating.
 func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
@@ -90,8 +90,8 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	if down.Healthy {
 		t.Error("first health event must report healthy=false (the down transition)")
 	}
-	if down.PluginUuid != rpc.FilesOwner(healthNode) {
-		t.Errorf("health uuid = %q, want %s", down.PluginUuid, rpc.FilesOwner(healthNode))
+	if down.Uuid != rpc.FilesOwner(healthNode) {
+		t.Errorf("health uuid = %q, want %s", down.Uuid, rpc.FilesOwner(healthNode))
 	}
 	if down.Detail == "" {
 		t.Error("down transition must carry the underlying failure as Detail")
@@ -101,8 +101,8 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	if !up.Healthy {
 		t.Error("second health event must report healthy=true (recovery)")
 	}
-	if up.PluginUuid != rpc.FilesOwner(healthNode) {
-		t.Errorf("health uuid = %q, want %s", up.PluginUuid, rpc.FilesOwner(healthNode))
+	if up.Uuid != rpc.FilesOwner(healthNode) {
+		t.Errorf("health uuid = %q, want %s", up.Uuid, rpc.FilesOwner(healthNode))
 	}
 }
 

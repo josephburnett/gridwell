@@ -228,7 +228,7 @@ func TestConnectionSpawn(t *testing.T) {
 	//    the remote's home through the declared segment.
 	lp := rpc(t, localOrigin, "Handshake", map[string]any{})
 	var homeRoot string
-	for _, p := range lp["plugins"].([]any) {
+	for _, p := range lp["sources"].([]any) {
 		pm := p.(map[string]any)
 		if pm["label"] == "home" {
 			homeRoot, _ = pm["rootGridId"].(string)
@@ -247,7 +247,7 @@ func TestConnectionSpawn(t *testing.T) {
 		t.Fatal("the landing grid must carry its serving node's namespace (node_ns)")
 	}
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
-	mp := menu["plugins"].([]any)
+	mp := menu["sources"].([]any)
 	if len(mp) != 1 {
 		t.Fatalf("routed menu has %d plugins through the tunnel, want the remote's home alone", len(mp))
 	}
@@ -529,7 +529,7 @@ func TestConnectionsModeSpawn(t *testing.T) {
 	}
 	localOrigin2, _ := startServe(t, bin, localDir, "127.0.0.1:0")
 	lp := rpc(t, localOrigin2, "Handshake", map[string]any{})
-	for _, p := range lp["plugins"].([]any) {
+	for _, p := range lp["sources"].([]any) {
 		if uuid, _ := p.(map[string]any)["uuid"].(string); strings.HasSuffix(uuid, "/cmconn1") {
 			t.Fatal("a retired connection must not row in")
 		}
@@ -586,7 +586,7 @@ func awaitConnRoot(t *testing.T, origin, name string) string {
 	deadline := time.After(30 * time.Second)
 	for {
 		lp := rpc(t, origin, "Handshake", map[string]any{})
-		rows, _ := lp["plugins"].([]any)
+		rows, _ := lp["sources"].([]any)
 		for _, p := range rows {
 			pm := p.(map[string]any)
 			if c, _ := pm["connection"].(bool); !c {
@@ -645,18 +645,18 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	// The root is the files row's one grid, and its id chains through the
 	// hop like every other id.
 	var fsRoot string
-	for _, p := range menu["plugins"].([]any) {
+	for _, p := range menu["sources"].([]any) {
 		pm := p.(map[string]any)
 		if pm["label"] != "files" {
 			continue
 		}
-		entries, _ := pm["pluginGrids"].([]any)
+		entries, _ := pm["sourceGrids"].([]any)
 		if len(entries) == 1 {
 			fsRoot, _ = entries[0].(map[string]any)["gridId"].(string)
 		}
 	}
 	if fsRoot == "" {
-		t.Fatalf("the remote's root is not on the routed menu: %v", menu["plugins"])
+		t.Fatalf("the remote's root is not on the routed menu: %v", menu["sources"])
 	}
 
 	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": fsRoot})
@@ -720,7 +720,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	// file copies its bytes. The far grid's accepts_tiles is what tells this
 	// node the door is a directory's.
 	var homeRoot string
-	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["plugins"].([]any) {
+	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["sources"].([]any) {
 		if pm := p.(map[string]any); pm["label"] == "home" {
 			homeRoot, _ = pm["rootGridId"].(string)
 		}

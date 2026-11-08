@@ -18,7 +18,7 @@ import (
 
 // menuContext is one node's menu: its plugins and its shell policy.
 type menuContext struct {
-	plugins        []*gridwellv1.PluginInfo
+	plugins        []*gridwellv1.SourceInfo
 	shellsDisabled bool
 	// fetched marks a completed load; a.fetch.menus owns asking.
 	fetched bool
@@ -75,7 +75,7 @@ func (a *App) fetchMenuCtx(ctx context.Context, done func() bool, ns string) {
 		return
 	}
 	mc := a.views.menuCtxs[ns]
-	mc.plugins = lp.Plugins
+	mc.plugins = lp.Sources
 	mc.shellsDisabled = lp.ShellsDisabled
 	mc.fetched = true
 	a.draw()
