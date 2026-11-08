@@ -1,10 +1,11 @@
 # Retired words (scripts/check-vocabulary.sh): "<word> [<allowed hit regex>]".
 # A hit is "path:line:text"; the regex must match it from the start.
 #
-# "provider" — one word: plugin. Allowed: xterm's own "link provider" API.
+# "provider" — a source is home, the files or a connection. Allowed: xterm's
+# own "link provider" API.
 provider .*[Ll]ink [Pp]rovider|.*registerLinkProvider
 providers
-# "loadout" — the compiled-in plugin set of a leaf binary.
+# "loadout" — a leaf binary's compiled-in set, gone.
 loadout
 # "viewX"/"viewY" — a door's integer window origin, spelled ViewX/ViewY on
 # the wire and viewX/viewY in proto-JSON. Schema v11 keeps the framing as a
@@ -29,8 +30,8 @@ launcher internal/local/tmux/|internal/local/shellsvc/
 # "interest" — what the clients show and the sources watch is the subscription
 # (internal/subscription, client/subscription).
 interest
-# A way into the node is an API: the web, connection, MCP, shell, content,
-# trace and plugin APIs.
+# A way into the node is an API: the web, connection, MCP, shell, content
+# and trace APIs.
 mcpdoor
 webdoor
 shelldoor
@@ -95,10 +96,9 @@ isexitwell
 pane-tile
 panetile
 kindpane
-# "collection" and "context" (the plugin API's word) — a plugin's grid has no
-# word of its own: it is a grid (PluginGrid, InfoResponse.grids). Go's
-# context.Context keeps its word; the grids.context_key column keeps its name,
-# since a column is never renamed.
+# "collection" and "context" — a source's grid has no word of its own: it
+# is a grid (SourceGrid, InfoResponse.source_grids). Go's context.Context
+# keeps its word.
 collection
 collections
 menuentry
@@ -124,8 +124,8 @@ remember
 remembers
 remembered
 remembering
-# "upstream" — what a plugin or connection reads has no word: name the thing
-# (the directory, GitLab, the mailbox, the far node).
+# "upstream" — what a source reads has no word: name the thing (the
+# directory, the far node).
 upstream
 # A link broken at any hop is a dead link: gwerr.DeadLink, pb.DeadLink and
 # client/deadlink.
@@ -148,3 +148,34 @@ stampPresented
 setRoutes
 routeMove
 openOutside
+# "plugin" — the node has no plugins (2026-11-07): what a plugin was is now
+# the files, a source or a connection, and each has its word. Allowed: the
+# migration chain and its fixtures, which read the old rows; the stored
+# spellings (the plugin_uuid system key, the `plugins:` key the config
+# refuses, cache.db's dropped pluginlists); buf's own config and word; the
+# CLAUDE.md decision that names what it reversed; the historical flake
+# ledger; and, until P4b rewrites them, the e2e specs and their fixtures.
+plugin internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|internal/config/config(_test)?\.go:[0-9]+:.*"plugins|(CLAUDE|ARCHITECTURE)\.md:[0-9]+:.*(~/\.gridwell/plugins|`plugins:`|says plugin only)|Makefile:[0-9]+:.*buf plugins|buf\.gen\.yaml:|docs/flake-ledger\.md:|apps/desktop/e2e(-web)?/
+plugins internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|internal/config/config(_test)?\.go:[0-9]+:.*"plugins|(CLAUDE|ARCHITECTURE)\.md:[0-9]+:.*(~/\.gridwell/plugins|`plugins:`|says plugin only)|Makefile:[0-9]+:.*buf plugins|buf\.gen\.yaml:|docs/flake-ledger\.md:|apps/desktop/e2e(-web)?/
+pluginhost internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+pluginhealth internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+PluginInfo internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+PluginGrid internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+PluginGrids internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+plugin_grids internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+pluginGrids internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+EventPluginHealth internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+plugin_health internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+plugin_uuid CLAUDE\.md:[0-9]+:.*stored spelling|internal/local/store/(store|schema)\.go:|internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+PluginUUID internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+plugin\.v1 internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+state_dir internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+PLUGINS_DIR internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+gridwell-plugin docs/flake-ledger\.md:|internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+gridwell-plugins internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+link_target internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+host_content api/gridwell/v1/data\.proto:[0-9]+:.*reserved|internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+source_label api/gridwell/v1/data\.proto:[0-9]+:.*reserved|internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+HostContent internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+SourceLabel internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
+isPlugin internal/local/store/(migrations\.go|migrations_test\.go|migration_harness_test\.go):|apps/desktop/e2e(-web)?/
