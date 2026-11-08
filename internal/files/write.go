@@ -242,7 +242,8 @@ func (s *Source) SetFraming(_ context.Context, req *pb.SetFramingRequest) (*pb.S
 }
 
 // SetSelection keeps a directory's selection on its grid row, as home keeps
-// a grid's. An added file gets its row; one not in the directory is ignored.
+// a grid's. An added file gets its row; an id naming no file in the
+// directory, a row's among them, is ignored, added or removed.
 func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*pb.SetSelectionResponse, error) {
 	if why := rpc.SelectRefusal(req); why != "" {
 		return nil, status.Error(codes.InvalidArgument, "files: "+why)
@@ -260,12 +261,8 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 	}
 	var add, remove []int64
 	for _, id := range req.Add {
-		_, in, err := s.tilePath(id)
-		if errGone(err) || err == nil && in != dir {
+		if _, in, err := s.tilePath(id); err != nil || in != dir {
 			continue
-		}
-		if err != nil {
-			return nil, err
 		}
 		row, err := s.mint(id)
 		if errGone(err) {
@@ -278,11 +275,8 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 	}
 	for _, id := range req.Remove {
 		path, in, err := s.tilePath(id)
-		if errGone(err) {
-			continue
-		}
 		if err != nil {
-			return nil, err
+			continue
 		}
 		if row, ok, err := s.row(in, path); err != nil {
 			return nil, err

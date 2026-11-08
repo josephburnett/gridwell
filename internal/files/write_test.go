@@ -380,3 +380,17 @@ func TestALargeBodyReadsInChunks(t *testing.T) {
 		t.Errorf("%d chunks, %d bytes, want %d", n, len(got), len(body))
 	}
 }
+
+// A select ignores an id that names no file of the directory, a row's among
+// them, and still lands the rest.
+func TestASelectIgnoresWhatIsNotOnTheGrid(t *testing.T) {
+	f := newFixture(t)
+	a := f.write("a.txt", "a")
+	ctx := context.Background()
+	if _, err := f.s.SetSelection(ctx, &pb.SetSelectionRequest{GridId: idOf(f.root), Add: []string{"12", idOf(a)}, Remove: []string{"13"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.grid(f.root).Grid.Selection; !slices.Equal(got, []string{idOf(a)}) {
+		t.Errorf("selection = %v", got)
+	}
+}
