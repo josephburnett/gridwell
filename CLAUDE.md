@@ -508,7 +508,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   bumping the version, and the file on disk is not renamed by it. A text
   tile's name stays the file's, since its presentation reads it
   (2026-10-20). A page the node serves has no address of its own, so a
-  navigation in it writes nothing (2026-10-21).
+  navigation in it writes nothing (2026-10-21), and a capture of it keeps
+  the screenshot alone, in place of an image's own picture: its title is
+  the file's name and it has no history (2026-11-08).
 - A directory's door never copies (2026-10-20): copied into another
   namespace, home or a far node's, it lands as the link to its grid a
   left-drag makes, and the ghost shows the link before the drop. A file's

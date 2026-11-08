@@ -150,6 +150,7 @@ const (
 	dFilesPath     = "a renamed or moved file retires its old id and a link to it reads dead"
 	dFilesPage     = "The node serves a page file's page through its content API"
 	dPageAddress   = "A page the node serves has no address of its own"
+	dPageCapture   = "a capture of it keeps the screenshot alone, in place of an image's own picture: its title is the file's name and it has no history"
 	dFilesName     = "A file's name is its file name until a rename"
 	dFilesFind     = "a text query answers empty: no body is read for it."
 	dShellCopy     = "A shell copied across nodes lands as a link"
@@ -210,7 +211,7 @@ var parityTable = []parityCell{
 	{kURL, opDescend, onFar, same, "", checkDescend},
 	{kURL, opFreeze, onFiles, same, "", checkFreeze},
 	{kURL, opFreeze, onFar, same, "", checkFreeze},
-	{kURL, opScreenshot, onFiles, decided, dFilesName, nil},
+	{kURL, opScreenshot, onFiles, decided, dPageCapture, nil},
 	{kURL, opScreenshot, onFar, same, "", checkScreenshot},
 	{kURL, opZoom, onFiles, same, "", checkZoom},
 	{kURL, opZoom, onFar, same, "", checkZoom},
