@@ -57,10 +57,9 @@ type Source struct {
 	shown   []string
 	links   map[string][]string
 
-	// served is, per directory, each listing a client may hold of it since it
-	// was last announced (settle).
+	// served is, per directory, what a client may hold of it (settle).
 	servedMu sync.Mutex
-	served   map[string][]listingSum
+	served   map[string]*servedDir
 
 	// told is, per file, the content stamp it was last told under (fresh).
 	toldMu sync.Mutex

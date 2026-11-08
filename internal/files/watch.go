@@ -126,9 +126,8 @@ func (s *Source) linkedFrom(dir string) []string {
 	return out
 }
 
-// check lists each directory and announces those whose listing moved, and
-// every directory linking into one, each once. One that will not list has
-// moved, since what a client holds of it is unknown.
+// check lists each directory and announces those whose listing moved. One
+// that will not list has moved, since what a client holds of it is unknown.
 func (s *Source) check(dirs []string) {
 	var moved []string
 	for _, d := range dirs {
@@ -137,8 +136,14 @@ func (s *Source) check(dirs []string) {
 			moved = append(moved, d)
 		}
 	}
+	s.announce(moved)
+}
+
+// announce tells each directory and every directory linking into one, each
+// once.
+func (s *Source) announce(dirs []string) {
 	var grids []string
-	for _, d := range moved {
+	for _, d := range dirs {
 		grids = append(grids, d)
 		grids = append(grids, s.linkedFrom(d)...)
 	}

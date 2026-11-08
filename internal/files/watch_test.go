@@ -252,3 +252,21 @@ func TestADarkDirectoryLeftIsNoLongerDark(t *testing.T) {
 		t.Errorf("still dark: %+v", h)
 	}
 }
+
+// A read that saw the disk before a change whose check settled first is
+// announced: the client holds the older listing, and the change's tell came
+// before it.
+func TestAReadOvertakenByAChangeIsAnnounced(t *testing.T) {
+	f := newFixture(t)
+	f.grid(f.root)
+	ev := f.events()
+	read, err := f.s.synthesize(f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.write("late.txt", "x")
+	f.s.check([]string{f.root})
+	await(t, ev, "the change", gridChanged(f.root))
+	f.s.answer(read)
+	await(t, ev, "the overtaken read", gridChanged(f.root))
+}

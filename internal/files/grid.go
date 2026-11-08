@@ -88,7 +88,8 @@ func (s *Source) linkFacts(out *listed, e diskEntry) {
 // listing is one directory as GetGrid answers it; rows[i] is tiles[i].
 type listing struct {
 	dir     string
-	gid     int64 // the directory's grid row, 0 when nobody touched it
+	since   uint64 // the directory's servedDir.gen before the disk was read
+	gid     int64  // the directory's grid row, 0 when nobody touched it
 	dark    bool
 	entries []listed
 	rows    []store.ExtTile
@@ -106,7 +107,7 @@ func (s *Source) synthesize(dir string) (*listing, error) {
 	if err != nil {
 		return nil, err
 	}
-	l := &listing{dir: dir, gid: gid}
+	l := &listing{dir: dir, gid: gid, since: s.servedGen(dir)}
 	ents, err := readDir(dir)
 	switch {
 	case err == nil:
@@ -243,8 +244,16 @@ func (s *Source) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGrid
 	if err != nil {
 		return nil, err
 	}
-	s.settle(l, false)
-	return &pb.GetGridResponse{Grid: l.grid, Tiles: l.tiles}, nil
+	return s.answer(l), nil
+}
+
+// answer is l as GetGrid answers it, noted as a listing a client holds, and
+// announced when a change settled while it was read.
+func (s *Source) answer(l *listing) *pb.GetGridResponse {
+	if s.settle(l, false) {
+		s.announce([]string{l.dir})
+	}
+	return &pb.GetGridResponse{Grid: l.grid, Tiles: l.tiles}
 }
 
 // tilePath reads a tile id as its path and the directory listing it. A root
@@ -374,23 +383,54 @@ func sumOf(l *listing) listingSum {
 	return out
 }
 
+// servedDir is the listings a client may hold of one directory since it was
+// last announced, and the last listing noted, with gen counting notes so a
+// read can tell one landed while it was in flight.
+type servedDir struct {
+	sums []listingSum
+	last listingSum
+	gen  uint64
+}
+
+func (s *Source) servedGen(dir string) uint64 {
+	s.servedMu.Lock()
+	defer s.servedMu.Unlock()
+	if g := s.served[dir]; g != nil {
+		return g.gen
+	}
+	return 0
+}
+
 // settle notes listing l and reports whether its directory must be
-// announced: a check finds it moved when it differs from every listing a
-// client may hold. A directory nobody read is noted, not announced.
+// announced, in one critical section so no read lands between check and
+// note: a read moved if another listing was noted while it was in flight,
+// and a check also if it differs from every listing a client may hold. A
+// directory nobody read is noted, not announced.
 func (s *Source) settle(l *listing, check bool) (moved bool) {
 	sum := sumOf(l)
 	s.servedMu.Lock()
 	defer s.servedMu.Unlock()
 	if s.served == nil {
-		s.served = map[string][]listingSum{}
+		s.served = map[string]*servedDir{}
 	}
-	held := s.served[l.dir]
+	g := s.served[l.dir]
+	if g == nil {
+		g = &servedDir{}
+		s.served[l.dir] = g
+	}
+	if check && l.dark && len(g.sums) == 0 {
+		return false
+	}
+	raced := g.gen != l.since && g.last != sum
+	differs := check && len(g.sums) > 0 && !slices.Equal(g.sums, []listingSum{sum})
 	switch {
-	case check && len(held) > 0 && !slices.Equal(held, []listingSum{sum}):
-		s.served[l.dir], moved = []listingSum{sum}, true
-	case !slices.Contains(held, sum) && !(check && l.dark):
-		s.served[l.dir] = append(held, sum)
+	case raced || differs:
+		g.sums, moved = []listingSum{sum}, true
+	case !slices.Contains(g.sums, sum):
+		g.sums = append(g.sums, sum)
 	}
+	g.last = sum
+	g.gen++
 	return moved
 }
 
