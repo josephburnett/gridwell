@@ -98,7 +98,7 @@ func registerFiles(t *testing.T, reg *server.Sources, st *store.Store, id string
 	for _, r := range roots {
 		rs = append(rs, files.Root{Path: r})
 	}
-	src, err := files.New(st.Files(), rs, trash)
+	src, err := files.New(st.Files(), rs, byPath(trash))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,6 +107,11 @@ func registerFiles(t *testing.T, reg *server.Sources, st *store.Store, id string
 		ns = via(src)
 	}
 	reg.Files = ns
+}
+
+// byPath is a trash that takes the deleted name's path.
+func byPath(trash func(string) error) func(*os.File, string) error {
+	return func(dir *os.File, name string) error { return trash(filepath.Join(dir.Name(), name)) }
 }
 
 // grid reads id, fatal on a refusal.

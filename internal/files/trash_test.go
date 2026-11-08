@@ -7,6 +7,27 @@ import (
 	"testing"
 )
 
+// parentOf opens path's directory, as DeleteTile hands the trash one.
+func parentOf(t *testing.T, path string) (*os.File, string) {
+	t.Helper()
+	d, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	return d, filepath.Base(path)
+}
+
+func trashInto(t *testing.T, trashDir, src string) error {
+	d, name := parentOf(t, src)
+	return intoTrash(trashDir, d, name)
+}
+
+func finderInto(t *testing.T, trashDir, src string) error {
+	d, name := parentOf(t, src)
+	return intoFinder(trashDir, d, name)
+}
+
 // TestEncodePathPercentEncodesButKeepsSlashes pins the .trashinfo Path= encoding:
 // each segment is percent-escaped (spaces, '#', '%', unicode) per the spec, but
 // the '/' separators are preserved so a file manager can resolve the original.
@@ -29,7 +50,7 @@ func TestEncodePathPercentEncodesButKeepsSlashes(t *testing.T) {
 func TestTrashingAMissingPathErrors(t *testing.T) {
 	trashDir := t.TempDir()
 	src := filepath.Join(t.TempDir(), "ghost.txt")
-	if err := intoTrash(trashDir, src); err == nil {
+	if err := trashInto(t, trashDir, src); err == nil {
 		t.Fatal("trashing a nonexistent path should error")
 	}
 	if entries, _ := os.ReadDir(filepath.Join(trashDir, "info")); len(entries) != 0 {
@@ -98,7 +119,7 @@ func TestTrashFileMovesAndRecords(t *testing.T) {
 	}
 	dir := t.TempDir()
 
-	if err := intoTrash(dir, src); err != nil {
+	if err := trashInto(t, dir, src); err != nil {
 		t.Fatalf("trash: %v", err)
 	}
 	if _, err := os.Stat(src); !os.IsNotExist(err) {
@@ -137,7 +158,7 @@ func TestTrashDirMovesWholeTree(t *testing.T) {
 	}
 	trashDir := t.TempDir()
 
-	if err := intoTrash(trashDir, dir); err != nil {
+	if err := trashInto(t, trashDir, dir); err != nil {
 		t.Fatalf("trash dir: %v", err)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -159,7 +180,7 @@ func TestTrashNameCollisionDisambiguates(t *testing.T) {
 		if err := os.WriteFile(src, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := intoTrash(trashDir, src); err != nil {
+		if err := trashInto(t, trashDir, src); err != nil {
 			t.Fatalf("trash %q: %v", content, err)
 		}
 	}
@@ -197,7 +218,7 @@ func TestIntoFinderMovesUnderItsOwnName(t *testing.T) {
 		if err := os.WriteFile(p, []byte{byte('a' + i)}, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := intoFinder(trashDir, p); err != nil {
+		if err := finderInto(t, trashDir, p); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := os.Lstat(p); !os.IsNotExist(err) {

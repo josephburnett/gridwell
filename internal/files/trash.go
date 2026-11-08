@@ -19,22 +19,17 @@ import (
 	"time"
 )
 
-// osTrash moves path, a file, directory or symlink, into the user's trash.
-func osTrash(path string) error {
-	abs, err := filepath.Abs(path)
-	if err == nil {
-		_, err = os.Lstat(abs)
-	}
-	dir, finder, perr := trashPlace(runtime.GOOS)
+// osTrash moves name in dir, a file, directory or symlink, into the user's
+// trash.
+func osTrash(dir *os.File, name string) error {
+	place, finder, err := trashPlace(runtime.GOOS)
 	switch {
 	case err != nil:
 		return err
-	case perr != nil:
-		return perr
 	case finder:
-		return intoFinder(dir, abs)
+		return intoFinder(place, dir, name)
 	}
-	return intoTrash(dir, abs)
+	return intoTrash(place, dir, name)
 }
 
 // trashPlace is the trash directory for goos, and whether it is Finder's.
@@ -52,17 +47,18 @@ func trashPlace(goos string) (dir string, finder bool, err error) {
 // there.
 var finderMu sync.Mutex
 
-// intoFinder moves src, an absolute path, into Finder's trash under its own
-// name, a clash taking the next free "name N.ext" as Finder names one. The
-// trash keeps no record beside the file: Finder's own "Put Back" record is
-// private to Finder.
-func intoFinder(trashDir, src string) error {
-	if err := os.MkdirAll(trashDir, 0o700); err != nil {
+// intoFinder moves base in dir into Finder's trash under its own name, a
+// clash taking the next free "name N.ext" as Finder names one. The trash
+// keeps no record beside the file: Finder's own "Put Back" record is private
+// to Finder.
+func intoFinder(trashDir string, dir *os.File, base string) error {
+	to, err := openTrashDir(trashDir)
+	if err != nil {
 		return err
 	}
+	defer to.Close()
 	finderMu.Lock()
 	defer finderMu.Unlock()
-	base := filepath.Base(src)
 	ext := filepath.Ext(base)
 	for i := 1; ; i++ {
 		name := base
@@ -75,8 +71,16 @@ func intoFinder(trashDir, src string) error {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-		return moveOrCopy(src, dst)
+		return moveOrCopy(dir, base, to, name)
 	}
+}
+
+// openTrashDir is a trash directory, made if absent.
+func openTrashDir(dir string) (*os.File, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	return os.Open(dir)
 }
 
 // trashHome resolves the freedesktop home-trash directory. Honors
@@ -93,23 +97,24 @@ func trashHome() (string, error) {
 	return filepath.Join(base, "Trash"), nil
 }
 
-// intoTrash moves src, an absolute path, into the trash directory trashDir, writing the matching
-// .trashinfo record (original path + deletion time) per the spec. src may be a
-// file, directory, or symlink. The info record is reserved atomically (O_EXCL)
-// so two deletes of same-named files never collide.
-func intoTrash(trashDir, src string) error {
-	filesDir := filepath.Join(trashDir, "files")
+// intoTrash moves base in dir, a file, directory or symlink, into the trash
+// directory trashDir, writing the matching .trashinfo record (original path
+// and deletion time) per the spec. The info record is reserved atomically
+// (O_EXCL) so two deletes of same-named files never collide.
+func intoTrash(trashDir string, dir *os.File, base string) error {
 	infoDir := filepath.Join(trashDir, "info")
-	for _, d := range []string{filesDir, infoDir} {
-		if err := os.MkdirAll(d, 0o700); err != nil {
-			return err
-		}
+	if err := os.MkdirAll(infoDir, 0o700); err != nil {
+		return err
 	}
+	files, err := openTrashDir(filepath.Join(trashDir, "files"))
+	if err != nil {
+		return err
+	}
+	defer files.Close()
 
 	record := []byte(fmt.Sprintf("[Trash Info]\nPath=%s\nDeletionDate=%s\n",
-		encodePath(src), time.Now().Format("2006-01-02T15:04:05")))
+		encodePath(filepath.Join(dir.Name(), base)), time.Now().Format("2006-01-02T15:04:05")))
 
-	base := filepath.Base(src)
 	for i := 1; ; i++ {
 		name := base
 		if i > 1 {
@@ -128,7 +133,7 @@ func intoTrash(trashDir, src string) error {
 			err = cerr
 		}
 		if err == nil {
-			err = moveOrCopy(src, filepath.Join(filesDir, name))
+			err = moveOrCopy(dir, base, files, name)
 		}
 		if err != nil {
 			_ = os.Remove(infoPath) // do not leave an orphaned record
@@ -137,16 +142,18 @@ func intoTrash(trashDir, src string) error {
 	}
 }
 
-// moveOrCopy renames src to dst, falling back to a recursive copy-then-remove
-// when the two are on different filesystems, where os.Rename returns EXDEV.
-func moveOrCopy(src, dst string) error {
-	err := os.Rename(src, dst)
+// moveOrCopy renames name in dir to dstName in to, falling back to a
+// recursive copy-then-remove when the two are on different filesystems,
+// where a rename answers EXDEV.
+func moveOrCopy(dir *os.File, name string, to *os.File, dstName string) error {
+	err := renameAt(dir, name, to, dstName)
 	if err == nil {
 		return nil
 	}
 	if !errors.Is(err, syscall.EXDEV) {
 		return err
 	}
+	src, dst := filepath.Join(dir.Name(), name), filepath.Join(to.Name(), dstName)
 	if cerr := copyTree(src, dst); cerr != nil {
 		_ = os.RemoveAll(dst)
 		return cerr

@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -44,7 +45,7 @@ type Root struct {
 type Source struct {
 	roots []Root
 	mem   *store.FileRows
-	trash func(path string) error
+	trash func(dir *os.File, name string) error
 	hub   *eventhub.Hub[*pb.Event]
 	watch *watcher
 
@@ -90,11 +91,11 @@ func (s *Source) lockPath(real string) (unlock func()) {
 
 var _ namespace.Namespace = (*Source)(nil)
 
-// New is the files over roots, their rows in mem. trash moves a deleted path
-// out of the tree; nil is the OS trash. Close ends the watch. A relative root
+// New is the files over roots, their rows in mem. trash moves the name in a
+// directory opened through its root out of the tree; nil is the OS trash. Close ends the watch. A relative root
 // is refused, since a path id names an absolute path and would name none of
 // its files.
-func New(mem *store.FileRows, roots []Root, trash func(path string) error) (*Source, error) {
+func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string) error) (*Source, error) {
 	if trash == nil {
 		trash = osTrash
 	}
@@ -220,24 +221,86 @@ func (s *Source) spell(target string) (string, bool) {
 	return "", false
 }
 
-// content is where path's bytes live, every link followed, errOutside when
+// content is where path's bytes live, every link followed, as the real
+// directory of the root holding them and the path under it; errOutside when
 // that leaves every root.
-func (s *Source) content(path string) (string, error) {
+func (s *Source) content(path string) (root, rel string, err error) {
 	if err := s.inTree(path); err != nil {
-		return "", err
+		return "", "", err
 	}
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	for _, r := range s.roots {
 		rr, err := filepath.EvalSymlinks(r.Path)
 		if err == nil && underRoot(rr, real) {
-			return real, nil
+			rel, _ := filepath.Rel(rr, real)
+			return rr, rel, nil
 		}
 	}
-	return "", errOutside
+	return "", "", errOutside
 }
+
+// opened is a file's bytes opened through the root holding them (os.Root),
+// so a directory swapped for a symlink after content resolved them is
+// refused rather than followed out of the tree. Its name is where the bytes
+// live.
+type opened struct {
+	*os.File
+	root *os.Root
+	rel  string
+	fi   os.FileInfo
+}
+
+// open opens path's bytes, nonblocking so that a FIFO answers its mode rather
+// than waiting for a writer.
+func (s *Source) open(path string) (*opened, error) {
+	rr, rel, err := s.content(path)
+	if err != nil {
+		return nil, err
+	}
+	resolved()
+	o := &opened{rel: rel}
+	if o.root, err = os.OpenRoot(rr); err != nil {
+		return nil, err
+	}
+	if o.File, err = o.root.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
+		if o.fi, err = o.File.Stat(); err != nil {
+			o.File.Close()
+		}
+	}
+	if err != nil {
+		o.root.Close()
+		return nil, err
+	}
+	return o, nil
+}
+
+func (o *opened) close() {
+	o.File.Close()
+	o.root.Close()
+}
+
+// openDir opens dir through the root that lexically holds it, the way down
+// inTree walked, for a rename that must not follow a directory swapped since.
+func (s *Source) openDir(dir string) (*os.File, error) {
+	r, ok := s.rootOf(dir)
+	if !ok {
+		return nil, errOutside
+	}
+	resolved()
+	root, err := os.OpenRoot(r.Path)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	rel, _ := filepath.Rel(r.Path, dir)
+	return root.Open(rel)
+}
+
+// resolved runs between checking a path and opening it: a test's seam.
+var resolved = func() {}
 
 // Info is the files' row of the roster: one grid per root, each with its
 // framing.

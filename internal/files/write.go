@@ -95,7 +95,12 @@ func (s *Source) rename(path, to string) (string, error) {
 	refuse := func(c codes.Code, why string, a ...any) error {
 		return status.Errorf(c, "files: %s cannot move to %s: "+why, append([]any{path, to}, a...)...)
 	}
-	fi, err := os.Stat(to)
+	into, err := s.openDir(to)
+	var fi os.FileInfo
+	if err == nil {
+		defer into.Close()
+		fi, err = into.Stat()
+	}
 	switch {
 	case gone(err):
 		return "", refuse(codes.InvalidArgument, "that directory is gone")
@@ -109,13 +114,18 @@ func (s *Source) rename(path, to string) (string, error) {
 	if _, err := os.Lstat(path); err != nil {
 		return "", refuse(codes.InvalidArgument, "it is gone")
 	}
-	landed := filepath.Join(to, filepath.Base(path))
+	name := filepath.Base(path)
+	landed := filepath.Join(to, name)
 	_, err = os.Lstat(landed)
 	switch {
 	case err == nil:
-		return "", refuse(codes.InvalidArgument, "%q is already there", filepath.Base(path))
+		return "", refuse(codes.InvalidArgument, "%q is already there", name)
 	case gone(err):
-		err = os.Rename(path, landed)
+		var from *os.File
+		if from, err = s.openDir(filepath.Dir(path)); err == nil {
+			err = renameAt(from, name, into, name)
+			from.Close()
+		}
 	}
 	switch {
 	case errors.Is(err, iofs.ErrPermission), errors.Is(err, syscall.EROFS):
@@ -366,7 +376,12 @@ func (s *Source) DeleteTile(_ context.Context, req *pb.DeleteTileRequest) (*pb.D
 	case err != nil:
 		return nil, status.Errorf(codes.Unavailable, "files: delete %s: %v", path, pathErr(err))
 	default:
-		if err := s.trash(path); err != nil {
+		d, err := s.openDir(dir)
+		if err == nil {
+			err = s.trash(d, filepath.Base(path))
+			d.Close()
+		}
+		if err != nil {
 			return nil, status.Errorf(codes.Internal, "files: trash %s: %v", path, err)
 		}
 	}

@@ -15,6 +15,36 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
+// bodyOf is body of the file at path.
+func bodyOf(t *testing.T, path string) ([]byte, string) {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body(f, fi)
+}
+
+// previewOf is previewJPEG of the file at path, nil for none there.
+func previewOf(t *testing.T, path string) []byte {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return previewJPEG(f, fi)
+}
+
 // A text file past the cap shows its first bytes in its presentation: a long
 // log reads as its beginning, not as a summary of itself.
 func TestABodyPastTheCapIsTheFilesBeginning(t *testing.T) {
@@ -25,7 +55,7 @@ func TestABodyPastTheCapIsTheFilesBeginning(t *testing.T) {
 		if err := os.WriteFile(p, content, 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if data, _ := body(p); !bytes.Equal(data, content[:bodyCap]) {
+		if data, _ := bodyOf(t, p); !bytes.Equal(data, content[:bodyCap]) {
 			t.Errorf("body(%s) = %d bytes, want its first %d", name, len(data), bodyCap)
 		}
 	}
@@ -48,7 +78,7 @@ func TestABodyIsWhatItsPresentationSays(t *testing.T) {
 		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if data, mt := body(path); data == nil || mt != media[p] {
+		if data, mt := bodyOf(t, path); data == nil || mt != media[p] {
 			t.Errorf("body(%q) = %q in %q, want %q", name, data, mt, media[p])
 		}
 	}
@@ -83,7 +113,7 @@ func TestAnImagesPictureIsBounded(t *testing.T) {
 	if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := previewJPEG(p)
+	got := previewOf(t, p)
 	img, _, err := image.Decode(bytes.NewReader(got))
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +121,7 @@ func TestAnImagesPictureIsBounded(t *testing.T) {
 	if b := img.Bounds(); b.Dx() != previewEdge || b.Dy() != 16 {
 		t.Errorf("picture %v", b)
 	}
-	if previewJPEG(filepath.Join(filepath.Dir(p), "notes.md")) != nil {
+	if previewOf(t, filepath.Join(filepath.Dir(p), "notes.md")) != nil {
 		t.Error("a text file has a picture")
 	}
 }
@@ -114,7 +144,7 @@ func TestAnImagePastThePixelBudgetIsNotDecoded(t *testing.T) {
 	}
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	got := previewJPEG(p)
+	got := previewOf(t, p)
 	runtime.ReadMemStats(&after)
 	if got != nil {
 		t.Error("an image past the budget has a picture")

@@ -54,7 +54,9 @@ func newFilesServer(t *testing.T) *filesServer {
 	f.node, f.home = registerPrimaryLocaldb(t, reg, st)
 	// The files' rows are a namespace of THIS store: the whole question is
 	// what lands in the node's one file.
-	src, err := files.New(st.Files(), []files.Root{{Path: f.root}}, os.RemoveAll)
+	src, err := files.New(st.Files(), []files.Root{{Path: f.root}}, func(d *os.File, name string) error {
+		return os.RemoveAll(filepath.Join(d.Name(), name))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

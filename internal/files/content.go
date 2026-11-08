@@ -8,8 +8,10 @@ import (
 	"errors"
 	"io"
 	iofs "io/fs"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 
 	"google.golang.org/grpc/codes"
@@ -47,20 +49,19 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 		return send(&pb.ContentChunk{Data: []byte(t.UrlString), MediaType: rpc.AddressMediaType, Version: t.Version})
 	}
 	path, _ := pathOf(req.TileId)
-	real, err := s.content(path)
-	var fi os.FileInfo
-	if err == nil {
-		fi, err = os.Stat(real)
-	}
-	if err != nil && !gone(err) {
+	o, err := s.open(path)
+	switch {
+	case gone(err):
+		return send(&pb.ContentChunk{})
+	case err != nil:
 		return diskRefusal("read", path, err)
 	}
-	if err != nil || !fi.Mode().IsRegular() {
+	defer o.close()
+	if !o.fi.Mode().IsRegular() {
 		return send(&pb.ContentChunk{})
 	}
-	stamp := contentStamp(fi.ModTime(), fi.Size())
-	data, media := body(real)
-	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: stamp}, send)
+	data, media := body(o.File, o.fi)
+	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: contentStamp(o.fi.ModTime(), o.fi.Size())}, send)
 }
 
 // WriteContent replaces a text file's bytes whole, by a temp file in its
@@ -109,11 +110,12 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 // (lockPath), and the stamp is read again just before it, so neither another
 // save nor another process's write is overwritten unseen.
 func (s *Source) write(path, claimed string, data []byte) (string, error) {
-	real, err := s.content(path)
+	o, err := s.open(path)
 	var fi os.FileInfo
 	if err == nil {
-		defer s.lockPath(real)()
-		fi, err = os.Stat(real)
+		defer o.close()
+		defer s.lockPath(o.Name())()
+		fi, err = o.root.Stat(o.rel)
 	}
 	switch {
 	case gone(err):
@@ -123,7 +125,7 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 	case !fi.Mode().IsRegular():
 		return "", status.Errorf(codes.InvalidArgument, "files: %s is not a regular file", path)
 	}
-	if err := unwritable(filepath.Base(real), fi.Size()); err != nil {
+	if err := unwritable(filepath.Base(o.Name()), fi.Size()); err != nil {
 		return "", status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
 	}
 	stale := func(fi os.FileInfo) error {
@@ -136,23 +138,25 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 		return "", err
 	}
 	// The rename would replace a file its mode refuses writes to.
-	if err := denied(real); err != nil {
+	if err := denied(o.Name()); err != nil {
 		return "", diskRefusal("written", path, err)
 	}
-	return replace(real, fi.Mode().Perm(), data, path, stale)
+	return replace(o, fi.Mode().Perm(), data, path, stale)
 }
 
-// replace writes data beside real and renames it over real, unless stale
-// refuses what real is just before.
-func replace(real string, perm os.FileMode, data []byte, path string, stale func(os.FileInfo) error) (string, error) {
-	tmp, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".gridwell-*")
+// replace writes data beside o's file, through its root, and renames it over
+// the file, unless stale refuses what the file is just before.
+func replace(o *opened, perm os.FileMode, data []byte, path string, stale func(os.FileInfo) error) (string, error) {
+	dir, base := filepath.Split(o.rel)
+	name := filepath.Join(dir, "."+base+".gridwell-"+strconv.FormatUint(rand.Uint64(), 36))
+	tmp, err := o.root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", diskRefusal("written", path, err)
 	}
 	keep := false
 	defer func() {
 		if !keep {
-			_ = os.Remove(tmp.Name())
+			_ = o.root.Remove(name)
 		}
 	}()
 	_, err = tmp.Write(data)
@@ -163,20 +167,20 @@ func replace(real string, perm os.FileMode, data []byte, path string, stale func
 		err = cerr
 	}
 	if err == nil {
-		err = os.Chmod(tmp.Name(), perm)
+		err = o.root.Chmod(name, perm)
 	}
 	var fi, now os.FileInfo
 	if err == nil {
-		fi, err = os.Stat(tmp.Name())
+		fi, err = o.root.Stat(name)
 	}
 	if err == nil {
-		now, err = os.Stat(real)
+		now, err = o.root.Stat(o.rel)
 	}
 	if err == nil {
 		if err := stale(now); err != nil {
 			return "", err
 		}
-		err = os.Rename(tmp.Name(), real)
+		err = o.root.Rename(name, o.rel)
 	}
 	if err != nil {
 		return "", diskRefusal("written", path, err)
@@ -209,24 +213,17 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	if err != nil {
 		return err
 	}
-	real, err := s.content(path)
-	var f *os.File
-	if err == nil {
-		var fi os.FileInfo
-		if fi, err = os.Stat(real); err == nil && (!fi.Mode().IsRegular() || !isPage(real)) {
-			return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
-		}
-	}
-	if err == nil {
-		f, err = os.Open(real)
-	}
+	f, err := s.open(path)
 	switch {
 	case gone(err):
 		return gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
 		return diskRefusal("read", path, err)
 	}
-	defer f.Close()
+	defer f.close()
+	if !f.fi.Mode().IsRegular() || !isPage(f.Name()) {
+		return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
+	}
 	buf := make([]byte, rpc.ContentChunkBytes)
 	for first := true; ; first = false {
 		n, err := io.ReadFull(f, buf)
@@ -235,7 +232,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 		}
 		if c := (&pb.ServeContentChunk{Data: buf[:n]}); n > 0 || first {
 			if first {
-				c.MediaType = mediaType(real)
+				c.MediaType = mediaType(f.Name())
 			}
 			if err := send(c); err != nil {
 				return err
@@ -267,12 +264,13 @@ func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest
 			return &pb.GetTilePreviewResponse{Jpeg: jpeg}, nil
 		}
 	}
-	real, err := s.content(path)
+	f, err := s.open(path)
 	switch {
 	case gone(err):
 		return nil, gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
 		return nil, diskRefusal("read", path, err)
 	}
-	return &pb.GetTilePreviewResponse{Jpeg: previewJPEG(real)}, nil
+	defer f.close()
+	return &pb.GetTilePreviewResponse{Jpeg: previewJPEG(f.File, f.fi)}, nil
 }

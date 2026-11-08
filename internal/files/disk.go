@@ -237,34 +237,21 @@ func contentStamp(mtime time.Time, size int64) string {
 // it shows its beginning, and is read-only.
 const bodyCap = 4 << 20
 
-// body is a text file's body in the media type its presentation names: its
-// bytes, up to the cap, when it is renderable or plain, and a summary of the
-// file otherwise. A missing file answers nil.
-func body(path string) (data []byte, media string) {
-	e, err := statEntry(path)
-	if err != nil {
-		return nil, ""
-	}
-	name := filepath.Base(path)
+// body is the text file f's body in the media type its presentation names:
+// its bytes, up to the cap, when it is renderable or plain, and a summary of
+// the file otherwise.
+func body(f *os.File, fi os.FileInfo) (data []byte, media string) {
+	name := filepath.Base(f.Name())
 	media = "text/markdown"
 	if presentation(name) == rpc.TextPresentationPlain {
 		media = "text/plain"
 	}
 	if renderable(name) || isPlainText(name) {
-		if b, err := readHead(path, bodyCap); err == nil {
+		if b, err := io.ReadAll(io.LimitReader(f, bodyCap)); err == nil {
 			return b, media
 		}
 	}
-	return []byte(summary(e)), media
-}
-
-func readHead(path string, limit int64) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(io.LimitReader(f, limit))
+	return []byte(summary(entryFromInfo(filepath.Dir(f.Name()), fi))), media
 }
 
 // summary is the body of a file whose bytes are not shown: markdown that
@@ -338,16 +325,13 @@ const (
 	previewPixelCap = 40_000_000
 )
 
-// previewJPEG is an image file's picture, nil for any file that is not an
+// previewJPEG is the image file f's picture, nil for any file that is not an
 // image, is too large, or does not decode.
-func previewJPEG(path string) []byte {
-	if !strings.HasPrefix(mediaType(path), "image/") {
+func previewJPEG(f *os.File, fi os.FileInfo) []byte {
+	if !strings.HasPrefix(mediaType(f.Name()), "image/") || !fi.Mode().IsRegular() || fi.Size() > previewFileCap {
 		return nil
 	}
-	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() || fi.Size() > previewFileCap {
-		return nil
-	}
-	data, err := os.ReadFile(path)
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil
 	}
