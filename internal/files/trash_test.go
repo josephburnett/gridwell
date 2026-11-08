@@ -77,38 +77,6 @@ func TestTrashHomeHonorsXDG(t *testing.T) {
 	}
 }
 
-// TestCopyTreePreservesFilesDirsAndSymlinks exercises the cross-device fallback
-// (copyTree) directly: a tree with a nested file, a subdir, and a symlink copies
-// byte-for-byte with the symlink kept as a symlink (not dereferenced).
-func TestCopyTreePreservesFilesDirsAndSymlinks(t *testing.T) {
-	src := filepath.Join(t.TempDir(), "tree")
-	if err := os.MkdirAll(filepath.Join(src, "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(src, "sub", "a.txt"), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("sub/a.txt", filepath.Join(src, "link")); err != nil {
-		t.Fatal(err)
-	}
-
-	dst := filepath.Join(t.TempDir(), "copy")
-	if err := copyTree(src, dst); err != nil {
-		t.Fatalf("copyTree: %v", err)
-	}
-
-	if data, err := os.ReadFile(filepath.Join(dst, "sub", "a.txt")); err != nil || string(data) != "hello" {
-		t.Errorf("nested file = %q, %v; want hello", data, err)
-	}
-	fi, err := os.Lstat(filepath.Join(dst, "link"))
-	if err != nil || fi.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("symlink not preserved as a symlink: mode=%v err=%v", fi.Mode(), err)
-	}
-	if target, err := os.Readlink(filepath.Join(dst, "link")); err != nil || target != "sub/a.txt" {
-		t.Errorf("symlink target = %q, %v; want sub/a.txt", target, err)
-	}
-}
-
 // TestTrashFileMovesAndRecords: trashing a file moves it under the trash
 // files/ dir and writes a .trashinfo record pointing back at the original
 // absolute path — i.e. it is recoverable, not gone.

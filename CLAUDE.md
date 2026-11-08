@@ -486,7 +486,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   write is read-only with the reason. An image file's preview carries a
   stamp, so a changed file redraws; an image whose header declares more
   than 40 million pixels gets no preview, and its tile shows its name. Delete moves the file
-  to the OS trash. Move renames within the files, and the file's row (placement,
+  to the OS trash, by a rename: a file on another filesystem than the home
+  trash goes to that filesystem's own, `.Trash-<uid>` at its top
+  (`.Trashes/<uid>` on macOS), made if absent, and a delete with no trash
+  to rename into is refused with the reason; nothing is copied (2026-11-08).
+  Move renames within the files, and the file's row (placement,
   name, framing) follows it under its new path's id while the old id
   retires; a move to another source is refused. Find on the files
   locates by `id:` and applies the node's row filters, and a text query

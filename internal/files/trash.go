@@ -3,32 +3,48 @@ package files
 // The OS trash, so a file deleted through Gridwell is recoverable: Finder's
 // ~/.Trash on macOS, and elsewhere the freedesktop.org home trash
 // ($XDG_DATA_HOME/Trash, default ~/.local/share/Trash), written directly so a
-// file manager can list and restore what was discarded.
+// file manager can list and restore what was discarded. A path on another
+// filesystem goes to that filesystem's own trash, at its top: .Trashes/<uid>
+// on macOS, .Trash-<uid> elsewhere. Every move is a rename; nothing is
+// copied.
 
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
 
 // osTrash moves name in dir, a file, directory or symlink, into the user's
-// trash.
+// trash, or its filesystem's when that is another than the home trash's.
 func osTrash(dir *os.File, name string) error {
 	place, finder, err := trashPlace(runtime.GOOS)
-	switch {
-	case err != nil:
+	if err != nil {
 		return err
-	case finder:
-		return intoFinder(place, dir, name)
 	}
-	return intoTrash(place, dir, name)
+	into := intoTrash
+	if finder {
+		into = intoFinder
+	}
+	if err = into(place, dir, name); !errors.Is(err, syscall.EXDEV) {
+		return err
+	}
+	top, err := mountTop(dir.Name())
+	if err != nil {
+		return fmt.Errorf("%s is on another filesystem than the trash, whose own trash cannot be found: %w", dir.Name(), err)
+	}
+	uid := strconv.Itoa(os.Getuid())
+	place = filepath.Join(top, ".Trash-"+uid)
+	if finder {
+		place = filepath.Join(top, ".Trashes", uid)
+	}
+	return into(place, dir, name)
 }
 
 // trashPlace is the trash directory for goos, and whether it is Finder's.
@@ -57,7 +73,7 @@ func intoFinder(trashDir string, dir *os.File, base string) error {
 		if i > 1 {
 			name = fmt.Sprintf("%s %d%s", strings.TrimSuffix(base, ext), i, ext)
 		}
-		if err := moveOrCopy(dir, base, to, name); !errors.Is(err, os.ErrExist) {
+		if err := renameAt(dir, base, to, name); !errors.Is(err, os.ErrExist) {
 			return err
 		}
 	}
@@ -121,7 +137,7 @@ func intoTrash(trashDir string, dir *os.File, base string) error {
 			err = cerr
 		}
 		if err == nil {
-			err = moveOrCopy(dir, base, files, name)
+			err = renameAt(dir, base, files, name)
 		}
 		if err != nil {
 			_ = os.Remove(infoPath) // do not leave an orphaned record
@@ -129,71 +145,6 @@ func intoTrash(trashDir string, dir *os.File, base string) error {
 		if !errors.Is(err, os.ErrExist) {
 			return err
 		}
-	}
-}
-
-// moveOrCopy renames name in dir to dstName in to, falling back to a
-// recursive copy-then-remove when the two are on different filesystems,
-// where a rename answers EXDEV.
-func moveOrCopy(dir *os.File, name string, to *os.File, dstName string) error {
-	err := renameAt(dir, name, to, dstName)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, syscall.EXDEV) {
-		return err
-	}
-	src, dst := filepath.Join(dir.Name(), name), filepath.Join(to.Name(), dstName)
-	if cerr := copyTree(src, dst); cerr != nil {
-		_ = os.RemoveAll(dst)
-		return cerr
-	}
-	return os.RemoveAll(src)
-}
-
-// copyTree recursively copies src to dst (files, dirs, symlinks), preserving
-// permission bits. Used only for the cross-device trash fallback.
-func copyTree(src, dst string) error {
-	info, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	switch {
-	case info.Mode()&os.ModeSymlink != 0:
-		target, err := os.Readlink(src)
-		if err != nil {
-			return err
-		}
-		return os.Symlink(target, dst)
-	case info.IsDir():
-		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
-			return err
-		}
-		entries, err := os.ReadDir(src)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if err := copyTree(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
-				return err
-			}
-		}
-		return nil
-	default:
-		in, err := os.Open(src)
-		if err != nil {
-			return err
-		}
-		defer in.Close()
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(out, in); err != nil {
-			_ = out.Close()
-			return err
-		}
-		return out.Close()
 	}
 }
 

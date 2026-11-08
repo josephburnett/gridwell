@@ -144,7 +144,7 @@ const (
 // The differences CLAUDE.md decides, quoted.
 const (
 	dFilesCreates  = "A directory's grid takes no new tiles"
-	dFilesDelete   = "Delete moves the file to the OS trash."
+	dFilesDelete   = "Delete moves the file to the OS trash, by a rename"
 	dFilesDoorCopy = "A directory's door never copies"
 	dFilesPageCopy = "a page file, whose page is the node's, copies as a link"
 	dFilesPath     = "a renamed or moved file retires its old id and a link to it reads dead"
