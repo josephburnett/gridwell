@@ -375,9 +375,22 @@ func CopiesAsLink(t *pb.Tile, acceptsTiles bool) bool {
 	return file && !Markdown(p)
 }
 
-// Markdown is a file name a copy carries the bytes of out of the files: one
-// ending in .md, in any case.
+// Markdown is a file name a copy carries the bytes of, into the files or out
+// of them: one ending in .md, in any case.
 func Markdown(name string) bool { return strings.HasSuffix(strings.ToLower(name), ".md") }
+
+// IntoDirectory is why a directory refuses t, copied or created there, and ""
+// when it takes it: a text tile, which it makes a new markdown file of its
+// body. The drop verdict and the node both read it.
+func IntoDirectory(t *pb.Tile) string {
+	switch {
+	case t.GetLink() || t.GetLinkTargetId() != "" || CopiesAsLink(t, true):
+		return "a directory takes no link, and a file that is not markdown copies as one"
+	case t.GetKind() != KindText:
+		return "a directory takes a text tile alone, made a markdown file, and refuses a " + t.GetKind()
+	}
+	return ""
+}
 
 // ShellTmux names the tmux a shell tile attaches: the tmux its
 // row names, which a copy shares with its source, or else its content tile's.

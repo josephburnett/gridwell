@@ -514,6 +514,17 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, TargetRefusesTiles: true}, DropRejected},
 		{"cross-source drop over delete still deletes",
 			DropInput{Started: true, TileID: "7", OverDelete: true, CrossSource: true}, DropDelete},
+		// A directory takes nothing but a text tile's copy (CLAUDE.md, 2026-11-08).
+		{"right drag of a text into a directory -> copy",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, TargetRefusesTiles: true, IntoDirectory: true}, DropCopy},
+		{"right drag of a markdown file into another directory -> copy",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, TargetRefusesTiles: true, IntoDirectory: true}, DropCopy},
+		{"left drag of a text into a directory -> rejected (no move across, no link there)",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, TargetRefusesTiles: true, IntoDirectory: true}, DropRejected},
+		{"ctrl right drag of a text into a directory -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentLink, TargetRefusesTiles: true, IntoDirectory: true}, DropRejected},
+		{"right drag of anything else into a directory -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, TargetRefusesTiles: true}, DropRejected},
 	}
 	for _, c := range cases {
 		if got := DecideDrop(c.in); got != c.want {
@@ -552,6 +563,34 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	for _, c := range cases {
 		if got := CarryCopiesAsLink(c.rows, c.accepts, c.known); got != c.want {
 			t.Errorf("%s: CarryCopiesAsLink = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestCarryIntoDirectory(t *testing.T) {
+	dir := rpc.QualifyID("n", rpc.KeyTileID("/r"))
+	text := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/4"}
+	url := &gridwellv1.Tile{Kind: rpc.KindURL, Id: "n/5"}
+	link := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/6", LinkTargetId: "n/4"}
+	md := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/s/a.md"))}
+	txt := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/s/a.txt"))}
+	cases := []struct {
+		name string
+		rows []*gridwellv1.Tile
+		grid string
+		want bool
+	}{
+		{"a text into a directory", []*gridwellv1.Tile{text}, dir, true},
+		{"a markdown file into a directory", []*gridwellv1.Tile{md}, dir, true},
+		{"a text and a url: each row its own verdict", []*gridwellv1.Tile{url, text}, dir, true},
+		{"a url", []*gridwellv1.Tile{url}, dir, false},
+		{"a link", []*gridwellv1.Tile{link}, dir, false},
+		{"a file that is not markdown", []*gridwellv1.Tile{txt}, dir, false},
+		{"a text into home", []*gridwellv1.Tile{text}, "n/1", false},
+	}
+	for _, c := range cases {
+		if got := CarryIntoDirectory(c.rows, c.grid); got != c.want {
+			t.Errorf("%s: CarryIntoDirectory = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

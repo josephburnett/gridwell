@@ -342,12 +342,10 @@ func (s *Source) Handshake(context.Context, *pb.HandshakeRequest) (*pb.Handshake
 	return nil, status.Error(codes.Unimplemented, "files: the node's handshake lists the files; they have none of their own")
 }
 
-func (s *Source) CreateTile(context.Context, *pb.CreateTileRequest) (*pb.TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "files: a directory takes no new tiles; a file is made on disk")
-}
-
+// CopyTile is never asked: the router copies into a directory by creating
+// the copy there (CreateTile), from whatever source.
 func (s *Source) CopyTile(context.Context, *pb.CopyTileRequest) (*pb.TileResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "files: a directory takes no new tiles, so a copy into one is refused")
+	return nil, status.Error(codes.Unimplemented, "files: a copy into a directory is the create of its copy")
 }
 
 func (s *Source) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {

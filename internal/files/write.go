@@ -4,13 +4,17 @@ package files
 // move renames the file, a delete trashes it.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	iofs "io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"unicode"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,6 +22,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
@@ -85,6 +90,103 @@ func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.
 	}
 	s.emitGridChanged(dir)
 	return s.changedTile(landed, changed, nil, true)
+}
+
+// CreateTile makes a text tile a new markdown file in the directory holding
+// its body, named for the tile or else the body's first line (fileName), its
+// row minted at the placement asked; a directory takes nothing else
+// (rpc.IntoDirectory). A name already there is refused and nothing written.
+func (s *Source) CreateTile(_ context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
+	t := req.GetTile()
+	if why := rpc.IntoDirectory(t); why != "" {
+		return nil, status.Error(codes.InvalidArgument, "files: "+why)
+	}
+	dir, err := s.dirOf(req.GridId)
+	if err != nil {
+		return nil, err
+	}
+	name := fileName(cmp.Or(t.AltText, doctype.AltFromSource(string(req.Content))))
+	path := filepath.Join(dir, name)
+	if len(req.Content) > bodyCap {
+		return nil, status.Errorf(codes.InvalidArgument, "files: %s: a body is at most %d MiB", path, bodyCap>>20)
+	}
+	if err := s.create(dir, name, req.Content); err != nil {
+		return nil, err
+	}
+	l, err := s.synthesize(dir)
+	if err != nil {
+		return nil, err
+	}
+	e, ok := l.entry(path)
+	if !ok {
+		return nil, l.absent(dir, path)
+	}
+	gid, err := s.mem.GridOf(dir)
+	if err == nil {
+		_, err = s.mem.Mint(gid, e.Entry, 0, t.X, t.Y, t.W, t.H)
+	}
+	return s.changedTile(path, true, err, true)
+}
+
+// create writes data as the new file name in dir, made exclusively, so a
+// name taken meanwhile is refused and never overwritten; a write that fails
+// takes its file away again.
+func (s *Source) create(dir, name string, data []byte) error {
+	rr, rel, err := s.content(dir)
+	var root *os.Root
+	if err == nil {
+		resolved()
+		root, err = os.OpenRoot(rr)
+	}
+	var f *os.File
+	if err == nil {
+		defer root.Close()
+		f, err = root.OpenFile(filepath.Join(rel, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	}
+	if errors.Is(err, iofs.ErrExist) {
+		return status.Errorf(codes.InvalidArgument, "files: %q is already in %s, and a copy replaces nothing", name, dir)
+	}
+	if err == nil {
+		if _, err = f.Write(data); err == nil {
+			err = f.Sync()
+		}
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			_ = root.Remove(filepath.Join(rel, name))
+		}
+	}
+	if err != nil {
+		return diskRefusal("written", filepath.Join(dir, name), err)
+	}
+	return nil
+}
+
+// fileName is the file a text tile made in a directory is named, from the
+// tile's name: no separator or control character (NUL among them), no
+// leading dot, trimmed, at most 120 bytes cut on a rune (below every
+// filesystem's 255), "untitled" when nothing is left, and ending in .md.
+func fileName(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, name)
+	name = strings.TrimLeft(strings.TrimSpace(name), ". ")
+	for len(name) > 120 {
+		_, n := utf8.DecodeLastRuneInString(name)
+		name = name[:len(name)-n]
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "untitled"
+	}
+	if !rpc.Markdown(name) {
+		name += ".md"
+	}
+	return name
 }
 
 // rename moves path into the directory to under its name and answers where

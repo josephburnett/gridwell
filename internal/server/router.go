@@ -330,7 +330,8 @@ func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Ti
 	if err := rt.refuseDisabled(m.DestGridId); err != nil {
 		return nil, err
 	}
-	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
+	// A copy into a directory is a new file of the bytes read, from any source.
+	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" || rpc.IsFilesID(m.DestGridId) {
 		return rt.copyAcrossSources(ctx, m, c, local, uuid, transit)
 	}
 	resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))

@@ -34,6 +34,8 @@ import (
 //   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
 //   - a directory's door or a file that is not markdown copies as a link to it
 //     (rpc.CopiesAsLink);
+//   - into a directory only a text tile copies, made a markdown file there
+//     (rpc.IntoDirectory);
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is a link's semantics in bytes;
@@ -91,6 +93,9 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	// The qualification every wire response gets decides whether this tile is
 	// a link, so the copy and a fresh read cannot disagree.
 	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
+	if why := rpc.IntoDirectory(q); why != "" && rpc.IsFilesID(dst.holder) {
+		return nil, status.Error(gcodes.InvalidArgument, why)
+	}
 
 	switch {
 	case rpc.IsDoorKind(q.Kind) && q.Link || rt.copiesAsLink(ctx, q):

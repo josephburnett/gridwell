@@ -160,7 +160,10 @@ they share an owner (`rpc.SharedOwner`), a connection included, the router
 forwards the whole copy and the node behind decides again; where they part,
 it deep-copies (`deepcopy.go`), reading through one chain and writing through
 the other. So bytes travel no further than the two ends are apart. Two
-connections are two owners even though one transport serves both.
+connections are two owners even though one transport serves both. A copy
+into a directory always deep-copies, since its arrival is a new file of the
+bytes read: a text tile alone, made a markdown file (`rpc.IntoDirectory`),
+while a file that is not markdown copies out as a link (`rpc.CopiesAsLink`).
 
 Two sockets. The web API (`web.bind`) serves Connect, the content API,
 the shell API and the MCP API (`/mcp`) behind a password cookie, or the

@@ -121,7 +121,7 @@ what each one is called.
 | door | A tile that leads to a grid, its own or, as a link, another's; descending through it pushes a frame. A drop into another namespace links, never moves. `client/door`. | A content tile; an API. |
 | content tile | A text, a url or a shell; a pane descends into one and it goes live. | A door; a workspace tile. |
 | link | A tile whose content is a path to another tile, drawn dashed, resolved one hop at a time; broken at any hop it reads dead. Deleting one unlinks. A link to a grid is a door. | A copy. |
-| copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target. Right-drag copies. | A link. |
+| copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target; of a text into a directory, a new markdown file. Right-drag copies. | A link; a move, which never crosses a source. |
 | text | A tile holding a body; its name is the body's first line. | |
 | url | A tile holding an address; it goes live on descent. | |
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
@@ -474,7 +474,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   is refused at parse with a message naming `files:`.
 - The files are one package, `internal/files`, reading disk and the
   store's file rows directly (2026-11-07). A directory's grid takes no new
-  tiles: a file is made on disk. A directory is a door; an image,
+  tile but a text, which is made a markdown file on disk (2026-11-08). A directory is a door; an image,
   video, audio or PDF file, a page file, is a url tile whose page the node
   serves, since none of them runs a script; every other file, HTML, CSS,
   JavaScript, JSON and SVG (which can carry a script) included, is a text
@@ -522,6 +522,23 @@ These were decided deliberately. Do not reverse one without a new decision.
   copies as a link when the grid it opens takes no new tiles
   (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
   so a disabled connection's door links too, as a dark one does.
+- Markdown crosses the files boundary by copy, and only markdown
+  (2026-11-08): the user keeps text, previews and arrangement in
+  `gridwell.db` and every other file's bytes on disk. A text tile copied
+  into a directory, by a right-drag or `copy`, or created there, as
+  `write_text` does, is a new markdown file holding its body, its row
+  minted at the drop's cell and its stamp and preview read from disk. Its
+  file name is the tile's name, typed or else its body's first line, with
+  no separator, NUL or control character and no leading dot, trimmed, at
+  most 120 bytes, `untitled` when nothing is left, ending in `.md`
+  (`files.fileName`). A name already there is refused with the reason and
+  nothing is written; a copy replaces nothing. A markdown file copied to
+  home or a far node's grid is a text tile holding its bytes, its name kept
+  as any copy's is, and any other file copied there links. Anything else
+  dropped into a directory is refused with the reason
+  (`rpc.IntoDirectory`, which the drop verdict, its ghost and the node
+  read alike), and nothing moves across the boundary. A directory's grid
+  still answers `accepts_tiles` false, so the + menu offers it nothing.
 - A symlink is a link (2026-11-07). One to a directory is a door whose
   grid is the target's, drawn as a link because the grid is not its own;
   one to a file is a link tile whose target is the target's path id,
@@ -715,7 +732,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   drop lands in or across one. Across sources a left-drag links too, because
   there is no move across sources, and so does a right-drag of a
   directory's door, because a directory never copies (2026-10-20), and of a
-  file that is not markdown (2026-11-08). Dashed means link; deleting a link
+  file that is not markdown (2026-11-08); into a directory only a text
+  tile's right-drag lands, as a new file (2026-11-08). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
   the same split a link out of a live tile opens — in any pane; macOS
   reports ctrl + left as a right press with ctrl held, so a ctrl or cmd

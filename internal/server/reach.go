@@ -25,8 +25,8 @@ const (
 // spellLinks rewrites t's links into the frame of the node holding
 // grid, where rpc.HeldAcross says they part from it; the graph is fetched only
 // then. A link the holder has no route to is refused, and nothing is
-// written. A directory takes no new tiles, so its owner's refusal is the
-// answer, never a missing route.
+// written. A directory takes no link (rpc.IntoDirectory), so its owner's
+// refusal is the answer, never a missing route.
 func (rt *router) spellLinks(ctx context.Context, grid string, t *pb.Tile) error {
 	if t == nil || rpc.IsFilesID(grid) {
 		return nil

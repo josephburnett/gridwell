@@ -57,9 +57,9 @@ func TestContentAPIThroughAConnection(t *testing.T) {
 	}
 }
 
-// A directory takes no new tiles, so a link written into one is refused with
-// that reason, here or on a far node, before any route for the link is
-// looked for.
+// A directory takes no link, so a link written into one is refused with
+// that reason (rpc.IntoDirectory), here or on a far node, before any route
+// for the link is looked for.
 func TestALinkIntoADirectoryHearsTheDirectorysRefusal(t *testing.T) {
 	dir := t.TempDir()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, filesAt(t, "rnode1", dir))
@@ -71,14 +71,14 @@ func TestALinkIntoADirectoryHearsTheDirectorysRefusal(t *testing.T) {
 	far := farFileID(dir)
 	_, err = h.localCl.CreateTile(t.Context(), &gridwellv1.CreateTileRequest{GridId: far,
 		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: home}})
-	if err == nil || !strings.Contains(err.Error(), "takes no new tiles") {
+	if err == nil || !strings.Contains(err.Error(), "a directory takes") {
 		t.Fatalf("a link to home written into a far directory = %v, want the directory's refusal", err)
 	}
 	local := t.TempDir()
 	n := newFilesNode(t, local)
 	_, err = n.cl.CreateTile(n.ctx, &gridwellv1.CreateTileRequest{GridId: n.roots[0],
 		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: n.home}})
-	if err == nil || !strings.Contains(err.Error(), "takes no new tiles") {
+	if err == nil || !strings.Contains(err.Error(), "a directory takes") {
 		t.Fatalf("a link to home written into a directory = %v, want the directory's refusal", err)
 	}
 }

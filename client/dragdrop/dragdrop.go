@@ -5,6 +5,7 @@ package dragdrop
 
 import (
 	"math"
+	"slices"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -270,6 +271,16 @@ type DropInput struct {
 	CrossSource bool
 	// CopiesAsLink is CarryCopiesAsLink over what the drag carries.
 	CopiesAsLink bool
+	// IntoDirectory is CarryIntoDirectory: a directory takes a copy of what
+	// the drag carries, though it takes no other new tile.
+	IntoDirectory bool
+}
+
+// CarryIntoDirectory: the grid is a directory and it takes a row of the
+// carry (rpc.IntoDirectory), so a copy there is a copy, and the server
+// decides each row.
+func CarryIntoDirectory(rows []*gridwellv1.Tile, grid string) bool {
+	return rpc.IsFilesID(grid) && slices.ContainsFunc(rows, func(r *gridwellv1.Tile) bool { return rpc.IntoDirectory(r) == "" })
 }
 
 // CarryCopiesAsLink: a copy of every row into another namespace is a link
@@ -320,7 +331,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropCreateTemplate, ""
 	case in.Forbidden:
 		return DropRejected, "forbidden"
-	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource):
+	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource) && !(in.Intent == IntentCopy && in.IntoDirectory):
 		return DropRejected, "target refuses tiles"
 	case in.SameCell:
 		return DropRejected, "same cell"

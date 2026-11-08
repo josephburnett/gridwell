@@ -6,6 +6,7 @@ package server_test
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,6 +31,7 @@ type filesNode struct {
 	ctx     context.Context
 	cl      *rpc.Client
 	raw     gridwellv1connect.GridwellClient
+	web     *http.Client // the web API's, with its cookie
 	srv     *server.Server
 	url     string
 	home    string // home's root grid, qualified
@@ -65,7 +67,7 @@ func newFilesNodeVia(t *testing.T, via func(namespace.Namespace) namespace.Names
 	}, via)
 	n.srv = servertest.New(t, reg, server.Config{ID: localNodeID})
 	hs := servertest.Serve(t, n.srv)
-	n.url = hs.URL
+	n.url, n.web = hs.URL, hs.Client()
 	n.cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	n.raw = gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
