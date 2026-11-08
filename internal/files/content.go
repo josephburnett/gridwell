@@ -76,7 +76,8 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 // directory renamed over it, so a reader sees the old bytes or the new and a
 // broken stream writes nothing. It claims the stamp the bytes were read
 // under, and a file whose stamp has moved is refused as a conflict. A url
-// tile's address is its row's, which a page file refuses.
+// tile's address is its row's, which a page file refuses, and a link is
+// refused, as a link row is at home.
 func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRequest, error)) (*pb.TileResponse, error) {
 	first, err := recv()
 	if err != nil {
@@ -85,6 +86,9 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 	t, err := s.tileByPath(first.TileId)
 	if err != nil {
 		return nil, err
+	}
+	if t.LinkTargetId != "" {
+		return nil, status.Errorf(codes.InvalidArgument, "files: %s is a link, which owns no bytes; its target is written by its own id", t.AltText)
 	}
 	data, err := namespace.Assembled(first, recv)
 	if err != nil {

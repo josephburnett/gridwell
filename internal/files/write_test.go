@@ -394,3 +394,20 @@ func TestASelectIgnoresWhatIsNotOnTheGrid(t *testing.T) {
 		t.Errorf("selection = %v", got)
 	}
 }
+
+// A link owns no bytes: a write to it is refused with the reason, and its
+// target keeps its own.
+func TestAWriteToALinkIsRefused(t *testing.T) {
+	f := newFixture(t)
+	real := f.write("real.md", "# real")
+	link := f.path("link.md")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skip("symlinks unsupported")
+	}
+	_, first := read(t, f.s, idOf(link))
+	_, err := writeAll(f.s, idOf(link), first.ContentStamp, []byte("# through"))
+	wantCode(t, "a write to a link", err, codes.InvalidArgument)
+	if b, _ := os.ReadFile(real); string(b) != "# real" {
+		t.Errorf("the target = %q", b)
+	}
+}
