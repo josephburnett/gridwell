@@ -6,7 +6,6 @@ import (
 	"time"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 )
@@ -113,11 +112,11 @@ func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, err := d.Mint(gid, &pluginv1.Entry{Key: "a", Kind: rpc.KindText, Label: "a"}, 0, 0, 0, 1, 1)
+	text, err := d.Mint(gid, Entry{Key: "a", Kind: rpc.KindText, Label: "a"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := d.Mint(gid, &pluginv1.Entry{Key: "u", Kind: rpc.KindURL, Label: "u", UrlString: "https://example.com/"}, 0, 2, 0, 1, 1)
+	page, err := d.Mint(gid, Entry{Key: "u", Kind: rpc.KindURL, Label: "u", URL: "https://example.com/"}, 0, 2, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

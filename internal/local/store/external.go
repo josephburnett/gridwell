@@ -1,22 +1,21 @@
 package store
 
-// The node's rows for a plugin's entries: rows in the same grids and tiles
-// tables as home, under ns = the plugin id (home is ns = ''). The plugin
+// The node's rows for a source's entries: rows in the same grids and tiles
+// tables as home, under ns = the source's id (home is ns = ''). The source
 // answers in stable string keys; the node mints the ids, keeps arrangement and
 // framing, and retires keys as tombstones. Ids are AUTOINCREMENT and never
 // reused, and a recreated key mints a fresh id (a partial unique index over
-// live rows). Plugin rows emit no store events, and a row's version moves
+// live rows). These rows emit no store events, and a row's version moves
 // only on a typed name.
 //
 // A row exists only once the user has made a durable fact about an entry.
 // Listing mints nothing: Overlay is a read-only join that derives an
 // untouched entry's placement by the algorithm Mint stores, and Refresh and
-// Sweep write only to rows that exist. An entry with a link_target is a link
-// row, its link_target_id the target's namespace-relative address
-// (rpc.EntryTileID), which the router qualifies on the way out. A row's
-// typed name is the user's, as on home's rows: alt_text with alt_user
-// latched, which no listing overwrites; so is a url's landed address, with
-// url_user latched.
+// Sweep write only to rows that exist. An entry with a LinkTarget is a link
+// row, its link_target_id the target's namespace-relative address, which the
+// router qualifies on the way out. A row's typed name is the user's, as on
+// home's rows: alt_text with alt_user latched, which no listing overwrites;
+// so is a url's landed address, with url_user latched.
 
 import (
 	"context"
@@ -27,28 +26,40 @@ import (
 	"strings"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Namespace is one plugin's view of the store.
+// Entry is one thing a source lists in a grid: its key and the content facts
+// the source owns. LinkTarget is the address of the thing it links to, ""
+// when it owns its content; Hint, when set, is where it asks to sit.
+type Entry struct {
+	Key, Label, Kind string
+	URL              string
+	ServesPage       bool
+	LinkTarget       string
+	Hint             *Hint
+}
+
+// Hint is the rect an entry asks to sit at.
+type Hint struct{ X, Y, W, H int64 }
+
+// Namespace is one source's view of the store.
 type Namespace struct {
 	s  *Store
 	ns string
 }
 
-// Namespace returns the rows under ns (a plugin id).
+// Namespace returns the rows under ns (a source's id).
 func (s *Store) Namespace(ns string) *Namespace {
 	return &Namespace{s: s, ns: ns}
 }
 
-// ID is the plugin id the rows are kept under.
+// ID is the source id the rows are kept under.
 func (n *Namespace) ID() string { return n.ns }
 
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
-// a door's minted child grid, 0 for a leaf. The caller names every such tile
-// by its key either way; see rpc.EntryTileID. URLUser is the row's url_user.
+// a door's minted child grid, 0 for a leaf. URLUser is the row's url_user.
 type ExtTile struct {
 	ID          int64
 	Key         string
@@ -76,14 +87,14 @@ func (n *Namespace) GridOf(key string) (int64, error) {
 	return id, err
 }
 
-// GridKey resolves a minted grid id back to the plugin's grid key.
+// GridKey resolves a minted grid id back to the source's grid key.
 func (n *Namespace) GridKey(gridID int64) (string, error) {
 	var key string
 	err := n.s.db.QueryRow(`SELECT context_key FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).Scan(&key)
 	return key, notFound(err)
 }
 
-// TileKey resolves a minted tile id to its (grid id, plugin key). A retired
+// TileKey resolves a minted tile id to its (grid id, source key). A retired
 // row still resolves, so a dangling link stays interpretable; the caller
 // decides what retirement means.
 func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, err error) {
@@ -93,12 +104,12 @@ func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned 
 	return gridID, key, tomb != 0, notFound(err)
 }
 
-// Overlay joins one plugin listing with the stored arrangement and writes
+// Overlay joins one listing with the stored arrangement and writes
 // nothing. Rows contribute id, placement, framing, a typed name and a landed
 // address; the listing contributes every other content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
 // gridID 0 means an untouched grid: every entry is derived.
-func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile, error) {
+func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 	rows := map[string]ExtTile{}
 	var stored []ExtTile
 	if gridID != 0 {
@@ -128,11 +139,11 @@ func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile,
 		if ok {
 			vacateRect(occupied, r.X, r.Y, r.W, r.H)
 		}
-		x, y, w, h := derivePlacement(occupied, &cur, e.PlacementHint)
+		x, y, w, h := derivePlacement(occupied, &cur, e.Hint)
 		if ok {
 			occupyRect(occupied, r.X, r.Y, r.W, r.H)
 			matched[e.Key] = true
-			r.Kind, r.LinkTargetId = entryKind(e), linkTargetOf(e)
+			r.Kind, r.LinkTargetId = entryKind(e), e.LinkTarget
 			if !r.Named {
 				r.AltText = e.Label
 			}
@@ -146,7 +157,7 @@ func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile,
 			continue
 		}
 		out = append(out, ExtTile{Key: e.Key, Tile: &gridwellv1.Tile{Kind: entryKind(e), AltText: e.Label,
-			UrlString: snapshotOf(e).url.String, LinkTargetId: linkTargetOf(e), X: x, Y: y, W: w, H: h}})
+			UrlString: snapshotOf(e).url.String, LinkTargetId: e.LinkTarget, X: x, Y: y, W: w, H: h}})
 	}
 	for _, r := range stored {
 		if !matched[r.Key] {
@@ -158,20 +169,11 @@ func (n *Namespace) Overlay(gridID int64, entries []*pluginv1.Entry) ([]ExtTile,
 
 // entryKind is the kind an entry answers with; "" reads as text, the one
 // default, applied where the join and the mint both see it.
-func entryKind(e *pluginv1.Entry) string {
+func entryKind(e Entry) string {
 	if e.Kind == "" {
 		return "text"
 	}
 	return e.Kind
-}
-
-// linkTargetOf is the address of the entry e links to, "" when e owns its
-// content.
-func linkTargetOf(e *pluginv1.Entry) string {
-	if lt := e.GetLinkTarget(); lt != nil {
-		return rpc.EntryTileID(lt.Grid, lt.Key)
-	}
-	return ""
 }
 
 // entrySnapshot is what a row keeps of its entry's content facts, presented
@@ -185,14 +187,14 @@ type entrySnapshot struct {
 	link sql.NullString
 }
 
-func snapshotOf(e *pluginv1.Entry) entrySnapshot {
+func snapshotOf(e Entry) entrySnapshot {
 	s := entrySnapshot{kind: entryKind(e)}
-	if t := linkTargetOf(e); t != "" {
+	if t := e.LinkTarget; t != "" {
 		s.link = sql.NullString{String: t, Valid: true}
 		return s
 	}
 	if s.kind == "url" {
-		s.url = sql.NullString{String: e.UrlString, Valid: true}
+		s.url = sql.NullString{String: e.URL, Valid: true}
 		s.page = e.ServesPage
 	}
 	return s
@@ -204,7 +206,7 @@ func snapshotOf(e *pluginv1.Entry) entrySnapshot {
 // listing's cursor, the first free cell (freeslot.go). Overlay derives
 // with it and Mint stores what Overlay derived, so touching a tile never
 // moves it.
-func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *pluginv1.PlacementHint) (x, y, w, h int64) {
+func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y, w, h int64) {
 	if hint != nil {
 		x, w, h = hint.X, max(hint.W, 1), max(hint.H, 1)
 		y = belowHint(occupied, x, hint.Y, w, h)
@@ -218,7 +220,7 @@ func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *pluginv1.Pla
 // Mint writes the row an entry has earned: the id, the placement it was
 // already answered at, and a content snapshot. It is the one INSERT; an entry
 // with a live row returns that id and writes nothing.
-func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, y, w, h int64) (int64, error) {
+func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int64) (int64, error) {
 	if id, ok, err := n.LiveTileID(gridID, e.Key); err != nil || ok {
 		return id, err
 	}
@@ -250,7 +252,7 @@ func (n *Namespace) Mint(gridID int64, e *pluginv1.Entry, childGridID int64, x, 
 // different, being the source's own content fact rather than the user's, and
 // an entry that becomes a link converts its row in place, keeping its id,
 // placement and framing (convert).
-func (n *Namespace) Refresh(gridID int64, entries []*pluginv1.Entry) error {
+func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
 	if gridID == 0 || len(entries) == 0 {
 		return nil
 	}
@@ -381,7 +383,7 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 }
 
 // write runs one write to this namespace's rows through the store's funnel
-// (withMutation). A plugin row publishes no store event, so row names what it
+// (withMutation). A source row publishes no store event, so row names what it
 // touched for the record: an id as rpc.EventKey spells it, or, before the
 // mint, its grid and key.
 func (n *Namespace) write(verb, row string, fn func(ctx context.Context, tx *sql.Tx) error) error {
@@ -395,7 +397,7 @@ func tileRow(id int64) string { return "t/" + strconv.FormatInt(id, 10) }
 
 // rowWrite is write for one existing row of table that carries no claim
 // (store.withRowWrite): changed is false when it landed where the row already
-// was, and the caller, which announces plugin rows itself, then says nothing.
+// was, and the caller, which announces source rows itself, then says nothing.
 func (n *Namespace) rowWrite(verb, table string, id int64, row string, fn func(ctx context.Context, tx *sql.Tx) error) (changed bool, err error) {
 	ctx := context.Background()
 	return n.s.withRowWrite(ctx, verb, table, id, func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
@@ -424,8 +426,8 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed b
 }
 
 // Move is the placement writeback, claiming the footprint the writer saw.
-// gridID 0 keeps the row's grid and key; another is the plugin's move
-// (pluginhost Adapter.moveAcross), and the row leaves the old selection.
+// gridID 0 keeps the row's grid and key; another is a move by the source
+// and the row leaves the old selection.
 func (n *Namespace) Move(tileID, gridID int64, key string, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
 	return n.rowWrite("MoveTile", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
@@ -454,7 +456,7 @@ func (n *Namespace) Move(tileID, gridID int64, key string, x, y, w, h int64, cla
 }
 
 // Rename is the user's name for an entry, kept on its row and never told to
-// the plugin, as home's RenameTile keeps one; a text tile's name is its
+// the source, as home's RenameTile keeps one; a text tile's name is its
 // source's and is refused, since its presentation reads it.
 func (n *Namespace) Rename(tileID, version int64, name string) (changed bool, err error) {
 	return n.userContent("RenameTile", tileID, version, func(t *gridwellv1.Tile) (string, any, error) {
@@ -469,7 +471,7 @@ func (n *Namespace) Rename(tileID, version int64, name string) (changed bool, er
 }
 
 // SetAddress is where a navigation in an entry's url landed, kept on its row
-// and never told to the plugin, as home's writeURLContent keeps one: http or
+// and never told to the source, as home's writeURLContent keeps one: http or
 // https only. A served page has no address of its own and is refused.
 func (n *Namespace) SetAddress(tileID, version int64, address string) (changed bool, err error) {
 	address = strings.TrimSpace(address)

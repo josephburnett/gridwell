@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 )
@@ -27,7 +26,7 @@ type readSubject struct {
 	scratch, trash        string
 	ns                    *Namespace
 	nsGrid, nsTile        int64
-	entries               []*pluginv1.Entry
+	entries               []Entry
 }
 
 // seedForReads writes, through the product's own verbs, a tile of every kind,
@@ -133,7 +132,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 	sub.nsGrid = gid
-	sub.entries = []*pluginv1.Entry{
+	sub.entries = []Entry{
 		{Key: "notes.md", Kind: "text", Label: "notes.md"},
 		{Key: "sub", Kind: "door", Label: "sub"},
 	}
@@ -277,7 +276,7 @@ func TestAReadOnAFreshHomeWritesNothing(t *testing.T) {
 			sub := readSubject{
 				root:    rootID(t, s),
 				ns:      s.Namespace("plug1"),
-				entries: []*pluginv1.Entry{{Key: "notes.md", Kind: "text", Label: "notes.md"}},
+				entries: []Entry{{Key: "notes.md", Kind: "text", Label: "notes.md"}},
 			}
 			before := storetest.Snapshot(t, s.db)
 			c.run(ctx, s, sub)

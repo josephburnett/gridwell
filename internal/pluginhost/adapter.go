@@ -551,11 +551,11 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		}
 	}
 	if !dark && gid != 0 {
-		if err := a.mem.Refresh(gid, resp.Entries); err != nil {
+		if err := a.mem.Refresh(gid, storeEntries(resp.Entries)); err != nil {
 			return nil, err
 		}
 	}
-	tiles, err := a.mem.Overlay(gid, resp.Entries)
+	tiles, err := a.mem.Overlay(gid, storeEntries(resp.Entries))
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +695,7 @@ func (a *Adapter) mint(ctx context.Context, tileID string) (int64, error) {
 			return 0, err
 		}
 	}
-	return a.mem.Mint(gid, entry, child, row.X, row.Y, row.W, row.H)
+	return a.mem.Mint(gid, storeEntry(entry), child, row.X, row.Y, row.W, row.H)
 }
 
 // MintRef is the router's canonicalizer. A plugin's canonical id is its
@@ -1321,4 +1321,24 @@ func (a *Adapter) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequ
 	// Either way the source changed and the client must look again.
 	a.emitGridChanged(rpc.EntryGridID(ref.gridKey))
 	return &gridwellv1.DeleteTileResponse{}, nil
+}
+
+// storeEntry is a plugin entry as the store keeps it.
+func storeEntry(e *pluginv1.Entry) store.Entry {
+	se := store.Entry{Key: e.Key, Label: e.Label, Kind: e.Kind, URL: e.UrlString, ServesPage: e.ServesPage}
+	if lt := e.GetLinkTarget(); lt != nil {
+		se.LinkTarget = rpc.EntryTileID(lt.Grid, lt.Key)
+	}
+	if h := e.GetPlacementHint(); h != nil {
+		se.Hint = &store.Hint{X: h.X, Y: h.Y, W: h.W, H: h.H}
+	}
+	return se
+}
+
+func storeEntries(es []*pluginv1.Entry) []store.Entry {
+	out := make([]store.Entry, len(es))
+	for i, e := range es {
+		out[i] = storeEntry(e)
+	}
+	return out
 }

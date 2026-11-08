@@ -582,10 +582,10 @@ func (a *Adapter) entryTile(ctx context.Context, gridKey string, e *pluginv1.Ent
 		}
 		return s.tileForKey(e.Key), nil
 	}
-	if err := a.mem.Refresh(gid, entries); err != nil {
+	if err := a.mem.Refresh(gid, storeEntries(entries)); err != nil {
 		return nil, err
 	}
-	rows, err := a.mem.Overlay(gid, entries)
+	rows, err := a.mem.Overlay(gid, storeEntries(entries))
 	if err != nil {
 		return nil, err
 	}

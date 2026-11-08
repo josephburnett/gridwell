@@ -1,2 +1,4 @@
 # Lines a decision raised the lines ceiling by, owed until brought back down by the lines row's ways: one entry per rise, date | decision | amount, entered in the commit that makes the rise, and low-water | lines is the value before the first rise.
 # The debt row of ratchet.txt counts the lines above low-water; at 0 that row, the low-water line and the paid entries go, and the next rise brings them back.
+low-water | 57469
+2026-11-07 | files native (Joe): the store owns its Entry, and the plugin host converts its entries to it at one boundary until P3 deletes the host | 22

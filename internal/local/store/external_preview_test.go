@@ -5,14 +5,13 @@ import (
 	"errors"
 	"testing"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // A plugin url tile keeps a screenshot and a standing freeze through the same
 // writers home's rows take: one blob swap, one frozen write.
 
-func mintOne(t *testing.T, d *Namespace, e *pluginv1.Entry) int64 {
+func mintOne(t *testing.T, d *Namespace, e Entry) int64 {
 	t.Helper()
 	gid, err := d.GridOf("root")
 	if err != nil {
@@ -25,8 +24,8 @@ func mintOne(t *testing.T, d *Namespace, e *pluginv1.Entry) int64 {
 	return id
 }
 
-func pageEntry(key string) *pluginv1.Entry {
-	return &pluginv1.Entry{Key: key, Kind: rpc.KindURL, Label: key, ServesPage: true}
+func pageEntry(key string) Entry {
+	return Entry{Key: key, Kind: rpc.KindURL, Label: key, ServesPage: true}
 }
 
 func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
@@ -70,7 +69,7 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 
 func TestAPluginScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
 	_, d := openExt(t)
-	text := mintOne(t, d, &pluginv1.Entry{Key: "n.md", Kind: rpc.KindText, Label: "n.md"})
+	text := mintOne(t, d, Entry{Key: "n.md", Kind: rpc.KindText, Label: "n.md"})
 	if _, err := d.SetURLPreview(text, []byte("shot")); !errors.Is(err, ErrNotURLTile) {
 		t.Fatalf("SetURLPreview on a text row = %v, want ErrNotURLTile", err)
 	}
@@ -87,7 +86,7 @@ func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 		if _, err := d.SetFrozen(id, want, nil); err != nil {
 			t.Fatal(err)
 		}
-		tiles, err := d.Overlay(gid, []*pluginv1.Entry{pageEntry("a.html")})
+		tiles, err := d.Overlay(gid, []Entry{pageEntry("a.html")})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,8 +161,8 @@ func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
 	mintOne(t, d, pageEntry("a.html"))
-	other := &pluginv1.Entry{Key: "b.md", Kind: rpc.KindText, Label: "b.md"}
-	if err := d.Refresh(gid, []*pluginv1.Entry{other}); err != nil {
+	other := Entry{Key: "b.md", Kind: rpc.KindText, Label: "b.md"}
+	if err := d.Refresh(gid, []Entry{other}); err != nil {
 		t.Fatal(err)
 	}
 	tiles, err := d.Overlay(gid, nil)
@@ -175,15 +174,15 @@ func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 	}
 
 	// The snapshot follows what the source last said, both ways.
-	addressed := &pluginv1.Entry{Key: "a.html", Kind: rpc.KindURL, Label: "a.html", UrlString: "https://a"}
-	if err := d.Refresh(gid, []*pluginv1.Entry{addressed}); err != nil {
+	addressed := Entry{Key: "a.html", Kind: rpc.KindURL, Label: "a.html", URL: "https://a"}
+	if err := d.Refresh(gid, []Entry{addressed}); err != nil {
 		t.Fatal(err)
 	}
 	tiles, _ = d.Overlay(gid, nil)
 	if got := extByKey(t, tiles, "a.html"); got.ServesPage || got.UrlString != "https://a" {
 		t.Fatalf("the snapshot kept a page the source stopped serving: %+v", got.Tile)
 	}
-	if err := d.Refresh(gid, []*pluginv1.Entry{pageEntry("a.html")}); err != nil {
+	if err := d.Refresh(gid, []Entry{pageEntry("a.html")}); err != nil {
 		t.Fatal(err)
 	}
 	tiles, _ = d.Overlay(gid, nil)

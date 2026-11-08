@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"testing"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -24,10 +23,10 @@ func openExt(t *testing.T) (*Store, *Namespace) {
 	return st, st.Namespace("plug1")
 }
 
-func textEntries(keys ...string) []*pluginv1.Entry {
-	out := make([]*pluginv1.Entry, len(keys))
+func textEntries(keys ...string) []Entry {
+	out := make([]Entry, len(keys))
 	for i, k := range keys {
-		out[i] = &pluginv1.Entry{Key: k, Kind: "text", Label: k}
+		out[i] = Entry{Key: k, Kind: "text", Label: k}
 	}
 	return out
 }
@@ -46,7 +45,7 @@ func sameExt(a, b ExtTile) bool {
 // the product does this, a row costing a durable touch, but a test about
 // placement or retirement wants rows for every key, at exactly the placements
 // the join derived.
-func mintAll(t *testing.T, d *Namespace, gid int64, entries []*pluginv1.Entry, authoritative bool) []ExtTile {
+func mintAll(t *testing.T, d *Namespace, gid int64, entries []Entry, authoritative bool) []ExtTile {
 	t.Helper()
 	if authoritative {
 		present := map[string]bool{}
@@ -61,7 +60,7 @@ func mintAll(t *testing.T, d *Namespace, gid int64, entries []*pluginv1.Entry, a
 	if err != nil {
 		t.Fatal(err)
 	}
-	byKey := map[string]*pluginv1.Entry{}
+	byKey := map[string]Entry{}
 	for _, e := range entries {
 		byKey[e.Key] = e
 	}
@@ -71,8 +70,8 @@ func mintAll(t *testing.T, d *Namespace, gid int64, entries []*pluginv1.Entry, a
 		}
 		e := byKey[tl.Key]
 		var child int64
-		if e.ChildGrid != "" {
-			if child, err = d.GridOf(e.ChildGrid); err != nil {
+		if e.Kind == "door" {
+			if child, err = d.GridOf("root/" + e.Key); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -166,7 +165,7 @@ func TestExtUserPlacementSurvivesMerges(t *testing.T) {
 func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("cal")
-	ev := []*pluginv1.Entry{{Key: "event1", Kind: "text", Label: "e", PlacementHint: &pluginv1.PlacementHint{X: 10, Y: 2, W: 2, H: 1}}}
+	ev := []Entry{{Key: "event1", Kind: "text", Label: "e", Hint: &Hint{X: 10, Y: 2, W: 2, H: 1}}}
 	tiles := mintAll(t, d, gid, ev, true)
 	e := extByKey(t, tiles, "event1")
 	if e.X != 10 || e.Y != 2 || e.W != 2 {
@@ -175,7 +174,7 @@ func TestExtHintSeedsFirstSightOnly(t *testing.T) {
 	if _, err := d.Move(e.ID, 0, "", 0, 0, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
-	ev[0].PlacementHint = &pluginv1.PlacementHint{X: 20, Y: 20, W: 1, H: 1}
+	ev[0].Hint = &Hint{X: 20, Y: 20, W: 1, H: 1}
 	tiles = mintAll(t, d, gid, ev, true)
 	if e := extByKey(t, tiles, "event1"); e.X != 0 || e.Y != 0 {
 		t.Fatalf("a hint moved a placed tile: %+v", e)
@@ -221,7 +220,7 @@ func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
-	listing := []*pluginv1.Entry{{Key: "dir", Kind: "door", Label: "dir", ChildGrid: "root/dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}}
+	listing := []Entry{{Key: "dir", Kind: "door", Label: "dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", URL: "https://a"}}
 	tiles := mintAll(t, d, gid, listing, true)
 	dir, f := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
 	if dir.ChildGridID == 0 {
@@ -367,7 +366,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 	}
 	// One durable touch: the row lands where the join was already answering.
 	want := extByKey(t, first, "f42")
-	id, err := d.Mint(gid, &pluginv1.Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, want.X, want.Y, want.W, want.H)
+	id, err := d.Mint(gid, Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, want.X, want.Y, want.W, want.H)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +387,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 		}
 	}
 	// Idempotent: a second mint of the same key is the same row.
-	again, err := d.Mint(gid, &pluginv1.Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, 9, 9, 1, 1)
+	again, err := d.Mint(gid, Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, 9, 9, 1, 1)
 	if err != nil || again != id {
 		t.Fatalf("second mint = %d (%v), want the first row %d", again, err, id)
 	}
@@ -407,7 +406,7 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	}
 	// The user drags "b" door clear of the flow.
 	b := extByKey(t, before, "b")
-	if _, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
+	if _, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
 		t.Fatal(err)
 	}
 	id, _, err := d.LiveTileID(gid, "b")
@@ -445,7 +444,7 @@ func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := extByKey(t, before, "b")
-	if _, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
+	if _, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
 		t.Fatal(err)
 	}
 	after, err := d.Overlay(gid, entries)
@@ -461,8 +460,8 @@ func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	}
 }
 
-func hinted(key string, x, y, w, h int64) *pluginv1.Entry {
-	return &pluginv1.Entry{Key: key, Kind: "text", Label: key, PlacementHint: &pluginv1.PlacementHint{X: x, Y: y, W: w, H: h}}
+func hinted(key string, x, y, w, h int64) Entry {
+	return Entry{Key: key, Kind: "text", Label: key, Hint: &Hint{X: x, Y: y, W: w, H: h}}
 }
 
 // overlapping names the first two tiles that share a cell, or "".
@@ -487,8 +486,8 @@ func overlapping(tiles []ExtTile) string {
 func TestHintOntoAStoredRowStacksBelowIt(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("week")
-	mintAll(t, d, gid, []*pluginv1.Entry{hinted("old", 0, 0, 2, 1)}, false)
-	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("new", 0, 0, 2, 1), hinted("old", 0, 1, 2, 1)})
+	mintAll(t, d, gid, []Entry{hinted("old", 0, 0, 2, 1)}, false)
+	tiles, err := d.Overlay(gid, []Entry{hinted("new", 0, 0, 2, 1), hinted("old", 0, 1, 2, 1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +505,7 @@ func TestHintOntoAStoredRowStacksBelowIt(t *testing.T) {
 func TestTwoEntriesWithOneHintGetTwoRects(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("week")
-	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("a", 3, 2, 1, 1), hinted("b", 3, 2, 1, 1)})
+	tiles, err := d.Overlay(gid, []Entry{hinted("a", 3, 2, 1, 1), hinted("b", 3, 2, 1, 1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,8 +525,8 @@ func TestTwoEntriesWithOneHintGetTwoRects(t *testing.T) {
 func TestTwoWideHintBesideAOneWideRowStacksBelowIt(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("week")
-	mintAll(t, d, gid, []*pluginv1.Entry{hinted("tue", 1, 0, 1, 1)}, false)
-	tiles, err := d.Overlay(gid, []*pluginv1.Entry{hinted("mon", 0, 0, 2, 1), hinted("tue", 2, 0, 2, 1)})
+	mintAll(t, d, gid, []Entry{hinted("tue", 1, 0, 1, 1)}, false)
+	tiles, err := d.Overlay(gid, []Entry{hinted("mon", 0, 0, 2, 1), hinted("tue", 2, 0, 2, 1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -565,7 +564,7 @@ func TestUnhintedEntriesStillFlowFromTheCursor(t *testing.T) {
 func TestExtTypedNameOutlivesTheSourcesLabel(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
-	listing := []*pluginv1.Entry{{Key: "u", Kind: "url", Label: "u", UrlString: "https://a"}, {Key: "f", Kind: "text", Label: "f"}}
+	listing := []Entry{{Key: "u", Kind: "url", Label: "u", URL: "https://a"}, {Key: "f", Kind: "text", Label: "f"}}
 	tiles := mintAll(t, d, gid, listing, true)
 	u, f := extByKey(t, tiles, "u"), extByKey(t, tiles, "f")
 
@@ -612,8 +611,8 @@ func TestExtTypedNameOutlivesTheSourcesLabel(t *testing.T) {
 func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
-	listing := []*pluginv1.Entry{
-		{Key: "u", Kind: "url", Label: "u", UrlString: "https://a.test/"},
+	listing := []Entry{
+		{Key: "u", Kind: "url", Label: "u", URL: "https://a.test/"},
 		{Key: "p", Kind: "url", Label: "p", ServesPage: true},
 		{Key: "f", Kind: "text", Label: "f"},
 	}
@@ -638,7 +637,7 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 		}
 	}
 
-	listing[0].UrlString = "https://a.test/moved"
+	listing[0].URL = "https://a.test/moved"
 	if err := d.Refresh(gid, listing); err != nil {
 		t.Fatal(err)
 	}
@@ -656,11 +655,11 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 	if got := extByKey(t, joined, "u"); got.UrlString != "https://b.test/p" {
 		t.Fatalf("join = %q, want the landed address over the listing's", got.UrlString)
 	}
-	listing[0].LinkTarget = &pluginv1.EntryRef{Grid: "root", Key: "f"}
+	listing[0].LinkTarget = rpc.EntryTileID("root", "f")
 	if err := d.Refresh(gid, listing); err != nil {
 		t.Fatal(err)
 	}
-	listing[0].LinkTarget = nil
+	listing[0].LinkTarget = ""
 	if err := d.Refresh(gid, listing); err != nil {
 		t.Fatal(err)
 	}

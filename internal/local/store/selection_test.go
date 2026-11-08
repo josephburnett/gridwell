@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -248,11 +247,11 @@ func TestPluginGridSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := n.Mint(gid, &pluginv1.Entry{Key: "a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
+	a, err := n.Mint(gid, Entry{Key: "a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := n.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, 2, 0, 1, 1)
+	b, err := n.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, 2, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +376,7 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err := n.Mint(gid, &pluginv1.Entry{Key: "e", Kind: "text", Label: "e"}, 0, 0, 0, 1, 1)
+	e, err := n.Mint(gid, Entry{Key: "e", Kind: "text", Label: "e"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +411,7 @@ func TestSelectionClearAllIsOneNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e, err := n.Mint(gid, &pluginv1.Entry{Key: "e", Kind: "text", Label: "e"}, 0, 0, 0, 1, 1)
+	e, err := n.Mint(gid, Entry{Key: "e", Kind: "text", Label: "e"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

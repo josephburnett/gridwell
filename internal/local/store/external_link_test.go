@@ -3,7 +3,6 @@ package store
 import (
 	"testing"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -11,9 +10,9 @@ import (
 // rows: derived as one, minted as one, converted to one in place when an
 // existing content row's entry becomes a link, and back.
 
-func linkEntry(key, targetGrid, targetKey string) *pluginv1.Entry {
-	return &pluginv1.Entry{Key: key, Kind: rpc.KindURL, Label: "link " + key, StatusDetail: "seen",
-		ServesPage: true, LinkTarget: &pluginv1.EntryRef{Grid: targetGrid, Key: targetKey}}
+func linkEntry(key, targetGrid, targetKey string) Entry {
+	return Entry{Key: key, Kind: rpc.KindURL, Label: "link " + key,
+		ServesPage: true, LinkTarget: rpc.EntryTileID(targetGrid, targetKey)}
 }
 
 // isLinkTo checks the content facts a link row holds: the target and none of
@@ -29,7 +28,7 @@ func isLinkTo(t *testing.T, what string, tl ExtTile, target string) {
 func TestALinkEntryIsDerivedAndMintedAsALinkRow(t *testing.T) {
 	st, d := openExt(t)
 	target := rpc.EntryTileID("everything", "t1")
-	entries := []*pluginv1.Entry{linkEntry("t1", "everything", "t1")}
+	entries := []Entry{linkEntry("t1", "everything", "t1")}
 
 	derived, err := d.Overlay(0, entries)
 	if err != nil {
@@ -80,7 +79,7 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := d.Refresh(gid, []*pluginv1.Entry{linkEntry("t1", "everything", "t1")}); err != nil {
+	if err := d.Refresh(gid, []Entry{linkEntry("t1", "everything", "t1")}); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := d.tiles(gid)
@@ -96,14 +95,14 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 	verifyRefcounts(t, st)
 
 	// A link's target is the listing's to move, like every other content fact.
-	if err := d.Refresh(gid, []*pluginv1.Entry{linkEntry("t1", "everything", "t9")}); err != nil {
+	if err := d.Refresh(gid, []Entry{linkEntry("t1", "everything", "t9")}); err != nil {
 		t.Fatal(err)
 	}
 	stored, _ = d.tiles(gid)
 	isLinkTo(t, "the re-targeted row", extByKey(t, stored, "t1"), rpc.EntryTileID("everything", "t9"))
 
 	// And an entry that stops being a link converts back, under the same id.
-	if err := d.Refresh(gid, []*pluginv1.Entry{{Key: "t1", Kind: rpc.KindURL, Label: "t1", UrlString: "https://x"}}); err != nil {
+	if err := d.Refresh(gid, []Entry{{Key: "t1", Kind: rpc.KindURL, Label: "t1", URL: "https://x"}}); err != nil {
 		t.Fatal(err)
 	}
 	stored, _ = d.tiles(gid)

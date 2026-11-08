@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
@@ -29,7 +28,7 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := ns.Mint(gid, &pluginv1.Entry{Key: "k", Kind: "text", Label: "k"}, 0, 0, 0, 1, 1)
+	id, err := ns.Mint(gid, Entry{Key: "k", Kind: "text", Label: "k"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +66,7 @@ func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := ns.Mint(gid, &pluginv1.Entry{Key: "k", Kind: "text", Label: "k"}, 0, 0, 0, 1, 1)
+	id, err := ns.Mint(gid, Entry{Key: "k", Kind: "text", Label: "k"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

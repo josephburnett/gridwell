@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
 // A row the plugin moved to another grid keeps its id under its new key and
@@ -14,7 +13,7 @@ func TestExtRekeyKeepsTheIDAndLeavesTheSelection(t *testing.T) {
 	_, d := openExt(t)
 	from, _ := d.GridOf("src")
 	to, _ := d.GridOf("dst")
-	id, err := d.Mint(from, &pluginv1.Entry{Key: "src/a", Kind: "text", Label: "a"}, 0, 1, 1, 1, 1)
+	id, err := d.Mint(from, Entry{Key: "src/a", Kind: "text", Label: "a"}, 0, 1, 1, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

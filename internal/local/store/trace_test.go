@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -85,7 +84,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	gs := strconv.FormatInt(gid, 10)
-	id, err := d.Mint(gid, &pluginv1.Entry{Key: "a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
+	id, err := d.Mint(gid, Entry{Key: "a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +107,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		{"SetTextScroll", "plug1:t/" + ts, func() error { _, err := d.SetTextScroll(id, 0, 0, 4, 4, ""); return err }},
 		{"SetContentZoom", "plug1:t/" + ts, func() error { _, err := d.SetContentZoom(id, z); return err }},
 		{"Mint", "plug1:g/" + gs + "/b", func() error {
-			_, err := d.Mint(gid, &pluginv1.Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)
+			_, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)
 			return err
 		}},
 		{"GridOf", "plug1:c/sent", func() error { _, err := d.GridOf("sent"); return err }},
@@ -149,7 +148,7 @@ func TestAnUnchangedPluginRowWriteNamesItsRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := d.Mint(gid, &pluginv1.Entry{Key: "same", Kind: "text", Label: "same"}, 0, 2, 2, 1, 1)
+	id, err := d.Mint(gid, Entry{Key: "same", Kind: "text", Label: "same"}, 0, 2, 2, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
