@@ -132,3 +132,19 @@ upstream
 deadref
 isdeadref
 deadreference
+# A plugin's site pages and the server.yaml routes that sent a url tile's
+# address to one, removed 2026-11-07 with the plugins: a url tile opens its
+# own address. The English verbs "present" and "route" stay; the names of the
+# feature's facts and verbs do not come back. Allowed: the reserved field
+# comments in the proto, which keep the numbers.
+presented_by api/gridwell/v1/data\.proto:[0-9]+:.*reserved
+presentedBy
+broken_reason api/gridwell/v1/data\.proto:[0-9]+:.*reserved
+PresentedPageURL
+PresentedSite
+routeNavigation
+leavesPage
+stampPresented
+setRoutes
+routeMove
+openOutside
