@@ -61,7 +61,7 @@ func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err 
 }
 
 // DropURLPreview retires a plugin url row's screenshot, so the row's preview is
-// its plugin's picture until the next capture; pluginhost.pagePreviewStale says
+// its file's picture until the next capture; files.pagePreviewStale says
 // when. A capture carries no claim, so neither does its retirement.
 func (n *Namespace) DropURLPreview(tileID int64) error {
 	return n.write("DropURLPreview", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {

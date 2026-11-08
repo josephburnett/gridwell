@@ -88,8 +88,7 @@ func (s *Server) SetView(_ context.Context, req *gridwellv1.SetViewRequest) (*gr
 // forgets a session whose stream closed. An empty share is sent only to
 // retract one the far node may hold. A far node from before SetView answers
 // Unimplemented and watches as it always did; any other refusal is the
-// connection's live updates off, told on its health as a plugin's is
-// (pluginhost.Adapter.SetView), until a share lands.
+// connection's live updates off, told on its health, until a share lands.
 func (s *Server) tellFar(ctx context.Context, name string, client namespace.Namespace) {
 	f := s.farOf(name)
 	told := false

@@ -116,8 +116,8 @@ func TestResolveBind(t *testing.T) {
 // the derived token, and federation= is last because a socket path may
 // contain spaces.
 func TestServingBanner(t *testing.T) {
-	got := servingBanner("127.0.0.1:8080", "/home/j o/.gridwell/federation.sock", "./web", 2, "hunter2")
-	want := "gridwell: serving on 127.0.0.1:8080 (static=./web plugins=2 auth=" + server.AuthToken("hunter2") + " federation=/home/j o/.gridwell/federation.sock)"
+	got := servingBanner("127.0.0.1:8080", "/home/j o/.gridwell/federation.sock", "./web", "hunter2")
+	want := "gridwell: serving on 127.0.0.1:8080 (static=./web auth=" + server.AuthToken("hunter2") + " federation=/home/j o/.gridwell/federation.sock)"
 	if got != want {
 		t.Errorf("banner = %q, want %q", got, want)
 	}
@@ -153,36 +153,15 @@ func TestBuildServeConfigFreshHome(t *testing.T) {
 	if err != nil || back.ID != cfg.ID {
 		t.Fatalf("the minted id must be written back: %v %+v", err, back)
 	}
+	if raw, _ := os.ReadFile(path); strings.Contains(string(raw), "db_file") || strings.Contains(string(raw), "gridwell.db") {
+		t.Errorf("the database path must never be stored:\n%s", raw)
+	}
 	if _, err := os.Stat(config.DBFile(dir)); err != nil {
 		t.Fatalf("the node's store must exist after the first build: %v", err)
 	}
 	again, err := buildServeConfig(dir, path)
 	if err != nil || again.ID != cfg.ID {
 		t.Fatalf("a second build must keep the id: %v %+v", err, again)
-	}
-}
-
-// A plugin listed without an id gets one minted and written back.
-func TestBuildServeConfigMintsPluginIDs(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "server.yaml")
-	if err := os.WriteFile(path, []byte("plugins:\n  - kind: fs\n    config:\n      root: /tmp\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := buildServeConfig(dir, path)
-	if err != nil {
-		t.Fatalf("buildServeConfig: %v", err)
-	}
-	pid := cfg.Plugins[0].ID
-	if pid == "" {
-		t.Fatal("plugin id must be minted")
-	}
-	raw, _ := os.ReadFile(path)
-	if strings.Contains(string(raw), "db_file") || strings.Contains(string(raw), "gridwell.db") {
-		t.Errorf("the database path must never be stored:\n%s", raw)
-	}
-	if !strings.Contains(string(raw), pid) {
-		t.Errorf("the minted plugin id must be written back:\n%s", raw)
 	}
 }
 

@@ -18,9 +18,9 @@ func backupTestDir(t *testing.T) (dir string, rootID string) {
 	dir = t.TempDir()
 	t.Setenv("GRIDWELL_HOME", dir)
 	cfgPath := filepath.Join(dir, "server.yaml")
-	// A plugin that has never served has no rows; a backup must not
-	// abort on it.
-	if err := os.WriteFile(cfgPath, []byte("plugins:\n  - kind: gitlab\n    label: todos\n"), 0o600); err != nil {
+	// A root that was never shown has no rows; a backup must not abort on
+	// it.
+	if err := os.WriteFile(cfgPath, []byte("files:\n  - root: "+t.TempDir()+"\n    label: notes\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := node.BuildConfig(dir, cfgPath); err != nil {
@@ -74,8 +74,8 @@ func TestBackupSnapshotsHome(t *testing.T) {
 			t.Errorf("backup lacks %s: %v (a restored node would rotate its password / lose its viewport)", filepath.Base(f), err)
 		}
 	}
-	if len(cfg.Plugins) != 1 {
-		t.Errorf("backup config lists %d entries, want the never-served plugin kept (it must not abort the backup)", len(cfg.Plugins))
+	if len(cfg.Files) != 1 {
+		t.Errorf("backup config lists %d roots, want the never-shown root kept (it must not abort the backup)", len(cfg.Files))
 	}
 	_ = dir
 }

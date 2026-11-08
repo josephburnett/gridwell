@@ -46,8 +46,7 @@
         "to": ".",
         "filter": [
           "gridwell",
-          "gridwell.exe",
-          "gridwell-plugin-*"
+          "gridwell.exe"
         ]
       }
     ],

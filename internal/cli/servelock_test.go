@@ -19,14 +19,14 @@ func TestServeLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first acquire: %v", err)
 	}
-	l1.WriteBanner("gridwell: serving on 127.0.0.1:1234 (static=embedded plugins=1)")
+	l1.WriteBanner("gridwell: serving on 127.0.0.1:1234 (static=embedded)")
 
 	_, err = acquireServeLock(dir)
 	var held *errServeLockHeld
 	if !errors.As(err, &held) {
 		t.Fatalf("second acquire = %v, want errServeLockHeld", err)
 	}
-	if held.banner != "gridwell: serving on 127.0.0.1:1234 (static=embedded plugins=1)" {
+	if held.banner != "gridwell: serving on 127.0.0.1:1234 (static=embedded)" {
 		t.Errorf("held banner = %q, want the holder's banner", held.banner)
 	}
 
@@ -46,7 +46,7 @@ func TestServeLock(t *testing.T) {
 func TestServeLockStaleFile(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "serve.lock"),
-		[]byte("gridwell: serving on 127.0.0.1:9 (static=embedded plugins=1)\n"), 0o600); err != nil {
+		[]byte("gridwell: serving on 127.0.0.1:9 (static=embedded)\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	l, err := acquireServeLock(dir)
@@ -74,9 +74,9 @@ func TestProbeServeLockReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.WriteBanner("gridwell: serving on 127.0.0.1:7 (static=embedded plugins=1)")
+	l.WriteBanner("gridwell: serving on 127.0.0.1:7 (static=embedded)")
 	banner, running, err := probeServeLock(dir)
-	if err != nil || !running || banner != "gridwell: serving on 127.0.0.1:7 (static=embedded plugins=1)" {
+	if err != nil || !running || banner != "gridwell: serving on 127.0.0.1:7 (static=embedded)" {
 		t.Fatalf("probe of held lock = (%q, %v, %v)", banner, running, err)
 	}
 	// Probing did not disturb the holder.

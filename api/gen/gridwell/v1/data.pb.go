@@ -90,8 +90,8 @@ type Grid struct {
 	Version int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
 	// writable: this grid's text bodies accept edits (WriteContent), so the
 	// client lets the user type into its text tiles. The owning namespace
-	// stamps it on every grid it serves, the home always and a plugin's from
-	// plugin.v1 InfoResponse.writable, and transit carries it verbatim. It is
+	// stamps it on every grid it serves, true for the home and the files, and
+	// transit carries it verbatim. It is
 	// per grid, not per namespace, because one connection fronts namespaces
 	// that differ. Wire-only, never persisted.
 	Writable bool `protobuf:"varint,6,opt,name=writable,proto3" json:"writable,omitempty"`
@@ -135,8 +135,8 @@ type Grid struct {
 	Selection []string `protobuf:"bytes,17,rep,name=selection,proto3" json:"selection,omitempty"`
 	// moves: a tile of this grid moves to another grid of its namespace
 	// (MoveTile), so a left-drag there is a move. The owning namespace stamps
-	// it on every grid it serves, true for the home and the files and a
-	// plugin's from plugin.v1 InfoResponse.move; transit carries it verbatim.
+	// it on every grid it serves, true for the home and the files; transit
+	// carries it verbatim.
 	// Wire-only.
 	Moves         *bool `protobuf:"varint,18,opt,name=moves,proto3,oneof" json:"moves,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -454,16 +454,16 @@ type Tile struct {
 	// qualified and peeled like the tile's own id, and never set by clients.
 	ShellTmux string `protobuf:"bytes,38,opt,name=shell_tmux,json=shellTmux,proto3" json:"shell_tmux,omitempty"`
 	// content_stamp is the source's name for the bytes behind a row with no
-	// version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
-	// adapter and verbatim in transit, "" when the source names none. It does
+	// version claim (a file's): "<mtime_ns>-<size>", carried verbatim in
+	// transit, "" when the source names none. It does
 	// for such a row what version does for a home row: a body read under
 	// another stamp is behind it, and one read under this stamp is not.
 	// Wire-only, never a stored column.
 	ContentStamp string `protobuf:"bytes,39,opt,name=content_stamp,json=contentStamp,proto3" json:"content_stamp,omitempty"`
-	// read_only is the owning plugin's sentence for why this text tile's body
-	// takes no edits though its grid is writable, "" when it takes them:
-	// plugin.v1 Entry.read_only, carried by the adapter and verbatim in
-	// transit. The client shows such a body as it shows any read-only text
+	// read_only is the owning source's sentence for why this text tile's body
+	// takes no edits though its grid is writable, "" when it takes them: a file
+	// the node cannot write, or a disabled connection's row, carried verbatim
+	// in transit. The client shows such a body as it shows any read-only text
 	// (textedit.ReadOnly). Wire-only, never a stored column.
 	ReadOnly string `protobuf:"bytes,40,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	// named: alt_text was typed, by the rename gesture, so no capture or
@@ -2532,10 +2532,9 @@ type HandshakeResponse struct {
 	// shells_disabled: this node refuses shell tiles outright, from server.yaml's
 	// disable_shells. The client removes the shell primitive from the + menu,
 	// and the server refuses CreateTile(kind=shell) and OpenShell before routing,
-	// on any grid. Only a home holds shells: a plugin creates no tile at all (its
-	// CreateTile is Unimplemented) and plugin.v1 entry kinds have no shell. It is
-	// a node-level operator fact, so it rides the node handshake rather than any
-	// per-plugin Info.
+	// on any grid. Only a home holds shells: the files create no tile at all
+	// (their CreateTile is Unimplemented). It is a node-level operator fact, so
+	// it rides the node handshake rather than any source's Info.
 	ShellsDisabled bool `protobuf:"varint,4,opt,name=shells_disabled,json=shellsDisabled,proto3" json:"shells_disabled,omitempty"`
 	// content_token gates the HTTP /content/ API, the ServeContent carrier.
 	// Pages served there run sandboxed with an opaque origin, so neither their

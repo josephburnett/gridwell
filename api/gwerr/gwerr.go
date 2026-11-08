@@ -111,9 +111,9 @@ func ClassifyError(err error) ErrorClass {
 }
 
 // IsTransport reports a code that means "not right now", from whichever hop.
-// It is the fact where the code is the speaker's contract, a plugin's
-// (docs/plugin-standard.md rule 3) or the router's to its callers; whether a
-// far node spoke is IsUnheard's, since a far plugin's Unavailable is an answer.
+// It is the fact where the code is the speaker's contract, the router's to
+// its callers; whether a far node spoke is IsUnheard's, since a far source's
+// Unavailable is an answer.
 // clientsync.Of is the client twin on the same three codes, pinned to this one
 // by TestOfAgreesWithGwerrIsTransport.
 func IsTransport(err error) bool {

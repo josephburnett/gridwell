@@ -742,20 +742,9 @@ pane is inside" and do not use the word elsewhere.
 
 ```
 internal, server   → api
-apps/gridwell      → server, api              (no plugin modules)
+apps/gridwell      → server, api
 api                → nothing of ours
 ```
 
-There is no arrow to a plugin, in either direction: plugins are a separate
-repository whose modules depend on `api` and never on this one, and no
-package here — test files included — may import one or name that repository
-in a go.mod. `test/boundary` enforces both, along with the api module's
-dependency budget, and `make check` builds every module standalone without
-go.work.
-
-A plugin loads exactly one way — `compose.LoadPlugin` spawns its binary —
-which `internal/plugin`'s subprocess tests, the seam tests that spawn through
-`internal/plugintest`, and `make check-connections` exercise for real. The
-binaries themselves come from the sibling checkout: `make build` compiles them
-out of `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into this repo root,
-where the loader looks.
+`test/boundary` enforces the arrows and the api module's dependency budget,
+and `make check` builds every module standalone without go.work.

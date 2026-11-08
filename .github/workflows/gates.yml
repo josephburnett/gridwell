@@ -20,11 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The plugins are their own repository. The Makefile's PLUGINS_DIR
-      # defaults to ../gridwell-plugins, beside this checkout, and `make
-      # build` and `make check` build the plugin binaries from there.
-      - name: fetch gridwell-plugins beside this checkout
-        run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -65,11 +60,6 @@ jobs:
       # fails: a name in a message is a claim, and this job is the proof.
       - name: shim commits that name no gate
         run: ./scripts/gates-named.sh "${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.sha }}"
-      # The plugins are their own repository. The Makefile's PLUGINS_DIR
-      # defaults to ../gridwell-plugins, beside this checkout, and `make
-      # build` and `make check` build the plugin binaries from there.
-      - name: fetch gridwell-plugins beside this checkout
-        run: git clone --depth 1 https://github.com/josephburnett/gridwell-plugins.git ../gridwell-plugins
       # Every live shell rides a tmux (internal/local/tmux), so it
       # is pinned present rather than trusted to the runner image.
       - name: system deps

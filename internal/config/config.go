@@ -1,6 +1,5 @@
 // Package config loads ~/.gridwell/server.yaml, the one config of the one
-// node. Plugin config keys are pass-through, handed to the plugin binary at
-// spawn uninterpreted. The node writes the file only to mint an absent id.
+// node. The node writes the file only to mint an absent id.
 package config
 
 import (
@@ -47,15 +46,13 @@ type ServerConfig struct {
 	RetiredNames []string `yaml:"retired_names,omitempty"`
 	// Files are the roots the node shows as grids, in config order.
 	Files []FilesRoot `yaml:"files,omitempty"`
-	// Plugins are the content plugins: separate binaries speaking plugin.v1.
-	Plugins []PluginConfig `yaml:"plugins,omitempty"`
 
 	// WebPassword is not a yaml fact: BuildConfig reads it from the file.
 	WebPassword string `yaml:"-"`
 	// CacheDir is derived by serve, ~/.gridwell/cache; empty disables caching.
 	CacheDir string `yaml:"-"`
 
-	// doc is the file as loaded, comments and all. Save edits the minted ids
+	// doc is the file as loaded, comments and all. Save edits the minted id
 	// into it and writes it back, so a default Parse filled in or a path it
 	// expanded can never reach the file: the struct is what the node reads,
 	// the document is what the user wrote. nil is a node with no file yet.
@@ -102,18 +99,6 @@ type FilesRoot struct {
 	Label string `yaml:"label,omitempty"`
 }
 
-// PluginConfig describes one content plugin. ID is the segment on every
-// link into it, minted once and never changed; Label is display only.
-// Binary defaults to gridwell-plugin-<kind> beside the gridwell binary.
-// Config lands in the plugin's environment, so a secret is a path, not a value.
-type PluginConfig struct {
-	ID     string            `yaml:"id,omitempty"`
-	Kind   string            `yaml:"kind"`
-	Label  string            `yaml:"label,omitempty"`
-	Binary string            `yaml:"binary,omitempty"`
-	Config map[string]string `yaml:"config,omitempty"`
-}
-
 // Defaults fills fields the config file leaves absent.
 var Defaults = ServerConfig{
 	Web: WebConfig{Bind: "127.0.0.1:8080"},
@@ -141,13 +126,6 @@ func CacheFile(dir string) string {
 	return filepath.Join(dir, "cache.db")
 }
 
-// PluginStateDir is one plugin's private directory, ~/.gridwell/plugins/<id>,
-// handed over at spawn as `state_dir`. What a plugin keeps there is its own
-// cache of its source, never a node fact, and disposable like cache.db.
-func PluginStateDir(dir, id string) string {
-	return filepath.Join(dir, "plugins", id)
-}
-
 // DumpsDir is where the node writes a trace dump, ~/.gridwell/dumps. Disposable:
 // a dump is a reading someone asked for, not a node fact.
 func DumpsDir(dir string) string {
@@ -169,6 +147,7 @@ var retiredKeys = map[string]string{
 	"password": "is the web-password file beside this config (delete it to rotate)",
 	"node_id":  "is the layout Gridwell used before one database per node; v0.1.0 is the last release that converts a node written that way",
 	"routes":   "is gone (2026-11-07): a url tile opens its own address, and the node's files are `files:`; delete the key",
+	"plugins":  "is gone (2026-11-07): the node shows a directory itself, as a root under `files:` ({root, label}), and has no plugins; delete the key",
 }
 
 // Load reads path and fills in defaults. A missing file wraps fs.ErrNotExist.
@@ -204,15 +183,6 @@ func Parse(data []byte) (*ServerConfig, error) {
 	if cfg.Web.Bind == "" {
 		cfg.Web.Bind = Defaults.Web.Bind
 	}
-	for i := range cfg.Plugins {
-		if cfg.Plugins[i].Kind == "" {
-			return nil, fmt.Errorf("plugins[%d]: kind is required", i)
-		}
-		switch cfg.Plugins[i].Kind {
-		case "home", "remote", "local", "localdb", "ssh":
-			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin: the node's id is `id:` and its connections are `connections:` — a server.yaml that still lists them here is the shape v0.1.0 was the last release to convert", i, cfg.Plugins[i].Kind)
-		}
-	}
 	if err := expandPaths(&cfg); err != nil {
 		return nil, err
 	}
@@ -236,26 +206,20 @@ func retiredKeyHint(err error) error {
 	return err
 }
 
-// Mint fills every absent id and reports whether it changed anything. It is
-// the one place config ids are minted.
+// Mint fills an absent node id and reports whether it did. It is the one
+// place a config id is minted.
 func Mint(cfg *ServerConfig) bool {
 	changed := false
 	if cfg.ID == "" {
 		cfg.ID = idshape.NewShortID()
 		changed = true
 	}
-	for i := range cfg.Plugins {
-		if cfg.Plugins[i].ID == "" {
-			cfg.Plugins[i].ID = idshape.NewShortID()
-			changed = true
-		}
-	}
 	return changed
 }
 
-// Save writes the minted ids into the loaded document and writes it back
+// Save writes the minted id into the loaded document and writes it back
 // 0600, through a temp file and a rename so a crash never loses the only copy
-// of the node's ids. It is the one config write, and it writes only what Mint
+// of the node's id. It is the one config write, and it writes only what Mint
 // minted: a field the file left absent stays absent, and the document's
 // comments and spelling survive.
 func Save(path string, cfg *ServerConfig) error {
@@ -280,16 +244,11 @@ func Save(path string, cfg *ServerConfig) error {
 	return nil
 }
 
-// mintedDocument is the loaded document with cfg's ids set on it. A node with
-// no file gets a document holding the node id alone, which is all a fresh
-// Defaults has to mint; anything else on a nil document has no user spelling
-// to keep and is refused rather than invented.
+// mintedDocument is the loaded document with cfg's id set on it; a node with
+// no file gets a document holding the node id alone.
 func mintedDocument(cfg *ServerConfig) (*yaml.Node, error) {
 	root := cfg.doc
 	if root == nil || len(root.Content) == 0 {
-		if len(cfg.Plugins) > 0 {
-			return nil, errors.New("config: cannot mint plugin ids into a document that was never loaded")
-		}
 		root = &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}}
 	}
 	top := root.Content[0]
@@ -297,22 +256,6 @@ func mintedDocument(cfg *ServerConfig) (*yaml.Node, error) {
 		return nil, errors.New("config: server.yaml is not a mapping")
 	}
 	setScalar(top, "id", cfg.ID)
-	plugins := mappingValue(top, "plugins")
-	if plugins == nil {
-		if len(cfg.Plugins) > 0 {
-			return nil, errors.New("config: plugins declared but the document has no plugins list")
-		}
-		return root, nil
-	}
-	if plugins.Kind != yaml.SequenceNode || len(plugins.Content) != len(cfg.Plugins) {
-		return nil, fmt.Errorf("config: the document lists %d plugins, the config %d", len(plugins.Content), len(cfg.Plugins))
-	}
-	for i, item := range plugins.Content {
-		if item.Kind != yaml.MappingNode {
-			return nil, fmt.Errorf("config: plugins[%d] is not a mapping", i)
-		}
-		setScalar(item, "id", cfg.Plugins[i].ID)
-	}
 	return root, nil
 }
 
@@ -348,19 +291,6 @@ func validateIDs(cfg *ServerConfig) error {
 		if err := check("id", cfg.ID); err != nil {
 			return err
 		}
-	}
-	seen := map[string]bool{cfg.ID: cfg.ID != ""}
-	for _, p := range cfg.Plugins {
-		if p.ID == "" {
-			continue
-		}
-		if err := check("plugin id", p.ID); err != nil {
-			return err
-		}
-		if seen[p.ID] {
-			return fmt.Errorf("plugin id %q is declared twice", p.ID)
-		}
-		seen[p.ID] = true
 	}
 	names := map[string]bool{}
 	for _, c := range cfg.Connections {
@@ -425,16 +355,6 @@ func expandPaths(cfg *ServerConfig) error {
 	for i := range cfg.Files {
 		if cfg.Files[i].Root, err = expand(cfg.Files[i].Root); err != nil {
 			return err
-		}
-	}
-	for i := range cfg.Plugins {
-		if cfg.Plugins[i].Binary, err = expand(cfg.Plugins[i].Binary); err != nil {
-			return err
-		}
-		for k, v := range cfg.Plugins[i].Config {
-			if cfg.Plugins[i].Config[k], err = expand(v); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

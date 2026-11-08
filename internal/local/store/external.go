@@ -56,9 +56,6 @@ func (s *Store) Namespace(ns string) *Namespace {
 	return &Namespace{s: s, ns: ns}
 }
 
-// ID is the source id the rows are kept under.
-func (n *Namespace) ID() string { return n.ns }
-
 // ExtTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
 // a door's minted child grid, 0 for a leaf. URLUser is the row's url_user.

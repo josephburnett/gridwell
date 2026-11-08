@@ -38,13 +38,12 @@ const (
 
 // The origins. OriginClient and OriginElectron are the only two an emitter may
 // claim: the node forces anything else to OriginClient, because a record that
-// came through the API did not come from the node. OriginNode and
-// OriginPlugin are the node's own, written on records it makes itself.
+// came through the API did not come from the node. OriginNode is the node's
+// own, written on records it makes itself.
 const (
 	OriginClient   = "client"
 	OriginElectron = "electron"
 	OriginNode     = "node"
-	OriginPlugin   = "plugin"
 )
 
 // DumpResponse is what DumpPath answers: where the node wrote its ring and

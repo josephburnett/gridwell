@@ -60,7 +60,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // Gridwell is the one RPC surface a node serves: the web, connection and MCP
-// APIs decode onto it, and pluginhost adapts plugin.v1 to it.
+// APIs decode onto it.
 type GridwellClient interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 	// Info is the whole handshake: identity plus the default root. Handshake
@@ -367,7 +367,7 @@ func (c *gridwellClient) DisableSource(ctx context.Context, in *DisableSourceReq
 // for forward compatibility.
 //
 // Gridwell is the one RPC surface a node serves: the web, connection and MCP
-// APIs decode onto it, and pluginhost adapts plugin.v1 to it.
+// APIs decode onto it.
 type GridwellServer interface {
 	// ── Lifecycle ───────────────────────────────────────────────────────────
 	// Info is the whole handshake: identity plus the default root. Handshake

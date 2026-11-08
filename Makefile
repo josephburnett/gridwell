@@ -1,30 +1,18 @@
-.PHONY: build bin plugins mac-bins wasm fmt-check proto-check check check-electron check-e2e check-web check-connections serve clean launch vendor dist dist-mac dist-win stamp-version node-modules
-
-# Every plugin kind with a binary in $(PLUGINS_DIR). `plugins` builds from
-# this list and `clean` removes from it.
-ALL_PLUGIN_KINDS := fs proc gitlab pages hey gmail
+.PHONY: build bin mac-bins wasm fmt-check proto-check check check-electron check-e2e check-web check-connections serve clean launch vendor dist dist-mac dist-win stamp-version node-modules
 
 # HOST_GOOS is what this machine builds for. The release builds run on native
 # runners, one per OS, so nothing here cross-compiles a distribution.
 HOST_GOOS := $(shell go env GOOS)
 
 ifeq ($(HOST_GOOS),windows)
-# Windows names a built binary <name>.exe. exeSuffixFor in
-# internal/cli/serve.go and apps/desktop/src/main/paths.ts are the loader's
-# side of the same fact.
+# Windows names a built binary <name>.exe; apps/desktop/src/main/paths.ts is
+# the sidecar's side of the same fact.
 EXE := .exe
-# proc reads /proc, so it is a unix plugin and the Windows build ships
-# without it rather than shipping one that can never answer.
-PLUGIN_KINDS := $(filter-out proc,$(ALL_PLUGIN_KINDS))
 else
 EXE :=
-PLUGIN_KINDS := $(ALL_PLUGIN_KINDS)
 endif
 
 BIN := ./gridwell$(EXE)
-# clean removes every kind, whatever this host builds, so switching hosts in
-# one checkout leaves nothing behind.
-ALL_PLUGIN_BIN := $(addsuffix $(EXE),$(addprefix ./gridwell-plugin-,$(ALL_PLUGIN_KINDS)))
 
 # VERSION is the release version and the git tag owns it, through the release
 # workflow's VERSION=$${GITHUB_REF_NAME#v}. Nothing in the tree carries a
@@ -33,10 +21,6 @@ ALL_PLUGIN_BIN := $(addsuffix $(EXE),$(addprefix ./gridwell-plugin-,$(ALL_PLUGIN
 VERSION ?=
 GO_LDFLAGS := -X github.com/josephburnett/gridwell/internal/cli.Version=$(VERSION)
 
-# The plugins live in their own repository, and PLUGINS_DIR is the one place
-# that says where that checkout is. It defaults to beside this one and is
-# overridable from the environment.
-PLUGINS_DIR ?= ../gridwell-plugins
 WASM := ./web/gridwell.wasm
 WASM_EXEC := ./web/wasm_exec.js
 # On Windows `go env GOROOT` answers C:\..., and every recipe here is a POSIX
@@ -54,35 +38,18 @@ NPM_CACHE := $(CACHE)/npm
 export electron_config_cache := $(CACHE)/electron
 export ELECTRON_BUILDER_CACHE := $(CACHE)/electron-builder
 
-# `bin`, `plugins` and `wasm` are phony so they always invoke `go build`, and
-# no stale binary or wasm artifact is ever served. Go's build cache keeps that
-# fast. Every plugin is its own separately compiled go-plugin binary, laid out
-# beside $(BIN) so the server resolves it by `gridwell-plugin-<kind>`.
-build: bin plugins wasm
+# `bin` and `wasm` are phony so they always invoke `go build`, and no stale
+# binary or wasm artifact is ever served. Go's build cache keeps that fast.
+build: bin wasm
 
 # CGO_ENABLED=0 makes the sidecar a static binary with no libc-version
 # coupling, which works because modernc.org/sqlite is pure Go. web/embed.go
-# embeds the web client, so the built gridwell and gridwell-plugin-<kind>
-# binaries are the whole distribution and the browser client serves from the
+# embeds the web client, so the built gridwell binary is the whole
+# distribution and the browser client serves from the
 # binary itself. bin depends on wasm so the embed carries the current
 # client.
 bin: wasm
 	cd apps/gridwell && CGO_ENABLED=0 go build -ldflags "$(GO_LDFLAGS)" -o ../../gridwell$(EXE) .
-
-# Phony so a source change always rebuilds; a file target would skip the build
-# whenever the binary already existed. The sources are in $(PLUGINS_DIR) and
-# the binaries land beside $(BIN), where the loader and every Go test look.
-plugins:
-	@test -d $(PLUGINS_DIR) || { \
-		echo "$(PLUGINS_DIR) missing — the plugins live in their own repository:"; \
-		echo "  git clone git@github.com:josephburnett/gridwell-plugins.git $(PLUGINS_DIR)"; \
-		echo "(or point PLUGINS_DIR at an existing checkout)"; \
-		exit 1; \
-	}
-	@set -e; for k in $(PLUGIN_KINDS); do \
-		echo "cd $(PLUGINS_DIR)/$$k && go build -o $(CURDIR)/gridwell-plugin-$$k$(EXE)"; \
-		(cd $(PLUGINS_DIR)/$$k && CGO_ENABLED=0 go build -o $(CURDIR)/gridwell-plugin-$$k$(EXE) ./cmd/gridwell-plugin-$$k); \
-	done
 
 # The .gz sidecar rides along, and the server serves it with
 # Content-Encoding: gzip when the client accepts it. The wasm is tens of
@@ -172,17 +139,14 @@ proto-check:
 #
 # MODULES lists every in-repo Go module beyond the root. check builds and
 # tests each one standalone with GOWORK=off, so no module can lean on the
-# workspace. The plugins are another repository's modules, gated by its own
-# `make check`.
+# workspace.
 MODULES := api internal/doctype apps/gridwell
 
 # check depends on wasm because web/embed.go embeds the built gridwell.wasm,
-# so a fresh checkout cannot `go build ./...` before one exists. It depends on
-# plugins because the seam tests spawn the real binaries, which is the only
-# way a plugin reaches this repo. `go vet ./...` runs at the host GOOS and
+# so a fresh checkout cannot `go build ./...` before one exists. `go vet ./...` runs at the host GOOS and
 # so sees none of the js/wasm-tagged files, which is why they are vetted
 # again under GOOS=js: this is the only gate that looks at them at all.
-check: fmt-check proto-check wasm plugins
+check: fmt-check proto-check wasm
 	go build ./...
 	go vet ./...
 	go test ./...
@@ -248,8 +212,8 @@ check-web: build node-modules
 
 # check-connections is the spawn gate: the real binaries through a real ssh
 # tunnel, with one write and read crossing every hop. The in-process seam
-# tests cannot see go-plugin spawn, so a failure that only happens in a
-# spawned process leaves them green. The `connections` build tag keeps `make
+# tests spawn no process, so a failure that only happens in a spawned
+# process leaves them green. The `connections` build tag keeps `make
 # check` fast. It is headless. CLAUDE.md's Gates table says when to run it.
 check-connections: build
 	cd test/connections && go test -tags connections -count=1 .
@@ -314,8 +278,8 @@ dist-mac: mac-bins wasm node-modules stamp-version
 	@echo "dmg: $(DESKTOP)/out/"
 
 # dist-win produces the portable Gridwell-<ver>.exe. Its accepted
-# degradations are in docs/release.md: no live shells, no serve lock, no proc
-# plugin, and no connection API, whose 0600 unix socket has no Windows
+# degradations are in docs/release.md: no live shells, no serve lock, and no
+# connection API, whose 0600 unix socket has no Windows
 # equivalent.
 dist-win: build node-modules stamp-version
 	cd $(DESKTOP) && npm run build && ./node_modules/.bin/electron-builder --win portable
@@ -341,8 +305,7 @@ mac-bins: wasm
 		lipo -create -output "$(CURDIR)/$$out" "$$tmp/$$out.amd64" "$$tmp/$$out.arm64"; \
 		codesign --force --sign - "$(CURDIR)/$$out"; \
 	}; \
-	fat gridwell apps/gridwell .; \
-	for k in $(PLUGIN_KINDS); do fat gridwell-plugin-$$k $(PLUGINS_DIR)/$$k ./cmd/gridwell-plugin-$$k; done
+	fat gridwell apps/gridwell .
 
 # `make launch` is the one-shot dev run: build the sidecar and wasm, compile
 # the TS, and launch Electron against ~/.gridwell. A node directory with no
@@ -365,5 +328,5 @@ node-modules:
 	}
 
 clean:
-	rm -f $(BIN) $(ALL_PLUGIN_BIN) $(WASM) $(WASM_EXEC)
+	rm -f $(BIN) $(WASM) $(WASM_EXEC)
 	rm -rf $(DESKTOP)/dist $(DESKTOP)/out

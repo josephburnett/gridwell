@@ -238,12 +238,6 @@ func capMsg(msg string) string {
 // call site.
 func LogWriter(r *Ring) io.Writer { return lineWriter{r, tracewire.OriginNode, "log"} }
 
-// PluginWriter is one plugin subprocess's stderr, under its own id: the
-// subprocess does not reach the node's log, so its lines arrive here instead.
-func PluginWriter(r *Ring, pluginID string) io.Writer {
-	return lineWriter{r, tracewire.OriginPlugin, pluginID}
-}
-
 type lineWriter struct {
 	r      *Ring
 	origin string

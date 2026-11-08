@@ -1,8 +1,8 @@
 // Package node is the embeddable Gridwell node: everything `gridwell serve`
 // does between config in hand and sockets up. The CLI is a wrapper that adds
 // flags, the serve lock, the banner and signal handling, and reimplements none
-// of the middle. The store, the files and the transport are constructed here from the
-// node's own config, so they never appear in `plugins:`.
+// of the middle. The store, the files and the transport are constructed here
+// from the node's own config.
 package node
 
 import (
@@ -94,7 +94,7 @@ func ensureStore(dir string, cfg *config.ServerConfig) error {
 
 // Options configures Start.
 type Options struct {
-	// Dir is the node's directory: store, cache and plugin state hang off it.
+	// Dir is the node's directory: the store and the cache hang off it.
 	Dir string
 	// Cfg is BuildConfig's result plus any caller adjustments.
 	Cfg *config.ServerConfig
@@ -132,7 +132,7 @@ func Start(opts Options) (*Node, error) {
 	}
 	// One disposable file caching what a connection last said, put in
 	// front of the transport below and nowhere else: a cache earns its keep
-	// across a network, and home and a plugin are both on this machine.
+	// across a network, and home and the files are both on this machine.
 	cache := openCache(cfg)
 	reg := plugin.NewRegistry()
 	fail := func(err error) (*Node, error) {
@@ -148,12 +148,6 @@ func Start(opts Options) (*Node, error) {
 	}
 	if err := startFiles(reg, st, cfg); err != nil {
 		return fail(err)
-	}
-	// A content plugin is registered bare: its source is a subprocess here, so
-	// caching answers buys no round trip. What it needs is supervision,
-	// and internal/plugin respawns one that dies.
-	if err := plugin.LoadInto(reg, cfg, opts.Dir, st); err != nil {
-		return fail(fmt.Errorf("load plugins: %w", err))
 	}
 	// The transport gets prefetch (CLAUDE.md, 2026-10-06).
 	if err := startTransport(reg, st, cfg, func(ns namespace.Namespace) namespace.Namespace {
@@ -204,8 +198,8 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 	return nil
 }
 
-// startFiles registers the files over the roots files: declares, after home
-// and before the plugins, under their owner id (rpc.FilesOwner). A node that
+// startFiles registers the files over the roots files: declares, after home,
+// under their owner id (rpc.FilesOwner). A node that
 // declares none has no files row. The files are dark or told, never
 // disabled, so they get no switch.
 func startFiles(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) error {

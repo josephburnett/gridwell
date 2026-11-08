@@ -237,12 +237,11 @@ const (
 )
 
 // WebContent is a url tile: at the address it carries, or at the /content/
-// API when its plugin serves the page.
+// API, the node serving the page.
 func WebContent(t *pb.Tile) bool { return KindOf(t.Kind).Content == ContentAddress }
 
 // TextDocument is a tile whose content is its own document body. Every text
-// tile has one: a served page is a url tile, serves_page on another kind being
-// refused by pluginhost.acceptEntries.
+// tile has one: a served page is a url tile (files.fileFacts).
 func TextDocument(t *pb.Tile) bool { return KindOf(t.Kind).Content == ContentBody }
 
 // HTTPAddress is an address a url tile may hold: http or https, nothing else.

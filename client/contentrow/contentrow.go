@@ -1,6 +1,6 @@
 // Package contentrow owns which row a tile's content facts are read from: a
 // content row's own, a leaf link's target's. A link row carries none of them
-// (the store's link CHECK, pluginhost.buildTiles), so an address, serves_page,
+// (the store's link CHECK, files.Source.buildTiles), so an address, serves_page,
 // read_only, text_presentation or preview read off the link is an empty
 // value, never an answer. It is js-free; the shim supplies the cache lookup
 // and reads the target a Pending verdict names.

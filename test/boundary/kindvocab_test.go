@@ -39,8 +39,6 @@ var kindLiteralOK = map[string]string{
 	"client/traceevent/traceevent.go":    `"pane" is a trace record's src and its key for a pane id, and "text" names the save queue`,
 	"client/wasm/url_modal.go":           `"url" is a DOM dataset property`,
 	"client/wasm/webview_bridge.go":      `"url" is a bridge event property`,
-
-	"internal/plugintest/gitlabfake/gitlabfake.go": `"url" is a plugin config key`,
 }
 
 // No non-test Go file outside the owners above writes a tile kind as a string.

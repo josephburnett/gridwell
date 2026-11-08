@@ -13,7 +13,7 @@ type Moved struct {
 	Reload bool
 	// DropCapture: a frame this client captured no longer answers for the
 	// preview, because the node retired the screenshot it would have become
-	// (pluginhost.pagePreviewStale).
+	// (files.pagePreviewStale).
 	DropCapture bool
 }
 

@@ -18,7 +18,7 @@ func TestRunStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	l.WriteBanner("gridwell: serving on 127.0.0.1:4242 (static=embedded plugins=1)")
+	l.WriteBanner("gridwell: serving on 127.0.0.1:4242 (static=embedded)")
 	if code := RunStatus(nil); code != 0 {
 		t.Errorf("status with a held lock = %d, want 0", code)
 	}

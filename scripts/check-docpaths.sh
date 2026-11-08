@@ -38,7 +38,7 @@ for f in $files; do
   for s in "${skip_files[@]}"; do [ "$f" = "$s" ] && continue 2; done
   # Path-like tokens; the leading dir must sit on a word boundary so
   # `desktop/` inside `apps/desktop/` (say) is not split in two.
-  for p in $(grep -oE '(^|[^A-Za-z0-9_./-])(internal|plugins|api|client|apps|scripts|test|web|docs)/[A-Za-z0-9_./*-]*' "$f" \
+  for p in $(grep -oE '(^|[^A-Za-z0-9_./-])(internal|api|client|apps|scripts|test|web|docs)/[A-Za-z0-9_./*-]*' "$f" \
       | sed -E 's/^[^A-Za-z]//' | sed -E 's#/\.\.\.$##; s#[.,;:)*]+$##; s#\.[A-Z][A-Za-z0-9]*$##; s#/$##' | LC_ALL=C sort -u); do
     [ -z "$p" ] && continue
     if [ -e "$p" ]; then continue; fi

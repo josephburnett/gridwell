@@ -66,13 +66,9 @@ connections:
       key: /k
       known_hosts: /kh
 retired_names: [olddead]
-plugins:
-    - id: p1
-      kind: fs
+files:
+    - root: /home/joe
       label: Home dir
-      config:
-        root: /home/joe
-    - kind: gitlab
 `)
 	cfg, err := Load(p)
 	if err != nil {
@@ -90,9 +86,8 @@ plugins:
 	if len(cfg.RetiredNames) != 1 || cfg.RetiredNames[0] != "olddead" {
 		t.Fatalf("retired = %v", cfg.RetiredNames)
 	}
-	if len(cfg.Plugins) != 2 || cfg.Plugins[0].ID != "p1" || cfg.Plugins[0].Label != "Home dir" ||
-		cfg.Plugins[0].Config["root"] != "/home/joe" || cfg.Plugins[1].Kind != "gitlab" || cfg.Plugins[1].ID != "" {
-		t.Fatalf("plugins = %+v", cfg.Plugins)
+	if len(cfg.Files) != 1 || cfg.Files[0] != (FilesRoot{Root: "/home/joe", Label: "Home dir"}) {
+		t.Fatalf("files = %+v", cfg.Files)
 	}
 }
 
@@ -102,7 +97,7 @@ func TestLoad_empty_and_defaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ID != "" || cfg.Web.Bind != Defaults.Web.Bind || cfg.Web.BindSet || len(cfg.Plugins) != 0 {
+	if cfg.ID != "" || cfg.Web.Bind != Defaults.Web.Bind || cfg.Web.BindSet || len(cfg.Files) != 0 {
 		t.Fatalf("fresh config = %+v", cfg)
 	}
 }
@@ -111,13 +106,10 @@ func TestLoad_empty_and_defaults(t *testing.T) {
 // pre-one-database file is refused naming the release that converts it.
 func TestLoad_refusesRetiredKeys(t *testing.T) {
 	cases := map[string]string{
-		"bind: 127.0.0.1:1\n":                    "web",
-		"password: hunter2\n":                    "web-password",
-		"plugins:\n  - id: p1\n":                 "kind is required",
-		"nonsense: 1\n":                          "not found",
-		"node_id: n1\n":                          "v0.1.0",
-		"plugins:\n  - id: h1\n    kind: home\n": "v0.1.0",
-		"plugins:\n  - id: r1\n    kind: ssh\n":  "v0.1.0",
+		"bind: 127.0.0.1:1\n": "web",
+		"password: hunter2\n": "web-password",
+		"nonsense: 1\n":       "not found",
+		"node_id: n1\n":       "v0.1.0",
 	}
 	for yml, want := range cases {
 		_, err := Load(write(t, t.TempDir(), yml))
@@ -131,8 +123,6 @@ func TestLoad_rejectsBadIDs(t *testing.T) {
 	for _, yml := range []string{
 		"id: has/slash\n",
 		"id: \"12345\"\n",
-		"plugins:\n  - id: \"777\"\n    kind: fs\n",
-		"plugins:\n  - id: dup1\n    kind: fs\n  - id: dup1\n    kind: proc\n",
 		"connections:\n  - name: \"9\"\n    addr: /s\n",
 		"connections:\n  - name: c1\n    addr: /s\n  - name: c1\n    addr: /t\n",
 		// A nameless stanza takes the empty segment: ids through it would
@@ -154,36 +144,36 @@ func TestLoad_rejectsBadIDs(t *testing.T) {
 
 func TestLoad_tilde_expansion(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	cfg, err := Load(write(t, t.TempDir(), "federation:\n  socket: ~/fed.sock\nstatic: ~/web\nplugins:\n  - id: p1\n    kind: fs\n    binary: ~/bin/x\n    config:\n      root: ~/docs\n"))
+	cfg, err := Load(write(t, t.TempDir(), "federation:\n  socket: ~/fed.sock\nstatic: ~/web\nfiles:\n  - root: ~/docs\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Federation.Socket != filepath.Join(home, "fed.sock") || cfg.StaticDir != filepath.Join(home, "web") ||
-		cfg.Plugins[0].Binary != filepath.Join(home, "bin/x") || cfg.Plugins[0].Config["root"] != filepath.Join(home, "docs") {
+		cfg.Files[0].Root != filepath.Join(home, "docs") {
 		t.Fatalf("tilde not expanded: %+v", cfg)
 	}
 }
 
 func TestLoad_invalid_yaml(t *testing.T) {
-	if _, err := Load(write(t, t.TempDir(), "plugins: [\n")); err == nil {
+	if _, err := Load(write(t, t.TempDir(), "files: [\n")); err == nil {
 		t.Fatal("invalid yaml must be an error")
 	}
 }
 
-// Mint fills exactly the absent ids and reports it; Save writes 0600 a file
-// the next Load reads back, with no derived field in it.
+// Mint fills the absent id and reports it; Save writes 0600 a file the next
+// Load reads back, with no derived field in it.
 func TestMintAndSave(t *testing.T) {
 	dir := t.TempDir()
-	p := write(t, dir, "plugins:\n  - kind: fs\n  - id: keep1\n    kind: proc\n")
+	p := write(t, dir, "files:\n  - root: /srv\n")
 	cfg, err := Load(p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.WebPassword, cfg.CacheDir = "secret", "/cache"
 	if !Mint(cfg) {
-		t.Fatal("Mint must report the minted ids")
+		t.Fatal("Mint must report the minted id")
 	}
-	if cfg.ID == "" || cfg.Plugins[0].ID == "" || cfg.Plugins[1].ID != "keep1" {
+	if cfg.ID == "" {
 		t.Fatalf("mint = %+v", cfg)
 	}
 	if Mint(cfg) {
@@ -204,7 +194,7 @@ func TestMintAndSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if back.ID != cfg.ID || back.Plugins[0].ID != cfg.Plugins[0].ID || back.Plugins[1].ID != "keep1" {
+	if back.ID != cfg.ID || len(back.Files) != 1 {
 		t.Fatalf("round trip: %+v vs %+v", back, cfg)
 	}
 	if _, err := os.Stat(p + ".tmp"); !errors.Is(err, fs.ErrNotExist) {
@@ -241,14 +231,14 @@ func TestDurableFiles(t *testing.T) {
 	}
 }
 
-// Save writes the minted ids into the document as it was loaded and nothing
+// Save writes the minted id into the document as it was loaded and nothing
 // else: a default the file left absent stays absent, a path stays in the
 // user's spelling, and the user's comments stay. Anything more is a config
 // write the user did not make, and an explicit web.bind is how the desktop's
 // --bind-default stops winning.
-func TestSaveWritesOnlyTheMintedIDs(t *testing.T) {
+func TestSaveWritesOnlyTheMintedID(t *testing.T) {
 	dir := t.TempDir()
-	src := "# my node\nplugins:\n  - kind: fs # files\n    binary: ~/bin/gridwell-plugin-fs\n    config:\n      root: ~/notes\n"
+	src := "# my node\nfederation:\n  socket: ~/fed.sock # the socket\nfiles:\n  - root: ~/notes\n"
 	p := write(t, dir, src)
 	cfg, err := Load(p)
 	if err != nil {
@@ -262,7 +252,7 @@ func TestSaveWritesOnlyTheMintedIDs(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(p)
 	got := string(raw)
-	for _, want := range []string{"id: " + cfg.ID, "id: " + cfg.Plugins[0].ID, "~/bin/gridwell-plugin-fs", "~/notes", "# my node", "# files"} {
+	for _, want := range []string{"id: " + cfg.ID, "~/fed.sock", "~/notes", "# my node", "# the socket"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("saved file lacks %q:\n%s", want, got)
 		}
@@ -277,8 +267,8 @@ func TestSaveWritesOnlyTheMintedIDs(t *testing.T) {
 	if back.Web.BindSet || back.Web.Bind != Defaults.Web.Bind {
 		t.Fatalf("a bind the file never had is now written down: %+v", back.Web)
 	}
-	if back.ID != cfg.ID || back.Plugins[0].ID != cfg.Plugins[0].ID {
-		t.Fatalf("ids did not round-trip: %+v vs %+v", back, cfg)
+	if back.ID != cfg.ID {
+		t.Fatalf("the id did not round-trip: %+v vs %+v", back, cfg)
 	}
 }
 
@@ -314,12 +304,12 @@ func TestExpandHomeGrammar(t *testing.T) {
 	}
 	// The file reads the same grammar, so a bare "~" is home here too.
 	home, _ := os.UserHomeDir()
-	cfg, err := Load(write(t, t.TempDir(), "plugins:\n  - id: p1\n    kind: fs\n    config:\n      root: \"~\"\n"))
+	cfg, err := Load(write(t, t.TempDir(), "files:\n  - root: \"~\"\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Plugins[0].Config["root"] != home {
-		t.Fatalf("bare ~ = %q, want %q", cfg.Plugins[0].Config["root"], home)
+	if cfg.Files[0].Root != home {
+		t.Fatalf("bare ~ = %q, want %q", cfg.Files[0].Root, home)
 	}
 }
 
@@ -387,6 +377,7 @@ func TestFilesRefusals(t *testing.T) {
 		"files:\n  - root: /a\n  - root: /a/\n": "twice",
 		"files:\n  - root: /a\n    kind: fs\n":  "not found",
 		"routes:\n  - match: x\n":               "`files:`",
+		"plugins:\n  - kind: fs\n":              "`files:`",
 	} {
 		_, err := Parse([]byte(yml))
 		if err == nil || !strings.Contains(err.Error(), want) {

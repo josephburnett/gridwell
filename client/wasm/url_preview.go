@@ -132,7 +132,7 @@ func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, da
 }
 
 // drawURLTile renders a URL tile in the parent grid view. Its preview is keyed
-// by the node (see pluginhost.previewKey) and its label is urlTileLabel's,
+// by the node (see files.previewKey) and its label is urlTileLabel's,
 // whoever serves the page.
 func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {

@@ -6,7 +6,6 @@ ARCHITECTURE.md plugin.v1
 ARCHITECTURE.md gridwell.v1
 CLAUDE.md plugin.v1
 docs/ids.md plugin.v1
-docs/plugin-authoring.md plugin.v1
 # A server.yaml key:
 ARCHITECTURE.md web.bind
 docs/mcp.md web.bind
@@ -18,7 +17,7 @@ ARCHITECTURE.md window.close()
 docs/flake-ledger.md expect.poll
 docs/flake-ledger.md os.tmpdir()
 docs/flake-ledger.md forcefullyCrashRenderer()
-docs/plugin-authoring.md stream.SendHeader
 # The plugins repository's memo package, which this tree does not hold:
-docs/plugin-standard.md memo.Changes
-docs/plugin-standard.md memo.Life
+# Symbols of the plugin system, deleted in P3 of the files-native change, that
+# ARCHITECTURE.md still names; P4 rewrites it and deletes these lines:
+ARCHITECTURE.md rpc.EntryTileID

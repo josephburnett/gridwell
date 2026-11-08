@@ -12,7 +12,7 @@ import (
 
 func linkEntry(key, targetGrid, targetKey string) Entry {
 	return Entry{Key: key, Kind: rpc.KindURL, Label: "link " + key,
-		ServesPage: true, LinkTarget: rpc.EntryTileID(targetGrid, targetKey)}
+		ServesPage: true, LinkTarget: rpc.KeyTileID(targetGrid + "/" + targetKey)}
 }
 
 // isLinkTo checks the content facts a link row holds: the target and none of
@@ -27,7 +27,7 @@ func isLinkTo(t *testing.T, what string, tl ExtTile, target string) {
 
 func TestALinkEntryIsDerivedAndMintedAsALinkRow(t *testing.T) {
 	st, d := openExt(t)
-	target := rpc.EntryTileID("everything", "t1")
+	target := rpc.KeyTileID("everything" + "/" + "t1")
 	entries := []Entry{linkEntry("t1", "everything", "t1")}
 
 	derived, err := d.Overlay(0, entries)
@@ -87,7 +87,7 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := extByKey(t, stored, "t1")
-	isLinkTo(t, "the converted row", got, rpc.EntryTileID("everything", "t1"))
+	isLinkTo(t, "the converted row", got, rpc.KeyTileID("everything"+"/"+"t1"))
 	if got.ID != id || got.X != 6 || got.Y != -3 || got.W != 2 {
 		t.Fatalf("conversion moved the row: %+v, want id %d at (6,-3) 2 wide", got, id)
 	}
@@ -99,7 +99,7 @@ func TestAContentRowListedAsALinkIsConvertedInPlace(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, _ = d.tiles(gid)
-	isLinkTo(t, "the re-targeted row", extByKey(t, stored, "t1"), rpc.EntryTileID("everything", "t9"))
+	isLinkTo(t, "the re-targeted row", extByKey(t, stored, "t1"), rpc.KeyTileID("everything"+"/"+"t9"))
 
 	// And an entry that stops being a link converts back, under the same id.
 	if err := d.Refresh(gid, []Entry{{Key: "t1", Kind: rpc.KindURL, Label: "t1", URL: "https://x"}}); err != nil {

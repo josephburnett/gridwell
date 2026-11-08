@@ -30,7 +30,7 @@ var surfacePkgFuncs = map[string]bool{
 
 // surfaceNames are the functions and methods, by name, whose call reaches a
 // client: eventhub.Hub.Publish; the health and grid events of
-// sourcecache.Layer and pluginhost.Adapter; plugin.Supervisor.setHealth;
+// sourcecache.Layer and files.Source;
 // connection.Server.note; namespace.Refollow.Down; the router's reportHealth;
 // an HTTP status; the shim's App.reportErr onto client/errsurface.
 var surfaceNames = map[string]bool{

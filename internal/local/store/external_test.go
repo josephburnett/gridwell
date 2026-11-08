@@ -655,7 +655,7 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 	if got := extByKey(t, joined, "u"); got.UrlString != "https://b.test/p" {
 		t.Fatalf("join = %q, want the landed address over the listing's", got.UrlString)
 	}
-	listing[0].LinkTarget = rpc.EntryTileID("root", "f")
+	listing[0].LinkTarget = rpc.KeyTileID("root" + "/" + "f")
 	if err := d.Refresh(gid, listing); err != nil {
 		t.Fatal(err)
 	}

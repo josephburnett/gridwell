@@ -6,7 +6,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 )
 
 // flagMessages are the messages whose flags the guard holds.
@@ -15,10 +14,6 @@ var flagMessages = []protoreflect.MessageDescriptor{
 	(&gridwellv1.Grid{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.PluginGrid{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.InfoResponse{}).ProtoReflect().Descriptor(),
-	(&pluginv1.InfoResponse{}).ProtoReflect().Descriptor(),
-	(&pluginv1.PluginGrid{}).ProtoReflect().Descriptor(),
-	(&pluginv1.ListResponse{}).ProtoReflect().Descriptor(),
-	(&pluginv1.Entry{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.EventPluginHealth{}).ProtoReflect().Descriptor(),
 }
 

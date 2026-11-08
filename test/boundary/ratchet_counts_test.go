@@ -741,71 +741,17 @@ func unheardByCode(t *testing.T, root string) []string {
 	return out
 }
 
-// TestUnheardByCodeStaysAtNine holds the readers of a transport status code
-// to the nine at hops where the code is the only fact there is: the plugin
-// subprocess hop, the deep copy, and the router and MCP API (Joe,
-// 2026-10-29). Every other hop reads the dial's answered marker.
-func TestUnheardByCodeStaysAtNine(t *testing.T) {
-	if got := unheardByCode(t, repoRoot(t)); len(got) != 9 {
-		t.Errorf("gwerr.IsTransport is read at %d sites outside api/gwerr, want 9; a new reader decides reachability from a code, read gwerr.IsUnheard instead:\n  %s", len(got), strings.Join(got, "\n  "))
-	}
-}
+// unheardByCodeSites is how many readers of a transport status code there
+// are, at hops where the code is the only fact there is: the deep copy, and
+// the router and MCP API (Joe, 2026-10-29).
+const unheardByCodeSites = 5
 
-// infoReaders are the production reads of a plugin's declaration that do not
-// come from one held copy: each call that asks the plugin API for Info, and
-// each memo outside internal/pluginhost, a struct field mapping to an
-// InfoResponse, that keeps an answer with a freshness of its own.
-func infoReaders(t *testing.T, root string) []string {
-	var out []string
-	productionGo(t, root, func(rel string, fset *token.FileSet, f *ast.File) {
-		plugin := importName(f, repoModule+"/api/gen/plugin/v1")
-		names := map[string]bool{}
-		for _, path := range []string{"/api/gen/plugin/v1", "/api/gen/gridwell/v1"} {
-			if name := importName(f, repoModule+path); name != "" {
-				names[name] = true
-			}
-		}
-		inHost := strings.HasPrefix(filepath.ToSlash(rel), "internal/pluginhost/")
-		ast.Inspect(f, func(n ast.Node) bool {
-			switch n := n.(type) {
-			case *ast.CallExpr:
-				sel, ok := n.Fun.(*ast.SelectorExpr)
-				if plugin == "" || !ok || sel.Sel.Name != "Info" || len(n.Args) != 2 {
-					return true
-				}
-				if lit, ok := n.Args[1].(*ast.UnaryExpr); ok {
-					if cl, ok := lit.X.(*ast.CompositeLit); ok && isSelector(cl.Type, plugin, "InfoRequest") {
-						out = append(out, fmt.Sprintf("%s:%d: asks Info", rel, fset.Position(n.Pos()).Line))
-					}
-				}
-			case *ast.StructType:
-				for _, field := range n.Fields.List {
-					m, ok := field.Type.(*ast.MapType)
-					if inHost || !ok {
-						continue
-					}
-					v := m.Value
-					if star, ok := v.(*ast.StarExpr); ok {
-						v = star.X
-					}
-					if sel, ok := v.(*ast.SelectorExpr); ok && sel.Sel.Name == "InfoResponse" {
-						if x, ok := sel.X.(*ast.Ident); ok && names[x.Name] {
-							out = append(out, fmt.Sprintf("%s:%d: memoizes Info", rel, fset.Position(field.Pos()).Line))
-						}
-					}
-				}
-			}
-			return true
-		})
-	})
-	return out
-}
-
-// TestOneInfoReader holds a plugin's declaration to one asker, the adapter's
-// held answer (pluginhost.Adapter.info), which every other reader reads.
-func TestOneInfoReader(t *testing.T) {
-	if got := infoReaders(t, repoRoot(t)); len(got) != 1 || !strings.HasPrefix(got[0], "internal/pluginhost/") {
-		t.Errorf("the plugin's Info is read from %d places, want the adapter's one: %q", len(got), got)
+// TestUnheardByCodeIsHeldAtItsHops holds the readers of a transport status
+// code to unheardByCodeSites. Every other hop reads the dial's answered
+// marker.
+func TestUnheardByCodeIsHeldAtItsHops(t *testing.T) {
+	if got := unheardByCode(t, repoRoot(t)); len(got) != unheardByCodeSites {
+		t.Errorf("gwerr.IsTransport is read at %d sites outside api/gwerr, want %d; a new reader decides reachability from a code, read gwerr.IsUnheard instead:\n  %s", len(got), unheardByCodeSites, strings.Join(got, "\n  "))
 	}
 }
 

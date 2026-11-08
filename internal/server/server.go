@@ -212,8 +212,7 @@ func (s *Server) homeScratch(ctx context.Context) (string, error) {
 }
 
 // pluginInfo is the Info of the namespace whose owner id is uuid, bounded by
-// pluginInfoTimeout so a hung one degrades to an error rather than a stall; a
-// plugin's is held by its adapter (pluginhost.Adapter.info).
+// pluginInfoTimeout so a hung one degrades to an error rather than a stall.
 func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
 	c, found := s.routeClient(uuid)
 	if !found {

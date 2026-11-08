@@ -12,11 +12,19 @@ apps/desktop/README.md apps/desktop/.cache
 .github/workflows/release.yml apps/desktop/out/*
 .github/workflows/release.yml apps/desktop/out/*.dmg
 .github/workflows/release.yml apps/desktop/out/*.exe
-# The files source the 2026-11-07 decisions name, built in the next commits
-# of the files-native change; this line goes when the package lands:
-# Docs that cite the plugin system's seam tests, which the files-native
-# change deleted; P4 rewrites the docs and deletes these lines:
+# The docs, skills and e2e specs that describe the plugin system, deleted in
+# P3 of the files-native change; P4 rewrites them and deletes these lines:
+.claude/skills/assessment/SKILL.md api/plugin/v1/plugin.proto
+ARCHITECTURE.md docs/plugin-authoring.md
+ARCHITECTURE.md internal/pluginhost/adapter.go
 apps/desktop/e2e/live-updates-off.spec.ts internal/server/live_updates_off_seam_test.go
+apps/desktop/e2e/runtree.ts internal/plugintest/heyfake
+docs/concepts.md internal/pluginhost
+docs/freshness.md internal/pluginhost/adapter.go
+docs/freshness.md internal/pluginhost/adapter_caps_test.go
+docs/freshness.md internal/pluginhost/fs_parity_test.go
+docs/freshness.md internal/pluginhost/watch.go
+docs/freshness.md internal/pluginhost/watch_test.go
 docs/freshness.md internal/server/abandoned_read_seam_test.go
 docs/freshness.md internal/server/fs_content_change_seam_test.go
 docs/freshness.md internal/server/fs_stamp_seam_test.go
@@ -30,15 +38,4 @@ docs/freshness.md internal/server/plugin_watch_seam_test.go
 docs/freshness.md internal/server/proc_content_change_seam_test.go
 docs/freshness.md internal/server/selection_plugin_seam_test.go
 docs/freshness.md internal/server/subscription_refused_seam_test.go
-docs/plugin-standard.md internal/server/cache_answer_seam_test.go
-docs/plugin-standard.md internal/server/fs_content_change_seam_test.go
-docs/plugin-standard.md internal/server/fs_info_refusal_seam_test.go
-docs/plugin-standard.md internal/server/fs_watch_seam_test.go
-docs/plugin-standard.md internal/server/fs_write_seam_test.go
-docs/plugin-standard.md internal/server/gitlab_outage_seam_test.go
-docs/plugin-standard.md internal/server/hey_dark_seam_test.go
-docs/plugin-standard.md internal/server/hey_watch_seam_test.go
-docs/plugin-standard.md internal/server/info_refusal_seam_test.go
-docs/plugin-standard.md internal/server/link_entry_seam_test.go
-docs/plugin-standard.md internal/server/pages_seam_test.go
-docs/plugin-standard.md internal/server/proc_content_change_seam_test.go
+docs/ids.md internal/pluginhost

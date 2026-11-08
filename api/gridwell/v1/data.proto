@@ -27,8 +27,8 @@ message Grid {
   reserved 4, 5; // source_kind, source_id
   // writable: this grid's text bodies accept edits (WriteContent), so the
   // client lets the user type into its text tiles. The owning namespace
-  // stamps it on every grid it serves, the home always and a plugin's from
-  // plugin.v1 InfoResponse.writable, and transit carries it verbatim. It is
+  // stamps it on every grid it serves, true for the home and the files, and
+  // transit carries it verbatim. It is
   // per grid, not per namespace, because one connection fronts namespaces
   // that differ. Wire-only, never persisted.
   bool writable = 6;
@@ -83,8 +83,8 @@ message Grid {
   repeated string selection = 17;
   // moves: a tile of this grid moves to another grid of its namespace
   // (MoveTile), so a left-drag there is a move. The owning namespace stamps
-  // it on every grid it serves, true for the home and the files and a
-  // plugin's from plugin.v1 InfoResponse.move; transit carries it verbatim.
+  // it on every grid it serves, true for the home and the files; transit
+  // carries it verbatim.
   // Wire-only.
   optional bool moves = 18;
 }
@@ -242,17 +242,17 @@ message Tile {
   string shell_tmux = 38;
 
   // content_stamp is the source's name for the bytes behind a row with no
-  // version claim (a plugin's): plugin.v1 Entry.content_stamp, carried by the
-  // adapter and verbatim in transit, "" when the source names none. It does
+  // version claim (a file's): "<mtime_ns>-<size>", carried verbatim in
+  // transit, "" when the source names none. It does
   // for such a row what version does for a home row: a body read under
   // another stamp is behind it, and one read under this stamp is not.
   // Wire-only, never a stored column.
   string content_stamp = 39;
 
-  // read_only is the owning plugin's sentence for why this text tile's body
-  // takes no edits though its grid is writable, "" when it takes them:
-  // plugin.v1 Entry.read_only, carried by the adapter and verbatim in
-  // transit. The client shows such a body as it shows any read-only text
+  // read_only is the owning source's sentence for why this text tile's body
+  // takes no edits though its grid is writable, "" when it takes them: a file
+  // the node cannot write, or a disabled connection's row, carried verbatim
+  // in transit. The client shows such a body as it shows any read-only text
   // (textedit.ReadOnly). Wire-only, never a stored column.
   string read_only = 40;
 
@@ -604,10 +604,9 @@ message HandshakeResponse {
   // shells_disabled: this node refuses shell tiles outright, from server.yaml's
   // disable_shells. The client removes the shell primitive from the + menu,
   // and the server refuses CreateTile(kind=shell) and OpenShell before routing,
-  // on any grid. Only a home holds shells: a plugin creates no tile at all (its
-  // CreateTile is Unimplemented) and plugin.v1 entry kinds have no shell. It is
-  // a node-level operator fact, so it rides the node handshake rather than any
-  // per-plugin Info.
+  // on any grid. Only a home holds shells: the files create no tile at all
+  // (their CreateTile is Unimplemented). It is a node-level operator fact, so
+  // it rides the node handshake rather than any source's Info.
   bool shells_disabled = 4;
   // content_token gates the HTTP /content/ API, the ServeContent carrier.
   // Pages served there run sandboxed with an opaque origin, so neither their
@@ -985,7 +984,7 @@ message Event {
 }
 
 // Gridwell is the one RPC surface a node serves: the web, connection and MCP
-// APIs decode onto it, and pluginhost adapts plugin.v1 to it.
+// APIs decode onto it.
 service Gridwell {
   // ── Lifecycle ───────────────────────────────────────────────────────────
   // Info is the whole handshake: identity plus the default root. Handshake

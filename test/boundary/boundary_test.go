@@ -20,9 +20,6 @@ import (
 
 const repoModule = "github.com/josephburnett/gridwell"
 
-// pluginsModule is the plugins repository. Nothing here may reach into it.
-const pluginsModule = "github.com/josephburnett/gridwell-plugins"
-
 // modules maps each in-repo module, by path suffix with "" for the root, to
 // the other in-repo modules its non-test packages may import. Tests are
 // exempt, because `go list .Imports` excludes test files and a seam test
@@ -32,12 +29,9 @@ var modules = map[string][]string{
 	"api": {},
 	// doctype: neutral text-document semantics, self-contained.
 	"internal/doctype": {},
-	// The plugins are their own repository, whose modules depend on the api
-	// and never on this one; TestNoPluginImplementation keeps it that way.
 	// The root module is the server library and its embedded client.
 	"": {"api", "internal/doctype"},
-	// The stock host takes the server and the api. It spawns plugin
-	// binaries rather than importing them.
+	// The node's binary takes the server and the api.
 	"apps/gridwell": {"", "api", "internal/doctype"},
 }
 
@@ -127,17 +121,14 @@ func TestArrows(t *testing.T) {
 	}
 }
 
-// TestAPIDependencyBudget pins the api module's direct dependencies. Every
-// plugin ever written inherits that graph, so a new entry is a decision. The
-// budget is wire only, and host persistence lives in the root module, so no
-// third-party plugin inherits a database driver it never calls.
+// TestAPIDependencyBudget pins the api module's direct dependencies: the
+// contract every client of the wire builds on, so a new entry is a decision.
+// The budget is wire only; persistence lives in the root module.
 func TestAPIDependencyBudget(t *testing.T) {
 	allowed := map[string]bool{
-		"connectrpc.com/connect":         true,
-		"github.com/hashicorp/go-hclog":  true,
-		"github.com/hashicorp/go-plugin": true,
-		"google.golang.org/grpc":         true,
-		"google.golang.org/protobuf":     true,
+		"connectrpc.com/connect":     true,
+		"google.golang.org/grpc":     true,
+		"google.golang.org/protobuf": true,
 	}
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "api", "go.mod"))
 	if err != nil {
@@ -159,72 +150,18 @@ func TestAPIDependencyBudget(t *testing.T) {
 		}
 		dep := strings.Fields(l)[0]
 		if !allowed[dep] {
-			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (every plugin inherits this graph)", dep)
-		}
-	}
-}
-
-// No package here, test files included, may import a plugin implementation,
-// and no module may declare the plugins repository as a dependency, so every
-// plugin-specific behavior rides a wire declaration. A test reaches a real
-// plugin the way production does, through internal/plugintest.
-func TestNoPluginImplementation(t *testing.T) {
-	root := repoRoot(t)
-	for mod := range modules {
-		dir := filepath.Join(root, mod)
-		// Every import edge, the ones only tests have included.
-		cmd := exec.Command("go", "list", "-f",
-			`{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}`, "./...")
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go list in %s: %v\n%s", mod, err, out)
-		}
-		sc := bufio.NewScanner(bytes.NewReader(out))
-		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-		for sc.Scan() {
-			fields := strings.Fields(sc.Text())
-			for _, imp := range fields[1:] {
-				if imp == pluginsModule || strings.HasPrefix(imp, pluginsModule+"/") {
-					t.Errorf("%s imports %s — a plugin implementation is another repository's; spawn the binary through internal/plugintest instead", fields[0], imp)
-				}
-			}
-		}
-	}
-	// A go.mod that names the plugins repository, by require or by
-	// replace, is the same coupling one step earlier.
-	mods, err := filepath.Glob(filepath.Join(root, "**", "go.mod"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, dir := range append(goWorkUses(t, root), ".") {
-		mods = append(mods, filepath.Join(root, dir, "go.mod"))
-	}
-	seen := map[string]bool{}
-	for _, path := range mods {
-		if seen[path] {
-			continue
-		}
-		seen[path] = true
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(data), pluginsModule) {
-			rel, _ := filepath.Rel(root, path)
-			t.Errorf("%s names %s — no module here may depend on the plugins repository", rel, pluginsModule)
+			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (every client of the wire inherits this graph)", dep)
 		}
 	}
 }
 
 // apiServerOwners maps each source file allowed to construct an API server or
 // its socket to why it may, so a harness cannot serve an API configured
-// differently from the node's. nodeexport.go owns the node APIs; the other two
-// entries are not node APIs, being a plugin subprocess's own server and a
-// throwaway for the connection API round trip.
+// differently from the node's. nodeexport.go owns the node APIs; the other
+// entry is not a node API, being a throwaway for the connection API round
+// trip.
 var apiServerOwners = map[string]string{
 	"internal/server/nodeexport.go":        "the node's API owner: WebAPIServer, ConnectionAPIServer, ConnectionHandler, ListenConnectionAPI",
-	"internal/plugintest/plugintest.go":    "not a node API: the plugin subprocess's own gRPC server",
 	"internal/namespace/roundtrip_test.go": "not a node API: a throwaway gRPC server for the connection API round-trip test",
 }
 
@@ -232,7 +169,6 @@ var apiServerOwners = map[string]string{
 // to build a gRPC client, and why.
 var apiClientOwners = map[string]string{
 	"internal/connection/dial/dial.go":     "the node's dial owner: ClientConn",
-	"internal/plugintest/plugintest.go":    "not a node API: the plugin subprocess's go-plugin client",
 	"internal/namespace/roundtrip_test.go": "not a node API: a throwaway gRPC client for the connection API round-trip test",
 }
 

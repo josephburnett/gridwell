@@ -56,6 +56,6 @@ Usage:
     gridwell version                          print the release version this
                                               binary was built from, or "dev"
 
-server.yaml names the node's id, its connections and its content plugins;
+server.yaml names the node's id, its connections and its files' roots;
 every DB path is derived from an id, never configured.`)
 }

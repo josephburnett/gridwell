@@ -102,10 +102,10 @@ func TestARepeatedRootFramingWritesNothing(t *testing.T) {
 	}
 }
 
-// A plugin row's writes say whether they changed it, because the adapter
-// announces them itself; a repeat changes nothing, not even updated_at, and
-// says so (pluginhost.TestARepeatedPluginWriteAnnouncesNothing is the other
-// side of the seam).
+// A file row's writes say whether they changed it, because the files
+// announce them themselves; a repeat changes nothing, not even updated_at,
+// and says so (files.TestEachWriteAnnouncesItsOwnFactOnce is the other side
+// of the seam).
 func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
 	s, d := openExt(t)
 	gid, err := d.GridOf("inbox")

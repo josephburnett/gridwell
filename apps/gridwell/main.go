@@ -1,6 +1,4 @@
-// gridwell is the host binary. Every plugin is an out-of-process
-// gridwell-plugin-* binary, so this module imports no plugin implementation;
-// test/boundary pins that.
+// gridwell is the node's binary, the web client embedded in it.
 package main
 
 import (

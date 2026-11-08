@@ -115,20 +115,18 @@ func TestStartRefusesAConnectionWithNoAddr(t *testing.T) {
 	}
 }
 
-// A plugin whose binary: path is not there fails the boot too, naming the
-// path: a plugin without the binary it needs must never come up as an empty
-// grid.
-func TestStartRefusesAPluginBinaryThatIsNotThere(t *testing.T) {
+// A files root that is not an absolute path fails the boot, naming it: a
+// relative root would show another directory under each working directory.
+func TestStartRefusesARelativeFilesRoot(t *testing.T) {
 	dir, cfg := startCfg(t)
-	bin := filepath.Join(dir, "nowhere", "gridwell-plugin-fs")
-	cfg.Plugins = []config.PluginConfig{{ID: "aaaaaaa", Kind: "fs", Binary: bin}}
+	cfg.Files = []config.FilesRoot{{Root: "notes"}}
 	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err == nil {
 		n.Close()
-		t.Fatal("serve started with a plugin binary that is not there")
+		t.Fatal("serve started with a relative files root")
 	}
-	if !strings.Contains(err.Error(), bin) {
-		t.Fatalf("the error must name the exact path, got: %v", err)
+	if !strings.Contains(err.Error(), "notes") {
+		t.Fatalf("the error must name the root, got: %v", err)
 	}
 }
 

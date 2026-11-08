@@ -66,7 +66,7 @@ func startServe(t *testing.T, bin, dir, bind string) (origin, fedSocket string) 
 func startServeProc(t *testing.T, bin, dir, bind string) (origin, fedSocket string, stop func()) {
 	t.Helper()
 	cmd := exec.Command(bin, "serve", "--bind", bind, "--static", "")
-	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+dir, "GRIDWELL_PLUGIN_DIR="+filepath.Dir(bin))
+	cmd.Env = append(os.Environ(), "GRIDWELL_HOME="+dir)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -616,8 +616,8 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	if _, err := os.Stat(bin); err != nil {
 		t.Fatalf("gridwell binary not built (run `make build`): %v", err)
 	}
-	// The remote serves a directory through the fs plugin. Nothing there is
-	// touched, so every tile it answers is named by its key.
+	// The remote serves a directory as a files root. Nothing there is
+	// touched, so every tile it answers is named by its path.
 	files := t.TempDir()
 	if err := os.WriteFile(filepath.Join(files, "far.txt"), []byte("hello from the far side"), 0o644); err != nil {
 		t.Fatal(err)
@@ -627,13 +627,9 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	}
 	remoteDir := t.TempDir()
 	freshDir(t, remoteDir)
-	appendConnectionsYAML(t, remoteDir, fmt.Sprintf(`plugins:
-    - kind: fs
-      label: files
-      binary: %s
-      config:
-        root: %s
-`, filepath.Join(root, "gridwell-plugin-fs"), files))
+	appendConnectionsYAML(t, remoteDir, fmt.Sprintf(`files:
+    - root: %s
+`, files))
 	_, remoteAddr := startServe(t, bin, remoteDir, "127.0.0.1:0")
 
 	creds := dialtest.Server(t, t.TempDir())
@@ -646,8 +642,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	ng := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": sshRoot})
 	nodeNS, _ := ng["grid"].(map[string]any)["nodeNs"].(string)
 	menu := rpc(t, localOrigin, "Handshake", map[string]any{"namespace": nodeNS})
-	// The fs plugin's declared grid is the door, since a plugin
-	// names no grid of its own, and the entry's grid id chains through the
+	// The root is the files row's one grid, and its id chains through the
 	// hop like every other id.
 	var fsRoot string
 	for _, p := range menu["plugins"].([]any) {
@@ -661,7 +656,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 		}
 	}
 	if fsRoot == "" {
-		t.Fatalf("the remote's fs grid is not on the routed menu: %v", menu["plugins"])
+		t.Fatalf("the remote's root is not on the routed menu: %v", menu["plugins"])
 	}
 
 	g := rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": fsRoot})
@@ -676,7 +671,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 		t.Fatalf("far.txt not listed through the tunnel: %v", g["tiles"])
 	}
 	if !strings.Contains(farID, "/~") {
-		t.Fatalf("far.txt came back as %q, want an untouched entry's key form", farID)
+		t.Fatalf("far.txt came back as %q, want its path's key form", farID)
 	}
 	// The id routes back to the same tile and its bytes.
 	back := rpc(t, localOrigin, "GetTile", map[string]any{"tileId": farID})["tile"].(map[string]any)
@@ -689,7 +684,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	}
 
 	// The id also survives a touch made from this side: a durable fact mints
-	// a row on the far node and the entry keeps the id its listing answers
+	// a row on the far node and the file keeps the id its listing answers
 	// under. A rename there is invisible on either node alone, so only a
 	// re-list through the tunnel tells the two apart.
 	moved := rpc(t, localOrigin, "MoveTile", map[string]any{
@@ -697,7 +692,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 		"claim": map[string]any{"gridId": back["gridId"], "x": back["x"], "y": back["y"], "w": back["w"], "h": back["h"]},
 	})["tile"].(map[string]any)
 	if moved["id"] != farID {
-		t.Fatalf("the touch renamed the far entry: %v, was %q", moved["id"], farID)
+		t.Fatalf("the touch renamed the far file: %v, was %q", moved["id"], farID)
 	}
 	g = rpc(t, localOrigin, "GetGrid", map[string]any{"gridId": fsRoot})
 	var again map[string]any
@@ -720,10 +715,10 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 		t.Fatalf("ReadContent after the touch = %q (%v)", body, err)
 	}
 
-	// A copy onto this node's home: the far plugin's door lands as a link to
-	// its grid, since a plugin door never copies, and the far plugin's file
-	// copies its bytes. The far grid's accepts_tiles is what tells this node
-	// the door is a plugin's.
+	// A copy onto this node's home: the far directory's door lands as a link
+	// to its grid, since a directory's door never copies, and the far text
+	// file copies its bytes. The far grid's accepts_tiles is what tells this
+	// node the door is a directory's.
 	var homeRoot string
 	for _, p := range rpc(t, localOrigin, "Handshake", map[string]any{})["plugins"].([]any) {
 		if pm := p.(map[string]any); pm["label"] == "home" {
@@ -743,13 +738,13 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 		"tileId": sub["id"], "destGridId": homeRoot, "x": 5, "y": 5,
 	})["tile"].(map[string]any)
 	if doorCopy["link"] != true || doorCopy["childGridId"] != sub["childGridId"] {
-		t.Fatalf("copy of the far plugin's door = %v, want a link to %v", doorCopy, sub["childGridId"])
+		t.Fatalf("copy of the far directory's door = %v, want a link to %v", doorCopy, sub["childGridId"])
 	}
 	fileCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": farID, "destGridId": homeRoot, "x": 7, "y": 5,
 	})["tile"].(map[string]any)
 	if fileCopy["link"] == true || fileCopy["linkTargetId"] != nil {
-		t.Fatalf("copy of the far plugin's file = %v, want a copy", fileCopy)
+		t.Fatalf("copy of the far file = %v, want a copy", fileCopy)
 	}
 	body, _, _, err = clientFor(localOrigin).ReadContent(context.Background(), fileCopy["id"].(string))
 	if err != nil || string(body) != "hello from the far side" {

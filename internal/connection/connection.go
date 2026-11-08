@@ -77,7 +77,7 @@ type Server struct {
 	liveOff map[string]string
 	// farHealth is each far namespace's standing health by its id here, for a
 	// late Subscribe; note forgets a connection's on the down every re-establish
-	// follows, and the far node's replay (pluginhost Adapter.Subscribe) refills it.
+	// follows, and the far node's replay of its sources' standing health refills it.
 	farHealth map[string]*gridwellv1.Event
 	// off reads which connections the user disabled, by name; the record is
 	// plugin.Registry's (SwitchedOff). Nil disables none.
