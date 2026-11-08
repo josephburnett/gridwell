@@ -428,8 +428,16 @@ func (s *Source) setHealth(edit func()) {
 	s.hub.Publish(now.event())
 }
 
-// noteRead records whether dir read, why "" when it did.
+// noteRead records whether dir read, why "" when it did. Only a directory
+// the view holds darkens the files: a read of one nobody shows, an agent's
+// or a find's, says nothing of their health.
 func (s *Source) noteRead(dir, why string) {
+	s.scopeMu.Lock()
+	scoped := slices.Contains(s.scopeLocked(), dir)
+	s.scopeMu.Unlock()
+	if why != "" && !scoped {
+		return
+	}
 	s.setHealth(func() {
 		if why == "" {
 			delete(s.dark, dir)

@@ -290,8 +290,9 @@ func newWatcher(s *Source) *watcher {
 }
 
 // set watches scope, dropping every watch outside it, and answers the
-// directories it added. A directory the OS refuses is the error, and the
-// rest stay watched.
+// directories it added, and those it watches only now, one that would not
+// read or be watched before. A directory the OS refuses is the error, and
+// the rest stay watched.
 func (w *watcher) set(scope []string) (added []string, err error) {
 	w.mu.Lock()
 	if w.closed {
@@ -301,11 +302,7 @@ func (w *watcher) set(scope []string) (added []string, err error) {
 	next := map[string]bool{}
 	for _, d := range scope {
 		next[d] = true
-		if !w.scope[d] {
-			added = append(added, d)
-		}
 	}
-	w.scope = next
 	for d := range w.watched {
 		if !next[d] {
 			_ = w.fsw.Remove(d)
@@ -313,8 +310,13 @@ func (w *watcher) set(scope []string) (added []string, err error) {
 		}
 	}
 	for _, d := range scope {
+		was := w.watched[d]
 		err = errors.Join(err, w.watchDir(d))
+		if !w.scope[d] || !was && w.watched[d] {
+			added = append(added, d)
+		}
 	}
+	w.scope = next
 	closing := w.detachIfIdle()
 	if err == nil && w.failed != "" {
 		err = errors.New(w.failed)

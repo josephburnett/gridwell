@@ -30,6 +30,7 @@ func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
 	writeFile(t, notes, "# n")
 	writeFile(t, other, "o")
 	n := newFilesNode(t, root)
+	events := n.show(n.roots[0])
 	untouched := n.tile(n.roots[0], other)
 	first, err := n.move(n.tile(n.roots[0], notes), n.roots[0], 8, 8)
 	if err != nil {
@@ -50,7 +51,6 @@ func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
 	if _, err := n.move(untouched, n.roots[0], 1, 1); err == nil {
 		t.Error("a file nobody touched was moved under a dark root")
 	}
-	events := n.subscribe()
 	h := await(t, events, "the outage", func(ev *gridwellv1.Event) bool { return ev.GetSourceHealth() != nil }).GetSourceHealth()
 	if h.Healthy || h.Uuid != rpc.FilesOwner(localNodeID) || !h.GetTold() {
 		t.Errorf("health = %v, want dark and still told", h)

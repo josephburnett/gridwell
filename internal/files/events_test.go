@@ -168,6 +168,7 @@ func healthTraced(mark uint64) []tracewire.Record {
 func TestHealthIsToldOnTransitionsAndTraced(t *testing.T) {
 	f := newFixture(t)
 	f.write("a.txt", "a")
+	f.show(f.root)
 	f.grid(f.root)
 	var mark uint64
 	if recs := trace.Default().Snapshot(); len(recs) > 0 {

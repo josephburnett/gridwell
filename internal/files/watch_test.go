@@ -402,3 +402,53 @@ func TestWhatIsKeptOfADirectoryIsBounded(t *testing.T) {
 	f.show(f.path("dir"))
 	await(t, ev, "the directory whose held listings were capped", gridChanged(f.path("dir")))
 }
+
+// A directory nobody shows that will not read says nothing of the files'
+// health: an agent's read of it darkens nothing.
+func TestAnUnreadableDirectoryNobodyShowsDarkensNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+	f := newFixture(t)
+	locked := f.mkdir("locked")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	f.show(f.root)
+	f.grid(locked)
+	if h := f.s.health(); h.dark {
+		t.Fatalf("a read of a directory nobody shows darkened the files: %+v", h)
+	}
+}
+
+// A shown directory that would not read or be watched is watched once it
+// can be, at the next view, and told: a permission fixed is seen.
+func TestAShownDirectoryFixedIsWatchedAndTold(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+	f := newFixture(t)
+	locked := f.mkdir("locked")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	ev := f.events()
+	f.grid(locked)
+	f.show(f.root, locked)
+	if h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); h.Healthy {
+		t.Fatalf("health = %+v", h)
+	}
+	if err := os.Chmod(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f.show(f.root, locked)
+	awaitAll(t, ev, map[string]func(*pb.Event) bool{
+		"the fixed directory": gridChanged(locked),
+		"light":               func(e *pb.Event) bool { return e.GetSourceHealth().GetHealthy() },
+	})
+	if !slices.Contains(f.watched(), locked) {
+		t.Errorf("watched %v, want the fixed directory", f.watched())
+	}
+}

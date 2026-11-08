@@ -114,6 +114,17 @@ func byPath(trash func(string) error) func(*os.File, string) error {
 	return func(dir *os.File, name string) error { return trash(filepath.Join(dir.Name(), name)) }
 }
 
+// show opens the event stream and shows the grids ids on it, as a client's
+// pane does, and answers the stream.
+func (n *filesNode) show(ids ...string) <-chan *gridwellv1.Event {
+	n.t.Helper()
+	events := n.subscribe()
+	if err := n.cl.SetView(n.ctx, &gridwellv1.SetViewRequest{ShownGridIds: ids}); err != nil {
+		n.t.Fatal(err)
+	}
+	return events
+}
+
 // grid reads id, fatal on a refusal.
 func (n *filesNode) grid(id string) *gridwellv1.GetGridResponse {
 	n.t.Helper()
@@ -219,7 +230,7 @@ func TestFilesRosterRowAndRootGrid(t *testing.T) {
 func TestFilesDarkRootHealthIsKeyedByTheFilesOwner(t *testing.T) {
 	gone := filepath.Join(t.TempDir(), "missing")
 	n := newFilesNode(t, gone)
-	events := n.subscribe()
+	events := n.show(n.roots[0])
 	if _, err := n.cl.GetGrid(n.ctx, n.roots[0]); err != nil {
 		t.Fatalf("a dark root's grid must answer: %v", err)
 	}

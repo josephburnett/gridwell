@@ -213,10 +213,11 @@ func TestProbeReadsTheDisk(t *testing.T) {
 	}
 }
 
-// A root that will not read is dark: its rows answer, the health event names
-// it, and it comes back by itself.
+// A shown root that will not read is dark: its rows answer, the health event
+// names it, and it comes back by itself.
 func TestARootThatWillNotReadIsDark(t *testing.T) {
 	f := newFixture(t)
+	f.show(f.root)
 	ev := f.events()
 	a := f.write("a.txt", "a")
 	at := tileIn(t, f.grid(f.root), a)
@@ -250,7 +251,7 @@ func TestARootThatWillNotReadIsDark(t *testing.T) {
 	}
 }
 
-// A directory under a root that will not read is dark too.
+// A shown directory under a root that will not read is dark too.
 func TestADirectoryThatWillNotReadIsDark(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads every directory")
@@ -262,6 +263,7 @@ func TestADirectoryThatWillNotReadIsDark(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	f.show(locked)
 	if resp := f.grid(locked); len(resp.Tiles) != 0 {
 		t.Errorf("tiles = %v", resp.Tiles)
 	}
@@ -280,7 +282,7 @@ func TestADarkDirectoryThatGoesIsNoLongerDark(t *testing.T) {
 	if err := os.Chmod(locked, 0); err != nil {
 		t.Fatal(err)
 	}
-	f.grid(locked)
+	f.show(locked)
 	if !f.s.health().dark {
 		t.Fatal("not dark")
 	}
