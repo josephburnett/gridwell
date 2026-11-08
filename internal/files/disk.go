@@ -319,11 +319,17 @@ const (
 	// previewFileCap skips a file too large to decode on every paint; past
 	// it the tile shows its name.
 	previewFileCap = 64 << 20
-	// previewPixelCap bounds what a decode allocates, a few bytes a pixel,
-	// since a small file may declare any size: a 40-megapixel photo has a
-	// picture, and past it the tile shows its name.
-	previewPixelCap = 40_000_000
+	// previewPixelCap bounds what a decode allocates, up to eight bytes a
+	// pixel (a 16-bit PNG), since a small file may declare any size: a
+	// 16-megapixel photo has a picture, and past it the tile shows its name.
+	previewPixelCap = 16_000_000
+	// previewDecodes is how many pictures decode at once, so a directory of
+	// large images asked for together holds what two decodes allocate, not all.
+	previewDecodes = 2
 )
+
+// decodes holds a slot for each decode under way.
+var decodes = make(chan struct{}, previewDecodes)
 
 // previewJPEG is the image file f's picture, nil for any file that is not an
 // image, is too large, or does not decode.
@@ -338,7 +344,9 @@ func previewJPEG(f *os.File, fi os.FileInfo) []byte {
 	if c, _, err := image.DecodeConfig(bytes.NewReader(data)); err != nil || int64(c.Width)*int64(c.Height) > previewPixelCap {
 		return nil
 	}
+	decodes <- struct{}{}
 	img, _, err := image.Decode(bytes.NewReader(data))
+	<-decodes
 	if err != nil {
 		return nil
 	}

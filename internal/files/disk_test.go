@@ -196,3 +196,55 @@ func TestALoopNamesAPathThroughItself(t *testing.T) {
 		}
 	}
 }
+
+// pngDeclaring is a small PNG whose header declares w by h pixels.
+func pngDeclaring(t *testing.T, w, h uint32) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewGray(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	b := buf.Bytes()
+	binary.BigEndian.PutUint32(b[16:], w)
+	binary.BigEndian.PutUint32(b[20:], h)
+	binary.BigEndian.PutUint32(b[29:], crc32.ChecksumIEEE(b[12:29]))
+	p := filepath.Join(t.TempDir(), "declared.png")
+	if err := os.WriteFile(p, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// A picture's decode is bounded in pixels and in how many run at once: a
+// 20-megapixel header gets no picture, and a third decode waits for one of
+// two to end.
+func TestPictureDecodesAreBounded(t *testing.T) {
+	if got := previewOf(t, pngDeclaring(t, 5000, 4000)); got != nil {
+		t.Error("an image past 16 million pixels has a picture")
+	}
+	small := filepath.Join(t.TempDir(), "small.png")
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(small, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for range cap(decodes) {
+		decodes <- struct{}{}
+	}
+	done := make(chan []byte, 1)
+	go func() { done <- previewOf(t, small) }()
+	select {
+	case <-done:
+		t.Fatal("a decode ran while every slot was taken")
+	case <-time.After(50 * time.Millisecond):
+	}
+	<-decodes
+	if got := <-done; got == nil {
+		t.Error("the waiting decode made no picture")
+	}
+	for len(decodes) > 0 {
+		<-decodes
+	}
+}

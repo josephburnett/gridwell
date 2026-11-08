@@ -125,7 +125,7 @@ extension. A file row keeps its kind, name and link in its snapshot
 that will not read still shows as what it was. A file's `preview_blob_id`
 is `files.previewKey`'s: the node's screenshot of the tile once one exists,
 else the image's own picture keyed below zero, and none for an image whose
-header declares more than 40 million pixels. A page file that changes on
+header declares more than 16 million pixels. A page file that changes on
 disk retires an unfrozen screenshot (`files.pagePreviewStale`).
 `Grid.scratch_grid_id` and `source_grids` come from the router's `GetGrid`
 (or `TransitQualifyGrid` for transit), which fails the read when the

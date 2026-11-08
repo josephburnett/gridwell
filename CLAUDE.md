@@ -487,7 +487,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   stale stamp is refused as a version conflict; a file the node cannot
   write is read-only with the reason. An image file's preview carries a
   stamp, so a changed file redraws; an image whose header declares more
-  than 40 million pixels gets no preview, and its tile shows its name. Delete moves the file
+  than 16 million pixels gets no preview, and its tile shows its name. Delete moves the file
   to the OS trash, by a rename: a file on another filesystem than the home
   trash goes to that filesystem's own, `.Trash-<uid>` at its top
   (`.Trashes/<uid>` on macOS), made if absent, and a delete with no trash
