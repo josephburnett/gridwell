@@ -15,12 +15,15 @@ import (
 // filesystem's trash, by a rename: nothing is copied, so a directory holding
 // a FIFO trashes at once instead of waiting on it.
 func TestAPathOnAnotherFilesystemGoesToItsOwnTrash(t *testing.T) {
-	home, err := os.MkdirTemp("/dev/shm", "gridwell-trash-")
+	// The victim lives on /dev/shm, whose mount top a user can write a
+	// .Trash-<uid> under; the home trash is on the test's temp filesystem,
+	// whose top may be / on a CI runner.
+	home := t.TempDir()
+	src, err := os.MkdirTemp("/dev/shm", "gridwell-trash-")
 	if err != nil {
 		t.Skip("no /dev/shm")
 	}
-	t.Cleanup(func() { os.RemoveAll(home) })
-	src := t.TempDir()
+	t.Cleanup(func() { os.RemoveAll(src) })
 	var a, b syscall.Stat_t
 	if syscall.Stat(home, &a) != nil || syscall.Stat(src, &b) != nil || a.Dev == b.Dev {
 		t.Skip("the temp directory and /dev/shm are one filesystem")
