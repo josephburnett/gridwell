@@ -10,80 +10,62 @@ and nothing the user made is dropped without a server verdict.
 
 ## The layers
 
-Reads travel client → router → source cache → transport or plugin → what
-the plugin or connection reads. Freshness is decided on the way back.
+Reads travel client → router → the files, or the source cache → transport →
+the far node. Freshness is decided on the way back.
 
-**1. What is read.** A plugin's directory, service, or process table; a far
-node's store. It has no freshness rule of its own, and everything else
-caches it. What it owes the node is a failure that says which kind it is: a
-transport-shaped error means "not right now", any coded error is a verdict. `api/gwerr`'s
-`IsTransport` reads that code where it is the speaker's contract, a
-plugin's and the router's. Whether a far node spoke at all is the
+**1. What is read.** A directory on the node's disk, or a far node's store.
+It has no freshness rule of its own. What it owes the node is a failure
+that says which kind it is: a transport-shaped error means "not right now",
+any coded error is a verdict. `api/gwerr`'s `IsTransport` reads that code
+where it is the speaker's contract, the files' and the router's. Whether a far node spoke at all is the
 connection hop's fact, not a code's: the connection API stamps every error
 it returns `gwerr.Answered`, the dial (`dial.ClientConn`, `gwerr.Received`)
 reads one that came back unstamped as unheard, and the source cache reads
 `gwerr.IsUnheard`. A far node of an older build stamps nothing, so every
 error from it reads unheard until it is upgraded.
 
-**2. The plugin overlay** — `internal/pluginhost/adapter.go`. A grid is a
-join: the plugin's `List` supplies the entries, `store.Namespace.Overlay`
-lays the minted rows over them. `Adapter.synthesize` degrades by whose fact
-is missing. A listing that fails transport-shaped is replaced by an empty,
-non-authoritative one: every row the node minted still reads, with the same
-ids, placement, and labels, and nothing retires. An entry with no row has
-nothing to answer from and is absent. The adapter publishes that
-outage as this namespace's health (`Adapter.noteSource`) — the transition
-only, on the same event and uuid the supervisor uses for the subprocess,
-because "a declared source is not answering" is one fact whichever half of
-the plugin it is — so the client marks the grids it serves as cached with
-no call of its own having to fail. A listing the plugin answered from its
-own cache carries `ListResponse.unreachable`, the reason: its entries serve
-and refresh rows as a live listing's do, the reason is published as the
-source's health by the same `noteSource`, and it retires nothing, since a
-cached answer is not a verdict even when it claims `authoritative`. Retirement needs a verdict — an
-authoritative listing sweeps by `store.Namespace.Sweep`, a live non-authoritative one
-sweeps only rows whose `Probe` answers a definitive `PRESENCE_GONE`. A dark *plugin* — the subprocess
-itself gone — fails the read outright, because the declared facts and the
-entries are the plugin's own and nothing can supply them. A source that
-changes on its own says so on `Watch` (`internal/pluginhost/watch.go`): the
-node holds one stream per subprocess while some client's view (`SetView`)
-shows one of its grids, scoped to the grids shown and those their link entries point into,
-and re-opened with the new set when that changes. A `GridChanged` is
-checked, not relayed: the node lists the grid and publishes the
-`GridChanged` a write would, on it and on every grid linking into it, each
-once per batch, only when the answer differs from what `GetGrid` served or
-the node last announced (`Adapter.settle`), so a grid open on
-screen refetches what moved and a directory whose files are written but whose
-names stay announces nothing. An `EntryChanged` is the entry's own
+**2. The files' rows** — `internal/files/grid.go`. A directory's grid is a
+join: `readDir` supplies the names, `store.FileRows.Overlay` lays the rows
+the user made over them (`Source.synthesize`). Every listing is a verdict
+on every name in it, so a read that answers sweeps the rows whose paths it
+no longer names (`FileRows.Sweep`) and refreshes the rest
+(`FileRows.Refresh`). A directory below a root that is gone is dead; a root
+that is gone, or any directory that will not read, is dark: its rows answer
+as they stand, with the same ids, placement and labels, nothing retires,
+and a file with no row is absent. Dark is kept per directory and published
+as the files' health, the transition only, on one event keyed `<node>/~`
+(`Source.noteRead`), so the client marks the grids it serves as cached with
+no call of its own having to fail. Dark follows the view: a directory that
+leaves every session's view darkens the files no more.
+
+The files are told of a change by the operating system
+(`internal/files/watch.go`, fsnotify), for the directories some session
+shows (`SetView`) and the directories their symlinks land in, so what
+watching costs is what is on screen. A directory's changes gather for
+200 ms (`debounceWindow`) and are then told: a name that came, went or
+changed kind is a `GridChanged`, checked rather than relayed — the node
+lists the directory and announces it, and every directory linking into
+it, only when the answer differs from what `GetGrid` served or the node
+last announced (`Source.settle`), so a directory whose files are written
+but whose names stay announces nothing. A file written in place is its own
 `TileChanged`, its row as `GetGrid` serves it, flagged `content_changed`
-(`Adapter.applyEntry`): the listing did not move, and a plugin row has no
-version to say its bytes did. A page the plugin serves that changed this way
-is not the page its screenshot shows, so the row gives the screenshot up and
-its preview is the plugin's picture until the next capture, unless the user
-froze it (`pagePreviewStale`). A coded refusal is not darkness: the listings
-still answer, so it rides a healthy `EventSourceHealth` as
-`live_updates_off` (`Adapter.noteWatch`), told once and cleared when a
-re-opened stream is open. Every health event the adapter tells carries
-`told`, whether the source's changes reach the node right now: a held
-declaration of `watch` with no failure since (`Adapter.sourceLocked`). A share of the subscription the adapter cannot take leaves
-the scope where it was, so it is the same notice, cleared when one lands; a
-far node that refuses the connection's share (`connection.Server.tellFar`) is
-the same notice on the connection's row. Every open,
-first, after a drop, or for a moved scope, is one path
-(`Adapter.followScope`): the new stream replaces the old only once it is
-open, so a grid in both is watched throughout, and then each grid it
-adds (the whole scope after a drop) is checked the same way, since nothing
-announced a change sent while no stream watched it; one it cannot list right
-now is announced, and the same listing is never announced twice. One nobody
-read is noted, not announced: after a node restart the client's own
-reconnect resync (`retryKick(true, cache.EverySource)`) re-reads every grid
-it holds. The check and the note are one critical section, and a `GetGrid`
-in flight across it is announced when it lands only if the listing it took
-differs from the one noted meanwhile. Descending into a directory of fifty
-subdirectories, read for their previews, so announces nothing. Only a
-plugin whose `InfoResponse.watch` declares it is asked; one that declares it
-and answers Unimplemented has a broken declaration, and that turns live
-updates off too.
+(`Source.applyFile`): a file's row has no version to say its bytes moved.
+A page file that changed this way is not the page its screenshot shows, so
+the row gives the screenshot up and its preview is the file's own picture
+until the next capture, unless the user froze it (`pagePreviewStale`). An
+overflow lost events, so every watched directory and every file in it is
+told again. A directory the view adds is listed when it is added, since a
+change between a client's read and the watch is otherwise told by nothing;
+one nobody read is noted, not announced. The check and the note are one
+critical section, and a `GetGrid` in flight across it is announced when it
+lands only if the listing it took differs from the one noted meanwhile
+(`Source.answer`). Descending into a directory of fifty subdirectories,
+read for their previews, so announces nothing. An OS refusal to watch (out
+of watches, or an error the OS reports after the fact) is not darkness: the
+listings still answer, so it rides a healthy `EventSourceHealth` as
+`live_updates_off` with `told` false (`Source.noteWatch`), and the next
+event the OS delivers ends it. `told` is the files' one freshness fact: the
+watch is healthy.
 
 **3. The transport** — `internal/connection/connection.go`. Reachability is
 cached, not only announced when it changes, and every way a connection
@@ -159,9 +141,9 @@ does change the framing columns. A body is bound to the row it derives from:
 row's blob as the cache held it when the read was asked
 (`Cache.AskContent`), or the save response's. `contentEntry.behind` is the
 one rule: a higher row version, or the same version with another blob, is a
-body the row has moved past. A row with no claim — a plugin's, version 0 and no blob — has no fact
+body the row has moved past. A row with no claim — a file's, version 0 and no blob — has no fact
 that orders its bytes. Where its source names them (`Tile.content_stamp`,
-the plugin's `Entry.content_stamp`, which the read answers with the bytes),
+which the read answers with the bytes, `<mtime_ns>-<size>` for a file),
 the stamp decides as a version would: a row under another stamp makes a
 clean body behind, by event or refetch alike, and one under the body's own
 stamp does not, so the echo of the body's own save is no news. Where the
@@ -178,8 +160,8 @@ held, when the write ends after its response filed the bytes — and `PutFetched
 while it was in flight. Who reads the body again is whoever draws it: the cache
 only drops it. What is drawn from a body (a preview's raster, a wrap, the rendered
 overlay) is keyed by `Cache.BodyGen`, which moves whenever the cached bytes
-do, an unsaved edit included, never by the row's version, which a plugin
-body's does not move and an edit moves for no one: a focused pane reads the
+do, an unsaved edit included, never by the row's version, which a file's
+body does not move and an edit moves for no one: a focused pane reads the
 bytes and an unfocused one a picture of them, so a key an edit leaves alone
 shows the two panes different documents. `SaveBasis` is what a save claims, never the grid row
 version, so a foreign writer's event can advance the row without ever
@@ -257,7 +239,7 @@ covers. A health event names one source; every cached id says which source
 serves it, because a hop prepends one segment to a health uuid exactly as it
 does to ids; so `cache.ServedBy` is the join of those two facts
 (`rpc.ChainedThrough` — a chain prefix, not an equality, so a connection's
-flap covers the far node's home store and the far node's plugins alike), and
+flap covers the far node's home and the far node's files alike), and
 `Cache.ResyncSet` is the grids one source answers for. `cache.Reaches` is the
 same rule asked about a source name rather than about a thing a source serves,
 for the one claim keyed that way — the menu context, which is a node's fact
@@ -327,8 +309,8 @@ per window.
 Both health directions, and what each one costs the user.
 
 **Down, discovered by the transport.** `connection.fanInRemote`'s
-`namespace.Follow` returns; `noteHealth(ns, false, detail)` writes
-`s.dark[name]` and publishes one `healthEvent` on the hub. `Server.Subscribe`
+`namespace.Follow` returns; `note` records it in `s.health` and publishes
+one `EventSourceHealth` on the hub, the transition only. `Server.Subscribe`
 relays it, and opens with `healthNow()` for anyone attaching later.
 
 `Layer.setDark` is the one writer of the cache's dark map, and the layer
@@ -344,7 +326,7 @@ layer discovered the transition alone and nobody else watched the call fail:
 on the transition only, `emitGridChanged` names the grid at hand, so a client
 already holding that grid re-reads rather than sitting on rows nothing is
 revalidating. A call its own caller gave up on (`gwerr.IsAbandoned`) is no
-news either way, here and in the plugin adapter's listing: the refetch an
+news either way: the refetch an
 announcement causes is cancelled by the next resync, and that cancel would be
 news again.
 
@@ -377,10 +359,10 @@ source's changes are told; an event that does not say leaves it. Every grid serv
 through one is served from cache, and that is what the bar's chip says
 (`Cache.SourceDark`, joined by `ServedBy`, the rule a resync is scoped by).
 `events.ReactHealth` is the one table over the event. Unhealthy posts a
-sticky notice keyed `plugin:<node>/<conn>` ("live updates stopped — …");
+sticky notice keyed `source:<node>/<conn>` ("live updates stopped — …");
 `live_updates_off` posts its own, keyed `live:<node>/<conn>` ("live updates
 off — …"), so each comes down on its own field. A move of the healthy bit
-arms `events.Resyncs`, which calls `retryKick(true, h.NodeUUID)` once the
+arms `events.Resyncs`, which calls `retryKick(true, h.Uuid)` once the
 source's health has held for `cadence.HealthSettleMs`: a flapping source
 resyncs once, on the state it rests in. A change of `live_updates_off`
 alone resyncs nothing: the listings still answer. The notices move at once. The down
@@ -390,12 +372,12 @@ the join `cache.ServedBy` makes of the health uuid and the ids the client
 already holds. The reads a resync cancels are the client's own doing, so they
 say nothing (`clientsync.OutcomeAbandoned`).
 
-**Up.** The next `namespace.Follow` establishes, on the far node's header; `noteHealth(ns, true, "")`
+**Up.** The next `namespace.Follow` establishes, on the far node's header; `note`
 publishes the recovery, and `learnRoot` publishes one too on a first or
 healed landing. `Layer.applyEvent` clears `dark[conn]`; the next successful
 pass-through call would have cleared it anyway through `noteReach`.
 `App.reportSourceHealth` clears the darkness, so the chip goes, resolves the
-notice, and arms the same settled `retryKick(true, h.NodeUUID)`, which cancels this source's
+notice, and arms the same settled `retryKick(true, h.Uuid)`, which cancels this source's
 in-flight fetches, clears its latches, and refetches `Cache.ResyncSet` of it —
 every cached grid chained through it, and nobody else's. Those reads hit the
 cache inside their windows with the source no longer dark, so they serve what
@@ -440,17 +422,17 @@ The version interlock, the outbox park, and the drain.
    The row advances when a foreign writer's event or a refetch lands without
    this client seeing the new bytes; claiming it would carry the current
    version with stale bytes past the server's check. The basis is an
-   `rpc.ContentBasis`: the version for a home body, and for a plugin's, which
-   has none, the source's stamp the bytes were read under
+   `rpc.ContentBasis`: the version for a home body, and for a file's, which
+   has none, the stamp the bytes were read under
    (`ContentChunk.content_stamp`).
 3. `App.postWriteContent` → `rpc.Client.WriteContent` → the router → the
    owning namespace. Home claims and bumps through `claimContentVersion` +
-   `finishContentEdit`, the one pair that may, and emits a `TileChanged`. A
-   plugin's adapter writes through by key with the claimed stamp
-   (`Adapter.WriteContent`), the plugin refuses a stamp that is not the
-   entry's now with the same `FailedPrecondition` a stale version gets, and
-   the adapter answers the row with the written bytes' stamp and emits its
-   `TileChanged`, flagged `content_changed`.
+   `finishContentEdit`, the one pair that may, and emits a `TileChanged`.
+   The files write the path with the claimed stamp (`Source.WriteContent`),
+   refuse a stamp that is not the file's now with the same
+   `FailedPrecondition` a stale version gets, and answer the row with the
+   written bytes' stamp and emit its `TileChanged`, flagged
+   `content_changed`.
 4. On success the client advances immediately, not when the echo lands:
    `a.c.UpdateTile(tile.GridID, *tile)` and
    `a.c.PutSavedContent(tile, newContent)`, filed under the response row.
@@ -461,8 +443,8 @@ The version interlock, the outbox park, and the drain.
    If an earlier write's echo (version N-1) is still in flight, the interlock
    `n.Version < cur.Version` drops it: applying it would roll the tile back
    and then forward, a mutation the user never made. The response row at N
-   stands. A plugin's write echoes twice — the adapter's `TileChanged` and the
-   plugin's own `Watch` `EntryChanged` — both carrying the written bytes'
+   stands. A file's write echoes twice — the files' own `TileChanged` and
+   the one the OS watch then tells — both carrying the written bytes'
    stamp, which the body is now filed under, so neither drops it: the typed
    text stays, saved or still being typed. An echo that overtakes its
    response ages nothing: every content write, text or pane layout, holds
@@ -524,11 +506,11 @@ every known grid. Blunt on purpose, and only here — the gap names no source,
 so there is nothing to scope it to. A health flap does name one, and resyncs
 that source's grids alone (`cache.ServedBy`).
 
-**A slow subscriber loses events.** `Layer.emitGridChanged` and
-`Adapter.emit` drop onto a full 64-slot buffer rather than blocking a
-revalidation or a write. Every event on those streams is a cue to look
-again, never a fact only it carries; the rows are already stored and the
-next read serves them.
+**A slow subscriber coalesces.** Every event stream fans out through
+`internal/eventhub`: a publisher never blocks on a slow subscriber, and a
+newer event for one entity replaces the older one it has not taken yet.
+Every event is a cue to look again or the row as it now is, never a fact
+only a lost event carries.
 
 **Serve-first can show a cached answer.** Inside `freshWindow`, with the source not
 known dark, `Layer.GetGrid` does not even revalidate. A change made on the
@@ -542,9 +524,8 @@ placement it saw instead. Framing and captures carry no claim and cannot
 conflict. Two panes settling the same door resolve by arrival order, and
 the outbox keeps one live entry per key by design.
 
-**Absence is never inferred from silence.** A non-authoritative listing
-retires nothing without a definitive `PRESENCE_GONE`
-(`Adapter.synthesize`, `Adapter.DeleteTile`), and a connection that cannot
+**Absence is never inferred from silence.** A directory that will not read
+retires nothing (`Source.synthesize`), and a connection that cannot
 be resolved answers NOT gone (`connection.Server.Probe`). A row kept on
 doubt costs nothing durable; a row retired on doubt loses a placement and
 every link to it. Framing is the same: a door answered with no framing
@@ -591,23 +572,23 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A subscriber arriving after the outage is told (`healthNow`) | `fanin_health_test.go:TestASubscriberArrivingAfterTheOutageIsToldOfIt` |
 | A far node that refuses the connection's share turns its live updates off on a healthy event, not told, replayed to a late subscriber, cleared when a share lands | `internal/connection/liveoff_test.go:TestAShareTheFarNodeRefusesTurnsItsLiveUpdatesOff` |
 | Direction one: a failed pass-through is darkness, the cached grid still serves, and the next answer clears it | `sourcecache/dark_test.go:TestAFailedCallIsDarkness` |
-| A call its caller abandoned is neither dark nor light, in the cache and the plugin adapter alike | `dark_test.go:TestAnAbandonedCallLearnsNothing`, `internal/server/abandoned_read_seam_test.go` |
+| A call its caller abandoned is neither dark nor light | `dark_test.go:TestAnAbandonedCallLearnsNothing` |
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
-| A plugin's source going dark is that namespace's health, announced on the transition only and replayed to a subscriber arriving mid-outage | `internal/pluginhost/fs_parity_test.go:TestADarkSourceIsPublishedAsHealth` |
-| A plugin's `Watch` change is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a busy directory whose names stay announces nothing; an entry changed in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a served page's live view reloads and its unfrozen screenshot gives way; the flag survives each hop and the hub's coalescing; an undeclared plugin is never asked, says no failure and is not told, a refusal or a declared Unimplemented turns live updates off on a healthy event and never darkens the source, a dropped stream re-opens and catches up every shown grid whose listing moved, a grid a scope adds is announced only when its listing differs from what was served, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a holder is announced once however many of its links moved, a read in flight across the check is announced only when it differs, a refusal clears when a re-opened stream is open, a respawn gets a fresh one; the stream is opened only while a client shows one of its grids, scoped to their grids, and a scope change re-opens it without a resync, across a connection too; a grid seen only as a door's preview is shown | `internal/server/plugin_watch_seam_test.go`, `internal/server/fs_watch_seam_test.go`, `internal/server/fs_content_change_seam_test.go`, `internal/server/proc_content_change_seam_test.go`, `internal/server/gitlab_content_change_seam_test.go`, `internal/server/hey_content_change_seam_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `internal/server/link_entry_seam_test.go:TestATargetsNewBytesReachTheBodyALinkShows`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/live_updates_off_seam_test.go`, `internal/server/parity_variant_test.go`, `internal/server/subscription_refused_seam_test.go`, `internal/pluginhost/watch_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/door-preview-watch.spec.ts` |
+| A root or directory that will not read is the files' health, keyed `<node>/~`, announced on the transition only, healed when it reads again, and dark only while a view shows it | `internal/server/files_seam_test.go:TestFilesDarkRootHealthIsKeyedByTheFilesOwner`, `internal/files/events_test.go:TestHealthIsToldOnTransitionsAndTraced`, `internal/files/watch_test.go:TestADarkDirectoryLeftIsNoLongerDark` |
+| A change on disk is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a directory whose names stay announces nothing; a file written in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a page file's live view reloads and its unfrozen screenshot gives way; a directory a view adds is checked, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a read in flight across the check is announced only when it differs, an overflow relists what is watched, a watch failure is live updates off with told false and recovers on the next event; only what a session shows is watched, across a connection too; a grid seen only as a door's preview is shown | `internal/server/files_watch_seam_test.go`, `internal/server/files_content_change_seam_test.go`, `internal/files/watch_test.go`, `internal/files/events_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/parity_variant_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/door-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the cached answer when dark; verdicts never masked | `sourcecache_test.go:TestServesTheCacheWhenDark`, `TestVerdictNeverMasked` |
 | A far root's framing event and an accepted root write land on every cached door rooted there; a dark framing write is refused as other dark writes are and cached nowhere; a tile event keeps a door's framing | `sourcecache/framing_test.go` |
 | A door answered with no framing keeps the cached one; an answer replaces it | `sourcecache/framing_test.go:TestSilenceKeepsTheCachedFramingAndAnAnswerReplacesIt` |
 | Across the real transport: a far grid reopens dark at the last pan, whoever made it, on the connection's row, the far menu, and its doors | `internal/server/darkframing_seam_test.go:TestAFarGridReopensWhereItWasLeftWhileDark` |
-| A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a plugin's grid; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/selection_plugin_seam_test.go`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
+| A selection lands on the owning node's grid row and comes back as `SelectionChanged` carrying the whole set, qualified per hop, at home, on a far node and on a directory; a tile leaving the grid is told the same way; a far grid's set reads dark as the source last held it | `internal/server/selection_seam_test.go`, `internal/server/files_behaviour_seam_test.go:TestFilesSelectionAndFindFilters`, `sourcecache/selection_test.go`; the client's cache folding it, `client/cache/selection_test.go`, `client/events/events_test.go:TestOweNamesTheGridOfATileEvent`; a select drawn before its echo, and a refused one re-read and said, `apps/desktop/e2e-web/web-selection.spec.ts` |
 | Door bodies degrade the same way | `servecontent_test.go:TestServeContentServesTheCacheWhenDark`, `TestServeContentNeverCachesVerdicts` |
 | Real binaries, real ssh: warmed reads serve the cached answer, never-read bytes fail, a revived remote answers live | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
 | A dark source is the bar's cached chip, and the join from a source to the grids it serves | `client/cache/dark_test.go`; live, `apps/desktop/e2e-web/web-remote-menu.spec.ts` ("a dark connection serves the cached grid, and the chip says so") |
 | Health uuid gains one segment per hop | `internal/server/routing_pure_test.go:TestQualifyEvent` (pure only) |
 | A connection's health event reaches a real client stream as `<node>/<conn>` | `internal/server/transport_seam_test.go:TestConnectionHealthArrivesQualified` |
-| The client's health arms: `reportSourceHealth` folds the transition in and kicks in both directions, and the notice resolves on recovery | The same revived-connection spec: the `plugin:` notice arrives on the down transition and leaves the notice row on recovery, and the chip appears and later clears with no gesture either time |
+| The client's health arms: `reportSourceHealth` folds the transition in and kicks in both directions, and the notice resolves on recovery | The same revived-connection spec: the `source:` notice arrives on the down transition and leaves the notice row on recovery, and the chip appears and later clears with no gesture either time |
 | A refused Watch is its own sticky notice beside the dark one, each clears on its own field, and the field alone resyncs nothing | `client/events/events_test.go:TestReactHealthTable`, `client/events/resync_test.go`; live, `apps/desktop/e2e/live-updates-off.spec.ts` |
 | A flap resyncs the flapping source's grids and nobody else's, including a chain through it | `client/cache/resync_test.go:TestAFlapResyncsOnlyTheGridsItsSourceServes`, `TestAConnectionsFlapOwnsEveryGridChainedThroughIt`; the chain rule at its owner, `api/rpc/segment_test.go:TestChainedThroughIsTheWholeChainNotOneNodesPeel` |
 | The gap paths keep their breadth: `cache.EverySource` is the whole cache | `client/cache/resync_test.go:TestEverySourceIsTheWholeCache` |
@@ -632,7 +613,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | The echo interlock drops an older `TileChanged` | `client/cache/cache_test.go:TestApplyStaleEchoDropped` (unit) |
 | A fetch never clobbers dirty bytes; a stale reply never regresses the basis | `cache_test.go:TestFetchNeverClobbersDirtyContent`, `TestStaleFetchNeverRegressesContent` |
 | A save response keeps mid-flight typing and only advances the basis | `cache_test.go:TestSavedContentKeepsMidFlightTyping` |
-| A plugin body is aged by its source's stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a cached body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/fs_stamp_seam_test.go` |
+| A file's body is aged by its stamp: its own save's echo keeps it, another stamp drops it, a reply whose row moved stamp mid-flight is refused; a cached body keeps its stamp; across the seam the row and the read name a file's bytes by one stamp | `client/cache/binding_test.go:TestAStampedBodyAgesByItsStamp`, `internal/sourcecache/stamp_test.go`, `internal/server/files_stamp_seam_test.go` |
 | A body answers only for the blob it was filed under, whichever path the newer row came by; a save is filed under its response row | `client/cache/binding_test.go:TestABodyIsBoundToItsOwnBlob`, `TestASavedBodyAnswersForItsResponseRow`, `TestDirtyTextSurvivesAForeignRowAnywhere` |
 | Transport parks, the drain converges against a dead link, the kick lands it | `outbox_seam_test.go:TestTransportFailureParksAndTheKickLandsIt` |
 | The unload drain lands through the beacon transport | `outbox_seam_test.go:TestUnloadDrainsTheOutbox` |
@@ -642,5 +623,5 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A write's own echo overtaking its response keeps the body, so the client never reads back what it just wrote; a foreign row during the write still ages it when the write ends | `internal/server/own_echo_seam_test.go:TestALayoutWriteEchoLeadingItsResponseIsNotReadBack` (seam), `client/cache/own_write_test.go` (unit) |
 | The interlock across the seam: real responses and real echoes of two writes, in every order the two paths can produce, never regress the cached row | `outbox_seam_test.go:TestEchoInterlockAcrossTheSeam` |
 | An older write response is refused by the same interlock an older echo is: one way into the tile map | `outbox_seam_test.go:TestAResponseRowObeysTheInterlock` (seam), `client/cache/cache_test.go:TestUpdateTileTakesTheOneWayIn`, `TestUpdateTileAgesTheBodyToo` (unit) |
-| A plugin body saves as a home one does: a clean save lands on disk and its own echoes keep the typed text; bytes changed on disk under a dirty edit refuse the save as a conflict and show the file; a write the plugin cannot take parks under its key-form id and lands when it is back; a verdict never parks | `internal/server/fs_write_seam_test.go`, `internal/pluginhost/adapter_caps_test.go:TestAdapterStampsTheWriteFactsThePluginDeclares`, the fs plugin's `fs/plugin/write_test.go`; live, `apps/desktop/e2e/fs-edit.spec.ts` |
+| A file's body saves as a home one does: a clean save lands on disk and its own echoes keep the typed text; bytes changed on disk under a dirty edit refuse the save as a conflict and show the file; a write the disk cannot take parks under its path id and lands when it can; a verdict never parks | `internal/server/files_write_seam_test.go`, `internal/files/write_test.go`; live, `apps/desktop/e2e/fs-edit.spec.ts` |
 | `syncContentOutbox`'s derivation: dirty→park, clean→ack, and the pre-drain sweep over the dirty set | `client/outbox/outbox_test.go:TestRecordContentIsTheDirtinessFork`, `TestSyncContentParksTheDirtySetInOrder` (`Outbox.RecordContent`/`SyncContent`; `mutate.go` is glue) |
