@@ -54,7 +54,6 @@ func TestAGoneFileReadsDeadAndComesBack(t *testing.T) {
 
 // A gone file's preview is dead too, as every other read of it is.
 func TestAGoneFilesPreviewIsDead(t *testing.T) {
-	t.Skip("regression for the orchestrator: GetTilePreview of a gone file answers an empty picture, not the dead verdict (content.go GetTilePreview, the gone arm)")
 	f := newFixture(t)
 	p := f.write("doc.md", "body of doc")
 	if err := os.Remove(p); err != nil {
@@ -188,7 +187,6 @@ func TestADarkRootKeepsTheArrangement(t *testing.T) {
 // An untouched file under a dark root is not dead: a move of it is refused
 // as the dark answers a read of it, never with the dead verdict.
 func TestAnUntouchedFileUnderADarkRootIsNotDead(t *testing.T) {
-	t.Skip("regression for the orchestrator: mint answers DeadLink (\"is gone\") for a file a dark directory cannot list, where tileByPath answers Unavailable (grid.go mint)")
 	if os.Geteuid() == 0 {
 		t.Skip("root reads every directory")
 	}

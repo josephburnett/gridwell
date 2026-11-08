@@ -27,3 +27,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): a write to a link is refused, while the plugin host still stands | 4
 2026-11-07 | files native (Joe): the files' header says a path is canonical only as spelled, while the plugin host still stands | 3
 2026-11-08 | files native (Joe): the router refuses a move onto another source's grid with one sentence before either source is asked, while the plugin host still stands | 14
+2026-11-08 | files native (Joe): a gone file's preview reads dead and a file under a dark directory is not dead, one verdict for every read, while the plugin host still stands | 6

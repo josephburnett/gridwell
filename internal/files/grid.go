@@ -300,10 +300,16 @@ func (s *Source) tileByPath(tileID string) (*pb.Tile, error) {
 	if t := l.tile(path); t != nil {
 		return t, nil
 	}
+	return nil, l.absent(dir, path)
+}
+
+// absent is why path is not in its directory's listing l: the directory
+// cannot be read, which says nothing of the file, or the file is gone.
+func (l listing) absent(dir, path string) error {
 	if l.dark {
-		return nil, status.Errorf(codes.Unavailable, "files: %s cannot be read and holds no row for %s", dir, path)
+		return status.Errorf(codes.Unavailable, "files: %s cannot be read and holds no row for %s", dir, path)
 	}
-	return nil, gwerr.DeadLink("", "files: %s is gone", path)
+	return gwerr.DeadLink("", "files: %s is gone", path)
 }
 
 // mint is the one place a file's row appears, at the placement GetGrid
@@ -325,7 +331,7 @@ func (s *Source) mint(tileID string) (int64, error) {
 		e, ok = l.entry(path)
 	}
 	if !ok {
-		return 0, gwerr.DeadLink("", "files: %s is gone", path)
+		return 0, l.absent(dir, path)
 	}
 	gid, err := s.mem.GridOf(dir)
 	if err != nil {

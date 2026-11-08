@@ -269,7 +269,7 @@ func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest
 	real, err := s.content(path)
 	switch {
 	case gone(err):
-		return &pb.GetTilePreviewResponse{}, nil
+		return nil, gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
 		return nil, contentRefusal(path, err)
 	}
