@@ -32,6 +32,9 @@ const (
 	diskDir
 	// diskLink is a symlink, listed as itself and never entered.
 	diskLink
+	// diskOther is a FIFO, a socket or a device: an open could block on it
+	// or read it forever, so it is never opened.
+	diskOther
 )
 
 // diskEntry is one name in a directory, from Lstat. target is where a link
@@ -82,6 +85,8 @@ func entryFromInfo(dir string, fi os.FileInfo) diskEntry {
 		e.target, e.targetKind = linkTarget(e.path)
 	case mode.IsDir():
 		e.kind = diskDir
+	case !mode.IsRegular():
+		e.kind = diskOther
 	}
 	return e
 }
@@ -97,6 +102,8 @@ func linkTarget(link string) (string, diskKind) {
 		return brokenTarget(link), diskLink
 	case fi.IsDir():
 		return real, diskDir
+	case !fi.Mode().IsRegular():
+		return real, diskOther
 	}
 	return real, diskFile
 }
@@ -337,7 +344,7 @@ func previewJPEG(path string) []byte {
 	if !strings.HasPrefix(mediaType(path), "image/") {
 		return nil
 	}
-	if fi, err := os.Stat(path); err != nil || fi.Size() > previewFileCap {
+	if fi, err := os.Stat(path); err != nil || !fi.Mode().IsRegular() || fi.Size() > previewFileCap {
 		return nil
 	}
 	data, err := os.ReadFile(path)

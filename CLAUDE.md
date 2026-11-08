@@ -476,7 +476,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   video, audio or PDF file, a page file, is a url tile whose page the node
   serves, since none of them runs a script; every other file, HTML, CSS,
   JavaScript, JSON and SVG (which can carry a script) included, is a text
-  tile, plain or both by its extension. A file
+  tile, plain or both by its extension. A name that is no regular file,
+  directory or symlink, a FIFO, a socket or a device, is a text tile with
+  no body, read-only because it is not a regular file, and nothing opens it
+  (2026-11-08). A file
   never placed sits at the placement its place in the listing derives. A
   write to a file claims its content stamp, `<mtime_ns>-<size>`, and a
   stale stamp is refused as a version conflict; a file the node cannot

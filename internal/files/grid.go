@@ -41,6 +41,9 @@ func (s *Source) entryOf(e diskEntry) listed {
 		out.Kind, out.Child = rpc.KindDoor, e.path
 	case diskLink:
 		s.linkFacts(&out, e)
+	case diskOther:
+		out.Kind, out.presentation = rpc.KindText, rpc.TextPresentationPlain
+		out.readOnly = e.name + " is not a regular file"
 	default:
 		if !fileFacts(&out, e.path) {
 			out.stamp = contentStamp(e.mtime, e.size)
@@ -77,6 +80,8 @@ func (s *Source) linkFacts(out *listed, e diskEntry) {
 	case held && e.targetKind == diskFile:
 		fileFacts(out, at)
 		out.target = at
+	case held && e.targetKind == diskOther:
+		out.Kind, out.target = rpc.KindText, at
 	default:
 		fileFacts(out, e.path)
 		at = e.target

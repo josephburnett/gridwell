@@ -55,7 +55,7 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 	if err != nil && !gone(err) {
 		return diskRefusal("read", path, err)
 	}
-	if err != nil || fi.IsDir() {
+	if err != nil || !fi.Mode().IsRegular() {
 		return send(&pb.ContentChunk{})
 	}
 	stamp := contentStamp(fi.ModTime(), fi.Size())
@@ -120,8 +120,8 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 		return "", gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
 		return "", diskRefusal("written", path, err)
-	case fi.IsDir():
-		return "", status.Errorf(codes.InvalidArgument, "files: %s is a directory", path)
+	case !fi.Mode().IsRegular():
+		return "", status.Errorf(codes.InvalidArgument, "files: %s is not a regular file", path)
 	}
 	if err := unwritable(filepath.Base(real), fi.Size()); err != nil {
 		return "", status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
@@ -213,7 +213,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	var f *os.File
 	if err == nil {
 		var fi os.FileInfo
-		if fi, err = os.Stat(real); err == nil && (fi.IsDir() || !isPage(real)) {
+		if fi, err = os.Stat(real); err == nil && (!fi.Mode().IsRegular() || !isPage(real)) {
 			return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
 		}
 	}
