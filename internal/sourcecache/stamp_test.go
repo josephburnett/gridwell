@@ -11,7 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// stamping answers every body with a source stamp, as a far plugin's does.
+// stamping answers every body with a source stamp, as a far file's does.
 type stamping struct {
 	namespace.Namespace
 	stamp string

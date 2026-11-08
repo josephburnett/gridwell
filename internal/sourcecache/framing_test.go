@@ -88,7 +88,7 @@ const (
 )
 
 // framingFixture caches both handshakes a far root's framing rides — the
-// transport's own row list and the far node's plugin list — and one grid
+// transport's own row list and the far node's source list — and one grid
 // holding a door, all with nothing framed yet.
 func framingFixture(t *testing.T) (*Layer, *framingSource) {
 	t.Helper()

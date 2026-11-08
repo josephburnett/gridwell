@@ -53,7 +53,7 @@ var cacheMigrations = []dbformat.Migration{
 
 // emptyCache deletes every cached answer, keeping the tables.
 func emptyCache(ctx context.Context, tx *sql.Tx) error {
-	for _, table := range []string{"pluginlists", "grids", "tiles", "content", "contentstamps", "previews", "servecontent"} {
+	for _, table := range []string{"sourcelists", "grids", "tiles", "content", "contentstamps", "previews", "servecontent"} {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table); err != nil {
 			return fmt.Errorf("empty %s: %w", table, err)
 		}
@@ -63,7 +63,8 @@ func emptyCache(ctx context.Context, tx *sql.Tx) error {
 
 const schemaDDL = `
 DROP TABLE IF EXISTS info;
-CREATE TABLE IF NOT EXISTS pluginlists (
+DROP TABLE IF EXISTS pluginlists;
+CREATE TABLE IF NOT EXISTS sourcelists (
     ns    TEXT PRIMARY KEY,
     proto BLOB NOT NULL
 );
@@ -391,7 +392,7 @@ func (c *Layer) emitHealth(healthy bool, detail string) {
 
 func now() int64 { return time.Now().Unix() }
 
-// Handshake forwards the routed plugin list and caches it per namespace. A
+// Handshake forwards the routed source list and caches it per namespace. A
 // door answered with no framing keeps the cached one (keepFraming).
 func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	r := c.order.begin()
@@ -400,13 +401,13 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 	c.noteReach(ctx, err, sourceOfNS(in.GetNamespace()), nil)
 	if err == nil {
 		r.install(doorGrids(resp), func() {
-			if old, ok := c.loadPluginList(ctx, in.GetNamespace()); ok {
+			if old, ok := c.loadSourceList(ctx, in.GetNamespace()); ok {
 				keepFraming(resp, old)
 			}
 			if b, merr := proto.Marshal(resp); merr == nil {
-				_, werr := c.db.ExecContext(ctx, `INSERT INTO pluginlists (ns, proto) VALUES (?, ?)
+				_, werr := c.db.ExecContext(ctx, `INSERT INTO sourcelists (ns, proto) VALUES (?, ?)
 					ON CONFLICT(ns) DO UPDATE SET proto=excluded.proto`, in.GetNamespace(), b)
-				c.noteCache("store pluginlist", werr)
+				c.noteCache("store sourcelist", werr)
 			}
 		})
 		return resp, nil
@@ -414,16 +415,16 @@ func (c *Layer) Handshake(ctx context.Context, in *pb.HandshakeRequest) (*pb.Han
 	if !gwerr.IsUnheard(err) {
 		return nil, err
 	}
-	cached, ok := c.loadPluginList(ctx, in.GetNamespace())
+	cached, ok := c.loadSourceList(ctx, in.GetNamespace())
 	if !ok {
 		return nil, err
 	}
 	return cached, nil
 }
 
-func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeResponse, bool) {
+func (c *Layer) loadSourceList(ctx context.Context, ns string) (*pb.HandshakeResponse, bool) {
 	var b []byte
-	if err := c.db.QueryRowContext(ctx, `SELECT proto FROM pluginlists WHERE ns = ?`, ns).Scan(&b); err != nil {
+	if err := c.db.QueryRowContext(ctx, `SELECT proto FROM sourcelists WHERE ns = ?`, ns).Scan(&b); err != nil {
 		return nil, false
 	}
 	l := &pb.HandshakeResponse{}
@@ -433,8 +434,7 @@ func (c *Layer) loadPluginList(ctx context.Context, ns string) (*pb.HandshakeRes
 	return l, true
 }
 
-// doorGrids names every grid a plugin list frames, the keys reframe folds
-// under.
+// doorGrids is every grid a source list frames: the keys reframe folds under.
 func doorGrids(l *pb.HandshakeResponse) []string {
 	var ids []string
 	for _, pl := range l.GetSources() {
@@ -987,7 +987,7 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		c.reselect(ctx, p.SelectionChanged.GetGridId(), func([]string) []string { return ids })
 	case *pb.Event_SourceHealth:
 		// The source's supervisor says whether it can be reached. A key deeper
-		// than a connection segment is a far plugin, not the machine. No
+		// than a connection segment is a far node's source, not the machine. No
 		// announce: the event itself is relayed onward.
 		c.setDark(p.SourceHealth.GetUuid(), !p.SourceHealth.GetHealthy(), p.SourceHealth.GetDetail(), false, nil)
 	}
@@ -1126,9 +1126,9 @@ func (c *Layer) reframe(ctx context.Context, gridID string, f rpc.Framing) {
 }
 
 func (c *Layer) reframeRows(ctx context.Context, gridID string, f rpc.Framing) {
-	rows, err := c.db.QueryContext(ctx, `SELECT ns, proto FROM pluginlists`)
+	rows, err := c.db.QueryContext(ctx, `SELECT ns, proto FROM sourcelists`)
 	if err != nil {
-		c.noteCache("load pluginlists", err)
+		c.noteCache("load sourcelists", err)
 		return
 	}
 	moved := map[string][]byte{}
@@ -1137,7 +1137,7 @@ func (c *Layer) reframeRows(ctx context.Context, gridID string, f rpc.Framing) {
 		var b []byte
 		if err := rows.Scan(&ns, &b); err != nil {
 			_ = rows.Close()
-			c.noteCache("load pluginlists", err)
+			c.noteCache("load sourcelists", err)
 			return
 		}
 		l := &pb.HandshakeResponse{}
@@ -1150,8 +1150,8 @@ func (c *Layer) reframeRows(ctx context.Context, gridID string, f rpc.Framing) {
 	}
 	_ = rows.Close()
 	for ns, b := range moved {
-		_, werr := c.db.ExecContext(ctx, `UPDATE pluginlists SET proto = ? WHERE ns = ?`, b, ns)
-		c.noteCache("reframe pluginlist", werr)
+		_, werr := c.db.ExecContext(ctx, `UPDATE sourcelists SET proto = ? WHERE ns = ?`, b, ns)
+		c.noteCache("reframe sourcelist", werr)
 	}
 }
 

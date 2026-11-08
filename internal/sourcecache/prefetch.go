@@ -98,7 +98,7 @@ func (c *Layer) stopWalks() {
 }
 
 // prefetch walks one source or all of them, warming grids, tiles, previews,
-// plugin lists and content bodies.
+// source lists and content bodies.
 func (c *Layer) prefetch(ctx context.Context, source string) {
 	w := &walker{c: c, ctx: ctx, seenGrids: map[string]bool{}, seenTiles: map[string]bool{}, seenNs: map[string]bool{}}
 	trace.Emit("sourcecache", "prefetch", "prefetch start", map[string]string{"source": source, "state": "start"})

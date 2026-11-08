@@ -312,7 +312,7 @@ func TestServesTheCacheWhenDark(t *testing.T) {
 // onto the half-delivered stream: that would hand the caller a body nobody
 // ever had. (Before S2 this shape was "the open succeeded but the first
 // Recv failed", because a chained read opened only as far as the local
-// transit plugin; in-process there is no open to succeed separately, so
+// transit namespace; in-process there is no open to succeed separately, so
 // the surviving distinction is the one that always mattered — before any
 // chunk, or after.)
 type halfDark struct {

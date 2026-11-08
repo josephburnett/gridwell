@@ -39,7 +39,7 @@ func (u *previewFar) GetTilePreview(_ context.Context, req *pb.GetTilePreviewReq
 
 // The walk asks for a preview only when the tile's key names one: 0 is the
 // node's word for none (pb.Tile.preview_blob_id), so asking costs the far
-// node a round trip, and its plugin one more, for an answer already given.
+// node a round trip, and its files one more, for an answer already given.
 func TestPrefetchAsksOnlyForAPreviewTheKeyNames(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -47,7 +47,7 @@ func TestPrefetchAsksOnlyForAPreviewTheKeyNames(t *testing.T) {
 		want bool
 	}{
 		{"a screenshot", 7, true},
-		{"a plugin's own picture", -3, true},
+		{"a file's own picture", -3, true},
 		{"no preview", 0, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
