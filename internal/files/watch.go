@@ -45,6 +45,7 @@ func (s *Source) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetView
 	}
 	s.scopeMu.Lock()
 	s.shown = shown
+	maps.DeleteFunc(s.links, func(d string, _ []string) bool { return !slices.Contains(shown, d) })
 	scope := s.scopeLocked()
 	s.scopeMu.Unlock()
 	s.check(s.rescope(scope))

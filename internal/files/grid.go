@@ -400,8 +400,14 @@ func sumOf(l *listing) listingSum {
 }
 
 // servedDir is the listings a client may hold of one directory since it was
-// last announced, and the last listing noted, with gen counting notes so a
-// read can tell one landed while it was in flight.
+// last announced, at most servedCap of them, past which they are one that
+// no listing sums to, so the next check announces; and the last listing
+// noted, with gen counting notes so a read can tell one landed while it was
+// in flight.
+const servedCap = 16
+
+var heldUnknown = listingSum{0xff}
+
 type servedDir struct {
 	sums []listingSum
 	last listingSum
@@ -442,7 +448,10 @@ func (s *Source) settle(l *listing, check bool) (moved bool) {
 	switch {
 	case raced || differs:
 		g.sums, moved = []listingSum{sum}, true
-	case !slices.Contains(g.sums, sum):
+	case slices.Contains(g.sums, sum):
+	case len(g.sums) == servedCap:
+		g.sums = []listingSum{heldUnknown}
+	default:
 		g.sums = append(g.sums, sum)
 	}
 	g.last = sum

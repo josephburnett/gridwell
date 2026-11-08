@@ -3,6 +3,7 @@ package files
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -365,4 +366,39 @@ func TestWhatWasToldFollowsTheView(t *testing.T) {
 	if len(f.s.told) != 0 {
 		t.Errorf("told after the view left = %v", f.s.told)
 	}
+}
+
+// What the files keep for a directory is bounded however often it is read
+// unwatched: where its links land follows the view, and the listings a
+// client may hold are capped, past which the next check announces it.
+func TestWhatIsKeptOfADirectoryIsBounded(t *testing.T) {
+	f := newFixture(t)
+	f.write("other/a.md", "a")
+	if err := os.Symlink(f.path("other/a.md"), f.path("dir/link.md")); err != nil {
+		f.mkdir("dir")
+		if err := os.Symlink(f.path("other/a.md"), f.path("dir/link.md")); err != nil {
+			t.Skip("symlinks unsupported")
+		}
+	}
+	f.grid(f.path("dir"))
+	f.show(f.root)
+	f.s.scopeMu.Lock()
+	links := len(f.s.links)
+	f.s.scopeMu.Unlock()
+	if links != 0 {
+		t.Errorf("links kept for %d directories the view does not show", links)
+	}
+	for i := range 3 * servedCap {
+		f.write(fmt.Sprintf("dir/%d.txt", i), "x")
+		f.grid(f.path("dir"))
+	}
+	f.s.servedMu.Lock()
+	held := len(f.s.served[f.path("dir")].sums)
+	f.s.servedMu.Unlock()
+	if held > servedCap {
+		t.Errorf("%d listings kept for one directory, want at most %d", held, servedCap)
+	}
+	ev := f.events()
+	f.show(f.path("dir"))
+	await(t, ev, "the directory whose held listings were capped", gridChanged(f.path("dir")))
 }
