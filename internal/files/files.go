@@ -61,7 +61,8 @@ type Source struct {
 	servedMu sync.Mutex
 	served   map[string]*servedDir
 
-	// told is, per file, the content stamp it was last told under (fresh).
+	// told is, per file, the content stamp it was last told under (fresh),
+	// while the view holds its directory (rescope).
 	toldMu sync.Mutex
 	told   map[string]string
 

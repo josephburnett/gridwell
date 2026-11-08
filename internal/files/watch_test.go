@@ -345,3 +345,24 @@ func TestADirectoryALinkBringsInIsChecked(t *testing.T) {
 	}
 	await(t, ev, "the linked directory's change", gridChanged(other))
 }
+
+// What the files keep per file they told follows the view, so it does not
+// grow with every directory ever shown.
+func TestWhatWasToldFollowsTheView(t *testing.T) {
+	f := newFixture(t)
+	p := f.write("a.md", "one")
+	f.grid(f.root)
+	ev := f.events()
+	f.show(f.root)
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(p, []byte("two!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	await(t, ev, "the file's change", tileChanged(p))
+	f.show()
+	f.s.toldMu.Lock()
+	defer f.s.toldMu.Unlock()
+	if len(f.s.told) != 0 {
+		t.Errorf("told after the view left = %v", f.s.told)
+	}
+}

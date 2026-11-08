@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	iofs "io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -94,14 +95,18 @@ func (s *Source) scopeLocked() []string {
 }
 
 // rescope watches scope and answers the directories it added; the watch's
-// verdict is the files' told, and dark follows the view, so a directory
-// that leaves it darkens the files no more.
+// verdict is the files' told, and dark and what was told of each file follow
+// the view, so a directory that leaves it darkens the files no more and
+// leaves nothing kept for it.
 func (s *Source) rescope(scope []string) []string {
 	added, err := s.watch.set(scope)
 	why := ""
 	if err != nil {
 		why = err.Error()
 	}
+	s.toldMu.Lock()
+	maps.DeleteFunc(s.told, func(path, _ string) bool { return !slices.Contains(scope, filepath.Dir(path)) })
+	s.toldMu.Unlock()
 	s.setHealth(func() {
 		s.liveOff = why
 		for d := range s.dark {
