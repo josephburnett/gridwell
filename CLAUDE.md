@@ -483,8 +483,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   write is read-only with the reason. An image file's preview carries a
   stamp, so a changed file redraws; an image whose header declares more
   than 40 million pixels gets no preview, and its tile shows its name. Delete moves the file
-  to the OS trash. Move renames within the files and rewrites the row's key,
-  keeping its id; a move to another source is refused. Find on the files
+  to the OS trash. Move renames within the files, and the file's row (placement,
+  name, framing) follows it under its new path's id while the old id
+  retires; a move to another source is refused. Find on the files
   locates by `id:` and applies the node's row filters, and a text query
   answers empty: no body is read for it.
 - A file's facts the user made are rows, minted on touch (2026-11-07):

@@ -22,8 +22,8 @@ import (
 )
 
 // MoveTile writes a placement on the file's row, minting it. A move to
-// another directory renames the file there first, and the row follows under
-// its new path, keeping its id; a move to another source is refused.
+// another directory renames the file, and its row follows under the new
+// path's id, the old one retired; a move to another source is refused.
 func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error) {
 	path, dir, err := s.tilePath(req.TileId)
 	if err != nil {

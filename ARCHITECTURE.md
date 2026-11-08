@@ -207,7 +207,8 @@ file's stamp, `<mtime_ns>-<size>`, and a stale one is refused as the version
 conflict; a file the node cannot write is read-only with the reason; a
 permission the disk refuses is PermissionDenied, an unreadable page 403 at
 the content API. Delete moves the file to the OS trash. A move to another
-directory renames it on disk and rewrites the row's key, keeping its id; a
+directory renames it on disk, and its row (placement, name, framing) follows
+under the new path's id while the old id retires; a
 move to another source is refused (`rpc.MoveAcross`). A symlink is a link:
 to a directory, a door onto the target's grid; to a file, a link tile whose
 target is the target's path id; dead when the target is gone or outside
