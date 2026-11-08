@@ -42,7 +42,7 @@ number; each argument says which it takes.
 
 A write claims what the agent read, as the app does. `read_tiles` and
 `read_grid` answer a `version` (and, for a text body, `body_version`, or
-`body_stamp` for a plugin's text). Pass it to a write and a change made since
+`body_stamp` for a file's text). Pass it to a write and a change made since
 you read is refused as a conflict; read again and decide. Leave it out and the
 API reads the row and claims it as it stands now. A move claims where the
 tile sits now; a delete claims its version and where it sits. `select` claims
@@ -66,12 +66,12 @@ empty list.
 | `sessions` | none | Every screen showing the node, the most recently changed first (see Here and these): its `id`, `label` (`desktop` or `browser`), when its view last `changed`, `away_since` when its stream has closed, the `workspace_tiles` it is inside, outermost first, and its `panes`: each one's `id`, place (`anchor` and `path`), the `grid` it shows, the `content` tile it is inside, and whether it is `focused`. The screen showing the shell you run in is marked `yours`. No screen is an empty list. |
 | `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles; `selection`: the tiles the user has in hand) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid. |
 | `read_tiles` | `ids` | One answer per id, in order: the row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux a shell names, the grid a door holds, and for a workspace tile its `layout`: the `version` it was read at and each pane's `id`, place (`anchor` and `path`), the `grid` when the layout names it (a pane with no path is on its anchor), the `content` tile it is inside, and whether it is `focused`, the pane the workspace tile reopens on. A link answers its target's content, or `dead` when the target is gone. An id that cannot be read gets its refusal as its verdict. |
-| `find` | `query`, `scope`, `limit`, `grid`, `recurse`, `created`, `modified`, `content_changed`, `selected`, `kind` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. The filters narrow it and combine: `grid` keeps the tiles on that grid, and with `recurse` the grids inside its doors, to any depth (a link door is not followed); `created`, `modified` (any write: a move, a framing, content) and `content_changed` keep the tiles whose time falls in the range, `{from, to}`, each an RFC 3339 time such as `2026-10-17T09:00:00Z`, inclusive, either left out for open; `selected` keeps the tiles in their grid's selection; `kind` keeps the tiles of one kind, `text`, `url`, `shell`, `door` or `workspace`, and any other is refused. With a filter the query may be empty, and the answer is what passes, newest first, by the time it filters on, else by when each was made. Each hit names the doors it sits inside; `skipped` names every namespace that did not answer. |
+| `find` | `query`, `scope`, `limit`, `grid`, `recurse`, `created`, `modified`, `content_changed`, `selected`, `kind` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. The filters narrow it and combine: `grid` keeps the tiles on that grid, and with `recurse` the grids inside its doors, to any depth (a link door is not followed); `created`, `modified` (any write: a move, a framing, content) and `content_changed` keep the tiles whose time falls in the range, `{from, to}`, each an RFC 3339 time such as `2026-10-17T09:00:00Z`, inclusive, either left out for open; `selected` keeps the tiles in their grid's selection; `kind` keeps the tiles of one kind, `text`, `url`, `shell`, `door` or `workspace`, and any other is refused. With a filter the query may be empty, and the answer is what passes, newest first, by the time it filters on, else by when each was made. The files match no text: a text query finds nothing in them, while `id:` and the filters do. Each hit names the doors it sits inside; `skipped` names every namespace that did not answer, the files as `<node>/~`. |
 | `write_text` | `items`: `id`, `grid`, `body`, `version` or `stamp`, `near` | An item with `id` replaces that text tile's whole body; through a link it writes the target. An item with `grid` and no `id` creates a 1×1 text tile born with the body, its name the body's first line, at the first free cell in reading order, or at `near` (`{x, y}`), or below it in its column when that cell is taken. A new tile claims nothing. |
-| `rename` | `items`: `id`, `name`, `version` | Renames a url, shell, door or workspace tile, home's or a plugin's. A plugin's entry keeps the typed name on the node's row, over its source's. |
-| `move` | `items`: `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same namespace. |
-| `copy` | `items`: `id`, `grid`, `at`, `link` | Lands in `grid` or the tile's own, at `at` or beside the tile. `link: false` is a deep copy; across namespaces a plugin's door, or a source that does not answer, lands as a link. `link: true` is a link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
-| `delete` | `items`: `id`, `version` | Moves a home tile to the trash. A plugin's entry is deleted as its plugin deletes (fs removes the file, gitlab marks the todo done, a read-only one refuses), never trashed. Deleting a link only unlinks. |
+| `rename` | `items`: `id`, `name`, `version` | Renames a url, shell, door or workspace tile, home's or a file's. A file keeps the typed name on the node's row, over its file name; the file on disk is not renamed. |
+| `move` | `items`: `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same namespace: a file moves to another directory of the files, renamed on disk, and a move to another source is refused. |
+| `copy` | `items`: `id`, `grid`, `at`, `link` | Lands in `grid` or the tile's own, at `at` or beside the tile. `link: false` is a deep copy; across namespaces a directory's door, a page file, or a source that does not answer, lands as a link. `link: true` is a link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
+| `delete` | `items`: `id`, `version` | Moves a home tile to the trash. A file goes to the OS trash, never home's. Deleting a link only unlinks. |
 | `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's doors, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". Every pane showing the grid shows it, inside a workspace tile too. |
 
 ## Here and these
@@ -111,13 +111,13 @@ starts with the kind of refusal, then the node's reason:
   cells are taken. Nothing was written.
 - `disabled:` the source is one the user switched off. It is read-only until
   the node restarts.
-- `dead link:` the path ends in nothing: a namespace not declared, or a
-  target its source says is gone.
-- `unreachable:` the plugin or far node did not answer. Try again later.
+- `dead link:` the path ends in nothing: a namespace not declared, a path
+  outside every root, or a target its source says is gone.
+- `unreachable:` a directory or a far node did not answer. Try again later.
 - `refused:` the request itself is wrong, such as renaming a text tile, whose
   name is its first line.
 - `not supported here:` the namespace does not do this, such as creating a
-  tile in a plugin's grid.
+  tile in a directory.
 - `not found:` no such tile or grid.
 
 ## Not exposed
