@@ -516,7 +516,7 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A directory wears its own tint, the outside colour in both themes of
   `theme.Palette`, wherever a grid, a door or a pane border shows it,
   because a directory is outside the system (2026-11-07). The client reads
-  that a grid is a directory from its id's shape (`rpc.ShapeKey`), never
+  that a grid is a directory from its id's shape (`rpc.IsFilesID`), never
   from a wire flag.
 - The files are dark or told, never disabled (2026-11-07). The node
   watches only the directories some open session shows, with a 200 ms
