@@ -619,7 +619,7 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	// The remote serves a directory as a files root. Nothing there is
 	// touched, so every tile it answers is named by its path.
 	files := t.TempDir()
-	if err := os.WriteFile(filepath.Join(files, "far.txt"), []byte("hello from the far side"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(files, "far.md"), []byte("hello from the far side"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(files, "sub"), 0o755); err != nil {
@@ -663,19 +663,19 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	var farID string
 	for _, ti := range g["tiles"].([]any) {
 		tm := ti.(map[string]any)
-		if tm["altText"] == "far.txt" {
+		if tm["altText"] == "far.md" {
 			farID, _ = tm["id"].(string)
 		}
 	}
 	if farID == "" {
-		t.Fatalf("far.txt not listed through the tunnel: %v", g["tiles"])
+		t.Fatalf("far.md not listed through the tunnel: %v", g["tiles"])
 	}
 	if !strings.Contains(farID, "/~") {
-		t.Fatalf("far.txt came back as %q, want its path's key form", farID)
+		t.Fatalf("far.md came back as %q, want its path's key form", farID)
 	}
 	// The id routes back to the same tile and its bytes.
 	back := rpc(t, localOrigin, "GetTile", map[string]any{"tileId": farID})["tile"].(map[string]any)
-	if back["altText"] != "far.txt" {
+	if back["altText"] != "far.md" {
 		t.Fatalf("GetTile on a key-form id through the chain = %v", back)
 	}
 	body, _, _, err := clientFor(localOrigin).ReadContent(context.Background(), farID)
@@ -698,12 +698,12 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	var again map[string]any
 	for _, ti := range g["tiles"].([]any) {
 		tm := ti.(map[string]any)
-		if tm["altText"] == "far.txt" {
+		if tm["altText"] == "far.md" {
 			again = tm
 		}
 	}
 	if again == nil || again["id"] != farID {
-		t.Fatalf("the far listing renamed far.txt after the touch: %v, was %q", again, farID)
+		t.Fatalf("the far listing renamed far.md after the touch: %v, was %q", again, farID)
 	}
 	// proto-JSON renders int64 as a string, so the comparison renders
 	// too.
