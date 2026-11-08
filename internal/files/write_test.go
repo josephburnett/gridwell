@@ -172,8 +172,12 @@ func TestAMoveRenamesAndKeepsTheRow(t *testing.T) {
 	await(t, ev, "the old directory's change", gridChanged(f.root))
 	await(t, ev, "the new directory's change", gridChanged(dir))
 
+	// Only a stale claim is the conflict, which the client reconciles; a
+	// refusal with a reason snaps the move back.
 	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1})
-	wantCode(t, "a taken name", err, codes.FailedPrecondition)
+	wantCode(t, "a taken name", err, codes.InvalidArgument)
+	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: idOf(f.path("gone")), X: 0, Y: 1, W: 1, H: 1})
+	wantCode(t, "a gone directory", err, codes.InvalidArgument)
 	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(dir), GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1})
 	wantCode(t, "a directory into itself", err, codes.InvalidArgument)
 	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: "12", X: 0, Y: 1, W: 1, H: 1})
@@ -181,9 +185,7 @@ func TestAMoveRenamesAndKeepsTheRow(t *testing.T) {
 	stale := tileIn(t, f.grid(f.root), taken)
 	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: stale.Id, GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1,
 		Claim: &pb.Placement{GridId: stale.GridId, X: stale.X + 5, Y: stale.Y, W: 1, H: 1}})
-	if err == nil {
-		t.Error("a stale claim moved the file")
-	}
+	wantCode(t, "a stale claim", err, codes.FailedPrecondition)
 	if _, err := os.Stat(taken); err != nil {
 		t.Errorf("a refused move touched the file: %v", err)
 	}

@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -86,7 +88,9 @@ func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.
 }
 
 // rename moves path into the directory to under its name and answers where
-// it landed. It replaces nothing.
+// it landed. It replaces nothing. Each refusal is a verdict with its reason,
+// never the conflict a stale claim is, so the client snaps the move back
+// rather than reconciling; a disk that cannot answer is the one outage.
 func (s *Source) rename(path, to string) (string, error) {
 	refuse := func(c codes.Code, why string, a ...any) error {
 		return status.Errorf(c, "files: %s cannot move to %s: "+why, append([]any{path, to}, a...)...)
@@ -94,27 +98,30 @@ func (s *Source) rename(path, to string) (string, error) {
 	fi, err := os.Stat(to)
 	switch {
 	case gone(err):
-		return "", refuse(codes.FailedPrecondition, "that directory is gone")
+		return "", refuse(codes.InvalidArgument, "that directory is gone")
 	case err != nil:
-		return "", refuse(codes.FailedPrecondition, "%v", pathErr(err))
+		return "", refuse(codes.Unavailable, "%v", pathErr(err))
 	case !fi.IsDir():
 		return "", refuse(codes.InvalidArgument, "that is not a directory")
 	case underRoot(path, to):
 		return "", refuse(codes.InvalidArgument, "a directory cannot move into itself")
 	}
 	if _, err := os.Lstat(path); err != nil {
-		return "", refuse(codes.FailedPrecondition, "it is gone")
+		return "", refuse(codes.InvalidArgument, "it is gone")
 	}
 	landed := filepath.Join(to, filepath.Base(path))
 	_, err = os.Lstat(landed)
 	switch {
 	case err == nil:
-		return "", refuse(codes.FailedPrecondition, "%q is already there", filepath.Base(path))
+		return "", refuse(codes.InvalidArgument, "%q is already there", filepath.Base(path))
 	case gone(err):
 		err = os.Rename(path, landed)
 	}
-	if err != nil {
-		return "", refuse(codes.FailedPrecondition, "%v", pathErr(err))
+	switch {
+	case errors.Is(err, iofs.ErrPermission), errors.Is(err, syscall.EROFS):
+		return "", refuse(codes.PermissionDenied, "%v", pathErr(err))
+	case err != nil:
+		return "", refuse(codes.InvalidArgument, "%v", pathErr(err))
 	}
 	return landed, nil
 }

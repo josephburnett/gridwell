@@ -39,7 +39,7 @@ func sendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk)
 // outside every root is a verdict, anything else a disk that cannot answer.
 func contentRefusal(path string, err error) error {
 	if errors.Is(err, errOutside) {
-		return status.Errorf(codes.FailedPrecondition, "files: %s %v", path, err)
+		return status.Errorf(codes.PermissionDenied, "files: %s %v", path, err)
 	}
 	return status.Errorf(codes.Unavailable, "files: read %s: %v", path, pathErr(err))
 }

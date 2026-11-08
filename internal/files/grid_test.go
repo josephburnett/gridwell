@@ -158,10 +158,12 @@ func TestASymlinkIsALink(t *testing.T) {
 		}
 	}
 	var got []byte
-	if err := f.s.ReadContent(ctx, &pb.ReadContentRequest{TileId: idOf(f.path("out"))}, func(c *pb.ContentChunk) error {
+	err := f.s.ReadContent(ctx, &pb.ReadContentRequest{TileId: idOf(f.path("out"))}, func(c *pb.ContentChunk) error {
 		got = append(got, c.Data...)
 		return nil
-	}); err == nil {
+	})
+	wantCode(t, "a link out of every root", err, codes.PermissionDenied)
+	if len(got) != 0 {
 		t.Errorf("a link out of every root read %q", got)
 	}
 }
