@@ -50,8 +50,9 @@ test('a left-drag of a file onto a directory door moves it there', async ({ gw, 
 });
 
 // There is no move to another source. A home tile dropped on a directory's
-// pane stays home, since a directory takes no new tiles, and a move asked of
-// the node all the same is refused with the one sentence (rpc.MoveAcross).
+// pane stays home, since a directory takes no tile but a text's copy, and a
+// move asked of the node all the same is refused with the one sentence
+// (rpc.MoveAcross).
 test('a home tile dropped on a directory stays home, and a move there is refused', async ({ gw, window }) => {
   const verbs: string[] = [];
   await window.route('**/gridwell.v1.Gridwell/{MoveTile,CreateTile,CopyTile}', async (r: any) => {

@@ -7,7 +7,7 @@ import { tileAt } from './oracle';
 // A right-drag of a directory's door onto home links it, as a left-drag does: a
 // directory door never copies (CLAUDE.md, 2026-10-20). The verdict
 // is the client's, so the commit is a CreateTile and no CopyTile is asked; a
-// file still copies its bytes. The server makes the same link of a CopyTile,
+// markdown file still copies its bytes. The server makes the same link of a CopyTile,
 // so only the verb tells the client's verdict apart.
 
 const ROOT = makeRunDir();
@@ -15,7 +15,7 @@ fs.mkdirSync(path.join(ROOT, 'sub'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'notes.md'), '# notes\n');
 test.use({ filesRoots: [{ root: ROOT, label: 'docs' }] });
 
-test('right-drag of a directory door onto home links it; a file still copies', async ({ gw, window }) => {
+test('right-drag of a directory door onto home links it; a markdown file still copies', async ({ gw, window }) => {
   const verbs: string[] = [];
   await window.route('**/gridwell.v1.Gridwell/{CopyTile,CreateTile}', async (r: any) => {
     verbs.push(r.request().url().split('/').pop());
