@@ -145,15 +145,15 @@ const (
 
 // The differences CLAUDE.md decides, quoted.
 const (
-	dPluginCreates  = "A plugin serves keys and content; the node owns ids and layout."
-	dPluginDelete   = "A delete is handed to the plugin, which says what deleting means"
-	dPluginDoorCopy = "A plugin's door never copies"
-	dPluginPageCopy = "A url entry whose plugin serves its page copies as a link too"
-	dPluginName     = "the source's label names it until a rename"
-	dPluginMove     = "a plugin that declares no move refuses with the reason" // plugin_move_test.go
-	dPluginPage     = "Plugins serve web content through"
+	dPluginCreates  = "A directory's grid takes no new tiles"
+	dPluginDelete   = "Delete moves the file to the OS trash."
+	dPluginDoorCopy = "A directory's door never copies"
+	dPluginPageCopy = "a page file, whose page is the node's, copies as a link"
+	dPluginName     = "A file's name is its file name until a rename"
+	dPluginMove     = "a move to another source is refused" // plugin_move_test.go
+	dPluginPage     = "The node serves a page file's page through its content API"
 	dShellCopy      = "A shell copied across nodes lands as a link"
-	dTextName       = "A text tile's name stays its source's, since its presentation reads it."
+	dTextName       = "A text tile's name stays the file's, since its presentation reads it"
 )
 
 var parityTable = []parityCell{

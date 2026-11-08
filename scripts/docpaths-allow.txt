@@ -12,3 +12,6 @@ apps/desktop/README.md apps/desktop/.cache
 .github/workflows/release.yml apps/desktop/out/*
 .github/workflows/release.yml apps/desktop/out/*.dmg
 .github/workflows/release.yml apps/desktop/out/*.exe
+# The files source the 2026-11-07 decisions name, built in the next commits
+# of the files-native change; this line goes when the package lands:
+CLAUDE.md internal/files

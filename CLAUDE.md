@@ -1,8 +1,8 @@
 # Gridwell
 
-Gridwell is a personal space: tiles on an infinite grid, nested, federated
-across plugins and machines. Four primitives (text, url, shell, door) and a
-closed, stable experience over an open set of content. `ARCHITECTURE.md`
+Gridwell is a personal space: tiles on an infinite grid, nested, over the
+node's files and federated across machines. Four primitives (text, url,
+shell, door) and a closed, stable experience over an open set of content. `ARCHITECTURE.md`
 says how it works. Read it first. This file says how to change it.
 
 ## The rule: things stay as you left them
@@ -15,7 +15,7 @@ When a decision is unclear, this rule wins — over performance, elegance, and
 convenience. Ask of every change: is everything the user didn't touch
 byte-for-byte the same, and does every reference still resolve to the thing
 it named? That is why ids are never reassigned, a copy is deep, framing
-never bumps `version`, and there is no cross-plugin move.
+never bumps `version`, and there is no move across sources.
 
 ## The promises
 
@@ -27,7 +27,7 @@ comment beside it says.
 
 - Things stay as you left them.
 - A tile behaves the same wherever its content comes from: yours, a
-  plugin's, or a far node's. The only difference is where the bytes come
+  file's, or a far node's. The only difference is where the bytes come
   from and who owns the address.
 - The node learns of a change by being told, never by asking on a clock. A
   clock is for a source that cannot tell, and then it is the source's.
@@ -95,23 +95,21 @@ what each one is called.
 | Word | What it names | What it is not |
 |---|---|---|
 | node | The one process: one id, one `server.yaml`, one `gridwell.db`. | Its home, which is a namespace; its directory, which is `~/.gridwell`. |
-| `~/.gridwell` | The node's directory: `server.yaml`, `gridwell.db`, `cache.db`, `web-password`, `~/.gridwell/plugins/<id>`. | A home. |
-| API | One interface the node serves, or in the plugin's case dials: the web API (the browser's calls), the connection API (the socket a connection dials), the plugin API (what a plugin serves the node), the MCP API (agents), the shell API (the WebSocket), the content API (a plugin's pages), the trace API. The web, connection and MCP APIs each decode onto the one router. | A door, which is a tile. |
+| `~/.gridwell` | The node's directory: `server.yaml`, `gridwell.db`, `cache.db`, `web-password`. | A home. |
+| API | One interface the node serves: the web API (the browser's calls), the connection API (the socket a connection dials), the MCP API (agents), the shell API (the WebSocket), the content API (the pages of the node's image, video, audio and PDF files), the trace API. The web, connection and MCP APIs each decode onto the one router. | A door, which is a tile. |
 | connection | A config row to a far node: an immutable name, a label, how to dial. | |
-| route | One rule of `server.yaml`'s ordered `routes`: a glob over an address, and a plugin that presents it or outside. | A place; a link's path. |
 
 **Namespaces**
 
 | Word | What it names | What it is not |
 |---|---|---|
-| namespace | A home, a plugin or a connection as the node holds it (`internal/namespace`); the segments of an id before the tile's own. | |
+| namespace | Home, the files or a connection as the node holds it (`internal/namespace`); the segments of an id before the tile's own, and for the files `<node>/~`. | |
 | home | The node's own namespace. A connection lands on the far node's home. | The node's directory. |
-| plugin | A subprocess that serves keys and content and declares its grids; the node owns the ids and the layout, and mints a plugin's grid when it is touched. | A home. |
-| entry | One thing a plugin lists: its key and its content. | A plugin's grid. |
-| key | A plugin's own name for one thing it serves. | An id, which the node mints. |
-| presents | A plugin's declaration of the site addresses it can show a page for (`InfoResponse.presents`). | Serves a page, which is an entry's. |
-| source | A plugin or a connection, as what a grid's rows come from (`source_label`, `DisableSource`); also the tile a copy was made from. The directory, service or node a plugin or connection represents has no word of its own: name the thing. | |
-| cache | What a source last answered (`cache.db`, `sourcecache`, a plugin's cache in its `state_dir`), served while it does not answer. Disposable, rewarmed by use. | Stale. |
+| files | The node's second source: the directories `server.yaml`'s `files:` declares, shown as grids (`internal/files`). | Home, which holds the rows the user made. |
+| root | One directory `files:` declares, with its label: a swatch in the + menu. | Home's root grid, where a client lands. |
+| directory | A folder under a root, shown as a grid; its door sits in its parent's grid and wears the outside tint. | A grid of home's. |
+| source | The files or a connection, as what a grid's rows come from; also the tile a copy was made from. The directory or node a source represents has no word of its own: name the thing. | |
+| cache | What a connection last answered (`cache.db`, `sourcecache`), served while it does not answer. Disposable, rewarmed by use. | Stale; a file's rows, which are node facts. |
 
 **Tiles**
 
@@ -128,7 +126,7 @@ what each one is called.
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
 | workspace tile | A tile holding a layout: a pane tree, with each frame's framing and scroll. | |
 | preview | What a tile looks like from outside. A capture is one; a freeze keeps one. | |
-| id | A tile's or grid's own segment, qualified by its namespace's: digits for a row the node minted, or `~` plus a plugin thing's own address. A namespace's is seven lowercase base36 characters with a leading letter, or a legacy 32-hex. Never reassigned. `docs/ids.md`. | A key. |
+| id | A tile's or grid's own segment, qualified by its namespace's: digits for a row the node minted, or `~` plus a file's absolute path, base64url. A namespace's is seven lowercase base36 characters with a leading letter, or a legacy 32-hex. Never reassigned. `docs/ids.md`. | A file's path, which the id encodes. |
 
 **Places and panes**
 
@@ -163,12 +161,12 @@ what each one is called.
 
 | Word | What it names | What it is not |
 |---|---|---|
-| dead | A link whose namespace is not declared, or whose key its namespace says is gone (`gwerr.DeadLink`). Nothing is said and nothing is asked until the declaration or that namespace's listing changes. | An error; dark. |
-| dark | A source declared but not answering right now: a connection that will not dial, or a plugin whose directory or service stopped answering while its process still does. Its grids serve from cache, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
-| disabled | A plugin or connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). | Dark. |
+| dead | A link whose namespace is not declared, whose path is outside every root, or whose target its source says is gone (`gwerr.DeadLink`). Nothing is said and nothing is asked until the declaration or that source's listing changes. | An error; dark. |
+| dark | A source declared but not answering right now: a connection that will not dial, or a root or directory that will not read. Its grids serve what the node holds, a connection's from cache and a directory's from its rows, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
+| disabled | A connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). The files are never disabled. | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
-| broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. A url tile a route sends to a plugin that does not answer is broken too (`Tile.broken_reason`). | Dark. |
-| told | A source whose changes reach the node as they happen (`EventPluginHealth.told`): it declares Watch and nothing has failed. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
+| broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
+| told | A source whose changes reach the node as they happen (`EventPluginHealth.told`): a connection whose stream is up, or files whose watch is healthy. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
 | unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
 | notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
 
@@ -187,7 +185,7 @@ what each one is called.
 | Word | What it names | What it is not |
 |---|---|---|
 | + menu | The menu on the + circle: the primitives, with a folded strip of swatches above. `client/menu`. | A palette. |
-| swatch | One item of the + menu's strip, per door seen from outside: a home, a far home, a plugin's grid. | An entry. |
+| swatch | One item of the + menu's strip, per door seen from outside: a home, a far home, a root. | A directory inside a root. |
 | strip | The chevron strip of the folded + menu, above the primitives; folded or open, the menu's own state. | A notice. |
 | palette | The colour set (`theme.Palette`). | The + menu. |
 | glyph | A namespace's icon, on its swatch, its ghost and the crumb of the grid it roots. | |
@@ -293,8 +291,8 @@ These were decided deliberately. Do not reverse one without a new decision.
 **Data**
 
 - The node is one process with one directory, `~/.gridwell`: one id, one
-  `server.yaml` (`id`, `web`, `federation`, `connections`, `plugins`,
-  `routes`), one `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
+  `server.yaml` (`id`, `web`, `federation`, `connections`, `files`), one
+  `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
 - The store mints the node's singleton grids (root, scratch, trash) when it
   opens, never on a read; reading never mutates has no exception
   (2026-09-30).
@@ -337,11 +335,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   until this decision.
 - A write to a tile carries one operation: a rename, a content zoom, a
   freeze or a writeback. One carrying more, or none, is refused with the
-  reason before anything lands, by every owner alike, home's, a plugin's or
+  reason before anything lands, by every owner alike, home's, the files' or
   a far node's (`rpc.OneOperation`, 2026-10-26).
 - The selection is a node fact (2026-10-15): the set of a grid's tiles the
   user has in hand lives on that grid's row (`grids.selection`), home's
-  grids and a plugin's alike, and a far grid's on the far node. It persists
+  grids and a directory's alike, and a far grid's on the far node. It persists
   across restarts. It names only tiles on its grid, so a tile that leaves
   the grid leaves the set and lands elsewhere unselected
   (`store.leaveSelection`). A select names what it adds and what it removes
@@ -354,7 +352,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   empties every grid under the grid's doors, to any depth, within its
   namespace, in one write, telling each grid whose set changed; `recurse`
   without `clear` is refused. `clear` with `all` and nothing else empties
-  every set the node holds, one write per namespace (home, each plugin),
+  every set the node holds, one write per namespace (home, the files),
   and goes on over each live connection to the far node, whose sets are its
   rows; asked over its connection API, a node clears its own and forwards
   nothing (`router.clearAllSelections`). The + circle's right-click offers
@@ -385,7 +383,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   on the verdict like a move; every selected tile wears the yellow border
   (`theme.Palette.Selection`) in every open view (2026-10-15).
 - A tile row keeps three times, one owner each, in unix seconds on home's
-  rows and a plugin's alike, none on the wire (2026-10-17): `created_at`,
+  rows and a file's alike, none on the wire (2026-10-17): `created_at`,
   when the row was made; `updated_at`, when anything last wrote it (a move,
   framing, a freeze, content); `content_at`, when its content last changed,
   written only by the version bump (`bumpTileVersion`) and read as
@@ -393,11 +391,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   `recurse` through owned doors, never a link), on the selection, and on
   the kind (text, url, shell, door or workspace, 2026-10-18; an unknown one is
   refused); the filters AND, an empty query with one lists what passes, newest first, and
-  they are the node's, applied to the rows it holds (`store.tileFilter`),
-  never a plugin's: the plugin answers the text, and the node keeps the hits
-  whose rows pass (`pluginhost` `filterHits`). An entry with no row has no
-  time and is in no selection but has its kind, and a plugin row's times are the node's
-  (minted, touched), not the source's.
+  they are the node's, applied to the rows it holds (`store.tileFilter`).
+  A text query answers empty on the files. A file row's times are the node's
+  (minted, touched), not the file's.
 - Framing is a float center plus a pane-size-independent zoom on the row
   that owns the door; a root keeps the same shape on its grid row. One
   wire verb (`SetFraming`), one store writer, one client function. Inside a
@@ -442,115 +438,116 @@ These were decided deliberately. Do not reverse one without a new decision.
 
 **Node**
 
-- Inside the node a namespace is a Go value (`internal/namespace`). gRPC
-  is used at two hops only: the plugin subprocess and the connection
-  API. Both node-side APIs decode onto the one router.
-- The plugin API is the third-party way in, and plugins live in their own
-  repository, `github.com/josephburnett/gridwell-plugins`; the shipped fs,
-  proc, pages, gitlab, gmail and hey are plugins like anyone else's.
-  This repo owns the plugin API: the proto, `api/gen/plugin/v1`, and the
-  go-plugin handshake (`api/compose`).
-  No gridwell package, test files included, imports a plugin implementation
-  or names that repository in a go.mod, and nothing switches on a plugin
-  kind; every plugin behavior rides a wire declaration. `test/boundary`
-  enforces it. A test that needs a real plugin spawns the shipped binary
-  (`internal/plugintest`). `make build` compiles those binaries out of
-  `$(PLUGINS_DIR)` (default `../gridwell-plugins`) into the repo root, so
-  check out the plugins repo beside this one.
-- A plugin serves keys and content; the node owns ids and layout. A plugin
-  holds no node fact. The private directory the node hands it at spawn
-  (`~/.gridwell/plugins/<id>`, as `state_dir`) is the plugin's own and
-  durable: its cache of its source and whatever its features keep. Nothing
-  deletes one, ever (2026-10-25). A connection is
-  config: an immutable name, a label, how to dial. Retiring a name is
-  forever, and explicit: `retired_names:` is the one owner, and the stored
-  `deleted` flag is only that list mirrored. Boot never retires a name
-  because the config stopped declaring it — the row and its landing stay,
-  its links go dead by the roster, and the stanza brings them back.
-  Secrets stay host-local file paths.
+- Inside the node a namespace is a Go value (`internal/namespace`): home
+  (`internal/local`), the files (`internal/files`) and each connection.
+  gRPC is used at one hop only, the connection API. Both node-side APIs
+  decode onto the one router.
+- There are no plugins (2026-11-07, reversing the plugin API of
+  2026-08-15). Besides home the node reads two kinds of source, its files
+  and its connections, both Go values behind `namespace.Namespace`. Nothing
+  is spawned, no `plugin.v1` is spoken, and nothing under
+  `~/.gridwell/plugins` is created or read, or deleted. A behaviour the files
+  have is the node's code, not a declaration on a wire.
+- Under the node an id has two shapes and no third (2026-11-07):
+  `<node>/<digits>` is a home row, `<node>/~<base64url of an absolute path>`
+  is a file or a directory (`rpc.KeyTileID`, `rpc.TileKey`), and
+  `<node>/<connection>/...` is a connection's. The files' owner id is
+  `<node>/~`, the key form of the empty path: `rpc.OwnerNamespaceOf` answers
+  it for every `<node>/~<path>` id, and it is the one owner rule for
+  routing, a shared owner, a dead link, the disable verdict and the health
+  key. A directory's grid and the
+  door that shows it in its parent both name the directory's path; `GetGrid`
+  and `GetTile` are separate verbs, and where one id must be classified the
+  disk says whether the path is a directory. A path is the thing's address:
+  a renamed or moved file retires its old id and a link to it reads dead,
+  since a link means the thing at that address (2026-10-22).
+- Roots are config (2026-11-07): `files:` in `server.yaml` is a list of
+  `{root: <absolute dir>, label: <text>}`. The roster has one files row
+  (`<node>/~`, labelled files, the folder glyph) carrying one grid per root,
+  between home and the connections, and each root is one swatch in the +
+  menu with its label, in config order. A path outside every root is dead
+  (`gwerr.DeadLink`). A `server.yaml` that still has `plugins:` or `routes:`
+  is refused at parse with a message naming `files:`.
+- The files are one package, `internal/files`, reading disk and the
+  store's file rows directly (2026-11-07). A directory's grid takes no new
+  tiles: a file is made on disk. A directory is a door; an image,
+  video, audio or PDF file, a page file, is a url tile whose page the node
+  serves, since none of them runs a script; every other file, HTML, CSS, JavaScript and
+  JSON included, is a text tile, plain or both by its extension. A file
+  never placed sits at the placement its place in the listing derives. A
+  write to a file claims its content stamp, `<mtime_ns>-<size>`, and a
+  stale stamp is refused as a version conflict; a file the node cannot
+  write is read-only with the reason. An image file's
+  preview carries a stamp, so a changed file redraws. Delete moves the file
+  to the OS trash. Move renames within the files and rewrites the row's key,
+  keeping its id; a move to another source is refused. Find on the files
+  locates by `id:` and applies the node's row filters, and a text query
+  answers empty: no body is read for it.
+- A file's facts the user made are rows, minted on touch (2026-11-07):
+  placement, framing, the typed name, the frozen preview and the content
+  stamp. A listing is overlaid onto the rows; every listing of a directory
+  is authoritative, so a row whose path it no longer names is swept and
+  tombstoned. An id is never reassigned: a path listed again is live again
+  under the same id.
+- A file's name is its file name until a rename, which the node keeps on
+  its row as home keeps one (`alt_text`, `alt_user` latched), claiming and
+  bumping the version, and the file on disk is not renamed by it. A text
+  tile's name stays the file's, since its presentation reads it
+  (2026-10-20). A page the node serves has no address of its own, so a
+  navigation in it writes nothing (2026-10-21).
+- A directory's door never copies (2026-10-20): copied into another
+  namespace, home or a far node's, it lands as the link to its grid a
+  left-drag makes, and the ghost shows the link before the drop. A file's
+  text or url copies its bytes; a page file, whose page is the node's,
+  copies as a link, since it has no address to copy (2026-10-21). A door
+  copies as a link when the grid it opens takes no new tiles
+  (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
+  so a disabled connection's door links too, as a dark one does.
+- A symlink is a link (2026-11-07). One to a directory is a door whose
+  grid is the target's, drawn as a link because the grid is not its own;
+  one to a file is a link tile whose target is the target's path id,
+  `~<base64url of its absolute path>`. Either is dashed, opens the target,
+  and is dead when the target is gone or outside every root.
+- A directory wears its own tint, the outside colour in both themes of
+  `theme.Palette`, wherever a grid, a door or a pane border shows it,
+  because a directory is outside the system (2026-11-07). The client reads
+  that a grid is a directory from its id's shape (`rpc.ShapeKey`), never
+  from a wire flag.
+- The files are dark or told, never disabled (2026-11-07). The node
+  watches only the directories some open session shows, with a 200 ms
+  debounce and a re-walk on overflow, and tells each change as
+  `GridChanged` or `TileChanged`; told is whether that watch is healthy. A
+  root or directory that will not read is dark: its grid serves what its
+  rows hold and says so through the health event, as a dark connection's
+  serves its cache. Nothing walks a directory nobody shows.
+- The node's old plugin rows are dropped (2026-11-07): one rebuild
+  migration deletes every tiles and grids row of a namespace other than
+  home's and retires the `ns` column. This is the one decided exception to
+  converting a row the new shape cannot hold; the files start fresh.
+- The handshake's roster carries one row per source, home, the files and
+  each connection, and the health event one per source, the files' keyed
+  `<node>/~`; their messages are
+  named for sources and keep their field numbers (2026-11-07). The
+  repository says plugin only in a `reserved` comment, a migration's
+  comment and `scripts/retired-words.txt`.
+- A connection is config: an immutable name, a label, how to dial.
+  Retiring a name is forever, and explicit: `retired_names:` is the one
+  owner, and the stored `deleted` flag is only that list mirrored. Boot
+  never retires a name because the config stopped declaring it — the row
+  and its landing stay, its links go dead by the roster, and the stanza
+  brings them back. Secrets stay host-local file paths.
 - A trace dump carries the node's `server.yaml` (2026-11-07): the bytes on
   disk at dump time, comments and order kept, appended after the ring's
-  records in the one `.jsonl`, so a reader of a dump sees the node's routes,
-  connections and plugins without asking. The yaml holds paths to secrets,
+  records in the one `.jsonl`, so a reader of a dump sees the node's files
+  and connections without asking. The yaml holds paths to secrets,
   never a secret, and the web password is a file of its own that no dump
   reads.
-- A plugin is not a place (2026-09-06, reversing the `root_grid`
-  decision). Nodes have homes; a plugin contributes doors. Its grids are
-  + menu rows, one per grid it declares (`InfoResponse.grids`, each naming
-  the grid's key), and it never wraps them in a synthetic root grid of
-  doors. `root_grid` is retired: the field number is kept forever and the
-  node reads it in one place only — a plugin that answers a root_grid and no
-  grids gets one derived grid onto it, so an old binary still contributes
-  a grid.
-  Declare both and the grids win; there is no privileged grid. A plugin that
-  declares none
-  contributes nothing and is healthy, not broken: `pluginhealth` gives its row
-  no status at all. A plugin that cannot serve the source its config declares
-  refuses `Info` with the reason, and is broken with that sentence and no
-  grids until the fix lands, which needs no restart (2026-09-30).
-- A plugin entry may be a link to another of its entries (2026-10-02):
-  `Entry.link_target` names the target by grid and key, and the node
-  draws the entry as a link to the target's key-form address, reads through
-  it, and mints nothing for the target until it is touched. A listing is
-  authoritative only when it enumerates the grid definitively (a whole
-  read, or a whole box walk while the live feed is connected), and `Probe`
-  answers for the grid it names, so leaving one grid is not being
-  gone. One thing listed in many grids is
-  one tile (hey: a thread in everything, its boxes holding links).
-- A plugin's entry is its source's thing, so two writes home takes are
-  the source's (2026-10-19). Its name is the user's once typed (2026-10-20):
-  the source's label names it until a rename, which the node keeps on its
-  row as home keeps one (`alt_text`, `alt_user` latched), claiming and
-  bumping the version, and no later label replaces; `plugin.v1` has no name
-  write and the plugin is never told (`pluginhost.SetTile`). A text tile's
-  name stays its source's, since its presentation reads it. Its url's
-  address follows the user, as home's does (2026-10-21): where a navigation
-  lands is written to the node's row the same way, latched (`url_user`), and
-  the plugin is never told (`store.Namespace.SetAddress`); a served page has
-  no address of its own and writes nothing.
-  A delete is handed to the plugin, which says what
-  deleting means (fs removes the file, gitlab marks the todo done, a
-  read-only projection refuses), and the row retires only when the listing
-  says the key is gone; the trash holds home's rows alone, since a key is
-  the plugin's address and never a row of home's. A plugin's door never
-  copies (2026-10-20): copied into another namespace, home or a far node's,
-  it lands as the link to its grid a left-drag makes, and the ghost shows
-  the link before the drop; a plugin's text or url still copies its bytes.
-  A url entry whose plugin serves its page copies as a link too
-  (2026-10-21): it has no address to copy, and the page is the plugin's.
-  A door is a plugin's when the grid it opens takes no new tiles
-  (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
-  so a disabled source's door links too, as a dark one does.
-- A plugin's entry moves to another of the plugin's grids only when the
-  plugin declares move (`InfoResponse.move`), as a file tree can and a
-  mailbox cannot: the plugin moves it and answers its key there, and the
-  node writes the row's grid and key in one write, keeping its id; a plugin
-  that declares no move refuses with the reason (2026-10-21). A link to the
-  old key reads dead: a key is the source's address, and a link means the
-  thing at that address, so a source that renames a key, by its own change
-  or by our move, has retired the old one (2026-10-22).
-- A source that lists but cannot watch is not dark: its listings stay live;
-  dark comes only from a listing the source did not answer, and a read the
-  caller abandoned says nothing about it (`gwerr.IsAbandoned`) (2026-10-02).
-  A plugin that declares no Watch is complete as declared: it is never asked
-  and shows no notice. Whether a source's changes are told right now is one
-  fact, `EventPluginHealth.told`, which the adapter derives from its held
-  declaration and its stream's failures, and it is the one fact the client's
-  cache reads (`cache.Current`). `live_updates_off` is only a failure — a
-  declared Watch answered Unimplemented, a stream refused with a code that is
-  not transport's, a share of the subscription that could not be taken — and
-  only a failure is a notice (2026-10-25).
-- A plugin's cache answers when a refresh fails: the read succeeds from
-  what it caches and says so in `ListResponse.unreachable` (the reason,
-  empty when live), which the node reports as the source's health while it
-  keeps serving the rows, never a failed read the cache could answer. It is the node's own rule — a cached grid
-  serves first, and that it is cached is the source's health — one hop
-  further (2026-10-02, `docs/plugin-standard.md` rule 7).
-- A plugin does work only to answer a call or for a `Watch` the node holds
-  with that grid in scope: no walk, glance or feed runs for the process's
-  life. The node holds a stream only while something shows the plugin's
-  grids, so this is "nothing is done for nobody" one hop further (2026-10-02,
-  `docs/plugin-standard.md` rule 8).
+- A source that answers is not dark; dark comes only from a read the
+  source did not answer, and a read the caller abandoned says nothing about
+  it (`gwerr.IsAbandoned`) (2026-10-02). Whether a source's changes are told
+  right now is one fact, `EventPluginHealth.told`, and it is the one fact the
+  client's cache reads (`cache.Current`). A declaration is never a notice;
+  only a failure is (2026-10-25).
 - The connection cache walks a far node's whole source on every subscribe
   and again when the connection comes back, so a far home reads while its
   connection is down. It is the decided exception to "nothing is done for
@@ -574,13 +571,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   phone that went to the background, marked away in `sessions` (2026-10-18).
 - A node has no grid of its own. A connection lands on the far node's home.
   The + menu's top row is one swatch per declared door: a node's home and
-  a connection's far home are places and get a row; a plugin's grids
-  are the swatches, one each, and the plugin has none of its own
+  a connection's far home are places and get a row, and each root is one
   (`client/door.PlacesOf` enumerates, `client/menu.Doors` composes). A
-  declared grid is named most specific first, then its instance — "Feed
-  (hey)", `door.GridName`, uniformly, with no privileged one, because a
-  clipped swatch must still tell them apart (2026-09-30) — and it carries
-  its framing, so a plugin's grid reopens where it was left. That row is an open set, so it is
+  root carries its framing, so it reopens where it was left. That row is an open set, so it is
   folded: a menu opens on the primitives with a chevron strip for the section
   above it, and every opening starts folded — the fold is the menu's live
   state and dies with it (`client/menu` decides what a state shows and owns
@@ -609,9 +602,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   its key in `GRIDWELL_SHELL`, Claude Code sends it as `X-Gridwell-Shell`,
   and the shell API, the one place a socket and its session are both in
   hand, joins the two (`Server.ShellHolder`).
-- A plugin or connection the user disables, from the Disable button on its
-  health notice, stays disabled until the node restarts. It is held in the
-  node's memory only (`plugin.Registry.Disable`), never in `server.yaml` or
+- A connection the user disables, from the Disable button on its health
+  notice, stays disabled until the node restarts. It is held in the node's
+  memory only, never in `server.yaml` or
   `gridwell.db`, nothing tries it meanwhile, and it reads as dark, with no
   notice standing (2026-10-09). Disabled is a verdict, not an outage: the
   router refuses a write to it with `gwerr.SourceDisabled`, which the client
@@ -623,50 +616,20 @@ These were decided deliberately. Do not reverse one without a new decision.
   delete it to rotate). The connection API is a 0600 unix socket, never
   TCP. Its `server.yaml` key stays `federation:` and its file stays
   `federation.sock`: an existing `~/.gridwell` already has them written down.
-- A plugin may present a site (2026-10-25). It declares the addresses it
-  can show as globs over the whole address (`InfoResponse.presents`), and
-  `routes` in `server.yaml`, in order, send an address to a plugin or
-  outside: the first rule whose glob matches takes it, a plugin's rule only
-  for an address that plugin declares, else it falls through; no taker is a
-  plain url tile, and a route naming an undeclared plugin is refused at
-  parse. A presented url tile stays a url tile of the node holding it, home's
-  or a far node's: its content is the site address, that node derives
-  `presented_by` on every answer (`rpc.Decide`), its page is the address
-  without its scheme under the tile's (`rpc.PresentedPageURL`), and where a
-  live view lands is written back as the site address: inside the tile's page
-  the one it is the page of, elsewhere in the node's content API nothing
-  (`urlview.Landed`). The content API carries a
-  whole request and flushes its answer, and the node's own headers are
-  never the plugin's (`server.nodeHeaders`). An outside address opens in the
-  default browser from the link funnel and creates nothing. A link followed
-  inside a live page is routed before the page moves, as any link is. On the
-  desktop main is asked first and decides with the handshake's routes
-  (`routes.routeNavigation`), a forced copy of `rpc.Decide` pinned by one
-  fixture (`api/rpc/testdata/routes.json`). An address with another taker
-  moves the tile there, written as a landed address and loaded as the row
-  then says (`urlview.View.Follow`); outside opens the default browser and
-  the page stays; the current taker's own move proceeds untouched. A served
-  page has no address to move, so a presented address opens below it. The
-  node answers a document request under a presented tile for an address its
-  plugin does not take with a redirect to the site (`server.leavesPage`), so
-  a browser tab follows the same rule. A route to a plugin that does not
-  answer makes the tile broken with the reason (`Tile.broken_reason`), never
-  the plain site: one tint, nothing loaded in its place, an open view closed
-  and a descent going live on nothing, until the plugin answers (2026-10-25).
-  Not answering is one fact, whatever the cause: the user disabled it, its
-  `Info` refused, its process down, or a call it left unanswered, a hung
-  process's among them, whatever it last declared. The verdict reads the
-  plugin's state, which every call to the process keeps and its health
-  event tells, and asks nothing; a plugin not answering is probed once, by
-  one bounded `Info`, while something shows a tile it presents
-  (`pluginhost.Adapter.Answering`, 2026-10-26). A dark plugin still answers,
-  and serves its pages from what it holds, so its tiles stay presented. Nothing names
-  a plugin kind: every behaviour rides the declaration and the rule.
-- Plugins serve web content through `/content/<token>/<tile-id>/<subpath>`.
-  Every response is sandboxed and gated by the content token, which is never
-  interchangeable with the cookie. It is either a text tile or a url tile: a
-  text tile cannot serve from the plugin, so `serves_page` rides a url entry
-  and the content API refuses it on every other kind.
+- The node serves a page file's page through its content API
+  (2026-11-07): a GET or HEAD of `/content/<token>/<qualified tile id>`
+  answers the whole file with its media type, `nosniff` and the sandbox
+  CSP, and nothing else: no subpath, no POST, no request headers carried.
+  The token in the path stays, because the desktop's url views run in their
+  own partition and cannot present the web cookie, and it is never
+  interchangeable with the cookie. ServeContent is the bytes and media type
+  of one tile's page and crosses a connection, so a far node's image opens
+  here. `serves_page` is the one flag that says a url tile's page is the
+  content API's, and only a url tile carries it.
+- A url tile opens its own address, and a link followed inside a live page
+  navigates that page (2026-11-07, reversing the site pages and address
+  rules of 2026-10-25). A link that opens a window opens its address in a
+  pane below.
 
 **Experience**
 
@@ -718,9 +681,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   `pane.LayoutFingerprint`).
 - Left-drag moves, right-drag copies, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
-  drop lands in or across one. Cross-plugin a left-drag links too, because
-  there is no cross-plugin move, and so does a right-drag of a plugin's
-  door, because a plugin door never copies (2026-10-20). Dashed means link; deleting a link
+  drop lands in or across one. Across sources a left-drag links too, because
+  there is no move across sources, and so does a right-drag of a
+  directory's door, because a directory never copies (2026-10-20). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
   the same split a link out of a live tile opens — in any pane; macOS
   reports ctrl + left as a right press with ctrl held, so a ctrl or cmd
@@ -743,8 +706,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   labelled, still deletable. It is a state, not an error — nothing is asked
   for it and nothing is said about it (`gwerr.DeadLink` is the answer,
   `client/deadlink` the verdict). A gone key listed again is live again under
-  the same id. Dead is not dark: a declared
-  plugin that is down and a declared connection that will not answer are
+  the same id. Dead is not dark: a root that
+  will not read and a declared connection that will not answer are
   health, and they come back. Nor is dead always forever: a retired
   connection name never returns, but a namespace merely undeclared is live
   again the moment it is declared again. `client/deadlink`.
@@ -803,7 +766,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   focused or not (`markdown.RenderedInset`, 2026-10-09).
 - The browser's cookies and storage are host-local: one set for every live
   url tile. Nothing about them or networks crosses the wire.
-- No parameterized plugins. Modals center on the active pane.
+- Modals center on the active pane.
 - A client the node served runs the node's build: the web API refuses any call
   from another build, and the client shows one persistent notice with a
   Reload button and reloads only when the user asks (2026-10-07).
@@ -852,8 +815,6 @@ cases `make check` alone proves little.
 - [ ] No error is swallowed. Unacknowledged writes park in `client/outbox`
       and nothing user-made is dropped without a server verdict.
 - [ ] Nothing the user can change lives only on the client.
-- [ ] No import of a plugin implementation anywhere, tests included, and no
-      switch on a plugin kind.
 - [ ] This is one logical change, and the comments in the files I touched
       are true and meet the comment standard.
 - [ ] Things stay as the user left them.

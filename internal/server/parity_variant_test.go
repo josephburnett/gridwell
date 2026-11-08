@@ -55,7 +55,7 @@ var parityRoutes = []*gridwellv1.Route{
 const (
 	dReadOnly = "so an edit is refused before it is typed"
 	dUntold   = "a source whose changes are not told is read on every move"
-	dCached   = "the read succeeds from what it caches and says so in `ListResponse.unreachable`"
+	dCached   = "its grid serves what its rows hold and says so through the health event"
 )
 
 type parityVariantCell struct {
