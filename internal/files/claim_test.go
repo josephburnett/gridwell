@@ -178,7 +178,7 @@ func TestEachWriteAnnouncesItsOwnFactOnce(t *testing.T) {
 func TestEachRootKeepsItsOwnFraming(t *testing.T) {
 	f := newFixture(t)
 	other := f.mkdir("../other")
-	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: other}}, nil)
+	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: other}}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

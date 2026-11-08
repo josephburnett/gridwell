@@ -48,7 +48,7 @@ func newFixture(t *testing.T) *fixture {
 		f.trashed = append(f.trashed, p)
 		f.mu.Unlock()
 		return os.RemoveAll(p)
-	})
+	}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

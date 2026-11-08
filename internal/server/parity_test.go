@@ -688,7 +688,7 @@ func newParityDisk(t *testing.T) parityDisk {
 // registerParityFiles registers d's roots as the node's files, as the node
 // does, a delete removing the path rather than moving it to the OS trash.
 func registerParityFiles(t *testing.T, reg *server.Sources, st *store.Store, node string, d parityDisk) {
-	src, err := files.New(st.Files(), []files.Root{{Path: d.main}, {Path: d.away}, {Path: d.lib}}, byPath(os.RemoveAll))
+	src, err := files.New(st.Files(), []files.Root{{Path: d.main}, {Path: d.away}, {Path: d.lib}}, byPath(os.RemoveAll), "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -138,6 +138,9 @@ func (s *Source) read(dir string) (*listing, error) {
 	}
 	present := map[string]bool{}
 	for _, e := range ents {
+		if _, ok := s.rootOf(e.path); !ok {
+			continue
+		}
 		le := s.entryOf(e)
 		l.entries = append(l.entries, le)
 		present[le.Key] = true

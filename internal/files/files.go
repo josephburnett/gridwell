@@ -44,10 +44,13 @@ type Root struct {
 // Source is the files as one namespace.Namespace.
 type Source struct {
 	roots []Root
-	mem   *store.FileRows
-	trash func(dir *os.File, name string) error
-	hub   *eventhub.Hub[*pb.Event]
-	watch *watcher
+	// own is the node's own directory, lexically and with its links
+	// followed, which is outside every root.
+	own, ownReal string
+	mem          *store.FileRows
+	trash        func(dir *os.File, name string) error
+	hub          *eventhub.Hub[*pb.Event]
+	watch        *watcher
 
 	// dark is, per directory, why its last read failed, until it leaves the
 	// view (rescope); liveOff is why the watch is not told. setHealth is
@@ -91,11 +94,12 @@ func (s *Source) lockPath(real string) (unlock func()) {
 
 var _ namespace.Namespace = (*Source)(nil)
 
-// New is the files over roots, their rows in mem. trash moves the name in a
-// directory opened through its root out of the tree; nil is the OS trash. Close ends the watch. A relative root
+// New is the files over roots, their rows in mem, the node's own directory
+// own outside every root. trash moves the name in a directory opened through
+// its root out of the tree; nil is the OS trash. Close ends the watch. A relative root
 // is refused, since a path id names an absolute path and would name none of
 // its files.
-func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string) error) (*Source, error) {
+func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string) error, own string) (*Source, error) {
 	if trash == nil {
 		trash = osTrash
 	}
@@ -111,6 +115,12 @@ func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string
 		}
 	}
 	s := &Source{roots: out, mem: mem, trash: trash, hub: eventhub.New(rpc.EventKey), dark: map[string]string{}}
+	if own != "" {
+		s.own, s.ownReal = filepath.Clean(own), filepath.Clean(own)
+		if real, err := filepath.EvalSymlinks(own); err == nil {
+			s.ownReal = real
+		}
+	}
 	s.watch = newWatcher(s)
 	return s, nil
 }
@@ -134,8 +144,12 @@ func pathOf(id string) (string, error) {
 	return p, nil
 }
 
-// rootOf is the innermost root holding path.
+// rootOf is the innermost root holding path, none for the node's own
+// directory.
 func (s *Source) rootOf(path string) (Root, bool) {
+	if s.own != "" && underRoot(s.own, path) {
+		return Root{}, false
+	}
 	var best Root
 	found := false
 	for _, r := range s.roots {
@@ -234,7 +248,7 @@ func (s *Source) content(path string) (root, rel string, err error) {
 	}
 	for _, r := range s.roots {
 		rr, err := filepath.EvalSymlinks(r.Path)
-		if err == nil && underRoot(rr, real) {
+		if err == nil && underRoot(rr, real) && (s.ownReal == "" || !underRoot(s.ownReal, real)) {
 			rel, _ := filepath.Rel(rr, real)
 			return rr, rel, nil
 		}

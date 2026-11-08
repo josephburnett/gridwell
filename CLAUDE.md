@@ -468,7 +468,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`<node>/~`, labelled files, the folder glyph) carrying one grid per root,
   between home and the connections, and each root is one swatch in the +
   menu with its label, in config order. A path outside every root is dead
-  (`gwerr.DeadLink`). A `server.yaml` that still has `plugins:` or `routes:`
+  (`gwerr.DeadLink`). The node's own directory is outside every root, a
+  root that holds it included: it is not listed, its paths are dead, and
+  nothing in it is written or trashed (2026-11-08). A `server.yaml` that still has `plugins:` or `routes:`
   is refused at parse with a message naming `files:`.
 - The files are one package, `internal/files`, reading disk and the
   store's file rows directly (2026-11-07). A directory's grid takes no new
