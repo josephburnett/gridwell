@@ -17,8 +17,7 @@ Then open the `release` run for that tag and download the three artifacts:
 | `gridwell-macos` | `Gridwell-<ver>-arm64.dmg`, `Gridwell-<ver>-x64.dmg` |
 | `gridwell-windows` | `Gridwell-<ver>.exe` (portable) |
 
-Each bundles the Electron runtime, the `gridwell` binary, and the plugin
-binaries. The server embeds the web client (`web/embed.go`), so nothing else
+Each bundles the Electron runtime and the `gridwell` binary. The server embeds the web client (`web/embed.go`), so nothing else
 is needed alongside them.
 
 `workflow_dispatch` runs the same three jobs without a tag, naming the
@@ -65,8 +64,8 @@ Settings → Privacy & Security, or:
 xattr -rd com.apple.quarantine /Applications/Gridwell.app
 ```
 
-Both dmgs carry the same Go binaries, built universal: the Makefile's
-`mac-bins` compiles each for amd64 and arm64, `lipo`s them together, and
+Both dmgs carry the same Go binary, built universal: the Makefile's
+`mac-bins` compiles it for amd64 and arm64, `lipo`s the two together, and
 ad-hoc signs the result — Apple Silicon refuses to exec an unsigned Mach-O,
 and `lipo` writes a new file whose inherited signature no longer covers it.
 The app bundle's signing pass does not reach a plain executable in
@@ -84,17 +83,8 @@ validation, which stops the app from launching at all.
   attach — the same route a dead tmux takes.
 - No serve lock. `internal/cli/servelock.go`'s flock has no Windows
   equivalent, so nothing stops a second `gridwell serve` over the same home.
-- No `proc` plugin. It reads `/proc`; the artifact ships without it rather
-  than with one that can never answer.
 - No connection API, so `federation:` in `server.yaml` stays unset. That
   API is a 0600 unix socket, and the model does not hold on Windows.
-
-## Adding a binary to the bundle
-
-Nothing to do. `extraResources` in `apps/desktop/package.json` is a filter
-over the repo root (`gridwell`, `gridwell.exe`, `gridwell-plugin-*`), so the
-Makefile's `ALL_PLUGIN_KINDS` stays the one list of what exists and the
-bundle follows it.
 
 ## Smoke test
 
