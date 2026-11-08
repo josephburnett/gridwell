@@ -1,7 +1,7 @@
 // Package node is the embeddable Gridwell node: everything `gridwell serve`
 // does between config in hand and sockets up. The CLI is a wrapper that adds
 // flags, the serve lock, the banner and signal handling, and reimplements none
-// of the middle. The store and the transport are constructed here from the
+// of the middle. The store, the files and the transport are constructed here from the
 // node's own config, so they never appear in `plugins:`.
 package node
 
@@ -23,6 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
+	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
@@ -145,6 +146,7 @@ func Start(opts Options) (*Node, error) {
 	if err := startHome(reg, st, cfg); err != nil {
 		return fail(fmt.Errorf("home: %w", err))
 	}
+	startFiles(reg, st, cfg)
 	// A content plugin is registered bare: its source is a subprocess here, so
 	// caching answers buys no round trip. What it needs is supervision,
 	// and internal/plugin respawns one that dies.
@@ -198,6 +200,24 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 	reg.Register(cfg.ID, "home", newHome(st, cfg.ID, cfg.Shell), nil)
 	reg.SetLabel(cfg.ID, "home")
 	return nil
+}
+
+// startFiles registers the files over the roots files: declares, after home
+// and before the plugins, under their owner id (rpc.FilesOwner). A node that
+// declares none has no files row. The files are dark or told, never
+// disabled, so they get no switch.
+func startFiles(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) {
+	if len(cfg.Files) == 0 {
+		return
+	}
+	roots := make([]files.Root, len(cfg.Files))
+	for i, r := range cfg.Files {
+		roots[i] = files.Root{Path: r.Root, Label: r.Label}
+	}
+	src := files.New(st.Namespace("~"), roots, nil)
+	owner := rpc.FilesOwner(cfg.ID)
+	reg.Register(owner, "files", src, src.Close)
+	reg.SetLabel(owner, "files")
 }
 
 // openCache opens ~/.gridwell/cache.db. A cache that cannot open degrades to the
@@ -292,7 +312,8 @@ func (n *Node) Close() error {
 			err = errors.Join(err, n.connSrv.Shutdown(ctx)) // Close unlinks the socket
 		}
 		// The cache closes BEFORE the transport it fronts: its prefetch walk
-		// reads through it and must be out before either goes away.
+		// reads through it and must be out before either goes away. The
+		// registry closes the files' watch before the store their rows are in.
 		err = errors.Join(err, n.cache.Close())
 		n.Reg.Close()
 		err = errors.Join(err, n.st.Close())

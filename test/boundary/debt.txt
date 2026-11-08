@@ -8,3 +8,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): the files wired into the node: files: in server.yaml, the files registered beside home, the owner rule <node>/~, the roster row, the health key, the directory tint and the seam tests, while the plugin host still stands | 35
 2026-11-07 | files native (Joe): rpc.OwnerNamespaceOf answers the files' owner <node>/~ for a path, rpc.SourceOf tells home from the files, and resolve routes a path to the files, while the plugin host still stands | 52
 2026-11-07 | files native (Joe): the router routes, rosters, words and fans out to the files under their owner id <node>/~, qualifying their answers with the node, while the plugin host still stands | 19
+2026-11-07 | files native (Joe): the node builds the files over the roots files: declares and registers them under <node>/~, while the plugin host still stands | 21
