@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"syscall"
 	"testing"
@@ -269,4 +270,36 @@ func TestAReadOvertakenByAChangeIsAnnounced(t *testing.T) {
 	await(t, ev, "the change", gridChanged(f.root))
 	f.s.answer(read)
 	await(t, ev, "the overtaken read", gridChanged(f.root))
+}
+
+// Close ends the watch for good: no reader, no debounce window, and a view
+// or a listing after it watches nothing.
+func TestCloseLeavesNothingBehind(t *testing.T) {
+	f := newFixture(t)
+	f.grid(f.root)
+	before := runtime.NumGoroutine()
+	f.show(f.root)
+	f.write("a.txt", "a")
+	deadline := time.Now().Add(5 * time.Second)
+	for !f.pending() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	f.s.Close()
+	f.show(f.root)
+	f.grid(f.root)
+	if got := f.watched(); len(got) != 0 || f.pending() {
+		t.Errorf("after Close: watched %v, a window open %v", got, f.pending())
+	}
+	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := runtime.NumGoroutine(); n > before {
+		t.Errorf("%d goroutines after Close, %d before New", n, before)
+	}
+}
+
+func (f *fixture) pending() bool {
+	f.s.watch.mu.Lock()
+	defer f.s.watch.mu.Unlock()
+	return len(f.s.watch.pending) > 0
 }

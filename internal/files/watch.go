@@ -264,12 +264,17 @@ type watcher struct {
 	pending map[string]*window
 	// failed is the OS's last refusal, which the next event delivered ends.
 	failed string
+	// closed is Close's: nothing is watched or owed after it.
+	closed bool
+	// running is every reader and every window's tell, which Close waits for.
+	running sync.WaitGroup
 }
 
 // window is one directory's changes while its debounce is open.
 type window struct {
 	listing bool
 	files   map[string]bool
+	timer   *time.Timer
 }
 
 func newWatcher(s *Source) *watcher {
@@ -282,6 +287,10 @@ func newWatcher(s *Source) *watcher {
 // rest stay watched.
 func (w *watcher) set(scope []string) (added []string, err error) {
 	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return nil, nil
+	}
 	next := map[string]bool{}
 	for _, d := range scope {
 		next[d] = true
@@ -323,7 +332,11 @@ func (w *watcher) watchDir(dir string) error {
 			return verdict(dir, err)
 		}
 		w.fsw = fsw
-		go w.run(fsw)
+		w.running.Add(1)
+		go func() {
+			defer w.running.Done()
+			w.run(fsw)
+		}()
 	}
 	if err := w.add(w.fsw, dir); err != nil {
 		return verdict(dir, err)
@@ -364,12 +377,21 @@ func closeWatcher(fsw *fsnotify.Watcher) {
 	}
 }
 
+// close stops every open window and the OS instance, and waits for the
+// reader and any tell already under way.
 func (w *watcher) close() {
 	w.mu.Lock()
+	w.closed = true
+	for _, win := range w.pending {
+		if win.timer.Stop() {
+			w.running.Done()
+		}
+	}
 	fsw := w.fsw
-	w.fsw, w.scope, w.watched = nil, map[string]bool{}, map[string]bool{}
+	w.fsw, w.scope, w.watched, w.pending = nil, map[string]bool{}, map[string]bool{}, map[string]*window{}
 	w.mu.Unlock()
 	closeWatcher(fsw)
+	w.running.Wait()
 }
 
 func (w *watcher) run(fsw *fsnotify.Watcher) {
@@ -454,11 +476,18 @@ func (w *watcher) eventError(fsw *fsnotify.Watcher, err error) {
 // touch adds to dir's debounce window, opening one if none is open. Callers
 // hold mu.
 func (w *watcher) touch(dir string, listing bool, file string) {
+	if w.closed {
+		return
+	}
 	win := w.pending[dir]
 	if win == nil {
 		win = &window{files: map[string]bool{}}
 		w.pending[dir] = win
-		time.AfterFunc(w.window, func() { w.owe(dir) })
+		w.running.Add(1)
+		win.timer = time.AfterFunc(w.window, func() {
+			defer w.running.Done()
+			w.owe(dir)
+		})
 	}
 	win.listing = win.listing || listing
 	if file != "" {

@@ -17,3 +17,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): a dark directory darkens the files only while the view holds it, while the plugin host still stands | 9
 2026-11-07 | files native (Joe): a root inside another root is a door there, never renamed away, while the plugin host still stands | 5
 2026-11-07 | files native (Joe): a read a change overtook is announced, the plugin host's generation check, while the plugin host still stands | 44
+2026-11-07 | files native (Joe): Close ends the watch for good and waits for its reader and tells, while the plugin host still stands | 29
