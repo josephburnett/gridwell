@@ -37,7 +37,7 @@ func TestFindLocatesAndFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.grid(dir)
-	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(deep), X: 4, Y: 0, W: 1, H: 1}); err != nil {
+	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(deep), X: 4, Y: 0, W: 1, H: 1, Claim: rpc.PlacementOf(f.tile(deep))}); err != nil {
 		t.Fatal(err)
 	}
 	resp, err := f.s.Find(ctx, &pb.FindRequest{Query: "id:" + idOf(deep)})

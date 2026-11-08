@@ -174,13 +174,14 @@ func TestAMoveRenamesAndKeepsTheRow(t *testing.T) {
 
 	// Only a stale claim is the conflict, which the client reconciles; a
 	// refusal with a reason snaps the move back.
-	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1})
+	tt, dt := f.tile(taken), f.tile(dir)
+	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(tt)})
 	wantCode(t, "a taken name", err, codes.InvalidArgument)
-	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: idOf(f.path("gone")), X: 0, Y: 1, W: 1, H: 1})
+	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: idOf(f.path("gone")), X: 0, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(tt)})
 	wantCode(t, "a gone directory", err, codes.InvalidArgument)
-	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(dir), GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1})
+	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(dir), GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(dt)})
 	wantCode(t, "a directory into itself", err, codes.InvalidArgument)
-	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: "12", X: 0, Y: 1, W: 1, H: 1})
+	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: idOf(taken), GridId: "12", X: 0, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(tt)})
 	wantCode(t, "another source", err, codes.InvalidArgument)
 	stale := tileIn(t, f.grid(f.root), taken)
 	_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: stale.Id, GridId: idOf(dir), X: 0, Y: 1, W: 1, H: 1,
@@ -202,7 +203,7 @@ func TestADeleteTrashesThePathItself(t *testing.T) {
 	}
 	ctx := context.Background()
 	lt := tileIn(t, f.grid(f.root), link)
-	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: lt.Id, X: 5, Y: 5, W: 1, H: 1}); err != nil {
+	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: lt.Id, X: 5, Y: 5, W: 1, H: 1, Claim: rpc.PlacementOf(lt)}); err != nil {
 		t.Fatal(err)
 	}
 	moved := f.tile(link)
@@ -220,12 +221,12 @@ func TestADeleteTrashesThePathItself(t *testing.T) {
 	if _, ok, _ := f.s.mem.LiveTileID(gid, link); ok {
 		t.Error("the row was not retired")
 	}
-	if _, err := f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: lt.Id}); err != nil {
+	if _, err := f.s.DeleteTile(ctx, rpc.DeleteOf(moved)); err != nil {
 		t.Errorf("deleting what is gone = %v", err)
 	}
-	_, err := f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(filepath.Join(f.base, "x"))})
+	_, err := f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(filepath.Join(f.base, "x")), Claim: &pb.Placement{}})
 	wantCode(t, "outside every root", err, codes.InvalidArgument)
-	_, err = f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(f.root)})
+	_, err = f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(f.root), Claim: &pb.Placement{}})
 	wantCode(t, "a root", err, codes.InvalidArgument)
 	if len(f.trashed) != 1 {
 		t.Errorf("trashed %v", f.trashed)

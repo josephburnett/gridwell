@@ -217,7 +217,7 @@ func TestARootThatWillNotReadIsDark(t *testing.T) {
 	ev := f.events()
 	a := f.write("a.txt", "a")
 	at := tileIn(t, f.grid(f.root), a)
-	if _, err := f.s.MoveTile(context.Background(), &pb.MoveTileRequest{TileId: at.Id, X: 3, Y: 3, W: 1, H: 1}); err != nil {
+	if _, err := f.s.MoveTile(context.Background(), &pb.MoveTileRequest{TileId: at.Id, X: 3, Y: 3, W: 1, H: 1, Claim: rpc.PlacementOf(at)}); err != nil {
 		t.Fatal(err)
 	}
 	moved := f.root + ".away"
@@ -229,7 +229,7 @@ func TestARootThatWillNotReadIsDark(t *testing.T) {
 		t.Errorf("the dark root's row = %+v", got)
 	}
 	h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth()
-	if h.Healthy || h.Detail == "" || !slices.Contains([]bool{true}, h.GetTold()) {
+	if h.Healthy || h.Detail == "" || !h.GetTold() {
 		t.Errorf("health = %+v", h)
 	}
 	if _, err := f.s.GetTile(context.Background(), &pb.GetTileRequest{TileId: idOf(f.path("b.txt"))}); grpcCode(err) != codes.Unavailable {
