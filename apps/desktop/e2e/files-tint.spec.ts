@@ -12,8 +12,8 @@ import { tileAt } from './oracle';
 // are the only place the decision and the drawing meet.
 
 // The dark palette's DirectoryBorder and DirectoryFill (client/theme).
-const BORDER = [217, 130, 43];
-const FILL = [46, 31, 16];
+const BORDER = [214, 79, 163];
+const FILL = [46, 20, 38];
 
 const ROOT = makeRunDir();
 fs.mkdirSync(path.join(ROOT, 'sub'));
