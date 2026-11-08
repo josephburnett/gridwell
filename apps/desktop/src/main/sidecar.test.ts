@@ -38,7 +38,7 @@ test('resolves on the serving banner with the ANNOUNCED address, not the request
   const p = boot(child);
   // The banner arrives split across chunks and on stderr; both happen.
   child.stderr.write('gridwell: serving on 127.0');
-  child.stderr.write('.0.1:9999 (static=/x plugins=1 federation=/tmp/gw home/federation.sock)\n');
+  child.stderr.write('.0.1:9999 (static=/x federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
   assert.equal(sc.origin, 'http://127.0.0.1:9999', 'the origin comes from the banner (server.yaml web.bind may override the request)');
   sc.stop();
@@ -50,7 +50,7 @@ test('passes the banner auth token through so the window can authenticate', asyn
   const child = new FakeChild();
   const p = boot(child);
   const token = 'b'.repeat(64);
-  child.stdout.write(`gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1 auth=${token} federation=/tmp/gw home/federation.sock)\n`);
+  child.stdout.write(`gridwell: serving on 127.0.0.1:9999 (static=/x auth=${token} federation=/tmp/gw home/federation.sock)\n`);
   const sc = await p;
   assert.equal(sc.auth, token, 'index.ts pre-sets this as the auth cookie — no prompt in the desktop app');
   sc.stop();
@@ -94,11 +94,11 @@ test('a slow but TALKING boot is never killed: every line re-arms the window', a
   for (const line of [
     'gridwell: home: scratch cleanup removed 41 ephemeral tile(s)',
     'gridwell: home: orphan cleanup killed 3 stale tmux(es)',
-    'gridwell: plugin fs (fs) respawned',
+    'gridwell: connection rtb: connected',
   ]) {
     await speakAfter(t, child, 30, line); // under the window, every time
   }
-  await speakAfter(t, child, 30, 'gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1)');
+  await speakAfter(t, child, 30, 'gridwell: serving on 127.0.0.1:9999 (static=/x)');
   const sc = await p; // well past 40ms, and alive throughout
   assert.equal(sc.origin, 'http://127.0.0.1:9999');
   assert.equal(child.killed, false, 'a talking process must never be killed for being slow');
@@ -135,7 +135,7 @@ test('"already serving" resolves EXTERNAL: connect, never watch, never kill', as
   const p = boot(child);
   const token = 'c'.repeat(64);
   child.stdout.write(
-    `gridwell: already serving on 127.0.0.1:7001 (static=embedded plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)\n`,
+    `gridwell: already serving on 127.0.0.1:7001 (static=embedded auth=${token} federation=/tmp/gw home/federation.sock)\n`,
   );
   const sc = await p;
   assert.equal(sc.external, true);
@@ -173,7 +173,7 @@ test('--no-server connects to a running server via the status banner', async () 
     spawnFn: () => child as unknown as ChildProcess,
     binaryPath: '/fake/gridwell',
   });
-  child.stdout.write('gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 federation=/tmp/gw home/federation.sock)\n');
+  child.stdout.write('gridwell: already serving on 127.0.0.1:10010 (static=embedded federation=/tmp/gw home/federation.sock)\n');
   const sc = await p;
   assert.equal(sc.external, true);
   assert.equal(sc.origin, 'http://127.0.0.1:10010');
@@ -182,7 +182,7 @@ test('--no-server connects to a running server via the status banner', async () 
 // The node's ring dies with it and a panic's stack is written straight to
 // stderr, so an exit nobody asked for is the one moment the tail must be kept.
 test('an exit nobody asked for is a crash; a stop, a clean shutdown and a probe are not', async () => {
-  const ready = 'gridwell: serving on 127.0.0.1:9999 (static=/x plugins=1)\n';
+  const ready = 'gridwell: serving on 127.0.0.1:9999 (static=/x)\n';
 
   const panicked = new FakeChild();
   const crashes: Record<string, string>[] = [];
@@ -219,7 +219,7 @@ test('an exit nobody asked for is a crash; a stop, a clean shutdown and a probe 
   const probe = new FakeChild();
   const e: Record<string, string>[] = [];
   const pe = boot(probe, 200, e);
-  probe.stdout.write('gridwell: already serving on 127.0.0.1:7001 (static=embedded plugins=2 federation=/x)\n');
+  probe.stdout.write('gridwell: already serving on 127.0.0.1:7001 (static=embedded federation=/x)\n');
   await pe;
   probe.emit('exit', 1, null);
   assert.deepEqual(e, [], 'the probe of an external server exits by design');

@@ -189,7 +189,7 @@ app.whenReady().then(async () => {
   console.log('goBack ok: second → first, no-op at the start');
 
   // ── reload shows the page its source changed, in the same view ──────────
-  // A served page whose plugin says it changed loads again at the address the
+  // A served page whose source says it changed loads again at the address the
   // descent opened (urlview.PageMoved); the server answers each load anew.
   let served = 0;
   const changing = http.createServer((_req, res) => {

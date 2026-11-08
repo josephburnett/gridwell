@@ -14,8 +14,8 @@ const goSource = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8');
 const PW = '0123456789abcdef0123456789abcdef';
 const TOKEN = 'a'.repeat(64);
 const SECRET_LINES = [
-  `gridwell: serving on 127.0.0.1:8080 (static=embedded plugins=2 auth=${TOKEN} federation=/h/federation.sock)`,
-  `gridwell: already serving on 127.0.0.1:8080 (static=embedded plugins=2 auth=${TOKEN} federation=/h/federation.sock)`,
+  `gridwell: serving on 127.0.0.1:8080 (static=embedded auth=${TOKEN} federation=/h/federation.sock)`,
+  `gridwell: already serving on 127.0.0.1:8080 (static=embedded auth=${TOKEN} federation=/h/federation.sock)`,
   `gridwell: web password: ${PW}  (/h/web-password — delete the file to rotate; every browser logs in again)`,
   `gridwell: agents: claude mcp add --transport http gridwell http://127.0.0.1:8080/mcp -H "Authorization: Bearer ${PW}" -H 'X-Gridwell-Shell: \${GRIDWELL_SHELL:-}'`,
 ];

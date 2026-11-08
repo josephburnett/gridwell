@@ -3,25 +3,25 @@ import assert from 'node:assert/strict';
 import { parseServingLine, windowOrigin, makeLineSplitter } from './lines';
 
 test('parseServingLine extracts the bound address from the serve banner', () => {
-  assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1 federation=/tmp/gw home/federation.sock)'), {
+  assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web federation=/tmp/gw home/federation.sock)'), {
     host: '127.0.0.1',
     port: 8099,
   });
   // A Tailscale bind from server.yaml.
-  assert.deepEqual(parseServingLine('gridwell: serving on 100.64.0.7:8080 (static=./web plugins=2 federation=/tmp/gw home/federation.sock)'), {
+  assert.deepEqual(parseServingLine('gridwell: serving on 100.64.0.7:8080 (static=./web federation=/tmp/gw home/federation.sock)'), {
     host: '100.64.0.7',
     port: 8080,
   });
   // Go announces a wildcard bind as the dual-stack listener address.
-  assert.deepEqual(parseServingLine('gridwell: serving on [::]:8080 (static= plugins=1 federation=/tmp/gw home/federation.sock)'), {
+  assert.deepEqual(parseServingLine('gridwell: serving on [::]:8080 (static= federation=/tmp/gw home/federation.sock)'), {
     host: '::',
     port: 8080,
   });
-  assert.deepEqual(parseServingLine('gridwell: serving on 0.0.0.0:8080 (static= plugins=1 federation=/tmp/gw home/federation.sock)'), {
+  assert.deepEqual(parseServingLine('gridwell: serving on 0.0.0.0:8080 (static= federation=/tmp/gw home/federation.sock)'), {
     host: '0.0.0.0',
     port: 8080,
   });
-  assert.deepEqual(parseServingLine('gridwell: serving on [::1]:9000 (static= plugins=1 federation=/tmp/gw home/federation.sock)'), {
+  assert.deepEqual(parseServingLine('gridwell: serving on [::1]:9000 (static= federation=/tmp/gw home/federation.sock)'), {
     host: '::1',
     port: 9000,
   });
@@ -30,12 +30,12 @@ test('parseServingLine extracts the bound address from the serve banner', () => 
 test('parseServingLine extracts the auth token when a password is configured', () => {
   const token = 'a'.repeat(64);
   assert.deepEqual(
-    parseServingLine(`gridwell: serving on 100.64.0.7:8080 (static=./web plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)`),
+    parseServingLine(`gridwell: serving on 100.64.0.7:8080 (static=./web auth=${token} federation=/tmp/gw home/federation.sock)`),
     { host: '100.64.0.7', port: 8080, auth: token },
   );
   // A non-token-shaped auth= is ignored rather than trusted.
   assert.deepEqual(
-    parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1 auth=nope federation=/tmp/gw home/federation.sock)'),
+    parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web auth=nope federation=/tmp/gw home/federation.sock)'),
     { host: '127.0.0.1', port: 8099 },
   );
 });
@@ -46,11 +46,11 @@ test('parseServingLine marks the "already serving" reprint external', () => {
   // it instead of treating its own exited probe child as the server.
   const token = 'd'.repeat(64);
   assert.deepEqual(
-    parseServingLine(`gridwell: already serving on 127.0.0.1:10010 (static=embedded plugins=2 auth=${token} federation=/tmp/gw home/federation.sock)`),
+    parseServingLine(`gridwell: already serving on 127.0.0.1:10010 (static=embedded auth=${token} federation=/tmp/gw home/federation.sock)`),
     { host: '127.0.0.1', port: 10010, auth: token, external: true },
   );
   assert.deepEqual(
-    parseServingLine('gridwell: already serving on [::]:8080 (static=embedded plugins=1 federation=/tmp/gw home/federation.sock)'),
+    parseServingLine('gridwell: already serving on [::]:8080 (static=embedded federation=/tmp/gw home/federation.sock)'),
     { host: '::', port: 8080, external: true },
   );
 });
@@ -61,12 +61,12 @@ test('parseServingLine rejects every other line', () => {
   assert.equal(parseServingLine('gridwell: WARNING: listening on 0.0.0.0:8080 — this is NOT a loopback address.'), null);
   assert.equal(parseServingLine(''), null);
   // A banner-shaped line with a garbage address must not resolve boot.
-  assert.equal(parseServingLine('gridwell: serving on nonsense (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
-  assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:notaport (static= plugins=1 federation=/tmp/gw home/federation.sock)'), null);
+  assert.equal(parseServingLine('gridwell: serving on nonsense (static= federation=/tmp/gw home/federation.sock)'), null);
+  assert.equal(parseServingLine('gridwell: serving on 127.0.0.1:notaport (static= federation=/tmp/gw home/federation.sock)'), null);
   // A banner with no federation= still resolves boot: the desktop app reaches
   // everything it needs over the web API, and a node may serve no connection
   // socket at all.
-  assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web plugins=1)'), {
+  assert.deepEqual(parseServingLine('gridwell: serving on 127.0.0.1:8099 (static=./web)'), {
     host: '127.0.0.1',
     port: 8099,
   });

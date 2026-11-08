@@ -12,8 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# The plugin binaries are another repository's roots; this gate sees only
-# what this repo ships.
+# The roots are what this repo ships.
 NATIVE_ROOTS=(./apps/gridwell)
 PKGS=(./internal/... ./api/... ./client/...)
 
