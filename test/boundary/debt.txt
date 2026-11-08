@@ -2,3 +2,6 @@
 # The debt row of ratchet.txt counts the lines and packages above their low-water marks; at 0 that row, the low-water lines and the paid entries go, and the next rise brings them back.
 low-water | 57469
 2026-11-07 | files native (Joe): the store owns its Entry, and the plugin host converts its entries to it at one boundary until P3 deletes the host | 22
+low-water | packages | 81
+2026-11-07 | files native (Joe): the files are one package, internal/files, beside the plugin host's until P3 deletes them | 1 | packages
+2026-11-07 | files native (Joe): internal/files, the files as one namespace.Namespace over the disk and their store rows, the fs plugin's disk code, watch and trash as node code, while the plugin host still stands | 2740

@@ -5,6 +5,7 @@
 # The anchor is a line number, the enclosing Go function, or a word on the
 # timer's line or the line above it. test/boundary/timers_test.go enforces it.
 internal/plugin/supervisor.go:sleep | poll | watchInterval, the exit watch: go-plugin has no exit signal; the respawn backoff waits here too
+internal/files/watch.go:touch | debounce | a directory's changes gather for debounceWindow before the files tell them, once each
 internal/namespace/refollow.go:wait | backoff | Refollow's doubling wait before re-dialing a stream
 internal/connection/connection.go:bootDialWait | bound | how long boot waits on a connection's first dial
 internal/sourcecache/prefetch.go:prefetchPause | bound | the gap between a prefetch walk's RPCs, so it never crowds out the user's reads
