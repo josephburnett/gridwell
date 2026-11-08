@@ -5,7 +5,7 @@ import { makeRunDir } from './homes';
 
 // The content API, desktop side: an fs image file is a url tile whose page the
 // plugin serves, and descending it goes live as a native WebContentsView at the
-// derived /content/<token>/<tile-id>/ address — the url-tile semantics, on a
+// derived /content/<token>/<tile-id> address — the url-tile semantics, on a
 // url tile. Ascending closes the view and freezes it the way it freezes any url
 // tile: the screenshot becomes the preview, replacing the plugin's thumbnail, and
 // nothing that means the tile's bytes or its address changes.
@@ -50,7 +50,7 @@ test('descending an fs image opens it live through the /content/ API', async ({
         ),
       { message: 'the descent opens the page live (issue #202, over the served page)', timeout: 15_000 },
     )
-    .toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}/$`));
+    .toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}$`));
 
   await gw.ascendViaCrumb();
   await expect

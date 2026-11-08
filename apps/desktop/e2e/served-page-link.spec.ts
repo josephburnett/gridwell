@@ -29,7 +29,7 @@ test('a target=_blank link out of a served page opens below', async ({ electronA
   expect(page.servesPage, 'an html file is a served page').toBe(true);
   await gw.descendCell(Number(page.x ?? 0), Number(page.y ?? 0));
 
-  const served = new RegExp(`/content/[0-9a-f]{64}/${page.id}/$`);
+  const served = new RegExp(`/content/[0-9a-f]{64}/${page.id}$`);
   const servedURL = () =>
     electronApp.evaluate(({ webContents }) =>
       webContents

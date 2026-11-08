@@ -57,7 +57,7 @@ test('an fs image tile: the circle opens the /content/ page in a new tab', async
     window.mouse.click(menu.plusX, menu.plusY),
   ]);
   await popup.waitForURL(/\/content\//, { timeout: 10_000 });
-  expect(popup.url()).toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}/$`));
+  expect(popup.url()).toMatch(new RegExp(`/content/[0-9a-f]{64}/${cat.id}$`));
 
   // The tab shows the file itself: same bytes, image content type, sandboxed by
   // the API. The token in the path is the whole credential, and this popup
