@@ -80,15 +80,9 @@ func (a *App) parentDoor(p *pane.Pane) (*gridwellv1.Tile, bool) {
 	return t, true
 }
 
-// declaredLabel is the source declaration's label for the pane's grid.
+// declaredLabel is the roster row's label for the pane's grid.
 func (a *App) declaredLabel(p *pane.Pane) string {
-	want := rpc.UUIDOf(a.gridIDForPane(p))
-	for _, pl := range a.allSources() {
-		if pl.Uuid == want && pl.Label != "" {
-			return pl.Label
-		}
-	}
-	return ""
+	return door.RowLabel(a.gridIDForPane(p), a.allSources())
 }
 
 // bubbleDecorate applies pane-state markers to the title text.

@@ -234,3 +234,17 @@ func TestFilesRowPlacesAreItsRoots(t *testing.T) {
 		t.Errorf("an uncached home grid's glyph = %q, want home's door", got)
 	}
 }
+
+// An uncached grid's bar and notice name the roster row it falls back to: a
+// directory's is the files', never home's, though their ids share the node.
+func TestRowLabelOfADirectoryIsTheFiles(t *testing.T) {
+	roster := []*gridwellv1.SourceInfo{
+		{Uuid: "n1", Label: "home", RootGridId: "n1/1"},
+		{Uuid: rpc.FilesOwner("n1"), Label: "files"},
+	}
+	for id, want := range map[string]string{"n1/" + rpc.KeyTileID("/srv/notes"): "files", "n1/4": "home", "zz/4": ""} {
+		if got := RowLabel(id, roster); got != want {
+			t.Errorf("RowLabel(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

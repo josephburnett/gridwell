@@ -145,8 +145,15 @@ func GlyphFor(gridID string, grid *gridwellv1.Grid, sources []*gridwellv1.Source
 	return rpc.GlyphDoor
 }
 
-// rowOf is the roster row an uncached grid's glyph falls back to: the files'
-// for a directory (rpc.SourceOf), else its first segment's.
+// RowLabel is the label of the roster row an uncached grid falls back to,
+// "" when none names it.
+func RowLabel(gridID string, sources []*gridwellv1.SourceInfo) string {
+	pl, _ := byUUID(rowOf(gridID), sources)
+	return pl.GetLabel()
+}
+
+// rowOf is the roster row an uncached grid falls back to: the files' for a
+// directory (rpc.SourceOf), else its first segment's.
 func rowOf(gridID string) string {
 	if rpc.IsFilesID(gridID) {
 		return rpc.SourceOf(gridID)

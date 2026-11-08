@@ -16,6 +16,7 @@ import (
 	"github.com/josephburnett/gridwell/client/cadence"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/contentrow"
+	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/menu"
@@ -1116,8 +1117,8 @@ func (a *App) drawGridNotice(r pane.Rect, gid string) {
 		return
 	}
 	name := gid
-	if pl, ok := a.sourceByUUID(rpc.UUIDOf(gid)); ok && pl.Label != "" {
-		name = pl.Label
+	if l := door.RowLabel(gid, a.allSources()); l != "" {
+		name = l
 	}
 	label := pane.GridNotice(name, a.fetch.grids.Failed(gid))
 	drawLabel(a.cctx, label, r.X+r.W/2, r.Y+r.H/2, labelOpts{
