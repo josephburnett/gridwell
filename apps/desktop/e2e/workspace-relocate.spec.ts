@@ -14,7 +14,7 @@ test('re-entering a workspace heals a leaf whose tile was moved into a door', as
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

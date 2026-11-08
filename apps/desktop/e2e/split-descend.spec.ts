@@ -6,7 +6,7 @@ import { test, expect } from './fixtures';
 // was. A plain click still descends in place. dragdrop.DropNavigateSplit
 // decides this at press time.
 test('ctrl+click descends in a new split pane; plain click stays in place', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const before = await gw.focused();
   const cx = Math.round(before.cx);
   const cy = Math.round(before.cy);

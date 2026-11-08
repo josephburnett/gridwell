@@ -5,7 +5,7 @@ import { createDoorToOtherNamespace, createLeafLink, moveTile, tileAt } from './
 import { makeRunDir } from './homes';
 
 // A link into a namespace this node does not declare is DEAD. Removing a
-// plugin from server.yaml, retiring a connection name, or an id that never
+// connection from server.yaml, retiring its name, or an id that never
 // resolved leaves link tiles pointing at nothing. Dead is a state and raises
 // nothing: the user sees what there is to throw away.
 //
@@ -15,7 +15,7 @@ import { makeRunDir } from './homes';
 // together against a live server.
 //
 // "z9gonee" is a well-formed namespace segment (7-char lowercase base36,
-// letter-leading) that names no plugin and no connection in the seeded home.
+// letter-leading) that names no connection in the seeded home.
 const GONE = 'z9gonee';
 
 async function errors(window: any) {
@@ -33,7 +33,7 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx) + 1;
   const cy = Math.round(f.cy) + 1;
@@ -48,7 +48,7 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
 
   // Seed the dangling link directly on the server: a link door whose child
   // grid lives in a namespace the node has never heard of. That is what a link
-  // left behind by a removed plugin looks like on disk.
+  // left behind by a removed connection looks like on disk.
   const dead = await createDoorToOtherNamespace(gw.origin, f.gridID, `${GONE}/1`, 'old files', cx, cy);
   expect(dead.id, 'the server accepted the dangling link').toBeTruthy();
 
@@ -90,27 +90,23 @@ test('a link into a namespace the node does not declare renders dead, quietly', 
   expect((await errors(window)).notices, 'and the delete is quiet too').toEqual([]);
 });
 
-// The boundary. A plugin the node DECLARES is alive whatever state it is in,
+// The boundary. A source the node DECLARES is alive whatever state it is in,
 // so its link tiles must never grey. Health covers a declared source that is
 // down, and greying it would hide one that is coming back.
 const FS_ROOT = makeRunDir();
 
 test.describe('a declared namespace is never dead', () => {
-  test.use({ extraPlugins: [{ kind: 'fs', name: 'files', config: { root: FS_ROOT } }] });
+  test.use({ filesRoots: [{ root: FS_ROOT, label: 'docs' }] });
 
-  test('a link into a declared plugin stays alive', async ({ gw, window }) => {
-    const pls = await gw.plugins();
-    const files = pls.find((p) => p.label === 'files')!;
-    // A plugin names no grid of its own, so the link goes to a grid it
-    // declares.
-    const grid = files.pluginGrids[0]?.gridID;
-    expect(grid, 'the fs plugin is declared and serves a grid').toBeTruthy();
+  test('a link into a declared files root stays alive', async ({ gw, window }) => {
+    // The files name no grid of their own, so the link goes to a root's.
+    const grid = await gw.swatchGridID('docs (files)');
 
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const f = await gw.focused();
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;
-    await createDoorToOtherNamespace(gw.origin, f.gridID, grid!, 'files', cx, cy);
+    await createDoorToOtherNamespace(gw.origin, f.gridID, grid, 'docs', cx, cy);
 
     // Wait for the tile to be drawn, so the verdict has every chance to fire
     // wrongly before asserting it did not.
@@ -118,23 +114,22 @@ test.describe('a declared namespace is never dead', () => {
       .poll(async () => tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)?.link)
       .toBe(true);
     await window.waitForTimeout(1_000);
-    expect(await deadLinks(window, f.gridID), 'a declared plugin is alive').toEqual([]);
+    expect(await deadLinks(window, f.gridID), 'a declared root is alive').toEqual([]);
   });
 
-  // The last hop answers, and the key is not there any more: the path ends in
+  // The last hop answers, and the path is not there any more: it ends in
   // nothing just the same. Reading the link's body hears the dead verdict,
   // draws it dead, and says nothing; the same id reads again once the file is
   // back and the namespace says a listing changed.
   test('a link to a file that is gone renders dead, quietly, until it is back', async ({ gw, window }) => {
     const file = path.join(FS_ROOT, 'gone.md');
     fs.writeFileSync(file, '# gone\nsoon\n');
-    const files = (await gw.plugins()).find((p) => p.label === 'files')!;
-    const grid = files.pluginGrids[0]!.gridID;
+    const grid = await gw.swatchGridID('docs (files)');
     const entry = ((await gw.getGrid(grid)).tiles ?? []).find((t) => t.altText === 'gone.md');
     expect(entry, 'the file is listed').toBeTruthy();
     fs.rmSync(file);
 
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const f = await gw.focused();
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;
@@ -176,13 +171,13 @@ test.describe('a link broken beyond a declared connection', () => {
   test.use({ extraNodes: ['second'] });
 
   test('renders dead, quietly, once the far node says so', async ({ gw, window }) => {
-    const second = (await gw.plugins()).find((p) => p.label === 'second')!;
+    const second = (await gw.sources()).find((p) => p.label === 'second')!;
     expect(second?.rootGridID, 'the connection lands').toBeTruthy();
     // "<node>/second/<far>/<root>" → "<node>/second/<far>/nope/1": the far node
     // declares no connection "nope".
     const deep = second.rootGridID.replace(/\/[^/]+$/, '/nope/1');
 
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const f = await gw.focused();
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;

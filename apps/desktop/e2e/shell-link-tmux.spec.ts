@@ -39,7 +39,7 @@ test('a link to a copy takes over the tmux of its source, and the source takes i
     await gw.clickScreen(menu.plusX, menu.plusY);
   };
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

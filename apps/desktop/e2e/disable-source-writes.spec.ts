@@ -15,8 +15,8 @@ test('a disabled far node reads read-only and its writes are dropped, not retrie
   window.on('console', (m) => {
     if (m.type() === 'error' && m.text().includes('SetFraming')) framingErrors.push(m.text());
   });
-  await gw.enterPlugin('second');
-  const far = (await gw.plugins()).find((p) => p.label === 'second')!;
+  await gw.enterSource('second');
+  const far = (await gw.sources()).find((p) => p.label === 'second')!;
   const f = await gw.focused();
   const [cx, cy] = [Math.round(f.cx), Math.round(f.cy) - 1];
   // A plain text tile: CreateTile with no link target.
@@ -79,8 +79,8 @@ test('a disabled far node reads read-only and its writes are dropped, not retrie
 // grid it is drawn from the press, refused, and taken down without a notice
 // or a parked retry (cache.SelectionRefused).
 test('a select on a disabled far grid is drawn, refused and taken down', async ({ gw, window }) => {
-  await gw.enterPlugin('second');
-  const far = (await gw.plugins()).find((p) => p.label === 'second')!;
+  await gw.enterSource('second');
+  const far = (await gw.sources()).find((p) => p.label === 'second')!;
   const f = await gw.focused();
   const [cx, cy] = [Math.round(f.cx), Math.round(f.cy) - 1];
   const note = await createLeafLink(gw.origin, f.gridID, '', 'pick.md', cx, cy);

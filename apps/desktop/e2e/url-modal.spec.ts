@@ -9,7 +9,7 @@ test('live views park under the url modal and return on close', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,

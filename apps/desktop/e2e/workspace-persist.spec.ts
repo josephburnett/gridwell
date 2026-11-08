@@ -14,7 +14,7 @@ async function workspaceState(window: any): Promise<{ depth: number; tileID?: st
 }
 
 test('reload restores the workspace from ?w=; post-reload bar ascent lands at the containing grid', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

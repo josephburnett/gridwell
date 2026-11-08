@@ -9,7 +9,7 @@ import { readDump, joinedRequests, bootOrigins, describe as describeDump } from 
 // trace whichever menu ran the row.
 
 test('the circle popover dumps the trace and names the file', async ({ gw, serve, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   await gw.openMenu();
   await gw.dragCreate('markdown', Math.round(f.cx), Math.round(f.cy));

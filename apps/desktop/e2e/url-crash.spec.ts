@@ -16,7 +16,7 @@ test('a crashed url view retires, and the next descent is live again', async ({ 
       message: string;
     }[];
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

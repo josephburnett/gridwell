@@ -3,41 +3,41 @@ import { tileAt } from './oracle';
 
 // The federated space through the real stack. Boot lands on the node's own
 // home, the first row of the menu list. Across the boundary a left-drag makes a
-// link in the destination and the source stays put, since there is no
-// cross-plugin move; a right-drag copies; deleting a link only unlinks; editing
+// link in the destination and the source stays put, since there is no move
+// to another source; a right-drag copies; deleting a link only unlinks; editing
 // through a leaf link lands on the one shared copy of the bytes. Dragging a
 // menu swatch into a grid links that namespace as a door.
 
 test.use({ extraNodes: ['second'] });
 
-test('boot lands on the first plugin', async ({ gw }) => {
-  const pls = await gw.plugins();
-  expect(pls.map((p) => p.label), 'both plugins configured, server.yaml order').toEqual(['home', 'second']);
+test('boot lands on home', async ({ gw }) => {
+  const rows = await gw.sources();
+  expect(rows.map((p) => p.label), 'home, then the connection').toEqual(['home', 'second']);
 
   // Boot lands on the home row's root grid.
   const f = await gw.focused();
-  expect(f.gridID, 'pane anchored at the first plugin root').toBe(pls[0].rootGridID);
+  expect(f.gridID, "pane anchored at home's root").toBe(rows[0].rootGridID);
 });
 
-// twoPanesTwoPlugins splits the boot pane and enters "home" in pane A and
+// twoPanesTwoNodes splits the boot pane and enters "home" in pane A and
 // "second" in pane B. The returned cells are off-center so later clicks never
 // land on them, and panes are focused with corner clicks because a center click
 // on a focused pane would descend.
-async function twoPanesTwoPlugins(gw: any) {
-  await gw.plugins();
+async function twoPanesTwoNodes(gw: any) {
+  await gw.sources();
   await gw.splitFocusedPaneVertical();
   const bId = (await gw.focused()).id;
   const a0 = (await gw.panes()).find((p: any) => p.id !== bId)!;
 
   await gw.clickScreen(a0.x + 20, a0.y + 20);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const a = (await gw.panes()).find((p: any) => p.id === a0.id)!;
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
 
   const b = (await gw.panes()).find((p: any) => p.id === bId)!;
   await gw.clickScreen(b.x + 20, b.y + 20);
-  await gw.enterPlugin('second');
+  await gw.enterSource('second');
   const bNow = (await gw.panes()).find((p: any) => p.id === bId)!;
   const tx = Math.round(bNow.cx);
   const ty = Math.round(bNow.cy) - 1;
@@ -45,7 +45,7 @@ async function twoPanesTwoPlugins(gw: any) {
 }
 
 test('left-drag links a door across nodes; the source stays; deleting the link never touches it', async ({ gw }) => {
-  const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
+  const { a, b, cx, cy, tx, ty } = await twoPanesTwoNodes(gw);
 
   // The source door goes on the far node. A link can point from home into the
   // far node; the far node cannot route back into this node's home.
@@ -80,7 +80,7 @@ test('left-drag links a door across nodes; the source stays; deleting the link n
 // server oracle mid-write. See docs/flake-ledger.md; closed in the client, not
 // here.
 test('right-drag deep-copies a solid door across nodes; a text left-drag links and edits through', async ({ gw }) => {
-  const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
+  const { a, b, cx, cy, tx, ty } = await twoPanesTwoNodes(gw);
 
   await gw.clickScreen(b.x + 20, b.y + 20);
   await gw.openMenu();
@@ -117,25 +117,25 @@ test('right-drag deep-copies a solid door across nodes; a text left-drag links a
     .toContain(marker);
 });
 
-test('drag a plugin swatch out of the + menu links it as a door', async ({ gw }) => {
+test('drag a connection swatch out of the + menu links it as a door', async ({ gw }) => {
   // The target cell is off-center so later clicks never land on it.
-  const pls = await gw.plugins();
-  const second = pls.find((p) => p.label === 'second')!;
+  const rows = await gw.sources();
+  const second = rows.find((p) => p.label === 'second')!;
   const f = await gw.focused();
   const tx = Math.round(f.cx);
   const ty = Math.round(f.cy) - 1;
   await gw.openMenu();
-  await gw.dragPluginLink('second', tx, ty);
+  await gw.dragSourceLink('second', tx, ty);
 
   const farDoor = tileAt(await gw.getGrid(f.gridID), 'door', tx, ty)!;
   expect(farDoor, 'link door created in the destination grid').toBeTruthy();
-  expect(farDoor.childGridId, "the link points at the plugin's root").toBe(second.rootGridID);
+  expect(farDoor.childGridId, "the link points at the far home's root").toBe(second.rootGridID);
   expect(farDoor.link, 'doors to other namespaces are links — deletes will not propagate').toBe(true);
-  expect(farDoor.altText, 'the farDoor carries the plugin label').toBe('second');
+  expect(farDoor.altText, 'the farDoor carries the connection label').toBe('second');
 
   await gw.descendCell(tx, ty);
   const after = await gw.focused();
-  expect(after.gridID, 'descent through the door reaches the plugin').toBe(second.rootGridID);
+  expect(after.gridID, 'descent through the door reaches the far home').toBe(second.rootGridID);
 });
 
 // The far node announces the copy it made and the connection relays that
@@ -143,7 +143,7 @@ test('drag a plugin swatch out of the + menu links it as a door', async ({ gw })
 // revalidated afterward finds nothing new either (see
 // sourcecache.TestAFoldedTileChangedIsNotAChange).
 test('a cross-node copy reads no listing back; the relayed event lands the copy', async ({ gw }) => {
-  const { a, b, cx, cy, tx, ty } = await twoPanesTwoPlugins(gw);
+  const { a, b, cx, cy, tx, ty } = await twoPanesTwoNodes(gw);
 
   await gw.clickScreen(a.x + 20, a.y + 20);
   await gw.openMenu();

@@ -12,7 +12,7 @@ test('a left drag whose release is never seen still commits and unhides its tile
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

@@ -10,7 +10,7 @@ test('dragging the ephemeral visit crumb onto another pane promotes it to a real
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const scratchGridID = await gw.scratchGridID('home');
 

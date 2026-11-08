@@ -14,8 +14,8 @@ test.use({
 });
 
 test('one menu row per connection; the picker row is gone', async ({ gw }) => {
-  await gw.enterPlugin('home');
-  const pls = await gw.plugins();
+  await gw.enterSource('home');
+  const pls = await gw.sources();
 
   // The label comes from the config. The remote is unreachable here, so the
   // row reads as waiting until the dial is attempted and broken once it has
@@ -38,9 +38,9 @@ test('clicking a pending connection says WHY, not nothing-to-descend-into', asyn
   // The descent guard looks the row up by its full id. Resolving through
   // rpc.LocalOf mangles a chained connection uuid, and the click then falls to
   // the generic "nothing to descend into" instead of the connection's status.
-  await gw.enterPlugin('home');
-  const rtb = (await gw.plugins()).find((p) => p.label === 'rtb')!;
-  await gw.clickPluginSwatch('rtb');
+  await gw.enterSource('home');
+  const rtb = (await gw.sources()).find((p) => p.label === 'rtb')!;
+  await gw.clickSwatch('rtb');
   // The notice keys by uuid, since labels can collide across connections.
   await expect
     .poll(async () => {

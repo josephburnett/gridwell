@@ -9,7 +9,7 @@ import { tileAt } from './oracle';
 
 test('a navigation inside a live url tile is the tile’s address', async ({ electronApp, window, gw }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

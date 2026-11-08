@@ -15,7 +15,7 @@ test('a shell url click opens the visit below and nothing escapes', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);
@@ -153,7 +153,7 @@ test('a shell url click is not also delivered to the terminal application', asyn
   home,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);
@@ -249,7 +249,7 @@ test('an OSC 8 hyperlink in a shell opens the visit below, not a browser', async
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

@@ -44,7 +44,7 @@ test('a url taken over by a workspace tile moves there and back without a reload
   const views = async (): Promise<TraceLine[]> =>
     (await dumpViaAPI(origin, token)).filter((l) => l.origin === 'electron' && l.src === 'webview');
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

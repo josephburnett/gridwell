@@ -7,7 +7,7 @@ import { test, expect } from './fixtures';
 // cursor. menuPaneForPointer is the one router for hover and press both, and it
 // cannot return a nil pane.
 test('a swatch highlights when the popover floats over another pane', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   await gw.splitFocusedPaneHorizontal();
   const stacked = (await gw.panes()).slice().sort((a, b) => a.y - b.y);
@@ -21,7 +21,7 @@ test('a swatch highlights when the popover floats over another pane', async ({ g
 
   const menu = await gw.menu();
   expect(menu.hover, 'a freshly opened menu hovers nothing').toBe(-1);
-  const swatch = menu.items.find((i) => !i.isPlugin && i.kind === 'url');
+  const swatch = menu.items.find((i) => !i.isSwatch && i.kind === 'url');
   expect(swatch, 'the url swatch is in the menu').toBeTruthy();
   const cx = swatch!.x + swatch!.w / 2;
   const cy = swatch!.y + swatch!.h / 2;

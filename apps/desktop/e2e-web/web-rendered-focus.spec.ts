@@ -7,7 +7,7 @@ import { tileAt } from '../e2e/oracle';
 // never asked for; it paints the rendered raster instead. The oracle is the
 // renderedPreviews hook's per-tile panePaints counter.
 test('a rendered pane stays rendered when focus moves to a sibling', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

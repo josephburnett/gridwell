@@ -11,7 +11,7 @@ import { tileAt, updateText } from './oracle';
 // test on either side alone would not catch a gesture wired to the wrong verb.
 
 test('ctrl+right-drag links inside one namespace; plain right-drag still copies', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);
@@ -75,7 +75,7 @@ test('ctrl+right-drag links inside one namespace; plain right-drag still copies'
 });
 
 test('ctrl+right-drag on a door links the same child grid, not a copy of it', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

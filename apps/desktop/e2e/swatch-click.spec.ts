@@ -6,13 +6,13 @@ import { test, expect } from './fixtures';
 // shim, between a pure verdict and a canvas hit-test, so only the real app can
 // see it, and the tile behind the popover has to be placed there.
 test('clicking a swatch that only creates by dragging navigates nowhere', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
 
   // The cell size is the distance between two neighbouring cell centers, so
   // finding the cell under the swatch needs no constant from the renderer.
   await gw.openMenu();
-  const swatch = (await gw.menu()).items.find((i) => !i.isPlugin && i.kind === 'door')!;
+  const swatch = (await gw.menu()).items.find((i) => !i.isSwatch && i.kind === 'door')!;
   expect(swatch, 'the door swatch is on the menu').toBeTruthy();
   const origin = await gw.cellCenter(home.id, 0, 0);
   const oneOver = await gw.cellCenter(home.id, 1, 1);

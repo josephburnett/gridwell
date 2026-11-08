@@ -82,7 +82,7 @@ test('shift-click toggles a tile, the border is yellow, a plain click leaves the
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -130,7 +130,7 @@ test('a shift-drag band takes the tiles wholly inside it, never one it only touc
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -157,7 +157,7 @@ test('Esc with no drag in flight clears the selection, and with none selected wr
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -204,7 +204,7 @@ test('inside a workspace tile the selection is the grid row\'s, every pane on th
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const { f, pt, a, inner, wx, wy } = await descendWorkspace(gw, window);
 
   await shiftClick(gw, window, wx + 2, wy);
@@ -240,7 +240,7 @@ test('inside a workspace tile a tile that leaves the grid leaves the set, and co
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
@@ -264,7 +264,7 @@ test('inside a workspace tile a tile that leaves the grid leaves the set, and co
 // Clear selections, the + circle's right-click row, empties every grid's set
 // the node holds, not only the one on screen.
 test('Clear selections empties every grid\'s set', async ({ electronApp, gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -290,7 +290,7 @@ test('Clear selections empties every grid\'s set', async ({ electronApp, gw, win
 // Inside a workspace tile the set is the grid row's, so the node's clear reaches
 // it like any other.
 test('Clear selections empties the set a pane inside a workspace tile shows', async ({ electronApp, gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const { f, a, inner, wx, wy } = await descendWorkspace(gw, window);
   await shiftClick(gw, window, wx + 2, wy);
   await expectSelection(gw, window, inner.id, f.gridID, [a.id], 'selected inside');

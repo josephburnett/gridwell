@@ -18,7 +18,7 @@ const dropPoint = (p: { x: number; w: number; y: number }) => ({
 });
 
 test('a swatch dropped into another pane that shows a grid lands there', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
 
   await gw.splitFocusedPaneVertical();
@@ -39,7 +39,7 @@ test('a swatch dropped into another pane that shows a grid lands there', async (
 });
 
 test('a swatch dropped over a pane descended into a tile creates nothing', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

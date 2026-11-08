@@ -12,7 +12,7 @@ test('wheel over a door zooms the door; over empty space, the pane (#210)', asyn
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -69,7 +69,7 @@ test('an off-center wheel burst drifts the door view toward the cursor (#219)', 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -107,7 +107,7 @@ test('zoom OUT over a view-filling door goes to the pane; zoom IN stays the door
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

@@ -25,7 +25,7 @@ function foreignLayout(anchor: string): string {
 }
 
 test('a stale layout write is refused and the workspace keeps the newer arrangement', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);

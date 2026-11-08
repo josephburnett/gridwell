@@ -26,7 +26,7 @@ test('a renderer offered a reload for its build reloads when asked, leaving no l
       marker,
     );
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

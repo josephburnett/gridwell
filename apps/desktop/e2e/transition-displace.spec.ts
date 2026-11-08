@@ -31,7 +31,7 @@ test('a second link-open mid-animation does not void the first pane descent', as
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const panesBefore = (await gw.panes()).length;
 

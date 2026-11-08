@@ -7,7 +7,7 @@ import { moveTile, tileAt, updateText } from './oracle';
 // the other window put it, as it was edited, on disk and on screen.
 
 test('a stale move and a stale delete are refused, and the tile stays as the other window left it', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx) - 2;
   const cy = Math.round(f.cy) - 1;

@@ -9,8 +9,8 @@ import { dumpNow } from './trace';
 // paints the draw that asks again.
 
 // endStream is a Connect server stream ending in an error before any message:
-// not_found as the node answers for a link whose fs file is gone, unavailable
-// as it answers for a plugin that is down.
+// not_found as the node answers for a link whose file is gone, unavailable
+// as it answers for a connection that is down.
 function endStream(code: string, message: string): Buffer {
   return envelope(0x02, Buffer.from(JSON.stringify({ error: { code, message } })));
 }
@@ -20,7 +20,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
   home,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -42,7 +42,7 @@ test('a body the server refuses is asked for once, reported once, and asked agai
       return r.continue();
     }
     refused++;
-    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: endStream('not_found', `plugin: no tile ${tile.id}`) });
+    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: endStream('not_found', `files: no tile ${tile.id}`) });
   });
 
   // A reload empties the body cache, so the first draw of the tile asks.
@@ -91,7 +91,7 @@ test('a body whose source is unreachable is asked for once per backstop, not per
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -113,7 +113,7 @@ test('a body whose source is unreachable is asked for once per backstop, not per
       return r.continue();
     }
     unanswered++;
-    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: endStream('unavailable', 'plugin down') });
+    return r.fulfill({ status: 200, contentType: 'application/connect+json', body: endStream('unavailable', 'connection down') });
   });
 
   await window.reload();

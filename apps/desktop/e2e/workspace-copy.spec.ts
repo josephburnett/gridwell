@@ -4,8 +4,8 @@ import { tileAt, writeContent } from './oracle';
 // Copy semantics for workspaces, driven through the real gesture: an in-grid
 // right-drag copy shares the layout blob by content address, and the copies
 // diverge on the first edit, so rearranging the copy can never touch the
-// original's arrangement. Cross-plugin byte-copy semantics are pinned at the
-// routing seam in internal/server crossplugin_copy_test.go; this is the
+// original's arrangement. Cross-node byte-copy semantics are pinned at the
+// routing seam in internal/server cross_node_copy_test.go; this is the
 // gesture-to-store composition for the common case.
 
 
@@ -18,7 +18,7 @@ async function barLeave(gw: any): Promise<void> {
 }
 
 test('copying a workspace: shared blob, independent divergence', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const ax = Math.round(f.cx);
@@ -71,7 +71,7 @@ test('copying a workspace: shared blob, independent divergence', async ({ gw, wi
 // default pane, reports once, and never writes over the blob it could not read.
 // Writing would let an older client rewrite a newer arrangement.
 test('an unreadable layout opens read-only and is never overwritten', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const ax = Math.round(f.cx);

@@ -1,7 +1,7 @@
 import type { TraceLine } from './trace';
 
-// The trace budget's attribution: every node rpc record and every sourcecache
-// or pluginhost work record in a dump is owed to a gesture, an event the node
+// The trace budget's attribution: every node rpc record, every sourcecache
+// work record and every files health record in a dump is owed to a gesture, an event the node
 // or client was told, a view the node was told, or a decision CLAUDE.md names.
 // What is owed to none of them was done for nobody or asked on a clock, which
 // two promises forbid ("told, never asked"; "nothing is done for nobody"), and
@@ -37,7 +37,7 @@ const VIEW_VERBS = new Set(['SetView', 'Subscribe']);
 // source layers' work.
 export function audited(r: TraceLine): boolean {
   if (r.origin !== 'node') return false;
-  return (r.src === 'router' && r.kind === 'rpc') || r.src === 'sourcecache' || r.src === 'pluginhost';
+  return (r.src === 'router' && r.kind === 'rpc') || r.src === 'sourcecache' || r.src === 'files';
 }
 
 function verbOf(r: TraceLine): string {
@@ -132,12 +132,8 @@ export function attribute(lines: TraceLine[], windows: GestureWindow[]): Verdict
       cause = rpcCause(r);
     } else if (r.src === 'sourcecache' && r.kind === 'prefetch') {
       cause = 'decision: prefetch walk (2026-10-06)';
-    } else if (r.src === 'pluginhost' && (r.kind === 'changed' || r.kind === 'health')) {
+    } else if ((r.src === 'files' && r.kind === 'health') || (r.src === 'sourcecache' && r.kind === 'dark')) {
       cause = 'event';
-    } else if (r.src === 'sourcecache' && r.kind === 'dark') {
-      cause = 'event';
-    } else if (r.src === 'pluginhost' && r.kind === 'watch') {
-      cause = viewBefore(lines, r) ? 'view' : null;
     } else if (r.src === 'sourcecache' && r.kind === 'revalidate') {
       cause = servedBefore(r, out);
     }
@@ -146,20 +142,6 @@ export function attribute(lines: TraceLine[], windows: GestureWindow[]): Verdict
     out.push({ rec: r, cause });
   }
   return out;
-}
-
-// viewBefore is a SetView or Subscribe the node heard within CAUSE_MS before
-// r: a Watch opens and closes on what the view shows.
-function viewBefore(lines: TraceLine[], r: TraceLine): boolean {
-  return lines.some(
-    (v) =>
-      v.origin === 'node' &&
-      v.src === 'router' &&
-      v.kind === 'rpc' &&
-      VIEW_VERBS.has(verbOf(v)) &&
-      (v.seq ?? 0) < (r.seq ?? 0) &&
-      (r.t ?? 0) - (v.t ?? 0) <= CAUSE_MS,
-  );
 }
 
 // servedBefore is the cause of the cached serve of the same grid a

@@ -3,14 +3,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// The content API, desktop side: an fs image file is a url tile whose page the
-// plugin serves, and descending it goes live as a native WebContentsView at the
+// The content API, desktop side: an image file is a url tile whose page the
+// node serves, and descending it goes live as a native WebContentsView at the
 // derived /content/<token>/<tile-id> address — the url-tile semantics, on a
 // url tile. Ascending closes the view and freezes it the way it freezes any url
-// tile: the screenshot becomes the preview, replacing the plugin's thumbnail, and
-// nothing that means the tile's bytes or its address changes.
+// tile: the screenshot becomes the preview, replacing the image's own picture,
+// and nothing that means the tile's bytes or its address changes.
 
-// A real 1x1 PNG so the fs plugin classifies and serves an actual image.
+// A real 1x1 PNG so the files classify and serve an actual image.
 const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
   'base64',
@@ -19,25 +19,24 @@ const PNG_1X1 = Buffer.from(
 const picsDir = makeRunDir();
 fs.writeFileSync(path.join(picsDir, 'cat.png'), PNG_1X1);
 
-test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: picsDir } }] });
+test.use({ filesRoots: [{ root: picsDir, label: 'pics' }] });
 
-test('descending an fs image opens it live through the /content/ API', async ({
+test('descending an image file opens it live through the /content/ API', async ({
   electronApp,
   gw,
 }) => {
-  await gw.enterPlugin('pics');
+  await gw.enterSource('pics (files)');
   const f = await gw.focused();
   const snap = await gw.getGrid(f.gridID);
   const cat = (snap.tiles ?? []).find((t) => t.altText === 'cat.png')!;
-  expect(cat, 'the fs root grid lists cat.png').toBeTruthy();
+  expect(cat, 'the root grid lists cat.png').toBeTruthy();
   expect(cat.kind, 'an image file is a url tile').toBe('url');
-  expect(cat.servesPage, 'whose page the plugin serves at the API').toBe(true);
+  expect(cat.servesPage, 'whose page the node serves at the API').toBe(true);
   expect(cat.urlString ?? '', 'and which carries no address of its own').toBe('');
   const versionBefore = Number(cat.version ?? 0);
 
   // A url descent goes live, so a native view opens at the derived API
-  // address: token, qualified tile id, and the trailing slash that relative
-  // URLs inside the page depend on.
+  // address: token and qualified tile id.
   await gw.descendCell(Number(cat.x ?? 0), Number(cat.y ?? 0));
   await expect
     .poll(
@@ -62,8 +61,8 @@ test('descending an fs image opens it live through the /content/ API', async ({
       { timeout: 15_000 },
     )
     .toBe(false);
-  // The plugin's picture keys below zero; the screenshot is a blob of the node's.
-  expect(Number(cat.previewBlobId ?? 0), 'before a visit the preview is the plugin picture').toBeLessThan(0);
+  // The image's own picture keys below zero; the screenshot is a blob of the node's.
+  expect(Number(cat.previewBlobId ?? 0), "before a visit the preview is the image's own").toBeLessThan(0);
   await expect
     .poll(
       async () =>
@@ -73,6 +72,6 @@ test('descending an fs image opens it live through the /content/ API', async ({
     .toBeGreaterThan(0);
   const after = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'cat.png')!;
   expect(Number(after.version ?? 0), 'a freeze claims no content bytes').toBe(versionBefore);
-  expect(after.urlString ?? '', 'the address stays the plugin\'s').toBe('');
+  expect(after.urlString ?? '', 'and it still carries no address').toBe('');
   expect(after.id, 'the tile keeps its name').toBe(cat.id);
 });

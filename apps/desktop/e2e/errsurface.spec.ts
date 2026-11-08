@@ -11,7 +11,7 @@ async function errors(window: any) {
 }
 
 test('a failed mutation RPC surfaces a dismissible notice on the notice row', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -57,7 +57,7 @@ test('a failed mutation RPC surfaces a dismissible notice on the notice row', as
 // for errsurface.ExpireAfter, with no user gesture. The sticky exemption is
 // pinned by the errsurface unit tests; this proves the live wiring fires.
 test('a one-shot notice expires off the notice row once its source goes quiet', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -89,7 +89,7 @@ test('a one-shot notice expires off the notice row once its source goes quiet', 
 });
 
 test('a rejected text save surfaces and reconciles instead of lingering as saved', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -141,7 +141,7 @@ test('an unreachable live URL tile surfaces a did-fail-load notice from the Elec
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // The url swatch's modal descends straight into a live url tile. Port 9,
   // discard, has nothing listening, so the connection is refused at once rather
@@ -171,7 +171,7 @@ async function setupDoorReframe(
   window: any,
   route: (r: any) => void,
 ): Promise<{ parentGrid: string; doorID: string; sig0: Record<string, string> }> {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);

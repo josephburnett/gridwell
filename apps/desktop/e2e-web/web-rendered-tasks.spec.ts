@@ -7,7 +7,7 @@ import { tileAt } from '../e2e/oracle';
 // pictures its checkboxes as stand-ins the one stylesheet draws
 // (markdown.PictureXHTML), its checked state carried.
 test('an unfocused rendered task list paints a picture with no form control', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

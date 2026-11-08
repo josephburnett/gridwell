@@ -20,7 +20,7 @@ function readsAfterOwnWrites(lines: TraceLine[], id: string): number {
 
 test('a pane layout write is never read back by the client that wrote it', async ({ gw, home, window }) => {
   const token = await loginToken(gw.origin, homePassword(home));
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);

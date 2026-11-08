@@ -2,14 +2,14 @@ import { test, expect, homePassword, loginToken } from './fixtures';
 import { tileAt } from './oracle';
 import { dumpNow } from './trace';
 
-// A source that declares no watch is complete as declared: the node says only
-// that its changes are not told (EventPluginHealth.told), and the client shows
-// nothing. A source that lists but fails to watch is not dark: the node says
-// so as EventPluginHealth.live_updates_off on a healthy event, and the client
-// shows one sticky notice of its own, apart from the dark one, and resyncs
-// nothing (events.ReactHealth). The node side, a real refused Watch whose listings
-// still answer, is internal/server/live_updates_off_seam_test.go: no OS lever
-// makes the shipped fs plugin refuse a watch while it still lists, so the
+// A source whose changes are not told says so (EventSourceHealth.told), and
+// the client shows nothing. A source that lists but fails to watch is not
+// dark: the node says so as EventSourceHealth.live_updates_off on a healthy
+// event, and the client shows one sticky notice of its own, apart from the
+// dark one, and resyncs nothing (events.ReactHealth). The node side, a watch
+// that fails while its listings still answer, is internal/files
+// TestToldFollowsTheWatch and internal/connection's liveoff_test.go: no OS
+// lever makes the files' watch fail while the directory still lists, so the
 // page's Subscribe is the lever here, one held stream per stage. Neither
 // source is told, so a move onto its grid reads it. Each
 // stage's stream ends, and a client whose stream is down reads on every move
@@ -27,7 +27,7 @@ function envelope(flag: number, payload: object): Buffer {
 
 test('a refused watch is one notice of its own, costs no resync, and clears when the watch opens; a declared no-watch says nothing', async ({ gw, home, window }) => {
   const cad = await gw.cadences();
-  const homePlugin = (await gw.plugins()).find((p) => p.label === 'home')!;
+  const homeRow = (await gw.sources()).find((p) => p.label === 'home')!;
   const landed = await gw.focused();
   const cx = Math.round(landed.cx);
   const cy = Math.round(landed.cy);
@@ -39,7 +39,7 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     await gw.ascendViaCrumb();
     await gw.waitIdle();
   };
-  const health = (h: object) => envelope(0, { pluginHealth: { pluginUuid: homePlugin.uuid, ...h } });
+  const health = (h: object) => envelope(0, { sourceHealth: { uuid: homeRow.uuid, ...h } });
   const refused = 'the OS refused another change watch';
 
   // Each stage answers one Subscribe and ends it; the reconnect waits for the
@@ -86,8 +86,8 @@ test('a refused watch is one notice of its own, costs no resync, and clears when
     return errs.notices;
   };
   const of = (ns: Notice[], key: string) => ns.filter((n) => n.source === key);
-  const live = 'live:' + homePlugin.uuid;
-  const dark = 'plugin:' + homePlugin.uuid;
+  const live = 'live:' + homeRow.uuid;
+  const dark = 'source:' + homeRow.uuid;
 
   try {
     await window.reload();

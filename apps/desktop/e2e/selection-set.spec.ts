@@ -29,7 +29,7 @@ function ghost(win: Page): Promise<{ active: boolean; hidden: string[]; carried:
 // Two selected text tiles two cells apart on one row, and an unselected one
 // below them, all held by the client with the selection.
 async function selectedPair(gw: GridwellDriver) {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

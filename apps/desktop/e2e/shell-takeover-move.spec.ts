@@ -32,7 +32,7 @@ test('a shell taken over moves with its terminal and socket, never reattaching',
     ).length;
   const shellText = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.shellText());
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

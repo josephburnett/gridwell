@@ -11,7 +11,7 @@ function countKind(snap: GridSnapshot, kind: string): number {
 }
 
 test('tile gestures (move, copy, resize, delete) mutate server state', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   // From the center cell toward the upper-left interior, clear of the edges.
@@ -60,7 +60,7 @@ test('tile gestures (move, copy, resize, delete) mutate server state', async ({ 
 // the client's drop preflight excludes the moving tile, as MoveTile does, or
 // the drag snaps back with nothing visibly in the way.
 test('a multi-cell tile moves one cell into its own old footprint (#231)', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx) - 1;

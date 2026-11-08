@@ -12,7 +12,7 @@ import { tileAt } from './oracle';
 // into a text tile holding body. The tile sits one cell below center so the
 // pane-center focus click on the right pane lands on no tile.
 async function twoPanesWithDoc(gw: any, body: string) {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) + 1;
@@ -85,7 +85,7 @@ test('one forwarded middle click on an unfocused live url pane focuses it and as
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
   await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
@@ -123,7 +123,7 @@ test('one click on an unfocused live url pane hands its page the keyboard, and i
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
   await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

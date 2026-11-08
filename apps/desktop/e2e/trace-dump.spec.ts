@@ -37,7 +37,7 @@ test('Dump logs writes one file holding both halves of the trace', async ({
   home,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   // A gesture with server work behind it, so the join is on a call this spec
   // made rather than only on the boot's.
   const f = await gw.focused();

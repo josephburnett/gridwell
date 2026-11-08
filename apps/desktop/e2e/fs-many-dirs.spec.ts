@@ -4,18 +4,12 @@ import * as path from 'node:path';
 import { makeRunDir } from './homes';
 import { settle } from './cadence';
 
-// A directory of many directories, opened through the fs plugin, shows each as
-// a door whose preview reads its child grid. That read is once, and nothing
-// the source says afterwards may turn into a storm of re-reads: on 2026-10-02
-// a home of ~100 directories made the client cancel and re-ask every grid on
-// each health flip, and each cancelled read came back to the node as a flip.
-//
-// On a Mac the first flip is the change watcher: fsnotify there is kqueue,
-// which holds one file descriptor per file in every watched directory, so the
-// plugin runs out and refuses Watch with ResourceExhausted. Linux's inotify
-// limit is far above what this spec shows, so the flip is injected the two
-// other ways it starts: reads abandoned in flight, and the plugin process
-// dying and being respawned.
+// A directory of many directories shows each as a door whose preview reads its
+// child grid. That read is once, and nothing the source says afterwards may
+// turn into a storm of re-reads: on 2026-10-02 a home of ~100 directories made
+// the client cancel and re-ask every grid on each health flip, and each
+// cancelled read came back to the node as a flip. The flip is injected the way
+// a client starts one: reads abandoned in flight by a reload.
 
 const ROOT = makeRunDir();
 const DIRS = 150;
@@ -24,7 +18,7 @@ for (let i = 0; i < DIRS; i++) {
   fs.mkdirSync(d, { recursive: true });
   for (let j = 0; j < 20; j++) fs.writeFileSync(path.join(d, `f${j}.txt`), `dir ${i} file ${j}\n`);
 }
-test.use({ extraPlugins: [{ kind: 'fs', name: 'dirs', config: { root: ROOT } }] });
+test.use({ filesRoots: [{ root: ROOT, label: 'dirs' }] });
 
 // readsOf counts GetGrid by grid id from now on, across reloads.
 async function readsOf(window: any): Promise<Map<string, number>> {
@@ -49,37 +43,15 @@ async function watchNotices(window: any, ms: number): Promise<string[]> {
   return [...seen];
 }
 
-// fsPluginPid is the fs plugin subprocess the node's sidecar spawned.
-async function fsPluginPid(electronApp: any): Promise<number> {
-  const sidecar: number = await electronApp.evaluate(
-    () => (globalThis as { __gwSidecarPid?: number }).__gwSidecarPid ?? 0,
-  );
-  for (const ent of fs.readdirSync('/proc')) {
-    if (!/^\d+$/.test(ent)) continue;
-    try {
-      const stat = fs.readFileSync(`/proc/${ent}/stat`, 'utf8');
-      const ppid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-      const cmd = fs.readFileSync(`/proc/${ent}/cmdline`, 'utf8');
-      if (ppid === sidecar && cmd.includes('gridwell-plugin-fs')) return Number(ent);
-    } catch {
-      // gone between the listing and the read
-    }
-  }
-  throw new Error(`no fs plugin under sidecar ${sidecar}`);
-}
-
-test('a directory of many directories reads each once and stays quiet', async ({ electronApp, gw, window }) => {
+test('a directory of many directories reads each once and stays quiet', async ({ gw, window }) => {
   test.setTimeout(180_000);
   const reads = await readsOf(window);
   const total = () => [...reads.values()].reduce((a, b) => a + b, 0);
-  // Read straight off the hook: the list is empty while a handshake is in
-  // flight, and that is "not yet", not a failure.
-  const status = (): Promise<string> =>
-    window.evaluate(
-      () => (window as any).__gridwellTest.plugins().find((p: any) => p.label === 'dirs')?.status ?? 'unlisted',
-    );
+  // The files are healthy while the pane is not served from what it holds
+  // (pane.cached, client/cache.SourceDark).
+  const dark = async (): Promise<boolean> => !!(await gw.focused()).cached;
 
-  await gw.enterPlugin('dirs');
+  await gw.enterSource('dirs (files)');
   const here = await gw.focused();
   const doors = ((await gw.getGrid(here.gridID)).tiles ?? []).filter((t) => t.kind === 'door');
   expect(doors, 'every directory is a door').toHaveLength(DIRS);
@@ -94,7 +66,7 @@ test('a directory of many directories reads each once and stays quiet', async ({
   }
   expect(previewed(), 'every door on screen read its grid for a preview').toBe(DIRS);
   expect(await watchNotices(window, 2_000), 'opening many directories raises no notice').toEqual([]);
-  expect(await status(), 'and the plugin stays healthy').toBe('');
+  expect(await dark(), 'and the files stay healthy').toBe(false);
   for (const w of doors) {
     expect(reads.get(w.childGridId!) ?? 0, `the preview of ${w.altText} read its grid`).toBeLessThanOrEqual(2);
   }
@@ -102,7 +74,7 @@ test('a directory of many directories reads each once and stays quiet', async ({
   // settledAfter holds the source to the end of its news: the client goes idle,
   // the notice row clears, and then nothing reads it at all.
   const settledAfter = async (what: string) => {
-    await expect.poll(status, { timeout: 30_000, message: `${what}: the plugin is healthy again` }).toBe('');
+    await expect.poll(dark, { timeout: 30_000, message: `${what}: the files are healthy again` }).toBe(false);
     await gw.waitIdle();
     await watchNotices(window, 2_000);
     for (const w of doors) {
@@ -123,13 +95,4 @@ test('a directory of many directories reads each once and stays quiet', async ({
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
   await settledAfter('reads abandoned by a reload');
-
-  // The source goes down and comes back once. Its two transitions each owe a
-  // resync, and nothing more may follow.
-  const killed = await fsPluginPid(electronApp);
-  process.kill(killed, 'SIGKILL');
-  await expect
-    .poll(() => fsPluginPid(electronApp).catch(() => killed), { timeout: 30_000 })
-    .not.toBe(killed);
-  await settledAfter('a respawned plugin');
 });

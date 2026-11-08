@@ -30,7 +30,7 @@ test('the node hears which grids the panes and their previews show, and hears th
   const union = async () => lastUnion(await dumpViaAPI(gw.origin, token));
   const view = async () => focusedView(await dumpViaAPI(gw.origin, token));
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   await expect.poll(union, { message: 'the landing grid is shown', timeout: 10_000 }).toEqual([rootGrid]);

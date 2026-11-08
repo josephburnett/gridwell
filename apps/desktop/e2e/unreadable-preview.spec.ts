@@ -7,7 +7,7 @@ import { tileAt } from './oracle';
 // that asks again. unreadable-body.spec.ts is the same rule for a body.
 
 test('a preview the server refuses is asked for once', async ({ electronApp, gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -41,7 +41,7 @@ test('a preview the server refuses is asked for once', async ({ electronApp, gw,
     return r.fulfill({
       status: 404,
       contentType: 'application/json',
-      body: JSON.stringify({ code: 'not_found', message: `plugin: no tile ${tile.id}` }),
+      body: JSON.stringify({ code: 'not_found', message: `files: no tile ${tile.id}` }),
     });
   });
 

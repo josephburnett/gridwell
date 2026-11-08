@@ -7,7 +7,7 @@ import { settle, timeToLand } from './cadence';
 // ReadContent. The edit logic is unit-tested in client/textedit and
 // client/markdown; this proves the wiring from keystrokes to a durable body.
 test('typing into a descended text tile persists to the server', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

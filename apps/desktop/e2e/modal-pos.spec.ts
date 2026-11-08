@@ -4,7 +4,7 @@ import { test, expect } from './fixtures';
 // centerCardOnActivePane, is the one rule for every modal card. The url modal
 // in a split is where pane center and screen center are far apart.
 test('the url modal centers on the active pane, not the screen', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const ps = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   const right = ps[1];

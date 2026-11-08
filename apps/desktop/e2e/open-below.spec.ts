@@ -10,7 +10,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const panesBefore = (await gw.panes()).length;
 
@@ -118,7 +118,7 @@ test('window.open from a live view splits the pane and opens ephemeral below', a
 // animating it would be a second transition for one gesture and would leave
 // the pane wearing the trace of a departure that never happened.
 test('a link-open split lands without animating an ascent nobody made', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

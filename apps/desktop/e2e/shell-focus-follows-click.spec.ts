@@ -12,7 +12,7 @@ test('left-click into a live shell transfers pane focus', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   await gw.splitFocusedPaneVertical();
   const panes0 = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
@@ -48,7 +48,7 @@ test('left-click into a live shell transfers pane focus', async ({
 
 // A live shell in the left pane, focus on the right one.
 async function shellBesideGrid(gw: any) {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(left);

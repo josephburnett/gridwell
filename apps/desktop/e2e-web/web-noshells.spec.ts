@@ -44,10 +44,10 @@ const test = base.extend<Fixtures>({
 });
 
 test('disable_shells removes the shell primitive from the + menu', async ({ gw }) => {
-  await gw.enterPlugin('home'); // a writable grid, so the primitives show
+  await gw.enterSource('home'); // a writable grid, so the primitives show
   await gw.openMenu();
   const menu = await gw.menu();
-  const primitives = menu.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
+  const primitives = menu.items.filter((i: any) => !i.isSwatch).map((i: any) => i.kind);
   expect(primitives, 'the other primitives all survive').toEqual(
     expect.arrayContaining(['door', 'markdown', 'url', 'workspace']),
   );

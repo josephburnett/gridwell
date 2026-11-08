@@ -21,7 +21,7 @@ test('the circle popover switches the theme and the browser keeps it', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   expect(await gw.theme(), 'a browser with nothing stored is dark').toBe('dark');
 
   const f = await gw.focused();

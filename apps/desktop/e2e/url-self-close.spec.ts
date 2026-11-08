@@ -17,7 +17,7 @@ test('a page that closes itself ends the live view with one notice', async ({ el
       severity: string;
     }[];
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

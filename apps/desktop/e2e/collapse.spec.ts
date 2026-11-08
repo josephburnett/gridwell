@@ -3,7 +3,7 @@ import { test, expect } from './fixtures';
 // Collapsing a pane tears down its per-pane state: forgetPane drops the
 // a.locals entry. This is also the e2e coverage of the pane-collapse gesture.
 test('collapsing a pane tears down its per-pane state (forgetPane)', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // a.locals holds only the selection and the live surfaces. An ephemeral url
   // visit opens a native view, so it gives the pane state forgetPane has to

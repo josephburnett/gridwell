@@ -1,12 +1,11 @@
-import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// The one owner of "the tree this run tests". A test resolves the sidecar, the
-// plugin binaries and web/ at its own launch, minutes after the gate built
-// them, so a rebuild in the shared checkout mid-run hands the tests that have
-// not started yet a client nobody ran a gate on. The run copies the artifacts
+// The one owner of "the tree this run tests". A test resolves the sidecar and
+// web/ at its own launch, minutes after the gate built them, so a rebuild in
+// the shared checkout mid-run hands the tests that have not started yet a
+// client nobody ran a gate on. The run copies the artifacts
 // once, at global setup, and every launch reads that copy.
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -22,22 +21,17 @@ function serveName(): string {
   return process.env.GRIDWELL_SERVE_BIN || 'gridwell';
 }
 
-// What a launch reads out of the repo root: the server binary, web/, which
-// holds the wasm client, and every plugin binary, which the server resolves
-// beside itself (resolveBinary, internal/cli/serve.go).
-function artifacts(root: string): string[] {
-  const names = new Set([serveName(), 'web']);
-  for (const n of fs.readdirSync(root)) {
-    if (n.startsWith('gridwell-plugin-')) names.add(n);
-  }
-  return [...names];
+// What a launch reads out of the repo root: the server binary and web/, which
+// holds the wasm client.
+function artifacts(): string[] {
+  return [serveName(), 'web'];
 }
 
 // Copies the artifacts into one directory this run owns and publishes it. A
 // missing one throws here, at setup, rather than as the first test's failure.
 export function snapshotTree(root: string = REPO_ROOT): string {
   const dir = makeRunDir();
-  for (const name of artifacts(root)) {
+  for (const name of artifacts()) {
     // Copies, never links: `go build` may rewrite its output in place, and a
     // link would carry that rewrite into the snapshot.
     fs.cpSync(path.join(root, name), path.join(dir, name), { recursive: true, dereference: true });
@@ -71,10 +65,6 @@ export function serveBin(): string {
   return path.join(treeRoot(), serveName());
 }
 
-function pluginDir(): string {
-  return treeRoot();
-}
-
 export function staticDir(): string {
   return path.join(treeRoot(), 'web');
 }
@@ -85,14 +75,5 @@ export function treeEnv(): Record<string, string> {
   return {
     GRIDWELL_SIDECAR: serveBin(),
     GRIDWELL_STATIC: staticDir(),
-    GRIDWELL_PLUGIN_DIR: pluginDir(),
   };
-}
-
-// Compiles one of this repo's Go test packages to out, for a fixture a spec
-// hosts (internal/plugintest/heyfake's TestE2EHost). A fixture is not a launch
-// artifact, so it is built from source, not taken from the snapshot.
-export function buildGoTest(pkg: string, out: string): void {
-  const built = spawnSync('go', ['test', '-c', '-o', out, pkg], { cwd: REPO_ROOT, encoding: 'utf8' });
-  if (built.status !== 0) throw new Error(`go test -c ${pkg}: ${built.stderr}`);
 }

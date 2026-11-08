@@ -14,7 +14,7 @@ async function errors(window: any) {
 }
 
 test('ascending a shell inside a door persists its preview', async ({ gw, window, electronApp }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const wx = Math.round(home.cx);
   const wy = Math.round(home.cy);

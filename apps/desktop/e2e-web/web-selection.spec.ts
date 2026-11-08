@@ -23,7 +23,7 @@ async function shiftClick(gw: GridwellDriver, window: Page, paneID: string, cx: 
 }
 
 async function twoTiles(gw: GridwellDriver) {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

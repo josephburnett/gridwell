@@ -37,7 +37,7 @@ test('stream break: a change made in the gap reaches the view with no later even
   await window.addInitScript(gate);
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -72,7 +72,7 @@ test('stream break: a descent shows a body written in the gap while the stream i
   await window.addInitScript(gate);
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

@@ -11,7 +11,7 @@ test('back ascends a descent; forward re-descends; pans never make entries', asy
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

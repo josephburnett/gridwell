@@ -13,7 +13,7 @@ async function hook<T>(window: any, expr: string): Promise<T> {
 }
 
 test('an SSE event mid-descent updates data without deflecting the landing framing', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
@@ -92,7 +92,7 @@ test('an SSE event mid-descent updates data without deflecting the landing frami
 // one the client makes however it navigates: a descent onto a grid it holds
 // reads nothing. The hold makes the crossing deterministic.
 test('a tile event that crosses its grid read on the wire still reaches the pane', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;

@@ -2,13 +2,13 @@ import { test, expect } from './fixtures';
 import { tileAt, getGrid } from '../e2e/oracle';
 
 // A delete parks the tile, keeping its id, under a dated month door in the trash
-// grid. The trash grid is a declared root declared grid whose swatch rides the +
-// menu's top row beside its plugin. A delete inside the trash tree destroys for
+// grid. The trash grid is a grid home declares, whose swatch rides the + menu's
+// top row beside home's. A delete inside the trash tree destroys for
 // real. Everything crosses the standard API, and the host and client know only
 // that this is another root grid with a glyph.
 
 test('delete parks in the dated trash; delete there is forever', async ({ gw, serve }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -24,11 +24,11 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   // The trashcan swatch is a declared grid on the + menu's top row, and
   // clicking it descends like any other swatch.
   await gw.openMenu();
-  await gw.expandPlugins();
+  await gw.expandSources();
   const menu = await gw.menu();
-  const trash = menu.items.find((i) => i.isPlugin && i.entry === 'trash');
+  const trash = menu.items.find((i) => i.isSwatch && i.sourceGrid === 'trash');
   expect(trash, 'the + menu offers the declared trashcan').toBeTruthy();
-  await gw.clickPluginSwatch('trash (home)');
+  await gw.clickSwatch('trash (home)');
   const troot = await gw.focused();
 
   // The title is the entry's name, the instance and the grid, the same

@@ -23,7 +23,7 @@ function envelope(flag: number, payload: object): Buffer {
 
 test('twenty health flips in a second resync once and say nothing about grids', async ({ gw, window }) => {
   const cad = await gw.cadences();
-  const home = (await gw.plugins()).find((p) => p.label === 'home')!;
+  const home = (await gw.sources()).find((p) => p.label === 'home')!;
   const landed = await gw.focused();
   expect(landed.gridID.startsWith(home.uuid + '/'), 'the home grid is served through the home source').toBe(true);
 
@@ -33,7 +33,7 @@ test('twenty health flips in a second resync once and say nothing about grids', 
   const released = new Promise<void>((r) => (release = r));
   let subscribes = 0;
   const flips = Array.from({ length: 20 }, (_, i) =>
-    envelope(0, { pluginHealth: { pluginUuid: home.uuid, healthy: i % 2 === 0, detail: `flap ${i}` } }),
+    envelope(0, { sourceHealth: { uuid: home.uuid, healthy: i % 2 === 0, detail: `flap ${i}` } }),
   );
   await window.route('**/gridwell.v1.Gridwell/Subscribe', async (r: any) => {
     if (subscribes++ > 0) {
@@ -83,7 +83,7 @@ test('twenty health flips in a second resync once and say nothing about grids', 
     const sources: string[] = errs.notices.map((n: any) => n.source);
     expect(sources.filter((s) => s.startsWith('grid:')), 'no grid notice stands').toEqual([]);
     expect(
-      sources.filter((s) => s === 'plugin:' + home.uuid),
+      sources.filter((s) => s === 'source:' + home.uuid),
       'the burst ended down, so its one sticky notice is up',
     ).toHaveLength(1);
   } finally {

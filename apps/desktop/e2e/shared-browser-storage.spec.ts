@@ -4,13 +4,13 @@ import { test, expect } from './fixtures';
 // whichever namespace owns it, local or through a connection, browses with
 // the same persistent cookies and storage, so a login holds everywhere.
 //
-// The seam: a cookie set while live in one plugin's tile is visible to a live
-// tile owned by another. Per-plugin cookies and storage would make these
-// different by construction and this spec would fail.
+// The seam: a cookie set while live in one namespace's tile is visible to a
+// live tile owned by another. Per-namespace cookies and storage would make
+// these different by construction and this spec would fail.
 
 test.use({ extraNodes: ['second'] });
 
-test('live tiles in different plugins share one set of cookies and storage', async ({
+test('live tiles in different namespaces share one set of cookies and storage', async ({
   electronApp,
   window,
   gw,
@@ -34,7 +34,7 @@ test('live tiles in different plugins share one set of cookies and storage', asy
       .toBe(true);
   };
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await goLiveURL('plug=one');
   await electronApp.evaluate(async ({ webContents }) => {
     const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('plug=one'));
@@ -44,7 +44,7 @@ test('live tiles in different plugins share one set of cookies and storage', asy
 
   await gw.ascendViaCrumb(); // ascend the url descent
   await gw.ascendViaCrumb(); // ascend the menu portal
-  await gw.enterPlugin('second');
+  await gw.enterSource('second');
   await goLiveURL('plug=two');
 
   const cookie = await electronApp.evaluate(async ({ webContents }) => {
@@ -52,7 +52,7 @@ test('live tiles in different plugins share one set of cookies and storage', asy
     if (!wc) throw new Error('second live view not found');
     return (await wc.executeJavaScript(`document.cookie`)) as string;
   });
-  expect(cookie, 'the cookie crossed the plugin boundary — one host-local set of cookies and storage').toContain(
+  expect(cookie, 'the cookie crossed the namespace boundary — one host-local set of cookies and storage').toContain(
     'gwshared=yes',
   );
 });

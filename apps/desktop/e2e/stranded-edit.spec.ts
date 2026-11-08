@@ -7,7 +7,7 @@ import { tileAt } from './oracle';
 // the save debounce is still pending cannot strand it.
 
 test('an edit typed right before leaving the doc still persists', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) - 1;

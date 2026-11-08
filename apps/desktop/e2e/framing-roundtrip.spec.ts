@@ -6,14 +6,14 @@ import { settle, timeToLand } from './cadence';
 // viewport the user sees, so they catch a desync between the live pane, the
 // saved ascent state, and the server-persisted door framing.
 //
-// A menu portal has no containing link tile, so a plugin root's ascent
-// writeback goes straight to the plugin's root framing through SetFraming's
-// root arm. That seam keeps its own test.
+// A menu portal has no containing link tile, so a far home's ascent
+// writeback goes straight to its root framing through SetFraming's root
+// arm. That seam keeps its own test.
 
 test.use({ extraNodes: ['second'] });
 
 test('re-descending a reframed door returns to exactly what you left', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
@@ -40,9 +40,9 @@ test('re-descending a reframed door returns to exactly what you left', async ({ 
   expect(back.cy, 'center y round-tripped').toBeCloseTo(left.cy, 1);
 });
 
-test('plugin root-grid viewport persists across + menu ascent and re-entry', async ({ gw }) => {
-  await gw.enterPlugin('second');
-  const pluginGrid = (await gw.focused()).gridID;
+test('a far home root-grid viewport persists across + menu ascent and re-entry', async ({ gw }) => {
+  await gw.enterSource('second');
+  const farGrid = (await gw.focused()).gridID;
 
   // The grid is empty, so the pan press lands on no tile.
   await gw.wheelAtFocusedCenter(-300);
@@ -53,23 +53,23 @@ test('plugin root-grid viewport persists across + menu ascent and re-entry', asy
 
   await gw.ascendViaCrumb();
   const home = await gw.focused();
-  expect(home.gridID, 'ascended back home').not.toBe(pluginGrid);
+  expect(home.gridID, 'ascended back home').not.toBe(farGrid);
 
-  // The handshake serves each plugin's persisted root view, so this reads
+  // The handshake serves each row's persisted root view, so this reads
   // server truth. Poll: the root framing post is async.
   await expect
     .poll(
       async () => {
-        const pl = (await gw.plugins()).find((x) => x.label === 'second');
+        const pl = (await gw.sources()).find((x) => x.label === 'second');
         return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 5_000 },
     )
     .toBeGreaterThan(0);
 
-  await gw.enterPlugin('second');
+  await gw.enterSource('second');
   const back = await gw.focused();
-  expect(back.gridID, 're-entered the same plugin root').toBe(pluginGrid);
+  expect(back.gridID, 're-entered the same far home root').toBe(farGrid);
   expect(back.zoom, 'zoom restored after re-entry').toBeCloseTo(left.zoom, 1);
   expect(back.cx, 'center x restored after re-entry').toBeCloseTo(left.cx, 1);
   expect(back.cy, 'center y restored after re-entry').toBeCloseTo(left.cy, 1);
@@ -82,7 +82,7 @@ test('a reframe persists without ascending (issue #190)', async ({ gw, window })
   // the values the client declares: the url replaces on the shorter one and
   // the server write settles after it, which is the order client/cadence pins.
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const parentGrid = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
@@ -133,10 +133,10 @@ test('a reframe persists without ascending (issue #190)', async ({ gw, window })
   expect(await storedZoom(), 'the persisted framing is the reframe').toBeGreaterThan(0);
 });
 
-test('a plugin root reframe persists without ascending (issue #190)', async ({ gw }) => {
-  // The same invariant one seam over: a plugin's root framing must reach the
-  // server without a + menu ascent.
-  await gw.enterPlugin('second');
+test('a far home root reframe persists without ascending (issue #190)', async ({ gw }) => {
+  // The same invariant one seam over: a far home's root framing must reach
+  // the server without a + menu ascent.
+  await gw.enterSource('second');
 
   await gw.wheelAtFocusedCenter(-300);
   const zc = await gw.focused();
@@ -144,12 +144,12 @@ test('a plugin root reframe persists without ascending (issue #190)', async ({ g
   const left = await gw.focused();
   expect(left.zoom, 'reframe actually changed the zoom').not.toBeCloseTo(1.0, 2);
 
-  // The handshake serves each plugin's persisted root view; poll it without
+  // The handshake serves each row's persisted root view; poll it without
   // ascending.
   await expect
     .poll(
       async () => {
-        const pl = (await gw.plugins()).find((x) => x.label === 'second');
+        const pl = (await gw.sources()).find((x) => x.label === 'second');
         return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 5_000 },
@@ -158,7 +158,7 @@ test('a plugin root reframe persists without ascending (issue #190)', async ({ g
 });
 
 test('ascending restores the parent viewport unchanged', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
 
@@ -197,7 +197,7 @@ test('a bare-URL boot restores the persisted home viewport', async ({ gw, window
   await expect
     .poll(
       async () => {
-        const pl = (await gw.plugins()).find((x) => x.label === 'home');
+        const pl = (await gw.sources()).find((x) => x.label === 'home');
         return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 10_000 },
@@ -254,7 +254,7 @@ test('a post-reload ascent restores the parent framing it was left at', async ({
   await expect
     .poll(
       async () => {
-        const pl = (await gw.plugins()).find((x) => x.label === 'home');
+        const pl = (await gw.sources()).find((x) => x.label === 'home');
         return Number(pl?.rootViewZoom ?? 0);
       },
       { timeout: 10_000 },

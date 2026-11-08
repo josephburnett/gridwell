@@ -19,14 +19,7 @@ const ROOT = makeRunDir();
 const BUDGET = path.join(__dirname, 'trace-budget.json');
 const QUIET_MS = 10_000;
 
-test.use({
-  extraPlugins: async ({}, use) => {
-    await use([
-      { kind: 'fs', name: 'code', config: { root: ROOT } },
-      { kind: 'proc', name: 'procs', config: { pid: String(process.pid) } },
-    ]);
-  },
-});
+test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
 
 async function tileAt(window: Page, gw: GridwellDriver, cx: number, cy: number): Promise<string> {
   const f = await gw.focused();
@@ -69,7 +62,7 @@ test('ordinary use does no work nobody asked for', async ({ gw, home, window }, 
     start = Date.now();
   };
 
-  await step('boot', () => gw.enterPlugin('home'));
+  await step('boot', () => gw.enterSource('home'));
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -95,8 +88,15 @@ test('ordinary use does no work nobody asked for', async ({ gw, home, window }, 
     await gw.ascendViaCrumb();
   });
 
-  await step('plugin', async () => {
-    await gw.enterPlugin('code');
+  // A change on disk while the directory is shown is told, and the read it
+  // causes is the event's.
+  await step('files', async () => {
+    await gw.enterSource('code (files)');
+    const here = await gw.focused();
+    fs.writeFileSync(path.join(ROOT, `told-${Date.now()}.md`), 'told\n');
+    await expect
+      .poll(() => window.evaluate((id: string) => (window as any).__gridwellTest.panes().find((p: any) => p.id === id).tileIds.length, here.id))
+      .toBeGreaterThan(here.tileIds.length);
     await gw.ascendViaCrumb();
   });
 

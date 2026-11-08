@@ -16,7 +16,7 @@ test('a stream that ends and reopens leaves its open, its end and the resync it 
   home,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   // The page's first stream ends cleanly before any event, as a node that
   // closed it would; the next one goes through.
   let ended = 0;
@@ -63,7 +63,7 @@ test("the id on the client's records is the session the node files its view unde
   home,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.waitIdle();
   const token = await loginToken(gw.origin, homePassword(home));
   let cid = '';
@@ -82,7 +82,7 @@ test("the id on the client's records is the session the node files its view unde
 });
 
 test('both halves of an rpc span name the entity the request is about', async ({ gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.waitIdle();
   const token = await loginToken(gw.origin, homePassword(home));
   const { cid, lines } = await dumpNow(window, gw.origin, token);
@@ -100,7 +100,7 @@ test('both halves of an rpc span name the entity the request is about', async ({
 });
 
 test('a notice pressed away leaves a record of how it went', async ({ electronApp, gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.waitIdle();
   // Dump logs puts up an info notice with no button, so a press on its row
   // dismisses it.
@@ -133,7 +133,7 @@ test('a notice pressed away leaves a record of how it went', async ({ electronAp
 });
 
 test('the pane tree records its split, zoom, swap and close', async ({ gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.waitIdle();
   const [first] = await gw.panes();
   await gw.splitFocusedPaneVertical();
@@ -172,7 +172,7 @@ test('the pane tree records its split, zoom, swap and close', async ({ gw, home,
 });
 
 test("a reload sends the page's last records by beacon, its unload among them", async ({ gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.waitIdle();
   const before: string = (await window.evaluate(() => (window as any).__gridwellTest.trace())).cid;
   await window.reload();
@@ -192,7 +192,7 @@ test("a reload sends the page's last records by beacon, its unload among them", 
 });
 
 test('a drop names how many tiles it carried and the cell it landed on', async ({ gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -219,7 +219,7 @@ test('a drop names how many tiles it carried and the cell it landed on', async (
 });
 
 test('a move the node never heard is taken back, and the dump says so', async ({ gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -246,7 +246,7 @@ test('a move the node never heard is taken back, and the dump says so', async ({
 });
 
 test('Clear selections reads as clearing all, not as one grid\'s select', async ({ electronApp, gw, home, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.waitIdle();
   const picked = pickFromNativeMenu(electronApp, 'Clear selections');
   await gw.rightClickCircle();

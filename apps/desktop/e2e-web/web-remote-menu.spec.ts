@@ -9,7 +9,7 @@ import { getGrid, tileAt } from '../e2e/oracle';
 
 // Descending into a node means being there. Two real nodes over a direct
 // connection, with no sshd anywhere: descending the connection lands on the
-// remote's home, the + menu inside that pane shows the remote node's plugins,
+// remote's home, the + menu inside that pane shows the remote node's sources,
 // exactly what a direct client of it sees, a primitive dragged from that menu
 // creates on the remote node, and dropping it into a local pane refuses
 // visibly, because a menu belongs to its node.
@@ -108,7 +108,7 @@ async function enterFarHome(
     .poll(
       async () => {
         const lp = await rpcJSON(world.local, 'Handshake', {});
-        const row = (lp.plugins ?? []).find((p: any) => p.connection && p.uuid?.endsWith('/farconn1'));
+        const row = (lp.sources ?? []).find((p: any) => p.connection && p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
@@ -117,11 +117,11 @@ async function enterFarHome(
     .not.toBe('');
   const farLp = await rpcJSON(world.far, 'Handshake', {});
   await rpcJSON(world.far, 'CreateTile', {
-    gridId: farLp.plugins[0].rootGridId,
+    gridId: farLp.sources[0].rootGridId,
     tile: { kind: 'text', x: 1, y: 1, w: 1, h: 1 },
   });
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -160,7 +160,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     .poll(
       async () => {
         const lp = await rpcJSON(world.local, 'Handshake', {});
-        const row = (lp.plugins ?? []).find((p: any) => p.connection && p.uuid?.endsWith('/farconn1'));
+        const row = (lp.sources ?? []).find((p: any) => p.connection && p.uuid?.endsWith('/farconn1'));
         farHomeGrid = row?.rootGridId ?? '';
         return farHomeGrid;
       },
@@ -168,12 +168,12 @@ test('the + menu inside a remote pane is the remote node, and its creations land
     )
     .not.toBe('');
   const farLp = await rpcJSON(world.far, 'Handshake', {});
-  expect(farHomeGrid.endsWith('/' + farLp.plugins[0].rootGridId), 'the landing is the remote HOME').toBe(
+  expect(farHomeGrid.endsWith('/' + farLp.sources[0].rootGridId), 'the landing is the remote HOME').toBe(
     true,
   );
 
   // ── A link door to the far home, dropped where the client looks ──
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -207,13 +207,13 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   await expect.poll(async () => (await gw.barName()).label).toBe('my far place');
 
   await gw.openMenu();
-  await gw.expandPlugins();
+  await gw.expandSources();
   await expect
     .poll(
       async () => {
         const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
         return (menu.items ?? [])
-          .filter((i: any) => i.isPlugin)
+          .filter((i: any) => i.isSwatch)
           .map((i: any) => i.label)
           .join(',');
       },
@@ -228,7 +228,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   const icx = Math.round(inside.cx);
   const icy = Math.round(inside.cy);
   await gw.dragCreate('markdown', icx, icy);
-  const farRootBare = farLp.plugins[0].rootGridId;
+  const farRootBare = farLp.sources[0].rootGridId;
   const farSnap = await getGrid(world.far.origin, farRootBare);
   expect(tileAt(farSnap, 'text', icx, icy), 'the text tile exists ON THE FAR NODE').toBeTruthy();
 
@@ -250,7 +250,7 @@ test('the + menu inside a remote pane is the remote node, and its creations land
   await gw.clickScreen(inside.x + 20, inside.y + 20);
   await gw.openMenu();
   const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
-  const md = menu.items.find((i: any) => !i.isPlugin && i.kind === 'markdown');
+  const md = menu.items.find((i: any) => !i.isSwatch && i.kind === 'markdown');
   expect(md, 'the remote menu offers markdown').toBeTruthy();
   const target = await gw.cellCenter(sib.id, Math.round(sib.cx) + 1, Math.round(sib.cy) + 1);
   const before = ((await gw.getGrid(f.gridID)).tiles ?? []).length;
@@ -299,7 +299,7 @@ test('a dark connection serves the cached grid, and the chip says so', async ({ 
 // docs/freshness.md's gap list left open:
 //
 //   (a) the GridChanged arm clears the per-grid failure latch and refetches.
-//   (b) reportPluginHealth folds the transition into the cache and kicks a
+//   (b) reportSourceHealth folds the transition into the cache and kicks a
 //       resync scoped to the source the event names, in BOTH directions, and
 //       its sticky notice resolves on recovery. This grid is served through the
 //       connection that flapped, so it is inside that scope (cache.ServedBy),
@@ -318,7 +318,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
   const { farHomeGrid } = await enterFarHome(gw, world);
   const notices = async (): Promise<{ source: string; message: string }[]> =>
     (await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? [];
-  const health = async () => (await notices()).filter((n) => String(n.source).startsWith('plugin:'));
+  const health = async () => (await notices()).filter((n) => String(n.source).startsWith('source:'));
   const focusedCached = async () => {
     const p = (await gw.panes()).find((q) => q.focused);
     return p?.gridID === farHomeGrid ? p.cached === true : null;
@@ -367,7 +367,7 @@ test('a revived connection clears its chip and its notice with nobody touching a
 // menu once per node namespace and holds a claim on that namespace while the
 // read is out; a request the network swallows, never fulfilled and never
 // aborted, would hold it for the life of the page, leaving the remote pane's +
-// menu with no plugin section at all and nothing on the notice row.
+// menu with no swatch section at all and nothing on the notice row.
 //
 // The read is bounded, and its expiry latches the namespace Unreachable, so
 // the menu fills itself in on the next backstop tick with the link in exactly
@@ -402,7 +402,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
   await gw.openMenu();
   const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
   expect(menu.open, 'the remote pane has its menu open').toBe(true);
-  expect(menu.toggle.present, 'the swallowed read leaves no plugin section to unfold').toBe(false);
+  expect(menu.toggle.present, 'the swallowed read leaves no swatch section to unfold').toBe(false);
 
   // No user action beyond keeping the menu open: the bounded read gives up,
   // says so on the notice row, and the draw of the menu after the backstop tick
@@ -420,7 +420,7 @@ test('a menu read the network swallows does not latch the remote menu empty', as
         }
         const now = await window.evaluate(() => (window as any).__gridwellTest.menu());
         return (now.items ?? [])
-          .filter((i: any) => i.isPlugin)
+          .filter((i: any) => i.isSwatch)
           .map((i: any) => i.label)
           .join(',');
       },

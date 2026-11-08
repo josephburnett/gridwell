@@ -41,7 +41,7 @@ async function navigate(electronApp: any, mark: string, target: string): Promise
 
 test('an ephemeral url visit inside a workspace tile reopens where it was left', async ({ electronApp, window, gw }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
@@ -95,7 +95,7 @@ test('an ephemeral url visit inside a workspace tile reopens where it was left',
 
 test('an ephemeral url visit that wrote its address is still deleted on ascent', async ({ electronApp, window, gw }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const home = await gw.focused();
 
@@ -166,7 +166,7 @@ async function freezeViaCircle(electronApp: any, window: any): Promise<void> {
 }
 
 test('an ephemeral url visit freezes like a placed tile, and stays frozen in its workspace', async ({ electronApp, window, gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
@@ -200,7 +200,7 @@ test('an ephemeral url visit freezes like a placed tile, and stays frozen in its
 });
 
 test('a frozen ephemeral url visit is still deleted on ascent', async ({ electronApp, window, gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const visit = await openVisit(window, gw, `${gw.origin}/wasm_exec.js?frzgone=1`);
   const live = liveURL(electronApp, 'frzgone=');
@@ -220,7 +220,7 @@ test('a frozen ephemeral url visit is still deleted on ascent', async ({ electro
 });
 
 test('an ephemeral url visit keeps its content zoom in its workspace', async ({ electronApp, window, gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);

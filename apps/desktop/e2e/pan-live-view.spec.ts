@@ -14,7 +14,7 @@ test('a pan in one pane never parks the live url view in another', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const panes = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(panes.length, 'the split made two side-by-side panes').toBe(2);

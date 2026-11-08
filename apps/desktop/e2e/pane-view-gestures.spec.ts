@@ -6,7 +6,7 @@ import { test, expect } from './fixtures';
 // zoom for the wheel, and the framed grid id and path for an ascend.
 
 test('wheel zoom and drag-pan reframe the focused pane', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const before = await gw.focused();
 
   // Wheel up, a negative dy, zooms in: the focused pane's zoom changes.
@@ -25,7 +25,7 @@ test('wheel zoom and drag-pan reframe the focused pane', async ({ gw }) => {
 });
 
 test('right-drag splits the focused pane into two — another view of the same grid', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const before = await gw.focused();
   expect((await gw.panes()).length, 'starts with one pane').toBe(1);
 
@@ -47,7 +47,7 @@ test('right-drag splits the focused pane into two — another view of the same g
 test('left-drag resizes the divider both ways; dragging to the edge closes the side', async ({
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
@@ -70,7 +70,7 @@ test('left-drag resizes the divider both ways; dragging to the edge closes the s
 test('right-drag from the divider splits (a new pane); short of the minimum it cancels', async ({
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   expect((await gw.panes()).length).toBe(2);
 
@@ -92,7 +92,7 @@ test('a border right-drag flips direction mid-gesture and splits where it releas
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);
@@ -118,7 +118,7 @@ test('a border right-drag flips direction mid-gesture and splits where it releas
 });
 
 test('crumb click ascends; a right-click on the slot no longer does (#222)', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const root = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
@@ -140,7 +140,7 @@ test('crumb click ascends; a right-click on the slot no longer does (#222)', asy
 });
 
 test('middle-click ascends out of a descended door', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const root = (await gw.focused()).gridID;
   const cx = Math.round((await gw.focused()).cx);
   const cy = Math.round((await gw.focused()).cy);
@@ -161,7 +161,7 @@ test('middle-click ascends out of a descended door', async ({ gw }) => {
 // same press: one click on a tile in an unfocused pane descends into it, and
 // with ctrl held it descends in a split below.
 test('one click on a tile in an unfocused pane focuses it and descends', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
@@ -181,7 +181,7 @@ test('one click on a tile in an unfocused pane focuses it and descends', async (
 });
 
 test('one ctrl+click on a tile in an unfocused pane descends in a split below', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const a = await gw.focused();
   const cx = Math.round(a.cx);
   const cy = Math.round(a.cy) - 1;
@@ -212,7 +212,7 @@ test.describe('stack hygiene', () => {
 
   test('a namespace crossing and a door round trip leave the place stack empty', async ({ gw }) => {
     const home = (await gw.focused()).anchor;
-    await gw.enterPlugin('second'); // the + menu crossing pushes one frame
+    await gw.enterSource('second'); // the + menu crossing pushes one frame
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy) - 1;
@@ -221,7 +221,7 @@ test.describe('stack hygiene', () => {
 
     await gw.descendCell(cx, cy); // the door descent pushes a second frame
     let cur = (await gw.panes()).find((p) => p.id === f.id)!;
-    expect(cur.placeDepth, 'two doors deep: a door, then the plugin link').toBe(2);
+    expect(cur.placeDepth, 'two doors deep: the swatch crossing, then the door').toBe(2);
 
     // Pane-center clicks: the ascend is position-independent, and a computed
     // cell center can land off-pane at the child grid's high zoom, which is the

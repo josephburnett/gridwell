@@ -9,7 +9,7 @@ import { tileAt } from './oracle';
 // looks like.
 
 test('a text tile created in a descended grid is rendered, not just persisted', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   let f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -47,7 +47,7 @@ test('a text tile created in a descended grid is rendered, not just persisted', 
 // exist on the server and both must be rendered. Picking one up must not make
 // the other vanish until it is put down.
 test('copying a tile leaves both the original and the copy rendered', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -85,7 +85,7 @@ test('copying a tile leaves both the original and the copy rendered', async ({ g
 
 // A moved tile is still drawn, now at the destination cell.
 test('a moved tile stays rendered at its destination', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -108,7 +108,7 @@ test('a moved tile stays rendered at its destination', async ({ gw }) => {
 // A delete must reach the render too, rather than leaving a ghost the cache
 // still draws.
 test('a deleted tile is removed from the render', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

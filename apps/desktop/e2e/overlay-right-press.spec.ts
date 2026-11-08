@@ -19,7 +19,7 @@ async function rightDragSplitFromOverlay(gw: any): Promise<number> {
 }
 
 test('a right-drag started on the text overlay splits the pane', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -35,7 +35,7 @@ test('a right-drag started on the text overlay splits the pane', async ({ gw }) 
 });
 
 test('a right-drag started on the shell overlay splits the pane', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

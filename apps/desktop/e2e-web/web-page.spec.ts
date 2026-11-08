@@ -17,19 +17,19 @@ const PNG_1X1 = Buffer.from(
 const picsDir = makeRunDir();
 fs.writeFileSync(path.join(picsDir, 'cat.png'), PNG_1X1);
 
-test.use({ extraPlugins: [{ kind: 'fs', name: 'pics', config: { root: picsDir } }] });
+test.use({ filesRoots: [{ root: picsDir, label: 'pics' }] });
 
-test('an fs image tile: the circle opens the /content/ page in a new tab', async ({
+test('an image file tile: the circle opens the /content/ page in a new tab', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('pics');
+  await gw.enterSource('pics (files)');
   const f = await gw.focused();
   const snap = await gw.getGrid(f.gridID);
   const cat = (snap.tiles ?? []).find((t) => t.altText === 'cat.png')!;
-  expect(cat, 'the fs root grid lists cat.png').toBeTruthy();
+  expect(cat, 'the root grid lists cat.png').toBeTruthy();
   expect(cat.kind, 'an image file is a url tile').toBe('url');
-  expect(cat.servesPage, 'whose page the plugin serves at the API').toBe(true);
+  expect(cat.servesPage, 'whose page the node serves at the API').toBe(true);
 
   // With no bridge the tile stays frozen, through DecideAutoLive's browser arm.
   // No dead modal and no error: the pane presents the frozen preview.

@@ -55,7 +55,7 @@ function rightDragInView(app: ElectronApplication, marker: string, paneId: strin
 }
 
 test('a right-drag started inside a live url view previews and lands where it is released', async ({ electronApp, gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

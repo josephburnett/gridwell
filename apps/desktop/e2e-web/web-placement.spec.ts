@@ -14,7 +14,7 @@ const clientTileAt = (window: any, paneID: string, x: number, y: number): Promis
 
 test('placement: a move and a resize are the client\'s before their echo', async ({ gw, window }) => {
   await installEchoGate(window);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -42,7 +42,7 @@ test('placement: a move and a resize are the client\'s before their echo', async
 
 test('placement: a refused move goes back and says so', async ({ gw, window, serve }) => {
   await installEchoGate(window);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

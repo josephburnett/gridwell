@@ -40,7 +40,7 @@ test('a pan inside a workspace tile writes the layout blob once and no framing r
 }) => {
   const token = await loginToken(gw.origin, homePassword(home));
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -115,7 +115,7 @@ test("an old blob's retired viewport is not read: a leaf restores to its grid's 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -175,7 +175,7 @@ test("a text leaf's scroll is the layout's: a scroll writes the blob and no SetT
   const token = await loginToken(gw.origin, homePassword(home));
   const c = await gw.cadences();
   const settleMs = Math.max(c.workspaceSaveMs, c.framingSaveMs);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -249,7 +249,7 @@ test('inside a workspace tile a document scrolled and left reopens where it was 
 }) => {
   const c = await gw.cadences();
   const settleMs = Math.max(c.workspaceSaveMs, c.framingSaveMs);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

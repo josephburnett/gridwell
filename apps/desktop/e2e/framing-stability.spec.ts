@@ -9,7 +9,7 @@ import { makeRunDir } from './homes';
 // persists its viewport.
 
 const FS_ROOT = makeRunDir();
-// A second fs root, with a document and a subdirectory in it: the host-file
+// A second files root, with a document and a subdirectory in it: the host-file
 // scroll test needs a file to descend into and the mid-descent reframe needs a
 // door. FS_ROOT stays empty for the root-grid pan test, whose press would
 // otherwise land on a tile instead of the grid.
@@ -17,14 +17,14 @@ const DOC_ROOT = makeRunDir();
 fs.writeFileSync(path.join(DOC_ROOT, 'long.md'), '# long\n\n' + 'line\n\n'.repeat(200));
 fs.mkdirSync(path.join(DOC_ROOT, 'papers'));
 fs.writeFileSync(path.join(DOC_ROOT, 'papers', 'one.md'), '# one\n');
-// Two plugins go through the FIXTURE form. Playwright reads a two-element array
+// Two roots go through the FIXTURE form. Playwright reads a two-element array
 // option as its [value, options] tuple, so a literal pair would silently seed
-// only the first, as a home with no plugins at all.
+// only the first.
 test.use({
-  extraPlugins: async ({}, use) => {
+  filesRoots: async ({}, use) => {
     await use([
-      { kind: 'fs', name: 'pics', config: { root: FS_ROOT } },
-      { kind: 'fs', name: 'docs', config: { root: DOC_ROOT } },
+      { root: FS_ROOT, label: 'pics' },
+      { root: DOC_ROOT, label: 'docs' },
     ]);
   },
 });
@@ -32,7 +32,7 @@ test.use({
 // A framing save that races a version-bumping write retries with a fresh claim
 // instead of dropping silently.
 test('a framing save survives a racing version bump', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -57,21 +57,21 @@ test('a framing save survives a racing version bump', async ({ gw, window }) => 
   void window;
 });
 
-// An fs plugin root persists its viewport; the root framing write must not be
-// swallowed on the plugin side.
-test('an fs root grid keeps its viewport across leave and re-entry', async ({ gw }) => {
-  await gw.enterPlugin('pics');
+// A files root persists its viewport; the root framing write must not be
+// swallowed on the files' side.
+test('a files root grid keeps its viewport across leave and re-entry', async ({ gw }) => {
+  await gw.enterSource('pics (files)');
   const grid = (await gw.focused()).gridID;
   await gw.wheelAtFocusedCenter(-240);
   const zc = await gw.focused();
   await gw.panFocusedGrid(Math.round(zc.cx), Math.round(zc.cy), Math.round(zc.cx) - 1, Math.round(zc.cy));
   const left = await gw.focused();
   await gw.ascendViaCrumb();
-  await gw.enterPlugin('pics');
+  await gw.enterSource('pics (files)');
   const back = await gw.focused();
   expect(back.gridID).toBe(grid);
-  expect(back.zoom, 'fs root zoom restored').toBeCloseTo(left.zoom, 1);
-  expect(Math.abs(back.cx - left.cx), 'fs root cx restored').toBeLessThan(0.51);
+  expect(back.zoom, 'root zoom restored').toBeCloseTo(left.zoom, 1);
+  expect(Math.abs(back.cx - left.cx), 'root cx restored').toBeLessThan(0.51);
 });
 
 // One pan, one write. Every draw of a drag arms the framing persister, so a
@@ -85,7 +85,7 @@ test('a pan longer than the settle window writes only where it came to rest', as
   window,
 }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('pics');
+  await gw.enterSource('pics (files)');
   const p = await gw.focused();
   const writes = () =>
     window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetFraming ?? 0));
@@ -116,7 +116,7 @@ test('a pan longer than the settle window writes only where it came to rest', as
 });
 
 // A root grid's framing is three numbers, and the event that announces it
-// carries them. Refetching the listing to learn them cost a plugin List per
+// carries them. Refetching the listing to learn them cost a directory read per
 // pan, and an ssh round trip per pan on a remote grid. Another writer's
 // framing reaches this client's door the same way, and moves no pane.
 test('reframing a root grid refetches nothing, and a foreign reframe arrives as the fact', async ({
@@ -124,7 +124,7 @@ test('reframing a root grid refetches nothing, and a foreign reframe arrives as 
   window,
 }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('pics');
+  await gw.enterSource('pics (files)');
   const p = await gw.focused();
   await gw.waitIdle();
   await settle(window, c.framingSaveMs);
@@ -145,7 +145,7 @@ test('reframing a root grid refetches nothing, and a foreign reframe arrives as 
   expect(listings(), "the pane's own framing write refetches no listing").toEqual([]);
 
   const door = async () =>
-    (await gw.plugins()).flatMap((pl) => pl.pluginGrids).find((e) => e.gridID === p.gridID)!;
+    (await gw.sources()).flatMap((pl) => pl.sourceGrids).find((e) => e.gridID === p.gridID)!;
   const rested = await gw.focused();
   await setRootFraming(gw.origin, p.gridID, 7, -3, 2.5);
   await expect
@@ -167,7 +167,7 @@ test('reframing a root grid refetches nothing, and a foreign reframe arrives as 
 // A reload fired inside the settle window still lands the save: the unload flush
 // rides beacons that outlive the page.
 test('a reload inside the settle window does not lose the framing', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -192,7 +192,7 @@ test('a reload inside the settle window does not lose the framing', async ({ gw,
 
 // Text scroll persists on the settle tick, with no ascent.
 test('text scroll persists without an ascent', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -225,7 +225,7 @@ test('text scroll persists without an ascent', async ({ gw, window }) => {
 for (const mode of ['text', 'rendered'] as const) {
   test(`a ${mode} overlay scroll persists on the settle alone`, async ({ gw, window }) => {
     const c = await gw.cadences();
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const home = await gw.focused();
     const cx = Math.round(home.cx);
     const cy = Math.round(home.cy);
@@ -272,17 +272,17 @@ for (const mode of ['text', 'rendered'] as const) {
   });
 }
 
-// A host file scrolls like any other text tile. The body is the plugin's;
-// where the user left the scroll is the node's, held in the plugin's
-// namespace of the store (#236, #270).
+// A host file scrolls like any other text tile. The body is the disk's;
+// where the user left the scroll is the node's, held on the file's row in the
+// store (#236, #270).
 //
-// The scroll is also this entry's FIRST durable fact, so it mints the entry's
-// row while the reader is standing on the entry's id. The pane's content id must
+// The scroll is also this file's FIRST durable fact, so it mints the file's
+// row while the reader is standing on the file's id. The pane's content id must
 // not move under them (#297): a rename would hide the rendered overlay mid-read
 // and leave the URL naming a tile the next listing does not contain, so the
-// reload would land at the plugin root.
+// reload would land at the files root.
 test('a host file keeps its scroll, and its id, across a reload', async ({ gw, window }) => {
-  await gw.enterPlugin('docs');
+  await gw.enterSource('docs (files)');
   const root = (await gw.focused()).gridID;
   const at = async () => (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'long.md')!;
   const doc = await at();
@@ -340,13 +340,13 @@ test('a host file keeps its scroll, and its id, across a reload', async ({ gw, w
     .toBeGreaterThan(0);
 });
 
-// A directory door reframed MID-DESCENT is that entry's first durable fact,
+// A directory door reframed MID-DESCENT is that directory's first durable fact,
 // and the URL is carrying the door's id while it happens. If the mint renamed
 // the door, the refetched listing would not hold the id the URL names,
-// urlwalk.Walk would skip it, and the reload would drop the user at the plugin
+// urlwalk.Walk would skip it, and the reload would drop the user at the files
 // root. #297
 test('a directory reframed mid-descent is still there after a reload', async ({ gw, window }) => {
-  await gw.enterPlugin('docs');
+  await gw.enterSource('docs (files)');
   const root = (await gw.focused()).gridID;
   const dir = (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'papers');
   expect(dir, 'papers listed').toBeTruthy();
@@ -379,11 +379,11 @@ test('a directory reframed mid-descent is still there after a reload', async ({ 
   ).toBeGreaterThan(0);
 });
 
-// A plugin door's framing is its tile's fact and changes no listing, so zooming
-// inside a directory refetches nothing of the grid that holds its door.
-test('reframing inside a plugin door refetches nothing of its parent', async ({ gw, window }) => {
+// A directory door's framing is its tile's fact and changes no listing, so
+// zooming inside a directory refetches nothing of the grid that holds its door.
+test('reframing inside a directory door refetches nothing of its parent', async ({ gw, window }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('docs');
+  await gw.enterSource('docs (files)');
   const root = (await gw.focused()).gridID;
   const dir = (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'papers');
   expect(dir, 'papers listed').toBeTruthy();
@@ -411,11 +411,11 @@ test('reframing inside a plugin door refetches nothing of its parent', async ({ 
   ).toEqual([]);
 });
 
-// A plugin document's scroll is its tile's fact and changes no listing, so
-// scrolling it refetches nothing of the grid that lists it.
-test('scrolling a plugin document refetches nothing of its parent', async ({ gw, window }) => {
+// A file's scroll is its tile's fact and changes no listing, so scrolling it
+// refetches nothing of the grid that lists it.
+test('scrolling a file refetches nothing of its parent', async ({ gw, window }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('docs');
+  await gw.enterSource('docs (files)');
   const root = (await gw.focused()).gridID;
   const doc = (await gw.getGrid(root)).tiles!.find((t) => t.altText === 'long.md');
   expect(doc, 'long.md listed').toBeTruthy();
@@ -461,7 +461,7 @@ test('scrolling a plugin document refetches nothing of its parent', async ({ gw,
 // One active surface per grid: a passive sibling pane never overwrites the
 // focused pane's persisted framing.
 test('a split sibling never overwrites the focused pane framing', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -495,7 +495,7 @@ test('a split sibling never overwrites the focused pane framing', async ({ gw, w
 // writes the ratio at the pane it was made in.
 test('a split writes no framing until a pane moves', async ({ gw, window }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -537,7 +537,7 @@ test('a split writes no framing until a pane moves', async ({ gw, window }) => {
 // Only persistFraming decides what a framing write carries, so every writer
 // gets the same answer.
 test('a mid-flight viewport never becomes the framing that persists', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -546,9 +546,9 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
 
   // Settle a root framing the user chose, so there is something to keep.
   await gw.wheelAtFocusedCenter(-240);
-  const uuid = (await gw.plugins()).find((p) => p.label === 'home')!.uuid;
+  const uuid = (await gw.sources()).find((p) => p.label === 'home')!.uuid;
   const rootView = async () => {
-    const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
+    const pl = (await gw.sources()).find((p) => p.uuid === uuid)!;
     return { cx: pl.rootViewCx, cy: pl.rootViewCy, zoom: pl.rootViewZoom };
   };
   await expect.poll(async () => (await rootView()).zoom, { timeout: 10_000 }).toBeGreaterThan(0);
@@ -585,16 +585,16 @@ test('a mid-flight viewport never becomes the framing that persists', async ({ g
 // the first settle tick after it is merely looked at, and a root grid's stamp
 // is derived from the window it was looked at in.
 test('looking at a grid never stamps a framing on it', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
   await gw.openMenu();
   await gw.dragCreate('door', cx, cy);
-  const uuid = (await gw.plugins()).find((p) => p.label === 'home')!.uuid;
+  const uuid = (await gw.sources()).find((p) => p.label === 'home')!.uuid;
   // Two settle windows with no gesture in them at all.
   await window.waitForTimeout(1500);
-  const pl = (await gw.plugins()).find((p) => p.uuid === uuid)!;
+  const pl = (await gw.sources()).find((p) => p.uuid === uuid)!;
   expect(Number(pl.rootViewZoom ?? 0), 'the root grid was stamped by being looked at').toBe(0);
 
   // A descent is a look too: the door it entered by keeps its zero.

@@ -5,15 +5,15 @@ import { makeRunDir } from './homes';
 import { createLeafLink, getGrid } from './oracle';
 
 // A body the source already knows it would refuse is never offered for
-// editing: fs declares a file the process may not write read-only on its
-// entry (Entry.read_only), so its descent shows the file with no editor and
-// the bar says why, while a sibling it can write opens in the editor.
+// editing: the files mark a file the process may not write read-only on its
+// tile (Tile.read_only), so its descent shows the file with no editor and the
+// bar says why, while a sibling it can write opens in the editor.
 
 const ROOT = makeRunDir();
-test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
+test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
 
 async function descendInto(gw: any, name: string) {
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   const f = await gw.focused();
   const tile = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t: any) => t.altText === name)!;
   expect(tile, `${name} listed`).toBeTruthy();
@@ -72,8 +72,7 @@ test('a home link to it opens read-only too', async ({ gw, window }) => {
   fs.writeFileSync(file, 'look, no hands\n');
   fs.chmodSync(file, 0o444);
 
-  const code = (await gw.plugins()).find((p) => p.label === 'code')!;
-  const dir = await getGrid(gw.origin, code.pluginGrids[0].gridID);
+  const dir = await getGrid(gw.origin, await gw.swatchGridID('code (files)'));
   const target = (dir.tiles ?? []).find((t: any) => t.altText === 'linked.txt')!;
   expect(target, 'linked.txt listed').toBeTruthy();
   const f = await gw.focused();

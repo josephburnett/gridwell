@@ -8,22 +8,22 @@ import { installEchoGate, holdEchoFor } from './echo';
 // CDP must drive the canvas as a finger on a phone would. Each gesture is
 // verified against pane and server state, never pixels.
 
-test('touch: tap opens the + menu and descends into a plugin', async ({ gw, window }) => {
+test('touch: tap opens the + menu and descends through a swatch', async ({ gw, window }) => {
   // Boot already sits at home's root, and every namespace lives on the + menu,
   // so the tap gesture is verified against that portal. The descent pushes a
   // frame for the return trip.
-  await gw.plugins();
+  await gw.sources();
   const before = await gw.focused();
   const menu = await gw.menu();
   await window.touchscreen.tap(menu.plusX, menu.plusY);
   await window.waitForFunction(() => (window as any).__gridwellTest.menu().open, null, {
     timeout: 5_000,
   });
-  // The plugin section is folded on every opening, and a finger opens it by
+  // The swatch section is folded on every opening, and a finger opens it by
   // tapping the chevron strip, which is a press like any other.
   const folded = await gw.menu();
   expect(folded.toggle.present, 'the folded section offers its chevron').toBe(true);
-  expect(folded.items.some((i) => i.isPlugin), 'and hides the plugin swatches').toBe(false);
+  expect(folded.items.some((i) => i.isSwatch), 'and hides the swatches').toBe(false);
   await window.touchscreen.tap(
     folded.toggle.x + folded.toggle.w / 2,
     folded.toggle.y + folded.toggle.h / 2,
@@ -34,17 +34,17 @@ test('touch: tap opens the + menu and descends into a plugin', async ({ gw, wind
     { timeout: 5_000 },
   );
   const open = await gw.menu();
-  const swatch = open.items.find((i) => i.isPlugin && i.label === 'home');
-  expect(swatch, 'plugin swatch present in the + menu').toBeTruthy();
+  const swatch = open.items.find((i) => i.isSwatch && i.label === 'home');
+  expect(swatch, 'the home swatch is in the + menu').toBeTruthy();
   await window.touchscreen.tap(swatch!.x + swatch!.w / 2, swatch!.y + swatch!.h / 2);
   await gw.waitIdle();
   const f = await gw.focused();
-  expect(f.gridID, 'tap descended to the plugin root').toBe(before.gridID);
+  expect(f.gridID, "tap descended to home's root").toBe(before.gridID);
   expect(f.placeDepth, 'the tap ran the descent (one frame pushed)').toBe(1);
 });
 
 test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   let f = await gw.focused();
   const z0 = f.zoom;
   const center = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
@@ -62,7 +62,7 @@ test('touch: pinch zooms the focused grid at the pinch midpoint', async ({ gw, w
 });
 
 test('touch: long-press-drag from the right edge splits the pane', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const before = (await gw.panes()).length;
   const y = f.y + f.h / 2;
@@ -77,7 +77,7 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
   // The ascent gesture is the crumb click, and on touch that is a plain tap on
   // the second-to-last chain crumb. The canvas translation routes it as the left
   // mousedown the bar hit-test acts on.
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -100,7 +100,7 @@ test('touch: tapping the previous crumb ascends a text descent (#222)', async ({
 
 test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, window }) => {
   await installEchoGate(window);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -164,7 +164,7 @@ test('touch: drag moves a tile; two-finger tap ascends a descent', async ({ gw, 
 });
 
 test('touch: a long-press lifted in place toggles the tile in its grid\'s selection', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -194,7 +194,7 @@ test('touch: a long-press lifted in place toggles the tile in its grid\'s select
 // the circle it opens the circle's menu, and no left press follows to open the
 // + menu over it.
 test('touch: a long-press on the circle opens its menu and nothing else', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await longPress(window, await gw.circleCenter());
   const popover = window.locator('#gw-circle-menu');
   await popover.waitFor({ timeout: 5_000 });
@@ -209,7 +209,7 @@ test('touch: a long-press lifted in place on a door crumb toggles the door in it
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f0 = await gw.focused();
   const cx = Math.round(f0.cx);
   const cy = Math.round(f0.cy);

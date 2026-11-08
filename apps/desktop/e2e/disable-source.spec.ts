@@ -2,7 +2,7 @@ import { test, expect } from './fixtures';
 import { getGrid } from './oracle';
 
 // A connection that will not answer can be switched off from its health
-// notice until the node restarts (plugin.Registry.Disable). The seam runs from
+// notice until the node restarts (connection.Server.Disable). The seam runs from
 // the button the notice row draws (errsurface.Offer), through the verb, to the
 // node's health event, which is what takes the notice down; the press itself
 // clears nothing. Nobody answers at 127.0.0.1:1, so the connection is down
@@ -21,10 +21,10 @@ async function notices(window: any): Promise<any[]> {
 }
 
 test('a source that will not answer is disabled from its notice and stays dark', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
-  const away = (await gw.plugins()).find((p) => p.label === 'away')!;
+  await gw.enterSource('home');
+  const away = (await gw.sources()).find((p) => p.label === 'away')!;
   expect(away, 'the connection is declared').toBeTruthy();
-  const source = 'plugin:' + away.uuid;
+  const source = 'source:' + away.uuid;
   const health = async () => (await notices(window)).find((n: any) => n.source === source);
 
   await expect
@@ -58,7 +58,7 @@ test('a source that will not answer is disabled from its notice and stays dark',
   // nothing.
   await window.reload();
   await window.waitForFunction(() => !!(window as any).__gridwellTest, null, { timeout: 30_000 });
-  await gw.plugins();
+  await gw.sources();
   await gw.waitIdle();
   await window.waitForTimeout(2_000);
   expect(await health(), 'no notice comes back for a disabled source').toBeUndefined();

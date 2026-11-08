@@ -9,7 +9,7 @@ import { tileAt } from '../e2e/oracle';
 test.use({ deviceScaleFactor: 2 });
 
 test('gestures at deviceScaleFactor 2: move, resize, delete, pane descent', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

@@ -16,7 +16,7 @@ test('the + menu over a stacked live url pane keeps its own release', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // Two stacked panes.
   await gw.splitFocusedPaneHorizontal();
@@ -49,7 +49,7 @@ test('the + menu over a stacked live url pane keeps its own release', async ({
   await gw.openMenu();
 
   const menu = await gw.menu();
-  const swatch = menu.items.find((i) => !i.isPlugin && i.kind === 'url');
+  const swatch = menu.items.find((i) => !i.isSwatch && i.kind === 'url');
   expect(swatch, 'the url swatch is in the menu').toBeTruthy();
   const cx = swatch!.x + swatch!.w / 2;
   const cy = swatch!.y + swatch!.h / 2;

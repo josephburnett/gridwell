@@ -5,7 +5,7 @@ import { test, expect } from './fixtures';
 // recently (wsbar.BandFocus).
 
 test('a click beside the bar focuses the most recent pane of the column above', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const two = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(two.length).toBe(2);

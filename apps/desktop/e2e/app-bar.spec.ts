@@ -7,7 +7,7 @@ import { test, expect } from './fixtures';
 // through (a left click focuses the column above; bar-row-focus.spec.ts).
 
 test('one bar rides the focused pane, in a band reserved once', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const winW = await window.evaluate(() => globalThis.innerWidth);
   const bar1 = await gw.bar();
   const solo = (await gw.panes())[0];

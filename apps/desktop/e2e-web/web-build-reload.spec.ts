@@ -85,7 +85,7 @@ test('a tab whose node changed build offers the reload and lands where it was wh
   expect(pageBuild, 'the served client is stamped').not.toBe('');
   expect(await nodeBuild(node.served), 'the node serves its own build').toBe(pageBuild);
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -166,7 +166,7 @@ test('a tab whose node changed build offers the reload and lands where it was wh
 });
 
 test('a tab holding unsaved text keeps it on screen and says to copy it first', async ({ gw, window, node }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

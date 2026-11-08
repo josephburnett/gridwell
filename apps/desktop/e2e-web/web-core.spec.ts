@@ -1,12 +1,12 @@
 import { test, expect, authHeaders } from './fixtures';
 import { tileAt } from '../e2e/oracle';
 
-// Crosses the browser-mode seam: the full core loop, boot, enter a plugin,
+// Crosses the browser-mode seam: the full core loop, boot, enter home,
 // create a tile, descend, type, persist, must work with no Electron shell and no
 // window.gridwell bridge, against the same server the desktop uses. The errors()
 // hook at the end is the oracle for nothing having degraded silently.
 test('the plain-browser client boots, creates, and edits', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -32,12 +32,12 @@ test('the plain-browser client boots, creates, and edits', async ({ gw, window }
 // browser has the same attach capability the desktop has and the menu offers
 // the shell swatch. A shell tile made elsewhere renders here too.
 test('the browser offers shell creation and views shell tiles fine', async ({ gw, window, serve }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
 
   await gw.openMenu();
   const menu = await gw.menu();
-  const primitives = menu.items.filter((i: any) => !i.isPlugin).map((i: any) => i.kind);
+  const primitives = menu.items.filter((i: any) => !i.isSwatch).map((i: any) => i.kind);
   expect(primitives, 'url stays creatable in the browser').toContain('url');
   expect(primitives, 'the browser attaches PTYs now — the swatch is offered').toContain('shell');
   await window.keyboard.press("Escape");

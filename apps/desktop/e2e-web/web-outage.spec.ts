@@ -44,7 +44,7 @@ test('typing survives a server outage and saves itself after the restart', async
   window,
   outage,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -114,7 +114,7 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
   // fetch is bounded, and the bound's expiry latches the grid Unreachable, so
   // the pane comes back on the next backstop tick.
   test.setTimeout(150_000);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -195,7 +195,7 @@ test('a grid fetch the network swallows does not latch "loading" forever', async
 });
 
 test('framing settled during an outage lands after the restart', async ({ gw, outage }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -243,10 +243,10 @@ test('an ephemeral visit left during an outage parks its delete and drains on re
   window,
   outage,
 }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
-  expect(scratchGridID, 'the home plugin advertises a scratch grid').toBeTruthy();
+  const scratchGridID = (await gw.sources()).find((l) => l.label === 'home')!.scratchGridID;
+  expect(scratchGridID, 'home advertises a scratch grid').toBeTruthy();
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // Shells ride the web API, so this is the browser's own visit.
   await gw.clickMenuSwatch('shell');
@@ -283,7 +283,7 @@ test('a write the network swallows parks in the outbox and drains itself', async
   window,
 }) => {
   test.setTimeout(150_000);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -353,8 +353,8 @@ test('the backstop re-posts a parked write on its interval, not before', async (
   gw,
   window,
 }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
-  await gw.enterPlugin('home');
+  const scratchGridID = (await gw.sources()).find((l) => l.label === 'home')!.scratchGridID;
+  await gw.enterSource('home');
 
   await gw.clickMenuSwatch('shell');
   await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');

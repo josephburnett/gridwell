@@ -24,10 +24,10 @@ const zoomPosts = (window: any): Promise<number> =>
   window.evaluate(() => Number((window as any).__gridwellTest.persistPosts().SetContentZoom ?? 0));
 
 test('Ctrl+= in an ephemeral shell zooms live and persists like a placed tile', async ({ window, gw }) => {
-  const scratchGridID = (await gw.plugins()).find((l) => l.label === 'home')!.scratchGridID;
+  const scratchGridID = (await gw.sources()).find((l) => l.label === 'home')!.scratchGridID;
   expect(scratchGridID, 'the home node advertises a scratch grid').toBeTruthy();
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // A click, not a drag, creates an ephemeral shell off-grid and descends.
   await gw.clickMenuSwatch('shell');

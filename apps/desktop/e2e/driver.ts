@@ -52,9 +52,9 @@ export interface Cadences {
 export interface MenuItem {
   index: number;
   // Door swatches sit in the top row, one per declared door. A click
-  // descends into it, a drag drops a door to another namespace link. isPlugin tells them from
-  // the primitive swatches.
-  isPlugin: boolean;
+  // descends into it, a drag drops a link to it. isSwatch tells them from
+  // the primitives.
+  isSwatch: boolean;
   kind: string; // a primitive's; a door swatch has none
   connection?: boolean; // a door swatch's: the row is a connection
   label?: string;
@@ -66,30 +66,30 @@ export interface MenuItem {
   glyph?: string;
   // The declared grid this swatch came from, such as the home's "trash".
   // Empty on a row's own place.
-  entry?: string;
+  sourceGrid?: string;
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-// One configured plugin as the client knows it, from the position-free
-// window.__gridwellTest.plugins(), available wherever the focused pane sits.
-export interface PluginDescriptor {
+// One roster row as the client knows it, from the position-free
+// window.__gridwellTest.sources(), available wherever the focused pane sits.
+export interface SourceDescriptor {
   index: number;
   connection: boolean;
   label: string;
   uuid: string;
-  // The row's own grid. A plugin names none of its own, so this is empty for
-  // one and its grids are in pluginGrids.
+  // The row's own grid. The files name none of their own, so this is empty
+  // for that row and its roots are in sourceGrids.
   rootGridID: string;
-  pluginGrids: PluginGrid[];
+  sourceGrids: SourceGrid[];
   // The scratch grid stamped on rootGridID, where ephemeral visits from it
   // land: empty until that grid is cached, so read it through scratchGridID().
   scratchGridID: string;
   infoError: string;
-  // The row's pluginhealth class; "" for a plugin's own row, which has none
-  // because a plugin is not a place.
+  // The row's sourcehealth class; "" for the files' row, which has none
+  // because it is not a place.
   status: string;
   // The handshake's persisted view of that grid, all 0 (absent) when never
   // visited. The server-side oracle for a root-grid reframe.
@@ -98,9 +98,9 @@ export interface PluginDescriptor {
   rootViewZoom: number;
 }
 
-// One declared grid: a grid the row is a door onto. label is instance
-// and grid joined (door.GridName), as "Feed (hey)".
-export interface PluginGrid {
+// One declared grid: a grid the row is a door onto. label is grid and row
+// joined (door.GridName), as "code (files)".
+export interface SourceGrid {
   id: string;
   label: string;
   gridID: string;
@@ -109,7 +109,7 @@ export interface PluginGrid {
   viewZoom: number;
 }
 
-// The plugin section's chevron strip. chevron is "up" collapsed, "down"
+// The swatches' chevron strip. chevron is "up" collapsed, "down"
 // expanded, "none" when there is no control.
 export interface MenuToggle {
   present: boolean;
@@ -164,11 +164,11 @@ export class GridwellDriver {
   }
 
   // Waits for Handshake to land.
-  async plugins(): Promise<PluginDescriptor[]> {
-    await this.win.waitForFunction(() => (window as any).__gridwellTest.plugins().length > 0, null, {
+  async sources(): Promise<SourceDescriptor[]> {
+    await this.win.waitForFunction(() => (window as any).__gridwellTest.sources().length > 0, null, {
       timeout: 15_000,
     });
-    return this.win.evaluate(() => (window as any).__gridwellTest.plugins());
+    return this.win.evaluate(() => (window as any).__gridwellTest.sources());
   }
 
   // The pane ids holding per-pane client state (a.locals). A collapsed pane's
@@ -329,28 +329,38 @@ export class GridwellDriver {
 
   // ── Gestures ────────────────────────────────────────────────────────────
 
-  // Puts the focused pane at the plugin's root grid, matched by label.
-  async enterPlugin(match: string): Promise<void> {
-    const pls = await this.plugins();
-    const pl = pls.find((p) => p.label === match);
-    if (!pl) throw new Error(`no plugin matching ${match}; have ${pls.map((p) => p.label)}`);
-    const f = await this.focused();
-    if (pl.rootGridID && f.gridID === pl.rootGridID) return; // already there
-    await this.clickPluginSwatch(match);
+  // The grid a swatch opens, matched by the swatch's label: a row's own
+  // ("home", a connection's) or a declared grid's ("code (files)").
+  async swatchGridID(match: string): Promise<string> {
+    const rows = await this.sources();
+    const gridID =
+      rows.find((p) => p.label === match && p.rootGridID)?.rootGridID ??
+      rows.flatMap((p) => p.sourceGrids).find((g) => g.label === match)?.gridID;
+    if (!gridID) {
+      throw new Error(`no swatch matching ${match}; have ${rows.flatMap((p) => [p.label, ...p.sourceGrids.map((g) => g.label)])}`);
+    }
+    return gridID;
   }
 
-  // The scratch grid of the plugin's root grid, once the client has that grid.
+  // Puts the focused pane at a swatch's grid (swatchGridID).
+  async enterSource(match: string): Promise<void> {
+    const gridID = await this.swatchGridID(match);
+    if ((await this.focused()).gridID === gridID) return; // already there
+    await this.clickSwatch(match);
+  }
+
+  // The scratch grid of a row's root grid, once the client has that grid.
   async scratchGridID(match: string): Promise<string> {
     await this.win.waitForFunction(
       (m: string) =>
-        ((window as any).__gridwellTest.plugins() as PluginDescriptor[]).some(
+        ((window as any).__gridwellTest.sources() as SourceDescriptor[]).some(
           (p) => p.label === m && p.scratchGridID !== '',
         ),
       match,
       { timeout: 15_000 },
     );
-    const pls = await this.plugins();
-    return pls.find((p) => p.label === match)!.scratchGridID;
+    const rows = await this.sources();
+    return rows.find((p) => p.label === match)!.scratchGridID;
   }
 
   // Clicks the focused pane's + button. It no-ops when the menu is already
@@ -364,11 +374,11 @@ export class GridwellDriver {
     });
   }
 
-  // Clicks the chevron strip, the gesture every plugin swatch sits behind
-  // because a menu opens collapsed. It no-ops when the section is already
+  // Clicks the chevron strip, the gesture every swatch sits behind because a
+  // menu opens folded. It no-ops when the section is already
   // shown, so a caller never has to ask which state it is in.
-  async expandPlugins(): Promise<void> {
-    // A remote pane's menu waits on the far node's plugin list, so wait rather
+  async expandSources(): Promise<void> {
+    // A remote pane's menu waits on the far node's roster, so wait rather
     // than read a menu that has not been told yet.
     await this.win.waitForFunction(
       () => {
@@ -431,17 +441,17 @@ export class GridwellDriver {
   // of the focused pane.
   async dragCreate(kind: string, cx: number, cy: number): Promise<void> {
     const menu = await this.menu();
-    const item = menu.items.find((i) => !i.isPlugin && i.kind === kind);
+    const item = menu.items.find((i) => !i.isSwatch && i.kind === kind);
     if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
     await this.dragSwatchToCell(item, cx, cy);
   }
 
-  // Drops a link, where clickPluginSwatch descends.
-  async dragPluginLink(match: string, cx: number, cy: number): Promise<void> {
-    await this.expandPlugins();
+  // Drops a link, where clickSwatch descends.
+  async dragSourceLink(match: string, cx: number, cy: number): Promise<void> {
+    await this.expandSources();
     const menu = await this.menu();
-    const item = menu.items.find((i) => i.isPlugin && i.label === match);
-    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.label)}`);
+    const item = menu.items.find((i) => i.isSwatch && i.label === match);
+    if (!item) throw new Error(`no swatch ${match}; have ${menu.items.map((i) => i.label)}`);
     await this.dragSwatchToCell(item, cx, cy);
   }
 
@@ -449,7 +459,7 @@ export class GridwellDriver {
   // descended into a tile, where there is no grid to take a cell from.
   async dragCreateToScreen(kind: string, x: number, y: number): Promise<void> {
     const menu = await this.menu();
-    const item = menu.items.find((i) => !i.isPlugin && i.kind === kind);
+    const item = menu.items.find((i) => !i.isSwatch && i.kind === kind);
     if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
     await this.dragSwatchToScreen(item, x, y);
   }
@@ -478,18 +488,18 @@ export class GridwellDriver {
   async clickMenuSwatch(kind: string): Promise<void> {
     await this.openMenu();
     const menu = await this.menu();
-    const item = menu.items.find((i) => !i.isPlugin && i.kind === kind);
+    const item = menu.items.find((i) => !i.isSwatch && i.kind === kind);
     if (!item) throw new Error(`no menu primitive ${kind}; have ${menu.items.map((i) => i.kind)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
   }
 
-  // A click, not a drag: the pane lands in the plugin's root grid.
-  async clickPluginSwatch(match: string): Promise<void> {
+  // A click, not a drag: the pane lands in the swatch's grid.
+  async clickSwatch(match: string): Promise<void> {
     await this.openMenu();
-    await this.expandPlugins();
+    await this.expandSources();
     const menu = await this.menu();
-    const item = menu.items.find((i) => i.isPlugin && i.label === match);
-    if (!item) throw new Error(`no plugin swatch ${match}; have ${menu.items.map((i) => i.label)}`);
+    const item = menu.items.find((i) => i.isSwatch && i.label === match);
+    if (!item) throw new Error(`no swatch ${match}; have ${menu.items.map((i) => i.label)}`);
     await this.win.mouse.click(item.x + item.w / 2, item.y + item.h / 2);
     await this.waitIdle();
   }
@@ -591,14 +601,14 @@ export class GridwellDriver {
     await this.waitIdle();
   }
 
-  // A right-drag always copies. Across a plugin boundary a leaf copies its
-  // bytes, a solid door is refused, and a link tile copies as another link.
+  // A right-drag always copies. Across a source boundary a leaf copies its
+  // bytes, a directory's door links, and a link tile copies as another link.
   async copyDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
     await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'right');
   }
 
-  // Within one plugin this moves the tile; across a plugin boundary it links,
-  // because there is no cross-plugin move.
+  // Within one source this moves the tile; across a source boundary it links,
+  // because there is no move to another source.
   async leftDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
     await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'left');
   }

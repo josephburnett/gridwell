@@ -49,16 +49,13 @@ test('a call with no request id is owed to a gesture only when the client wrote 
   assert.deepEqual(causes([rec('client', 'gesture', 'press', 'left', 1_400), rpc('GetGrid start', 1_500)]), ['gesture']);
 });
 
-test("the source layers: a walk is the decision's, a told change the event's, a Watch the view's", () => {
+test("the source layers: a walk is the decision's, a health change the event's", () => {
   const lines = [
     rec('node', 'sourcecache', 'prefetch', 'prefetch start', 9_000),
-    rec('node', 'pluginhost', 'changed', 'grid changed', 9_000),
-    rpc('SetView start', 9_000, { req: 'r7' }),
-    rpc('SetView ok', 9_010, { req: 'r7' }),
-    rec('node', 'pluginhost', 'watch', 'watch open', 9_100),
-    rec('node', 'pluginhost', 'watch', 'watch open', 9_200 + CAUSE_MS),
+    rec('node', 'files', 'health', 'dark true, told true', 9_000),
+    rec('node', 'sourcecache', 'dark', 'far dark', 9_000),
   ];
-  assert.deepEqual(causes(lines), ['decision: prefetch walk (2026-10-06)', 'event', 'view', 'view', 'view', null]);
+  assert.deepEqual(causes(lines), ['decision: prefetch walk (2026-10-06)', 'event', 'event']);
 });
 
 test("work inside a call is the call's, and a revalidation is the serve's it runs behind", () => {

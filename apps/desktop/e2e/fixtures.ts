@@ -14,30 +14,23 @@ import { freePort } from '../src/main/freeport';
 // (runtree.ts).
 const DESKTOP_DIR = path.resolve(__dirname, '..');
 
-// One content plugin to declare in the seeded node directory's server.yaml.
-export interface PluginSpec {
-  kind: string;
-  name: string;
-  config?: Record<string, string>;
+// One directory to declare under server.yaml's `files:`. Its swatch in the +
+// menu is "<label> (files)" (door.GridName).
+export interface FilesRoot {
+  root: string;
+  label: string;
 }
 
-// A throwaway node directory: a server.yaml declaring the given plugins, whose first
-// serve mints the ids and creates the store, as a real user's first run does.
-// `extraYaml` appends raw sections such as a connections: list. Callers remove
-// the returned dir on teardown.
-export function seedHome(extra: PluginSpec[] = [], extraYaml = ''): string {
+// A throwaway node directory: a server.yaml declaring the given files roots,
+// whose first serve mints the ids and creates the store, as a real user's
+// first run does. `extraYaml` appends raw sections such as a connections:
+// list. Callers remove the returned dir on teardown.
+export function seedHome(roots: FilesRoot[] = [], extraYaml = ''): string {
   const home = makeHome();
   let yaml = '';
-  if (extra.length) {
-    yaml += 'plugins:\n';
-    for (const p of extra) {
-      yaml += `    - kind: ${p.kind}\n      label: ${p.name}\n`;
-      const conf = Object.entries(p.config ?? {});
-      if (conf.length) {
-        yaml += '      config:\n';
-        for (const [k, v] of conf) yaml += `        ${k}: ${JSON.stringify(v)}\n`;
-      }
-    }
+  if (roots.length) {
+    yaml += 'files:\n';
+    for (const r of roots) yaml += `    - root: ${JSON.stringify(r.root)}\n      label: ${JSON.stringify(r.label)}\n`;
   }
   fs.writeFileSync(path.join(home, 'server.yaml'), yaml + extraYaml);
   return home;
@@ -144,9 +137,9 @@ type Fixtures = {
   electronApp: ElectronApplication;
   window: Page;
   gw: GridwellDriver;
-  // Set with test.use({ extraPlugins: [...] }): plugins seedHome declares,
+  // Set with test.use({ filesRoots: [...] }): the roots seedHome declares,
   // present from the first launch.
-  extraPlugins: PluginSpec[];
+  filesRoots: FilesRoot[];
   // Far nodes to boot and connect directly, one row each in the + menu: the
   // second writable space a cross-namespace spec needs.
   extraNodes: string[];
@@ -166,13 +159,13 @@ type Fixtures = {
 // --user-data-dir flag and by applyUserDataOverride, so no test instance shares
 // ~/.config/gridwell-desktop with the live app or a concurrent instance.
 export const test = base.extend<Fixtures>({
-  extraPlugins: [[], { option: true }],
+  filesRoots: [[], { option: true }],
   extraNodes: [[], { option: true }],
   extraYaml: ['', { option: true }],
   forceDeviceScaleFactor: [0, { option: true }],
   fontconfig: ['', { option: true }],
 
-  home: async ({ extraPlugins, extraNodes, extraYaml }, use) => {
+  home: async ({ filesRoots, extraNodes, extraYaml }, use) => {
     // Far nodes come up before the local node, so its boot-time connect learns
     // each landing synchronously. They go down after the app closes, because
     // this fixture's teardown runs after electronApp's.
@@ -185,7 +178,7 @@ export const test = base.extend<Fixtures>({
         yaml += `    - name: ${n.label}\n      label: ${n.label}\n      addr: ${path.join(n.home, 'federation.sock')}\n`;
       }
     }
-    await use(seedHome(extraPlugins, yaml));
+    await use(seedHome(filesRoots, yaml));
     for (const n of far) await stopFarNode(n);
   },
 
@@ -205,14 +198,7 @@ export const test = base.extend<Fixtures>({
       ],
       cwd: DESKTOP_DIR,
       env: {
-        // Strip the live app's plugin env vars, which go-plugin re-appends at
-        // Start() as the last duplicate, overriding the fresh per-test config.
-        // The sidecar sets both for each launch anyway.
-        ...Object.fromEntries(
-          Object.entries(process.env).filter(
-            ([k]) => k !== 'GRIDWELL_PLUGIN_CONFIG' && k !== 'GRIDWELL_PLUGIN',
-          ),
-        ),
+        ...process.env,
         GRIDWELL_E2E: '1',
         ...(fontconfig ? { FONTCONFIG_FILE: fontconfig } : {}),
         ...homeEnv(home),

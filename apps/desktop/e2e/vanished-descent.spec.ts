@@ -15,7 +15,7 @@ import { deleteTile, tileAt } from './oracle';
 // runs; the seam crossed here is a real GetTile verdict reaching the real notice row.
 
 test('a descent whose row is deleted under it says so on the notice row', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

@@ -19,7 +19,7 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // On the local origin, so it loads with no network.
   const wcBefore = await electronApp.evaluate(

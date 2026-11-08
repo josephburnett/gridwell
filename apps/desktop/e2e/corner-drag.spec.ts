@@ -21,7 +21,7 @@ test('a press at a three-pane corner arms both axes and one drag moves both spli
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   let byX = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(byX[0]);
@@ -70,7 +70,7 @@ test('a press on a divider away from the corner arms one axis and moves only it'
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   let byX = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(byX[0]);

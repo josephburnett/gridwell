@@ -8,7 +8,7 @@ import { settle } from './cadence';
 // cross-node copy lives in the two-node spec, which has the second node.
 
 test('a copy reads no listing back; its event lands the copy', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -36,7 +36,7 @@ test('a copy reads no listing back; its event lands the copy', async ({ gw }) =>
 // own. The other pane shows the same grid, so a read back would be asked.
 test('a text mode flip reads no listing back', async ({ gw, window }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) - 1;

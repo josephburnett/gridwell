@@ -1,6 +1,6 @@
 import { test as base, Page } from '@playwright/test';
 import { spawn, ChildProcess } from 'node:child_process';
-import { seedHome, PluginSpec } from '../e2e/fixtures';
+import { seedHome, FilesRoot } from '../e2e/fixtures';
 import { serveBin, staticDir, treeEnv } from '../e2e/runtree';
 import { homeEnv, removeHome } from '../e2e/homes';
 import { GridwellDriver } from '../e2e/driver';
@@ -21,9 +21,8 @@ type Fixtures = {
   serve: Served;
   window: Page;
   gw: GridwellDriver;
-  // Mirrors the Electron fixture's option: plugins seedHome registers beyond
-  // the node's own home.
-  extraPlugins: PluginSpec[];
+  // Mirrors the Electron fixture's option: the files roots seedHome declares.
+  filesRoots: FilesRoot[];
   // Raw server.yaml sections seedHome appends, as the Electron fixture's.
   extraYaml: string;
 };
@@ -128,12 +127,12 @@ export async function authenticate(page: Page, served: Served): Promise<void> {
 }
 
 export const test = base.extend<Fixtures>({
-  extraPlugins: [[], { option: true }],
+  filesRoots: [[], { option: true }],
   extraYaml: ['', { option: true }],
 
   // A throwaway node directory, as the Electron suite seeds one, on an ephemeral port.
-  serve: async ({ extraPlugins, extraYaml }, use) => {
-    const home = seedHome(extraPlugins, extraYaml);
+  serve: async ({ filesRoots, extraYaml }, use) => {
+    const home = seedHome(filesRoots, extraYaml);
     const served = await spawnServe(home, await freePort());
     await use(served);
     await stopServe(served.child);

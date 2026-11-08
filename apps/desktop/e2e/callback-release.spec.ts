@@ -7,7 +7,7 @@ import { test, expect } from './fixtures';
 // the assertion.
 
 test('a gesture and its animation leave no armed callback behind', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -40,7 +40,7 @@ test('a gesture and its animation leave no armed callback behind', async ({ gw }
 // server at all. Armed by what they would write, a repainting live tile
 // leaves neither persister pending.
 test('a live tile repainting leaves no settle timer armed', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

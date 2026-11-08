@@ -14,7 +14,7 @@ test('an ephemeral url visit explains itself instead of opening a dead modal', a
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.clickMenuSwatch('url'); // opens the menu itself
   // No modal: the visit could only ever produce a blank frozen tile.
   await expect(window.locator('#gw-url-modal.open')).toHaveCount(0);
@@ -26,7 +26,7 @@ test('a frozen url tile: the circle button opens the address in a new tab', asyn
   window,
   serve,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

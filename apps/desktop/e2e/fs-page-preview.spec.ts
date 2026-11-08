@@ -3,18 +3,25 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// A page a plugin serves wears the preview an internet page does. Before the
-// first visit an html page has no picture, so nothing asks for one; the ascent
-// out of the live page freezes it, and from then on the preview is that
-// screenshot, served by the node.
+// A page the node serves wears the preview an internet page does. Before the
+// first visit a PDF has no picture, since only an image is its own, so
+// nothing asks for one; the ascent out of the live page freezes it, and from
+// then on the preview is that screenshot, served by the node.
+
+// A one-page PDF with no text, as small as a reader still opens.
+const PDF = [
+  '%PDF-1.4',
+  '1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+  '2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj',
+  'trailer<</Root 1 0 R>>',
+  '%%EOF',
+].join('\n');
 
 const siteDir = makeRunDir();
-fs.writeFileSync(
-  path.join(siteDir, 'page.html'),
-  '<html><body style="background:#2a6"><h1>a served page</h1></body></html>',
-);
+fs.writeFileSync(path.join(siteDir, 'page.pdf'), PDF);
 
-test.use({ extraPlugins: [{ kind: 'fs', name: 'site', config: { root: siteDir } }] });
+test.use({ filesRoots: [{ root: siteDir, label: 'site' }] });
 
 test('a served page with no picture is not asked for one, and its screenshot becomes its preview', async ({
   electronApp,
@@ -33,12 +40,12 @@ test('a served page with no picture is not asked for one, and its screenshot bec
     return r.fulfill({ response: resp });
   });
 
-  await gw.enterPlugin('site');
+  await gw.enterSource('site (files)');
   const f = await gw.focused();
-  const page = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'page.html')!;
-  expect(page, 'the fs root lists page.html').toBeTruthy();
-  expect(page.servesPage, 'an html file is a page the plugin serves').toBe(true);
-  expect(Number(page.previewBlobId ?? 0), 'an unvisited html page has no preview').toBe(0);
+  const page = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'page.pdf')!;
+  expect(page, 'the root lists page.pdf').toBeTruthy();
+  expect(page.servesPage, 'a PDF is a page the node serves').toBe(true);
+  expect(Number(page.previewBlobId ?? 0), 'an unvisited PDF has no preview').toBe(0);
   pageID = page.id!;
 
   // A second of the tile on screen is dozens of frames, each one a chance to ask.
@@ -60,12 +67,12 @@ test('a served page with no picture is not asked for one, and its screenshot bec
   await expect
     .poll(
       async () =>
-        Number((await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'page.html')?.previewBlobId ?? 0),
+        Number((await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'page.pdf')?.previewBlobId ?? 0),
       { message: 'the ascent stores the screenshot as the preview', timeout: 15_000 },
     )
     .toBeGreaterThan(0);
-  const after = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'page.html')!;
-  expect(after.urlString ?? '', "the address stays the plugin's").toBe('');
+  const after = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'page.pdf')!;
+  expect(after.urlString ?? '', 'it still carries no address').toBe('');
   expect(Number(after.version ?? 0), 'a freeze claims no content bytes').toBe(Number(page.version ?? 0));
 
   // A reload empties the preview cache, so the grid's draw asks for the preview,

@@ -12,7 +12,7 @@ test('right-clicking the bar circle over a live url pops the context menu; Copy 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

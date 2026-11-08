@@ -3,58 +3,38 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// Plain-text files show verbatim, with no markdown mangling, because the plugin
-// declares text_presentation "plain". A body read under a stamp the file has
-// moved past is read again; caching it at version 0 would hide every later
-// edit on disk.
+// Plain-text files show verbatim, with no markdown mangling, because the files
+// declare text_presentation "plain" by their extension. A body read under a
+// stamp the file has moved past is read again; caching it at version 0 would
+// hide every later edit on disk.
 
 const ROOT = makeRunDir();
-// Two plugins go through the FIXTURE form; see framing-stability.spec.ts.
-// pages declares no writable, so its notes are the read-only plugin document.
-test.use({
-  extraPlugins: async ({}, use) => {
-    await use([
-      { kind: 'fs', name: 'code', config: { root: ROOT } },
-      { kind: 'pages', name: 'site', config: {} },
-    ]);
-  },
-});
+test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
 
-test('the plugin fs declares no tool it cannot honor (#271)', async ({ gw, window }) => {
-  await gw.enterPlugin('code');
-  await gw.openMenu();
-  await gw.expandPlugins();
-  const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
-  const labels = (menu.items ?? []).map((i: any) => i.label);
-  expect(labels, 'no dead-end find entry on plugin fs').not.toContain('find');
-});
-
-test('an fs grid wears the glyph its plugin declared, not a kind the client knows', async ({ gw }) => {
-  // The fs plugin declares glyph "folder" and host_content in its plugin.v1
-  // handshake, the adapter stamps both onto every grid it serves, and the
-  // client's crumb renders the declared glyph. Nothing between them knows the
-  // word "fs".
-  await gw.enterPlugin('code');
+test('a directory grid wears the folder glyph the files declare', async ({ gw }) => {
+  // The files stamp glyph "folder" onto every grid they serve, and the
+  // client's crumb renders the declared glyph.
+  await gw.enterSource('code (files)');
   const bar = await gw.bar();
   const chain = bar.segments.filter((s) => s.kind === 'chain');
   const here = chain[chain.length - 1];
-  expect(here, 'the fs level has a crumb').toBeTruthy();
+  expect(here, 'the directory level has a crumb').toBeTruthy();
   expect(here.glyph, 'the crumb wears the declared folder glyph').toBe('folder');
   // The level the descent came from is the node's own grid, which declares
   // nothing, so it wears the door glyph.
   expect(chain[0].glyph, 'home is owned content').toBe('door');
 });
 
-test('the bar says which directory an fs grid lists, at its door and a level down', async ({ gw }) => {
-  // The plugin's listing names its source (ListResponse.source_label), the
-  // adapter carries it on the grid, and the bar draws it after the grid's name.
+test('the bar says which directory a grid lists, at its root and a level down', async ({ gw }) => {
+  // The grid's id is the directory's path, and the bar draws that path after
+  // the grid's name (bartitle.Input.DirectoryPath).
   fs.mkdirSync(path.join(ROOT, 'sub'), { recursive: true });
-  // The plugin may name the root as configured or with its links resolved.
+  // The root may be named as configured or with its links resolved.
   const endsIn = (d: string) => {
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(` — (${esc(d)}|${esc(fs.realpathSync(d))})$`);
   };
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   await expect.poll(async () => (await gw.barName()).label, { timeout: 10_000 }).toMatch(endsIn(ROOT));
   const f = await gw.focused();
   const sub = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'sub')!;
@@ -62,19 +42,19 @@ test('the bar says which directory an fs grid lists, at its door and a level dow
   await gw.descendCell(Number(sub.x ?? 0), Number(sub.y ?? 0));
   const label = async () => (await gw.barName()).label;
   await expect.poll(label, { timeout: 10_000 }).toMatch(endsIn(path.join(ROOT, 'sub')));
-  expect(await label(), 'the grid is named before its source').toMatch(/^sub — /);
+  expect(await label(), 'the grid is named before its path').toMatch(/^sub — /);
 });
 
 test('a source file shows as plain text and refreshes each open', async ({ gw, window }) => {
   // The freshness half of this test mutates the file and the module-scoped dir
   // persists across runs, so rewrite it first.
   fs.writeFileSync(path.join(ROOT, 'notes.go'), '# not a heading\nplain body v1\n');
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   const f = await gw.focused();
   const snap = await gw.getGrid(f.gridID);
   const tile = (snap.tiles ?? []).find((t) => t.altText === 'notes.go')!;
   expect(tile, 'notes.go listed').toBeTruthy();
-  expect((tile as { textPresentation?: string }).textPresentation, 'plugin declares plain').toBe('plain');
+  expect((tile as { textPresentation?: string }).textPresentation, 'a .go file is plain').toBe('plain');
 
   await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
@@ -98,13 +78,12 @@ test('a source file shows as plain text and refreshes each open', async ({ gw, w
 });
 
 test('a file open in a pane shows bytes written on disk with no gesture', async ({ gw }) => {
-  // The plugin tells the entry changed (EntryChanged) under a new stamp, the
-  // node tells the client its row's bytes moved (Tile.content_stamp), and the
-  // cache drops the clean body the open view draws, so the view reads it
-  // again. The row's version does not move: a plugin body has none.
+  // The watch tells the file changed under a new stamp (Tile.content_stamp),
+  // and the cache drops the clean body the open view draws, so the view reads
+  // it again. The row's version does not move: a file's body has none.
   const file = path.join(ROOT, 'live.go');
   fs.writeFileSync(file, 'first body\n');
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   const f = await gw.focused();
   const tile = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t) => t.altText === 'live.go')!;
   expect(tile, 'live.go listed').toBeTruthy();
@@ -116,18 +95,18 @@ test('a file open in a pane shows bytes written on disk with no gesture', async 
   await expect.poll(shown, { timeout: 10_000 }).toContain('second body, written while open');
 });
 
-test('a projection rearranged stays rearranged: fs tiles move and resize (#266)', async ({
+test('a directory rearranged stays rearranged: its tiles move and resize (#266)', async ({
   gw,
 }) => {
   fs.mkdirSync(path.join(ROOT, 'movedir'), { recursive: true });
   fs.writeFileSync(path.join(ROOT, 'sizeme.md'), 'a body to size\n');
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   const f = await gw.focused();
   const dir = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'movedir')!;
   expect(dir, 'movedir listed').toBeTruthy();
 
   // A same-grid left-drag is placement rather than creation, so the
-  // projection, which accepts no tiles, accepts it and its store persists it.
+  // directory, which accepts no tiles, accepts it and the store persists it.
   // The client must not refuse the gesture before the RPC can fire.
   const fx = Number(dir.x ?? 0);
   const fy = Number(dir.y ?? 0);
@@ -159,14 +138,19 @@ test('a projection rearranged stays rearranged: fs tiles move and resize (#266)'
     .toBe('2x1');
 });
 
-test('a read-only plugin document is selectable, and stays so through a reload (#268)', async ({
+test('a read-only file is selectable, and stays so through a reload (#268)', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('site');
+  test.skip(process.getuid?.() === 0, 'root writes a 0444 file');
+  const file = path.join(ROOT, 'about.md');
+  if (fs.existsSync(file)) fs.chmodSync(file, 0o644);
+  fs.writeFileSync(file, '# About\n\nThis note is read-only on disk, and still selectable.\n');
+  fs.chmodSync(file, 0o444);
+  await gw.enterSource('code (files)');
   const f = await gw.focused();
-  const tile = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'about')!;
-  expect(tile, 'the about note listed').toBeTruthy();
+  const tile = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'about.md')!;
+  expect(tile, 'about.md listed').toBeTruthy();
   await gw.descendCell(Number(tile.x ?? 0), Number(tile.y ?? 0));
   await expect.poll(async () => (await gw.focused()).textFocus).not.toBe('');
 
@@ -190,7 +174,7 @@ test('a read-only plugin document is selectable, and stays so through a reload (
         }),
       { timeout: 15_000 },
     )
-    .toContain('serves web pages');
+    .toContain('read-only on disk');
 
   // A real mouse drag must select the text, so no handler may swallow the drag
   // and no user-select may block it.
@@ -205,5 +189,5 @@ test('a read-only plugin document is selectable, and stays so through a reload (
   await window.mouse.up();
   await expect
     .poll(() => window.evaluate(() => globalThis.getSelection()?.toString() ?? ''))
-    .toContain('plugin');
+    .toContain('read-only');
 });

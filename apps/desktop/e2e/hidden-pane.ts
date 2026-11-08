@@ -44,7 +44,7 @@ async function workspaceDepth(window: any): Promise<number> {
 
 export async function hiddenPaneScenario(gw: GridwellDriver, window: any, token: string): Promise<void> {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

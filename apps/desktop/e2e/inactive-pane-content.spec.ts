@@ -13,7 +13,7 @@ import { tileAt } from './oracle';
 // the user just left showed the older document until a save landed.
 
 const ROOT = makeRunDir();
-test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
+test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
 
 const WRITE = '**/gridwell.v1.Gridwell/WriteContent';
 const painted = (window: any): Promise<Record<string, string>> =>
@@ -25,7 +25,7 @@ const checkedIn = (s: string) => (s.match(/gw-task-done/g) ?? []).length;
 // Two panes on the home grid, the left descended into a text tile holding
 // body, the right focused, so the left paints on canvas.
 async function splitOnText(gw: any, body: string) {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy) + 1;
@@ -99,10 +99,10 @@ test('a grid preview in another pane follows unsaved typing', async ({ gw, windo
   await window.unroute(WRITE);
 });
 
-test('an fs file changed on disk shows its new bytes in the pane focus left', async ({ gw, window }) => {
+test('a file changed on disk shows its new bytes in the pane focus left', async ({ gw, window }) => {
   const file = path.join(ROOT, 'notes.txt');
   fs.writeFileSync(file, 'version one\n');
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   await gw.splitFocusedPaneVertical();
   const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
   await gw.focusPane(left);

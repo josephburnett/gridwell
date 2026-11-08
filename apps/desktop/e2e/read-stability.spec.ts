@@ -70,7 +70,7 @@ async function roundTrip(gw: any, window: any, cx: number, cy: number, settleMs:
 for (const kind of ['door', 'markdown', 'url', 'shell'] as const) {
   test(`looking inside a ${kind} tile and coming back writes nothing`, async ({ gw, window }) => {
     const settleMs = (await gw.cadences()).framingSaveMs;
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const home = await gw.focused();
     const cx = Math.round(home.cx);
     const cy = Math.round(home.cy);
@@ -125,7 +125,7 @@ for (const kind of ['door', 'markdown', 'url', 'shell'] as const) {
 for (const kind of ['door', 'markdown'] as const) {
   test(`a reload inside a ${kind} writes nothing until the user moves`, async ({ gw, window }) => {
     const settleMs = (await gw.cadences()).framingSaveMs;
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const home = await gw.focused();
     const cx = Math.round(home.cx);
     const cy = Math.round(home.cy);
@@ -177,7 +177,7 @@ for (const kind of ['door', 'markdown'] as const) {
 // land at the top and write nothing.
 test('looking inside a long document and coming back writes nothing', async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -219,7 +219,7 @@ test('looking inside a long document and coming back writes nothing', async ({ g
 // other's window.
 test("a document framed in another pane size is looked at without a write", async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

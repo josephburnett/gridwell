@@ -34,7 +34,7 @@ test('a copy of a live shell attaches its tmux: one client, one exit for both', 
     window.evaluate(() => (window as any).__gridwellTest.shellBuffer());
   const slot = () => window.evaluate(() => (window as any).__gridwellTest.barSlot());
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);
@@ -110,7 +110,7 @@ test('a copy of a live shell attaches its tmux: one client, one exit for both', 
 test('a copy of a never-opened shell starts the tmux its source then joins', async ({ gw, window }) => {
   const shellText = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.shellText());
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

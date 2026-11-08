@@ -5,14 +5,14 @@ import { makeRunDir } from './homes';
 // The bar's chain inside a workspace, across the layout-blob seam.
 //
 // A workspace's durable place is its layout blob, and the bar's chain is that
-// place projected. A pane that crossed into a plugin has frames below the
+// place projected. A pane that crossed into a files root has frames below the
 // crossing, the grid it started in and the door it came through, and those
 // are the only way back out. Leaving and re-entering the workspace round-trips
 // the whole stack through the blob, so this spec asserts on what the bar shows
 // after the re-entry rather than on the encoder alone.
 
 const FS_ROOT = makeRunDir();
-test.use({ extraPlugins: [{ kind: 'fs', name: 'files', config: { root: FS_ROOT } }] });
+test.use({ filesRoots: [{ root: FS_ROOT, label: 'docs' }] });
 
 // chainAfterBoundary returns the focused pane's own crumbs, everything after the
 // innermost workspace tile boundary. The crumbs before it belong to the window: the
@@ -25,11 +25,11 @@ function chainAfterBoundary(bar: { segments: any[] }): any[] {
   return bar.segments.slice(last + 1);
 }
 
-test('a workspace re-entered inside a plugin keeps every crumb down from its root', async ({
+test('a workspace re-entered inside a files root keeps every crumb down from its root', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -40,18 +40,18 @@ test('a workspace re-entered inside a plugin keeps every crumb down from its roo
   const pt = tileAt(await gw.getGrid(rootGrid), 'workspace', wx, wy);
   expect(pt).toBeTruthy();
 
-  // Inside the workspace, cross into a plugin, so the pane's place is the home
-  // grid and then the plugin's root through the menu swatch.
+  // Inside the workspace, cross into the files root, so the pane's place is
+  // the home grid and then the root's grid through the menu swatch.
   await gw.descendCell(wx, wy);
-  await gw.clickPluginSwatch('files');
+  await gw.clickSwatch('docs (files)');
   const inside = await gw.focused();
-  const pluginGrid = inside.gridID;
-  expect(pluginGrid, 'the pane crossed into the plugin').not.toBe(rootGrid);
+  const rootDir = inside.gridID;
+  expect(rootDir, 'the pane crossed into the root').not.toBe(rootGrid);
 
   const before = chainAfterBoundary(await gw.bar());
-  expect(before.map((s) => s.anchor), 'live chain: the root grid, then the plugin').toEqual([
+  expect(before.map((s) => s.anchor), 'live chain: the home grid, then the root').toEqual([
     rootGrid,
-    pluginGrid,
+    rootDir,
   ]);
 
   // Leave: the ascent flushes the layout, and the write lands a beat later.
@@ -67,16 +67,16 @@ test('a workspace re-entered inside a plugin keeps every crumb down from its roo
     .toBe(true);
 
   // The re-entered chain must be what it was, root crumb included. Without that
-  // crumb there is no way back out of the plugin inside this workspace.
+  // crumb there is no way back out of the root inside this workspace.
   await gw.descendCell(wx, wy);
   await expect
     .poll(async () => chainAfterBoundary(await gw.bar()).map((s) => s.anchor), {
       message: 'the restored chain must still start at the root grid',
       timeout: 15_000,
     })
-    .toEqual([rootGrid, pluginGrid]);
+    .toEqual([rootGrid, rootDir]);
 
-  // And the root crumb still works: clicking it ascends out of the plugin,
+  // And the root crumb still works: clicking it ascends out of the root,
   // inside the workspace.
   const bar = await gw.bar();
   const root = chainAfterBoundary(bar)[0];
@@ -91,7 +91,7 @@ test('a workspace restored by ?w= still shows a glyph on its close-all crumb', a
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

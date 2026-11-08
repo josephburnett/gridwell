@@ -9,7 +9,7 @@ test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -48,7 +48,7 @@ test('Ctrl+= zooms a live url view (composed with the layout zoom)', async ({
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );
@@ -96,7 +96,7 @@ test('the zoom chord works when the live view owns keyboard focus', async ({
   gw,
 }) => {
   // The ephemeral url tile lands in the scratch grid stamped on home.
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratch = await gw.scratchGridID('home');
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,

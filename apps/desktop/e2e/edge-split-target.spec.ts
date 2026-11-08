@@ -11,7 +11,7 @@ async function depth(window: any): Promise<number> {
 }
 
 test('a right-press on the workspace tile outline at the window edge splits like an interior divider', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);

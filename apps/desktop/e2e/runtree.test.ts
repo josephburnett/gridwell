@@ -24,12 +24,11 @@ function withNoTree(body: () => void): void {
   }
 }
 
-// A repo root as `make build` leaves one: the server binary, a plugin binary
-// beside it, and web/ holding the wasm client.
+// A repo root as `make build` leaves one: the server binary and web/ holding
+// the wasm client.
 function fakeRoot(bytes: string): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runtree-test-'));
   fs.writeFileSync(path.join(root, 'gridwell'), `server ${bytes}`);
-  fs.writeFileSync(path.join(root, 'gridwell-plugin-fake'), `plugin ${bytes}`);
   fs.mkdirSync(path.join(root, 'web'));
   fs.writeFileSync(path.join(root, 'web', 'gridwell.wasm'), `client ${bytes}`);
   return root;
@@ -44,24 +43,20 @@ test('a rebuild under a running suite does not change what the suite tests', () 
       // The peer rebuild: every artifact rewritten in place, as `go build -o`
       // does, while the run that pinned them is still launching tests.
       fs.writeFileSync(path.join(root, 'gridwell'), 'server rebuilt');
-      fs.writeFileSync(path.join(root, 'gridwell-plugin-fake'), 'plugin rebuilt');
       fs.writeFileSync(path.join(root, 'web', 'gridwell.wasm'), 'client rebuilt');
 
       const read = (...p: string[]) => fs.readFileSync(path.join(snap, ...p), 'utf8');
       assert.equal(read('gridwell'), 'server built');
-      assert.equal(read('gridwell-plugin-fake'), 'plugin built');
       assert.equal(read('web', 'gridwell.wasm'), 'client built');
 
       // And every launch reads the snapshot: the sidecar the Electron fixture
-      // names, the binary a bare serve spawns, the static dir it serves, and
-      // the directory the server resolves plugin binaries from.
+      // names, the binary a bare serve spawns and the static dir it serves.
       assert.equal(treeRoot(), snap);
       assert.equal(serveBin(), path.join(snap, 'gridwell'));
       assert.equal(staticDir(), path.join(snap, 'web'));
       assert.deepEqual(treeEnv(), {
         GRIDWELL_SIDECAR: path.join(snap, 'gridwell'),
         GRIDWELL_STATIC: path.join(snap, 'web'),
-        GRIDWELL_PLUGIN_DIR: snap,
       });
 
       removeTree();

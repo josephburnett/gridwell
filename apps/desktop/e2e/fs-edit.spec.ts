@@ -3,20 +3,21 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { makeRunDir } from './homes';
 
-// A text file in a plugin that declares writable is typed into and saved like
-// a home document: the save writes the file, the plugin's own Watch echo of
-// the write leaves the typed text alone, and bytes changed on disk under an
-// unsaved edit refuse the save as a conflict and show the file as it is.
+// A text file under a files root is typed into and saved like a home
+// document: the save writes the file, the watch's echo of the write leaves the
+// typed text alone, and bytes changed on disk under an unsaved edit refuse the
+// save as a conflict (the content stamp it claimed is stale) and show the file
+// as it is.
 
 const ROOT = makeRunDir();
-test.use({ extraPlugins: [{ kind: 'fs', name: 'code', config: { root: ROOT } }] });
+test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
 
 const notices = (window: any) =>
   window.evaluate(() => (window as any).__gridwellTest.errors().notices as { source: string }[]);
 
 async function openFile(gw: any, name: string, body: string) {
   fs.writeFileSync(path.join(ROOT, name), body);
-  await gw.enterPlugin('code');
+  await gw.enterSource('code (files)');
   const f = await gw.focused();
   const tile = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t: any) => t.altText === name)!;
   expect(tile, `${name} listed`).toBeTruthy();
@@ -24,7 +25,7 @@ async function openFile(gw: any, name: string, body: string) {
   await expect.poll(async () => gw.textareaValue(), { timeout: 10_000 }).toBe(body);
 }
 
-test('typing into an fs file saves it to disk, and its echo leaves the typing alone', async ({
+test('typing into a file saves it to disk, and its echo leaves the typing alone', async ({
   gw,
   window,
 }) => {
@@ -36,7 +37,7 @@ test('typing into an fs file saves it to disk, and its echo leaves the typing al
     .poll(() => fs.readFileSync(file, 'utf8'), { timeout: 10_000 })
     .toBe('line one\ntyped here');
 
-  // The plugin's Watch tells the write back as the entry's change; the body
+  // The watch tells the write back as the file's change; the body
   // is filed under the stamp it names, so the editor keeps its text and the
   // next keystrokes save on top of the first.
   await new Promise((r) => setTimeout(r, 2000));
@@ -71,7 +72,7 @@ test('a file changed on disk under an unsaved edit refuses the save and shows th
   expect(await gw.textareaValue(), 'the change on disk dropped the unsaved edit').toBe('mine\nmy edit');
   await window.unroute('**/gridwell.v1.Gridwell/WriteContent');
 
-  // The next save claims the bytes the edit was typed over; the plugin refuses
+  // The next save claims the bytes the edit was typed over; the files refuse
   // it as a conflict, and the editor shows the file as it is.
   await gw.typeText('!');
   await expect.poll(async () => gw.textareaValue(), { timeout: 15_000 }).toBe('theirs\n');

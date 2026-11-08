@@ -48,7 +48,7 @@ async function shiftClickCrumb(gw: GridwellDriver, win: Page, tileID: string) {
 }
 
 test('shift-click on a door crumb toggles the door in its grid and stays where the pane is', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f0 = await gw.focused();
   const cx = Math.round(f0.cx);
   const cy = Math.round(f0.cy);
@@ -90,7 +90,7 @@ test('shift-click on a door crumb toggles the door in its grid and stays where t
 });
 
 test('shift-click on a workspace tile crumb toggles the workspace tile and stays inside it', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f0 = await gw.focused();
   const wx = Math.round(f0.cx);
   const wy = Math.round(f0.cy);
@@ -118,7 +118,7 @@ test('shift-click on a workspace tile crumb toggles the workspace tile and stays
 // Another writer's select reaches the crumb's border without a gesture: the
 // view lists the grid the crumb sits on, so its SelectionChanged arrives.
 test("a select made elsewhere of a crumb's tile reaches its border", async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f0 = await gw.focused();
   const cx = Math.round(f0.cx);
   const cy = Math.round(f0.cy);

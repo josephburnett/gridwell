@@ -23,7 +23,7 @@ test('a rendered preview keeps its letter height across a grid zoom that crosses
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const grid = f.gridID;
   const cx = Math.round(f.cx);

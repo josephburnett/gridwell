@@ -10,7 +10,7 @@ test('clicking the menu url swatch descends into an off-grid ephemeral visit', a
   // repeated field.
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const home = await gw.focused();
   const homeBefore = await gw.getGrid(home.gridID);

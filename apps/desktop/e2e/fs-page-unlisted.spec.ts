@@ -4,13 +4,14 @@ import { test, expect } from './fixtures';
 import { createLeafLink, moveTile, tileAt } from './oracle';
 import { makeRunDir } from './homes';
 
-// A page a plugin serves has no address of its own, so a page row its source
-// is not listing right now must still be that page: a click never asks the
-// user for an address the plugin would refuse. A source that cannot be read is
-// health, so the row keeps presenting as the page it was; a file that is gone
-// is a gone key, so a link to it is dead, and a dead link asks nothing either.
+// A page the node serves has no address of its own, so a page row whose
+// directory is not listing right now must still be that page: a click never
+// asks the user for an address. A directory that cannot be read is dark,
+// which is health, so the row keeps presenting as the page it was; a file
+// that is gone is a gone path, so a link to it is dead, and a dead link asks
+// nothing either.
 
-// One 1x1 png: an image is a page the fs plugin serves.
+// One 1x1 png: an image is a page the node serves.
 const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
   'base64',
@@ -18,16 +19,16 @@ const PNG = Buffer.from(
 
 const modal = (window: any) => window.locator('#gw-url-modal.open');
 
-test.describe('a page whose source goes dark', () => {
+test.describe('a page whose directory goes dark', () => {
   const siteDir = makeRunDir();
   fs.writeFileSync(path.join(siteDir, 'kept.png'), PNG);
-  test.use({ extraPlugins: [{ kind: 'fs', name: 'site', config: { root: siteDir } }] });
+  test.use({ filesRoots: [{ root: siteDir, label: 'site' }] });
 
   test('still presents as the page, and a click descends into it', async ({ gw, window }) => {
-    await gw.enterPlugin('site');
+    await gw.enterSource('site (files)');
     const f = await gw.focused();
     const page = (await gw.getGrid(f.gridID)).tiles!.find((t) => t.altText === 'kept.png')!;
-    expect(page?.servesPage, 'an image is a page the plugin serves').toBe(true);
+    expect(page?.servesPage, 'an image is a page the node serves').toBe(true);
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy);
     // A row is what answers while the source cannot: the move mints it.
@@ -41,9 +42,12 @@ test.describe('a page whose source goes dark', () => {
       await expect
         .poll(async () => (await gw.getGrid(f.gridID)).tiles!.map((t) => t.altText), { timeout: 15_000 })
         .toEqual(['kept.png']);
+      await expect
+        .poll(async () => (await gw.focused()).cached, { message: 'the pane serves the directory from what it holds', timeout: 15_000 })
+        .toBe(true);
       const dark = tileAt(await gw.getGrid(f.gridID), 'url', cx + 1, cy + 1)!;
       expect(dark?.servesPage, 'the dark row is still the page').toBe(true);
-      expect(dark.urlString ?? '', "and the address is still the plugin's").toBe('');
+      expect(dark.urlString ?? '', 'and it still carries no address').toBe('');
 
       await gw.descendCell(cx + 1, cy + 1);
       await expect
@@ -58,18 +62,17 @@ test.describe('a page whose source goes dark', () => {
 
 test.describe('a page whose file is gone', () => {
   const siteDir = makeRunDir();
-  test.use({ extraPlugins: [{ kind: 'fs', name: 'site', config: { root: siteDir } }] });
+  test.use({ filesRoots: [{ root: siteDir, label: 'site' }] });
 
   test('a link to it greys, and a click asks nothing', async ({ gw, window }) => {
     const file = path.join(siteDir, 'gone.png');
     fs.writeFileSync(file, PNG);
-    const site = (await gw.plugins()).find((p) => p.label === 'site')!;
-    const grid = site.pluginGrids[0]!.gridID;
+    const grid = await gw.swatchGridID('site (files)');
     const entry = ((await gw.getGrid(grid)).tiles ?? []).find((t) => t.altText === 'gone.png');
     expect(entry?.servesPage, 'the image is listed as a page').toBe(true);
     fs.rmSync(file);
 
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const f = await gw.focused();
     const cx = Math.round(f.cx) + 1;
     const cy = Math.round(f.cy) + 1;

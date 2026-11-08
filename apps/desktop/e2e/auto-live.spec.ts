@@ -7,7 +7,7 @@ import { tileAt } from './oracle';
 // target without editing it: the version moves only at the ascent freeze.
 
 test('shell descent reconnects the running tmux with its state', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -65,7 +65,7 @@ test('url descent reopens the page live; a sibling preview stays frozen', async 
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

@@ -6,7 +6,7 @@ import { test, expect } from './fixtures';
 // read through the rawRows hook; one row per source line diverges by dozens.
 
 test('the canvas paints the rows the textarea soft-wraps', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

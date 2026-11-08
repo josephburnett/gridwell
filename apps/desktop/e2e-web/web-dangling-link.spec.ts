@@ -7,22 +7,23 @@ import { makeRunDir, removeHome } from '../e2e/homes';
 import { GridwellDriver } from '../e2e/driver';
 import { tileAt } from '../e2e/oracle';
 
-// A dangling door, a link into a plugin no longer in server.yaml, is DEAD:
-// the node does not declare that namespace, so the tile greys, nothing is
-// asked for it, and nothing is said about it (client/deadlink).
+// A dangling door, a link into a files root no longer in server.yaml, is
+// DEAD: with no root declared the node does not declare the files at all, so
+// the tile greys, nothing is asked for it, and nothing is said about it
+// (client/deadlink).
 //
 // dead-link.spec.ts pins the state against a link seeded straight onto
 // the server. This crosses the other half of the seam, in browser mode: a link
-// the user really dropped on a plugin really in server.yaml, then the config
+// the user really dropped on a root really in server.yaml, then the config
 // edit and the reboot that make it dangle. It counts verdicts and fetches over
 // three seconds of rendering, both of which must be zero.
 
-base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) => {
+base('a link into an undeclared files root goes dead, quietly', async ({ page }) => {
   const docs = makeRunDir();
   fs.writeFileSync(path.join(docs, 'note.md'), 'hello');
-  const home = seedHome([{ kind: 'fs', name: 'files', config: { root: docs } }]);
+  const home = seedHome([{ root: docs, label: 'docs' }]);
 
-  // Boot 1: with the plugin. Drop a link to it on the home root.
+  // Boot 1: with the root. Drop a link to it on the home root.
   let linkID = '';
   let childGridID = '';
   const served1 = await spawnServe(home, await freePort());
@@ -34,22 +35,22 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     await gw.waitIdle();
     const f = await gw.focused();
     await gw.openMenu();
-    await gw.dragPluginLink('files', Math.round(f.cx), Math.round(f.cy));
+    await gw.dragSourceLink('docs (files)', Math.round(f.cx), Math.round(f.cy));
     await gw.waitIdle();
     const seeded: any = await gw.getGrid(f.gridID);
     const link = (seeded.tiles ?? []).find((t: any) => t.kind === 'door');
-    expect(link, 'boot 1 dropped the plugin link door').toBeTruthy();
+    expect(link, 'boot 1 dropped the root link door').toBeTruthy();
     expect(link.link, 'and it is a link, not a door of its own').toBe(true);
     linkID = link.id;
     childGridID = String(link.childGridId ?? '');
-    expect(childGridID, 'the link names the plugin root it points at').toBeTruthy();
+    expect(childGridID, 'the link names the root it points at').toBeTruthy();
   } finally {
     await stopServe(served1.child);
   }
 
-  // The conversion-shaped edit: the plugin leaves the config, the home and its
-  // link tile stay. Serve minted ids into server.yaml on boot 1, so keep
-  // everything but the plugins list.
+  // The config edit: the root leaves the config, the home and its link tile
+  // stay. Serve minted the node id into server.yaml on boot 1, so keep
+  // everything but the files list.
   const yaml = fs.readFileSync(path.join(home, 'server.yaml'), 'utf8');
   const idLine = yaml.split('\n').find((l) => l.startsWith('id:'));
   expect(idLine, 'boot 1 minted the node id').toBeTruthy();
@@ -75,7 +76,7 @@ base('a link into an unconfigured plugin goes dead, quietly', async ({ page }) =
     await gw.waitIdle();
     const f = await gw.focused();
 
-    // server.yaml lost the plugin, so the tile the roster cannot place reads
+    // server.yaml lost the root, so the tile the roster cannot place reads
     // dead.
     await expect
       .poll(

@@ -14,7 +14,7 @@ test('left-clicking a live URL pane transfers focus when the menu is closed', as
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // Clicking the swatch, rather than dragging it, opens an ephemeral visit.
   const wcBefore = await electronApp.evaluate(
@@ -58,7 +58,7 @@ test('left-clicking a live URL pane closes the + menu on the previously-focused 
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,

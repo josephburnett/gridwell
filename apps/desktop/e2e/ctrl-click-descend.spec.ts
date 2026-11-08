@@ -14,7 +14,7 @@ const presses = [
 for (const press of presses) {
   for (const unfocused of [false, true]) {
     test(`${press.name} on a door in ${unfocused ? 'an unfocused' : 'the focused'} pane descends in a split below`, async ({ gw }) => {
-      await gw.enterPlugin('home');
+      await gw.enterSource('home');
       const a0 = await gw.focused();
       const cx = Math.round(a0.cx);
       const cy = Math.round(a0.cy) - 1;

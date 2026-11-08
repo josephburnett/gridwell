@@ -31,7 +31,7 @@ async function workspaceDepth(window: any): Promise<number> {
 // the focused pane and recorded in the layout. The other pane shows the grid
 // holding the workspace.
 async function visitInsideWorkspace(gw: GridwellDriver, window: any) {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;

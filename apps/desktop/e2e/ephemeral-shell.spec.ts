@@ -11,7 +11,7 @@ test('clicking the shell swatch opens an ephemeral shell; ascent deletes it', as
 }) => {
   const tileCount = (g: { tiles?: unknown[] }) => (g.tiles ?? []).length;
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const home = await gw.focused();
   const homeBefore = await gw.getGrid(home.gridID);

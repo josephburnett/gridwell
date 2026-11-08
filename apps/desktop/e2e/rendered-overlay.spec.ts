@@ -10,7 +10,7 @@ test('rendered mode shows sanitized HTML; the toggle round-trips to the editor',
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

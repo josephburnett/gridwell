@@ -24,7 +24,7 @@ function count(asked: string[], id: string): number {
 
 test('a boot, a descent and an ascent read each grid they show once', async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -79,7 +79,7 @@ test('a boot, a descent and an ascent read each grid they show once', async ({ g
 // A preview's bytes decode after the fetch that brought them has returned, so
 // the draws between are a decoding blob, not a missing one.
 test('a preview is fetched once on first look', async ({ electronApp, gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -133,7 +133,7 @@ test('a preview is fetched once on first look', async ({ electronApp, gw, window
 test('coming back to what the cache holds asks for nothing again', async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
   const depth = async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy) - 2;

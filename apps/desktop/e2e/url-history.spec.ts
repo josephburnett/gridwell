@@ -8,7 +8,7 @@ import { tileAt } from './oracle';
 // coming back.
 
 test('a revived url tile can still go back', async ({ electronApp, window, gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);

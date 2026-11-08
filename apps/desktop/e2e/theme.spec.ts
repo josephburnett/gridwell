@@ -46,7 +46,7 @@ test('the bar circle right-clicks to a theme menu; light survives a reload', asy
   gw,
   window,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   expect(await gw.theme(), 'a client with no stored preference is dark').toBe('dark');
 
   const f = await gw.focused();
@@ -171,7 +171,7 @@ test('the wide workspace tile crumb is a band lighter than the ink it carries', 
   window,
 }) => {
   await wearLight(gw, window);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -196,7 +196,7 @@ test('the wide workspace tile crumb is a band lighter than the ink it carries', 
 
 test("the light circle's rim is a casing, not the bar's lettering", async ({ gw, window }) => {
   await wearLight(gw, window);
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
 
   // The rim lifts the circle off the band. Worn in the lettering ink it is a
   // near-black ring around a saturated chip, which is what the dark palette

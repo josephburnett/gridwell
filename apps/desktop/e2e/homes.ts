@@ -22,9 +22,9 @@ export function makeHome(): string {
 }
 
 // The environment that points a node at its home. Its temp dir rides inside,
-// so what the node mints there (tmux's config dir and socket, go-plugin's
-// sockets) goes when the home goes, and its tmux server's argv names the home
-// it belongs to (tmuxToKill).
+// so what the node mints there (tmux's config dir and socket) goes when the
+// home goes, and its tmux server's argv names the home it belongs to
+// (tmuxToKill).
 export function homeEnv(home: string): Record<string, string> {
   const tmp = path.join(home, 'tmp');
   fs.mkdirSync(tmp, { recursive: true });

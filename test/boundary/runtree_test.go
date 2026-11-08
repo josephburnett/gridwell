@@ -18,7 +18,7 @@ func TestE2ELaunchesFromTheRunSnapshot(t *testing.T) {
 	root := repoRoot(t)
 	// The env vars naming the artifacts, and the constant a harness resolving
 	// the repo root itself has always been called.
-	names := regexp.MustCompile(`GRIDWELL_SIDECAR|GRIDWELL_STATIC|GRIDWELL_PLUGIN_DIR|GRIDWELL_SERVE_BIN|REPO_ROOT`)
+	names := regexp.MustCompile(`GRIDWELL_SIDECAR|GRIDWELL_STATIC|GRIDWELL_SERVE_BIN|REPO_ROOT`)
 	var offenders []string
 	for _, dir := range []string{"e2e", "e2e-web"} {
 		files, err := filepath.Glob(filepath.Join(root, "apps", "desktop", dir, "*.ts"))

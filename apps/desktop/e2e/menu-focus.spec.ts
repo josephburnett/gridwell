@@ -4,7 +4,7 @@ import { test, expect } from './fixtures';
 // SyncFocus owns the rule; this proves the wiring end to end.
 
 test('the + menu closes when focus leaves its pane', async ({ gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const panes = await gw.panes();
   expect(panes.length, 'split produced two panes').toBe(2);

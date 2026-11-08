@@ -22,7 +22,7 @@ test('freezing a live shell keeps its preview; the copy keeps it after the origi
     await gw.clickScreen(menu.plusX, menu.plusY);
   };
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);

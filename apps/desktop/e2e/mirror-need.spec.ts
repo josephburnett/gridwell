@@ -37,7 +37,7 @@ test('a live url is captured only while another pane shows it', async ({ electro
     );
   const c = await gw.cadences();
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   const cx = Math.round(home.cx);
   const cy = Math.round(home.cy);
@@ -96,7 +96,7 @@ test('a live url is captured only while another pane shows it', async ({ electro
 
 test('a live shell snapshots only at a park and while another pane shows it', async ({ gw, window }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const a = await gw.focused();
   const b = (await gw.panes()).find((p) => p.id !== a.id)!;

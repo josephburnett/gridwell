@@ -56,7 +56,7 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
 }) => {
   const token = await loginToken(gw.origin, homePassword(home));
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);
@@ -125,7 +125,7 @@ test('two panes on one grid keep their own views through leave, re-entry and rel
 
 test('a reopened pane ascends onto the view it left the level below at', async ({ gw, window }) => {
   const c = await gw.cadences();
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
   const wx = Math.round(f.cx);

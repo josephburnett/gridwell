@@ -8,7 +8,7 @@ import { test, expect } from './fixtures';
 test('clicking the bar title zooms a pane and back, restoring the layout exactly', async ({
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before).toHaveLength(2);
@@ -41,7 +41,7 @@ test('the title shows a read-only context label on non-renamable panes', async (
 }) => {
   // A root grid shows its configured label, and right-clicking it never opens
   // the rename input.
-  await gw.plugins(); // wait for boot to settle on the root grid
+  await gw.sources(); // wait for boot to settle on the root grid
   await expect.poll(async () => (await gw.barName()).label).toBe('home');
   expect((await gw.barName()).editable).toBe(false);
   await gw.clickBarName('right');

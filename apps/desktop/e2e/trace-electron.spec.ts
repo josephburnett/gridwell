@@ -17,7 +17,7 @@ test('a live url tile puts the main process into the node trace', async ({
   const origin = new URL(window.url()).origin;
   const token = await loginToken(origin, homePassword(home));
 
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const wcBefore = await electronApp.evaluate(
     ({ webContents }) => webContents.getAllWebContents().length,
   );

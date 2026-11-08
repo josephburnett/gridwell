@@ -61,7 +61,7 @@ async function finishHeld(win: Page, x: number, y: number, button: 'left' | 'rig
 }
 
 test('Esc on a tile move leaves the tile in its cell and writes nothing', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -93,7 +93,7 @@ test('Esc on a tile move leaves the tile in its cell and writes nothing', async 
 for (const link of [false, true]) {
   const what = link ? 'ctrl + right-drag link' : 'right-drag copy';
   test(`Esc on a ${what} makes no tile`, async ({ gw, window }) => {
-    await gw.enterPlugin('home');
+    await gw.enterSource('home');
     const f = await gw.focused();
     const cx = Math.round(f.cx);
     const cy = Math.round(f.cy);
@@ -123,7 +123,7 @@ for (const link of [false, true]) {
 
 test('Esc on a pan returns the viewport and stamps no framing', async ({ gw, window }) => {
   const settleMs = (await gw.cadences()).framingSaveMs;
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await settle(window, settleMs);
   const f = await gw.focused();
   const posts = () =>
@@ -153,7 +153,7 @@ test('Esc on a pan returns the viewport and stamps no framing', async ({ gw, win
 });
 
 test('Esc on a divider resize puts the panes back', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   const writes = await watchWrites(window);
@@ -179,7 +179,7 @@ test('Esc on a divider resize puts the panes back', async ({ gw, window }) => {
 });
 
 test('Esc on a crush keeps the pane', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   await gw.splitFocusedPaneVertical();
   const before = (await gw.panes()).slice().sort((a, b) => a.x - b.x);
   expect(before.length).toBe(2);
@@ -204,14 +204,14 @@ test('Esc on a crush keeps the pane', async ({ gw, window }) => {
 });
 
 test('Esc on a swatch drag-create makes nothing', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
   const n = (await gw.getGrid(f.gridID)).tiles?.length ?? 0;
   await gw.openMenu();
   const menu = await gw.menu();
-  const item = menu.items.find((i) => !i.isPlugin && i.kind === 'markdown')!;
+  const item = menu.items.find((i) => !i.isSwatch && i.kind === 'markdown')!;
   const to = await gw.cellCenter(f.id, cx, cy);
   const writes = await watchWrites(window);
 
@@ -234,7 +234,7 @@ test('Esc on a swatch drag-create makes nothing', async ({ gw, window }) => {
 // ephemeral-promote.spec.ts: arming the drag parks the live view, and the layer
 // change under the real cursor would otherwise read as a lost release.
 test('Esc on the ephemeral crumb drag promotes nothing', async ({ electronApp, window, gw }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const home = await gw.focused();
   await gw.splitFocusedPaneVertical();
   const visitor = await gw.focused();
@@ -286,7 +286,7 @@ test('Esc on the ephemeral crumb drag promotes nothing', async ({ electronApp, w
 // With nothing in flight Esc is not a gesture's, and a drag after a cancelled
 // one is a fresh gesture that commits as usual.
 test('a drag after a cancelled one moves the tile', async ({ gw, window }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const f = await gw.focused();
   const cx = Math.round(f.cx);
   const cy = Math.round(f.cy);
@@ -315,7 +315,7 @@ test('Esc reaches a drag forwarded from a live view that holds keyboard focus', 
   window,
   gw,
 }) => {
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const wcBefore = await electronApp.evaluate(({ webContents }) => webContents.getAllWebContents().length);
   await gw.clickMenuSwatch('url');
   await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });

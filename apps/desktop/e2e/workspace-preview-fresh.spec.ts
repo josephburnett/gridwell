@@ -29,7 +29,7 @@ async function workspaceDepth(window: any): Promise<number> {
 
 test("a workspace preview never draws a leaf its layout no longer names", async ({ gw, home, window }) => {
   const token = await loginToken(gw.origin, homePassword(home));
-  await gw.enterPlugin('home');
+  await gw.enterSource('home');
   const scratchGridID = await gw.scratchGridID('home');
   const f = await gw.focused();
   const rootGrid = f.gridID;
