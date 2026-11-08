@@ -127,7 +127,7 @@ what each one is called.
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
 | workspace tile | A tile holding a layout: a pane tree, with each frame's framing and scroll. | |
 | preview | What a tile looks like from outside. A capture is one; a freeze keeps one. | |
-| id | A tile's or grid's own segment, qualified by its namespace's: digits for a row the node minted, or `~` plus a file's absolute path, base64url. A namespace's is seven lowercase base36 characters with a leading letter, or a legacy 32-hex. Never reassigned. `docs/ids.md`. | A file's path, which the id encodes. |
+| id | A tile's or grid's own segment, qualified by its namespace's: digits for a home row, or `~` plus a file's absolute path, base64url. A namespace's is seven lowercase base36 characters with a leading letter, or a legacy 32-hex. Never reassigned. `docs/ids.md`. | A file's path, which the id encodes. |
 
 **Places and panes**
 
@@ -166,7 +166,7 @@ what each one is called.
 | dark | A source declared but not answering right now: a connection that will not dial, or a root or directory that will not read. Its grids serve what the node holds, a connection's from cache and a directory's from its rows, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
 | disabled | A connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). The files are never disabled. | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
-| broken | A door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
+| broken | A connection's door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
 | told | A source whose changes reach the node as they happen (`EventSourceHealth.told`): a connection whose stream is up, or files whose watch is healthy. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
 | unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
 | notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
@@ -292,7 +292,8 @@ These were decided deliberately. Do not reverse one without a new decision.
 **Data**
 
 - The node is one process with one directory, `~/.gridwell`: one id, one
-  `server.yaml` (`id`, `web`, `federation`, `connections`, `files`), one
+  `server.yaml` (`id`, `web`, `federation`, `static`, `shell`,
+  `disable_shells`, `connections`, `retired_names`, `files`), one
   `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
 - The store mints the node's singleton grids (root, scratch, trash) when it
   opens, never on a read; reading never mutates has no exception

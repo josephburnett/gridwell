@@ -2652,10 +2652,11 @@ func (x *TileResponse) GetTile() *Tile {
 
 // DeadLink is the detail on a NotFound that means the path an id names
 // ends in nothing: a namespace the answering node does not declare, at
-// whatever hop that node sits, or a key its declared namespace says is gone.
+// whatever hop that node sits, a path outside every root, or a key its
+// declared namespace says is gone.
 // The link is dead, a state and not an error. gwerr.DeadLink writes it and
 // gwerr.IsDeadLink reads it; namespace is the undeclared segment in the
-// answering node's frame, empty when the namespace answered for a gone key.
+// answering node's frame, empty when the namespace answered for the path.
 type DeadLink struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
