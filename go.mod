@@ -8,7 +8,7 @@ replace (
 )
 
 // The api module lives in this repo (ARCHITECTURE.md, Module boundaries): the
-// contract every plugin builds against, carved out so the arrows are
+// contract a far node builds against, carved out so the arrows are
 // structural. The replace makes the in-repo copy authoritative for the app
 // build.
 require (

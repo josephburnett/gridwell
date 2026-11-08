@@ -117,8 +117,8 @@ room
 rooms
 # "memory" and "remember" for what a source last answered — that is the
 # cache (cached). memory stays for RAM: held in memory, an in-memory store,
-# SQLite's :memory:.
-memory .*(in memory|in-memory|:memory:|memory only|journal_mode=memory|muscle memory|over memory|memTransport)
+# SQLite's :memory:, the modernc.org/memory module.
+memory .*(in memory|in-memory|:memory:|memory only|journal_mode=memory|muscle memory|over memory|memTransport|modernc\.org/memory)
 memories
 remember
 remembers

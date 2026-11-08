@@ -11,7 +11,7 @@ bad=0
 while read -r word allow; do
   [ -z "$word" ] && continue
   case "$word" in \#*) continue ;; esac
-  hits=$(git ls-files -z -- '*.go' '*.ts' '*.md' '*.yml' '*.yaml' '*.sh' '*.proto' 'Makefile' \
+  hits=$(git ls-files -z -- '*.go' '*.ts' '*.md' '*.yml' '*.yaml' '*.sh' '*.proto' '*.mod' 'Makefile' \
     | xargs -0 grep -nwi -- "$word" 2>/dev/null \
     | grep -v '\.pb\.go:\|\.connect\.go:' || true)
   if [ -n "$allow" ]; then
