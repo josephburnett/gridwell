@@ -36,7 +36,7 @@ of a context window.
 
 2. **Write the expectations without the code.** Spawn one agent that is
    given only `CLAUDE.md`, `api/gridwell/v1/data.proto`,
-   `api/plugin/v1/plugin.proto`, `docs/concepts.md` and `docs/freshness.md`,
+   `docs/concepts.md` and `docs/freshness.md`,
    and is forbidden to open any other file. It writes `expectations.md`
    into the scratchpad: for every promise, the concrete behaviours that
    must hold; the parity cells, kind times operation times owner, each
@@ -49,7 +49,8 @@ of a context window.
    minutes of real use. Tabulate it: every rpc by verb and outcome, every
    error code, every repeated ask of one id, every id of the wrong shape,
    every event followed by a refetch, every write the user did not make,
-   every walk or capture nothing on screen needed, every plugin log line.
+   every walk or capture nothing on screen needed, every files or connection
+   log line.
    Each anomaly is a finding until a decision in CLAUDE.md explains it.
 
 4. **Read at the owners.** Three lists name what to read, and each item is

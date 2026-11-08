@@ -22,8 +22,7 @@ each, so the session stays responsive and judges by the ledger diff.
 
 2. **Brief one agent.** Opus, in a worktree off main
    (`git -C /home/joe/gridwell worktree add .worktrees/<row> -b <row> main`).
-   The worktree has no `../gridwell-plugins`, so `make wasm` then
-   `GRIDWELL_PLUGIN_DIR=/home/joe/gridwell go test ./...`. The brief names
+   In it, `make wasm` then `go test ./...`. The brief names
    the row, its count function in `test/boundary/ratchet_counts_test.go`,
    the mechanism and decision columns verbatim, and these rules:
    - the count falls only by the mechanism the row names; the build refuses
