@@ -1,10 +1,10 @@
-// Package pluginmeta records a Gridwell database's durable identity inside the
+// Package dbmeta records a Gridwell database's durable identity inside the
 // database itself, so the server checks on each start that the DB it opens is
 // the one server.yaml names. Three keys live in the storage-only
 // _gridwell_meta table: gridwell, a marker; id, the durable routing id; and
 // kind, which schema the DB holds. id and kind are immutable, strictly
 // verified in both directions on every open; the display name is config-only.
-package pluginmeta
+package dbmeta
 
 import (
 	"database/sql"
@@ -14,20 +14,20 @@ import (
 
 	// This package calls sql.Open("sqlite", ...), so it owns the driver
 	// registration. Relying on another package to import it would fail at run
-	// time in a binary that links pluginmeta without the store.
+	// time in a binary that links dbmeta without the store.
 	_ "modernc.org/sqlite"
 )
 
 // Sentinel errors, tested with errors.Is.
 var (
 	// ErrIDMismatch: the durable identity must never silently change.
-	ErrIDMismatch = errors.New("pluginmeta: configured id does not match the one stored in the plugin DB")
+	ErrIDMismatch = errors.New("dbmeta: configured id does not match the one stored in the DB")
 	// ErrKindMismatch: kind selects the schema, so opening a DB as the wrong
 	// kind is refused.
-	ErrKindMismatch = errors.New("pluginmeta: configured kind does not match the one stored in the plugin DB")
+	ErrKindMismatch = errors.New("dbmeta: configured kind does not match the one stored in the DB")
 	// ErrNotInitialized: only Create makes an identity, so a DB that was
 	// never created fails loudly instead of materializing an empty store.
-	ErrNotInitialized = errors.New("pluginmeta: plugin DB is missing or uninitialized")
+	ErrNotInitialized = errors.New("dbmeta: the DB is missing or uninitialized")
 )
 
 const (
@@ -107,14 +107,14 @@ func Verify(dbPath, id, kind string) (Meta, error) {
 func open(dbPath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("pluginmeta open %s: %w", dbPath, err)
+		return nil, fmt.Errorf("dbmeta open %s: %w", dbPath, err)
 	}
 	// One connection is the single-writer discipline every SQLite handle here
 	// pins, so a pooled second cannot race the file lock into SQLITE_BUSY.
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS _gridwell_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("pluginmeta schema: %w", err)
+		return nil, fmt.Errorf("dbmeta schema: %w", err)
 	}
 	return db, nil
 }
@@ -129,7 +129,7 @@ func writeIdentity(db *sql.DB, id, kind string) error {
 			`INSERT INTO _gridwell_meta (k, v) VALUES (?, ?)
 			 ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
 			kv.k, kv.v); err != nil {
-			return fmt.Errorf("pluginmeta write %s: %w", kv.k, err)
+			return fmt.Errorf("dbmeta write %s: %w", kv.k, err)
 		}
 	}
 	return nil
@@ -159,7 +159,7 @@ func readKey(db *sql.DB, k string) (string, error) {
 	case errors.Is(err, sql.ErrNoRows):
 		return "", nil
 	case err != nil:
-		return "", fmt.Errorf("pluginmeta read %s: %w", k, err)
+		return "", fmt.Errorf("dbmeta read %s: %w", k, err)
 	}
 	return v, nil
 }

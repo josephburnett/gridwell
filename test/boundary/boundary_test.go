@@ -418,7 +418,7 @@ func TestOneStoreWriteFunnel(t *testing.T) {
 // storeWriteFunnel.
 var sqliteOpeners = map[string]string{
 	"internal/sourcecache/sourcecache.go":         "cache.db, the disposable connection cache, not gridwell.db",
-	"internal/pluginmeta/pluginmeta.go":           "the storage-only _gridwell_meta identity marker, checked before the store opens; it carries no node fact (internal/local/store/CLAUDE.md)",
+	"internal/dbmeta/dbmeta.go":                   "the storage-only _gridwell_meta identity marker, checked before the store opens; it carries no node fact (internal/local/store/CLAUDE.md)",
 	"internal/cli/backup.go":                      "VACUUM INTO a fresh snapshot file; it writes no row of the source",
 	"internal/local/store/storetest/storetest.go": "a read-only (mode=ro) handle for tests that ask what is at rest",
 }

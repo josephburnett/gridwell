@@ -1,8 +1,8 @@
 package local
 
 import (
+	"github.com/josephburnett/gridwell/internal/dbmeta"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/pluginmeta"
 )
 
 // OpenVerified is the one way the home's store is opened: verify the
@@ -11,7 +11,7 @@ import (
 // qualified links carry. Fusing the three makes the forgotten-injection
 // state unrepresentable.
 func OpenVerified(dbPath, uuid, kind string) (*store.Store, error) {
-	if _, err := pluginmeta.Verify(dbPath, uuid, kind); err != nil {
+	if _, err := dbmeta.Verify(dbPath, uuid, kind); err != nil {
 		return nil, err
 	}
 	st, err := store.Open(dbPath)

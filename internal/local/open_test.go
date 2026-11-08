@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/pluginmeta"
+	"github.com/josephburnett/gridwell/internal/dbmeta"
 )
 
 // The open seam: a store opened the way the binary opens it reports the config
@@ -14,7 +14,7 @@ import (
 func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")
 	// Stamp the config id into the DB, as registration does.
-	if err := pluginmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
+	if err := dbmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
 	}
 	st, err := OpenVerified(dbPath, "k3x9m2q", "home")
@@ -35,7 +35,7 @@ func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 // authoritative and a wrong spawn must fail loudly rather than adopt.
 func TestOpenVerifiedRefusesMismatch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "plugin.db")
-	if err := pluginmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
+	if err := dbmeta.Create(dbPath, "k3x9m2q", "home"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := OpenVerified(dbPath, "z9z9z9z", "home"); err == nil {

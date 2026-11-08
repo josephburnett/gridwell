@@ -1,4 +1,4 @@
-package pluginmeta
+package dbmeta
 
 import (
 	"database/sql"

@@ -23,12 +23,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
+	"github.com/josephburnett/gridwell/internal/dbmeta"
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/pluginmeta"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
@@ -76,7 +76,7 @@ func ensureStore(dir string, cfg *config.ServerConfig) error {
 	if _, err := os.Stat(path); err == nil {
 		// A changed id must never silently open, or shadow, another
 		// identity's data.
-		if _, err := pluginmeta.Verify(path, cfg.ID, "home"); err != nil {
+		if _, err := dbmeta.Verify(path, cfg.ID, "home"); err != nil {
 			return fmt.Errorf("%s is not the store of id %q — did `id` change? (an id is immutable; restore the old one): %w", path, cfg.ID, err)
 		}
 		return nil
@@ -89,7 +89,7 @@ func ensureStore(dir string, cfg *config.ServerConfig) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	return pluginmeta.Create(path, cfg.ID, "home")
+	return dbmeta.Create(path, cfg.ID, "home")
 }
 
 // Options configures Start.
