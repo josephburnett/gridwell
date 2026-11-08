@@ -14,10 +14,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	_ "modernc.org/sqlite"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -58,6 +61,9 @@ type transportHarness struct {
 	cut chan struct{}
 	// farAPI is the remote node's connection API; stopFarNode takes it away.
 	farAPI *httptest.Server
+	// refuseShare, set, has the far node refuse this node's share, so the
+	// connection's changes are not told.
+	refuseShare atomic.Bool
 
 	mu      sync.Mutex
 	dialErr error
@@ -76,11 +82,20 @@ func (h *transportHarness) stopFarNode() {
 	h.farAPI.CloseClientConnections()
 }
 
-// farLink is the dialed far namespace with a cuttable event stream. Every
-// other verb passes straight through to the real remote export.
+// farLink is the dialed far namespace with a cuttable event stream and a
+// share it can refuse. Every other verb passes straight through to the real
+// remote export.
 type farLink struct {
 	namespace.Namespace
-	cut <-chan struct{}
+	cut    <-chan struct{}
+	refuse *atomic.Bool
+}
+
+func (f *farLink) SetView(ctx context.Context, req *gridwellv1.SetViewRequest) (*gridwellv1.SetViewResponse, error) {
+	if f.refuse.Load() {
+		return nil, status.Error(codes.FailedPrecondition, "the far node cannot watch what is shown")
+	}
+	return f.Namespace.SetView(ctx, req)
 }
 
 func (f *farLink) Subscribe(ctx context.Context, in *gridwellv1.SubscribeRequest, send func(*gridwellv1.Event) error) error {
@@ -140,7 +155,7 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 		if h.dialErr != nil {
 			return nil, nil, h.dialErr
 		}
-		return &farLink{Namespace: namespace.FromClient(remoteExport), cut: h.cut}, func() {}, nil
+		return &farLink{Namespace: namespace.FromClient(remoteExport), cut: h.cut, refuse: &h.refuseShare}, func() {}, nil
 	}, "", conns, nil)
 	if err != nil {
 		t.Fatal(err)

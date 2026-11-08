@@ -9,12 +9,15 @@ package server_test
 // test/boundary's TestParityIsZero, which reads it off TestParity/count.
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"slices"
@@ -24,14 +27,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/clientsync"
@@ -43,29 +41,30 @@ import (
 	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/urlview"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
+	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/pluginhost"
-	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
 type parityKind string
 
 // The kinds, and the three grids a door can open onto as seen from the node
-// holding it: one of its home's, a plugin's it declares, a far home it reaches.
+// holding it: one of its home's, one of its directories, a far home it
+// reaches.
 const (
-	kText       parityKind = "text"
-	kURL        parityKind = "url"
-	kShell      parityKind = "shell"
-	kWorkspace  parityKind = "workspace"
-	kDoor       parityKind = "door"
-	kDoorHome   parityKind = "door to a home grid"
-	kDoorPlugin parityKind = "door to a plugin grid"
-	kDoorFar    parityKind = "door to a far home"
+	kText      parityKind = "text"
+	kURL       parityKind = "url"
+	kShell     parityKind = "shell"
+	kWorkspace parityKind = "workspace"
+	kDoor      parityKind = "door"
+	kDoorHome  parityKind = "door to a home grid"
+	kDoorDir   parityKind = "door to a directory"
+	kDoorFar   parityKind = "door to a far home"
 )
 
-var parityKinds = []parityKind{kText, kURL, kShell, kWorkspace, kDoor, kDoorHome, kDoorPlugin, kDoorFar}
+var parityKinds = []parityKind{kText, kURL, kShell, kWorkspace, kDoor, kDoorHome, kDoorDir, kDoorFar}
 
 type parityOp string
 
@@ -96,9 +95,9 @@ var parityOps = []parityOp{opCreate, opMove, opCopy, opLink, opDelete, opRename,
 type parityOwner string
 
 const (
-	onHome   parityOwner = "home"
-	onPlugin parityOwner = "plugin"
-	onFar    parityOwner = "far"
+	onHome  parityOwner = "home"
+	onFiles parityOwner = "files"
+	onFar   parityOwner = "far"
 )
 
 type parityVerdict int
@@ -133,317 +132,320 @@ const (
 	naScroll  = "only a text has a text scroll (textedit.Scroll)"
 	naFraming = "framing is a door's (rpc.IsDoorKind)"
 	naContent = "the kind holds no content of its own (rpc.KindCaps.Content)"
-	naServe   = "only a url entry serves a page (plugin.proto Entry.serves_page)"
+	naServe   = "only a url tile serving its page has a page to serve (rpc.PageContent)"
 )
 
-// What a plugin cannot hold.
+// What the files cannot hold.
 const (
-	naPluginKind  = "a plugin serves door, text and url entries only (plugin.proto Entry.kind)"
-	naPluginDoor  = "a plugin's door to its own grid is the door row, and a door entry has no link variant (plugin.proto Entry.link_target)"
-	naPluginGrids = "a plugin entry opens and links only its own grids (plugin.proto Entry.child_grid, Entry.link_target)"
+	naFilesKind     = "the files hold directories, text files, page files and symlinks only, so no shell and no workspace (files.entryOf)"
+	naFilesTextName = "a text file's name is its file name, which its presentation reads, so nothing renames it (store.Namespace.Rename)"
+	naFilesGrids    = "a directory's doors are its subdirectories and its symlinks, which land under a root only, so none opens a home's or a far node's grid (files.linkFacts)"
 )
 
 // The differences CLAUDE.md decides, quoted.
 const (
-	dPluginCreates  = "A directory's grid takes no new tiles"
-	dPluginDelete   = "Delete moves the file to the OS trash."
-	dPluginDoorCopy = "A directory's door never copies"
-	dPluginPageCopy = "a page file, whose page is the node's, copies as a link"
-	dPluginName     = "A file's name is its file name until a rename"
-	dPluginMove     = "a move to another source is refused" // plugin_move_test.go
-	dPluginPage     = "The node serves a page file's page through its content API"
-	dShellCopy      = "A shell copied across nodes lands as a link"
-	dTextName       = "A text tile's name stays the file's, since its presentation reads it"
+	dFilesCreates  = "A directory's grid takes no new tiles"
+	dFilesDelete   = "Delete moves the file to the OS trash."
+	dFilesDoorCopy = "A directory's door never copies"
+	dFilesPageCopy = "a page file, whose page is the node's, copies as a link"
+	dFilesPath     = "a renamed or moved file retires its old id and a link to it reads dead"
+	dFilesPage     = "The node serves a page file's page through its content API"
+	dPageAddress   = "A page the node serves has no address of its own"
+	dFilesName     = "A file's name is its file name until a rename"
+	dFilesFind     = "a text query answers empty: no body is read for it."
+	dShellCopy     = "A shell copied across nodes lands as a link"
+	dTextName      = "A text tile's name stays the file's, since its presentation reads it"
+	dLinkDead      = "Either is dashed, opens the target, and is dead when the target is gone or outside every root"
 )
 
 var parityTable = []parityCell{
-	{kText, opCreate, onPlugin, decided, dPluginCreates, nil},
+	{kText, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kText, opCreate, onFar, same, "", checkCreate},
-	{kText, opMove, onPlugin, decided, dPluginMove, nil},
+	{kText, opMove, onFiles, decided, dFilesPath, nil},
 	{kText, opMove, onFar, same, "", checkMove},
-	{kText, opCopy, onPlugin, same, "", checkCopy},
+	{kText, opCopy, onFiles, same, "", checkCopy},
 	{kText, opCopy, onFar, same, "", checkCopy},
-	{kText, opLink, onPlugin, same, "", checkLink},
+	{kText, opLink, onFiles, same, "", checkLink},
 	{kText, opLink, onFar, same, "", checkLink},
-	{kText, opDelete, onPlugin, decided, dPluginDelete, nil},
+	{kText, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kText, opDelete, onFar, same, "", checkDelete},
-	{kText, opRename, onPlugin, na, naName, nil},
+	{kText, opRename, onFiles, na, naFilesTextName, nil},
 	{kText, opRename, onFar, na, naName, nil},
-	{kText, opDescend, onPlugin, same, "", checkDescend},
+	{kText, opDescend, onFiles, same, "", checkDescend},
 	{kText, opDescend, onFar, same, "", checkDescend},
-	{kText, opFreeze, onPlugin, na, naLive, nil},
+	{kText, opFreeze, onFiles, na, naLive, nil},
 	{kText, opFreeze, onFar, na, naLive, nil},
-	{kText, opScreenshot, onPlugin, na, naLive, nil},
+	{kText, opScreenshot, onFiles, na, naLive, nil},
 	{kText, opScreenshot, onFar, na, naLive, nil},
-	{kText, opZoom, onPlugin, same, "", checkZoom},
+	{kText, opZoom, onFiles, same, "", checkZoom},
 	{kText, opZoom, onFar, same, "", checkZoom},
-	{kText, opScroll, onPlugin, same, "", checkScroll},
+	{kText, opScroll, onFiles, same, "", checkScroll},
 	{kText, opScroll, onFar, same, "", checkScroll},
-	{kText, opFraming, onPlugin, na, naFraming, nil},
+	{kText, opFraming, onFiles, na, naFraming, nil},
 	{kText, opFraming, onFar, na, naFraming, nil},
-	{kText, opRead, onPlugin, same, "", checkRead},
+	{kText, opRead, onFiles, same, "", checkRead},
 	{kText, opRead, onFar, same, "", checkRead},
-	{kText, opWrite, onPlugin, decided, dTextName, nil},
+	{kText, opWrite, onFiles, decided, dTextName, nil},
 	{kText, opWrite, onFar, same, "", checkWrite},
-	{kText, opServe, onPlugin, na, naServe, nil},
+	{kText, opServe, onFiles, na, naServe, nil},
 	{kText, opServe, onFar, na, naServe, nil},
-	{kText, opFind, onPlugin, same, "", checkFind},
+	{kText, opFind, onFiles, decided, dFilesFind, nil},
 	{kText, opFind, onFar, same, "", checkFind},
-	{kText, opUpdate, onPlugin, decided, dTextName, nil},
+	{kText, opUpdate, onFiles, decided, dTextName, nil},
 	{kText, opUpdate, onFar, same, "", checkUpdate},
-	{kText, opDead, onPlugin, same, "", checkDead},
+	{kText, opDead, onFiles, same, "", checkDead},
 	{kText, opDead, onFar, same, "", checkDead},
-	{kURL, opCreate, onPlugin, decided, dPluginCreates, nil},
+	{kURL, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kURL, opCreate, onFar, same, "", checkCreate},
-	{kURL, opMove, onPlugin, decided, dPluginMove, nil},
+	{kURL, opMove, onFiles, decided, dFilesPath, nil},
 	{kURL, opMove, onFar, same, "", checkMove},
-	{kURL, opCopy, onPlugin, decided, dPluginPageCopy, nil},
+	{kURL, opCopy, onFiles, decided, dFilesPageCopy, nil},
 	{kURL, opCopy, onFar, same, "", checkCopy},
-	{kURL, opLink, onPlugin, same, "", checkLink},
+	{kURL, opLink, onFiles, decided, dFilesPage, nil},
 	{kURL, opLink, onFar, same, "", checkLink},
-	{kURL, opDelete, onPlugin, decided, dPluginDelete, nil},
+	{kURL, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kURL, opDelete, onFar, same, "", checkDelete},
-	{kURL, opRename, onPlugin, same, "", checkRename},
+	{kURL, opRename, onFiles, same, "", checkRename},
 	{kURL, opRename, onFar, same, "", checkRename},
-	{kURL, opDescend, onPlugin, same, "", checkDescend},
+	{kURL, opDescend, onFiles, decided, dFilesPage, nil},
 	{kURL, opDescend, onFar, same, "", checkDescend},
-	{kURL, opFreeze, onPlugin, same, "", checkFreeze},
+	{kURL, opFreeze, onFiles, same, "", checkFreeze},
 	{kURL, opFreeze, onFar, same, "", checkFreeze},
-	{kURL, opScreenshot, onPlugin, decided, dPluginName, nil},
+	{kURL, opScreenshot, onFiles, decided, dFilesName, nil},
 	{kURL, opScreenshot, onFar, same, "", checkScreenshot},
-	{kURL, opZoom, onPlugin, same, "", checkZoom},
+	{kURL, opZoom, onFiles, same, "", checkZoom},
 	{kURL, opZoom, onFar, same, "", checkZoom},
-	{kURL, opScroll, onPlugin, na, naScroll, nil},
+	{kURL, opScroll, onFiles, na, naScroll, nil},
 	{kURL, opScroll, onFar, na, naScroll, nil},
-	{kURL, opFraming, onPlugin, na, naFraming, nil},
+	{kURL, opFraming, onFiles, na, naFraming, nil},
 	{kURL, opFraming, onFar, na, naFraming, nil},
-	{kURL, opRead, onPlugin, same, "", checkRead},
+	{kURL, opRead, onFiles, decided, dPageAddress, nil},
 	{kURL, opRead, onFar, same, "", checkRead},
-	{kURL, opWrite, onPlugin, same, "", checkWrite},
+	{kURL, opWrite, onFiles, decided, dPageAddress, nil},
 	{kURL, opWrite, onFar, same, "", checkWrite},
-	{kURL, opServe, onPlugin, decided, dPluginPage, nil},
+	{kURL, opServe, onFiles, decided, dFilesPage, nil},
 	{kURL, opServe, onFar, same, "", checkServe},
-	{kURL, opFind, onPlugin, same, "", checkFind},
+	{kURL, opFind, onFiles, decided, dFilesFind, nil},
 	{kURL, opFind, onFar, same, "", checkFind},
-	{kURL, opUpdate, onPlugin, same, "", checkUpdate},
+	{kURL, opUpdate, onFiles, decided, dPageAddress, nil},
 	{kURL, opUpdate, onFar, same, "", checkUpdate},
-	{kURL, opDead, onPlugin, same, "", checkDead},
+	{kURL, opDead, onFiles, same, "", checkDead},
 	{kURL, opDead, onFar, same, "", checkDead},
-	{kShell, opCreate, onPlugin, na, naPluginKind, nil},
+	{kShell, opCreate, onFiles, na, naFilesKind, nil},
 	{kShell, opCreate, onFar, same, "", checkCreate},
-	{kShell, opMove, onPlugin, na, naPluginKind, nil},
+	{kShell, opMove, onFiles, na, naFilesKind, nil},
 	{kShell, opMove, onFar, same, "", checkMove},
-	{kShell, opCopy, onPlugin, na, naPluginKind, nil},
+	{kShell, opCopy, onFiles, na, naFilesKind, nil},
 	{kShell, opCopy, onFar, decided, dShellCopy, nil},
-	{kShell, opLink, onPlugin, na, naPluginKind, nil},
+	{kShell, opLink, onFiles, na, naFilesKind, nil},
 	{kShell, opLink, onFar, same, "", checkLink},
-	{kShell, opDelete, onPlugin, na, naPluginKind, nil},
+	{kShell, opDelete, onFiles, na, naFilesKind, nil},
 	{kShell, opDelete, onFar, same, "", checkDelete},
-	{kShell, opRename, onPlugin, na, naPluginKind, nil},
+	{kShell, opRename, onFiles, na, naFilesKind, nil},
 	{kShell, opRename, onFar, same, "", checkRename},
-	{kShell, opDescend, onPlugin, na, naPluginKind, nil},
+	{kShell, opDescend, onFiles, na, naFilesKind, nil},
 	{kShell, opDescend, onFar, same, "", checkDescend},
-	{kShell, opFreeze, onPlugin, na, naPluginKind, nil},
+	{kShell, opFreeze, onFiles, na, naFilesKind, nil},
 	{kShell, opFreeze, onFar, same, "", checkFreeze},
-	{kShell, opScreenshot, onPlugin, na, naPluginKind, nil},
+	{kShell, opScreenshot, onFiles, na, naFilesKind, nil},
 	{kShell, opScreenshot, onFar, same, "", checkScreenshot},
-	{kShell, opZoom, onPlugin, na, naPluginKind, nil},
+	{kShell, opZoom, onFiles, na, naFilesKind, nil},
 	{kShell, opZoom, onFar, same, "", checkZoom},
-	{kShell, opScroll, onPlugin, na, naScroll, nil},
+	{kShell, opScroll, onFiles, na, naScroll, nil},
 	{kShell, opScroll, onFar, na, naScroll, nil},
-	{kShell, opFraming, onPlugin, na, naFraming, nil},
+	{kShell, opFraming, onFiles, na, naFraming, nil},
 	{kShell, opFraming, onFar, na, naFraming, nil},
-	{kShell, opRead, onPlugin, na, naContent, nil},
+	{kShell, opRead, onFiles, na, naContent, nil},
 	{kShell, opRead, onFar, na, naContent, nil},
-	{kShell, opWrite, onPlugin, na, naContent, nil},
+	{kShell, opWrite, onFiles, na, naContent, nil},
 	{kShell, opWrite, onFar, na, naContent, nil},
-	{kShell, opServe, onPlugin, na, naServe, nil},
+	{kShell, opServe, onFiles, na, naServe, nil},
 	{kShell, opServe, onFar, na, naServe, nil},
-	{kShell, opFind, onPlugin, na, naPluginKind, nil},
+	{kShell, opFind, onFiles, na, naFilesKind, nil},
 	{kShell, opFind, onFar, same, "", checkFind},
-	{kShell, opUpdate, onPlugin, na, naPluginKind, nil},
+	{kShell, opUpdate, onFiles, na, naFilesKind, nil},
 	{kShell, opUpdate, onFar, same, "", checkUpdate},
-	{kShell, opDead, onPlugin, na, naPluginKind, nil},
+	{kShell, opDead, onFiles, na, naFilesKind, nil},
 	{kShell, opDead, onFar, same, "", checkDead},
-	{kWorkspace, opCreate, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opCreate, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opCreate, onFar, same, "", checkCreate},
-	{kWorkspace, opMove, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opMove, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opMove, onFar, same, "", checkMove},
-	{kWorkspace, opCopy, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opCopy, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opCopy, onFar, same, "", checkCopy},
-	{kWorkspace, opLink, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opLink, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opLink, onFar, same, "", checkLink},
-	{kWorkspace, opDelete, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opDelete, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opDelete, onFar, same, "", checkDelete},
-	{kWorkspace, opRename, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opRename, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opRename, onFar, same, "", checkRename},
-	{kWorkspace, opDescend, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opDescend, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opDescend, onFar, same, "", checkDescend},
-	{kWorkspace, opFreeze, onPlugin, na, naLive, nil},
+	{kWorkspace, opFreeze, onFiles, na, naLive, nil},
 	{kWorkspace, opFreeze, onFar, na, naLive, nil},
-	{kWorkspace, opScreenshot, onPlugin, na, naLive, nil},
+	{kWorkspace, opScreenshot, onFiles, na, naLive, nil},
 	{kWorkspace, opScreenshot, onFar, na, naLive, nil},
-	{kWorkspace, opZoom, onPlugin, na, naZoom, nil},
+	{kWorkspace, opZoom, onFiles, na, naZoom, nil},
 	{kWorkspace, opZoom, onFar, na, naZoom, nil},
-	{kWorkspace, opScroll, onPlugin, na, naScroll, nil},
+	{kWorkspace, opScroll, onFiles, na, naScroll, nil},
 	{kWorkspace, opScroll, onFar, na, naScroll, nil},
-	{kWorkspace, opFraming, onPlugin, na, naFraming, nil},
+	{kWorkspace, opFraming, onFiles, na, naFraming, nil},
 	{kWorkspace, opFraming, onFar, na, naFraming, nil},
-	{kWorkspace, opRead, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opRead, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opRead, onFar, same, "", checkRead},
-	{kWorkspace, opWrite, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opWrite, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opWrite, onFar, same, "", checkWrite},
-	{kWorkspace, opServe, onPlugin, na, naServe, nil},
+	{kWorkspace, opServe, onFiles, na, naServe, nil},
 	{kWorkspace, opServe, onFar, na, naServe, nil},
-	{kWorkspace, opFind, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opFind, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opFind, onFar, same, "", checkFind},
-	{kWorkspace, opUpdate, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opUpdate, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opUpdate, onFar, same, "", checkUpdate},
-	{kWorkspace, opDead, onPlugin, na, naPluginKind, nil},
+	{kWorkspace, opDead, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opDead, onFar, same, "", checkDead},
-	{kDoor, opCreate, onPlugin, decided, dPluginCreates, nil},
+	{kDoor, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kDoor, opCreate, onFar, same, "", checkCreate},
-	{kDoor, opMove, onPlugin, decided, dPluginMove, nil},
+	{kDoor, opMove, onFiles, decided, dFilesPath, nil},
 	{kDoor, opMove, onFar, same, "", checkMove},
-	{kDoor, opCopy, onPlugin, decided, dPluginDoorCopy, nil},
+	{kDoor, opCopy, onFiles, decided, dFilesDoorCopy, nil},
 	{kDoor, opCopy, onFar, same, "", checkCopy},
-	{kDoor, opLink, onPlugin, same, "", checkLink},
+	{kDoor, opLink, onFiles, same, "", checkLink},
 	{kDoor, opLink, onFar, same, "", checkLink},
-	{kDoor, opDelete, onPlugin, decided, dPluginDelete, nil},
+	{kDoor, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kDoor, opDelete, onFar, same, "", checkDelete},
-	{kDoor, opRename, onPlugin, same, "", checkRename},
+	{kDoor, opRename, onFiles, same, "", checkRename},
 	{kDoor, opRename, onFar, same, "", checkRename},
-	{kDoor, opDescend, onPlugin, same, "", checkDescend},
+	{kDoor, opDescend, onFiles, same, "", checkDescend},
 	{kDoor, opDescend, onFar, same, "", checkDescend},
-	{kDoor, opFreeze, onPlugin, na, naLive, nil},
+	{kDoor, opFreeze, onFiles, na, naLive, nil},
 	{kDoor, opFreeze, onFar, na, naLive, nil},
-	{kDoor, opScreenshot, onPlugin, na, naLive, nil},
+	{kDoor, opScreenshot, onFiles, na, naLive, nil},
 	{kDoor, opScreenshot, onFar, na, naLive, nil},
-	{kDoor, opZoom, onPlugin, na, naZoom, nil},
+	{kDoor, opZoom, onFiles, na, naZoom, nil},
 	{kDoor, opZoom, onFar, na, naZoom, nil},
-	{kDoor, opScroll, onPlugin, na, naScroll, nil},
+	{kDoor, opScroll, onFiles, na, naScroll, nil},
 	{kDoor, opScroll, onFar, na, naScroll, nil},
-	{kDoor, opFraming, onPlugin, same, "", checkFraming},
+	{kDoor, opFraming, onFiles, same, "", checkFraming},
 	{kDoor, opFraming, onFar, same, "", checkFraming},
-	{kDoor, opRead, onPlugin, na, naContent, nil},
+	{kDoor, opRead, onFiles, na, naContent, nil},
 	{kDoor, opRead, onFar, na, naContent, nil},
-	{kDoor, opWrite, onPlugin, na, naContent, nil},
+	{kDoor, opWrite, onFiles, na, naContent, nil},
 	{kDoor, opWrite, onFar, na, naContent, nil},
-	{kDoor, opServe, onPlugin, na, naServe, nil},
+	{kDoor, opServe, onFiles, na, naServe, nil},
 	{kDoor, opServe, onFar, na, naServe, nil},
-	{kDoor, opFind, onPlugin, same, "", checkFind},
+	{kDoor, opFind, onFiles, decided, dFilesFind, nil},
 	{kDoor, opFind, onFar, same, "", checkFind},
-	{kDoor, opUpdate, onPlugin, same, "", checkUpdate},
+	{kDoor, opUpdate, onFiles, same, "", checkUpdate},
 	{kDoor, opUpdate, onFar, same, "", checkUpdate},
-	{kDoor, opDead, onPlugin, same, "", checkDead},
+	{kDoor, opDead, onFiles, same, "", checkDead},
 	{kDoor, opDead, onFar, same, "", checkDead},
-	{kDoorHome, opCreate, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opCreate, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opCreate, onFar, same, "", checkCreate},
-	{kDoorHome, opMove, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opMove, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opMove, onFar, same, "", checkMove},
-	{kDoorHome, opCopy, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opCopy, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opCopy, onFar, same, "", checkCopy},
-	{kDoorHome, opLink, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opLink, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opLink, onFar, same, "", checkLink},
-	{kDoorHome, opDelete, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opDelete, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opDelete, onFar, same, "", checkDelete},
-	{kDoorHome, opRename, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opRename, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opRename, onFar, same, "", checkRename},
-	{kDoorHome, opDescend, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opDescend, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opDescend, onFar, same, "", checkDescend},
-	{kDoorHome, opFreeze, onPlugin, na, naLive, nil},
+	{kDoorHome, opFreeze, onFiles, na, naLive, nil},
 	{kDoorHome, opFreeze, onFar, na, naLive, nil},
-	{kDoorHome, opScreenshot, onPlugin, na, naLive, nil},
+	{kDoorHome, opScreenshot, onFiles, na, naLive, nil},
 	{kDoorHome, opScreenshot, onFar, na, naLive, nil},
-	{kDoorHome, opZoom, onPlugin, na, naZoom, nil},
+	{kDoorHome, opZoom, onFiles, na, naZoom, nil},
 	{kDoorHome, opZoom, onFar, na, naZoom, nil},
-	{kDoorHome, opScroll, onPlugin, na, naScroll, nil},
+	{kDoorHome, opScroll, onFiles, na, naScroll, nil},
 	{kDoorHome, opScroll, onFar, na, naScroll, nil},
-	{kDoorHome, opFraming, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opFraming, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opFraming, onFar, same, "", checkFraming},
-	{kDoorHome, opRead, onPlugin, na, naContent, nil},
+	{kDoorHome, opRead, onFiles, na, naContent, nil},
 	{kDoorHome, opRead, onFar, na, naContent, nil},
-	{kDoorHome, opWrite, onPlugin, na, naContent, nil},
+	{kDoorHome, opWrite, onFiles, na, naContent, nil},
 	{kDoorHome, opWrite, onFar, na, naContent, nil},
-	{kDoorHome, opServe, onPlugin, na, naServe, nil},
+	{kDoorHome, opServe, onFiles, na, naServe, nil},
 	{kDoorHome, opServe, onFar, na, naServe, nil},
-	{kDoorHome, opFind, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opFind, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opFind, onFar, same, "", checkFind},
-	{kDoorHome, opUpdate, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opUpdate, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opUpdate, onFar, same, "", checkUpdate},
-	{kDoorHome, opDead, onPlugin, na, naPluginGrids, nil},
+	{kDoorHome, opDead, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opDead, onFar, same, "", checkDead},
-	{kDoorPlugin, opCreate, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opCreate, onFar, same, "", checkCreate},
-	{kDoorPlugin, opMove, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opMove, onFar, same, "", checkMove},
-	{kDoorPlugin, opCopy, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opCopy, onFar, same, "", checkCopy},
-	{kDoorPlugin, opLink, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opLink, onFar, same, "", checkLink},
-	{kDoorPlugin, opDelete, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opDelete, onFar, same, "", checkDelete},
-	{kDoorPlugin, opRename, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opRename, onFar, same, "", checkRename},
-	{kDoorPlugin, opDescend, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opDescend, onFar, same, "", checkDescend},
-	{kDoorPlugin, opFreeze, onPlugin, na, naLive, nil},
-	{kDoorPlugin, opFreeze, onFar, na, naLive, nil},
-	{kDoorPlugin, opScreenshot, onPlugin, na, naLive, nil},
-	{kDoorPlugin, opScreenshot, onFar, na, naLive, nil},
-	{kDoorPlugin, opZoom, onPlugin, na, naZoom, nil},
-	{kDoorPlugin, opZoom, onFar, na, naZoom, nil},
-	{kDoorPlugin, opScroll, onPlugin, na, naScroll, nil},
-	{kDoorPlugin, opScroll, onFar, na, naScroll, nil},
-	{kDoorPlugin, opFraming, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opFraming, onFar, same, "", checkFraming},
-	{kDoorPlugin, opRead, onPlugin, na, naContent, nil},
-	{kDoorPlugin, opRead, onFar, na, naContent, nil},
-	{kDoorPlugin, opWrite, onPlugin, na, naContent, nil},
-	{kDoorPlugin, opWrite, onFar, na, naContent, nil},
-	{kDoorPlugin, opServe, onPlugin, na, naServe, nil},
-	{kDoorPlugin, opServe, onFar, na, naServe, nil},
-	{kDoorPlugin, opFind, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opFind, onFar, same, "", checkFind},
-	{kDoorPlugin, opUpdate, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opUpdate, onFar, same, "", checkUpdate},
-	{kDoorPlugin, opDead, onPlugin, na, naPluginDoor, nil},
-	{kDoorPlugin, opDead, onFar, same, "", checkDead},
-	{kDoorFar, opCreate, onPlugin, na, naPluginGrids, nil},
+	{kDoorDir, opCreate, onFiles, decided, dFilesCreates, nil},
+	{kDoorDir, opCreate, onFar, same, "", checkCreate},
+	{kDoorDir, opMove, onFiles, decided, dFilesPath, nil},
+	{kDoorDir, opMove, onFar, same, "", checkMove},
+	{kDoorDir, opCopy, onFiles, same, "", checkCopy},
+	{kDoorDir, opCopy, onFar, same, "", checkCopy},
+	{kDoorDir, opLink, onFiles, same, "", checkLink},
+	{kDoorDir, opLink, onFar, same, "", checkLink},
+	{kDoorDir, opDelete, onFiles, decided, dFilesDelete, nil},
+	{kDoorDir, opDelete, onFar, same, "", checkDelete},
+	{kDoorDir, opRename, onFiles, same, "", checkRename},
+	{kDoorDir, opRename, onFar, same, "", checkRename},
+	{kDoorDir, opDescend, onFiles, same, "", checkDescend},
+	{kDoorDir, opDescend, onFar, same, "", checkDescend},
+	{kDoorDir, opFreeze, onFiles, na, naLive, nil},
+	{kDoorDir, opFreeze, onFar, na, naLive, nil},
+	{kDoorDir, opScreenshot, onFiles, na, naLive, nil},
+	{kDoorDir, opScreenshot, onFar, na, naLive, nil},
+	{kDoorDir, opZoom, onFiles, na, naZoom, nil},
+	{kDoorDir, opZoom, onFar, na, naZoom, nil},
+	{kDoorDir, opScroll, onFiles, na, naScroll, nil},
+	{kDoorDir, opScroll, onFar, na, naScroll, nil},
+	{kDoorDir, opFraming, onFiles, same, "", checkFraming},
+	{kDoorDir, opFraming, onFar, same, "", checkFraming},
+	{kDoorDir, opRead, onFiles, na, naContent, nil},
+	{kDoorDir, opRead, onFar, na, naContent, nil},
+	{kDoorDir, opWrite, onFiles, na, naContent, nil},
+	{kDoorDir, opWrite, onFar, na, naContent, nil},
+	{kDoorDir, opServe, onFiles, na, naServe, nil},
+	{kDoorDir, opServe, onFar, na, naServe, nil},
+	{kDoorDir, opFind, onFiles, decided, dFilesFind, nil},
+	{kDoorDir, opFind, onFar, same, "", checkFind},
+	{kDoorDir, opUpdate, onFiles, same, "", checkUpdate},
+	{kDoorDir, opUpdate, onFar, same, "", checkUpdate},
+	{kDoorDir, opDead, onFiles, decided, dLinkDead, nil},
+	{kDoorDir, opDead, onFar, same, "", checkDead},
+	{kDoorFar, opCreate, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opCreate, onFar, same, "", checkCreate},
-	{kDoorFar, opMove, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opMove, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opMove, onFar, same, "", checkMove},
-	{kDoorFar, opCopy, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opCopy, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opCopy, onFar, same, "", checkCopy},
-	{kDoorFar, opLink, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opLink, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opLink, onFar, same, "", checkLink},
-	{kDoorFar, opDelete, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opDelete, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDelete, onFar, same, "", checkDelete},
-	{kDoorFar, opRename, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opRename, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opRename, onFar, same, "", checkRename},
-	{kDoorFar, opDescend, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opDescend, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDescend, onFar, same, "", checkDescend},
-	{kDoorFar, opFreeze, onPlugin, na, naLive, nil},
+	{kDoorFar, opFreeze, onFiles, na, naLive, nil},
 	{kDoorFar, opFreeze, onFar, na, naLive, nil},
-	{kDoorFar, opScreenshot, onPlugin, na, naLive, nil},
+	{kDoorFar, opScreenshot, onFiles, na, naLive, nil},
 	{kDoorFar, opScreenshot, onFar, na, naLive, nil},
-	{kDoorFar, opZoom, onPlugin, na, naZoom, nil},
+	{kDoorFar, opZoom, onFiles, na, naZoom, nil},
 	{kDoorFar, opZoom, onFar, na, naZoom, nil},
-	{kDoorFar, opScroll, onPlugin, na, naScroll, nil},
+	{kDoorFar, opScroll, onFiles, na, naScroll, nil},
 	{kDoorFar, opScroll, onFar, na, naScroll, nil},
-	{kDoorFar, opFraming, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opFraming, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opFraming, onFar, same, "", checkFraming},
-	{kDoorFar, opRead, onPlugin, na, naContent, nil},
+	{kDoorFar, opRead, onFiles, na, naContent, nil},
 	{kDoorFar, opRead, onFar, na, naContent, nil},
-	{kDoorFar, opWrite, onPlugin, na, naContent, nil},
+	{kDoorFar, opWrite, onFiles, na, naContent, nil},
 	{kDoorFar, opWrite, onFar, na, naContent, nil},
-	{kDoorFar, opServe, onPlugin, na, naServe, nil},
+	{kDoorFar, opServe, onFiles, na, naServe, nil},
 	{kDoorFar, opServe, onFar, na, naServe, nil},
-	{kDoorFar, opFind, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opFind, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opFind, onFar, same, "", checkFind},
-	{kDoorFar, opUpdate, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opUpdate, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opUpdate, onFar, same, "", checkUpdate},
-	{kDoorFar, opDead, onPlugin, na, naPluginGrids, nil},
+	{kDoorFar, opDead, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDead, onFar, same, "", checkDead},
 }
 
@@ -522,7 +524,7 @@ func checkParityTable(t *testing.T, table []parityCell) {
 	}
 	for _, k := range parityKinds {
 		for _, op := range parityOps {
-			for _, o := range []parityOwner{onPlugin, onFar} {
+			for _, o := range []parityOwner{onFiles, onFar} {
 				if !seen[parityCell{kind: k, op: op, owner: o}.String()] {
 					t.Errorf("%s/%s/%s has no cell", k, op, o)
 				}
@@ -604,16 +606,11 @@ func parityDelta(before, after *gridwellv1.Tile) map[string]string {
 	return out
 }
 
-const (
-	parityPluginUUID    = "pparity"
-	parityFarPluginUUID = "pparfar"
-)
-
 // parityFix is three nodes in a chain, the local one reaching the far one
 // through a connection and the far one reaching a third the same way, the
-// first two each with its home and a paritySource, and a client subscribed at
-// the local web API showing every grid the cells use. The third node is what
-// a far home's door opens when the far node holds it.
+// first two each with its home and its files over a parityDisk, and a client
+// subscribed at the local web API showing every grid the cells use. The
+// third node is what a far home's door opens when the far node holds it.
 type parityFix struct {
 	t       *testing.T
 	ctx     context.Context
@@ -621,15 +618,15 @@ type parityFix struct {
 	raw     gridwellv1connect.GridwellClient
 	h       *transportHarness
 	third   *farNode
-	src     map[string]*paritySource // by the qualified namespace of its grids
-	root    map[parityOwner]string   // the grid each owner's tiles sit on
-	away    map[parityOwner]string   // another grid of the same owner
-	farHome map[parityOwner]string   // the far home a door on the owner's grid opens
+	disk    map[string]parityDisk  // each node's files by the prefix it is reached through, "" the local one
+	root    map[parityOwner]string // the grid each owner's tiles sit on
+	away    map[parityOwner]string // another grid of the same owner
+	farHome map[parityOwner]string // the far home a door on the owner's grid opens
 	// undeclare takes out the connections of the node holding the owner's
 	// tiles, answering what declares them again.
 	undeclare map[parityOwner]func() func()
 	nodes     map[string]parityNode // each node by the prefix it is reached through, "" the local one
-	plugins   []*gridwellv1.PluginInfo
+	roster    []*gridwellv1.PluginInfo
 	token     string
 	events    chan *gridwellv1.Event
 	breaks    map[string]func() // per tile, what breaks the path to it
@@ -654,14 +651,70 @@ const (
 	parityThirdConn = parityConn + "rnode1/zurich/"
 )
 
-// newParityFix builds the fixture, each paritySource first taking declare,
-// a variant's declarations.
-func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
-	local, far := newParitySource(), newParitySource()
-	for _, d := range declare {
-		d(local)
-		d(far)
+// parityNodeIDs is each node's id by the prefix it is reached through.
+var parityNodeIDs = map[string]string{"": localNodeID, parityConn: "rnode1"}
+
+// parityDisk is one node's files: three roots. main holds a text file, a
+// page file, a directory and a symlink to lib's hall; away is empty; lib
+// holds hall and inner, the directory a home door opens. Each directory
+// holds one file.
+type parityDisk struct {
+	main, away, lib string
+}
+
+// parityFileNames is main's tiles by name; fileTile places each where home's
+// twin sits.
+var parityFileNames = map[parityKind]string{kText: "Body.md", kURL: "Site.png", kDoor: "Door", kDoorDir: "Hall"}
+
+func (d parityDisk) hall() string  { return filepath.Join(d.lib, "hall") }
+func (d parityDisk) inner() string { return filepath.Join(d.lib, "inner") }
+
+func newParityDisk(t *testing.T) parityDisk {
+	d := parityDisk{main: t.TempDir(), away: t.TempDir(), lib: t.TempDir()}
+	var img bytes.Buffer
+	if err := png.Encode(&img, image.NewGray(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
 	}
+	writeFile(t, filepath.Join(d.main, "Body.md"), "Body.md")
+	writeFile(t, filepath.Join(d.main, "Site.png"), img.String())
+	writeFile(t, filepath.Join(d.main, "Door", "Inner"), "Inner")
+	writeFile(t, filepath.Join(d.hall(), "Inner"), "Inner")
+	writeFile(t, filepath.Join(d.inner(), "Inner"), "Inner")
+	if err := os.Symlink(d.hall(), filepath.Join(d.main, "Hall")); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+// registerParityFiles registers d's roots as the node's files, as the node
+// does, a delete removing the path rather than moving it to the OS trash.
+func registerParityFiles(t *testing.T, reg *plugin.Registry, st *store.Store, node string, d parityDisk) {
+	src, err := files.New(st.Namespace("~"), []files.Root{{Path: d.main}, {Path: d.away}, {Path: d.lib}}, os.RemoveAll)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Register(rpc.FilesOwner(node), "files", src, src.Close)
+	reg.SetLabel(rpc.FilesOwner(node), "files")
+}
+
+// fileID is path's id on the node reached through prefix, as the local
+// node spells it.
+func (f *parityFix) fileID(prefix, path string) string {
+	return prefix + rpc.QualifyID(parityNodeIDs[prefix], rpc.KeyTileID(path))
+}
+
+// pathOf is the path a files id names on the node holding it, ok false for
+// any other id.
+func pathOf(id string) (path string, ok bool) {
+	if !rpc.IsFilesID(id) {
+		return "", false
+	}
+	return rpc.TileKey(rpc.LocalOf(id))
+}
+
+// newParityFix builds the fixture, each variant then applied.
+func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
+	disks := map[string]parityDisk{"": newParityDisk(t), parityConn: newParityDisk(t)}
 	third := newFarNode(t, "cnode1")
 	undeclare := map[parityOwner]func() func(){}
 	at := func(o parityOwner) func(*plugin.Registry, *store.Store) {
@@ -671,16 +724,19 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 	}
 	h := buildTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, nil,
 		func(reg *plugin.Registry, st *store.Store) {
-			registerParitySource(t, reg, st, parityPluginUUID, local)
+			registerParityFiles(t, reg, st, localNodeID, disks[""])
+			// The switch the node gives each connection it declares.
+			tr, _ := reg.Transport()
+			reg.Switch(strings.TrimSuffix(parityConn, "/"), "geneva", func() { tr.(*connection.Server).Disable("geneva") })
 			at(onHome)(reg, st)
 		},
 		func(reg *plugin.Registry, st *store.Store) {
-			registerParitySource(t, reg, st, parityFarPluginUUID, far)
+			registerParityFiles(t, reg, st, "rnode1", disks[parityConn])
 		},
 		connectTo(t, "zurich", third, at(onFar)))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	t.Cleanup(cancel)
-	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h, third: third, undeclare: undeclare,
+	f := &parityFix{t: t, ctx: ctx, cl: h.localCl, h: h, third: third, undeclare: undeclare, disk: disks,
 		raw:    gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL, connect.WithProtoJSON()),
 		events: make(chan *gridwellv1.Event, 1024), breaks: map[string]func(){}, mends: map[string]func(){},
 		health: map[string]*gridwellv1.EventPluginHealth{}, heard: cache.New(),
@@ -691,11 +747,9 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.src = map[string]*paritySource{parityPluginUUID: local, parityConn + parityFarPluginUUID: far}
-	f.plugins, f.token = lp.Plugins, lp.ContentToken
+	f.roster, f.token = lp.Plugins, lp.ContentToken
 	f.root[onHome], f.root[onFar] = lp.HomeGridId, connectionRows(lp)[0].RootGridId
-	f.root[onPlugin] = rpc.QualifyID(parityPluginUUID, rpc.EntryGridID("all"))
-	f.away[onPlugin] = rpc.QualifyID(parityPluginUUID, rpc.EntryGridID("other"))
+	f.root[onFiles], f.away[onFiles] = f.fileID("", disks[""].main), f.fileID("", disks[""].away)
 	// The far node's + menu, read through the connection, lands its own
 	// connection on the third node's home.
 	farMenu, err := f.cl.HandshakeNS(ctx, strings.TrimSuffix(parityConn, "/"))
@@ -717,13 +771,16 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 		t.Fatal(err)
 	}
 	shown := []string{f.farHome[onFar]}
-	for _, o := range []parityOwner{onHome, onPlugin, onFar} {
+	for _, o := range []parityOwner{onHome, onFiles, onFar} {
 		shown = append(shown, f.root[o], f.away[o])
 	}
-	for ns := range f.src {
-		for _, g := range []string{"all", "inner", "other"} {
-			shown = append(shown, rpc.QualifyID(ns, rpc.EntryGridID(g)))
+	for prefix, d := range disks {
+		for _, dir := range []string{d.main, d.away, filepath.Join(d.main, "Door"), d.hall(), d.inner()} {
+			shown = append(shown, f.fileID(prefix, dir))
 		}
+	}
+	for _, v := range variants {
+		v.apply(f)
 	}
 	es, err := f.cl.Subscribe(ctx)
 	if err != nil {
@@ -755,19 +812,6 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 	return f
 }
 
-// registerParitySource registers src as the loader does, through
-// pluginhost.Start.
-func registerParitySource(t *testing.T, reg *plugin.Registry, st *store.Store, uuid string, src *paritySource) {
-	cp, closer, err := plugintest.Loopback(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	a, stop := pluginhost.Start(cp, st.Namespace(uuid), nil, "plugin "+uuid+" watch")
-	t.Cleanup(func() { stop(); closer() })
-	reg.Register(uuid, "parity", a, nil)
-	reg.SetLabel(uuid, "parity")
-}
-
 func (f *parityFix) create(o parityOwner, tl *gridwellv1.Tile, body []byte) *gridwellv1.Tile {
 	f.t.Helper()
 	created, err := f.cl.CreateWithContent(f.ctx, &gridwellv1.CreateTileRequest{GridId: f.root[o], Tile: tl}, body)
@@ -780,28 +824,17 @@ func (f *parityFix) create(o parityOwner, tl *gridwellv1.Tile, body []byte) *gri
 // parityCells is where each kind sits, on every owner alike.
 var parityCells = map[parityKind][2]int64{
 	kText: {1, 1}, kURL: {2, 1}, kShell: {3, 1}, kWorkspace: {4, 1},
-	kDoor: {5, 1}, kDoorHome: {6, 1}, kDoorPlugin: {7, 1}, kDoorFar: {8, 1},
+	kDoor: {5, 1}, kDoorHome: {6, 1}, kDoorDir: {7, 1}, kDoorFar: {8, 1},
 }
 
 var parityLayout = []byte(`{"v":1,"root":{"pane":{"id":"p1","zoom":1}},"focus":"p1"}`)
 
-// tile answers owner's tile of kind: a plugin's from its listing, home's and
-// a far home's made as the user makes them, the same on both.
+// tile answers owner's tile of kind: the files' from disk, home's and a far
+// home's made as the user makes them, the same on both.
 func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 	f.t.Helper()
-	if o == onPlugin {
-		name := map[parityKind]string{kText: "Body", kURL: "Site", kDoor: "Door"}[k]
-		g, err := f.cl.GetGrid(f.ctx, f.root[o])
-		if err != nil {
-			f.t.Fatal(err)
-		}
-		for _, tl := range g.Tiles {
-			if tl.AltText == name {
-				f.breaks[tl.Id] = func() { f.src[parityPluginUUID].remove(rpc.LocalOf(tl.Id)) }
-				return tl
-			}
-		}
-		f.t.Fatalf("the plugin lists no %s named %q", k, name)
+	if o == onFiles {
+		return f.fileTile(k)
 	}
 	at := parityCells[k]
 	cell := func(tl *gridwellv1.Tile) *gridwellv1.Tile {
@@ -811,9 +844,9 @@ func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 	var made *gridwellv1.Tile
 	switch k {
 	case kText:
-		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindText}), []byte("Body"))
+		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindText}), []byte("Body.md"))
 	case kURL:
-		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindURL, UrlString: "https://example.com/u", AltText: "Site"}), nil)
+		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindURL, UrlString: "https://example.com/u", AltText: "Site.png"}), nil)
 	case kShell:
 		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindShell}), nil)
 	case kWorkspace:
@@ -827,13 +860,14 @@ func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: target.ChildGridId}), nil)
 		f.breaks[made.Id] = f.destroyer(target.Id)
 		return made
-	case kDoorPlugin:
-		ns := parityPluginUUID
+	case kDoorDir:
+		prefix := ""
 		if o == onFar {
-			ns = parityConn + parityFarPluginUUID
+			prefix = parityConn
 		}
-		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: rpc.QualifyID(ns, rpc.EntryGridID("inner"))}), nil)
-		f.breaks[made.Id] = func() { f.src[ns].dropGrid("inner") }
+		dir := f.disk[prefix].inner()
+		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: f.fileID(prefix, dir)}), nil)
+		f.breaks[made.Id] = func() { f.remove(dir) }
 		return made
 	case kDoorFar:
 		made = f.create(o, cell(&gridwellv1.Tile{Kind: rpc.KindDoor, AltText: "Hall", ChildGridId: f.farHome[o]}), nil)
@@ -846,8 +880,39 @@ func (f *parityFix) tile(o parityOwner, k parityKind) *gridwellv1.Tile {
 	return made
 }
 
-// door makes a door holding one text, as the plugin's door holds its inner
-// grid's.
+// fileTile is the files' tile of kind on main, placed where home's twin
+// sits as the user places it.
+func (f *parityFix) fileTile(k parityKind) *gridwellv1.Tile {
+	f.t.Helper()
+	d := f.disk[""]
+	path := filepath.Join(d.main, parityFileNames[k])
+	t, err := f.cl.GetTile(f.ctx, f.fileID("", path))
+	if err != nil {
+		f.t.Fatalf("the files hold no %s at %s: %v", k, path, err)
+	}
+	if at := parityCells[k]; t.X != at[0] || t.Y != at[1] {
+		if t, err = f.cl.MoveTile(f.ctx, &gridwellv1.MoveTileRequest{TileId: t.Id, X: at[0], Y: at[1], W: 1, H: 1,
+			Claim: rpc.PlacementOf(t)}); err != nil {
+			f.t.Fatalf("place %s: %v", k, err)
+		}
+	}
+	gone := path
+	if k == kDoorDir {
+		gone = d.hall()
+	}
+	f.breaks[t.Id] = func() { f.remove(gone) }
+	return t
+}
+
+// remove takes path off disk, as a user's rm -r.
+func (f *parityFix) remove(path string) {
+	f.t.Helper()
+	if err := os.RemoveAll(path); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// door makes a door holding one text, as a directory holds one file.
 func (f *parityFix) door(o parityOwner, tl *gridwellv1.Tile) *gridwellv1.Tile {
 	f.t.Helper()
 	made := f.create(o, tl, nil)
@@ -917,10 +982,12 @@ func (f *parityFix) told(ids, grids []string) bool {
 
 // draw is the client's verdict on the row: dead or not, the banner's hue and
 // words, and whether the outside treatment agrees with who owns the address
-// the row opens, which is the one difference the promise allows a draw.
+// the row opens and whether it sits in a directory, the differences the
+// promise and the directory tint allow a draw. The hue is the row's own, the
+// tint a directory's rows wear aside.
 func (f *parityFix) draw(t *gridwellv1.Tile) string {
-	host := rpc.IsFilesID(t.GridId)
-	dead := deadlink.DeadTile(t, f.plugins, localNodeID, func(id string) bool {
+	inDir := rpc.IsFilesID(t.GridId)
+	dead := deadlink.DeadTile(t, f.roster, localNodeID, func(id string) bool {
 		var err error
 		if t.LinkTargetId != "" {
 			_, err = f.cl.GetTile(f.ctx, id)
@@ -929,10 +996,9 @@ func (f *parityFix) draw(t *gridwellv1.Tile) string {
 		}
 		return clientsync.Of(err) == clientsync.OutcomeDead
 	})
-	outside := tilepreview.Outside(t, host)
-	elsewhere := rpc.IsDoorKind(t.Kind) && t.ChildGridId != "" && rpc.NamespaceOf(t.ChildGridId) != rpc.NamespaceOf(t.GridId)
-	return fmt.Sprintf("dead=%v outside-as-its-address=%v hue=%d banner=%q",
-		dead, outside == elsewhere, tilepreview.BannerHue(t, outside), tilepreview.BannerText(t))
+	elsewhere := rpc.IsDoorKind(t.Kind) && t.ChildGridId != "" && rpc.SourceOf(t.ChildGridId) != rpc.SourceOf(t.GridId)
+	return fmt.Sprintf("dead=%v outside-as-its-place=%v hue=%d banner=%q", dead, tilepreview.Outside(t, inDir) == (elsewhere || inDir),
+		tilepreview.BannerHue(t, tilepreview.Outside(t, false)), tilepreview.BannerText(t))
 }
 
 // observe is a write's observable: its answer, and once it landed the row
@@ -957,191 +1023,6 @@ func (f *parityFix) observe(before *gridwellv1.Tile, id string, err error, tells
 		obs.Told = f.told([]string{id}, grids)
 	}
 	return obs
-}
-
-// paritySource is a plugin over one small source: a text, a url, a page and a
-// door onto a grid holding one text, plus an empty grid, every one placed
-// where home's twin is.
-type paritySource struct {
-	pluginv1.UnimplementedPluginServer
-	mu      sync.Mutex
-	grids   map[string][]*pluginv1.Entry
-	bodies  map[string]string
-	stamp   int
-	changes chan *pluginv1.Change
-	moves   bool // declares and answers Move (plugin_move_test.go)
-	// What a variant declares otherwise (parity_variant_test.go).
-	unwritable, unwatched, partial bool
-	unreachable                    string
-}
-
-func newParitySource() *paritySource {
-	at := func(x, y int64) *pluginv1.PlacementHint { return &pluginv1.PlacementHint{X: x, Y: y, W: 1, H: 1} }
-	return &paritySource{
-		grids: map[string][]*pluginv1.Entry{
-			"all": {
-				{Key: "t", Kind: rpc.KindText, Label: "Body", ContentStamp: "s0", PlacementHint: at(1, 1)},
-				{Key: "u", Kind: rpc.KindURL, Label: "Site", UrlString: "https://example.com/u", PlacementHint: at(2, 1)},
-				{Key: "p", Kind: rpc.KindURL, Label: "Page", ServesPage: true, PlacementHint: at(2, 2)},
-				{Key: "d", Kind: rpc.KindDoor, Label: "Door", ChildGrid: "inner", PlacementHint: at(5, 1)},
-			},
-			"inner": {{Key: "it", Kind: rpc.KindText, Label: "Inner", ContentStamp: "s0", PlacementHint: at(0, 0)}},
-			"other": {},
-		},
-		bodies:  map[string]string{"t": "Body", "it": "Inner"},
-		changes: make(chan *pluginv1.Change, 64),
-	}
-}
-
-func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves,
-		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
-}
-
-func (s *paritySource) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	resp := &pluginv1.ListResponse{Authoritative: !s.partial, Unreachable: s.unreachable}
-	for _, e := range s.grids[req.Grid] {
-		resp.Entries = append(resp.Entries, proto.CloneOf(e))
-	}
-	return resp, nil
-}
-
-// entry is key's entry and the grid listing it; the caller holds mu.
-func (s *paritySource) entry(key string) (*pluginv1.Entry, string) {
-	for g, es := range s.grids {
-		for _, e := range es {
-			if e.Key == key {
-				return e, g
-			}
-		}
-	}
-	return nil, ""
-}
-
-func (s *paritySource) ReadContent(req *pluginv1.ReadContentRequest, stream grpc.ServerStreamingServer[pluginv1.ContentChunk]) error {
-	s.mu.Lock()
-	body, ok := s.bodies[req.Key]
-	e, _ := s.entry(req.Key)
-	s.mu.Unlock()
-	if !ok || e == nil {
-		return status.Errorf(codes.NotFound, "no body %q", req.Key)
-	}
-	return stream.Send(&pluginv1.ContentChunk{Data: []byte(body), MediaType: "text/markdown", ContentStamp: e.ContentStamp})
-}
-
-func (s *paritySource) WriteContent(stream grpc.ClientStreamingServer[pluginv1.WriteContentRequest, pluginv1.WriteContentResponse]) error {
-	first, err := stream.Recv()
-	if err != nil {
-		return err
-	}
-	data := slices.Clone(first.Data)
-	for {
-		next, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		data = append(data, next.Data...)
-	}
-	s.mu.Lock()
-	e, _ := s.entry(first.Key)
-	// A plugin that is not writable implements no WriteContent, and one that
-	// declares an entry read-only refuses it with that sentence.
-	switch {
-	case s.unwritable:
-		s.mu.Unlock()
-		return status.Error(codes.Unimplemented, "method WriteContent not implemented")
-	case e != nil && e.ReadOnly != "":
-		s.mu.Unlock()
-		return status.Error(codes.PermissionDenied, e.ReadOnly)
-	}
-	if e == nil || e.ContentStamp != first.ContentStamp {
-		s.mu.Unlock()
-		return status.Errorf(codes.FailedPrecondition, "%q moved past stamp %q", first.Key, first.ContentStamp)
-	}
-	s.stamp++
-	e.ContentStamp, s.bodies[first.Key] = fmt.Sprintf("s%d", s.stamp), string(data)
-	stamp := e.ContentStamp
-	s.mu.Unlock()
-	return stream.SendAndClose(&pluginv1.WriteContentResponse{ContentStamp: stamp})
-}
-
-func (s *paritySource) ServeContent(req *pluginv1.ServeContentRequest, stream grpc.ServerStreamingServer[pluginv1.ServeContentChunk]) error {
-	return stream.Send(&pluginv1.ServeContentChunk{Status: 200, MediaType: "text/html", Data: []byte("<p>" + req.Key + "</p>")})
-}
-
-func (s *paritySource) Probe(_ context.Context, req *pluginv1.ProbeRequest) (*pluginv1.ProbeResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if e, g := s.entry(req.Key); e != nil && (req.Grid == "" || req.Grid == g) {
-		return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_PRESENT}, nil
-	}
-	if s.unreachable != "" {
-		// A source answered from cache cannot say a key is gone.
-		return &pluginv1.ProbeResponse{}, nil
-	}
-	return &pluginv1.ProbeResponse{Presence: pluginv1.ProbeResponse_PRESENCE_GONE}, nil
-}
-
-func (s *paritySource) Find(_ context.Context, req *pluginv1.FindRequest) (*pluginv1.FindResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	path := map[string][]string{"all": {"all"}, "inner": {"all", "inner"}, "other": {"other"}}
-	resp := &pluginv1.FindResponse{}
-	for g, es := range s.grids {
-		for _, e := range es {
-			if strings.Contains(e.Label, req.Query) || strings.Contains(s.bodies[e.Key], req.Query) {
-				resp.Results = append(resp.Results, &pluginv1.FindResult{Entry: proto.CloneOf(e), GridPath: path[g]})
-			}
-		}
-	}
-	return resp, nil
-}
-
-func (s *paritySource) Watch(_ *pluginv1.WatchRequest, stream grpc.ServerStreamingServer[pluginv1.Change]) error {
-	for {
-		select {
-		case ch := <-s.changes:
-			if err := stream.Send(ch); err != nil {
-				return err
-			}
-		case <-stream.Context().Done():
-			return nil
-		}
-	}
-}
-
-// change edits the source under mu and tells the node what moved.
-func (s *paritySource) change(edit func() *pluginv1.Change) {
-	s.mu.Lock()
-	ch := edit()
-	s.mu.Unlock()
-	s.changes <- ch
-}
-
-// remove takes the entry an id names out of the source, as a file deleted.
-func (s *paritySource) remove(id string) {
-	_, key, _, _ := rpc.SplitEntryID(id)
-	s.change(func() *pluginv1.Change {
-		_, g := s.entry(key)
-		s.grids[g] = slices.DeleteFunc(s.grids[g], func(e *pluginv1.Entry) bool { return e.Key == key })
-		return &pluginv1.Change{Payload: &pluginv1.Change_GridChanged{GridChanged: &pluginv1.GridChanged{Grid: g}}}
-	})
-}
-
-// dropGrid takes a grid and the door opening it out of the source.
-func (s *paritySource) dropGrid(grid string) {
-	s.change(func() *pluginv1.Change {
-		delete(s.grids, grid)
-		s.grids["all"] = slices.DeleteFunc(s.grids["all"], func(e *pluginv1.Entry) bool { return e.ChildGrid == grid })
-		return &pluginv1.Change{Payload: &pluginv1.Change_GridChanged{GridChanged: &pluginv1.GridChanged{Grid: "all"}}}
-	})
 }
 
 // listing is a grid as a view lists it: the names of its tiles, sorted.
@@ -1261,7 +1142,7 @@ func checkLink(f *parityFix, o parityOwner, k parityKind) observable {
 // drop is the cell on home a gesture from owner's tile lands on, one per
 // owner, since home's run and the owner's share home's root.
 func (f *parityFix) drop(o parityOwner) (x, y int64) {
-	return 0, map[parityOwner]int64{onHome: 4, onPlugin: 5, onFar: 6}[o]
+	return 0, map[parityOwner]int64{onHome: 4, onFiles: 5, onFar: 6}[o]
 }
 
 // dropped says a new row sits where its gesture dropped it.
@@ -1360,6 +1241,10 @@ func checkFraming(f *parityFix, o parityOwner, k parityKind) observable {
 	return obs
 }
 
+// parityFileEdits is the bytes a file's own change puts: a text's body, a
+// picture of another size.
+var parityFileEdits = map[parityKind]string{kText: "Body edited", kURL: "\x89PNG another picture"}
+
 // parityEdits is the content each kind's write puts, the edit a user makes.
 var parityEdits = map[parityKind]string{
 	kText:      "Body edited",
@@ -1382,29 +1267,6 @@ func checkWrite(f *parityFix, o parityOwner, k parityKind) observable {
 		obs.Read = string(data) + " / " + clientsync.Of(err).String()
 	}
 	return obs
-}
-
-// add lists one more entry in a grid.
-func (s *paritySource) add(grid string, e *pluginv1.Entry) {
-	s.change(func() *pluginv1.Change {
-		s.grids[grid] = append(s.grids[grid], e)
-		return &pluginv1.Change{Payload: &pluginv1.Change_GridChanged{GridChanged: &pluginv1.GridChanged{Grid: grid}}}
-	})
-}
-
-// edit changes an entry in place, a text's body or a url's address, as a
-// file written.
-func (s *paritySource) edit(key, value string) {
-	s.change(func() *pluginv1.Change {
-		e, g := s.entry(key)
-		if e.Kind == rpc.KindURL {
-			e.UrlString = value
-		} else {
-			s.stamp++
-			e.ContentStamp, s.bodies[key] = fmt.Sprintf("s%d", s.stamp), value
-		}
-		return &pluginv1.Change{Payload: &pluginv1.Change_EntryChanged{EntryChanged: &pluginv1.EntryChanged{Grid: g, Entry: proto.CloneOf(e)}}}
-	})
 }
 
 // checkDelete deletes the tile as the trashcan drop does and reads it back.
@@ -1455,14 +1317,13 @@ func checkCopy(f *parityFix, o parityOwner, k parityKind) observable {
 }
 
 // change is the tile's source changing it: home's or the far node's own
-// writer, or the plugin's source, each in its own words. A door's change is
-// a tile more on the grid it opens.
+// writer, or a file written on disk, each in its own words. A door's change
+// is a tile more on the grid it opens.
 func (f *parityFix) change(t *gridwellv1.Tile) {
 	f.t.Helper()
 	if rpc.IsDoorKind(t.Kind) {
-		if src := f.src[rpc.NamespaceOf(t.ChildGridId)]; src != nil {
-			gkey, _, _, _ := rpc.SplitEntryID(rpc.LocalOf(t.ChildGridId))
-			src.add(gkey, &pluginv1.Entry{Key: "more", Kind: rpc.KindText, Label: "More", PlacementHint: &pluginv1.PlacementHint{X: 3, Y: 3, W: 1, H: 1}})
+		if dir, ok := pathOf(t.ChildGridId); ok {
+			writeFile(f.t, filepath.Join(dir, "More"), "More")
 			return
 		}
 		n, grid := f.holder(t.ChildGridId)
@@ -1472,9 +1333,8 @@ func (f *parityFix) change(t *gridwellv1.Tile) {
 		}
 		return
 	}
-	if src := f.src[rpc.NamespaceOf(t.Id)]; src != nil {
-		_, key, _, _ := rpc.SplitEntryID(rpc.LocalOf(t.Id))
-		src.edit(key, parityEdits[parityKind(t.Kind)])
+	if path, ok := pathOf(t.Id); ok {
+		writeFile(f.t, path, parityFileEdits[parityKind(t.Kind)])
 		return
 	}
 	if t.Kind == rpc.KindShell {
@@ -1574,8 +1434,8 @@ func checkDead(f *parityFix, o parityOwner, k parityKind) observable {
 	if mend := f.mends[t.Id]; mend != nil {
 		defer mend()
 	}
-	// The break reaches a plugin's listing by its Watch, so the read is
-	// asked until it answers something else.
+	// The break reaches the files by their watch, so the read is asked
+	// until it answers something else.
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		row, err := f.cl.GetTile(f.ctx, link.Id)
@@ -1592,13 +1452,13 @@ func checkDead(f *parityFix, o parityOwner, k parityKind) observable {
 }
 
 // checkServe asks the content API for a page. Home serves none, so its
-// reference is the local plugin's page; the far run asks the far node's.
+// reference is the local files' page; the far run asks the far node's.
 func checkServe(f *parityFix, o parityOwner, k parityKind) observable {
-	ns := parityPluginUUID
+	prefix := ""
 	if o == onFar {
-		ns = localNodeID + "/geneva/" + parityFarPluginUUID
+		prefix = parityConn
 	}
-	g, err := f.cl.GetGrid(f.ctx, rpc.QualifyID(ns, rpc.EntryGridID("all")))
+	g, err := f.cl.GetGrid(f.ctx, f.fileID(prefix, f.disk[prefix].main))
 	if err != nil {
 		return observable{Outcome: clientsync.Of(err).String()}
 	}
@@ -1617,6 +1477,6 @@ func checkServe(f *parityFix, o parityOwner, k parityKind) observable {
 		}
 		return observable{Outcome: clientsync.OutcomeOK.String(), Draw: f.draw(t), Read: fmt.Sprintf("%d %s", resp.StatusCode, body)}
 	}
-	f.t.Fatalf("%s lists no page", ns)
+	f.t.Fatalf("%q's files list no page", prefix)
 	return observable{}
 }

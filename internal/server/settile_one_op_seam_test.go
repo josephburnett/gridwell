@@ -12,7 +12,7 @@ import (
 // owner, and neither lands (rpc.SetTileOp).
 func TestSetTileOneOperationEveryOwner(t *testing.T) {
 	f := newParityFix(t)
-	for _, o := range []parityOwner{onHome, onPlugin, onFar} {
+	for _, o := range []parityOwner{onHome, onFiles, onFar} {
 		before, err := f.cl.GetTile(f.ctx, f.tile(o, kURL).Id)
 		if err != nil {
 			t.Fatal(err)

@@ -9,10 +9,10 @@ import (
 
 // TestGoneGridReadsDead holds what the parity cell door/see it dead compares
 // and cannot itself say: a door onto a grid its owner says is gone, home's
-// destroyed from the trash or a plugin's whose door left the listing, draws
-// dead in the client and reads dead, never as a refusal or an empty grid.
+// destroyed from the trash or a directory taken off disk, draws dead in the
+// client and reads dead, never as a refusal or an empty grid.
 func TestGoneGridReadsDead(t *testing.T) {
-	for _, o := range []parityOwner{onHome, onPlugin} {
+	for _, o := range []parityOwner{onHome, onFiles} {
 		t.Run(string(o), func(t *testing.T) {
 			t.Parallel()
 			obs := checkDead(newParityFix(t), o, kDoor)
