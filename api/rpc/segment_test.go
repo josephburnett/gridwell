@@ -48,6 +48,17 @@ func TestKeyTileIDRoundTrip(t *testing.T) {
 	}
 }
 
+// A key decodes only from its one spelling: the decoder skips a newline or a
+// carriage return, so a segment with one inside would name the key twice.
+func TestTileKeyRefusesEveryOtherSpelling(t *testing.T) {
+	seg := KeyTileID("/home/joe/notes.md")
+	for _, other := range []string{seg[:4] + "\n" + seg[4:], seg[:4] + "\r" + seg[4:], seg + "\n", seg + "\r\n"} {
+		if key, ok := TileKey(other); ok {
+			t.Errorf("TileKey(%q) = %q, true; want false: only %q spells it", other, key, seg)
+		}
+	}
+}
+
 // The example the design names, spelled out so the encoding cannot drift.
 func TestKeyTileIDEncoding(t *testing.T) {
 	if got := KeyTileID("/home/joe/x"); got != "~L2hvbWUvam9lL3g" {

@@ -24,8 +24,8 @@ const (
 // letter-leading namespace segment.
 const keyTilePrefix = "~"
 
-// keyTileEncoding is strict, so exactly one segment spells any given key. Its
-// alphabet excludes "/", which keeps a key chain-safe however many slashes
+// keyTileEncoding spells a key one way only: TileKey also refuses what the
+// decoder would skip, a newline or a carriage return. Its alphabet excludes "/", which keeps a key chain-safe however many slashes
 // the key contains, and needs no escaping in a URL path.
 var keyTileEncoding = base64.RawURLEncoding
 
@@ -43,7 +43,7 @@ func TileKey(seg string) (key string, ok bool) {
 		return "", false
 	}
 	b, err := keyTileEncoding.Strict().DecodeString(rest)
-	if err != nil {
+	if err != nil || keyTileEncoding.EncodeToString(b) != rest {
 		return "", false
 	}
 	return string(b), true
