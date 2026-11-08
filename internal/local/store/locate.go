@@ -315,7 +315,7 @@ func (n *FileRows) FindPassing(ids []int64, req *gridwellv1.FindRequest) (map[in
 
 // FindRows lists this namespace's rows passing req's kind, time and
 // selection filters, newest first, at most limit: all an empty query with no grid can
-// find, since an entry with no row has no time and is in no selection.
+// find, since a file with no row has no time and is in no selection.
 func (n *FileRows) FindRows(req *gridwellv1.FindRequest, limit int) ([]FindRow, error) {
 	f := tileFilter{on: files, req: req}
 	where, args := f.sql()

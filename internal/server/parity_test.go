@@ -1054,7 +1054,7 @@ func (f *parityFix) content(t *gridwellv1.Tile) (string, error) {
 	case k.Descends == rpc.DescendGrid:
 		return f.listing(t.ChildGridId)
 	case k.Content == rpc.ContentAddress:
-		// A presented page is under the tile's own, whose id is the owner's.
+		// A served page is under the tile's own, whose id is the owner's.
 		page := rpc.PageURL("", f.token, t.Id)
 		return strings.Replace(urlview.Address(t, page), page, "<page>/", 1), nil
 	case k.Content != rpc.ContentNone:

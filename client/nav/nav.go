@@ -261,8 +261,8 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 		}
 		m.engage(c.PaneID, r.Tile, w, &pl)
 	case stepHealed:
-		// A tile from a source without Find keeps the place it was restored
-		// with; the engagement happens either way.
+		// A tile Find did not locate keeps the place it was restored with;
+		// the engagement happens either way.
 		if r.OK {
 			landHealed(c.PaneID, c.Tile, r.Doors, w, &pl)
 		}

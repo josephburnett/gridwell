@@ -93,7 +93,7 @@ func (v View) SameAs(w View) bool {
 }
 
 // Reframe writes a root grid's framing onto every door rooted at gridID, a
-// row's own and a declared entry's alike, and reports whether any value moved
+// roster row's own and each root's of the files alike, and reports whether any value moved
 // by SameAs.
 func Reframe(gridID string, f Framing, sources []*pb.SourceInfo) bool {
 	if gridID == "" {

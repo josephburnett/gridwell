@@ -339,7 +339,7 @@ func opening(t *testing.T, s *Server) []*gridwellv1.Event {
 // part of it: the far node tells it once on the stream, so a client
 // subscribing after it was told hears it from the connection's opening replay,
 // and once the far node re-establishes without it, hears nothing.
-func TestASubscriberArrivingLateIsToldAFarPluginsStandingHealth(t *testing.T) {
+func TestASubscriberArrivingLateIsToldAFarSourcesStandingHealth(t *testing.T) {
 	was := namespace.DefaultBackoff
 	t.Cleanup(func() { namespace.DefaultBackoff = was })
 	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}

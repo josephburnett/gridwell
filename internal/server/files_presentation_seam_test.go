@@ -13,10 +13,10 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Every text tile declares a presentation, and its body is the
-// media type the declaration names: plain is text/plain, both is markdown.
-// Past the body cap a file still answers in its declaration's form.
-func TestFilesTextTilesDeclareWhatTheirBodiesAre(t *testing.T) {
+// Every text tile carries a presentation, and its body is the media type
+// the presentation names: plain is text/plain, both is markdown. Past the
+// body cap a file still answers in its presentation's form.
+func TestFilesTextTilesAreWhatTheirPresentationSays(t *testing.T) {
 	root := t.TempDir()
 	bodies := map[string]string{
 		"notes.md":  "# notes\n",

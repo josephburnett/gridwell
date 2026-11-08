@@ -357,8 +357,8 @@ func TestDescentOf(t *testing.T) {
 	}
 }
 
-// A root grid's framing lives on every door rooted at it, a row's own and a
-// declared entry's alike, and on nothing else. Writing what is already there
+// A root grid's framing lives on every door rooted at it, a roster row's own
+// and each root's of the files alike, and on nothing else. Writing what is already there
 // changes nothing, so the pane that made the write never sees its own echo.
 func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 	menu := []*pb.SourceInfo{

@@ -54,7 +54,7 @@ func ParseFindQuery(q string) FindQuery {
 }
 
 // FindNeedsRow reports whether req filters on a fact only a node's row
-// holds, a time or the selection, so an entry with no row passes none.
+// holds, a time or the selection, so a file with no row passes none.
 func FindNeedsRow(req *pb.FindRequest) bool {
 	return req.Selected || req.Created != nil || req.Modified != nil || req.ContentChanged != nil
 }

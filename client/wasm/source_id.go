@@ -63,9 +63,9 @@ func (a *App) gridMeta(gridID string) (*gridwellv1.Grid, bool) {
 	return g.Meta, true
 }
 
-// sourceByRoot returns the door rooted at gridID, a menu row's own grid
-// or one of its declared entries'. The rule is door.ByRoot's; this resolves
-// the declaration list it reads.
+// sourceByRoot returns the door rooted at gridID, a roster row's own grid
+// or one of its roots'. The rule is door.ByRoot's; this resolves the roster
+// it reads.
 func (a *App) sourceByRoot(gridID string) (*gridwellv1.SourceInfo, bool) {
 	return door.ByRoot(gridID, a.allSources())
 }

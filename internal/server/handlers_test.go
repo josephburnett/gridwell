@@ -93,7 +93,7 @@ func TestLinkFilesBySwatch(t *testing.T) {
 // linkBySwatch links a menu row's one door into a grid the way the UI does:
 // drag its + menu swatch = CreateDoor with the door's qualified grid as the
 // child (a door to another namespace LINK), labeled with the swatch's label
-// (client/wasm createPluginLinkAtCell). Which swatches a row contributes is
+// (client/wasm createSourceLinkAtCell). Which swatches a row contributes is
 // door.PlacesOf, the client's own rule, so this drags what the user drags.
 func linkBySwatch(t *testing.T, cl *rpc.Client, rowUUID, destGrid string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
