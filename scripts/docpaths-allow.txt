@@ -12,7 +12,7 @@ apps/desktop/README.md apps/desktop/.cache
 .github/workflows/release.yml apps/desktop/out/*
 .github/workflows/release.yml apps/desktop/out/*.dmg
 .github/workflows/release.yml apps/desktop/out/*.exe
-# The docs, skills and e2e specs that describe the plugin system, deleted in
-# P3 of the files-native change; P4 rewrites them and deletes these lines:
+# Two e2e files that cite paths deleted with the files-native change; P4b
+# rewrites them and deletes these lines:
 apps/desktop/e2e/live-updates-off.spec.ts internal/server/live_updates_off_seam_test.go
 apps/desktop/e2e/runtree.ts internal/plugintest/heyfake

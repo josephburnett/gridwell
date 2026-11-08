@@ -14,6 +14,3 @@ ARCHITECTURE.md window.close()
 docs/flake-ledger.md expect.poll
 docs/flake-ledger.md os.tmpdir()
 docs/flake-ledger.md forcefullyCrashRenderer()
-# The plugins repository's memo package, which this tree does not hold:
-# Symbols of the plugin system, deleted in P3 of the files-native change, that
-# ARCHITECTURE.md still names; P4 rewrites it and deletes these lines:
