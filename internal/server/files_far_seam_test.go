@@ -12,8 +12,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 )
@@ -52,5 +54,31 @@ func TestContentAPIThroughAConnection(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusOK || !bytes.Equal(body, buf.Bytes()) || res.Header.Get("Content-Type") != "image/png" {
 		t.Fatalf("connection GET = %d %q, %d bytes; want the remote image's %d", res.StatusCode, res.Header.Get("Content-Type"), len(body), buf.Len())
+	}
+}
+
+// A directory takes no new tiles, so a link written into one is refused with
+// that reason, here or on a far node, before any route for the link is
+// looked for.
+func TestALinkIntoADirectoryHearsTheDirectorysRefusal(t *testing.T) {
+	dir := t.TempDir()
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, filesAt(t, "rnode1", dir))
+	lp, err := h.localCl.Handshake(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := rpc.HomeGrid(lp)
+	far := farFileID(dir)
+	_, err = h.localCl.CreateTile(t.Context(), &gridwellv1.CreateTileRequest{GridId: far,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: home}})
+	if err == nil || !strings.Contains(err.Error(), "takes no new tiles") {
+		t.Fatalf("a link to home written into a far directory = %v, want the directory's refusal", err)
+	}
+	local := t.TempDir()
+	n := newFilesNode(t, local)
+	_, err = n.cl.CreateTile(n.ctx, &gridwellv1.CreateTileRequest{GridId: n.roots[0],
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: n.home}})
+	if err == nil || !strings.Contains(err.Error(), "takes no new tiles") {
+		t.Fatalf("a link to home written into a directory = %v, want the directory's refusal", err)
 	}
 }

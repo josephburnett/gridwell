@@ -2,3 +2,4 @@
 # The debt row of ratchet.txt counts the lines and packages above their low-water marks; at 0 that row, the low-water lines and the paid entries go, and the next rise brings them back.
 low-water | 57236
 2026-11-08 | verification fixes (Joe: a clean and complete change): ChainedThrough tells home from the files, and a hop peels by the chain an id is spelled under | 7
+2026-11-08 | verification fixes (Joe: a clean and complete change): a link written into a directory hears the directory's refusal, not a missing route | 1
