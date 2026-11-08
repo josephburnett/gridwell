@@ -35,7 +35,7 @@ func qualifyField(prefix string, id *string, optional bool) {
 
 // TransitQualifyTiles prepends prefix to every id in a tile, an
 // already-qualified child included. The wire Link bit rides verbatim,
-// because the far side already decided what is a link and a remote plugin's
+// because the far side already decided what is a link and a far source's
 // interior door stays owned though its child id contains "/".
 func TransitQualifyTiles(prefix string, tiles []*pb.Tile) []*pb.Tile {
 	out := make([]*pb.Tile, len(tiles))
@@ -199,7 +199,7 @@ func QualifyFindResponse(prefix string, resp *pb.FindResponse, qualifyTiles func
 
 // QualifyEventIDs prepends prefix to every id in a change event and keeps
 // every other field, so a fact an event carries survives each hop. A health
-// event's plugin uuid is an id like any other, so a far namespace's health
+// event's uuid is an id like any other, so a far namespace's health
 // stays addressable here.
 func QualifyEventIDs(prefix string, ev *pb.Event, qualifyTile func(*pb.Tile) *pb.Tile) *pb.Event {
 	switch p := ev.Payload.(type) {
@@ -244,13 +244,13 @@ func TransitQualifyEvent(prefix string, ev *pb.Event) *pb.Event {
 	})
 }
 
-// TransitQualifyPluginList prepends one hop segment to every id a forwarded
+// TransitQualifySourceList prepends one hop segment to every id a forwarded
 // Handshake response carries. The content token and node identity are zeroed,
 // being capabilities of the handshake with the node asked directly;
-// shells_disabled and per-plugin InfoError ride verbatim. It is the one reader
+// shells_disabled and each row's InfoError ride verbatim. It is the one reader
 // of the retired connections list: a far node built before the fold still
-// answers with one, and its rows join plugins here as ConnectionRow's shape.
-func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.HandshakeResponse {
+// answers with one, and its rows join the sources here as ConnectionRow's shape.
+func TransitQualifySourceList(prefix string, resp *pb.HandshakeResponse) *pb.HandshakeResponse {
 	if resp == nil {
 		return nil
 	}
@@ -268,7 +268,7 @@ func TransitQualifyPluginList(prefix string, resp *pb.HandshakeResponse) *pb.Han
 	return out
 }
 
-// QualifySourceGrids prepends one hop segment to a plugin's declared grid
+// QualifySourceGrids prepends one hop segment to a source's grid
 // targets, returning fresh values so a hop never mutates what it forwards.
 func QualifySourceGrids(prefix string, in []*pb.SourceGrid) []*pb.SourceGrid {
 	if len(in) == 0 {

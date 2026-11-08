@@ -33,7 +33,7 @@ func DisabledEvent(uuid string) *pb.Event {
 }
 
 // FramingEvent is the one shape a root grid's framing write takes on the
-// wire, from the store and the plugin adapter alike.
+// wire, from the store and the files alike.
 func FramingEvent(gridID string, f Framing) *pb.Event {
 	return &pb.Event{Payload: &pb.Event_GridFramingChanged{GridFramingChanged: &pb.GridFramingChanged{
 		GridId: gridID, ViewCx: f.cx, ViewCy: f.cy, ViewZoom: f.zoom,
@@ -41,7 +41,7 @@ func FramingEvent(gridID string, f Framing) *pb.Event {
 }
 
 // SelectionEvent is the one shape a grid's new selection takes on the wire,
-// the whole set, from the store and the plugin adapter alike.
+// the whole set, from the store and the files alike.
 func SelectionEvent(gridID string, tileIDs []string) *pb.Event {
 	return &pb.Event{Payload: &pb.Event_SelectionChanged{SelectionChanged: &pb.SelectionChanged{
 		GridId: gridID, TileIds: tileIDs,

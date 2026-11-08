@@ -60,10 +60,10 @@ func TestTransitQualifyGridReadsAnOlderNodesOneBitForBothFacts(t *testing.T) {
 }
 
 // A node built before the connections list was retired still answers with
-// one. The transit hop is its one reader: every row it carries joins plugins
+// one. The transit hop is its one reader: every row it carries joins the sources
 // in ConnectionRow's shape, qualified like the rows beside it, after them.
-func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
-	out := TransitQualifyPluginList("hop", &pb.HandshakeResponse{
+func TestTransitQualifySourceListFoldsARetiredConnectionsList(t *testing.T) {
+	out := TransitQualifySourceList("hop", &pb.HandshakeResponse{
 		Sources: []*pb.SourceInfo{{Uuid: "n1", RootGridId: "n1/1"}},
 		Connections: []*pb.ConnectionInfo{
 			{Uuid: "n1/rtb", Label: "rtb", RootGridId: "n1/rtb/r/1", RootViewCx: 2, RootViewCy: 3, RootViewZoom: 0.5},
@@ -74,7 +74,7 @@ func TestTransitQualifyPluginListFoldsARetiredConnectionsList(t *testing.T) {
 		t.Fatalf("the retired list must not be forwarded, got %+v", out.Connections)
 	}
 	if len(out.Sources) != 3 || out.Sources[0].Uuid != "hop/n1" {
-		t.Fatalf("plugins = %+v, want home then the two connection rows", out.Sources)
+		t.Fatalf("sources = %+v, want home then the two connection rows", out.Sources)
 	}
 	var rows []*pb.SourceInfo
 	for _, pl := range out.Sources {

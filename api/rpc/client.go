@@ -57,7 +57,7 @@ func (c *Client) Handshake(ctx context.Context) (*pb.HandshakeResponse, error) {
 	return c.HandshakeNS(ctx, "")
 }
 
-// HandshakeNS is the routed plugin list. ns "" answers for the node this client
+// HandshakeNS is the routed source list. ns "" answers for the node this client
 // talks to; a chain answers for the node it names, re-qualified per hop.
 func (c *Client) HandshakeNS(ctx context.Context, ns string) (*pb.HandshakeResponse, error) {
 	return msg(c.cl.Handshake(ctx, connect.NewRequest(&pb.HandshakeRequest{Namespace: ns})))

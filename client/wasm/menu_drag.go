@@ -64,7 +64,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // cell would otherwise leave those coordinates on the next gesture's swatch.
 func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
 	if item.isSwatch {
-		t := rpc.PluginDoorTile(item.source)
+		t := rpc.SourceDoorTile(item.source)
 		t.Id = item.source.Uuid
 		return t
 	}

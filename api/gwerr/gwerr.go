@@ -1,7 +1,7 @@
 // Package gwerr is the contract's error vocabulary: the sentinel errors a
-// store or plugin answers with, and the sentinel-to-class table every
-// transport maps from. It is in the api module so the host and a plugin
-// share the sentinels without importing each other.
+// store or source answers with, and the sentinel-to-class table every
+// transport maps from. It is in the api module so a node and a client share
+// the sentinels without importing each other.
 package gwerr
 
 import (
@@ -15,7 +15,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// Sentinel errors. A plugin may return one wrapped, so callers use
+// Sentinel errors. A source may return one wrapped, so callers use
 // errors.Is.
 var (
 	ErrNotFound        = errors.New("not found")

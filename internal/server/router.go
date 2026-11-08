@@ -171,7 +171,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		if err != nil {
 			return nil, err
 		}
-		return rpc.TransitQualifyPluginList(hop, resp), nil
+		return rpc.TransitQualifySourceList(hop, resp), nil
 	}
 	var out []*pb.SourceInfo
 	for _, n := range rt.srv.namespaces() {
@@ -182,7 +182,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, rpc.TransitQualifyPluginList(n.UUID, tr).Sources...)
+			out = append(out, rpc.TransitQualifySourceList(n.UUID, tr).Sources...)
 			continue
 		}
 		// A failed Info leaves info nil and the error rides along.

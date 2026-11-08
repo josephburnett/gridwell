@@ -81,7 +81,7 @@ const MaxContentBytes = 16 * 1024 * 1024
 // by its kind.
 func IsDoorKind(kind string) bool { return KindOf(kind).Descends == DescendGrid }
 
-// "<uuid>/<local>" is the cross-plugin id convention; QualifyID, SplitID,
+// "<uuid>/<local>" is the qualified id convention; QualifyID, SplitID,
 // UUIDOf and NamespaceOf are its only encode/decode points.
 func QualifyID(uuid, local string) string { return uuid + "/" + local }
 
@@ -131,7 +131,7 @@ func UUIDOf(id string) string {
 
 // IsDoorToOtherNamespace compares whole sources (SourceOf), since behind a
 // connection every id shares its first segment and home's ids share the files'
-// node; a PluginDoorTile, whose GridID is empty, is one.
+// node; a SourceDoorTile, whose GridID is empty, is one.
 func IsDoorToOtherNamespace(t *pb.Tile) bool {
 	return IsDoorKind(t.Kind) && t.ChildGridId != "" &&
 		SourceOf(t.ChildGridId) != SourceOf(t.GridId)
@@ -155,9 +155,9 @@ func LocalOf(id string) string {
 	return id
 }
 
-// PluginDoorTile is the synthetic door to another namespace tile a plugin is rendered as
-// outside a real grid: the drag ghost and the menu swatch.
-func PluginDoorTile(pl *pb.SourceInfo) *pb.Tile {
+// SourceDoorTile is the synthetic link door a roster row is drawn as outside
+// a real grid: the drag ghost and the menu swatch.
+func SourceDoorTile(pl *pb.SourceInfo) *pb.Tile {
 	return &pb.Tile{
 		Kind:        KindDoor,
 		W:           1,
@@ -171,7 +171,7 @@ func PluginDoorTile(pl *pb.SourceInfo) *pb.Tile {
 	}
 }
 
-// ConnectionRow is the one shape a connection takes in the + menu: a plugins
+// ConnectionRow is the one shape a connection takes in the + menu: a roster
 // row marked connection, its landing as the root and the last dial failure
 // as InfoError. A pending connection is rootless, so health reads it as
 // waiting, not broken.
@@ -184,8 +184,8 @@ func ConnectionRow(uuid, label, rootGridID, statusDetail string, view View) *pb.
 	}
 }
 
-// IsConnectionRow is the one fact that tells a connection row from a plugin
-// row; never the shape of the uuid.
+// IsConnectionRow is the one fact that tells a connection row from home's
+// and the files'; never the shape of the uuid.
 func IsConnectionRow(pl *pb.SourceInfo) bool { return pl.GetConnection() }
 
 // HomeGrid is the qualified grid id "/" means: the handshake's home_grid_id,
@@ -194,7 +194,7 @@ func HomeGrid(l *pb.HandshakeResponse) string {
 	return l.GetHomeGridId()
 }
 
-// HomeRow is the plugins row rooted at HomeGrid, the one owner of the home's
+// HomeRow is the roster row rooted at HomeGrid, the one owner of the home's
 // framing; nil when the node learned no home.
 func HomeRow(l *pb.HandshakeResponse) *pb.SourceInfo {
 	home := HomeGrid(l)
@@ -218,9 +218,8 @@ func IsWorkspaceKind(kind string) bool { return KindOf(kind).Descends == Descend
 // IsBodyKind: these kinds hold a content blob of their own.
 func IsBodyKind(kind string) bool { return KindOf(kind).Content.InBlob() }
 
-// The plugin glyph vocabulary: declared by the plugin, rendered by the
-// client, an unknown name falling back to the globe so a third-party plugin
-// degrades without either side learning names. A row declaring nothing takes
+// The glyph vocabulary: named by a source, rendered by the client, an
+// unknown name falling back to the globe. A row declaring nothing takes
 // the grid glyph instead (client/door.RowGlyph).
 const (
 	GlyphFolder  = "folder"
@@ -249,7 +248,7 @@ func HTTPAddress(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
 
-// PageContent is a url tile whose plugin serves the page, at PageURL.
+// PageContent is a url tile whose source serves the page, at PageURL.
 func PageContent(t *pb.Tile) bool { return WebContent(t) && t.ServesPage }
 
 // Descent is the content family a pane descended into a tile is showing: a
@@ -272,9 +271,9 @@ func LeafLink(t *pb.Tile) bool {
 }
 
 // QualifyLinkTarget is a leaf link's target as the node holding the link
-// spells it. A target with no namespace segment is an entry of the holder's
-// own namespace, the way a plugin links one of its entries to another
-// (Entry.link_target); any other target is already the holder's spelling.
+// spells it. A target with no namespace segment is the holder's own, the way
+// the files link a symlink to its target's path; any other target is
+// already the holder's spelling.
 func QualifyLinkTarget(holder, target string) string {
 	if _, _, qualified := SplitID(target); qualified || target == "" {
 		return target
@@ -291,7 +290,7 @@ func PageURL(origin, contentToken, tileID string) string {
 	return origin + ContentPath + contentToken + "/" + tileID
 }
 
-// The text_presentation vocabulary: whether a plugin's text body is a
+// The text_presentation vocabulary: whether a file's text body is a
 // document. There is no document-only value, because the user can always
 // reach the source bytes.
 const (
@@ -341,10 +340,10 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 }
 
 // CopiesAsLink reports that a copy of t into another namespace is LinkOf(t):
-// t, not a link, is a page its plugin serves or a door onto a grid that takes
+// t, not a link, is a page its source serves or a door onto a grid that takes
 // no new tiles (Grid.accepts_tiles of the grid it opens or stands on). That is
-// a plugin's (CLAUDE.md, 2026-10-20 and 2026-10-21), or a disabled source's,
-// which reads as dark and so links too.
+// a directory's (CLAUDE.md, 2026-10-20 and 2026-10-21), or a disabled
+// connection's, which reads as dark and so links too.
 func CopiesAsLink(t *pb.Tile, acceptsTiles bool) bool {
 	return !t.GetLink() && t.GetLinkTargetId() == "" &&
 		(PageContent(t) || IsDoorKind(t.GetKind()) && !acceptsTiles)

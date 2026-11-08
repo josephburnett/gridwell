@@ -74,13 +74,13 @@ func Find(anchor string, parentTiles map[string]*gridwellv1.Tile, sources []*gri
 	for _, pl := range sources {
 		for _, e := range pl.SourceGrids {
 			if e.GridId == anchor {
-				return rpc.PluginDoorTile(GridRow(pl, e)), Declared
+				return rpc.SourceDoorTile(GridRow(pl, e)), Declared
 			}
 		}
 	}
 	for _, pl := range sources {
 		if pl.RootGridId == anchor {
-			return rpc.PluginDoorTile(pl), Root
+			return rpc.SourceDoorTile(pl), Root
 		}
 	}
 	return nil, None

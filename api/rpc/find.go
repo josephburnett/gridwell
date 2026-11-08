@@ -17,7 +17,7 @@ import (
 
 // FindHopTimeout bounds one hop's answer during a find fan-out, so a hung
 // hop cannot stall the whole find. One owner for both fan-outs: the
-// server's per-plugin loop and the connection transport's per-connection one.
+// server's per-source loop and the connection transport's per-connection one.
 const FindHopTimeout = 3 * time.Second
 
 // FindDefaultLimit caps a query that brings no limit, wherever the node
@@ -33,17 +33,18 @@ func FindLimit(req *pb.FindRequest) int {
 }
 
 // FindQuery is the parsed form of a Find query, the one grammar every
-// plugin reads. Exactly one of ID and Text is set.
+// source reads. Exactly one of ID and Text is set.
 type FindQuery struct {
 	// ID is an exact tile id to locate; the result carries the tile and its
 	// containing-door path.
 	ID string
-	// Text is interpreted by each plugin against its own data.
+	// Text is matched by each source against its own rows; the files answer
+	// it empty.
 	Text string
 }
 
 // ParseFindQuery is the selector grammar: id:<tile-id> and free text. New
-// selectors extend here, never in a plugin, or the grammar forks.
+// selectors extend here, never in a source, or the grammar forks.
 func ParseFindQuery(q string) FindQuery {
 	q = strings.TrimSpace(q)
 	if rest, ok := strings.CutPrefix(q, "id:"); ok {
@@ -96,8 +97,8 @@ func CheckFind(req *pb.FindRequest) error {
 }
 
 // Find issues one query. scope routes to the namespace owning that qualified
-// id; "" fans out across every plugin, and transit nodes recurse. limit caps
-// results per answering plugin, 0 for its default.
+// id; "" fans out across every source, and transit nodes recurse. limit caps
+// results per answering source, 0 for its default.
 func (c *Client) Find(ctx context.Context, query, scope string, limit int32) (*pb.FindResponse, error) {
 	resp, err := c.cl.Find(ctx, connect.NewRequest(&pb.FindRequest{
 		Query: query, Scope: scope, Limit: limit,

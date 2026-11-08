@@ -10,7 +10,7 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// keySamples are the keys a plugin might name a tile by: paths with slashes,
+// keySamples are the keys an id may carry: paths with slashes,
 // the empty key, unicode, raw bytes, and the characters a URL or a base64
 // alphabet would otherwise argue about.
 var keySamples = []string{
@@ -209,7 +209,7 @@ func TestValidateSegmentRefusesEveryTileShape(t *testing.T) {
 // OwnerNamespaceOf is the router's peel as a value: the namespace this node
 // hands the id to, which is not NamespaceOf (everything before the LAST
 // segment) on any chain longer than one hop. The cases are the routing table
-// itself — a plugin id, the home store under the node's own id, a connection
+// itself — a bare namespace id, the home store under the node's own id, a connection
 // under it, and a transit chain through that connection, whose deeper hops
 // belong to the far node's frame and are never this node's to name.
 func TestOwnerNamespaceOfIsTheRoutersPeel(t *testing.T) {
@@ -217,7 +217,7 @@ func TestOwnerNamespaceOfIsTheRoutersPeel(t *testing.T) {
 	cases := []struct {
 		id, want string
 	}{
-		// A plugin: one segment, whatever its local id's shape.
+		// A bare namespace: one segment, whatever its local id's shape.
 		{"p9xyzab/1", "p9xyzab"},
 		{"p9xyzab/" + KeyTileID("/home/joe"), "p9xyzab"},
 		// The node's own store: a tile segment under the node is home.
@@ -292,13 +292,13 @@ func TestChainedThroughIsTheWholeChainNotOneNodesPeel(t *testing.T) {
 		{"p9xyzab/" + KeyTileID("/home/joe"), "p9xyzab", true},
 		{"p9xyzabx/1", "p9xyzab", false}, // a segment boundary, not a byte prefix
 		{"p9xyzab", "p9xyzab", false},    // a namespace is not a thing it serves
-		{"q9zzzzz/1", "p9xyzab", false},  // a different plugin
+		{"q9zzzzz/1", "p9xyzab", false},  // a different namespace
 		{node + "/1", node, true},        // the node's own home store
 		{node + "/laptop/1", node, true}, // its connections chain under it too
 		{node + "/laptop/1", node + "/laptop", true},
 		{node + "/1", node + "/laptop", false},
 		// Deeper than any one node's peel: the far node's home store and the
-		// far node's plugin each name a chain of their own.
+		// far node's files each name a chain of their own.
 		{node + "/laptop/far9xyz/1", node + "/laptop", true},
 		{node + "/laptop/far9xyz/1", node + "/laptop/far9xyz", true},
 		{node + "/laptop/rp9plug/4", node + "/laptop/far9xyz", false},
@@ -335,7 +335,7 @@ func TestFilesIDs(t *testing.T) {
 		{"n1/7", "n1", false},
 		{"n1/geneva/n2/7", "n1/geneva/n2", false},
 		{"n1", "", false},
-		// A key that is no absolute path is a plugin's, not a file's.
+		// A key that is no absolute path is not a file's.
 		{"p9xyzab/" + KeyTileID("inbox"), "p9xyzab", false},
 		{"n1/" + KeyTileID("C:\\notes"), "n1/~", true},
 	}

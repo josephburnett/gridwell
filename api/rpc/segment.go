@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// SegmentShape is what one segment of a chained id is: a namespace (a plugin
-// or node id, or a connection name), a store row id, or a plugin key carried
-// in the id itself so a tile no plugin minted a row for is still nameable.
+// SegmentShape is what one segment of a chained id is: a namespace (a node
+// id or a connection name), a store row id, or a file's path carried in the
+// id itself so a file the node minted no row for is still nameable.
 // The three are disjoint by construction: a row is all digits, a key form
 // leads with "~", a namespace segment is neither.
 type SegmentShape string
@@ -29,7 +29,7 @@ const keyTilePrefix = "~"
 // the key contains, and needs no escaping in a URL path.
 var keyTileEncoding = base64.RawURLEncoding
 
-// KeyTileID renders a plugin key as a tile segment. Any byte string is a legal
+// KeyTileID renders a key, a file's path, as a tile segment. Any byte string is a legal
 // key and round-trips through TileKey.
 func KeyTileID(key string) string {
 	return keyTilePrefix + keyTileEncoding.EncodeToString([]byte(key))

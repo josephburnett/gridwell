@@ -54,8 +54,8 @@ func ReachEdges(lp *pb.HandshakeResponse) []ReachEdge {
 // ChainOf splits an id in nodeID's frame into the connections it hops, the
 // segments those hops take (prefix), and the rest (tail), which is the id in
 // the frame of the node the hops end on: id == prefix + tail. A hop is a node
-// segment followed by a namespace segment, since a plugin's own ids are rows
-// or keys.
+// segment followed by a namespace segment, since home's and the files' own
+// ids are rows or paths.
 func ChainOf(id, nodeID string) (conns []string, prefix, tail string) {
 	segs := strings.Split(id, "/")
 	pos := 0

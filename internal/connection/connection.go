@@ -711,7 +711,7 @@ func (s *Server) Handshake(ctx context.Context, req *gridwellv1.HandshakeRequest
 	if err != nil {
 		return nil, err
 	}
-	return rpc.TransitQualifyPluginList(first, resp), nil
+	return rpc.TransitQualifySourceList(first, resp), nil
 }
 
 func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*gridwellv1.ProbeResponse, error) {

@@ -31,7 +31,7 @@ func TestNewShortIDShape(t *testing.T) {
 	}
 }
 
-// NewUUID mints system.plugin_uuid, which claims uniqueness across nodes.
+// NewUUID mints the store's node uuid, which claims uniqueness across nodes.
 func TestNewUUIDStays128Bit(t *testing.T) {
 	id := NewUUID()
 	if len(id) != 32 {

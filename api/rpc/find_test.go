@@ -9,8 +9,8 @@ import (
 )
 
 // The one selector grammar: id: is exact, everything else is
-// plugin-interpreted text. New selectors extend the parser, never a
-// plugin.
+// text each source matches. New selectors extend the parser, never a
+// source.
 func TestParseFindQuery(t *testing.T) {
 	cases := []struct {
 		in       string

@@ -1,7 +1,7 @@
 // Package idshape owns the Gridwell contract's identity shapes: the short id
-// mint, the 128-bit mint behind system.plugin_uuid, and what a namespace
-// segment must satisfy. It is in the api module so a plugin and the host
-// agree without importing each other.
+// mint, the 128-bit mint behind the store's stored node uuid, and what a
+// namespace segment must satisfy. It is in the api module so a node and a
+// client agree without importing each other.
 package idshape
 
 import (
@@ -23,9 +23,8 @@ func NewUUID() string {
 // shortIDLen gives about 35.7 bits: even odds of a collision near 300k ids.
 const shortIDLen = 7
 
-// NewShortID mints a plugin, node or namespace identity. Lowercase because
-// the id names filesystem paths — a plugin's state_dir at ~/.gridwell/plugins/<id>,
-// the home's tmux socket gridwell-<id>; no '/' so rpc.SplitID keeps its
+// NewShortID mints a node or namespace identity. Lowercase because the id
+// names filesystem paths, the home's tmux socket gridwell-<id>; no '/' so rpc.SplitID keeps its
 // delimiter; a leading letter so a URL path tells a namespace segment from a
 // tile id. The 32-hex shape stays valid forever.
 func NewShortID() string {

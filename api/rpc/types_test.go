@@ -119,9 +119,9 @@ func TestIsDoorToOtherNamespace(t *testing.T) {
 		tile *pb.Tile
 		want bool
 	}{
-		{"interior door (same plugin) is not a door to another namespace",
+		{"interior door (same namespace) is not a door to another namespace",
 			&pb.Tile{Kind: KindDoor, GridId: "u/1", ChildGridId: "u/2"}, false},
-		{"cross-plugin door is a door to another namespace",
+		{"door into another namespace is a door to another namespace",
 			&pb.Tile{Kind: KindDoor, GridId: "u/1", ChildGridId: "v/2"}, true},
 		{"non-door is never a door to another namespace",
 			&pb.Tile{Kind: KindText, GridId: "u/1", ChildGridId: "v/2"}, false},
@@ -131,12 +131,12 @@ func TestIsDoorToOtherNamespace(t *testing.T) {
 			&pb.Tile{Kind: KindDoor}, false},
 		// A menu swatch's exact shape: no owning grid, qualified child grid.
 		{"synthetic door node (empty grid_id, qualified child_grid_id) is a door to another namespace",
-			&pb.Tile{Kind: KindDoor, ChildGridId: "plugin-uuid/1"}, true},
+			&pb.Tile{Kind: KindDoor, ChildGridId: "source-uuid/1"}, true},
 		{"home door onto a far home's grid, one hop, is a door to another namespace",
 			&pb.Tile{Kind: KindDoor, GridId: "n1/3", ChildGridId: "n1/geneva/n2/5"}, true},
 		{"far door onto a grid two hops further is a door to another namespace",
 			&pb.Tile{Kind: KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/n2/paris/n3/5"}, true},
-		{"far door onto the far node's own plugin grid is a door to another namespace",
+		{"far door onto the far node's own files is a door to another namespace",
 			&pb.Tile{Kind: KindDoor, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/fs/~L2hvbWU"}, true},
 		{"far link door onto another grid of the far home is not a door to another namespace",
 			&pb.Tile{Kind: KindDoor, Link: true, GridId: "n1/geneva/n2/3", ChildGridId: "n1/geneva/n2/8"}, false},
@@ -156,37 +156,37 @@ func TestIsDoorToOtherNamespace(t *testing.T) {
 	}
 }
 
-func TestPluginDoorTile(t *testing.T) {
+func TestSourceDoorTile(t *testing.T) {
 	pl := &pb.SourceInfo{Label: "files", RootGridId: "fs-uuid/1",
 		RootViewCx: 3, RootViewCy: -2, RootViewZoom: 0.5}
-	got := PluginDoorTile(pl)
+	got := SourceDoorTile(pl)
 	// The load-bearing invariants the swatch preview depends on: the tile is
-	// a door carrying the plugin's root grid as its child, which makes it an
+	// a door carrying the row's root grid as its child, which makes it an
 	// door to another namespace, so the client fetches and previews that grid.
 	if !IsDoorKind(got.Kind) {
-		t.Errorf("PluginDoorTile kind = %q, want a door", got.Kind)
+		t.Errorf("SourceDoorTile kind = %q, want a door", got.Kind)
 	}
 	if got.ChildGridId != pl.RootGridId {
-		t.Errorf("PluginDoorTile ChildGridID = %q, want %q", got.ChildGridId, pl.RootGridId)
+		t.Errorf("SourceDoorTile ChildGridID = %q, want %q", got.ChildGridId, pl.RootGridId)
 	}
 	if !IsDoorToOtherNamespace(got) {
-		t.Errorf("PluginDoorTile is not a door to another namespace; a door would draw an inert interior door")
+		t.Errorf("SourceDoorTile is not a door to another namespace; a door would draw an inert interior door")
 	}
 	// Link is the one "this is a link" signal, and the client reads it
 	// alone. This synthetic tile never passes through the server's
 	// qualifyTiles, so it must stamp the bit itself or the menu swatch loses
 	// its dashed border.
 	if !got.Link {
-		t.Error("PluginDoorTile does not set Link; the door swatch would render as owned content, not a link")
+		t.Error("SourceDoorTile does not set Link; the door swatch would render as owned content, not a link")
 	}
 	if got.AltText != pl.Label {
-		t.Errorf("PluginDoorTile AltText = %q, want %q", got.AltText, pl.Label)
+		t.Errorf("SourceDoorTile AltText = %q, want %q", got.AltText, pl.Label)
 	}
-	// The plugin's persisted root framing rides as the tile's framing. It is
+	// The row's persisted root framing rides as the tile's framing. It is
 	// one shape, so it carries across verbatim, and a + menu descent lands at
 	// the left-off view.
 	if got.ViewCx != 3 || got.ViewCy != -2 || got.ViewZoom != 0.5 {
-		t.Errorf("PluginDoorTile framing = (%v,%v,%v), want the plugin root framing (3,-2,0.5)",
+		t.Errorf("SourceDoorTile framing = (%v,%v,%v), want the row's root framing (3,-2,0.5)",
 			got.ViewCx, got.ViewCy, got.ViewZoom)
 	}
 }
@@ -384,7 +384,7 @@ func TestReframeWritesEveryDoorRootedAtTheGrid(t *testing.T) {
 		t.Error("an equal framing reported a change")
 	}
 	if !Reframe("p/~ZmVlZA", f, menu) || menu[1].SourceGrids[0].ViewZoom != 0.75 {
-		t.Errorf("a plugin grid's entry = %+v", menu[1].SourceGrids[0])
+		t.Errorf("a root's swatch = %+v", menu[1].SourceGrids[0])
 	}
 	if Reframe("x/1", f, menu) || Reframe("", f, menu) {
 		t.Error("a grid no door roots reported a change")
