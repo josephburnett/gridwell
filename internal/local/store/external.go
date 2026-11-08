@@ -31,19 +31,14 @@ import (
 
 // Entry is one thing a directory lists: its path and the content facts the
 // disk owns. LinkTarget is the address of the thing it links to, "" when it
-// owns its content; Child is a door's grid key; Hint, when set, is where it
-// asks to sit.
+// owns its content; Child is a door's grid key.
 type Entry struct {
 	Key, Label, Kind string
 	URL              string
 	ServesPage       bool
 	LinkTarget       string
 	Child            string
-	Hint             *Hint
 }
-
-// Hint is the rect an entry asks to sit at.
-type Hint struct{ X, Y, W, H int64 }
 
 // FileRows is the files' view of the store.
 type FileRows struct{ s *Store }
@@ -150,7 +145,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 		if ok {
 			vacateRect(occupied, r.X, r.Y, r.W, r.H)
 		}
-		x, y, w, h := derivePlacement(occupied, &cur, e.Hint)
+		x, y := nextFreeRect(occupied, &cur, 1, 1)
 		if ok {
 			occupyRect(occupied, r.X, r.Y, r.W, r.H)
 			matched[e.Key] = true
@@ -168,7 +163,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 			continue
 		}
 		out = append(out, ExtTile{Key: e.Key, Tile: &gridwellv1.Tile{Kind: entryKind(e), AltText: e.Label,
-			UrlString: snapshotOf(e).url.String, LinkTargetId: e.LinkTarget, X: x, Y: y, W: w, H: h}})
+			UrlString: snapshotOf(e).url.String, LinkTargetId: e.LinkTarget, X: x, Y: y, W: 1, H: 1}})
 	}
 	for _, r := range stored {
 		if !matched[r.Key] {
@@ -209,23 +204,6 @@ func snapshotOf(e Entry) entrySnapshot {
 		s.page = e.ServesPage
 	}
 	return s
-}
-
-// derivePlacement places a hinted entry at the first free rect of the hint's
-// size at or below the hint (belowHint), so a calendar's column stays its
-// column. Any other entry takes the next free cell from the
-// listing's cursor, the first free cell (freeslot.go). Overlay derives
-// with it and Mint stores what Overlay derived, so touching a tile never
-// moves it.
-func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y, w, h int64) {
-	if hint != nil {
-		x, w, h = hint.X, max(hint.W, 1), max(hint.H, 1)
-		y = belowHint(occupied, x, hint.Y, w, h)
-		occupyRect(occupied, x, y, w, h)
-		return x, y, w, h
-	}
-	x, y = nextFreeRect(occupied, cur, 1, 1)
-	return x, y, 1, 1
 }
 
 // Mint writes the row an entry has earned: the id, the placement it was
