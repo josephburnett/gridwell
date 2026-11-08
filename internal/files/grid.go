@@ -106,14 +106,16 @@ type listing struct {
 // its rows answer as they stand and nothing retires. Where its links land
 // is noted after the read, since noting may list those directories too.
 func (s *Source) synthesize(dir string) (*listing, error) {
-	l, err := s.read(dir)
+	l, err := s.read(dir, true)
 	if err == nil && !l.dark {
 		s.noteLinks(dir, l.entries)
 	}
 	return l, err
 }
 
-func (s *Source) read(dir string) (*listing, error) {
+// read lists dir; a read that speaks notes whether it read (noteRead), and
+// one that does not, a find's, says nothing of the files' health.
+func (s *Source) read(dir string, speaks bool) (*listing, error) {
 	s.moving.RLock()
 	defer s.moving.RUnlock()
 	gid, _, err := s.mem.LookupGrid(dir)
@@ -122,18 +124,23 @@ func (s *Source) read(dir string) (*listing, error) {
 	}
 	l := &listing{dir: dir, gid: gid, since: s.servedGen(dir)}
 	ents, err := readDir(dir)
+	note := func(why string) {
+		if speaks {
+			s.noteRead(dir, why)
+		}
+	}
 	switch {
 	case err == nil:
-		s.noteRead(dir, "")
+		note("")
 	case gone(err) && !s.isRoot(dir):
-		s.noteRead(dir, "")
+		note("")
 		return nil, gwerr.DeadLink("", "files: %s is gone", dir)
 	default:
 		why := fmt.Sprintf("%s cannot be read: %v", dir, pathErr(err))
 		if gone(err) {
 			why = fmt.Sprintf("root %s does not exist", dir)
 		}
-		s.noteRead(dir, why)
+		note(why)
 		l.dark = true
 	}
 	present := map[string]bool{}

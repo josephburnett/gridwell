@@ -114,7 +114,8 @@ func (s *Source) filterHits(req *pb.FindRequest, hits []findHit, listing bool) (
 	return out, nil
 }
 
-// findGrids lists each directory a find reads once.
+// findGrids lists each directory a find reads once, saying nothing of the
+// files' health.
 type findGrids struct {
 	s     *Source
 	byDir map[string]*listing
@@ -124,7 +125,7 @@ func (g *findGrids) grid(dir string) (*listing, error) {
 	if l, ok := g.byDir[dir]; ok {
 		return l, nil
 	}
-	l, err := g.s.synthesize(dir)
+	l, err := g.s.read(dir, false)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +223,7 @@ func (g *findGrids) placed(r store.FindRow) (*findHit, error) {
 
 // chain is the doors from a root down to dir, found by listing down from each
 // root through the directories the node holds rows for, the ones the user
-// has touched: a find never walks the disk. ok is false when no such way
+// has touched, so a locate reads only those. ok is false when no such way
 // down reaches it.
 func (g *findGrids) chain(target string) (above []*pb.Tile, ok bool, err error) {
 	type step struct {

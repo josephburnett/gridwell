@@ -533,7 +533,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   `GridChanged` or `TileChanged`; told is whether that watch is healthy. A
   root or directory that will not read is dark: its grid serves what its
   rows hold and says so through the health event, as a dark connection's
-  serves its cache. Nothing walks a directory nobody shows.
+  serves its cache. Nothing watches a directory nobody shows, and nothing
+  reads one unasked: a recursive Find is the user asking, so it reads the
+  directories under the grid it names, never through a link, and a read for
+  a Find says nothing of the files' health (2026-11-08).
 - The node's rows of every namespace but home's are dropped (2026-11-07):
   one rebuild migration deletes every tiles and grids row of a namespace
   other than home's and retires the `ns` column. This is the one decided
