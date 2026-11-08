@@ -328,3 +328,20 @@ func TestToldRecoversAfterATransientFailure(t *testing.T) {
 		t.Errorf("not told on a new instance: %q", h.liveOff)
 	}
 }
+
+// A directory a shown directory newly links into is listed when the link
+// brings it into the watch, so a change there before the watch is told.
+func TestADirectoryALinkBringsInIsChecked(t *testing.T) {
+	f := newFixture(t)
+	other := f.mkdir("other")
+	f.write("other/t.txt", "t")
+	f.grid(f.root)
+	f.grid(other)
+	ev := f.events()
+	f.show(f.root)
+	f.write("other/u.txt", "u")
+	if err := os.Symlink(filepath.Join(other, "t.txt"), f.path("link")); err != nil {
+		t.Skip("symlinks unsupported")
+	}
+	await(t, ev, "the linked directory's change", gridChanged(other))
+}

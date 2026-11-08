@@ -19,3 +19,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): a read a change overtook is announced, the plugin host's generation check, while the plugin host still stands | 44
 2026-11-07 | files native (Joe): Close ends the watch for good and waits for its reader and tells, while the plugin host still stands | 29
 2026-11-07 | files native (Joe): a watch failure ends with the instance it was reported on, while the plugin host still stands | 1
+2026-11-07 | files native (Joe): a directory a link brings into the watch is listed, while the plugin host still stands | 6

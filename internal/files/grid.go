@@ -99,8 +99,17 @@ type listing struct {
 
 // synthesize reads dir and joins it with its rows. A directory that is gone
 // is dead, a root that is gone is dark, and one that will not read is dark:
-// its rows answer as they stand and nothing retires.
+// its rows answer as they stand and nothing retires. Where its links land
+// is noted after the read, since noting may list those directories too.
 func (s *Source) synthesize(dir string) (*listing, error) {
+	l, err := s.read(dir)
+	if err == nil && !l.dark {
+		s.noteLinks(dir, l.entries)
+	}
+	return l, err
+}
+
+func (s *Source) read(dir string) (*listing, error) {
 	s.moving.RLock()
 	defer s.moving.RUnlock()
 	gid, _, err := s.mem.LookupGrid(dir)
@@ -129,15 +138,12 @@ func (s *Source) synthesize(dir string) (*listing, error) {
 		l.entries = append(l.entries, le)
 		present[le.Key] = true
 	}
-	if !l.dark {
-		s.noteLinks(dir, l.entries)
-		if gid != 0 {
-			if err := s.mem.Sweep(gid, present); err != nil {
-				return nil, err
-			}
-			if err := s.mem.Refresh(gid, storeEntries(l.entries)); err != nil {
-				return nil, err
-			}
+	if !l.dark && gid != 0 {
+		if err := s.mem.Sweep(gid, present); err != nil {
+			return nil, err
+		}
+		if err := s.mem.Refresh(gid, storeEntries(l.entries)); err != nil {
+			return nil, err
 		}
 	}
 	if l.rows, err = s.mem.Overlay(gid, storeEntries(l.entries)); err != nil {

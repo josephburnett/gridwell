@@ -52,7 +52,7 @@ func (s *Source) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetView
 
 // noteLinks records the directories dir's symlinks to files land in: a shown
 // directory's links read their targets, so a change there is a change to
-// what it shows.
+// what it shows, and one the watch takes in is listed, as a view's is.
 func (s *Source) noteLinks(dir string, entries []listed) {
 	var into []string
 	for _, e := range entries {
@@ -79,7 +79,7 @@ func (s *Source) noteLinks(dir string, entries []listed) {
 	scope := s.scopeLocked()
 	s.scopeMu.Unlock()
 	if shown {
-		s.rescope(scope)
+		s.check(s.rescope(scope))
 	}
 }
 
