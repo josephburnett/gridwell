@@ -350,3 +350,100 @@ func TestARelativeRootIsRefused(t *testing.T) {
 		t.Fatal("a relative root was taken")
 	}
 }
+
+// No verb reaches a file through a symlinked directory, whether it lands
+// inside the tree or outside it: the path is dead, nothing is served or
+// pictured, and nothing on disk moves or changes.
+func TestNoVerbReachesThroughALinkedDirectory(t *testing.T) {
+	f := newFixture(t)
+	f.write("dir/inner.txt", "inner")
+	f.write("dir/inner.png", "\x89PNG inner")
+	outside := filepath.Join(f.base, "outside")
+	for name, body := range map[string]string{"secret.txt": "secret", "secret.png": "\x89PNG secret"} {
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(outside, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, dest := range map[string]string{"dirlink": f.path("dir"), "outdir": outside} {
+		if err := os.Symlink(dest, f.path(name)); err != nil {
+			t.Skip("symlinks unsupported")
+		}
+	}
+	other := f.mkdir("other")
+	ctx := context.Background()
+	for _, p := range []string{f.path("dirlink/inner.txt"), f.path("dirlink/inner.png"), f.path("outdir/secret.txt"), f.path("outdir/secret.png")} {
+		id := idOf(p)
+		var read []byte
+		err := f.s.ReadContent(ctx, &pb.ReadContentRequest{TileId: id}, func(c *pb.ContentChunk) error {
+			read = append(read, c.Data...)
+			return nil
+		})
+		if !gwerr.IsDeadLink(err) || len(read) != 0 {
+			t.Errorf("ReadContent(%s) = %q, %v; want dead", p, read, err)
+		}
+		var served []byte
+		err = f.s.ServeContent(ctx, &pb.ServeContentRequest{TileId: id}, func(c *pb.ServeContentChunk) error {
+			served = append(served, c.Data...)
+			return nil
+		})
+		if !gwerr.IsDeadLink(err) || len(served) != 0 {
+			t.Errorf("ServeContent(%s) = %q, %v; want dead", p, served, err)
+		}
+		if resp, err := f.s.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: id}); !gwerr.IsDeadLink(err) || len(resp.GetJpeg()) != 0 {
+			t.Errorf("GetTilePreview(%s) = %d bytes, %v; want dead", p, len(resp.GetJpeg()), err)
+		}
+		if _, err := writeAll(f.s, id, "", []byte("mine")); !gwerr.IsDeadLink(err) {
+			t.Errorf("WriteContent(%s) = %v, want dead", p, err)
+		}
+		_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: id, GridId: idOf(other), X: 0, Y: 0, W: 1, H: 1, Claim: &pb.Placement{}})
+		if !gwerr.IsDeadLink(err) {
+			t.Errorf("MoveTile(%s) = %v, want dead", p, err)
+		}
+	}
+	for p, want := range map[string]string{f.path("dir/inner.txt"): "inner", filepath.Join(outside, "secret.txt"): "secret"} {
+		if b, err := os.ReadFile(p); err != nil || string(b) != want {
+			t.Errorf("%s = %q, %v", p, b, err)
+		}
+	}
+	if left, _ := os.ReadDir(other); len(left) != 0 {
+		t.Errorf("a move landed %v", left)
+	}
+}
+
+// A path listed again after it went is the same tile on the wire, since its
+// id is its path.
+func TestAPathListedAgainIsTheSameTile(t *testing.T) {
+	f := newFixture(t)
+	p := f.write("a.txt", "a")
+	ctx := context.Background()
+	at := tileIn(t, f.grid(f.root), p)
+	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: at.Id, X: 9, Y: 9, W: 1, H: 1, Claim: rpc.PlacementOf(at)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.grid(f.root); len(got.Tiles) != 0 {
+		t.Fatalf("a gone file listed: %v", got.Tiles)
+	}
+	f.write("a.txt", "again")
+	again := tileIn(t, f.grid(f.root), p)
+	if again.Id != at.Id {
+		t.Errorf("listed again as %s, was %s", again.Id, at.Id)
+	}
+}
+
+// A text file's name is its own: a rename is refused, and the file keeps it.
+func TestATextFileIsNotRenamed(t *testing.T) {
+	f := newFixture(t)
+	p := f.write("a.md", "# a")
+	tl := tileIn(t, f.grid(f.root), p)
+	_, err := f.s.SetTile(context.Background(), &pb.SetTileRequest{TileId: tl.Id, Version: tl.Version, Rename: "b"})
+	wantCode(t, "a text file's rename", err, codes.InvalidArgument)
+	if got := tileIn(t, f.grid(f.root), p); got.AltText != "a.md" {
+		t.Errorf("name = %q", got.AltText)
+	}
+}
