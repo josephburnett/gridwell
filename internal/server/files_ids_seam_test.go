@@ -40,3 +40,13 @@ func TestFilesAnIdNamingNoPathIsDead(t *testing.T) {
 		}
 	}
 }
+
+// A handshake routed to the files' owner reaches the files, which answer
+// that the node's handshake lists them, never that no source is there.
+func TestFilesHandshakeRoutesByTheOwnerRule(t *testing.T) {
+	n := newFilesNode(t, t.TempDir())
+	_, err := n.cl.HandshakeNS(n.ctx, rpc.FilesOwner(localNodeID))
+	if err == nil || gwerr.IsDeadLink(err) || !strings.Contains(err.Error(), "the node's handshake lists the files") {
+		t.Fatalf("Handshake(%s) = %v, want the files' own answer", rpc.FilesOwner(localNodeID), err)
+	}
+}

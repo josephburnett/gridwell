@@ -160,6 +160,8 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		case hop != rt.srv.cfg.ID:
 		case rest == "":
 			c = rt.srv.src.Home
+		case ns == rpc.FilesOwner(hop):
+			c = rt.srv.src.Files
 		default:
 			// "<id>/<conn>/…": the transport answers for the connection.
 			c = rt.srv.src.Transport
@@ -270,7 +272,7 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		if err != nil {
 			return nil, err
 		}
-		return rt.qualifyFind(ctx, transit, uuid, uuid, resp), nil
+		return rt.qualifyFind(ctx, transit, rpc.OwnerNamespaceOf(scope, rt.srv.cfg.ID), uuid, resp), nil
 	}
 	out := &pb.FindResponse{}
 	for _, n := range rt.srv.namespaces() {
