@@ -6,8 +6,9 @@ package server
 //
 // becomes one ServeContent RPC routed through servePage, so links resolve and
 // transit hops forward exactly like ReadContent, and the answer is the page's
-// whole bytes with its media type. Nothing of the request but the tile rides
-// along: no subpath, no query, no header, no body.
+// whole bytes with its media type, written as each chunk arrives, so a video
+// plays while it streams and no layer holds a page whole. Nothing of the
+// request but the tile rides along: no subpath, no query, no header, no body.
 //
 // Every response carries the contentSandbox CSP, so the page runs with an
 // opaque origin: no cookies, no storage, no reach into the RPC surface.
@@ -21,6 +22,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -93,32 +95,46 @@ func (s *Server) contentAPI() http.Handler {
 			http.Error(w, "gridwell: bad content token", http.StatusUnauthorized)
 			return
 		}
-		// The first chunk names the media type; the rest carry bytes.
-		var mediaType string
-		var page []byte
-		first := true
-		err := s.servePage(r.Context(), tileID, func(chunk *pb.ServeContentChunk) error {
-			if first {
-				mediaType, first = chunk.GetMediaType(), false
+		// The first chunk names the media type and starts the answer; a
+		// failure before it is the status, and one after it cuts the answer
+		// short, which the reader sees as a broken page.
+		started := false
+		start := func(mediaType string) {
+			started = true
+			h := w.Header()
+			h.Set("Content-Security-Policy", contentSandbox)
+			h.Set("X-Content-Type-Options", "nosniff")
+			if mediaType != "" {
+				h.Set("Content-Type", mediaType)
 			}
-			page = append(page, chunk.GetData()...)
-			return nil
+			w.WriteHeader(http.StatusOK)
+		}
+		err := s.servePage(r.Context(), tileID, func(chunk *pb.ServeContentChunk) error {
+			if !started {
+				start(chunk.GetMediaType())
+			}
+			if r.Method == http.MethodHead {
+				return errHeadAnswered
+			}
+			_, err := w.Write(chunk.GetData())
+			return err
 		})
-		if err != nil {
+		switch {
+		case err == nil && !started:
+			start("")
+		case err == nil, errors.Is(err, errHeadAnswered):
+		case !started:
 			refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
-			return
+		default:
+			refusedWeb(path, http.StatusOK, "cut short: "+err.Error(), nil)
+			panic(http.ErrAbortHandler)
 		}
-		h := w.Header()
-		h.Set("Content-Security-Policy", contentSandbox)
-		h.Set("X-Content-Type-Options", "nosniff")
-		if mediaType != "" {
-			h.Set("Content-Type", mediaType)
-		}
-		h.Set("Content-Length", strconv.Itoa(len(page)))
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(page)
 	})
 }
+
+// errHeadAnswered ends a HEAD's page at its first chunk, whose media type
+// is all a HEAD answers.
+var errHeadAnswered = errors.New("a HEAD is answered by its headers")
 
 // httpStatusError maps a routing or RPC failure onto the API's HTTP surface
 // and answers the status it wrote. Unimplemented is deliberately 404: a

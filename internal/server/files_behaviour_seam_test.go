@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -283,6 +284,49 @@ func TestFilesImagePageThroughTheContentAPI(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" || !bytes.Equal(body, buf.Bytes()) {
 		t.Fatalf("page = %d %q, %d bytes; want 200 image/png and the file", resp.StatusCode, resp.Header.Get("Content-Type"), len(body))
+	}
+}
+
+// A page is streamed from the file to the response a chunk at a time, so a
+// video plays while it arrives and no layer holds the whole file; a HEAD
+// answers the page's media type and no bytes.
+func TestFilesPageStreamsThroughTheContentAPI(t *testing.T) {
+	root := t.TempDir()
+	video := filepath.Join(root, "clip.mp4")
+	page := bytes.Repeat([]byte("0123456789abcdef"), 2<<20)
+	if err := os.WriteFile(video, page, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	n := newFilesNode(t, root)
+	tl := n.tile(n.roots[0], video)
+	lp, err := n.cl.Handshake(n.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := rpc.PageURL(n.url, lp.ContentToken, tl.Id)
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	runtime.ReadMemStats(&after)
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "video/mp4" || got != int64(len(page)) {
+		t.Fatalf("page = %d %q, %d bytes; want 200 video/mp4 and %d", resp.StatusCode, resp.Header.Get("Content-Type"), got, len(page))
+	}
+	if n := after.TotalAlloc - before.TotalAlloc; n > 8<<20 {
+		t.Errorf("serving a %d MiB page allocated %d MiB", len(page)>>20, n>>20)
+	}
+	head, err := http.Head(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(head.Body)
+	head.Body.Close()
+	if head.StatusCode != http.StatusOK || head.Header.Get("Content-Type") != "video/mp4" || len(body) != 0 {
+		t.Errorf("HEAD = %d %q, %d bytes", head.StatusCode, head.Header.Get("Content-Type"), len(body))
 	}
 }
 

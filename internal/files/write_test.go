@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
@@ -335,6 +336,27 @@ func TestAPageFileServesItsBytes(t *testing.T) {
 	}
 	if _, err := writeAll(f.s, idOf(png), "", []byte("https://example.com")); err == nil {
 		t.Error("a page file took an address")
+	}
+}
+
+// A page is read and sent a chunk at a time, never held whole.
+func TestAPageIsSentAsItIsRead(t *testing.T) {
+	f := newFixture(t)
+	page := bytes.Repeat([]byte("0123456789abcdef"), 2<<20)
+	p := f.write("clip.mp4", string(page))
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	sent, chunks := 0, 0
+	err := f.s.ServeContent(context.Background(), &pb.ServeContentRequest{TileId: idOf(p)}, func(c *pb.ServeContentChunk) error {
+		sent, chunks = sent+len(c.Data), chunks+1
+		return nil
+	})
+	runtime.ReadMemStats(&after)
+	if err != nil || sent != len(page) || chunks < 2 {
+		t.Fatalf("served %d bytes in %d chunks (%v), want %d", sent, chunks, err, len(page))
+	}
+	if n := after.TotalAlloc - before.TotalAlloc; n > 8<<20 {
+		t.Errorf("serving a %d MiB page allocated %d MiB", len(page)>>20, n>>20)
 	}
 }
 

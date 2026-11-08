@@ -63,8 +63,8 @@ type Namespace interface {
 
 	// ReadContent's first chunk carries media_type and the row version.
 	ReadContent(ctx context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error
-	// ServeContent is the /content/ API; the first chunk carries status
-	// and media_type.
+	// ServeContent is the /content/ API; the first chunk carries
+	// media_type, and send keeps no chunk's data past its return.
 	ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error
 	// WriteContent commits once, at a clean io.EOF, so a recv that fails
 	// leaves the old value byte-for-byte intact. The first message binds

@@ -6,6 +6,7 @@ package files
 import (
 	"context"
 	"errors"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path/filepath"
@@ -21,15 +22,16 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// sendChunks sends data in chunks, first carrying what the first chunk must.
-func sendChunks[C any](data []byte, first C, set func(C, []byte) C, next func() C, send func(C) error) error {
+// sendChunks sends data in chunks, the first carrying first's facts.
+func sendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk) error) error {
 	c := first
 	for {
 		n := min(len(data), rpc.ContentChunkBytes)
-		if err := send(set(c, data[:n])); err != nil || n == len(data) {
+		c.Data = data[:n]
+		if err := send(c); err != nil || n == len(data) {
 			return err
 		}
-		data, c = data[n:], next()
+		data, c = data[n:], &pb.ContentChunk{}
 	}
 }
 
@@ -67,9 +69,7 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 	}
 	stamp := contentStamp(fi.ModTime(), fi.Size())
 	data, media := body(real)
-	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: stamp},
-		func(c *pb.ContentChunk, b []byte) *pb.ContentChunk { c.Data = b; return c },
-		func() *pb.ContentChunk { return &pb.ContentChunk{} }, send)
+	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: stamp}, send)
 }
 
 // WriteContent replaces a text file's bytes whole, by a temp file in its
@@ -193,17 +193,19 @@ func writeRefusal(path string, err error) error {
 	return status.Errorf(codes.Unavailable, "files: write %s: %v", path, pathErr(err))
 }
 
-// ServeContent is a page file's whole bytes and media type. Only a page file
-// has a page: any other file's bytes could be a page that runs a script, in
-// the content API's sandbox, which allows scripts. A link serves where it
-// lands, so it is a page file by its target's name.
+// ServeContent is a page file's whole bytes and media type, read and sent a
+// chunk at a time through one buffer, so a video plays as it arrives and
+// none is held whole. Only a page file has a page: any other file's bytes
+// could be a page that runs a script, in the content API's sandbox, which
+// allows scripts. A link serves where it lands, so it is a page file by its
+// target's name.
 func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	path, _, err := s.tilePath(req.TileId)
 	if err != nil {
 		return err
 	}
 	real, err := s.content(path)
-	var data []byte
+	var f *os.File
 	if err == nil {
 		var fi os.FileInfo
 		if fi, err = os.Stat(real); err == nil && (fi.IsDir() || !isPage(real)) {
@@ -211,7 +213,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 		}
 	}
 	if err == nil {
-		data, err = os.ReadFile(real)
+		f, err = os.Open(real)
 	}
 	switch {
 	case gone(err):
@@ -219,9 +221,25 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	case err != nil:
 		return contentRefusal(path, err)
 	}
-	return sendChunks(data, &pb.ServeContentChunk{MediaType: mediaType(real)},
-		func(c *pb.ServeContentChunk, b []byte) *pb.ServeContentChunk { c.Data = b; return c },
-		func() *pb.ServeContentChunk { return &pb.ServeContentChunk{} }, send)
+	defer f.Close()
+	buf := make([]byte, rpc.ContentChunkBytes)
+	for first := true; ; first = false {
+		n, err := io.ReadFull(f, buf)
+		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+			return status.Errorf(codes.Unavailable, "files: read %s: %v", path, pathErr(err))
+		}
+		if c := (&pb.ServeContentChunk{Data: buf[:n]}); n > 0 || first {
+			if first {
+				c.MediaType = mediaType(real)
+			}
+			if err := send(c); err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			return nil
+		}
+	}
 }
 
 // GetTilePreview answers the picture previewKey named: the row's screenshot
