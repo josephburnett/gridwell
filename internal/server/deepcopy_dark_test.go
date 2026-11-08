@@ -275,16 +275,18 @@ func TestMidCopyFailureNeverDoublesTheDoor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Only the inner door is visited, so the copy's one framing write is
-	// the inner copy's, made once that copy exists.
-	if _, err := cl.SetFraming(ctx, &pb.SetFramingRequest{TileId: inner.Id, Cx: 0.5, Cy: 0.5, Zoom: 0.25}); err != nil {
-		t.Fatal(err)
+	// Both doors are visited, so the copy writes the outer copy's framing
+	// and then the inner copy's, once that copy exists.
+	for _, id := range []string{door.Id, inner.Id} {
+		if _, err := cl.SetFraming(ctx, &pb.SetFramingRequest{TileId: id, Cx: 0.5, Cy: 0.5, Zoom: 0.25}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// The dest tunnel drops MID-copy: the inner copy's framing fails, so the
 	// failure travels up through the child arm with the inner copy already
 	// created.
-	dark.darkFramingFrom = 1
+	dark.darkFramingFrom = 2
 
 	_, cerr := cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: door.Id, DestGridId: rootA, X: 0, Y: 0,

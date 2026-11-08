@@ -462,3 +462,50 @@ func TestCopyURLAcrossNodesCarriesPreview(t *testing.T) {
 		t.Errorf("copied history = %q, want the source's %q", got.UrlHistory, frozen.UrlHistory)
 	}
 }
+
+// TestCopyFramedDoorsOntoAFarNode: a deep copy writes each copied door's
+// framing on the far node and reads the next level through the answer, so a
+// framing answer must name the tile it framed, connection segment and all.
+func TestCopyFramedDoorsOntoAFarNode(t *testing.T) {
+	cl, rootB, rootA := newTwoHomes(t, nil)
+	ctx := context.Background()
+
+	outer, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootB, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "outer"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: outer.ChildGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "inner"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{outer.Id, inner.Id} {
+		if _, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: id, Cx: 1, Cy: 2, Zoom: 0.5}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	far, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: 5, Y: 5, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	framed, err := cl.SetFraming(ctx, &gridwellv1.SetFramingRequest{TileId: far.Id, Cx: 3, Cy: 4, Zoom: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if framed.Id != far.Id || framed.ChildGridId != far.ChildGridId {
+		t.Errorf("framing a far door answered %q (child %q), want the door it framed %q (child %q)",
+			framed.Id, framed.ChildGridId, far.Id, far.ChildGridId)
+	}
+
+	top, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: outer.Id, DestGridId: rootA, X: 0, Y: 0})
+	if err != nil {
+		t.Fatalf("deep copy of framed doors onto the far node: %v", err)
+	}
+	if top.ViewZoom != 0.5 {
+		t.Errorf("the top copy lost its framing: %+v", top)
+	}
+	g, err := cl.GetGrid(ctx, top.ChildGridId)
+	if err != nil || len(g.Tiles) != 1 || g.Tiles[0].ViewZoom != 0.5 {
+		t.Fatalf("the inner copy is missing or lost its framing: %v %v", g, err)
+	}
+}

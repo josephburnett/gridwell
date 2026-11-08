@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
@@ -729,9 +730,8 @@ func (s *Server) Probe(ctx context.Context, req *gridwellv1.ProbeRequest) (*grid
 	return fw.client.Probe(ctx, &gridwellv1.ProbeRequest{TileId: local})
 }
 
-// forwardVerb is the shape every non-streaming verb takes: route the id, build
-// the far node's request around the local half, call it, and qualify the answer
-// back into this node's ids.
+// forwardVerb is every non-streaming verb: route the id, build the far node's
+// request around the local half, call it, and qualify the answer into ours.
 func forwardVerb[Req, Resp any](ctx context.Context, s *Server, ref string,
 	build func(local string, hop rpc.Hop) Req,
 	call func(namespace.Namespace, context.Context, Req) (Resp, error),
@@ -755,8 +755,16 @@ func peeled[Req proto.Message](req Req) func(string, rpc.Hop) Req {
 	return func(_ string, hop rpc.Hop) Req { return rpc.PeelRequest(hop, req) }
 }
 
-// asIs is the qualifier for an answer carrying no id of the far node's.
-func asIs[Resp any](_ string, resp Resp) Resp { return resp }
+// qualifyAnswer qualifies the tile an answer carries, found by its field and
+// not by verb, so no verb but GetGrid and Find hands one back unqualified.
+func qualifyAnswer[Resp proto.Message](ns string, resp Resp) Resp {
+	m := resp.ProtoReflect()
+	if f := m.Descriptor().Fields().ByName("tile"); f != nil && m.Has(f) {
+		t := m.Get(f).Message().Interface().(*gridwellv1.Tile)
+		m.Set(f, protoreflect.ValueOfMessage(rpc.TransitQualifyTiles(ns, []*gridwellv1.Tile{t})[0].ProtoReflect()))
+	}
+	return resp
+}
 
 // liveHops is every live connection, by name.
 func (s *Server) liveHops() []forward {
@@ -791,7 +799,7 @@ func (s *Server) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReque
 	if ref == "" {
 		ref = req.RootGridId
 	}
-	return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.SetFraming, asIs)
+	return forwardVerb(ctx, s, ref, peeled(req), namespace.Namespace.SetFraming, qualifyAnswer)
 }
 
 // SetSelection forwards a far grid's selection write: the selection is the far
@@ -800,7 +808,7 @@ func (s *Server) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionR
 	if req.All {
 		return s.clearAllSelections(ctx, req)
 	}
-	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.SetSelection, asIs)
+	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.SetSelection, qualifyAnswer)
 }
 
 func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*gridwellv1.GetGridResponse, error) {
@@ -812,35 +820,35 @@ func (s *Server) GetGrid(ctx context.Context, req *gridwellv1.GetGridRequest) (*
 func (s *Server) GetTile(ctx context.Context, req *gridwellv1.GetTileRequest) (*gridwellv1.TileResponse, error) {
 	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.GetTileRequest {
 		return &gridwellv1.GetTileRequest{TileId: local}
-	}, namespace.Namespace.GetTile, prependTileResp)
+	}, namespace.Namespace.GetTile, qualifyAnswer)
 }
 
 func (s *Server) GetTilePreview(ctx context.Context, req *gridwellv1.GetTilePreviewRequest) (*gridwellv1.GetTilePreviewResponse, error) {
 	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.GetTilePreviewRequest {
 		return &gridwellv1.GetTilePreviewRequest{TileId: local}
-	}, namespace.Namespace.GetTilePreview, asIs)
+	}, namespace.Namespace.GetTilePreview, qualifyAnswer)
 }
 
 func (s *Server) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliveRequest) (*gridwellv1.ShellTmuxAliveResponse, error) {
 	return forwardVerb(ctx, s, req.TileId, func(local string, _ rpc.Hop) *gridwellv1.ShellTmuxAliveRequest {
 		return &gridwellv1.ShellTmuxAliveRequest{TileId: local}
-	}, namespace.Namespace.ShellTmuxAlive, asIs)
+	}, namespace.Namespace.ShellTmuxAlive, qualifyAnswer)
 }
 
 func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.CreateTile, prependTileResp)
+	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.CreateTile, qualifyAnswer)
 }
 
 func (s *Server) SetTile(ctx context.Context, req *gridwellv1.SetTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.SetTile, prependTileResp)
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.SetTile, qualifyAnswer)
 }
 
 func (s *Server) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.MoveTile, prependTileResp)
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.MoveTile, qualifyAnswer)
 }
 
 func (s *Server) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.TileResponse, error) {
-	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CopyTile, prependTileResp)
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.CopyTile, qualifyAnswer)
 }
 
 func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest) (*gridwellv1.DeleteTileResponse, error) {
@@ -848,7 +856,7 @@ func (s *Server) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReque
 		out := rpc.PeelRequest(hop, req)
 		out.TileId = local
 		return out
-	}, namespace.Namespace.DeleteTile, asIs)
+	}, namespace.Namespace.DeleteTile, qualifyAnswer)
 }
 
 func (s *Server) ReadContent(ctx context.Context, req *gridwellv1.ReadContentRequest, send func(*gridwellv1.ContentChunk) error) error {
@@ -889,7 +897,7 @@ func (s *Server) WriteContent(ctx context.Context, recv func() (*gridwellv1.Writ
 	if err != nil {
 		return nil, err
 	}
-	return prependTileResp(fw.ns, resp), nil
+	return qualifyAnswer(fw.ns, resp), nil
 }
 
 func (s *Server) OpenShell(ctx context.Context, recv func() (*gridwellv1.OpenShellRequest, error), send func(*gridwellv1.OpenShellResponse) error) error {
@@ -959,12 +967,4 @@ func prependGridResp(ns string, resp *gridwellv1.GetGridResponse) *gridwellv1.Ge
 		Grid:  rpc.TransitQualifyGrid(ns, resp.Grid),
 		Tiles: rpc.TransitQualifyTiles(ns, resp.Tiles),
 	}
-}
-
-func prependTileResp(ns string, resp *gridwellv1.TileResponse) *gridwellv1.TileResponse {
-	t := resp.GetTile()
-	if t == nil {
-		return resp
-	}
-	return &gridwellv1.TileResponse{Tile: rpc.TransitQualifyTiles(ns, []*gridwellv1.Tile{t})[0]}
 }
