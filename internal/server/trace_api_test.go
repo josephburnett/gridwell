@@ -184,8 +184,8 @@ func TestTraceAPIRefusesAGarbledSendClock(t *testing.T) {
 	}
 }
 
-// A dump carries the node's server.yaml as it is on disk, after the ring, so a reader of the dump has the routes, connections and
-// plugins without asking; a node with no file says so and still dumps.
+// A dump carries the node's server.yaml as it is on disk, after the ring, so a reader of the dump has the files, connections and
+// the rest without asking; a node with no file says so and still dumps.
 func TestTraceDumpCarriesServerYAML(t *testing.T) {
 	cl, base, dir := traceServer(t)
 	dump := func() []tracewire.Record {
@@ -225,8 +225,8 @@ func TestTraceDumpCarriesServerYAML(t *testing.T) {
 		t.Errorf("a node with no server.yaml dumped %+v, want one %s record with the reason", got, tracewire.KindConfigUnread)
 	}
 
-	yaml := "# Joe's node\nid: k3f9x2a\n\nroutes:\n" +
-		strings.Repeat("  - glob: \"https://gitlab.example.com/*\"\n    plugin: p1234567 # ünïcode\n", 40)
+	yaml := "# Joe's node\nid: k3f9x2a\n\nfiles:\n" +
+		strings.Repeat("  - root: /home/joe/notes\n    label: notes # ünïcode\n", 40)
 	if len(yaml) <= tracewire.MaxMsg {
 		t.Fatal("the fixture must be longer than one record's msg")
 	}

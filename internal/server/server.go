@@ -205,22 +205,22 @@ func (s *Server) homeScratch(ctx context.Context) (string, error) {
 	if s.src.Home == nil || s.cfg.ID == "" {
 		return "", nil
 	}
-	info, err := s.pluginInfo(ctx, s.cfg.ID)
+	info, err := s.sourceInfo(ctx, s.cfg.ID)
 	if err != nil || info.ScratchGridId == "" {
 		return "", err
 	}
 	return rpc.QualifyID(s.cfg.ID, info.ScratchGridId), nil
 }
 
-// pluginInfo is the Info of the namespace whose owner id is uuid, home's or
-// the files', bounded by pluginInfoTimeout so a hung one degrades to an error
+// sourceInfo is the Info of the namespace whose owner id is uuid, home's or
+// the files', bounded by sourceInfoTimeout so a hung one degrades to an error
 // rather than a stall.
-func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
+func (s *Server) sourceInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
 	c, found := s.owned(uuid)
 	if !found {
 		return nil, errors.New("no source " + uuid)
 	}
-	ictx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
+	ictx, cancel := context.WithTimeout(ctx, sourceInfoTimeout)
 	defer cancel()
 	return c.Info(ictx, &pb.InfoRequest{})
 }

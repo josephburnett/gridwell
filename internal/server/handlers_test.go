@@ -305,37 +305,37 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 	}
 }
 
-// TestListPlugins: the + menu source lists home, then the files, with their
+// TestListSources: the + menu source lists home, then the files, with their
 // labels.
-func TestListPlugins(t *testing.T) {
+func TestListSources(t *testing.T) {
 	f := newFilesServer(t)
 	list, err := f.cl.Handshake(context.Background())
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	plugins := list.Sources
+	rows := list.Sources
 	// Home, then the files.
-	if len(plugins) != 2 {
-		t.Fatalf("got %d rows, want 2: %+v", len(plugins), plugins)
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2: %+v", len(rows), rows)
 	}
-	if plugins[0].Label != "home" {
-		t.Errorf("row 0 = %+v, want the home row", plugins[0])
+	if rows[0].Label != "home" {
+		t.Errorf("row 0 = %+v, want the home row", rows[0])
 	}
 	// Home advertises its qualified root grid id (for click-enter).
-	if !strings.HasPrefix(plugins[0].RootGridId, plugins[0].Uuid+"/") {
-		t.Errorf("row 0 root_grid_id = %q, want %q prefix", plugins[0].RootGridId, plugins[0].Uuid)
+	if !strings.HasPrefix(rows[0].RootGridId, rows[0].Uuid+"/") {
+		t.Errorf("row 0 root_grid_id = %q, want %q prefix", rows[0].RootGridId, rows[0].Uuid)
 	}
 	// The home grid is stamped with a qualified scratch grid (the
 	// ephemeral-url target), distinct from itself; the row carries none.
-	home, err := f.cl.GetGrid(context.Background(), plugins[0].RootGridId)
+	home, err := f.cl.GetGrid(context.Background(), rows[0].RootGridId)
 	if err != nil {
 		t.Fatalf("GetGrid(home): %v", err)
 	}
-	if s := home.GetGrid().GetScratchGridId(); !strings.HasPrefix(s, plugins[0].Uuid+"/") || s == plugins[0].RootGridId {
-		t.Errorf("home scratch_grid_id = %q, want %q-prefixed and not the root", s, plugins[0].Uuid)
+	if s := home.GetGrid().GetScratchGridId(); !strings.HasPrefix(s, rows[0].Uuid+"/") || s == rows[0].RootGridId {
+		t.Errorf("home scratch_grid_id = %q, want %q-prefixed and not the root", s, rows[0].Uuid)
 	}
-	if plugins[1].Uuid != rpc.FilesOwner(f.node) || plugins[1].Label != "files" {
-		t.Errorf("row 1 = %+v, want the files", plugins[1])
+	if rows[1].Uuid != rpc.FilesOwner(f.node) || rows[1].Label != "files" {
+		t.Errorf("row 1 = %+v, want the files", rows[1])
 	}
 }
 
@@ -361,11 +361,11 @@ func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.SourceInfo) st
 func TestCreateScratchURLRoutes(t *testing.T) {
 	cl := newFilesServer(t).cl
 	ctx := context.Background()
-	plugins, err := cl.Handshake(ctx)
+	roster, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	scratch := homeScratchOf(t, cl, plugins.Sources[0])
+	scratch := homeScratchOf(t, cl, roster.Sources[0])
 	// Empty path + scratch grid: a normal create here would fail path validation
 	// (the scratch grid is off-grid); the scratch route bypasses it.
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/ephemeral"}})

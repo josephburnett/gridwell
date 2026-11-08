@@ -315,7 +315,7 @@ func TestMCPSelectAddsAndRemovesWithoutAClaim(t *testing.T) {
 		t.Fatalf("after a recursive clear the inner grid holds %v", g.Grid.Selection)
 	}
 
-	// all clears every grid the node holds, the feed plugin's included.
+	// all clears every grid the node holds, the files' included.
 	call(t, s, "select", map[string]any{"grid": n.root, "add": []string{a.ID}}, &g)
 	call(t, s, "select", map[string]any{"grid": door.ChildGridId, "add": []string{inner.ID}}, &g)
 	f := mkText(t, s, n.feedRoot, "f")

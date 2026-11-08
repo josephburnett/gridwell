@@ -79,7 +79,7 @@ func (hungInfo) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, 
 	return nil, ctx.Err()
 }
 
-// A namespace whose Info never answers lists broken once pluginInfoTimeout
+// A namespace whose Info never answers lists broken once sourceInfoTimeout
 // runs out, and the rest of the menu is not held behind it.
 func TestAHungInfoListsBrokenAfterTheTimeout(t *testing.T) {
 	h := newConnectHandler(newRouter(onFiles(t, &Sources{}, hungInfo{})))
@@ -88,8 +88,8 @@ func TestAHungInfoListsBrokenAfterTheTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if took := time.Since(start); took < pluginInfoTimeout || took > pluginInfoTimeout+2*time.Second {
-		t.Errorf("Handshake took %v, want it bounded by pluginInfoTimeout (%v)", took, pluginInfoTimeout)
+	if took := time.Since(start); took < sourceInfoTimeout || took > sourceInfoTimeout+2*time.Second {
+		t.Errorf("Handshake took %v, want it bounded by sourceInfoTimeout (%v)", took, sourceInfoTimeout)
 	}
 	if r.Msg.Sources[0].InfoError == "" {
 		t.Error("a hung Info lists no InfoError")
@@ -114,14 +114,14 @@ func TestHandshakeSurfacesInfoErrorOverTheWire(t *testing.T) {
 	hs := serveWeb(t, onFiles(t, &Sources{}, alwaysFailInfo{}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
-	plugins, err := cl.Handshake(context.Background())
+	roster, err := cl.Handshake(context.Background())
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	if len(plugins.Sources) != 1 {
-		t.Fatalf("got %d rows, want 1: %+v", len(plugins.Sources), plugins.Sources)
+	if len(roster.Sources) != 1 {
+		t.Fatalf("got %d rows, want 1: %+v", len(roster.Sources), roster.Sources)
 	}
-	p := plugins.Sources[0]
+	p := roster.Sources[0]
 	if p.RootGridId != "" || len(p.SourceGrids) != 0 {
 		t.Errorf("broken row = %v, want no door", p)
 	}

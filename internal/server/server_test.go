@@ -26,7 +26,7 @@ func registerPrimaryLocaldb(t *testing.T, reg *Sources, st *store.Store) (uuid, 
 	t.Helper()
 	uuid, err := st.PluginUUID(context.Background())
 	if err != nil {
-		t.Fatalf("plugin uuid: %v", err)
+		t.Fatalf("home uuid: %v", err)
 	}
 	client := local.New(st, nil)
 	reg.Home = client
@@ -37,8 +37,8 @@ func registerPrimaryLocaldb(t *testing.T, reg *Sources, st *store.Store) (uuid, 
 	return uuid, uuid + "/" + bareRoot
 }
 
-// newTestServer wires up a Server whose primary DB is a registered store
-// plugin (the server holds no store of its own for the data plane) and returns
+// newTestServer wires up a Server whose primary DB is a home over a store
+// (the server holds no store of its own for the data plane) and returns
 // the httptest server, a typed Connect client, and the qualified root grid id.
 func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	t.Helper()

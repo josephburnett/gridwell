@@ -3,7 +3,7 @@ package server_test
 // The disable_shells contract, pinned over the real wire: the gRPC node export
 // behind ConnectionHandler. The web API's half is shell_api_seam_test.go,
 // and both enter through the one shell route. The refusal lives at the router,
-// before plugin resolution, so no plugin can serve a shell while the flag is
+// before routing, so no namespace can serve a shell while the flag is
 // set:
 //   - Handshake carries shells_disabled (the client drops the menu
 //     swatch from it),
@@ -62,7 +62,7 @@ func TestShellsDisabled(t *testing.T) {
 		t.Errorf("CreateTile(text) must still work: %v", err)
 	}
 
-	// A shell tile that PRE-DATES the flag (created through the plugin
+	// A shell tile that PRE-DATES the flag (created through home
 	// directly — placement is sacred, the row stays): its PTY is
 	// closed and its tmux reads as gone.
 	pre, err := direct.CreateTile(ctx, &gridwellv1.CreateTileRequest{
@@ -116,7 +116,7 @@ func TestShellsEnabledByDefault(t *testing.T) {
 	}
 }
 
-// gridLocal strips the plugin qualifier for a DIRECT (in-plugin) call.
+// gridLocal strips the namespace qualifier for a DIRECT (in-namespace) call.
 func gridLocal(qualified string) string {
 	for i := 0; i < len(qualified); i++ {
 		if qualified[i] == '/' {

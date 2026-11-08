@@ -133,7 +133,7 @@ func (p *failInfoWatch) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, s
 }
 
 // An Info failure at Subscribe time must not permanently drop a namespace's
-// fan-in for the life of the client stream: watchPlugin retries Info with
+// fan-in for the life of the client stream: watchSource retries Info with
 // backoff, so a namespace merely slow to answer still gets its events fanned in,
 // observable here as a health-down event followed by a health-recovery one.
 func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) {

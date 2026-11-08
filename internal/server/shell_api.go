@@ -28,7 +28,7 @@ import (
 )
 
 // defaultShellWriteTimeout bounds one PTY-output frame write, so a viewer
-// whose socket has stopped draining cannot pin the plugin's PTY reader
+// whose socket has stopped draining cannot pin home's PTY reader
 // forever. New copies it onto the Server, which is what the API reads, so a
 // seam test can wedge a socket on a server of its own rather than waiting the
 // bound out or lowering it under an API that is already serving.

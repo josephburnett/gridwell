@@ -1,4 +1,4 @@
 package server
 
-// SourceInfoTimeout is pluginInfoTimeout, for a test that waits it out.
-const SourceInfoTimeout = pluginInfoTimeout
+// SourceInfoTimeout is sourceInfoTimeout, for a test that waits it out.
+const SourceInfoTimeout = sourceInfoTimeout

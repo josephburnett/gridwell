@@ -57,7 +57,7 @@ func newShellAPIFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shell
 	}
 	uuid, err := st.PluginUUID(context.Background())
 	if err != nil {
-		t.Fatalf("plugin uuid: %v", err)
+		t.Fatalf("home uuid: %v", err)
 	}
 	cfg.ID = uuid
 	fake := shellsvctest.New()

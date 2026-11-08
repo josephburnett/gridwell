@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
-// blipClient forwards to the real plugin, but after the delete of armID
+// blipClient forwards to the real home, but after the delete of armID
 // every GetTile answers Unavailable — a transport blip at exactly the
 // moment the handler confirms whether the deleted workspace row is gone.
 type blipClient struct {

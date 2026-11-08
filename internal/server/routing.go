@@ -9,7 +9,7 @@ import (
 // The id codec lives once, in api/rpc; this file only applies it to namespace
 // responses.
 
-// qualifyGrid qualifies every id in a Grid with the plugin's uuid.
+// qualifyGrid qualifies every id in a Grid with its namespace's uuid.
 func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 	if g == nil {
 		return nil
@@ -21,7 +21,7 @@ func qualifyGrid(uuid string, g *pb.Grid) *pb.Grid {
 }
 
 // qualifyTiles qualifies every id in a namespace's tiles. A ChildGridId that
-// arrived already qualified is a cross-plugin link, so the door is a link
+// arrived already qualified is a link into another namespace, so the door is a link
 // and is left alone; surfacing that here as Tile.link gives render and
 // store one "is a link" signal. A bare uuid comparison would miss a
 // same-namespace link door, which "arrived qualified" catches. A symlink's

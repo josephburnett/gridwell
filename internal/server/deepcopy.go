@@ -14,12 +14,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// Cross-plugin copy. deepCopyTile is the one owner of what a copy of a tile
+// Copy across namespaces. deepCopyTile is the one owner of what a copy of a tile
 // into another namespace is: the top-level copy enters through it at the
 // destination cell, the walk inside a copied door at each source cell, so the
 // rule is written once and holds at every depth. The router reads the source
 // subtree through the namespace interface and materializes it in the
-// destination plugin: create, recurse, framing and preview through the one
+// destination namespace: create, recurse, framing and preview through the one
 // writeback.
 //
 // Creation is necessarily top-down, because an interior door's child grid is
@@ -32,10 +32,10 @@ import (
 //   - a solid door becomes a new door plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
 //   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
-//   - a plugin's door or served page copies as a link to it (rpc.CopiesAsLink);
+//   - a directory's door or a page file copies as a link to it (rpc.CopiesAsLink);
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
-//     owner-frame-relative, which is cross-plugin link semantics in bytes;
+//     owner-frame-relative, which is a link's semantics in bytes;
 //   - a url copies its url_string, and every leaf rpc.CopyFacts by rpc.CopyWrites;
 //   - a shell copies as a link to its source, since a copy shares its
 //     source's tmux and a tmux is namespace-local;
@@ -115,7 +115,7 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 		return rt.copyLeaf(ctx, src, t, q, dst, dstGrid, x, y)
 	}
 	return nil, status.Errorf(gcodes.InvalidArgument,
-		"cross-plugin copy: unsupported tile kind %q", t.Kind)
+		"copy across namespaces: unsupported tile kind %q", t.Kind)
 }
 
 // copiesAsLink is rpc.CopiesAsLink over the router's read of the grid a door
@@ -136,7 +136,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 	// Leaf bytes are read before the copy row is created, so an unreachable
 	// source degrades to a link instead of an empty copy that looks whole. A
 	// body kind is always asked: blob_id is the local store's own bookkeeping
-	// and a plugin's rows carry none, so gating on it would copy a plugin's
+	// and a file's row carries none, so gating on it would copy a file's
 	// text as an empty tile.
 	var body []byte
 	if rpc.IsBodyKind(t.Kind) {

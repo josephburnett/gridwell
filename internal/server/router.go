@@ -109,7 +109,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			// The declared facts have no other source, so a handshake that does
 			// not answer fails the read rather than present wrong ones.
 			owner := rpc.OwnerNamespaceOf(req.GridId, rt.srv.cfg.ID)
-			info, ierr := rt.srv.pluginInfo(ctx, owner)
+			info, ierr := rt.srv.sourceInfo(ctx, owner)
 			if ierr != nil {
 				return nil, infoDeclarationError(req.GridId, owner, ierr)
 			}
@@ -143,9 +143,9 @@ func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequ
 	return c.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: local})
 }
 
-// pluginInfoTimeout bounds each source's Info handshake so one hung source
+// sourceInfoTimeout bounds each source's Info handshake so one hung source
 // cannot stall the menu.
-const pluginInfoTimeout = 3 * time.Second
+const sourceInfoTimeout = 3 * time.Second
 
 // Handshake enumerates home, the files and the connections for the + menu.
 func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
@@ -186,7 +186,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			continue
 		}
 		// A failed Info leaves info nil and the error rides along.
-		info, err := rt.srv.pluginInfo(ctx, n.UUID)
+		info, err := rt.srv.sourceInfo(ctx, n.UUID)
 		out = append(out, buildSourceInfo(n.UUID, n.Label, info, err))
 	}
 	resp := &pb.HandshakeResponse{
@@ -367,15 +367,15 @@ func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Ti
 		return nil, err
 	}
 	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" {
-		return rt.copyAcrossPlugins(ctx, m, c, local, uuid, transit)
+		return rt.copyAcrossSources(ctx, m, c, local, uuid, transit)
 	}
 	resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
 	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
-// copyAcrossPlugins lands a copy at the dropped cell; the per-kind copy is
+// copyAcrossSources lands a copy at the dropped cell; the per-kind copy is
 // deepCopyTile's, and this level owns the partial-copy wording.
-func (rt *router) copyAcrossPlugins(ctx context.Context, m *pb.CopyTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
+func (rt *router) copyAcrossSources(ctx context.Context, m *pb.CopyTileRequest, src namespace.Namespace, srcLocal, srcUUID string, srcTransit bool) (*pb.TileResponse, error) {
 	resp, err := src.GetTile(ctx, &pb.GetTileRequest{TileId: srcLocal})
 	if err != nil {
 		return nil, err
@@ -652,11 +652,11 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 		settled := sync.OnceFunc(settling.Done)
 		if n.Transit {
 			// The transport has no handshake to ask.
-			go rt.watchPlugin(subCtx, n, func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
+			go rt.watchSource(subCtx, n, func(context.Context) (*pb.InfoResponse, error) { return &pb.InfoResponse{}, nil }, events, settled)
 			continue
 		}
-		go rt.watchPlugin(subCtx, n,
-			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.pluginInfo(ctx, n.UUID) }, events, settled)
+		go rt.watchSource(subCtx, n,
+			func(ctx context.Context) (*pb.InfoResponse, error) { return rt.srv.sourceInfo(ctx, n.UUID) }, events, settled)
 	}
 	listening := make(chan struct{})
 	go func() { settling.Wait(); close(listening) }()
@@ -738,13 +738,13 @@ func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest)
 	return &pb.DisableSourceResponse{}, nil
 }
 
-// watchPlugin fans namespace n's events into the client's stream until ctx
+// watchSource fans namespace n's events into the client's stream until ctx
 // ends, qualified with n.prefix(); the health it reports itself is keyed by
 // n.UUID, as a health event n sends names itself under its prefix. The Info
 // fetch rides namespace.Refollow's loop, so a source slow to start is not
 // excluded for good. settled is called once the first attempt is established
 // or has failed, or ctx has ended.
-func (rt *router) watchPlugin(ctx context.Context, n namespaceRow, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
+func (rt *router) watchSource(ctx context.Context, n namespaceRow, infoOf func(context.Context) (*pb.InfoResponse, error), events chan<- *pb.Event, settled func()) {
 	defer settled()
 	namespace.Refollow{
 		Label: "subscribe: source " + n.UUID,

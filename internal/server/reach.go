@@ -108,7 +108,7 @@ func (rt *router) reach(ctx context.Context) (rpc.Reach, error) {
 					continue
 				}
 				r[e.Lands] = &rpc.ReachNode{Label: e.Label}
-				hctx, cancel := context.WithTimeout(ctx, pluginInfoTimeout)
+				hctx, cancel := context.WithTimeout(ctx, sourceInfoTimeout)
 				far, err := rt.Handshake(hctx, &pb.HandshakeRequest{Namespace: row.Uuid})
 				cancel()
 				if err == nil {

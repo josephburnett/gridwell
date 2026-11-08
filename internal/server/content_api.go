@@ -138,7 +138,7 @@ var errHeadAnswered = errors.New("a HEAD is answered by its headers")
 
 // httpStatusError maps a routing or RPC failure onto the API's HTTP surface
 // and answers the status it wrote. Unimplemented is deliberately 404: a
-// plugin that serves no web content has no pages.
+// source that serves no page has no pages.
 func httpStatusError(w http.ResponseWriter, err error) int {
 	st, _ := status.FromError(err)
 	switch st.Code() {

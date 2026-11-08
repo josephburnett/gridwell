@@ -72,7 +72,7 @@ func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 		t.Fatalf("DeleteTile(workspace): %v", err)
 	}
 
-	// The first delete PARKS the workspace in the local plugin's trash
+	// The first delete PARKS the workspace in home's trash
 	// Its ephemerals stay alive so a restore comes back whole.
 	if _, err := cl.GetTile(ctx, eph.Id); err != nil {
 		t.Fatalf("a trashed workspace must keep its ephemeral shell: %v", err)

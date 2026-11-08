@@ -129,7 +129,7 @@ caps: a page is its tile's whole bytes, so one read answers every later
 one.
 
 **5. The server fan-in** — `internal/server/router.go`. `Subscribe` starts
-one `watchPlugin` per namespace plus one for the transport. `watchPlugin`
+one `watchSource` per namespace plus one for the transport. `watchSource`
 runs a `namespace.Refollow` whose every attempt asks `Info` and then follows
 the namespace's stream; `Refollow` re-dials it with backoff until the
 subscription ends and reports the down/up transitions as
@@ -303,7 +303,7 @@ correcting with no user gesture.
    the same event, so the next read passes through and the verdict surfaces
    rather than the cached answer standing forever.
 8. `Layer.Subscribe` is serving that channel alongside the teed stream of
-   the connection behind it. Its subscriber is the `namespace.Follow` inside the `watchPlugin`
+   the connection behind it. Its subscriber is the `namespace.Follow` inside the `watchSource`
    that `router.Subscribe` starts for the transport with `transit=true`.
 9. `qualifyEvent` prepends the node id. The connection segment is already on
    the id, because the cache's own ids are `<conn>/<remote-id>`.
