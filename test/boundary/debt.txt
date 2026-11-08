@@ -29,3 +29,4 @@ low-water | packages | 81
 2026-11-08 | files native (Joe): the router refuses a move onto another source's grid with one sentence before either source is asked, while the plugin host still stands | 14
 2026-11-08 | files native (Joe): a gone file's preview reads dead and a file under a dark directory is not dead, one verdict for every read, while the plugin host still stands | 6
 2026-11-08 | files native (Joe): a door row that becomes a link or another kind gives up its child grid, and one that becomes a door takes its entry's, while the plugin host still stands | 18
+2026-11-08 | files native (Joe): migration v23 drops the node's old plugin rows and retires ns, and the store tells home's rows from the files' by key | 66

@@ -19,15 +19,15 @@ import (
 // neither can be renamed.
 func (s *Store) SetFrozen(ctx context.Context, tileIDStr string, frozen bool, claim *bool) (*gridwellv1.Tile, error) {
 	return s.tileWrite(ctx, "SetFrozen", tileIDStr, func(tx *sql.Tx, tileID int64) error {
-		return s.setFrozenTx(ctx, tx, "", tileID, frozen, claim)
+		return s.setFrozenTx(ctx, tx, home, tileID, frozen, claim)
 	})
 }
 
-// SetFrozen is the standing freeze on a plugin's tile, the write home's rows
+// SetFrozen is the standing freeze on a file's tile, the write home's rows
 // take.
-func (n *Namespace) SetFrozen(tileID int64, frozen bool, claim *bool) (changed bool, err error) {
+func (n *FileRows) SetFrozen(tileID int64, frozen bool, claim *bool) (changed bool, err error) {
 	return n.rowWrite("SetFrozen", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
-		return n.s.setFrozenTx(ctx, tx, n.ns, tileID, frozen, claim)
+		return n.s.setFrozenTx(ctx, tx, files, tileID, frozen, claim)
 	})
 }
 
@@ -35,10 +35,10 @@ func (n *Namespace) SetFrozen(tileID int64, frozen bool, claim *bool) (changed b
 // nothing to go live to. claim is the value the writer saw, nil for the node's
 // own write; a write landing where the row already is loses nothing, so only
 // a freeze that moved under a writer asking to move it is refused.
-func (s *Store) setFrozenTx(ctx context.Context, tx *sql.Tx, ns string, tileID int64, frozen bool, claim *bool) error {
+func (s *Store) setFrozenTx(ctx context.Context, tx *sql.Tx, on side, tileID int64, frozen bool, claim *bool) error {
 	var kind string
 	var cur bool
-	if err := liveRow(ctx, tx, ns, tileID, "kind, url_frozen", &kind, &cur); err != nil {
+	if err := liveRow(ctx, tx, on, tileID, "kind, url_frozen", &kind, &cur); err != nil {
 		return err
 	}
 	if !rpc.KindOf(kind).Freezes() {
@@ -57,6 +57,6 @@ func (s *Store) setFrozenTx(ctx context.Context, tx *sql.Tx, ns string, tileID i
 
 // liveRow scans cols of a live row within one namespace into dests:
 // ErrNotFound for a row that is retired or another namespace's.
-func liveRow(ctx context.Context, q gridReader, ns string, tileID int64, cols string, dests ...any) error {
-	return notFound(q.QueryRowContext(ctx, `SELECT `+cols+` FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0`, tileID, ns).Scan(dests...))
+func liveRow(ctx context.Context, q gridReader, on side, tileID int64, cols string, dests ...any) error {
+	return notFound(q.QueryRowContext(ctx, `SELECT `+cols+` FROM tiles WHERE id = ? AND `+on.of("key")+` AND tombstoned = 0`, tileID).Scan(dests...))
 }

@@ -25,7 +25,7 @@ const applicationID = 0x4757654C // "GWeL"
 // migrations plus one test fixture. TestSchemaEquivalence proves a fresh Open
 // equals tablesV1 plus the full chain, which is what makes the fresh-DB stamp
 // shortcut sound. The contract is CLAUDE.md in this directory.
-const schemaVersion = 22
+const schemaVersion = 23
 
 // SchemaVersion is the schema generation this binary reads and writes.
 func SchemaVersion() int { return schemaVersion }
@@ -140,12 +140,64 @@ var migrations = []migration{
 	// v22: tiles.url_user, a plugin url's address latched as the user's.
 	// Additive: 0 is the listing's address, every existing row's meaning.
 	{to: 22, run: addColumnIfMissingDDL("tiles", "url_user", `ALTER TABLE tiles ADD COLUMN url_user INTEGER NOT NULL DEFAULT 0`)},
+	// v23: the node's old plugin rows are dropped (Joe, 2026-11-07, the one
+	// decided exception to converting a row: there are no plugins, and the
+	// files start fresh). Every tile and grid row of a namespace other than
+	// home goes, the preview blobs they held released; tiles.ns retires, by
+	// rebuild, and grids.ns by DROP COLUMN; grids.context_key is renamed key,
+	// the name tiles.key already has for a path, so one name says "this row
+	// is a file's" in both tables. Every home row stays byte for byte.
+	{to: 23, run: migrateV23},
 }
 
 // respelledKinds maps a kind as a released binary stored it to the kind this
 // binary stores. Every rebuild converts through it (rebuildSelect), because a
 // rebuild materializes the current CHECK, which admits only the new spelling.
 var respelledKinds = [][2]string{{"well", rpc.KindDoor}, {"pane", rpc.KindWorkspace}}
+
+// migrateV23 drops the rows of every namespace but home and retires ns; see
+// the chain entry. A row is another namespace's when its ns says so or, on a
+// file whose tiles an earlier rebuild already took ns from, when it has a key,
+// which only a plugin's row or a file's ever had. Tiles go before grids, which
+// they reference.
+func migrateV23(ctx context.Context, tx *sql.Tx) error {
+	foreign := "key != ''"
+	if has, err := hasColumn(ctx, tx, "tiles", "ns"); err != nil {
+		return err
+	} else if has {
+		foreign += " OR ns != ''"
+	}
+	for _, q := range []string{
+		// The preview each dropped row held is released as decBlobRefcount
+		// releases one, the blob going with its last reference.
+		`CREATE TEMP TABLE v23_released AS SELECT preview_blob_id AS id FROM tiles
+			WHERE (` + foreign + `) AND preview_blob_id IS NOT NULL`,
+		`UPDATE blobs SET refcount = refcount - (SELECT COUNT(*) FROM v23_released WHERE id = blobs.id)`,
+		`DELETE FROM tiles WHERE ` + foreign,
+		`DELETE FROM blobs WHERE refcount <= 0 AND id IN (SELECT id FROM v23_released)`,
+		`DROP TABLE v23_released`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("drop the plugin rows: %w", err)
+		}
+	}
+	if err := rebuildTiles(ctx, tx, 22); err != nil {
+		return err
+	}
+	for _, q := range []string{
+		`DROP INDEX IF EXISTS idx_grids_context`,
+		`DELETE FROM grids WHERE ns != ''`,
+		`ALTER TABLE grids DROP COLUMN ns`,
+		`ALTER TABLE grids RENAME COLUMN context_key TO key`,
+		tilesKeyIndexDDL,
+		gridsKeyIndexDDL,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return fmt.Errorf("v23: %w", err)
+		}
+	}
+	return nil
+}
 
 // migrateV20 and migrateV21 respell the kinds; see the chain entries.
 func migrateV20(ctx context.Context, tx *sql.Tx) error { return respellKinds(ctx, tx, 19) }
@@ -158,7 +210,7 @@ func respellKinds(ctx context.Context, tx *sql.Tx, reads int) error {
 		return err
 	}
 	// DROP TABLE tiles took idx_tiles_live_key with it; see rebuildTiles.
-	_, err := tx.ExecContext(ctx, externalsIndexDDL)
+	_, err := tx.ExecContext(ctx, tilesKeyIndexDDL)
 	return err
 }
 
@@ -202,7 +254,7 @@ func migrateV16(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	// DROP TABLE tiles took idx_tiles_live_key with it; see rebuildTiles.
-	if _, err := tx.ExecContext(ctx, externalsIndexDDL); err != nil {
+	if _, err := tx.ExecContext(ctx, tilesKeyIndexDDL); err != nil {
 		return err
 	}
 	for _, q := range []string{
@@ -226,7 +278,7 @@ func migrateV14(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `UPDATE tiles SET serves_page = 1
-		WHERE ns != '' AND kind = 'url' AND link_target_id IS NULL AND url_string = ''`)
+		WHERE key != '' AND kind = 'url' AND link_target_id IS NULL AND url_string = ''`)
 	return err
 }
 
@@ -259,7 +311,7 @@ func rebuildTilesReading(n int) func(ctx context.Context, tx *sql.Tx) error {
 // rebuildTiles rebuilds the tiles table into the current shape: create
 // tiles_new from the same DDL a fresh Open uses, copy every row id-for-id,
 // drop, rename, recreate the indexes. It recreates only tilesIndexDDL's; a
-// rebuild at or after v9 must also recreate externalsIndexDDL's
+// rebuild at or after v9 must also recreate tilesKeyIndexDDL's
 // idx_tiles_live_key, which DROP TABLE takes with it.
 //
 // The sqlite_sequence save and restore is load-bearing: DROP TABLE deletes
@@ -360,7 +412,7 @@ func migrateV11(ctx context.Context, tx *sql.Tx) error {
 		return err
 	}
 	// DROP TABLE tiles took idx_tiles_live_key with it; see rebuildTiles.
-	_, err := tx.ExecContext(ctx, externalsIndexDDL)
+	_, err := tx.ExecContext(ctx, tilesKeyIndexDDL)
 	return err
 }
 
@@ -430,11 +482,9 @@ func migrateV9(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 	}
-	// The listings table is spelled here because this step must produce v9's
-	// shape whatever a later template says; v12 drops it again. The two
-	// partial indexes name the columns just added, so they ride here too, and
-	// in Open's post-migration step for a fresh file, which never runs the
-	// chain.
+	// The listings table and the two partial indexes are spelled here
+	// because this step must produce v9's shape whatever a later template
+	// says; v12 drops the table and v23 the indexes' ns.
 	if _, err := tx.ExecContext(ctx, `
 CREATE TABLE IF NOT EXISTS listings (
     grid_id       INTEGER PRIMARY KEY REFERENCES grids(id),
@@ -443,7 +493,7 @@ CREATE TABLE IF NOT EXISTS listings (
 );`); err != nil {
 		return err
 	}
-	_, err := tx.ExecContext(ctx, externalsIndexDDL)
+	_, err := tx.ExecContext(ctx, tilesKeyIndexDDL)
 	return err
 }
 
@@ -486,9 +536,9 @@ func migrateV10(ctx context.Context, tx *sql.Tx) error {
 	if err := rebuildTiles(ctx, tx, 10); err != nil {
 		return err
 	}
-	// DROP TABLE tiles took idx_tiles_live_key with it; externalsIndexDDL,
+	// DROP TABLE tiles took idx_tiles_live_key with it; tilesKeyIndexDDL,
 	// not tilesIndexDDL, creates it. Any rebuild after v9 must do the same.
-	_, err = tx.ExecContext(ctx, externalsIndexDDL)
+	_, err = tx.ExecContext(ctx, tilesKeyIndexDDL)
 	return err
 }
 

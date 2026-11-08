@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1018,12 +1019,12 @@ func init() {
 				t.Fatalf("seed plugin grid: %v", err)
 			}
 			pluginGrid := mustID(t, res)
-			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
-				VALUES (?, 'text', 12, 34, 2, 3, 'v11 cached', 100, 100, 'p9', 'notes.md')`, pluginGrid); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, key)
+				VALUES (?, 'text', 12, 34, 2, 3, 'v11 cached', 100, 100, 'notes.md')`, pluginGrid); err != nil {
 				t.Fatalf("seed external row: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key, tombstoned)
-				VALUES (?, 'text', 13, 34, 1, 1, 'v11 gone', 100, 100, 'p9', 'gone.md', 1)`, pluginGrid); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, key, tombstoned)
+				VALUES (?, 'text', 13, 34, 1, 1, 'v11 gone', 100, 100, 'gone.md', 1)`, pluginGrid); err != nil {
 				t.Fatalf("seed retired row: %v", err)
 			}
 			if _, err := db.Exec(`INSERT INTO listings (grid_id, entries, authoritative) VALUES (?, X'0a04', 1)`, pluginGrid); err != nil {
@@ -1042,14 +1043,14 @@ func init() {
 			// The dark-source answer comes from the node's own rows now.
 			var x, y, w, h, tomb int64
 			var label string
-			if err := db.QueryRow(`SELECT x, y, w, h, alt_text, tombstoned FROM tiles WHERE ns = 'p9' AND key = 'notes.md'`).
+			if err := db.QueryRow(`SELECT x, y, w, h, alt_text, tombstoned FROM tiles WHERE key = 'notes.md'`).
 				Scan(&x, &y, &w, &h, &label, &tomb); err != nil {
 				t.Fatalf("read the external row: %v", err)
 			}
 			if x != 12 || y != 34 || w != 2 || h != 3 || label != "v11 cached" || tomb != 0 {
 				t.Errorf("the external row changed across v12: %d,%d %dx%d %q tomb=%d", x, y, w, h, label, tomb)
 			}
-			if err := db.QueryRow(`SELECT tombstoned FROM tiles WHERE ns = 'p9' AND key = 'gone.md'`).Scan(&tomb); err != nil {
+			if err := db.QueryRow(`SELECT tombstoned FROM tiles WHERE key = 'gone.md'`).Scan(&tomb); err != nil {
 				t.Fatalf("read the retired row: %v", err)
 			}
 			if tomb != 1 {
@@ -1115,10 +1116,10 @@ func init() {
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
 			for _, q := range []string{
-				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key)
-					VALUES (` + rootID + `, 'url', 91, 9, 1, 1, '', 'v13 page', 100, 100, 'p1', 'a.html')`,
-				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key)
-					VALUES (` + rootID + `, 'url', 92, 9, 1, 1, 'https://v13.example', 'v13 addressed', 100, 100, 'p1', 'b')`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, key)
+					VALUES (` + rootID + `, 'url', 91, 9, 1, 1, '', 'v13 page', 100, 100, 'a.html')`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, key)
+					VALUES (` + rootID + `, 'url', 92, 9, 1, 1, 'https://v13.example', 'v13 addressed', 100, 100, 'b')`,
 				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at)
 					VALUES (` + rootID + `, 'url', 93, 9, 1, 1, '', 'v13 home url', 100, 100)`,
 			} {
@@ -1293,8 +1294,8 @@ func init() {
 			if err != nil {
 				t.Fatalf("seed plugin grid: %v", err)
 			}
-			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, ns, key)
-				VALUES (?, 'text', 0, 0, 1, 1, 'v17 plugin row', 1800000000123456789, 1800000500987654321, 'p18', 'k')`,
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, key)
+				VALUES (?, 'text', 0, 0, 1, 1, 'v17 plugin row', 1800000000123456789, 1800000500987654321, 'k')`,
 				mustID(t, res)); err != nil {
 				t.Fatalf("seed plugin row: %v", err)
 			}
@@ -1425,8 +1426,8 @@ func init() {
 		version: 22,
 		seed: func(t *testing.T, db *sql.DB, rootID string) {
 			t.Helper()
-			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key)
-				VALUES (` + rootID + `, 'url', 96, 9, 1, 1, 'https://listed.test/', 'v21 row', 100, 100, 'p21', 'u')`); err != nil {
+			if _, err := db.Exec(`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, key)
+				VALUES (` + rootID + `, 'url', 96, 9, 1, 1, 'https://listed.test/', 'v21 row', 100, 100, 'u')`); err != nil {
 				t.Fatalf("seed v21 row: %v", err)
 			}
 		},
@@ -1442,6 +1443,105 @@ func init() {
 			}
 		},
 	})
+
+	// v23: the plugin rows go, and the blobs only they held; home's rows stay
+	// as they were, and ns retires.
+	var homeV22 []string
+	migrationFixtures = append(migrationFixtures, migrationFixture{
+		version: 23,
+		seed: func(t *testing.T, db *sql.DB, rootID string) {
+			t.Helper()
+			res, err := db.Exec(`INSERT INTO grids (created_at, updated_at, ns, context_key) VALUES (100, 100, 'p1234567', '.')`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			plugin := mustID(t, res)
+			child, err := db.Exec(`INSERT INTO grids (created_at, updated_at) VALUES (100, 100)`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, q := range []string{
+				`INSERT INTO blobs (hash, data, refcount, media_type) VALUES ('v22-own', X'01', 1, 'image/jpeg')`,
+				`INSERT INTO blobs (hash, data, refcount, media_type) VALUES ('v22-shared', X'02', 2, 'image/jpeg')`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, preview_blob_id)
+					VALUES (` + rootID + `, 'url', 97, 9, 1, 1, '', 'v22 home url', 100, 100, (SELECT id FROM blobs WHERE hash = 'v22-shared'))`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at, child_grid_id)
+					VALUES (` + rootID + `, 'door', 98, 9, 1, 1, 'v22 home door', 100, 100, ` + strconv.FormatInt(mustID(t, child), 10) + `)`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, key, preview_blob_id)
+					VALUES (` + strconv.FormatInt(plugin, 10) + `, 'url', 0, 0, 1, 1, '', 'v22 plugin own', 100, 100, 'a.png', (SELECT id FROM blobs WHERE hash = 'v22-own'))`,
+				`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, key, preview_blob_id)
+					VALUES (` + strconv.FormatInt(plugin, 10) + `, 'url', 1, 0, 1, 1, '', 'v22 plugin shared', 100, 100, 'b.png', (SELECT id FROM blobs WHERE hash = 'v22-shared'))`,
+			} {
+				if _, err := db.Exec(q); err != nil {
+					t.Fatalf("seed: %v", err)
+				}
+			}
+			homeV22 = homeRows(t, db)
+		},
+		verify: func(t *testing.T, db *sql.DB) {
+			t.Helper()
+			var n int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM tiles WHERE alt_text LIKE 'v22 plugin%'`).Scan(&n); err != nil || n != 0 {
+				t.Errorf("plugin tiles left: %d (%v)", n, err)
+			}
+			if err := db.QueryRow(`SELECT COUNT(*) FROM grids WHERE key != ''`).Scan(&n); err != nil || n != 0 {
+				t.Errorf("plugin grids left: %d (%v)", n, err)
+			}
+			var own, shared int
+			_ = db.QueryRow(`SELECT COUNT(*) FROM blobs WHERE hash = 'v22-own'`).Scan(&own)
+			_ = db.QueryRow(`SELECT refcount FROM blobs WHERE hash = 'v22-shared'`).Scan(&shared)
+			if own != 0 || shared != 1 {
+				t.Errorf("blobs: the plugin's own %d left, the shared one at refcount %d; want 0 and 1", own, shared)
+			}
+			for _, tc := range []struct{ table, column string }{{"tiles", "ns"}, {"grids", "ns"}, {"grids", "context_key"}} {
+				if _, ok := tableColumnsFP(t, db, tc.table)[tc.column]; ok {
+					t.Errorf("%s.%s survived v23", tc.table, tc.column)
+				}
+			}
+			if got := homeRows(t, db); !reflect.DeepEqual(got, homeV22) {
+				t.Errorf("home rows changed across v23:\n got %v\nwant %v", got, homeV22)
+			}
+		},
+	})
+}
+
+// homeRows is every home tile and grid row as the columns both v22 and v23
+// carry read it, in id order.
+func homeRows(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+	var out []string
+	for _, q := range []string{
+		`SELECT id, grid_id, kind, x, y, w, h, alt_text, child_grid_id, preview_blob_id, created_at, updated_at FROM tiles WHERE key = '' ORDER BY id`,
+		`SELECT id, version, created_at, updated_at, root_cx, root_cy, root_zoom, selection FROM grids WHERE ` + homeGrids(t, db) + ` ORDER BY id`,
+	} {
+		rows, err := db.Query(q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cols, _ := rows.Columns()
+		for rows.Next() {
+			vals := make([]any, len(cols))
+			ptrs := make([]any, len(cols))
+			for i := range vals {
+				ptrs[i] = &vals[i]
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, fmt.Sprint(vals...))
+		}
+		rows.Close()
+	}
+	return out
+}
+
+// homeGrids is the predicate that keeps a query to home's grids, before v23
+// and after it.
+func homeGrids(t *testing.T, db *sql.DB) string {
+	if _, ok := tableColumnsFP(t, db, "grids")["ns"]; ok {
+		return "ns = ''"
+	}
+	return "key = ''"
 }
 
 // objectIDColumn is spelled once so the v10 fixture's assertions cannot drift.

@@ -1,8 +1,7 @@
 package store
 
 // The one automatic placement: where a tile lands when nobody chose a cell. A
-// plugin entry with no placement hint takes the next free slot of its
-// grid's overlay, a deleted tile takes the next free slot of its trash
+// file never placed takes the next free slot of its directory's overlay, a deleted tile takes the next free slot of its trash
 // month, and a tile the MCP API creates or copies takes FreeSlot. All read
 // this rule, so touching one cannot move another. It is layout only; the user
 // rearranges afterwards and it stays as left.
@@ -10,7 +9,7 @@ package store
 import gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 // FreeSlot is where a w×h tile lands among taken: at or below near in near's
-// column when the caller names a cell, as a plugin's hint does, else the first
+// column when the caller names a cell, else the first
 // free slot from the origin in reading order.
 func FreeSlot(taken []*gridwellv1.Tile, near *[2]int64, w, h int64) (x, y int64) {
 	occupied := map[[2]int64]bool{}

@@ -11,7 +11,7 @@ import (
 // A plugin url tile keeps a screenshot and a standing freeze through the same
 // writers home's rows take: one blob swap, one frozen write.
 
-func mintOne(t *testing.T, d *Namespace, e Entry) int64 {
+func mintOne(t *testing.T, d *FileRows, e Entry) int64 {
 	t.Helper()
 	gid, err := d.GridOf("root")
 	if err != nil {
@@ -58,12 +58,9 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 	}
 	verifyRefcounts(t, st)
 
-	// Home cannot read a plugin row's preview, nor a plugin a home row's.
+	// Home cannot read a file row's preview.
 	if _, err := st.GetTilePreview(ctx, itoa(a)); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("home read a plugin row's preview: %v", err)
-	}
-	if _, err := st.Namespace("other").Preview(a); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("another namespace read the preview: %v", err)
+		t.Fatalf("home read a file row's preview: %v", err)
 	}
 }
 
@@ -147,9 +144,6 @@ func TestDroppingAPluginScreenshotReleasesItsBlob(t *testing.T) {
 	}
 	if got, _ := d.Preview(id); string(got) != "next" {
 		t.Fatalf("Preview = %q after the next capture, want next", got)
-	}
-	if err := st.Namespace("other").DropURLPreview(id); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("another namespace dropped the screenshot: %v", err)
 	}
 }
 

@@ -452,3 +452,52 @@ func TestMigrateV13OverAGenuineV12File(t *testing.T) {
 		t.Errorf("connections after reopen = %+v, want %+v", after, before)
 	}
 }
+
+// A genuine v22 file carries tiles.ns, which a chain-built one lost at v10's
+// rebuild, and the v9 indexes over it: v23 drops every row an ns names, its
+// preview with it, keeps home's, keeps the sequence, and ends equal to a
+// fresh file.
+func TestMigrateV23OverAGenuineV22File(t *testing.T) {
+	ctx := context.Background()
+	db, root := buildDBAtV1(t, filepath.Join(t.TempDir(), "genuinev22.db"))
+	applyMigrationsUpTo(t, db, 22)
+	for _, q := range []string{
+		`DROP INDEX idx_tiles_live_key`,
+		`ALTER TABLE tiles ADD COLUMN ns TEXT NOT NULL DEFAULT ''`,
+		`CREATE UNIQUE INDEX idx_tiles_live_key ON tiles(ns, grid_id, key) WHERE ns != '' AND tombstoned = 0`,
+		`INSERT INTO grids (created_at, updated_at, ns, context_key) VALUES (100, 100, 'p1234567', 'inbox')`,
+		`INSERT INTO blobs (hash, data, refcount, media_type) VALUES ('genuine-v22', X'03', 1, 'image/jpeg')`,
+		`INSERT INTO tiles (grid_id, kind, x, y, w, h, url_string, alt_text, created_at, updated_at, ns, key, preview_blob_id)
+			VALUES ((SELECT id FROM grids WHERE ns = 'p1234567'), 'url', 0, 0, 1, 1, '', 'genuine plugin', 100, 100,
+			'p1234567', 'a.png', (SELECT id FROM blobs WHERE hash = 'genuine-v22'))`,
+		`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+			VALUES (` + root + `, 'text', 4, 4, 1, 1, 'genuine home', 100, 100)`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("restore the v22 shape (%s): %v", q, err)
+		}
+	}
+	var seq int64
+	if err := db.QueryRowContext(ctx, `SELECT seq FROM sqlite_sequence WHERE name = 'tiles'`).Scan(&seq); err != nil {
+		t.Fatal(err)
+	}
+	home := homeRows(t, db)
+	if err := storeOver(db).migrateUp(ctx, migrations, 23); err != nil {
+		t.Fatalf("migrate a genuine v22 file to v23: %v", err)
+	}
+	var plugin, blobs int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tiles WHERE alt_text = 'genuine plugin'`).Scan(&plugin)
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM blobs WHERE hash = 'genuine-v22'`).Scan(&blobs)
+	if plugin != 0 || blobs != 0 {
+		t.Errorf("the plugin row (%d) or its preview (%d) survived v23", plugin, blobs)
+	}
+	if got := homeRows(t, db); !reflect.DeepEqual(got, home) {
+		t.Errorf("home rows changed across v23:\n got %v\nwant %v", got, home)
+	}
+	var after int64
+	if err := db.QueryRowContext(ctx, `SELECT seq FROM sqlite_sequence WHERE name = 'tiles'`).Scan(&after); err != nil || after != seq {
+		t.Errorf("the tiles sequence is %d (%v), want the pre-v23 %d", after, err, seq)
+	}
+	fresh, _ := newTestStoreFile(t)
+	compareFingerprints(t, schemaFingerprint(t, fresh.db), schemaFingerprint(t, db))
+}

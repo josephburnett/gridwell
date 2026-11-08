@@ -101,7 +101,7 @@ func registerFiles(t *testing.T, reg *plugin.Registry, st *store.Store, id strin
 	for _, r := range roots {
 		rs = append(rs, files.Root{Path: r})
 	}
-	src, err := files.New(st.Namespace("~"), rs, trash)
+	src, err := files.New(st.Files(), rs, trash)
 	if err != nil {
 		t.Fatal(err)
 	}

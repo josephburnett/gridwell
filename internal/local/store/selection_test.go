@@ -242,7 +242,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 // framing, and a retired row leaves the set.
 func TestPluginGridSelection(t *testing.T) {
 	s := newTestStore(t)
-	n := s.Namespace("plug1")
+	n := s.Files()
 	gid, err := n.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
@@ -272,8 +272,8 @@ func TestPluginGridSelection(t *testing.T) {
 		t.Errorf("selecting a retired row: changed %v, err %v; want it ignored", changed, err)
 	}
 	// Home's grid of the same number is not this one.
-	if _, err := s.Namespace("").SetSelection(gid, SelectOp{Add: []int64{b}}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("another namespace's grid: err = %v, want ErrNotFound", err)
+	if err := s.SetSelection(context.Background(), &gridwellv1.SetSelectionRequest{GridId: itoa(gid), Add: []string{itoa(b)}}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("home on a files grid: err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -371,7 +371,7 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
-	n := s.Namespace("plug1")
+	n := s.Files()
 	gid, err := n.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)
@@ -406,7 +406,7 @@ func TestSelectionClearAllIsOneNamespace(t *testing.T) {
 	ctx := context.Background()
 	root := rootID(t, s)
 	g1, g2 := nest(t, s, root)
-	n := s.Namespace("plug1")
+	n := s.Files()
 	gid, err := n.GridOf("inbox")
 	if err != nil {
 		t.Fatal(err)

@@ -1,9 +1,9 @@
 package store
 
-// The node's rows for a source's entries: rows in the same grids and tiles
-// tables as home, under ns = the source's id (home is ns = ''). The source
-// answers in stable string keys; the node mints the ids, keeps arrangement and
-// framing, and retires keys as tombstones. Ids are AUTOINCREMENT and never
+// The files' rows: rows in the same grids and tiles tables as home, keyed by
+// the path they are about (key; home's rows have key ''). The files answer in
+// paths; the node mints the ids, keeps arrangement and framing, and retires
+// paths as tombstones. Ids are AUTOINCREMENT and never
 // reused, and a recreated key mints a fresh id (a partial unique index over
 // live rows). These rows emit no store events, and a row's version moves
 // only on a typed name.
@@ -29,10 +29,10 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Entry is one thing a source lists in a grid: its key and the content facts
-// the source owns. LinkTarget is the address of the thing it links to, ""
-// when it owns its content; Child is a door's grid key; Hint, when set, is
-// where it asks to sit.
+// Entry is one thing a directory lists: its path and the content facts the
+// disk owns. LinkTarget is the address of the thing it links to, "" when it
+// owns its content; Child is a door's grid key; Hint, when set, is where it
+// asks to sit.
 type Entry struct {
 	Key, Label, Kind string
 	URL              string
@@ -45,15 +45,27 @@ type Entry struct {
 // Hint is the rect an entry asks to sit at.
 type Hint struct{ X, Y, W, H int64 }
 
-// Namespace is one source's view of the store.
-type Namespace struct {
-	s  *Store
-	ns string
-}
+// FileRows is the files' view of the store.
+type FileRows struct{ s *Store }
 
-// Namespace returns the rows under ns (a source's id).
-func (s *Store) Namespace(ns string) *Namespace {
-	return &Namespace{s: s, ns: ns}
+// Files is the files' rows.
+func (s *Store) Files() *FileRows { return &FileRows{s: s} }
+
+// side is which of a table's two kinds of row a query keeps to: home's,
+// whose key is ”, or the files', whose key is a path.
+type side bool
+
+const (
+	home  side = false
+	files side = true
+)
+
+// of is the predicate on col, a key column, that keeps a query to the side.
+func (on side) of(col string) string {
+	if on {
+		return col + " != ''"
+	}
+	return col + " = ''"
 }
 
 // ExtTile is one joined entry: the node's row, or a derived placement when
@@ -68,15 +80,15 @@ type ExtTile struct {
 }
 
 // GridOf resolves a grid key to its grid id, minting on first sight.
-func (n *Namespace) GridOf(key string) (int64, error) {
+func (n *FileRows) GridOf(key string) (int64, error) {
 	id, ok, err := n.LookupGrid(key)
 	if err != nil || ok {
 		return id, err
 	}
 	now := n.s.now().Unix()
 	err = n.write("GridOf", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, ns, context_key)
-			VALUES (0, ?, ?, ?, ?)`, now, now, n.ns, key)
+		res, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, key)
+			VALUES (0, ?, ?, ?)`, now, now, key)
 		if err != nil {
 			return err
 		}
@@ -87,18 +99,18 @@ func (n *Namespace) GridOf(key string) (int64, error) {
 }
 
 // GridKey resolves a minted grid id back to the source's grid key.
-func (n *Namespace) GridKey(gridID int64) (string, error) {
+func (n *FileRows) GridKey(gridID int64) (string, error) {
 	var key string
-	err := n.s.db.QueryRow(`SELECT context_key FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).Scan(&key)
+	err := n.s.db.QueryRow(`SELECT key FROM grids WHERE id = ? AND key != ''`, gridID).Scan(&key)
 	return key, notFound(err)
 }
 
 // TileKey resolves a minted tile id to its (grid id, source key). A retired
 // row still resolves, so a dangling link stays interpretable; the caller
 // decides what retirement means.
-func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, err error) {
+func (n *FileRows) TileKey(tileID int64) (gridID int64, key string, tombstoned bool, err error) {
 	var tomb int64
-	err = n.s.db.QueryRow(`SELECT grid_id, key, tombstoned FROM tiles WHERE id = ? AND ns = ?`, tileID, n.ns).
+	err = n.s.db.QueryRow(`SELECT grid_id, key, tombstoned FROM tiles WHERE id = ? AND key != ''`, tileID).
 		Scan(&gridID, &key, &tomb)
 	return gridID, key, tomb != 0, notFound(err)
 }
@@ -108,7 +120,7 @@ func (n *Namespace) TileKey(tileID int64) (gridID int64, key string, tombstoned 
 // address; the listing contributes every other content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
 // gridID 0 means an untouched grid: every entry is derived.
-func (n *Namespace) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
+func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 	rows := map[string]ExtTile{}
 	var stored []ExtTile
 	if gridID != 0 {
@@ -219,7 +231,7 @@ func derivePlacement(occupied map[[2]int64]bool, cur *cursor, hint *Hint) (x, y,
 // Mint writes the row an entry has earned: the id, the placement it was
 // already answered at, and a content snapshot. It is the one INSERT; an entry
 // with a live row returns that id and writes nothing.
-func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int64) (int64, error) {
+func (n *FileRows) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int64) (int64, error) {
 	if id, ok, err := n.LiveTileID(gridID, e.Key); err != nil || ok {
 		return id, err
 	}
@@ -232,9 +244,9 @@ func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h in
 	var id int64
 	err := n.write("Mint", "g/"+strconv.FormatInt(gridID, 10)+"/"+e.Key, func(ctx context.Context, tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
-			child_grid_id, url_string, alt_text, serves_page, link_target_id, created_at, updated_at, ns, key)
-			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, n.ns, e.Key)
+			child_grid_id, url_string, alt_text, serves_page, link_target_id, created_at, updated_at, key)
+			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, e.Key)
 		if err != nil {
 			return fmt.Errorf("store: mint %q: %w", e.Key, err)
 		}
@@ -253,7 +265,7 @@ func (n *Namespace) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h in
 // row in place, keeping its id, placement and framing (convert): a row that
 // stops being a door gives up its grid, and one that becomes a door takes
 // its entry's, since the tiles CHECK lets only a door hold one.
-func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
+func (n *FileRows) Refresh(gridID int64, entries []Entry) error {
 	if gridID == 0 || len(entries) == 0 {
 		return nil
 	}
@@ -304,11 +316,11 @@ func (n *Namespace) Refresh(gridID int64, entries []Entry) error {
 // hold, its screenshot and its text mode, since a link's preview is its
 // target's. A typed name stays, and so
 // does a landed address while the row is still a url.
-func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot, child sql.NullInt64) error {
+func (n *FileRows) convert(r ExtTile, label string, s entrySnapshot, child sql.NullInt64) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
 			if _, err := tx.ExecContext(ctx, `UPDATE tiles SET preview_blob_id = NULL, text_mode = NULL
-				WHERE id = ? AND ns = ? AND tombstoned = 0`, r.ID, n.ns); err != nil {
+				WHERE id = ? AND key != '' AND tombstoned = 0`, r.ID); err != nil {
 				return err
 			}
 			if r.PreviewBlobId != 0 {
@@ -319,8 +331,8 @@ func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot, child sql.
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE tiles SET kind = ?,
 			alt_text = CASE WHEN alt_user = 1 THEN alt_text ELSE ? END, url_string = ?, url_user = ?, serves_page = ?,
-			link_target_id = ?, child_grid_id = ?, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`,
-			s.kind, label, s.url, s.user, s.page, s.link, child, n.s.now().Unix(), r.ID, n.ns)
+			link_target_id = ?, child_grid_id = ?, updated_at = ? WHERE id = ? AND key != '' AND tombstoned = 0`,
+			s.kind, label, s.url, s.user, s.page, s.link, child, n.s.now().Unix(), r.ID)
 		return err
 	})
 }
@@ -328,7 +340,7 @@ func (n *Namespace) convert(r ExtTile, label string, s entrySnapshot, child sql.
 // Sweep retires the rows of a grid whose keys an authoritative listing did not
 // mention: the source says they are gone, so the ids they minted retire and
 // never come back. An untouched entry has nothing to sweep.
-func (n *Namespace) Sweep(gridID int64, present map[string]bool) error {
+func (n *FileRows) Sweep(gridID int64, present map[string]bool) error {
 	rows, err := n.tiles(gridID)
 	if err != nil {
 		return err
@@ -346,21 +358,21 @@ func (n *Namespace) Sweep(gridID int64, present map[string]bool) error {
 
 // LookupGrid is GridOf without the mint, for the join, which must not
 // write.
-func (n *Namespace) LookupGrid(key string) (int64, bool, error) {
-	return n.lookupID(`SELECT id FROM grids WHERE ns = ? AND context_key = ?`, n.ns, key)
+func (n *FileRows) LookupGrid(key string) (int64, bool, error) {
+	return n.lookupID(`SELECT id FROM grids WHERE key = ? AND key != ''`, key)
 }
 
 // LiveTileID is TileKey's inverse: an entry with a row is named by that row's
 // id, never by its key.
-func (n *Namespace) LiveTileID(gridID int64, key string) (int64, bool, error) {
+func (n *FileRows) LiveTileID(gridID int64, key string) (int64, bool, error) {
 	if gridID == 0 {
 		return 0, false, nil
 	}
-	return n.lookupID(`SELECT id FROM tiles WHERE ns = ? AND grid_id = ? AND key = ? AND tombstoned = 0`, n.ns, gridID, key)
+	return n.lookupID(`SELECT id FROM tiles WHERE grid_id = ? AND key = ? AND key != '' AND tombstoned = 0`, gridID, key)
 }
 
 // lookupID answers the id query finds, ok false when it finds none.
-func (n *Namespace) lookupID(query string, args ...any) (id int64, ok bool, err error) {
+func (n *FileRows) lookupID(query string, args ...any) (id int64, ok bool, err error) {
 	err = n.s.db.QueryRow(query, args...).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
@@ -370,9 +382,9 @@ func (n *Namespace) lookupID(query string, args ...any) (id int64, ok bool, err 
 
 // tiles lists the live rows of a grid, by id, the stored columns through the
 // one descriptor and the key beside them.
-func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
+func (n *FileRows) tiles(gridID int64) ([]ExtTile, error) {
 	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key, url_user FROM tiles
-		WHERE ns = ? AND grid_id = ? AND tombstoned = 0 ORDER BY id`, n.ns, gridID)
+		WHERE key != '' AND grid_id = ? AND tombstoned = 0 ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -402,11 +414,11 @@ func (n *Namespace) tiles(gridID int64) ([]ExtTile, error) {
 // (withMutation). A source row publishes no store event, so row names what it
 // touched for the record: an id as rpc.EventKey spells it, or, before the
 // mint, its grid and key.
-func (n *Namespace) write(verb, row string, fn func(ctx context.Context, tx *sql.Tx) error) error {
+func (n *FileRows) write(verb, row string, fn func(ctx context.Context, tx *sql.Tx) error) error {
 	ctx := context.Background()
 	return n.s.withMutation(ctx, verb, func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
 		return fn(ctx, tx)
-	}, n.ns+":"+row)
+	}, "~:"+row)
 }
 
 func tileRow(id int64) string { return "t/" + strconv.FormatInt(id, 10) }
@@ -414,19 +426,19 @@ func tileRow(id int64) string { return "t/" + strconv.FormatInt(id, 10) }
 // rowWrite is write for one existing row of table that carries no claim
 // (store.withRowWrite): changed is false when it landed where the row already
 // was, and the caller, which announces source rows itself, then says nothing.
-func (n *Namespace) rowWrite(verb, table string, id int64, row string, fn func(ctx context.Context, tx *sql.Tx) error) (changed bool, err error) {
+func (n *FileRows) rowWrite(verb, table string, id int64, row string, fn func(ctx context.Context, tx *sql.Tx) error) (changed bool, err error) {
 	ctx := context.Background()
 	return n.s.withRowWrite(ctx, verb, table, id, func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
 		return fn(ctx, tx)
-	}, n.ns+":"+row)
+	}, "~:"+row)
 }
 
 // exec runs a single-row UPDATE on a live row of this namespace, mapping zero
 // rows to ErrNotFound: a retired row refuses mutation.
-func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed bool, err error) {
-	args = append(args, n.s.now().Unix(), tileID, n.ns)
+func (n *FileRows) exec(verb, set string, tileID int64, args ...any) (changed bool, err error) {
+	args = append(args, n.s.now().Unix(), tileID)
 	return n.rowWrite(verb, "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+`, updated_at = ? WHERE id = ? AND ns = ? AND tombstoned = 0`, args...)
+		res, err := tx.ExecContext(ctx, `UPDATE tiles SET `+set+`, updated_at = ? WHERE id = ? AND key != '' AND tombstoned = 0`, args...)
 		if err != nil {
 			return err
 		}
@@ -444,11 +456,11 @@ func (n *Namespace) exec(verb, set string, tileID int64, args ...any) (changed b
 // Move is the placement writeback, claiming the footprint the writer saw.
 // gridID 0 keeps the row's grid and key; another is a move by the source
 // and the row leaves the old selection.
-func (n *Namespace) Move(tileID, gridID int64, key string, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
+func (n *FileRows) Move(tileID, gridID int64, key string, x, y, w, h int64, claim *gridwellv1.Placement) (changed bool, err error) {
 	return n.rowWrite("MoveTile", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		cur := &gridwellv1.Tile{Id: strconv.FormatInt(tileID, 10)}
 		from, was := int64(0), ""
-		if err := liveRow(ctx, tx, n.ns, tileID, "x, y, w, h, grid_id, key", &cur.X, &cur.Y, &cur.W, &cur.H, &from, &was); err != nil {
+		if err := liveRow(ctx, tx, files, tileID, "x, y, w, h, grid_id, key", &cur.X, &cur.Y, &cur.W, &cur.H, &from, &was); err != nil {
 			return err
 		}
 		if gridID == 0 {
@@ -474,7 +486,7 @@ func (n *Namespace) Move(tileID, gridID int64, key string, x, y, w, h int64, cla
 // Rename is the user's name for an entry, kept on its row and never told to
 // the source, as home's RenameTile keeps one; a text tile's name is its
 // source's and is refused, since its presentation reads it.
-func (n *Namespace) Rename(tileID, version int64, name string) (changed bool, err error) {
+func (n *FileRows) Rename(tileID, version int64, name string) (changed bool, err error) {
 	return n.userContent("RenameTile", tileID, version, func(t *gridwellv1.Tile) (string, any, error) {
 		if !rpc.KindOf(t.Kind).TypedName {
 			return "", nil, fmt.Errorf("%w: a text tile's name is its source's; its presentation reads it", ErrInvalidArgument)
@@ -489,7 +501,7 @@ func (n *Namespace) Rename(tileID, version int64, name string) (changed bool, er
 // SetAddress is where a navigation in an entry's url landed, kept on its row
 // and never told to the source, as home's writeURLContent keeps one: http or
 // https only. A served page has no address of its own and is refused.
-func (n *Namespace) SetAddress(tileID, version int64, address string) (changed bool, err error) {
+func (n *FileRows) SetAddress(tileID, version int64, address string) (changed bool, err error) {
 	address = strings.TrimSpace(address)
 	if !rpc.HTTPAddress(address) {
 		return false, fmt.Errorf("%w: only http/https URLs allowed", ErrInvalidArgument)
@@ -509,10 +521,10 @@ func (n *Namespace) SetAddress(tileID, version int64, address string) (changed b
 // claims the version, and decide answers the latching SET and its value from
 // the row as claimed, "" for a write that lands where the row already is.
 // A write bumps the version.
-func (n *Namespace) userContent(verb string, tileID, version int64, decide func(*gridwellv1.Tile) (string, any, error)) (changed bool, err error) {
+func (n *FileRows) userContent(verb string, tileID, version int64, decide func(*gridwellv1.Tile) (string, any, error)) (changed bool, err error) {
 	err = n.write(verb, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		var t gridwellv1.Tile
-		if err := liveRow(ctx, tx, n.ns, tileID, tileColumns, scanDests(tilesColumns, &t)...); err != nil {
+		if err := liveRow(ctx, tx, files, tileID, tileColumns, scanDests(tilesColumns, &t)...); err != nil {
 			return err
 		}
 		if t.Version != version {
@@ -533,13 +545,13 @@ func (n *Namespace) userContent(verb string, tileID, version int64, decide func(
 
 // SetFraming persists framing into this namespace's rows, the one writer of
 // the one shape (framing.go). Exactly one of tileID and rootGridID is set.
-func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed bool, err error) {
+func (n *FileRows) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed bool, err error) {
 	table, id, row := "tiles", tileID, tileRow(tileID)
 	if tileID == 0 {
 		table, id, row = "grids", rootGridID, "f/"+strconv.FormatInt(rootGridID, 10)
 	}
 	return n.rowWrite("SetFraming", table, id, row, func(ctx context.Context, tx *sql.Tx) error {
-		k, err := updateFraming(ctx, tx, n.ns, tileID, rootGridID, f, n.s.now().Unix())
+		k, err := updateFraming(ctx, tx, files, tileID, rootGridID, f, n.s.now().Unix())
 		if err != nil {
 			return err
 		}
@@ -551,7 +563,7 @@ func (n *Namespace) SetFraming(tileID, rootGridID int64, f rpc.Framing) (changed
 }
 
 // SetTextScroll persists a text tile's scroll.
-func (n *Namespace) SetTextScroll(tileID, tx, ty, tw, th int64, mode string) (changed bool, err error) {
+func (n *FileRows) SetTextScroll(tileID, tx, ty, tw, th int64, mode string) (changed bool, err error) {
 	var m any
 	if mode != "" {
 		m = mode
@@ -560,18 +572,18 @@ func (n *Namespace) SetTextScroll(tileID, tx, ty, tw, th int64, mode string) (ch
 }
 
 // SetContentZoom persists the per-tile content scale.
-func (n *Namespace) SetContentZoom(tileID int64, zoom rpc.ContentZoom) (changed bool, err error) {
+func (n *FileRows) SetContentZoom(tileID int64, zoom rpc.ContentZoom) (changed bool, err error) {
 	return n.exec("SetContentZoom", contentZoomSet, tileID, zoom.Float())
 }
 
 // Retire tombstones one tile row: the delete-gesture path. The row stays so a
 // stale link stays interpretable, its screenshot is released, and it
 // leaves its grid's selection.
-func (n *Namespace) Retire(tileID int64) error {
+func (n *FileRows) Retire(tileID int64) error {
 	return n.write("Retire", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		var preview sql.NullInt64
 		var gridID int64
-		if err := liveRow(ctx, tx, n.ns, tileID, "preview_blob_id, grid_id", &preview, &gridID); err != nil {
+		if err := liveRow(ctx, tx, files, tileID, "preview_blob_id, grid_id", &preview, &gridID); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE tiles SET tombstoned = 1, preview_blob_id = NULL WHERE id = ?`, tileID); err != nil {
@@ -589,9 +601,13 @@ func (n *Namespace) Retire(tileID int64) error {
 
 // RootFraming reads a root grid's framing, the row that owns it when there is
 // no door tile.
-func (n *Namespace) RootFraming(gridID int64) (rpc.View, error) {
+func (n *FileRows) RootFraming(gridID int64) (rpc.View, error) { return n.s.rootFraming(gridID) }
+
+// rootFraming is the framing a grid row keeps for itself, home's root or a
+// directory's, NotFound when never framed.
+func (s *Store) rootFraming(gridID int64) (rpc.View, error) {
 	var ncx, ncy, nzoom sql.NullFloat64
-	err := n.s.db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ? AND ns = ?`, gridID, n.ns).
+	err := s.db.QueryRow(`SELECT root_cx, root_cy, root_zoom FROM grids WHERE id = ?`, gridID).
 		Scan(&ncx, &ncy, &nzoom)
 	if err != nil || !ncx.Valid || !ncy.Valid || !nzoom.Valid {
 		return rpc.View{}, notFound(err)

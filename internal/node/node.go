@@ -210,7 +210,7 @@ func startFiles(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig)
 	for i, r := range cfg.Files {
 		roots[i] = files.Root{Path: r.Root, Label: r.Label}
 	}
-	src, err := files.New(st.Namespace("~"), roots, nil)
+	src, err := files.New(st.Files(), roots, nil)
 	if err != nil {
 		return err
 	}

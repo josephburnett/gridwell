@@ -42,7 +42,7 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	f.st = st
-	f.s, err = New(st.Namespace("~"), []Root{{Path: f.root, Label: "notes"}}, func(p string) error {
+	f.s, err = New(st.Files(), []Root{{Path: f.root, Label: "notes"}}, func(p string) error {
 		f.mu.Lock()
 		f.trashed = append(f.trashed, p)
 		f.mu.Unlock()

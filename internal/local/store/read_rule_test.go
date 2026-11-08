@@ -24,7 +24,7 @@ type readSubject struct {
 	door, workspace, link string
 	trashed               string
 	scratch, trash        string
-	ns                    *Namespace
+	ns                    *FileRows
 	nsGrid, nsTile        int64
 	entries               []Entry
 }
@@ -126,7 +126,7 @@ func seedForReads(t *testing.T, s *Store) readSubject {
 		t.Fatal(err)
 	}
 
-	sub.ns = s.Namespace("plug1")
+	sub.ns = s.Files()
 	gid, err := sub.ns.GridOf("a/grid")
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +275,7 @@ func TestAReadOnAFreshHomeWritesNothing(t *testing.T) {
 			ctx := context.Background()
 			sub := readSubject{
 				root:    rootID(t, s),
-				ns:      s.Namespace("plug1"),
+				ns:      s.Files(),
 				entries: []Entry{{Key: "notes.md", Kind: "text", Label: "notes.md"}},
 			}
 			before := storetest.Snapshot(t, s.db)

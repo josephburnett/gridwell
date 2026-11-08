@@ -75,7 +75,7 @@ func TestReadingTheFilesWritesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	s, err := New(st.Namespace("~"), []Root{{Path: root}}, nil)
+	s, err := New(st.Files(), []Root{{Path: root}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

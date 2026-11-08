@@ -1,23 +1,27 @@
 # internal/local/store — the format contract
 
 This package is the node's one database, `~/.gridwell/gridwell.db`: home's
-content (`ns = ''`), every plugin's rows under its namespace in the same
-tables, and the transport's connections. It holds node facts only: minted
-ids (`ns`, `key` → id), layout, framing, the user's bytes, connections,
-tombstones. What a connection last answered is cache and lives in `cache.db`
-(`internal/sourcecache`), never here.
+content, the files' rows in the same tables, and the transport's
+connections. It holds node facts only: minted ids, layout, framing, the
+user's bytes, connections, tombstones. What a connection last answered is
+cache and lives in `cache.db` (`internal/sourcecache`), never here.
 
-A plugin row is minted lazily: listing a source mints nothing (`Overlay` is
-a read-only join, `Mint` the one INSERT), so a row exists only for an entry
-the user has touched — moved, resized, framed, or pointed a link at.
-A listing writes only to rows that exist: `Refresh` keeps a touched row's
-outage snapshot at what the source last said, and `Sweep` tombstones a row
-whose key an authoritative listing no longer names.
-In an outage the rows the user touched answer an unreachable source,
-unchanged; an untouched entry has no row and is absent until the source
-answers again. An entry with a `link_target` is a
-link row (`link_target_id` holds the target's entry address), and a content
-row whose entry becomes a link is converted in place by `Refresh`, keeping
+`key` is the one column that tells the two sides apart, on tiles and grids
+alike: '' on every home row, a file's or directory's absolute path on the
+files' (`side` in external.go, `FileRows`). It was `context_key` on grids
+until v23, which retired `ns` and renamed it, the one rename in the chain,
+so that one name says "this row is a file's" in both tables.
+
+A file's row is minted lazily: listing a directory mints nothing
+(`Overlay` is a read-only join, `Mint` the one INSERT), so a row exists only
+for a file the user has touched — moved, resized, framed, renamed, or
+pointed a link at. A listing writes only to rows that exist: `Refresh`
+keeps a touched row's snapshot at what the disk last said, and `Sweep`
+tombstones a row whose path a listing no longer names. While a directory
+will not read, the rows the user touched answer, unchanged; an untouched
+file has no row and is absent until the directory reads again. A symlink
+to a file is a link row (`link_target_id` holds the target's path id), and a
+row whose file becomes a link is converted in place by `Refresh`, keeping
 its id and placement.
 
 ## The promise
@@ -36,7 +40,8 @@ intact.
   the `sqlite_sequence` seeds. A row the new shape cannot hold is converted,
   never deleted. Record the decision in the migration's comment. A wire
   field retired with a column becomes `reserved`. v10, v11, and v12 are the
-  worked examples.
+  worked examples; v23 is the one decided exception to converting, the
+  node's old plugin rows dropped.
 
 ## How the schema is represented
 
@@ -120,8 +125,8 @@ every open. Never relax them.
   of `content_at`, so a row's content time moves exactly when its version
   does; `created_at` and `updated_at` (every write) are the other two times. Everything else — captures, framing, layout —
   goes through `loadForWrite` + `emitTileChanged` and bumps nothing; a
-  placement claims the placement it saw (`ClaimPlacement`, home and a
-  plugin's rows alike), a freeze claims the freeze it saw (`setFrozenTx`),
+  placement claims the placement it saw (`ClaimPlacement`, home's and the
+  files' rows alike), a freeze claims the freeze it saw (`setFrozenTx`),
   and a delete claims the version and the placement (`DeleteClaim`). Those single-tile writes run in `withTileWrite`, so one that lands
   where the row already is writes nothing and tells no one
   (`repeat_write_test.go`). A stale placement is refused; the overlap check in the

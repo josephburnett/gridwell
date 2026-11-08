@@ -91,7 +91,7 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 	// (see readSnapshot); a NULL is a row whose blob is missing.
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT b.data FROM tiles t LEFT JOIN blobs b ON b.id = t.blob_id
-		 WHERE t.ns = '' AND t.kind = 'workspace' AND t.blob_id IS NOT NULL`)
+		 WHERE t.key = '' AND t.kind = 'workspace' AND t.blob_id IS NOT NULL`)
 	if err != nil {
 		return nil, false, fmt.Errorf("workspace refs: %w", err)
 	}

@@ -44,13 +44,13 @@ func (s *Store) SetURLState(ctx context.Context, tileIDStr string, jpeg []byte, 
 	})
 }
 
-// SetURLPreview is a plugin url tile's screenshot, the preview half of home's
-// SetURLState: the address, title and history are the plugin's to say, so
+// SetURLPreview is a page file's screenshot, the preview half of home's
+// SetURLState: the address, title and history are the file's to say, so
 // only the picture is the node's to keep.
-func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err error) {
+func (n *FileRows) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err error) {
 	return n.rowWrite("SetURLPreview", "tiles", tileID, tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		var kind string
-		if err := liveRow(ctx, tx, n.ns, tileID, "kind", &kind); err != nil {
+		if err := liveRow(ctx, tx, files, tileID, "kind", &kind); err != nil {
 			return err
 		}
 		if rpc.KindOf(kind).Content != rpc.ContentAddress {
@@ -60,14 +60,14 @@ func (n *Namespace) SetURLPreview(tileID int64, jpeg []byte) (changed bool, err 
 	})
 }
 
-// DropURLPreview retires a plugin url row's screenshot, so the row's preview is
+// DropURLPreview retires a page file row's screenshot, so the row's preview is
 // its file's picture until the next capture; files.pagePreviewStale says
 // when. A capture carries no claim, so neither does its retirement.
-func (n *Namespace) DropURLPreview(tileID int64) error {
+func (n *FileRows) DropURLPreview(tileID int64) error {
 	return n.write("DropURLPreview", tileRow(tileID), func(ctx context.Context, tx *sql.Tx) error {
 		var blob sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ? AND tombstoned = 0 AND kind = 'url'`,
-			tileID, n.ns).Scan(&blob)
+		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND key != '' AND tombstoned = 0 AND kind = 'url'`,
+			tileID).Scan(&blob)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}

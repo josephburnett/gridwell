@@ -99,9 +99,9 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
-	if _, err := db.Exec(externalsIndexDDL); err != nil {
+	if _, err := db.Exec(tilesKeyIndexDDL + gridsKeyIndexDDL); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("apply externals indexes: %w", err)
+		return nil, fmt.Errorf("apply the files' indexes: %w", err)
 	}
 	if err := s.bootstrap(context.Background()); err != nil {
 		db.Close()
@@ -246,7 +246,7 @@ func (s *Store) RootFraming(ctx context.Context) (rpc.View, error) {
 	if err != nil {
 		return rpc.View{}, err
 	}
-	return s.Namespace("").RootFraming(rootID)
+	return s.rootFraming(rootID)
 }
 
 // GridFraming is the same fact for any grid of home, by its decimal id. Home
@@ -257,7 +257,7 @@ func (s *Store) GridFraming(gridID string) (rpc.View, error) {
 	if err != nil {
 		return rpc.View{}, err
 	}
-	return s.Namespace("").RootFraming(id)
+	return s.rootFraming(id)
 }
 
 // SetFraming is the one framing writer: how this grid looked when the user
@@ -287,7 +287,7 @@ func (s *Store) SetFraming(ctx context.Context, req *gridwellv1.SetFramingReques
 		if !rpc.IsDoorKind(n.Kind) {
 			return ErrNotDoorTile
 		}
-		if _, err := updateFraming(ctx, tx, "", tileID, 0, f, s.now().Unix()); err != nil {
+		if _, err := updateFraming(ctx, tx, home, tileID, 0, f, s.now().Unix()); err != nil {
 			return err
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
@@ -309,7 +309,7 @@ func (s *Store) setRootFraming(ctx context.Context, req *gridwellv1.SetFramingRe
 		return fmt.Errorf("%w: %v", ErrInvalidArgument, err)
 	}
 	_, err = s.withRowWrite(ctx, "SetFraming/root", "grids", gridID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		n, err := updateFraming(ctx, tx, "", 0, gridID, f, s.now().Unix())
+		n, err := updateFraming(ctx, tx, home, 0, gridID, f, s.now().Unix())
 		if err != nil {
 			return err
 		}

@@ -1,7 +1,7 @@
 package files
 
 // A directory as a grid: its listing joined with the rows the user made
-// (store.Namespace.Overlay), every listing a verdict on every name in it.
+// (store.FileRows.Overlay), every listing a verdict on every name in it.
 
 import (
 	"context"

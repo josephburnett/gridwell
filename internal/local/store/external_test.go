@@ -13,14 +13,14 @@ import (
 // wins, hints seed first sight only, authoritative absence retires and
 // recreation mints fresh, and everything survives reopen.
 
-func openExt(t *testing.T) (*Store, *Namespace) {
+func openExt(t *testing.T) (*Store, *FileRows) {
 	t.Helper()
 	st, err := Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	return st, st.Namespace("plug1")
+	return st, st.Files()
 }
 
 func textEntries(keys ...string) []Entry {
@@ -45,7 +45,7 @@ func sameExt(a, b ExtTile) bool {
 // the product does this, a row costing a durable touch, but a test about
 // placement or retirement wants rows for every key, at exactly the placements
 // the join derived.
-func mintAll(t *testing.T, d *Namespace, gid int64, entries []Entry, authoritative bool) []ExtTile {
+func mintAll(t *testing.T, d *FileRows, gid int64, entries []Entry, authoritative bool) []ExtTile {
 	t.Helper()
 	if authoritative {
 		present := map[string]bool{}
@@ -286,7 +286,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := st.Namespace("plug1")
+	d := st.Files()
 	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a"), true)
 	a := extByKey(t, tiles, "a")
@@ -301,7 +301,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st2.Close()
-	d2 := st2.Namespace("plug1")
+	d2 := st2.Files()
 	gid2, _ := d2.GridOf("root")
 	if gid2 != gid {
 		t.Fatalf("grid re-minted across reopen: %d != %d", gid2, gid)

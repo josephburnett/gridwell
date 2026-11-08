@@ -3,7 +3,7 @@
 // is named by its absolute path (rpc.KeyTileID), a directory's grid and the
 // door showing it alike; the node's facts about one (placement, framing, a
 // typed name, a frozen preview, the selection) are store rows minted on
-// touch (store.Namespace), and every other fact is read off disk on every
+// touch (store.FileRows), and every other fact is read off disk on every
 // read. Ids handed in and out are bare; the router qualifies them. A path is
 // canonical only as spelled: two spellings of one file, through a symlinked
 // root and by its real path, or two cases on a case-insensitive disk, are
@@ -42,7 +42,7 @@ type Root struct {
 // Source is the files as one namespace.Namespace.
 type Source struct {
 	roots []Root
-	mem   *store.Namespace
+	mem   *store.FileRows
 	trash func(path string) error
 	hub   *eventhub.Hub[*pb.Event]
 	watch *watcher
@@ -81,7 +81,7 @@ var _ namespace.Namespace = (*Source)(nil)
 // out of the tree; nil is the OS trash. Close ends the watch. A relative root
 // is refused, since a path id names an absolute path and would name none of
 // its files.
-func New(mem *store.Namespace, roots []Root, trash func(path string) error) (*Source, error) {
+func New(mem *store.FileRows, roots []Root, trash func(path string) error) (*Source, error) {
 	if trash == nil {
 		trash = osTrash
 	}

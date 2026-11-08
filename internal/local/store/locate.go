@@ -132,19 +132,19 @@ type findHit struct {
 }
 
 // tileFilter is a find's filters as one SQL condition over `tiles t`, the
-// one place they mean anything: home's find and a plugin's rows
+// one place they mean anything: home's find and the files' rows
 // (Namespace.FindRows) both read it. grid 0 is no grid scope; scratch 0
 // excludes no grid.
 type tileFilter struct {
-	ns      string
+	on      side
 	req     *gridwellv1.FindRequest
 	grid    int64
 	scratch int64
 }
 
 func (f tileFilter) sql() (string, []any) {
-	conds := []string{"t.ns = ?", "t.tombstoned = 0"}
-	args := []any{f.ns}
+	conds := []string{f.on.of("t.key"), "t.tombstoned = 0"}
+	var args []any
 	if f.scratch != 0 {
 		conds = append(conds, "t.grid_id != ?")
 		args = append(args, f.scratch)
@@ -156,9 +156,9 @@ func (f tileFilter) sql() (string, []any) {
 		conds = append(conds, `t.grid_id IN (WITH RECURSIVE scope(id) AS (
 			SELECT ? UNION
 			SELECT w.child_grid_id FROM tiles w JOIN scope ON w.grid_id = scope.id
-			WHERE w.kind = 'door' AND w.ns = ? AND w.tombstoned = 0 AND typeof(w.child_grid_id) = 'integer')
+			WHERE w.kind = 'door' AND `+f.on.of("w.key")+` AND w.tombstoned = 0 AND typeof(w.child_grid_id) = 'integer')
 			SELECT id FROM scope)`)
-		args = append(args, f.grid, f.ns)
+		args = append(args, f.grid)
 	case f.grid != 0:
 		conds = append(conds, "t.grid_id = ?")
 		args = append(args, f.grid)
@@ -275,7 +275,7 @@ func reverse(ts []*gridwellv1.Tile) {
 	}
 }
 
-// FindRow is a plugin row a find found by its facts alone: its id, the
+// FindRow is a file's row a find found by its facts alone: its id, the
 // grid it sits on and its key there.
 type FindRow struct {
 	ID, GridID int64
@@ -283,14 +283,14 @@ type FindRow struct {
 }
 
 // FindPassing answers which of ids pass req's kind, time and selection filters,
-// each with the time an empty query orders by. A plugin's grid scope is its
-// caller's, the grids being grids the plugin names.
-func (n *Namespace) FindPassing(ids []int64, req *gridwellv1.FindRequest) (map[int64]int64, error) {
+// each with the time an empty query orders by. The files' grid scope is their
+// caller's, the grids being directories the files name.
+func (n *FileRows) FindPassing(ids []int64, req *gridwellv1.FindRequest) (map[int64]int64, error) {
 	out := map[int64]int64{}
 	if len(ids) == 0 {
 		return out, nil
 	}
-	f := tileFilter{ns: n.ns, req: req}
+	f := tileFilter{on: files, req: req}
 	where, args := f.sql()
 	in := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
 	qargs := make([]any, 0, len(ids)+len(args))
@@ -316,8 +316,8 @@ func (n *Namespace) FindPassing(ids []int64, req *gridwellv1.FindRequest) (map[i
 // FindRows lists this namespace's rows passing req's kind, time and
 // selection filters, newest first, at most limit: all an empty query with no grid can
 // find, since an entry with no row has no time and is in no selection.
-func (n *Namespace) FindRows(req *gridwellv1.FindRequest, limit int) ([]FindRow, error) {
-	f := tileFilter{ns: n.ns, req: req}
+func (n *FileRows) FindRows(req *gridwellv1.FindRequest, limit int) ([]FindRow, error) {
+	f := tileFilter{on: files, req: req}
 	where, args := f.sql()
 	rows, err := n.s.db.Query(`SELECT t.id, t.grid_id, t.key FROM tiles t WHERE `+where+
 		` ORDER BY `+f.newest()+` DESC, t.id DESC LIMIT ?`, append(args, limit)...)

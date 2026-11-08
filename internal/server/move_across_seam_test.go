@@ -55,7 +55,7 @@ func TestAMoveBetweenThisNodeAndAFarOneIsRefusedEitherWay(t *testing.T) {
 	writeFile(t, f, "a")
 	h := buildTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, nil,
 		func(reg *plugin.Registry, st *store.Store) {
-			src, err := files.New(st.Namespace("~"), []files.Root{{Path: root}}, func(string) error { return nil })
+			src, err := files.New(st.Files(), []files.Root{{Path: root}}, func(string) error { return nil })
 			if err != nil {
 				t.Fatal(err)
 			}

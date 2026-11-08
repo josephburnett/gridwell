@@ -84,7 +84,7 @@ integer origin view_x/view_y, which v11 converted.`,
 	{
 		name: "child_grid_id", ddl: "INTEGER", since: 1,
 		comment: `No FK on child_grid_id: the child grid of a door to another namespace
-lives in another plugin (a qualified "<uuid>/<id>" link), so the link is a soft
+lives in another source (a qualified "<ns>/<id>" link), so the link is a soft
 pointer. Interior door integrity rests on the refcount machinery +
 property test.`,
 		bind: func(t *gridwellv1.Tile) any { return nullString{&t.ChildGridId} },
@@ -155,8 +155,8 @@ writeback and never bumps version. Added at schema v4, additive.`,
 		name: "link_target_id", ddl: "TEXT", since: 6,
 		comment: `link_target_id makes a leaf tile (text, url, shell, workspace) a link: a
 qualified "<uuid>/<tile-id>" link to the tile that owns the
-content, or on a plugin's row a bare entry address in that same plugin
-(rpc.EntryTileID). NULL is an ordinary owned tile. A link row stores no content
+content, or on a file's row the bare path id of the file it lands on,
+"~<base64url path>" (rpc.KeyTileID). NULL is an ordinary owned tile. A link row stores no content
 of its own, which the CHECK's link branch enforces, and readers
 resolve bytes, preview, and tmux through the target id. The door
 kind's link variant is a qualified child_grid_id, the door to another namespace, so
@@ -174,29 +174,25 @@ Framing; it never bumps version. Added at schema v7, additive.`,
 		bind: func(t *gridwellv1.Tile) any { return intBool{&t.UrlFrozen} },
 	},
 	{
-		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
-		comment: `ns/key/tombstoned describe a plugin's row. ns is the owning
-plugin id ('' is home); key is the plugin's stable key for the entry;
-tombstoned=1 retires the key forever, so the id is never reused and a
-recreated key mints fresh. Home rows carry the defaults. Added at
-schema v9, additive.`,
-		noCopy: "a copy lands in home (ns ''): plugin rows are re-listed, never copied",
-	},
-	{
 		name: "key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
-		noCopy: "an external's key — '' on every home row",
+		comment: `key/tombstoned describe a file's row: key is the file's absolute path,
+'' on every home row, which is how a query tells the two sides apart;
+tombstoned=1 retires the row forever, so its id is never reused and a
+path listed again mints fresh. Added at schema v9, additive, beside the
+ns column v23 retired.`,
+		noCopy: "a copy lands in home, where key is ''",
 	},
 	{
 		name: "tombstoned", ddl: "INTEGER NOT NULL DEFAULT 0", since: 9,
-		noCopy: "an external's retirement — 0 on every home row",
+		noCopy: "a file row's retirement — 0 on every home row",
 	},
 	{name: "created_at", ddl: "INTEGER NOT NULL", since: 1},
 	{name: "updated_at", ddl: "INTEGER NOT NULL", since: 1},
 	{
 		name: "serves_page", ddl: "INTEGER NOT NULL DEFAULT 0", since: 14,
-		comment: `serves_page=1 is a plugin url row whose page the plugin serves, the
+		comment: `serves_page=1 is a file's url row whose page the node serves, the
 address derived at the /content/ API. Like kind and alt_text it is a
-snapshot of the listing, so a row its source does not list right now
+snapshot of the listing, so a row its directory does not list right now
 still presents as a page rather than as a url tile with no address.
 Added at schema v14, additive.`,
 		bind:   func(t *gridwellv1.Tile) any { return intBool{&t.ServesPage} },
@@ -221,8 +217,8 @@ one time. Storage-only. Added at schema v19, additive.`,
 	},
 	{
 		name: "url_user", ddl: "INTEGER NOT NULL DEFAULT 0", since: 22,
-		comment: `url_user=1 marks a plugin url row's url_string as the user's, the
-address a navigation landed on (Namespace.SetAddress), which no listing
+		comment: `url_user=1 marks a file url row's url_string as the user's, the
+address a navigation landed on (FileRows.SetAddress), which no listing
 replaces, as alt_user keeps a typed name. Storage-only. Added at schema
 v22, additive.`,
 		noCopy: "a copy lands in home, where no listing replaces an address",
@@ -248,19 +244,17 @@ never shares a grid), so only blobs are reference-counted.`,
 	{name: "created_at", ddl: "INTEGER NOT NULL", since: 1},
 	{name: "updated_at", ddl: "INTEGER NOT NULL DEFAULT 0", since: 1},
 	{
-		name: "ns", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
-		comment: `ns names the grid's owner: '' is home, a plugin id is that plugin's
-rows. One table serves every namespace. context_key is the plugin's
-stable key for the grid this grid projects, and is '' for home
-grids. Added at schema v9, additive.`,
+		name: "key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
+		comment: `key is a directory's absolute path on the files' grid row, '' on every
+home grid. Added at schema v9 as context_key beside ns; v23 retired ns
+and renamed it key, the one name tiles.key already has for a path.`,
 	},
-	{name: "context_key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9},
 	{
 		name: "root_cx", ddl: "REAL", since: 11,
 		comment: `root_cx/cy/zoom is the framing of a root grid — one with no door
 tile to carry it — in exactly the shape a door's view_cx/cy/zoom
 uses, NULL when never visited. Home's root is this
-row with ns = ''; a plugin grid's is its own. It reaches the client
+row with key = ''; a directory's is its own. It reaches the client
 through the Info handshake's root_view_* fields, never as a Grid
 field, which is why it is storage-only here.`,
 	},

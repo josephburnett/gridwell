@@ -41,7 +41,7 @@ var gridColumns = wireColumns(gridsColumns)
 func (s *Store) loadGrid(ctx context.Context, q gridReader, gridID int64) (*gridwellv1.Grid, error) {
 	var g gridwellv1.Grid
 	err := q.QueryRowContext(ctx,
-		`SELECT `+gridColumns+` FROM grids WHERE id = ? AND ns = ''`, gridID,
+		`SELECT `+gridColumns+` FROM grids WHERE id = ? AND key = ''`, gridID,
 	).Scan(scanDests(gridsColumns, &g)...)
 	if err != nil {
 		return nil, notFound(err)
@@ -66,13 +66,13 @@ func scanTile(scanner interface {
 }
 
 func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*gridwellv1.Tile, error) {
-	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ? AND ns = ''`, tileID)
+	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ? AND key = ''`, tileID)
 	n, err := scanTile(row)
 	return n, notFound(err)
 }
 
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]*gridwellv1.Tile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? AND ns = '' ORDER BY id`, gridID)
+	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? AND key = '' ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
@@ -132,19 +132,19 @@ func (s *Store) GetTilePreview(ctx context.Context, tileID string) ([]byte, erro
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	return s.tilePreview(ctx, "", id)
+	return s.tilePreview(ctx, home, id)
 }
 
-// Preview is a plugin tile's last-frozen JPEG, nil when it has none.
-func (n *Namespace) Preview(tileID int64) ([]byte, error) {
-	return n.s.tilePreview(context.Background(), n.ns, tileID)
+// Preview is a file tile's last-frozen JPEG, nil when it has none.
+func (n *FileRows) Preview(tileID int64) ([]byte, error) {
+	return n.s.tilePreview(context.Background(), files, tileID)
 }
 
 // tilePreview is the one frozen-preview read.
-func (s *Store) tilePreview(ctx context.Context, ns string, id int64) (jpeg []byte, err error) {
+func (s *Store) tilePreview(ctx context.Context, on side, id int64) (jpeg []byte, err error) {
 	err = s.readSnapshot(ctx, func(tx *sql.Tx) error {
 		var previewBID sql.NullInt64
-		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND ns = ?`, id, ns).Scan(&previewBID)
+		err := tx.QueryRowContext(ctx, `SELECT preview_blob_id FROM tiles WHERE id = ? AND `+on.of("key"), id).Scan(&previewBID)
 		if err != nil || !previewBID.Valid {
 			return notFound(err)
 		}

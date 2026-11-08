@@ -5,7 +5,7 @@ package store
 // zoom, so a window resize never moves a saved view. It lives on the row that
 // owns the door, a tile row (view_cx, view_cy, view_zoom) for a grid
 // entered through a door, or a grid row (root_cx, root_cy, root_zoom) for a
-// root, home's included at ns = ''. Never visited is three NULLs, written only
+// root, home's included at key = ''. Never visited is three NULLs, written only
 // by a row's creation; updateFraming writes only an rpc.Framing. This file is
 // the single SQL writer, so the shape cannot drift.
 
@@ -30,7 +30,7 @@ func viewArgs(v rpc.View) (cx, cy, zoom any) {
 // non-zero, and a tombstoned tile refuses the write because a retired key
 // stays retired. A grid row takes no timestamp: updated_at on grids follows
 // content.
-func updateFraming(ctx context.Context, tx *sql.Tx, ns string, tileID, gridID int64, f rpc.Framing, now int64) (int64, error) {
+func updateFraming(ctx context.Context, tx *sql.Tx, on side, tileID, gridID int64, f rpc.Framing, now int64) (int64, error) {
 	var (
 		res sql.Result
 		err error
@@ -38,12 +38,12 @@ func updateFraming(ctx context.Context, tx *sql.Tx, ns string, tileID, gridID in
 	if tileID != 0 {
 		res, err = tx.ExecContext(ctx,
 			`UPDATE tiles SET view_cx = ?, view_cy = ?, view_zoom = ?, updated_at = ?
-			 WHERE id = ? AND ns = ? AND tombstoned = 0`,
-			f.Cx(), f.Cy(), f.Zoom(), now, tileID, ns)
+			 WHERE id = ? AND `+on.of("key")+` AND tombstoned = 0`,
+			f.Cx(), f.Cy(), f.Zoom(), now, tileID)
 	} else {
 		res, err = tx.ExecContext(ctx,
-			`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND ns = ?`,
-			f.Cx(), f.Cy(), f.Zoom(), gridID, ns)
+			`UPDATE grids SET root_cx = ?, root_cy = ?, root_zoom = ? WHERE id = ? AND `+on.of("key"),
+			f.Cx(), f.Cy(), f.Zoom(), gridID)
 	}
 	if err != nil {
 		return 0, err

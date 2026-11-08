@@ -56,7 +56,7 @@ func newFilesServer(t *testing.T) *filesServer {
 	reg.SetLabel(f.node, "home")
 	// The files' rows are a namespace of THIS store: the whole question is
 	// what lands in the node's one file.
-	src, err := files.New(st.Namespace("~"), []files.Root{{Path: f.root}}, os.RemoveAll)
+	src, err := files.New(st.Files(), []files.Root{{Path: f.root}}, os.RemoveAll)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func newFilesServer(t *testing.T) *filesServer {
 	return f
 }
 
-// filesRows counts the tile and grid rows the files' namespace owns. Home is
-// the empty ns and is not lazy, so it is excluded: this is exactly the number
+// filesRows counts the tile and grid rows the files own. Home's rows have an
+// empty key and are not lazy, so they are excluded: this is exactly the number
 // browsing must not move.
 func filesRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 	t.Helper()
@@ -81,7 +81,7 @@ func filesRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 		}
 		return n
 	}
-	return count(`SELECT count(*) FROM tiles WHERE ns != ''`), count(`SELECT count(*) FROM grids WHERE ns != ''`)
+	return count(`SELECT count(*) FROM tiles WHERE key != ''`), count(`SELECT count(*) FROM grids WHERE key != ''`)
 }
 
 // filesGrid seeds n files plus one subdirectory and returns the root's grid
@@ -323,7 +323,7 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 func storedLink(t *testing.T, st *sql.DB, qualifiedID string) string {
 	t.Helper()
 	var target sql.NullString
-	if err := st.QueryRow(`SELECT link_target_id FROM tiles WHERE id = ? AND ns = ''`,
+	if err := st.QueryRow(`SELECT link_target_id FROM tiles WHERE id = ? AND key = ''`,
 		rpc.LocalOf(qualifiedID)).Scan(&target); err != nil {
 		t.Fatal(err)
 	}

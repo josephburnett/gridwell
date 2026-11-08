@@ -101,16 +101,16 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		verb, keys string
 		write      func() error
 	}{
-		{"MoveTile", "plug1:t/" + ts, func() error { _, err := d.Move(id, 0, "", 3, 3, 1, 1, nil); return err }},
-		{"SetFraming", "plug1:t/" + ts, func() error { _, err := d.SetFraming(id, 0, f); return err }},
-		{"SetFraming", "plug1:f/" + gs, func() error { _, err := d.SetFraming(0, gid, f); return err }},
-		{"SetTextScroll", "plug1:t/" + ts, func() error { _, err := d.SetTextScroll(id, 0, 0, 4, 4, ""); return err }},
-		{"SetContentZoom", "plug1:t/" + ts, func() error { _, err := d.SetContentZoom(id, z); return err }},
-		{"Mint", "plug1:g/" + gs + "/b", func() error {
+		{"MoveTile", "~:t/" + ts, func() error { _, err := d.Move(id, 0, "", 3, 3, 1, 1, nil); return err }},
+		{"SetFraming", "~:t/" + ts, func() error { _, err := d.SetFraming(id, 0, f); return err }},
+		{"SetFraming", "~:f/" + gs, func() error { _, err := d.SetFraming(0, gid, f); return err }},
+		{"SetTextScroll", "~:t/" + ts, func() error { _, err := d.SetTextScroll(id, 0, 0, 4, 4, ""); return err }},
+		{"SetContentZoom", "~:t/" + ts, func() error { _, err := d.SetContentZoom(id, z); return err }},
+		{"Mint", "~:g/" + gs + "/b", func() error {
 			_, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, 5, 5, 1, 1)
 			return err
 		}},
-		{"GridOf", "plug1:c/sent", func() error { _, err := d.GridOf("sent"); return err }},
+		{"GridOf", "~:c/sent", func() error { _, err := d.GridOf("sent"); return err }},
 	} {
 		if err := w.write(); err != nil {
 			t.Fatalf("%s: %v", w.verb, err)
@@ -133,7 +133,7 @@ func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
 		t.Fatalf("Move on no row = %v, want ErrNotFound", err)
 	}
 	for _, rec := range trace.Default().Snapshot() {
-		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "MoveTile error:") && rec.KV["keys"] == "plug1:t/999999" {
+		if rec.Src == "store" && strings.HasPrefix(rec.Msg, "MoveTile error:") && rec.KV["keys"] == "~:t/999999" {
 			return
 		}
 	}
@@ -156,7 +156,7 @@ func TestAnUnchangedPluginRowWriteNamesItsRow(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec, ok := find(trace.Default().Snapshot(), "MoveTile unchanged")
-	if want := "plug1:t/" + strconv.FormatInt(id, 10); !ok || rec.KV["keys"] != want {
+	if want := "~:t/" + strconv.FormatInt(id, 10); !ok || rec.KV["keys"] != want {
 		t.Errorf("unchanged record = %+v, want keys %s", rec, want)
 	}
 }

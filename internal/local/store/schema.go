@@ -1,10 +1,10 @@
 package store
 
 // The canonical SQLite schema. The `system` KV table holds singleton state;
-// the schema version lives in the SQLite header, not here. A plugin's rows
-// live in the same tables under its own namespace, and a door pointing at one
-// is an ordinary `door` row whose child_grid_id is a qualified
-// "<plugin-uuid>/<grid-id>" link.
+// the schema version lives in the SQLite header, not here. The files' rows
+// live in the same tables, told from home's by a non-empty key, and a door
+// onto another source's grid is an ordinary `door` row whose child_grid_id
+// is that grid's qualified id.
 //
 // The five tile kinds:
 //   - door: points at a child grid, in this namespace or, as a door to another namespace,
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS system (
     value TEXT NOT NULL
 );
 -- Keys: root_grid_id, plugin_uuid, scratch_grid_id, trash_grid_id. Home's
--- root framing is not here: it lives on its root grid row, ns = '', in the
+-- root framing is not here: it lives on its root grid row, key = '', in the
 -- same three columns every other root uses.
 `
 
@@ -121,13 +121,20 @@ CREATE INDEX IF NOT EXISTS idx_tiles_grid_id   ON tiles(grid_id);
 CREATE INDEX IF NOT EXISTS idx_tiles_child     ON tiles(child_grid_id);
 `
 
-// externalsIndexDDL is the v9 pair of partial unique indexes over the
-// plugin-row columns. They name columns v9 adds, so they cannot ride
-// tablesDDL, which Open applies before migrating an old file; Open creates
-// them after the chain instead.
-const externalsIndexDDL = `
-CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_context ON grids(ns, context_key) WHERE ns != '';
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tiles_live_key ON tiles(ns, grid_id, key) WHERE ns != '' AND tombstoned = 0;
+// tilesKeyIndexDDL is the partial unique index over the files' live tile
+// rows: one live row per path in a directory. It names a column v9 adds, so
+// it cannot ride tablesDDL, which Open applies before migrating an old file;
+// Open creates it after the chain, and every tiles rebuild after v9
+// recreates it, since DROP TABLE takes it along.
+const tilesKeyIndexDDL = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tiles_live_key ON tiles(grid_id, key) WHERE key != '' AND tombstoned = 0;
+`
+
+// gridsKeyIndexDDL is the partial unique index over the files' grid rows: one
+// row per directory. It names grids.key, which v23 names, so Open creates it
+// after the chain.
+const gridsKeyIndexDDL = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_grids_key ON grids(key) WHERE key != '';
 `
 
 // tablesV1 is the frozen schema at schemaVersion 1. Never edit it: tests build

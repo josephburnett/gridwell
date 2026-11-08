@@ -1,7 +1,7 @@
 package store
 
 // The selection: the set of a grid's tiles the user has in hand, one fact on
-// the grid row (grids.selection) for home's grids and a plugin's alike. A
+// the grid row (grids.selection) for home's grids and the files' alike. A
 // select clears, adds and removes, claims nothing and bumps no version.
 
 import (
@@ -81,9 +81,9 @@ func (s selectionScan) Scan(v any) error {
 	return nil
 }
 
-func readSelection(ctx context.Context, q gridReader, ns string, gridID int64) ([]int64, error) {
+func readSelection(ctx context.Context, q gridReader, on side, gridID int64) ([]int64, error) {
 	var text string
-	err := q.QueryRowContext(ctx, `SELECT selection FROM grids WHERE id = ? AND ns = ?`, gridID, ns).Scan(&text)
+	err := q.QueryRowContext(ctx, `SELECT selection FROM grids WHERE id = ? AND `+on.of("key"), gridID).Scan(&text)
 	if err != nil {
 		return nil, notFound(err)
 	}
@@ -102,27 +102,27 @@ type SelectOp struct {
 // setSelectionTx is the one selection write. It answers each grid whose set
 // it changed, the named grid first when it did. An added tile not live on the
 // grid is ignored.
-func setSelectionTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64, op SelectOp) ([]int64, error) {
-	cur, err := readSelection(ctx, tx, ns, gridID)
+func setSelectionTx(ctx context.Context, tx *sql.Tx, on side, gridID int64, op SelectOp) ([]int64, error) {
+	cur, err := readSelection(ctx, tx, on, gridID)
 	if err != nil {
 		return nil, err
 	}
-	on := make([]int64, 0, len(op.Add))
+	add := make([]int64, 0, len(op.Add))
 	for _, id := range op.Add {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tiles
-			WHERE id = ? AND grid_id = ? AND ns = ? AND tombstoned = 0`, id, gridID, ns).Scan(&n); err != nil {
+			WHERE id = ? AND grid_id = ? AND `+on.of("key")+` AND tombstoned = 0`, id, gridID).Scan(&n); err != nil {
 			return nil, err
 		}
 		if n > 0 {
-			on = append(on, id)
+			add = append(add, id)
 		}
 	}
 	from := idStrings(cur)
 	if op.Clear {
 		from = nil
 	}
-	next, err := parseIDs(rpc.ApplySelect(from, idStrings(on), idStrings(op.Remove)))
+	next, err := parseIDs(rpc.ApplySelect(from, idStrings(add), idStrings(op.Remove)))
 	if err != nil {
 		return nil, err
 	}
@@ -136,14 +136,14 @@ func setSelectionTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64, op
 	if !op.Recurse {
 		return changed, nil
 	}
-	nested, err := clearNestedTx(ctx, tx, ns, gridID)
+	nested, err := clearNestedTx(ctx, tx, on, gridID)
 	return append(changed, nested...), err
 }
 
 // clearNestedTx empties the set of every grid under gridID's doors, to any
 // depth. A door to another namespace, whose child_grid_id is a
 // qualified string, is not followed.
-func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]int64, error) {
+func clearNestedTx(ctx context.Context, tx *sql.Tx, on side, gridID int64) ([]int64, error) {
 	var changed []int64
 	seen := map[int64]bool{gridID: true}
 	queue := []int64{gridID}
@@ -151,8 +151,8 @@ func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]
 		g := queue[0]
 		queue = queue[1:]
 		rows, err := tx.QueryContext(ctx, `SELECT child_grid_id FROM tiles
-			WHERE grid_id = ? AND ns = ? AND kind = 'door' AND tombstoned = 0
-			AND typeof(child_grid_id) = 'integer'`, g, ns)
+			WHERE grid_id = ? AND `+on.of("key")+` AND kind = 'door' AND tombstoned = 0
+			AND typeof(child_grid_id) = 'integer'`, g)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +165,7 @@ func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]
 				continue
 			}
 			seen[k] = true
-			res, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE id = ? AND ns = ? AND selection != ''`, k, ns)
+			res, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE id = ? AND `+on.of("key")+` AND selection != ''`, k)
 			if err != nil {
 				return nil, err
 			}
@@ -183,7 +183,7 @@ func clearNestedTx(ctx context.Context, tx *sql.Tx, ns string, gridID int64) ([]
 // leaveSelection takes a tile that left gridID out of its selection, and is
 // how the set names only tiles on its grid: setSelectionTx adds nothing
 // else, and every way a tile leaves a grid calls this in the same transaction
-// (tileLeft for home's, Retire for a plugin's). changed is false when the tile
+// (tileLeft for home's, Retire for a file's). changed is false when the tile
 // was not selected.
 func leaveSelection(ctx context.Context, tx *sql.Tx, gridID, tileID int64) (set []int64, changed bool, err error) {
 	var text string
@@ -231,7 +231,7 @@ func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRe
 	}
 	if req.All {
 		return s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-			changed, err := clearAllTx(ctx, tx, "")
+			changed, err := clearAllTx(ctx, tx, home)
 			if err != nil {
 				return err
 			}
@@ -256,7 +256,7 @@ func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRe
 		return err
 	}
 	return s.withMutation(ctx, "SetSelection", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
-		changed, err := setSelectionTx(ctx, tx, "", gid, op)
+		changed, err := setSelectionTx(ctx, tx, home, gid, op)
 		if err != nil {
 			return err
 		}
@@ -264,7 +264,7 @@ func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRe
 			return errUnchanged
 		}
 		for _, g := range changed {
-			stored, err := readSelection(ctx, tx, "", g)
+			stored, err := readSelection(ctx, tx, home, g)
 			if err != nil {
 				return err
 			}
@@ -274,19 +274,19 @@ func (s *Store) SetSelection(ctx context.Context, req *gridwellv1.SetSelectionRe
 	})
 }
 
-// SetSelection is a select of a plugin's grid row, the write home's grids
+// SetSelection is a select of a directory's grid row, the write home's grids
 // take. It answers each grid whose set changed, for the caller to announce.
-func (n *Namespace) SetSelection(gridID int64, op SelectOp) (changed []int64, err error) {
+func (n *FileRows) SetSelection(gridID int64, op SelectOp) (changed []int64, err error) {
 	err = n.s.withMutation(context.Background(), "SetSelection", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
 		var err error
-		if changed, err = setSelectionTx(context.Background(), tx, n.ns, gridID, op); err != nil {
+		if changed, err = setSelectionTx(context.Background(), tx, files, gridID, op); err != nil {
 			return err
 		}
 		if len(changed) == 0 {
 			return errUnchanged
 		}
 		return nil
-	}, n.ns+":s/"+strconv.FormatInt(gridID, 10))
+	}, "~:s/"+strconv.FormatInt(gridID, 10))
 	if err != nil {
 		return nil, err
 	}
@@ -295,17 +295,17 @@ func (n *Namespace) SetSelection(gridID int64, op SelectOp) (changed []int64, er
 
 // ClearAllSelections empties every grid's set in the namespace, answering
 // each grid whose set changed, for the caller to announce.
-func (n *Namespace) ClearAllSelections() (changed []int64, err error) {
+func (n *FileRows) ClearAllSelections() (changed []int64, err error) {
 	err = n.s.withMutation(context.Background(), "SetSelection", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
 		var err error
-		if changed, err = clearAllTx(context.Background(), tx, n.ns); err != nil {
+		if changed, err = clearAllTx(context.Background(), tx, files); err != nil {
 			return err
 		}
 		if len(changed) == 0 {
 			return errUnchanged
 		}
 		return nil
-	}, n.ns+":s/*")
+	}, "~:s/*")
 	if err != nil {
 		return nil, err
 	}
@@ -313,8 +313,8 @@ func (n *Namespace) ClearAllSelections() (changed []int64, err error) {
 }
 
 // clearAllTx empties every grid's set in namespace ns.
-func clearAllTx(ctx context.Context, tx *sql.Tx, ns string) ([]int64, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM grids WHERE ns = ? AND selection != '' ORDER BY id`, ns)
+func clearAllTx(ctx context.Context, tx *sql.Tx, on side) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM grids WHERE `+on.of("key")+` AND selection != '' ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -322,13 +322,13 @@ func clearAllTx(ctx context.Context, tx *sql.Tx, ns string) ([]int64, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE ns = ? AND selection != ''`, ns); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE grids SET selection = '' WHERE `+on.of("key")+` AND selection != ''`); err != nil {
 		return nil, err
 	}
 	return changed, nil
 }
 
-// Selection reads a plugin grid row's selection.
-func (n *Namespace) Selection(gridID int64) ([]int64, error) {
-	return readSelection(context.Background(), n.s.db, n.ns, gridID)
+// Selection reads a directory's grid row's selection.
+func (n *FileRows) Selection(gridID int64) ([]int64, error) {
+	return readSelection(context.Background(), n.s.db, files, gridID)
 }
