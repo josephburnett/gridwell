@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -42,11 +41,6 @@ func trashPlace(goos string) (dir string, finder bool, err error) {
 	return dir, false, err
 }
 
-// finderMu makes intoFinder's check for a free name and its move one step
-// within this process; a rename onto a taken name would replace what is
-// there.
-var finderMu sync.Mutex
-
 // intoFinder moves base in dir into Finder's trash under its own name, a
 // clash taking the next free "name N.ext" as Finder names one. The trash
 // keeps no record beside the file: Finder's own "Put Back" record is private
@@ -57,21 +51,15 @@ func intoFinder(trashDir string, dir *os.File, base string) error {
 		return err
 	}
 	defer to.Close()
-	finderMu.Lock()
-	defer finderMu.Unlock()
 	ext := filepath.Ext(base)
 	for i := 1; ; i++ {
 		name := base
 		if i > 1 {
 			name = fmt.Sprintf("%s %d%s", strings.TrimSuffix(base, ext), i, ext)
 		}
-		dst := filepath.Join(trashDir, name)
-		if _, err := os.Lstat(dst); err == nil {
-			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
+		if err := moveOrCopy(dir, base, to, name); !errors.Is(err, os.ErrExist) {
 			return err
 		}
-		return moveOrCopy(dir, base, to, name)
 	}
 }
 
@@ -138,7 +126,9 @@ func intoTrash(trashDir string, dir *os.File, base string) error {
 		if err != nil {
 			_ = os.Remove(infoPath) // do not leave an orphaned record
 		}
-		return err
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
 	}
 }
 

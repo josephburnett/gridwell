@@ -1,4 +1,4 @@
-//go:build !unix
+//go:build !linux && !darwin
 
 package files
 
@@ -7,8 +7,14 @@ import (
 	"path/filepath"
 )
 
-// renameAt is the unix one by path: the OS here renames by no directory
-// handle, so a directory swapped between the open and the rename is walked.
+// renameAt is rename_linux.go's by path, after a check that the name is
+// free: the OS here has no rename by directory handle that refuses to
+// replace, so a directory swapped, or a name taken, between the check and
+// the rename is walked or replaced.
 func renameAt(dir *os.File, name string, to *os.File, newName string) error {
-	return os.Rename(filepath.Join(dir.Name(), name), filepath.Join(to.Name(), newName))
+	dst := filepath.Join(to.Name(), newName)
+	if _, err := os.Lstat(dst); err == nil {
+		return &os.LinkError{Op: "rename", Old: name, New: dst, Err: os.ErrExist}
+	}
+	return os.Rename(filepath.Join(dir.Name(), name), dst)
 }

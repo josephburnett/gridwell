@@ -115,25 +115,20 @@ func (s *Source) rename(path, to string) (string, error) {
 		return "", refuse(codes.InvalidArgument, "it is gone")
 	}
 	name := filepath.Base(path)
-	landed := filepath.Join(to, name)
-	_, err = os.Lstat(landed)
-	switch {
-	case err == nil:
-		return "", refuse(codes.InvalidArgument, "%q is already there", name)
-	case gone(err):
-		var from *os.File
-		if from, err = s.openDir(filepath.Dir(path)); err == nil {
-			err = renameAt(from, name, into, name)
-			from.Close()
-		}
+	from, err := s.openDir(filepath.Dir(path))
+	if err == nil {
+		err = renameAt(from, name, into, name)
+		from.Close()
 	}
 	switch {
+	case errors.Is(err, iofs.ErrExist):
+		return "", refuse(codes.InvalidArgument, "%q is already there", name)
 	case errors.Is(err, iofs.ErrPermission), errors.Is(err, syscall.EROFS):
 		return "", refuse(codes.PermissionDenied, "%v", pathErr(err))
 	case err != nil:
 		return "", refuse(codes.InvalidArgument, "%v", pathErr(err))
 	}
-	return landed, nil
+	return filepath.Join(to, name), nil
 }
 
 // SetTile writes one operation on the file's row, minting it: a rename is the

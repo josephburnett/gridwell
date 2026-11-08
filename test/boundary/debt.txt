@@ -9,3 +9,4 @@ low-water | 57236
 2026-11-08 | verification fixes (Joe: a clean and complete change): a FIFO, socket or device is a name-only text tile that nothing opens | 12
 2026-11-08 | verification fixes (Joe: a clean and complete change): every read, preview, page, save, trash and move opens through the root that holds the path | 96
 2026-11-08 | verification fixes (Joe: a clean and complete change): a read landing outside every root is dead | 6
+2026-11-08 | verification fixes (Joe: a clean and complete change): a move or a trash renames by a call that replaces nothing | 12
