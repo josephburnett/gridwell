@@ -589,7 +589,6 @@ func main() {
 			renderedPanePaints: map[string]int{},
 			textPreviews:       map[string]textPreview{},
 			paintedText:        map[string]string{},
-			bannerTexts:        map[string]string{},
 			selectionPainted:   map[string][]string{},
 			persistPosts:       map[string]int{},
 		},

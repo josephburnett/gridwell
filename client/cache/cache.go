@@ -261,7 +261,7 @@ func (c *Cache) TileContent(tileID string) ([]byte, bool) {
 }
 
 // PutGrid replaces a grid's metadata and tile set after a fresh GetGrid,
-// aging bodies exactly as an event would.
+// aging and sweeping bodies exactly as events would.
 func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -277,6 +277,13 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 		gr.Tiles[n.Id] = n
 	}
 	c.keepHeldLocked(gr)
+	if was, ok := c.grids[g.Id]; ok {
+		for id := range was.Tiles {
+			if _, kept := gr.Tiles[id]; !kept {
+				c.dropCleanLocked(id)
+			}
+		}
+	}
 	c.grids[g.Id] = gr
 	for _, n := range away {
 		c.storeLocked(n, false)
@@ -292,6 +299,14 @@ func (c *Cache) evictElsewhereLocked(tileID, home string) {
 		if id != home {
 			delete(g.Tiles, tileID)
 		}
+	}
+}
+
+// dropCleanLocked sweeps the body of a tile that left a grid, but a dirty one:
+// a move leaves before it lands, and the flush sweep surfaces an orphan.
+func (c *Cache) dropCleanLocked(tileID string) {
+	if e, ok := c.content[tileID]; ok && !e.dirty {
+		delete(c.content, tileID)
 	}
 }
 
@@ -650,11 +665,7 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 			return false
 		}
 		_, present := g.Tiles[r.TileId]
-		// A dirty body stays: a cross-grid move emits TileRemoved then
-		// TileChanged, and the flush sweep surfaces an orphan.
-		if e, ok := c.content[r.TileId]; !ok || !e.dirty {
-			delete(c.content, r.TileId)
-		}
+		c.dropCleanLocked(r.TileId)
 		delete(g.Tiles, r.TileId)
 		return present
 	case *gridwellv1.Event_GridChanged:

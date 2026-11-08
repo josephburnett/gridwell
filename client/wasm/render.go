@@ -824,7 +824,6 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 	if !shown {
 		return
 	}
-	a.e2e.bannerTexts[n.Id] = text
 	withClip(a.cctx, ix, iy, iw, ih, func() {
 		fillRectC(a.cctx, ix, iy, iw, bannerH, a.pal.SourceLabelBg)
 		drawLabel(a.cctx, text, ix+4, iy+bannerH/2, labelOpts{

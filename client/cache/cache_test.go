@@ -462,6 +462,29 @@ func TestPutGridReconcilesContentLikeAnEvent(t *testing.T) {
 	}
 }
 
+// A re-read listing is the grid's whole set, so a tile it no longer holds is
+// swept as a TileRemoved sweeps it: a clean body goes, and whatever reads it
+// next, a link to a file deleted on disk among them, reads again and hears
+// the file is gone. A dirty body stays for its save to reconcile.
+func TestPutGridSweepsTheBodyOfATileThatLeft(t *testing.T) {
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, []*gridwellv1.Tile{
+		&gridwellv1.Tile{Id: "10", GridId: "1", Kind: rpc.KindText},
+		&gridwellv1.Tile{Id: "11", GridId: "1", Kind: rpc.KindText},
+	})
+	c.PutFetchedContent("10", []byte("gone on disk"), vb(0), c.AskContent("10"))
+	c.PutFetchedContent("11", []byte("# saved"), vb(0), c.AskContent("11"))
+	c.PutEditedContent("11", []byte("# dirty typing"))
+
+	c.PutGrid(&gridwellv1.Grid{Id: "1"}, nil)
+	if _, ok := c.TileContent("10"); ok {
+		t.Error("the body of a tile the listing no longer holds survived the re-read")
+	}
+	if b, ok := c.DirtyContent("11"); !ok || string(b) != "# dirty typing" {
+		t.Error("a dirty body was dropped when its tile left the listing")
+	}
+}
+
 // A save is queued with frozen bytes but claims its basis at send time, so a
 // fetch completing in that window would send stale bytes under the current
 // version. A fetch never replaces a dirty entry.

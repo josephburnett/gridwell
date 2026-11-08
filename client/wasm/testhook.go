@@ -34,7 +34,6 @@ type e2e struct {
 	// "raster:" and the rasterized document.
 	paintedText   map[string]string
 	lastRasterSVG string
-	bannerTexts   map[string]string // the last banner line each tile drew
 	// selectionPainted is the tiles each pane last drew with the selection border.
 	selectionPainted map[string][]string
 	// crumbsSelected is the tiles whose bar crumbs last drew with it.
@@ -251,14 +250,6 @@ func (a *App) installTestHook() {
 			out := map[string]any{}
 			for k, v := range a.e2e.paintedText {
 				out[k] = v
-			}
-			return out
-		}),
-		// The last banner line each tile drew: its name as painted.
-		"bannerTexts": js.FuncOf(func(js.Value, []js.Value) any {
-			out := map[string]any{}
-			for id, t := range a.e2e.bannerTexts {
-				out[id] = t
 			}
 			return out
 		}),
