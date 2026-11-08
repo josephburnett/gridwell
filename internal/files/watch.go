@@ -262,7 +262,8 @@ type watcher struct {
 	scope   map[string]bool
 	watched map[string]bool
 	pending map[string]*window
-	// failed is the OS's last refusal, which the next event delivered ends.
+	// failed is the OS's last refusal, which the next event delivered ends,
+	// or the end of the instance it was reported on.
 	failed string
 	// closed is Close's: nothing is watched or owed after it.
 	closed bool
@@ -308,10 +309,10 @@ func (w *watcher) set(scope []string) (added []string, err error) {
 	for _, d := range scope {
 		err = errors.Join(err, w.watchDir(d))
 	}
+	closing := w.detachIfIdle()
 	if err == nil && w.failed != "" {
 		err = errors.New(w.failed)
 	}
-	closing := w.detachIfIdle()
 	w.mu.Unlock()
 	closeWatcher(closing)
 	return added, err
@@ -367,7 +368,7 @@ func (w *watcher) detachIfIdle() *fsnotify.Watcher {
 		return nil
 	}
 	fsw := w.fsw
-	w.fsw = nil
+	w.fsw, w.failed = nil, ""
 	return fsw
 }
 

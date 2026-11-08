@@ -2,6 +2,7 @@ package files
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -302,4 +303,28 @@ func (f *fixture) pending() bool {
 	f.s.watch.mu.Lock()
 	defer f.s.watch.mu.Unlock()
 	return len(f.s.watch.pending) > 0
+}
+
+// A failure the OS reported after the fact belongs to its instance: once the
+// view empties and that instance goes, a new view is told again.
+func TestToldRecoversAfterATransientFailure(t *testing.T) {
+	f := newFixture(t)
+	ev := f.events()
+	f.show(f.root)
+	f.s.watch.mu.Lock()
+	fsw := f.s.watch.fsw
+	f.s.watch.mu.Unlock()
+	f.s.watch.eventError(fsw, errors.New("queue broke"))
+	h := await(t, ev, "not told", func(e *pb.Event) bool { return e.GetPluginHealth() != nil }).GetPluginHealth()
+	if h.GetTold() {
+		t.Fatalf("health = %+v", h)
+	}
+	f.show()
+	if h := f.s.health(); h.liveOff != "" {
+		t.Errorf("not told once the instance went: %q", h.liveOff)
+	}
+	f.show(f.root)
+	if h := f.s.health(); h.liveOff != "" {
+		t.Errorf("not told on a new instance: %q", h.liveOff)
+	}
 }
