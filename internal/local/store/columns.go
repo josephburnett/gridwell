@@ -178,8 +178,7 @@ Framing; it never bumps version. Added at schema v7, additive.`,
 		comment: `key/tombstoned describe a file's row: key is the file's absolute path,
 '' on every home row, which is how a query tells the two sides apart;
 tombstoned=1 retires the row forever, so its id is never reused and a
-path listed again mints fresh. Added at schema v9, additive, beside the
-ns column v23 retired.`,
+path listed again mints fresh. Added at schema v9, additive.`,
 		noCopy: "a copy lands in home, where key is ''",
 	},
 	{
@@ -244,8 +243,7 @@ never shares a grid), so only blobs are reference-counted.`,
 	{
 		name: "key", ddl: "TEXT NOT NULL DEFAULT ''", since: 9,
 		comment: `key is a directory's absolute path on the files' grid row, '' on every
-home grid. Added at schema v9 as context_key beside ns; v23 retired ns
-and renamed it key, the one name tiles.key already has for a path.`,
+home grid. Added at schema v9.`,
 	},
 	{
 		name: "root_cx", ddl: "REAL", since: 11,

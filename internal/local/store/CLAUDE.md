@@ -8,9 +8,7 @@ cache and lives in `cache.db` (`internal/sourcecache`), never here.
 
 `key` is the one column that tells the two sides apart, on tiles and grids
 alike: '' on every home row, a file's or directory's absolute path on the
-files' (`side` in files.go, `FileRows`). It was `context_key` on grids
-until v23, which retired `ns` and renamed it, the one rename in the chain,
-so that one name says "this row is a file's" in both tables.
+files' (`side` in files.go, `FileRows`).
 
 A file's row is minted lazily: listing a directory mints nothing
 (`Overlay` is a read-only join, `Mint` the one INSERT), so a row exists only
@@ -31,7 +29,8 @@ opens an older file and brings it forward, with every user-visible fact
 intact.
 
 - Never delete the DB to absorb a schema change.
-- Never rename, retype, or repurpose a column or table.
+- Never rename, retype, or repurpose a column or table. v23's rename of
+  `grids.context_key` to `key` is the one decided exception.
 - Evolution is additive by default: new columns with a default, new tables,
   new indexes.
 - Dead storage may be retired. The evidence is a grep of every read showing
