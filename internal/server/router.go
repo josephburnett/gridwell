@@ -253,7 +253,7 @@ func (rt *router) GetTile(ctx context.Context, req *pb.GetTileRequest) (*pb.Tile
 
 // Find routes a grid_id or a scope to its owner, and an id: lookup is its
 // own scope; free text with no scope fans out to every namespace, each bounded
-// by rpc.FindHopTimeout, and names each it went without (rpc.FindHop).
+// by rpc.FindHopTimeout, and names each it went without by its owner id.
 // Every hop carries the filters (rpc.PeelRequest).
 func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindResponse, error) {
 	m := req
@@ -270,7 +270,7 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		if err != nil {
 			return nil, err
 		}
-		return rt.qualifyFind(ctx, transit, uuid, resp), nil
+		return rt.qualifyFind(ctx, transit, uuid, uuid, resp), nil
 	}
 	out := &pb.FindResponse{}
 	for _, n := range rt.srv.namespaces() {
@@ -279,15 +279,15 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		hop := rpc.Hop{Seg: n.prefix(), Via: n.UUID, Transit: n.Transit}
 		resp, err := n.NS.Find(pctx, rpc.PeelRequest(hop, m))
 		cancel()
-		q := rt.qualifyFind(ctx, n.Transit, n.prefix(), rpc.FindHop(resp, err))
+		q := rt.qualifyFind(ctx, n.Transit, n.UUID, n.prefix(), rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
 }
 
-func (rt *router) qualifyFind(ctx context.Context, transit bool, uuid string, resp *pb.FindResponse) *pb.FindResponse {
-	return rpc.QualifyFindResponse(uuid, resp, func(ts []*pb.Tile) []*pb.Tile {
+func (rt *router) qualifyFind(ctx context.Context, transit bool, owner, uuid string, resp *pb.FindResponse) *pb.FindResponse {
+	return rpc.QualifyFindResponse(owner, resp, func(ts []*pb.Tile) []*pb.Tile {
 		return rt.qualifyOut(ctx, transit, uuid, ts)
 	})
 }

@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
@@ -58,9 +59,9 @@ func TestAFindSaysWhatItWentWithout(t *testing.T) {
 	}
 
 	got := skipped()
-	far := localNodeID + "/geneva/rnode1"
-	if len(got) != 1 || !strings.HasPrefix(got[0], far) || !strings.Contains(got[0], "the index is not answering") {
-		t.Fatalf("skipped = %q, want only the far files with their reason", got)
+	farFiles := rpc.FilesOwner(localNodeID + "/geneva/rnode1")
+	if len(got) != 1 || got[0] != farFiles+": the index is not answering" {
+		t.Fatalf("skipped = %q, want only the far files, by their owner id %s, with their reason", got, farFiles)
 	}
 
 	h.stopFarNode()
