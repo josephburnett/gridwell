@@ -4,7 +4,10 @@
 // door showing it alike; the node's facts about one (placement, framing, a
 // typed name, a frozen preview, the selection) are store rows minted on
 // touch (store.Namespace), and every other fact is read off disk on every
-// read. Ids handed in and out are bare; the router qualifies them.
+// read. Ids handed in and out are bare; the router qualifies them. A path is
+// canonical only as spelled: two spellings of one file, through a symlinked
+// root and by its real path, or two cases on a case-insensitive disk, are
+// two ids.
 package files
 
 import (

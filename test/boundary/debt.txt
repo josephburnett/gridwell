@@ -25,3 +25,4 @@ low-water | packages | 81
 2026-11-07 | files native (Joe): a find on a gone directory finds nothing, while the plugin host still stands | 4
 2026-11-07 | files native (Joe): what the files keep per file told follows the view, while the plugin host still stands | 6
 2026-11-07 | files native (Joe): a write to a link is refused, while the plugin host still stands | 4
+2026-11-07 | files native (Joe): the files' header says a path is canonical only as spelled, while the plugin host still stands | 3
