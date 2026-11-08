@@ -52,9 +52,9 @@ type Input struct {
 	// ConfigLabel is the declared label of an uncached parent, resolved on the
 	// no-descent arm alone for the same reason as Door.
 	ConfigLabel string
-	// SourceLabel is the path of the pane's grid when it is a directory
+	// DirectoryPath is the path of the pane's grid when it is a directory
 	// (rpc.FilePath), resolved on the no-descent arm alone.
-	SourceLabel string
+	DirectoryPath string
 }
 
 // Verdict is what the bar draws and what a right-click edits. Label is the
@@ -90,8 +90,8 @@ const unnamed = "unnamed"
 func Decide(in Input) Verdict {
 	v := decideName(in)
 	switch {
-	case !in.Descent && in.SourceLabel != v.Label:
-		v.Source = in.SourceLabel
+	case !in.Descent && in.DirectoryPath != v.Label:
+		v.Source = in.DirectoryPath
 	case in.Descent && in.Descended && in.DescendedReadOnly != "":
 		v.Source = "read-only: " + in.DescendedReadOnly
 	case in.Descent && in.Descended && in.CertainlyEphemeral:

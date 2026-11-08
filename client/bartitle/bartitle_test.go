@@ -142,22 +142,22 @@ func TestDecideSourceLabel(t *testing.T) {
 		want string
 	}{
 		{"a grid names its source after its door",
-			Input{AtAnchor: true, Door: door.Declared, DoorName: "Inbox (hey)", SourceLabel: "Inbox · 12 unread"},
+			Input{AtAnchor: true, Door: door.Declared, DoorName: "Inbox (hey)", DirectoryPath: "Inbox · 12 unread"},
 			"Inbox (hey) — Inbox · 12 unread"},
 		{"a door row inside a source grid names its directory",
-			Input{Parent: true, ParentName: "src", SourceLabel: "/srv/src"},
+			Input{Parent: true, ParentName: "src", DirectoryPath: "/srv/src"},
 			"src — /srv/src"},
 		{"a nameless grid still says its source",
-			Input{AtAnchor: true, SourceLabel: "/srv"},
+			Input{AtAnchor: true, DirectoryPath: "/srv"},
 			"unnamed — /srv"},
 		{"a source that only repeats the name adds nothing",
-			Input{AtAnchor: true, Door: door.Declared, DoorName: "pages", SourceLabel: "pages"},
+			Input{AtAnchor: true, Door: door.Declared, DoorName: "pages", DirectoryPath: "pages"},
 			"pages"},
 		{"a grid whose source says nothing shows the name alone",
 			Input{AtAnchor: true, Door: door.Declared, DoorName: "Feed (hey)"},
 			"Feed (hey)"},
 		{"inside a tile the source does not show",
-			Input{Descent: true, Descended: true, DescendedName: "notes", SourceLabel: "/srv"},
+			Input{Descent: true, Descended: true, DescendedName: "notes", DirectoryPath: "/srv"},
 			"notes"},
 	}
 	for _, c := range cases {
@@ -193,7 +193,7 @@ func TestDecideReadOnlyReason(t *testing.T) {
 // The source label is shown, never edited: the rename still names the grid's
 // own row with its own name.
 func TestDecideSourceLabelLeavesTheRenameAlone(t *testing.T) {
-	v := Decide(Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox", SourceLabel: "/srv/inbox"})
+	v := Decide(Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox", DirectoryPath: "/srv/inbox"})
 	if v.Rename != RenameDoor || v.Label != "inbox" || !v.Editable {
 		t.Fatalf("Decide = %+v, want the door's rename on its own name", v)
 	}

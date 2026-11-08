@@ -289,9 +289,8 @@ func TestLinkOfNamesTheContentNotTheMiddleman(t *testing.T) {
 // TestTextDocumentAndPageContent pins the two derivations of "is this a
 // page", which were spelled three ways across the shim before they had
 // owners. A served page is a url tile: web content wherever the address comes
-// from, and never a document. The last row is the shape acceptEntries refuses
-// (pluginhost.acceptEntries), so no client meets it; read here it is the plain
-// document its kind says it is.
+// from, and never a document. The last row is a shape no source answers, so no
+// client meets it; read here it is the plain document its kind says it is.
 func TestTextDocumentAndPageContent(t *testing.T) {
 	cases := []struct {
 		name                   string
