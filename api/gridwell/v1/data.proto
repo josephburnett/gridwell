@@ -271,20 +271,8 @@ message Tile {
   // it, a copy carries it, and CreateTile honours it. SetTile ignores it.
   bool named = 41;
 
-  // presented_by is the namespace of the plugin presenting this url tile's
-  // address in place of the site, "" for none: the verdict of the routes of
-  // the node holding the row over the plugins' presents (rpc.Decide); the
-  // tile opens at the plugin's page for it. Wire-only, derived, never a
-  // stored column.
-  string presented_by = 42;
-
-  // broken_reason is why the plugin presented_by names cannot present this
-  // url tile now, "" when it can: a route sends the address to a plugin whose
-  // Info failed or timed out, or that the user disabled (rpc.Decide). The tile
-  // reads broken and loads nothing in place of the plugin's page, the site
-  // least of all, until the plugin answers. Wire-only, derived beside
-  // presented_by, never a stored column.
-  string broken_reason = 43;
+  reserved 42; // presented_by
+  reserved 43; // broken_reason
 }
 
 // ─── Plugin / node lifecycle ──────────────────────────────────────────────
@@ -333,9 +321,7 @@ message InfoResponse {
   // PluginGrid. The serving node stamps them onto every grid the plugin
   // serves.
   repeated PluginGrid plugin_grids = 17;
-  // presents is the plugin's declared site addresses, as plugin.v1 declares
-  // them; home and a connection answer none.
-  repeated string presents = 18;
+  reserved 18; // presents
 }
 
 // Probe reports the definitive presence of one tile, for non-authoritative
@@ -422,43 +408,23 @@ message WriteContentRequest {
   string content_stamp = 4;
 }
 
-// ServeContent is the RPC carrier behind the server's HTTP /content/ endpoint.
-// A GET, HEAD or POST of /content/<token>/<tile-id>/<subpath> becomes one
-// ServeContent call routed to the tile's owning plugin, through transit hops as
-// ReadContent is, and the response streams back as the HTTP body. A plugin can
-// present any content as web content this way, from an image file to a whole
-// HTML page with its relative subresources and its forms. The server sandboxes
-// the browser side with a CSP sandbox: opaque origin, no cookies, no RPC reach,
-// so a plugin-served page can never act on the user's Gridwell.
-//
-// subpath "" is the tile's root page; a non-empty subpath is a page-relative
-// resource such as "img/cat.png" whose meaning the plugin defines. method ""
-// means GET. Chunk 1 carries status, media_type and headers; later chunks
-// carry data only. A plugin that does not serve web content leaves the RPC
-// unimplemented and the content API answers 404. A url tile a plugin
-// presents (Tile.presented_by) is that plugin's to serve, asked with tile_id
-// "": the subpath is the site address without its scheme, or under "_/" the
-// plugin's own assets.
+// ServeContent is the RPC carrier behind the server's HTTP /content/ API: a
+// GET or HEAD of /content/<token>/<tile-id> becomes one call routed to the
+// tile's owner, through transit hops as ReadContent is. The answer is the
+// tile's whole page: its media type on chunk 1 and its bytes across the
+// chunks, which only frame the message size. The server sandboxes the browser
+// side with a CSP sandbox: opaque origin, no cookies, no RPC reach. An owner
+// with no page for the tile answers NotFound or leaves the RPC unimplemented,
+// and the content API answers 404.
 message ServeContentRequest {
   string tile_id = 1;
-  string subpath = 2;
-  string method = 3;
-  string query = 4; // the raw query string, without its "?"
-  repeated Header headers = 5;
-  bytes body = 6;
+  reserved 2, 3, 4, 5, 6; // subpath, method, query, headers, body
 }
 message ServeContentChunk {
-  int64 status = 1;      // chunk 1 only; HTTP status code
+  reserved 1;            // status
   string media_type = 2; // chunk 1 only
   bytes data = 3;
-  // chunk 1 only; written after the node's own, never in place of one.
-  repeated Header headers = 4;
-}
-
-// Header is one HTTP header line: a name repeated for each of its values.
-message Header {
-  string name = 1;
-  string value = 2;
+  reserved 4;            // headers
 }
 
 // MoveTile is the single placement writeback. Placement is one fact,
@@ -615,13 +581,8 @@ message PluginInfo {
   // from a plugin's (rpc.IsConnectionRow): rootless, it is waiting, not
   // nothing.
   bool connection = 14;
-  // presents mirrors InfoResponse.presents, for the client's route verdict.
-  repeated string presents = 15;
-  // unanswered is why a plugin a route names does not answer now, "" while
-  // it does: switched off, its process down, or its last call unanswered
-  // (pluginhost.Adapter.Answering). The route verdict reads its presents as
-  // unknown (rpc.DeclaredBy).
-  string unanswered = 16;
+  reserved 15; // presents
+  reserved 16; // unanswered
 }
 // ConnectionInfo is RETIRED (2026-09-18): a connection is a plugins row with
 // connection set, rpc.ConnectionRow's shape, because the + menu is one
@@ -673,19 +634,7 @@ message HandshakeResponse {
   // for an unstamped build, for the client's log. Nothing depends on it: the
   // web API refuses a page of another build on every call (OtherBuild).
   string build = 14;
-  // routes is server.yaml's, in order, for the link funnel's verdict
-  // (rpc.Decide), which must be made before any tile exists. Node-local:
-  // zeroed on forward.
-  repeated Route routes = 15;
-}
-
-// Route is one rule of server.yaml's ordered routes: match is a glob over the
-// whole address, and exactly one of plugin (a plugin's id) and outside is
-// set (rpc.CheckRoute). Its yaml keys are its field names.
-message Route {
-  string match   = 1;
-  string plugin  = 2;
-  bool   outside = 3;
+  reserved 15; // routes
 }
 
 

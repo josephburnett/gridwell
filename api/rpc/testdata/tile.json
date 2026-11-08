@@ -1,7 +1,6 @@
 {
   "altText": "AltText-145",
   "blobId": "863",
-  "brokenReason": "BrokenReason-625",
   "childGridId": "ChildGridId-961",
   "contentStamp": "ContentStamp-531",
   "contentZoom": 139.5,
@@ -12,7 +11,6 @@
   "link": true,
   "linkTargetId": "LinkTargetId-548",
   "named": true,
-  "presentedBy": "PresentedBy-449",
   "previewBlobId": "902",
   "readOnly": "ReadOnly-433",
   "servesPage": true,

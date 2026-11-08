@@ -24,29 +24,25 @@ var (
 	serveContentSourceCap = int64(512 << 20)
 )
 
-// ServeContent tees the served body the way ReadContent tees a tile's. Only
-// a plain GET's status-200 answer with no headers is cached, and only a plain
-// GET is answered from it: an error page is a verdict, and verdicts are never
-// served from cache; a POST, a query or the headers a row has no column for
-// would answer a later read with what it did not ask.
+// ServeContent tees the served page the way ReadContent tees a tile's body,
+// and answers from what it holds only when the source is unheard: a refusal
+// is a verdict, and verdicts are never served from cache. The table's
+// subpath and status columns hold "" and 200, since a page is its tile's
+// whole bytes.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	first, data, flowed, fits, err := tee(func(f func(*pb.ServeContentChunk) error) error { return c.Namespace.ServeContent(ctx, in, f) }, send, serveContentEntryCap)
 	c.noteReachTile(ctx, err, in.GetTileId())
-	plain := (in.GetMethod() == "" || in.GetMethod() == "GET") && in.GetQuery() == ""
-	if !plain {
-		return err
-	}
 	if err == nil {
-		if fits && first.GetStatus() == 200 && len(first.GetHeaders()) == 0 {
-			c.storeServeContent(ctx, in.GetTileId(), in.GetSubpath(), first.GetStatus(), first.GetMediaType(), data)
+		if fits {
+			c.storeServeContent(ctx, in.GetTileId(), first.GetMediaType(), data)
 		}
 		return nil
 	}
 	if !flowed && gwerr.IsUnheard(err) {
-		if st, mt, cached, ok := c.loadServeContent(ctx, in.GetTileId(), in.GetSubpath()); ok {
+		if mt, cached, ok := c.loadServeContent(ctx, in.GetTileId()); ok {
 			return sendChunked(cached, func(b []byte, first bool) error {
 				if first {
-					return send(&pb.ServeContentChunk{Status: st, MediaType: mt, Data: b})
+					return send(&pb.ServeContentChunk{MediaType: mt, Data: b})
 				}
 				return send(&pb.ServeContentChunk{Data: b})
 			})
@@ -55,12 +51,12 @@ func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, se
 	return err
 }
 
-func (c *Layer) storeServeContent(ctx context.Context, tileID, subpath string, status int64, mediaType string, data []byte) {
+func (c *Layer) storeServeContent(ctx context.Context, tileID, mediaType string, data []byte) {
 	_, err := c.db.ExecContext(ctx, `INSERT INTO servecontent (tile_id, subpath, status, media_type, data, fetched_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(tile_id, subpath) DO UPDATE SET status=excluded.status,
-			media_type=excluded.media_type, data=excluded.data, fetched_at=excluded.fetched_at`,
-		tileID, subpath, status, mediaType, blob(data), now())
+		VALUES (?, '', 200, ?, ?, ?)
+		ON CONFLICT(tile_id, subpath) DO UPDATE SET media_type=excluded.media_type,
+			data=excluded.data, fetched_at=excluded.fetched_at`,
+		tileID, mediaType, blob(data), now())
 	c.noteCache("store servecontent", err)
 	c.evictServeContent(ctx)
 }
@@ -86,11 +82,11 @@ func (c *Layer) evictServeContent(ctx context.Context) {
 	}
 }
 
-func (c *Layer) loadServeContent(ctx context.Context, tileID, subpath string) (status int64, mediaType string, data []byte, ok bool) {
-	err := c.db.QueryRowContext(ctx, `SELECT status, media_type, data FROM servecontent
-		WHERE tile_id = ? AND subpath = ?`, tileID, subpath).Scan(&status, &mediaType, &data)
+func (c *Layer) loadServeContent(ctx context.Context, tileID string) (mediaType string, data []byte, ok bool) {
+	err := c.db.QueryRowContext(ctx, `SELECT media_type, data FROM servecontent
+		WHERE tile_id = ? AND subpath = ''`, tileID).Scan(&mediaType, &data)
 	if err != nil {
-		return 0, "", nil, false
+		return "", nil, false
 	}
-	return status, mediaType, data, true
+	return mediaType, data, true
 }

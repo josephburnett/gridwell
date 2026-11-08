@@ -121,7 +121,7 @@ func (f *fake) ReadContent(_ context.Context, _ *pb.ReadContentRequest, send fun
 	return f.err
 }
 func (f *fake) ServeContent(_ context.Context, _ *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	return send(&pb.ServeContentChunk{Status: 200, MediaType: "text/plain", Data: []byte("hi")})
+	return send(&pb.ServeContentChunk{MediaType: "text/plain", Data: []byte("hi")})
 }
 func (f *fake) WriteContent(_ context.Context, recv func() (*pb.WriteContentRequest, error)) (*pb.TileResponse, error) {
 	for {

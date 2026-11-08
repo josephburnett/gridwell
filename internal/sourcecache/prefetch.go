@@ -233,7 +233,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 			return false
 		}
 		n, ok := drain(func(count func(int)) error {
-			return w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId(), Subpath: ""},
+			return w.c.ServeContent(w.ctx, &pb.ServeContentRequest{TileId: t.GetId()},
 				func(ch *pb.ServeContentChunk) error { count(len(ch.GetData())); return nil })
 		})
 		if !ok {
