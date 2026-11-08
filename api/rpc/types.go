@@ -289,6 +289,26 @@ func PageURL(origin, contentToken, tileID string) string {
 	return origin + ContentPath + contentToken + "/" + tileID
 }
 
+// PageRange is the bytes [from, from+n) of a page of size that a
+// ServeContentRequest's offset and length ask: offset below 0 counts back
+// from the end, and length 0 runs to it. ok is false for a range that starts
+// at or past the end of a page that has bytes, or of an empty one asked for
+// its last bytes.
+func PageRange(offset, length, size int64) (from, n int64, ok bool) {
+	from = offset
+	if from < 0 {
+		from = max(0, size+from)
+	}
+	if from >= size && (size > 0 || offset < 0) {
+		return 0, 0, false
+	}
+	n = size - from
+	if length > 0 {
+		n = min(n, length)
+	}
+	return from, n, true
+}
+
 // The text_presentation vocabulary: whether a file's text body is a
 // document. There is no document-only value, because the user can always
 // reach the source bytes.

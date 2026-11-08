@@ -31,7 +31,7 @@ func (rt *router) ReadContent(ctx context.Context, req *pb.ReadContentRequest, s
 // local API and the request rides this verb through the tunnel, which is how
 // a far node's pages are served.
 func (rt *router) ServeContent(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	return rt.srv.servePage(ctx, req.TileId, send)
+	return rt.srv.servePage(ctx, req, send)
 }
 
 // WriteContent preserves commit-at-close: the owner commits only after a clean

@@ -6,9 +6,11 @@ package server
 //
 // becomes one ServeContent RPC routed through servePage, so links resolve and
 // transit hops forward exactly like ReadContent, and the answer is the page's
-// whole bytes with its media type, written as each chunk arrives, so a video
-// plays while it streams and no layer holds a page whole. Nothing of the
-// request but the tile rides along: no subpath, no query, no header, no body.
+// bytes, or the one byte range a Range header asks (206, or 416 past the
+// end), with its media type and length, written as each chunk arrives, so a
+// video plays and seeks while it streams and no layer holds a page whole.
+// Nothing of the request but the tile and that range rides along: no
+// subpath, no query, no other header, no body.
 //
 // Every response carries the contentSandbox CSP, so the page runs with an
 // opaque origin: no cookies, no storage, no reach into the RPC surface.
@@ -23,6 +25,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -95,25 +98,45 @@ func (s *Server) contentAPI() http.Handler {
 			http.Error(w, "gridwell: bad content token", http.StatusUnauthorized)
 			return
 		}
-		// The first chunk names the media type and starts the answer; a
-		// failure before it is the status, and one after it cuts the answer
-		// short, which the reader sees as a broken page.
-		started := false
-		start := func(mediaType string) {
+		// The first chunk names the media type and the size and starts the
+		// answer; a failure before it is the status, and one after it cuts
+		// the answer short, which the reader sees as a broken page.
+		req := &pb.ServeContentRequest{TileId: tileID}
+		ranged := false
+		if rng := r.Header.Get("Range"); rng != "" {
+			req.Offset, req.Length, ranged = pageRange(rng)
+		}
+		started, bodyless := false, r.Method == http.MethodHead
+		start := func(c *pb.ServeContentChunk) {
 			started = true
 			h := w.Header()
 			h.Set("Content-Security-Policy", contentSandbox)
 			h.Set("X-Content-Type-Options", "nosniff")
-			if mediaType != "" {
-				h.Set("Content-Type", mediaType)
+			if c.GetMediaType() != "" {
+				h.Set("Content-Type", c.GetMediaType())
 			}
-			w.WriteHeader(http.StatusOK)
+			code := http.StatusOK
+			if c.Size != nil {
+				size := c.GetSize()
+				h.Set("Accept-Ranges", "bytes")
+				from, n, ok := rpc.PageRange(req.Offset, req.Length, size)
+				switch {
+				case ranged && (!ok || n == 0):
+					h.Set("Content-Range", "bytes */"+strconv.FormatInt(size, 10))
+					code, bodyless, n = http.StatusRequestedRangeNotSatisfiable, true, 0
+				case ranged:
+					h.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", from, from+n-1, size))
+					code = http.StatusPartialContent
+				}
+				h.Set("Content-Length", strconv.FormatInt(n, 10))
+			}
+			w.WriteHeader(code)
 		}
-		err := s.servePage(r.Context(), tileID, func(chunk *pb.ServeContentChunk) error {
+		err := s.servePage(r.Context(), req, func(chunk *pb.ServeContentChunk) error {
 			if !started {
-				start(chunk.GetMediaType())
+				start(chunk)
 			}
-			if r.Method == http.MethodHead {
+			if bodyless {
 				return errHeadAnswered
 			}
 			_, err := w.Write(chunk.GetData())
@@ -121,7 +144,7 @@ func (s *Server) contentAPI() http.Handler {
 		})
 		switch {
 		case err == nil && !started:
-			start("")
+			start(&pb.ServeContentChunk{})
 		case err == nil, errors.Is(err, errHeadAnswered):
 		case !started:
 			refusedWeb(path, httpStatusError(w, err), err.Error(), nil)
@@ -132,9 +155,34 @@ func (s *Server) contentAPI() http.Handler {
 	})
 }
 
-// errHeadAnswered ends a HEAD's page at its first chunk, whose media type
-// is all a HEAD answers.
+// errHeadAnswered ends a HEAD's page, or a range past its end, at its first
+// chunk, whose headers are the whole answer.
 var errHeadAnswered = errors.New("a HEAD is answered by its headers")
+
+// pageRange is the one byte range a Range header asks, as a
+// ServeContentRequest spells it; ok is false for none it can read, a list of
+// ranges included, which is answered whole.
+func pageRange(h string) (offset, length int64, ok bool) {
+	spec, found := strings.CutPrefix(strings.TrimSpace(h), "bytes=")
+	a, b, dash := strings.Cut(spec, "-")
+	if !found || !dash || strings.Contains(spec, ",") {
+		return 0, 0, false
+	}
+	end, err := strconv.ParseInt(b, 10, 64)
+	if a == "" {
+		return -end, 0, err == nil && end > 0
+	}
+	start, serr := strconv.ParseInt(a, 10, 64)
+	switch {
+	case serr != nil || start < 0:
+		return 0, 0, false
+	case b == "":
+		return start, 0, true
+	case err != nil || end < start:
+		return 0, 0, false
+	}
+	return start, end - start + 1, true
+}
 
 // httpStatusError maps a routing or RPC failure onto the API's HTTP surface
 // and answers the status it wrote. Unimplemented is deliberately 404: a

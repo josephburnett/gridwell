@@ -26,14 +26,14 @@ var (
 
 // ServeContent tees the served page the way ReadContent tees a tile's body,
 // and answers from what it holds only when the source is unheard: a refusal
-// is a verdict, and verdicts are never served from cache. The table's
-// subpath and status columns hold "" and 200, since a page is its tile's
-// whole bytes.
+// is a verdict, and verdicts are never served from cache. Only a whole page
+// is kept, and a cached one answers whole, carrying no size, whatever range
+// was asked. The table's subpath and status columns hold "" and 200.
 func (c *Layer) ServeContent(ctx context.Context, in *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	first, data, flowed, fits, err := tee(func(f func(*pb.ServeContentChunk) error) error { return c.Namespace.ServeContent(ctx, in, f) }, send, serveContentEntryCap)
 	c.noteReachTile(ctx, err, in.GetTileId())
 	if err == nil {
-		if fits {
+		if fits && in.Offset == 0 && in.Length == 0 {
 			c.storeServeContent(ctx, in.GetTileId(), first.GetMediaType(), data)
 		}
 		return nil

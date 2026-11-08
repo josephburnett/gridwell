@@ -1506,14 +1506,19 @@ func (x *WriteContentRequest) GetContentStamp() string {
 // ServeContent is the RPC carrier behind the server's HTTP /content/ API: a
 // GET or HEAD of /content/<token>/<tile-id> becomes one call routed to the
 // tile's owner, through transit hops as ReadContent is. The answer is the
-// tile's whole page, streamed: its media type on chunk 1 and its bytes across
-// the chunks as they are read, so a page is never held whole. The server sandboxes the browser
+// tile's page, or the one byte range asked of it, streamed: its media type and
+// whole size on chunk 1 and its bytes across the chunks as they are read, so
+// a page is never held whole. The server sandboxes the browser
 // side with a CSP sandbox: opaque origin, no cookies, no RPC reach. An owner
 // with no page for the tile answers NotFound or leaves the RPC unimplemented,
 // and the content API answers 404.
 type ServeContentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TileId string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`
+	// offset and length are the byte range asked: offset below 0 is the last
+	// -offset bytes, and length 0 runs to the end.
+	Offset        int64 `protobuf:"varint,7,opt,name=offset,proto3" json:"offset,omitempty"`
+	Length        int64 `protobuf:"varint,8,opt,name=length,proto3" json:"length,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1555,10 +1560,27 @@ func (x *ServeContentRequest) GetTileId() string {
 	return ""
 }
 
+func (x *ServeContentRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ServeContentRequest) GetLength() int64 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
 type ServeContentChunk struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MediaType     string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"` // chunk 1 only
-	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	MediaType string                 `protobuf:"bytes,2,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"` // chunk 1 only
+	Data      []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	// size is the page's whole length, chunk 1 only. Unset, the source did
+	// not read the range, and data is the whole page.
+	Size          *int64 `protobuf:"varint,5,opt,name=size,proto3,oneof" json:"size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1605,6 +1627,13 @@ func (x *ServeContentChunk) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *ServeContentChunk) GetSize() int64 {
+	if x != nil && x.Size != nil {
+		return *x.Size
+	}
+	return 0
 }
 
 // MoveTile is the single placement writeback. Placement is one fact,
@@ -4614,13 +4643,17 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x12\n" +
 	"\x04data\x18\x03 \x01(\fR\x04data\x12#\n" +
-	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"L\n" +
+	"\rcontent_stamp\x18\x04 \x01(\tR\fcontentStamp\"|\n" +
 	"\x13ServeContentRequest\x12\x17\n" +
-	"\atile_id\x18\x01 \x01(\tR\x06tileIdJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"R\n" +
+	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x16\n" +
+	"\x06offset\x18\a \x01(\x03R\x06offset\x12\x16\n" +
+	"\x06length\x18\b \x01(\x03R\x06lengthJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"t\n" +
 	"\x11ServeContentChunk\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x02 \x01(\tR\tmediaType\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04dataJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"\xaf\x01\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\x12\x17\n" +
+	"\x04size\x18\x05 \x01(\x03H\x00R\x04size\x88\x01\x01B\a\n" +
+	"\x05_sizeJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"\xaf\x01\n" +
 	"\x0fMoveTileRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\x12\x17\n" +
 	"\agrid_id\x18\x03 \x01(\tR\x06gridId\x12\f\n" +
@@ -5014,6 +5047,7 @@ func file_gridwell_v1_data_proto_init() {
 		return
 	}
 	file_gridwell_v1_data_proto_msgTypes[0].OneofWrappers = []any{}
+	file_gridwell_v1_data_proto_msgTypes[18].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[40].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[58].OneofWrappers = []any{}
 	file_gridwell_v1_data_proto_msgTypes[59].OneofWrappers = []any{

@@ -387,20 +387,28 @@ message WriteContentRequest {
 // ServeContent is the RPC carrier behind the server's HTTP /content/ API: a
 // GET or HEAD of /content/<token>/<tile-id> becomes one call routed to the
 // tile's owner, through transit hops as ReadContent is. The answer is the
-// tile's whole page, streamed: its media type on chunk 1 and its bytes across
-// the chunks as they are read, so a page is never held whole. The server sandboxes the browser
+// tile's page, or the one byte range asked of it, streamed: its media type and
+// whole size on chunk 1 and its bytes across the chunks as they are read, so
+// a page is never held whole. The server sandboxes the browser
 // side with a CSP sandbox: opaque origin, no cookies, no RPC reach. An owner
 // with no page for the tile answers NotFound or leaves the RPC unimplemented,
 // and the content API answers 404.
 message ServeContentRequest {
   string tile_id = 1;
   reserved 2, 3, 4, 5, 6; // subpath, method, query, headers, body
+  // offset and length are the byte range asked: offset below 0 is the last
+  // -offset bytes, and length 0 runs to the end.
+  int64 offset = 7;
+  int64 length = 8;
 }
 message ServeContentChunk {
   reserved 1;            // status
   string media_type = 2; // chunk 1 only
   bytes data = 3;
   reserved 4;            // headers
+  // size is the page's whole length, chunk 1 only. Unset, the source did
+  // not read the range, and data is the whole page.
+  optional int64 size = 5;
 }
 
 // MoveTile is the single placement writeback. Placement is one fact,

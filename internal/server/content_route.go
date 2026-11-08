@@ -5,21 +5,24 @@ import (
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// servePage answers one page request from the namespace that owns tileID's
-// content (contentRoute), asked for the bytes of the tile's page and nothing
-// else.
-func (s *Server) servePage(ctx context.Context, tileID string, send func(*pb.ServeContentChunk) error) error {
-	c, local, _, err := s.contentRoute(ctx, tileID)
+// servePage answers one page request from the namespace that owns its
+// tile's content (contentRoute), asked for the bytes of the tile's page, or a
+// range of them, and nothing else.
+func (s *Server) servePage(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
+	c, local, _, err := s.contentRoute(ctx, req.TileId)
 	if err != nil {
 		return err
 	}
-	return c.ServeContent(ctx, &pb.ServeContentRequest{TileId: local}, send)
+	bound := proto.CloneOf(req)
+	bound.TileId = local
+	return c.ServeContent(ctx, bound, send)
 }
 
 // contentRoute resolves the namespace and local id that serve a tile's content.

@@ -214,9 +214,10 @@ func diskRefusal(verb, path string, err error) error {
 	return status.Errorf(codes.Unavailable, "files: %s cannot be %s right now: %v", path, verb, pathErr(err))
 }
 
-// ServeContent is a page file's whole bytes and media type, read and sent a
-// chunk at a time through one buffer, so a video plays as it arrives and
-// none is held whole. Only a page file has a page: any other file's bytes
+// ServeContent is a page file's bytes, the range asked (rpc.PageRange), with
+// its media type and size, read and sent a chunk at a time through one
+// buffer, so a video plays and seeks as it arrives and none is held whole. A
+// range past the end sends the first chunk alone. Only a page file has a page: any other file's bytes
 // could be a page that runs a script, in the content API's sandbox, which
 // allows scripts. A link serves where it lands, so it is a page file by its
 // target's name.
@@ -233,15 +234,21 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	if !f.fi.Mode().IsRegular() || !isPage(f.Name()) {
 		return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
 	}
+	size := f.fi.Size()
+	from, left, _ := rpc.PageRange(req.Offset, req.Length, size)
+	if _, err := f.Seek(from, io.SeekStart); err != nil {
+		return diskRefusal("read", path, err)
+	}
+	r := io.LimitReader(f, left)
 	buf := make([]byte, rpc.ContentChunkBytes)
 	for first := true; ; first = false {
-		n, err := io.ReadFull(f, buf)
+		n, err := io.ReadFull(r, buf)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 			return diskRefusal("read", path, err)
 		}
 		if c := (&pb.ServeContentChunk{Data: buf[:n]}); n > 0 || first {
 			if first {
-				c.MediaType = mediaType(f.Name())
+				c.MediaType, c.Size = mediaType(f.Name()), &size
 			}
 			if err := send(c); err != nil {
 				return err

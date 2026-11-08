@@ -640,14 +640,18 @@ These were decided deliberately. Do not reverse one without a new decision.
   `federation.sock`: an existing `~/.gridwell` already has them written down.
 - The node serves a page file's page through its content API
   (2026-11-07): a GET or HEAD of `/content/<token>/<qualified tile id>`
-  streams the file in chunks as it is read, with its media type, `nosniff`
-  and the sandbox CSP and no `Content-Length`, so a video plays as it
-  arrives and no page is held whole; nothing else: no subpath, no POST, no
-  request headers carried. A permission the disk refuses answers 403.
+  streams the file in chunks as it is read, with its media type, `nosniff`,
+  the sandbox CSP and its `Content-Length` when its size is known, and
+  honours one byte range (`Range`: 206 with `Content-Range`, 416 past the
+  end, a list of ranges answered whole), so a video plays and seeks as it
+  arrives and no page is held whole (2026-11-08); nothing else: no subpath,
+  no POST, no other request header carried. A permission the disk refuses
+  answers 403.
   The token in the path stays, because the desktop's url views run in their
   own partition and cannot present the web cookie, and it is never
-  interchangeable with the cookie. ServeContent is the bytes and media type
-  of one tile's page and crosses a connection, so a far node's image opens
+  interchangeable with the cookie. ServeContent is the bytes, or one range
+  of them, the size and media type of one tile's page and crosses a
+  connection, so a far node's image opens
   here. `serves_page` is the one flag that says a url tile's page is the
   content API's, and only a url tile carries it.
 - A url tile opens its own address, and a link followed inside a live page
