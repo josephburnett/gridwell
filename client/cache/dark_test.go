@@ -184,3 +184,17 @@ func TestDarkFilesDarkenDirectoriesOnly(t *testing.T) {
 		t.Errorf("dark files: directory dark=%v, home dark=%v; want true, false", c.SourceDark(dir), c.SourceDark("n1/7"))
 	}
 }
+
+// Home is not the files, though their ids share the node: home dark darkens
+// no directory, and a change to a home grid revives no file link.
+func TestHomeIsNotTheFiles(t *testing.T) {
+	c := New()
+	dir := "n1/" + rpc.KeyTileID("/srv/notes")
+	c.NoteHealth("n1", false)
+	if c.SourceDark(dir) || !c.SourceDark("n1/7") {
+		t.Errorf("dark home: directory dark=%v, home dark=%v; want false, true", c.SourceDark(dir), c.SourceDark("n1/7"))
+	}
+	if ServedBy(dir, rpc.SourceOf("n1/7")) {
+		t.Errorf("a home grid's change revives %s, a file link home does not serve", dir)
+	}
+}

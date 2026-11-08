@@ -61,7 +61,7 @@ func QualifyOwnIDs(uuid string, t *pb.Tile) {
 }
 
 // Hop is one inbound peel, the inverse of the prepend. Seg is the segment the
-// hop removes, and only from an id served through the namespace chain Via; any
+// hop removes, and only from an id spelled under the namespace chain Via; any
 // other id crosses verbatim, to be refused behind the hop rather than
 // misresolved. Transit says the namespace behind the hop fronts other nodes'
 // chains, where a link is peeled like every id.
@@ -78,9 +78,9 @@ func InboundHop(routed, nodeID string, transit bool) Hop {
 	return Hop{Seg: UUIDOf(routed), Via: OwnerNamespaceOf(routed, nodeID), Transit: transit}
 }
 
-// PeelID removes the hop's segment from an id served through Via.
+// PeelID removes the hop's segment from an id spelled under Via.
 func (h Hop) PeelID(id string) string {
-	if h.Seg != "" && ChainedThrough(id, h.Via) {
+	if h.Seg != "" && underChain(id, h.Via) {
 		return id[len(h.Seg)+1:]
 	}
 	return id

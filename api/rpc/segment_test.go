@@ -300,7 +300,7 @@ func TestChainedThroughIsTheWholeChainNotOneNodesPeel(t *testing.T) {
 		want   bool
 	}{
 		{"p9xyzab/1", "p9xyzab", true},
-		{"p9xyzab/" + KeyTileID("/home/joe"), "p9xyzab", true},
+		{"p9xyzab/" + KeyTileID("/home/joe"), "p9xyzab/~", true},
 		{"p9xyzabx/1", "p9xyzab", false}, // a segment boundary, not a byte prefix
 		{"p9xyzab", "p9xyzab", false},    // a namespace is not a thing it serves
 		{"q9zzzzz/1", "p9xyzab", false},  // a different namespace
@@ -317,6 +317,10 @@ func TestChainedThroughIsTheWholeChainNotOneNodesPeel(t *testing.T) {
 		// else: no home row, no deeper chain's path.
 		{node + "/" + KeyTileID("/srv/a"), node + "/~", true},
 		{node + "/1", node + "/~", false},
+		// Home is not the files, though their ids share the node.
+		{node + "/" + KeyTileID("/srv/a"), node, false},
+		{node + "/laptop/far9xyz/" + KeyTileID("/srv/a"), node + "/laptop/far9xyz", false},
+		{node + "/laptop/far9xyz/" + KeyTileID("/srv/a"), node + "/laptop", true},
 		{node + "/laptop/far9xyz/" + KeyTileID("/srv/a"), node + "/~", false},
 		{node + "/laptop/far9xyz/" + KeyTileID("/srv/a"), node + "/laptop/far9xyz/~", true},
 		{"n1abcdex/" + KeyTileID("/srv/a"), node + "/~", false},

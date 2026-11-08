@@ -102,7 +102,7 @@ func TestServedBy(t *testing.T) {
 		want   bool
 	}{
 		{"a local source's grid", fsPl + "/1", fsPl, true},
-		{"a local source's key-form tile", fsPl + "/" + rpc.KeyTileID("/home/joe"), fsPl, true},
+		{"a node's home does not serve its files", fsPl + "/" + rpc.KeyTileID("/home/joe"), fsPl, false},
 		{"another source's grid", "zz9zzzz/1", fsPl, false},
 		{"a segment that merely starts the same", fsPl + "x/1", fsPl, false},
 		{"the source's own name is not a grid it serves", fsPl, fsPl, false},

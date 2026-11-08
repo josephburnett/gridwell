@@ -162,11 +162,18 @@ func SharedOwner(a, b, nodeID string) string {
 }
 
 // ChainedThrough reports whether a qualified id is served through the
-// namespace chain ns: a prefix on a segment boundary, so "n1/laptop" is
-// chained through neither "n1x" nor itself, and for the files' owner every
-// path directly under its node. Whoever asks which ids a source answers for
-// needs the whole chain, which OwnerNamespaceOf does not give.
+// namespace chain ns: under it (underChain), and never a path directly under
+// a node through that node's home, which is the files'. Whoever asks which
+// ids a source answers for needs the whole chain, which OwnerNamespaceOf
+// does not give.
 func ChainedThrough(id, ns string) bool {
+	return underChain(id, ns) && (!IsFilesID(id) || NamespaceOf(id) != ns)
+}
+
+// underChain is id spelled under the chain ns: a prefix on a segment
+// boundary, so "n1/laptop" is under neither "n1x" nor itself, and for the
+// files' owner every path directly under its node.
+func underChain(id, ns string) bool {
 	if chain := QualifierOf(ns); chain != ns {
 		return IsFilesID(id) && NamespaceOf(id) == chain
 	}
