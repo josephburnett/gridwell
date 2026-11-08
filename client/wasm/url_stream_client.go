@@ -163,18 +163,6 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 	}
 }
 
-// descendedContentID is the row whose content pane p is descended into: a
-// link's target, else the descended row's own; "" on a grid.
-func (a *App) descendedContentID(p *pane.Pane) string {
-	if p.ContentID() == "" {
-		return ""
-	}
-	if t, ok := a.descendedTile(p); ok {
-		return rpc.ContentID(t)
-	}
-	return p.ContentID()
-}
-
 // moveURLView hands the view fromID holds to pane to, page and all: no close,
 // no freeze and no reload.
 func (a *App) moveURLView(fromID string, to *pane.Pane) {

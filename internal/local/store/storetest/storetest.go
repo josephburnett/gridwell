@@ -59,13 +59,6 @@ func Snapshot(t *testing.T, db *sql.DB) string {
 	return b.String()
 }
 
-// Table is Snapshot for one table, for a test that wants to say which table
-// the write landed in.
-func Table(t *testing.T, db *sql.DB, table string) string {
-	t.Helper()
-	return strings.Join(tableRows(t, db, table), "\n")
-}
-
 func tableRows(t *testing.T, db *sql.DB, table string) []string {
 	t.Helper()
 	rs, err := db.Query(`SELECT * FROM "` + table + `"`)
