@@ -88,13 +88,13 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 		linkTarget                sql.NullString
 		shellTmux                 sql.NullString
 	)
-	if n.LinkTargetId != "" {
+	if rpc.LeafLink(n) {
 		// A copy of a link is a link (CLAUDE.md, 2026-10-06); the CHECK's link
 		// branch requires every content column NULL.
 		linkTarget = sql.NullString{String: n.LinkTargetId, Valid: true}
 	}
 	c := rpc.CopyFacts(n)
-	if n.LinkTargetId == "" {
+	if !rpc.LeafLink(n) {
 		k := rpc.KindOf(n.Kind)
 		if k.Content == rpc.ContentAddress {
 			urlStr = sql.NullString{String: n.UrlString, Valid: true}

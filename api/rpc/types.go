@@ -338,7 +338,7 @@ func PlacementOf(t *pb.Tile) *pb.Placement {
 // ContentID is the tile id that owns a tile's content: a leaf link's target, or
 // the tile's own id.
 func ContentID(t *pb.Tile) string {
-	if t.LinkTargetId != "" {
+	if LeafLink(t) {
 		return t.LinkTargetId
 	}
 	return t.Id

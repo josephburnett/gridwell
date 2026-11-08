@@ -76,7 +76,7 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 	if err != nil {
 		return nil, err
 	}
-	if t.LinkTargetId != "" {
+	if rpc.LeafLink(t) {
 		return nil, status.Errorf(codes.InvalidArgument, "files: %s is a link, which owns no bytes; its target is written by its own id", t.AltText)
 	}
 	data, err := namespace.Assembled(first, recv)

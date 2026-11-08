@@ -260,10 +260,10 @@ func (p *Home) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest
 	if t == nil {
 		return nil, status.Error(codes.InvalidArgument, "create: nil tile")
 	}
-	if len(req.Content) > 0 && (t.LinkTargetId != "" || !rpc.IsBodyKind(t.Kind)) {
+	if len(req.Content) > 0 && (rpc.LeafLink(t) || !rpc.IsBodyKind(t.Kind)) {
 		return nil, status.Errorf(codes.InvalidArgument, "create: a %s tile is not born with content", t.Kind)
 	}
-	if t.LinkTargetId != "" {
+	if rpc.LeafLink(t) {
 		// A leaf link of any leaf kind; the store validates kind and target.
 		return tileResp(p.st.CreateLeafLink(ctx, req.GridId, t.X, t.Y, t.W, t.H,
 			t.Kind, t.LinkTargetId, t.AltText, t.Named))
@@ -381,7 +381,7 @@ func (p *Home) tmuxOf(ctx context.Context, tileID string) (string, error) {
 	if err != nil {
 		return "", gwerr.ToStatus(err)
 	}
-	if !rpc.KindOf(t.Kind).Tmux || t.LinkTargetId != "" {
+	if !rpc.KindOf(t.Kind).Tmux || rpc.LeafLink(t) {
 		return "", status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
 	}
 	return rpc.ShellTmux(t), nil

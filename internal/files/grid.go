@@ -205,7 +205,7 @@ func (s *Source) buildTiles(dir string, rows []store.FileTile, entries []listed)
 		if child != "" {
 			t.ChildGridId, t.Link = idOf(child), child != r.Key
 		}
-		if ok && t.LinkTargetId == "" {
+		if ok && !rpc.LeafLink(t) {
 			t.ContentStamp, t.ReadOnly, t.ServesPage = e.stamp, e.readOnly, e.ServesPage
 			t.TextPresentation = e.presentation
 			t.PreviewBlobId = previewKey(t.PreviewBlobId, e.preview)

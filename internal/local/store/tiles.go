@@ -335,7 +335,7 @@ func (s *Store) SetTextScroll(ctx context.Context, tileIDStr string, textX, text
 		if err != nil {
 			return err
 		}
-		if n.LinkTargetId != "" {
+		if rpc.LeafLink(n) {
 			// A link row persists the scroll only: the CHECK keeps
 			// text_mode NULL on a link, because framing is per-link local and
 			// the mode is not.

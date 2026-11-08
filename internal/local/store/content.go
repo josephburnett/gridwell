@@ -27,7 +27,7 @@ func (s *Store) WriteContent(ctx context.Context, tileID string, version int64, 
 	if err != nil {
 		return nil, err
 	}
-	if t.LinkTargetId != "" {
+	if rpc.LeafLink(t) {
 		return nil, fmt.Errorf("%w: a link owns no content; write through its target %s",
 			ErrInvalidArgument, t.LinkTargetId)
 	}

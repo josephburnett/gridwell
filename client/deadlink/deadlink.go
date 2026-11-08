@@ -18,7 +18,7 @@ func TargetID(t *gridwellv1.Tile) string {
 	if t == nil || !t.Link {
 		return ""
 	}
-	if t.LinkTargetId != "" {
+	if rpc.LeafLink(t) {
 		return t.LinkTargetId
 	}
 	// A childless link is a menu swatch or door tile, which names no

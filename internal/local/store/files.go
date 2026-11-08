@@ -148,7 +148,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
 			if !r.Named {
 				r.AltText = e.Label
 			}
-			if r.LinkTargetId != "" {
+			if rpc.LeafLink(r.Tile) {
 				r.UrlString, r.ServesPage, r.PreviewBlobId = "", false, 0
 			}
 			out = append(out, r)

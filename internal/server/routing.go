@@ -41,7 +41,7 @@ func qualifyTiles(uuid string, tiles []*pb.Tile) []*pb.Tile {
 		}
 		// A leaf link is a link by construction, however its target is
 		// spelled, so the one derived Link bit covers both link shapes.
-		if t.LinkTargetId != "" {
+		if rpc.LeafLink(t) {
 			qt.LinkTargetId = rpc.QualifyLinkTarget(uuid, t.LinkTargetId)
 			qt.Link = true
 		}

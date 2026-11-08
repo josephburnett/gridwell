@@ -12,7 +12,7 @@ import (
 // target is not known, because the link's own spelling names a tile, not a
 // tmux.
 func TmuxKey(row, target *gridwellv1.Tile) (key string, ok bool) {
-	if row.LinkTargetId == "" {
+	if !rpc.LeafLink(row) {
 		return rpc.ShellTmux(row), true
 	}
 	if target == nil {
