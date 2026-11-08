@@ -2,8 +2,10 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -520,5 +522,35 @@ func TestExtDoorRowBecomingALinkGivesUpItsChildGrid(t *testing.T) {
 	}
 	if h := fileByKey(t, got, "h"); h.Kind != "door" || h.LinkTargetId != "" || h.ChildGridID != child {
 		t.Fatalf("row = kind %q link %q child %d, want the door onto grid %d", h.Kind, h.LinkTargetId, h.ChildGridID, child)
+	}
+}
+
+// Two first touches of one directory or one file at once mint one row and
+// answer it to both, never a uniqueness error.
+func TestExtFirstTouchesAtOnceMintOneRow(t *testing.T) {
+	_, d := openExt(t)
+	for round := range 20 {
+		dir := fmt.Sprintf("/r/%d", round)
+		var wg sync.WaitGroup
+		grids, tiles := make([]int64, 4), make([]int64, 4)
+		errs := make([]error, 4)
+		for i := range 4 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if grids[i], errs[i] = d.GridOf(dir); errs[i] == nil {
+					tiles[i], errs[i] = d.Mint(grids[i], Entry{Key: dir + "/a", Kind: "text", Label: "a"}, 0, 0, 0, 1, 1)
+				}
+			}()
+		}
+		wg.Wait()
+		for i := range 4 {
+			if errs[i] != nil {
+				t.Fatalf("round %d: a first touch: %v", round, errs[i])
+			}
+			if grids[i] != grids[0] || tiles[i] != tiles[0] {
+				t.Fatalf("round %d: grids %v tiles %v, want one of each", round, grids, tiles)
+			}
+		}
 	}
 }

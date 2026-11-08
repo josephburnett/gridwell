@@ -71,7 +71,8 @@ type FileTile struct {
 	*gridwellv1.Tile
 }
 
-// GridOf resolves a grid key to its grid id, minting on first sight.
+// GridOf resolves a grid key to its grid id, minting on first sight; two
+// first sights at once mint one row and both read it.
 func (n *FileRows) GridOf(key string) (int64, error) {
 	id, ok, err := n.LookupGrid(key)
 	if err != nil || ok {
@@ -79,13 +80,11 @@ func (n *FileRows) GridOf(key string) (int64, error) {
 	}
 	now := n.s.now().Unix()
 	err = n.write("GridOf", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, key)
-			VALUES (0, ?, ?, ?)`, now, now, key)
-		if err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, key)
+			VALUES (0, ?, ?, ?) ON CONFLICT DO NOTHING`, now, now, key); err != nil {
 			return err
 		}
-		id, err = res.LastInsertId()
-		return err
+		return tx.QueryRowContext(ctx, `SELECT id FROM grids WHERE key = ?`, key).Scan(&id)
 	})
 	return id, err
 }
@@ -200,7 +199,8 @@ func snapshotOf(e Entry) entrySnapshot {
 
 // Mint writes the row an entry has earned: the id, the placement it was
 // already answered at, and a content snapshot. It is the one INSERT; an entry
-// with a live row returns that id and writes nothing.
+// with a live row, one a mint racing it made included, returns that id and
+// writes nothing.
 func (n *FileRows) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int64) (int64, error) {
 	if id, ok, err := n.LiveTileID(gridID, e.Key); err != nil || ok {
 		return id, err
@@ -213,15 +213,14 @@ func (n *FileRows) Mint(gridID int64, e Entry, childGridID int64, x, y, w, h int
 	now := n.s.now().Unix()
 	var id int64
 	err := n.write("Mint", "g/"+strconv.FormatInt(gridID, 10)+"/"+e.Key, func(ctx context.Context, tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
+		if _, err := tx.ExecContext(ctx, `INSERT INTO tiles (version, grid_id, kind, x, y, w, h,
 			child_grid_id, url_string, alt_text, serves_page, link_target_id, created_at, updated_at, key)
-			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, e.Key)
-		if err != nil {
+			VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+			gridID, s.kind, x, y, w, h, child, s.url, e.Label, s.page, s.link, now, now, e.Key); err != nil {
 			return fmt.Errorf("store: mint %q: %w", e.Key, err)
 		}
-		id, err = res.LastInsertId()
-		return err
+		return tx.QueryRowContext(ctx, `SELECT id FROM tiles WHERE grid_id = ? AND key = ? AND tombstoned = 0`,
+			gridID, e.Key).Scan(&id)
 	})
 	return id, err
 }
