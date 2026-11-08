@@ -52,10 +52,13 @@ func newFilesNode(t *testing.T, roots ...string) *filesNode {
 		rs = append(rs, files.Root{Path: r})
 		n.roots = append(n.roots, rpc.QualifyID(localNodeID, rpc.KeyTileID(r)))
 	}
-	src := files.New(st.Namespace("~"), rs, func(p string) error {
+	src, err := files.New(st.Namespace("~"), rs, func(p string) error {
 		n.trashed = append(n.trashed, p)
 		return os.RemoveAll(p)
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	reg := plugin.NewRegistry()
 	reg.Register(localNodeID, "home", local.New(st, nil), nil)
 	reg.SetLabel(localNodeID, "home")

@@ -174,7 +174,10 @@ func TestARootBehindASymlinkServes(t *testing.T) {
 	if err := os.Symlink(f.root, link); err != nil {
 		t.Skip("symlinks unsupported")
 	}
-	s := New(f.st.Namespace("~"), []Root{{Path: link}}, nil)
+	s, err := New(f.st.Namespace("~"), []Root{{Path: link}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer s.Close()
 	resp, err := s.GetGrid(context.Background(), &pb.GetGridRequest{GridId: idOf(link)})
 	if err != nil {
@@ -298,7 +301,10 @@ func TestARootInsideARootIsADoorThere(t *testing.T) {
 	inner := f.mkdir("inner")
 	f.write("inner/a.txt", "a")
 	other := f.mkdir("other")
-	s := New(f.st.Namespace("~"), []Root{{Path: f.root}, {Path: inner}}, nil)
+	s, err := New(f.st.Namespace("~"), []Root{{Path: f.root}, {Path: inner}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer s.Close()
 	ctx := context.Background()
 	g, err := s.GetGrid(ctx, &pb.GetGridRequest{GridId: idOf(f.root)})
@@ -331,5 +337,14 @@ func TestARootInsideARootIsADoorThere(t *testing.T) {
 	}
 	if _, err := s.GetTile(ctx, &pb.GetTileRequest{TileId: idOf(f.root)}); !gwerr.IsDeadLink(err) {
 		t.Errorf("the outer root as a tile = %v, want dead", err)
+	}
+}
+
+// A root is an absolute path, since every id the files answer is one.
+func TestARelativeRootIsRefused(t *testing.T) {
+	f := newFixture(t)
+	if s, err := New(f.st.Namespace("~"), []Root{{Path: f.root}, {Path: "notes"}}, nil); err == nil {
+		s.Close()
+		t.Fatal("a relative root was taken")
 	}
 }

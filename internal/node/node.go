@@ -146,7 +146,9 @@ func Start(opts Options) (*Node, error) {
 	if err := startHome(reg, st, cfg); err != nil {
 		return fail(fmt.Errorf("home: %w", err))
 	}
-	startFiles(reg, st, cfg)
+	if err := startFiles(reg, st, cfg); err != nil {
+		return fail(err)
+	}
 	// A content plugin is registered bare: its source is a subprocess here, so
 	// caching answers buys no round trip. What it needs is supervision,
 	// and internal/plugin respawns one that dies.
@@ -206,18 +208,22 @@ func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) 
 // and before the plugins, under their owner id (rpc.FilesOwner). A node that
 // declares none has no files row. The files are dark or told, never
 // disabled, so they get no switch.
-func startFiles(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) {
+func startFiles(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) error {
 	if len(cfg.Files) == 0 {
-		return
+		return nil
 	}
 	roots := make([]files.Root, len(cfg.Files))
 	for i, r := range cfg.Files {
 		roots[i] = files.Root{Path: r.Root, Label: r.Label}
 	}
-	src := files.New(st.Namespace("~"), roots, nil)
+	src, err := files.New(st.Namespace("~"), roots, nil)
+	if err != nil {
+		return err
+	}
 	owner := rpc.FilesOwner(cfg.ID)
 	reg.Register(owner, "files", src, src.Close)
 	reg.SetLabel(owner, "files")
+	return nil
 }
 
 // openCache opens ~/.gridwell/cache.db. A cache that cannot open degrades to the

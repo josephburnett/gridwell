@@ -74,13 +74,18 @@ type Source struct {
 var _ namespace.Namespace = (*Source)(nil)
 
 // New is the files over roots, their rows in mem. trash moves a deleted path
-// out of the tree; nil is the OS trash. Close ends the watch.
-func New(mem *store.Namespace, roots []Root, trash func(path string) error) *Source {
+// out of the tree; nil is the OS trash. Close ends the watch. A relative root
+// is refused, since a path id names an absolute path and would name none of
+// its files.
+func New(mem *store.Namespace, roots []Root, trash func(path string) error) (*Source, error) {
 	if trash == nil {
 		trash = osTrash
 	}
 	out := make([]Root, len(roots))
 	for i, r := range roots {
+		if !filepath.IsAbs(r.Path) {
+			return nil, fmt.Errorf("files: root %q is not an absolute path", r.Path)
+		}
 		p := filepath.Clean(r.Path)
 		out[i] = Root{Path: p, Label: r.Label}
 		if out[i].Label == "" {
@@ -89,7 +94,7 @@ func New(mem *store.Namespace, roots []Root, trash func(path string) error) *Sou
 	}
 	s := &Source{roots: out, mem: mem, trash: trash, hub: eventhub.New(rpc.EventKey), dark: map[string]string{}}
 	s.watch = newWatcher(s)
-	return s
+	return s, nil
 }
 
 // Close stops watching the disk.
