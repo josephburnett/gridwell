@@ -163,7 +163,9 @@ func TestASymlinkIsALink(t *testing.T) {
 		got = append(got, c.Data...)
 		return nil
 	})
-	wantCode(t, "a link out of every root", err, codes.PermissionDenied)
+	if !gwerr.IsDeadLink(err) {
+		t.Errorf("a link out of every root read by its own id = %v, want dead", err)
+	}
 	if len(got) != 0 {
 		t.Errorf("a link out of every root read %q", got)
 	}

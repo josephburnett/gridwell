@@ -57,8 +57,8 @@ func TestFilesSymlinksOutOfTheRootServeNothing(t *testing.T) {
 		}
 		body, _ := io.ReadAll(res.Body)
 		res.Body.Close()
-		if res.StatusCode == http.StatusOK || strings.Contains(string(body), "secret") {
-			t.Errorf("page %s = %d %q; want nothing outside the root served", id, res.StatusCode, body)
+		if res.StatusCode != http.StatusNotFound || strings.Contains(string(body), "secret") {
+			t.Errorf("page %s = %d %q; want dead, nothing outside the root served", id, res.StatusCode, body)
 		}
 	}
 }

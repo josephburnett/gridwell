@@ -54,7 +54,7 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 	case gone(err):
 		return send(&pb.ContentChunk{})
 	case err != nil:
-		return diskRefusal("read", path, err)
+		return readRefusal(path, err)
 	}
 	defer o.close()
 	if !o.fi.Mode().IsRegular() {
@@ -189,6 +189,18 @@ func replace(o *opened, perm os.FileMode, data []byte, path string, stale func(o
 	return contentStamp(fi.ModTime(), fi.Size()), nil
 }
 
+// readRefusal answers a read the disk refused on path: one gone, or landing
+// outside every root, is dead, as a link out of the tree is.
+func readRefusal(path string, err error) error {
+	switch {
+	case gone(err):
+		return gwerr.DeadLink("", "files: %s is gone", path)
+	case errors.Is(err, errOutside):
+		return gwerr.DeadLink("", "files: %s %v", path, err)
+	}
+	return diskRefusal("read", path, err)
+}
+
 // diskRefusal answers a content verb the disk refused on path: a path
 // outside every root or a permission refused is a verdict with its reason,
 // anything else a disk that cannot answer right now.
@@ -214,11 +226,8 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 		return err
 	}
 	f, err := s.open(path)
-	switch {
-	case gone(err):
-		return gwerr.DeadLink("", "files: %s is gone", path)
-	case err != nil:
-		return diskRefusal("read", path, err)
+	if err != nil {
+		return readRefusal(path, err)
 	}
 	defer f.close()
 	if !f.fi.Mode().IsRegular() || !isPage(f.Name()) {
@@ -265,11 +274,8 @@ func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest
 		}
 	}
 	f, err := s.open(path)
-	switch {
-	case gone(err):
-		return nil, gwerr.DeadLink("", "files: %s is gone", path)
-	case err != nil:
-		return nil, diskRefusal("read", path, err)
+	if err != nil {
+		return nil, readRefusal(path, err)
 	}
 	defer f.close()
 	return &pb.GetTilePreviewResponse{Jpeg: previewJPEG(f.File, f.fi)}, nil
