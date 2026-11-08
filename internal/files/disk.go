@@ -142,11 +142,12 @@ func pathErr(err error) error {
 
 // mediaTypes is the node's own table, not mime.TypeByExtension, whose answers
 // vary with the host's mime.types and would make a file a page on one
-// machine and a text on another.
+// machine and a text on another. An svg is not here: it can carry a script,
+// so it is a text tile.
 var mediaTypes = map[string]string{
 	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
 	".webp": "image/webp", ".avif": "image/avif", ".bmp": "image/bmp", ".ico": "image/x-icon",
-	".svg": "image/svg+xml", ".pdf": "application/pdf",
+	".pdf": "application/pdf",
 	".mp4": "video/mp4", ".webm": "video/webm",
 	".mp3": "audio/mpeg", ".ogg": "audio/ogg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".flac": "audio/flac",
 }
@@ -173,7 +174,7 @@ var plainTextExts = map[string]bool{
 	".css": true, ".scss": true, ".dart": true, ".kt": true, ".swift": true,
 	".diff": true, ".patch": true, ".lock": true, ".mod": true, ".sum": true,
 	".service": true, ".gitignore": true, ".dockerignore": true,
-	".html": true, ".htm": true,
+	".html": true, ".htm": true, ".svg": true,
 }
 
 var plainTextNames = map[string]bool{

@@ -288,12 +288,19 @@ func TestADirectoryKeepsItsSelection(t *testing.T) {
 	}
 }
 
-// A page file's page is its whole bytes and media type; a directory serves
-// none.
+// A page file's page is its whole bytes and media type; every other file,
+// and a directory, serves none, since its bytes could be a page that runs a
+// script: an html file, an svg, or a link named like a picture.
 func TestAPageFileServesItsBytes(t *testing.T) {
 	f := newFixture(t)
 	png := f.write("pic.png", "\x89PNG fake")
 	bin := f.write("blob", "plain words")
+	html := f.write("page.html", "<script>alert(1)</script>")
+	svg := f.write("pic.svg", "<svg><script>alert(1)</script></svg>")
+	disguised := f.path("disguised.png")
+	if err := os.Symlink(html, disguised); err != nil {
+		t.Skip("symlinks unsupported")
+	}
 	ctx := context.Background()
 	serve := func(p string) ([]byte, string, error) {
 		var data []byte
@@ -310,11 +317,16 @@ func TestAPageFileServesItsBytes(t *testing.T) {
 	if data, media, err := serve(png); err != nil || media != "image/png" || string(data) != "\x89PNG fake" {
 		t.Errorf("png = %q %q %v", data, media, err)
 	}
-	if _, media, err := serve(bin); err != nil || media != "text/plain; charset=utf-8" {
-		t.Errorf("an unknown file sniffs: %q %v", media, err)
+	for _, p := range []string{bin, html, svg, disguised, f.mkdir("dir")} {
+		data, _, err := serve(p)
+		wantCode(t, filepath.Base(p), err, codes.NotFound)
+		if len(data) != 0 {
+			t.Errorf("%s served %q", filepath.Base(p), data)
+		}
 	}
-	_, _, err := serve(f.mkdir("dir"))
-	wantCode(t, "a directory", err, codes.NotFound)
+	if tl := tileIn(t, f.grid(f.root), svg); tl.Kind != rpc.KindText || tl.ServesPage || tl.TextPresentation != rpc.TextPresentationPlain {
+		t.Errorf("an svg = kind %q page %v presentation %q, want a plain text tile", tl.Kind, tl.ServesPage, tl.TextPresentation)
+	}
 	if _, _, err := serve(f.path("gone.png")); !gwerr.IsDeadLink(err) {
 		t.Errorf("a gone page = %v", err)
 	}

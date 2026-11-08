@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	iofs "io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -194,7 +193,10 @@ func writeRefusal(path string, err error) error {
 	return status.Errorf(codes.Unavailable, "files: write %s: %v", path, pathErr(err))
 }
 
-// ServeContent is a page file's whole bytes and media type.
+// ServeContent is a page file's whole bytes and media type. Only a page file
+// has a page: any other file's bytes could be a page that runs a script, in
+// the content API's sandbox, which allows scripts. A link serves where it
+// lands, so it is a page file by its target's name.
 func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	path, _, err := s.tilePath(req.TileId)
 	if err != nil {
@@ -204,8 +206,8 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	var data []byte
 	if err == nil {
 		var fi os.FileInfo
-		if fi, err = os.Stat(real); err == nil && fi.IsDir() {
-			return status.Errorf(codes.NotFound, "files: %s is a directory, which serves no page", path)
+		if fi, err = os.Stat(real); err == nil && (fi.IsDir() || !isPage(real)) {
+			return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
 		}
 	}
 	if err == nil {
@@ -217,12 +219,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	case err != nil:
 		return contentRefusal(path, err)
 	}
-	media := mediaType(real)
-	if media == "" {
-		// The content API sends nosniff, so this is the only sniff.
-		media = http.DetectContentType(data)
-	}
-	return sendChunks(data, &pb.ServeContentChunk{MediaType: media},
+	return sendChunks(data, &pb.ServeContentChunk{MediaType: mediaType(real)},
 		func(c *pb.ServeContentChunk, b []byte) *pb.ServeContentChunk { c.Data = b; return c },
 		func() *pb.ServeContentChunk { return &pb.ServeContentChunk{} }, send)
 }
