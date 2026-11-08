@@ -2,80 +2,16 @@ package server
 
 import (
 	"context"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/internal/claimtest"
-	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/pluginhost"
-	"github.com/josephburnett/gridwell/internal/plugintest"
 )
-
-// fsPluginUUID / procPluginUUID are the registry keys used by the
-// plugin-wired test server.
-const (
-	fsPluginUUID   = "fs-test-uuid"
-	procPluginUUID = "proc-test-uuid"
-)
-
-// newTestServerWithPlugins wires a server to the spawned fs and proc plugins,
-// the fs one rooted at a fresh temp dir returned as fsRoot, so door creation
-// routes through the plugins exactly as in production.
-// newPluginClient stands up the plugin stack the way the loader does: the
-// shipped gridwell-plugin-<kind> binary spawned with cfg, fronted by the
-// pluginhost adapter over a fresh store. A plugin lives in its own repository,
-// so the subprocess is the only way to reach one.
-func newPluginClient(t *testing.T, kind string, cfg map[string]string) namespace.Namespace {
-	t.Helper()
-	memStore, err := store.Open(filepath.Join(t.TempDir(), "mem.db"))
-	if err != nil {
-		t.Fatalf("%s layout: %v", kind, err)
-	}
-	t.Cleanup(func() { _ = memStore.Close() })
-	cp := plugintest.Spawn(t, kind, cfg)
-	return pluginhost.New(cp, memStore.Namespace("p1"), nil)
-}
-
-func registerPluginPlugin(t *testing.T, reg *plugin.Registry, uuid, kind string, cfg map[string]string) {
-	t.Helper()
-	reg.Register(uuid, kind, newPluginClient(t, kind, cfg), nil)
-}
-
-func newTestServerWithPlugins(t *testing.T) (cl *rpc.Client, root, fsRoot string) {
-	t.Helper()
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-
-	reg := plugin.NewRegistry()
-	_, root = registerPrimaryLocaldb(t, reg, st)
-
-	fsRoot = t.TempDir()
-	registerPluginPlugin(t, reg, fsPluginUUID, "fs", map[string]string{"root": fsRoot})
-	reg.SetLabel(fsPluginUUID, "files")
-
-	// Rooted at this test process, so the projected tree is this test's own
-	// couple of children rather than the whole machine's process table.
-	registerPluginPlugin(t, reg, procPluginUUID, "proc", map[string]string{"pid": strconv.Itoa(os.Getpid())})
-	reg.SetLabel(procPluginUUID, "processes")
-
-	srv := mustNew(t, reg, Config{})
-	hs := serveWeb(t, srv)
-	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	return cl, root, fsRoot
-}
 
 func TestCreateTextRPC(t *testing.T) {
 	_, cl, root := newTestServer(t)
@@ -93,7 +29,7 @@ func TestCreateTextRPC(t *testing.T) {
 	}
 
 	// Body is fetched by routable tile id (GetBlob is unroutable in the
-	// rootless model — blob ids carry no plugin namespace).
+	// rootless model — blob ids carry no namespace).
 	data, _, version, err := cl.ReadContent(ctx, tile.Id)
 	if err != nil {
 		t.Fatalf("get tile content: %v", err)
@@ -107,7 +43,7 @@ func TestCreateTextRPC(t *testing.T) {
 
 	// The bytes↔version pairing is the client's save basis: after an edit
 	// bumps the row, a re-fetch must return the NEW version with the new
-	// bytes — pairing them in one plugin read is what lets a client never
+	// bytes — pairing them in one namespace read is what lets a client never
 	// claim a version whose content it hasn't seen.
 	upd, err := cl.WriteContent(ctx, tile.Id, rpc.ContentBasis{Version: tile.Version}, []byte("# hi v2"))
 	if err != nil {
@@ -136,28 +72,30 @@ func TestCreateURLRPC(t *testing.T) {
 	}
 }
 
-// TestLinkFsPluginBySwatch: linking the fs plugin drops a plain door tile whose
-// child grid lives in the fs plugin — child_grid_id is the qualified
-// "<fs-uuid>/<id>". (TestLinkPluginBySwatch covers the proc plugin; this covers fs,
-// the other built-in source.)
-func TestLinkFsPluginBySwatch(t *testing.T) {
-	cl, root, _ := newTestServerWithPlugins(t)
-	tile := linkBySwatch(t, cl, fsPluginUUID, root, 0, 0)
+// TestLinkFilesBySwatch: dragging a root's + menu swatch drops a door to
+// another namespace whose child grid is the root's, in the files, and which
+// arrives as a link: the server stamps link=true on the way back, so the
+// client renders it dashed and a delete only unlinks.
+func TestLinkFilesBySwatch(t *testing.T) {
+	f := newFilesServer(t)
+	tile := linkBySwatch(t, f.cl, rpc.FilesOwner(f.node), f.home, 0, 0)
 	if tile.Kind != rpc.KindDoor {
 		t.Errorf("kind = %q, want %q", tile.Kind, rpc.KindDoor)
 	}
-	if !strings.HasPrefix(tile.ChildGridId, fsPluginUUID+"/") {
-		t.Errorf("child_grid_id = %q, want prefix %q/", tile.ChildGridId, fsPluginUUID)
+	if tile.ChildGridId != f.grid {
+		t.Errorf("child_grid_id = %q, want the root's grid %q", tile.ChildGridId, f.grid)
+	}
+	if !tile.Link {
+		t.Error("door must arrive as a link (dashed link), got link=false")
 	}
 }
 
-// linkBySwatch links a plugin into a grid the way the UI does: drag the
-// plugin's + menu swatch = CreateDoor with the door's qualified grid as
-// the child (a door to another namespace LINK), labeled with the swatch's label
+// linkBySwatch links a menu row's one door into a grid the way the UI does:
+// drag its + menu swatch = CreateDoor with the door's qualified grid as the
+// child (a door to another namespace LINK), labeled with the swatch's label
 // (client/wasm createPluginLinkAtCell). Which swatches a row contributes is
 // door.PlacesOf, the client's own rule, so this drags what the user drags.
-// Every plugin under test here declares one grid, so there is one.
-func linkBySwatch(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, y int64) *gridwellv1.Tile {
+func linkBySwatch(t *testing.T, cl *rpc.Client, rowUUID, destGrid string, x, y int64) *gridwellv1.Tile {
 	t.Helper()
 	ctx := context.Background()
 	lp, err := cl.Handshake(ctx)
@@ -166,47 +104,42 @@ func linkBySwatch(t *testing.T, cl *rpc.Client, pluginUUID, destGrid string, x, 
 	}
 	var places []door.Place
 	for _, p := range lp.Plugins {
-		if p.Uuid == pluginUUID {
+		if p.Uuid == rowUUID {
 			places = door.PlacesOf(p)
 		}
 	}
 	if len(places) != 1 {
-		t.Fatalf("link %s: %d swatches in %+v, want one", pluginUUID, len(places), lp.Plugins)
+		t.Fatalf("link %s: %d swatches in %+v, want one", rowUUID, len(places), lp.Plugins)
 	}
 	row := places[0].Plugin
 	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: destGrid, Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, X: x, Y: y, W: 1, H: 1, ChildGridId: row.RootGridId, AltText: row.Label, ViewCx: row.RootViewCx, ViewCy: row.RootViewCy, ViewZoom: row.RootViewZoom}})
 	if err != nil {
-		t.Fatalf("link %s: %v", pluginUUID, err)
+		t.Fatalf("link %s: %v", rowUUID, err)
 	}
 	return tile
 }
 
-// TestMenuAndDoorLabelAgree: the label the menu shows for a plugin
-// (Handshake) and the label carried onto a link door are the same
-// server.yaml display name — never a plugin-derived string.
+// TestMenuAndDoorLabelAgree: the label the menu shows for a root's swatch
+// and the label carried onto the door dropped from it are one string.
 func TestMenuAndDoorLabelAgree(t *testing.T) {
-	cl, root, _ := newTestServerWithPlugins(t)
-	ctx := context.Background()
-
-	plugins, err := cl.Handshake(ctx)
+	f := newFilesServer(t)
+	lp, err := f.cl.Handshake(context.Background())
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
 	var menuLabel string
-	for _, p := range plugins.Plugins {
-		if p.Uuid == fsPluginUUID {
-			menuLabel = p.Label
+	for _, p := range lp.Plugins {
+		if p.Uuid == rpc.FilesOwner(f.node) {
+			menuLabel = door.PlacesOf(p)[0].Plugin.Label
 		}
 	}
-	if menuLabel != "files" {
-		t.Fatalf("menu label = %q, want the configured %q", menuLabel, "files")
+	if menuLabel == "" {
+		t.Fatalf("the files' swatch has no label: %+v", lp.Plugins)
 	}
-
-	tile := linkBySwatch(t, cl, fsPluginUUID, root, 0, 0)
+	tile := linkBySwatch(t, f.cl, rpc.FilesOwner(f.node), f.home, 0, 0)
 	if tile.AltText != menuLabel {
 		t.Errorf("dropped door label = %q, want %q (must match the menu)", tile.AltText, menuLabel)
 	}
-	_ = ctx
 }
 
 func TestResizeAndSetFramingRPCs(t *testing.T) {
@@ -372,40 +305,37 @@ func TestVersionConflictReturnsFailedPrecondition(t *testing.T) {
 	}
 }
 
-// TestListPlugins: the + menu source lists configured plugins in config
-// order, with their labels.
+// TestListPlugins: the + menu source lists home, then the files, with their
+// labels.
 func TestListPlugins(t *testing.T) {
-	cl, _, _ := newTestServerWithPlugins(t)
-	list, err := cl.Handshake(context.Background())
+	f := newFilesServer(t)
+	list, err := f.cl.Handshake(context.Background())
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
 	plugins := list.Plugins
-	// Registration order: home, then fs, then proc.
-	if len(plugins) != 3 {
-		t.Fatalf("got %d plugins, want 3: %+v", len(plugins), plugins)
+	// Home, then the files.
+	if len(plugins) != 2 {
+		t.Fatalf("got %d rows, want 2: %+v", len(plugins), plugins)
 	}
 	if plugins[0].Label != "home" {
-		t.Errorf("plugin[0] = %+v, want the home row", plugins[0])
+		t.Errorf("row 0 = %+v, want the home row", plugins[0])
 	}
-	// Each plugin advertises its qualified root grid id (for click-enter).
+	// Home advertises its qualified root grid id (for click-enter).
 	if !strings.HasPrefix(plugins[0].RootGridId, plugins[0].Uuid+"/") {
-		t.Errorf("plugin[0] root_grid_id = %q, want %q prefix", plugins[0].RootGridId, plugins[0].Uuid)
+		t.Errorf("row 0 root_grid_id = %q, want %q prefix", plugins[0].RootGridId, plugins[0].Uuid)
 	}
 	// The home grid is stamped with a qualified scratch grid (the
 	// ephemeral-url target), distinct from itself; the row carries none.
-	home, err := cl.GetGrid(context.Background(), plugins[0].RootGridId)
+	home, err := f.cl.GetGrid(context.Background(), plugins[0].RootGridId)
 	if err != nil {
 		t.Fatalf("GetGrid(home): %v", err)
 	}
 	if s := home.GetGrid().GetScratchGridId(); !strings.HasPrefix(s, plugins[0].Uuid+"/") || s == plugins[0].RootGridId {
 		t.Errorf("home scratch_grid_id = %q, want %q-prefixed and not the root", s, plugins[0].Uuid)
 	}
-	if plugins[1].Label != "files" {
-		t.Errorf("plugin[1] = %+v, want fs", plugins[1])
-	}
-	if plugins[2].Label != "processes" {
-		t.Errorf("plugin[2] = %+v, want proc", plugins[2])
+	if plugins[1].Uuid != rpc.FilesOwner(f.node) || plugins[1].Label != "files" {
+		t.Errorf("row 1 = %+v, want the files", plugins[1])
 	}
 }
 
@@ -427,9 +357,9 @@ func homeScratchOf(t *testing.T, cl *rpc.Client, home *gridwellv1.PluginInfo) st
 // qualified scratch grid is an ephemeral visit — it routes path-free into the
 // scratch grid (no descent path leads there) and the tile carries link=false
 // (it's owned content, just off-grid), with the typed URL. This proves the
-// whole client→server→plugin path-free path the "descend into a url" feature uses.
+// whole client→server→home path-free path the "descend into a url" feature uses.
 func TestCreateScratchURLRoutes(t *testing.T) {
-	cl, _, _ := newTestServerWithPlugins(t)
+	cl := newFilesServer(t).cl
 	ctx := context.Background()
 	plugins, err := cl.Handshake(ctx)
 	if err != nil {
@@ -458,55 +388,35 @@ func TestCreateScratchURLRoutes(t *testing.T) {
 	}
 }
 
-// TestPluginGridCarriesHomeScratch: a grid served by a plugin that declares
-// no scratch grid of its own — fs, proc, gitlab — carries the node's home
-// scratch grid instead. The grid is the carrier because it chains through
-// connections; the stamp is where the client learns that a link clicked in a
-// rendered document inside a plugin grid has somewhere to land as an
-// ephemeral visit. Without it the visit could not open.
-func TestPluginGridCarriesHomeScratch(t *testing.T) {
-	cl, _, _ := newTestServerWithPlugins(t)
+// TestDirectoryGridCarriesHomeScratch: a directory's grid, whose namespace
+// declares no scratch grid of its own, carries the node's home scratch grid
+// instead. The grid is the carrier because it chains through connections;
+// the stamp is where the client learns that a link clicked in a rendered
+// document inside a directory has somewhere to land as an ephemeral visit.
+// Without it the visit could not open.
+func TestDirectoryGridCarriesHomeScratch(t *testing.T) {
+	f := newFilesServer(t)
 	ctx := context.Background()
-	hs, err := cl.Handshake(ctx)
+	hs, err := f.cl.Handshake(ctx)
 	if err != nil {
 		t.Fatalf("Handshake: %v", err)
 	}
-	homeScratch := homeScratchOf(t, cl, hs.Plugins[0])
-	fsRoot := plugintest.LandingOf(t, hs.Plugins[1])
-	g, err := cl.GetGrid(ctx, fsRoot)
+	homeScratch := homeScratchOf(t, f.cl, hs.Plugins[0])
+	g, err := f.cl.GetGrid(ctx, f.grid)
 	if err != nil {
-		t.Fatalf("GetGrid fs root: %v", err)
+		t.Fatalf("GetGrid files root: %v", err)
 	}
 	if g.Grid.ScratchGridId != homeScratch {
-		t.Fatalf("fs grid scratch_grid_id = %q, want home's %q", g.Grid.ScratchGridId, homeScratch)
+		t.Fatalf("directory grid scratch_grid_id = %q, want home's %q", g.Grid.ScratchGridId, homeScratch)
 	}
 	// The stamp must not be a dangling pointer: a visit created against it
 	// routes into home, exactly what a link click does.
-	tile, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: g.Grid.ScratchGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: "https://gitlab.example/g/p/-/merge_requests/1"}})
+	tile, err := f.cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: g.Grid.ScratchGridId, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 1, H: 1, UrlString: "https://example.com/visit"}})
 	if err != nil {
 		t.Fatalf("create ephemeral url into stamped scratch: %v", err)
 	}
 	if tile.Kind != rpc.KindURL {
 		t.Errorf("kind = %q, want url", tile.Kind)
-	}
-}
-
-// TestLinkPluginBySwatch: linking a plugin (copying its node-grid tile) drops an
-// door to another namespace in the destination grid whose child is the plugin's root.
-func TestLinkPluginBySwatch(t *testing.T) {
-	cl, root, _ := newTestServerWithPlugins(t)
-	tile := linkBySwatch(t, cl, procPluginUUID, root, 0, 0)
-	if tile.Kind != rpc.KindDoor {
-		t.Errorf("kind = %q, want door", tile.Kind)
-	}
-	if !strings.HasPrefix(tile.ChildGridId, procPluginUUID+"/") {
-		t.Errorf("child_grid_id = %q, want %q prefix", tile.ChildGridId, procPluginUUID)
-	}
-	// A door to a plugin is a LINK: the server must stamp link=true on the way back
-	// through the wire, so the client renders it dashed (and a delete unlinks
-	// only). This is the bit render reads instead of guessing from uuids.
-	if !tile.Link {
-		t.Error("door must arrive as a link (dashed link), got link=false")
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
@@ -36,12 +37,14 @@ func (failingFind) Find(context.Context, *gridwellv1.FindRequest) (*gridwellv1.F
 }
 
 // A free-text find that went without a namespace says which and why, at
-// any depth: a far plugin that failed, and then the connection itself once
-// the far node is gone. A namespace that does not find is no skip.
+// any depth: a far node's files that failed, and then the connection itself
+// once the far node is gone. A namespace that does not find is no skip.
 func TestAFindSaysWhatItWentWithout(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingFind{}, nil) })
+		func(reg *plugin.Registry, _ *store.Store) {
+			reg.Register(rpc.FilesOwner("rnode1"), "files", failingFind{}, nil)
+		})
 	skipped := func() []string {
 		t.Helper()
 		resp, err := h.localCl.Find(ctx, "xylophone", "", 0)
@@ -56,9 +59,9 @@ func TestAFindSaysWhatItWentWithout(t *testing.T) {
 	}
 
 	got := skipped()
-	far := localNodeID + "/geneva/pfail01: "
+	far := localNodeID + "/geneva/rnode1"
 	if len(got) != 1 || !strings.HasPrefix(got[0], far) || !strings.Contains(got[0], "the index is not answering") {
-		t.Fatalf("skipped = %q, want only the far plugin with its reason", got)
+		t.Fatalf("skipped = %q, want only the far files with their reason", got)
 	}
 
 	h.stopFarNode()
@@ -73,7 +76,9 @@ func TestAFindSaysWhatItWentWithout(t *testing.T) {
 func TestAnIDLookupAsksOnlyItsOwner(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pfail01", "feed", failingFind{}, nil) })
+		func(reg *plugin.Registry, _ *store.Store) {
+			reg.Register(rpc.FilesOwner("rnode1"), "files", failingFind{}, nil)
+		})
 	tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: localNodeID + "/geneva/rnode1/" + h.rootBare,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 1, H: 1},

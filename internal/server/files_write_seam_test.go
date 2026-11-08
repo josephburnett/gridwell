@@ -1,9 +1,9 @@
 package server_test
 
-// A text tile behaves the same wherever its content comes from: an fs file
-// is typed into and saved as a home document is, through the client's own
+// A text tile behaves the same wherever its content comes from: a file is
+// typed into and saved as a home document is, through the client's own
 // owners (cache, textedit.SaveClaim, clientsync, outbox) over the real node
-// and the real fs binary. postWriteContent is the shim's spelling of a save;
+// and its files. postWriteContent is the shim's spelling of a save;
 // save below is that spelling.
 
 import (
@@ -73,30 +73,30 @@ func (k *contentClient) stampNow(id string) string {
 	return b.Stamp
 }
 
-// A plugin that declares writable and move serves grids whose bodies take
-// edits, whose tiles move, and that take no new tiles: the + menu offers
-// nothing it would refuse, and a left-drag to another directory is a move.
-func TestFsGridTakesEditsAndNoTiles(t *testing.T) {
-	k := newContentClient(t, "pfsgrid", t.TempDir())
+// A directory's grid takes edits to its bodies, moves its tiles, and takes
+// no new tiles: the + menu offers nothing it would refuse, and a left-drag
+// to another directory is a move.
+func TestFilesGridTakesEditsAndNoTiles(t *testing.T) {
+	k := newContentClient(t, t.TempDir())
 	g, err := k.cl.GetGrid(k.ctx, k.landing)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !g.Grid.Writable || g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() || !g.Grid.GetMoves() {
-		t.Errorf("fs grid: writable=%v accepts_tiles=%v moves=%v; want writable, moving, accepting no tiles", g.Grid.Writable, g.Grid.AcceptsTiles, g.Grid.Moves)
+		t.Errorf("directory grid: writable=%v accepts_tiles=%v moves=%v; want writable, moving, accepting no tiles", g.Grid.Writable, g.Grid.AcceptsTiles, g.Grid.Moves)
 	}
 }
 
 // A clean save lands on disk under the stamp it read, its answer names the
-// written bytes' stamp, and the plugin's own Watch echo of the write leaves
-// the typed text in place, saved or still being typed.
-func TestFsSaveLandsAndItsEchoLeavesTheTypedTextAlone(t *testing.T) {
+// written bytes' stamp, and the watch's echo of the write leaves the typed
+// text in place, saved or still being typed.
+func TestFilesSaveLandsAndItsEchoLeavesTheTypedTextAlone(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "notes.md")
 	if err := os.WriteFile(path, []byte("# before\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfssave", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	id := rpc.ContentID(k.tile("notes.md"))
 	k.body(id)
@@ -147,16 +147,16 @@ func TestFsSaveLandsAndItsEchoLeavesTheTypedTextAlone(t *testing.T) {
 }
 
 // Bytes changed on disk under a dirty edit are not clobbered: the save
-// claims the stamp the edit was typed over, the plugin refuses it as a
+// claims the stamp the edit was typed over, the files refuse it as a
 // conflict, and the client's conflict path drops the refused bytes and shows
 // the file as it is.
-func TestFsSaveOverBytesChangedOnDiskIsRefusedAndSurfaces(t *testing.T) {
+func TestFilesSaveOverBytesChangedOnDiskIsRefusedAndSurfaces(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "notes.md")
 	if err := os.WriteFile(path, []byte("# mine\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfsconflict", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	id := rpc.ContentID(k.tile("notes.md"))
 	k.body(id)
@@ -200,8 +200,8 @@ func TestFsSaveOverBytesChangedOnDiskIsRefusedAndSurfaces(t *testing.T) {
 	}
 }
 
-// downWrites is a plugin whose writes cannot reach it while down: the answer
-// a supervised plugin that died gives.
+// downWrites is the files with writes that cannot reach the disk while
+// down, answered as a disk that cannot answer is.
 type downWrites struct {
 	namespace.Namespace
 	down atomic.Bool
@@ -209,21 +209,21 @@ type downWrites struct {
 
 func (d *downWrites) WriteContent(ctx context.Context, recv func() (*gridwellv1.WriteContentRequest, error)) (*gridwellv1.TileResponse, error) {
 	if d.down.Load() {
-		return nil, status.Error(codes.Unavailable, "plugin not responding")
+		return nil, status.Error(codes.Unavailable, "files: disk not answering")
 	}
 	return d.Namespace.WriteContent(ctx, recv)
 }
 
-// A plugin write that fails on transport parks under its key-form id like a
-// home write, keeps the typed bytes, and lands when the plugin is back.
-func TestFsWriteThePluginCannotTakeParksAndLands(t *testing.T) {
+// A write the disk cannot take parks under its key-form id like a home
+// write, keeps the typed bytes, and lands when the disk answers again.
+func TestFilesWriteTheDiskCannotTakeParksAndLands(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "notes.md")
 	if err := os.WriteFile(path, []byte("# before\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var d *downWrites
-	k := newContentClientVia(t, "pfspark", root, func(ns namespace.Namespace) namespace.Namespace {
+	k := newContentClientVia(t, root, func(ns namespace.Namespace) namespace.Namespace {
 		d = &downWrites{Namespace: ns}
 		return d
 	})
@@ -239,7 +239,7 @@ func TestFsWriteThePluginCannotTakeParksAndLands(t *testing.T) {
 	k.c.PutEditedContent(id, []byte("# typed while down\n"))
 	err := k.save(out, id)
 	if clientsync.Of(err) != clientsync.OutcomeTransport {
-		t.Fatalf("a down plugin answered %v, want a transport failure", err)
+		t.Fatalf("a disk not answering answered %v, want a transport failure", err)
 	}
 	if !out.Has(outbox.Key{Op: outbox.OpContent, ID: id}) {
 		t.Fatalf("parked %v, want the write under %q", out.Keys(), id)
@@ -256,6 +256,6 @@ func TestFsWriteThePluginCannotTakeParksAndLands(t *testing.T) {
 		t.Errorf("the drain left %v parked", out.Keys())
 	}
 	if got, _ := os.ReadFile(path); string(got) != "# typed while down\n" {
-		t.Errorf("disk holds %q after the plugin came back", got)
+		t.Errorf("disk holds %q after the disk answered again", got)
 	}
 }

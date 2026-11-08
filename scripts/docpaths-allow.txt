@@ -14,3 +14,31 @@ apps/desktop/README.md apps/desktop/.cache
 .github/workflows/release.yml apps/desktop/out/*.exe
 # The files source the 2026-11-07 decisions name, built in the next commits
 # of the files-native change; this line goes when the package lands:
+# Docs that cite the plugin system's seam tests, which the files-native
+# change deleted; P4 rewrites the docs and deletes these lines:
+apps/desktop/e2e/live-updates-off.spec.ts internal/server/live_updates_off_seam_test.go
+docs/freshness.md internal/server/abandoned_read_seam_test.go
+docs/freshness.md internal/server/fs_content_change_seam_test.go
+docs/freshness.md internal/server/fs_stamp_seam_test.go
+docs/freshness.md internal/server/fs_watch_seam_test.go
+docs/freshness.md internal/server/fs_write_seam_test.go
+docs/freshness.md internal/server/gitlab_content_change_seam_test.go
+docs/freshness.md internal/server/hey_content_change_seam_test.go
+docs/freshness.md internal/server/link_entry_seam_test.go
+docs/freshness.md internal/server/live_updates_off_seam_test.go
+docs/freshness.md internal/server/plugin_watch_seam_test.go
+docs/freshness.md internal/server/proc_content_change_seam_test.go
+docs/freshness.md internal/server/selection_plugin_seam_test.go
+docs/freshness.md internal/server/subscription_refused_seam_test.go
+docs/plugin-standard.md internal/server/cache_answer_seam_test.go
+docs/plugin-standard.md internal/server/fs_content_change_seam_test.go
+docs/plugin-standard.md internal/server/fs_info_refusal_seam_test.go
+docs/plugin-standard.md internal/server/fs_watch_seam_test.go
+docs/plugin-standard.md internal/server/fs_write_seam_test.go
+docs/plugin-standard.md internal/server/gitlab_outage_seam_test.go
+docs/plugin-standard.md internal/server/hey_dark_seam_test.go
+docs/plugin-standard.md internal/server/hey_watch_seam_test.go
+docs/plugin-standard.md internal/server/info_refusal_seam_test.go
+docs/plugin-standard.md internal/server/link_entry_seam_test.go
+docs/plugin-standard.md internal/server/pages_seam_test.go
+docs/plugin-standard.md internal/server/proc_content_change_seam_test.go

@@ -11,16 +11,16 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// A plugin grid's selection is the node's fact, on the node's row for
-// that grid, as its framing is: a real spawned fs plugin never hears of it.
-// Selecting an entry touches it, so it gets its row; the set reads back in the
-// grid's own spelling of each tile; and an entry the source stops listing
-// leaves the set.
-func TestAPluginGridsSelectionIsTheNodesFact(t *testing.T) {
-	cl, st, _, fsRoot := lazyStack(t)
+// A directory's selection is the node's fact, on the node's row for that
+// grid, as its framing is. Selecting a file touches it, so it gets its row;
+// the set reads back in the grid's own spelling of each tile; and a file the
+// directory stops listing leaves the set.
+func TestADirectorysSelectionIsTheNodesFact(t *testing.T) {
+	f := newFilesServer(t)
+	cl, st, fsRoot := f.cl, f.db, f.root
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	grid := fsGrid(t, cl, fsRoot, 3)
+	grid := filesGrid(t, f, 3)
 	g, err := cl.GetGrid(ctx, grid)
 	if err != nil {
 		t.Fatal(err)
@@ -33,7 +33,7 @@ func TestAPluginGridsSelectionIsTheNodesFact(t *testing.T) {
 	if f0 == "" || f1 == "" {
 		t.Fatalf("listing names %v", ids)
 	}
-	tiles0, _ := pluginRows(t, st)
+	tiles0, _ := filesRows(t, st)
 
 	told := make(chan []string, 8)
 	stream, err := cl.Subscribe(ctx)
@@ -63,10 +63,10 @@ func TestAPluginGridsSelectionIsTheNodesFact(t *testing.T) {
 			t.Errorf("SelectionChanged carries %v, want %v", got, want)
 		}
 	case <-ctx.Done():
-		t.Fatal("no SelectionChanged for the plugin's grid")
+		t.Fatal("no SelectionChanged for the directory")
 	}
-	if tiles, _ := pluginRows(t, st); tiles != tiles0+2 {
-		t.Errorf("selecting two entries minted %d rows, want 2", tiles-tiles0)
+	if tiles, _ := filesRows(t, st); tiles != tiles0+2 {
+		t.Errorf("selecting two files minted %d rows, want 2", tiles-tiles0)
 	}
 	g, err = cl.GetGrid(ctx, grid)
 	if err != nil {
@@ -87,6 +87,6 @@ func TestAPluginGridsSelectionIsTheNodesFact(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !slices.Equal(g.Grid.Selection, []string{f1}) {
-		t.Errorf("after the source stopped listing f0 the grid reads %v, want [%s]", g.Grid.Selection, f1)
+		t.Errorf("after the directory stopped listing f0 the grid reads %v, want [%s]", g.Grid.Selection, f1)
 	}
 }

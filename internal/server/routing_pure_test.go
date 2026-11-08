@@ -14,8 +14,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// TestQualifyTilesQualifiesIDs: a plugin returns bare ids; the server prefixes
-// each with the plugin uuid (id and grid_id), and qualifies an interior
+// TestQualifyTilesQualifiesIDs: a namespace returns bare ids; the server
+// prefixes each with the namespace's (id and grid_id), and qualifies an interior
 // child_grid_id too.
 func TestQualifyTilesQualifiesIDs(t *testing.T) {
 	in := []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "7"}}
@@ -30,7 +30,7 @@ func TestQualifyTilesQualifiesIDs(t *testing.T) {
 }
 
 // TestQualifyTilesLeavesAlreadyQualifiedChild: the child_grid_id of a door to another namespace is
-// already a cross-plugin link (<uuid>/<local>) and must NOT be re-prefixed
+// already a link to another namespace (<ns>/<local>) and must NOT be re-prefixed
 // — re-qualifying would produce uuidA/uuidB/9 and break routing. This is the
 // branch the integration tests never hit.
 func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
@@ -42,23 +42,23 @@ func TestQualifyTilesLeavesAlreadyQualifiedChild(t *testing.T) {
 }
 
 // TestQualifyTilesLink: the authoritative link signal. A child that
-// arrived ALREADY qualified is a link (a door to another namespace / cross-plugin
-// copy) — Link must be set; render draws it dashed. A bare interior child
+// arrived ALREADY qualified is a link (a door to another namespace / a copy
+// across one) — Link must be set; render draws it dashed. A bare interior child
 // is owned content — Link stays false (solid). This is the exact bug the
-// fix closes: a same-plugin link door (child uuid == grid uuid) is still a
+// fix closes: a same-namespace link door (child uuid == grid uuid) is still a
 // link, which a bare uuid comparison would call owned and render solid.
 func TestQualifyTilesLink(t *testing.T) {
-	// Cross-plugin link: child uuid differs from the door's own.
+	// A link across namespaces: child uuid differs from the door's own.
 	cross := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidB/9"}})
 	if !cross[0].Link {
-		t.Error("cross-plugin door to another namespace should be a link")
+		t.Error("a door to another namespace should be a link")
 	}
 	// A same-namespace link door: the child arrived qualified with the same uuid
 	// as the door's grid. It is still a link, which a bare uuid
 	// comparison would miss.
 	same := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "uuidA/9"}})
 	if !same[0].Link {
-		t.Error("same-plugin link door (qualified child) should be a link, not owned")
+		t.Error("a same-namespace link door (qualified child) should be a link, not owned")
 	}
 	// Interior door: bare numeric child, owned — not a link.
 	interior := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", ChildGridId: "7"}})
@@ -93,13 +93,13 @@ func TestQualifyTilesQualifiesAShellTmux(t *testing.T) {
 	}
 }
 
-// TestQualifyTilesTransit: a TRANSIT plugin (a connection) speaks ids
+// TestQualifyTilesTransit: the TRANSIT namespace (a connection) speaks ids
 // that are already qualified from the REMOTE node's perspective — chains.
-// Local qualification must prepend the transit plugin's uuid to every id
-// (id, grid, child — even an already-qualified child, which for a leaf plugin
-// would be a sibling link but through a hop is a link within the
+// Local qualification must prepend the connection's segment to every id
+// (id, grid, child — even an already-qualified child, which for a leaf
+// namespace would be a sibling link but through a hop is a link within the
 // remote's namespace, reachable only through this connection), and must trust
-// the wire Link bit verbatim: a remote plugin's interior door is OWNED
+// the wire Link bit verbatim: a remote home's interior door is OWNED
 // content and renders solid, even though its child id contains "/".
 func TestQualifyTilesTransit(t *testing.T) {
 	// A remote home's interior door, as the remote connection API emits it.
@@ -110,7 +110,7 @@ func TestQualifyTilesTransit(t *testing.T) {
 		t.Errorf("transit interior = %+v, want every id prefixed with ssh1/", interior)
 	}
 	if interior.Link {
-		t.Error("a remote plugin's interior door is owned content, not a link — Link must stay false through the hop")
+		t.Error("a remote interior door is owned content, not a link — Link must stay false through the hop")
 	}
 
 	// A remote link (door to another namespace) keeps Link true and its target
@@ -135,11 +135,11 @@ func TestQualifyTilesTransit(t *testing.T) {
 // TestQualifyTilesLeafLink: a leaf link (text/url/shell/pane carrying a
 // link_target_id) is the leaf twin of the door to another namespace at the qualify seam — the
 // ONE derived Link bit covers both shapes. The stored target is always
-// qualified (the store enforces it), so a leaf plugin's qualification never
+// qualified (the store enforces it), so a leaf namespace's qualification never
 // prefixes it; a transit hop prepends exactly one segment, the same chain rule
 // as a qualified child_grid_id.
 func TestQualifyTilesLeafLink(t *testing.T) {
-	// Leaf plugin: target stays verbatim, Link derived true.
+	// Leaf namespace: target stays verbatim, Link derived true.
 	ln := qualifyTiles("uuidA", []*pb.Tile{{Id: "5", GridId: "1", Kind: "text", LinkTargetId: "uuidB/42"}})[0]
 	if !ln.Link {
 		t.Error("a leaf link must derive Link=true (dashed = link)")
@@ -165,23 +165,24 @@ func TestQualifyTilesLeafLink(t *testing.T) {
 	}
 }
 
-// A plugin's link to one of its own entries arrives as a bare entry address;
-// the leaf spells it in its own namespace, and a transit hop then carries it
-// like every other link and peels it back on the way in.
+// A namespace's link to one of its own tiles arrives as a bare address (a
+// symlink in the files names its target's path); the leaf spells it in its
+// own namespace, and a transit hop then carries it like every other link and
+// peels it back on the way in.
 func TestQualifyTilesLeafLinkWithinOneNamespace(t *testing.T) {
-	target := rpc.EntryTileID("everything", "t1")
-	leaf := qualifyTiles("hey", []*pb.Tile{{Id: rpc.EntryTileID("box", "t1"), GridId: rpc.EntryGridID("box"),
-		Kind: "url", LinkTargetId: target}})[0]
-	if !leaf.Link || leaf.LinkTargetId != "hey/"+target {
-		t.Fatalf("leaf = link %v target %q, want a link to hey/%s", leaf.Link, leaf.LinkTargetId, target)
+	target := rpc.KeyTileID("/r/t.txt")
+	leaf := qualifyTiles("rnode1", []*pb.Tile{{Id: rpc.KeyTileID("/r/l"), GridId: rpc.KeyTileID("/r"),
+		Kind: "text", LinkTargetId: target}})[0]
+	if !leaf.Link || leaf.LinkTargetId != "rnode1/"+target {
+		t.Fatalf("leaf = link %v target %q, want a link to rnode1/%s", leaf.Link, leaf.LinkTargetId, target)
 	}
 	far := qualifyTilesTransit("node/conn", []*pb.Tile{leaf})[0]
-	if far.LinkTargetId != "node/conn/hey/"+target || !far.Link {
+	if far.LinkTargetId != "node/conn/rnode1/"+target || !far.Link {
 		t.Fatalf("through a connection = link %v target %q", far.Link, far.LinkTargetId)
 	}
 	back := rpc.Hop{Seg: "node", Via: "node", Transit: true}.PeelTile(far)
-	if back.LinkTargetId != "conn/hey/"+target {
-		t.Fatalf("peeled at the hop = %q, want conn/hey/%s", back.LinkTargetId, target)
+	if back.LinkTargetId != "conn/rnode1/"+target {
+		t.Fatalf("peeled at the hop = %q, want conn/rnode1/%s", back.LinkTargetId, target)
 	}
 }
 
@@ -219,9 +220,9 @@ func TestQualifyEvent(t *testing.T) {
 		t.Errorf("TileRemoved = %+v", rem.GetTileRemoved())
 	}
 
-	// PluginHealth carries a plugin uuid, which is an id like any other: each
-	// hop prepends one segment. A far node's fan-in re-serves its own
-	// plugins' health transitions; without the prepend they arrive addressed
+	// PluginHealth carries a source's owner id, which is an id like any
+	// other: each hop prepends one segment. A far node's fan-in re-serves its
+	// own sources' health transitions; without the prepend they arrive addressed
 	// by a bare remote uuid that names nothing on this side of the connection, so
 	// the "live updates stopped" notice attaches to nothing (or, worse, could
 	// collide with a local source key). Regression: qualifyEvent's switch
@@ -246,8 +247,7 @@ func TestQualifyEvent(t *testing.T) {
 		t.Errorf("self PluginHealth uuid = %q, want the fan-in's own %q", got, "u")
 	}
 
-	// Leaf plugins don't emit PluginHealth today, but the chain rule is
-	// uniform: every id in a response gets this hop prepended.
+	// The chain rule is uniform for a leaf namespace too: every id in a response gets this hop prepended.
 	leafHealth := qualifyEvent("u", false, &pb.Event{Payload: &pb.Event_PluginHealth{PluginHealth: &pb.EventPluginHealth{
 		PluginUuid: "x", Healthy: true,
 	}}})
@@ -256,15 +256,15 @@ func TestQualifyEvent(t *testing.T) {
 	}
 }
 
-// TestSplitPluginID covers the parse both ways.
-func TestSplitPluginID(t *testing.T) {
+// TestSplitID covers the parse both ways.
+func TestSplitID(t *testing.T) {
 	if u, l, ok := rpc.SplitID("abc/12"); !ok || u != "abc" || l != "12" {
 		t.Errorf("split(abc/12) = %q,%q,%v", u, l, ok)
 	}
 	if _, _, ok := rpc.SplitID("bare"); ok {
 		t.Error("a bare id should report ok=false")
 	}
-	// A leading slash is not a plugin prefix (IndexByte > 0 required).
+	// A leading slash is not a namespace prefix (IndexByte > 0 required).
 	if _, _, ok := rpc.SplitID("/x"); ok {
 		t.Error("leading-slash id should report ok=false")
 	}
@@ -275,13 +275,13 @@ func TestSplitPluginID(t *testing.T) {
 // the server consumes it (TestAsConnectError below drives the store-sentinel
 // fall-through path).
 
-// TestAsConnectError maps both gRPC status codes (from plugin subprocesses) and
+// TestAsConnectError maps both gRPC status codes (from a namespace or a far node) and
 // local store sentinels onto Connect codes.
 func TestAsConnectError(t *testing.T) {
 	if asConnectError(nil) != nil {
 		t.Error("nil error should stay nil")
 	}
-	// gRPC status path (errors that crossed the plugin boundary).
+	// gRPC status path (errors that crossed a namespace boundary).
 	grpcCases := []struct {
 		in   error
 		want connect.Code
@@ -289,7 +289,7 @@ func TestAsConnectError(t *testing.T) {
 		{status.Error(gcodes.NotFound, "x"), connect.CodeNotFound},
 		{status.Error(gcodes.InvalidArgument, "x"), connect.CodeInvalidArgument},
 		{status.Error(gcodes.FailedPrecondition, "x"), connect.CodeFailedPrecondition},
-		// Unavailable (e.g. a plugin's dial to its configured target failed)
+		// Unavailable (e.g. a connection's dial to its configured target failed)
 		// must stay Unavailable, not fall through to Internal: clientsync.Of
 		// classifies only CodeUnavailable/DeadlineExceeded/Canceled as
 		// OutcomeTransport ("the server never spoke, keep local state and

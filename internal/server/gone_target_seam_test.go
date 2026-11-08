@@ -43,14 +43,15 @@ func bodyOf(ctx context.Context, t *testing.T, cl *rpc.Client, id string) string
 	return string(data)
 }
 
-// A link whose file moved away is dead, however its reads reach the fs
-// plugin, and reads again the moment the file is back where the link names:
+// A link whose file moved away is dead, however its reads reach the files,
+// and reads again the moment the file is back where the link names:
 // the link is never rewritten. The directory is what moves, the case a
 // project reorganised on disk leaves behind.
 func TestALinkToAMovedFileIsDeadUntilItIsBack(t *testing.T) {
-	cl, _, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl, fsRoot := f.cl, f.root
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 1)
+	root := filesGrid(t, f, 1)
 	lp, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +107,7 @@ func TestALinkToAMovedFileIsDeadUntilItIsBack(t *testing.T) {
 // Home answers a destroyed target the same way: its id is never reassigned,
 // so the link's path ends in nothing for good.
 func TestALinkToADestroyedHomeTileIsDead(t *testing.T) {
-	cl, _, _, _ := lazyStack(t)
+	cl := newFilesServer(t).cl
 	ctx := context.Background()
 	lp, err := cl.Handshake(ctx)
 	if err != nil {

@@ -1,7 +1,7 @@
 package server_test
 
-// The fs behaviours, against the node's own files: every one the plugin's
-// seam tests held, crossing the web API to files.Source over a temp root.
+// The files' behaviours through the router: every call crosses the web API
+// to files.Source over a temp root.
 
 import (
 	"bytes"
@@ -38,9 +38,9 @@ func (n *filesNode) move(t *gridwellv1.Tile, grid string, x, y int64) (*gridwell
 		Claim: rpc.PlacementOf(t)})
 }
 
-// A directory lists its files and subdirectories as the fs plugin did:
-// sorted, a directory a door onto its own grid, a markdown file a text tile
-// that renders, a plain file a plain one, and none of them minted.
+// A directory lists its files and subdirectories sorted, a directory a door
+// onto its own grid, a markdown file a text tile that renders, a plain file a
+// plain one, and none of them minted.
 func TestFilesListing(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "b.md"), "# b\n")

@@ -10,16 +10,16 @@ import (
 )
 
 // A file's row and its read name its bytes by one stamp, carried from the
-// plugin through the node to the client, so the client knows a body it holds
+// files through the node to the client, so the client knows a body it holds
 // is current without a version: a change on disk moves the row's stamp, the
 // body read under the old one ages, and the new read names the new one.
-func TestFsRowAndBodyNameTheFilesBytesByOneStamp(t *testing.T) {
+func TestFilesRowAndBodyNameTheFilesBytesByOneStamp(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "notes.md")
 	if err := os.WriteFile(path, []byte("# before\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfsstamp", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	row := k.tile("notes.md")
 	_, _, basis, err := k.cl.ReadContent(k.ctx, row.Id)

@@ -19,6 +19,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
@@ -41,29 +42,29 @@ type filesNode struct {
 // their deletes recorded instead of moved to the OS trash.
 func newFilesNode(t *testing.T, roots ...string) *filesNode {
 	t.Helper()
+	return newFilesNodeVia(t, nil, roots...)
+}
+
+// newFilesNodeVia is newFilesNode with the node reaching the files through
+// via, nil for directly.
+func newFilesNodeVia(t *testing.T, via func(namespace.Namespace) namespace.Namespace, roots ...string) *filesNode {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	n := &filesNode{t: t}
-	var rs []files.Root
 	for _, r := range roots {
-		rs = append(rs, files.Root{Path: r})
 		n.roots = append(n.roots, rpc.QualifyID(localNodeID, rpc.KeyTileID(r)))
-	}
-	src, err := files.New(st.Namespace("~"), rs, func(p string) error {
-		n.trashed = append(n.trashed, p)
-		return os.RemoveAll(p)
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	reg := plugin.NewRegistry()
 	reg.Register(localNodeID, "home", local.New(st, nil), nil)
 	reg.SetLabel(localNodeID, "home")
-	reg.Register(rpc.FilesOwner(localNodeID), "files", src, src.Close)
-	reg.SetLabel(rpc.FilesOwner(localNodeID), "files")
+	registerFiles(t, reg, st, localNodeID, roots, func(p string) error {
+		n.trashed = append(n.trashed, p)
+		return os.RemoveAll(p)
+	}, via)
 	t.Cleanup(reg.Close)
 	n.srv = servertest.New(t, reg, server.Config{ID: localNodeID})
 	hs := servertest.Serve(t, n.srv)
@@ -79,6 +80,37 @@ func newFilesNode(t *testing.T, roots ...string) *filesNode {
 	}
 	n.home = rpc.HomeGrid(lp)
 	return n
+}
+
+// filesAt registers the files over roots on the node id, a delete removing
+// the path: the shape newFarNode and buildTransportHarness take for more of
+// a node.
+func filesAt(t *testing.T, id string, roots ...string) func(*plugin.Registry, *store.Store) {
+	return func(reg *plugin.Registry, st *store.Store) {
+		t.Helper()
+		registerFiles(t, reg, st, id, roots, os.RemoveAll, nil)
+	}
+}
+
+// registerFiles registers on reg, under the files' owner id of the node id,
+// the files over roots in st's files namespace, reached through via when set.
+func registerFiles(t *testing.T, reg *plugin.Registry, st *store.Store, id string, roots []string,
+	trash func(string) error, via func(namespace.Namespace) namespace.Namespace) {
+	t.Helper()
+	var rs []files.Root
+	for _, r := range roots {
+		rs = append(rs, files.Root{Path: r})
+	}
+	src, err := files.New(st.Namespace("~"), rs, trash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ns namespace.Namespace = src
+	if via != nil {
+		ns = via(src)
+	}
+	reg.Register(rpc.FilesOwner(id), "files", ns, src.Close)
+	reg.SetLabel(rpc.FilesOwner(id), "files")
 }
 
 // grid reads id, fatal on a refusal.
@@ -181,7 +213,8 @@ func TestFilesRosterRowAndRootGrid(t *testing.T) {
 }
 
 // A root that will not read is dark, told under the files' owner id on every
-// open stream, and its grid still answers.
+// open stream, and its grid still answers; the directory made, the next read
+// heals it with no restart.
 func TestFilesDarkRootHealthIsKeyedByTheFilesOwner(t *testing.T) {
 	gone := filepath.Join(t.TempDir(), "missing")
 	n := newFilesNode(t, gone)
@@ -195,6 +228,17 @@ func TestFilesDarkRootHealthIsKeyedByTheFilesOwner(t *testing.T) {
 	})
 	if h := ev.GetPluginHealth(); h.PluginUuid != rpc.FilesOwner(localNodeID) || h.Detail == "" {
 		t.Fatalf("health = %v, want dark keyed %s with the root named", h, rpc.FilesOwner(localNodeID))
+	}
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	n.grid(n.roots[0])
+	ev = await(t, events, "light health", func(ev *gridwellv1.Event) bool {
+		h := ev.GetPluginHealth()
+		return h != nil && h.Healthy
+	})
+	if h := ev.GetPluginHealth(); h.PluginUuid != rpc.FilesOwner(localNodeID) {
+		t.Fatalf("health = %v, want light keyed %s", h, rpc.FilesOwner(localNodeID))
 	}
 }
 

@@ -80,10 +80,10 @@ func homeRoot(t *testing.T, c namespace.Namespace) string {
 	return ""
 }
 
-// nodeServer stands up a full Server (one in-process store
-// registered as uuid "ur1", label "personal") behind its ConnectionHandler on a real
+// nodeServer stands up a full Server (node "ur1", its home one in-process
+// store labelled "personal") behind its ConnectionHandler on a real
 // TCP listener, and returns a raw gRPC client dialed at it — the exact wire a
-// remote ssh-plugin sees after its tunnel. Every request routes by the
+// connecting node sees after its ssh tunnel. Every request routes by the
 // QUALIFIED ids it carries; there is no scoping header and no name-based
 // selection.
 func nodeServer(t *testing.T) (namespace.Namespace, namespace.Namespace) {
@@ -106,6 +106,7 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 	reg := plugin.NewRegistry()
 	reg.Register("ur1", "home", direct, nil)
 	reg.SetLabel("ur1", "personal")
+	cfg.ID = "ur1"
 	srv := servertest.New(t, reg, cfg)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -144,15 +145,15 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 	c, direct := nodeServer(t)
 	ctx := context.Background()
 
-	pluginRoot := homeRoot(t, c)
-	if pluginRoot[:4] != "ur1/" {
-		t.Fatalf("home root = %q, want the plugin's qualified root ur1/<n>", pluginRoot)
+	root := homeRoot(t, c)
+	if root[:4] != "ur1/" {
+		t.Fatalf("home root = %q, want the qualified root ur1/<n>", root)
 	}
 
-	// Create through the export, verify via the direct plugin client: the
-	// export writes to the same plugin, ids peeled one segment per hop.
+	// Create through the export, verify via the direct home client: the
+	// export writes to the same home, ids peeled one segment per hop.
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: pluginRoot,
+		GridId: root,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 2, H: 2},
 	})
 	if err != nil {
@@ -162,7 +163,7 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 		t.Errorf("created id = %q, want qualified ur1/<n>", got)
 	}
 	// The body follows through the export's WriteContent; verify via the
-	// DIRECT plugin client — the export writes to the same plugin, ids
+	// DIRECT home client — the export writes to the same home, ids
 	// peeled one segment per hop.
 	writeOne(t, c, created.Tile.Id, created.Tile.Version, []byte("# via export"))
 	localID := created.Tile.Id[4:]
@@ -172,9 +173,9 @@ func TestNodeExportRoutesByQualifiedID(t *testing.T) {
 	}
 }
 
-func TestNodeExportUnknownPluginIsNotFound(t *testing.T) {
+func TestNodeExportUnknownNamespaceIsNotFound(t *testing.T) {
 	c, _ := nodeServer(t)
-	_, err := c.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: "no-such-plugin/1"})
+	_, err := c.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: "no-such-node/1"})
 	if status.Code(err) != gcodes.NotFound {
 		t.Fatalf("err = %v, want NotFound", err)
 	}
@@ -182,7 +183,7 @@ func TestNodeExportUnknownPluginIsNotFound(t *testing.T) {
 
 func TestNodeExportSubscribeStreamsQualifiedEvents(t *testing.T) {
 	// Server-stream through the export: the whole node's fan-in, ids
-	// qualified — this is how a connecting laptop hears a remote plugin change.
+	// qualified — this is how a connecting laptop hears a remote change.
 	c, _ := nodeServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -266,9 +267,9 @@ func TestNodeExportContentStreams(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
 
-	pluginRoot := homeRoot(t, c)
+	root := homeRoot(t, c)
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: pluginRoot,
+		GridId: root,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
 	})
 	if err != nil {
@@ -289,7 +290,7 @@ func TestNodeExportContentStreams(t *testing.T) {
 	}
 
 	moved, err := c.MoveTile(ctx, &gridwellv1.MoveTileRequest{
-		TileId: created.Tile.Id, GridId: pluginRoot, X: 5, Y: 5, W: 3, H: 3,
+		TileId: created.Tile.Id, GridId: root, X: 5, Y: 5, W: 3, H: 3,
 		Claim: rpc.PlacementOf(created.Tile),
 	})
 	if err != nil {
@@ -310,9 +311,9 @@ func TestNodeExportFinds(t *testing.T) {
 	c, _ := nodeServer(t)
 	ctx := context.Background()
 
-	pluginRoot := homeRoot(t, c)
+	root := homeRoot(t, c)
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
-		GridId: pluginRoot,
+		GridId: root,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 1, Y: 1, W: 2, H: 2},
 	})
 	if err != nil {

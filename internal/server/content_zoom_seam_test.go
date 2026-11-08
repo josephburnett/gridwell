@@ -13,11 +13,11 @@ import (
 )
 
 // A content zoom crosses the client, the web API and the router to one of
-// two writers: the store's own for a home tile, the plugin adapter's for a
-// plugin tile. Both must refuse what the column cannot mean, and write a
+// two writers: home's for a home tile, the files' for a file. Both must refuse what the column cannot mean, and write a
 // valid value exactly.
 func TestContentZoomRefusedAtEitherWriter(t *testing.T) {
-	cl, st, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl, st := f.cl, f.db
 	ctx := context.Background()
 
 	lp, err := cl.Handshake(ctx)
@@ -29,7 +29,7 @@ func TestContentZoomRefusedAtEitherWriter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pg, err := cl.GetGrid(ctx, fsGrid(t, cl, fsRoot, 1))
+	pg, err := cl.GetGrid(ctx, filesGrid(t, f, 1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,16 +40,16 @@ func TestContentZoomRefusedAtEitherWriter(t *testing.T) {
 		}
 	}
 	if file == nil {
-		t.Fatal("no f0.txt in the plugin grid")
+		t.Fatal("no f0.txt in the directory")
 	}
 
-	for _, c := range []struct{ name, id string }{{"home tile", home.Id}, {"plugin tile", file.Id}} {
+	for _, c := range []struct{ name, id string }{{"home tile", home.Id}, {"file", file.Id}} {
 		t.Run(c.name, func(t *testing.T) {
 			before, err := cl.GetTile(ctx, c.id)
 			if err != nil {
 				t.Fatal(err)
 			}
-			tiles0, grids0 := pluginRows(t, st)
+			tiles0, grids0 := filesRows(t, st)
 			for _, z := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), 0, -1,
 				rpc.ContentZoomMin - 0.01, rpc.ContentZoomMax + 0.01, 1e9} {
 				_, err := cl.SetContentZoom(ctx, c.id, z)
@@ -64,7 +64,7 @@ func TestContentZoomRefusedAtEitherWriter(t *testing.T) {
 			if !proto.Equal(before, after) {
 				t.Errorf("a refused zoom changed the tile:\nbefore %v\nafter  %v", before, after)
 			}
-			if tiles, grids := pluginRows(t, st); tiles != tiles0 || grids != grids0 {
+			if tiles, grids := filesRows(t, st); tiles != tiles0 || grids != grids0 {
 				t.Errorf("a refused zoom minted rows: %d/%d -> %d/%d", tiles0, grids0, tiles, grids)
 			}
 

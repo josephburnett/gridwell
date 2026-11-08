@@ -4,8 +4,7 @@ package server_test
 // file's body in a pane, a text tile's preview in a shown grid, an image's preview.
 // The client half is the shim's own loop over its js-free owners: cache.Apply,
 // events.Route, a refetch of the grid the plan names, and a ReadContent for a
-// body the cache no longer holds (render.go fetchTileContent). Every shipped
-// plugin's content-change seam test runs that client (newContentClientOf).
+// body the cache no longer holds (render.go fetchTileContent).
 
 import (
 	"bytes"
@@ -15,20 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/events"
-	"github.com/josephburnett/gridwell/internal/local"
-	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/pluginhost"
-	"github.com/josephburnett/gridwell/internal/plugintest"
-	"github.com/josephburnett/gridwell/internal/server"
-	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
 
 // contentClient is a client as the shim runs one: its cache and its event
@@ -38,7 +28,7 @@ type contentClient struct {
 	ctx     context.Context
 	cl      *rpc.Client
 	c       *cache.Cache
-	events  chan *gridwellv1.Event
+	events  <-chan *gridwellv1.Event
 	landing string
 	// changed counts the grid changes the client was told, and told the
 	// rows whose bytes it was told moved, by id.
@@ -46,68 +36,19 @@ type contentClient struct {
 	told    map[string]int
 }
 
-func newContentClient(t *testing.T, uuid, root string) *contentClient {
+// newContentClient is a client of a node whose files are root, landed on
+// root's grid.
+func newContentClient(t *testing.T, root string) *contentClient {
 	t.Helper()
-	return newContentClientVia(t, uuid, root, nil)
+	return newContentClientVia(t, root, nil)
 }
 
-// newContentClientVia is newContentClient with the node reaching the fs
-// adapter through via, nil for directly.
-func newContentClientVia(t *testing.T, uuid, root string, via func(namespace.Namespace) namespace.Namespace) *contentClient {
+// newContentClientVia is newContentClient with the node reaching the files
+// through via, nil for directly.
+func newContentClientVia(t *testing.T, root string, via func(namespace.Namespace) namespace.Namespace) *contentClient {
 	t.Helper()
-	return newContentClientOf(t, uuid, "fs", map[string]string{"root": root}, via)
-}
-
-// newContentClientOf is newContentClientVia over the shipped plugin kind,
-// spawned with cfg.
-func newContentClientOf(t *testing.T, uuid, kind string, cfg map[string]string, via func(namespace.Namespace) namespace.Namespace) *contentClient {
-	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	cp := plugintest.Spawn(t, kind, cfg)
-	a, stop := pluginhost.Start(cp, st.Namespace(uuid), nil, "plugin "+uuid+" watch")
-	var ns namespace.Namespace = a
-	if via != nil {
-		ns = via(a)
-	}
-	reg := plugin.NewRegistry()
-	reg.Register(localNodeID, "home", local.New(st, nil), nil)
-	reg.Register(uuid, kind, ns, stop)
-	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
-	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	t.Cleanup(cancel)
-	lp, err := cl.Handshake(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	k := &contentClient{t: t, ctx: ctx, cl: cl, c: cache.New(), events: make(chan *gridwellv1.Event, 256)}
-	for _, p := range lp.Plugins {
-		if p.Uuid == uuid {
-			k.landing = plugintest.LandingOf(t, p)
-		}
-	}
-	if k.landing == "" {
-		t.Fatalf("no %s plugin in the handshake", kind)
-	}
-	go func() {
-		es, err := cl.Subscribe(ctx)
-		if err != nil {
-			return
-		}
-		defer es.Close()
-		for {
-			ev, ok, err := es.Recv()
-			if err != nil || !ok {
-				return
-			}
-			k.events <- ev
-		}
-	}()
-	return k
+	n := newFilesNodeVia(t, via, root)
+	return &contentClient{t: t, ctx: n.ctx, cl: n.cl, c: cache.New(), events: n.subscribe(), landing: n.roots[0]}
 }
 
 func (k *contentClient) fetchGrid(id string) {
@@ -190,13 +131,13 @@ func (k *contentClient) settle() {
 
 // A text file open in a pane shows its new bytes once they change on disk.
 // The pane tells the node it shows the grid the file sits in (pane.Showing).
-func TestFsOpenFileShowsItsNewBytes(t *testing.T) {
+func TestFilesOpenFileShowsItsNewBytes(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "notes.md")
 	if err := os.WriteFile(path, []byte("# before\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfsopen", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	id := rpc.ContentID(k.tile("notes.md"))
 	if got := k.body(id); string(got) != "# before\n" {
@@ -218,13 +159,13 @@ func TestFsOpenFileShowsItsNewBytes(t *testing.T) {
 
 // A text tile's preview in a shown grid draws its new bytes once they change on
 // disk: the preview is drawn from the same cached body (render.go tileBody).
-func TestFsTextPreviewShowsItsNewBytes(t *testing.T) {
+func TestFilesTextPreviewShowsItsNewBytes(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "todo.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfspreview", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)
@@ -244,9 +185,9 @@ func TestFsTextPreviewShowsItsNewBytes(t *testing.T) {
 	}
 }
 
-// An image's preview in a shown grid is keyed by the file's mtime
-// (Entry.preview_stamp), so an edited image is asked for its new picture.
-func TestFsImagePreviewShowsItsNewPicture(t *testing.T) {
+// An image's preview in a shown grid is keyed by the file's mtime, so an
+// edited image is asked for its new picture.
+func TestFilesImagePreviewShowsItsNewPicture(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "pic.png")
 	if err := os.WriteFile(path, []byte("\x89PNG\r\n\x1a\nA"), 0o644); err != nil {
@@ -256,7 +197,7 @@ func TestFsImagePreviewShowsItsNewPicture(t *testing.T) {
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	k := newContentClient(t, "pfsimg", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	if err := k.cl.SetView(k.ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{k.landing}}); err != nil {
 		t.Fatal(err)

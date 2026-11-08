@@ -16,25 +16,28 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// flakyWatchPlugin is a plugin whose Info always succeeds and whose Subscribe
+// healthNode is the node these fakes are the files of.
+const healthNode = "lnode1"
+
+// flakyWatch is a namespace whose Info always succeeds and whose Subscribe
 // stream fails its first failSubFirstN calls before settling into a healthy
 // stream that sends its header and nothing else until its context ends. It is the seam-level fake for the fan-in's down/recovery
 // transition — a unit test on the loop in isolation would not prove the
 // transition reaches a real client stream over the real wire; this does.
-type flakyWatchPlugin struct {
+type flakyWatch struct {
 	namespacetest.Unimplemented
 	subCalls      atomic.Int32
 	failSubFirstN int32
 }
 
-func (p *flakyWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+func (p *flakyWatch) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
 	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
-func (p *flakyWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+func (p *flakyWatch) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	n := p.subCalls.Add(1)
 	if n <= p.failSubFirstN {
-		return errors.New("simulated plugin stream failure")
+		return errors.New("simulated stream failure")
 	}
 	if err := send(nil); err != nil {
 		return err
@@ -61,18 +64,18 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventPluginHealth {
 	}
 }
 
-// TestSubscribeFanInReportsHealthDownAndRecovery kills a plugin's event
+// TestSubscribeFanInReportsHealthDownAndRecovery kills a namespace's event
 // stream once and asserts the client's Subscribe stream receives an
 // EventPluginHealth(healthy=false) transition followed by
 // EventPluginHealth(healthy=true) on the retry that succeeds — proving
 // the fan-in's backoff loop tells the client about the outage
 // instead of the client silently going stale with tiles that stop updating.
 func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
-	fake := &flakyWatchPlugin{failSubFirstN: 1}
+	fake := &flakyWatch{failSubFirstN: 1}
 	client := fake
 	reg := plugin.NewRegistry()
-	reg.Register("u-1", "test", client, nil)
-	srv := mustNew(t, reg, Config{})
+	reg.Register(rpc.FilesOwner(healthNode), "files", client, nil)
+	srv := mustNew(t, reg, Config{ID: healthNode})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
@@ -88,8 +91,8 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	if down.Healthy {
 		t.Error("first health event must report healthy=false (the down transition)")
 	}
-	if down.PluginUuid != "u-1" {
-		t.Errorf("plugin uuid = %q, want u-1", down.PluginUuid)
+	if down.PluginUuid != rpc.FilesOwner(healthNode) {
+		t.Errorf("health uuid = %q, want %s", down.PluginUuid, rpc.FilesOwner(healthNode))
 	}
 	if down.Detail == "" {
 		t.Error("down transition must carry the underlying failure as Detail")
@@ -99,22 +102,22 @@ func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	if !up.Healthy {
 		t.Error("second health event must report healthy=true (recovery)")
 	}
-	if up.PluginUuid != "u-1" {
-		t.Errorf("plugin uuid = %q, want u-1", up.PluginUuid)
+	if up.PluginUuid != rpc.FilesOwner(healthNode) {
+		t.Errorf("health uuid = %q, want %s", up.PluginUuid, rpc.FilesOwner(healthNode))
 	}
 }
 
-// alwaysFailInfoWatchPlugin fails Info on its first failInfoFirstN calls,
+// failInfoWatch fails Info on its first failInfoFirstN calls,
 // then succeeds. Models the bug this test guards against:
 // before the fix, a single failed Info AT SUBSCRIBE TIME permanently excluded
-// the plugin from that stream's fan-in — retrying never happened.
-type alwaysFailInfoWatchPlugin struct {
+// the namespace from that stream's fan-in — retrying never happened.
+type failInfoWatch struct {
 	namespacetest.Unimplemented
 	infoCalls      atomic.Int32
 	failInfoFirstN int32
 }
 
-func (p *alwaysFailInfoWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
+func (p *failInfoWatch) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
 	n := p.infoCalls.Add(1)
 	if n <= p.failInfoFirstN {
 		return nil, errors.New("simulated info failure")
@@ -122,7 +125,7 @@ func (p *alwaysFailInfoWatchPlugin) Info(context.Context, *pb.InfoRequest) (*pb.
 	return &pb.InfoResponse{DisplayName: "T", RootGridId: "1"}, nil
 }
 
-func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
+func (p *failInfoWatch) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, send func(*pb.Event) error) error {
 	if err := send(nil); err != nil {
 		return err
 	}
@@ -130,16 +133,16 @@ func (p *alwaysFailInfoWatchPlugin) Subscribe(ctx context.Context, _ *pb.Subscri
 	return nil
 }
 
-// An Info failure at Subscribe time must not permanently drop a plugin's
+// An Info failure at Subscribe time must not permanently drop a namespace's
 // fan-in for the life of the client stream: watchPlugin retries Info with
-// backoff, so a plugin merely slow to come up still gets its events fanned in,
+// backoff, so a namespace merely slow to answer still gets its events fanned in,
 // observable here as a health-down event followed by a health-recovery one.
 func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) {
-	fake := &alwaysFailInfoWatchPlugin{failInfoFirstN: 1}
+	fake := &failInfoWatch{failInfoFirstN: 1}
 	client := fake
 	reg := plugin.NewRegistry()
-	reg.Register("u-2", "test", client, nil)
-	srv := mustNew(t, reg, Config{})
+	reg.Register(rpc.FilesOwner(healthNode), "files", client, nil)
+	srv := mustNew(t, reg, Config{ID: healthNode})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
@@ -174,10 +177,10 @@ func TestSubscribeFanInRetriesOnTheDeclaredBackoff(t *testing.T) {
 	t.Cleanup(func() { namespace.DefaultBackoff = was })
 	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
 
-	fake := &flakyWatchPlugin{failSubFirstN: 4}
+	fake := &flakyWatch{failSubFirstN: 4}
 	reg := plugin.NewRegistry()
-	reg.Register("u-4", "test", fake, nil)
-	srv := mustNew(t, reg, Config{})
+	reg.Register(rpc.FilesOwner(healthNode), "files", fake, nil)
+	srv := mustNew(t, reg, Config{ID: healthNode})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 

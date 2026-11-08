@@ -6,7 +6,6 @@ import (
 	"image"
 	"image/png"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,19 +13,14 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/connection"
-	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
 // The /content/ API crosses every seam at once: HTTP URL grammar → token
-// gate → router (with link resolution and transit forwarding) → plugin
+// gate → router (with link resolution and transit forwarding) → the files'
 // ServeContent stream → HTTP response with the sandbox header. These tests
-// drive the REAL WebHandler with real plugins behind it — the exact
+// drive the REAL WebHandler with the node's files behind it — the exact
 // surface a sandboxed page's subresource request hits.
 
 // TestParseContentPath pins the URL grammar: the qualified tile id ends at
@@ -39,7 +33,7 @@ func TestParseContentPath(t *testing.T) {
 		ok            bool
 	}{
 		{"/content/tok/uf1/5", "tok", "uf1/5", true},
-		// A tile the plugin has never minted a row for is named by its key,
+		// A tile the node has never minted a row for is named by its key,
 		// and the API reads that shape as the end of the id exactly as it
 		// reads digits, or an untouched page would 404.
 		{"/content/tok/uf1/~L2hvbWU", "tok", "uf1/~L2hvbWU", true},
@@ -74,44 +68,23 @@ func TestPageURLMatchesContentAPIGrammar(t *testing.T) {
 	}
 }
 
-// contentAPIServer stands up a WebHandler with an fs plugin over a temp
-// dir holding one image, and returns the base URL plus the image tile's
-// qualified id and the raw bytes.
-func contentAPIServer(t *testing.T, password string) (hs *httptest.Server, tileID string, img []byte) {
+// contentAPIServer serves a node whose files hold one image, and answers
+// the server, a client that carries no cookie, the image tile's qualified id
+// and the raw bytes.
+func contentAPIServer(t *testing.T) (f *filesServer, bare *http.Client, tileID string, img []byte) {
 	t.Helper()
-	dir := t.TempDir()
+	f = newFilesServer(t)
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
 		t.Fatal(err)
 	}
 	img = buf.Bytes()
-	if err := os.WriteFile(filepath.Join(dir, "cat.png"), img, 0o644); err != nil {
+	cat := filepath.Join(f.root, "cat.png")
+	if err := os.WriteFile(cat, img, 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	fsClient := newPluginClient(t, "fs", map[string]string{"root": dir})
-
-	reg := plugin.NewRegistry()
-	reg.Register("uf1", "fs", fsClient, nil)
-	srv := mustNew(t, reg, Config{Password: password})
-	hs = webAPITest(t, srv.WebHandler())
-
-	ctx := context.Background()
-	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	grid, err := fsClient.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: plugintest.Landing(t, info)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tl := range grid.Tiles {
-		if tl.AltText == "cat.png" {
-			return hs, "uf1/" + tl.Id, img
-		}
-	}
-	t.Fatal("no cat.png tile")
-	return nil, "", nil
+	bare = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	return f, bare, rpc.QualifyID(f.node, rpc.KeyTileID(cat)), img
 }
 
 // TestContentAPIServesImage: the happy path end to end, WITHOUT any auth
@@ -119,10 +92,11 @@ func contentAPIServer(t *testing.T, password string) (hs *httptest.Server, tileI
 // subresource requests and the desktop's native views can never present the
 // cookie.
 func TestContentAPIServesImage(t *testing.T) {
-	hs, tileID, img := contentAPIServer(t, "pw")
-	token := ContentToken("pw")
+	f, bare, tileID, img := contentAPIServer(t)
+	hs := f.hs
+	token := ContentToken(testPassword)
 
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID, "")
+	res, body := get(t, bare, hs.URL+"/content/"+token+"/"+tileID, "")
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("GET page = %d %q, want 200", res.StatusCode, body)
 	}
@@ -143,10 +117,10 @@ func TestContentAPIServesImage(t *testing.T) {
 	}
 
 	// Nothing under the page is a page, and nothing but a read is asked.
-	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID+"/a.css", ""); res.StatusCode != http.StatusNotFound {
+	if res, _ := get(t, bare, hs.URL+"/content/"+token+"/"+tileID+"/a.css", ""); res.StatusCode != http.StatusNotFound {
 		t.Errorf("GET under the page = %d, want 404", res.StatusCode)
 	}
-	res, err := hs.Client().Post(hs.URL+"/content/"+token+"/"+tileID, "text/plain", strings.NewReader("x"))
+	res, err := bare.Post(hs.URL+"/content/"+token+"/"+tileID, "text/plain", strings.NewReader("x"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,134 +134,37 @@ func TestContentAPIServesImage(t *testing.T) {
 // a 401; the content token replayed as an auth cookie opens nothing. The
 // two derivations live in different domains on purpose.
 func TestContentAPITokenGate(t *testing.T) {
-	hs, tileID, _ := contentAPIServer(t, "pw")
+	f, bare, tileID, _ := contentAPIServer(t)
+	hs := f.hs
 
-	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("wrong")+"/"+tileID, ""); res.StatusCode != http.StatusUnauthorized {
+	if res, _ := get(t, bare, hs.URL+"/content/"+ContentToken("wrong")+"/"+tileID, ""); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("wrong token = %d, want 401", res.StatusCode)
 	}
-	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+AuthToken("pw")+"/"+tileID, ""); res.StatusCode != http.StatusUnauthorized {
+	if res, _ := get(t, bare, hs.URL+"/content/"+AuthToken(testPassword)+"/"+tileID, ""); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("auth token as content token = %d, want 401 (domain separation)", res.StatusCode)
 	}
-	if res, _ := get(t, noRedirect(hs), hs.URL+"/", ContentToken("pw")); res.StatusCode != http.StatusUnauthorized {
+	if res, _ := get(t, bare, hs.URL+"/", ContentToken(testPassword)); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("content token as auth cookie = %d, want 401 (domain separation)", res.StatusCode)
 	}
 }
 
-// TestContentAPIResolvesLeafLink: a home link to an fs image serves the
+// TestContentAPIResolvesLeafLink: a home link to an image file serves the
 // TARGET's bytes — the API inherits contentRoute, the one resolution
 // point, like every other content read.
 func TestContentAPIResolvesLeafLink(t *testing.T) {
-	dir := t.TempDir()
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
-		t.Fatal(err)
-	}
-	img := buf.Bytes()
-	if err := os.WriteFile(filepath.Join(dir, "cat.png"), img, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	fsClient := newPluginClient(t, "fs", map[string]string{"root": dir})
-
-	st, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	reg := plugin.NewRegistry()
-	_, rootA := registerPrimaryLocaldb(t, reg, st)
-	reg.Register("uf1", "fs", fsClient, nil)
-	srv := mustNew(t, reg, Config{})
-	hs := serveWeb(t, srv)
-
-	ctx := context.Background()
-	info, err := fsClient.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	grid, err := fsClient.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: plugintest.Landing(t, info)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var catID string
-	for _, tl := range grid.Tiles {
-		if tl.AltText == "cat.png" {
-			catID = "uf1/" + tl.Id
-		}
-	}
-	cl := rpc.NewClient(hs.Client(), hs.URL)
-	link, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 2, H: 2, LinkTargetId: catID, AltText: "cat.png"}})
+	f, bare, catID, img := contentAPIServer(t)
+	link, err := f.cl.CreateTile(context.Background(), &gridwellv1.CreateTileRequest{GridId: f.home, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 2, H: 2, LinkTargetId: catID, AltText: "cat.png"}})
 	if err != nil {
 		t.Fatalf("create link: %v", err)
 	}
-
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+link.Id, "")
+	res, body := get(t, bare, f.hs.URL+"/content/"+ContentToken(testPassword)+"/"+link.Id, "")
 	if res.StatusCode != http.StatusOK || body != string(img) {
 		t.Fatalf("link GET = %d, %d bytes; want the target's %d image bytes", res.StatusCode, len(body), len(img))
 	}
 }
 
-// TestContentAPIThroughAConnection: the id "<node>/<conn>/<tile>"
-// forwards through the node's TRANSPORT — the only transit namespace there
-// is — and streams back, so a connection carries pages as it does
-// everything else: the
-// same one-hop-per-segment composition as every content read. The dialer
-// lands the connection on an in-process namespace; there is no proxy stand-in
-// any more, because the transport itself is a Go value now.
-func TestContentAPIThroughAConnection(t *testing.T) {
-	dir := t.TempDir()
-	var buf bytes.Buffer
-	if err := png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
-		t.Fatal(err)
-	}
-	img := buf.Bytes()
-	if err := os.WriteFile(filepath.Join(dir, "remote.png"), img, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	farNode := newPluginClient(t, "fs", map[string]string{"root": dir})
-
-	// The local node's own store owns the connections table.
-	connStore, err := store.Open(t.TempDir() + "/gridwell.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = connStore.Close() })
-	transport, err := connection.New(connStore, func(dial.Config) (namespace.Namespace, func(), error) {
-		return farNode, func() {}, nil
-	}, "", []config.ConnectionConfig{{Name: "far", Addr: "/tmp/far.sock"}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = transport.Close() })
-	transport.ConnectAll(context.Background())
-
-	reg := plugin.NewRegistry()
-	reg.SetTransport(transport, nil)
-	srv := mustNew(t, reg, Config{ID: "lnode1"})
-	hs := serveWeb(t, srv)
-
-	ctx := context.Background()
-	info, err := farNode.Info(ctx, &gridwellv1.InfoRequest{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	grid, err := farNode.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: plugintest.Landing(t, info)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var tid string
-	for _, tl := range grid.Tiles {
-		if tl.AltText == "remote.png" {
-			tid = tl.Id
-		}
-	}
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/lnode1/far/"+tid, "")
-	if res.StatusCode != http.StatusOK || body != string(img) {
-		t.Fatalf("connection GET = %d, %d bytes; want the remote image's %d", res.StatusCode, len(body), len(img))
-	}
-}
-
-// TestContentAPIUnimplemented: a plugin that serves no web content answers
-// 404, never a 500 — no pages is a normal property of a plugin.
+// TestContentAPIUnimplemented: a namespace that serves no web content
+// answers 404, never a 500 — no pages is a normal property of home.
 func TestContentAPIUnimplemented(t *testing.T) {
 	st, err := store.Open(":memory:")
 	if err != nil {
@@ -317,9 +194,8 @@ func TestContentAPIUnimplemented(t *testing.T) {
 // flush uses (application/json unary, no Connect header), so the
 // last-pan-survives-quit path rests on a tested seam.
 func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
-	hs, _, _ := contentAPIServer(t, testPassword)
-	withCookie(t, hs, testPassword) // Handshake and the beacon ride the gated mux
-	cl := rpc.NewClient(hs.Client(), hs.URL)
+	f, _, _, _ := contentAPIServer(t)
+	hs, cl := f.hs, f.cl
 	ctx := context.Background()
 
 	pl, err := cl.Handshake(ctx)
@@ -332,12 +208,12 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	if pl.ContentToken == AuthToken(testPassword) {
 		t.Errorf("content token must never equal the auth token (domain separation)")
 	}
-	// The fs plugin's one declared grid is the door this frames: a
-	// plugin is not a place, so there is no root of its own to aim at.
-	if len(pl.Plugins[0].PluginGrids) != 1 || pl.Plugins[0].PluginGrids[0].ViewZoom != 0 {
-		t.Fatalf("fresh row = %+v, want one grid never visited (zoom 0)", pl.Plugins[0])
+	// The files' one root is the door this frames: the files row is no
+	// place, so it has no root of its own to aim at.
+	if len(pl.Plugins[1].PluginGrids) != 1 || pl.Plugins[1].PluginGrids[0].ViewZoom != 0 {
+		t.Fatalf("fresh row = %+v, want one grid never visited (zoom 0)", pl.Plugins[1])
 	}
-	landing := plugintest.LandingOf(t, pl.Plugins[0])
+	landing := pl.Plugins[1].PluginGrids[0].GridId
 
 	path, body := rpc.SetFramingBeacon(&gridwellv1.SetFramingRequest{
 		RootGridId: landing, Cx: 3, Cy: 4, Zoom: 0.5,
@@ -354,7 +230,7 @@ func TestHandshakeCarriesTokensAndRootView(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := pl2.Plugins[0].PluginGrids[0]
+	got := pl2.Plugins[1].PluginGrids[0]
 	if got.ViewCx != 3 || got.ViewCy != 4 || got.ViewZoom != 0.5 {
 		t.Errorf("door view after beacon = (%v,%v,%v), want (3,4,0.5)",
 			got.ViewCx, got.ViewCy, got.ViewZoom)

@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"context"
@@ -8,12 +8,12 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A tmux lives on the node that started it, so a shell copied into
-// another namespace cannot share it there: what the holding node can reach,
+// A tmux lives on the node that started it, so a shell copied onto
+// another node cannot share it there: what the holding node can reach,
 // you can link, and the copy is a link to its source, at the top of the
 // gesture and inside a deep-copied door alike.
-func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
-	cl, _, rootA, _, rootB := twoPluginServer(t)
+func TestCopyShellAcrossNodesLinksItsSource(t *testing.T) {
+	cl, rootB, rootA := newTwoHomes(t, nil)
 	ctx := context.Background()
 
 	sh, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA,
@@ -23,7 +23,7 @@ func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
 	}
 	top, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: sh.Id, DestGridId: rootB, X: 3, Y: 3})
 	if err != nil {
-		t.Fatalf("cross-plugin shell copy: %v", err)
+		t.Fatalf("cross-node shell copy: %v", err)
 	}
 	if top.Kind != rpc.KindShell || top.LinkTargetId != sh.Id || !top.Link {
 		t.Errorf("top-level copy = kind %q target %q link %v, want a shell link to %q",
@@ -42,7 +42,7 @@ func TestCopyShellAcrossPluginsLinksItsSource(t *testing.T) {
 	}
 	wc, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: door.Id, DestGridId: rootB, X: 6, Y: 6})
 	if err != nil {
-		t.Fatalf("cross-plugin door copy: %v", err)
+		t.Fatalf("cross-node door copy: %v", err)
 	}
 	g, err := cl.GetGrid(ctx, wc.ChildGridId)
 	if err != nil {

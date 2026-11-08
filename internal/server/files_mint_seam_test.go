@@ -1,19 +1,17 @@
 package server
 
-// Lazy minting through the whole stack: a real spawned fs plugin, the
-// adapter, the router, the web API, and the store's own file. Every
-// assertion here is about the seam, because both halves are individually
-// happy with either behavior — the store will mint a row whenever asked, and
-// the plugin never knows there are rows at all. What must be true is the
-// thing only the seam can be wrong about: browsing a source writes nothing,
-// and the first durable touch writes exactly one row, at the placement the
-// user was already looking at.
+// Lazy minting through the whole stack: the node's files, the router, the
+// web API, and the store's own file. Every assertion here is about the seam,
+// because both halves are individually happy with either behavior — the store
+// will mint a row whenever asked, and the disk never knows there are rows at
+// all. What must be true is the thing only the seam can be wrong about:
+// browsing a directory writes nothing, and the first durable touch writes
+// exactly one row, at the placement the user was already looking at.
 
 import (
 	"context"
 	"database/sql"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,49 +20,59 @@ import (
 
 	"connectrpc.com/connect"
 
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/claimtest"
+	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/pluginhost"
-	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// lazyStack is newTestServerWithPlugins with a read-only handle on the store's
-// file, because the question these tests ask is "what is in the file".
-func lazyStack(t *testing.T) (cl *rpc.Client, st *sql.DB, hs httpServer, fsRoot string) {
+// filesServer is a node with home and the files over one fresh root, both
+// namespaces of one store file, served through the real web API.
+type filesServer struct {
+	cl   *rpc.Client
+	hs   *httptest.Server
+	db   *sql.DB // a read-only handle on the store's file
+	node string  // the node's id, home's
+	home string  // home's root grid
+	root string  // the files' one root directory
+	grid string  // its grid
+}
+
+func newFilesServer(t *testing.T) *filesServer {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "gridwell.db")
-	s, err := store.Open(path)
+	st, err := store.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
-	st = storetest.Reader(t, path)
+	t.Cleanup(func() { _ = st.Close() })
+	f := &filesServer{db: storetest.Reader(t, path), root: t.TempDir()}
 	reg := plugin.NewRegistry()
-	registerPrimaryLocaldb(t, reg, s)
-	fsRoot = t.TempDir()
-	// The plugin's namespace is a namespace of THIS store, not a store of its
-	// own: the whole question is what lands in the node's one file.
-	cp := plugintest.Spawn(t, "fs", map[string]string{"root": fsRoot})
-	reg.Register(fsPluginUUID, "fs", pluginhost.New(cp, s.Namespace(fsPluginUUID), nil), nil)
-	reg.SetLabel(fsPluginUUID, "files")
-	srv := mustNew(t, reg, Config{})
-	h := serveWeb(t, srv)
-	return rpc.NewClient(h.Client(), h.URL, connect.WithProtoJSON()), st, httpServer{h.URL, h.Client()}, fsRoot
+	f.node, f.home = registerPrimaryLocaldb(t, reg, st)
+	reg.SetLabel(f.node, "home")
+	// The files' rows are a namespace of THIS store: the whole question is
+	// what lands in the node's one file.
+	src, err := files.New(st.Namespace("~"), []files.Root{{Path: f.root}}, os.RemoveAll)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.Register(rpc.FilesOwner(f.node), "files", src, src.Close)
+	reg.SetLabel(rpc.FilesOwner(f.node), "files")
+	t.Cleanup(reg.Close)
+	f.hs = serveWeb(t, mustNew(t, reg, Config{ID: f.node}))
+	f.cl = rpc.NewClient(f.hs.Client(), f.hs.URL, connect.WithProtoJSON())
+	f.grid = rpc.QualifyID(f.node, rpc.KeyTileID(f.root))
+	return f
 }
 
-type httpServer struct {
-	URL    string
-	client *http.Client
-}
-
-// pluginRows counts the tile and grid rows any plugin namespace owns. Home is
-// ns = ” and is not lazy, so it is excluded: this is exactly the number
+// filesRows counts the tile and grid rows the files' namespace owns. Home is
+// the empty ns and is not lazy, so it is excluded: this is exactly the number
 // browsing must not move.
-func pluginRows(t *testing.T, st *sql.DB) (tiles, grids int) {
+func filesRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 	t.Helper()
 	count := func(q string) int {
 		var n int
@@ -76,43 +84,34 @@ func pluginRows(t *testing.T, st *sql.DB) (tiles, grids int) {
 	return count(`SELECT count(*) FROM tiles WHERE ns != ''`), count(`SELECT count(*) FROM grids WHERE ns != ''`)
 }
 
-// fsGrid seeds n files plus one subdirectory and returns the qualified grid id
-// of the plugin's root, WITHOUT linking it: a door to it is a stored link and
-// would mint the root grid's row, which is the very thing being counted.
-func fsGrid(t *testing.T, cl *rpc.Client, fsRoot string, n int) string {
+// filesGrid seeds n files plus one subdirectory and returns the root's grid
+// id, WITHOUT linking it: a door to it is a stored link and would mint the
+// root grid's row, which is the very thing being counted.
+func filesGrid(t *testing.T, f *filesServer, n int) string {
 	t.Helper()
 	for i := range n {
 		name := "f" + strconv.Itoa(i) + ".txt"
-		if err := os.WriteFile(filepath.Join(fsRoot, name), []byte(name), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(f.root, name), []byte(name), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.Mkdir(filepath.Join(fsRoot, "sub"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(f.root, "sub"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(fsRoot, "sub", "deep.txt"), []byte("deep"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(f.root, "sub", "deep.txt"), []byte("deep"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	lp, err := cl.Handshake(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range lp.Plugins {
-		if p.Uuid == fsPluginUUID {
-			return plugintest.LandingOf(t, p)
-		}
-	}
-	t.Fatal("no fs plugin in the handshake")
-	return ""
+	return f.grid
 }
 
 // Browsing is a read. A hundred entries listed, descended into, and listed
 // again leave the file exactly as they found it.
 func TestListingAHundredEntriesMintsNothing(t *testing.T) {
-	cl, st, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl, st := f.cl, f.db
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 100)
-	tiles0, grids0 := pluginRows(t, st)
+	root := filesGrid(t, f, 100)
+	tiles0, grids0 := filesRows(t, st)
 
 	g, err := cl.GetGrid(ctx, root)
 	if err != nil {
@@ -143,7 +142,7 @@ func TestListingAHundredEntriesMintsNothing(t *testing.T) {
 	if _, err := cl.GetGrid(ctx, sub.ChildGridId); err != nil {
 		t.Fatal(err)
 	}
-	if tiles, grids := pluginRows(t, st); tiles != tiles0 || grids != grids0 {
+	if tiles, grids := filesRows(t, st); tiles != tiles0 || grids != grids0 {
 		t.Fatalf("browsing wrote %d tile rows and %d grid rows; a listing must write none",
 			tiles-tiles0, grids-grids0)
 	}
@@ -155,9 +154,10 @@ func TestListingAHundredEntriesMintsNothing(t *testing.T) {
 // underneath the grid the user already sees, and a rename would take the id out
 // from under whoever is standing on it.
 func TestTouchingEveryTileChangesNothingTheClientCanSee(t *testing.T) {
-	cl, _, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl := f.cl
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 12)
+	root := filesGrid(t, f, 12)
 
 	derived, err := cl.GetGrid(ctx, root)
 	if err != nil {
@@ -193,14 +193,15 @@ func TestTouchingEveryTileChangesNothingTheClientCanSee(t *testing.T) {
 
 // One move, one row — and the row is not undone by the next listing.
 func TestOneMoveMintsExactlyOneRow(t *testing.T) {
-	cl, st, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl, st := f.cl, f.db
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 8)
+	root := filesGrid(t, f, 8)
 	g, err := cl.GetGrid(ctx, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tiles0, grids0 := pluginRows(t, st)
+	tiles0, grids0 := filesRows(t, st)
 
 	moved, err := cl.MoveTile(ctx, claimtest.Claimed(t, cl, &gridwellv1.MoveTileRequest{
 		TileId: g.Tiles[3].Id, GridId: root, X: 9, Y: 4, W: 2, H: 2,
@@ -208,7 +209,7 @@ func TestOneMoveMintsExactlyOneRow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tiles1, grids1 := pluginRows(t, st)
+	tiles1, grids1 := filesRows(t, st)
 	if tiles1 != tiles0+1 {
 		t.Fatalf("a move wrote %d tile rows, want exactly 1", tiles1-tiles0)
 	}
@@ -232,22 +233,23 @@ func TestOneMoveMintsExactlyOneRow(t *testing.T) {
 	if !found {
 		t.Fatal("the moved tile is not in the next listing")
 	}
-	if tiles2, grids2 := pluginRows(t, st); tiles2 != tiles1 || grids2 != grids1 {
+	if tiles2, grids2 := filesRows(t, st); tiles2 != tiles1 || grids2 != grids1 {
 		t.Fatalf("re-listing after a move wrote %d tile and %d grid rows", tiles2-tiles1, grids2-grids1)
 	}
 }
 
 // A link stores the address the user dragged, tile and grid alike, and mints
-// nothing in the plugin's namespace: a plugin thing's public id is its
-// key-form address, so a link at rest already names something that cannot
+// nothing in the files' namespace: a file's public id is its key-form
+// address, so a link at rest already names something that cannot
 // reflow, and the address is the same name the listing answers. Storing a row
 // id instead would give the same document two names — one reached in place and
 // one reached through the link — and the client keys a live surface, and a
 // text save queue, by that name (rpc.ContentID).
 func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
-	cl, st, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl, st := f.cl, f.db
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 5)
+	root := filesGrid(t, f, 5)
 	lp, err := cl.Handshake(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -285,11 +287,10 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 
 	// What is at rest: the id the user dragged, unchanged. Tile and grid alike
 	// answer to their key-form address for good, and the grid key and the
-	// entry key are as permanent as the plugin's keys, so there is nothing a
+	// entry key are as permanent as the paths, so there is nothing a
 	// row would make safer — and a second name is what a row would cost.
-	ns, local, ok := rpc.SplitID(link.LinkTargetId)
-	if !ok || ns != fsPluginUUID || rpc.ShapeOf(local) != rpc.ShapeKey {
-		t.Fatalf("link_target_id = %q: a leaf link at rest must name the entry's address in the fs plugin", link.LinkTargetId)
+	if _, local, ok := rpc.SplitID(link.LinkTargetId); !ok || !rpc.IsFilesID(link.LinkTargetId) || rpc.ShapeOf(local) != rpc.ShapeKey {
+		t.Fatalf("link_target_id = %q: a leaf link at rest must name the file's address", link.LinkTargetId)
 	}
 	if link.LinkTargetId != leaf.Id {
 		t.Fatalf("link_target_id = %q, want the id the user dragged, %q", link.LinkTargetId, leaf.Id)
@@ -309,10 +310,10 @@ func TestALinkOntoAnUntouchedEntryStoresItsAddress(t *testing.T) {
 	if string(body) != leaf.AltText {
 		t.Fatalf("the link reads %q, want the file %q", body, leaf.AltText)
 	}
-	// And neither drop wrote a row in the plugin's namespace: a link is a
-	// durable fact about the LINK, which is a home row; the entry it names
+	// And neither drop wrote a row in the files' namespace: a link is a
+	// durable fact about the LINK, which is a home row; the file it names
 	// needs nothing stored to keep answering.
-	if tiles, _ := pluginRows(t, st); tiles != 0 {
+	if tiles, _ := filesRows(t, st); tiles != 0 {
 		t.Fatalf("the two drops minted %d tile rows, want none: a link names the address", tiles)
 	}
 }
@@ -331,9 +332,10 @@ func storedLink(t *testing.T, st *sql.DB, qualifiedID string) string {
 
 // Every read answers a derived address, all the way out to the web API.
 func TestKeyFormReadsRoundTrip(t *testing.T) {
-	cl, st, hs, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl, st := f.cl, f.db
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 3)
+	root := filesGrid(t, f, 3)
 	g, err := cl.GetGrid(ctx, root)
 	if err != nil {
 		t.Fatal(err)
@@ -362,22 +364,7 @@ func TestKeyFormReadsRoundTrip(t *testing.T) {
 	if string(body) != "f1.txt" || !strings.HasPrefix(media, "text/plain") {
 		t.Fatalf("content = (%q, %q)", body, media)
 	}
-	// The /content/ API: the same id in a URL path, served as HTTP.
-	url := hs.URL + "/content/" + ContentToken(testPassword) + "/" + leaf.Id
-	res, err := hs.client.Get(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("the API answered %d for a derived address (%s)", res.StatusCode, url)
-	}
-	buf := make([]byte, 64)
-	n, _ := res.Body.Read(buf)
-	if string(buf[:n]) != "f1.txt" {
-		t.Fatalf("the API served %q", buf[:n])
-	}
-	if tiles, grids := pluginRows(t, st); tiles != 0 || grids != 0 {
+	if tiles, grids := filesRows(t, st); tiles != 0 || grids != 0 {
 		t.Fatalf("reading minted %d tile and %d grid rows", tiles, grids)
 	}
 }
@@ -386,9 +373,10 @@ func TestKeyFormReadsRoundTrip(t *testing.T) {
 // the URL codec: decode it, walk the descent the way the client does, and the
 // leaf's bytes come back.
 func TestURLDescentToAKeyFormLeafResolves(t *testing.T) {
-	cl, _, _, fsRoot := lazyStack(t)
+	f := newFilesServer(t)
+	cl := f.cl
 	ctx := context.Background()
-	root := fsGrid(t, cl, fsRoot, 3)
+	root := filesGrid(t, f, 3)
 	g, err := cl.GetGrid(ctx, root)
 	if err != nil {
 		t.Fatal(err)

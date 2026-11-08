@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -14,19 +15,24 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/connection"
+	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // mcpNode is a real Server behind the real web API, with a home and a
-// second namespace, "feed", the user can switch off.
+// connection, "feed", to a far node's home, which the user can switch off.
 type mcpNode struct {
 	srv        *Server
 	url, root  string
 	feedRoot   string
+	feedNS     string // the connection's namespace
 	reg        *plugin.Registry
 	connectURL string
 	web        *http.Client
@@ -34,28 +40,57 @@ type mcpNode struct {
 
 func newMCPNode(t *testing.T) *mcpNode {
 	t.Helper()
-	ctx := context.Background()
 	home, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = home.Close() })
 	reg := plugin.NewRegistry()
-	_, root := registerPrimaryLocaldb(t, reg, home)
-	feed, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = feed.Close() })
-	reg.Register("feed", "feed", local.New(feed, nil), nil)
-	reg.Switch("feed", "feed", func() {})
-	feedRoot, err := feed.RootGridID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := mustNew(t, reg, Config{})
+	node, root := registerPrimaryLocaldb(t, reg, home)
+	feedRoot := connectFar(t, reg, home, node, "feed")
+	reg.Switch(node+"/feed", "feed", func() {})
+	srv := mustNew(t, reg, Config{ID: node})
 	hs := webAPITest(t, srv.WebHandler())
-	return &mcpNode{srv: srv, url: hs.URL + mcpapi.Path, root: root, feedRoot: "feed/" + feedRoot, reg: reg, connectURL: hs.URL, web: hs.Client()}
+	return &mcpNode{srv: srv, url: hs.URL + mcpapi.Path, root: root, feedRoot: feedRoot, feedNS: node + "/feed", reg: reg, connectURL: hs.URL, web: hs.Client()}
+}
+
+// connectFar declares on reg, over the node's store st, one connection,
+// name, landing on a far node "rnode1" with a home of its own served on its
+// connection API, and answers the far home's root grid as the node
+// qualifies it.
+func connectFar(t *testing.T, reg *plugin.Registry, st *store.Store, node, name string) string {
+	t.Helper()
+	ctx := context.Background()
+	far, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = far.Close() })
+	farReg := plugin.NewRegistry()
+	farReg.Register("rnode1", "home", local.New(far, nil), nil)
+	api := httptest.NewUnstartedServer(nil)
+	api.Config = ConnectionAPIServer(mustNew(t, farReg, Config{ID: "rnode1"}).ConnectionHandler())
+	api.Start()
+	t.Cleanup(api.Close)
+	conn, err := dial.ClientConn(strings.TrimPrefix(api.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	transport, err := connection.New(st, func(dial.Config) (namespace.Namespace, func(), error) {
+		return namespace.FromClient(gridwellv1.NewGridwellClient(conn)), func() {}, nil
+	}, "", []config.ConnectionConfig{{Name: name, Addr: "/s"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = transport.Close() })
+	transport.ConnectAll(ctx)
+	reg.SetTransport(transport, nil)
+	root, err := far.RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return node + "/" + name + "/rnode1/" + root
 }
 
 // headers adds a fixed set of headers to every request an MCP client makes.
@@ -514,7 +549,7 @@ func TestAnMCPWriteToADisabledSourceIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := n.reg.Disable("feed"); err != nil {
+	if err := n.reg.Disable(n.feedNS); err != nil {
 		t.Fatal(err)
 	}
 	s, err := n.agent(t, bearer(testPassword))

@@ -20,8 +20,8 @@ import (
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// unresolvedPages is a far plugin whose own source failed: it serves its page
-// tile, and every page it is asked for answers Unavailable with its reason.
+// unresolvedPages is a far node's files whose disk failed: they serve a page
+// tile, and every page they are asked for answers Unavailable with the reason.
 type unresolvedPages struct{ namespacetest.Unimplemented }
 
 func (unresolvedPages) Info(context.Context, *gridwellv1.InfoRequest) (*gridwellv1.InfoResponse, error) {
@@ -41,13 +41,13 @@ func (unresolvedPages) GetTile(_ context.Context, in *gridwellv1.GetTileRequest)
 }
 
 func (unresolvedPages) ServeContent(context.Context, *gridwellv1.ServeContentRequest, func(*gridwellv1.ServeContentChunk) error) error {
-	return status.Error(codes.Unavailable, "hey: lookup app.hey.com: no such host")
+	return status.Error(codes.Unavailable, "files: read /page: input/output error")
 }
 
 // An Unavailable the far node answered is the far node speaking, so the
 // connection stays light: no dark record, so no GridChanged and no prefetch
-// walk on the next success. A far plugin's darkness, and a third node's behind
-// the far node, are the far node's to publish. A far node that stops answering
+// walk on the next success. A far node's files going dark, and a third node's
+// behind the far node, are the far node's to publish. A far node that stops answering
 // still reads dark. Across the real
 // connection API and its dial, because whether the far node answered is the
 // fact the hop carries.
@@ -64,18 +64,21 @@ func TestAnAnsweredUnavailableLeavesTheConnectionLight(t *testing.T) {
 			t.Cleanup(func() { _ = cache.Close() })
 			return cache.Front(ns, sourcecache.Options{Prefetch: true})
 		},
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register("pheyab1", "hey", unresolvedPages{}, nil) },
+		func(reg *plugin.Registry, _ *store.Store) {
+			reg.Register(rpc.FilesOwner("rnode1"), "files", unresolvedPages{}, nil)
+		},
 		connectTo(t, "zurich", third, nil))
 	root := "geneva/rnode1/" + h.rootBare
+	page := "geneva/" + rpc.QualifyID("rnode1", rpc.KeyTileID("/page"))
 	if _, err := h.tClient.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: root}); err != nil {
 		t.Fatal(err)
 	}
 	mark := traceSeq()
 	for range 3 {
-		err := h.tClient.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: "geneva/pheyab1/~page"},
+		err := h.tClient.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: page},
 			func(*gridwellv1.ServeContentChunk) error { return nil })
 		if status.Code(err) != codes.Unavailable {
-			t.Fatalf("ServeContent = %v, want the far plugin's Unavailable", err)
+			t.Fatalf("ServeContent = %v, want the far files' Unavailable", err)
 		}
 		if _, err := h.tClient.GetGrid(ctx, &gridwellv1.GetGridRequest{GridId: root}); err != nil {
 			t.Fatal(err)
@@ -95,7 +98,7 @@ func TestAnAnsweredUnavailableLeavesTheConnectionLight(t *testing.T) {
 
 	h.stopFarNode()
 	mark = traceSeq()
-	_ = h.tClient.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: "geneva/pheyab1/~page"},
+	_ = h.tClient.ServeContent(ctx, &gridwellv1.ServeContentRequest{TileId: page},
 		func(*gridwellv1.ServeContentChunk) error { return nil })
 	dark := false
 	for _, rec := range traceSince(mark) {

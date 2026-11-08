@@ -10,8 +10,6 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -30,11 +28,7 @@ func (s *selectRefuser) SetSelection(context.Context, *gridwellv1.SetSelectionRe
 // answer and in the trace, not only the first: a second refusal dropped is
 // a selection the user thinks is cleared and is not.
 func TestTheAllClearAnswersEveryNamespacesRefusal(t *testing.T) {
-	const a, b = "pinsa01", "pinsb01"
-	reg := plugin.NewRegistry()
-	reg.Register(a, "feed", &selectRefuser{why: "first source refused"}, nil)
-	reg.Register(b, "feed", &selectRefuser{why: "second source refused"}, nil)
-	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	hs := servertest.Serve(t, sinkAt(t, &selectRefuser{why: "first source refused"}, &selectRefuser{why: "second source refused"}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	err := cl.SetSelection(context.Background(), &gridwellv1.SetSelectionRequest{Clear: true, All: true})
@@ -51,8 +45,9 @@ func TestTheAllClearAnswersEveryNamespacesRefusal(t *testing.T) {
 			span = rec.KV
 		}
 	}
-	if !seen[a] || !seen[b] {
-		t.Errorf("selection/clear records name %v, want both %s and %s", seen, a, b)
+	// The transport's records name the node, whose id its rows ride under.
+	if files := rpc.FilesOwner(localNodeID); !seen[files] || !seen[localNodeID] {
+		t.Errorf("selection/clear records name %v, want both %s and the transport's %s", seen, files, localNodeID)
 	}
 	if span["all"] != "true" || span["clear"] != "true" || span["recurse"] != "false" || span["add"] != "0" || span["remove"] != "0" {
 		t.Errorf("the SetSelection span = %v, want its flags and counts", span)

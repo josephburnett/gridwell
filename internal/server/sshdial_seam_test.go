@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"fmt"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"io"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/plugin"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
 	"github.com/josephburnett/gridwell/internal/connection/dial/dialtest"
 	"github.com/josephburnett/gridwell/internal/local"
@@ -26,30 +26,27 @@ import (
 // The transport's real dial seam, in-process: a genuine x/crypto/ssh server —
 // public-key auth, host-key verification against a known_hosts file, channel
 // forwarding — in front of a genuine `gridwell serve` node handler, with
-// cleartext HTTP/2, the id-routed node export, and two in-process stores.
+// cleartext HTTP/2, the id-routed node export, and an in-process store.
 // dial.Dial crosses every layer the production binary crosses except the
 // network itself.
 
-// remoteNode stands up the "remote gridwell serve": node id "rnode" with two
-// namespaces ("personal", "work") behind ConnectionHandler on a real listener.
-// Returns its address and a direct client to the first plugin for
-// ground-truth assertions.
+// remoteNode stands up the "remote gridwell serve": node "ur1" with its home
+// ("personal") and its files behind ConnectionHandler on a real listener.
+// Returns its address and a direct client to the home for ground-truth
+// assertions.
 func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	t.Helper()
 	reg := plugin.NewRegistry()
-	for i, name := range []string{"personal", "work"} {
-		st, err := store.Open(":memory:")
-		if err != nil {
-			t.Fatalf("store.Open: %v", err)
-		}
-		t.Cleanup(func() { st.Close() })
-		direct := local.New(st, shellsvc.NewManager(shellsvctest.New()))
-		uuid := fmt.Sprintf("ur%d", i+1)
-		reg.Register(uuid, "home", direct, nil)
-		reg.SetLabel(uuid, name)
+	st, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
 	}
-	direct, _ := reg.Get("ur1")
-	srv := servertest.New(t, reg, server.Config{})
+	t.Cleanup(func() { st.Close() })
+	direct := local.New(st, shellsvc.NewManager(shellsvctest.New()))
+	reg.Register("ur1", "home", direct, nil)
+	reg.SetLabel("ur1", "personal")
+	filesAt(t, "ur1", t.TempDir())(reg, st)
+	srv := servertest.New(t, reg, server.Config{ID: "ur1"})
 	// The connection API is a unix socket; the test sshd
 	// forwards direct-streamlocal to it, exactly like a real sshd.
 	sock := filepath.Join(t.TempDir(), "federation.sock")
@@ -90,9 +87,9 @@ func TestDialReachesRemoteNodeThroughRealSSH(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// The connection's root is the remote's HOME (its first rooted plugin) —
-	// where a direct client of that node lands too. The remote's plugin
-	// list rides the same tunnel, labels intact.
+	// The connection's root is the remote's HOME — where a direct client of
+	// that node lands too. The remote's roster rides the same tunnel, labels
+	// intact.
 	info, err := c.Info(ctx, &gridwellv1.InfoRequest{})
 	if err != nil {
 		t.Fatalf("tunneled Info: %v", err)
@@ -104,12 +101,12 @@ func TestDialReachesRemoteNodeThroughRealSSH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tunneled Handshake: %v", err)
 	}
-	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "personal" || lp.Plugins[1].Label != "work" {
-		t.Fatalf("remote plugins = %+v, want personal,work", lp.Plugins)
+	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "personal" || lp.Plugins[1].Uuid != rpc.FilesOwner("ur1") {
+		t.Fatalf("remote rows = %+v, want personal, then the files", lp.Plugins)
 	}
 
 	// Write at the remote's home; read back directly on the remote: the
-	// connection is the same plugin, hop peeled.
+	// connection is the same home, hop peeled.
 	created, err := c.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: info.RootGridId,
 		Tile:   &gridwellv1.Tile{Kind: "text", X: 0, Y: 0, W: 2, H: 2},
@@ -121,7 +118,7 @@ func TestDialReachesRemoteNodeThroughRealSSH(t *testing.T) {
 		t.Fatalf("created id = %q, want the remote's qualified ur1/<n>", created.Tile.Id)
 	}
 	// The body follows through the tunnel's WriteContent, then reads back
-	// DIRECTLY on the remote — the connection is the same plugin, hop peeled.
+	// DIRECTLY on the remote — the connection is the same home, hop peeled.
 	_ = writeThenRead(t, ctx, c, created.Tile.Id, created.Tile.Version, []byte("# over ssh"))
 	got := readAllChunks(t, ctx, direct, strings.TrimPrefix(created.Tile.Id, "ur1/"))
 	if string(got) != "# over ssh" {
@@ -163,7 +160,7 @@ func readAllChunks(t *testing.T, ctx context.Context, c namespace.Namespace, til
 // restart) and comes back. The connection must heal by itself — the original
 // design captured one ssh.Client in the gRPC dialer at spawn, so every
 // reconnect attempt tunneled through the dead session and the connection stayed
-// dark until the plugin was restarted, while the server's fan-in retried
+// dark until the connection was restarted, while the server's fan-in retried
 // forever against a transport that could never recover.
 func TestTunnelRecoversAfterSSHDeath(t *testing.T) {
 	nodeAddr, _ := remoteNode(t)

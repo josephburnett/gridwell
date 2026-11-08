@@ -21,6 +21,7 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
+	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
@@ -92,33 +93,42 @@ func subscribed(cl *rpc.Client) func() {
 	return cancel
 }
 
+// sinkAt serves a node whose files are sink and whose transport is far,
+// when set.
+func sinkAt(t *testing.T, sink, far namespace.Namespace) *server.Server {
+	t.Helper()
+	reg := plugin.NewRegistry()
+	reg.Register(rpc.FilesOwner(localNodeID), "files", sink, nil)
+	if far != nil {
+		reg.SetTransport(far, nil)
+	}
+	return servertest.New(t, reg, server.Config{ID: localNodeID})
+}
+
 // Two clients showing overlapping grids of one namespace hand it the union,
 // peeled to its own ids, and a grid of another namespace is not its business;
 // a client whose stream closes takes its grids with it.
 func TestSubscriptionReachesEachNamespaceAsItsShare(t *testing.T) {
-	const a, b = "pinta01", "pintb01"
 	sinkA, sinkB := &subscriptionSink{}, &subscriptionSink{}
-	reg := plugin.NewRegistry()
-	reg.Register(a, "feed", sinkA, nil)
-	reg.Register(b, "feed", sinkB, nil)
-	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	hs := servertest.Serve(t, sinkAt(t, sinkA, sinkB))
 	one := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	two := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	ctx := context.Background()
+	key := func(p string) string { return rpc.LocalOf(fileID(p)) }
 
 	closeOne := subscribed(one)
 	closeTwo := subscribed(two)
-	if err := one.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{a + "/1", a + "/2", b + "/9"}}); err != nil {
+	if err := one.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{fileID("/1"), fileID("/2"), localNodeID + "/geneva/9"}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := two.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{a + "/2", a + "/3"}}); err != nil {
+	if err := two.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{fileID("/2"), fileID("/3")}}); err != nil {
 		t.Fatal(err)
 	}
-	sinkA.await(t, []string{"1", "2", "3"})
-	sinkB.await(t, []string{"9"})
+	sinkA.await(t, []string{key("/1"), key("/2"), key("/3")})
+	sinkB.await(t, []string{"geneva/9"})
 
 	closeOne()
-	sinkA.await(t, []string{"2", "3"})
+	sinkA.await(t, []string{key("/2"), key("/3")})
 	sinkB.await(t, nil)
 	closeTwo()
 	sinkA.await(t, nil)
@@ -128,17 +138,16 @@ func TestSubscriptionReachesEachNamespaceAsItsShare(t *testing.T) {
 // it, peeled of the connection segment, under the connection's own session,
 // and takes it back when the client here stops showing it.
 func TestSubscriptionCrossesAConnection(t *testing.T) {
-	const far = "pintf01"
 	sink := &subscriptionSink{}
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register(far, "feed", sink, nil) })
+		func(reg *plugin.Registry, _ *store.Store) { reg.Register(rpc.FilesOwner("rnode1"), "files", sink, nil) })
 	ctx := context.Background()
 
 	closeSub := subscribed(h.localCl)
-	if err := h.localCl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{localNodeID + "/geneva/" + far + "/5"}}); err != nil {
+	if err := h.localCl.SetView(ctx, &gridwellv1.SetViewRequest{ShownGridIds: []string{farFileID("/5")}}); err != nil {
 		t.Fatal(err)
 	}
-	sink.await(t, []string{"5"})
+	sink.await(t, []string{rpc.KeyTileID("/5")})
 	closeSub()
 	sink.await(t, nil)
 }
@@ -148,29 +157,27 @@ func TestSubscriptionCrossesAConnection(t *testing.T) {
 // once the stream closes, as a phone's does in the background, it is still
 // listed, away since the close and watching nothing.
 func TestSessionsHoldEachViewOpenThenAway(t *testing.T) {
-	const a = "pinta01"
 	sink := &subscriptionSink{}
-	reg := plugin.NewRegistry()
-	reg.Register(a, "feed", sink, nil)
-	srv := servertest.New(t, reg, server.Config{ID: localNodeID})
+	srv := sinkAt(t, sink, nil)
 	hs := servertest.Serve(t, srv)
+	a := func(p string) string { return fileID("/" + p) }
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	ctx := context.Background()
 
 	closeSub := subscribed(cl)
 	view := &gridwellv1.SetViewRequest{
 		Label:          "browser",
-		ShownGridIds:   []string{a + "/2", a + "/7"},
-		WorkspaceTiles: []string{localNodeID + "9"},
+		ShownGridIds:   []string{a("2"), a("7")},
+		WorkspaceTiles: []string{localNodeID + "/9"},
 		Panes: []*gridwellv1.ViewPane{
-			{Id: "p0", Anchor: a + "/1", Path: []string{a + "/4"}, GridId: a + "/2", Focused: true},
-			{Id: "p1", Anchor: a + "/1", Path: []string{a + "/4"}, ContentId: a + "/5", GridId: a + "/2"},
+			{Id: "p0", Anchor: a("1"), Path: []string{a("4")}, GridId: a("2"), Focused: true},
+			{Id: "p1", Anchor: a("1"), Path: []string{a("4")}, ContentId: a("5"), GridId: a("2")},
 		},
 	}
 	if err := cl.SetView(ctx, view); err != nil {
 		t.Fatal(err)
 	}
-	sink.await(t, []string{"2", "7"})
+	sink.await(t, []string{rpc.LocalOf(a("2")), rpc.LocalOf(a("7"))})
 	var held []server.Session
 	deadline := time.Now().Add(5 * time.Second)
 	for len(held) == 0 && time.Now().Before(deadline) {
@@ -228,10 +235,7 @@ func awaitRecord(t *testing.T, what string, ok func(tracewire.Record) bool) trac
 // counted open, the view set, a namespace refusing its share, and the stream
 // going away when it closes.
 func TestASessionsStreamAndViewAreTracedUnderItsID(t *testing.T) {
-	const a = "pintr01"
-	reg := plugin.NewRegistry()
-	reg.Register(a, "feed", &refusingSink{}, nil)
-	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	hs := servertest.Serve(t, sinkAt(t, &refusingSink{}, nil))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	session := cl.Session()
 	of := func(src, kind, msg string) func(tracewire.Record) bool {
@@ -247,14 +251,14 @@ func TestASessionsStreamAndViewAreTracedUnderItsID(t *testing.T) {
 	if rec := awaitRecord(t, "view/session open", of("view", "session", "open")); rec.KV["streams"] != "1" {
 		t.Errorf("open record = %v, want streams 1", rec.KV)
 	}
-	if err := cl.SetView(context.Background(), &gridwellv1.SetViewRequest{Label: "browser", ShownGridIds: []string{a + "/4"}}); err != nil {
+	if err := cl.SetView(context.Background(), &gridwellv1.SetViewRequest{Label: "browser", ShownGridIds: []string{fileID("/4")}}); err != nil {
 		t.Fatal(err)
 	}
 	if rec := awaitRecord(t, "view/set", of("view", "set", "")); rec.KV["label"] != "browser" {
 		t.Errorf("view/set = %v, want label browser", rec.KV)
 	}
 	awaitRecord(t, "view/refused", func(rec tracewire.Record) bool {
-		return rec.Src == "view" && rec.Kind == "refused" && rec.KV["ns"] == a && strings.Contains(rec.Msg, "cannot watch")
+		return rec.Src == "view" && rec.Kind == "refused" && rec.KV["ns"] == rpc.FilesOwner(localNodeID) && strings.Contains(rec.Msg, "cannot watch")
 	})
 	closeSub()
 	awaitRecord(t, "view/session away", of("view", "session", "away"))
@@ -267,7 +271,7 @@ func (s *tellingSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequ
 	if err := send(nil); err != nil {
 		return err
 	}
-	if err := send(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: "5"}}}); err != nil {
+	if err := send(&gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: rpc.KeyTileID("/5")}}}); err != nil {
 		return err
 	}
 	<-ctx.Done()
@@ -278,13 +282,11 @@ func (s *tellingSink) Subscribe(ctx context.Context, _ *gridwellv1.SubscribeRequ
 // by the qualified id in every rpc record; the router, which qualifies it,
 // writes both keys and the namespace in one record, so one grep joins them.
 func TestAnEventsQualifiedKeyIsTracedBesideItsLocalOne(t *testing.T) {
-	const a = "pinte01"
-	reg := plugin.NewRegistry()
-	reg.Register(a, "feed", &tellingSink{}, nil)
-	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
+	hs := servertest.Serve(t, sinkAt(t, &tellingSink{}, nil))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	t.Cleanup(subscribed(cl))
 	awaitRecord(t, "router/event", func(rec tracewire.Record) bool {
-		return rec.Src == "router" && rec.Kind == "event" && rec.KV["key"] == "g/"+a+"/5" && rec.KV["local"] == "g/5" && rec.KV["ns"] == a
+		return rec.Src == "router" && rec.Kind == "event" && rec.KV["key"] == "g/"+fileID("/5") &&
+			rec.KV["local"] == "g/"+rpc.KeyTileID("/5") && rec.KV["ns"] == rpc.FilesOwner(localNodeID)
 	})
 }

@@ -1,80 +1,37 @@
-package server
+package server_test
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	pluginv1 "github.com/josephburnett/gridwell/api/gen/plugin/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
-	"github.com/josephburnett/gridwell/internal/pluginhost"
-	"github.com/josephburnett/gridwell/internal/plugintest"
 )
 
-// pagesSource lists two url entries, each labelled by the source.
-type pagesSource struct {
-	pluginv1.UnimplementedPluginServer
-}
-
-func (pagesSource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
-	return &pluginv1.InfoResponse{Kind: "pages", DisplayName: "pages",
-		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}}}, nil
-}
-
-func (pagesSource) List(_ context.Context, req *pluginv1.ListRequest) (*pluginv1.ListResponse, error) {
-	if req.Grid != "all" {
-		return &pluginv1.ListResponse{Authoritative: true}, nil
-	}
-	return &pluginv1.ListResponse{Authoritative: true, Entries: []*pluginv1.Entry{
-		{Key: "a", Kind: rpc.KindURL, Label: "Source A", UrlString: "https://example.com/a"},
-		{Key: "b", Kind: rpc.KindURL, Label: "Source B", UrlString: "https://example.com/b"},
-	}}, nil
-}
-
-// A plugin's url copied onto home keeps the name the copier saw, the source's
-// or a typed one, and whether it was typed: a page-title capture on the copy
-// replaces the source's name and never a typed one (CLAUDE.md, 2026-10-20).
-func TestAPluginURLCopiedOntoHomeKeepsItsName(t *testing.T) {
+// A url copied onto a far node keeps the name the copier saw, the page's or a
+// typed one, and whether it was typed: a page-title capture on the copy
+// replaces a name that followed the page and never a typed one (CLAUDE.md,
+// 2026-10-20).
+func TestAURLCopiedAcrossNodesKeepsItsName(t *testing.T) {
+	cl, near, far := newTwoHomes(t, nil)
 	ctx := context.Background()
-	st, err := store.Open(filepath.Join(t.TempDir(), "gridwell.db"))
-	if err != nil {
-		t.Fatal(err)
+	create := func(x int64, name string) *gridwellv1.Tile {
+		t.Helper()
+		u, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: near,
+			Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: x, Y: 0, W: 1, H: 1, UrlString: "https://example.com/" + name}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, err = cl.SetTile(ctx, &gridwellv1.SetTileRequest{TileId: u.Id, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, AltText: name}})
+		if err != nil {
+			t.Fatalf("capture %q: %v", name, err)
+		}
+		return u
 	}
-	t.Cleanup(func() { _ = st.Close() })
-	reg := plugin.NewRegistry()
-	_, home := registerPrimaryLocaldb(t, reg, st)
-	cp, closer, err := plugintest.Loopback(pagesSource{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(closer)
-	const uuid = "pages-uuid"
-	a, stop := pluginhost.Start(cp, st.Namespace(uuid), nil, "pages watch")
-	t.Cleanup(stop)
-	reg.Register(uuid, "pages", a, nil)
-	h := serveWeb(t, mustNew(t, reg, Config{}))
-	cl := rpc.NewClient(h.Client(), h.URL, connect.WithProtoJSON())
-
-	g, err := cl.GetGrid(ctx, rpc.QualifyID(uuid, rpc.EntryGridID("all")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	byName := map[string]*gridwellv1.Tile{}
-	for _, tl := range g.Tiles {
-		byName[tl.AltText] = tl
-	}
-	src, plain := byName["Source A"], byName["Source B"]
-	if src == nil || plain == nil {
-		t.Fatalf("grid = %+v, want the two url entries", g.Tiles)
-	}
+	src, plain := create(0, "Source A"), create(1, "Source B")
 	renamed, err := cl.RenameTile(ctx, src.Id, src.Version, "mine")
 	if err != nil {
-		t.Fatalf("rename the plugin's url: %v", err)
+		t.Fatalf("rename the url: %v", err)
 	}
 
 	for i, c := range []struct {
@@ -84,9 +41,9 @@ func TestAPluginURLCopiedOntoHomeKeepsItsName(t *testing.T) {
 		{renamed, "mine", "mine"},
 		{plain, "Source B", "Page title"},
 	} {
-		copied, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: c.from.Id, DestGridId: home, X: int64(4 + i), Y: 4})
+		copied, err := cl.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: c.from.Id, DestGridId: far, X: int64(4 + i), Y: 4})
 		if err != nil {
-			t.Fatalf("copy %q onto home: %v", c.name, err)
+			t.Fatalf("copy %q across: %v", c.name, err)
 		}
 		if copied.AltText != c.name {
 			t.Fatalf("the copy is named %q, want %q, the name it was copied with", copied.AltText, c.name)
@@ -109,7 +66,7 @@ func TestAPluginURLCopiedOntoHomeKeepsItsName(t *testing.T) {
 // had, and whether it was typed: a url and a door as copies, a shell and a
 // link as links.
 func TestEveryKindCopiedAcrossNamespacesKeepsItsName(t *testing.T) {
-	cl, _, rootA, _, rootB := twoPluginServer(t)
+	cl, rootB, rootA := newTwoHomes(t, nil)
 	ctx := context.Background()
 	create := func(tl *gridwellv1.Tile) *gridwellv1.Tile {
 		t.Helper()

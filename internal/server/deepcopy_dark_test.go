@@ -1,4 +1,4 @@
-package server
+package server_test
 
 import (
 	"context"
@@ -6,15 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/local"
-	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // The offline deep-copy seam: copying a partially-reachable remote grid never
@@ -25,8 +21,8 @@ import (
 // darkSource is the source cache's offline shape, metadata served and selected
 // reads Unavailable.
 
-// darkSource wraps a real plugin client, failing selected calls the way a
-// dark connection does (codes.Unavailable) — or with an injected verdict, for
+// darkSource wraps the connection, failing selected calls the way a dark
+// one does (codes.Unavailable) — or with an injected verdict, for
 // the gone-is-not-a-link pin.
 type darkSource struct {
 	namespace.Namespace
@@ -73,66 +69,33 @@ func (d *darkSource) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRe
 	return d.Namespace.GetTilePreview(ctx, in)
 }
 
-// darkTwoPluginServer is twoPluginServer with plugin A's client wrapped in
-// a darkSource the test controls.
-func darkTwoPluginServer(t *testing.T) (cl *rpc.Client, dark *darkSource, uuidA, rootA, uuidB, rootB string) {
+// newDarkTwoHomes is newTwoHomes with the connection wrapped in a
+// darkSource the test controls: the far home is A, the source a test
+// darkens, and the near home is B.
+func newDarkTwoHomes(t *testing.T) (cl *rpc.Client, dark *darkSource, rootA, rootB string) {
 	t.Helper()
-	ctx := context.Background()
-	reg := plugin.NewRegistry()
-
-	stA, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = stA.Close() })
-	uuidA, err = stA.PluginUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	clientA := local.New(stA, nil)
-	dark = &darkSource{Namespace: clientA,
-		darkContent: map[string]bool{}, darkGrids: map[string]bool{},
+	dark = &darkSource{darkContent: map[string]bool{}, darkGrids: map[string]bool{},
 		darkPreviews: map[string]bool{}, verdict: map[string]error{}}
-	reg.Register(uuidA, "home", dark, nil)
-	bareRootA, err := stA.RootGridID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rootA = uuidA + "/" + bareRootA
-
-	stB, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = stB.Close() })
-	uuidB, err = stB.PluginUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	clientB := local.New(stB, nil)
-	reg.Register(uuidB, "home", clientB, nil)
-	bareRootB, err := stB.RootGridID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rootB = uuidB + "/" + bareRootB
-
-	srv := mustNew(t, reg, Config{})
-	hs := serveWeb(t, srv)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), dark, uuidA, rootA, uuidB, rootB
+	cl, rootB, rootA = newTwoHomes(t, func(ns namespace.Namespace) namespace.Namespace {
+		dark.Namespace = ns
+		return dark
+	})
+	return cl, dark, rootA, rootB
 }
 
+// localID is the id the connection is asked by for a qualified one: the
+// node's own segment peeled.
 func localID(t *testing.T, qualified string) string {
 	t.Helper()
-	_, local, ok := rpc.SplitID(qualified)
+	local, ok := strings.CutPrefix(qualified, localNodeID+"/")
 	if !ok {
-		t.Fatalf("not a qualified id: %q", qualified)
+		t.Fatalf("not an id of this node: %q", qualified)
 	}
 	return local
 }
 
 func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
-	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
+	cl, dark, rootA, rootB := newDarkTwoHomes(t)
 	ctx := context.Background()
 
 	door, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: rootA, Tile: &pb.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "trip"}})
@@ -218,7 +181,7 @@ func TestDeepCopyDegradesToLinksWhenSourceDark(t *testing.T) {
 }
 
 func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
-	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
+	cl, dark, rootA, rootB := newDarkTwoHomes(t)
 	ctx := context.Background()
 
 	// A text whose bytes are dark: the single-tile right-drag degrades to a
@@ -269,7 +232,7 @@ func TestTopLevelCopyDegradesWhenSourceDark(t *testing.T) {
 // the-server-never-spoke degrades. Turning a verdict into a link would
 // resurrect deleted content as a dangling link that looks deliberate.
 func TestGoneIsNeverALink(t *testing.T) {
-	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
+	cl, dark, rootA, rootB := newDarkTwoHomes(t)
 	ctx := context.Background()
 
 	door, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: rootA, Tile: &pb.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "trip"}})
@@ -298,10 +261,10 @@ func TestGoneIsNeverALink(t *testing.T) {
 // pointing at a grid they never touched). Same guard the top-level copy
 // already has (out != nil before sourceUnreachable); the child arm lacked it.
 func TestMidCopyFailureNeverDoublesTheDoor(t *testing.T) {
-	cl, dark, _, rootA, _, rootB := darkTwoPluginServer(t)
+	cl, dark, rootA, rootB := newDarkTwoHomes(t)
 	ctx := context.Background()
 
-	// Source lives in HEALTHY plugin B; the wrapped plugin A is the dest.
+	// The source is the healthy near home B; the wrapped far home A is the dest.
 	door, err := cl.CreateTile(ctx, &pb.CreateTileRequest{GridId: rootB, Tile: &pb.Tile{Kind: rpc.KindDoor, X: 0, Y: 0, W: 1, H: 1, AltText: "outer"}})
 	if err != nil {
 		t.Fatal(err)
@@ -312,18 +275,16 @@ func TestMidCopyFailureNeverDoublesTheDoor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Both are visited, so the copy writes a framing for each; a door
-	// never visited has none to copy.
-	for _, id := range []string{door.Id, inner.Id} {
-		if _, err := cl.SetFraming(ctx, &pb.SetFramingRequest{TileId: id, Cx: 0.5, Cy: 0.5, Zoom: 0.25}); err != nil {
-			t.Fatal(err)
-		}
+	// Only the inner door is visited, so the copy's one framing write is
+	// the inner copy's, made once that copy exists.
+	if _, err := cl.SetFraming(ctx, &pb.SetFramingRequest{TileId: inner.Id, Cx: 0.5, Cy: 0.5, Zoom: 0.25}); err != nil {
+		t.Fatal(err)
 	}
 
-	// The dest tunnel drops MID-copy: the outer copy's framing (1st
-	// SetFraming) lands, the inner's (2nd) fails — so the failure travels
-	// up through the child arm with the inner copy already created.
-	dark.darkFramingFrom = 2
+	// The dest tunnel drops MID-copy: the inner copy's framing fails, so the
+	// failure travels up through the child arm with the inner copy already
+	// created.
+	dark.darkFramingFrom = 1
 
 	_, cerr := cl.CopyTile(ctx, &pb.CopyTileRequest{
 		TileId: door.Id, DestGridId: rootA, X: 0, Y: 0,

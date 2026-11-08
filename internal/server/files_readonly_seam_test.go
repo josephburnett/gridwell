@@ -11,10 +11,10 @@ import (
 	"github.com/josephburnett/gridwell/client/textedit"
 )
 
-// A body the source already knows it would refuse is never offered for
-// editing: fs says so per entry (Entry.read_only), the node carries it on the
-// tile, and the client's one predicate reads it beside the grid's writable.
-func TestFsBodyItWouldRefuseIsReadOnlyOnTheTile(t *testing.T) {
+// A body the files already know they would refuse is never offered for
+// editing: the tile carries the reason (read_only), and the client's one
+// predicate reads it beside the grid's writable.
+func TestFilesBodyItWouldRefuseIsReadOnlyOnTheTile(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root writes a 0444 file")
 	}
@@ -30,7 +30,7 @@ func TestFsBodyItWouldRefuseIsReadOnlyOnTheTile(t *testing.T) {
 	write("data.bin", []byte{0, 1, 2, 3}, 0o644)
 	write("big.txt", []byte(strings.Repeat("x", 4<<20+1)), 0o644)
 
-	k := newContentClient(t, "pfsro", root)
+	k := newContentClient(t, root)
 	k.fetchGrid(k.landing)
 	g, _ := k.c.Grid(k.landing)
 	cases := []struct {

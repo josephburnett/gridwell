@@ -1,61 +1,21 @@
-package server
+package server_test
 
 import (
 	"context"
-	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"testing"
 
-	"connectrpc.com/connect"
-
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/local"
-	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
-// The link-resolution seam: ReadContent and
-// GetTilePreview on a LEAF LINK resolve to the target at the SERVING NODE,
-// through the one contentRoute — across two real plugins and the real
-// router. Before this, resolution lived only in the wasm client
-// (rpc.ContentID): any other caller reading a link got an empty row.
-
-// twoPluginHTTPServer is twoPluginServer plus the raw HTTP base URL, for the
-// /preview/tile/ route.
-func twoPluginHTTPServer(t *testing.T) (cl *rpc.Client, baseURL, rootA, rootB string) {
-	t.Helper()
-	ctx := context.Background()
-	reg := plugin.NewRegistry()
-
-	stA, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = stA.Close() })
-	_, rootA = registerPrimaryLocaldb(t, reg, stA)
-
-	stB, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = stB.Close() })
-	uuidB, err := stB.PluginUUID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	clientB := local.New(stB, nil)
-	reg.Register(uuidB, "home", clientB, nil)
-	bareRootB, err := stB.RootGridID(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	srv := mustNew(t, reg, Config{})
-	hs := serveWeb(t, srv)
-	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs.URL, rootA, uuidB + "/" + bareRootB
-}
+// The link-resolution seam: ReadContent and GetTilePreview on a LEAF LINK
+// resolve to the target at the SERVING NODE, through the one contentRoute,
+// across the node's home and a far node's and the real router. Before this,
+// resolution lived only in the wasm client (rpc.ContentID): any other caller
+// reading a link got an empty row.
 
 func TestReadContentResolvesLeafLinkAtServer(t *testing.T) {
-	cl, _, rootA, rootB := twoPluginHTTPServer(t)
+	cl, rootB, rootA := newTwoHomes(t, nil) // the target far, the link near
 	ctx := context.Background()
 
 	src, err := cl.CreateWithContent(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: 0, Y: 0, W: 2, H: 2}}, []byte("# The Source\n\nbody"))
@@ -94,10 +54,10 @@ func TestReadContentResolvesLeafLinkAtServer(t *testing.T) {
 }
 
 func TestPreviewReadResolvesLeafLink(t *testing.T) {
-	cl, _, rootA, rootB := twoPluginHTTPServer(t)
+	cl, rootB, rootA := newTwoHomes(t, nil) // the target far, the link near
 	ctx := context.Background()
 
-	// A url tile in A with a frozen JPEG preview.
+	// A url tile in the far home with a frozen JPEG preview.
 	src, err := cl.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: rootA, Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: 0, Y: 0, W: 2, H: 2, UrlString: "https://example.com"}})
 	if err != nil {
 		t.Fatalf("create url: %v", err)

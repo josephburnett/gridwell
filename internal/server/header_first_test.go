@@ -7,7 +7,7 @@ import (
 	"testing/synctest"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/internal/local"
+	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"github.com/josephburnett/gridwell/internal/plugin"
@@ -23,18 +23,13 @@ func TestTheHeaderGoesOutBeforeADisabledSourceIsTold(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = home.Close() })
-	registerPrimaryLocaldb(t, reg, home)
-	feed, err := store.Open(":memory:")
-	if err != nil {
+	node, _ := registerPrimaryLocaldb(t, reg, home)
+	conn := node + "/geneva"
+	reg.Switch(conn, "geneva", func() {})
+	if err := reg.Disable(conn); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = feed.Close() })
-	reg.Register("feed", "feed", local.New(feed, nil), nil)
-	reg.Switch("feed", "feed", func() {})
-	if err := reg.Disable("feed"); err != nil {
-		t.Fatal(err)
-	}
-	srv := mustNew(t, reg, Config{})
+	srv := mustNew(t, reg, Config{ID: node})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -58,9 +53,9 @@ func TestTheHeaderGoesOutBeforeAFailedSourceIsTold(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
 		reg := plugin.NewRegistry()
-		reg.Register("held", "held", heldStream{release: release}, nil)
-		reg.Register("broken", "broken", namespacetest.Unimplemented{}, nil)
-		srv := mustNew(t, reg, Config{})
+		reg.Register(rpc.FilesOwner("lnode1"), "files", heldStream{release: release}, nil)
+		reg.SetTransport(namespacetest.Unimplemented{}, nil)
+		srv := mustNew(t, reg, Config{ID: "lnode1"})
 
 		ctx, cancel := context.WithCancel(t.Context())
 		said := make(chan *gridwellv1.Event, 16)
