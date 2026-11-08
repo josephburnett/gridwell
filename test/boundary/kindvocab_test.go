@@ -26,8 +26,8 @@ var kindLiteralOK = map[string]string{
 
 	// The store is storage: a kind here is a column value, and its SQL must
 	// keep spelling what the rows already hold.
-	"internal/local/store/external.go": "storage: the kind written into a synthetic source row",
-	"internal/local/store/shell.go":    "storage: the kind written into a shell tile's INSERT",
+	"internal/local/store/files.go": "storage: the kind written into a synthetic source row",
+	"internal/local/store/shell.go": "storage: the kind written into a shell tile's INSERT",
 
 	// The client's own vocabularies, which collide with a kind word by
 	// coincidence and mean something else.

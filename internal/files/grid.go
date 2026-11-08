@@ -91,7 +91,7 @@ type listing struct {
 	gid     int64  // the directory's grid row, 0 when nobody touched it
 	dark    bool
 	entries []listed
-	rows    []store.ExtTile
+	rows    []store.FileTile
 	tiles   []*pb.Tile
 	grid    *pb.Grid
 }
@@ -170,7 +170,7 @@ func storeEntries(es []listed) []store.Entry {
 
 // buildTiles names each row by its path and adds what the disk says of it.
 // A door is a link when the grid it opens is not its own path's, a symlink's.
-func (s *Source) buildTiles(dir string, rows []store.ExtTile, entries []listed) ([]*pb.Tile, error) {
+func (s *Source) buildTiles(dir string, rows []store.FileTile, entries []listed) ([]*pb.Tile, error) {
 	byKey := map[string]listed{}
 	for _, e := range entries {
 		byKey[e.Key] = e
@@ -222,7 +222,7 @@ func pagePreviewStale(e listed, row *pb.Tile) bool {
 
 // at is the index of path's row, -1 when the listing has none.
 func (l *listing) at(path string) int {
-	return slices.IndexFunc(l.rows, func(r store.ExtTile) bool { return r.Key == path })
+	return slices.IndexFunc(l.rows, func(r store.FileTile) bool { return r.Key == path })
 }
 
 func (l *listing) tile(path string) *pb.Tile {

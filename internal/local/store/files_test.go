@@ -35,7 +35,7 @@ func textEntries(keys ...string) []Entry {
 // and the content facts the listing supplied. A row read back from the store
 // carries more columns than a derived placement does, so the wire record is
 // not compared whole.
-func sameExt(a, b ExtTile) bool {
+func sameExt(a, b FileTile) bool {
 	return a.ID == b.ID && a.Key == b.Key && a.ChildGridID == b.ChildGridID &&
 		a.X == b.X && a.Y == b.Y && a.W == b.W && a.H == b.H &&
 		a.Kind == b.Kind && a.AltText == b.AltText
@@ -45,7 +45,7 @@ func sameExt(a, b ExtTile) bool {
 // the product does this, a row costing a durable touch, but a test about
 // placement or retirement wants rows for every key, at exactly the placements
 // the join derived.
-func mintAll(t *testing.T, d *FileRows, gid int64, entries []Entry, authoritative bool) []ExtTile {
+func mintAll(t *testing.T, d *FileRows, gid int64, entries []Entry, authoritative bool) []FileTile {
 	t.Helper()
 	if authoritative {
 		present := map[string]bool{}
@@ -84,7 +84,7 @@ func mintAll(t *testing.T, d *FileRows, gid int64, entries []Entry, authoritativ
 	return tiles
 }
 
-func extByKey(t *testing.T, tiles []ExtTile, key string) ExtTile {
+func fileByKey(t *testing.T, tiles []FileTile, key string) FileTile {
 	t.Helper()
 	for _, tl := range tiles {
 		if tl.Key == key {
@@ -92,7 +92,7 @@ func extByKey(t *testing.T, tiles []ExtTile, key string) ExtTile {
 		}
 	}
 	t.Fatalf("no tile with key %q in %+v", key, tiles)
-	return ExtTile{}
+	return FileTile{}
 }
 
 func TestExtMergeIsIdempotent(t *testing.T) {
@@ -111,10 +111,10 @@ func TestExtMergeIsIdempotent(t *testing.T) {
 			t.Fatalf("merge not idempotent: %+v != %+v", first[i], second[i])
 		}
 	}
-	if a := extByKey(t, first, "a"); a.X != 0 || a.Y != 0 {
+	if a := fileByKey(t, first, "a"); a.X != 0 || a.Y != 0 {
 		t.Fatalf("a at (%d,%d), want (0,0)", a.X, a.Y)
 	}
-	if b := extByKey(t, first, "b"); b.X != 1 || b.Y != 0 {
+	if b := fileByKey(t, first, "b"); b.X != 1 || b.Y != 0 {
 		t.Fatalf("b at (%d,%d), want (1,0)", b.X, b.Y)
 	}
 }
@@ -145,17 +145,17 @@ func TestExtUserPlacementSurvivesMerges(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a", "b"), true)
-	a := extByKey(t, tiles, "a")
+	a := fileByKey(t, tiles, "a")
 	if _, err := d.Move(a.ID, 0, "", 5, 3, 2, 2, nil); err != nil {
 		t.Fatal(err)
 	}
 	tiles = mintAll(t, d, gid, textEntries("a", "b", "c", "d"), true)
-	a2 := extByKey(t, tiles, "a")
+	a2 := fileByKey(t, tiles, "a")
 	if a2.X != 5 || a2.Y != 3 || a2.W != 2 || a2.H != 2 {
 		t.Fatalf("user placement lost: %+v", a2)
 	}
 	for _, key := range []string{"c", "d"} {
-		n := extByKey(t, tiles, key)
+		n := fileByKey(t, tiles, key)
 		if n.X >= 5 && n.X < 7 && n.Y >= 3 && n.Y < 5 {
 			t.Fatalf("%s landed inside a's footprint at (%d,%d)", key, n.X, n.Y)
 		}
@@ -166,7 +166,7 @@ func TestExtAuthoritativeAbsenceRetiresAndRecreationMintsFresh(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a", "b"), true)
-	oldA := extByKey(t, tiles, "a")
+	oldA := fileByKey(t, tiles, "a")
 	tiles = mintAll(t, d, gid, textEntries("b"), true)
 	if len(tiles) != 1 || tiles[0].Key != "b" {
 		t.Fatalf("retired row still served: %+v", tiles)
@@ -179,7 +179,7 @@ func TestExtAuthoritativeAbsenceRetiresAndRecreationMintsFresh(t *testing.T) {
 		t.Fatalf("mutating a retired row: err=%v, want ErrNotFound", err)
 	}
 	tiles = mintAll(t, d, gid, textEntries("a", "b"), true)
-	if newA := extByKey(t, tiles, "a"); newA.ID == oldA.ID {
+	if newA := fileByKey(t, tiles, "a"); newA.ID == oldA.ID {
 		t.Fatal("recreated key reused the retired id")
 	}
 }
@@ -188,12 +188,12 @@ func TestExtNonAuthoritativeAbsenceKeepsTheRow(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("procroot")
 	tiles := mintAll(t, d, gid, textEntries("pid:1", "pid:2"), false)
-	p2 := extByKey(t, tiles, "pid:2")
+	p2 := fileByKey(t, tiles, "pid:2")
 	if _, err := d.Move(p2.ID, 0, "", 4, 4, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	tiles = mintAll(t, d, gid, textEntries("pid:1"), false)
-	if kept := extByKey(t, tiles, "pid:2"); kept.ID != p2.ID || kept.X != 4 || kept.Y != 4 {
+	if kept := fileByKey(t, tiles, "pid:2"); kept.ID != p2.ID || kept.X != 4 || kept.Y != 4 {
 		t.Fatalf("non-authoritative absence dropped state: %+v", kept)
 	}
 }
@@ -203,7 +203,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	gid, _ := d.GridOf("root")
 	listing := []Entry{{Key: "dir", Kind: "door", Label: "dir"}, {Key: "f", Kind: "text", Label: "f"}, {Key: "u", Kind: "url", Label: "u", URL: "https://a"}}
 	tiles := mintAll(t, d, gid, listing, true)
-	dir, f := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
+	dir, f := fileByKey(t, tiles, "dir"), fileByKey(t, tiles, "f")
 	if dir.ChildGridID == 0 {
 		t.Fatal("door minted no child grid")
 	}
@@ -218,7 +218,7 @@ func TestExtFramingPersistsAndFactsRefresh(t *testing.T) {
 	}
 	listing[1].Label = "f renamed"
 	tiles = mintAll(t, d, gid, listing, true)
-	dir2, f2 := extByKey(t, tiles, "dir"), extByKey(t, tiles, "f")
+	dir2, f2 := fileByKey(t, tiles, "dir"), fileByKey(t, tiles, "f")
 	if dir2.ViewCx != 3 || dir2.ViewCy != -1 || dir2.ViewZoom != 1.5 {
 		t.Fatalf("door framing lost: %+v", dir2)
 	}
@@ -237,7 +237,7 @@ func TestExtRetireIsTheDeleteGesture(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a"), true)
-	a := extByKey(t, tiles, "a")
+	a := fileByKey(t, tiles, "a")
 	if err := d.Retire(a.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 	d := st.Files()
 	gid, _ := d.GridOf("root")
 	tiles := mintAll(t, d, gid, textEntries("a"), true)
-	a := extByKey(t, tiles, "a")
+	a := fileByKey(t, tiles, "a")
 	if _, err := d.Move(a.ID, 0, "", 2, 2, 1, 1, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestExtReopenKeepsEverything(t *testing.T) {
 		t.Fatalf("grid re-minted across reopen: %d != %d", gid2, gid)
 	}
 	tiles = mintAll(t, d2, gid2, textEntries("a"), true)
-	if a2 := extByKey(t, tiles, "a"); a2.ID != a.ID || a2.X != 2 || a2.Y != 2 {
+	if a2 := fileByKey(t, tiles, "a"); a2.ID != a.ID || a2.X != 2 || a2.Y != 2 {
 		t.Fatalf("arrangement lost across reopen: %+v", a2)
 	}
 }
@@ -318,7 +318,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 	}
 	entries := textEntries(keys...)
 	before := rowCount(t, st)
-	var first []ExtTile
+	var first []FileTile
 	for pass := range 3 {
 		tiles, err := d.Overlay(gid, entries)
 		if err != nil {
@@ -346,7 +346,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 		t.Fatalf("listing wrote %d rows; the join must write none", got-before)
 	}
 	// One durable touch: the row lands where the join was already answering.
-	want := extByKey(t, first, "f42")
+	want := fileByKey(t, first, "f42")
 	id, err := d.Mint(gid, Entry{Key: "f42", Kind: "text", Label: "f42"}, 0, want.X, want.Y, want.W, want.H)
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +358,7 @@ func TestExtOverlayWritesNothingAndMintKeepsThePlacement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := extByKey(t, after, "f42")
+	got := fileByKey(t, after, "f42")
 	if got.ID != id || got.X != want.X || got.Y != want.Y {
 		t.Fatalf("minting moved the tile: derived %+v, minted %+v", want, got)
 	}
@@ -386,7 +386,7 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The user drags "b" door clear of the flow.
-	b := extByKey(t, before, "b")
+	b := fileByKey(t, before, "b")
 	if _, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
 		t.Fatal(err)
 	}
@@ -402,13 +402,13 @@ func TestMintingOneEntryLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"a", "c", "d", "e"} {
-		was, now := extByKey(t, before, key), extByKey(t, after, key)
+		was, now := fileByKey(t, before, key), fileByKey(t, after, key)
 		if was.X != now.X || was.Y != now.Y {
 			t.Fatalf("%q moved because a neighbour was dragged: (%d,%d) → (%d,%d)",
 				key, was.X, was.Y, now.X, now.Y)
 		}
 	}
-	if got := extByKey(t, after, "b"); got.X != 3 || got.Y != 4 {
+	if got := fileByKey(t, after, "b"); got.X != 3 || got.Y != 4 {
 		t.Fatalf("the dragged tile is at (%d,%d), want (3,4)", got.X, got.Y)
 	}
 }
@@ -424,7 +424,7 @@ func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := extByKey(t, before, "b")
+	b := fileByKey(t, before, "b")
 	if _, err := d.Mint(gid, Entry{Key: "b", Kind: "text", Label: "b"}, 0, b.X, b.Y, b.W, b.H); err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,7 @@ func TestMintingInPlaceLeavesItsNeighboursWhereTheyWere(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"a", "b", "c", "d", "e"} {
-		was, now := extByKey(t, before, key), extByKey(t, after, key)
+		was, now := fileByKey(t, before, key), fileByKey(t, after, key)
 		if was.X != now.X || was.Y != now.Y {
 			t.Fatalf("%q moved because a neighbour was touched in place: (%d,%d) → (%d,%d)",
 				key, was.X, was.Y, now.X, now.Y)
@@ -449,7 +449,7 @@ func TestExtTypedNameOutlivesTheSourcesLabel(t *testing.T) {
 	gid, _ := d.GridOf("root")
 	listing := []Entry{{Key: "u", Kind: "url", Label: "u", URL: "https://a"}, {Key: "f", Kind: "text", Label: "f"}}
 	tiles := mintAll(t, d, gid, listing, true)
-	u, f := extByKey(t, tiles, "u"), extByKey(t, tiles, "f")
+	u, f := fileByKey(t, tiles, "u"), fileByKey(t, tiles, "f")
 
 	changed, err := d.Rename(u.ID, 0, "mine")
 	if err != nil || !changed {
@@ -473,17 +473,17 @@ func TestExtTypedNameOutlivesTheSourcesLabel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := extByKey(t, stored, "u"); got.AltText != "mine" || got.Version != 1 {
+	if got := fileByKey(t, stored, "u"); got.AltText != "mine" || got.Version != 1 {
 		t.Fatalf("stored snapshot = %q at version %d, want the typed name at version 1", got.AltText, got.Version)
 	}
-	if got := extByKey(t, stored, "f"); got.AltText != "f retitled" {
+	if got := fileByKey(t, stored, "f"); got.AltText != "f retitled" {
 		t.Fatalf("an unrenamed row's snapshot = %q, want the source's new label", got.AltText)
 	}
 	joined, err := d.Overlay(gid, listing)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := extByKey(t, joined, "u"); got.AltText != "mine" {
+	if got := fileByKey(t, joined, "u"); got.AltText != "mine" {
 		t.Fatalf("join = %q, want the typed name over the source's label", got.AltText)
 	}
 }
@@ -500,7 +500,7 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 		{Key: "f", Kind: "text", Label: "f"},
 	}
 	tiles := mintAll(t, d, gid, listing, true)
-	u := extByKey(t, tiles, "u")
+	u := fileByKey(t, tiles, "u")
 
 	if changed, err := d.SetAddress(u.ID, 0, "https://a.test/"); err != nil || changed {
 		t.Fatalf("landing where the row points: changed=%v err=%v, want nothing written", changed, err)
@@ -515,7 +515,7 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 		t.Fatalf("a non-http address: got %v, want ErrInvalidArgument", err)
 	}
 	for _, k := range []string{"p", "f"} {
-		if _, err := d.SetAddress(extByKey(t, tiles, k).ID, 0, "https://b.test/"); !errors.Is(err, ErrInvalidArgument) {
+		if _, err := d.SetAddress(fileByKey(t, tiles, k).ID, 0, "https://b.test/"); !errors.Is(err, ErrInvalidArgument) {
 			t.Fatalf("%s has no address of its own: got %v, want ErrInvalidArgument", k, err)
 		}
 	}
@@ -528,14 +528,14 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := extByKey(t, stored, "u"); got.UrlString != "https://b.test/p" || got.Version != 1 || !got.URLUser {
+	if got := fileByKey(t, stored, "u"); got.UrlString != "https://b.test/p" || got.Version != 1 || !got.URLUser {
 		t.Fatalf("stored snapshot = %q at version %d latched %v, want the landed address at version 1", got.UrlString, got.Version, got.URLUser)
 	}
 	joined, err := d.Overlay(gid, listing)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := extByKey(t, joined, "u"); got.UrlString != "https://b.test/p" {
+	if got := fileByKey(t, joined, "u"); got.UrlString != "https://b.test/p" {
 		t.Fatalf("join = %q, want the landed address over the listing's", got.UrlString)
 	}
 	listing[0].LinkTarget = rpc.KeyTileID("root" + "/" + "f")
@@ -549,7 +549,7 @@ func TestExtLandedAddressOutlivesTheListing(t *testing.T) {
 	if joined, err = d.Overlay(gid, listing); err != nil {
 		t.Fatal(err)
 	}
-	if got := extByKey(t, joined, "u"); got.UrlString != "https://a.test/moved" || got.URLUser {
+	if got := fileByKey(t, joined, "u"); got.UrlString != "https://a.test/moved" || got.URLUser {
 		t.Fatalf("after a link and back = %q latched %v, want the listing's address: a link holds none", got.UrlString, got.URLUser)
 	}
 }
@@ -574,7 +574,7 @@ func TestExtDoorRowBecomingALinkGivesUpItsChildGrid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h := extByKey(t, got, "h"); h.Kind != "text" || h.LinkTargetId != rpc.KeyTileID("/gone") || h.ChildGridID != 0 {
+	if h := fileByKey(t, got, "h"); h.Kind != "text" || h.LinkTargetId != rpc.KeyTileID("/gone") || h.ChildGridID != 0 {
 		t.Fatalf("row = kind %q link %q child %d, want a text link with no child grid", h.Kind, h.LinkTargetId, h.ChildGridID)
 	}
 	door.Child = "hall"
@@ -584,7 +584,7 @@ func TestExtDoorRowBecomingALinkGivesUpItsChildGrid(t *testing.T) {
 	if got, err = d.Overlay(gid, []Entry{door}); err != nil {
 		t.Fatal(err)
 	}
-	if h := extByKey(t, got, "h"); h.Kind != "door" || h.LinkTargetId != "" || h.ChildGridID != child {
+	if h := fileByKey(t, got, "h"); h.Kind != "door" || h.LinkTargetId != "" || h.ChildGridID != child {
 		t.Fatalf("row = kind %q link %q child %d, want the door onto grid %d", h.Kind, h.LinkTargetId, h.ChildGridID, child)
 	}
 }

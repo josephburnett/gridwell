@@ -63,10 +63,10 @@ func (on side) of(col string) string {
 	return col + " = ''"
 }
 
-// ExtTile is one joined entry: the node's row, or a derived placement when
+// FileTile is one joined entry: the node's row, or a derived placement when
 // the entry has none. ID is the minted row id, 0 when derived; ChildGridID is
 // a door's minted child grid, 0 for a leaf. URLUser is the row's url_user.
-type ExtTile struct {
+type FileTile struct {
 	ID          int64
 	Key         string
 	ChildGridID int64
@@ -115,9 +115,9 @@ func (n *FileRows) TileKey(tileID int64) (gridID int64, key string, tombstoned b
 // address; the listing contributes every other content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
 // gridID 0 means an untouched grid: every entry is derived.
-func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
-	rows := map[string]ExtTile{}
-	var stored []ExtTile
+func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
+	rows := map[string]FileTile{}
+	var stored []FileTile
 	if gridID != 0 {
 		var err error
 		stored, err = n.tiles(gridID)
@@ -136,7 +136,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 	}
 	var cur cursor
 	matched := map[string]bool{}
-	out := make([]ExtTile, 0, len(entries)+len(stored))
+	out := make([]FileTile, 0, len(entries)+len(stored))
 	for _, e := range entries {
 		// Every entry takes a slot in the flow, minted or not, so touching
 		// or dragging one tile never shifts the rest by a cell. An entry's
@@ -162,7 +162,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]ExtTile, error) {
 			out = append(out, r)
 			continue
 		}
-		out = append(out, ExtTile{Key: e.Key, Tile: &gridwellv1.Tile{Kind: entryKind(e), AltText: e.Label,
+		out = append(out, FileTile{Key: e.Key, Tile: &gridwellv1.Tile{Kind: entryKind(e), AltText: e.Label,
 			UrlString: snapshotOf(e).url.String, LinkTargetId: e.LinkTarget, X: x, Y: y, W: 1, H: 1}})
 	}
 	for _, r := range stored {
@@ -251,7 +251,7 @@ func (n *FileRows) Refresh(gridID int64, entries []Entry) error {
 	if err != nil {
 		return err
 	}
-	byKey := map[string]ExtTile{}
+	byKey := map[string]FileTile{}
 	for _, r := range stored {
 		byKey[r.Key] = r
 	}
@@ -294,7 +294,7 @@ func (n *FileRows) Refresh(gridID int64, entries []Entry) error {
 // hold, its screenshot and its text mode, since a link's preview is its
 // target's. A typed name stays, and so
 // does a landed address while the row is still a url.
-func (n *FileRows) convert(r ExtTile, label string, s entrySnapshot, child sql.NullInt64) error {
+func (n *FileRows) convert(r FileTile, label string, s entrySnapshot, child sql.NullInt64) error {
 	return n.write("Refresh", tileRow(r.ID), func(ctx context.Context, tx *sql.Tx) error {
 		if s.link.Valid {
 			if _, err := tx.ExecContext(ctx, `UPDATE tiles SET preview_blob_id = NULL, text_mode = NULL
@@ -360,31 +360,31 @@ func (n *FileRows) lookupID(query string, args ...any) (id int64, ok bool, err e
 
 // tiles lists the live rows of a grid, by id, the stored columns through the
 // one descriptor and the key beside them.
-func (n *FileRows) tiles(gridID int64) ([]ExtTile, error) {
+func (n *FileRows) tiles(gridID int64) ([]FileTile, error) {
 	rows, err := n.s.db.Query(`SELECT `+tileColumns+`, key, url_user FROM tiles
 		WHERE key != '' AND grid_id = ? AND tombstoned = 0 ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
-	return collect(rows, func(rows *sql.Rows) (ExtTile, error) {
+	return collect(rows, func(rows *sql.Rows) (FileTile, error) {
 		var key string
 		var user bool
 		t, err := scanTile(rows, &key, &user)
 		if err != nil {
-			return ExtTile{}, err
+			return FileTile{}, err
 		}
 		id, err := strconv.ParseInt(t.Id, 10, 64)
 		if err != nil {
-			return ExtTile{}, fmt.Errorf("store: row id %q: %w", t.Id, err)
+			return FileTile{}, fmt.Errorf("store: row id %q: %w", t.Id, err)
 		}
 		// A leaf's child_grid_id is NULL, which the descriptor reads as "".
 		var child int64
 		if t.ChildGridId != "" {
 			if child, err = strconv.ParseInt(t.ChildGridId, 10, 64); err != nil {
-				return ExtTile{}, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
+				return FileTile{}, fmt.Errorf("store: row %d child grid %q: %w", id, t.ChildGridId, err)
 			}
 		}
-		return ExtTile{ID: id, Key: key, ChildGridID: child, URLUser: user, Tile: t}, nil
+		return FileTile{ID: id, Key: key, ChildGridID: child, URLUser: user, Tile: t}, nil
 	})
 }
 

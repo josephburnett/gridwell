@@ -87,7 +87,7 @@ func TestAFileURLTileHoldsTheStandingFreeze(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := extByKey(t, tiles, "a.html").UrlFrozen; got != want {
+		if got := fileByKey(t, tiles, "a.html").UrlFrozen; got != want {
 			t.Fatalf("url_frozen = %v, want %v", got, want)
 		}
 	}
@@ -163,7 +163,7 @@ func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := extByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
+	if got := fileByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
 		t.Fatalf("an absent page row answers %+v, want a page at the file's address", got.Tile)
 	}
 
@@ -173,14 +173,14 @@ func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	tiles, _ = d.Overlay(gid, nil)
-	if got := extByKey(t, tiles, "a.html"); got.ServesPage || got.UrlString != "https://a" {
+	if got := fileByKey(t, tiles, "a.html"); got.ServesPage || got.UrlString != "https://a" {
 		t.Fatalf("the snapshot kept a page the source stopped serving: %+v", got.Tile)
 	}
 	if err := d.Refresh(gid, []Entry{pageEntry("a.html")}); err != nil {
 		t.Fatal(err)
 	}
 	tiles, _ = d.Overlay(gid, nil)
-	if got := extByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
+	if got := fileByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
 		t.Fatalf("the snapshot missed the page the source serves again: %+v", got.Tile)
 	}
 }

@@ -236,7 +236,7 @@ func (s *Source) fileTile(dir string, e listed) (*pb.Tile, error) {
 	if err != nil {
 		return nil, err
 	}
-	i := slices.IndexFunc(rows, func(r store.ExtTile) bool { return r.Key == e.Key })
+	i := slices.IndexFunc(rows, func(r store.FileTile) bool { return r.Key == e.Key })
 	if i < 0 {
 		return nil, nil
 	}
@@ -247,7 +247,7 @@ func (s *Source) fileTile(dir string, e listed) (*pb.Tile, error) {
 		}
 		r.PreviewBlobId = 0
 	}
-	tiles, err := s.buildTiles(dir, []store.ExtTile{r}, one)
+	tiles, err := s.buildTiles(dir, []store.FileTile{r}, one)
 	if err != nil {
 		return nil, err
 	}

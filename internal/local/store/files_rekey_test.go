@@ -37,7 +37,7 @@ func TestExtRekeyKeepsTheIDAndLeavesTheSelection(t *testing.T) {
 		t.Fatalf("old grid's selection = %v (%v), want empty", sel, err)
 	}
 	tiles := mintAll(t, d, to, textEntries("dst/a"), true)
-	if r := extByKey(t, tiles, "dst/a"); r.ID != id || r.X != 2 || r.Y != 2 {
+	if r := fileByKey(t, tiles, "dst/a"); r.ID != id || r.X != 2 || r.Y != 2 {
 		t.Fatalf("listed after the move: %+v, want row %d at 2,2", r, id)
 	}
 }

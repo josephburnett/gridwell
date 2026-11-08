@@ -8,7 +8,7 @@ cache and lives in `cache.db` (`internal/sourcecache`), never here.
 
 `key` is the one column that tells the two sides apart, on tiles and grids
 alike: '' on every home row, a file's or directory's absolute path on the
-files' (`side` in external.go, `FileRows`). It was `context_key` on grids
+files' (`side` in files.go, `FileRows`). It was `context_key` on grids
 until v23, which retired `ns` and renamed it, the one rename in the chain,
 so that one name says "this row is a file's" in both tables.
 
@@ -92,7 +92,7 @@ Changing the tiles `CHECK` or retiring storage needs a rebuild, inside the
 migration tx: create `tiles_new` from the current DDL → `INSERT … SELECT`
 the columns `rebuildColumns(N-1)` derives → `DROP TABLE tiles` → rename →
 recreate every `idx_tiles_*` index (from `tilesIndexDDL` and
-`externalsIndexDDL`) → restore the `sqlite_sequence` row. Without the
+`tilesKeyIndexDDL`) → restore the `sqlite_sequence` row. Without the
 restore, ids of deleted tiles get reused and stored links resolve to
 the wrong tile. `migrateV10` is the worked example; `rebuildSelect` is where
 a retiring column's meaning converts into its successor (`view_x + w/2`).
