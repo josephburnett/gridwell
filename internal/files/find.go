@@ -156,8 +156,8 @@ func childDir(t *pb.Tile) string {
 	return dir
 }
 
-// walk lists dir and, with recurse, every directory its doors open, each
-// tile placed under the doors that reached it.
+// walk lists dir and, with recurse, every directory its own doors open,
+// never a link's, each tile placed under the doors that reached it.
 func (g *findGrids) walk(dir string, above []*pb.Tile, recurse bool, seen map[string]bool) ([]findHit, error) {
 	seen[dir] = true
 	l, err := g.grid(dir)
@@ -173,7 +173,7 @@ func (g *findGrids) walk(dir string, above []*pb.Tile, recurse bool, seen map[st
 	}
 	for _, t := range l.tiles {
 		child := childDir(t)
-		if child == "" || seen[child] {
+		if child == "" || t.Link || seen[child] {
 			continue
 		}
 		under, err := g.walk(child, append(slices.Clone(above), t), true, seen)

@@ -2,6 +2,8 @@ package files
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -106,5 +108,37 @@ func TestFindTimesAreTheRows(t *testing.T) {
 	}
 	if got := f.find(&pb.FindRequest{Query: "id:" + idOf(touched), Created: &pb.TimeRange{To: 1}}); len(got) != 0 {
 		t.Errorf("a locate the time filter fails = %v", got)
+	}
+}
+
+// A recursive find goes through a directory's own doors, never a link: a
+// symlink to a directory elsewhere opens that directory's grid, which the
+// directory does not hold.
+func TestARecursiveFindNeverFollowsALink(t *testing.T) {
+	f := newFixture(t)
+	f.write("a/x.md", "x")
+	other := filepath.Join(f.base, "other")
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "y.md"), []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(other, f.path("link")); err != nil {
+		t.Skip("symlinks unsupported")
+	}
+	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: other}}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	resp, err := s.Find(context.Background(), &pb.FindRequest{GridId: idOf(f.root), Recurse: true, Kind: rpc.KindText})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range resp.Results {
+		if r.Tile.AltText == "y.md" {
+			t.Errorf("a recursive find went through the link to %s", other)
+		}
 	}
 }
