@@ -809,7 +809,7 @@ func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outsid
 // drawTileBannerLabelIn takes the text color, so a dead link's grey label
 // shares the one banner geometry.
 func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, textColor string) {
-	text := tilepreview.BannerText(n)
+	text := n.GetAltText()
 	if text == "" {
 		return
 	}

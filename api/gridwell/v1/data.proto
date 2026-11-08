@@ -223,13 +223,7 @@ message Tile {
   string text_presentation = 33;
 
   reserved 34; // menu_entry
-
-  // status_detail is the owning source's one emoji about this tile's state,
-  // set only when there is something to notice, which nothing outside that
-  // source can derive. The client draws it before the name
-  // (tilepreview.BannerText) and never instead of it. Wire-only: never a
-  // stored column, never set by clients.
-  string status_detail = 35;
+  reserved 35; // status_detail
 
   // shell_tmux names the tmux a shell tile attaches: the id of the tile
   // that started it, set on a copy so every copy shares its source's tmux.

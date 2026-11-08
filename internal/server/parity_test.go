@@ -993,7 +993,7 @@ func (f *parityFix) draw(t *gridwellv1.Tile) string {
 	})
 	elsewhere := rpc.IsDoorKind(t.Kind) && t.ChildGridId != "" && rpc.SourceOf(t.ChildGridId) != rpc.SourceOf(t.GridId)
 	return fmt.Sprintf("dead=%v outside-as-its-place=%v hue=%d banner=%q", dead, tilepreview.Outside(t, inDir) == (elsewhere || inDir),
-		tilepreview.BannerHue(t, tilepreview.Outside(t, false)), tilepreview.BannerText(t))
+		tilepreview.BannerHue(t, tilepreview.Outside(t, false)), t.GetAltText())
 }
 
 // observe is a write's observable: its answer, and once it landed the row

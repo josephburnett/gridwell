@@ -120,8 +120,8 @@ child's, and `qualifyTiles` keeps the bit it is handed. `text_presentation`
 and `serves_page` come from the files' read of the file's name
 (`files.fileFacts`): a page file (image, video, audio, PDF) is a url tile
 that serves its page, every other file a text tile, plain or both by its
-extension; `status_detail` has no source today. A file row keeps its kind,
-name and link in its snapshot (`store.snapshotOf`), so a row of a directory
+extension. A file row keeps its kind, name and link in its snapshot
+(`store.snapshotOf`), so a row of a directory
 that will not read still shows as what it was. A file's `preview_blob_id`
 is `files.previewKey`'s: the node's screenshot of the tile once one exists,
 else the image's own picture keyed below zero, and none for an image whose
@@ -641,7 +641,6 @@ copy:
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which preview a file's tile wears | `files.previewKey` |
-| what a tile's banner reads | `tilepreview.BannerText` (the source's status emoji, then the name) |
 | does a tile draw as host state, and which hue its banner wears | `tilepreview.Outside`, `tilepreview.BannerHue` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |

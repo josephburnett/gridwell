@@ -13,7 +13,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Every text tile declares a presentation and no state, and its body is the
+// Every text tile declares a presentation, and its body is the
 // media type the declaration names: plain is text/plain, both is markdown.
 // Past the body cap a file still answers in its declaration's form.
 func TestFilesTextTilesDeclareWhatTheirBodiesAre(t *testing.T) {
@@ -40,9 +40,6 @@ func TestFilesTextTilesDeclareWhatTheirBodiesAre(t *testing.T) {
 			continue
 		}
 		seen++
-		if tl.StatusDetail != "" {
-			t.Errorf("%s carries status_detail %q; a file has no state worth a word", tl.AltText, tl.StatusDetail)
-		}
 		want := map[string]string{rpc.TextPresentationPlain: "text/plain", rpc.TextPresentationBoth: "text/markdown"}[tl.TextPresentation]
 		if want == "" {
 			t.Errorf("%s declares text_presentation %q; every text tile declares plain or both", tl.AltText, tl.TextPresentation)

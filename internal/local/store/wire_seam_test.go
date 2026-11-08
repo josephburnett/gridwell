@@ -31,7 +31,7 @@ func TestStoreRowSurvivesTheWire(t *testing.T) {
 }
 
 // The fixtures above are total over what the store can put on the wire: every
-// pb.Tile field is non-zero in at least one, except the three the store never
+// pb.Tile field is non-zero in at least one, except the wire-only ones the store never
 // sets. Without this a new column could be wired through the store and
 // silently left out of the seam fixture.
 func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
@@ -40,7 +40,6 @@ func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
 	derived := map[string]string{
 		"Link":             "derived by the router from child_grid_id's shape",
 		"TextPresentation": "stated by the owning source from its content",
-		"StatusDetail":     "the owning source's current trouble with the tile",
 		"ContentStamp":     "the owning source's name for a claimless row's bytes",
 		"ReadOnly":         "the owning source's reason a text body takes no edits",
 	}

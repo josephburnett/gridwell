@@ -14,7 +14,6 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
-	"github.com/josephburnett/gridwell/client/tilepreview"
 )
 
 // Paints text tiles on the canvas: the raw monospace source, soft-wrapped
@@ -105,7 +104,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 		// Content starts below the banner band, on bannerGeom's shared
 		// formula, so the alt text never overprints the first line.
 		topInset := 0.0
-		if tilepreview.BannerText(n) != "" {
+		if n.GetAltText() != "" {
 			if _, bannerH, shown := bannerGeom(h, h-2*tileBorderPx); shown {
 				topInset = bannerH
 			}

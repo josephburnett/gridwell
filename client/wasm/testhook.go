@@ -254,7 +254,7 @@ func (a *App) installTestHook() {
 			}
 			return out
 		}),
-		// The last banner line each tile drew: tilepreview.BannerText as painted.
+		// The last banner line each tile drew: its name as painted.
 		"bannerTexts": js.FuncOf(func(js.Value, []js.Value) any {
 			out := map[string]any{}
 			for id, t := range a.e2e.bannerTexts {

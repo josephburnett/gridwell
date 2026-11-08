@@ -438,12 +438,6 @@ type Tile struct {
 	// documents. The files derive it from the file name's extension.
 	// Wire-only, never a stored column.
 	TextPresentation string `protobuf:"bytes,33,opt,name=text_presentation,json=textPresentation,proto3" json:"text_presentation,omitempty"`
-	// status_detail is the owning source's one emoji about this tile's state,
-	// set only when there is something to notice, which nothing outside that
-	// source can derive. The client draws it before the name
-	// (tilepreview.BannerText) and never instead of it. Wire-only: never a
-	// stored column, never set by clients.
-	StatusDetail string `protobuf:"bytes,35,opt,name=status_detail,json=statusDetail,proto3" json:"status_detail,omitempty"`
 	// shell_tmux names the tmux a shell tile attaches: the id of the tile
 	// that started it, set on a copy so every copy shares its source's tmux.
 	// Empty means the tile's own id; rpc.ShellTmux reads it. Stored,
@@ -692,13 +686,6 @@ func (x *Tile) GetServesPage() bool {
 func (x *Tile) GetTextPresentation() string {
 	if x != nil {
 		return x.TextPresentation
-	}
-	return ""
-}
-
-func (x *Tile) GetStatusDetail() string {
-	if x != nil {
-		return x.StatusDetail
 	}
 	return ""
 }
@@ -4533,7 +4520,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xbf\a\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xa0\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -4566,14 +4553,13 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"url_frozen\x18\x1e \x01(\bR\turlFrozen\x12\x1f\n" +
 	"\vserves_page\x18  \x01(\bR\n" +
 	"servesPage\x12+\n" +
-	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12#\n" +
-	"\rstatus_detail\x18# \x01(\tR\fstatusDetail\x12\x1d\n" +
+	"\x11text_presentation\x18! \x01(\tR\x10textPresentation\x12\x1d\n" +
 	"\n" +
 	"shell_tmux\x18& \x01(\tR\tshellTmux\x12#\n" +
 	"\rcontent_stamp\x18' \x01(\tR\fcontentStamp\x12\x1b\n" +
 	"\tread_only\x18( \x01(\tR\breadOnly\x12\x14\n" +
 	"\x05named\x18) \x01(\bR\x05namedJ\x04\b\x02\x10\x03J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#J\x04\b*\x10+J\x04\b+\x10,\"\r\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#J\x04\b#\x10$J\x04\b*\x10+J\x04\b+\x10,\"\r\n" +
 	"\vInfoRequest\"\xf3\x02\n" +
 	"\fInfoResponse\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +

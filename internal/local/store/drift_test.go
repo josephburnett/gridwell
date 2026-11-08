@@ -44,7 +44,6 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"link":              `derived by the router from a qualified child_grid_id — the one authoritative "is a link" signal`,
 				"text_presentation": "stated by the owning source: how its text body presents",
 				"content_stamp":     "the owning source's name for the bytes behind a claimless row, as its listing answered it",
-				"status_detail":     "the owning source's current trouble with this tile",
 				"read_only":         "the owning source's reason this text body takes no edits",
 			},
 		},

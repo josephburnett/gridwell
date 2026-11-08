@@ -167,8 +167,8 @@ func richTile() *pb.Tile {
 		UrlString: "https://example.test/x", UrlHistory: "a\nb", UrlFrozen: true,
 		ViewCx: 1.5, ViewCy: -2.5, ViewZoom: 0.25, ContentZoom: 1.75,
 		TextX: 1, TextY: 2, TextW: 3, TextH: 4, TextMode: "edit",
-		TextPresentation: "both", StatusDetail: "ok",
-		ServesPage: true,
+		TextPresentation: "both",
+		ServesPage:       true,
 	}
 }
 
