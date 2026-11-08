@@ -32,7 +32,8 @@ import (
 //   - a solid door becomes a new door plus a recursive copy of its child grid,
 //     with its framing preserved through SetFraming;
 //   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
-//   - a directory's door or a page file copies as a link to it (rpc.CopiesAsLink);
+//   - a directory's door or a file that is not markdown copies as a link to it
+//     (rpc.CopiesAsLink);
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is a link's semantics in bytes;

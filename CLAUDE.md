@@ -513,9 +513,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   the file's name and it has no history (2026-11-08).
 - A directory's door never copies (2026-10-20): copied into another
   namespace, home or a far node's, it lands as the link to its grid a
-  left-drag makes, and the ghost shows the link before the drop. A file's
-  text or url copies its bytes; a page file, whose page is the node's,
-  copies as a link, since it has no address to copy (2026-10-21). A door
+  left-drag makes, and the ghost shows the link before the drop. A
+  markdown file, one whose name ends in `.md` in any case, copies its bytes
+  (`rpc.Markdown`), and any other file copies as a link: a page file, whose
+  page is the node's, copies as a link, since it has no address to copy
+  (2026-10-21), and a text file that is not markdown, since its bytes stay
+  on disk (2026-11-08). A door
   copies as a link when the grid it opens takes no new tiles
   (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
   so a disabled connection's door links too, as a dark one does.
@@ -711,7 +714,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   modifier flips the right button from copy to link, in the namespace the
   drop lands in or across one. Across sources a left-drag links too, because
   there is no move across sources, and so does a right-drag of a
-  directory's door, because a directory never copies (2026-10-20). Dashed means link; deleting a link
+  directory's door, because a directory never copies (2026-10-20), and of a
+  file that is not markdown (2026-11-08). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
   the same split a link out of a live tile opens — in any pane; macOS
   reports ctrl + left as a right press with ctrl held, so a ctrl or cmd

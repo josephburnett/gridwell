@@ -18,3 +18,4 @@ low-water | 57236
 2026-11-08 | verification fixes (Joe: a clean and complete change): a window of changes lists its directory once | 31
 2026-11-08 | verification fixes (Joe: a clean and complete change): a picture decodes within 16 million pixels, two at once | 8
 2026-11-08 | verification fixes (Joe: a clean and complete change): the content API answers one byte range of a page | 78
+2026-11-08 | markdown copies across the files boundary (Joe): a file that is not markdown copies out as a link | 12

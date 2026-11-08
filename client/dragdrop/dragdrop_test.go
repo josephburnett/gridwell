@@ -526,7 +526,9 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	door := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~a"}
 	link := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~b", Link: true}
 	text := &gridwellv1.Tile{Kind: rpc.KindText}
-	page := &gridwellv1.Tile{Kind: rpc.KindURL, ServesPage: true}
+	page := &gridwellv1.Tile{Kind: rpc.KindURL, ServesPage: true, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/p.png"))}
+	md := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/notes.md"))}
+	txt := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/notes.txt"))}
 	cases := []struct {
 		name           string
 		rows           []*gridwellv1.Tile
@@ -542,6 +544,8 @@ func TestCarryCopiesAsLink(t *testing.T) {
 		{"a source door with a source text", []*gridwellv1.Tile{door, text}, false, true, false},
 		{"a served page, wherever it sits", []*gridwellv1.Tile{page}, true, true, true},
 		{"a source door with a served page", []*gridwellv1.Tile{door, page}, false, true, true},
+		{"a markdown file copies its bytes", []*gridwellv1.Tile{md}, false, true, false},
+		{"any other file links", []*gridwellv1.Tile{txt}, false, true, true},
 		{"a link door is a link already", []*gridwellv1.Tile{link}, false, true, false},
 		{"nothing carried", nil, false, true, false},
 	}

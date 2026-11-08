@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,11 @@ var (
 	vDark     = parityVariant{"a directory that will not read", nil}
 	vDisabled = parityVariant{"a disabled source", nil}
 	vUntold   = parityVariant{"a far node refusing the share", func(f *parityFix) { f.h.refuseShare.Store(true) }}
+	vPlain    = parityVariant{"a text file that is not markdown", func(f *parityFix) {
+		for _, d := range f.disk {
+			writeFile(f.t, filepath.Join(d.main, "Notes.txt"), "Notes")
+		}
+	}}
 )
 
 // The decisions the variants are held to, quoted.
@@ -48,6 +54,7 @@ const (
 	dDisabled      = "every grid it serves is stamped `writable=false`, `accepts_tiles=false`, each row `read_only` with the reason, so an edit is refused before it is typed"
 	dNeverDisabled = "The files are dark or told, never disabled"
 	dUntold        = "a source whose changes are not told is read on every move"
+	dPlainCopy     = "a text file that is not markdown, since its bytes stay on disk"
 )
 
 type parityVariantCell struct {
@@ -67,6 +74,8 @@ var parityVariantTable = []parityVariantCell{
 	{vDisabled, parityCell{kText, opWrite, onFar, decided, dDisabled, nil}, holdsDisabled},
 	{vDisabled, parityCell{kText, opWrite, onFiles, decided, dNeverDisabled, nil}, holdsNeverDisabled},
 	{vUntold, parityCell{kURL, opUpdate, onFar, decided, dUntold, nil}, holdsUntold},
+	{vPlain, parityCell{kText, opCopy, onFiles, decided, dPlainCopy, nil}, holdsPlainLinks},
+	{vPlain, parityCell{kText, opCopy, onFar, decided, dPlainCopy, nil}, holdsPlainLinks},
 }
 
 // parityVariantPrefix is the node whose files a decided cell's owner
@@ -161,6 +170,32 @@ func holdsReadOnly(f *parityFix, prefix string) error {
 	}
 	if data, _, _, err := f.cl.ReadContent(f.ctx, tl.Id); err != nil || string(data) != "Body.md" {
 		return fmt.Errorf("the body reads %q, %v after the refusal", data, err)
+	}
+	return nil
+}
+
+// holdsPlainLinks proves a text file that is not markdown, copied onto home,
+// lands as a link to it, as the ghost says (rpc.CopiesAsLink), and its
+// bytes are not copied.
+func holdsPlainLinks(f *parityFix, prefix string) error {
+	g, err := f.cl.GetGrid(f.ctx, f.fileID(prefix, f.disk[prefix].main))
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(g.Tiles, func(tl *gridwellv1.Tile) bool { return tl.AltText == "Notes.txt" })
+	if i < 0 {
+		return fmt.Errorf("the files list no Notes.txt")
+	}
+	tl := g.Tiles[i]
+	if !rpc.CopiesAsLink(tl, true) {
+		return fmt.Errorf("the ghost would show a copy of %s", tl.Id)
+	}
+	made, err := f.cl.CopyTile(f.ctx, &gridwellv1.CopyTileRequest{TileId: tl.Id, DestGridId: f.root[onHome], X: 0, Y: 7})
+	if err != nil {
+		return err
+	}
+	if made.LinkTargetId != tl.Id || made.Kind != rpc.KindText {
+		return fmt.Errorf("the copy is %v, want a link to %s", made, tl.Id)
 	}
 	return nil
 }

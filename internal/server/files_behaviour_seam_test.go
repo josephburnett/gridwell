@@ -393,10 +393,10 @@ func TestFilesFramingOnRootAndDoor(t *testing.T) {
 
 // A directory's door never copies: into home it lands as the link a
 // left-drag makes, and a home door into a directory copies as another link.
-// A file's text copies its bytes.
+// A markdown file copies its bytes.
 func TestFilesCopyIntoHome(t *testing.T) {
 	root := t.TempDir()
-	f := filepath.Join(root, "a.txt")
+	f := filepath.Join(root, "a.md")
 	writeFile(t, f, "the bytes")
 	sub := filepath.Join(root, "sub")
 	writeFile(t, filepath.Join(sub, "c.txt"), "c")
