@@ -87,9 +87,9 @@ func parseRatchet(t *testing.T, r io.Reader) []ratchetRow {
 
 // raisedAboveCommitted names each row recorded above the value the committed
 // ledger holds for it. A row new since then compares to nothing, and a row
-// gone since then reached its floor. A row counted in lines may rise by
-// exactly the debt entered since then (debt.txt).
-func raisedAboveCommitted(committed, now []ratchetRow, entered int) []string {
+// gone since then reached its floor. A ceiling, and the debt row, may rise
+// by exactly the debt entered since then for it (debt.txt).
+func raisedAboveCommitted(committed, now []ratchetRow, entered map[string]int) []string {
 	was := map[string]int{}
 	for _, r := range committed {
 		was[r.name] = r.recorded
@@ -99,9 +99,9 @@ func raisedAboveCommitted(committed, now []ratchetRow, entered int) []string {
 		prev, ok := was[r.name]
 		switch {
 		case !ok || r.recorded <= prev:
-		case !slices.Contains(inLines, r.name):
+		case !raisable(r.name):
 			out = append(out, fmt.Sprintf("ratchet.txt:%d: %s is recorded at %d, above the %d committed before it: a count only falls", r.line, r.name, r.recorded, prev))
-		case r.recorded-prev != entered:
+		case r.recorded-prev != entered[r.name]:
 			out = append(out, fmt.Sprintf("ratchet.txt:%d: %s rose by %d with no debt entry naming the decision", r.line, r.name, r.recorded-prev))
 		}
 	}
@@ -146,10 +146,10 @@ func TestRaisedAboveCommitted(t *testing.T) {
 	committed := parseRatchet(t, strings.NewReader("# header\nlines | 100 | - | o | m | d\ngone | 3 | 2 | o | m | d\n"))
 	now := parseRatchet(t, strings.NewReader("# header\nlines | 101 | - | o | m | d\nnew | 9 | 0 | o | m | d\n"))
 	want := []string{"ratchet.txt:2: lines rose by 1 with no debt entry naming the decision"}
-	if got := raisedAboveCommitted(committed, now, 0); !slices.Equal(got, want) {
+	if got := raisedAboveCommitted(committed, now, nil); !slices.Equal(got, want) {
 		t.Errorf("got %q, want %q", got, want)
 	}
-	if got := raisedAboveCommitted(now, committed, 0); len(got) != 0 {
+	if got := raisedAboveCommitted(now, committed, nil); len(got) != 0 {
 		t.Errorf("a fall passes, got %q", got)
 	}
 }
@@ -174,7 +174,7 @@ func TestRatchet(t *testing.T) {
 			t.Error(msg)
 		}
 	})
-	owing := readDebt(t, root).lowWater != 0
+	owing := readDebt(t, root).owing()
 	for name := range ratchetCounts {
 		if name == "debt" && !owing {
 			continue
