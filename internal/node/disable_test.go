@@ -123,15 +123,16 @@ func TestADisabledConnectionIsNeverDialedAgainAndReadsDark(t *testing.T) {
 	}
 }
 
-// Home is not a source the user can switch off, and neither is a name this
-// node does not declare.
-func TestOnlyADeclaredSourceCanBeDisabled(t *testing.T) {
+// Only a connection can be switched off: not home, not the files, and not a
+// name this node does not declare.
+func TestOnlyADeclaredConnectionCanBeDisabled(t *testing.T) {
 	dir := t.TempDir()
 	cfg, err := BuildConfig(dir, filepath.Join(dir, "server.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg.Web.Bind = "127.0.0.1:0"
+	cfg.Files = []config.FilesRoot{{Root: t.TempDir()}}
 	n, err := Start(Options{Dir: dir, Cfg: cfg})
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +140,7 @@ func TestOnlyADeclaredSourceCanBeDisabled(t *testing.T) {
 	n.ServeBackground()
 	t.Cleanup(func() { _ = n.Close() })
 	cl := webClient(t, "http://"+n.Ln.Addr().String(), cfg.WebPassword)
-	for _, ns := range []string{cfg.ID, rpc.QualifyID(cfg.ID, "nobody"), "nosuchplugin"} {
+	for _, ns := range []string{cfg.ID, rpc.FilesOwner(cfg.ID), rpc.QualifyID(cfg.ID, "nobody"), "nosuchplugin"} {
 		err := cl.DisableSource(context.Background(), ns)
 		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 			t.Errorf("disable %q = %v, want refused with the reason", ns, err)

@@ -72,16 +72,16 @@ type Server struct {
 	// only by note. Never persisted.
 	health map[string]connState
 	// liveOff is why a far node refused this node's share, by connection,
-	// while the refusal stands: its plugins watch nothing shown here. Written
+	// while the refusal stands: its sources watch nothing shown here. Written
 	// only by noteLiveOff. Never persisted.
 	liveOff map[string]string
 	// farHealth is each far namespace's standing health by its id here, for a
 	// late Subscribe; note forgets a connection's on the down every re-establish
 	// follows, and the far node's replay of its sources' standing health refills it.
 	farHealth map[string]*gridwellv1.Event
-	// off reads which connections the user disabled, by name; the record is
-	// plugin.Registry's (SwitchedOff). Nil disables none.
-	off func(name string) bool
+	// off is every connection the user disabled, by name, for the process's
+	// life (Disable), guarded by mu. Never persisted.
+	off map[string]bool
 
 	hub *eventhub.Hub[*gridwellv1.Event]
 
@@ -136,7 +136,7 @@ func New(st *store.Store, dialer Dialer, home string, conns []config.ConnectionC
 	ctx := context.Background()
 	s := &Server{st: st, dial: dialer, home: home, conns: map[string]*Conn{},
 		live: map[string]*liveConn{}, health: map[string]connState{}, liveOff: map[string]string{},
-		farHealth: map[string]*gridwellv1.Event{}, far: map[string]*farSubscription{}, hub: eventhub.New(rpc.EventKey)}
+		farHealth: map[string]*gridwellv1.Event{}, far: map[string]*farSubscription{}, off: map[string]bool{}, hub: eventhub.New(rpc.EventKey)}
 	retiredSet := map[string]bool{}
 	for _, r := range retired {
 		retiredSet[r] = true
@@ -199,18 +199,25 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// SwitchedOff hands the server its reader of the user's switch, before
-// anything dials.
-func (s *Server) SwitchedOff(off func(name string) bool) { s.off = off }
+// switchedOff is whether the user disabled name; the caller holds mu.
+func (s *Server) switchedOff(name string) bool { return s.off[name] }
 
-func (s *Server) switchedOff(name string) bool { return s.off != nil && s.off(name) }
-
-// Disable is a connection's switch (plugin.Registry.Switch), run once the
-// registry records it off: its transport closes, cancelling everything it
-// runs, and every later read through the name is refused unavailable without
-// a dial, so the cache answers for it as for any dark connection.
-func (s *Server) Disable(name string) {
+// Disable switches the connection name off until the process exits, the
+// user's verdict from its health notice: its transport closes, cancelling
+// everything it runs, and every later read through the name is refused
+// unavailable without a dial, so the cache answers for it as for any dark
+// connection. Only a connection this node declares can be disabled; a second
+// Disable does nothing more.
+func (s *Server) Disable(name string) error {
+	if _, ok := s.conns[name]; !ok {
+		return fmt.Errorf("%q is not a connection this node declares", name)
+	}
 	s.mu.Lock()
+	if s.off[name] {
+		s.mu.Unlock()
+		return nil
+	}
+	s.off[name] = true
 	lc := s.live[name]
 	delete(s.live, name)
 	s.mu.Unlock()
@@ -219,6 +226,26 @@ func (s *Server) Disable(name string) {
 		lc.closer()
 	}
 	s.note(name, connState{detail: rpc.DisabledDetail})
+	return nil
+}
+
+// DisabledReason is the sentence a disabled connection's rows carry and its
+// writes are refused with, "" while name is on.
+func (s *Server) DisabledReason(name string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.off[name] {
+		return ""
+	}
+	c := s.conns[name].Cfg
+	return rpc.DisabledReason(cmp.Or(c.Label, c.Name))
+}
+
+// DisabledNow is every connection the user disabled, by name, sorted.
+func (s *Server) DisabledNow() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Sorted(maps.Keys(s.off))
 }
 
 // ConnectAll dials every declared connection and learns its landing, bounded

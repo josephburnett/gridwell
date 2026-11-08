@@ -10,11 +10,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/server"
 )
 
 // failingFind is a namespace whose find index is not answering.
@@ -42,8 +41,8 @@ func (failingFind) Find(context.Context, *gridwellv1.FindRequest) (*gridwellv1.F
 func TestAFindSaysWhatItWentWithout(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) {
-			reg.Register(rpc.FilesOwner("rnode1"), "files", failingFind{}, nil)
+		func(reg *server.Sources, _ *store.Store) {
+			reg.Files = failingFind{}
 		})
 	skipped := func() []string {
 		t.Helper()
@@ -76,8 +75,8 @@ func TestAFindSaysWhatItWentWithout(t *testing.T) {
 func TestAnIDLookupAsksOnlyItsOwner(t *testing.T) {
 	ctx := context.Background()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) {
-			reg.Register(rpc.FilesOwner("rnode1"), "files", failingFind{}, nil)
+		func(reg *server.Sources, _ *store.Store) {
+			reg.Files = failingFind{}
 		})
 	tile, err := h.localCl.CreateTile(ctx, &gridwellv1.CreateTileRequest{
 		GridId: localNodeID + "/geneva/rnode1/" + h.rootBare,

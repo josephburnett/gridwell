@@ -169,7 +169,7 @@ func (s *Server) ShellHolder(ctx context.Context, key string) (session string, o
 		}
 		trace.Emit("shellapi", "holder", "join", kv)
 	}()
-	want := s.homeUUID() + "/" + key
+	want := rpc.QualifyID(s.cfg.ID, key)
 	rt := newRouter(s)
 	for _, a := range s.shells.newestFirst() {
 		if a.session == "" {

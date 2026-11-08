@@ -15,7 +15,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // blipClient forwards to the real plugin, but after the delete of armID
@@ -64,9 +63,9 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 		t.Fatal(err)
 	}
 	bc := &blipClient{Namespace: inner}
-	reg := plugin.NewRegistry()
-	reg.Register(uuid, "home", bc, nil)
-	srv := mustNew(t, reg, Config{})
+	reg := &Sources{}
+	reg.Home = bc
+	srv := mustNew(t, reg, Config{ID: uuid})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	root := uuid + "/" + bare

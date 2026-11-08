@@ -18,7 +18,6 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	clienttrace "github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -28,7 +27,7 @@ import (
 // with the request id dropped in the middle.
 func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 	dir := t.TempDir()
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: dir}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: dir}))
 	const reqID = "k3f9x2a"
 	marker := "gesture " + reqID
 
@@ -107,7 +106,7 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 
 // An rpc nobody tagged still says what it did; the join key is simply empty.
 func TestAnRPCWithoutARequestIDIsStillTraced(t *testing.T) {
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: t.TempDir()}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	if _, err := cl.GetGrid(context.Background(), connect.NewRequest(&pb.GetGridRequest{GridId: "nope/1"})); err == nil {
 		t.Fatal("GetGrid on an unrouted id answered")
@@ -125,7 +124,7 @@ func TestAnRPCWithoutARequestIDIsStillTraced(t *testing.T) {
 
 // A streaming verb is one span around the whole stream, not none.
 func TestAStreamingRPCGetsBothRecords(t *testing.T) {
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: t.TempDir()}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	const reqID = "stream-req"
 	req := connect.NewRequest(&pb.ReadContentRequest{TileId: "nope/1"})
@@ -156,7 +155,7 @@ func TestAStreamingRPCGetsBothRecords(t *testing.T) {
 // traces too: a node debugging a federated gesture has the far hop in its own
 // ring.
 func TestTheConnectionAPITracesItsRPCs(t *testing.T) {
-	srv := mustNew(t, plugin.NewRegistry(), Config{Dir: t.TempDir()})
+	srv := mustNew(t, &Sources{}, Config{Dir: t.TempDir()})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -192,7 +191,7 @@ func TestTheConnectionAPITracesItsRPCs(t *testing.T) {
 // a dump joins the node's work on a grid to the client's records about that
 // grid without the request id. Unary and streaming, on both APIs.
 func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: t.TempDir()}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	const unaryReq, streamReq = "entity-unary", "entity-stream"
 	req := connect.NewRequest(&pb.GetGridRequest{GridId: "nope/g7abcde"})
@@ -205,7 +204,7 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 		}
 	}
 
-	srv := mustNew(t, plugin.NewRegistry(), Config{Dir: t.TempDir()})
+	srv := mustNew(t, &Sources{}, Config{Dir: t.TempDir()})
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -248,7 +247,7 @@ func TestAnRPCSpanNamesItsRequestsEntity(t *testing.T) {
 // the node's clock, however slow the client's clock and however long the
 // batch waited.
 func TestAClientBatchLandsAtItsEmitTimeOnTheNodesClock(t *testing.T) {
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: t.TempDir()}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
 	skew := -time.Hour // the client's clock runs an hour slow
 	c := clienttrace.New(8, "c7clock")
 	emitted := time.Now().Add(skew)

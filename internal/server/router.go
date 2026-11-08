@@ -64,7 +64,7 @@ func (rt *router) hop(routed string, transit bool) rpc.Hop {
 	return rpc.InboundHop(routed, rt.srv.cfg.ID, transit)
 }
 
-// tileResp applies the transit rule when the owning plugin is a connection.
+// tileResp applies the transit rule when the owning source is a connection.
 func (rt *router) tileResp(ctx context.Context, uuid string, transit bool, resp *pb.TileResponse, err error) (*pb.TileResponse, error) {
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (rt *router) qualifyOut(ctx context.Context, transit bool, uuid string, til
 	return qualifyTilesFor(transit, uuid, tiles)
 }
 
-// qualifyEvent re-applies a plugin's uuid to a change event's ids, each row
+// qualifyEvent re-applies a source's prefix to a change event's ids, each row
 // as qualifyOut leaves it; the walk is rpc.QualifyEventIDs.
 func (rt *router) qualifyEvent(ctx context.Context, uuid string, transit bool, ev *pb.Event) *pb.Event {
 	return rpc.QualifyEventIDs(uuid, ev, func(t *pb.Tile) *pb.Tile {
@@ -115,7 +115,7 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 			}
 			g.PluginGrids = rpc.QualifyPluginGrids(uuid, info.PluginGrids)
 			if g.ScratchGridId, ierr = rt.srv.homeScratch(ctx); ierr != nil {
-				return nil, infoDeclarationError(req.GridId, rt.srv.homeUUID(), ierr)
+				return nil, infoDeclarationError(req.GridId, rt.srv.cfg.ID, ierr)
 			}
 		}
 	}
@@ -125,13 +125,13 @@ func (rt *router) GetGrid(ctx context.Context, req *pb.GetGridRequest) (*pb.GetG
 }
 
 // infoDeclarationError says which grid could not be answered and why, transport-class
-// unless the plugin gave a code, so the client re-asks rather than latching.
+// unless the source gave a code, so the client re-asks rather than latching.
 func infoDeclarationError(gridID, uuid string, err error) error {
 	code := status.Code(err)
 	if code == gcodes.Unknown {
 		code = gcodes.Unavailable
 	}
-	return status.Errorf(code, "grid %s: plugin %s handshake failed, so the grid's declarations are unknown: %v", gridID, uuid, err)
+	return status.Errorf(code, "grid %s: source %s handshake failed, so the grid's declarations are unknown: %v", gridID, uuid, err)
 }
 
 func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
@@ -143,11 +143,11 @@ func (rt *router) GetTilePreview(ctx context.Context, req *pb.GetTilePreviewRequ
 	return c.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: local})
 }
 
-// pluginInfoTimeout bounds each plugin's Info handshake so one hung plugin
+// pluginInfoTimeout bounds each source's Info handshake so one hung source
 // cannot stall the menu.
 const pluginInfoTimeout = 3 * time.Second
 
-// Handshake enumerates the configured plugins in config order for the + menu.
+// Handshake enumerates home, the files and the connections for the + menu.
 func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.HandshakeResponse, error) {
 	// A namespaced request routes like every other read; "" stays local.
 	if ns := req.GetNamespace(); ns != "" {
@@ -155,12 +155,16 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		if !ok {
 			hop, rest = ns, ""
 		}
-		c, found := rt.srv.routeClient(hop)
-		if hop == rt.srv.cfg.ID && rest != "" {
+		var c namespace.Namespace
+		switch {
+		case hop != rt.srv.cfg.ID:
+		case rest == "":
+			c = rt.srv.src.Home
+		default:
 			// "<id>/<conn>/…": the transport answers for the connection.
-			c, found = rt.srv.pluginReg.Transport()
+			c = rt.srv.src.Transport
 		}
-		if !found {
+		if c == nil {
 			return nil, gwerr.DeadLink(hop, "no source %q", hop)
 		}
 		resp, err := c.Handshake(ctx, &pb.HandshakeRequest{Namespace: rest})
@@ -181,12 +185,9 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 			out = append(out, rpc.TransitQualifyPluginList(n.UUID, tr).Plugins...)
 			continue
 		}
-		// The server.yaml display name is authoritative, since the menu and a
-		// door to the plugin must agree; buildPluginInfo owns the fallbacks.
-		label := rt.srv.pluginReg.Label(n.UUID)
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
-		out = append(out, buildPluginInfo(n.UUID, n.Kind, label, info, err))
+		out = append(out, buildPluginInfo(n.UUID, n.Label, info, err))
 	}
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
@@ -198,23 +199,24 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 	}
 	// Home is the node's own store, where "/" lands.
 	for _, p := range out {
-		if p.Uuid == rt.srv.homeUUID() {
+		if p.Uuid == rt.srv.cfg.ID && rt.srv.src.Home != nil {
 			resp.HomeGridId = p.RootGridId
 		}
 	}
 	return resp, nil
 }
 
-// buildPluginInfo assembles a menu PluginInfo from the config and the source's
-// Info, nil when Info failed with infoErr the reason: the source is still
-// listed, and InfoError tells broken from healthy-but-rootless. uuid is the
-// row's owner id; its grids are qualified as its answers are (rpc.QualifierOf).
-func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
-	out := &pb.PluginInfo{Uuid: uuid, Label: configLabel}
+// buildPluginInfo assembles a menu PluginInfo from the row's label and the
+// source's Info, nil when Info failed with infoErr the reason: the source is
+// still listed, and InfoError tells broken from healthy-but-rootless. uuid is
+// the row's owner id; its grids are qualified as its answers are
+// (rpc.QualifierOf).
+func buildPluginInfo(uuid, label string, info *pb.InfoResponse, infoErr error) *pb.PluginInfo {
+	out := &pb.PluginInfo{Uuid: uuid, Label: label}
 	if info != nil {
 		prefix := rpc.QualifierOf(uuid)
 		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(prefix, info.RootGridId), rpc.QualifyPluginGrids(prefix, info.PluginGrids)
-		out.Label, out.Glyph = cmp.Or(configLabel, info.DisplayName), info.Glyph
+		out.Glyph = info.Glyph
 		out.RootViewCx, out.RootViewCy, out.RootViewZoom = info.RootViewCx, info.RootViewCy, info.RootViewZoom
 	} else if infoErr != nil {
 		out.InfoError = infoRefusal(infoErr)
@@ -223,16 +225,15 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 	if out.InfoError == "" && infoErr != nil {
 		out.InfoError = infoErr.Error()
 	}
-	out.Label = cmp.Or(out.Label, kind)
 	return out
 }
 
-// infoRefusal is the sentence a broken row carries: the plugin's own words, or
-// "not responding" when it never spoke.
+// infoRefusal is the sentence a broken row carries: the source's own words,
+// or "not responding" when it never spoke.
 func infoRefusal(err error) string {
 	msg := status.Convert(err).Message()
 	if gwerr.IsTransport(err) {
-		return "plugin not responding: " + msg
+		return "not responding: " + msg
 	}
 	return msg
 }
@@ -518,7 +519,7 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 	return left
 }
 
-// SetFraming is the one framing write. Unimplemented (a plugin that keeps no
+// SetFraming is the one framing write. Unimplemented (a source that keeps no
 // framing) is not an error.
 func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*pb.SetFramingResponse, error) {
 	f, err := rpc.FramingOf(req)
@@ -564,7 +565,7 @@ func (rt *router) SetFraming(ctx context.Context, req *pb.SetFramingRequest) (*p
 // clearAllSelections is the all-clear: every namespace this node declares
 // clears its own grids, each in its own write, and the transport forwards it
 // to each live far node. A far node's sets are its rows, so one asked over
-// the connection API clears its home and plugins and forwards nothing,
+// the connection API clears its home and files and forwards nothing,
 // which is what keeps a cycle of connections from echoing it. A disabled
 // source is read-only and skipped. Every namespace is tried, and every
 // refusal is in the answer, since each is a set left uncleared.
@@ -575,7 +576,7 @@ func (rt *router) clearAllSelections(ctx context.Context, req *pb.SetSelectionRe
 		switch {
 		case n.Transit && rt.farAsked:
 			verdict = "skipped: asked by a far node"
-		case !n.Transit && rt.srv.pluginReg.DisabledReason(n.UUID) != "":
+		case rt.srv.nsDisabledReason(n.UUID) != "":
 			verdict = "skipped: disabled"
 		default:
 			if _, err := n.NS.SetSelection(ctx, req); err != nil {
@@ -642,7 +643,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 	// flushes the response, and a client takes that for listening.
 	off, detach := rt.srv.switchedOff.Subscribe()
 	defer detach()
-	disabled := rt.srv.pluginReg.DisabledNow()
+	disabled := rt.srv.disabledNow()
 
 	events := make(chan *pb.Event, 64)
 	var settling sync.WaitGroup
@@ -707,7 +708,7 @@ func (rt *router) Subscribe(ctx context.Context, req *pb.SubscribeRequest, send 
 // fan-in failing, it is disabled, and a row it changes takes no edits
 // (stampDisabled).
 func (s *Server) asSwitched(ev *pb.Event) *pb.Event {
-	if h := ev.GetPluginHealth(); h != nil && s.pluginReg.Disabled(h.GetPluginUuid()) {
+	if h := ev.GetPluginHealth(); h != nil && s.nsDisabledReason(h.GetPluginUuid()) != "" {
 		return rpc.DisabledEvent(h.GetPluginUuid())
 	}
 	if t := ev.GetTileChanged().GetTile(); t != nil {
@@ -719,12 +720,17 @@ func (s *Server) asSwitched(ev *pb.Event) *pb.Event {
 	return ev
 }
 
-// DisableSource switches off a plugin or connection this node declares until
-// the node exits (plugin.Registry.Disable), and tells every open stream, and
-// every view showing one of its grids (announceDisabled).
+// DisableSource switches off a connection this node declares until the node
+// exits (Sources.Switches), and tells every open stream, and every view
+// showing one of its grids (announceDisabled). Home, the files and anything a
+// far node declares are not this node's to stop.
 func (rt *router) DisableSource(_ context.Context, req *pb.DisableSourceRequest) (*pb.DisableSourceResponse, error) {
 	ns := req.GetNamespace()
-	if err := rt.srv.pluginReg.Disable(ns); err != nil {
+	name, ok := rt.srv.connectionOf(ns)
+	if !ok {
+		return nil, status.Errorf(gcodes.FailedPrecondition, "disable: %q is not a connection this node declares", ns)
+	}
+	if err := rt.srv.src.Switches.Disable(name); err != nil {
 		return nil, status.Error(gcodes.FailedPrecondition, "disable: "+err.Error())
 	}
 	rt.srv.switchedOff.Publish(rpc.DisabledEvent(ns))

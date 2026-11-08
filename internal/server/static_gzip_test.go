@@ -44,7 +44,7 @@ func gzipStaticServer(t *testing.T) (hs *httptest.Server, dir string, raw []byte
 		t.Fatal(err)
 	}
 
-	srv := mustNew(t, nil, Config{StaticFS: os.DirFS(dir)})
+	srv := mustNew(t, &Sources{}, Config{StaticFS: os.DirFS(dir)})
 	hs = serveWeb(t, srv)
 	return hs, dir, raw
 }
@@ -124,7 +124,7 @@ func TestStaticGzipSidecar(t *testing.T) {
 // instantiateStreaming requires — with no files on disk at all. This is
 // the "copy the binaries to another machine" contract.
 func TestEmbeddedWebClientServes(t *testing.T) {
-	srv := mustNew(t, nil, Config{StaticFS: web.FS})
+	srv := mustNew(t, &Sources{}, Config{StaticFS: web.FS})
 	hs := serveWeb(t, srv)
 
 	res := getEncoded(t, hs.URL+"/", "")

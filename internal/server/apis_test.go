@@ -8,7 +8,6 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // The two APIs are different handlers: the web API no
@@ -17,7 +16,7 @@ import (
 // handler seam: a gRPC client against WebHandler gets no Gridwell
 // service, while the same call against ConnectionHandler answers.
 func TestWebAPIServesNoGRPC(t *testing.T) {
-	srv := mustNew(t, plugin.NewRegistry(), Config{})
+	srv := mustNew(t, &Sources{}, Config{})
 	serve := func(h http.Handler) string {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

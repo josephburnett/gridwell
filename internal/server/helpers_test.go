@@ -1,13 +1,14 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // testPassword is the password every in-package test server is gated behind
@@ -17,12 +18,12 @@ const testPassword = "test-password"
 
 // mustNew is New with the test password filled in and the error
 // fatal. servertest.New is its twin for tests outside this package.
-func mustNew(t testing.TB, reg *plugin.Registry, cfg Config) *Server {
+func mustNew(t testing.TB, src *Sources, cfg Config) *Server {
 	t.Helper()
 	if cfg.Password == "" {
 		cfg.Password = testPassword
 	}
-	srv, err := New(reg, cfg)
+	srv, err := New(*src, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,4 +67,33 @@ func withCookie(t testing.TB, hs *httptest.Server, password string) *httptest.Se
 	jar.SetCookies(u, []*http.Cookie{{Name: AuthCookieName, Value: AuthToken(password)}})
 	hs.Client().Jar = jar
 	return hs
+}
+
+// oneSwitch is the switch over one declared connection, for a test that
+// disables it with no transport behind it.
+type oneSwitch struct {
+	name string
+	off  bool
+}
+
+func (s *oneSwitch) Disable(name string) error {
+	if name != s.name {
+		return fmt.Errorf("%q is not a connection this node declares", name)
+	}
+	s.off = true
+	return nil
+}
+
+func (s *oneSwitch) DisabledReason(name string) string {
+	if s.off && name == s.name {
+		return rpc.DisabledReason(name)
+	}
+	return ""
+}
+
+func (s *oneSwitch) DisabledNow() []string {
+	if s.off {
+		return []string{s.name}
+	}
+	return nil
 }

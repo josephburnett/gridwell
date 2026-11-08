@@ -17,7 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/server"
 )
 
 func wantMoveAcross(t *testing.T, what string, err error) {
@@ -54,12 +54,12 @@ func TestAMoveBetweenThisNodeAndAFarOneIsRefusedEitherWay(t *testing.T) {
 	f := filepath.Join(root, "a.txt")
 	writeFile(t, f, "a")
 	h := buildTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, nil,
-		func(reg *plugin.Registry, st *store.Store) {
+		func(reg *server.Sources, st *store.Store) {
 			src, err := files.New(st.Files(), []files.Root{{Path: root}}, func(string) error { return nil })
 			if err != nil {
 				t.Fatal(err)
 			}
-			reg.Register(rpc.FilesOwner(localNodeID), "files", src, src.Close)
+			reg.Files = src
 		})
 	ctx := t.Context()
 	lp, err := h.localCl.Handshake(ctx)

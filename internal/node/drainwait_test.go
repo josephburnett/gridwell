@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
@@ -58,7 +57,7 @@ func nodeServing(t *testing.T, handle func(ctx context.Context)) *Node {
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 	// A Node always holds a cache store, unavailable or not, as Start builds it.
-	n := &Node{Reg: plugin.NewRegistry(), Ln: ln, st: st, cache: sourcecache.Unavailable("no cache in this test"), webSrv: srv, cancelRequest: cancel}
+	n := &Node{Ln: ln, st: st, cache: sourcecache.Unavailable("no cache in this test"), webSrv: srv, cancelRequest: cancel}
 	go func() {
 		res, err := http.Get("http://" + ln.Addr().String() + "/")
 		if err == nil {

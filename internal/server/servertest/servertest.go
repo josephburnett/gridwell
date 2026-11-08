@@ -12,19 +12,18 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 )
 
 // Password gates every server New builds unless cfg carries its own.
 const Password = "test-password"
 
-func New(t testing.TB, reg *plugin.Registry, cfg server.Config) *server.Server {
+func New(t testing.TB, src *server.Sources, cfg server.Config) *server.Server {
 	t.Helper()
 	if cfg.Password == "" {
 		cfg.Password = Password
 	}
-	srv, err := server.New(reg, cfg)
+	srv, err := server.New(*src, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

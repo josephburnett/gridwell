@@ -13,7 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
 
@@ -76,7 +75,7 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	registerPrimaryLocaldb(t, reg, st)
 
 	far := &farConnection{}
@@ -91,7 +90,7 @@ func TestServeFirstEventReachesTheClient(t *testing.T) {
 	// aged-cache shape without the wait.
 	front := cache.Front(far, sourcecache.Options{Prefetch: true, FreshWindow: time.Millisecond})
 	root := farRoot
-	reg.SetTransport(front, nil)
+	reg.Transport = front
 
 	const nodeID = "lnode1"
 	srv := mustNew(t, reg, Config{ID: nodeID})

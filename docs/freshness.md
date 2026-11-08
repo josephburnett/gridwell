@@ -142,7 +142,7 @@ every namespace's stream has settled the node's stream sends its own header,
 so a client knows the node is listening before any event. Every relayed event is re-qualified by
 `qualifyEvent` → `rpc.QualifyEventIDs`: one segment prepended per hop, the
 health uuid included, so a far namespace's health stays addressable here.
-A source the user disabled (`plugin.Registry.Disable`) is told as disabled
+A source the user disabled (`connection.Server.Disable`) is told as disabled
 whatever a layer under the router says of it (`Server.asSwitched`), and a
 stream opens with every disabled one. At the switch, every grid of it on
 screen is announced changed (`Server.announceDisabled`), so the views read it

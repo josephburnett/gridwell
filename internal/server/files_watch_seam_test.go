@@ -21,7 +21,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
@@ -282,12 +281,11 @@ func TestFilesShowingTheNodeDirectoryWhileItsCacheWarmsSettles(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = cache.Close() })
-	reg := plugin.NewRegistry()
-	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	reg := &server.Sources{}
+	reg.Home = local.New(st, nil)
 	registerFiles(t, reg, st, localNodeID, []string{dir}, os.RemoveAll, nil)
 	// node.Start's transport wiring.
-	reg.SetTransport(cache.Front(wideFar{}, sourcecache.Options{Prefetch: true}), nil)
-	t.Cleanup(reg.Close)
+	reg.Transport = cache.Front(wideFar{}, sourcecache.Options{Prefetch: true})
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	shown := fileID(dir)

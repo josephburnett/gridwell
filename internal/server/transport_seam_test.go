@@ -10,8 +10,10 @@ package server_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,7 +36,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -115,7 +116,7 @@ func (f *farLink) Subscribe(ctx context.Context, in *gridwellv1.SubscribeRequest
 // declared on the local one; the dialer lands every connection on the
 // remote export, or fails with dialErr when set. Each remote func registers
 // more of the remote node beside its home.
-func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
+func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error, remote ...func(*server.Sources, *store.Store)) *transportHarness {
 	t.Helper()
 	return newFrontedTransportHarness(t, conns, dialErr, nil, remote...)
 }
@@ -124,7 +125,7 @@ func newTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr 
 // between the local router and the transport, as the node puts its source
 // cache there.
 func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
-	front func(namespace.Namespace) namespace.Namespace, remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
+	front func(namespace.Namespace) namespace.Namespace, remote ...func(*server.Sources, *store.Store)) *transportHarness {
 	t.Helper()
 	return buildTransportHarness(t, conns, dialErr, front, nil, remote...)
 }
@@ -132,8 +133,8 @@ func newFrontedTransportHarness(t *testing.T, conns []config.ConnectionConfig, d
 // buildTransportHarness is newFrontedTransportHarness with near, when set,
 // registering more of the local node beside its home.
 func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialErr error,
-	front func(namespace.Namespace) namespace.Namespace, near func(*plugin.Registry, *store.Store),
-	remote ...func(*plugin.Registry, *store.Store)) *transportHarness {
+	front func(namespace.Namespace) namespace.Namespace, near func(*server.Sources, *store.Store),
+	remote ...func(*server.Sources, *store.Store)) *transportHarness {
 	t.Helper()
 	ctx := context.Background()
 
@@ -174,10 +175,10 @@ func buildTransportHarness(t *testing.T, conns []config.ConnectionConfig, dialEr
 	}
 	t.Cleanup(func() { _ = localStore.Close() })
 	homeClient := local.New(localStore, shellsvc.NewManager(h.localShell))
-	localReg := plugin.NewRegistry()
-	localReg.Register(localNodeID, "home", homeClient, nil)
-	localReg.SetLabel(localNodeID, "home")
-	localReg.SetTransport(tClient, nil)
+	localReg := &server.Sources{}
+	localReg.Home = homeClient
+	restart(localReg, tClient)
+	localReg.Switches = recordSwitch(conns)
 	if near != nil {
 		near(localReg, localStore)
 	}
@@ -201,13 +202,13 @@ type farNode struct {
 	root   string      // its home's root grid, qualified in its own frame
 }
 
-func newFarNode(t *testing.T, id string, more ...func(*plugin.Registry, *store.Store)) *farNode {
+func newFarNode(t *testing.T, id string, more ...func(*server.Sources, *store.Store)) *farNode {
 	t.Helper()
 	return newFarNodeWith(t, server.Config{ID: id}, more...)
 }
 
 // newFarNodeWith is newFarNode serving cfg.
-func newFarNodeWith(t *testing.T, cfg server.Config, more ...func(*plugin.Registry, *store.Store)) *farNode {
+func newFarNodeWith(t *testing.T, cfg server.Config, more ...func(*server.Sources, *store.Store)) *farNode {
 	t.Helper()
 	id := cfg.ID
 	n := &farNode{shell: shellsvctest.New()}
@@ -216,9 +217,8 @@ func newFarNodeWith(t *testing.T, cfg server.Config, more ...func(*plugin.Regist
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	reg := plugin.NewRegistry()
-	reg.Register(id, "home", local.New(st, shellsvc.NewManager(n.shell)), nil)
-	reg.SetLabel(id, "home")
+	reg := &server.Sources{}
+	reg.Home = local.New(st, shellsvc.NewManager(n.shell))
 	for _, r := range more {
 		r(reg, st)
 	}
@@ -247,8 +247,8 @@ func newFarNodeWith(t *testing.T, cfg server.Config, more ...func(*plugin.Regist
 // process as buildTransportHarness connects the local node, so a test can
 // stand up a chain of three nodes. at, when set, is handed the node's
 // registry and store once the connection is declared.
-func connectTo(t *testing.T, name string, far *farNode, at func(*plugin.Registry, *store.Store)) func(*plugin.Registry, *store.Store) {
-	return func(reg *plugin.Registry, st *store.Store) {
+func connectTo(t *testing.T, name string, far *farNode, at func(*server.Sources, *store.Store)) func(*server.Sources, *store.Store) {
+	return func(reg *server.Sources, st *store.Store) {
 		t.Helper()
 		transport, err := connection.New(st, func(dial.Config) (namespace.Namespace, func(), error) {
 			return namespace.FromClient(far.export), func() {}, nil
@@ -258,7 +258,8 @@ func connectTo(t *testing.T, name string, far *farNode, at func(*plugin.Registry
 		}
 		t.Cleanup(func() { _ = transport.Close() })
 		transport.ConnectAll(context.Background())
-		reg.SetTransport(transport, nil)
+		restart(reg, transport)
+		reg.Switches = recordSwitch([]config.ConnectionConfig{{Name: name}})
 		if at != nil {
 			at(reg, st)
 		}
@@ -268,19 +269,19 @@ func connectTo(t *testing.T, name string, far *farNode, at func(*plugin.Registry
 // undeclareConnections takes every connection out of the node reg serves, as a restart
 // whose server.yaml declares none, so an id through one reads dead. The func
 // it answers declares them again; a stream already following them goes on.
-func undeclareConnections(t *testing.T, reg *plugin.Registry, st *store.Store) func() {
+func undeclareConnections(t *testing.T, reg *server.Sources, st *store.Store) func() {
 	t.Helper()
-	declared, ok := reg.Transport()
-	if !ok {
+	if reg.Transport == nil {
 		t.Fatal("the node declares no connections to take out")
 	}
+	declared := transportOf(reg)
 	none, err := connection.New(st, nil, "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = none.Close() })
-	reg.SetTransport(none, nil)
-	return func() { reg.SetTransport(declared, nil) }
+	restart(reg, none)
+	return func() { restart(reg, declared) }
 }
 
 func TestConnectionThroughTheChain(t *testing.T) {
@@ -685,5 +686,47 @@ func connectionRows(l *gridwellv1.HandshakeResponse) []*gridwellv1.PluginInfo {
 			out = append(out, pl)
 		}
 	}
+	return out
+}
+
+// switches records which connections the user switched off and stops
+// nothing, so a test reaches a disabled connection's rows without the source
+// cache the node fronts it with: what it holds is the router's verdict and
+// stamps. The node's own switch, which closes the transport, is
+// connection.Server's (internal/node's disable tests).
+type switches map[string]*atomic.Bool
+
+func recordSwitch(conns []config.ConnectionConfig) switches {
+	out := switches{}
+	for _, c := range conns {
+		out[c.Name] = new(atomic.Bool)
+	}
+	return out
+}
+
+func (s switches) Disable(name string) error {
+	off, ok := s[name]
+	if !ok {
+		return fmt.Errorf("%q is not a connection this node declares", name)
+	}
+	off.Store(true)
+	return nil
+}
+
+func (s switches) DisabledReason(name string) string {
+	if off := s[name]; off != nil && off.Load() {
+		return rpc.DisabledReason(name)
+	}
+	return ""
+}
+
+func (s switches) DisabledNow() []string {
+	var out []string
+	for name, off := range s {
+		if off.Load() {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
 	return out
 }

@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josephburnett/gridwell/internal/plugin"
-
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -31,20 +29,19 @@ import (
 // network itself.
 
 // remoteNode stands up the "remote gridwell serve": node "ur1" with its home
-// ("personal") and its files behind ConnectionHandler on a real listener.
+// and its files behind ConnectionHandler on a real listener.
 // Returns its address and a direct client to the home for ground-truth
 // assertions.
 func remoteNode(t *testing.T) (string, namespace.Namespace) {
 	t.Helper()
-	reg := plugin.NewRegistry()
+	reg := &server.Sources{}
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
 	direct := local.New(st, shellsvc.NewManager(shellsvctest.New()))
-	reg.Register("ur1", "home", direct, nil)
-	reg.SetLabel("ur1", "personal")
+	reg.Home = direct
 	filesAt(t, "ur1", t.TempDir())(reg, st)
 	srv := servertest.New(t, reg, server.Config{ID: "ur1"})
 	// The connection API is a unix socket; the test sshd
@@ -101,8 +98,8 @@ func TestDialReachesRemoteNodeThroughRealSSH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tunneled Handshake: %v", err)
 	}
-	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "personal" || lp.Plugins[1].Uuid != rpc.FilesOwner("ur1") {
-		t.Fatalf("remote rows = %+v, want personal, then the files", lp.Plugins)
+	if len(lp.Plugins) != 2 || lp.Plugins[0].Label != "home" || lp.Plugins[1].Uuid != rpc.FilesOwner("ur1") {
+		t.Fatalf("remote rows = %+v, want home, then the files", lp.Plugins)
 	}
 
 	// Write at the remote's home; read back directly on the remote: the

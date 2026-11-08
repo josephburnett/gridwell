@@ -32,7 +32,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/tmux"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -53,14 +52,18 @@ func newShellAPIFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shell
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
+	if cfg.ID != "" {
+		st.SetPluginID(cfg.ID)
+	}
 	uuid, err := st.PluginUUID(context.Background())
 	if err != nil {
 		t.Fatalf("plugin uuid: %v", err)
 	}
+	cfg.ID = uuid
 	fake := shellsvctest.New()
 	client := local.New(st, shellsvc.NewManager(fake))
-	reg := plugin.NewRegistry()
-	reg.Register(uuid, "home", client, nil)
+	reg := &Sources{}
+	reg.Home = client
 	bareRoot, err := st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatalf("root grid: %v", err)
@@ -463,7 +466,6 @@ func TestShellClientSurfacesAWedgedSocket(t *testing.T) {
 	}))
 	deaf.Listener = deafListener{deaf.Listener}
 	deaf.Start()
-	t.Cleanup(deaf.Close)
 
 	exit := make(chan shellstream.Exit, 4)
 	reg := shellstream.New(shellws.Dialer(shellws.Options{Origin: deaf.URL, HTTPClient: deaf.Client(), WriteTimeout: bound}),
@@ -502,7 +504,7 @@ func TestShellWriteBoundsAreTheDeclaredOnes(t *testing.T) {
 	if shellws.DefaultWriteTimeout != 30*time.Second {
 		t.Errorf("the client bounds a keystroke frame write at %v, want 30s", shellws.DefaultWriteTimeout)
 	}
-	srv := mustNew(t, plugin.NewRegistry(), Config{})
+	srv := mustNew(t, &Sources{}, Config{})
 	if srv.shellWriteTimeout != defaultShellWriteTimeout {
 		t.Errorf("New built a server bounding writes at %v, want defaultShellWriteTimeout (%v)", srv.shellWriteTimeout, defaultShellWriteTimeout)
 	}

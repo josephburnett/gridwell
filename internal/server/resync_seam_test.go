@@ -12,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/client/retry"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -27,8 +26,8 @@ func TestAChangeDuringAStreamBreakReachesTheClientWithoutAnotherEvent(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	reg := plugin.NewRegistry()
-	reg.Register(localNodeID, "home", local.New(st, nil), nil)
+	reg := &server.Sources{}
+	reg.Home = local.New(st, nil)
 	hs := servertest.Serve(t, servertest.New(t, reg, server.Config{ID: localNodeID}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	writer := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

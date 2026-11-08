@@ -13,14 +13,13 @@ import (
 
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // traceServer is a gated web API with a directory to dump into.
 func traceServer(t *testing.T) (*http.Client, string, string) {
 	t.Helper()
 	dir := t.TempDir()
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{Dir: dir}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: dir}))
 	return hs.Client(), hs.URL, dir
 }
 
@@ -131,7 +130,7 @@ func TestTraceAPIsRefuseEverythingButPost(t *testing.T) {
 
 // A directory the server does not know is a refusal, not a dump beside the binary.
 func TestTraceDumpRefusesWithoutAHome(t *testing.T) {
-	hs := serveWeb(t, mustNew(t, plugin.NewRegistry(), Config{}))
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{}))
 	res, err := hs.Client().Post(hs.URL+tracewire.DumpPath, "", nil)
 	if err != nil {
 		t.Fatal(err)

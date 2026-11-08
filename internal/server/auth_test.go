@@ -16,7 +16,6 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 const spaMarker = "GRIDWELL-SPA-MARKER"
@@ -33,14 +32,14 @@ func newAuthTestServer(t *testing.T, password string) (*httptest.Server, string)
 		t.Fatalf("open store: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	reg := plugin.NewRegistry()
-	_, root := registerPrimaryLocaldb(t, reg, st)
+	reg := &Sources{}
+	node, root := registerPrimaryLocaldb(t, reg, st)
 
 	staticDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticDir, "index.html"), []byte(spaMarker), 0o644); err != nil {
 		t.Fatalf("write index: %v", err)
 	}
-	srv, err := New(reg, Config{StaticFS: os.DirFS(staticDir), Password: password})
+	srv, err := New(*reg, Config{ID: node, StaticFS: os.DirFS(staticDir), Password: password})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +76,7 @@ func get(t *testing.T, c *http.Client, url string, cookie string) (*http.Respons
 // — dead in the binary, but a standing shortcut for every test that
 // mounted the mux without a cookie.
 func TestNewRequiresAPassword(t *testing.T) {
-	if _, err := New(plugin.NewRegistry(), Config{}); err == nil {
+	if _, err := New(Sources{}, Config{}); err == nil {
 		t.Fatal("New accepted an empty password — the web API must never be open")
 	}
 }

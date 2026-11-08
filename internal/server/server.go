@@ -27,7 +27,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/eventhub"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/subscription"
 	"strconv"
 )
@@ -53,12 +52,32 @@ type Config struct {
 	Dir string
 }
 
-// Server routes every operation through the registry by the first segment of
-// its qualified id; home is where a client lands. Mount WebHandler and
-// ConnectionHandler on their own sockets; see node.Start.
+// Sources is what a node declares, each in its slot: home, where a client
+// lands; the files; and the transport, every connection under the node's id.
+// A nil slot declares nothing.
+type Sources struct {
+	Home      namespace.Namespace
+	Files     namespace.Namespace
+	Transport namespace.Namespace
+	// Switches turns a connection off; nil when the node has none.
+	Switches Switches
+}
+
+// Switches is the user's switch over the connections, keyed by connection
+// name: a connection is the only source that can be disabled
+// (connection.Server).
+type Switches interface {
+	Disable(name string) error
+	DisabledReason(name string) string
+	DisabledNow() []string
+}
+
+// Server routes every operation to the source owning its qualified id
+// (rpc.OwnerNamespaceOf). Mount WebHandler and ConnectionHandler on their own
+// sockets; see node.Start.
 type Server struct {
-	cfg       Config
-	pluginReg *plugin.Registry
+	cfg Config
+	src Sources
 
 	mux *http.ServeMux
 
@@ -71,8 +90,8 @@ type Server struct {
 	// shells is every open /shell attachment and the session it rides under.
 	shells liveShells
 
-	// switchedOff tells every open stream of a source the user just disabled
-	// (router.DisableSource); plugin.Registry owns which are.
+	// switchedOff tells every open stream of a connection the user just
+	// disabled (router.DisableSource); Sources.Switches owns which are.
 	switchedOff *eventhub.Hub[*pb.Event]
 
 	// build is tracewire.BuildCommit, read once: the handshake names it and
@@ -81,13 +100,13 @@ type Server struct {
 }
 
 // New refuses an empty Config.Password: the web API has no open mode.
-func New(reg *plugin.Registry, cfg Config) (*Server, error) {
+func New(src Sources, cfg Config) (*Server, error) {
 	if cfg.Password == "" {
 		return nil, errors.New("server: a web password is required (the web API is never open)")
 	}
 	srv := &Server{
 		cfg:               cfg,
-		pluginReg:         reg,
+		src:               src,
 		mux:               http.NewServeMux(),
 		shellWriteTimeout: defaultShellWriteTimeout,
 		build:             tracewire.BuildCommit(),
@@ -98,42 +117,36 @@ func New(reg *plugin.Registry, cfg Config) (*Server, error) {
 	return srv, nil
 }
 
-// routeClient resolves a namespace uuid to home or a plugin. A connection is
-// not addressable by uuid alone; resolve is the lookup that sees it.
-func (s *Server) routeClient(uuid string) (namespace.Namespace, bool) {
-	return s.pluginReg.Get(uuid)
-}
-
 // resolve is the routing lookup every API goes through: the namespace owning a
 // qualified id (rpc.OwnerNamespaceOf), the local id it understands, the uuid
 // its answers are re-qualified with, and whether it is transit.
-// "<id>/<digits>" is the home store; "<id>/~<path>" is the files, registered
-// under rpc.FilesOwner and answering bare paths qualified with the node's id;
-// "<id>/<letters>/…" is a connection, whose local id keeps the connection
-// segment for the transport to peel; anything else is a plugin by uuid.
-//
-// The transport is the only transit namespace, structurally: a plugin's ids are
-// its own, since the node mints them, while a connection's arrive already
-// qualified from the far node's frame.
+// "<id>/<digits>" is the home store; "<id>/~<path>" is the files, answering
+// bare paths qualified with the node's id; "<id>/<letters>/…" is a
+// connection, whose local id keeps the connection segment for the transport
+// to peel. The transport is the only transit namespace: its ids arrive
+// already qualified from the far node's frame.
 func (s *Server) resolve(id string) (ns namespace.Namespace, local, uuid string, transit, ok bool) {
-	uuid, local, split := rpc.SplitID(id)
-	if !split {
+	first, local, split := rpc.SplitID(id)
+	if !split || first != s.cfg.ID {
 		return nil, "", "", false, false
 	}
-	owner := uuid
-	if s.cfg.ID != "" {
-		owner = rpc.OwnerNamespaceOf(id, s.cfg.ID)
+	owner := rpc.OwnerNamespaceOf(id, s.cfg.ID)
+	if owner != first && rpc.QualifierOf(owner) != first {
+		return s.src.Transport, local, first, true, s.src.Transport != nil
 	}
-	if rpc.QualifierOf(owner) == uuid && owner != uuid {
-		c, found := s.pluginReg.Get(owner)
-		return c, local, uuid, false, found
+	ns, ok = s.owned(owner)
+	return ns, local, first, false, ok
+}
+
+// owned is the namespace of this node's own whose owner id is owner: home or
+// the files.
+func (s *Server) owned(owner string) (namespace.Namespace, bool) {
+	for _, n := range s.namespaces() {
+		if !n.Transit && n.UUID == owner {
+			return n.NS, true
+		}
 	}
-	if owner != uuid {
-		t, has := s.pluginReg.Transport()
-		return t, local, uuid, true, has
-	}
-	c, found := s.pluginReg.Get(uuid)
-	return c, local, uuid, false, found
+	return nil, false
 }
 
 // undeclared is the answer for an id whose owner this node does not declare:
@@ -152,12 +165,12 @@ func (s *Server) clientForID(id string) (ns namespace.Namespace, local string, o
 
 // namespaceRow is one namespace this node declares. UUID is its owner id
 // (rpc.OwnerNamespaceOf), which keys its roster row, its health and its share
-// of the subscription. Kind is the registry's configured kind, empty for the
-// transport, whose rows carry their own.
+// of the subscription; Label names its roster row, empty for the transport,
+// whose rows carry their own.
 type namespaceRow struct {
-	UUID, Kind string
-	NS         namespace.Namespace
-	Transit    bool
+	UUID, Label string
+	NS          namespace.Namespace
+	Transit     bool
 }
 
 // prefix is what the namespace's answers are qualified with: the node's id
@@ -165,56 +178,45 @@ type namespaceRow struct {
 func (n namespaceRow) prefix() string { return rpc.QualifierOf(n.UUID) }
 
 // namespaces enumerates what this node declares, in the one order every
-// fan-out takes: home, the files and the plugins as registered, then the
-// transport under the node's own id, which is the id a connection's rows re-qualify
-// through and the only transit namespace. A node without an id declares no
-// connections.
+// fan-out takes: home, the files, then the transport under the node's own id,
+// which is the id a connection's rows re-qualify through. A node without an
+// id declares nothing.
 func (s *Server) namespaces() []namespaceRow {
-	var out []namespaceRow
-	for _, p := range s.pluginReg.Ordered() {
-		c, ok := s.routeClient(p.UUID)
-		if !ok {
-			continue
-		}
-		out = append(out, namespaceRow{UUID: p.UUID, Kind: p.Kind, NS: c})
+	if s.cfg.ID == "" {
+		return nil
 	}
-	if t, ok := s.pluginReg.Transport(); ok && s.cfg.ID != "" {
-		out = append(out, namespaceRow{UUID: s.cfg.ID, NS: t, Transit: true})
+	var out []namespaceRow
+	if s.src.Home != nil {
+		out = append(out, namespaceRow{UUID: s.cfg.ID, Label: "home", NS: s.src.Home})
+	}
+	if s.src.Files != nil {
+		out = append(out, namespaceRow{UUID: rpc.FilesOwner(s.cfg.ID), Label: "files", NS: s.src.Files})
+	}
+	if s.src.Transport != nil {
+		out = append(out, namespaceRow{UUID: s.cfg.ID, NS: s.src.Transport, Transit: true})
 	}
 	return out
 }
 
-// homeUUID is the configured node id, or the first registered entry when a test
-// registers home under another id, since home is registered first.
-func (s *Server) homeUUID() string {
-	if _, ok := s.pluginReg.Get(s.cfg.ID); ok {
-		return s.cfg.ID
-	}
-	if o := s.pluginReg.Ordered(); len(o) > 0 {
-		return o[0].UUID
-	}
-	return ""
-}
-
 // homeScratch is the node's scratch grid, home's, qualified: where every
 // ephemeral visit this node serves lands, whatever grid it was opened from.
-// "" when no home is registered.
+// "" when the node has no home.
 func (s *Server) homeScratch(ctx context.Context) (string, error) {
-	hu := s.homeUUID()
-	if hu == "" {
+	if s.src.Home == nil || s.cfg.ID == "" {
 		return "", nil
 	}
-	info, err := s.pluginInfo(ctx, hu)
+	info, err := s.pluginInfo(ctx, s.cfg.ID)
 	if err != nil || info.ScratchGridId == "" {
 		return "", err
 	}
-	return rpc.QualifyID(hu, info.ScratchGridId), nil
+	return rpc.QualifyID(s.cfg.ID, info.ScratchGridId), nil
 }
 
-// pluginInfo is the Info of the namespace whose owner id is uuid, bounded by
-// pluginInfoTimeout so a hung one degrades to an error rather than a stall.
+// pluginInfo is the Info of the namespace whose owner id is uuid, home's or
+// the files', bounded by pluginInfoTimeout so a hung one degrades to an error
+// rather than a stall.
 func (s *Server) pluginInfo(ctx context.Context, uuid string) (*pb.InfoResponse, error) {
-	c, found := s.routeClient(uuid)
+	c, found := s.owned(uuid)
 	if !found {
 		return nil, errors.New("no source " + uuid)
 	}

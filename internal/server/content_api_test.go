@@ -14,7 +14,6 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // The /content/ API crosses every seam at once: HTTP URL grammar → token
@@ -171,9 +170,9 @@ func TestContentAPIUnimplemented(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	reg := plugin.NewRegistry()
-	_, root := registerPrimaryLocaldb(t, reg, st)
-	srv := mustNew(t, reg, Config{})
+	reg := &Sources{}
+	node, root := registerPrimaryLocaldb(t, reg, st)
+	srv := mustNew(t, reg, Config{ID: node})
 	hs := serveWeb(t, srv)
 
 	cl := rpc.NewClient(hs.Client(), hs.URL)

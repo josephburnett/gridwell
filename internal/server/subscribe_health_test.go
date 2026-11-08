@@ -13,7 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // healthNode is the node these fakes are the files of.
@@ -73,8 +72,8 @@ func recvHealth(t *testing.T, stream *rpc.EventStream) *pb.EventPluginHealth {
 func TestSubscribeFanInReportsHealthDownAndRecovery(t *testing.T) {
 	fake := &flakyWatch{failSubFirstN: 1}
 	client := fake
-	reg := plugin.NewRegistry()
-	reg.Register(rpc.FilesOwner(healthNode), "files", client, nil)
+	reg := &Sources{}
+	reg.Files = client
 	srv := mustNew(t, reg, Config{ID: healthNode})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -140,8 +139,8 @@ func (p *failInfoWatch) Subscribe(ctx context.Context, _ *pb.SubscribeRequest, s
 func TestSubscribeRetriesInfoFailureInsteadOfPermanentlyExcluding(t *testing.T) {
 	fake := &failInfoWatch{failInfoFirstN: 1}
 	client := fake
-	reg := plugin.NewRegistry()
-	reg.Register(rpc.FilesOwner(healthNode), "files", client, nil)
+	reg := &Sources{}
+	reg.Files = client
 	srv := mustNew(t, reg, Config{ID: healthNode})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -178,8 +177,8 @@ func TestSubscribeFanInRetriesOnTheDeclaredBackoff(t *testing.T) {
 	namespace.DefaultBackoff = namespace.Backoff{First: 10 * time.Millisecond, Max: 20 * time.Millisecond}
 
 	fake := &flakyWatch{failSubFirstN: 4}
-	reg := plugin.NewRegistry()
-	reg.Register(rpc.FilesOwner(healthNode), "files", fake, nil)
+	reg := &Sources{}
+	reg.Files = fake
 	srv := mustNew(t, reg, Config{ID: healthNode})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

@@ -11,7 +11,6 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // brokenShellHost is a namespace whose PTY host cannot be asked: the tmux
@@ -31,8 +30,8 @@ func (brokenShellHost) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest
 // nothing said, and the client's probe-failure notice exists for exactly this
 // class. Only disable_shells is a verdict of the router's own.
 func TestShellTmuxAliveFailureReachesTheClient(t *testing.T) {
-	reg := plugin.NewRegistry()
-	reg.Register("h1", "home", brokenShellHost{}, nil)
+	reg := &Sources{}
+	reg.Home = brokenShellHost{}
 	srv := mustNew(t, reg, Config{ID: "h1"})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL)

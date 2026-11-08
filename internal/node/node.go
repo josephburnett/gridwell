@@ -6,7 +6,6 @@
 package node
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -19,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -27,8 +25,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 )
@@ -104,14 +100,16 @@ type Options struct {
 
 // Node is a running (or listen-ready) Gridwell node.
 type Node struct {
-	Reg *plugin.Registry
 	// Ln is the web API's socket. ConnLn is the connection API's socket,
 	// nil when the API is closed.
 	Ln     net.Listener
 	ConnLn net.Listener
 
-	st            *store.Store
-	cache         *sourcecache.Store
+	st    *store.Store
+	cache *sourcecache.Store
+	// closers end what the node started beside the store, in start order:
+	// the files' watch, the transport.
+	closers       []func()
 	srv           *server.Server
 	webSrv        *http.Server
 	connSrv       *http.Server
@@ -134,28 +132,29 @@ func Start(opts Options) (*Node, error) {
 	// front of the transport below and nowhere else: a cache earns its keep
 	// across a network, and home and the files are both on this machine.
 	cache := openCache(cfg)
-	reg := plugin.NewRegistry()
+	var closers []func()
 	fail := func(err error) (*Node, error) {
-		reg.Close()
 		_ = cache.Close()
+		closeAll(closers)
 		st.Close()
 		return nil, err
 	}
-	// Home first: the first registered entry with a root is where a client
-	// lands. See rpc.HomeGrid.
-	if err := startHome(reg, st, cfg); err != nil {
-		return fail(fmt.Errorf("home: %w", err))
-	}
-	if err := startFiles(reg, st, cfg); err != nil {
+	src := server.Sources{Home: newHome(st, cfg.ID, cfg.Shell)}
+	if files, err := startFiles(st, cfg); err != nil {
 		return fail(err)
+	} else if files != nil {
+		src.Files = files
+		closers = append(closers, files.Close)
 	}
 	// The transport gets prefetch (CLAUDE.md, 2026-10-06).
-	if err := startTransport(reg, st, cfg, func(ns namespace.Namespace) namespace.Namespace {
-		return cache.Front(ns, sourcecache.Options{Prefetch: true})
-	}); err != nil {
+	impl, err := startTransport(st, cfg)
+	if err != nil {
 		return fail(fmt.Errorf("transport: %w", err))
 	}
-	srv, err := server.New(reg, server.Config{
+	src.Transport = cache.Front(impl, sourcecache.Options{Prefetch: true})
+	src.Switches = impl
+	closers = append(closers, func() { closeImpl(impl) })
+	srv, err := server.New(src, server.Config{
 		ID:            cfg.ID,
 		StaticFS:      opts.StaticFS,
 		Password:      cfg.WebPassword,
@@ -187,37 +186,21 @@ func Start(opts Options) (*Node, error) {
 			return fail(err)
 		}
 	}
-	return &Node{Reg: reg, Ln: ln, ConnLn: connLn, st: st, cache: cache, srv: srv, webSrv: webSrv, connSrv: connSrv, cancelRequest: cancel}, nil
+	return &Node{Ln: ln, ConnLn: connLn, st: st, cache: cache, closers: closers, srv: srv, webSrv: webSrv, connSrv: connSrv, cancelRequest: cancel}, nil
 }
 
-// startHome registers the home over the store: a Go value the router calls
-// directly. The node owns the store handle, not home.
-func startHome(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) error {
-	reg.Register(cfg.ID, "home", newHome(st, cfg.ID, cfg.Shell), nil)
-	reg.SetLabel(cfg.ID, "home")
-	return nil
-}
-
-// startFiles registers the files over the roots files: declares, after home,
-// under their owner id (rpc.FilesOwner). A node that
-// declares none has no files row. The files are dark or told, never
+// startFiles builds the files over the roots files: declares; a node that
+// declares none has no files, nil. The files are dark or told, never
 // disabled, so they get no switch.
-func startFiles(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig) error {
+func startFiles(st *store.Store, cfg *config.ServerConfig) (*files.Source, error) {
 	if len(cfg.Files) == 0 {
-		return nil
+		return nil, nil
 	}
 	roots := make([]files.Root, len(cfg.Files))
 	for i, r := range cfg.Files {
 		roots[i] = files.Root{Path: r.Root, Label: r.Label}
 	}
-	src, err := files.New(st.Files(), roots, nil)
-	if err != nil {
-		return err
-	}
-	owner := rpc.FilesOwner(cfg.ID)
-	reg.Register(owner, "files", src, src.Close)
-	reg.SetLabel(owner, "files")
-	return nil
+	return files.New(st.Files(), roots, nil)
 }
 
 // openCache opens ~/.gridwell/cache.db. A cache that cannot open degrades to the
@@ -248,21 +231,23 @@ func openCacheFile(cfg *config.ServerConfig) (*sourcecache.Store, error) {
 }
 
 // startTransport reconciles the store's connection rows against the declared
-// connections, dials them bounded, and installs the transport as the node's
-// connection namespace ("<id>/<conn>/…") behind front.
-func startTransport(reg *plugin.Registry, st *store.Store, cfg *config.ServerConfig, front func(namespace.Namespace) namespace.Namespace) error {
+// connections and dials them bounded: the node's connection namespace
+// ("<id>/<conn>/…") and the switch over each connection.
+func startTransport(st *store.Store, cfg *config.ServerConfig) (*connection.Server, error) {
 	userHome, _ := os.UserHomeDir()
 	impl, err := connection.New(st, dial.Dial, userHome, cfg.Connections, cfg.RetiredNames)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	impl.SwitchedOff(func(name string) bool { return reg.Disabled(rpc.QualifyID(cfg.ID, name)) })
 	impl.ConnectAll(context.Background())
-	reg.SetTransport(front(impl), func() { closeImpl(impl) })
-	for _, c := range cfg.Connections {
-		reg.Switch(rpc.QualifyID(cfg.ID, c.Name), cmp.Or(c.Label, c.Name), func() { impl.Disable(c.Name) })
+	return impl, nil
+}
+
+// closeAll runs closers in reverse start order.
+func closeAll(closers []func()) {
+	for i := len(closers) - 1; i >= 0; i-- {
+		closers[i]()
 	}
-	return nil
 }
 
 // closeImpl releases a native impl's own resources. A close failure at
@@ -298,8 +283,8 @@ func (n *Node) ServeBackground() <-chan error {
 // shutdown, once. A var so a test can wait it out; see drainwait_test.go.
 var closeDrainWait = 5 * time.Second
 
-// Close drains in-flight requests, bounded by closeDrainWait, then closes the
-// registry.
+// Close drains in-flight requests, bounded by closeDrainWait, then closes
+// what the node started and the store.
 // Idempotent by contract: the CLI both defers it and calls it to report the
 // error, and the second call returns the first's verdict.
 func (n *Node) Close() error {
@@ -312,10 +297,10 @@ func (n *Node) Close() error {
 			err = errors.Join(err, n.connSrv.Shutdown(ctx)) // Close unlinks the socket
 		}
 		// The cache closes BEFORE the transport it fronts: its prefetch walk
-		// reads through it and must be out before either goes away. The
-		// registry closes the files' watch before the store their rows are in.
+		// reads through it and must be out before either goes away. The files'
+		// watch closes before the store their rows are in.
 		err = errors.Join(err, n.cache.Close())
-		n.Reg.Close()
+		closeAll(n.closers)
 		err = errors.Join(err, n.st.Close())
 		n.closeErr = err
 	})

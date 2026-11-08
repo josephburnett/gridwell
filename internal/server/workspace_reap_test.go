@@ -12,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // TestDeleteWorkspaceReapsItsEphemerals: a workspace tile's layout
@@ -25,14 +24,14 @@ import (
 // workspace never deletes data.
 func TestDeleteWorkspaceReapsItsEphemerals(t *testing.T) {
 	ctx := context.Background()
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	_, root := registerPrimaryLocaldb(t, reg, st)
-	srv := mustNew(t, reg, Config{})
+	node, root := registerPrimaryLocaldb(t, reg, st)
+	srv := mustNew(t, reg, Config{ID: node})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 

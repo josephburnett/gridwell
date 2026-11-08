@@ -22,7 +22,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -33,7 +32,7 @@ type mcpNode struct {
 	url, root  string
 	feedRoot   string
 	feedNS     string // the connection's namespace
-	reg        *plugin.Registry
+	reg        *Sources
 	connectURL string
 	web        *http.Client
 }
@@ -45,10 +44,9 @@ func newMCPNode(t *testing.T) *mcpNode {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = home.Close() })
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	node, root := registerPrimaryLocaldb(t, reg, home)
 	feedRoot := connectFar(t, reg, home, node, "feed")
-	reg.Switch(node+"/feed", "feed", func() {})
 	srv := mustNew(t, reg, Config{ID: node})
 	hs := webAPITest(t, srv.WebHandler())
 	return &mcpNode{srv: srv, url: hs.URL + mcpapi.Path, root: root, feedRoot: feedRoot, feedNS: node + "/feed", reg: reg, connectURL: hs.URL, web: hs.Client()}
@@ -58,7 +56,7 @@ func newMCPNode(t *testing.T) *mcpNode {
 // name, landing on a far node "rnode1" with a home of its own served on its
 // connection API, and answers the far home's root grid as the node
 // qualifies it.
-func connectFar(t *testing.T, reg *plugin.Registry, st *store.Store, node, name string) string {
+func connectFar(t *testing.T, reg *Sources, st *store.Store, node, name string) string {
 	t.Helper()
 	ctx := context.Background()
 	far, err := store.Open(":memory:")
@@ -66,12 +64,11 @@ func connectFar(t *testing.T, reg *plugin.Registry, st *store.Store, node, name 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = far.Close() })
-	farReg := plugin.NewRegistry()
-	farReg.Register("rnode1", "home", local.New(far, nil), nil)
+	farReg := &Sources{}
+	farReg.Home = local.New(far, nil)
 	api := httptest.NewUnstartedServer(nil)
 	api.Config = ConnectionAPIServer(mustNew(t, farReg, Config{ID: "rnode1"}).ConnectionHandler())
 	api.Start()
-	t.Cleanup(api.Close)
 	conn, err := dial.ClientConn(strings.TrimPrefix(api.URL, "http://"))
 	if err != nil {
 		t.Fatal(err)
@@ -85,7 +82,8 @@ func connectFar(t *testing.T, reg *plugin.Registry, st *store.Store, node, name 
 	}
 	t.Cleanup(func() { _ = transport.Close() })
 	transport.ConnectAll(ctx)
-	reg.SetTransport(transport, nil)
+	reg.Transport = transport
+	reg.Switches = &oneSwitch{name: name}
 	root, err := far.RootGridID(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -549,7 +547,7 @@ func TestAnMCPWriteToADisabledSourceIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := n.reg.Disable(n.feedNS); err != nil {
+	if err := n.reg.Switches.Disable("feed"); err != nil {
 		t.Fatal(err)
 	}
 	s, err := n.agent(t, bearer(testPassword))

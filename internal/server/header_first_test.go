@@ -7,26 +7,24 @@ import (
 	"testing/synctest"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
-	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // The header is the stream's first word even with a source switched off:
 // anything sent before it flushes the response, and a client takes that as
 // the node listening (rpc.Client.Subscribe) and resyncs before it is.
 func TestTheHeaderGoesOutBeforeADisabledSourceIsTold(t *testing.T) {
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	home, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = home.Close() })
 	node, _ := registerPrimaryLocaldb(t, reg, home)
-	conn := node + "/geneva"
-	reg.Switch(conn, "geneva", func() {})
-	if err := reg.Disable(conn); err != nil {
+	sw := &oneSwitch{name: "geneva"}
+	reg.Switches = sw
+	if err := sw.Disable("geneva"); err != nil {
 		t.Fatal(err)
 	}
 	srv := mustNew(t, reg, Config{ID: node})
@@ -52,9 +50,9 @@ func TestTheHeaderGoesOutBeforeADisabledSourceIsTold(t *testing.T) {
 func TestTheHeaderGoesOutBeforeAFailedSourceIsTold(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
-		reg := plugin.NewRegistry()
-		reg.Register(rpc.FilesOwner("lnode1"), "files", heldStream{release: release}, nil)
-		reg.SetTransport(namespacetest.Unimplemented{}, nil)
+		reg := &Sources{}
+		reg.Files = heldStream{release: release}
+		reg.Transport = namespacetest.Unimplemented{}
 		srv := mustNew(t, reg, Config{ID: "lnode1"})
 
 		ctx, cancel := context.WithCancel(t.Context())

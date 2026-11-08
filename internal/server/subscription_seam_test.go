@@ -23,7 +23,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 	"github.com/josephburnett/gridwell/internal/trace"
@@ -97,10 +96,10 @@ func subscribed(cl *rpc.Client) func() {
 // when set.
 func sinkAt(t *testing.T, sink, far namespace.Namespace) *server.Server {
 	t.Helper()
-	reg := plugin.NewRegistry()
-	reg.Register(rpc.FilesOwner(localNodeID), "files", sink, nil)
+	reg := &server.Sources{}
+	reg.Files = sink
 	if far != nil {
-		reg.SetTransport(far, nil)
+		reg.Transport = far
 	}
 	return servertest.New(t, reg, server.Config{ID: localNodeID})
 }
@@ -140,7 +139,9 @@ func TestSubscriptionReachesEachNamespaceAsItsShare(t *testing.T) {
 func TestSubscriptionCrossesAConnection(t *testing.T) {
 	sink := &subscriptionSink{}
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil,
-		func(reg *plugin.Registry, _ *store.Store) { reg.Register(rpc.FilesOwner("rnode1"), "files", sink, nil) })
+		func(reg *server.Sources, _ *store.Store) {
+			reg.Files = sink
+		})
 	ctx := context.Background()
 
 	closeSub := subscribed(h.localCl)

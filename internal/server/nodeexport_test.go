@@ -18,7 +18,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -103,9 +102,8 @@ func nodeServerCfg(t *testing.T, cfg server.Config) (namespace.Namespace, namesp
 	impl := local.New(st, shellsvc.NewManager(shellsvctest.New()))
 	direct := impl
 
-	reg := plugin.NewRegistry()
-	reg.Register("ur1", "home", direct, nil)
-	reg.SetLabel("ur1", "personal")
+	reg := &server.Sources{}
+	reg.Home = direct
 	cfg.ID = "ur1"
 	srv := servertest.New(t, reg, cfg)
 

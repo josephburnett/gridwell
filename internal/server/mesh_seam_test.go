@@ -29,7 +29,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -40,7 +39,7 @@ type meshEdge struct{ From, Name, To string }
 type meshNode struct {
 	id   string
 	st   *store.Store
-	reg  *plugin.Registry
+	reg  *server.Sources
 	cl   *rpc.Client                      // the node's web API
 	web  gridwellv1connect.GridwellClient // the same API without Client's guards
 	root string                           // the home's bare root grid id
@@ -113,16 +112,14 @@ func newMesh(t *testing.T, ids []string, edges []meshEdge) *mesh {
 		hs := httptest.NewUnstartedServer(nil)
 		hs.Config = server.ConnectionAPIServer(n.api)
 		hs.Start()
-		t.Cleanup(hs.Close)
 		conn, err := dial.ClientConn(strings.TrimPrefix(hs.URL, "http://"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = conn.Close() })
 		n.far = gridwellv1.NewGridwellClient(conn)
-		n.reg = plugin.NewRegistry()
-		n.reg.Register(id, "home", local.New(st, nil), nil)
-		n.reg.SetLabel(id, "home of "+id)
+		n.reg = &server.Sources{}
+		n.reg.Home = local.New(st, nil)
 		m.nodes[id] = n
 	}
 	for _, id := range ids {
@@ -176,12 +173,11 @@ func (m *mesh) declare(id string, edges []meshEdge, retired []string) {
 		m.t.Fatal(err)
 	}
 	m.t.Cleanup(func() { _ = transport.Close() })
-	n.reg.SetTransport(transport, nil)
+	restart(n.reg, transport)
 }
 
 func (m *mesh) connect(id string) {
-	t, _ := m.nodes[id].reg.Transport()
-	t.(*connection.Server).ConnectAll(context.Background())
+	transportOf(m.nodes[id].reg).(*connection.Server).ConnectAll(context.Background())
 }
 
 // redeclare is a restart of node id with a new connections config.

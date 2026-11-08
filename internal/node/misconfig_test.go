@@ -143,11 +143,8 @@ func TestStartServesWhenTheRemoteIsMerelyUnreachable(t *testing.T) {
 		t.Fatalf("an unreachable remote must not fail the boot: %v", err)
 	}
 	defer n.Close()
-	transport, ok := n.Reg.Transport()
-	if !ok {
-		t.Fatal("no transport installed")
-	}
-	hs, err := transport.Handshake(t.Context(), &pb.HandshakeRequest{})
+	n.ServeBackground()
+	hs, err := webClient(t, "http://"+n.Ln.Addr().String(), cfg.WebPassword).Handshake(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

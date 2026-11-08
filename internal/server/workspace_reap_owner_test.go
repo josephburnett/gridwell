@@ -12,21 +12,21 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/internal/claimtest"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // reapFixture stands a node up and answers a client, its root grid and its
 // scratch grid: the setup both phases of the owner test share.
 func reapFixture(t *testing.T) (cl *rpc.Client, root, scratch string) {
 	t.Helper()
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	_, root = registerPrimaryLocaldb(t, reg, st)
-	srv := mustNew(t, reg, Config{})
+	node, qroot := registerPrimaryLocaldb(t, reg, st)
+	root = qroot
+	srv := mustNew(t, reg, Config{ID: node})
 	hs := serveWeb(t, srv)
 	cl = rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	g, err := cl.GetGrid(context.Background(), root)

@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/sourcecache"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
@@ -64,8 +64,8 @@ func TestAnAnsweredUnavailableLeavesTheConnectionLight(t *testing.T) {
 			t.Cleanup(func() { _ = cache.Close() })
 			return cache.Front(ns, sourcecache.Options{Prefetch: true})
 		},
-		func(reg *plugin.Registry, _ *store.Store) {
-			reg.Register(rpc.FilesOwner("rnode1"), "files", unresolvedPages{}, nil)
+		func(reg *server.Sources, _ *store.Store) {
+			reg.Files = unresolvedPages{}
 		},
 		connectTo(t, "zurich", third, nil))
 	root := "geneva/rnode1/" + h.rootBare

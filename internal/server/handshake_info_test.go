@@ -16,7 +16,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // infoNode is the node these tests' fakes are the files of.
@@ -24,9 +23,9 @@ const infoNode = "lnode1"
 
 // onFiles registers ns as infoNode's files, the second namespace a node
 // declares beside home, and serves the node.
-func onFiles(t *testing.T, reg *plugin.Registry, ns namespace.Namespace) *Server {
+func onFiles(t *testing.T, reg *Sources, ns namespace.Namespace) *Server {
 	t.Helper()
-	reg.Register(rpc.FilesOwner(infoNode), "files", ns, nil)
+	reg.Files = ns
 	return mustNew(t, reg, Config{ID: infoNode})
 }
 
@@ -50,7 +49,7 @@ func (p *countingInfo) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse,
 // the next Handshake asks the namespace again and lists it whole.
 func TestHandshakeRetriesFailedInfo(t *testing.T) {
 	fake := &countingInfo{failFirst: true}
-	h := newConnectHandler(newRouter(onFiles(t, plugin.NewRegistry(), fake)))
+	h := newConnectHandler(newRouter(onFiles(t, &Sources{}, fake)))
 
 	r1, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
 	if err != nil {
@@ -83,7 +82,7 @@ func (hungInfo) Info(ctx context.Context, _ *pb.InfoRequest) (*pb.InfoResponse, 
 // A namespace whose Info never answers lists broken once pluginInfoTimeout
 // runs out, and the rest of the menu is not held behind it.
 func TestAHungInfoListsBrokenAfterTheTimeout(t *testing.T) {
-	h := newConnectHandler(newRouter(onFiles(t, plugin.NewRegistry(), hungInfo{})))
+	h := newConnectHandler(newRouter(onFiles(t, &Sources{}, hungInfo{})))
 	start := time.Now()
 	r, err := h.Handshake(context.Background(), connect.NewRequest(&pb.HandshakeRequest{}))
 	if err != nil {
@@ -112,7 +111,7 @@ func (alwaysFailInfo) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, 
 // -> rpc.Client.Handshake. InfoError must survive that round trip so the
 // wasm client can classify a broken namespace (client/pluginhealth).
 func TestHandshakeSurfacesInfoErrorOverTheWire(t *testing.T) {
-	hs := serveWeb(t, onFiles(t, plugin.NewRegistry(), alwaysFailInfo{}))
+	hs := serveWeb(t, onFiles(t, &Sources{}, alwaysFailInfo{}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 
 	plugins, err := cl.Handshake(context.Background())
@@ -170,8 +169,8 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	ns := &infoFlake{Namespace: local.New(st, nil)}
-	reg := plugin.NewRegistry()
-	reg.Register(uuid, "home", ns, nil)
+	reg := &Sources{}
+	reg.Home = ns
 	srv := mustNew(t, reg, Config{ID: uuid})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
@@ -232,9 +231,9 @@ func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	home := &infoFlake{Namespace: local.New(st, nil)}
-	reg := plugin.NewRegistry()
-	reg.Register(homeUUID, "home", home, nil)
-	reg.Register(rpc.FilesOwner(homeUUID), "files", scratchless{}, nil)
+	reg := &Sources{}
+	reg.Home = home
+	reg.Files = scratchless{}
 	srv := mustNew(t, reg, Config{ID: homeUUID})
 	dir := rpc.QualifyID(homeUUID, rpc.KeyTileID("/r"))
 	hs := serveWeb(t, srv)

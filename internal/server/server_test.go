@@ -17,20 +17,19 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // registerPrimaryLocaldb serves st as a namespace in reg under its stable
 // uuid — exactly how production registers the primary DB. Returns the uuid and
 // the qualified root grid id the client should open at.
-func registerPrimaryLocaldb(t *testing.T, reg *plugin.Registry, st *store.Store) (uuid, qualifiedRoot string) {
+func registerPrimaryLocaldb(t *testing.T, reg *Sources, st *store.Store) (uuid, qualifiedRoot string) {
 	t.Helper()
 	uuid, err := st.PluginUUID(context.Background())
 	if err != nil {
 		t.Fatalf("plugin uuid: %v", err)
 	}
 	client := local.New(st, nil)
-	reg.Register(uuid, "home", client, nil)
+	reg.Home = client
 	bareRoot, err := st.RootGridID(context.Background())
 	if err != nil {
 		t.Fatalf("root grid id: %v", err)
@@ -49,10 +48,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *rpc.Client, string) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	reg := plugin.NewRegistry()
-	_, root := registerPrimaryLocaldb(t, reg, st)
+	reg := &Sources{}
+	node, root := registerPrimaryLocaldb(t, reg, st)
 
-	srv := mustNew(t, reg, Config{})
+	srv := mustNew(t, reg, Config{ID: node})
 	hs := serveWeb(t, srv)
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())
 	return hs, cl, root
@@ -140,9 +139,9 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		t.Fatalf("write asset: %v", err)
 	}
 
-	reg := plugin.NewRegistry()
-	registerPrimaryLocaldb(t, reg, st)
-	srv := mustNew(t, reg, Config{StaticFS: os.DirFS(dir)})
+	reg := &Sources{}
+	node, _ := registerPrimaryLocaldb(t, reg, st)
+	srv := mustNew(t, reg, Config{ID: node, StaticFS: os.DirFS(dir)})
 	hs := serveWeb(t, srv)
 
 	tests := []struct {

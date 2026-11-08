@@ -41,11 +41,10 @@ import (
 	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/urlview"
 	"github.com/josephburnett/gridwell/internal/config"
-	"github.com/josephburnett/gridwell/internal/connection"
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
+	"github.com/josephburnett/gridwell/internal/server"
 )
 
 type parityKind string
@@ -688,13 +687,12 @@ func newParityDisk(t *testing.T) parityDisk {
 
 // registerParityFiles registers d's roots as the node's files, as the node
 // does, a delete removing the path rather than moving it to the OS trash.
-func registerParityFiles(t *testing.T, reg *plugin.Registry, st *store.Store, node string, d parityDisk) {
+func registerParityFiles(t *testing.T, reg *server.Sources, st *store.Store, node string, d parityDisk) {
 	src, err := files.New(st.Files(), []files.Root{{Path: d.main}, {Path: d.away}, {Path: d.lib}}, os.RemoveAll)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.Register(rpc.FilesOwner(node), "files", src, src.Close)
-	reg.SetLabel(rpc.FilesOwner(node), "files")
+	reg.Files = src
 }
 
 // fileID is path's id on the node reached through prefix, as the local
@@ -717,20 +715,17 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 	disks := map[string]parityDisk{"": newParityDisk(t), parityConn: newParityDisk(t)}
 	third := newFarNode(t, "cnode1")
 	undeclare := map[parityOwner]func() func(){}
-	at := func(o parityOwner) func(*plugin.Registry, *store.Store) {
-		return func(reg *plugin.Registry, st *store.Store) {
+	at := func(o parityOwner) func(*server.Sources, *store.Store) {
+		return func(reg *server.Sources, st *store.Store) {
 			undeclare[o] = func() func() { return undeclareConnections(t, reg, st) }
 		}
 	}
 	h := buildTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, nil,
-		func(reg *plugin.Registry, st *store.Store) {
+		func(reg *server.Sources, st *store.Store) {
 			registerParityFiles(t, reg, st, localNodeID, disks[""])
-			// The switch the node gives each connection it declares.
-			tr, _ := reg.Transport()
-			reg.Switch(strings.TrimSuffix(parityConn, "/"), "geneva", func() { tr.(*connection.Server).Disable("geneva") })
 			at(onHome)(reg, st)
 		},
-		func(reg *plugin.Registry, st *store.Store) {
+		func(reg *server.Sources, st *store.Store) {
 			registerParityFiles(t, reg, st, "rnode1", disks[parityConn])
 		},
 		connectTo(t, "zurich", third, at(onFar)))

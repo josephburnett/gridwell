@@ -12,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/shellsvc"
 	"github.com/josephburnett/gridwell/internal/local/shellsvc/shellsvctest"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -24,7 +23,6 @@ func connectionAPIHandler(t *testing.T) http.Handler {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { st.Close() })
-	reg := plugin.NewRegistry()
-	reg.Register("ur1", "home", local.New(st, shellsvc.NewManager(shellsvctest.New())), nil)
-	return servertest.New(t, reg, server.Config{}).ConnectionHandler()
+	home := local.New(st, shellsvc.NewManager(shellsvctest.New()))
+	return servertest.New(t, &server.Sources{Home: home}, server.Config{ID: "ur1"}).ConnectionHandler()
 }

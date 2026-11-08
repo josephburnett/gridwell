@@ -20,7 +20,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
 )
@@ -58,14 +57,12 @@ func newFilesNodeVia(t *testing.T, via func(namespace.Namespace) namespace.Names
 	for _, r := range roots {
 		n.roots = append(n.roots, rpc.QualifyID(localNodeID, rpc.KeyTileID(r)))
 	}
-	reg := plugin.NewRegistry()
-	reg.Register(localNodeID, "home", local.New(st, nil), nil)
-	reg.SetLabel(localNodeID, "home")
+	reg := &server.Sources{}
+	reg.Home = local.New(st, nil)
 	registerFiles(t, reg, st, localNodeID, roots, func(p string) error {
 		n.trashed = append(n.trashed, p)
 		return os.RemoveAll(p)
 	}, via)
-	t.Cleanup(reg.Close)
 	n.srv = servertest.New(t, reg, server.Config{ID: localNodeID})
 	hs := servertest.Serve(t, n.srv)
 	n.url = hs.URL
@@ -85,8 +82,8 @@ func newFilesNodeVia(t *testing.T, via func(namespace.Namespace) namespace.Names
 // filesAt registers the files over roots on the node id, a delete removing
 // the path: the shape newFarNode and buildTransportHarness take for more of
 // a node.
-func filesAt(t *testing.T, id string, roots ...string) func(*plugin.Registry, *store.Store) {
-	return func(reg *plugin.Registry, st *store.Store) {
+func filesAt(t *testing.T, id string, roots ...string) func(*server.Sources, *store.Store) {
+	return func(reg *server.Sources, st *store.Store) {
 		t.Helper()
 		registerFiles(t, reg, st, id, roots, os.RemoveAll, nil)
 	}
@@ -94,7 +91,7 @@ func filesAt(t *testing.T, id string, roots ...string) func(*plugin.Registry, *s
 
 // registerFiles registers on reg, under the files' owner id of the node id,
 // the files over roots in st's files namespace, reached through via when set.
-func registerFiles(t *testing.T, reg *plugin.Registry, st *store.Store, id string, roots []string,
+func registerFiles(t *testing.T, reg *server.Sources, st *store.Store, id string, roots []string,
 	trash func(string) error, via func(namespace.Namespace) namespace.Namespace) {
 	t.Helper()
 	var rs []files.Root
@@ -109,8 +106,7 @@ func registerFiles(t *testing.T, reg *plugin.Registry, st *store.Store, id strin
 	if via != nil {
 		ns = via(src)
 	}
-	reg.Register(rpc.FilesOwner(id), "files", ns, src.Close)
-	reg.SetLabel(rpc.FilesOwner(id), "files")
+	reg.Files = ns
 }
 
 // grid reads id, fatal on a refusal.

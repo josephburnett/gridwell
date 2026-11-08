@@ -13,7 +13,6 @@ import (
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellwire"
 	"github.com/josephburnett/gridwell/internal/mcpapi"
-	"github.com/josephburnett/gridwell/internal/plugin"
 	"github.com/josephburnett/gridwell/internal/trace"
 )
 
@@ -35,7 +34,7 @@ func refusalOf(path, msg string) (tracewire.Record, bool) {
 // content token or a bearer.
 func TestTheWebAPIRecordsEveryRefusalWithoutItsSecret(t *testing.T) {
 	const password = "trace-secret-pw"
-	srv := mustNew(t, plugin.NewRegistry(), Config{Password: password, Dir: t.TempDir()})
+	srv := mustNew(t, &Sources{}, Config{Password: password, Dir: t.TempDir()})
 	bare := webAPITest(t, srv.WebHandler())
 	authed := withCookie(t, webAPITest(t, srv.WebHandler()), password)
 	do := func(c *http.Client, method, u string, body string, hdr map[string]string) {
@@ -137,7 +136,7 @@ func TestAShellAttachAndItsHolderAreTraced(t *testing.T) {
 // A union too long for one record's msg still says how many grids it holds,
 // and lists whole ids only, so a cut never reads as a different id.
 func TestAViewUnionRecordCountsItsGrids(t *testing.T) {
-	srv := mustNew(t, plugin.NewRegistry(), Config{})
+	srv := mustNew(t, &Sources{}, Config{})
 	var union []string
 	for i := range 300 {
 		union = append(union, "nounion/"+strconv.Itoa(1000+i))

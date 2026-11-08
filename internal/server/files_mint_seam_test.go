@@ -27,7 +27,6 @@ import (
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/local/store/storetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // filesServer is a node with home and the files over one fresh root, both
@@ -51,18 +50,16 @@ func newFilesServer(t *testing.T) *filesServer {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	f := &filesServer{db: storetest.Reader(t, path), root: t.TempDir()}
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	f.node, f.home = registerPrimaryLocaldb(t, reg, st)
-	reg.SetLabel(f.node, "home")
 	// The files' rows are a namespace of THIS store: the whole question is
 	// what lands in the node's one file.
 	src, err := files.New(st.Files(), []files.Root{{Path: f.root}}, os.RemoveAll)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reg.Register(rpc.FilesOwner(f.node), "files", src, src.Close)
-	reg.SetLabel(rpc.FilesOwner(f.node), "files")
-	t.Cleanup(reg.Close)
+	reg.Files = src
+
 	f.hs = serveWeb(t, mustNew(t, reg, Config{ID: f.node}))
 	f.cl = rpc.NewClient(f.hs.Client(), f.hs.URL, connect.WithProtoJSON())
 	f.grid = rpc.QualifyID(f.node, rpc.KeyTileID(f.root))

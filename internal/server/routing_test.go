@@ -5,7 +5,6 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // routeMark is a namespace known by its name, so a route says which it took.
@@ -19,11 +18,11 @@ type routeMark struct {
 // id errors (no root to fall back to); an undeclared namespace errors.
 func TestRoute(t *testing.T) {
 	const node = "lnode1"
-	reg := plugin.NewRegistry()
-	reg.Register(node, "home", &routeMark{name: "home"}, nil)
-	reg.Register(rpc.FilesOwner(node), "files", &routeMark{name: "files"}, nil)
-	reg.SetTransport(&routeMark{name: "transport"}, nil)
-	rt := &router{srv: &Server{pluginReg: reg, cfg: Config{ID: node}}}
+	reg := &Sources{}
+	reg.Home = &routeMark{name: "home"}
+	reg.Files = &routeMark{name: "files"}
+	reg.Transport = &routeMark{name: "transport"}
+	rt := &router{srv: &Server{src: *reg, cfg: Config{ID: node}}}
 	file := rpc.KeyTileID("/a")
 
 	cases := []struct {

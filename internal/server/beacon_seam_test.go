@@ -13,7 +13,6 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // The unload-beacon seam (the transport-loss class): the
@@ -26,14 +25,15 @@ import (
 // every tab close while returning 200.
 func beaconTestServer(t *testing.T) (cl *rpc.Client, hs *httptest.Server, root string) {
 	t.Helper()
-	reg := plugin.NewRegistry()
+	reg := &Sources{}
 	st, err := store.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	_, root = registerPrimaryLocaldb(t, reg, st)
-	srv := mustNew(t, reg, Config{})
+	node, qroot := registerPrimaryLocaldb(t, reg, st)
+	root = qroot
+	srv := mustNew(t, reg, Config{ID: node})
 	hs = serveWeb(t, srv)
 	return rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON()), hs, root
 }

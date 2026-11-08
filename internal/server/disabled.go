@@ -1,11 +1,13 @@
 package server
 
-// A source the user disabled (plugin.Registry.Disable) is read-only until the
-// node restarts. The router is the one layer every verb crosses for plugins
-// and connections alike, so it refuses the writes and stamps the reads here,
-// deriving both from the registry on the way out; nothing is stored.
+// A connection the user disabled (Sources.Switches) is read-only until the
+// node restarts. The router is the one layer every verb crosses, so it
+// refuses the writes and stamps the reads here, deriving both from the
+// switches on the way out; nothing is stored.
 
 import (
+	"strings"
+
 	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -13,11 +15,41 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// disabledReason is the sentence of the switched-off source owning id, ""
-// while that source is on.
+// disabledReason is the sentence of the switched-off connection owning id,
+// "" while it is on and for every other source.
 func (s *Server) disabledReason(id string) (ns, reason string) {
 	ns = rpc.OwnerNamespaceOf(id, s.cfg.ID)
-	return ns, s.pluginReg.DisabledReason(ns)
+	return ns, s.nsDisabledReason(ns)
+}
+
+// nsDisabledReason is disabledReason for an owner id.
+func (s *Server) nsDisabledReason(ns string) string {
+	if name, ok := s.connectionOf(ns); ok {
+		return s.src.Switches.DisabledReason(name)
+	}
+	return ""
+}
+
+// disabledNow is every connection the user disabled, by its namespace.
+func (s *Server) disabledNow() []string {
+	if s.src.Switches == nil {
+		return nil
+	}
+	var out []string
+	for _, name := range s.src.Switches.DisabledNow() {
+		out = append(out, rpc.QualifyID(s.cfg.ID, name))
+	}
+	return out
+}
+
+// connectionOf is the connection a namespace of this node's names, "<id>/<name>";
+// ok is false for home, the files and anything a far node declares, none of
+// which this node can switch off.
+func (s *Server) connectionOf(ns string) (name string, ok bool) {
+	first, rest, split := rpc.SplitID(ns)
+	ok = split && s.src.Switches != nil && first == s.cfg.ID && !strings.Contains(rest, "/") &&
+		rpc.ShapeOf(rest) == rpc.ShapeNamespace
+	return rest, ok
 }
 
 // refuseDisabled answers a write naming any of ids whose source is switched

@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"github.com/josephburnett/gridwell/internal/namespace/namespacetest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -11,7 +12,6 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/local/store"
-	"github.com/josephburnett/gridwell/internal/plugin"
 )
 
 // TestQualifyTilesQualifiesIDs: a namespace returns bare ids; the server
@@ -350,9 +350,9 @@ func TestResolveRoutesByTheNamespacePeel(t *testing.T) {
 	}
 	// resolve hands the files their bare path and qualifies their answers
 	// with the node, never with the owner id the registry keys them by.
-	reg := plugin.NewRegistry()
-	reg.Register(rpc.FilesOwner(node), "files", nil, nil)
-	srv, err := New(reg, Config{ID: node, Password: "pw"})
+	reg := &Sources{}
+	reg.Files = namespacetest.Unimplemented{}
+	srv, err := New(*reg, Config{ID: node, Password: "pw"})
 	if err != nil {
 		t.Fatal(err)
 	}
