@@ -129,7 +129,7 @@ captured.`,
 		name: "alt_user", field: "named", ddl: "INTEGER NOT NULL DEFAULT 0", since: 2,
 		comment: `alt_user=1 marks alt_text as user-owned, set by the rename gesture:
 automatic captures (a url's page title on freeze, a shell's foreground
-command on detach) and a plugin's listing must not overwrite a name the
+command on detach) and a directory's listing must not overwrite a name the
 user set. A copy carries it, and a create honours it, so a copy across
 namespaces keeps it too. On the wire it is named, read-only to every
 write but those. Added at schema v2, additive.`,

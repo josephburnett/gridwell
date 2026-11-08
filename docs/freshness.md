@@ -380,7 +380,7 @@ through one is served from cache, and that is what the bar's chip says
 sticky notice keyed `plugin:<node>/<conn>` ("live updates stopped — …");
 `live_updates_off` posts its own, keyed `live:<node>/<conn>` ("live updates
 off — …"), so each comes down on its own field. A move of the healthy bit
-arms `events.Resyncs`, which calls `retryKick(true, h.PluginUUID)` once the
+arms `events.Resyncs`, which calls `retryKick(true, h.NodeUUID)` once the
 source's health has held for `cadence.HealthSettleMs`: a flapping source
 resyncs once, on the state it rests in. A change of `live_updates_off`
 alone resyncs nothing: the listings still answer. The notices move at once. The down
@@ -395,7 +395,7 @@ publishes the recovery, and `learnRoot` publishes one too on a first or
 healed landing. `Layer.applyEvent` clears `dark[conn]`; the next successful
 pass-through call would have cleared it anyway through `noteReach`.
 `App.reportSourceHealth` clears the darkness, so the chip goes, resolves the
-notice, and arms the same settled `retryKick(true, h.PluginUUID)`, which cancels this source's
+notice, and arms the same settled `retryKick(true, h.NodeUUID)`, which cancels this source's
 in-flight fetches, clears its latches, and refetches `Cache.ResyncSet` of it —
 every cached grid chained through it, and nobody else's. Those reads hit the
 cache inside their windows with the source no longer dark, so they serve what

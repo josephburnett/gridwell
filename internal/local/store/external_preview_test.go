@@ -8,7 +8,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A plugin url tile keeps a screenshot and a standing freeze through the same
+// A page file's url tile keeps a screenshot and a standing freeze through the same
 // writers home's rows take: one blob swap, one frozen write.
 
 func mintOne(t *testing.T, d *FileRows, e Entry) int64 {
@@ -28,7 +28,7 @@ func pageEntry(key string) Entry {
 	return Entry{Key: key, Kind: rpc.KindURL, Label: key, ServesPage: true}
 }
 
-func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
+func TestAFileURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 	st, d := openExt(t)
 	ctx := context.Background()
 	a := mintOne(t, d, pageEntry("a.html"))
@@ -64,7 +64,7 @@ func TestAPluginURLTileKeepsAScreenshotThroughTheSharedBlobSwap(t *testing.T) {
 	}
 }
 
-func TestAPluginScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
+func TestAFileScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
 	_, d := openExt(t)
 	text := mintOne(t, d, Entry{Key: "n.md", Kind: rpc.KindText, Label: "n.md"})
 	if _, err := d.SetURLPreview(text, []byte("shot")); !errors.Is(err, ErrNotURLTile) {
@@ -75,7 +75,7 @@ func TestAPluginScreenshotIsRefusedOnAnythingButAURLRow(t *testing.T) {
 	}
 }
 
-func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
+func TestAFileURLTileHoldsTheStandingFreeze(t *testing.T) {
 	_, d := openExt(t)
 	gid, _ := d.GridOf("root")
 	id := mintOne(t, d, pageEntry("a.html"))
@@ -95,7 +95,7 @@ func TestAPluginURLTileHoldsTheStandingFreeze(t *testing.T) {
 
 // A retired row keeps its id but never shows a preview again, so the blob it held
 // is released rather than kept alive by a tombstone.
-func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
+func TestRetiringAFileRowReleasesItsScreenshot(t *testing.T) {
 	st, d := openExt(t)
 	id := mintOne(t, d, pageEntry("a.html"))
 	if _, err := d.SetURLPreview(id, []byte("shot")); err != nil {
@@ -119,7 +119,7 @@ func TestRetiringAPluginRowReleasesItsScreenshot(t *testing.T) {
 
 // A screenshot a moved page retires releases its blob, and the row takes the
 // next capture as any row does.
-func TestDroppingAPluginScreenshotReleasesItsBlob(t *testing.T) {
+func TestDroppingAFileScreenshotReleasesItsBlob(t *testing.T) {
 	st, d := openExt(t)
 	id := mintOne(t, d, pageEntry("a.html"))
 	if err := d.DropURLPreview(id); err != nil {
@@ -164,7 +164,7 @@ func TestAPageRowPresentsAsAPageWhenItsEntryIsAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := extByKey(t, tiles, "a.html"); !rpc.PageContent(got.Tile) || got.UrlString != "" {
-		t.Fatalf("an absent page row answers %+v, want a page at the plugin's address", got.Tile)
+		t.Fatalf("an absent page row answers %+v, want a page at the file's address", got.Tile)
 	}
 
 	// The snapshot follows what the source last said, both ways.

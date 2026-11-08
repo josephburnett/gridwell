@@ -49,7 +49,7 @@ func TestNextFreeRectIsTheOneReadingOrder(t *testing.T) {
 
 // FreeSlot reads the same rule over a grid's rows: with no cell named it is
 // the reading order from the origin, and a named cell is a hint that stacks
-// below in its own column when taken, as a plugin's hint does.
+// below in its own column when taken, as FreeSlot's near does.
 func TestFreeSlotIsTheFirstFreeCellOverAGridsRows(t *testing.T) {
 	taken := []*gridwellv1.Tile{{X: 0, Y: 0, W: 1, H: 1}, {X: 1, Y: 0, W: 2, H: 1}, {X: 5, Y: 3, W: 1, H: 2}}
 	if x, y := FreeSlot(taken, nil, 1, 1); x != 3 || y != 0 {

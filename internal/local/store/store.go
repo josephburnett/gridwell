@@ -52,14 +52,14 @@ type Store struct {
 	now   func() time.Time // overridden in tests
 	newID func() string    // overridden in tests
 	hub   *eventhub.Hub[*gridwellv1.Event]
-	// pluginID is injected by SetPluginID. "" is a bare test store, and
-	// PluginUUID then falls back to the bootstrap mint.
-	pluginID string
+	// nodeID is injected by SetNodeID. "" is a bare test store, and
+	// NodeUUID then falls back to the bootstrap mint.
+	nodeID string
 }
 
 const (
 	systemKeyRootGridID    = "root_grid_id"
-	systemKeyPluginUUID    = "plugin_uuid"
+	systemKeyNodeUUID      = "plugin_uuid" // the stored spelling: a key is never renamed
 	systemKeyScratchGridID = "scratch_grid_id"
 )
 
@@ -149,8 +149,8 @@ func singletonGrid(ctx context.Context, q gridReader, key string) (int64, error)
 
 // bootstrap mints, in one transaction, every singleton grid the file lacks,
 // keyed by the same system row a read finds it by, so an existing gridwell.db keeps
-// its ids. The plugin_uuid mint rides with the root's, never alone: see
-// PluginUUID. Framing is not seeded: NULL already means never visited.
+// its ids. The node uuid mint rides with the root's, never alone: see
+// NodeUUID. Framing is not seeded: NULL already means never visited.
 func (s *Store) bootstrap(ctx context.Context) error {
 	var absent []string
 	for _, key := range singletonGridKeys {
@@ -177,7 +177,7 @@ func (s *Store) bootstrap(ctx context.Context) error {
 			}
 			if key == systemKeyRootGridID {
 				if _, err := tx.ExecContext(ctx, `INSERT INTO system (key, value) VALUES (?, ?)`,
-					systemKeyPluginUUID, s.newID()); err != nil {
+					systemKeyNodeUUID, s.newID()); err != nil {
 					return err
 				}
 			}
@@ -216,20 +216,20 @@ func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 	return s.singletonID(ctx, systemKeyScratchGridID)
 }
 
-// SetPluginID injects the config id the binary verified against its DB at
-// spawn. The system.plugin_uuid row is a second, independently minted identity
+// SetNodeID injects the config id the binary verified against its DB at
+// boot. The stored node uuid is a second, independently minted identity
 // nothing outside this store sees: qualified links carry the config id,
 // so a comparison against the mint could never match. The mint survives only
 // as the fallback for bare test stores that never had a config.
-func (s *Store) SetPluginID(id string) { s.pluginID = id }
+func (s *Store) SetNodeID(id string) { s.nodeID = id }
 
-// PluginUUID returns the identity this store's qualified ids carry: the
-// injected config id (see SetPluginID), or the bootstrap mint for a test store.
-func (s *Store) PluginUUID(ctx context.Context) (string, error) {
-	if s.pluginID != "" {
-		return s.pluginID, nil
+// NodeUUID returns the identity this store's qualified ids carry: the
+// injected config id (see SetNodeID), or the bootstrap mint for a test store.
+func (s *Store) NodeUUID(ctx context.Context) (string, error) {
+	if s.nodeID != "" {
+		return s.nodeID, nil
 	}
-	v, ok, err := systemValue(ctx, s.db, systemKeyPluginUUID)
+	v, ok, err := systemValue(ctx, s.db, systemKeyNodeUUID)
 	if err != nil {
 		return "", err
 	}
@@ -239,8 +239,8 @@ func (s *Store) PluginUUID(ctx context.Context) (string, error) {
 	return v, nil
 }
 
-// RootFraming returns home's root framing, in the same three columns a plugin
-// grid's root keeps.
+// RootFraming returns home's root framing, in the same three columns a
+// root of the files keeps.
 func (s *Store) RootFraming(ctx context.Context) (rpc.View, error) {
 	rootID, err := singletonGrid(ctx, s.db, systemKeyRootGridID)
 	if err != nil {

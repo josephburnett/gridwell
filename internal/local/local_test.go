@@ -466,7 +466,7 @@ func TestCleanupScratchSparesWorkspaceEphemerals(t *testing.T) {
 	ctx := context.Background()
 	scratch := scratchGrid(t, p)
 
-	uuid, err := p.Store().PluginUUID(ctx)
+	uuid, err := p.Store().NodeUUID(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

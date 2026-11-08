@@ -31,7 +31,7 @@ type readSubject struct {
 
 // seedForReads writes, through the product's own verbs, a tile of every kind,
 // a nested grid, a capture, a framing, a trashed row, an ephemeral, and a
-// plugin namespace with a minted row. Every read verb below has something to
+// files' namespace with a minted row. Every read verb below has something to
 // find, so a read that writes has something to write over.
 func seedForReads(t *testing.T, s *Store) readSubject {
 	t.Helper()
@@ -157,12 +157,12 @@ type readCase struct {
 
 // readCases is every read the store serves, the wire's four (GetGrid, GetTile,
 // GetTilePreview, Find) plus the handshake's fields, content, blobs and the
-// plugin namespace's join.
+// files' namespace's join.
 func readCases() []readCase {
 	ignore2 := func(_ any, _ error) {}
 	return []readCase{
 		{"RootGridID", func(ctx context.Context, s *Store, _ readSubject) { s.RootGridID(ctx) }},
-		{"PluginUUID", func(ctx context.Context, s *Store, _ readSubject) { s.PluginUUID(ctx) }},
+		{"NodeUUID", func(ctx context.Context, s *Store, _ readSubject) { s.NodeUUID(ctx) }},
 		{"ScratchGridID", func(ctx context.Context, s *Store, _ readSubject) { s.ScratchGridID(ctx) }},
 		{"TrashGridID", func(ctx context.Context, s *Store, _ readSubject) { s.TrashGridID(ctx) }},
 		{"RootFraming", func(ctx context.Context, s *Store, _ readSubject) { s.RootFraming(ctx) }},

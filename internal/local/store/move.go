@@ -97,7 +97,7 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 // ClaimPlacement verifies a placement claim against row n: the placement the
 // writer saw must be the one the row holds. It is the state, not its history,
 // so a tile moved away and back is where the writer saw it and the write
-// lands. A nil claim is the node's own write. withGrid is false for a plugin's
+// lands. A nil claim is the node's own write. withGrid is false for a file's
 // row, whose grid its listing fixes.
 func ClaimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) error {
 	if c == nil {

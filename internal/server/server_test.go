@@ -24,7 +24,7 @@ import (
 // the qualified root grid id the client should open at.
 func registerPrimaryLocaldb(t *testing.T, reg *Sources, st *store.Store) (uuid, qualifiedRoot string) {
 	t.Helper()
-	uuid, err := st.PluginUUID(context.Background())
+	uuid, err := st.NodeUUID(context.Background())
 	if err != nil {
 		t.Fatalf("home uuid: %v", err)
 	}

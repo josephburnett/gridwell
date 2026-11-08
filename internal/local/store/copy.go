@@ -53,8 +53,8 @@ func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (i
 
 // childGridForCopy returns the child_grid_id a copy of tile n should carry,
 // ready to bind into the INSERT. An interior door gets a deep copy of its
-// subtree; a door to another namespace keeps its qualified cross-plugin link, since
-// another plugin owns that grid; everything else gets nil.
+// subtree; a door to another namespace keeps its qualified link, since
+// another namespace owns that grid; everything else gets nil.
 func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile) (any, error) {
 	if n.ChildGridId == "" {
 		return nil, nil

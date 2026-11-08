@@ -18,6 +18,6 @@ func OpenVerified(dbPath, uuid, kind string) (*store.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	st.SetPluginID(uuid)
+	st.SetNodeID(uuid)
 	return st, nil
 }

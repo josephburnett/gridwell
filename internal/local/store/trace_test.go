@@ -74,10 +74,10 @@ func TestARefusedStoreWriteSaysSo(t *testing.T) {
 	t.Error("a refused write left no record")
 }
 
-// A plugin row's write goes through the same funnel as home's, so it leaves
+// A file row's write goes through the same funnel as home's, so it leaves
 // the same record. It publishes no event to read its row off, so it names
 // the row itself, qualified by its namespace.
-func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
+func TestAFileRowWriteSaysWhatItTouched(t *testing.T) {
 	_, d := openExt(t)
 	gid, err := d.GridOf("inbox")
 	if err != nil {
@@ -117,7 +117,7 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 		}
 		rec, ok := find(trace.Default().Snapshot(), w.verb)
 		if !ok {
-			t.Errorf("%s on a plugin row left no record", w.verb)
+			t.Errorf("%s on a file row left no record", w.verb)
 			continue
 		}
 		if rec.Src != "store" || rec.Kind != "write" || rec.KV["keys"] != w.keys {
@@ -126,8 +126,8 @@ func TestAPluginRowWriteSaysWhatItTouched(t *testing.T) {
 	}
 }
 
-// A refused plugin-row write says so, as a refused home write does.
-func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
+// A refused file-row write says so, as a refused home write does.
+func TestARefusedFileRowWriteSaysSo(t *testing.T) {
 	_, d := openExt(t)
 	if _, err := d.Move(999999, 0, "", 0, 0, 1, 1, nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Move on no row = %v, want ErrNotFound", err)
@@ -137,12 +137,12 @@ func TestARefusedPluginRowWriteSaysSo(t *testing.T) {
 			return
 		}
 	}
-	t.Error("a refused plugin-row write left no record naming its row")
+	t.Error("a refused file-row write left no record naming its row")
 }
 
-// A plugin-row write that lands where the row already is says so, naming the
+// A file-row write that lands where the row already is says so, naming the
 // row, so a dump tells which write was a no-op.
-func TestAnUnchangedPluginRowWriteNamesItsRow(t *testing.T) {
+func TestAnUnchangedFileRowWriteNamesItsRow(t *testing.T) {
 	_, d := openExt(t)
 	gid, err := d.GridOf("inbox")
 	if err != nil {

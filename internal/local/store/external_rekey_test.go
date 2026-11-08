@@ -7,7 +7,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// A row the plugin moved to another grid keeps its id under its new key and
+// A row the files moved to another grid keeps its id under its new key and
 // leaves the old grid's selection, and a stale claim moves nothing.
 func TestExtRekeyKeepsTheIDAndLeavesTheSelection(t *testing.T) {
 	_, d := openExt(t)

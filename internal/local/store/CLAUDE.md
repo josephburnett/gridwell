@@ -41,7 +41,7 @@ intact.
   never deleted. Record the decision in the migration's comment. A wire
   field retired with a column becomes `reserved`. v10, v11, and v12 are the
   worked examples; v23 is the one decided exception to converting, the
-  node's old plugin rows dropped.
+  rows of every namespace but home's dropped.
 
 ## How the schema is represented
 

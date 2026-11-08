@@ -9,7 +9,7 @@ import (
 func (s *Store) SetClock(now func() time.Time) { s.now = now }
 
 // SetIDGenerator overrides UUID generation (test-only: deterministic
-// system.plugin_uuid).
+// the stored node uuid).
 func (s *Store) SetIDGenerator(f func() string) { s.newID = f }
 
 // GetBlob returns the bytes of a blob.

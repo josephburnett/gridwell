@@ -22,12 +22,12 @@ func TestOpenVerifiedInjectsConfigIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	got, err := st.PluginUUID(context.Background())
+	got, err := st.NodeUUID(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got != "k3x9m2q" {
-		t.Fatalf("PluginUUID = %q, want the verified config id %q (the bootstrap mint leaked through)", got, "k3x9m2q")
+		t.Fatalf("NodeUUID = %q, want the verified config id %q (the bootstrap mint leaked through)", got, "k3x9m2q")
 	}
 }
 

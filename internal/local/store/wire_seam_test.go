@@ -35,14 +35,14 @@ func TestStoreRowSurvivesTheWire(t *testing.T) {
 // sets. Without this a new column could be wired through the store and
 // silently left out of the seam fixture.
 func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
-	// Wire-only fields: derived by the server or the owning plugin, never a
+	// Wire-only fields: derived by the server or the owning source, never a
 	// stored column, so no store row can exercise them here.
 	derived := map[string]string{
 		"Link":             "derived by the router from child_grid_id's shape",
-		"TextPresentation": "declared by the owning plugin from its content",
-		"StatusDetail":     "the owning plugin's current trouble with the tile",
-		"ContentStamp":     "the owning plugin's name for a claimless row's bytes",
-		"ReadOnly":         "the owning plugin's reason a text body takes no edits",
+		"TextPresentation": "stated by the owning source from its content",
+		"StatusDetail":     "the owning source's current trouble with the tile",
+		"ContentStamp":     "the owning source's name for a claimless row's bytes",
+		"ReadOnly":         "the owning source's reason a text body takes no edits",
 	}
 	covered := map[string]bool{}
 	for _, tile := range wireFixtures(t) {
@@ -125,7 +125,7 @@ func wireFixtures(t *testing.T) map[string]*pb.Tile {
 		t.Fatal(err)
 	}
 
-	// serves_page is stored only on a plugin's row.
+	// serves_page is stored only on a file's row.
 	ns := s.Files()
 	pgid, err := ns.GridOf("root")
 	if err != nil {

@@ -53,9 +53,9 @@ func newShellAPIFixture(t *testing.T, cfg Config, tweak ...func(*Server)) *shell
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	if cfg.ID != "" {
-		st.SetPluginID(cfg.ID)
+		st.SetNodeID(cfg.ID)
 	}
-	uuid, err := st.PluginUUID(context.Background())
+	uuid, err := st.NodeUUID(context.Background())
 	if err != nil {
 		t.Fatalf("home uuid: %v", err)
 	}

@@ -18,9 +18,9 @@ func rowTimes(t *testing.T, s *Store, id int64) (created, updated int64) {
 	return created, updated
 }
 
-// A plugin's rows keep time in the unit home's do, unix seconds, so one
+// A file's rows keep time in the unit home's do, unix seconds, so one
 // filter reads every row of the table.
-func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
+func TestFileRowTimesAreUnixSeconds(t *testing.T) {
 	st, ns := openExt(t)
 	at := time.Unix(1_800_000_000, 123)
 	st.SetClock(func() time.Time { return at })
@@ -40,7 +40,7 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if gc != at.Unix() || gu != at.Unix() {
-		t.Errorf("plugin grid times = %d, %d, want %d", gc, gu, at.Unix())
+		t.Errorf("directory grid times = %d, %d, want %d", gc, gu, at.Unix())
 	}
 	later := at.Add(time.Hour)
 	st.SetClock(func() time.Time { return later })
@@ -56,9 +56,9 @@ func TestPluginRowTimesAreUnixSeconds(t *testing.T) {
 	}
 }
 
-// Every write to a plugin's row moves its updated_at, as every write to
+// Every write to a file's row moves its updated_at, as every write to
 // home's does: a move, a text scroll, a content zoom.
-func TestPluginRowWritesStampUpdatedAt(t *testing.T) {
+func TestFileRowWritesStampUpdatedAt(t *testing.T) {
 	st, ns := openExt(t)
 	at := time.Unix(1_800_000_000, 0)
 	st.SetClock(func() time.Time { return at })

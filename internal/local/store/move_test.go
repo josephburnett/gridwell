@@ -170,7 +170,7 @@ func TestMoveTileCycleRefusedWithoutPath(t *testing.T) {
 	}
 }
 
-// The child grid of a door to another namespace belongs to another plugin — no local subtree, so
+// The child grid of a door to another namespace belongs to another namespace — no local subtree, so
 // placement anywhere local is legal and the walk must not trip on the
 // qualified (non-numeric) child_grid_id.
 func TestMoveTileDoorToOtherNamespaceHasNoLocalSubtree(t *testing.T) {

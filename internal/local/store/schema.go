@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS system (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- Keys: root_grid_id, plugin_uuid, scratch_grid_id, trash_grid_id. Home's
+-- Keys: root_grid_id, plugin_uuid (the node uuid), scratch_grid_id, trash_grid_id. Home's
 -- root framing is not here: it lives on its root grid row, key = '', in the
 -- same three columns every other root uses.
 `
@@ -103,7 +103,7 @@ const tilesCheck = `    CHECK (
        -- NULL means never arranged, and descent installs the default pane.
        OR (kind = 'workspace' AND child_grid_id IS NULL     AND url_string IS NULL  AND preview_blob_id IS NULL AND text_mode IS NULL)
        ))
-    -- link variant: a leaf tile whose content lives in another plugin's
+    -- link variant: a leaf tile whose content lives in another namespace's
     -- tile, named by link_target_id. No content columns: bytes, preview,
     -- and url are read through the target. The text framing columns and
     -- view_* stay usable, because framing is per-link local, like the view of a

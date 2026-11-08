@@ -19,7 +19,7 @@ func gridRowCount(t *testing.T, s *Store) int {
 	return n
 }
 
-// A door to another namespace points at another plugin's grid through a qualified
+// A door to another namespace points at another namespace's grid through a qualified
 // child_grid_id, and the store treats that child as a shared link, never
 // a thing it owns: copy copies the link, delete drops only the
 // link, move preserves it.

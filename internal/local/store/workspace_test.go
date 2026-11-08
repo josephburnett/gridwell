@@ -136,18 +136,18 @@ func TestWorkspaceCopySharesBlobThenDiverges(t *testing.T) {
 	}
 }
 
-// The plugin identity is the config id injected by SetPluginID, not the
+// The node identity is the config id injected by SetNodeID, not the
 // bootstrap mint. Layout blobs qualify their references with the config id, so
 // the ephemeral-refs matcher must speak it too, or the boot sweep reaps
 // pane-owned shells and kills their tmuxes. A test that builds the blob
-// from PluginUUID cannot catch this: it matches whatever PluginUUID returns.
+// from NodeUUID cannot catch this: it matches whatever NodeUUID returns.
 func TestWorkspaceRefsMatchTheInjectedIdentity(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 	root := rootID(t, s)
 
 	// The production identity: a config id DIFFERENT from the minted uuid.
-	s.SetPluginID("k3x9m2q")
+	s.SetNodeID("k3x9m2q")
 
 	pt, err := s.CreateWorkspace(ctx, root, 0, 0, 1, 1, "ws", false, nil)
 	if err != nil {

@@ -238,7 +238,7 @@ func TestATileLeavingItsGridLeavesTheSelection(t *testing.T) {
 	}
 }
 
-// A plugin's grid keeps its selection on the node's row for it, like its
+// A directory's grid keeps its selection on the node's row for it, like its
 // framing, and a retired row leaves the set.
 func TestSourceGridSelection(t *testing.T) {
 	s := newTestStore(t)
@@ -392,15 +392,15 @@ func TestSelectionClearRecurseStaysInItsNamespace(t *testing.T) {
 	if got, err := n.Selection(gid); err != nil || len(got) != 1 {
 		t.Errorf("the grid behind a door to another namespace: %v, %v; want it kept", got, err)
 	}
-	// From the plugin's side the walk stays in its own rows too.
+	// From the files' side the walk stays in its own rows too.
 	changed, err := n.SetSelection(gid, SelectOp{Clear: true, Recurse: true})
 	if err != nil || !slices.Equal(changed, []int64{gid}) {
-		t.Errorf("a plugin grid's recursive clear changed %v, %v; want [%d]", changed, err, gid)
+		t.Errorf("a directory grid's recursive clear changed %v, %v; want [%d]", changed, err, gid)
 	}
 }
 
-// The all-clear empties every grid's set in one namespace, home's or a
-// plugin's, and leaves the others' sets alone; it names nothing else.
+// The all-clear empties every grid's set in one namespace, home's or the
+// files', and leaves the others' sets alone; it names nothing else.
 func TestSelectionClearAllIsOneNamespace(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
@@ -442,11 +442,11 @@ func TestSelectionClearAllIsOneNamespace(t *testing.T) {
 		t.Errorf("told %d grids, want 3", got)
 	}
 	if got, _ := n.Selection(gid); len(got) != 1 {
-		t.Errorf("home's all-clear reached the plugin's grid: %v", got)
+		t.Errorf("home's all-clear reached the directory's grid: %v", got)
 	}
 	changed, err := n.ClearAllSelections()
 	if err != nil || !slices.Equal(changed, []int64{gid}) {
-		t.Errorf("the plugin's all-clear changed %v, %v; want [%d]", changed, err, gid)
+		t.Errorf("the files' all-clear changed %v, %v; want [%d]", changed, err, gid)
 	}
 	if changed, err := n.ClearAllSelections(); err != nil || len(changed) != 0 {
 		t.Errorf("a second all-clear changed %v, %v", changed, err)

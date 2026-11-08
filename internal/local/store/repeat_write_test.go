@@ -106,7 +106,7 @@ func TestARepeatedRootFramingWritesNothing(t *testing.T) {
 // announce them themselves; a repeat changes nothing, not even updated_at,
 // and says so (files.TestEachWriteAnnouncesItsOwnFactOnce is the other side
 // of the seam).
-func TestARepeatedPluginRowWriteWritesNothing(t *testing.T) {
+func TestARepeatedFileRowWriteWritesNothing(t *testing.T) {
 	s, d := openExt(t)
 	gid, err := d.GridOf("inbox")
 	if err != nil {

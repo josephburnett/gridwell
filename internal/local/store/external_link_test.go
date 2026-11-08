@@ -6,7 +6,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A plugin entry that names a link_target is a link row in the node's
+// A file entry that names a link target is a link row in the node's
 // rows: derived as one, minted as one, converted to one in place when an
 // existing content row's entry becomes a link, and back.
 

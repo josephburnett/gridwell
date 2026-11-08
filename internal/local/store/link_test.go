@@ -56,7 +56,7 @@ func TestCreateLeafLinkRejectsDoorAndBareTargets(t *testing.T) {
 		t.Error("CreateLeafLink accepted kind=door; doors link via child_grid_id")
 	}
 	// A bare (unqualified) target would be ambiguous outside the allocating
-	// plugin — same rule as the qualified child of a door to another namespace.
+	// namespace — same rule as the qualified child of a door to another namespace.
 	if _, err := s.CreateLeafLink(ctx, root, 0, 0, 1, 1, rpc.KindText, "42", "", false); err == nil {
 		t.Error("CreateLeafLink accepted a bare integer target")
 	}

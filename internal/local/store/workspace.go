@@ -83,7 +83,7 @@ func (s *Store) SetWorkspaceLayout(ctx context.Context, tileID, version int64, d
 // any pane blob failed to decode, and the caller must then reap nothing: a
 // wrongly-swept shell is a killed process, while a delayed sweep is not.
 func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]bool, unreadable bool, err error) {
-	uuid, err := s.PluginUUID(ctx)
+	uuid, err := s.NodeUUID(ctx)
 	if err != nil {
 		return nil, false, err
 	}

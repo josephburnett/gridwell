@@ -54,7 +54,7 @@ func TestWorkspaceDeleteBlipDoesNotReap(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	inner := local.New(st, nil)
-	uuid, err := st.PluginUUID(ctx)
+	uuid, err := st.NodeUUID(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

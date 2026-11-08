@@ -119,15 +119,15 @@ func TestExtMergeIsIdempotent(t *testing.T) {
 	}
 }
 
-// Externals share the tables with home but never its reads: a plugin's
+// The files' rows share the tables with home but never its reads: a file's
 // grid is invisible through home's reads, and home's grid holds
-// no plugin rows.
+// no file rows.
 func TestExtRowsAreInvisibleToHome(t *testing.T) {
 	st, d := openExt(t)
 	gid, _ := d.GridOf("root")
 	mintAll(t, d, gid, textEntries("a"), true)
 	if _, err := st.GetGrid(t.Context(), itoa(gid)); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("home GetGrid of a plugin grid = %v, want ErrNotFound", err)
+		t.Fatalf("home GetGrid of a directory grid = %v, want ErrNotFound", err)
 	}
 	root, _ := st.RootGridID(t.Context())
 	g, err := st.GetGrid(t.Context(), root)
@@ -136,7 +136,7 @@ func TestExtRowsAreInvisibleToHome(t *testing.T) {
 	}
 	for _, tl := range g.Tiles {
 		if tl.AltText == "a" {
-			t.Fatal("a plugin row leaked into home's root grid")
+			t.Fatal("a file row leaked into home's root grid")
 		}
 	}
 }

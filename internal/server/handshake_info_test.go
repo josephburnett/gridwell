@@ -160,7 +160,7 @@ func TestGetGridFailsWhenOwnerInfoFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	uuid, err := st.PluginUUID(ctx)
+	uuid, err := st.NodeUUID(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	homeUUID, err := st.PluginUUID(ctx)
+	homeUUID, err := st.NodeUUID(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
