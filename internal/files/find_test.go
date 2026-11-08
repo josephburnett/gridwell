@@ -3,6 +3,7 @@ package files
 import (
 	"context"
 	"testing"
+	"time"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -74,5 +75,36 @@ func TestFindOnAGoneDirectoryIsEmpty(t *testing.T) {
 				t.Errorf("Find(%s, recurse %v) = %v", dir, recurse, got)
 			}
 		}
+	}
+}
+
+// A time filter reads the node's row: a file nobody touched has no row and
+// no time, so it passes none, and a touched one passes on its row's times.
+// An id: locate a filter fails answers nothing.
+func TestFindTimesAreTheRows(t *testing.T) {
+	f := newFixture(t)
+	touched := f.write("touched.md", "t")
+	f.write("untouched.md", "u")
+	ctx := context.Background()
+	tt := f.tile(touched)
+	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: tt.Id, X: 5, Y: 5, W: 1, H: 1, Claim: rpc.PlacementOf(tt)}); err != nil {
+		t.Fatal(err)
+	}
+	since := &pb.TimeRange{From: time.Now().Add(-time.Hour).Unix()}
+	for name, req := range map[string]*pb.FindRequest{
+		"created":          {GridId: idOf(f.root), Created: since},
+		"modified":         {GridId: idOf(f.root), Modified: since},
+		"content_changed":  {GridId: idOf(f.root), ContentChanged: since},
+		"created anywhere": {Created: since},
+	} {
+		if got := f.find(req); len(got) != 1 || got[0] != "touched.md" {
+			t.Errorf("%s = %v, want the touched file alone", name, got)
+		}
+	}
+	if got := f.find(&pb.FindRequest{Query: "id:" + idOf(touched), Kind: rpc.KindURL}); len(got) != 0 {
+		t.Errorf("a locate the kind filter fails = %v", got)
+	}
+	if got := f.find(&pb.FindRequest{Query: "id:" + idOf(touched), Created: &pb.TimeRange{To: 1}}); len(got) != 0 {
+		t.Errorf("a locate the time filter fails = %v", got)
 	}
 }
