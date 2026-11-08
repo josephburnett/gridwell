@@ -52,8 +52,8 @@ type Input struct {
 	// ConfigLabel is the declared label of an uncached parent, resolved on the
 	// no-descent arm alone for the same reason as Door.
 	ConfigLabel string
-	// SourceLabel is the pane's grid's Grid.source_label, resolved on the
-	// no-descent arm alone.
+	// SourceLabel is the path of the pane's grid when it is a directory
+	// (rpc.FilePath), resolved on the no-descent arm alone.
 	SourceLabel string
 }
 

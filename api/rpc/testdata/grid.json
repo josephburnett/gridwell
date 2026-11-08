@@ -1,7 +1,6 @@
 {
   "acceptsTiles": true,
   "glyph": "Glyph-357",
-  "hostContent": true,
   "id": "Id-771",
   "moves": true,
   "nodeNs": "NodeNs-650",
@@ -20,7 +19,6 @@
   "selection": [
     "Selection-813"
   ],
-  "sourceLabel": "SourceLabel-412",
   "version": "488",
   "writable": true
 }

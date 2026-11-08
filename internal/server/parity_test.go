@@ -919,10 +919,7 @@ func (f *parityFix) told(ids, grids []string) bool {
 // words, and whether the outside treatment agrees with who owns the address
 // the row opens, which is the one difference the promise allows a draw.
 func (f *parityFix) draw(t *gridwellv1.Tile) string {
-	host := false
-	if g, err := f.cl.GetGrid(f.ctx, t.GridId); err == nil {
-		host = g.Grid.GetHostContent()
-	}
+	host := rpc.IsFilesID(t.GridId)
 	dead := deadlink.DeadTile(t, f.plugins, localNodeID, func(id string) bool {
 		var err error
 		if t.LinkTargetId != "" {

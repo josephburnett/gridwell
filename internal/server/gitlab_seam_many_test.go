@@ -58,11 +58,6 @@ func TestGitLabManyWeeksThroughPaginatedAPI(t *testing.T) {
 	if len(root.Tiles) != 14 || gl.Calls() != 4 {
 		t.Fatalf("root = %d weeks after %d calls, want 14 weeks after 4", len(root.Tiles), gl.Calls())
 	}
-	// The counts are the plugin's own summary of the walk, read where the bar
-	// reads them: on the grid the node serves.
-	if got := root.Grid.GetSourceLabel(); got != "gitlab todos · 20 open · 240 done" {
-		t.Errorf("root source label = %q", got)
-	}
 	labels := map[string]bool{}
 	rows := map[int64]int{}
 	for _, tl := range root.Tiles {

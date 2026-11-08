@@ -10,10 +10,10 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// Outside reports the outside-Gridwell treatment. A grid that declares
-// host_content makes every row in it host state, whatever the row is.
-func Outside(t *gridwellv1.Tile, parentHostContent bool) bool {
-	return parentHostContent || rpc.IsDoorToOtherNamespace(t) || rpc.KindOf(t.Kind).Tmux
+// Outside reports the outside-Gridwell treatment. Every row of a directory
+// (cache.Grid.Directory) wears it, whatever the row is.
+func Outside(t *gridwellv1.Tile, inDirectory bool) bool {
+	return inDirectory || rpc.IsDoorToOtherNamespace(t) || rpc.KindOf(t.Kind).Tmux
 }
 
 // Hue is the family a banner label echoes: the tile's own outline, so label

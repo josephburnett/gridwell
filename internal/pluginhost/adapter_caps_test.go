@@ -129,9 +129,6 @@ func TestGridWearsThePluginsDeclarations(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := resp.Grid.GetHostContent(); got != tc.info.GetHostContent() {
-				t.Errorf("grid host_content = %v, declared %v", got, tc.info.GetHostContent())
-			}
 			if got := resp.Grid.GetGlyph(); got != tc.info.GetGlyph() {
 				t.Errorf("grid glyph = %q, declared %q", got, tc.info.GetGlyph())
 			}

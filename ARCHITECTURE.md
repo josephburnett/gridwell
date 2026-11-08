@@ -137,12 +137,12 @@ entry's, from the plugin's `Entry` through `pluginhost.buildTiles`, and
 `pluginhost.Adapter.applyEntry` alone, and `Tile.content_stamp` (the
 source's name for those bytes) from the plugin's `Entry` through
 `pluginhost.buildTiles`.
-`Grid.host_content` (these rows project host state) and
-`Grid.glyph` (the grid's icon) come from the owning plugin's
+`Grid.glyph` (the grid's icon) comes from the owning source's
 `Info`, which the adapter holds as the plugin last answered it
 (`pluginhost.Adapter.info`) and every reader, the server's included, reads
-from there; they are what the client reads
-instead of knowing a plugin's kind. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
+from there; it is what the client reads
+instead of knowing a plugin's kind. Whether a grid is a directory, and its
+path, are its id (`rpc.IsFilesID`, `rpc.FilePath`), never a wire flag. `Grid.node_ns` comes from `TransitQualifyGrid` alone.
 
 ## The router
 
@@ -467,8 +467,8 @@ stands in (`rasterprev.Cache`).
 **The bar.** One bar at the bottom of the window (`client/wsbar`,
 `bottombar.go`), always there, riding the focused pane: one crumb per frame,
 the title, and the circle slot (+ menu / back / refresh). The title is the
-grid's name, then, on a grid, what its source calls it (`Grid.source_label`,
-from the plugin's listing); `bartitle.Decide` owns it. `wsbar.Rect` owns
+grid's name, then, on a directory, its path (`rpc.FilePath` of the grid's
+id); `bartitle.Decide` owns it. `wsbar.Rect` owns
 where it is — the chrome spans the focused pane and slides under it as focus
 moves, so the slot is never a wide screen away from the pane you are working
 in, inside the full-width row `wsbar.Band` reserves once, whatever has focus.

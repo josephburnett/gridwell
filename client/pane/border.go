@@ -25,7 +25,7 @@ type BorderInput struct {
 	TileKind     string
 	Focused      bool // the keyboard-focused pane in the split tree
 	URLLive      bool // a live native view renders into this pane
-	// InHostGrid is the viewed grid's declared host_content. It drives the
+	// InHostGrid is whether the viewed grid is a directory. It drives the
 	// Host family for a read-only host text tile; the grid view itself stays
 	// FamilyGrid, because every grid is a grid.
 	InHostGrid bool

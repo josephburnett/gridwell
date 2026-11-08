@@ -53,8 +53,7 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 			parent, in.Parent, in.ParentName = t, true, t.AltText
 		}
 		in.ConfigLabel = a.declaredLabel(p)
-		m, _ := a.gridMeta(a.gridIDForPane(p))
-		in.SourceLabel = m.GetSourceLabel()
+		in.SourceLabel, _ = rpc.FilePath(a.gridIDForPane(p))
 	}
 	v := bartitle.Decide(in)
 	switch v.Rename {

@@ -115,9 +115,29 @@ func QualifierOf(owner string) string {
 }
 
 // IsFilesID reports whether a qualified id names a file or a directory: its
-// own segment is a path's key form, wherever the chain holds it.
+// own segment is the key form of an absolute path, wherever the chain holds
+// it.
 func IsFilesID(id string) bool {
-	return NamespaceOf(id) != "" && ShapeOf(LocalOf(id)) == ShapeKey
+	if NamespaceOf(id) == "" {
+		return false
+	}
+	p, ok := TileKey(LocalOf(id))
+	return ok && absPath(p)
+}
+
+// absPath is an absolute path on any host a node runs on: rooted, or a
+// Windows volume's.
+func absPath(p string) bool {
+	return strings.HasPrefix(p, "/") || len(p) > 2 && p[1] == ':' && (p[2] == '\\' || p[2] == '/')
+}
+
+// FilePath is the path a file or directory's id names, ok false for any
+// other id: the id is the path, so nothing else carries it.
+func FilePath(id string) (string, bool) {
+	if !IsFilesID(id) {
+		return "", false
+	}
+	return TileKey(LocalOf(id))
 }
 
 // SourceOf is the source a qualified id belongs to: its namespace chain, or

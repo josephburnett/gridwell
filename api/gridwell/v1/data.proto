@@ -53,14 +53,9 @@ message Grid {
   // stamped on this grid. Stamped from Info by the serving node, and verbatim
   // through transit with grid_id prefixed per hop. Wire-only.
   repeated PluginGrid plugin_grids = 11;
-  // host_content says this grid projects host state, such as a directory or
-  // the process table, instead of holding content of its own, and the client
-  // renders its rows with the host treatment: the outside tint and the
-  // border family of a door to another namespace. The owning plugin declares it (plugin.v1
-  // InfoResponse.host_content), the adapter that serves the grid stamps it,
-  // and transit carries it verbatim. A reader consults it instead of
-  // learning a kind's name. Wire-only, never persisted.
-  bool host_content = 13;
+  // A directory is told by its id's shape (rpc.IsFilesID), never by a flag
+  // (2026-11-07).
+  reserved 13; // host_content
   // glyph is the owning plugin's declared identity glyph for this grid, from
   // the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
   // client falls back to the door glyph or the glyph of the door to another
@@ -69,13 +64,9 @@ message Grid {
   // grid reached through a door to another namespace. Stamped by the adapter, verbatim in
   // transit. Wire-only, never persisted.
   string glyph = 14;
-  // source_label is the owning plugin's name for what backs this grid, as
-  // its listing answered it (plugin.v1 ListResponse.source_label: a
-  // directory path, "Inbox · 12 unread"); the bar shows it while a pane
-  // stands on the grid. Like the rows, it is a cache of the source, not a
-  // node fact, so gridwell.db never holds it. Stamped by the adapter,
-  // verbatim in transit. Wire-only.
-  string source_label = 15;
+  // A directory's path is its id (rpc.FilePath), so the bar reads it there
+  // (2026-11-07).
+  reserved 15; // source_label
   // accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
   // offers its primitives and a swatch drops into it, and its url rows'
   // titles and trails are the node's to write. The owning namespace stamps it on
@@ -92,10 +83,9 @@ message Grid {
   repeated string selection = 17;
   // moves: a tile of this grid moves to another grid of its namespace
   // (MoveTile), so a left-drag there is a move. The owning namespace stamps
-  // it on every grid it serves, true for the home and a plugin's from
-  // plugin.v1 InfoResponse.move; transit carries it verbatim. It is absent
-  // only from a node built before it, where a grid moved unless it was
-  // host_content, and rpc.TransitQualifyGrid reads that for it. Wire-only.
+  // it on every grid it serves, true for the home and the files and a
+  // plugin's from plugin.v1 InfoResponse.move; transit carries it verbatim.
+  // Wire-only.
   optional bool moves = 18;
 }
 

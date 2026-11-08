@@ -104,10 +104,9 @@ func TestGitLabTodosThroughTheStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A plugin that holds its own content declares no host_content, so its
-	// grids render as owned content — the gitlab glyph is the door's, exactly
-	// as it was when the client had no declaration for the kind "gitlab".
-	if len(root.Tiles) != 2 || root.Grid.HostContent || root.Grid.Glyph != "" {
+	// The gitlab glyph is the door's, exactly as it was when the client had
+	// no declaration for the kind "gitlab".
+	if len(root.Tiles) != 2 || root.Grid.Glyph != "" {
 		t.Fatalf("root = %+v %v", root.Grid, root.Tiles)
 	}
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")

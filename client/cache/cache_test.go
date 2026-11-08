@@ -618,24 +618,26 @@ func TestDirtyAccessors(t *testing.T) {
 	}
 }
 
-// A renderer holding an unfetched grid asks anyway, so "not known" answers no
-// rather than making every call site spell the nil check.
-func TestGridDeclarationsAreNilSafe(t *testing.T) {
+// A directory is told by its id, and a renderer holding an unfetched grid
+// asks anyway, so "not known" answers no rather than making every call site
+// spell the nil check.
+func TestGridDirectoryIsItsIdAndNilSafe(t *testing.T) {
 	c := New()
-	c.PutGrid(&gridwellv1.Grid{Id: "1", HostContent: true}, nil)
-	c.PutGrid(&gridwellv1.Grid{Id: "2"}, nil)
+	dir := rpc.QualifyID("n1", rpc.KeyTileID("/srv/notes"))
+	c.PutGrid(&gridwellv1.Grid{Id: dir}, nil)
+	c.PutGrid(&gridwellv1.Grid{Id: "n1/2"}, nil)
 
-	g, ok := c.Grid("1")
-	if !ok || !g.HostContent() {
-		t.Errorf("declared grid: HostContent=%v, want true", g.HostContent())
+	g, ok := c.Grid(dir)
+	if !ok || !g.Directory() {
+		t.Errorf("a directory's grid: Directory=%v, want true", g.Directory())
 	}
-	plain, ok := c.Grid("2")
-	if !ok || plain.HostContent() {
-		t.Errorf("undeclared grid: HostContent=%v, want false", plain.HostContent())
+	plain, ok := c.Grid("n1/2")
+	if !ok || plain.Directory() {
+		t.Errorf("a home grid: Directory=%v, want false", plain.Directory())
 	}
 	var missing *Grid
-	if missing.HostContent() {
-		t.Error("an unfetched grid declares nothing")
+	if missing.Directory() {
+		t.Error("an unfetched grid is no directory")
 	}
 }
 

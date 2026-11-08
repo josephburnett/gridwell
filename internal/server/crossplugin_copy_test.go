@@ -570,9 +570,6 @@ func TestCopyPluginDoorOntoHomeLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if root.Grid.HostContent {
-		t.Fatal("the gitlab grid declares host content; this test needs one that does not")
-	}
 	week := tileByLabelPrefix(root.Tiles, "2026-08-17")
 	if week == nil || !rpc.IsDoorKind(week.Kind) || week.Link {
 		t.Fatalf("week door = %+v", week)

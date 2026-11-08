@@ -592,10 +592,8 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 		Id:           addr,
 		AcceptsTiles: proto.Bool(false),
 		Writable:     ci.Writable,
-		HostContent:  ci.HostContent,
 		Moves:        proto.Bool(ci.Move),
 		Glyph:        ci.Glyph,
-		SourceLabel:  resp.SourceLabel,
 		Selection:    selection,
 	}
 	wire, err := buildTiles(addr, gkey, tiles, resp.Entries, a.mem.GridKey)

@@ -673,27 +673,6 @@ func TestWatchReopenAnnouncesOnlyWhatChanged(t *testing.T) {
 	}
 }
 
-// The source's label is part of the listing a client holds: it rides the grid
-// GetGrid serves, and a listing that moved only its label is announced as one
-// that moved a row is, or the bar keeps the old count.
-func TestSourceLabelRidesTheGridAndMovesTheListing(t *testing.T) {
-	p := newListingPlugin(map[string][]string{"all": {"a"}}, idle)
-	p.labels = map[string]string{"all": "Inbox · 12 unread"}
-	a, seen := watchingNothing(t, p, nil)
-	resp, err := a.GetGrid(context.Background(), &gridwellv1.GetGridRequest{GridId: rpc.EntryGridID("all")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := resp.Grid.GetSourceLabel(); got != "Inbox · 12 unread" {
-		t.Errorf("grid source_label = %q, want the listing's", got)
-	}
-	p.edit(func() { p.labels["all"] = "Inbox · 11 unread" })
-	show(t, a, "all")
-	if got, want := awaitAnnounced(t, p, seen, "all"), map[string]int{rpc.EntryGridID("all"): 1}; !maps.Equal(got, want) {
-		t.Errorf("a label-only change announced %v, want %v", got, want)
-	}
-}
-
 // A GridChanged is checked as a scope add is: the node lists the grid
 // and tells clients only when the listing moved from what it served or last
 // announced. Changes that move no name announce nothing, however often the

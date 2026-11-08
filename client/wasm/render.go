@@ -495,7 +495,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 				}
 			} else {
-				inHost := g.HostContent()
+				inHost := g.Directory()
 				picked := map[string]bool{}
 				for _, id := range a.selectionShown(p) {
 					picked[id] = true
@@ -914,7 +914,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 	hidden dragdrop.Carry,
 ) {
 	c := a.cctx
-	childInHost := child.HostContent()
+	childInHost := child.Directory()
 	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
 		if hidden.Has(n.Id) {
@@ -1020,7 +1020,7 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 			in.Ephemeral = a.certainlyEphemeral(p, tile)
 		}
 	}
-	if gridOK && g.HostContent() {
+	if gridOK && g.Directory() {
 		in.InHostGrid = true
 	}
 	return in

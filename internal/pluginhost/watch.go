@@ -258,7 +258,7 @@ func sumOf(s *synthesized) listingSum {
 		entries[i].ContentStamp = ""
 	}
 	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(
-		&pluginv1.ListResponse{Entries: entries, Authoritative: s.authoritative, SourceLabel: s.grid.SourceLabel})
+		&pluginv1.ListResponse{Entries: entries, Authoritative: s.authoritative})
 	if err != nil {
 		return listingSum{}
 	}

@@ -106,9 +106,9 @@ type Grid struct {
 	Tiles map[string]*gridwellv1.Tile
 }
 
-// HostContent reports the grid's plugin-declared host_content, so its rows
-// draw in the outside-Gridwell treatment.
-func (g *Grid) HostContent() bool { return g != nil && g.Meta.HostContent }
+// Directory reports that the grid is a directory, told by its id
+// (rpc.IsFilesID), so its rows draw in the outside-Gridwell treatment.
+func (g *Grid) Directory() bool { return g != nil && rpc.IsFilesID(g.Meta.GetId()) }
 
 // New returns an empty cache.
 func New() *Cache {

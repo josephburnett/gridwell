@@ -32,9 +32,6 @@ func TestADirectoryListsItsKindsInNameOrder(t *testing.T) {
 	if g.Id != idOf(f.root) || g.GetAcceptsTiles() || !g.Writable || !g.GetMoves() || g.Glyph != rpc.GlyphFolder {
 		t.Errorf("grid stamps = %+v", g)
 	}
-	if g.HostContent || g.SourceLabel != "" {
-		t.Errorf("grid carries a wire flag the client derives: %+v", g)
-	}
 	door := tileIn(t, resp, f.path("sub"))
 	if door.Kind != rpc.KindDoor || door.ChildGridId != idOf(f.path("sub")) || door.Link {
 		t.Errorf("door = %+v", door)

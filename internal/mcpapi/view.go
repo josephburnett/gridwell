@@ -130,7 +130,8 @@ func tileOf(t *pb.Tile, roster []*pb.PluginInfo, node string) Tile {
 }
 
 func gridOf(g *pb.Grid) Grid {
-	return Grid{ID: g.GetId(), Writable: g.GetWritable(), AcceptsTiles: g.GetAcceptsTiles(), Source: g.GetSourceLabel(),
+	path, _ := rpc.FilePath(g.GetId())
+	return Grid{ID: g.GetId(), Writable: g.GetWritable(), AcceptsTiles: g.GetAcceptsTiles(), Source: path,
 		Selection: append([]string{}, g.GetSelection()...)}
 }
 

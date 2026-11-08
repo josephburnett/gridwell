@@ -335,6 +335,9 @@ func TestFilesIDs(t *testing.T) {
 		{"n1/7", "n1", false},
 		{"n1/geneva/n2/7", "n1/geneva/n2", false},
 		{"n1", "", false},
+		// A key that is no absolute path is a plugin's, not a file's.
+		{"p9xyzab/" + KeyTileID("inbox"), "p9xyzab", false},
+		{"n1/" + KeyTileID("C:\\notes"), "n1/~", true},
 	}
 	for _, c := range cases {
 		if got := IsFilesID(c.id); got != c.files {
@@ -343,6 +346,12 @@ func TestFilesIDs(t *testing.T) {
 		if got := SourceOf(c.id); got != c.source {
 			t.Errorf("SourceOf(%q) = %q, want %q", c.id, got, c.source)
 		}
+	}
+	if p, ok := FilePath("n1/" + dir); !ok || p != "/srv/notes" {
+		t.Errorf("FilePath = %q %v, want /srv/notes", p, ok)
+	}
+	if _, ok := FilePath("n1/7"); ok {
+		t.Error("a home row has no path")
 	}
 	if got := FilesOwner("n1"); got != "n1/~" {
 		t.Errorf("FilesOwner = %q, want n1/~", got)

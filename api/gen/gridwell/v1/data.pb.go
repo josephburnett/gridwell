@@ -111,14 +111,6 @@ type Grid struct {
 	// stamped on this grid. Stamped from Info by the serving node, and verbatim
 	// through transit with grid_id prefixed per hop. Wire-only.
 	PluginGrids []*PluginGrid `protobuf:"bytes,11,rep,name=plugin_grids,json=pluginGrids,proto3" json:"plugin_grids,omitempty"`
-	// host_content says this grid projects host state, such as a directory or
-	// the process table, instead of holding content of its own, and the client
-	// renders its rows with the host treatment: the outside tint and the
-	// border family of a door to another namespace. The owning plugin declares it (plugin.v1
-	// InfoResponse.host_content), the adapter that serves the grid stamps it,
-	// and transit carries it verbatim. A reader consults it instead of
-	// learning a kind's name. Wire-only, never persisted.
-	HostContent bool `protobuf:"varint,13,opt,name=host_content,json=hostContent,proto3" json:"host_content,omitempty"`
 	// glyph is the owning plugin's declared identity glyph for this grid, from
 	// the same vocabulary as InfoResponse.glyph ("" = no declaration, and the
 	// client falls back to the door glyph or the glyph of the door to another
@@ -127,13 +119,6 @@ type Grid struct {
 	// grid reached through a door to another namespace. Stamped by the adapter, verbatim in
 	// transit. Wire-only, never persisted.
 	Glyph string `protobuf:"bytes,14,opt,name=glyph,proto3" json:"glyph,omitempty"`
-	// source_label is the owning plugin's name for what backs this grid, as
-	// its listing answered it (plugin.v1 ListResponse.source_label: a
-	// directory path, "Inbox · 12 unread"); the bar shows it while a pane
-	// stands on the grid. Like the rows, it is a cache of the source, not a
-	// node fact, so gridwell.db never holds it. Stamped by the adapter,
-	// verbatim in transit. Wire-only.
-	SourceLabel string `protobuf:"bytes,15,opt,name=source_label,json=sourceLabel,proto3" json:"source_label,omitempty"`
 	// accepts_tiles: this grid takes new tiles (CreateTile), so the + menu
 	// offers its primitives and a swatch drops into it, and its url rows'
 	// titles and trails are the node's to write. The owning namespace stamps it on
@@ -150,10 +135,9 @@ type Grid struct {
 	Selection []string `protobuf:"bytes,17,rep,name=selection,proto3" json:"selection,omitempty"`
 	// moves: a tile of this grid moves to another grid of its namespace
 	// (MoveTile), so a left-drag there is a move. The owning namespace stamps
-	// it on every grid it serves, true for the home and a plugin's from
-	// plugin.v1 InfoResponse.move; transit carries it verbatim. It is absent
-	// only from a node built before it, where a grid moved unless it was
-	// host_content, and rpc.TransitQualifyGrid reads that for it. Wire-only.
+	// it on every grid it serves, true for the home and the files and a
+	// plugin's from plugin.v1 InfoResponse.move; transit carries it verbatim.
+	// Wire-only.
 	Moves         *bool `protobuf:"varint,18,opt,name=moves,proto3,oneof" json:"moves,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -231,23 +215,9 @@ func (x *Grid) GetPluginGrids() []*PluginGrid {
 	return nil
 }
 
-func (x *Grid) GetHostContent() bool {
-	if x != nil {
-		return x.HostContent
-	}
-	return false
-}
-
 func (x *Grid) GetGlyph() string {
 	if x != nil {
 		return x.Glyph
-	}
-	return ""
-}
-
-func (x *Grid) GetSourceLabel() string {
-	if x != nil {
-		return x.SourceLabel
 	}
 	return ""
 }
@@ -4546,7 +4516,7 @@ var File_gridwell_v1_data_proto protoreflect.FileDescriptor
 
 const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\n" +
-	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\xc8\x03\n" +
+	"\x16gridwell/v1/data.proto\x12\vgridwell.v1\"\x8e\x03\n" +
 	"\x04Grid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x1a\n" +
@@ -4554,16 +4524,14 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0fscratch_grid_id\x18\a \x01(\tR\rscratchGridId\x12\x17\n" +
 	"\anode_ns\x18\n" +
 	" \x01(\tR\x06nodeNs\x12:\n" +
-	"\fplugin_grids\x18\v \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12!\n" +
-	"\fhost_content\x18\r \x01(\bR\vhostContent\x12\x14\n" +
-	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12!\n" +
-	"\fsource_label\x18\x0f \x01(\tR\vsourceLabel\x12(\n" +
+	"\fplugin_grids\x18\v \x03(\v2\x17.gridwell.v1.PluginGridR\vpluginGrids\x12\x14\n" +
+	"\x05glyph\x18\x0e \x01(\tR\x05glyph\x12(\n" +
 	"\raccepts_tiles\x18\x10 \x01(\bH\x00R\facceptsTiles\x88\x01\x01\x12\x1c\n" +
 	"\tselection\x18\x11 \x03(\tR\tselection\x12\x19\n" +
 	"\x05moves\x18\x12 \x01(\bH\x01R\x05moves\x88\x01\x01B\x10\n" +
 	"\x0e_accepts_tilesB\b\n" +
 	"\x06_movesJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"J\x04\b\f\x10\r\"\xc2\x01\n" +
+	"J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10\"\xc2\x01\n" +
 	"\n" +
 	"PluginGrid\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
