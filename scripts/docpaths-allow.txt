@@ -19,7 +19,6 @@ ARCHITECTURE.md docs/plugin-authoring.md
 ARCHITECTURE.md internal/pluginhost/adapter.go
 apps/desktop/e2e/live-updates-off.spec.ts internal/server/live_updates_off_seam_test.go
 apps/desktop/e2e/runtree.ts internal/plugintest/heyfake
-docs/concepts.md internal/pluginhost
 docs/freshness.md internal/pluginhost/adapter.go
 docs/freshness.md internal/pluginhost/adapter_caps_test.go
 docs/freshness.md internal/pluginhost/fs_parity_test.go
