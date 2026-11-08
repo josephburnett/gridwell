@@ -159,14 +159,44 @@ func (s *Source) announce(dirs []string) {
 	}
 }
 
-// tell is what one closed debounce window owes dir.
+// tell is what one closed debounce window owes dir, from one listing of it
+// at most, however many of its files changed.
 func (s *Source) tell(dir string, listing bool, files []string) {
+	w := &windowRead{s: s, dir: dir}
 	if listing {
-		s.check([]string{dir})
+		w.check()
 	}
 	slices.Sort(files)
 	for _, f := range files {
-		s.applyFile(dir, f)
+		s.applyFile(w, f)
+	}
+}
+
+// windowRead is one window's listing of its directory, read when first
+// needed, and whether it was checked.
+type windowRead struct {
+	s       *Source
+	dir     string
+	l       *listing
+	err     error
+	checked bool
+}
+
+func (w *windowRead) listing() (*listing, error) {
+	if w.l == nil && w.err == nil {
+		w.l, w.err = w.s.synthesize(w.dir)
+	}
+	return w.l, w.err
+}
+
+// check is Source.check of the window's listing, once.
+func (w *windowRead) check() {
+	if w.checked {
+		return
+	}
+	w.checked = true
+	if l, err := w.listing(); err != nil || w.s.settle(l, true) {
+		w.s.announce([]string{w.dir})
 	}
 }
 
@@ -174,7 +204,7 @@ func (s *Source) tell(dir string, listing bool, files []string) {
 // serves it, flagged content_changed, because a file's row carries no
 // version that could say so. A file the listing does not hold is the
 // listing's to answer.
-func (s *Source) applyFile(dir, path string) {
+func (s *Source) applyFile(w *windowRead, path string) {
 	de, err := statEntry(path)
 	if err != nil || de.kind == diskDir {
 		return
@@ -183,9 +213,9 @@ func (s *Source) applyFile(dir, path string) {
 	if !s.fresh(path, e.stamp) {
 		return
 	}
-	t, err := s.fileTile(dir, e)
+	t, err := s.fileTile(w, e)
 	if err != nil || t == nil {
-		s.check([]string{dir})
+		w.check()
 		return
 	}
 	s.hub.Publish(&pb.Event{Payload: &pb.Event_TileChanged{TileChanged: &pb.TileChanged{Tile: t, ContentChanged: true}}})
@@ -210,11 +240,12 @@ func (s *Source) fresh(path, stamp string) bool {
 	return true
 }
 
-// fileTile is e's tile in dir. A row keeps its own placement, so e alone
-// builds it and refreshes its snapshot as a listing would, and retires a
-// page's screenshot the change left behind; an untouched file's placement
-// flows from the whole listing, so the directory is listed.
-func (s *Source) fileTile(dir string, e listed) (*pb.Tile, error) {
+// fileTile is e's tile in w's directory. A row keeps its own placement, so e
+// alone builds it and refreshes its snapshot as a listing would, and retires
+// a page's screenshot the change left behind; an untouched file's placement
+// flows from the whole listing, the window's.
+func (s *Source) fileTile(w *windowRead, e listed) (*pb.Tile, error) {
+	dir := w.dir
 	gid, _, err := s.mem.LookupGrid(dir)
 	if err != nil {
 		return nil, err
@@ -223,7 +254,7 @@ func (s *Source) fileTile(dir string, e listed) (*pb.Tile, error) {
 		if err != nil {
 			return nil, err
 		}
-		l, err := s.synthesize(dir)
+		l, err := w.listing()
 		if err != nil {
 			return nil, err
 		}

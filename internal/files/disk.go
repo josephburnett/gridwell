@@ -49,8 +49,8 @@ type diskEntry struct {
 	targetKind diskKind
 }
 
-// readDir lists dir by name, dotfiles included.
-func readDir(dir string) ([]diskEntry, error) {
+// readDir lists dir by name, dotfiles included; a test counts its calls.
+var readDir = func(dir string) ([]diskEntry, error) {
 	f, err := os.Open(dir)
 	if err != nil {
 		return nil, err

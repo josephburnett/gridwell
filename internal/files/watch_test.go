@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -450,5 +451,44 @@ func TestAShownDirectoryFixedIsWatchedAndTold(t *testing.T) {
 	})
 	if !slices.Contains(f.watched(), locked) {
 		t.Errorf("watched %v, want the fixed directory", f.watched())
+	}
+}
+
+// A window of many files written in a shown directory costs one listing of
+// it, however many: a checkout or a build writing a hundred files lists the
+// directory once, not a hundred times.
+func TestAWindowOfWritesListsTheDirectoryOnce(t *testing.T) {
+	f := newFixture(t)
+	var paths []string
+	for i := range 100 {
+		paths = append(paths, f.write(fmt.Sprintf("f%03d.txt", i), "x"))
+	}
+	f.grid(f.root)
+	f.show(f.root)
+	ev := f.events()
+	var mu sync.Mutex
+	reads := 0
+	was := readDir
+	t.Cleanup(func() { readDir = was })
+	readDir = func(dir string) ([]diskEntry, error) {
+		if dir == f.root {
+			mu.Lock()
+			reads++
+			mu.Unlock()
+		}
+		return was(dir)
+	}
+	for _, p := range paths {
+		if err := os.WriteFile(p, []byte("written"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, p := range paths {
+		await(t, ev, "a written file's change", tileChanged(p))
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if reads > 2 {
+		t.Errorf("a window of %d writes listed the directory %d times, want once", len(paths), reads)
 	}
 }
