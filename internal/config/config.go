@@ -17,9 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/idshape"
-	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // ServerConfig is ~/.gridwell/server.yaml.
@@ -49,9 +47,6 @@ type ServerConfig struct {
 	RetiredNames []string `yaml:"retired_names,omitempty"`
 	// Plugins are the content plugins: separate binaries speaking plugin.v1.
 	Plugins []PluginConfig `yaml:"plugins,omitempty"`
-	// Routes send a url tile's address to a plugin that presents it or
-	// outside, first taker wins; rpc.Decide reads them.
-	Routes []*pb.Route `yaml:"routes,omitempty"`
 
 	// WebPassword is not a yaml fact: BuildConfig reads it from the file.
 	WebPassword string `yaml:"-"`
@@ -164,6 +159,7 @@ var retiredKeys = map[string]string{
 	"bind":     "is `web: {bind: …}`",
 	"password": "is the web-password file beside this config (delete it to rotate)",
 	"node_id":  "is the layout Gridwell used before one database per node; v0.1.0 is the last release that converts a node written that way",
+	"routes":   "is gone (2026-11-07): a url tile opens its own address; delete the key",
 }
 
 // Load reads path and fills in defaults. A missing file wraps fs.ErrNotExist.
@@ -206,18 +202,6 @@ func Parse(data []byte) (*ServerConfig, error) {
 		switch cfg.Plugins[i].Kind {
 		case "home", "remote", "local", "localdb", "ssh":
 			return nil, fmt.Errorf("plugins[%d]: kind %q is the node itself, not a plugin: the node's id is `id:` and its connections are `connections:` — a server.yaml that still lists them here is the shape v0.1.0 was the last release to convert", i, cfg.Plugins[i].Kind)
-		}
-	}
-	declared := map[string]bool{}
-	for _, p := range cfg.Plugins {
-		declared[p.ID] = p.ID != ""
-	}
-	for i, r := range cfg.Routes {
-		if err := rpc.CheckRoute(r); err != nil {
-			return nil, fmt.Errorf("routes[%d]: %w", i, err)
-		}
-		if r.Plugin != "" && !declared[r.Plugin] {
-			return nil, fmt.Errorf("routes[%d]: plugin %q is not an id under plugins:, so the route would send its addresses nowhere", i, r.Plugin)
 		}
 	}
 	if err := expandPaths(&cfg); err != nil {

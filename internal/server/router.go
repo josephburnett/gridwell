@@ -76,15 +76,9 @@ func (rt *router) tileResp(ctx context.Context, uuid string, transit bool, resp 
 	return &pb.TileResponse{Tile: t}, nil
 }
 
-// qualifyOut is qualifyTilesFor for an answer leaving the router: a row this
-// node holds takes its derived facts too (stampPresented); a far row arrives
-// with its own node's.
+// qualifyOut is qualifyTilesFor for an answer leaving the router.
 func (rt *router) qualifyOut(ctx context.Context, transit bool, uuid string, tiles []*pb.Tile) []*pb.Tile {
-	out := qualifyTilesFor(transit, uuid, tiles)
-	if !transit {
-		rt.srv.stampPresented(ctx, out...)
-	}
-	return out
+	return qualifyTilesFor(transit, uuid, tiles)
 }
 
 // qualifyEvent re-applies a plugin's uuid to a change event's ids, each row
@@ -191,12 +185,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		label := rt.srv.pluginReg.Label(n.UUID)
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.pluginInfo(ctx, n.UUID)
-		row := buildPluginInfo(n.UUID, n.Kind, label, info, err)
-		// Only a route reads it (rpc.DeclaredBy), and reading it may probe.
-		if slices.ContainsFunc(rt.srv.cfg.Routes, func(r *pb.Route) bool { return r.Plugin == n.UUID }) {
-			row.Unanswered = rt.srv.unanswered(n.UUID)
-		}
-		out = append(out, row)
+		out = append(out, buildPluginInfo(n.UUID, n.Kind, label, info, err))
 	}
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
@@ -205,7 +194,6 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		ContentToken: ContentToken(rt.srv.cfg.Password),
 		Build:        rt.srv.build,
 		Plugins:      out,
-		Routes:       rt.srv.cfg.Routes,
 	}
 	// Home is the node's own store, where "/" lands.
 	for _, p := range out {
@@ -225,7 +213,6 @@ func buildPluginInfo(uuid, kind, configLabel string, info *pb.InfoResponse, info
 		out.RootGridId, out.PluginGrids = rpc.QualifyOptionalID(uuid, info.RootGridId), rpc.QualifyPluginGrids(uuid, info.PluginGrids)
 		out.Label, out.Glyph = cmp.Or(configLabel, info.DisplayName), info.Glyph
 		out.RootViewCx, out.RootViewCy, out.RootViewZoom = info.RootViewCx, info.RootViewCy, info.RootViewZoom
-		out.Presents = info.Presents
 	} else if infoErr != nil {
 		out.InfoError = infoRefusal(infoErr)
 	}

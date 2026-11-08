@@ -10,10 +10,7 @@ package server
 // right subpath.
 
 import (
-	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -99,94 +96,6 @@ func TestPagesPluginServesPageTilesAsURLRows(t *testing.T) {
 	if about := tileByLabel(t, grid, "about"); about.ServesPage || about.Kind != rpc.KindText {
 		t.Errorf("the about tile = kind %q serves_page %v; it is the plain-text contrast",
 			about.Kind, about.ServesPage)
-	}
-}
-
-// hrefRe finds the page's relative references, the way a browser would.
-var hrefRe = regexp.MustCompile(`(?:src|href)="([^"]+)"`)
-
-// The seam the plugin cannot test alone: the page arrives through the API as
-// a whole HTML document, and each relative URL inside it — resolved against
-// the tile's address exactly as a browser resolves it — comes back as the
-// same tile's ServeContent with that name as the subpath. Nothing on either
-// side of the seam can check this: the plugin never sees a URL, and the API
-// never sees the HTML.
-func TestPagesPluginSubpathsResolveLikeABrowser(t *testing.T) {
-	hs, grid := pagesServer(t)
-	styled := tileByLabel(t, grid, "styled")
-	token := ContentToken(testPassword)
-
-	// Start where the client sends a browser, and let the API's redirect to
-	// the trailing slash happen: without it every relative URL below would
-	// resolve one level too high.
-	start := rpc.PageURL(hs.URL, token, pagesNS+"/"+styled.Id)
-	res, body := get(t, hs.Client(), start, "")
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("GET page = %d %q", res.StatusCode, body)
-	}
-	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("page Content-Type = %q", ct)
-	}
-	if !strings.HasPrefix(body, "<!doctype html>") || !strings.Contains(body, "</html>") {
-		t.Errorf("the API did not deliver a whole document: %.60q", body)
-	}
-	// The content API's invariant rides a generated page like any other.
-	if csp := res.Header.Get("Content-Security-Policy"); csp != contentSandbox {
-		t.Errorf("CSP = %q", csp)
-	}
-
-	base, err := url.Parse(res.Request.URL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	refs := 0
-	for _, m := range hrefRe.FindAllStringSubmatch(body, -1) {
-		ref := m[1]
-		if strings.Contains(ref, "://") || strings.HasPrefix(ref, "#") || strings.HasPrefix(ref, "data:") {
-			continue
-		}
-		u, err := url.Parse(ref)
-		if err != nil {
-			t.Fatalf("page names an unparseable url %q", ref)
-		}
-		got := base.ResolveReference(u).String()
-		// A browser's resolution must land inside this tile's own space, or
-		// the request escapes to another tile — or off the API entirely.
-		if want := start + ref; got != want {
-			t.Errorf("%q resolved to %s, want %s", ref, got, want)
-		}
-		sub, subBody := get(t, hs.Client(), got, "")
-		if sub.StatusCode != http.StatusOK {
-			t.Errorf("GET %s = %d", got, sub.StatusCode)
-			continue
-		}
-		if len(subBody) == 0 {
-			t.Errorf("GET %s returned an empty body", got)
-		}
-		if sub.Header.Get("Content-Type") == "" {
-			t.Errorf("GET %s carried no media type; nosniff makes that unusable", got)
-		}
-		refs++
-	}
-	if refs < 2 {
-		t.Fatalf("the styled page named %d relative resources, want its stylesheet and image", refs)
-	}
-}
-
-// A subpath the page does not name is an ordinary 404 with a body, not a
-// gateway failure: the plugin answers the miss itself, so the status is one
-// the plugin chose rather than one the API inferred from an RPC error.
-func TestPagesPluginMissingSubpathIs404(t *testing.T) {
-	hs, grid := pagesServer(t)
-	styled := tileByLabel(t, grid, "styled")
-	base := rpc.PageURL(hs.URL, ContentToken(testPassword), pagesNS+"/"+styled.Id)
-
-	res, body := get(t, noRedirect(hs), base+"no-such-asset.css", "")
-	if res.StatusCode != http.StatusNotFound {
-		t.Errorf("missing subpath = %d %q, want 404", res.StatusCode, body)
-	}
-	if body == "" {
-		t.Error("a 404 from the plugin should still say something")
 	}
 }
 

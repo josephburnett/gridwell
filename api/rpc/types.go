@@ -285,26 +285,10 @@ func QualifyLinkTarget(holder, target string) string {
 // ContentPath is where the node's content API is mounted.
 const ContentPath = "/content/"
 
-// PageURL mirrors the server's parseContentPath. The trailing slash is
-// load-bearing: relative subresource URLs resolve against the directory.
+// PageURL mirrors the server's parseContentPath: the token, then the
+// qualified tile id, and nothing after it.
 func PageURL(origin, contentToken, tileID string) string {
-	return origin + ContentPath + contentToken + "/" + tileID + "/"
-}
-
-// PresentedAssets is the subpath under a presented tile's page that its
-// plugin keeps for the page's own assets.
-const PresentedAssets = "_/"
-
-// PresentedSite is the site address, in site's
-// scheme, that a location inside page names. False for a location outside
-// page, the page itself, or the plugin's assets.
-func PresentedSite(page, site, location string) (string, bool) {
-	scheme, _, ok := strings.Cut(site, "://")
-	rest, inside := strings.CutPrefix(location, page)
-	if !ok || !inside || rest == "" || strings.HasPrefix(rest, PresentedAssets) || strings.ContainsAny(rest[:1], "?#") {
-		return "", false
-	}
-	return scheme + "://" + rest, true
+	return origin + ContentPath + contentToken + "/" + tileID
 }
 
 // The text_presentation vocabulary: whether a plugin's text body is a

@@ -2,60 +2,24 @@ package server
 
 import (
 	"context"
-	"net/http"
 
 	gcodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/proto"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/internal/namespace"
-	"github.com/josephburnett/gridwell/internal/trace"
 )
 
-// pageRoute is contentRoute for a page: a url tile a plugin presents is that
-// plugin's to serve, asked with no key, the subpath its site address, and a
-// broken one is refused with its reason, so nothing loads in its place. A far
-// row is its own node's to judge, behind the hop, and comes back nil.
-func (s *Server) pageRoute(ctx context.Context, qualifiedID string) (namespace.Namespace, string, *pb.Tile, error) {
-	c, local, row, err := s.contentRoute(ctx, qualifiedID)
-	if err != nil || row == nil {
-		return c, local, nil, err
-	}
-	if s.stampPresented(ctx, row); row.PresentedBy == "" {
-		return c, local, row, nil
-	}
-	if row.BrokenReason != "" {
-		return nil, "", nil, status.Error(gcodes.Unavailable, row.BrokenReason)
-	}
-	p, found := s.routeClient(row.PresentedBy)
-	if !found {
-		return nil, "", nil, undeclared(row.PresentedBy)
-	}
-	return p, "", row, nil
-}
-
-// servePage answers one page request from whoever serves it (pageRoute),
-// unless it is a document under a presented tile for an address its plugin
-// does not take (leavesPage): that is a redirect to the site, so a browser
-// tab, which nothing can ask first, follows the routes as a desktop view does,
-// or for an address a plugin that does not answer takes, its reason.
-func (s *Server) servePage(ctx context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	c, local, row, err := s.pageRoute(ctx, req.TileId)
+// servePage answers one page request from the namespace that owns tileID's
+// content (contentRoute), asked for the bytes of the tile's page and nothing
+// else.
+func (s *Server) servePage(ctx context.Context, tileID string, send func(*pb.ServeContentChunk) error) error {
+	c, local, _, err := s.contentRoute(ctx, tileID)
 	if err != nil {
 		return err
 	}
-	if site, v, ok := s.leavesPage(ctx, row, req); ok {
-		if v.Broken != "" {
-			return status.Error(gcodes.Unavailable, v.Broken)
-		}
-		trace.Emit("webapi", "left", "a document its plugin does not take", map[string]string{"tile": req.TileId, "site": site})
-		return send(&pb.ServeContentChunk{Status: http.StatusSeeOther, Headers: []*pb.Header{{Name: "Location", Value: site}}})
-	}
-	bound := proto.CloneOf(req)
-	bound.TileId = local
-	return c.ServeContent(ctx, bound, send)
+	return c.ServeContent(ctx, &pb.ServeContentRequest{TileId: local}, send)
 }
 
 // contentRoute resolves the namespace and local id that serve a tile's content.

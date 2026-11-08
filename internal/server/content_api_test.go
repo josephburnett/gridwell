@@ -29,53 +29,47 @@ import (
 // drive the REAL WebHandler with real plugins behind it — the exact
 // surface a sandboxed page's subresource request hits.
 
-// TestParseContentPath pins the URL grammar: the first all-digits segment
-// terminates the qualified tile id, since a namespace segment is never purely
-// numeric, and ".." never survives.
+// TestParseContentPath pins the URL grammar: the qualified tile id ends at
+// its first tile segment, since a namespace segment is never one, and
+// nothing follows it: there is no subpath.
 func TestParseContentPath(t *testing.T) {
 	cases := []struct {
-		path                   string
-		token, tileID, subpath string
-		needSlash, ok          bool
+		path          string
+		token, tileID string
+		ok            bool
 	}{
-		{"/content/tok/uf1/5/", "tok", "uf1/5", "", false, true},
-		{"/content/tok/uf1/5", "tok", "uf1/5", "", true, true},
-		{"/content/tok/uf1/5/img/cat.png", "tok", "uf1/5", "img/cat.png", false, true},
+		{"/content/tok/uf1/5", "tok", "uf1/5", true},
 		// A tile the plugin has never minted a row for is named by its key,
 		// and the API reads that shape as the end of the id exactly as it
-		// reads digits — otherwise an untouched page would 404.
-		{"/content/tok/uf1/~L2hvbWU/", "tok", "uf1/~L2hvbWU", "", false, true},
-		{"/content/tok/uf1/~L2hvbWU/a.css", "tok", "uf1/~L2hvbWU", "a.css", false, true},
-		{"/content/tok/ssh1/conn/uf1/5/a.css", "tok", "ssh1/conn/uf1/5", "a.css", false, true},
-		{"/content/tok/uf1/5/../secret", "", "", "", false, false},
-		{"/content/tok/uf1/", "", "", "", false, false},     // no numeric local id
-		{"/content/tok/uf1/abc/", "", "", "", false, false}, // ditto
-		{"/content/tok", "", "", "", false, false},          // token alone
-		{"/elsewhere/tok/uf1/5/", "", "", "", false, false}, // wrong prefix
+		// reads digits, or an untouched page would 404.
+		{"/content/tok/uf1/~L2hvbWU", "tok", "uf1/~L2hvbWU", true},
+		{"/content/tok/ssh1/conn/uf1/5", "tok", "ssh1/conn/uf1/5", true},
+		{"/content/tok/uf1/5/", "", "", false},            // a subpath, however short
+		{"/content/tok/uf1/5/img/cat.png", "", "", false}, // a subpath
+		{"/content/tok/uf1/5/../secret", "", "", false},
+		{"/content/tok/uf1/", "", "", false},    // no local id
+		{"/content/tok/uf1/abc", "", "", false}, // ditto
+		{"/content/tok", "", "", false},         // token alone
+		{"/elsewhere/tok/uf1/5", "", "", false}, // wrong prefix
 	}
 	for _, c := range cases {
-		token, tileID, subpath, needSlash, ok := parseContentPath(c.path)
-		if token != c.token || tileID != c.tileID || subpath != c.subpath || needSlash != c.needSlash || ok != c.ok {
-			t.Errorf("parse(%q) = (%q,%q,%q,%v,%v), want (%q,%q,%q,%v,%v)",
-				c.path, token, tileID, subpath, needSlash, ok,
-				c.token, c.tileID, c.subpath, c.needSlash, c.ok)
+		token, tileID, ok := parseContentPath(c.path)
+		if token != c.token || tileID != c.tileID || ok != c.ok {
+			t.Errorf("parse(%q) = (%q,%q,%v), want (%q,%q,%v)", c.path, token, tileID, ok, c.token, c.tileID, c.ok)
 		}
 	}
 }
 
 // TestPageURLMatchesContentAPIGrammar pins the two sides of the URL contract to
 // each other: rpc.PageURL (what the client builds) must parse back through
-// parseContentPath (what the API accepts) with nothing lost — the same
-// derive-once discipline as every other seam, so the grammar can never
-// drift apart silently.
+// parseContentPath (what the API accepts) with nothing lost.
 func TestPageURLMatchesContentAPIGrammar(t *testing.T) {
 	for _, id := range []string{"uf1/5", "ssh1/conn/uf1/5", "1b467bbd65466256f8a64c538cabdac8/12"} {
 		u := rpc.PageURL("https://host:1234", ContentToken("pw"), id)
 		path := strings.TrimPrefix(u, "https://host:1234")
-		token, tileID, subpath, needSlash, ok := parseContentPath(path)
-		if !ok || needSlash || token != ContentToken("pw") || tileID != id || subpath != "" {
-			t.Errorf("PageURL(%q) = %q does not round-trip: (%q,%q,%q,%v,%v)",
-				id, u, token, tileID, subpath, needSlash, ok)
+		token, tileID, ok := parseContentPath(path)
+		if !ok || token != ContentToken("pw") || tileID != id {
+			t.Errorf("PageURL(%q) = %q does not round-trip: (%q,%q,%v)", id, u, token, tileID, ok)
 		}
 	}
 }
@@ -128,7 +122,7 @@ func TestContentAPIServesImage(t *testing.T) {
 	hs, tileID, img := contentAPIServer(t, "pw")
 	token := ContentToken("pw")
 
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID, "")
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("GET page = %d %q, want 200", res.StatusCode, body)
 	}
@@ -148,11 +142,17 @@ func TestContentAPIServesImage(t *testing.T) {
 		t.Errorf("nosniff header = %q", xc)
 	}
 
-	// The root page redirects to its trailing-slash home (relative
-	// subresource URLs resolve against the directory).
-	res, _ = get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID, "")
-	if res.StatusCode != http.StatusMovedPermanently || !strings.HasSuffix(res.Header.Get("Location"), tileID+"/") {
-		t.Errorf("no-slash GET = %d loc %q, want 301 to .../", res.StatusCode, res.Header.Get("Location"))
+	// Nothing under the page is a page, and nothing but a read is asked.
+	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+token+"/"+tileID+"/a.css", ""); res.StatusCode != http.StatusNotFound {
+		t.Errorf("GET under the page = %d, want 404", res.StatusCode)
+	}
+	res, err := hs.Client().Post(hs.URL+"/content/"+token+"/"+tileID, "text/plain", strings.NewReader("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("POST = %d, want 405", res.StatusCode)
 	}
 }
 
@@ -162,10 +162,10 @@ func TestContentAPIServesImage(t *testing.T) {
 func TestContentAPITokenGate(t *testing.T) {
 	hs, tileID, _ := contentAPIServer(t, "pw")
 
-	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("wrong")+"/"+tileID+"/", ""); res.StatusCode != http.StatusUnauthorized {
+	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("wrong")+"/"+tileID, ""); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("wrong token = %d, want 401", res.StatusCode)
 	}
-	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+AuthToken("pw")+"/"+tileID+"/", ""); res.StatusCode != http.StatusUnauthorized {
+	if res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+AuthToken("pw")+"/"+tileID, ""); res.StatusCode != http.StatusUnauthorized {
 		t.Errorf("auth token as content token = %d, want 401 (domain separation)", res.StatusCode)
 	}
 	if res, _ := get(t, noRedirect(hs), hs.URL+"/", ContentToken("pw")); res.StatusCode != http.StatusUnauthorized {
@@ -220,7 +220,7 @@ func TestContentAPIResolvesLeafLink(t *testing.T) {
 		t.Fatalf("create link: %v", err)
 	}
 
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+link.Id+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+link.Id, "")
 	if res.StatusCode != http.StatusOK || body != string(img) {
 		t.Fatalf("link GET = %d, %d bytes; want the target's %d image bytes", res.StatusCode, len(body), len(img))
 	}
@@ -280,7 +280,7 @@ func TestContentAPIThroughAConnection(t *testing.T) {
 			tid = tl.Id
 		}
 	}
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/lnode1/far/"+tid+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/lnode1/far/"+tid, "")
 	if res.StatusCode != http.StatusOK || body != string(img) {
 		t.Fatalf("connection GET = %d, %d bytes; want the remote image's %d", res.StatusCode, len(body), len(img))
 	}
@@ -304,7 +304,7 @@ func TestContentAPIUnimplemented(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+txt.Id+"/", "")
+	res, _ := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken(testPassword)+"/"+txt.Id, "")
 	if res.StatusCode != http.StatusNotFound {
 		t.Errorf("localdb page GET = %d, want 404 (ServeContent unimplemented)", res.StatusCode)
 	}

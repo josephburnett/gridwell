@@ -59,7 +59,7 @@ func TestTheWebAPIRecordsEveryRefusalWithoutItsSecret(t *testing.T) {
 		map[string]string{"Content-Type": "application/x-www-form-urlencoded"})
 	do(noRedirect, http.MethodGet, bare.URL+authLoginPath+"?token=wrong-"+AuthToken(password), "", nil)
 	do(bare.Client(), http.MethodPost, bare.URL+mcpapi.Path, "{}", map[string]string{"Authorization": "Bearer wrong-" + password})
-	do(bare.Client(), http.MethodGet, bare.URL+contentPathPrefix+"wrong-"+ContentToken(password)+"/n/1/", "", nil)
+	do(bare.Client(), http.MethodGet, bare.URL+contentPathPrefix+"wrong-"+ContentToken(password)+"/n/1", "", nil)
 	do(authed.Client(), http.MethodPost, authed.URL+tracewire.Path, `{"msg":"one"}`+"\n{bad\n", nil)
 	do(authed.Client(), http.MethodGet, authed.URL+shellwire.Path, "", nil)
 

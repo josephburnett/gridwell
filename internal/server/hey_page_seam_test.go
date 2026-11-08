@@ -72,7 +72,7 @@ func TestHeyPageThroughTheContentAPI(t *testing.T) {
 		t.Fatal("no thread tile serves a page")
 	}
 
-	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("pw")+"/"+tileID+"/", "")
+	res, body := get(t, noRedirect(hs), hs.URL+"/content/"+ContentToken("pw")+"/"+tileID, "")
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("GET page = %d %q", res.StatusCode, body)
 	}

@@ -18,11 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"slices"
 	"strconv"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -68,13 +67,6 @@ type Adapter struct {
 	srcDetail       string
 	liveOff         string
 	subscriptionOff string
-	// unanswered is why the process left the probe unanswered, "" once it
-	// answers any call (heard). probing is the one probe in flight (recheck),
-	// bounded by wait, which a verdict that reads the state hands over
-	// (Answering): a plugin no verdict reads is never probed.
-	unanswered string
-	probing    atomic.Bool
-	wait       atomic.Int64
 
 	// shown is this plugin's share of the node's subscription, as grids, and
 	// links is, per grid, the grids its last live listing links into.
@@ -120,10 +112,6 @@ func New(cp pluginv1.PluginClient, mem *store.Namespace, sup Supervisor) *Adapte
 	if sup != nil {
 		sup.OnHealth(func(up bool, _ string) {
 			a.lacks.forget()
-			// A new process, or none, is the supervisor's news.
-			a.srcMu.Lock()
-			a.unanswered = ""
-			a.srcMu.Unlock()
 			if up {
 				a.declMu.Lock()
 				a.decl, a.declErr = nil, nil
@@ -142,7 +130,7 @@ func (a *Adapter) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwel
 	if err != nil {
 		return nil, err
 	}
-	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph, Presents: ci.Presents}
+	resp := &gridwellv1.InfoResponse{DisplayName: ci.DisplayName, Glyph: ci.Glyph}
 	for _, m := range declaredGrids(ci) {
 		out := &gridwellv1.PluginGrid{
 			Id: m.Id, Label: m.Label, Glyph: m.Glyph,
@@ -171,7 +159,6 @@ func (a *Adapter) info(ctx context.Context, fresh bool) (*pluginv1.InfoResponse,
 		return ci, err
 	}
 	ci, err = a.cp.Info(ctx, &pluginv1.InfoRequest{})
-	a.heard(ctx, err)
 	if !gwerr.IsAbandoned(ctx, err) && a.processUp() {
 		a.setSource(func() {
 			a.declMu.Lock()
@@ -181,56 +168,6 @@ func (a *Adapter) info(ctx context.Context, fresh bool) (*pluginv1.InfoResponse,
 	}
 	return ci, err
 }
-
-// Answering is why the process does not answer now, "" while it does, read
-// from what its calls last found and the supervisor, with nothing asked. A
-// process not answering is probed (recheck), bounded by wait, so the verdict
-// moves when it answers again.
-func (a *Adapter) Answering(wait time.Duration) string {
-	if a.sup != nil {
-		if up, detail := a.sup.Health(); !up {
-			return notAnswering(detail)
-		}
-	}
-	a.wait.Store(int64(wait))
-	why := a.source().unanswered
-	if why != "" {
-		a.recheck()
-	}
-	return why
-}
-
-// heard records a call's outcome: any outcome is the process answering, an
-// Unavailable included, since a plugin says that of its source and a process
-// that died is the supervisor's news. A call its caller gave up says
-// nothing, so it is a reason to ask (recheck).
-func (a *Adapter) heard(ctx context.Context, err error) {
-	if gwerr.IsAbandoned(ctx, err) {
-		a.recheck()
-		return
-	}
-	a.setSource(func() { a.unanswered = "" })
-}
-
-// recheck asks the process for its Info once, unless a probe is in flight or
-// no verdict has read this plugin; an Info unanswered by the bound is the
-// process not answering.
-func (a *Adapter) recheck() {
-	wait := time.Duration(a.wait.Load())
-	if wait == 0 || !a.probing.CompareAndSwap(false, true) {
-		return
-	}
-	go func() {
-		defer a.probing.Store(false)
-		ctx, cancel := context.WithTimeout(context.Background(), wait)
-		defer cancel()
-		if _, err := a.info(ctx, true); err != nil && ctx.Err() != nil {
-			a.setSource(func() { a.unanswered = notAnswering("no answer to Info in " + wait.String()) })
-		}
-	}()
-}
-
-func notAnswering(why string) string { return "plugin not responding: " + why }
 
 // declaredGrids is the one place root_grid is still read: a plugin that
 // declares no grids gets one derived from it, so an old binary keeps
@@ -355,16 +292,13 @@ func (a *Adapter) processUp() bool {
 // sourceState is the source as one health event tells it; the zero value is a
 // light source whose changes are told, or whose declaration is not yet held.
 type sourceState struct {
-	dark, untold                bool
-	detail, liveOff, unanswered string
+	dark, untold    bool
+	detail, liveOff string
 }
 
 func (s sourceState) line() string {
 	msg := "source live"
-	switch {
-	case s.unanswered != "":
-		msg = "process not answering"
-	case s.dark:
+	if s.dark {
 		msg = "source dark"
 	}
 	if s.liveOff != "" {
@@ -374,7 +308,7 @@ func (s sourceState) line() string {
 }
 
 func (s sourceState) event() *gridwellv1.Event {
-	ev := rpc.HealthEvent("", !s.dark && s.unanswered == "", cmp.Or(s.unanswered, s.detail))
+	ev := rpc.HealthEvent("", !s.dark, s.detail)
 	ev.GetPluginHealth().LiveUpdatesOff = s.liveOff
 	ev.GetPluginHealth().Told = proto.Bool(!s.untold)
 	return ev
@@ -388,7 +322,7 @@ func (a *Adapter) source() sourceState {
 
 // sourceLocked is told while a held declaration of Watch has no failure since.
 func (a *Adapter) sourceLocked() sourceState {
-	s := sourceState{dark: a.srcDark, liveOff: cmp.Or(a.liveOff, a.subscriptionOff), unanswered: a.unanswered}
+	s := sourceState{dark: a.srcDark, liveOff: cmp.Or(a.liveOff, a.subscriptionOff)}
 	if s.dark {
 		s.detail = a.srcDetail
 	}
@@ -583,7 +517,6 @@ func (a *Adapter) synthesize(ctx context.Context, gridID string) (*synthesized, 
 	// Whether the process or its source failed is the supervisor's fact.
 	dark := false
 	resp, err := a.cp.List(ctx, &pluginv1.ListRequest{Grid: gkey})
-	a.heard(ctx, err)
 	if err != nil {
 		if gwerr.IsAbandoned(ctx, err) || !gwerr.IsTransport(err) || !a.processUp() {
 			return nil, err
@@ -1261,41 +1194,36 @@ func (a *Adapter) writeAddress(ctx context.Context, first *gridwellv1.WriteConte
 	return a.changedTile(ctx, id, changed, err, false)
 }
 
+// ServeContent is the bytes and media type of the tile's page, asked of the
+// plugin by key with nothing of the request; a page the plugin answers with
+// another status than 200 is no page.
 func (a *Adapter) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {
-	// No tile is an address the plugin presents (server.pageRoute): no key.
-	var ref tileRef
-	if req.TileId != "" {
-		var err error
-		if ref, err = a.resolveTile(req.TileId); err != nil {
-			return err
-		}
+	ref, err := a.resolveTile(req.TileId)
+	if err != nil {
+		return err
 	}
-	_, err := ask(&a.lacks, "ServeContent", func() (struct{}, error) {
-		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: ref.key, Subpath: req.Subpath,
-			Method: req.Method, Query: req.Query, Body: req.Body,
-			Headers: headers(req.Headers, func(n, v string) *pluginv1.Header { return &pluginv1.Header{Name: n, Value: v} })})
-		if err == nil {
-			err = relay(cs.Recv, func(c *pluginv1.ServeContentChunk) *gridwellv1.ServeContentChunk {
-				return &gridwellv1.ServeContentChunk{Status: c.Status, MediaType: c.MediaType, Data: c.Data,
-					Headers: headers(c.Headers, func(n, v string) *gridwellv1.Header { return &gridwellv1.Header{Name: n, Value: v} })}
-			}, send)
+	_, err = ask(&a.lacks, "ServeContent", func() (struct{}, error) {
+		cs, err := a.cp.ServeContent(ctx, &pluginv1.ServeContentRequest{Key: ref.key})
+		if err != nil {
+			return struct{}{}, err
 		}
-		a.heard(ctx, err)
-		return struct{}{}, err
+		first, err := cs.Recv()
+		switch {
+		case err == io.EOF:
+			return struct{}{}, status.Errorf(codes.NotFound, "plugin: %s serves no page", req.TileId)
+		case err != nil:
+			return struct{}{}, err
+		case first.Status != 0 && first.Status != http.StatusOK:
+			return struct{}{}, status.Errorf(codes.NotFound, "plugin: %s answered its page %d", req.TileId, first.Status)
+		}
+		if err := send(&gridwellv1.ServeContentChunk{MediaType: first.MediaType, Data: first.Data}); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, relay(cs.Recv, func(c *pluginv1.ServeContentChunk) *gridwellv1.ServeContentChunk {
+			return &gridwellv1.ServeContentChunk{Data: c.Data}
+		}, send)
 	})
 	return err
-}
-
-// headers carries header lines across the two APIs' Header messages.
-func headers[F interface {
-	GetName() string
-	GetValue() string
-}, T any](from []F, to func(name, value string) T) []T {
-	out := make([]T, 0, len(from))
-	for _, h := range from {
-		out = append(out, to(h.GetName(), h.GetValue()))
-	}
-	return out
 }
 
 // GetTilePreview answers the preview previewKey named.

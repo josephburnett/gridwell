@@ -121,40 +121,15 @@ serving a page is what that entry's address is, and the node refuses the
 declaration on any other kind. Leave `url_string` empty — the node derives the
 address when the page is opened — and serve a document body from a `text` entry
 instead if you want one, which is a second entry, not a second rendering of
-this one. The page is served at a directory URL, so an ordinary relative URL inside
-it comes back as `ServeContent` on the same key with that name as the
-`subpath`. Past its address, a served page is a url tile like any other: the
+this one. The page is the whole of what you answer: the node asks for no
+other path under it. Past its address, a served page is a url tile like any other: the
 node keeps its screenshot, its standing freeze and its zoom, and you store
 none of them.
 
-`ServeContent` carries the page's whole request, not only a GET: the
-method (GET, HEAD or POST; "" means GET), the raw query, the request's
-headers less the node's credentials, and the body. Answer the status, the
-media type and any headers of your own on the first chunk, and stream the
-rest; each chunk reaches the page as you send it. The node's own headers,
-the sandbox CSP among them, are never yours: a header naming one is
-dropped.
-
-A plugin may present a site instead of, or beside, serving entries:
-declare in `presents` the globs of the site addresses you can show, such
-as `https://gitlab.com/*/-/merge_requests/*` (`*` is any run of
-characters, `/` included). A route in `server.yaml` sends a url tile's
-address to you only when one of them matches it, and the tile stays the
-user's url tile, so you own no tile and need no grid. Its page is
-`ServeContent` with an empty `key` and the address without its scheme as
-the `subpath` (`gitlab.com/g/p/-/merge_requests/7`), the query as the
-query; a link inside your page to another address you present is that
-address under the same prefix, and the node writes where the user went
-back to the tile. A link inside your page goes where the routes send it
-before the page moves, so a subpath you do not present never reaches you
-as a page: on the desktop the tile leaves for the site, another plugin's
-page or the default browser, and in a browser tab the node redirects the
-document to the site. Serve your page's own assets under the subpath `_/`;
-an asset or a fetch under your page is always yours. While you do not
-answer, your `Info` refused, a call left unanswered, your process down or
-hung, or the user has disabled you, the tiles your routes take read broken
-with the reason and load nothing until you answer: the site is never shown
-in your place.
+`ServeContent` carries the key and nothing of the request. Answer the
+media type on the first chunk and the bytes across the rest; the node
+answers the page whole, with its own headers, the sandbox CSP among them.
+A status other than 200 is no page.
 
 ## Links
 

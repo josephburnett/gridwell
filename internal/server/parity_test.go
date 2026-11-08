@@ -556,21 +556,19 @@ func parityOracle(t *testing.T, c parityCell, home, got observable) {
 // parityFacts is the row as the client draws and reads it, ids aside.
 func parityFacts(t *gridwellv1.Tile) map[string]string {
 	out := map[string]string{
-		"kind":      t.Kind,
-		"link":      fmt.Sprint(t.Link),
-		"name":      t.AltText,
-		"named":     fmt.Sprint(t.Named),
-		"place":     fmt.Sprint(t.X, t.Y, t.W, t.H),
-		"grid":      t.GridId,
-		"url":       t.UrlString,
-		"history":   t.UrlHistory,
-		"frozen":    fmt.Sprint(t.UrlFrozen),
-		"preview":   fmt.Sprint(t.PreviewBlobId != 0),
-		"framing":   fmt.Sprint(t.ViewCx, t.ViewCy, t.ViewZoom),
-		"scroll":    fmt.Sprint(t.TextX, t.TextY, t.TextMode),
-		"zoom":      fmt.Sprint(t.ContentZoom),
-		"presented": fmt.Sprint(t.PresentedBy != ""),
-		"broken":    t.BrokenReason,
+		"kind":    t.Kind,
+		"link":    fmt.Sprint(t.Link),
+		"name":    t.AltText,
+		"named":   fmt.Sprint(t.Named),
+		"place":   fmt.Sprint(t.X, t.Y, t.W, t.H),
+		"grid":    t.GridId,
+		"url":     t.UrlString,
+		"history": t.UrlHistory,
+		"frozen":  fmt.Sprint(t.UrlFrozen),
+		"preview": fmt.Sprint(t.PreviewBlobId != 0),
+		"framing": fmt.Sprint(t.ViewCx, t.ViewCy, t.ViewZoom),
+		"scroll":  fmt.Sprint(t.TextX, t.TextY, t.TextMode),
+		"zoom":    fmt.Sprint(t.ContentZoom),
 	}
 	if rpc.IsBodyKind(t.Kind) {
 		// The basis a save of the body claims; a url's content is its address.
@@ -675,7 +673,7 @@ func newParityFix(t *testing.T, declare ...func(*paritySource)) *parityFix {
 		func(reg *plugin.Registry, st *store.Store) {
 			registerParitySource(t, reg, st, parityPluginUUID, local)
 			at(onHome)(reg, st)
-		}, parityRoutes,
+		},
 		func(reg *plugin.Registry, st *store.Store) {
 			registerParitySource(t, reg, st, parityFarPluginUUID, far)
 		},
@@ -977,8 +975,7 @@ type paritySource struct {
 	moves   bool // declares and answers Move (plugin_move_test.go)
 	// What a variant declares otherwise (parity_variant_test.go).
 	unwritable, unwatched, partial bool
-	unreachable, refusesInfo       string
-	presents                       []string
+	unreachable                    string
 }
 
 func newParitySource() *paritySource {
@@ -1002,10 +999,7 @@ func newParitySource() *paritySource {
 func (s *paritySource) Info(context.Context, *pluginv1.InfoRequest) (*pluginv1.InfoResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.refusesInfo != "" {
-		return nil, status.Error(codes.FailedPrecondition, s.refusesInfo)
-	}
-	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves, Presents: s.presents,
+	return &pluginv1.InfoResponse{Kind: "parity", DisplayName: "parity", Watch: !s.unwatched, Writable: !s.unwritable, Move: s.moves,
 		Grids: []*pluginv1.PluginGrid{{Id: "all", Label: "All", Grid: "all"}, {Id: "other", Label: "Other", Grid: "other"}}}, nil
 }
 

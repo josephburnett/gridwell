@@ -363,7 +363,7 @@ func TestKeyFormReadsRoundTrip(t *testing.T) {
 		t.Fatalf("content = (%q, %q)", body, media)
 	}
 	// The /content/ API: the same id in a URL path, served as HTTP.
-	url := hs.URL + "/content/" + ContentToken(testPassword) + "/" + leaf.Id + "/"
+	url := hs.URL + "/content/" + ContentToken(testPassword) + "/" + leaf.Id
 	res, err := hs.client.Get(url)
 	if err != nil {
 		t.Fatal(err)
