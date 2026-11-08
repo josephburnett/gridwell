@@ -54,7 +54,7 @@ func (m *Machine) descend(g Gesture, w World) Plan {
 // re-descent lands where the user left.
 func (m *Machine) descendGrid(p PaneView, door *gridwellv1.Tile, w World, pl *planner) {
 	if door.ChildGridId == "" {
-		// A link whose target is not available says why; pluginhealth owns
+		// A link whose target is not available says why; sourcehealth owns
 		// the wording.
 		if n := w.Door.Health; n != nil {
 			pl.add(Effect{Kind: EffReport, Severity: n.Severity,

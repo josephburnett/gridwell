@@ -10,7 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/client/door"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/sourcehealth"
 	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
@@ -209,18 +209,18 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 }
 
 // drawSourceHealthTint overlays a plugin link tile with its
-// pluginhealth-decided tint. Only this node's own plugins have local health,
+// sourcehealth-decided tint. Only this node's own plugins have local health,
 // so a remote node's tiles surface their state through descent errors.
 func (a *App) drawSourceHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 	// A link with no target is not enterable wherever it lives. The descent
 	// guard explains on click.
-	if pluginhealth.UnrootedLink(n) {
+	if sourcehealth.UnrootedLink(n) {
 		// A row this node cannot classify gets the neutral dimming too,
 		// because not knowing yet is exactly the waiting look.
 		color := a.pal.DoorWaitingTint
 		// The local plugin list knows more: a failure gets the alarm tint.
 		if pl, ok := a.pluginByUUID(rpc.LocalOf(n.Id)); ok {
-			if st, classified := pluginhealth.Classify(pl); classified && st == pluginhealth.Broken {
+			if st, classified := sourcehealth.Classify(pl); classified && st == sourcehealth.Broken {
 				color = a.pal.DoorBrokenTint
 			}
 		}

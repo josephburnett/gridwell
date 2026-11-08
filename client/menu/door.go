@@ -10,7 +10,7 @@ package menu
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/client/door"
-	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/sourcehealth"
 )
 
 // Doors composes the section in handshake order, each row's declared
@@ -21,7 +21,7 @@ func Doors(rows []*gridwellv1.SourceInfo) []door.Place {
 		row := rows[i]
 		places := door.PlacesOf(row)
 		out = append(out, places...)
-		if _, classified := pluginhealth.Classify(row); len(places) == 0 && classified {
+		if _, classified := sourcehealth.Classify(row); len(places) == 0 && classified {
 			out = append(out, door.Place{Plugin: row})
 		}
 	}

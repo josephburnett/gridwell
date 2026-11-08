@@ -1,8 +1,8 @@
-// Package pluginhealth owns how a door tile draws and behaves. Every
+// Package sourcehealth owns how a door tile draws and behaves. Every
 // failure is one status, Broken, with the reason only in the click report,
 // since the user cannot act on which failure it was. A row that is no door
-// and no failure has no status at all: a plugin is not itself a place.
-package pluginhealth
+// and no failure has no status at all: the files are not themselves a place.
+package sourcehealth
 
 import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -11,7 +11,7 @@ import (
 )
 
 // Status classifies a door's interactivity: a door onto a node's home,
-// a connection's far home, or a plugin's grid.
+// a connection's far home, or a root of the files.
 type Status int
 
 const (
@@ -27,8 +27,8 @@ const (
 
 // Classify decides pl's status from the Info handshake alone, and no caller
 // asks a second question about the row. ok is false for a row that is no
-// door and no failure — every healthy plugin, since a plugin is not a place
-// — and nothing draws or reports such a row.
+// door and no failure — the healthy files row, since the files are not a
+// place — and nothing draws or reports such a row.
 func Classify(pl *gridwellv1.SourceInfo) (Status, bool) {
 	switch {
 	case pl.InfoError != "":
@@ -43,7 +43,7 @@ func Classify(pl *gridwellv1.SourceInfo) (Status, bool) {
 
 // UnrootedLink is a door link with no root grid behind it. It reads the tile
 // alone, so it holds for a remote node's door rows too, which the local
-// plugin list cannot classify.
+// roster cannot classify.
 func UnrootedLink(t *gridwellv1.Tile) bool {
 	return t.Link && rpc.IsDoorKind(t.Kind) && t.ChildGridId == ""
 }
@@ -55,7 +55,7 @@ func BrokenReason(pl *gridwellv1.SourceInfo) string { return pl.InfoError }
 // ClickNotice is errsurface.Surface.Report's arguments for clicking a
 // non-enterable door tile; false for Enterable, which descends instead.
 // The source keys on the uuid because two connections can share a label, and
-// on "door:" because "plugin:" is errsurface's sticky namespace and a
+// on "door:" because "source:" is errsurface's sticky namespace and a
 // click notice should expire.
 func ClickNotice(pl *gridwellv1.SourceInfo) (sev errsurface.Severity, source, message string, ok bool) {
 	st, known := Classify(pl)

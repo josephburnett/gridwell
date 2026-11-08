@@ -109,7 +109,7 @@ func (alwaysFailInfo) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, 
 // TestHandshakeSurfacesInfoErrorOverTheWire crosses the seam a pure
 // buildSourceInfo unit test cannot reach: server -> Connect wire (proto-JSON)
 // -> rpc.Client.Handshake. InfoError must survive that round trip so the
-// wasm client can classify a broken namespace (client/pluginhealth).
+// wasm client can classify a broken namespace (client/sourcehealth).
 func TestHandshakeSurfacesInfoErrorOverTheWire(t *testing.T) {
 	hs := serveWeb(t, onFiles(t, &Sources{}, alwaysFailInfo{}))
 	cl := rpc.NewClient(hs.Client(), hs.URL, connect.WithProtoJSON())

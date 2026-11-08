@@ -47,11 +47,11 @@ here.
 | **dead** (`client/deadlink`) | The namespace is not declared, or it answered that the key is gone (`gwerr.DeadLink`). Nothing is said, and nothing is asked again until the declaration or that namespace's listing changes, so neither can storm the notice row. |
 | **dark** (`internal/sourcecache` and `internal/pluginhost`, health events) | Declared, not answering right now — a connection that will not dial, or a plugin whose directory or service stopped answering while its process still does. Fetched, reported, recovers on its own. It is one fact: a grid served by a dark source is served from cache, not answered live, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
 | **disabled** (`connection.Server.Disable`, `EventSourceHealth.disabled`) | A connection the user switched off from its health notice, until the node restarts. It reads exactly as dark — the cache where there is one, the read failing where there is none — but nothing tries it again and no notice stands, and it is read-only: a write is refused (`gwerr.SourceDisabled`) and dropped, never retried, and its rows say why (`Tile.read_only`). Held in the node's memory only: `server.yaml` and `gridwell.db` never record it, so a restart brings the source back. |
-| **waiting** (`pluginhealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
-| **broken** (`pluginhealth.Broken`) | A door that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
+| **waiting** (`sourcehealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |
+| **broken** (`sourcehealth.Broken`) | A door that will not open, whatever the reason — `Info` failed, the probe timed out. That is exactly `InfoError` being set. One tint; the click reports at `Error` and `BrokenReason` carries the detail. |
 | **unknown** | Not yet known, which is neither yes nor no. `scratch.For`, `a.gridWritable` and `a.gridAcceptsTiles` all return `(value, known)`, so each caller picks its own safe default where the reason is visible. |
 
-`pluginhealth.Classify` answers only for a row that can be a door: a node's
+`sourcehealth.Classify` answers only for a row that can be a door: a node's
 home, a connection, a plugin's grid swatch. A plugin's own row is none of
 those, so it has no status at all — nothing draws it, and no click reaches it.
 

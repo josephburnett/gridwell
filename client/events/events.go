@@ -91,7 +91,7 @@ type StickyNotice struct {
 
 // ReactHealth is the one table over a health event, given the source's label,
 // whether the client held it dark before (cache.NoteHealth), and whether the
-// user may switch it off (pluginhealth.Disableable). A disabled source is
+// user may switch it off (sourcehealth.Disableable). A disabled source is
 // dark and says nothing more: the user asked for exactly that.
 func ReactHealth(h *pb.EventSourceHealth, label string, wasDark, disableable bool) HealthReaction {
 	uuid := h.GetUuid()

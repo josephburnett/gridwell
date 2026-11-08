@@ -2,7 +2,7 @@
 // place over the page — native live URL views and native menus — whether it
 // keeps a trace half of its own, and whether this node has shells. It is
 // derived once at boot, so no other code tests for the bridge to make a
-// feature decision, and, like client/pluginhealth, it holds the errsurface
+// feature decision, and, like client/sourcehealth, it holds the errsurface
 // report for a missing capability.
 package caps
 

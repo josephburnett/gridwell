@@ -44,7 +44,7 @@ type Notice struct {
 type DoorWorld struct {
 	DeadLink bool // deadlink.DeadTile
 	IsLink   bool // isLinkTile, the row's link declaration
-	// Health is pluginhealth.ClickNotice for a link with no child grid, nil
+	// Health is sourcehealth.ClickNotice for a link with no child grid, nil
 	// when there is none or the question does not arise.
 	Health   *Notice
 	ReadOnly bool // tileReadOnly for the door row

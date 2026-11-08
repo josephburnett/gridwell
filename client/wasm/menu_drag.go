@@ -14,7 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/sourcehealth"
 )
 
 // The + menu swatch as a gesture: arming a template drag, what a bare click
@@ -151,8 +151,8 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
 		if r.Door {
-			st, classified := pluginhealth.Classify(d.item.plugin)
-			r.Enterable = classified && st == pluginhealth.Enterable
+			st, classified := sourcehealth.Classify(d.item.plugin)
+			r.Enterable = classified && st == sourcehealth.Enterable
 		}
 	}
 	switch menu.DropOn(r) {

@@ -33,12 +33,12 @@ import (
 	"github.com/josephburnett/gridwell/client/outbox"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
-	"github.com/josephburnett/gridwell/client/pluginhealth"
 	"github.com/josephburnett/gridwell/client/preview"
 	"github.com/josephburnett/gridwell/client/rasterprev"
 	"github.com/josephburnett/gridwell/client/retry"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
+	"github.com/josephburnett/gridwell/client/sourcehealth"
 	"github.com/josephburnett/gridwell/client/subscription"
 	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/touchgest"
@@ -1273,7 +1273,7 @@ func (a *App) reportSourceHealth(h *gridwellv1.EventSourceHealth) {
 	// The client's one copy of which sources are not answering or not told.
 	wasDark := a.c.NoteHealth(h.Uuid, h.Healthy)
 	a.c.NoteTold(h)
-	r := events.ReactHealth(h, label, wasDark, pluginhealth.Disableable(a.plugins, h.Uuid))
+	r := events.ReactHealth(h, label, wasDark, sourcehealth.Disableable(a.plugins, h.Uuid))
 	for _, n := range []events.StickyNotice{r.Dark, r.LiveOff} {
 		if n.Message == "" {
 			a.resolveErr(n.Source)

@@ -254,7 +254,7 @@ func TestDescendLinkWithNoChildGrid(t *testing.T) {
 		plan := New().Do(descendGesture("pane1", link), w)
 		r := only(t, plan, EffReport)
 		if r.Severity != errsurface.Error || r.Source != "door:u1" || r.Message != "files: boom" {
-			t.Fatalf("report = %+v, want pluginhealth's wording verbatim", r)
+			t.Fatalf("report = %+v, want sourcehealth's wording verbatim", r)
 		}
 		if len(plan.Effects) != 3 {
 			t.Fatalf("effects = %v, want cancel, flush, report", kinds(plan))

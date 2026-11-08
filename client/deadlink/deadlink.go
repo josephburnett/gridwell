@@ -4,7 +4,7 @@
 // first hop's declaration is judged from the handshake roster, read fresh;
 // everything else only the owning node can judge, and its answer is the dead
 // verdict a read heard. A declared namespace that is down is not dead, but
-// pluginhealth's and cache.SourceDark's.
+// sourcehealth's and cache.SourceDark's.
 package deadlink
 
 import (
@@ -22,7 +22,7 @@ func TargetID(t *gridwellv1.Tile) string {
 		return t.LinkTargetId
 	}
 	// A childless link is a menu swatch or door tile, which names no
-	// namespace and stays pluginhealth's.
+	// namespace and stays sourcehealth's.
 	return t.ChildGridId
 }
 

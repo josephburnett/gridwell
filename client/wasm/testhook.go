@@ -18,7 +18,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/sourcehealth"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -720,7 +720,7 @@ func (a *App) paneSelection(p *pane.Pane) []any {
 }
 
 // thPlugins returns the configured menu rows: identity, the row's own grid
-// where it has one, declared grids, pluginhealth class. Empty until
+// where it has one, declared grids, sourcehealth class. Empty until
 // Handshake lands; the driver polls. A plugin names no grid of its own, so
 // rootGridID is empty for one and its grids are where a spec finds a
 // grid. scratchGridID is the root grid's stamp, empty until that grid is
@@ -761,17 +761,17 @@ func (a *App) thPlugins(js.Value, []js.Value) any {
 	return out
 }
 
-// pluginStatusName is the stable string for a row's pluginhealth class,
-// shared by thPlugins/thMenu; "" for a row pluginhealth does not classify.
+// pluginStatusName is the stable string for a row's sourcehealth class,
+// shared by thPlugins/thMenu; "" for a row sourcehealth does not classify.
 func pluginStatusName(pl *gridwellv1.SourceInfo) string {
-	st, classified := pluginhealth.Classify(pl)
+	st, classified := sourcehealth.Classify(pl)
 	if !classified {
 		return ""
 	}
 	switch st {
-	case pluginhealth.Broken:
+	case sourcehealth.Broken:
 		return "broken"
-	case pluginhealth.Waiting:
+	case sourcehealth.Waiting:
 		return "waiting"
 	}
 	return "enterable"

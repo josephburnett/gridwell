@@ -15,7 +15,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
-	"github.com/josephburnett/gridwell/client/pluginhealth"
+	"github.com/josephburnett/gridwell/client/sourcehealth"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
@@ -205,7 +205,7 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 	if tile.ChildGridId != "" || !rpc.IsDoorKind(tile.Kind) {
 		return d
 	}
-	// A door with no target: ask pluginhealth why, so the click says
+	// A door with no target: ask sourcehealth why, so the click says
 	// something. The id is bare on a menu row and node-qualified on a link
 	// tile, so both shapes are tried.
 	pl, ok := a.pluginByUUID(tile.Id)
@@ -215,7 +215,7 @@ func (a *App) navWorldForDescend(tile *gridwellv1.Tile) *nav.DoorWorld {
 	if !ok {
 		return d
 	}
-	if sev, source, message, ok := pluginhealth.ClickNotice(pl); ok {
+	if sev, source, message, ok := sourcehealth.ClickNotice(pl); ok {
 		d.Health = &nav.Notice{Severity: sev, Source: source, Message: message}
 	}
 	return d

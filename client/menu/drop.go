@@ -32,7 +32,7 @@ type Release struct {
 	Occupied bool
 	// Door marks a plugin, connection or declared-root swatch.
 	Door bool
-	// Enterable is pluginhealth.Classify == Enterable. DropOn reads it on the
+	// Enterable is sourcehealth.Classify == Enterable. DropOn reads it on the
 	// door arm alone, so the caller may leave it false elsewhere.
 	Enterable bool
 	// AcceptsTiles is the destination's Grid.accepts_tiles. Unknown is false:

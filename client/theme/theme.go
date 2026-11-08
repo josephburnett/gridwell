@@ -135,7 +135,7 @@ type Palette struct {
 	SplitInactive string
 	// ScrimStroke casings a preview line over a tile body of any shade.
 	ScrimStroke string
-	// Door tints for a non-enterable row (client/pluginhealth). Broken,
+	// Door tints for a non-enterable row (client/sourcehealth). Broken,
 	// every failure whatever the reason, takes the red alarm family; waiting
 	// takes neutral grey, because nothing has gone wrong yet.
 	DoorBrokenTint  string
