@@ -137,16 +137,13 @@ func rejectionText(v js.Value) string {
 }
 
 // bridgePlace asks main to create or attach a WebContentsView for paneID, on
-// the one host-local session. page and site are what main routes the view's
-// navigations by (routes.ts ViewRoute). onFail runs when main refuses: no view
-// exists, so the caller's live handle must go.
-func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url, page, site string, b viewBounds, contentZoom float64, history string, hidden, focused bool, onFail func()) {
+// the one host-local session. onFail runs when main refuses: no view exists,
+// so the caller's live handle must go.
+func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b viewBounds, contentZoom float64, history string, hidden, focused bool, onFail func()) {
 	a.bridgeVerb("placeWebview", map[string]any{
 		"paneId":      paneID,
 		"tileId":      tileID,
 		"url":         url,
-		"page":        page,
-		"site":        site,
 		"bounds":      b.toJS(),
 		"contentZoom": contentZoom,
 		"history":     history,
@@ -235,28 +232,9 @@ func (a *App) bridgeGoBack(paneID string) {
 	a.bridgeVerb("goBack", map[string]any{"paneId": paneID}, nil, nil)
 }
 
-// bridgeReload loads addr in the pane's live view, site being the tile's
-// address it shows there.
-func (a *App) bridgeReload(paneID, addr, site string) {
-	a.bridgeVerb("reload", map[string]any{"paneId": paneID, "url": addr, "site": site}, nil, nil)
-}
-
-// bridgeSetRoutes hands main the handshake's routes and declarations, which
-// it routes a live page's navigations by before the page moves (routes.ts).
-func (a *App) bridgeSetRoutes() {
-	rules := make([]any, len(a.routes.rules))
-	for i, r := range a.routes.rules {
-		rules[i] = map[string]any{"match": r.Match, "plugin": r.Plugin, "outside": r.Outside}
-	}
-	declared := map[string]any{}
-	for id, d := range a.routes.declared {
-		globs := make([]any, len(d.Presents))
-		for i, p := range d.Presents {
-			globs[i] = p
-		}
-		declared[id] = map[string]any{"presents": globs, "unknown": d.Unknown}
-	}
-	a.bridgeVerb("setRoutes", map[string]any{"routes": js.ValueOf(rules), "declared": js.ValueOf(declared)}, nil, nil)
+// bridgeReload loads addr in the pane's live view.
+func (a *App) bridgeReload(paneID, addr string) {
+	a.bridgeVerb("reload", map[string]any{"paneId": paneID, "url": addr}, nil, nil)
 }
 
 // bridgeShowMenu pops the live view's pane menu from the bar circle's
@@ -331,11 +309,6 @@ func (a *App) installWebviewListeners() {
 		// forwards the url, and the link opens as an ephemeral visit below.
 		{"onOpenBelow", func(ev js.Value) {
 			a.openLinkBelow(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
-		}},
-		// Main's routes sent a navigation of the page elsewhere than the
-		// page's taker, and held the page where it was.
-		{"onRouteMove", func(ev js.Value) {
-			a.routeURLView(jsString(ev.Get("paneId")), jsString(ev.Get("url")))
 		}},
 		// "Freeze Page" in the circle's menu over a live view.
 		{"onFreezeURL", func(ev js.Value) {
@@ -418,13 +391,4 @@ func jsString(v js.Value) string {
 		return ""
 	}
 	return v.String()
-}
-
-// openOutside hands addr to the default browser: main's open-outside verb on
-// the desktop, whose refusal surfaces through bridgeCall, and a new tab in a
-// plain browser, where the browser is the default one.
-func (a *App) openOutside(addr string) {
-	if !a.bridgeVerb("openOutside", map[string]any{"url": addr}, nil, nil) {
-		js.Global().Get("window").Call("open", addr, "_blank", "noopener")
-	}
 }

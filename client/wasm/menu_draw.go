@@ -210,14 +210,8 @@ func (a *App) drawPluginGlyph(glyph string, x, y, w, h float64) {
 
 // drawPluginHealthTint overlays a plugin link tile with its
 // pluginhealth-decided tint. Only this node's own plugins have local health,
-// so a remote node's tiles surface their state through descent errors. A url
-// tile the node says is broken (Tile.broken_reason) wears a broken door's
-// tint, a far one's by its own node's verdict.
+// so a remote node's tiles surface their state through descent errors.
 func (a *App) drawPluginHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
-	if n.BrokenReason != "" {
-		fillRectC(a.cctx, x, y, w, h, a.pal.DoorBrokenTint)
-		return
-	}
 	// A link with no target is not enterable wherever it lives. The descent
 	// guard explains on click.
 	if pluginhealth.UnrootedLink(n) {

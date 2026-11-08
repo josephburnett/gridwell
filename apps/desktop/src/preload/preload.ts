@@ -23,7 +23,6 @@ const LISTENERS = {
   onZoomKey: EV.zoomKey,
   onEscapeKey: EV.escapeKey,
   onViewGone: EV.viewGone,
-  onRouteMove: EV.routeMove,
   onError: EV.error,
 } as const;
 
@@ -67,11 +66,6 @@ const VERBS = {
   // Main's own trace half, handed to the node before a dump; see
   // TraceClient.handOver. Its args are bridgeVerb's and carry nothing.
   handOverTrace: CH.handOverTrace,
-  // Hands an http(s) address to the default browser; anything else rejects.
-  openOutside: CH.openOutside,
-  // The handshake's routes and declarations, which main routes a live page's
-  // navigations by before the page moves.
-  setRoutes: CH.setRoutes,
 } as const;
 
 const verbs = Object.fromEntries(

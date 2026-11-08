@@ -12,7 +12,6 @@ import (
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/contentzoom"
-	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
@@ -34,11 +33,12 @@ type urlView struct {
 	// owns is urlview.Owns for the row: whether its title and trail are the
 	// node's to write. page is a served page, which has no address to write.
 	owns, page bool
-	// view is where the page is and which taker shows it (urlview.View).
-	view urlview.View
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
+	// lastURL is where the page last landed (urlview.Landed), for the promote
+	// gesture.
+	lastURL string
 	// lastTitle is for the unload beacon, which cannot wait for the bridge.
 	lastTitle string
 	// gen is main's view behind this handle, minted at place and kept by a
@@ -60,7 +60,7 @@ func contentViewBounds(r pane.Rect) viewBounds {
 	return viewBounds{X: x, Y: y, W: w, H: h}
 }
 
-// webAddress resolves the address a url tile presents at (urlview.Address),
+// webAddress resolves the address a url tile opens at (urlview.Address),
 // read off its content row: "" while a link's target is not read, or dead. A
 // served page's content API address is never persisted, because the desktop
 // origin is an ephemeral port.
@@ -70,15 +70,6 @@ func (a *App) webAddress(t *gridwellv1.Tile) string {
 		return ""
 	}
 	return urlview.Address(row, rpc.PageURL(a.origin, a.contentToken, row.Id))
-}
-
-// urlViewOf is what row's view shows as it opens: the site at the row's
-// address, or its plugin's page for it. A served page has no site.
-func (a *App) urlViewOf(row *gridwellv1.Tile) urlview.View {
-	if rpc.PageContent(row) {
-		return urlview.View{}
-	}
-	return urlview.View{Page: rpc.PageURL(a.origin, a.contentToken, row.Id), Site: row.UrlString, Shows: row.PresentedBy}
 }
 
 // openURLStream goes live; what that does to the row is
@@ -105,18 +96,14 @@ func (a *App) openURLStream(p *pane.Pane, tileID string) {
 }
 
 // placeURLView puts the content-owning row t live in pane paneID; engage
-// decides whether to keep, move or place the view. A broken row places
-// nothing and says why (urlview.Opens), and the pane waits for it to answer.
+// decides whether to keep, move or place the view.
 func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
-	if a.refuseBroken(paneID, t) {
-		return
-	}
 	p := a.tree.FindPane(paneID)
 	if p == nil || !a.engage(a.urlSurface(), p, t.Id, t.Id) {
 		return
 	}
 	v := a.urlViewIn(p, t.Id, a.ownsURLRow(t), rpc.PageContent(t))
-	v.gen, v.view = a.urlGens.Next(), a.urlViewOf(t)
+	v.gen = a.urlGens.Next()
 	a.local(p.ID).urlView = v
 	if !v.page {
 		a.seedURLAddress(t)
@@ -126,7 +113,7 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
 	// The focus fact rides the placement, because going live is not always a
 	// gesture on the focused pane.
-	a.bridgePlace(p.ID, t.Id, v.gen, addr, rpc.PageURL(a.origin, a.contentToken, t.Id), v.view.Site, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
+	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
 		t.UrlHistory, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
 		func() { a.dropURLView(p.ID, v) })
 	a.draw()
@@ -166,91 +153,14 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 			stored = []byte(t.UrlString)
 		}
 	}
-	view, site, ok := v.view.Land(string(stored), landed, a.presenterOf)
+	site, ok := urlview.Landed(rpc.PageURL(a.origin, a.contentToken, v.tileID), landed)
 	if !ok {
 		return
 	}
-	v.view = view
+	v.lastURL = site
 	if urlview.WriteAddress(v.page, site, string(stored)) {
 		a.putEditedContent(v.tileID, []byte(site))
 	}
-}
-
-// presenterOf is the routes' verdict on site: the plugin whose page shows it.
-func (a *App) presenterOf(site string) string {
-	return rpc.Decide(site, a.routes.rules, a.routes.declared).Plugin
-}
-
-// routeURLView moves the tile in paneID's view to site, where main's routes
-// sent a navigation the page did not make (routes.ts): the address is written
-// as a landed one is, at once, and the view loads what the row then says
-// (followURLRow).
-func (a *App) routeURLView(paneID, site string) {
-	v := a.urlViewFor(paneID)
-	if v == nil || v.page {
-		return
-	}
-	v.view.Moving = site
-	stored, _ := a.c.TileContent(v.tileID)
-	if urlview.WriteAddress(v.page, site, string(stored)) {
-		a.putEditedContent(v.tileID, []byte(site))
-		a.flushTileContent(v.tileID)
-		return
-	}
-	if t := a.cachedTileByID(v.tileID); t != nil {
-		a.followURLRow(t)
-	}
-}
-
-// followURLRow loads, in every live view of row t, what urlview.View.Follow
-// says the row asks of it, closing one it says loads nothing; and places t in
-// a pane waiting for it once it opens.
-func (a *App) followURLRow(t *gridwellv1.Tile) {
-	for paneID, pl := range a.locals {
-		if pl.awaits == t.Id {
-			if _, opens := urlview.Opens(t); opens {
-				pl.awaits = ""
-				if p := a.tree.FindPane(paneID); p != nil && a.descendedContentID(p) == t.Id {
-					a.placeURLView(paneID, t)
-				}
-			}
-			continue
-		}
-		v := pl.urlView
-		if v == nil || v.tileID != t.Id {
-			continue
-		}
-		view, addr, ok := v.view.Follow(t)
-		if !ok {
-			continue
-		}
-		v.view = view
-		a.emit(traceevent.URLFollow(paneID, v.tileID, view.Shows))
-		urlConsole("follow pane=%s tile=%s url=%s", paneID, v.tileID, addr)
-		if addr == "" {
-			// Closed unfrozen: the plugin's absence is no look of the
-			// tile's to keep.
-			a.closeURLStream(paneID, false)
-			a.refuseBroken(paneID, t)
-			continue
-		}
-		a.bridgeReload(paneID, addr, view.Site)
-	}
-}
-
-// refuseBroken reports why row t opens nothing in pane paneID and has the
-// pane wait for it (paneLocal.awaits); false when it opens.
-func (a *App) refuseBroken(paneID string, t *gridwellv1.Tile) bool {
-	notice, opens := urlview.Opens(t)
-	if opens {
-		if pl, ok := a.localIf(paneID); ok && pl.awaits == t.Id {
-			pl.awaits = ""
-		}
-		return false
-	}
-	a.reportErr(errsurface.Error, "door:"+t.PresentedBy, notice)
-	a.local(paneID).awaits = t.Id
-	return true
 }
 
 // descendedContentID is the row whose content pane p is descended into: a
@@ -275,7 +185,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	old := from.urlView
 	from.urlView = nil
 	v := a.urlViewIn(to, old.tileID, old.owns, old.page)
-	v.navDirty, v.view, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.view, old.lastTitle, old.gen, old.reloadOwed
+	v.navDirty, v.lastURL, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.lastURL, old.lastTitle, old.gen, old.reloadOwed
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
 	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)
@@ -493,7 +403,7 @@ func (a *App) reloadURLView(paneID string, v *urlView) {
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLReload(paneID, v.tileID))
 	urlConsole("reload pane=%s tile=%s url=%s", paneID, v.tileID, addr)
-	a.bridgeReload(paneID, addr, v.view.Site)
+	a.bridgeReload(paneID, addr)
 }
 
 // canvasGesture mirrors this draw's gesture and overlay state for

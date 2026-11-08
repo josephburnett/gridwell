@@ -1,8 +1,2 @@
 # Lines a decision raised the lines ceiling by, owed until brought back down by the lines row's ways: one entry per rise, date | decision | amount, entered in the commit that makes the rise, and low-water | lines is the value before the first rise.
 # The debt row of ratchet.txt counts the lines above low-water; at 0 that row, the low-water line and the paid entries go, and the next rise brings them back.
-low-water | 58287
-2026-11-06 | Copy URL on the circle menu of a live url pane (Joe) | 12
-2026-11-06 | shift + click on a crumb toggles the tile's selection and a selected crumb wears the border (Joe): the bar's select arm in wsbar.RouteClick, which touch's Select reaches too, and pane.NavCrumb.SelectTarget | 68
-2026-11-06 | shift + click on a crumb toggles the tile's selection and a selected crumb wears the border (Joe): the crumb draws the border its tile does, and the view lists the grids the bar's crumbs sit on (pane.Showing) | 36
-2026-11-06 | a right press over a live page is the site's unless it becomes a drag (Joe): the drag's moves and release, which the view that took the press keeps, followed in main's input of that view (forwardedDragStep) and fed to the renderer's right-drag | 32
-2026-11-07 | a trace dump carries the node's server.yaml (Joe) | 43

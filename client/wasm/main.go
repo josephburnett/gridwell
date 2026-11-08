@@ -79,13 +79,6 @@ type App struct {
 	// plugins is the Handshake's menu-row list, in config order.
 	plugins []*gridwellv1.PluginInfo
 
-	// routes is what the link funnel asks rpc.Decide with: the node's routes
-	// and what each plugin declares, from the handshake (takeMenu).
-	routes struct {
-		rules    []*gridwellv1.Route
-		declared map[string]rpc.Declared
-	}
-
 	// home is the qualified grid id "/" means; every "empty anchor" reader
 	// resolves through it.
 	home string
@@ -418,9 +411,6 @@ type paneLocal struct {
 	pane.SessionState
 	urlView   *urlView
 	shellConn *shellStreamConn
-	// awaits is the url row whose go-live a broken verdict refused, placed
-	// when a read of it opens (followURLRow).
-	awaits string
 }
 
 func (a *App) shellConnFor(paneID string) *shellStreamConn {
@@ -671,12 +661,9 @@ func main() {
 	select {}
 }
 
-// takeMenu keeps what a handshake of this node says of its plugins and
-// routes, and hands the routes to main.
+// takeMenu keeps what a handshake of this node says of its plugins.
 func (a *App) takeMenu(h *gridwellv1.HandshakeResponse) {
 	a.plugins = h.Plugins
-	a.routes.rules, a.routes.declared = rpc.Routing(h)
-	a.bridgeSetRoutes()
 }
 
 // bootstrap loads the plugin list, then starts the rest of the client.
@@ -764,11 +751,6 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 	}
 	if r.Store {
 		a.c.PutGrid(resp.Grid, resp.Tiles)
-		// A resync is how a presenter's health reaches its tiles
-		// (cache.ResyncSet), so a read is followed as an event is.
-		for _, t := range resp.Tiles {
-			a.followURLRow(t)
-		}
 	}
 	return err
 }
@@ -1062,9 +1044,6 @@ func (a *App) startSSE() {
 			}
 			if plan.Reload != "" {
 				a.owePageReload(plan.Reload)
-			}
-			if plan.Follow != nil {
-				a.followURLRow(plan.Follow)
 			}
 			if plan.ClearLatch != "" {
 				a.fetch.grids.Change(plan.ClearLatch)

@@ -114,25 +114,3 @@ func TestCheckRefusesARouteWithBothOrNeither(t *testing.T) {
 		}
 	}
 }
-
-// The handshake carries the routes in order and each plugin's presents, so
-// the client's verdict is the node's.
-func TestRoutingReadsTheHandshake(t *testing.T) {
-	routes := []*pb.Route{{Match: "https://gitlab.com/*/-/merge_requests/*", Plugin: "lab0001"}, {Match: "https://gitlab.com/*", Outside: true}}
-	h := &pb.HandshakeResponse{Routes: routes, Plugins: []*pb.PluginInfo{
-		{Uuid: "home0001"}, {Uuid: "lab0001", Presents: []string{"https://gitlab.com/*/-/merge_requests/*"}},
-		{Uuid: "off0001", Unanswered: "off is disabled until the node restarts"}}}
-	gotRoutes, declared := Routing(h)
-	if len(gotRoutes) != 2 || gotRoutes[0] != routes[0] || gotRoutes[1] != routes[1] {
-		t.Fatalf("routes = %v, want %v in order", gotRoutes, routes)
-	}
-	if len(declared) != 2 || len(declared["lab0001"].Presents) != 1 || declared["off0001"].Unknown == "" {
-		t.Fatalf("declared = %v, want lab0001's presents and off0001 unknown", declared)
-	}
-	if v := Decide("https://gitlab.com/g/p/-/merge_requests/7", gotRoutes, declared); v.Plugin != "lab0001" {
-		t.Errorf("a merge request: %+v, want lab0001 before the outside rule", v)
-	}
-	if v := Decide("https://gitlab.com/g/p/-/issues/7", gotRoutes, declared); !v.Outside {
-		t.Errorf("an issue: %+v, want outside", v)
-	}
-}

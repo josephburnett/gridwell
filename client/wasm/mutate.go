@@ -330,7 +330,6 @@ func (a *App) postWriteContent(gid, tileID string, claim rpc.ContentBasis, newCo
 	a.c.PutWriteResponse(tile.GridId, tile, cache.WroteBody)
 	a.c.PutSavedContent(tile, newContent)
 	a.recordContent(tile.Id)
-	a.followURLRow(tile)
 	return tile, true
 }
 

@@ -71,15 +71,3 @@ func Decide(address string, routes []*pb.Route, declared map[string]Declared) Ve
 	}
 	return Verdict{}
 }
-
-// Routing is what a handshake gives the link funnel to ask Decide with: the
-// node's routes and each plugin's declaration, by its namespace.
-func Routing(h *pb.HandshakeResponse) ([]*pb.Route, map[string]Declared) {
-	declared := map[string]Declared{}
-	for _, p := range h.GetPlugins() {
-		if d := DeclaredBy(p); len(d.Presents) > 0 || d.Unknown != "" {
-			declared[p.Uuid] = d
-		}
-	}
-	return h.GetRoutes(), declared
-}
