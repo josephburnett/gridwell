@@ -99,7 +99,11 @@ a retiring column's meaning converts into its successor (`view_x + w/2`).
 
 A rebuild always materializes the current shape, so a chain-built file at
 N-1 never has a retired column. A drop or conversion needs a genuine-old-file
-test (`TestMigrateV10OverAGenuineV9File`), not just a fixture. Fixtures find
+test (`TestMigrateV10OverAGenuineV9File`), not just a fixture, and a drop
+that picks rows by a column needs a test over a file an earlier rebuild in
+this binary took it from: v23 picks a foreign namespace's tile by its grid's
+`ns` too, because a file left at v9 to v20 has no `tiles.ns`
+(`TestMigrateV23DropsAKeylessPluginTileByItsGrid`). Fixtures find
 their rows by `alt_text`, which survives the whole chain. `Open` runs the
 chain before `bootstrap`.
 

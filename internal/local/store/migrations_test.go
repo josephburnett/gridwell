@@ -501,3 +501,37 @@ func TestMigrateV23OverAGenuineV22File(t *testing.T) {
 	fresh, _ := newTestStoreFile(t)
 	compareFingerprints(t, schemaFingerprint(t, fresh.db), schemaFingerprint(t, db))
 }
+
+// A file left at v9 to v20 lost tiles.ns at an earlier rebuild in this
+// binary, so v23 tells a plugin's tile by its grid as well as its key: one
+// with no key, which a released mint never refused, goes with its grid
+// rather than failing the grid's delete on its foreign key.
+func TestMigrateV23DropsAKeylessPluginTileByItsGrid(t *testing.T) {
+	ctx := context.Background()
+	db, root := buildDBAtV1(t, filepath.Join(t.TempDir(), "v20origin.db"))
+	applyMigrationsUpTo(t, db, 20)
+	seed := func(qs ...string) {
+		for _, q := range qs {
+			if _, err := db.ExecContext(ctx, q); err != nil {
+				t.Fatalf("seed the v20 file (%s): %v", q, err)
+			}
+		}
+	}
+	seed(`INSERT INTO grids (created_at, updated_at, ns, context_key) VALUES (100, 100, 'p1234567', 'inbox')`,
+		`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+			VALUES (`+root+`, 'text', 4, 4, 1, 1, 'home', 100, 100)`)
+	home := homeRows(t, db)
+	seed(`INSERT INTO tiles (grid_id, kind, x, y, w, h, alt_text, created_at, updated_at)
+			VALUES ((SELECT id FROM grids WHERE ns = 'p1234567'), 'text', 0, 0, 1, 1, 'keyless plugin', 100, 100)`)
+	if err := storeOver(db).migrateUp(ctx, migrations, 23); err != nil {
+		t.Fatalf("migrate a v20 file holding a keyless plugin tile to v23: %v", err)
+	}
+	var plugin int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tiles WHERE alt_text = 'keyless plugin'`).Scan(&plugin)
+	if plugin != 0 {
+		t.Errorf("the keyless plugin tile survived v23")
+	}
+	if got := homeRows(t, db); !reflect.DeepEqual(got, home) {
+		t.Errorf("home rows changed across v23:\n got %v\nwant %v", got, home)
+	}
+}

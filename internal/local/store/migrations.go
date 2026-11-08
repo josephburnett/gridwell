@@ -156,12 +156,12 @@ var migrations = []migration{
 var respelledKinds = [][2]string{{"well", rpc.KindDoor}, {"pane", rpc.KindWorkspace}}
 
 // migrateV23 drops the rows of every namespace but home and retires ns; see
-// the chain entry. A row is another namespace's when its ns says so or, on a
-// file whose tiles an earlier rebuild already took ns from, when it has a key,
-// which only a plugin's row or a file's ever had. Tiles go before grids, which
-// they reference.
+// the chain entry. A tile is another namespace's when its ns says so, when
+// its grid's ns does, or, on a file whose tiles an earlier rebuild already
+// took ns from, when it has a key, which only a plugin's row or a file's ever
+// had. Tiles go before grids, which they reference.
 func migrateV23(ctx context.Context, tx *sql.Tx) error {
-	foreign := "key != ''"
+	foreign := "key != '' OR grid_id IN (SELECT id FROM grids WHERE ns != '')"
 	if has, err := hasColumn(ctx, tx, "tiles", "ns"); err != nil {
 		return err
 	} else if has {
