@@ -35,15 +35,6 @@ func sendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk)
 	}
 }
 
-// contentRefusal answers a content verb for a path it cannot read: one
-// outside every root is a verdict, anything else a disk that cannot answer.
-func contentRefusal(path string, err error) error {
-	if errors.Is(err, errOutside) {
-		return status.Errorf(codes.PermissionDenied, "files: %s %v", path, err)
-	}
-	return status.Errorf(codes.Unavailable, "files: read %s: %v", path, pathErr(err))
-}
-
 // ReadContent answers a text file's body with its stamp, taken before the
 // read so bytes written during it read as a stamp they do not match. A url
 // tile's content is its row's address, as home's is.
@@ -62,7 +53,7 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 		fi, err = os.Stat(real)
 	}
 	if err != nil && !gone(err) {
-		return contentRefusal(path, err)
+		return diskRefusal("read", path, err)
 	}
 	if err != nil || fi.IsDir() {
 		return send(&pb.ContentChunk{})
@@ -130,12 +121,10 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 		fi, err = os.Stat(real)
 	}
 	switch {
-	case errors.Is(err, errOutside):
-		return "", status.Errorf(codes.PermissionDenied, "files: %s %v, and nothing there is written", path, err)
 	case gone(err):
 		return "", gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
-		return "", status.Errorf(codes.Unavailable, "files: write %s: %v", path, pathErr(err))
+		return "", diskRefusal("written", path, err)
 	case fi.IsDir():
 		return "", status.Errorf(codes.InvalidArgument, "files: %s is a directory", path)
 	}
@@ -147,7 +136,7 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 	}
 	// The rename would replace a file its mode refuses writes to.
 	if err := denied(real); err != nil {
-		return "", writeRefusal(path, err)
+		return "", diskRefusal("written", path, err)
 	}
 	return replace(real, fi.Mode().Perm(), data, path)
 }
@@ -156,7 +145,7 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 func replace(real string, perm os.FileMode, data []byte, path string) (string, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(real), "."+filepath.Base(real)+".gridwell-*")
 	if err != nil {
-		return "", writeRefusal(path, err)
+		return "", diskRefusal("written", path, err)
 	}
 	keep := false
 	defer func() {
@@ -182,19 +171,23 @@ func replace(real string, perm os.FileMode, data []byte, path string) (string, e
 		err = os.Rename(tmp.Name(), real)
 	}
 	if err != nil {
-		return "", writeRefusal(path, err)
+		return "", diskRefusal("written", path, err)
 	}
 	keep = true
 	return contentStamp(fi.ModTime(), fi.Size()), nil
 }
 
-// writeRefusal answers a failed write: a permission refused is a verdict
-// with its reason, anything else a disk that cannot answer right now.
-func writeRefusal(path string, err error) error {
-	if errors.Is(err, iofs.ErrPermission) || errors.Is(err, syscall.EROFS) {
-		return status.Errorf(codes.PermissionDenied, "files: %s cannot be written: %v", path, pathErr(err))
+// diskRefusal answers a content verb the disk refused on path: a path
+// outside every root or a permission refused is a verdict with its reason,
+// anything else a disk that cannot answer right now.
+func diskRefusal(verb, path string, err error) error {
+	switch {
+	case errors.Is(err, errOutside):
+		return status.Errorf(codes.PermissionDenied, "files: %s %v", path, err)
+	case errors.Is(err, iofs.ErrPermission) || errors.Is(err, syscall.EROFS):
+		return status.Errorf(codes.PermissionDenied, "files: %s cannot be %s: %v", path, verb, pathErr(err))
 	}
-	return status.Errorf(codes.Unavailable, "files: write %s: %v", path, pathErr(err))
+	return status.Errorf(codes.Unavailable, "files: %s cannot be %s right now: %v", path, verb, pathErr(err))
 }
 
 // ServeContent is a page file's whole bytes and media type, read and sent a
@@ -223,14 +216,14 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 	case gone(err):
 		return gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
-		return contentRefusal(path, err)
+		return diskRefusal("read", path, err)
 	}
 	defer f.Close()
 	buf := make([]byte, rpc.ContentChunkBytes)
 	for first := true; ; first = false {
 		n, err := io.ReadFull(f, buf)
 		if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-			return status.Errorf(codes.Unavailable, "files: read %s: %v", path, pathErr(err))
+			return diskRefusal("read", path, err)
 		}
 		if c := (&pb.ServeContentChunk{Data: buf[:n]}); n > 0 || first {
 			if first {
@@ -271,7 +264,7 @@ func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest
 	case gone(err):
 		return nil, gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
-		return nil, contentRefusal(path, err)
+		return nil, diskRefusal("read", path, err)
 	}
 	return &pb.GetTilePreviewResponse{Jpeg: previewJPEG(real)}, nil
 }

@@ -62,8 +62,8 @@ func TestFilesTextTilesDeclareWhatTheirBodiesAre(t *testing.T) {
 	}
 }
 
-// A page file the node may not read is refused with the reason at the
-// content API, never answered as absent.
+// A page file the node may not read is refused as forbidden at the content
+// API: a permission is a verdict, never an absence or an outage.
 func TestFilesUnreadablePageIsRefusedNotMissing(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads every file")
@@ -84,7 +84,7 @@ func TestFilesUnreadablePageIsRefusedNotMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if res.StatusCode == http.StatusOK || res.StatusCode == http.StatusNotFound {
-		t.Errorf("unreadable page = %d, want a refusal that is not 404", res.StatusCode)
+	if res.StatusCode != http.StatusForbidden {
+		t.Errorf("unreadable page = %d, want 403", res.StatusCode)
 	}
 }
