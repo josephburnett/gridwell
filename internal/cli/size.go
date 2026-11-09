@@ -8,8 +8,8 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strings"
 
+	"github.com/josephburnett/gridwell/client/fileinfo"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
@@ -93,7 +93,7 @@ func clean(w io.Writer, dir string, yes bool) int {
 	}
 	fmt.Fprintln(w)
 	printReport(w, dir, after)
-	fmt.Fprintf(w, "\ngridwell.db: %s before, %s after\n", human(dbBytes(before)), human(dbBytes(after)))
+	fmt.Fprintf(w, "\ngridwell.db: %s before, %s after\n", fileinfo.Size(dbBytes(before)), fileinfo.Size(dbBytes(after)))
 	return 0
 }
 
@@ -142,16 +142,16 @@ func printReport(w io.Writer, dir string, a store.Analysis) {
 		return fmt.Sprintf("%5.1f%%", 100*float64(n)/float64(total))
 	}
 	line := func(label string, count int, bytes int64) {
-		fmt.Fprintf(w, "  %-42s %6d %7s %s\n", label, count, human(bytes), share(bytes))
+		fmt.Fprintf(w, "  %-42s %6d %7s %s\n", label, count, fileinfo.Size(bytes), share(bytes))
 	}
 	count := func(label string, n int) { fmt.Fprintf(w, "  %-42s %6d\n", label, n) }
 	db := config.DBFile(dir)
 	fmt.Fprintf(w, "gridwell.db  %s (%d pages of %s; file %s, wal %s); %s free, which a clean's VACUUM reclaims\n",
-		human(total), a.Pages, human(a.PageSize), human(fileBytes(db)), human(fileBytes(db+"-wal")), human(a.FreePages*a.PageSize))
-	fmt.Fprintf(w, "cache.db     %s, disposable, rewarmed by use\n", human(fileBytes(config.CacheFile(dir))))
+		fileinfo.Size(total), a.Pages, fileinfo.Size(a.PageSize), fileinfo.Size(fileBytes(db)), fileinfo.Size(fileBytes(db+"-wal")), fileinfo.Size(a.FreePages*a.PageSize))
+	fmt.Fprintf(w, "cache.db     %s, disposable, rewarmed by use\n", fileinfo.Size(fileBytes(config.CacheFile(dir))))
 	fmt.Fprintln(w, "\ntables (dbstat pages, indexes folded in)")
 	for _, t := range a.Tables {
-		fmt.Fprintf(w, "  %-42s        %7s %s\n", t.Name, human(t.Bytes), share(t.Bytes))
+		fmt.Fprintf(w, "  %-42s        %7s %s\n", t.Name, fileinfo.Size(t.Bytes), share(t.Bytes))
 	}
 	fmt.Fprintf(w, "\ntiles %-10s", "")
 	for _, p := range store.Places {
@@ -187,22 +187,4 @@ func kindOrder(a store.Analysis) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// human is a size as ls -h prints it.
-func human(n int64) string {
-	if n < 1024 {
-		return fmt.Sprintf("%d", n)
-	}
-	v, unit := float64(n), ""
-	for _, u := range strings.Split("KMGT", "") {
-		if v < 1024 {
-			break
-		}
-		v, unit = v/1024, u
-	}
-	if v < 10 {
-		return fmt.Sprintf("%.1f%s", v, unit)
-	}
-	return fmt.Sprintf("%.0f%s", v, unit)
 }
