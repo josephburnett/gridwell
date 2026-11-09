@@ -182,6 +182,19 @@ Gridwell write onto a directory to home once the files have read the
 directory, and refuses a cell any tile the grid shows covers, a file's
 derived placement among them (`cellFree`).
 
+The Gridwell layer over a directory is every home row on a grid keyed at
+or under its path (`store/overlay.go`). A move of the directory within
+Gridwell rewrites those keys and the files' rows under it in one
+transaction (`store.FileRows.Rekey`), so the tiles keep their ids, cells,
+framing and selection; a delete sends the directory to the OS trash and
+its Gridwell tiles to home's (`store.FileRows.TrashOver`). A directory gone
+underneath Gridwell is listed in its parent from the rows, a door with
+`Tile.gone` set (`files.goneDoors`, `store.FileRows.HeldUnder`), and its
+grid answers its Gridwell tiles alone, not writable. Whether a parent lists
+one is a fact of home's rows, so the files hear home's events
+(`files.Source.hear`). A find places a home result over a directory on
+the directory's own path, asked of the files (`router.find`).
+
 Two sockets. The web API (`web.bind`) serves Connect, the content API,
 the shell API and the MCP API (`/mcp`) behind a password cookie, or the
 password itself as a bearer, which is how an agent authenticates; serve mints

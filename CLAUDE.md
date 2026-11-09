@@ -171,6 +171,7 @@ what each one is called.
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
 | broken | A connection's door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
 | told | A source whose changes reach the node as they happen (`EventSourceHealth.told`): a connection whose stream is up, or files whose watch is healthy. One that is not told has its grids read on every move, and says nothing. | A failure; dark. |
+| gone | A directory not on disk that Gridwell tiles are still over, or over a directory under it: its parent lists it from the rows as a grey door (`Tile.gone`), its grid holding those tiles alone. Reads dead once no tile is left. | Dead, which keeps nothing; dark, a directory that will not read. |
 | unknown | Not yet known, neither yes nor no: the callers that return `(value, known)` each pick their own safe default. | |
 | notice | A surfaced failure (`client/errsurface`); health notices are shown in a row of them. | A strip. |
 
@@ -571,7 +572,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   every Gridwell row under it, subdirectories included, follows to the new
   path, since their grids are keyed by the path that moved. A directory
   that goes away underneath Gridwell, deleted, renamed or moved outside it,
-  stays in its parent as a grey door, the muted family, holding only its
+  stays in its parent as a gone door (`Tile.gone`), grey, the muted family, holding only its
   Gridwell tiles: the one door a listing does not supply, made from the
   rows, up to the root, so no Gridwell data is lost to a change of the
   disk; its tiles are moved out by hand. Deleting a directory within
