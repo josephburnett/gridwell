@@ -82,14 +82,16 @@ class, and the word says who started the write.
 | **serves_page** | This url tile is a page file (an image, video, audio or PDF file) and opens at the `/content/` API, where the node streams the file, instead of at an address of its own. Only a url tile carries it. It has no address to follow the user, and its title and history are the file's, so the freeze writes the screenshot alone (`urlview.Writeback`); the preview, the standing freeze and the zoom are a url tile's. When the file changes on disk, a live view showing it loads it again once on screen, and an unfrozen screenshot gives way to the file's own picture until the next capture (`urlview.PageMoved`, `files.pagePreviewStale`). |
 | **text_presentation: plain** | Verbatim preformatted text; no rendered/raw toggle. |
 | **text_presentation: both** | The tile is a document: rendered by default, with the toggle to the raw source, whether or not the tile is writable. |
+| **text_presentation: info** | The file's name renders as nothing, so the tile has no body: its preview is its size and its extension's type, and a descent shows its file information, with see more opening its bytes in the hex view (`textedit.DecideDescent`, `client/fileinfo`). Any other file reaches the same view by the i button. |
 | **freeze** (`Tile.url_frozen`) | A standing user intent not to go live, on a url or a shell alike. The preview is what a frozen tile looks like; the intent is why it stays that way. Freezing is a screenshot, not a kill: the address still resolves, the tmux still runs, and a copy taken while frozen keeps that preview. The reconnect gesture is the one thing that clears it. The field name is from before a shell could be frozen. |
 | **content zoom** (`Tile.content_zoom`) | The scale of what renders inside one text, shell or url tile, stored on its row by `SetTile`'s content-zoom arm, so a document reads larger without the grid moving and stays that size wherever the tile is shown. Pane zoom is the grid's viewport; this is the tile's. `client/contentzoom` owns the chord and the range. |
 | **theme** (`client/theme`) | Which palette the client draws in, dark or light. A view preference of this browser or this app, not a fact about your things: it is never written, never shared between your machines, and defaults to dark. Right-click the + menu circle on any grid to pick one. |
 | **glyph** | The icon a namespace wears on its swatch, its ghost and the crumb of the grid it roots (`door.GlyphFor`): the folder for the files and their directories, the globe for a connection, the door for home, the trash for home's trashcan. An unknown name degrades to the globe. |
 
-The files say whether a text file is a document, by its extension; the user
-can always see the source bytes. That is why there are two values and not
-three: nothing renders a body with no way back to its bytes.
+The files say whether a text file is a document, plain, or neither, by its
+name alone, so a listing reads no file; the user can always see the source
+bytes, in the hex view when nothing else shows them. Nothing renders a body
+with no way back to its bytes.
 
 `client/textedit` owns the first two presentation rules (`ToggleVisible`,
 `PresentationHTML`), so `make check` executes them.

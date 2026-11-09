@@ -127,6 +127,8 @@ what each one is called.
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
 | workspace tile | A tile holding a layout: a pane tree, with each frame's framing and scroll. | |
 | preview | What a tile looks like from outside. A capture is one; a freeze keeps one. | |
+| file information | What the disk says of a file, read when it is opened (`FileInfo`): its inode's facts and its type sniffed from its first bytes; and the view that shows it, the text mode `info`. | A listing, which reads no file. |
+| hex view | A file's bytes beneath its file information, per row of 16 the offset, the bytes in hex and their UTF-8 decoding, loaded 64K at a time; the text mode `hex`. | The raw source a text's toggle shows. |
 | id | A tile's or grid's own segment, qualified by its namespace's: digits for a home row, or `~` plus a file's absolute path, base64url. A namespace's is seven lowercase base36 characters with a leading letter, or a legacy 32-hex. Never reassigned. `docs/ids.md`. | A file's path, which the id encodes. |
 
 **Places and panes**
@@ -733,6 +735,18 @@ These were decided deliberately. Do not reverse one without a new decision.
   tile keeps that preview, the address and the tmux keep existing, a
   copy taken while frozen keeps the copy, and only the reconnect clears it
   (`shellconn.DecideGoLive`).
+- A file whose name renders as nothing shows its file information
+  (Joe, 2026-11-08). Its preview in a directory is its size, as `ls -h`
+  spells it, off the stamp, and the type its extension says
+  (`rpc.ExtensionType`), so a listing reads no file. A descent asks
+  `ReadContent{info}` and shows the inode's facts and the type sniffed
+  from its first 512 bytes; see more opens the hex view beneath, which
+  asks the content API for 64K at a time by range as it is scrolled.
+  Read-only: nothing edits the bytes. Any other file reaches its file
+  information by the i button beside the rendered/raw toggle. The info and
+  hex modes are the row's text mode, so a file reopens as it was left
+  (`textedit.DecideDescent`, `client/fileinfo`). A file's information is
+  read when it is opened and never cached for a dark source.
 - An ephemeral visit is a tile with no home grid and no other difference
   (2026-10-20): a visit writes its address, title, freeze, name and content
   zoom wherever its row is, and offers the freeze gesture and the rename
