@@ -163,15 +163,12 @@ func shimOnly(record) (string, bool) { return "", false }
 
 // barRegion routes through wsbar.RouteClick at x on a 400-wide bar holding a
 // workspace tile crumb, two chain crumbs, the last one an ephemeral visit, and
-// a title at 200..280; a wheel over the bar is gesture.ClassifyWheel's. Every
+// a title at 200..280; a wheel in the band is gesture.ClassifyWheel's. Every
 // bar surface's Select is routed (bottomBarSelect).
 func barRegion(zone wsbar.Zone, x float64) verdict {
 	return func(r record) (string, bool) {
 		if r.button < 0 {
-			if zone != wsbar.ZoneBar {
-				return "", false
-			}
-			return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{OverBar: true})), true
+			return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{Zone: zone})), true
 		}
 		h := wsbar.RouteClick(wsbar.Click{
 			Button: r.button, Shift: r.shift, X: x, Zone: zone, BarW: 400,

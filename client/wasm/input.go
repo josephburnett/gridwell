@@ -244,17 +244,15 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	// The band is under no pane, so a wheel there is classified for the
 	// focused pane; gesture.ClassifyWheel owns what it does.
-	if bx, top, bw, barOK := a.bottomBarRect(); barOK &&
-		wsbar.Where(sx, sy, bx, top, bw) == wsbar.ZoneBar {
-		fp := a.tree.FocusedPane()
-		if fp == nil {
+	if bx, top, bw, barOK := a.bottomBarRect(); barOK {
+		if zone := wsbar.Where(sx, sy, bx, top, bw); zone != wsbar.ZoneOutside {
+			fp := a.tree.FocusedPane()
+			if fp != nil && gesture.ClassifyWheel(gesture.WheelInput{Zone: zone, TextFocused: fp.ContentID() != ""}) == gesture.WheelZoomFocused {
+				fr := a.paneRectByID(fp.ID)
+				a.wheelZoomPaneAt(fp, fr, dy, fr.X+fr.W/2, fr.Y+fr.H/2)
+			}
 			return nil
 		}
-		if gesture.ClassifyWheel(gesture.WheelInput{OverBar: true, TextFocused: fp.ContentID() != ""}) == gesture.WheelZoomFocused {
-			fr := a.paneRectByID(fp.ID)
-			a.wheelZoomPaneAt(fp, fr, dy, fr.X+fr.W/2, fr.Y+fr.H/2)
-		}
-		return nil
 	}
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok {

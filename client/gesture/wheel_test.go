@@ -1,6 +1,10 @@
 package gesture
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/josephburnett/gridwell/client/wsbar"
+)
 
 func TestClassifyWheel(t *testing.T) {
 	cases := []struct {
@@ -11,9 +15,12 @@ func TestClassifyWheel(t *testing.T) {
 		{"grid view zooms", WheelInput{}, WheelZoomPane},
 		// The bar is under no pane, so a wheel there zooms the focused pane
 		// about its centre, or nothing when that pane is inside a document.
-		{"over the bar zooms the focused grid pane", WheelInput{OverBar: true}, WheelZoomFocused},
-		{"over the bar, a focused content pane is left alone", WheelInput{OverBar: true, TextFocused: true}, WheelIgnore},
-		{"over the bar, a door under nothing claims nothing", WheelInput{OverBar: true, OverEnterableDoor: true}, WheelZoomFocused},
+		{"over the bar zooms the focused grid pane", WheelInput{Zone: wsbar.ZoneBar}, WheelZoomFocused},
+		{"over the bar, a focused content pane is left alone", WheelInput{Zone: wsbar.ZoneBar, TextFocused: true}, WheelIgnore},
+		{"over the bar, a door under nothing claims nothing", WheelInput{Zone: wsbar.ZoneBar, OverEnterableDoor: true}, WheelZoomFocused},
+		// Beside the bar there is no pane under the wheel, and the band is
+		// no pane's.
+		{"beside the bar does nothing", WheelInput{Zone: wsbar.ZoneBand}, WheelIgnore},
 		{"grid view zooms even with live view flags", WheelInput{LiveURLView: true, InContentBox: true}, WheelZoomPane},
 		// An enterable door under the cursor zooms its own preview, and
 		// empty space zooms the pane.
