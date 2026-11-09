@@ -49,7 +49,7 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 	if err != nil {
 		return fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	srcGrid, err := parseID(t.GridId)
+	srcGrid, err := gridRow(ctx, tx, t.GridId)
 	if err != nil {
 		return fmt.Errorf("tile %s: bad grid_id %q: %w", t.Id, t.GridId, err)
 	}
@@ -71,14 +71,14 @@ func (s *Store) moveTileToTrash(ctx context.Context, tx *sql.Tx, events *[]*grid
 		monthGrid, x, y, s.now().Unix(), tileID); err != nil {
 		return err
 	}
-	if err := s.bumpGridVersion(ctx, tx, srcGrid); err != nil {
+	if err := s.bumpGridVersion(ctx, tx, events, srcGrid); err != nil {
 		return err
 	}
-	if err := s.bumpGridVersion(ctx, tx, monthGrid); err != nil {
+	if err := s.bumpGridVersion(ctx, tx, events, monthGrid); err != nil {
 		return err
 	}
 	if minted {
-		if err := s.bumpGridVersion(ctx, tx, trashID); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, events, trashID); err != nil {
 			return err
 		}
 	}

@@ -20,21 +20,16 @@ func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	destGridID, err := parseID(req.DestGridId)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid dest_grid_id", ErrInvalidArgument)
-	}
 	var out *gridwellv1.Tile
 	err = s.withMutation(ctx, "CopyTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}
-
-		if _, err := s.loadGrid(ctx, tx, destGridID); err != nil {
-			return fmt.Errorf("%w: destination grid %d: %v", ErrInvalidArgument, destGridID, err)
+		dstGrid, err := s.destGrid(ctx, tx, req.DestGridId)
+		if err != nil {
+			return err
 		}
-		dstGrid := destGridID
 
 		over, err := overlapsExisting(ctx, tx, dstGrid, req.X, req.Y, n.W, n.H)
 		if err != nil {
@@ -48,7 +43,7 @@ func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (
 		if err != nil {
 			return err
 		}
-		if err := s.bumpGridVersion(ctx, tx, dstGrid); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, events, dstGrid); err != nil {
 			return err
 		}
 		out, err = s.emitTileChanged(ctx, tx, newID, events)

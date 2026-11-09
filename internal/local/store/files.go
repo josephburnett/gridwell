@@ -80,11 +80,8 @@ func (n *FileRows) GridOf(key string) (int64, error) {
 	}
 	now := n.s.now().Unix()
 	err = n.write("GridOf", "c/"+key, func(ctx context.Context, tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, key)
-			VALUES (0, ?, ?, ?) ON CONFLICT DO NOTHING`, now, now, key); err != nil {
-			return err
-		}
-		return tx.QueryRowContext(ctx, `SELECT id FROM grids WHERE key = ?`, key).Scan(&id)
+		id, err = mintKeyGrid(ctx, tx, key, now)
+		return err
 	})
 	return id, err
 }
@@ -106,6 +103,16 @@ func (n *FileRows) TileKey(tileID int64) (gridID int64, key string, tombstoned b
 	return gridID, key, tomb != 0, notFound(err)
 }
 
+// Over is home's rows on a directory's grid, the Gridwell tiles placed over
+// it, as home answers them: each named by its digits and its grid by the
+// directory's id. gridID 0, a grid never touched, holds none.
+func (n *FileRows) Over(gridID int64) ([]*gridwellv1.Tile, error) {
+	if gridID == 0 {
+		return nil, nil
+	}
+	return n.s.loadTilesInGrid(context.Background(), n.s.db, gridID)
+}
+
 // Overlay joins one listing with the stored arrangement and writes
 // nothing. Rows contribute id, placement, framing and a typed name; the listing contributes every other content fact. Rows the listing does not mention follow at the end from
 // their stored snapshot, which is what makes a touched tile survive an outage.
@@ -123,11 +130,19 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
 			rows[r.Key] = r
 		}
 	}
-	// A derived placement flows around what the user has arranged; a row
-	// never moves because its neighbours changed.
+	// A derived placement flows around what the user has arranged, a
+	// Gridwell tile placed over the directory among it; a row never moves
+	// because its neighbours changed.
 	occupied := map[[2]int64]bool{}
 	for _, r := range stored {
 		occupyRect(occupied, r.X, r.Y, r.W, r.H)
+	}
+	over, err := n.Over(gridID)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range over {
+		occupyRect(occupied, t.X, t.Y, t.W, t.H)
 	}
 	var cur cursor
 	matched := map[string]bool{}

@@ -265,8 +265,8 @@ func TestSourceGridSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(got, []int64{b}) {
-		t.Errorf("after retiring %d: selection = %v, want [%d]", a, got, b)
+	if !slices.Equal(got, []string{rpc.KeyTileID("b")}) {
+		t.Errorf("after retiring %d: selection = %v, want b alone", a, got)
 	}
 	if changed, err := n.SetSelection(gid, SelectOp{Add: []int64{a}}); err != nil || len(changed) != 0 {
 		t.Errorf("selecting a retired row: changed %v, err %v; want it ignored", changed, err)

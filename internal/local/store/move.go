@@ -29,21 +29,13 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
-	destGridID, err := parseID(req.GridId)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
-	}
 	var out *gridwellv1.Tile
 	err = s.withTileWrite(ctx, "MoveTile", tileID, func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		n, err := s.loadForWrite(ctx, tx, tileID, "", nil)
 		if err != nil {
 			return err
 		}
-		srcGrid, err := parseID(n.GridId)
-		if err != nil {
-			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, n.GridId, err)
-		}
-		if srcGrid == destGridID && n.X == req.X && n.Y == req.Y && n.W == req.W && n.H == req.H {
+		if n.GridId == req.GridId && n.X == req.X && n.Y == req.Y && n.W == req.W && n.H == req.H {
 			// Already where the write puts it: nothing to overwrite, so no
 			// claim to lose.
 			out = n
@@ -52,8 +44,13 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 		if err := ClaimPlacement(n, req.Claim, true); err != nil {
 			return err
 		}
-		if _, err := s.loadGrid(ctx, tx, destGridID); err != nil {
-			return fmt.Errorf("%w: destination grid %d: %v", ErrInvalidArgument, destGridID, err)
+		srcGrid, err := gridRow(ctx, tx, n.GridId)
+		if err != nil {
+			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, n.GridId, err)
+		}
+		destGridID, err := s.destGrid(ctx, tx, req.GridId)
+		if err != nil {
+			return err
 		}
 		if err := s.doorWouldContainItself(ctx, tx, n, destGridID); err != nil {
 			return err
@@ -78,10 +75,10 @@ func (s *Store) MoveTile(ctx context.Context, req *gridwellv1.MoveTileRequest) (
 			return err
 		}
 		if crossGrid {
-			if err := s.bumpGridVersion(ctx, tx, srcGrid); err != nil {
+			if err := s.bumpGridVersion(ctx, tx, events, srcGrid); err != nil {
 				return err
 			}
-			if err := s.bumpGridVersion(ctx, tx, destGridID); err != nil {
+			if err := s.bumpGridVersion(ctx, tx, events, destGridID); err != nil {
 				return err
 			}
 			if err := s.tileLeft(ctx, tx, events, srcGrid, tileID); err != nil {
@@ -103,13 +100,7 @@ func ClaimPlacement(n *gridwellv1.Tile, c *gridwellv1.Placement, withGrid bool) 
 	if c == nil {
 		return nil
 	}
-	gridMoved := false
-	if withGrid {
-		have, herr := parseID(n.GetGridId())
-		saw, serr := parseID(c.GridId)
-		gridMoved = herr != nil || serr != nil || have != saw
-	}
-	if gridMoved || n.X != c.X || n.Y != c.Y || n.W != c.W || n.H != c.H {
+	if withGrid && n.GetGridId() != c.GetGridId() || n.X != c.X || n.Y != c.Y || n.W != c.W || n.H != c.H {
 		return fmt.Errorf("%w: tile %s is no longer where the writer saw it", ErrVersionConflict, n.Id)
 	}
 	return nil

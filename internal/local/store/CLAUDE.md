@@ -8,7 +8,9 @@ cache and lives in `cache.db` (`internal/sourcecache`), never here.
 
 `key` is the one column that tells the two sides apart, on tiles and grids
 alike: '' on every home row, a file's or directory's absolute path on the
-files' (`side` in files.go, `FileRows`).
+files' (`side` in files.go, `FileRows`). A home row's grid may be a
+directory's keyed row: a Gridwell tile over a directory, its grid spelled
+`~<path>` on the wire (`scanHomeTile`, `gridRow`).
 
 A file's row is minted lazily: listing a directory mints nothing
 (`Overlay` is a read-only join, `Mint` the one INSERT), so a row exists only

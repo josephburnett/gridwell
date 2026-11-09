@@ -363,24 +363,13 @@ func (s *Source) row(dir, path string) (int64, bool, error) {
 	return s.mem.LiveTileID(gid, path)
 }
 
-// selection is a directory's selection, each row named by its path.
+// selection is a directory's selection, a file named by its path and a
+// Gridwell tile by its row.
 func (s *Source) selection(gid int64) ([]string, error) {
 	if gid == 0 {
 		return nil, nil
 	}
-	rows, err := s.mem.Selection(gid)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(rows))
-	for _, id := range rows {
-		_, key, _, err := s.mem.TileKey(id)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, idOf(key))
-	}
-	return out, nil
+	return s.mem.Selection(gid)
 }
 
 // listingSum is a listing as a client holds it, without the content stamps:

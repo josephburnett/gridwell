@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
 )
 
 // GetGrid returns the grid plus all of its tiles. It is a pure read: home holds
@@ -65,18 +67,90 @@ func scanTile(scanner interface {
 	return &n, nil
 }
 
+// homeTileSelect selects home's rows with the key of the grid each sits on,
+// which scanHomeTile spells the row's grid by.
+var homeTileSelect = `SELECT ` + tileColumns + `, (SELECT g.key FROM grids g WHERE g.id = tiles.grid_id) FROM tiles`
+
+// scanHomeTile is scanTile for a home row: one on a directory's grid names
+// that grid as the directory's id, ~<path>, the id the files answer it by.
+func scanHomeTile(scanner interface {
+	Scan(dest ...any) error
+}) (*gridwellv1.Tile, error) {
+	var key sql.NullString
+	t, err := scanTile(scanner, &key)
+	if err == nil && key.String != "" {
+		t.GridId = rpc.KeyTileID(key.String)
+	}
+	return t, err
+}
+
 func (s *Store) loadTile(ctx context.Context, q gridReader, tileID int64) (*gridwellv1.Tile, error) {
-	row := q.QueryRowContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE id = ? AND key = ''`, tileID)
-	n, err := scanTile(row)
+	n, err := scanHomeTile(q.QueryRowContext(ctx, homeTileSelect+` WHERE id = ? AND key = ''`, tileID))
 	return n, notFound(err)
 }
 
 func (s *Store) loadTilesInGrid(ctx context.Context, q gridReader, gridID int64) ([]*gridwellv1.Tile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+tileColumns+` FROM tiles WHERE grid_id = ? AND key = '' ORDER BY id`, gridID)
+	rows, err := q.QueryContext(ctx, homeTileSelect+` WHERE grid_id = ? AND key = '' ORDER BY id`, gridID)
 	if err != nil {
 		return nil, err
 	}
-	return collect(rows, func(rows *sql.Rows) (*gridwellv1.Tile, error) { return scanTile(rows) })
+	return collect(rows, func(rows *sql.Rows) (*gridwellv1.Tile, error) { return scanHomeTile(rows) })
+}
+
+// gridRow reads a wire grid id as its row: a home grid's digits, or a
+// directory's ~<path>, the grids row keyed by its path, NotFound when the
+// directory was never touched. It is scanHomeTile's inverse.
+func gridRow(ctx context.Context, q gridReader, wire string) (int64, error) {
+	key, ok := rpc.TileKey(wire)
+	if !ok {
+		return parseID(wire)
+	}
+	var id int64
+	err := q.QueryRowContext(ctx, `SELECT id FROM grids WHERE key = ? AND key != ''`, key).Scan(&id)
+	return id, notFound(err)
+}
+
+// destGrid is the grid row a Gridwell write onto the wire grid id lands on:
+// a home grid that exists, or a directory's, its row minted on first sight
+// in the write's own transaction (mintKeyGrid).
+func (s *Store) destGrid(ctx context.Context, tx *sql.Tx, wire string) (int64, error) {
+	if key, ok := rpc.TileKey(wire); ok {
+		if key == "" {
+			return 0, fmt.Errorf("%w: the files' own id is no grid", ErrInvalidArgument)
+		}
+		return mintKeyGrid(ctx, tx, key, s.now().Unix())
+	}
+	id, err := parseID(wire)
+	if err != nil {
+		return 0, fmt.Errorf("%w: invalid grid_id %q", ErrInvalidArgument, wire)
+	}
+	if _, err := s.loadGrid(ctx, tx, id); err != nil {
+		return 0, fmt.Errorf("%w: grid %d: %v", ErrInvalidArgument, id, err)
+	}
+	return id, nil
+}
+
+// mintKeyGrid is the one mint of a directory's grid row, the files' touch and
+// a Gridwell tile placed there alike; two first sights at once mint one row.
+func mintKeyGrid(ctx context.Context, tx *sql.Tx, key string, now int64) (id int64, err error) {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO grids (version, created_at, updated_at, key)
+		VALUES (0, ?, ?, ?) ON CONFLICT DO NOTHING`, now, now, key); err != nil {
+		return 0, err
+	}
+	err = tx.QueryRowContext(ctx, `SELECT id FROM grids WHERE key = ?`, key).Scan(&id)
+	return id, err
+}
+
+// gridWire is grid row id as the wire names it (scanHomeTile).
+func gridWire(ctx context.Context, q gridReader, id int64) (string, error) {
+	var key string
+	if err := q.QueryRowContext(ctx, `SELECT key FROM grids WHERE id = ?`, id).Scan(&key); err != nil {
+		return "", notFound(err)
+	}
+	if key != "" {
+		return rpc.KeyTileID(key), nil
+	}
+	return strconv.FormatInt(id, 10), nil
 }
 
 // insertGrid mints an empty grid row. The migration chain keeps its own copy
@@ -189,12 +263,19 @@ func (s *Store) bumpTileVersion(ctx context.Context, tx *sql.Tx, tileID int64) e
 const contentAtSQL = "COALESCE(t.content_at, t.created_at)"
 
 // bumpGridVersion increments a grid row's version and stamps updated_at. A
-// grid's version moves on a structural change only.
-func (s *Store) bumpGridVersion(ctx context.Context, tx *sql.Tx, gridID int64) error {
-	_, err := tx.ExecContext(ctx,
-		`UPDATE grids SET version = version + 1, updated_at = ? WHERE id = ?`,
-		s.now().Unix(), gridID)
-	return err
+// grid's version moves on a structural change only, which a directory's grid
+// tells as GridChanged, since the files compose it from the disk and home's
+// rows alike.
+func (s *Store) bumpGridVersion(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.Event, gridID int64) error {
+	var key string
+	err := tx.QueryRowContext(ctx,
+		`UPDATE grids SET version = version + 1, updated_at = ? WHERE id = ? RETURNING key`,
+		s.now().Unix(), gridID).Scan(&key)
+	if err != nil || key == "" {
+		return notFound(err)
+	}
+	*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_GridChanged{GridChanged: &gridwellv1.GridChanged{GridId: rpc.KeyTileID(key)}}})
+	return nil
 }
 
 // overlapsExisting reports whether the rectangle (x,y,w,h) overlaps any tile

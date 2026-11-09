@@ -105,20 +105,16 @@ func (s *Store) createTile(
 	gridIDStr string, x, y, w, h int64, named bool,
 	insert func(tx *sql.Tx, gridID, now int64) (tileID int64, err error),
 ) (*gridwellv1.Tile, error) {
-	gridID, err := parseID(gridIDStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: invalid grid_id", ErrInvalidArgument)
-	}
 	if w <= 0 || h <= 0 {
 		return nil, fmt.Errorf("%w: w and h must be positive", ErrInvalidArgument)
 	}
 	var out *gridwellv1.Tile
-	err = s.withMutation(ctx, "CreateTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+	err := s.withMutation(ctx, "CreateTile", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
 		// grid_id is authoritative; no descent path is on the wire.
-		if _, err := s.loadGrid(ctx, tx, gridID); err != nil {
-			return fmt.Errorf("%w: grid %d: %v", ErrInvalidArgument, gridID, err)
+		gid, err := s.destGrid(ctx, tx, gridIDStr)
+		if err != nil {
+			return err
 		}
-		gid := gridID
 
 		over, err := overlapsExisting(ctx, tx, gid, x, y, w, h)
 		if err != nil {
@@ -137,7 +133,7 @@ func (s *Store) createTile(
 				return err
 			}
 		}
-		if err := s.bumpGridVersion(ctx, tx, gid); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, events, gid); err != nil {
 			return err
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
@@ -278,7 +274,7 @@ func (s *Store) createScratch(
 		if err != nil {
 			return err
 		}
-		if err := s.bumpGridVersion(ctx, tx, gridID); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, events, gridID); err != nil {
 			return err
 		}
 		out, err = s.emitTileChanged(ctx, tx, tileID, events)
@@ -370,7 +366,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 		if err := DeleteClaim(t, req, true); err != nil {
 			return err
 		}
-		srcGrid, err := parseID(t.GridId)
+		srcGrid, err := gridRow(ctx, tx, t.GridId)
 		if err != nil {
 			return fmt.Errorf("tile %d: bad grid_id %q: %w", tileID, t.GridId, err)
 		}
@@ -387,7 +383,7 @@ func (s *Store) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileReques
 		if err := s.decTileRefs(ctx, tx, t.Kind, t.ChildGridId, t.BlobId, t.PreviewBlobId); err != nil {
 			return err
 		}
-		if err := s.bumpGridVersion(ctx, tx, srcGrid); err != nil {
+		if err := s.bumpGridVersion(ctx, tx, events, srcGrid); err != nil {
 			return err
 		}
 		return s.tileLeft(ctx, tx, events, srcGrid, tileID)

@@ -112,7 +112,7 @@ func setSelectionTx(ctx context.Context, tx *sql.Tx, on side, gridID int64, op S
 	for _, id := range op.Add {
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM tiles
-			WHERE id = ? AND grid_id = ? AND `+on.of("key")+` AND tombstoned = 0`, id, gridID).Scan(&n); err != nil {
+			WHERE id = ? AND grid_id = ? AND tombstoned = 0`, id, gridID).Scan(&n); err != nil {
 			return nil, err
 		}
 		if n > 0 {
@@ -237,17 +237,51 @@ func leaveSelection(ctx context.Context, tx *sql.Tx, gridID, tileID int64) (set 
 // tileLeft announces that tileID left home's grid gridID, and takes it out of
 // the grid's selection, telling the new set when that changed it.
 func (s *Store) tileLeft(ctx context.Context, tx *sql.Tx, events *[]*gridwellv1.Event, gridID, tileID int64) error {
-	grid := strconv.FormatInt(gridID, 10)
+	grid, err := gridWire(ctx, tx, gridID)
+	if err != nil {
+		return err
+	}
 	*events = append(*events, &gridwellv1.Event{Payload: &gridwellv1.Event_TileRemoved{TileRemoved: &gridwellv1.TileRemoved{
 		GridId: grid,
 		TileId: strconv.FormatInt(tileID, 10),
 	}}})
-	set, changed, err := leaveSelection(ctx, tx, gridID, tileID)
+	_, changed, err := leaveSelection(ctx, tx, gridID, tileID)
 	if err != nil || !changed {
 		return err
 	}
-	*events = append(*events, rpc.SelectionEvent(grid, idStrings(set)))
+	ids, err := selectionIDs(ctx, tx, gridID)
+	if err != nil {
+		return err
+	}
+	*events = append(*events, rpc.SelectionEvent(grid, ids))
 	return nil
+}
+
+// selectionIDs is a grid's set as the wire names it, the one spelling: a
+// home row by its digits, a file's row by its path, which a directory's set
+// holds side by side.
+func selectionIDs(ctx context.Context, q gridReader, gridID int64) ([]string, error) {
+	var text string
+	if err := q.QueryRowContext(ctx, `SELECT selection FROM grids WHERE id = ?`, gridID).Scan(&text); err != nil {
+		return nil, notFound(err)
+	}
+	set, err := parseSelection(text)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(set))
+	for _, id := range set {
+		var key string
+		if err := q.QueryRowContext(ctx, `SELECT key FROM tiles WHERE id = ?`, id).Scan(&key); err != nil {
+			return nil, notFound(err)
+		}
+		if key != "" {
+			out = append(out, rpc.KeyTileID(key))
+		} else {
+			out = append(out, strconv.FormatInt(id, 10))
+		}
+	}
+	return out, nil
 }
 
 // SetSelection is a select of a home grid, or with All of every home grid,
@@ -355,7 +389,8 @@ func clearAllTx(ctx context.Context, tx *sql.Tx, on side) ([]int64, error) {
 	return changed, nil
 }
 
-// Selection reads a directory's grid row's selection.
-func (n *FileRows) Selection(gridID int64) ([]int64, error) {
-	return readSelection(context.Background(), n.s.db, files, gridID)
+// Selection reads a directory's grid row's selection as the wire names it
+// (selectionIDs).
+func (n *FileRows) Selection(gridID int64) ([]string, error) {
+	return selectionIDs(context.Background(), n.s.db, gridID)
 }

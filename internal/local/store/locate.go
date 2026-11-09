@@ -22,11 +22,16 @@ func (s *Store) Find(ctx context.Context, req *gridwellv1.FindRequest) ([]*gridw
 	limit := rpc.FindLimit(req)
 	f := tileFilter{req: req}
 	if req.GridId != "" {
-		gid, err := parseID(req.GridId)
+		gid, err := gridRow(ctx, s.db, req.GridId)
+		if errors.Is(err, ErrNotFound) {
+			// A directory never touched holds no Gridwell row.
+			return nil, nil
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: invalid grid_id %q", ErrInvalidArgument, req.GridId)
 		}
 		f.grid = gid
+		f.under, _ = rpc.TileKey(req.GridId)
 	}
 	q := rpc.ParseFindQuery(req.Query)
 	if q.ID != "" {
@@ -140,6 +145,10 @@ type tileFilter struct {
 	req     *gridwellv1.FindRequest
 	grid    int64
 	scratch int64
+	// under is the path of a directory grid scopes a recursive find to, so
+	// every directory under it seeds the walk, whether or not a door row
+	// leads there.
+	under string
 }
 
 func (f tileFilter) sql() (string, []any) {
@@ -155,10 +164,11 @@ func (f tileFilter) sql() (string, []any) {
 		// qualified path elsewhere, which recursion does not follow.
 		conds = append(conds, `t.grid_id IN (WITH RECURSIVE scope(id) AS (
 			SELECT ? UNION
+			SELECT g.id FROM grids g WHERE ? != '' AND substr(g.key, 1, length(?) + 1) = ? || '/' UNION
 			SELECT w.child_grid_id FROM tiles w JOIN scope ON w.grid_id = scope.id
 			WHERE w.kind = 'door' AND `+f.on.of("w.key")+` AND w.tombstoned = 0 AND typeof(w.child_grid_id) = 'integer')
 			SELECT id FROM scope)`)
-		args = append(args, f.grid)
+		args = append(args, f.grid, f.under, f.under, f.under)
 	case f.grid != 0:
 		conds = append(conds, "t.grid_id = ?")
 		args = append(args, f.grid)
@@ -227,7 +237,7 @@ func findSnippet(text, needle string) string {
 // and empty for a tile at a root. It is the same server-derived parent chain
 // doorWouldContainItself trusts.
 func (s *Store) doorChainFor(ctx context.Context, t *gridwellv1.Tile) ([]*gridwellv1.Tile, error) {
-	grid, err := parseID(t.GridId)
+	grid, err := gridRow(ctx, s.db, t.GridId)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -235,7 +245,7 @@ func (s *Store) doorChainFor(ctx context.Context, t *gridwellv1.Tile) ([]*gridwe
 	for {
 		var doorID int64
 		err := s.db.QueryRowContext(ctx,
-			`SELECT id FROM tiles WHERE child_grid_id = ?`, grid).Scan(&doorID)
+			`SELECT id FROM tiles WHERE child_grid_id = ? AND key = ''`, grid).Scan(&doorID)
 		if errors.Is(err, sql.ErrNoRows) {
 			reverse(doors)
 			return doors, nil
@@ -248,7 +258,7 @@ func (s *Store) doorChainFor(ctx context.Context, t *gridwellv1.Tile) ([]*gridwe
 			return nil, err
 		}
 		doors = append(doors, w)
-		grid, err = parseID(w.GridId)
+		grid, err = gridRow(ctx, s.db, w.GridId)
 		if err != nil {
 			return nil, ErrNotFound
 		}

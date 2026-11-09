@@ -23,3 +23,4 @@ low-water | 57236
 2026-11-08 | trace fixes (Joe: his trace of ordinary use): a batch sent again after a lost answer is kept once | 22
 2026-11-08 | trace fixes (Joe: his trace of ordinary use): an rpc answered with the dead verdict is traced as dead, not as an error | 12
 2026-11-08 | trace fixes (Joe: his trace of ordinary use): a connection's call carries the request id of the call it serves to the far node | 31
+2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): a home row sits on a directory's grid, its grid spelled ~<path> on every read, event and set | 112
