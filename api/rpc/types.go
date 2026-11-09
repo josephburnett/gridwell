@@ -363,21 +363,12 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 		LinkTargetId: ContentID(src), AltText: src.AltText}
 }
 
-// CopiesAsLink reports that a copy of t into another namespace is LinkOf(t):
-// t, not a link, is a door onto a grid that takes no new tiles (Grid.accepts_tiles
-// of the grid it opens or stands on), a directory's or a disabled
-// connection's, which reads as dark and so links too; or a file that is not
-// markdown, a page file among them, whose bytes stay on disk (CLAUDE.md,
-// 2026-11-08).
-func CopiesAsLink(t *pb.Tile, acceptsTiles bool) bool {
-	switch {
-	case t.GetLink() || LeafLink(t):
-		return false
-	case IsDoorKind(t.GetKind()):
-		return !acceptsTiles
-	}
+// CopiesAsLink reports that a copy of t, a file that is not markdown, a
+// page file among them, is a link, since its bytes stay on disk (CLAUDE.md,
+// 2026-11-08). CopyOf owns every other case.
+func CopiesAsLink(t *pb.Tile) bool {
 	p, file := FilePath(t.GetId())
-	return file && !Markdown(p)
+	return file && !IsDoorKind(t.GetKind()) && !Markdown(p)
 }
 
 // CopyAs is what a copy of a tile becomes; CopyOf decides it.
@@ -407,7 +398,7 @@ func CopyOf(t *pb.Tile, sameSource bool, accepts func() bool) (CopyAs, string) {
 		return CopyDeep, t.GetChildGridId()
 	case k.Tmux && sameSource:
 		return CopyShell, ShellTmux(t)
-	case k.Tmux || CopiesAsLink(t, true):
+	case k.Tmux || CopiesAsLink(t):
 		// A tmux lives on the node that started it.
 		return CopyLinkTile, t.GetId()
 	case k.Content != ContentNone:
@@ -425,7 +416,7 @@ func Markdown(name string) bool { return strings.HasSuffix(strings.ToLower(name)
 // body. The drop verdict and the node both read it.
 func IntoDirectory(t *pb.Tile) string {
 	switch {
-	case t.GetLink() || LeafLink(t) || CopiesAsLink(t, true):
+	case t.GetLink() || LeafLink(t) || CopiesAsLink(t):
 		return "a directory takes no link, and a file that is not markdown copies as one"
 	case t.GetKind() != KindText:
 		return "a directory takes a text tile alone, made a markdown file, and refuses a " + t.GetKind()

@@ -283,16 +283,19 @@ func CarryIntoDirectory(rows []*gridwellv1.Tile, grid string) bool {
 	return rpc.IsFilesID(grid) && slices.ContainsFunc(rows, func(r *gridwellv1.Tile) bool { return rpc.IntoDirectory(r) == "" })
 }
 
-// CarryCopiesAsLink: a copy of every row into another namespace is a link
-// (rpc.CopiesAsLink), accepts being Grid.accepts_tiles of the grid they sit
-// on. A carry with any row that copies, or from a grid not yet read, is a
-// copy, and the server decides each row.
-func CarryCopiesAsLink(rows []*gridwellv1.Tile, accepts, known bool) bool {
-	if !known || len(rows) == 0 {
+// CarryCopiesAsLink: rpc.CopyOf makes a link of every row copied onto dest,
+// the node's verdict read on this side, accepts being Grid.accepts_tiles of
+// the grid the rows sit on. A carry with any row that copies is a copy, and
+// the server decides each row; a door on a grid not yet read copies.
+func CarryCopiesAsLink(rows []*gridwellv1.Tile, dest string, accepts, known bool) bool {
+	if len(rows) == 0 {
 		return false
 	}
 	for _, r := range rows {
-		if !rpc.CopiesAsLink(r, accepts) {
+		// The node copies within a source alone, never into a directory.
+		same := rpc.SourceOf(r.GetId()) == rpc.SourceOf(dest) && !rpc.IsFilesID(dest)
+		as, _ := rpc.CopyOf(r, same, func() bool { return accepts || !known })
+		if as != rpc.CopyLinkGrid && as != rpc.CopyLinkTile {
 			return false
 		}
 	}

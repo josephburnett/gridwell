@@ -187,7 +187,7 @@ func holdsPlainLinks(f *parityFix, prefix string) error {
 		return fmt.Errorf("the files list no Notes.txt")
 	}
 	tl := g.Tiles[i]
-	if !rpc.CopiesAsLink(tl, true) {
+	if !rpc.CopiesAsLink(tl) {
 		return fmt.Errorf("the ghost would show a copy of %s", tl.Id)
 	}
 	made, err := f.cl.CopyTile(f.ctx, &gridwellv1.CopyTileRequest{TileId: tl.Id, DestGridId: f.root[onHome], X: 0, Y: 7})

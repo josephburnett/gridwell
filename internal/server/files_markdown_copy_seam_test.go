@@ -131,7 +131,7 @@ func TestAMarkdownFileCopiesOutAndAnyOtherLinks(t *testing.T) {
 	writeFile(t, filepath.Join(root, "main.go"), "package main\n")
 	n := newFilesNode(t, root)
 	md := n.tile(n.roots[0], filepath.Join(root, "notes.MD"))
-	if rpc.CopiesAsLink(md, true) {
+	if rpc.CopiesAsLink(md) {
 		t.Error("rpc.CopiesAsLink says a markdown file links, so the ghost would show a link the node never makes")
 	}
 	made, err := n.cl.CopyTile(n.ctx, &gridwellv1.CopyTileRequest{TileId: md.Id, DestGridId: n.home, X: 3, Y: 3})
@@ -145,7 +145,7 @@ func TestAMarkdownFileCopiesOutAndAnyOtherLinks(t *testing.T) {
 		t.Errorf("the copy holds %q, want the file's bytes", got)
 	}
 	code := n.tile(n.roots[0], filepath.Join(root, "main.go"))
-	if !rpc.CopiesAsLink(code, true) {
+	if !rpc.CopiesAsLink(code) {
 		t.Error("rpc.CopiesAsLink says a .go file copies, so the ghost would show a copy the node never makes")
 	}
 	linked, err := n.cl.CopyTile(n.ctx, &gridwellv1.CopyTileRequest{TileId: code.Id, DestGridId: n.home, X: 4, Y: 3})

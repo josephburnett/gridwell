@@ -39,7 +39,7 @@ func TestFilesPageFileCopiedIntoHomeLinks(t *testing.T) {
 	writeFile(t, pdf, "%PDF-1.4\n")
 	n := newFilesNode(t, root)
 	page := n.tile(n.roots[0], pdf)
-	if !rpc.CopiesAsLink(page, true) {
+	if !rpc.CopiesAsLink(page) {
 		t.Error("rpc.CopiesAsLink says the page copies, so the ghost would show a copy the node never makes")
 	}
 	copied, err := n.cl.CopyTile(n.ctx, &gridwellv1.CopyTileRequest{TileId: page.Id, DestGridId: n.home, X: 3, Y: 3})

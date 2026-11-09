@@ -534,34 +534,43 @@ func TestDecideDrop(t *testing.T) {
 }
 
 func TestCarryCopiesAsLink(t *testing.T) {
-	door := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~a"}
-	link := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "p/~b", Link: true}
-	text := &gridwellv1.Tile{Kind: rpc.KindText}
+	door := &gridwellv1.Tile{Kind: rpc.KindDoor, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/d")), ChildGridId: rpc.QualifyID("n", rpc.KeyTileID("/r/d"))}
+	link := &gridwellv1.Tile{Kind: rpc.KindDoor, Id: "n/7", ChildGridId: "n/laptop/8", Link: true}
+	leafLink := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/6", LinkTargetId: "n/4"}
+	text := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/4"}
+	shell := &gridwellv1.Tile{Kind: rpc.KindShell, Id: "n/5"}
 	page := &gridwellv1.Tile{Kind: rpc.KindURL, ServesPage: true, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/p.png"))}
 	md := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/notes.md"))}
 	txt := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/notes.txt"))}
+	const home, far = "n/9", "n/laptop/2"
 	cases := []struct {
 		name           string
 		rows           []*gridwellv1.Tile
+		dest           string
 		accepts, known bool
 		want           bool
 	}{
-		{"a source's door", []*gridwellv1.Tile{door}, false, true, true},
-		{"two source doors", []*gridwellv1.Tile{door, door}, false, true, true},
-		{"a home door", []*gridwellv1.Tile{door}, true, true, false},
-		{"a grid not yet read: the server decides", []*gridwellv1.Tile{door}, false, false, false},
+		{"a source's door", []*gridwellv1.Tile{door}, home, false, true, true},
+		{"two source doors", []*gridwellv1.Tile{door, door}, home, false, true, true},
+		{"a home door", []*gridwellv1.Tile{door}, far, true, true, false},
+		{"a grid not yet read: the server decides", []*gridwellv1.Tile{door}, home, false, false, false},
 		// A source's text copies its bytes, so a carry holding one is a
 		// copy, and the server links the doors in it row by row.
-		{"a source door with a source text", []*gridwellv1.Tile{door, text}, false, true, false},
-		{"a served page, wherever it sits", []*gridwellv1.Tile{page}, true, true, true},
-		{"a source door with a served page", []*gridwellv1.Tile{door, page}, false, true, true},
-		{"a markdown file copies its bytes", []*gridwellv1.Tile{md}, false, true, false},
-		{"any other file links", []*gridwellv1.Tile{txt}, false, true, true},
-		{"a link door is a link already", []*gridwellv1.Tile{link}, false, true, false},
-		{"nothing carried", nil, false, true, false},
+		{"a source door with a source text", []*gridwellv1.Tile{door, text}, far, false, true, false},
+		{"a served page, wherever it sits", []*gridwellv1.Tile{page}, home, true, true, true},
+		{"a source door with a served page", []*gridwellv1.Tile{door, page}, home, false, true, true},
+		{"a markdown file copies its bytes", []*gridwellv1.Tile{md}, home, false, true, false},
+		{"any other file links", []*gridwellv1.Tile{txt}, home, false, true, true},
+		{"a link door copies as a link", []*gridwellv1.Tile{link}, far, true, true, true},
+		{"a leaf link copies as a link", []*gridwellv1.Tile{leafLink}, far, true, true, true},
+		// A tmux lives on the node that started it (CLAUDE.md, 2026-10-01).
+		{"a shell across sources links", []*gridwellv1.Tile{shell}, far, true, true, true},
+		{"a shell within its source copies", []*gridwellv1.Tile{shell}, home, true, true, false},
+		{"a text across sources copies", []*gridwellv1.Tile{text}, far, true, true, false},
+		{"nothing carried", nil, far, false, true, false},
 	}
 	for _, c := range cases {
-		if got := CarryCopiesAsLink(c.rows, c.accepts, c.known); got != c.want {
+		if got := CarryCopiesAsLink(c.rows, c.dest, c.accepts, c.known); got != c.want {
 			t.Errorf("%s: CarryCopiesAsLink = %v, want %v", c.name, got, c.want)
 		}
 	}
