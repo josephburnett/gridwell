@@ -189,9 +189,11 @@ what each one is called.
 
 | Word | What it names | What it is not |
 |---|---|---|
-| + menu | The menu on the + circle: the primitives, with a folded strip of swatches above. `client/menu`. | A palette. |
-| swatch | One item of the + menu's strip, per door seen from outside: a home, a far home, a root. | A directory inside a root. |
-| strip | The chevron strip of the folded + menu, above the primitives; folded or open, the menu's own state. | A notice. |
+| + menu | The menu on the + circle: the primitives, with a folded strip of templates and swatches above. `client/menu`. | A palette. |
+| template | A tile on home's templates grid, shown in the + menu's strip above the swatches. A click opens an ephemeral copy of it; a drag out moves or copies it as any tile. | A swatch; a clipboard. |
+| copy swatch | The dashed grey + first in the strip's templates, no row of its own: released over a tile or a pane, it copies that tile in as a template. | A template; a swatch. |
+| swatch | One item of the + menu's strip, per door seen from outside: a home, a far home, a root. | A directory inside a root; a template. |
+| strip | The chevron strip of the folded + menu, above the primitives: rows of templates, then rows of swatches; folded or open, the menu's own state. | A notice. |
 | palette | The colour set (`theme.Palette`). | The + menu. |
 | glyph | A namespace's icon, on its swatch, its ghost and the crumb of the grid it roots. | |
 
@@ -299,15 +301,21 @@ These were decided deliberately. Do not reverse one without a new decision.
   `server.yaml` (`id`, `web`, `federation`, `static`, `shell`,
   `disable_shells`, `connections`, `retired_names`, `files`), one
   `gridwell.db`. `cache.db` is disposable. Serve mints what is absent, and that is the only config write.
-- The store mints the node's singleton grids (root, scratch, trash) when it
-  opens, never on a read; reading never mutates has no exception
-  (2026-09-30).
+- The store mints the node's singleton grids (root, scratch, trash,
+  templates) when it opens, never on a read; reading never mutates has no
+  exception (2026-09-30). The templates grid is an ordinary home grid,
+  `templates_grid_id` beside the others in the `system` table, no gesture
+  navigating to it; the handshake names it, qualified
+  (`HandshakeResponse.templates_grid_id`), and its tiles are the templates
+  (Joe 2026-11-09).
 - `gridwell.db` holds node facts only: minted ids, layout, framing, the
   user's bytes, connections, tombstones. What a connection last answered is
   cache. `gridwell size` reports what it holds, read-only and safe while
   serving; `gridwell clean` removes what nothing reaches (a grid no root or
   owning door reaches, the tiles on it or on a gone grid, a blob no kept
-  row names), never the trash or a tombstone, through the delete's own
+  row names, an ephemeral visit no reached workspace tile's layout names,
+  the trash's included), never the trash, the templates or a tombstone,
+  through the delete's own
   teardown and refused whole if a reached row would change, then VACUUMs,
   and only while the node is stopped (`store.Analysis`, `store.Clean`,
   2026-11-08).
@@ -686,6 +694,23 @@ These were decided deliberately. Do not reverse one without a new decision.
   above it, and every opening starts folded — the fold is the menu's live
   state and dies with it (`client/menu` decides what a state shows and owns
   the flag).
+- The + menu's strip holds templates above the swatches (Joe 2026-11-09):
+  rows of at most five, as the primitives are, the templates' rows first,
+  the copy swatch then the templates newest first, then the swatches' rows,
+  the two never sharing a row; three rows show and the rest scroll in the
+  strip. A template is a tile and is drawn as it is on a grid. Left-drag,
+  right-drag and ctrl + right-drag of one move, copy and link it as of any
+  tile, a drop on a shell pastes its reference and the trashcan deletes it,
+  so the strip behaves as a copy buffer. A click opens an ephemeral copy:
+  the copy is made on the scratch grid first, deep as every copy is (a
+  shell's naming the template's tmux), and the visit descends into it, for
+  every kind, so the template's row, preview included, is never touched.
+  The copy swatch released over a tile, a content pane, a pane inside a
+  workspace tile, an ephemeral visit's pane or a shell copies that row onto
+  the templates grid by `rpc.CopyOf`'s rules, the ghost showing the verdict;
+  released anywhere else it does nothing. Dragging a tile into the strip is
+  not a gesture. A view whose strip is open lists the templates grid, so
+  the node watches it only then.
 - Agents reach the node through the MCP API (2026-10-15): `/mcp` on the
   web API, Streamable HTTP, the web password as a bearer beside the cookie,
   and no build gate, since no page is behind it. It decodes onto the one
@@ -694,7 +719,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   creates or copies with no cell named lands at the first free cell
   (`store.FreeSlot`). It
   exposes no destroy from the trash, no shells and no config;
-  `docs/mcp.md` is the contract. It has ten tools (2026-10-18): `sessions`,
+  `docs/mcp.md` is the contract; `read_grid` with the id `templates` reads
+  home's templates grid (2026-11-09). It has ten tools (2026-10-18): `sessions`,
   `read_grid`, `read_tiles`, `find`, `write_text`, `rename`, `move`, `copy`,
   `delete` and `select`, and every write takes a list and answers a verdict
   per item in order, each item its own write with its own claim, a refused
