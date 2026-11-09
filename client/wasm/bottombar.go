@@ -448,7 +448,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 }
 
 // startPromoteDrag arms the promote drag from the bar's current crumb, as a
-// template-shaped drag whose item carries the origin pane.
+// menu-shaped drag whose item carries the origin pane.
 func (a *App) startPromoteDrag(p *pane.Pane, t *gridwellv1.Tile, seg wsbar.Segment, bx, top, sx, sy float64) {
 	square := min(seg.W, wsbar.RowH)
 	// cache.Grid hands out the cached rows themselves, so the ghost is a
@@ -458,8 +458,8 @@ func (a *App) startPromoteDrag(p *pane.Pane, t *gridwellv1.Tile, seg wsbar.Segme
 	ghost.W, ghost.H = 1, 1
 	a.dragging = &dragState{
 		originPaneID:  p.ID,
-		isTemplate:    true,
-		item:          menuItem{primitive: tplURL, promotePane: p.ID},
+		fromMenu:      true,
+		item:          menuItem{primitive: primURL, promotePane: p.ID},
 		menuNS:        a.paneNodeNS(p),
 		startScreenX:  sx,
 		startScreenY:  sy,

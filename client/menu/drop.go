@@ -1,6 +1,6 @@
 package menu
 
-// What a template drag's release does. The + menu's swatches and the bar's
+// What a menu drag's release does. The + menu's swatches and the bar's
 // promote crumb ride the same drag, so one verdict answers for every one of
 // them, and a release that creates nothing still says why.
 

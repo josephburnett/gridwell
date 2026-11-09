@@ -15,7 +15,7 @@ func TestClickOn(t *testing.T) {
 		{"a primitive that declares a visit opens it", Swatch{Visits: true}, ClickVisit},
 		{"a primitive that declares none does nothing", Swatch{}, ClickNothing},
 		// A source row carries the zero primitive kind and the promote
-		// crumb is spelled as a url template, so identity beats kind.
+		// crumb is spelled as the url primitive, so identity beats kind.
 		{"a source row beats its zero-value primitive",
 			Swatch{IsSwatch: true, Visits: true}, ClickEnter},
 		{"the promote crumb beats the url primitive it is spelled as",

@@ -213,7 +213,7 @@ func MoveForbidden(sameGrid, movesAsLink, srcMoves, srcKnown, dstMoves, dstKnown
 type Intent int
 
 const (
-	// IntentMove is a left-drag, and the zero value a menu template drag
+	// IntentMove is a left-drag, and the zero value a menu drag
 	// leaves unset.
 	IntentMove Intent = iota
 	IntentCopy        // a right-drag
@@ -233,7 +233,7 @@ const (
 	// placing nothing.
 	DropNavigate      DropAction = iota
 	DropNavigateSplit            // that click asking for a split at press
-	DropCreateTemplate
+	DropFromMenu
 	DropPanEnd   // an empty-space drag, which persists the viewport
 	DropDelete   // a release over the source pane's trashcan button
 	DropRejected // snaps back
@@ -256,7 +256,7 @@ type DropInput struct {
 	// SplitNav is gesture.SplitNav at left-press time, fixed there so letting
 	// the key go mid-click cannot change the verdict.
 	SplitNav   bool
-	IsTemplate bool
+	FromMenu   bool
 	Intent     Intent
 	TileID     string // "" for a pan or empty-space drag
 	OverDelete bool
@@ -351,7 +351,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropNavigateSplit, ""
 	case !in.Started:
 		return DropNavigate, ""
-	case in.TileID == "" && !in.IsTemplate:
+	case in.TileID == "" && !in.FromMenu:
 		return DropPanEnd, ""
 	case in.OverDelete && in.Touch && in.CarriesFile:
 		return DropRejected, FingerNoFile
@@ -359,8 +359,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropDelete, ""
 	case !in.HasTarget:
 		return DropRejected, "no target"
-	case in.IsTemplate:
-		return DropCreateTemplate, ""
+	case in.FromMenu:
+		return DropFromMenu, ""
 	case in.OntoShell && in.PasteRefusal != "":
 		return DropRejected, in.PasteRefusal
 	case in.OntoShell:

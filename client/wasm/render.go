@@ -145,25 +145,25 @@ func (a *App) drawTraceOutline(c js.Value, x, y, w, h, alpha float64) {
 // plusButtonRadius comes from menu.Default(), so canvas and DOM agree.
 var plusButtonRadius = menu.Default().PlusRadius
 
-// templateKind identifies one built-in tile primitive. Order matters: it is
+// primitiveKind identifies one built-in tile primitive. Order matters: it is
 // the popover layout and the hit-test index.
-type templateKind int
+type primitiveKind int
 
 const (
-	tplDoor templateKind = iota
-	tplMarkdown
-	tplURL
-	tplShell
-	// tplWorkspace is a stored split-pane layout, created never-arranged.
-	tplWorkspace
-	// tplFile and tplDirectory make a name on disk (menu.Offer.Disk).
-	tplFile
-	tplDirectory
+	primDoor primitiveKind = iota
+	primMarkdown
+	primURL
+	primShell
+	// primWorkspace is a stored split-pane layout, created never-arranged.
+	primWorkspace
+	// primFile and primDirectory make a name on disk (menu.Offer.Disk).
+	primFile
+	primDirectory
 )
 
 // primitive is one row per built-in kind, so a kind cannot be half-added.
 type primitive struct {
-	kind  templateKind
+	kind  primitiveKind
 	name  string
 	ghost *gridwellv1.Tile
 	// glyph is drawn in the colour of the ghost's family (pane.TileFamily).
@@ -186,63 +186,63 @@ var onDisk = rpc.KeyTileID("")
 // order. Both fill in init, because the rows close over App methods.
 var (
 	primitives     []primitive
-	primitiveKinds []templateKind
+	primitiveKinds []primitiveKind
 )
 
 func init() {
 	primitives = []primitive{
 		{
-			kind: tplDoor, name: "door",
+			kind: primDoor, name: "door",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindDoor, W: 1, H: 1},
 			glyph:  drawDoorGlyph,
 			create: createAt("CreateDoor", rpc.KindDoor),
 		},
 		{
-			kind: tplMarkdown, name: "markdown",
+			kind: primMarkdown, name: "markdown",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindText, W: 1, H: 1},
 			glyph:  drawDocumentGlyph,
 			create: func(a *App, gid string, cellX, cellY int64) { a.createTextAtCell(gid, []byte{}, cellX, cellY) },
 		},
 		{
-			kind: tplURL, name: "url",
+			kind: primURL, name: "url",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindURL, W: 1, H: 1},
 			glyph:  drawGlobeGlyph,
 			create: createAt("CreateURL", rpc.KindURL),
 			click:  func(a *App, p *pane.Pane) { a.visitURLFromMenu(p) },
 		},
 		{
-			kind: tplShell, name: "shell",
+			kind: primShell, name: "shell",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
 			glyph:  drawShellGlyph,
 			create: createAt("CreateShell", rpc.KindShell),
 			click:  func(a *App, p *pane.Pane) { a.visitShellFromMenu(p) },
 		},
 		{
-			kind: tplWorkspace, name: "workspace",
+			kind: primWorkspace, name: "workspace",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindWorkspace, W: 1, H: 1, AltText: "workspace"},
 			glyph:  drawWorkspaceGlyph,
 			create: createAt("CreateWorkspace", rpc.KindWorkspace),
 		},
 		{
-			kind: tplFile, name: "file", disk: true,
+			kind: primFile, name: "file", disk: true,
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindText, Id: onDisk, W: 1, H: 1},
 			glyph:  drawDocumentGlyph,
 			create: createOnDisk("CreateFile", "new file", rpc.KindText),
 		},
 		{
-			kind: tplDirectory, name: "directory", disk: true,
+			kind: primDirectory, name: "directory", disk: true,
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindDoor, Id: onDisk, W: 1, H: 1},
 			glyph:  drawFolderGlyph,
 			create: createOnDisk("CreateDirectory", "new directory", rpc.KindDoor),
 		},
 	}
-	primitiveKinds = make([]templateKind, len(primitives))
+	primitiveKinds = make([]primitiveKind, len(primitives))
 	for i, pr := range primitives {
 		primitiveKinds[i] = pr.kind
 	}
 }
 
-func primitiveFor(k templateKind) (primitive, bool) {
+func primitiveFor(k primitiveKind) (primitive, bool) {
 	for _, pr := range primitives {
 		if pr.kind == k {
 			return pr, true
@@ -255,7 +255,7 @@ func primitiveFor(k templateKind) (primitive, bool) {
 type menuItem struct {
 	isSwatch  bool
 	source    *gridwellv1.SourceInfo // when isSwatch (for a grid's swatch, its pseudo-row)
-	primitive templateKind           // when !isSwatch
+	primitive primitiveKind          // when !isSwatch
 	grid      *gridwellv1.SourceGrid
 	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
 	promotePane string
@@ -299,7 +299,7 @@ func (a *App) menuGroups(p *pane.Pane) (sources, primitives []menuItem) {
 	offer.ShellsDisabled = ctx.shellsDisabled
 	if offer.Primitives() {
 		for _, k := range primitiveKinds {
-			if pr, _ := primitiveFor(k); k == tplShell && !offer.Shell() || pr.disk && !offer.Disk() {
+			if pr, _ := primitiveFor(k); k == primShell && !offer.Shell() || pr.disk && !offer.Disk() {
 				continue
 			}
 			prims = append(prims, menuItem{primitive: k})

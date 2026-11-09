@@ -799,7 +799,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 			// The exact selector drawMenuItem renders.
 			e["glyph"] = door.RowGlyph(item.source)
 		} else {
-			e["kind"] = templateKindName(item.primitive)
+			e["kind"] = primitiveName(item.primitive)
 		}
 		// A declared grid reports its identity, but the label stays
 		// door.GridName's, the one the banner draws: a second name for
@@ -901,9 +901,9 @@ func (a *App) focusedPaneRect() (*pane.Pane, pane.Rect, bool) {
 	return p, r, ok
 }
 
-// templateKindName reads the primitives table, so the name a spec picks a
+// primitiveName reads the primitives table, so the name a spec picks a
 // swatch by cannot drift from the swatch.
-func templateKindName(k templateKind) string {
+func primitiveName(k primitiveKind) string {
 	if pr, ok := primitiveFor(k); ok {
 		return pr.name
 	}

@@ -429,21 +429,21 @@ func TestDecideDrop(t *testing.T) {
 
 		// Early branches beat everything.
 		{"bare click -> navigate (beats all)",
-			DropInput{Started: false, IsTemplate: true, TileID: "7", OverDelete: true, HasTarget: true}, DropNavigate},
+			DropInput{Started: false, FromMenu: true, TileID: "7", OverDelete: true, HasTarget: true}, DropNavigate},
 		{"ctrl bare click -> navigate in a split",
 			DropInput{Started: false, SplitNav: true, TileID: "7"}, DropNavigateSplit},
 		{"ctrl held on a started drag -> still a plain move",
 			DropInput{Started: true, SplitNav: true, TileID: "7", HasTarget: true}, DropMove},
-		{"template -> create (beats pan)",
-			DropInput{Started: true, IsTemplate: true, TileID: "", HasTarget: true}, DropCreateTemplate},
+		{"menu item -> create (beats pan)",
+			DropInput{Started: true, FromMenu: true, TileID: "", HasTarget: true}, DropFromMenu},
 		{"pan (tileID \"\") -> panEnd (beats delete and the target check)",
 			DropInput{Started: true, TileID: "", OverDelete: true, HasTarget: true}, DropPanEnd},
 		{"pan off any pane -> still panEnd",
 			DropInput{Started: true, TileID: "", HasTarget: false}, DropPanEnd},
 		// A creation needs a destination like every other landing arm. A
 		// swatch released over a content descent resolves no target.
-		{"template with no target -> rejected",
-			DropInput{Started: true, IsTemplate: true, TileID: "", HasTarget: false}, DropRejected},
+		{"menu item with no target -> rejected",
+			DropInput{Started: true, FromMenu: true, TileID: "", HasTarget: false}, DropRejected},
 
 		// Delete fires and outranks the placement arms.
 		{"over delete button -> delete",

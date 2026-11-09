@@ -100,7 +100,7 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in = dragdrop.DropInput{
 		Started:    d.started,
 		SplitNav:   d.splitNav,
-		IsTemplate: d.isTemplate,
+		FromMenu:   d.fromMenu,
 		Intent:     d.intent,
 		TileID:     d.tileID,
 		OverDelete: a.overDeleteButton(d, sx, sy),
@@ -218,10 +218,10 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 
 // shellTargetAt is the shell a release at the cursor pastes into: a live
 // shell pane's, or a shell tile on the pane's grid the drag does not carry.
-// A menu template is no carry and pastes nothing.
+// A menu item is no carry and pastes nothing.
 func (a *App) shellTargetAt(sx, sy float64, d *dragState) (*dropTarget, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
-	if !ok || d.isTemplate {
+	if !ok || d.fromMenu {
 		return nil, false
 	}
 	if p.ContentID() != "" {

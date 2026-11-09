@@ -20,14 +20,14 @@ const (
 type Swatch struct {
 	// IsSwatch marks a source, connection or declared-root row.
 	IsSwatch bool
-	// Promote marks the bar's current-visit crumb, dragged as a template.
+	// Promote marks the bar's current-visit crumb, dragged as a menu item.
 	Promote bool
 	// Visits marks a primitive whose table row declares a click behavior.
 	Visits bool
 }
 
 // ClickOn asks identity before kind, because a row can carry more than one
-// flag: the promote crumb is spelled as a url template, so Promote is read
+// flag: the promote crumb is spelled as the url primitive, so Promote is read
 // before Visits.
 func ClickOn(s Swatch) ClickTarget {
 	switch {

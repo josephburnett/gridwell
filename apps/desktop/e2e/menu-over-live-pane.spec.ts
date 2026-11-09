@@ -9,7 +9,7 @@ import { test, expect } from './fixtures';
 // alike, over pane.CanvasOwnsPointer: an armed gesture keeps its own release,
 // so the view never swallows it. And the open menu parks every live view
 // (pane.ParkSurface), so the real press reaches the canvas at all. A release
-// swallowed here leaves the swatch's template drag armed forever, so no url
+// swallowed here leaves the swatch's menu drag armed forever, so no url
 // modal opens and waitIdle never returns.
 test('the + menu over a stacked live url pane keeps its own release', async ({
   electronApp,
@@ -68,7 +68,7 @@ test('the + menu over a stacked live url pane keeps its own release', async ({
   // rather than timing out inside waitIdle.
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.idleDetail().dragging), {
-      message: 'the swatch release must resolve the armed template drag',
+      message: 'the swatch release must resolve the armed menu drag',
       timeout: 5_000,
     })
     .toBe(false);

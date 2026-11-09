@@ -127,16 +127,16 @@ func TestEveryGestureIsNamed(t *testing.T) {
 // expected still says which verdict it took.
 func TestEveryDropVerdictIsNamed(t *testing.T) {
 	want := map[dragdrop.DropAction]string{
-		dragdrop.DropNavigate:       "navigate",
-		dragdrop.DropNavigateSplit:  "navigate in a split",
-		dragdrop.DropCreateTemplate: "create",
-		dragdrop.DropPanEnd:         "pan end",
-		dragdrop.DropDelete:         "delete",
-		dragdrop.DropRejected:       "rejected",
-		dragdrop.DropMove:           "move",
-		dragdrop.DropCopy:           "copy",
-		dragdrop.DropLink:           "link",
-		dragdrop.DropPaste:          "paste",
+		dragdrop.DropNavigate:      "navigate",
+		dragdrop.DropNavigateSplit: "navigate in a split",
+		dragdrop.DropFromMenu:      "create",
+		dragdrop.DropPanEnd:        "pan end",
+		dragdrop.DropDelete:        "delete",
+		dragdrop.DropRejected:      "rejected",
+		dragdrop.DropMove:          "move",
+		dragdrop.DropCopy:          "copy",
+		dragdrop.DropLink:          "link",
+		dragdrop.DropPaste:         "paste",
 	}
 	if len(want) != int(dragdrop.DropPaste)+1 {
 		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropPaste)+1)

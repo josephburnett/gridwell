@@ -528,7 +528,7 @@ type ghost struct {
 // dragState tracks an in-progress drag; started is false until the cursor
 // leaves dragThreshold.
 type dragState struct {
-	// menuNS is the node whose menu offered a template: primitives create there.
+	// menuNS is the node whose menu offered the item: primitives create there.
 	menuNS       string
 	originPaneID string
 	// splitNav is gesture.SplitNav at left-press: a bare click descends in a new split.
@@ -556,8 +556,8 @@ type dragState struct {
 
 	// item is a menu drag's grabbed entry: a primitive to create or a source
 	// to link as a door to another namespace.
-	isTemplate bool
-	item       menuItem
+	fromMenu bool
+	item     menuItem
 
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string

@@ -2,7 +2,7 @@ package dragdrop
 
 import "testing"
 
-// A release over a shell pastes whatever the button, and only a template or
+// A release over a shell pastes whatever the button, and only a menu item or
 // the early arms beat it; a refusal snaps back naming its reason.
 func TestDecideDropOntoAShell(t *testing.T) {
 	onto := DropInput{Started: true, TileID: "u/1", HasTarget: true, OntoShell: true}
@@ -21,7 +21,7 @@ func TestDecideDropOntoAShell(t *testing.T) {
 			return in
 		}, DropRejected, "Notes is not on the shell's node"},
 		{"the trashcan still deletes", func(in DropInput) DropInput { in.OverDelete = true; return in }, DropDelete, ""},
-		{"a template still creates", func(in DropInput) DropInput { in.IsTemplate = true; return in }, DropCreateTemplate, ""},
+		{"a menu item still creates", func(in DropInput) DropInput { in.FromMenu = true; return in }, DropFromMenu, ""},
 		{"a bare click still navigates", func(in DropInput) DropInput { in.Started = false; return in }, DropNavigate, ""},
 	} {
 		in := c.in(onto)

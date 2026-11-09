@@ -17,14 +17,14 @@ import (
 	"github.com/josephburnett/gridwell/client/sourcehealth"
 )
 
-// The + menu swatch as a gesture: arming a template drag, what a bare click
+// The + menu swatch as a gesture: arming a menu drag, what a bare click
 // does, and what a release over a grid creates. What a swatch shows is
 // client/menu's decision, what a click means is menu.ClickOn's, and
 // what a release does is menu.DropOn's. The create RPCs are in
 // create_tile.go.
 
 // startMenuDrag arms a drag from the i'th menu item, as a regular tile
-// drag but with isTemplate=true so the release branches to creation. The
+// drag but with fromMenu=true so the release branches to creation. The
 // menu stays open until commit.
 func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) {
 	items := a.menuItems(p)
@@ -35,7 +35,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		isTemplate:   true,
+		fromMenu:     true,
 		item:         item,
 		// The menu belongs to the pane's node, and the drop rules compare
 		// this against the destination's.
@@ -60,7 +60,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // an in-flight item takes the same draw path as a real tile. A source item
 // carries the source's uuid as its id, so the health tint and the
 // not-enterable descent guard can name it. Every answer is caller-owned:
-// primitives share one template apiece, and a caller placing the ghost at a
+// primitives share one ghost apiece, and a caller placing the ghost at a
 // cell would otherwise leave those coordinates on the next gesture's swatch.
 func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
 	if item.isSwatch {
@@ -74,10 +74,10 @@ func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
 	return &gridwellv1.Tile{}
 }
 
-// clickTemplate runs the bare-click behavior of the menu item a template
+// clickMenuItem runs the bare-click behavior of the menu item a menu
 // drag was armed from. Which behavior is menu.ClickOn's, over the swatch
 // alone since a click has no destination. Every swatch has an answer.
-func (a *App) clickTemplate(d *dragState) {
+func (a *App) clickMenuItem(d *dragState) {
 	fp := a.tree.FindPane(d.originPaneID)
 	if fp == nil {
 		return
@@ -135,15 +135,15 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 	a.visitEphemeralShell(p) // reports if there is nowhere to open
 }
 
-// commitTemplateDrop resolves the template drag at release. menu.DropOn
+// commitMenuDrop resolves the menu drag at release. menu.DropOn
 // says what the release does; this gathers the facts and runs it. The
 // destination is the (t, dropX, dropY) the one gather produced for the verdict
 // that routed this call, so the create lands exactly where DecideDrop said it
 // may, and dropTargetAt owns what is legal.
-func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	pr, isPrimitive := primitiveFor(d.item.primitive)
 	r := menu.Release{Target: t != nil, Door: d.item.isSwatch,
-		Promote: d.item.primitive == tplURL && d.item.promotePane != "",
+		Promote: d.item.primitive == primURL && d.item.promotePane != "",
 		Disk:    !d.item.isSwatch && isPrimitive && pr.disk}
 	if r.Target {
 		// The target's grid is the open door's child when the cursor promoted

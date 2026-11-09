@@ -46,8 +46,8 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// verdict's bare-click arm, which is the canvas's. The popover floats
 	// over a live pane, so falling through would act on the tile behind the
 	// swatch.
-	if d.isTemplate && !d.started {
-		a.clickTemplate(d)
+	if d.fromMenu && !d.started {
+		a.clickMenuItem(d)
 		return true
 	}
 
@@ -83,10 +83,10 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		a.scheduleURLUpdate()
 		return true
 
-	case dragdrop.DropCreateTemplate:
+	case dragdrop.DropFromMenu:
 		// The target and the cell are the verdict's own, gathered above, so
 		// the create cannot land somewhere the verdict did not allow.
-		a.commitTemplateDrop(d, t, dropX, dropY)
+		a.commitMenuDrop(d, t, dropX, dropY)
 		return true
 
 	case dragdrop.DropPanEnd:

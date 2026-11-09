@@ -92,7 +92,7 @@ func (a *App) armed() gesture.Armed {
 		RightDrag:   a.rightDrag != nil,
 		Drag:        d != nil,
 		DragCreates: d != nil && d.intent.Creates(),
-		Pan:         d != nil && d.tileID == "" && !d.isTemplate,
+		Pan:         d != nil && d.tileID == "" && !d.fromMenu,
 		Band:        a.band != nil,
 	}
 }
@@ -588,7 +588,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	if !a.advanceDragGhost(d, sx, sy) {
 		return nil
 	}
-	if d.tileID == "" && !d.isTemplate {
+	if d.tileID == "" && !d.fromMenu {
 		// A pan drag only arms in grid mode, since a content descent swallows
 		// the mousedown, so there is no text-scroll arm here.
 		focused := a.tree.FindPane(d.originPaneID)
@@ -623,12 +623,12 @@ func (a *App) advanceDragGhost(d *dragState, sx, sy float64) bool {
 		return false
 	}
 	d.started = true
-	if d.tileID == "" && !d.isTemplate {
+	if d.tileID == "" && !d.fromMenu {
 		return true
 	}
 	size := d.srcCellSize
 	if size <= 0 {
-		// A template drag has no srcCellSize: the menu's lives in screen px,
+		// A menu drag has no srcCellSize: the menu's lives in screen px,
 		// not cells. A right-drag copy keeps the bare cellPx fallback.
 		size = cellPx
 		if src := a.tree.FindPane(d.originPaneID); src != nil && !d.intent.Creates() {

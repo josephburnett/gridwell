@@ -137,7 +137,7 @@ func (a *App) drawMenu(p *pane.Pane) {
 
 // drawMenuToggle paints the source section's chevron strip, its chevron
 // pointing the way the press moves the section. A band and never a swatch, so
-// nothing invites the drag a template tile takes.
+// nothing invites the drag a swatch takes.
 func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
 	fillRectC(a.cctx, r.X, r.Y, r.W, r.H, a.pal.PlusBg)
 	cx := r.X + r.W/2

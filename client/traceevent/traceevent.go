@@ -488,16 +488,16 @@ func Drop(v dragdrop.DropAction, at DropAt) Event {
 
 // dropNames is the table over DecideDrop's verdicts.
 var dropNames = map[dragdrop.DropAction]string{
-	dragdrop.DropNavigate:       "navigate",
-	dragdrop.DropNavigateSplit:  "navigate in a split",
-	dragdrop.DropCreateTemplate: "create",
-	dragdrop.DropPanEnd:         "pan end",
-	dragdrop.DropDelete:         "delete",
-	dragdrop.DropRejected:       "rejected",
-	dragdrop.DropMove:           "move",
-	dragdrop.DropCopy:           "copy",
-	dragdrop.DropLink:           "link",
-	dragdrop.DropPaste:          "paste",
+	dragdrop.DropNavigate:      "navigate",
+	dragdrop.DropNavigateSplit: "navigate in a split",
+	dragdrop.DropFromMenu:      "create",
+	dragdrop.DropPanEnd:        "pan end",
+	dragdrop.DropDelete:        "delete",
+	dragdrop.DropRejected:      "rejected",
+	dragdrop.DropMove:          "move",
+	dragdrop.DropCopy:          "copy",
+	dragdrop.DropLink:          "link",
+	dragdrop.DropPaste:         "paste",
 }
 
 func dropName(v dragdrop.DropAction) string {

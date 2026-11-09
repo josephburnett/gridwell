@@ -25,7 +25,7 @@ test('workspace primitive: drag-create persists a workspace tile and its preview
   const wx = Math.round(f.cx);
   const wy = Math.round(f.cy);
 
-  // dragCreate resolves the swatch by templateKindName, so a missing menu
+  // dragCreate resolves the swatch by primitiveName, so a missing menu
   // entry fails right here.
   await gw.openMenu();
   await gw.dragCreate('workspace', wx, wy);
