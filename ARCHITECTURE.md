@@ -74,7 +74,8 @@ connection it is forwarded as sent and the node there decides; where it parts
 connection graph (`rpc.Reach`) and rewrites it as the holder's own route to
 the target (`Reach.Respell`), or refuses the write, "<holder> has no
 connection to <target>", with nothing stored. A placement never changes the
-holding node, since a move across namespaces is a link gesture.
+holding node, since a move to another node is refused and the gesture there
+links.
 
 ## The contract
 
@@ -93,12 +94,13 @@ record shapes. Everything else derives from it:
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Find` |
-| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a file's body its stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. |
-| Web content | `ServeContent` — behind `/content/<token>/<tile-id>`, a page file's bytes, streamed in chunks as they are read (no Content-Length), with its media type. Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
+| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a file's body its stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. `ReadContent{info}` asks a file for the facts about its bytes instead: one chunk carrying `file_info` (the inode's facts and the type sniffed from its first 512 bytes) and no data. |
+| Web content | `ServeContent` — behind `/content/<token>/<tile-id>`, a page file's bytes with its media type, and every other file's as `application/octet-stream`, streamed in chunks as they are read, with the size when it is known and one byte range when asked (`offset`, `length`). Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its doors too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
 | Mutations | `CreateTile`, `SetTile` (one op per call), `MoveTile`, `CopyTile`, `DeleteTile` |
-| Shells | `OpenShell`, `ShellTmuxAlive` — a PTY both ways |
+| Shells | `OpenShell`, `ShellTmuxAlive` — a PTY both ways; `PasteShell` — what a drop onto a shell types into its tmux |
+| Health | `DisableSource` — the user's switch on a connection (see Disabled) |
 | Events | `Subscribe`, `SetView` — what a client shows (its panes, their places and focus, the grids on screen), held in memory while its stream is open |
 
 `Find` is the one find verb: free text, or `id:` for the exact locate,
@@ -120,7 +122,8 @@ child's, and `qualifyTiles` keeps the bit it is handed. `text_presentation`
 and `serves_page` come from the files' read of the file's name
 (`files.fileFacts`): a page file (image, video, audio, PDF) is a url tile
 that serves its page, every other file a text tile, plain or both by its
-extension. A file row keeps its kind, name and link in its snapshot
+extension, or info when its name renders as nothing (`files.presentation`,
+the one owner of what renders as text). A file row keeps its kind, name and link in its snapshot
 (`store.snapshotOf`), so a row of a directory
 that will not read still shows as what it was. A file's `preview_blob_id`
 is `files.previewKey`'s: the node's screenshot of the tile once one exists,
@@ -202,8 +205,15 @@ the 0600 `web-password` file and prints it with the `claude mcp add` line,
 delete it to rotate. Behind the cookie the
 build gate (`Server.otherBuild`) refuses any call a page of another build
 makes, before the verb runs; the page offers a reload (`client/nodebuild`). An
-agent's MCP call is no page's, so the gate never judges it. The
-connection API is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
+agent's MCP call is no page's, so the gate never judges it. A place URL is a
+reference: a GET of one behind the password whose `Accept` does not lead
+with `text/html` answers what the place names (`place_api.go`), its path
+read by the client's own grammar (`pane.DecodeURL`): a text's body, a url's
+address, a page's bytes as the content API serves them, a grid or a door's
+grid as `read_grid` answers it and any other tile as `read_tiles` does
+(`mcpapi.Reader`). A browser's navigation still gets the client. Like the
+content API it is outside the build gate, since a tool's read names no
+build. The connection API is a 0600 unix socket, never TCP; ssh forwards it between nodes. Its
 `server.yaml` key is `federation:` and its file is `federation.sock`, kept
 because an existing `~/.gridwell` already has them written down.
 
@@ -233,7 +243,8 @@ carrying one swatch per root. A file or a directory is named by its
 absolute path (`rpc.KeyTileID`), and the files read disk and their store
 rows directly: a directory is a door; a page file (image, video, audio,
 PDF) is a url tile whose page the node serves; every other file, SVG, HTML,
-CSS, JavaScript and JSON included, is a text tile. A file never placed sits
+CSS, JavaScript and JSON included, is a text tile, and one whose name
+renders as nothing has no body and shows its file information. A file never placed sits
 where its place in the listing derives (`store.FileRows.Overlay`); the
 facts the user makes about it (placement, framing, a typed name, a frozen
 preview) are rows minted on touch, keyed by the path. A write claims the
@@ -341,7 +352,10 @@ their health.
 One database, `gridwell.db`. It holds node facts only: the ids the node
 minted (home's rows, and the files' rows keyed by path, `key` → id),
 layout, framing, the user's bytes, connections, tombstones. What a connection last answered lives in `cache.db`. The
-format contract is `internal/local/store/CLAUDE.md`.
+format contract is `internal/local/store/CLAUDE.md`. `gridwell size` reads
+what it holds (`store.Analysis`), safe beside a serving node; `gridwell
+clean`, only while the node is stopped, removes what nothing reaches, never
+the trash or a tombstone, through a delete's own teardown (`store.Clean`).
 
 **Framing** is one shape: a float center in the grid's own coordinates plus
 a pane-size-independent zoom (the intrinsic ratio, live/overtake). It lives
@@ -420,6 +434,16 @@ body. A file row's stamp (`Tile.content_stamp`) says whether a body is
 behind it, and its event says when its bytes moved
 (`TileChanged.content_changed`).
 
+**File information.** A file whose name renders as nothing is a text tile
+with no body (`text_presentation` info). Its preview is its size off the
+stamp and the type its extension says (`fileinfo.Preview`,
+`rpc.ExtensionType`), so a listing opens no file. A descent asks
+`ReadContent{info}` and lays the answer out (`fileinfo.Rows`); see more
+opens the hex view beneath, which asks the content API for 64K at a time by
+range as it scrolls (`fileinfo.HexLines`). Any other file reaches the same
+view by the i button. The info and hex modes are the row's text mode
+(`textedit.DecideDescent`), so a file reopens as it was left.
+
 **Outbox.** `client/outbox` is the ordered record of writes the server has
 not answered: framing, captures, layout, unsaved bytes. One reconcile rule
 (`Record`: a transport failure parks a retry, any verdict acks). Two drains:
@@ -430,7 +454,7 @@ file's stamp) and
 `write`/`do` (everything else).
 
 **Dead links.** A link is a path of hops. When any hop stops declaring the
-next namespace — the files' roots dropped from `server.yaml`, a connection
+next namespace — every root dropped from `server.yaml`, a connection
 stanza removed, a connection name retired, here or on any node along the
 way — the link is dead. So is a link whose last hop answers but whose
 target is gone: a file the files say is gone (a
@@ -515,7 +539,7 @@ DOM focus change is a `dom-focus` trace record.
 the lifecycle). Binary frames are PTY bytes, text frames are JSON control
 (resize up, one exit verdict down). The shell API (`internal/server/shell_api.go`)
 resolves the id before accepting, so a refused upgrade never leaves a tmux
-tmux behind.
+behind.
 
 A shell tile names a tmux (`rpc.ShellTmux`): its own id, or, for a
 copy, the tmux its source named, which the store writes on every copy
@@ -529,6 +553,18 @@ last row naming it, a trashed one included. A link names its target's
 tmux, so the client keys every shell fact by `shellconn.TmuxKey`, which
 reads the target row first. A tmux lives on the node that
 started it, so a shell copied across namespaces copies as a link.
+
+A drop onto a shell pastes (`dragdrop.DropPaste`): `PasteShell` names the
+shell, the dropped tiles and the client's origin, and moves nothing. It
+lands only when every dropped row is of the shell's node
+(`shellpaste.Refusal`, which the ghost reads from the ids too). The router
+of the node owning the shell's tmux spells the text (`shellpaste.Text`): a
+file's or a directory's absolute path, any other tile's reference, its
+place URL under the client's origin or, at a far node, which is sent none,
+under its own web address (`shellpaste.BindOrigin`). Home types it with
+`tmux send-keys -l`, attached or not; a tmux that is not running is refused
+and none is started. The files refuse a paste, and a connection forwards
+it.
 
 **Takeover.** One live surface per key: a content tile, or for a shell the
 tmux it names. Opening it elsewhere takes over, and `pane.TakeOver` says
@@ -568,9 +604,12 @@ bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
 view's pixels — a pan in one pane leaves the others alone. The focus guard keeps OS keyboard focus in the focused
 pane's view only. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
-left press, and `showContextMenu` — the one funnel for both ways into the
-native menu — announces the pane it is opening on. Both land in `focusToPane`,
-so a right-click moves focus like every other press. A view whose webContents
+left press, and main hears a right press from the view's own input events
+(`onRightPress`). Both land in `focusToPane`, so a right press moves focus
+like every other press. A right-drag that starts over the view is the pane
+gesture it would be on the canvas, and a right-click without a drag is the
+page's own `contextmenu` (`urlview-preload.ts`); Gridwell pops no menu of
+its own over a page. A view whose webContents
 ends outside `remove()` — a page that called `window.close()` — is retired at
 once (`retire`): its entry goes, every later call for the pane is a no-op, and
 the renderer hears `onViewGone` and drops its handle, so the pane shows the
@@ -688,6 +727,11 @@ copy:
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
+| what a copy of each kind becomes | `rpc.CopyOf`, read by the store's copy, the router's walk and the drop verdict |
+| whether a drop onto a shell lands, and what it types | `shellpaste.Refusal`; `shellpaste.Text`, at the node owning the shell |
+| what a place URL answers a tool | `place_api.go`, over `pane.DecodeURL` and `mcpapi.Reader` |
+| a file's information and its hex view, laid out | `client/fileinfo`, over `ReadContent{info}` and the content API's ranges |
+| what the database holds, and what nothing reaches | `store.Analysis`; `store.Clean` removes it |
 | is this tile an ephemeral visit | `scratch.Ephemeral` over `Grid.scratch_grid_id` |
 | does a live surface still belong on screen | `pane.SurfaceOf` |
 | does going live keep, move or place the tile's surface | `pane.TakeOver`; leaving a level, `pane.Heir` |
