@@ -544,11 +544,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   one to a file is a link tile whose target is the target's path id,
   `~<base64url of its absolute path>`. Either is dashed, opens the target,
   and is dead when the target is gone or outside every root.
-- A directory wears its own tint, the outside colour in both themes of
-  `theme.Palette`, wherever a grid, a door or a pane border shows it,
-  because a directory is outside the system (2026-11-07). The client reads
-  that a grid is a directory from its id's shape (`rpc.IsFilesID`), never
-  from a wire flag.
+- A directory wears its own tint, the outside colour, magenta in both
+  themes of `theme.Palette`, a hue no kind uses, because a directory is
+  outside the system (2026-11-07). A door whose grid is a directory wears
+  it wherever it sits, as does every file in a directory, page files
+  included. The swatch, the ghost, the door, the crumb, the bar band and
+  the pane border all read one classifier (`pane.TileFamily`,
+  `pane.FamilyOf`) and one table (`theme.Palette.Family`), so no two of
+  them can disagree (2026-11-08). The client reads that a grid is a
+  directory from its id's shape (`rpc.IsFilesID`), never from a wire flag.
 - The files are dark or told, never disabled (2026-11-07). The node
   watches only the directories some open session shows, with a 200 ms
   debounce and a re-walk on overflow, and tells each change as
