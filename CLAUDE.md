@@ -122,6 +122,7 @@ what each one is called.
 | content tile | A text, a url or a shell; a pane descends into one and it goes live. | A door; a workspace tile. |
 | link | A tile whose content is a path to another tile, drawn dashed, resolved one hop at a time; broken at any hop it reads dead. Deleting one unlinks. A link to a grid is a door. | A copy. |
 | copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target. Right-drag copies. | A link; a move, which never crosses a connection or the disk. |
+| reference | A Gridwell URL naming a tile or a grid: its place in the client's address grammar under an origin. A browser opens the place; read with the web password it answers the content. A drop onto a shell pastes one. | A link, which is a tile. |
 | text | A tile holding a body; its name is the body's first line. | |
 | url | A tile holding an address; it goes live on descent. | |
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
@@ -721,6 +722,30 @@ These were decided deliberately. Do not reverse one without a new decision.
   connection, so a far node's image opens
   here. `serves_page` is the one flag that says a url tile's page is the
   content API's, and only a url tile carries it.
+- A place URL is a reference (Joe, 2026-11-08): a GET of one whose
+  `Accept` does not lead with `text/html`, carrying the web password as a
+  bearer or the cookie, answers what the place names: a text's body
+  (`text/markdown`, a file that is not markdown `text/plain`), a url's
+  address (`text/uri-list`), a page's bytes through the content API, a
+  door or a grid as `read_grid` answers it and any other tile as
+  `read_tiles` does (`mcpapi.Reader`); a browser's navigation still gets
+  the client. The path is read by `pane.DecodeURL`, the client's own
+  grammar, never a second parser. Like the content API it is outside the
+  build gate: a tool's read names no build. The MCP instructions say how
+  to read one, and docs/mcp.md says the same words.
+- A drop onto a shell is one verb, `PasteShell{tile_id, tile_ids,
+  origin}` (Joe, 2026-11-08), which the web and connection APIs decode
+  onto the router and the MCP API does not expose. The node owning the
+  shell's tmux answers it: its router refuses a row of another node
+  (`shellpaste.Refusal`), reads the rows and spells the text
+  (`shellpaste.Text`): a file or a directory its absolute path, any other
+  tile its reference under the client's origin or, with none, as a far
+  node is sent none, under its own web address (`shellpaste.BindOrigin`),
+  which a shell on its machine reaches; each word single-quoted where a
+  shell would split it, space-separated, no newline. Home types it with
+  `tmux send-keys -l`, attached or not, so a frozen shell takes a drop; a
+  tmux that is not running is refused and none is started, since a paste
+  is not an open. The files refuse it and a connection forwards it.
 - A url tile opens its own address, and a link followed inside a live page
   navigates that page (2026-11-07, reversing the site pages and address
   rules of 2026-10-25). A link that opens a window opens its address in a
@@ -810,6 +835,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   on a cell the set does not vacate; each tile is its own write with its
   own claim, so a stale one is refused and snaps back alone
   (2026-10-15, `dragdrop.CarryOf`).
+- A drop onto a shell pastes (Joe, 2026-11-08): a release over a shell,
+  its tile on a grid or its live pane, whatever the button, types into its
+  tmux what the carry names and moves nothing; only a menu template, a
+  bare click and the trashcan stand above it (`dragdrop.DropPaste`). It
+  lands when every carried row is of the shell's node, and is refused
+  otherwise with "<name> is not on the shell's node", which the ghost
+  reads from the ids alone and writes under its no-entry badge; a paste
+  that lands outlines the shell.
 - A link is a path, and a link broken at any hop — a namespace this node
   does not declare, one a node further along the chain does not declare, or
   a target its namespace says is gone — is dead: greyed, inert, still
