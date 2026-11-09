@@ -321,3 +321,28 @@ export function tileAt(snap: GridSnapshot, kind: string, x: number, y: number): 
     (t) => t.kind === kind && Number(t.x ?? 0) === x && Number(t.y ?? 0) === y,
   );
 }
+
+// The node's handshake, as the web client reads it at boot.
+export async function handshake(origin: string): Promise<{ homeGridId?: string; templatesGridId?: string }> {
+  const res = await fetch(`${origin}/${SERVICE}/Handshake`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: '{}',
+  });
+  if (!res.ok) throw new Error(`Handshake failed: ${res.status} ${await res.text()}`);
+  return (await res.json()) as { homeGridId?: string; templatesGridId?: string };
+}
+
+// A text tile with body, made as an agent makes one: the create, then the
+// write that claims the version it answered.
+export async function createText(origin: string, gridId: string, x: number, y: number, body: string): Promise<Tile> {
+  const res = await fetch(`${origin}/${SERVICE}/CreateTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ gridId, tile: { kind: 'text', x, y, w: 1, h: 1 } }),
+  });
+  if (!res.ok) throw new Error(`CreateTile(text) failed: ${res.status} ${await res.text()}`);
+  const t = ((await res.json()) as { tile: Tile }).tile;
+  await updateText(origin, t.id, Number(t.version ?? 0), body);
+  return getTile(origin, t.id);
+}
