@@ -992,8 +992,8 @@ func (c *Layer) applyEvent(ctx context.Context, ev *pb.Event) {
 		ids := p.SelectionChanged.GetTileIds()
 		c.reselect(ctx, p.SelectionChanged.GetGridId(), func([]string) []string { return ids })
 	case *pb.Event_SourceHealth:
-		// The source's supervisor says whether it can be reached. A key deeper
-		// than a connection segment is a far node's source, not the machine. No
+		// The source says whether it can be reached. A key deeper than a
+		// connection segment is a far node's source, not the machine. No
 		// announce: the event itself is relayed onward.
 		c.setDark(p.SourceHealth.GetUuid(), !p.SourceHealth.GetHealthy(), p.SourceHealth.GetDetail(), false, nil)
 	}

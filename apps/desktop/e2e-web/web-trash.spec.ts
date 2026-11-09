@@ -31,11 +31,11 @@ test('delete parks in the dated trash; delete there is forever', async ({ gw, se
   await gw.clickSwatch('trash (home)');
   const troot = await gw.focused();
 
-  // The title is the entry's name, the instance and the grid, the same
-  // name its swatch wears. That name is config-owned, so it is not renamable,
-  // and the level's crumb wears the entry's declared glyph.
+  // The title is the swatch's label and its source, the same name the swatch
+  // wears. The source owns that label, so it is not renamable, and the level's
+  // crumb wears the swatch's glyph.
   await expect.poll(async () => (await gw.barName()).label).toBe('trash (home)');
-  expect((await gw.barName()).editable, 'a declared entry is not renamable').toBe(false);
+  expect((await gw.barName()).editable, 'the swatch label is not renamable').toBe(false);
   const bar = await gw.bar();
   const rootCrumb = bar.segments.filter((s) => s.kind === 'chain' && s.anchor).pop();
   expect(rootCrumb?.glyph, 'the crumb wears the trash glyph').toBe('trash');
