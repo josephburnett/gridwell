@@ -251,7 +251,7 @@ type SourceGrid struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                       // identity within the source
 	Label  string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                 // swatch label, verbatim
-	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // the declared glyph vocabulary ("" = the kind's default glyph)
+	Glyph  string                 `protobuf:"bytes,3,opt,name=glyph,proto3" json:"glyph,omitempty"`                 // a name of the glyph vocabulary, rpc.Glyph*; "" names none (door.GlyphFor)
 	GridId string                 `protobuf:"bytes,7,opt,name=grid_id,json=gridId,proto3" json:"grid_id,omitempty"` // the target grid, qualified per hop
 	// view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
 	// meaning as SourceInfo.root_view_*. A door carries the framing of the
@@ -730,8 +730,7 @@ func (x *Tile) GetGone() bool {
 	return false
 }
 
-// Info is a source's identity and its default root grid. There is no Attach
-// or Detach: a source the node declares is already there.
+// Info is a source's identity and its default root grid.
 type InfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -884,9 +883,9 @@ func (x *InfoResponse) GetSourceGrids() []*SourceGrid {
 	return nil
 }
 
-// Probe reports the definitive presence of one tile, for non-authoritative
-// sources where an entry can vanish between a listing and the reconcile. A
-// failed read must never sweep a tile; only GONE does.
+// Probe reports whether one tile is there, as its owner says: a file can
+// vanish between a listing and a read. A failed read must never sweep a
+// tile; only GONE does.
 type ProbeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`

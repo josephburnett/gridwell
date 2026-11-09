@@ -96,7 +96,7 @@ message Grid {
 message SourceGrid {
   string id           = 1; // identity within the source
   string label        = 2; // swatch label, verbatim
-  string glyph        = 3; // the declared glyph vocabulary ("" = the kind's default glyph)
+  string glyph        = 3; // a name of the glyph vocabulary, rpc.Glyph*; "" names none (door.GlyphFor)
   reserved 4, 5, 6; // color, kind, param_schema
   string grid_id      = 7; // the target grid, qualified per hop
   // view_cx/cy/zoom is grid_id's last-saved viewport, the same shape and
@@ -266,8 +266,7 @@ message Tile {
 // connection. The client talks to its own node; the node routes to home and
 // the files and forwards through connections.
 
-// Info is a source's identity and its default root grid. There is no Attach
-// or Detach: a source the node declares is already there.
+// Info is a source's identity and its default root grid.
 message InfoRequest {}
 message InfoResponse {
   reserved 1; // kind
@@ -306,9 +305,9 @@ message InfoResponse {
   reserved 18; // presents
 }
 
-// Probe reports the definitive presence of one tile, for non-authoritative
-// sources where an entry can vanish between a listing and the reconcile. A
-// failed read must never sweep a tile; only GONE does.
+// Probe reports whether one tile is there, as its owner says: a file can
+// vanish between a listing and a read. A failed read must never sweep a
+// tile; only GONE does.
 message ProbeRequest {
   string tile_id = 1;
 }
