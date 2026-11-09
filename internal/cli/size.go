@@ -11,6 +11,7 @@ import (
 
 	"github.com/josephburnett/gridwell/client/fileinfo"
 	"github.com/josephburnett/gridwell/internal/config"
+	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
@@ -65,7 +66,11 @@ func clean(w io.Writer, dir string, yes bool) int {
 	if _, err := os.Stat(path); err != nil {
 		return die("clean", err)
 	}
-	st, err := store.Open(path)
+	id, err := nodeID(dir)
+	if err != nil {
+		return die("clean", err)
+	}
+	st, err := local.OpenVerified(path, id, "home")
 	if err != nil {
 		return die("clean", err)
 	}
@@ -98,11 +103,16 @@ func clean(w io.Writer, dir string, yes bool) int {
 }
 
 func sizeOf(w io.Writer, dir string, asJSON bool) error {
+	id, err := nodeID(dir)
+	if err != nil {
+		return err
+	}
 	st, err := store.OpenReadOnly(config.DBFile(dir))
 	if err != nil {
 		return err
 	}
 	defer st.Close()
+	st.SetNodeID(id)
 	a, err := st.Analysis(context.Background())
 	if err != nil {
 		return err
@@ -119,6 +129,16 @@ func sizeOf(w io.Writer, dir string, asJSON bool) error {
 	}
 	printReport(w, dir, a)
 	return nil
+}
+
+// nodeID is the id server.yaml gives the node, which its layouts qualify
+// rows by; "" when none is minted yet.
+func nodeID(dir string) (string, error) {
+	cfg, err := config.Load(config.File(dir))
+	if err != nil {
+		return "", err
+	}
+	return cfg.ID, nil
 }
 
 func fileBytes(path string) int64 {
@@ -171,6 +191,7 @@ func printReport(w io.Writer, dir string, a store.Analysis) {
 	line("only the trash names", a.TrashOnly.Count, a.TrashOnly.Bytes)
 	fmt.Fprintln(w, "\nwhat nothing reaches (clean removes it; its tiles are the unreached and gone_grid columns)")
 	count("grids no root or door reaches", a.UnreachedGrids)
+	count("ephemeral visits no layout names", a.UnreachedScratch)
 	line("blobs no row names", a.Unnamed.Count, a.Unnamed.Bytes)
 	line("blobs only those rows name", a.UnreachedOnly.Count, a.UnreachedOnly.Bytes)
 	fmt.Fprintln(w, "\nfound, never removed")

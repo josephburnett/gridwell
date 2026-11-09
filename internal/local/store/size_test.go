@@ -38,7 +38,26 @@ func sizeFixture(t *testing.T) (s *Store, path string, garbage map[string]bool) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateScratchURL(ctx, "https://example.org"); err != nil {
+	// Ephemeral visits held by a workspace tile's layout, one on home's root
+	// and one in the trash: kept.
+	s.SetNodeID(fixtureNode)
+	held, err := s.CreateScratchURL(ctx, "https://example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateWorkspace(ctx, root, 4, 0, 1, 1, "ws", false, layoutNaming(held.Id)); err != nil {
+		t.Fatal(err)
+	}
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	heldText, err := s.CreateText(ctx, scratch, 2, 0, 1, 1, []byte("held from the trash"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	trashedWS, err := s.CreateWorkspace(ctx, root, 5, 0, 1, 1, "trashed ws", false, layoutNaming(heldText.Id))
+	if err != nil {
 		t.Fatal(err)
 	}
 	// A template, and one that is a door with a text under it: kept.
@@ -56,8 +75,10 @@ func sizeFixture(t *testing.T) (s *Store, path string, garbage map[string]bool) 
 	if _, err := s.CreateText(ctx, tdoor.ChildGridId, 0, 0, 1, 1, []byte("under a template")); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: trashed.Id}); err != nil {
-		t.Fatal(err)
+	for _, id := range []string{trashed.Id, trashedWS.Id} {
+		if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: id}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	garbage = map[string]bool{}
@@ -83,16 +104,33 @@ func sizeFixture(t *testing.T) (s *Store, path string, garbage map[string]bool) 
 	exec(`INSERT INTO tiles (grid_id, kind, x, y, key, created_at, updated_at) VALUES (?, 'text', 0, 0, '/notes/a.md', 1, 1)`, dir)
 	exec(`INSERT INTO tiles (grid_id, kind, x, y, key, tombstoned, created_at, updated_at) VALUES (?, 'text', 1, 0, '/notes/b.md', 1, 1, 1)`, dir)
 
+	// Ephemeral visits no layout holds: a url, and a door with a text under
+	// it, which goes with the door's teardown.
+	loose, err := s.CreateScratchURL(ctx, "https://example.net")
+	if err != nil {
+		t.Fatal(err)
+	}
+	garbage["tiles:"+loose.Id] = true
+	looseDoor, err := s.CreateDoor(ctx, scratch, 3, 0, 1, 1, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	under, err := s.CreateText(ctx, looseDoor.ChildGridId, 0, 0, 1, 1, []byte("under a loose door"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	garbage["tiles:"+looseDoor.Id], garbage["grids:"+looseDoor.ChildGridId] = true, true
+	garbage["tiles:"+under.Id], garbage[fmt.Sprintf("blobs:%d", under.BlobId)] = true, true
 	// A blob no row names.
 	garbage[fmt.Sprintf("blobs:%d", exec(`INSERT INTO blobs (hash, data, refcount) VALUES ('unnamed', 'xxxxx', 0)`))] = true
 	// A grid no door owns, holding a text and a door to a grid of its own.
 	orphan := exec(`INSERT INTO grids (created_at, updated_at) VALUES (1, 1)`)
-	under := exec(`INSERT INTO grids (created_at, updated_at) VALUES (1, 1)`)
+	underOrphan := exec(`INSERT INTO grids (created_at, updated_at) VALUES (1, 1)`)
 	ob := exec(`INSERT INTO blobs (hash, data, refcount) VALUES ('orphan', 'orphan body', 1)`)
 	garbage[fmt.Sprintf("tiles:%d", exec(`INSERT INTO tiles (grid_id, kind, x, y, blob_id, created_at, updated_at) VALUES (?, 'text', 0, 0, ?, 1, 1)`, orphan, ob))] = true
-	garbage[fmt.Sprintf("tiles:%d", exec(`INSERT INTO tiles (grid_id, kind, x, y, child_grid_id, created_at, updated_at) VALUES (?, 'door', 1, 0, ?, 1, 1)`, orphan, under))] = true
-	garbage[fmt.Sprintf("tiles:%d", exec(`INSERT INTO tiles (grid_id, kind, x, y, created_at, updated_at) VALUES (?, 'shell', 0, 0, 1, 1)`, under))] = true
-	garbage[fmt.Sprintf("grids:%d", orphan)], garbage[fmt.Sprintf("grids:%d", under)] = true, true
+	garbage[fmt.Sprintf("tiles:%d", exec(`INSERT INTO tiles (grid_id, kind, x, y, child_grid_id, created_at, updated_at) VALUES (?, 'door', 1, 0, ?, 1, 1)`, orphan, underOrphan))] = true
+	garbage[fmt.Sprintf("tiles:%d", exec(`INSERT INTO tiles (grid_id, kind, x, y, created_at, updated_at) VALUES (?, 'shell', 0, 0, 1, 1)`, underOrphan))] = true
+	garbage[fmt.Sprintf("grids:%d", orphan)], garbage[fmt.Sprintf("grids:%d", underOrphan)] = true, true
 	garbage[fmt.Sprintf("blobs:%d", ob)] = true
 	// A tile on a grid that is gone, sharing the kept text's blob.
 	exec(`PRAGMA foreign_keys=OFF`)
@@ -100,6 +138,15 @@ func sizeFixture(t *testing.T) (s *Store, path string, garbage map[string]bool) 
 	exec(`UPDATE blobs SET refcount = refcount + 1 WHERE id = ?`, text.BlobId)
 	exec(`PRAGMA foreign_keys=ON`)
 	return s, path, garbage
+}
+
+// fixtureNode is the config id the size fixture's layouts qualify by.
+const fixtureNode = "k3x9m2q"
+
+// layoutNaming is a workspace tile's layout with one pane descended into the
+// home row id, as the client writes it.
+func layoutNaming(id string) []byte {
+	return []byte(`{"v":1,"root":{"pane":{"id":"p1","text_focus":"` + fixtureNode + `/` + id + `"}},"focus":"p1"}`)
 }
 
 // dumpKept renders every row of the node's tables but the garbage, so a
@@ -139,7 +186,9 @@ func dumpKept(t *testing.T, s *Store, garbage map[string]bool) string {
 }
 
 // The analysis counts exactly the planted garbage, and Clean removes exactly
-// it: every other row of every table is byte-identical after.
+// it: every other row of every table is byte-identical after. An ephemeral
+// visit is reached only while a workspace tile's layout, in the trash too,
+// names it.
 func TestCleanRemovesWhatNothingReaches(t *testing.T) {
 	ctx := context.Background()
 	s, _, garbage := sizeFixture(t)
@@ -148,33 +197,38 @@ func TestCleanRemovesWhatNothingReaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := map[string]int{
-		"unreached grids": a.UnreachedGrids,
-		"unreached tiles": a.Kinds["text"][PlaceUnreached] + a.Kinds["door"][PlaceUnreached] + a.Kinds["shell"][PlaceUnreached],
-		"gone-grid tiles": a.Kinds["text"][PlaceGoneGrid],
-		"unnamed blobs":   a.Unnamed.Count,
-		"unreached-only":  a.UnreachedOnly.Count,
-		"drift":           a.RefcountDrift,
-		"home texts":      a.Kinds["text"][PlaceHome],
-		"trash texts":     a.Kinds["text"][PlaceTrash],
-		"template texts":  a.Kinds["text"][PlaceTemplates],
-		"scratch urls":    a.Kinds["url"][PlaceScratch],
-		"files texts":     a.Kinds["text"][PlaceFiles],
-		"tombstoned":      a.Kinds["text"][PlaceTombstoned],
-		"previews":        a.Previews.Count,
-		"trash only":      a.TrashOnly.Count,
+		"unreached grids":  a.UnreachedGrids,
+		"unreached tiles":  a.Kinds["text"][PlaceUnreached] + a.Kinds["door"][PlaceUnreached] + a.Kinds["shell"][PlaceUnreached] + a.Kinds["url"][PlaceUnreached],
+		"loose scratch":    a.UnreachedScratch,
+		"gone-grid tiles":  a.Kinds["text"][PlaceGoneGrid],
+		"unnamed blobs":    a.Unnamed.Count,
+		"unreached-only":   a.UnreachedOnly.Count,
+		"drift":            a.RefcountDrift,
+		"home texts":       a.Kinds["text"][PlaceHome],
+		"trash texts":      a.Kinds["text"][PlaceTrash],
+		"template texts":   a.Kinds["text"][PlaceTemplates],
+		"scratch urls":     a.Kinds["url"][PlaceScratch],
+		"scratch texts":    a.Kinds["text"][PlaceScratch],
+		"home workspaces":  a.Kinds["workspace"][PlaceHome],
+		"trash workspaces": a.Kinds["workspace"][PlaceTrash],
+		"files texts":      a.Kinds["text"][PlaceFiles],
+		"tombstoned":       a.Kinds["text"][PlaceTombstoned],
+		"previews":         a.Previews.Count,
+		"trash only":       a.TrashOnly.Count,
 	}
 	want := map[string]int{
-		"unreached grids": 2, "unreached tiles": 3, "gone-grid tiles": 1, "unnamed blobs": 1,
-		"unreached-only": 1, "drift": 0, "home texts": 2, "trash texts": 1, "template texts": 2, "scratch urls": 1,
-		"files texts": 1, "tombstoned": 1, "previews": 1, "trash only": 1,
+		"unreached grids": 3, "unreached tiles": 6, "loose scratch": 2, "gone-grid tiles": 1, "unnamed blobs": 1,
+		"unreached-only": 2, "drift": 0, "home texts": 2, "trash texts": 1, "template texts": 2, "scratch urls": 1,
+		"scratch texts": 1, "home workspaces": 1, "trash workspaces": 1,
+		"files texts": 1, "tombstoned": 1, "previews": 1, "trash only": 2,
 	}
 	for k, w := range want {
 		if got[k] != w {
 			t.Errorf("%s = %d, want %d", k, got[k], w)
 		}
 	}
-	if a.Removable() != 8 {
-		t.Errorf("Removable() = %d, want 8", a.Removable())
+	if a.Removable() != 13 {
+		t.Errorf("Removable() = %d, want 13", a.Removable())
 	}
 
 	before := dumpKept(t, s, garbage)
@@ -269,5 +323,46 @@ func TestAnalysisOverFreshAndMigratedFiles(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// A layout that will not read could name any ephemeral visit, so while one
+// stands every visit is reached and Clean removes none, as the boot sweep
+// reaps none.
+func TestCleanKeepsEveryVisitWhileALayoutWillNotRead(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	s.SetNodeID(fixtureNode)
+	if _, err := s.CreateWorkspace(ctx, rootID(t, s), 0, 0, 1, 1, "ws", false, []byte("not a layout")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateScratchURL(ctx, "https://example.org"); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.Analysis(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Kinds["url"][PlaceScratch] != 1 || a.Removable() != 0 {
+		t.Errorf("scratch urls %d, removable %d; want the visit reached and nothing to remove",
+			a.Kinds["url"][PlaceScratch], a.Removable())
+	}
+}
+
+// A store not given the node's id reads no layout's names, so it holds every
+// visit.
+func TestCleanKeepsEveryVisitWithoutTheNodeID(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	if _, err := s.CreateScratchURL(ctx, "https://example.org"); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.Analysis(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Kinds["url"][PlaceScratch] != 1 || a.Removable() != 0 {
+		t.Errorf("scratch urls %d, removable %d; want the visit reached and nothing to remove",
+			a.Kinds["url"][PlaceScratch], a.Removable())
 	}
 }

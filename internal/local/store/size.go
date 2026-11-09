@@ -1,9 +1,11 @@
 package store
 
 // What gridwell.db holds, and the one removal of what nothing reaches. A grid
-// is reached from a singleton (root, scratch, trash, templates) or a files row, through
-// the doors that own their grids (tileRefs); a blob is kept while a row names
-// it. The trash and a tombstoned file row are reached, by decision.
+// is reached from a singleton (root, trash, templates) or a files row,
+// through the doors that own their grids (tileRefs); an ephemeral visit, a row
+// on the scratch grid, is reached while a reached workspace tile's layout
+// names it (layoutRefs); a blob is kept while a row names it. The trash and a
+// tombstoned file row are reached, by decision.
 
 import (
 	"context"
@@ -60,9 +62,10 @@ type Analysis struct {
 	Previews  Blobs                     `json:"preview_blobs"` // named by a kept row's preview_blob_id
 	TrashOnly Blobs                     `json:"trash_only_blobs"`
 	// What nothing reaches, which Clean removes.
-	UnreachedGrids int   `json:"unreached_grids"`
-	Unnamed        Blobs `json:"unnamed_blobs"`
-	UnreachedOnly  Blobs `json:"unreached_only_blobs"` // named only by unreached or gone-grid rows
+	UnreachedGrids   int   `json:"unreached_grids"`
+	UnreachedScratch int   `json:"unreached_scratch"` // ephemeral visits no layout names, among the unreached
+	Unnamed          Blobs `json:"unnamed_blobs"`
+	UnreachedOnly    Blobs `json:"unreached_only_blobs"` // named only by unreached or gone-grid rows
 	// Found and reported, never removed: Clean sets a refcount to its count
 	// of naming rows, and a row naming a gone blob or grid is the user's.
 	RefcountDrift int `json:"refcount_drift"`
@@ -83,6 +86,7 @@ func (a Analysis) Removable() int {
 // every row and blob it must leave as they are.
 type cleanPlan struct {
 	goneGrid  []sizeTile
+	scratch   []sizeTile // ephemeral visits no layout names
 	unreached []int64
 	unnamed   []int64
 	drift     map[int64]int64
@@ -117,12 +121,13 @@ func OpenReadOnly(path string) (*Store, error) {
 	return s, nil
 }
 
-// Analysis reads what the database holds.
+// Analysis reads what the database holds. A layout names rows by the
+// node's config id, so a store not given it (SetNodeID) holds every visit.
 func (s *Store) Analysis(ctx context.Context) (Analysis, error) {
 	var a Analysis
 	err := s.readSnapshot(ctx, func(tx *sql.Tx) error {
 		var err error
-		a, _, err = analyze(ctx, tx)
+		a, _, err = analyze(ctx, tx, s.nodeID)
 		return err
 	})
 	return a, err
@@ -133,7 +138,7 @@ func (s *Store) Analysis(ctx context.Context) (Analysis, error) {
 // kept row or blob.
 func (s *Store) Clean(ctx context.Context) error {
 	return s.withMutation(ctx, "Clean", func(tx *sql.Tx, _ *[]*gridwellv1.Event) error {
-		_, p, err := analyze(ctx, tx)
+		_, p, err := analyze(ctx, tx, s.nodeID)
 		if err != nil {
 			return err
 		}
@@ -150,6 +155,17 @@ func (s *Store) Clean(ctx context.Context) error {
 				return err
 			}
 		}
+		for _, t := range p.scratch {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM tiles WHERE id = ?`, t.id); err != nil {
+				return err
+			}
+			if err := s.decTileRefs(ctx, tx, t.kind, t.child.String, nullToInt(t.blob), nullToInt(t.preview)); err != nil {
+				return err
+			}
+			if _, _, err := leaveSelection(ctx, tx, t.grid, t.id); err != nil {
+				return err
+			}
+		}
 		for _, g := range p.unreached {
 			if err := s.deleteGrid(ctx, tx, g); err != nil {
 				return err
@@ -160,7 +176,7 @@ func (s *Store) Clean(ctx context.Context) error {
 				return err
 			}
 		}
-		a, after, err := analyze(ctx, tx)
+		a, after, err := analyze(ctx, tx, s.nodeID)
 		if err != nil {
 			return err
 		}
@@ -179,7 +195,7 @@ func (s *Store) Compact(ctx context.Context) error {
 	return err
 }
 
-func analyze(ctx context.Context, q gridReader) (Analysis, cleanPlan, error) {
+func analyze(ctx context.Context, q gridReader, node string) (Analysis, cleanPlan, error) {
 	a := Analysis{Kinds: map[string]map[string]int{}}
 	p := cleanPlan{drift: map[int64]int64{}}
 	for _, pr := range []struct {
@@ -210,7 +226,7 @@ func analyze(ctx context.Context, q gridReader) (Analysis, cleanPlan, error) {
 			queue = append(queue, g)
 		}
 	}
-	for key, where := range map[string]string{systemKeyRootGridID: PlaceHome, systemKeyScratchGridID: PlaceScratch, systemKeyTrashGridID: PlaceTrash,
+	for key, where := range map[string]string{systemKeyRootGridID: PlaceHome, systemKeyTrashGridID: PlaceTrash,
 		systemKeyTemplatesGridID: PlaceTemplates} {
 		g, err := singletonGrid(ctx, q, key)
 		if err != nil {
@@ -218,6 +234,12 @@ func analyze(ctx context.Context, q gridReader) (Analysis, cleanPlan, error) {
 		}
 		reach(g, where)
 	}
+	// The scratch grid is kept; its rows are reached one by one, below.
+	scratch, err := singletonGrid(ctx, q, systemKeyScratchGridID)
+	if err != nil {
+		return a, p, err
+	}
+	place[scratch] = PlaceScratch
 	rows, err = q.QueryContext(ctx, `SELECT id, key FROM grids`)
 	if err != nil {
 		return a, p, err
@@ -256,10 +278,48 @@ func analyze(ctx context.Context, q gridReader) (Analysis, cleanPlan, error) {
 	for _, t := range tiles {
 		onGrid[t.grid] = append(onGrid[t.grid], t)
 	}
-	for i := 0; i < len(queue); i++ {
-		for _, t := range onGrid[queue[i]] {
-			if g, _ := tileRefs(t.kind, t.child.String, 0, 0); g != 0 && exists[g] {
-				reach(g, place[queue[i]])
+	layoutOf, err := workspaceLayouts(ctx, q)
+	if err != nil {
+		return a, p, err
+	}
+	visit := map[int64]bool{}
+	for _, t := range onGrid[scratch] {
+		visit[t.id] = true
+	}
+	// A visit a reached layout names is held, and its door reaches its grid,
+	// whose workspace tiles may hold more. A layout that will not read could
+	// name any visit, so then every one is held, as the boot sweep then
+	// reaps none; so does every layout when node is unknown.
+	held, named, scanned, unreadable := map[int64]bool{}, map[int64]bool{}, map[int64]bool{}, node == ""
+	for progress := true; progress; {
+		progress = false
+		for ; len(queue) > 0; queue = queue[1:] {
+			for _, t := range onGrid[queue[0]] {
+				if g, _ := tileRefs(t.kind, t.child.String, 0, 0); g != 0 && exists[g] {
+					reach(g, place[queue[0]])
+				}
+			}
+		}
+		for _, t := range tiles {
+			data, ok := layoutOf[t.id]
+			if !ok || scanned[t.id] || place[t.grid] == "" || !exists[t.grid] || (visit[t.id] && !held[t.id]) {
+				continue
+			}
+			scanned[t.id], progress = true, true
+			ids, readable := layoutRefs(node, data)
+			unreadable = unreadable || !readable
+			for _, id := range ids {
+				if n, err := parseID(id); err == nil {
+					named[n] = true
+				}
+			}
+		}
+		for _, t := range onGrid[scratch] {
+			if !held[t.id] && (unreadable || named[t.id]) {
+				held[t.id], progress = true, true
+				if g, _ := tileRefs(t.kind, t.child.String, 0, 0); g != 0 && exists[g] {
+					reach(g, PlaceScratch)
+				}
 			}
 		}
 	}
@@ -295,8 +355,12 @@ func analyze(ctx context.Context, q gridReader) (Analysis, cleanPlan, error) {
 		case !exists[t.grid]:
 			where = PlaceGoneGrid
 			p.goneGrid = append(p.goneGrid, t)
-		case where == "":
+		case where == "", visit[t.id] && !held[t.id]:
 			where = PlaceUnreached
+			if visit[t.id] {
+				a.UnreachedScratch++
+				p.scratch = append(p.scratch, t)
+			}
 		case t.key != "":
 			where = PlaceFiles
 		}

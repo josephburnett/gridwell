@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -87,40 +88,59 @@ func (s *Store) WorkspaceEphemeralRefs(ctx context.Context) (refs map[string]boo
 	if err != nil {
 		return nil, false, err
 	}
-	// One statement, so each layout is the blob its row names at one instant
-	// (see readSnapshot); a NULL is a row whose blob is missing.
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT b.data FROM tiles t LEFT JOIN blobs b ON b.id = t.blob_id
-		 WHERE t.key = '' AND t.kind = 'workspace' AND t.blob_id IS NOT NULL`)
-	if err != nil {
-		return nil, false, fmt.Errorf("workspace refs: %w", err)
-	}
-	layouts, err := collect(rows, func(rows *sql.Rows) ([]byte, error) {
-		var data []byte
-		err := rows.Scan(&data)
-		return data, err
-	})
+	layouts, err := workspaceLayouts(ctx, s.db)
 	if err != nil {
 		return nil, false, err
 	}
 	refs = map[string]bool{}
 	for _, data := range layouts {
-		if data == nil {
-			unreadable = true
-			continue
-		}
-		ids, err := panelayout.TextFocusIDs(data)
-		if err != nil {
-			unreadable = true
-			continue
-		}
+		ids, ok := layoutRefs(uuid, data)
+		unreadable = unreadable || !ok
 		for _, id := range ids {
-			// Blob ids are qualified in the owning node's frame; only
-			// same-namespace references resolve to rows in this store.
-			if u, local, ok := rpc.SplitID(id); ok && u == uuid {
-				refs[local] = true
-			}
+			refs[id] = true
 		}
 	}
 	return refs, unreadable, nil
+}
+
+// workspaceLayouts is every workspace tile's layout by its row, in one
+// statement, so each is the blob its row names at one instant (see
+// readSnapshot); nil is a row whose blob is missing.
+func workspaceLayouts(ctx context.Context, q gridReader) (map[int64][]byte, error) {
+	rows, err := q.QueryContext(ctx, `SELECT t.id, b.data FROM tiles t LEFT JOIN blobs b ON b.id = t.blob_id
+		WHERE t.key = '' AND t.kind = 'workspace' AND t.blob_id IS NOT NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("workspace layouts: %w", err)
+	}
+	out := map[int64][]byte{}
+	for rows.Next() {
+		var id int64
+		var data []byte
+		if err := rows.Scan(&id, &data); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[id] = data
+	}
+	return out, errors.Join(rows.Err(), rows.Close())
+}
+
+// layoutRefs is the home rows of node a layout names, by their local ids; ok
+// is false for a layout that will not read, nil being one whose blob is
+// missing. Blob ids are qualified in the owning node's frame, so only node's
+// own references are rows of this store.
+func layoutRefs(node string, data []byte) (ids []string, ok bool) {
+	if data == nil {
+		return nil, false
+	}
+	named, err := panelayout.TextFocusIDs(data)
+	if err != nil {
+		return nil, false
+	}
+	for _, id := range named {
+		if u, local, ok := rpc.SplitID(id); ok && u == node {
+			ids = append(ids, local)
+		}
+	}
+	return ids, true
 }

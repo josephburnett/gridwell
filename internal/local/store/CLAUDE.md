@@ -34,7 +34,11 @@ over it is listed from these rows (`HeldUnder`).
 nothing and may run beside a serving node, and `Analysis`. `gridwell
 clean` runs `Clean`: one `withMutation` that removes what nothing reaches,
 through the delete's own teardown, refused whole if a kept row or blob
-would change. The trash, the templates and every tombstone are kept.
+would change. The trash, the templates and every tombstone are kept. A
+row on the scratch grid, an ephemeral visit, is reached only while a
+reached workspace tile's layout names it, in the trash too; the layouts name
+rows by the node's config id, so a store not given it (`SetNodeID`) holds
+every visit, as one layout that will not read does.
 
 Home's singleton grids, root, scratch, trash and templates, are `system`
 rows (`singletonGridKeys`), each minted by `Open` when absent and never on a
