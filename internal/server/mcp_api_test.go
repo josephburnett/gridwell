@@ -661,3 +661,26 @@ func TestAnMCPBulkWriteTracesEveryItemsVerdict(t *testing.T) {
 		t.Fatalf("the span's end record = %v, want items 2, refused 2 and shell_key %s", end, shell)
 	}
 }
+
+// read_grid with the id templates reads home's templates grid, the + menu's
+// templates, and names its id, which copy, move and delete take.
+func TestMCPReadsTheTemplatesGrid(t *testing.T) {
+	n := newMCPNode(t)
+	s, err := n.agent(t, bearer(testPassword))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var grid mcpapi.GridOut
+	call(t, s, "read_grid", map[string]any{"id": "templates"}, &grid)
+	if !strings.HasPrefix(grid.Grid.ID, rpc.UUIDOf(n.root)+"/") || grid.Grid.ID == n.root || !grid.Grid.AcceptsTiles {
+		t.Fatalf("read_grid(templates) = %+v, want home's templates grid", grid.Grid)
+	}
+	plan := mkText(t, s, n.root, "# plan")
+	if v := items(t, s, "copy", map[string]any{"id": plan.ID, "grid": grid.Grid.ID})[0]; v.Verdict != "ok" {
+		t.Fatalf("copy into the templates grid = %+v", v)
+	}
+	call(t, s, "read_grid", map[string]any{"id": "templates"}, &grid)
+	if len(grid.Tiles) != 1 || grid.Tiles[0].Name != "plan" {
+		t.Fatalf("templates = %+v, want the one copy", grid.Tiles)
+	}
+}

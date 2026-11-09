@@ -38,7 +38,15 @@ one showing the shell you run in. "These" is that grid's selection, from
 read_grid. A screen on another node is not listed, so the workspaces used
 lately come from find with kind workspace and content_changed {}.
 
+Templates. ` + templates + `
+
 Gridwell references. ` + references
+
+// templates is the section docs/mcp.md says word for word under "Templates".
+const templates = `The + menu's templates are the tiles of home's templates grid, an
+ordinary home grid no gesture navigates to. read_grid with the id templates
+reads it, and its answer names the grid's id: copy onto it makes a template,
+and move, copy and delete take a template like any tile.`
 
 // references is the section docs/mcp.md says word for word under "Gridwell
 // references".
@@ -66,7 +74,7 @@ func New(rt namespace.Namespace, node, version string, screens Screens) *mcp.Ser
 	s := mcp.NewServer(&mcp.Implementation{Name: "gridwell", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "Every screen showing this node, the most recently changed first: its id, label, when its view last changed, when it went away (a phone's browser in the background), the workspace tiles it is inside, outermost first, and each pane's place, the grid it shows, the content tile it is inside and whether it has focus. The screen showing the shell this agent runs in is marked yours. An empty list is no screen."}, d.sessions)
-	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid."}, d.readGrid)
+	mcp.AddTool(s, &mcp.Tool{Name: "read_grid", Description: "Read a grid: its selection, the tiles the user has in hand, and its rows with id, kind, name, placement, version, and whether each is a link and dead. No id reads the node's home grid, and the id templates its templates grid, the + menu's templates."}, d.readGrid)
 	mcp.AddTool(s, &mcp.Tool{Name: "read_tiles", Description: "Read tiles by id, one answer per id in order: its row, and the body of a text tile (with body_version, the claim write_text takes), the address of a url, the tmux a shell names, the grid a door holds, or a workspace tile's layout: each pane's place, the grid the layout names, its content tile and whether it is focused. A link answers its target's content, or dead. An id that cannot be read is that answer's refusal, not the call's."}, d.readTiles)
 	mcp.AddTool(s, &mcp.Tool{Name: "find", Description: "Find tiles by name, body or address, everywhere or within one namespace; each hit carries the doors it sits inside. Filters narrow it and combine: grid (with recurse, the grids inside its doors too), created, modified (any write: a move, a framing, content) and content_changed, each a {from, to} range of RFC 3339 times, either end left open,, selected (only tiles in their grid's selection) and kind (text, url, shell, door or workspace). With a filter the query may be empty: it then lists what passes, newest first, by the time filtered on, else when made; kind workspace with content_changed {} lists the workspaces by when their layout last changed."}, d.find)
 	mcp.AddTool(s, &mcp.Tool{Name: "write_text", Description: "Write text tiles, a list of items applied in order, a verdict per item. An item with id replaces that text tile's whole body (through a link, its target's), claiming the version you read or, with none, the one on disk now. An item with grid and no id creates a 1x1 text tile there, its name the body's first line, at the first free cell or at or below the cell named in near."}, d.writeText)
@@ -113,7 +121,7 @@ func (c *Cell) near() *[2]int64 {
 }
 
 type gridIn struct {
-	ID string `json:"id,omitempty" jsonschema:"the grid's id; empty is the node's home grid"`
+	ID string `json:"id,omitempty" jsonschema:"the grid's id; empty is the node's home grid, templates its templates grid"`
 }
 
 func (d *toolset) readGrid(ctx context.Context, _ *mcp.CallToolRequest, in gridIn) (*mcp.CallToolResult, GridOut, error) {
@@ -126,6 +134,9 @@ func (d *toolset) grid(ctx context.Context, id string) (GridOut, error) {
 	hs, err := d.rt.Handshake(ctx, &pb.HandshakeRequest{})
 	if err != nil {
 		return GridOut{}, refusal(err)
+	}
+	if id == "templates" { // see templates
+		id = hs.GetTemplatesGridId()
 	}
 	g, err := d.rt.GetGrid(ctx, &pb.GetGridRequest{GridId: cmp.Or(id, hs.GetHomeGridId())})
 	if err != nil {

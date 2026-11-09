@@ -64,7 +64,7 @@ empty list.
 | Tool | Arguments | What it does |
 |---|---|---|
 | `sessions` | none | Every screen showing the node, the most recently changed first (see Here and these): its `id`, `label` (`desktop` or `browser`), when its view last `changed`, `away_since` when its stream has closed, the `workspace_tiles` it is inside, outermost first, and its `panes`: each one's `id`, place (`anchor` and `path`), the `grid` it shows, the `content` tile it is inside, and whether it is `focused`. The screen showing the shell you run in is marked `yours`. No screen is an empty list. |
-| `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles; `selection`: the tiles the user has in hand) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid. |
+| `read_grid` | `id`, optional | A grid's facts (`writable`: its text takes edits; `accepts_tiles`: it takes new tiles; `selection`: the tiles the user has in hand) and its rows: id, kind, name, placement, version, and for a link the address it resolves to and whether it is dead. No id reads the node's home grid, and the id `templates` its templates grid (see Templates). |
 | `read_tiles` | `ids` | One answer per id, in order: the row, and what its kind holds: a text tile's body with `body_version`, a url's address, the tmux a shell names, the grid a door holds, and for a workspace tile its `layout`: the `version` it was read at and each pane's `id`, place (`anchor` and `path`), the `grid` when the layout names it (a pane with no path is on its anchor), the `content` tile it is inside, and whether it is `focused`, the pane the workspace tile reopens on. A link answers its target's content, or `dead` when the target is gone. An id that cannot be read gets its refusal as its verdict. |
 | `find` | `query`, `scope`, `limit`, `grid`, `recurse`, `created`, `modified`, `content_changed`, `selected`, `kind` | Tiles whose name, body or address matches, everywhere this node reaches or within the namespace or id in `scope`. `id:<tile-id>` finds one tile. The filters narrow it and combine: `grid` keeps the tiles on that grid, and with `recurse` the grids inside its doors, to any depth (a link door is not followed); `created`, `modified` (any write: a move, a framing, content) and `content_changed` keep the tiles whose time falls in the range, `{from, to}`, each an RFC 3339 time such as `2026-10-17T09:00:00Z`, inclusive, either left out for open; `selected` keeps the tiles in their grid's selection; `kind` keeps the tiles of one kind, `text`, `url`, `shell`, `door` or `workspace`, and any other is refused. With a filter the query may be empty, and the answer is what passes, newest first, by the time it filters on, else by when each was made. The files match no text: a text query finds nothing in them, while `id:` and the filters do. Each hit names the doors it sits inside; `skipped` names every namespace that did not answer, the files as `<node>/~`. |
 | `write_text` | `items`: `id`, `grid`, `body`, `version` or `stamp`, `near` | An item with `id` replaces that text tile's whole body; through a link it writes the target. An item with `grid` and no `id` creates a 1×1 text tile born with the body, its name the body's first line, at the first free cell in reading order, or at `near` (`{x, y}`), or below it in its column when that cell is taken. In a directory the new tile is a Gridwell text over it, never a file. A new tile claims nothing. |
@@ -101,6 +101,13 @@ reaches here through a connection is that node's. The workspaces the user
 has used lately are workspace tiles: `find` with `kind` `workspace` and
 `content_changed` `{}` (both ends open) lists them by when their layout last
 changed, newest first.
+
+## Templates
+
+The + menu's templates are the tiles of home's templates grid, an ordinary
+home grid no gesture navigates to. `read_grid` with the id `templates`
+reads it, and its answer names the grid's id: `copy` onto it makes a
+template, and `move`, `copy` and `delete` take a template like any tile.
 
 ## Gridwell references
 
