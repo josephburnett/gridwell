@@ -292,6 +292,10 @@ func TestOneEventFanOut(t *testing.T) {
 // leaves a trace record; a write beside it does neither.
 const storeWriteFunnel = "withMutation"
 
+// storeCompact is the one write beside the funnel: VACUUM rewrites the
+// file's pages and no row, and SQLite refuses it inside a transaction.
+const storeCompact = "Compact"
+
 // storeTxOpener is the one function that begins a transaction, and only the
 // funnel and the read snapshot may call it: a read of several statements
 // needs one state of the database, and a write needs the funnel's trace.
@@ -321,7 +325,7 @@ func TestOneStoreWriteFunnel(t *testing.T) {
 		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || fn.Name.Name == storeWriteFunnel {
+			if !ok || fn.Body == nil || fn.Name.Name == storeWriteFunnel || fn.Name.Name == storeCompact {
 				continue
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {

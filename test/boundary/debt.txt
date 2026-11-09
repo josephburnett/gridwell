@@ -34,3 +34,4 @@ low-water | packages | 78
 2026-11-08 | the file information view (Joe, 2026-11-08): client/fileinfo, a file's preview, its file information table and its hex view in pure code, and textedit's info and hex modes | 214
 2026-11-08 | the file information view (Joe, 2026-11-08): client/fileinfo, the package of a file's preview, file information and hex view | 1 | packages
 2026-11-08 | the file information view (Joe, 2026-11-08): the shim's view, the table, the see more row, the hex view paging through the content API, the i button and a file's preview | 405
+2026-11-08 | gridwell size and clean (Joe, 2026-11-08): the store reads what gridwell.db holds and removes what nothing reaches, through the delete teardown | 363
