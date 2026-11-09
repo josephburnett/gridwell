@@ -15,6 +15,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	clienttrace "github.com/josephburnett/gridwell/client/trace"
 	"github.com/josephburnett/gridwell/internal/connection/dial"
@@ -108,8 +109,8 @@ func TestADumpHoldsTheClientsRecordAndTheRPCItCaused(t *testing.T) {
 func TestAnRPCWithoutARequestIDIsStillTraced(t *testing.T) {
 	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
-	if _, err := cl.GetGrid(context.Background(), connect.NewRequest(&pb.GetGridRequest{GridId: "nope/1"})); err == nil {
-		t.Fatal("GetGrid on an unrouted id answered")
+	if _, err := cl.GetGrid(context.Background(), connect.NewRequest(&pb.GetGridRequest{GridId: "1"})); err == nil {
+		t.Fatal("GetGrid on an unqualified id answered")
 	}
 	var errored bool
 	for _, rec := range trace.Default().Snapshot() {
@@ -122,12 +123,51 @@ func TestAnRPCWithoutARequestIDIsStillTraced(t *testing.T) {
 	}
 }
 
+// A read of a namespace this node does not declare is answered with the dead
+// verdict, and its span says dead, never error, on both APIs: a dead link is
+// a state.
+func TestADeadAnswerIsTracedAsDead(t *testing.T) {
+	srv := mustNew(t, &Sources{}, Config{Dir: t.TempDir()})
+	hs := serveWeb(t, srv)
+	req := connect.NewRequest(&pb.GetGridRequest{GridId: "afxl3c7/~Ym94OmltYm94"})
+	req.Header().Set(tracewire.RequestHeader, "dead-web")
+	gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL).GetGrid(context.Background(), req)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	connAPI := ConnectionAPIServer(srv.ConnectionHandler())
+	go connAPI.Serve(ln)
+	t.Cleanup(func() { connAPI.Close() })
+	conn, err := dial.ClientConn(ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx := metadata.AppendToOutgoingContext(context.Background(), tracewire.RequestHeader, "dead-conn")
+	if _, err := pb.NewGridwellClient(conn).GetGrid(ctx, &pb.GetGridRequest{GridId: "afxl3c7/~Ym94OmltYm94"}); !gwerr.IsDeadLink(err) {
+		t.Fatalf("GetGrid of an undeclared namespace = %v, want the dead verdict", err)
+	}
+	for _, want := range []string{"dead-web", "dead-conn"} {
+		var end tracewire.Record
+		for _, rec := range trace.Default().Snapshot() {
+			if rec.Src == "router" && rec.KV["req"] == want && rec.Msg != "GetGrid start" {
+				end = rec
+			}
+		}
+		if end.Msg != "GetGrid dead" || end.KV["code"] != "" {
+			t.Errorf("req %s ended %q code %q, want \"GetGrid dead\" with no code", want, end.Msg, end.KV["code"])
+		}
+	}
+}
+
 // A streaming verb is one span around the whole stream, not none.
 func TestAStreamingRPCGetsBothRecords(t *testing.T) {
 	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
 	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL)
 	const reqID = "stream-req"
-	req := connect.NewRequest(&pb.ReadContentRequest{TileId: "nope/1"})
+	req := connect.NewRequest(&pb.ReadContentRequest{TileId: "1"})
 	req.Header().Set(tracewire.RequestHeader, reqID)
 	stream, err := cl.ReadContent(context.Background(), req)
 	if err != nil {
@@ -136,7 +176,7 @@ func TestAStreamingRPCGetsBothRecords(t *testing.T) {
 	for stream.Receive() {
 	}
 	if stream.Err() == nil {
-		t.Fatal("ReadContent on an unrouted id answered")
+		t.Fatal("ReadContent on an unqualified id answered")
 	}
 	var started, ended bool
 	for _, rec := range trace.Default().Snapshot() {

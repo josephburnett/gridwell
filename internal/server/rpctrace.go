@@ -87,9 +87,8 @@ func (s *span) end(err error, code string) {
 	s.open()
 	kv := s.kv()
 	kv["ms"] = strconv.FormatInt(time.Since(s.start).Milliseconds(), 10)
-	msg := s.verb + " ok"
-	if err != nil {
-		msg = s.verb + " error: " + err.Error()
+	msg, failed := gwerr.EndRecord(s.verb, err)
+	if failed {
 		kv["code"] = code
 	}
 	trace.Emit("router", "rpc", msg, kv)

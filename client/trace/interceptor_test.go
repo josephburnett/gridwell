@@ -14,6 +14,7 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/idshape"
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
@@ -87,10 +88,16 @@ func TestTheEndRecordCarriesTheDurationAndTheCode(t *testing.T) {
 	i.span("k3f9x2a", "/gridwell.v1.Gridwell/SetTile", nil).end(nil)
 	i.span("m2p8z1b", "/gridwell.v1.Gridwell/WriteContent", nil).end(
 		connect.NewError(connect.CodeNotFound, errors.New("no such tile")))
+	dead := gwerr.DeadLink("afxl3c7", "no source")
+	i.span("p4q7r2c", "/gridwell.v1.Gridwell/GetGrid", nil).end(
+		gwerr.ConnectDetails(dead, connect.NewError(connect.CodeNotFound, dead)))
 
 	recs := decode(t, mustBatch(t, c))
-	if len(recs) != 4 {
-		t.Fatalf("%d records, want two spans", len(recs))
+	if len(recs) != 6 {
+		t.Fatalf("%d records, want three spans", len(recs))
+	}
+	if recs[5].Msg != "GetGrid dead" || recs[5].KV["code"] != "" {
+		t.Errorf("the dead verdict reads %q with code %q, want a state, not an error", recs[5].Msg, recs[5].KV["code"])
 	}
 	if recs[1].Msg != "SetTile ok" || recs[1].KV["ms"] != "1" {
 		t.Errorf("the kept call reads %q in %qms", recs[1].Msg, recs[1].KV["ms"])

@@ -32,6 +32,19 @@ func IsDeadLink(err error) bool {
 	return ok
 }
 
+// EndRecord is the message of an rpc span's exit record, the node's and the
+// client's: ok, dead for the dead verdict, which is a state and not an
+// error, or the error, where failed says the record carries its code.
+func EndRecord(verb string, err error) (msg string, failed bool) {
+	switch {
+	case err == nil:
+		return verb + " ok", false
+	case IsDeadLink(err):
+		return verb + " dead", false
+	}
+	return verb + " error: " + err.Error(), true
+}
+
 // detail is err's detail of type D, read off a gRPC status or a Connect error
 // alike, so the node and the browser share one reading.
 func detail[D any](err error) (D, bool) {

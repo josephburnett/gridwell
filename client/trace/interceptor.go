@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/api/tracewire"
 )
@@ -74,9 +75,8 @@ func (s *span) end(err error) {
 	end := s.i.now()
 	kv := s.kv()
 	kv["ms"] = strconv.FormatInt(end.Sub(s.start).Milliseconds(), 10)
-	msg := s.verb + " ok"
-	if err != nil {
-		msg = s.verb + " error: " + err.Error()
+	msg, failed := gwerr.EndRecord(s.verb, err)
+	if failed {
 		kv["code"] = connect.CodeOf(err).String()
 	}
 	s.i.c.Emit(rpcSrc, rpcKind, msg, kv, end)
