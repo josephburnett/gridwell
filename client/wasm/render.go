@@ -23,7 +23,7 @@ import (
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/textedit"
-	"github.com/josephburnett/gridwell/client/tilepreview"
+	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -163,7 +163,8 @@ type primitive struct {
 	kind  templateKind
 	name  string
 	ghost *gridwellv1.Tile
-	glyph func(a *App, x, y, w, h float64)
+	// glyph is drawn in the colour of the ghost's family (pane.TileFamily).
+	glyph func(c js.Value, x, y, w, h float64, color string)
 	// create fires into gridID, the drop target's grid, never re-derived here.
 	create func(a *App, gridID string, cellX, cellY int64)
 	// click is what a bare click on the swatch does. A column, not an arm per
@@ -183,33 +184,33 @@ func init() {
 		{
 			kind: tplDoor, name: "door",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindDoor, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawDoorGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder) },
+			glyph:  drawDoorGlyph,
 			create: createAt("CreateDoor", rpc.KindDoor),
 		},
 		{
 			kind: tplMarkdown, name: "markdown",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindText, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawDocumentGlyph(a.cctx, x, y, w, h, a.pal.MarkdownLine) },
+			glyph:  drawDocumentGlyph,
 			create: func(a *App, gid string, cellX, cellY int64) { a.createTextAtCell(gid, []byte{}, cellX, cellY) },
 		},
 		{
 			kind: tplURL, name: "url",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindURL, W: 1, H: 1},
-			glyph:  func(a *App, x, y, w, h float64) { drawGlobeGlyph(a.cctx, x, y, w, h, a.pal.URLLine) },
+			glyph:  drawGlobeGlyph,
 			create: createAt("CreateURL", rpc.KindURL),
 			click:  func(a *App, p *pane.Pane) { a.visitURLFromMenu(p) },
 		},
 		{
 			kind: tplShell, name: "shell",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindShell, W: 1, H: 1, AltText: "shell"},
-			glyph:  func(a *App, x, y, w, h float64) { drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder) },
+			glyph:  drawShellGlyph,
 			create: createAt("CreateShell", rpc.KindShell),
 			click:  func(a *App, p *pane.Pane) { a.visitShellFromMenu(p) },
 		},
 		{
 			kind: tplWorkspace, name: "workspace",
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindWorkspace, W: 1, H: 1, AltText: "workspace"},
-			glyph:  func(a *App, x, y, w, h float64) { drawWorkspaceGlyph(a.cctx, x, y, w, h, a.pal.WorkspaceBorder) },
+			glyph:  drawWorkspaceGlyph,
 			create: createAt("CreateWorkspace", rpc.KindWorkspace),
 		},
 	}
@@ -513,9 +514,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					w := float64(n.W) * cellSize
 					h := float64(n.H) * cellSize
 					nn := n
-					outside := tilepreview.Outside(nn, inDirectory)
 					dashed := isLinkTile(nn)
-					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, outside, dashed, p.ID)
+					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, pane.TileFamily(nn, inDirectory), dashed, p.ID)
 					a.drawSourceHealthTint(nn, left, top, w, h)
 					a.drawDeadLink(nn, left, top, w, h)
 					if picked[n.Id] {
@@ -698,26 +698,27 @@ func drawGridLinesIn(c js.Value, color string, clipX, clipY, clipW, clipH, cellS
 
 // drawNodeWithPreview previews a door's child grid at the child's cell scale,
 // so the descent zoom crosses no discontinuity.
-func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, selected, outside, dashed bool, paintPaneID string) {
+// fam is the tile's pane.TileFamily, asked once where the tile is met.
+func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize float64, selected bool, fam theme.Family, dashed bool, paintPaneID string) {
 	k := rpc.KindOf(n.Kind)
 	switch {
 	case k.Content == rpc.ContentBody:
-		a.drawMarkdownNode(n, x, y, w, h, selected, outside, dashed)
-		a.drawTileBannerLabel(n, x, y, w, h, outside)
+		a.drawMarkdownNode(n, x, y, w, h, selected, fam, dashed)
+		a.drawTileBannerLabel(n, x, y, w, h, fam)
 		return
 	case k.Live == rpc.DescentURL:
-		a.drawURLTile(n, x, y, w, h, selected, dashed)
-		a.drawTileBannerLabel(n, x, y, w, h, outside)
+		a.drawURLTile(n, x, y, w, h, selected, fam, dashed)
+		a.drawTileBannerLabel(n, x, y, w, h, fam)
 		return
 	case k.Live == rpc.DescentShell:
-		a.drawShellTile(n, x, y, w, h, selected, dashed)
-		a.drawTileBannerLabel(n, x, y, w, h, outside)
+		a.drawShellTile(n, x, y, w, h, selected, fam, dashed)
+		a.drawTileBannerLabel(n, x, y, w, h, fam)
 		return
 	case k.Content == rpc.ContentLayout:
-		a.drawWorkspacePreview(n, x, y, w, h, selected, outside, dashed)
+		a.drawWorkspacePreview(n, x, y, w, h, selected, fam, dashed)
 		return
 	case k.Descends != rpc.DescendGrid:
-		a.drawNode(a.cctx, n, x, y, w, h, selected, outside, tileBorderPx, dashed)
+		a.drawNode(a.cctx, n, x, y, w, h, selected, fam, tileBorderPx, dashed)
 		return
 	}
 	// One level: drawChildPreview paints its children through the flat drawNode.
@@ -734,7 +735,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	showPreview := haveChild && previewCell >= 0.5
 
 	if rpc.IsDoorToOtherNamespace(n) && !showPreview {
-		a.drawSourceGlyph(a.sourceGlyph(n.ChildGridId), x, y, w, h)
+		a.drawSourceGlyph(a.sourceGlyph(n.ChildGridId), x, y, w, h, a.pal.Family(fam).Line)
 	} else {
 		withClip(a.cctx, x, y, w, h, func() {
 			// Aligned so the child point the door's framing centers on lands at the
@@ -757,9 +758,9 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 		})
 	}
 
-	// Every door is blue; the dash means a link.
-	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, dashed, selected)
-	a.drawTileBannerLabel(n, x, y, w, h, outside)
+	// The dash means a link.
+	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.Family(fam).Line, dashed, selected)
+	a.drawTileBannerLabel(n, x, y, w, h, fam)
 }
 
 // tileReadOnly is textedit.ReadOnly over the row whose content n presents and
@@ -803,8 +804,10 @@ func bannerGeom(h, ih float64) (fontPx, bannerH float64, shown bool) {
 	return fontPx, fontPx + 4, true
 }
 
-func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, outside bool) {
-	a.drawTileBannerLabelIn(n, x, y, w, h, a.bannerTextColor(n, outside))
+// drawTileBannerLabel letters the name in the family's line, so label and
+// frame read as one.
+func (a *App) drawTileBannerLabel(n *gridwellv1.Tile, x, y, w, h float64, fam theme.Family) {
+	a.drawTileBannerLabelIn(n, x, y, w, h, a.pal.Family(fam).Line)
 }
 
 // drawTileBannerLabelIn takes the text color, so a dead link's grey label
@@ -831,22 +834,6 @@ func (a *App) drawTileBannerLabelIn(n *gridwellv1.Tile, x, y, w, h float64, text
 			font: fontSpec(fontPx, bannerFontFamily, true), fill: textColor, baseline: "middle",
 		})
 	})
-}
-
-func (a *App) bannerTextColor(n *gridwellv1.Tile, outside bool) string {
-	switch tilepreview.BannerHue(n, outside) {
-	case tilepreview.HueShell:
-		return a.pal.ShellBorder
-	case tilepreview.HueDoor:
-		return a.pal.FocusBorder
-	case tilepreview.HueDirectory:
-		return a.pal.DirectoryBorder
-	case tilepreview.HueURL:
-		return a.pal.URLLine
-	case tilepreview.HueText:
-		return a.pal.MarkdownLine
-	}
-	return a.pal.Muted
 }
 
 // fetchTileContent asks for a body the cache does not hold, or with again one
@@ -930,36 +917,19 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		}
 		nn := n
 		// url and shell children skip their JPEGs, so a door's interior reads uniformly.
-		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, tilepreview.Outside(nn, childInDirectory), borderPx, false)
+		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, pane.TileFamily(nn, childInDirectory), borderPx, false)
 	}
 }
 
 // drawNode is the flat renderer, for nested previews and non-door tiles.
-func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool, outside bool, borderPx float64, dashed bool) {
+func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selected bool, fam theme.Family, borderPx float64, dashed bool) {
 	if dashed {
 		setTileDash(c)
 		defer clearTileDash(c)
 	}
-	fill, line := a.pal.Locked, ""
-	switch k := rpc.KindOf(n.Kind); {
-	case k.Descends == rpc.DescendGrid:
-		fill, line = a.pal.Bg, a.pal.FocusBorder
-	case k.Live == rpc.DescentURL:
-		fill, line = a.pal.URLFill, a.pal.URLLine
-	case k.Live == rpc.DescentShell:
-		fill, line = a.pal.ShellFill, a.pal.ShellBorder
-	case k.Content == rpc.ContentBody:
-		fill, line = a.pal.MarkdownFill, a.pal.MarkdownLine
-		if outside {
-			fill, line = a.pal.DirectoryFill, a.pal.DirectoryBorder
-		}
-	case k.Content == rpc.ContentLayout:
-		fill, line = a.pal.WorkspaceFill, a.pal.WorkspaceBorder
-	}
-	fillRectC(c, x, y, w, h, fill)
-	if line != "" {
-		strokeTileBorder(c, x, y, w, h, line, borderPx)
-	}
+	fc := a.pal.Family(fam)
+	fillRectC(c, x, y, w, h, fc.Fill)
+	strokeTileBorder(c, x, y, w, h, fc.Line, borderPx)
 	if selected {
 		a.drawFocusedTileOutline(c, x, y, w, h)
 	}
@@ -970,12 +940,12 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 // cells of parentCellSize.
 func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r pane.Rect, frag float64) {
 	w, h := float64(n.W)*parentCellSize, float64(n.H)*parentCellSize
-	outside := tilepreview.Outside(n, false)
+	fam := pane.TileFamily(n, rpc.IsFilesID(n.GetGridId()))
 	// Dashed means this is, or becomes, a link: it shows mid-drag which
 	// right-button mode is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, fam, dashed, "")
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				a.drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))
@@ -990,7 +960,7 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r 
 	}
 	if frag < 0.98 {
 		a.cctx.Set("globalAlpha", 1.0-frag)
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, outside, dashed, "")
+		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, fam, dashed, "")
 		a.cctx.Set("globalAlpha", 1.0)
 	}
 	a.cctx.Set("globalAlpha", frag)
@@ -998,9 +968,13 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r 
 	a.cctx.Set("globalAlpha", 1.0)
 }
 
-// paneBorderColorFor picks the border from what the pane descended into.
+// paneBorderColorFor is the pane's family's line, faded when it has no focus.
 func (a *App) paneBorderColorFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused bool, urlLive bool) string {
-	return pane.BorderColor(a.borderInputFor(p, g, gridOK, focused, urlLive), a.paneBorderColors())
+	c := a.pal.Family(pane.FamilyOf(a.borderInputFor(p, g, gridOK, focused, urlLive)))
+	if focused {
+		return c.Line
+	}
+	return c.LineFaded
 }
 
 // borderInputFor is shared with the bottom bar, so frame and band agree.
@@ -1024,25 +998,6 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 		in.InDirectory = true
 	}
 	return in
-}
-
-func (a *App) paneBorderColors() pane.BorderColors {
-	return pane.BorderColors{
-		Focused:        a.pal.FocusBorder,
-		FocusedFaded:   a.pal.FocusBorderFaded,
-		Text:           a.pal.MarkdownLine,
-		TextFaded:      a.pal.MarkdownLineFaded,
-		URL:            a.pal.URLLine,
-		URLFaded:       a.pal.URLLineFaded,
-		URLLive:        a.pal.URLLiveLine,
-		URLLiveFaded:   a.pal.URLLiveLineFaded,
-		Shell:          a.pal.ShellBorder,
-		ShellFaded:     a.pal.ShellBorderFaded,
-		Directory:      a.pal.DirectoryBorder,
-		DirectoryFaded: a.pal.DirectoryBorderFaded,
-		Ephemeral:      a.pal.EphemeralBorder,
-		EphemeralFaded: a.pal.EphemeralBorderFaded,
-	}
 }
 
 // drawEdgeIndicators marks every tile outside the viewport on the ray from

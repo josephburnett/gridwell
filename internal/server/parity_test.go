@@ -36,9 +36,10 @@ import (
 	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/deadlink"
 	"github.com/josephburnett/gridwell/client/events"
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
-	"github.com/josephburnett/gridwell/client/tilepreview"
+	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/urlview"
 	"github.com/josephburnett/gridwell/internal/config"
 	"github.com/josephburnett/gridwell/internal/files"
@@ -977,11 +978,10 @@ func (f *parityFix) told(ids, grids []string) bool {
 	}
 }
 
-// draw is the client's verdict on the row: dead or not, the banner's hue and
-// words, and whether the outside treatment agrees with who owns the address
-// the row opens and whether it sits in a directory, the differences the
-// promise and the directory tint allow a draw. The hue is the row's own, the
-// tint a directory's rows wear aside.
+// draw is the client's verdict on the row: dead or not, its kind's colour
+// family and its banner's words, and whether the family it wears is its
+// kind's or the outside colour, the one difference the directory tint allows
+// a draw (pane.TileFamily).
 func (f *parityFix) draw(t *gridwellv1.Tile) string {
 	inDir := rpc.IsFilesID(t.GridId)
 	dead := deadlink.DeadTile(t, f.roster, localNodeID, func(id string) bool {
@@ -993,9 +993,10 @@ func (f *parityFix) draw(t *gridwellv1.Tile) string {
 		}
 		return clientsync.Of(err) == clientsync.OutcomeDead
 	})
-	elsewhere := rpc.IsDoorKind(t.Kind) && t.ChildGridId != "" && rpc.SourceOf(t.ChildGridId) != rpc.SourceOf(t.GridId)
-	return fmt.Sprintf("dead=%v outside-as-its-place=%v hue=%d banner=%q", dead, tilepreview.Outside(t, inDir) == (elsewhere || inDir),
-		tilepreview.BannerHue(t, tilepreview.Outside(t, false)), t.GetAltText())
+	kind := pane.TileFamily(&gridwellv1.Tile{Kind: t.Kind}, false)
+	fam := pane.TileFamily(t, inDir)
+	return fmt.Sprintf("dead=%v kind-or-outside=%v family=%d banner=%q", dead, fam == kind || fam == theme.FamilyDirectory,
+		kind, t.GetAltText())
 }
 
 // observe is a write's observable: its answer, and once it landed the row

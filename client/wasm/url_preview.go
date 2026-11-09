@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/preview"
+	"github.com/josephburnett/gridwell/client/theme"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
@@ -113,35 +114,35 @@ func (a *App) descendedRow(n *gridwellv1.Tile) *gridwellv1.Tile {
 	return n
 }
 
-// drawShellTile is drawURLTile for a shell. The outline is the shell orange,
-// because bash runs outside Gridwell's data world.
-func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
+// drawShellTile is drawURLTile for a shell.
+func (a *App) drawShellTile(n *gridwellv1.Tile, x, y, w, h float64, selected bool, fam theme.Family, dashed bool) {
+	fc := a.pal.Family(fam)
 	withClip(a.cctx, x, y, w, h, func() {
-		a.drawFrozenPreview(n, x, y, w, h, a.pal.ShellFill, n.PreviewBlobId, func() {
+		a.drawFrozenPreview(n, x, y, w, h, fc.Fill, n.PreviewBlobId, func() {
 			if n.PreviewBlobId != 0 {
 				a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 			} else if w > 20 && h > 20 {
 				// A menu drop never refreshed, so paint the glyph rather
 				// than a blank box.
-				drawShellGlyph(a.cctx, x, y, w, h, a.pal.ShellBorder)
+				drawShellGlyph(a.cctx, x, y, w, h, fc.Line)
 			}
 		})
 
-		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.ShellBorder, dashed, selected)
+		a.strokeTileFrame(a.cctx, x, y, w, h, fc.Line, dashed, selected)
 	})
 }
 
 // drawURLTile renders a URL tile in the parent grid view. Its preview is keyed
 // by the node (see files.previewKey) and its label is urlTileLabel's,
 // whoever serves the page.
-func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected, dashed bool) {
+func (a *App) drawURLTile(n *gridwellv1.Tile, x, y, w, h float64, selected bool, fam theme.Family, dashed bool) {
 	withClip(a.cctx, x, y, w, h, func() {
 		a.drawFrozenPreview(n, x, y, w, h, a.pal.FileInnerBg, n.PreviewBlobId, func() {
 			a.drawPreviewPlaceholder(urlTileLabel(n), x, y, w, h)
 			a.fetchURLPreview(rpc.ContentID(n), n.PreviewBlobId)
 		})
 
-		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.URLLine, dashed, selected)
+		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.Family(fam).Line, dashed, selected)
 	})
 }
 

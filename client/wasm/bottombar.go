@@ -49,22 +49,8 @@ func (a *App) barTheme() (band, button string) {
 		return a.pal.Bg, a.pal.FocusBorder
 	}
 	g, gridOK := a.c.Grid(a.gridIDForPane(p))
-	in := a.borderInputFor(p, g, gridOK, true, a.urlViewFor(p.ID) != nil)
-	switch pane.FamilyOf(in) {
-	case pane.FamilyText:
-		return a.pal.BarTextBand, a.pal.MarkdownLine
-	case pane.FamilyURL:
-		return a.pal.URLFill, a.pal.URLLine
-	case pane.FamilyURLLive:
-		return a.pal.URLFill, a.pal.URLLiveLine
-	case pane.FamilyShell:
-		return a.pal.ShellFill, a.pal.ShellBorder
-	case pane.FamilyDirectory:
-		return a.pal.BarDirectoryBand, a.pal.DirectoryBorder
-	case pane.FamilyEphemeral:
-		return a.pal.BarEphemeralBand, a.pal.EphemeralBorder
-	}
-	return a.pal.BarGridBand, a.pal.FocusBorder
+	c := a.pal.Family(pane.FamilyOf(a.borderInputFor(p, g, gridOK, true, a.urlViewFor(p.ID) != nil)))
+	return c.Band, c.Line
 }
 
 // navCrumb is pane.NavCrumb; navChain is the stack's NavChain for the
@@ -348,9 +334,10 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, select
 		if cr.Anchor != "" {
 			// A root crumb: the namespace's identity glyph, the same drawing
 			// as its menu swatch.
+			line := a.pal.Family(pane.GridFamily(cr.Anchor)).Line
 			fillRectC(c, x, y, side, side, a.pal.Bg)
-			a.drawSourceGlyph(a.sourceGlyph(cr.Anchor), x, y, side, side)
-			c.Set("strokeStyle", a.pal.FocusBorder)
+			a.drawSourceGlyph(a.sourceGlyph(cr.Anchor), x, y, side, side, line)
+			c.Set("strokeStyle", line)
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
 		} else if t := a.chainCrumbTile(cr); t != nil {
@@ -358,7 +345,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, select
 			if cells < 1 {
 				cells = 1
 			}
-			a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, false, isLinkTile(t), "")
+			a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, pane.TileFamily(t, rpc.IsFilesID(t.GetGridId())), isLinkTile(t), "")
 		} else {
 			// The row is not cached, so draw a placeholder; the fetch kicked
 			// by chainCrumbTile fills it in.

@@ -191,6 +191,51 @@ type Palette struct {
 	CardShadow string
 }
 
+// Family is a colour family: what a tile, a pane, a swatch or a crumb wears.
+// client/pane classifies (pane.TileFamily, pane.FamilyOf) and Palette.Family
+// is the one table from a family to its shades, so no two drawers disagree.
+type Family int
+
+const (
+	FamilyGrid Family = iota // a grid of home's or a far node's, and its door
+	FamilyText
+	FamilyURL
+	FamilyURLLive // a url tile with a live view
+	FamilyShell
+	FamilyDirectory // a directory, its door and every file in it
+	FamilyWorkspace
+	// FamilyEphemeral beats the kind's, because ascending deletes the tile.
+	FamilyEphemeral
+	FamilyMuted // a kind with no colour of its own
+)
+
+// FamilyColors is one family's shades: its body, its outline saturated and
+// faded, and the bar's band.
+type FamilyColors struct{ Fill, Line, LineFaded, Band string }
+
+// Family is the one table from a family to its shades.
+func (p Palette) Family(f Family) FamilyColors {
+	switch f {
+	case FamilyText:
+		return FamilyColors{p.MarkdownFill, p.MarkdownLine, p.MarkdownLineFaded, p.BarTextBand}
+	case FamilyURL:
+		return FamilyColors{p.URLFill, p.URLLine, p.URLLineFaded, p.URLFill}
+	case FamilyURLLive:
+		return FamilyColors{p.URLFill, p.URLLiveLine, p.URLLiveLineFaded, p.URLFill}
+	case FamilyShell:
+		return FamilyColors{p.ShellFill, p.ShellBorder, p.ShellBorderFaded, p.ShellFill}
+	case FamilyDirectory:
+		return FamilyColors{p.DirectoryFill, p.DirectoryBorder, p.DirectoryBorderFaded, p.BarDirectoryBand}
+	case FamilyWorkspace:
+		return FamilyColors{p.WorkspaceFill, p.WorkspaceBorder, p.WorkspaceBorder, p.WorkspaceFill}
+	case FamilyEphemeral:
+		return FamilyColors{p.Locked, p.EphemeralBorder, p.EphemeralBorderFaded, p.BarEphemeralBand}
+	case FamilyMuted:
+		return FamilyColors{p.Locked, p.Muted, p.Muted, p.Locked}
+	}
+	return FamilyColors{p.Bg, p.FocusBorder, p.FocusBorderFaded, p.BarGridBand}
+}
+
 var dark = Palette{
 	Bg:          "#0c0d11",
 	FileInnerBg: "#1c1f26",

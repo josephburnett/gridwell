@@ -1,19 +1,10 @@
 package pane
 
-import "github.com/josephburnett/gridwell/api/rpc"
-
-// BorderColors is the renderer's palette, one saturated and one faded string
-// per Family. The functions here are pure and indifferent to which CSS colors
-// they are.
-type BorderColors struct {
-	Focused, FocusedFaded     string
-	Text, TextFaded           string
-	URL, URLFaded             string
-	URLLive, URLLiveFaded     string
-	Shell, ShellFaded         string
-	Directory, DirectoryFaded string
-	Ephemeral, EphemeralFaded string
-}
+import (
+	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/theme"
+)
 
 // BorderInput is what the classifier needs about a pane. It is a struct rather
 // than a *Pane so this package depends on no cache or tile types: the caller
@@ -26,82 +17,59 @@ type BorderInput struct {
 	Focused      bool // the keyboard-focused pane in the split tree
 	URLLive      bool // a live native view renders into this pane
 	// InDirectory is whether the viewed grid is a directory
-	// (cache.Grid.Directory). It drives the Directory family for the grid and
-	// for a text tile in it; a url or shell tile in one keeps its kind's.
+	// (cache.Grid.Directory).
 	InDirectory bool
 	// Ephemeral is the descended tile living in the scratch grid, so it is
 	// deleted on ascent. Only meaningful with HasTextFocus and TileKnown.
 	Ephemeral bool
 }
 
-// Family is the one classification behind the color grammar. The pane outline
-// and the bottom bar's band and buttons both derive from it, so the outline and
-// the bar cannot disagree about what the pane is showing.
-type Family int
+// TileFamily is the one classifier of a tile's colour: its frame, its banner,
+// its swatch, its crumb, its ghost and a pane descended into it all read it.
+// inDirectory is whether the grid the tile sits in is a directory.
+func TileFamily(t *gridwellv1.Tile, inDirectory bool) theme.Family {
+	switch k := rpc.KindOf(t.GetKind()); {
+	case k.Live == rpc.DescentShell:
+		return theme.FamilyShell
+	case k.Descends == rpc.DescendGrid:
+		// A door wears the family of the grid it opens, wherever it sits.
+		return GridFamily(t.GetChildGridId())
+	case inDirectory && (k.Live == rpc.DescentURL || k.Content == rpc.ContentBody):
+		// A file is outside, whatever it holds.
+		return theme.FamilyDirectory
+	case k.Live == rpc.DescentURL:
+		return theme.FamilyURL
+	case k.Content == rpc.ContentBody:
+		return theme.FamilyText
+	case k.Content == rpc.ContentLayout:
+		return theme.FamilyWorkspace
+	}
+	return theme.FamilyMuted
+}
 
-const (
-	FamilyGrid      Family = iota // any grid of home's or a far node's, at any depth
-	FamilyText                    // a descent into a text tile
-	FamilyURL                     // a descent into a url tile, frozen
-	FamilyURLLive                 // a descent into a url tile with a live view
-	FamilyShell                   // a descent into a shell tile
-	FamilyDirectory               // a directory, or a text tile in one: outside the system
-	// FamilyEphemeral is a descent into a scratch-grid tile. It beats the kind
-	// color, because ascending deletes the tile.
-	FamilyEphemeral
-)
+// GridFamily is a grid's family: a directory is outside the system.
+func GridFamily(gridID string) theme.Family {
+	if rpc.IsFilesID(gridID) {
+		return theme.FamilyDirectory
+	}
+	return theme.FamilyGrid
+}
 
-// FamilyOf is the single classifier every color consumer derives from.
-func FamilyOf(s BorderInput) Family {
-	if s.HasTextFocus {
-		if s.TileKnown {
-			if s.Ephemeral {
-				return FamilyEphemeral
-			}
-			switch k := rpc.KindOf(s.TileKind); {
-			case k.Live == rpc.DescentURL:
-				if s.URLLive {
-					return FamilyURLLive
-				}
-				return FamilyURL
-			case k.Live == rpc.DescentShell:
-				return FamilyShell
-			case k.Content == rpc.ContentBody:
-				if s.InDirectory {
-					return FamilyDirectory
-				}
-				return FamilyText
-			}
+// FamilyOf is the pane's family, which its border and the bar's band and
+// buttons read: the descended tile's, or the grid's.
+func FamilyOf(s BorderInput) theme.Family {
+	if !s.HasTextFocus || !s.TileKnown {
+		if s.InDirectory {
+			return theme.FamilyDirectory
 		}
+		return theme.FamilyGrid
 	}
-	if s.InDirectory {
-		return FamilyDirectory
+	if s.Ephemeral {
+		return theme.FamilyEphemeral
 	}
-	return FamilyGrid
-}
-
-// BorderColor is the pane's Family, saturated when the pane has focus.
-func BorderColor(s BorderInput, c BorderColors) string {
-	switch FamilyOf(s) {
-	case FamilyEphemeral:
-		return focused(s, c.Ephemeral, c.EphemeralFaded)
-	case FamilyURLLive:
-		return focused(s, c.URLLive, c.URLLiveFaded)
-	case FamilyURL:
-		return focused(s, c.URL, c.URLFaded)
-	case FamilyShell:
-		return focused(s, c.Shell, c.ShellFaded)
-	case FamilyDirectory:
-		return focused(s, c.Directory, c.DirectoryFaded)
-	case FamilyText:
-		return focused(s, c.Text, c.TextFaded)
+	f := TileFamily(&gridwellv1.Tile{Kind: s.TileKind}, s.InDirectory)
+	if f == theme.FamilyURL && s.URLLive {
+		return theme.FamilyURLLive
 	}
-	return focused(s, c.Focused, c.FocusedFaded)
-}
-
-func focused(s BorderInput, sat, faded string) string {
-	if s.Focused {
-		return sat
-	}
-	return faded
+	return f
 }

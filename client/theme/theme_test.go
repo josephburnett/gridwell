@@ -121,3 +121,22 @@ func TestCSSName(t *testing.T) {
 		}
 	}
 }
+
+// Every family has every shade in both palettes, and no two families share an
+// outline, so a family reads as itself wherever it is drawn.
+func TestEveryFamilyHasItsOwnLine(t *testing.T) {
+	for _, th := range All() {
+		p := Of(th)
+		lines := map[string]Family{}
+		for f := FamilyGrid; f <= FamilyMuted; f++ {
+			c := p.Family(f)
+			if c.Fill == "" || c.Line == "" || c.LineFaded == "" || c.Band == "" {
+				t.Errorf("%v: family %d leaves a shade empty: %+v", th, f, c)
+			}
+			if g, ok := lines[c.Line]; ok {
+				t.Errorf("%v: families %d and %d share the line %s", th, g, f, c.Line)
+			}
+			lines[c.Line] = f
+		}
+	}
+}

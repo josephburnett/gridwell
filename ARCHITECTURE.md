@@ -645,7 +645,7 @@ copy:
 | does this descent go live | `shellconn.DecideAutoLive` |
 | what a closing url view writes back (a served page: its frame alone) | `urlview.Writeback` |
 | which preview a file's tile wears | `files.previewKey` |
-| does a tile draw as host state, and which hue its banner wears | `tilepreview.Outside`, `tilepreview.BannerHue` |
+| which colour a tile, its swatch, its crumb, the pane on it and the bar wear | `pane.TileFamily`, `pane.FamilyOf`, over the one table `theme.Palette.Family` |
 | what the bar's circle slot is | `barslot.Decide` (drawn and clicked) |
 | what that slot's right-click offers | `circlemenu.For` |
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |

@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
+	"github.com/josephburnett/gridwell/client/theme"
 )
 
 // Paints text tiles on the canvas: the raw monospace source, soft-wrapped
@@ -94,7 +95,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 // tile's width, and the stored TextX/TextY are its scroll. The preview
 // follows the tile's stored text_mode, and raw source covers the async gap
 // before its first raster.
-func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
+func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected bool, fam theme.Family, dashed bool) {
 	frame := markdown.PreviewFrameOf(w, textFixedScale, contentzoom.Of(n.GetContentZoom()), n.TextX, n.TextY)
 	scale, scrollX, scrollY := frame.Scale, frame.ScrollX, frame.ScrollY
 
@@ -129,14 +130,7 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected,
 		}
 	})
 
-	// A host file the markdown renderer can show is text-green like any
-	// document, and one it cannot is muted grey. markdown.Renderable is the
-	// same rule the files serve bodies by, so the color never lies.
-	outlineColor := a.pal.MarkdownLine
-	if outside && !markdown.Renderable(n.AltText) {
-		outlineColor = a.pal.Muted
-	}
-	a.strokeTileFrame(a.cctx, x, y, w, h, outlineColor, dashed, selected)
+	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.Family(fam).Line, dashed, selected)
 }
 
 // markdownStyle is the raw-text painter's font, spacing and color in logical

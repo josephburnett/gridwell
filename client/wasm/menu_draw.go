@@ -11,7 +11,6 @@ import (
 	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/sourcehealth"
-	"github.com/josephburnett/gridwell/client/tilepreview"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
@@ -164,22 +163,23 @@ func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
 // that has no content yet.
 func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	n := menuItemGhostNode(item)
+	fam := pane.TileFamily(n, false)
+	line := a.pal.Family(fam).Line
 	if item.isSwatch {
 		// A source swatch is the linked door it drops into a grid, dashed
 		// because a cross-source link can be unlinked. Drawn identically
 		// here, as the drag ghost, and once dropped.
 		fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
-		a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.FocusBorder, true /* dashed */, false /* selected */)
-		a.drawSourceGlyph(door.RowGlyph(item.source), x, y, w, h)
-		a.drawTileBannerLabel(n, x, y, w, h, false)
+		a.strokeTileFrame(a.cctx, x, y, w, h, line, true /* dashed */, false /* selected */)
+		a.drawSourceGlyph(door.RowGlyph(item.source), x, y, w, h, line)
+		a.drawTileBannerLabel(n, x, y, w, h, fam)
 		// A broken or waiting source gets the same health tint its link
 		// tiles do.
 		a.drawSourceHealthTint(n, x, y, w, h)
 	} else {
-		outside := tilepreview.Outside(n, false)
-		a.drawNode(a.cctx, n, x, y, w, h, false, outside, tileBorderPx, false)
+		a.drawNode(a.cctx, n, x, y, w, h, false, fam, tileBorderPx, false)
 		if pr, ok := primitiveFor(item.primitive); ok {
-			pr.glyph(a, x, y, w, h)
+			pr.glyph(a.cctx, x, y, w, h, line)
 		}
 	}
 	if hovered {
@@ -190,19 +190,19 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 // drawSourceGlyph is the name-to-pixels half of a declared identity glyph.
 // Which name a row wears is door.RowGlyph's and door.GlyphFor's, so the menu
 // swatch and the bar crumb cannot default differently. Never a kind switch:
-// the client must not know its sources.
-func (a *App) drawSourceGlyph(glyph string, x, y, w, h float64) {
+// the client must not know its sources. color is the door's family's line.
+func (a *App) drawSourceGlyph(glyph string, x, y, w, h float64, color string) {
 	switch glyph {
 	case rpc.GlyphFolder:
-		drawFolderGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
+		drawFolderGlyph(a.cctx, x, y, w, h, color)
 	case rpc.GlyphDoor:
-		drawDoorGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
+		drawDoorGlyph(a.cctx, x, y, w, h, color)
 	case rpc.GlyphTrash:
-		drawTrashGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
+		drawTrashGlyph(a.cctx, x, y, w, h, color)
 	default:
 		// rpc.GlyphGlobe, declared by every connection, and equally any name
 		// this client does not know.
-		drawGlobeGlyph(a.cctx, x, y, w, h, a.pal.FocusBorder)
+		drawGlobeGlyph(a.cctx, x, y, w, h, color)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panepreview"
+	"github.com/josephburnett/gridwell/client/theme"
 )
 
 // workspaceLayout is panepreview.Layouts over the content cache; the memo
@@ -37,13 +38,14 @@ func (a *App) paneLayoutUnreadable(tileID string, err error) {
 // leaf's grid one level deep, through the same machinery door previews use.
 // One level deep, flat beyond, so a door inside a leaf draws as its flat
 // preview. A never-arranged layout shows the split glyph.
-func (a *App) drawWorkspacePreview(n *gridwellv1.Tile, x, y, w, h float64, selected, outside, dashed bool) {
+func (a *App) drawWorkspacePreview(n *gridwellv1.Tile, x, y, w, h float64, selected bool, fam theme.Family, dashed bool) {
 	c := a.cctx
-	fillRectC(c, x, y, w, h, a.pal.WorkspaceFill)
+	fc := a.pal.Family(fam)
+	fillRectC(c, x, y, w, h, fc.Fill)
 
 	tree, ok := a.workspaceLayout(n)
 	if !ok {
-		drawWorkspaceGlyph(c, x, y, w, h, a.pal.WorkspaceBorder)
+		drawWorkspaceGlyph(c, x, y, w, h, fc.Line)
 	} else {
 		tileRect := pane.Rect{X: x, Y: y, W: w, H: h}
 		withClip(c, x, y, w, h, func() {
@@ -52,13 +54,13 @@ func (a *App) drawWorkspacePreview(n *gridwellv1.Tile, x, y, w, h float64, selec
 			}
 			// On top, so the split structure reads at any size.
 			for _, d := range pane.Dividers(tree, tileRect, 1) {
-				fillRectC(c, d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1), a.pal.WorkspaceBorder)
+				fillRectC(c, d.Rect.X, d.Rect.Y, max(d.Rect.W, 1), max(d.Rect.H, 1), fc.Line)
 			}
 		})
 	}
 
-	a.strokeTileFrame(c, x, y, w, h, a.pal.WorkspaceBorder, dashed, selected)
-	a.drawTileBannerLabel(n, x, y, w, h, outside)
+	a.strokeTileFrame(c, x, y, w, h, fc.Line, dashed, selected)
+	a.drawTileBannerLabel(n, x, y, w, h, fam)
 }
 
 // drawPaneLeafPreview paints one leaf: the grid its place resolves to, at the
