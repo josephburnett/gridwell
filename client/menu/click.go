@@ -14,6 +14,9 @@ const (
 	ClickEnter
 	// ClickVisit opens the ephemeral visit without placing a tile.
 	ClickVisit
+	// ClickCopy visits an ephemeral copy of a template: the copy is made
+	// first, and the template is never touched.
+	ClickCopy
 )
 
 // Swatch carries no coordinate, because a click has no destination.
@@ -24,13 +27,19 @@ type Swatch struct {
 	Promote bool
 	// Visits marks a primitive whose table row declares a click behavior.
 	Visits bool
+	// Template marks a template; the copy swatch is a press with no click.
+	Template, CopySwatch bool
 }
 
 // ClickOn asks identity before kind, because a row can carry more than one
 // flag: the promote crumb is spelled as the url primitive, so Promote is read
-// before Visits.
+// before Visits, and a strip item carries the zero primitive.
 func ClickOn(s Swatch) ClickTarget {
 	switch {
+	case s.Template:
+		return ClickCopy
+	case s.CopySwatch:
+		return ClickNothing
 	case s.IsSwatch:
 		return ClickEnter
 	case s.Promote:

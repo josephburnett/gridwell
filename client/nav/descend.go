@@ -79,7 +79,10 @@ func (m *Machine) descendGrid(p PaneView, door *gridwellv1.Tile, w World, pl *pl
 		return
 	}
 	base := p.Stack.Copy()
-	if w.Door.IsLink {
+	// An ephemeral door sits on the scratch grid, no grid of the pane's
+	// place, so its frame names its grid as a link's does.
+	eph, known := scratch.Ephemeral(p.Scratch, door.GridId)
+	if w.Door.IsLink || eph && known {
 		// A link crosses into another id space, so the frame carries the target
 		// grid id and every path id below stays in one namespace.
 		next.GridID = door.ChildGridId

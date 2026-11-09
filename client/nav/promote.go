@@ -43,7 +43,7 @@ func (m *Machine) promote(g Gesture, w World) Plan {
 	// first names the new tile.
 	if old := w.Promote.old(); old != nil {
 		eph, known := scratch.Ephemeral(op.Scratch, old.GridId)
-		if eph && known && !w.otherPaneShows(op.ID, old.Id) {
+		if eph && known && !w.otherPaneHolds(op.ID, old.Id) {
 			m.retireVisit(old, &pl)
 		}
 	}

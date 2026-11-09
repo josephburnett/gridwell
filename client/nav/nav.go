@@ -305,7 +305,7 @@ func (m *Machine) Resume(tok Token, r Result, w World) Plan {
 			TileID: r.Tile.Id, Tile: r.Tile})
 	case stepRetireVisit:
 		// A layout the node did not take still names the visit, so it stays.
-		if r.OK && !w.otherPaneShows("", c.Tile.Id) {
+		if r.OK && !w.otherPaneHolds("", c.Tile.Id) {
 			pl.add(Effect{Kind: EffDeleteEphemeral, Tile: c.Tile})
 		}
 	case stepRestoreCursor:

@@ -51,6 +51,11 @@ func TestDecide(t *testing.T) {
 			Verdict{Rename: RenameDescent, Label: "example.com", Source: "ephemeral", Editable: true},
 		},
 		{
+			"a grid entered through an ephemeral door says it is ephemeral",
+			Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox", CertainlyEphemeral: true},
+			Verdict{Rename: RenameDoor, Label: "inbox", Source: "ephemeral", Editable: true},
+		},
+		{
 			"a door's grid names the door it was entered through",
 			Input{AtAnchor: true, Door: door.Tile, DoorName: "inbox"},
 			Verdict{Rename: RenameDoor, Label: "inbox", Editable: true},

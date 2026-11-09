@@ -171,6 +171,9 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, doorTile, visit *gridwellv1.Tile) {
 	lw := w.Leave
 	own := p.Stack.FramingTarget(w.LevelDepth > 0)
+	if !own.Content {
+		visit = endedVisit(p, w, lw.DoorRow)
+	}
 	if own.Content {
 		file := lw.DescendedTile
 		if file == nil {
@@ -180,11 +183,8 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 			return own.TileID, nil, nil
 		}
 		pl.add(Effect{Kind: EffSaveText, PaneID: p.ID, TileID: file.Id})
-		// An ephemeral tile closes like any other and is then retired. The
-		// answer must be a known yes, and no other pane may still show it,
-		// since a split copies the visit.
-		eph, known := scratch.Ephemeral(p.Scratch, file.GridId)
-		ephemeral := eph && known && !w.otherPaneShows(p.ID, file.Id)
+		// An ephemeral tile closes like any other and is then retired.
+		visit = endedVisit(p, w, file)
 		if rpc.WebContent(file) {
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
 				Streams: StreamURL, Freeze: true})
@@ -193,15 +193,12 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 			pl.add(Effect{Kind: EffCloseStream, PaneID: p.ID,
 				Streams: StreamShell, Freeze: true})
 		}
-		if ephemeral {
-			visit = file
-		}
 		return own.TileID, file, visit
 	}
 	if own.Layout {
 		// The view leaves with the popped frame and the layout write follows
 		// from the settle; the ascent animates onto the door's own framing.
-		return own.TileID, lw.DoorTile, nil
+		return own.TileID, lw.DoorTile, visit
 	}
 	if own.TileID == "" {
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
@@ -210,14 +207,14 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 	if !lw.DoorGridCached {
 		pl.add(Effect{Kind: EffFetchGrid, GridID: lw.DoorGridID})
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
-		return own.TileID, nil, nil
+		return own.TileID, nil, visit
 	}
 	if lw.DoorTile == nil {
 		// A + menu descent, for which the origin grid holds no row: the root
 		// grid row carries the framing instead, through the same verb, so
 		// re-entering from the menu lands at the left-off view.
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
-		return own.TileID, nil, nil
+		return own.TileID, nil, visit
 	}
 	// The executor writes the door's view region and patches the cache
 	// before the ascent is calibrated, so the frame swap matches where the
@@ -227,6 +224,18 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 	t := proto.CloneOf(lw.DoorTile)
 	settleFraming(t, p, w.CellPx)
 	return own.TileID, t, nil
+}
+
+// endedVisit is row when leaving it ends an ephemeral visit: a known yes,
+// and no other pane still holds it, since a split copies the place.
+func endedVisit(p PaneView, w World, row *gridwellv1.Tile) *gridwellv1.Tile {
+	if row == nil {
+		return nil
+	}
+	if eph, known := scratch.Ephemeral(p.Scratch, row.GridId); !eph || !known || w.otherPaneHolds(p.ID, row.Id) {
+		return nil
+	}
+	return row
 }
 
 // settleFraming applies to a door row the framing PersistFraming is about

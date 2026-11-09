@@ -20,8 +20,8 @@ type BorderInput struct {
 	// InDirectory is whether the viewed grid is a directory
 	// (cache.Grid.Directory).
 	InDirectory bool
-	// Ephemeral is the descended tile living in the scratch grid, so it is
-	// deleted on ascent. Only meaningful with HasTextFocus and TileKnown.
+	// Ephemeral is the tile the pane stands in, descended into or entered as
+	// a door, living in the scratch grid, so it is deleted on ascent.
 	Ephemeral bool
 }
 
@@ -66,14 +66,14 @@ func GridFamily(gridID string) theme.Family {
 // FamilyOf is the pane's family, which its border and the bar's band and
 // buttons read: the descended tile's, or the grid's.
 func FamilyOf(s BorderInput) theme.Family {
+	if s.Ephemeral {
+		return theme.FamilyEphemeral
+	}
 	if !s.HasTextFocus || !s.TileKnown {
 		if s.InDirectory {
 			return theme.FamilyDirectory
 		}
 		return theme.FamilyGrid
-	}
-	if s.Ephemeral {
-		return theme.FamilyEphemeral
 	}
 	f := TileFamily(&gridwellv1.Tile{Kind: s.TileKind, Id: s.TileID})
 	if f == theme.FamilyURL && s.URLLive {

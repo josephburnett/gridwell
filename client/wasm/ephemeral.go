@@ -65,17 +65,36 @@ func (a *App) scratchOrReport(p *pane.Pane) string {
 // grid and focuses the off-grid tile descendedTile resolves. label is the
 // kind's own, because it keys the parked write.
 func (a *App) visitEphemeral(p *pane.Pane, label string, tile *gridwellv1.Tile) {
+	a.visitIn(p, label, func(scratch string) tileCall {
+		req := &gridwellv1.CreateTileRequest{GridId: scratch, Tile: tile}
+		return func(ctx context.Context) (*gridwellv1.Tile, error) { return a.cl.CreateTile(ctx, req) }
+	})
+}
+
+// visitCopy visits an ephemeral copy of template: the copy lands in the
+// pane's scratch grid first, by the copy rules any copy follows (a shell's
+// names the template's tmux), and the descent is into the copy, so the
+// template is never touched.
+func (a *App) visitCopy(p *pane.Pane, template *gridwellv1.Tile) {
+	a.visitIn(p, "CopyTile", func(scratch string) tileCall {
+		req := &gridwellv1.CopyTileRequest{TileId: template.Id, DestGridId: scratch}
+		return func(ctx context.Context) (*gridwellv1.Tile, error) { return a.cl.CopyTile(ctx, req) }
+	})
+}
+
+// visitIn makes the visit's row in the pane's scratch grid by the call
+// build builds and descends into it.
+func (a *App) visitIn(p *pane.Pane, label string, build func(scratch string) tileCall) {
 	scratch := a.scratchOrReport(p)
 	if scratch == "" {
 		return
 	}
 	paneID := p.ID
-	a.createTile(label, scratch, &gridwellv1.CreateTileRequest{GridId: scratch, Tile: tile},
-		func(created *gridwellv1.Tile) {
-			if fp := a.tree.FindPane(paneID); fp != nil {
-				a.descend(fp, created)
-			}
-		})
+	a.postTileMutate(label, scratch, build(scratch), func(created *gridwellv1.Tile) {
+		if fp := a.tree.FindPane(paneID); fp != nil {
+			a.descend(fp, created)
+		}
+	})
 }
 
 // visitEphemeralURL is where every link opened inside Gridwell lands.
@@ -90,6 +109,18 @@ func (a *App) visitEphemeralURL(p *pane.Pane, url string) {
 func (a *App) certainlyEphemeral(p *pane.Pane, t *gridwellv1.Tile) bool {
 	eph, known := scratch.Ephemeral(a.scratchGridOf(p), t.GridId)
 	return known && eph
+}
+
+// enteredVisit is the door a grid pane was entered through when that door is
+// certainly an ephemeral visit, a template's copy, nil otherwise.
+func (a *App) enteredVisit(p *pane.Pane) *gridwellv1.Tile {
+	if p.ContentID() != "" || p.Door == "" {
+		return nil
+	}
+	if t := a.cachedTileByID(p.Door); t != nil && a.certainlyEphemeral(p, t) {
+		return t
+	}
+	return nil
 }
 
 // possiblyEphemeral: t is ephemeral, or it is not known yet.

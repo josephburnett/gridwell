@@ -5,6 +5,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/scratch"
 )
 
@@ -146,4 +147,80 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 			t.Fatalf("deleted %+v, want the visit", d)
 		}
 	})
+}
+
+// A template's ephemeral copy can be a door or a workspace tile (Joe
+// 2026-11-09 templates): the door sits on the scratch grid, no grid of the
+// pane's, so its frame carries its grid as a link's does; leaving that frame,
+// or the workspace tile's level, retires the copy as a content visit is.
+
+func ephemeralDoor() *gridwellv1.Tile {
+	return &gridwellv1.Tile{Id: "d1", Kind: rpc.KindDoor, GridId: "sg", W: 1, H: 1, ChildGridId: "dc"}
+}
+
+func TestEphemeralDoorFrameCarriesItsGrid(t *testing.T) {
+	w := ephemeralWorld(gridPane("pane1", "g1"))
+	w.Door = &DoorWorld{}
+	tr := only(t, New().Do(descendGesture("pane1", ephemeralDoor()), w), EffStartTransition)
+	if child := tr.Segments[1].Place; child.GridID != "dc" || child.Door != "d1" {
+		t.Fatalf("frame = %+v, want the door's grid carried", child.Frame)
+	}
+}
+
+func doorVisitPane(id string) PaneView {
+	p := gridPane(id, "g1")
+	p.Stack.Push(pane.Frame{GridID: "dc", Door: "d1"})
+	p.GridID = "dc"
+	return p
+}
+
+func TestRetireEphemeralDoorOnAscent(t *testing.T) {
+	t.Run("leaving the door's frame retires the copy after the layout flush", func(t *testing.T) {
+		m := New()
+		w := ephemeralWorld(doorVisitPane("pane1"))
+		w.Leave = &LeaveWorld{DoorRow: ephemeralDoor()}
+		plan := m.Do(ascendGesture("pane1", 1, false), w)
+		a := flushAwait(t, plan, EffInstallPlace)
+		d := only(t, m.Resume(a.Token, Result{OK: true}, baseWorld(gridPane("pane1", "g1"))), EffDeleteEphemeral)
+		if d.Tile.GetId() != "d1" {
+			t.Fatalf("deleted %+v, want the door copy", d.Tile)
+		}
+	})
+	t.Run("a split still inside the door keeps it", func(t *testing.T) {
+		m := New()
+		w := ephemeralWorld(doorVisitPane("pane1"))
+		w.Leave = &LeaveWorld{DoorRow: ephemeralDoor()}
+		plan := m.Do(ascendGesture("pane1", 1, false), w)
+		a := flushAwait(t, plan, EffInstallPlace)
+		still := baseWorld(gridPane("pane1", "g1"), doorVisitPane("pane2"))
+		if i := indexOf(m.Resume(a.Token, Result{OK: true}, still), EffDeleteEphemeral); i >= 0 {
+			t.Fatal("deleted a door another pane is inside")
+		}
+	})
+	t.Run("a placed door is not retired", func(t *testing.T) {
+		w := ephemeralWorld(doorVisitPane("pane1"))
+		w.Leave = &LeaveWorld{DoorRow: doorRow()}
+		plan := New().Do(ascendGesture("pane1", 1, false), w)
+		if indexOf(plan, EffAwait) >= 0 {
+			t.Fatalf("a placed door's ascent awaits a retire: %v", kinds(plan))
+		}
+	})
+}
+
+func TestRetireEphemeralWorkspaceOnLeave(t *testing.T) {
+	m := New()
+	w := levelWorld(true)
+	w.LevelRow = &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindWorkspace, GridId: "sg"}
+	w.LevelScratch = scratch.Grid{Cached: true, ScratchGridID: "sg"}
+	plan := m.Do(leaveGesture(1), w)
+	a := flushAwait(t, plan, EffPopLevel)
+	if d := only(t, m.Resume(a.Token, Result{OK: true}, baseWorld(gridPane("pane1", "g1"))), EffDeleteEphemeral); d.Tile.GetId() != "pt1" {
+		t.Fatalf("deleted %+v, want the workspace copy", d.Tile)
+	}
+	placed := levelWorld(true)
+	placed.LevelRow = &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindWorkspace, GridId: "g1"}
+	placed.LevelScratch = w.LevelScratch
+	if indexOf(New().Do(leaveGesture(1), placed), EffAwait) >= 0 {
+		t.Fatal("a placed workspace tile's leave awaits a retire")
+	}
 }

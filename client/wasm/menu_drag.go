@@ -122,10 +122,15 @@ func (a *App) clickMenuItem(d *dragState) {
 	}
 	pr, _ := primitiveFor(d.item.primitive)
 	switch menu.ClickOn(menu.Swatch{
-		IsSwatch: d.item.isSwatch,
-		Promote:  d.item.promotePane != "",
-		Visits:   pr.click != nil,
+		IsSwatch:   d.item.isSwatch,
+		Promote:    d.item.promotePane != "",
+		Visits:     pr.click != nil,
+		Template:   d.item.template != nil,
+		CopySwatch: d.item.copySwatch,
 	}) {
+	case menu.ClickCopy:
+		a.menu.Close()
+		a.visitCopy(fp, d.item.template)
 	case menu.ClickEnter:
 		// The same descent a link tile takes, through a synthetic link tile
 		// at the pane's view center, so ascent lands back exactly here.

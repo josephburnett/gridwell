@@ -60,6 +60,9 @@ type LeaveWorld struct {
 	// DoorTile is the door row, nil when the grid holds none, as for a +
 	// menu portal.
 	DoorTile *gridwellv1.Tile
+	// DoorRow is the frame's door row wherever the cache holds it, an
+	// ephemeral door's on the scratch grid included; nil when not cached.
+	DoorRow *gridwellv1.Tile
 	// LandingView is persistedGridView for the grid being landed on, nil when
 	// nothing is persisted or the owning row is not cached.
 	LandingView *rpc.Framing
@@ -178,6 +181,11 @@ type World struct {
 	Caps       caps.Caps
 	LevelDepth int
 	LevelTop   *pane.Level
+	// LevelRow is the top level's workspace tile as the cache holds it, and
+	// LevelScratch the scratch rule of the pane it was entered from: an
+	// ephemeral one is retired on leaving.
+	LevelRow     *gridwellv1.Tile
+	LevelScratch scratch.Grid
 
 	// The cached liveness probe results, keyed by tmux (shellconn.TmuxKey).
 	// Known is separate because not probed yet is not dead.
@@ -213,13 +221,19 @@ func (w World) current(gridID string) bool {
 	return gridID != "" && w.Current[gridID]
 }
 
-// otherPaneShows reports that another pane is descended into tileID, so
-// leaving does not delete it: splitting an ephemeral visit copies the descent,
-// and the copy's ascent must not delete the row the source pane still shows.
-func (w World) otherPaneShows(paneID, tileID string) bool {
+// otherPaneHolds reports that a pane other than paneID has tileID in its
+// place, descended into it or inside it through a door, so leaving does not
+// delete it: splitting an ephemeral visit copies the place, and the copy's
+// ascent must not delete the row the source pane still shows.
+func (w World) otherPaneHolds(paneID, tileID string) bool {
 	for _, p := range w.Panes {
-		if p.ID != paneID && p.Stack.ContentID() == tileID {
-			return true
+		if p.ID == paneID {
+			continue
+		}
+		for _, f := range p.Stack.Frames() {
+			if f.Door == tileID {
+				return true
+			}
 		}
 	}
 	return false

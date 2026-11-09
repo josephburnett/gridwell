@@ -52,6 +52,7 @@ func (a *App) barTitle(p *pane.Pane) (bartitle.Verdict, *gridwellv1.Tile) {
 		} else if t, ok := a.parentDoor(p); ok {
 			parent, in.Parent, in.ParentName = t, true, t.AltText
 		}
+		in.CertainlyEphemeral = a.enteredVisit(p) != nil
 		in.ConfigLabel = a.declaredLabel(p)
 		in.DirectoryPath, _ = rpc.FilePath(a.gridIDForPane(p))
 	}

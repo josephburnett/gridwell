@@ -20,6 +20,8 @@ func TestClickOn(t *testing.T) {
 			Swatch{IsSwatch: true, Visits: true}, ClickEnter},
 		{"the promote crumb beats the url primitive it is spelled as",
 			Swatch{Promote: true, Visits: true}, ClickNothing},
+		{"a template visits a copy of itself", Swatch{Template: true}, ClickCopy},
+		{"the copy swatch is only dragged", Swatch{CopySwatch: true}, ClickNothing},
 	}
 	for _, c := range cases {
 		if got := ClickOn(c.in); got != c.want {

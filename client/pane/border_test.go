@@ -71,6 +71,7 @@ func TestFamilyOf(t *testing.T) {
 		{"url live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true}, theme.FamilyURLLive},
 		{"shell", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "shell"}, theme.FamilyShell},
 		{"ephemeral beats kind and live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true, Ephemeral: true}, theme.FamilyEphemeral},
+		{"a grid entered through an ephemeral door is ephemeral", BorderInput{DescentDepth: 1, Ephemeral: true}, theme.FamilyEphemeral},
 		{"an unknown tile is the grid's", BorderInput{HasTextFocus: true, TileKind: "text", URLLive: true}, theme.FamilyGrid},
 		{"an unknown tile in a directory is the directory's", BorderInput{HasTextFocus: true, InDirectory: true}, theme.FamilyDirectory},
 	}

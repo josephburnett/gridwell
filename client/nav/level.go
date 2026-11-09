@@ -9,6 +9,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
+	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/transition"
 )
 
@@ -345,6 +346,11 @@ func (m *Machine) leaveLevels(g Gesture, w World) Plan {
 	pl.add(pop)
 	if !outer {
 		pl.fetchGrid(w, pop.GridID)
+	}
+	if row := w.LevelRow; row != nil && row.Id == top.TileID {
+		if eph, known := scratch.Ephemeral(w.LevelScratch, row.GridId); eph && known {
+			m.retireVisit(row, &pl)
+		}
 	}
 	// The landing reads the tree the pop just installed, so it is planned
 	// against a world gathered after it.

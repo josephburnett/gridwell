@@ -1060,6 +1060,8 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 			in.TileID = tile.Id
 			in.Ephemeral = a.certainlyEphemeral(p, tile)
 		}
+	} else {
+		in.Ephemeral = a.enteredVisit(p) != nil
 	}
 	if gridOK && g.Directory() {
 		in.InDirectory = true

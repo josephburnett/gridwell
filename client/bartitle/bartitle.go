@@ -35,8 +35,9 @@ type Input struct {
 	// DescendedReadOnly is the descended row's Tile.read_only: why its source
 	// takes no edits to its body.
 	DescendedReadOnly string
-	// CertainlyEphemeral says the descended row is an ephemeral visit, which
-	// the title says after its name, since saying so needs a known yes.
+	// CertainlyEphemeral says the descended row, or on a grid the door it was
+	// entered through, is an ephemeral visit, which the title says after its
+	// name, since saying so needs a known yes.
 	CertainlyEphemeral bool
 	// AtAnchor is len(pane.Path()) == 0: the pane stands on the level's own
 	// grid, so its door is the row it was entered through.
@@ -90,6 +91,8 @@ const unnamed = "unnamed"
 func Decide(in Input) Verdict {
 	v := decideName(in)
 	switch {
+	case !in.Descent && in.CertainlyEphemeral:
+		v.Source = "ephemeral"
 	case !in.Descent && in.DirectoryPath != v.Label:
 		v.Source = in.DirectoryPath
 	case in.Descent && in.Descended && in.DescendedReadOnly != "":

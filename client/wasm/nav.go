@@ -169,6 +169,14 @@ func (a *App) navWorldCommon() nav.World {
 		ShellAliveKnown: map[string]bool{},
 		Current:         a.c.Current(),
 	}
+	if top := a.ws.Top(); top != nil {
+		w.LevelRow = a.cachedTileByID(top.TileID)
+		if top.OuterTree != nil {
+			if op := top.OuterTree.FindPane(top.OriginPane); op != nil {
+				w.LevelScratch = a.scratchGridOf(op)
+			}
+		}
+	}
 	rects := a.layoutPanes()
 	a.tree.Walk(func(p *pane.Pane) {
 		r := rects[p.ID]
@@ -236,6 +244,7 @@ func (a *App) navWorldForAscend(paneID string) *nav.LeaveWorld {
 			lw.DescendedTile = file
 		}
 	case own.TileID != "":
+		lw.DoorRow = a.cachedTileByID(own.TileID)
 		lw.DoorGridID = a.gridIDForPathFrom(own.DoorAnchor, own.DoorPath)
 		if g, ok := a.c.Grid(lw.DoorGridID); ok {
 			lw.DoorGridCached = true
