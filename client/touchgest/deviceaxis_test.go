@@ -191,9 +191,10 @@ func barRegion(zone wsbar.Zone, x float64) verdict {
 
 var barActions = map[wsbar.Action]bool{}
 
-// inGrid routes the right press through gesture.Classify, a left press that
-// does not move through over (a click verdict) and a wheel through
-// gesture.ClassifyWheel; a left drag and the middle button are the shim's.
+// inGrid routes the right press through gesture.Classify, a shift + left
+// press through gesture.ClassifySelect, a left press that does not move
+// through click (a click verdict) and a wheel through gesture.ClassifyWheel;
+// a left drag and the middle button are the shim's.
 func inGrid(in gesture.Input, click func() (string, bool), wheel gesture.WheelInput) verdict {
 	return func(r record) (string, bool) {
 		switch {
@@ -202,6 +203,9 @@ func inGrid(in gesture.Input, click func() (string, bool), wheel gesture.WheelIn
 			return fmt.Sprint("wheel ", gesture.ClassifyWheel(wheel)), true
 		case r.button == 2:
 			return fmt.Sprint("right ", gesture.Classify(in)), true
+		case r.button == 0 && r.shift:
+			return fmt.Sprint("select ", gesture.ClassifySelect(gesture.SelectInput{
+				Shift: true, GridPlace: in.InGridView, OverTile: in.OverTile})), true
 		case r.button == 0 && !r.moved && click != nil:
 			return click()
 		}
@@ -248,7 +252,7 @@ func deviceSurfaces() []surface {
 		{"door tile", "input.go", tileDrag(inGrid(gesture.Input{InGridView: true, OverTile: true, InTileCenter: true},
 			func() (string, bool) {
 				return fmt.Sprint("click ", gesture.DecideTileClick(gesture.ClickInput{Door: true})), true
-			}, door)), `"on touch a long-press lifted in place toggles" (2026-10-15)`, false},
+			}, door)), `"on touch a long-press lifted in place toggles" (2026-10-15)`, true},
 		{"grid background", "input.go", inGrid(gesture.Input{InGridView: true}, nil, gesture.WheelInput{}), "", false},
 		{"live content", "input.go", func(r record) (string, bool) {
 			switch {
