@@ -18,9 +18,8 @@ var verdictOwners = []struct {
 	re      *regexp.Regexp
 	allowed int
 }{
-	// The one left is internal/server/deepcopy.go's copy dispatch, being rewritten.
 	{"a leaf link (rpc.LeafLink)", []string{"api/rpc/types.go"},
-		regexp.MustCompile(`LinkTargetId\s*[!=]=\s*""`), 1},
+		regexp.MustCompile(`LinkTargetId\s*[!=]=\s*""`), 0},
 	{"a grid is the scratch grid (rpc.Ephemeral, store.Ephemeral)",
 		[]string{"api/rpc/types.go", "internal/local/store/store.go"},
 		regexp.MustCompile(`[!=]=\s*[\w.]*[sS]cratch\w*|[sS]cratch\w*(\(\))?\s*[!=]=\s*[^"\s0]`), 0},

@@ -371,7 +371,7 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 // 2026-11-08).
 func CopiesAsLink(t *pb.Tile, acceptsTiles bool) bool {
 	switch {
-	case t.GetLink() || t.GetLinkTargetId() != "":
+	case t.GetLink() || LeafLink(t):
 		return false
 	case IsDoorKind(t.GetKind()):
 		return !acceptsTiles
@@ -425,7 +425,7 @@ func Markdown(name string) bool { return strings.HasSuffix(strings.ToLower(name)
 // body. The drop verdict and the node both read it.
 func IntoDirectory(t *pb.Tile) string {
 	switch {
-	case t.GetLink() || t.GetLinkTargetId() != "" || CopiesAsLink(t, true):
+	case t.GetLink() || LeafLink(t) || CopiesAsLink(t, true):
 		return "a directory takes no link, and a file that is not markdown copies as one"
 	case t.GetKind() != KindText:
 		return "a directory takes a text tile alone, made a markdown file, and refuses a " + t.GetKind()
