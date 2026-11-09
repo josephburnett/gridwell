@@ -13,8 +13,8 @@ import { tileAt } from './oracle';
 
 // The dark palette's DirectoryBorder and DirectoryFill, and FocusBorder, the
 // grid family's line (client/theme).
-const BORDER = [214, 79, 163];
-const FILL = [46, 20, 38];
+const BORDER = [178, 74, 106];
+const FILL = [38, 18, 25];
 const BLUE = [74, 111, 255];
 
 const ROOT = makeRunDir();
