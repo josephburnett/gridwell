@@ -546,7 +546,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   one to a file is a link tile whose target is the target's path id,
   `~<base64url of its absolute path>`. Either is dashed, opens the target,
   and is dead when the target is gone or outside every root.
-- A directory wears its own tint, the outside colour, a muted wine in both
+- A directory wears its own tint, the outside colour, a dark red in both
   themes of `theme.Palette`, a hue no kind uses, because a directory is
   outside the system (2026-11-07). A door whose grid is a directory wears
   it wherever it sits, as does every file in a directory, page files

@@ -70,7 +70,7 @@ type Palette struct {
 	FocusBorder    string
 	// FocusBorderFaded outlines a descended but unfocused pane.
 	FocusBorderFaded string
-	// DirectoryBorder is the outside colour, a muted wine, a hue no kind uses: a
+	// DirectoryBorder is the outside colour, a dark red, a hue no kind uses: a
 	// directory, its door and every file in it read as outside the system.
 	DirectoryBorder      string
 	DirectoryBorderFaded string
@@ -249,9 +249,9 @@ var dark = Palette{
 	FocusBorder:      "#4a6fff",
 	FocusBorderFaded: "#2c3d70",
 
-	DirectoryBorder:      "#b24a6a",
-	DirectoryBorderFaded: "#5e2a3a",
-	DirectoryFill:        "#261219",
+	DirectoryBorder:      "#a83232",
+	DirectoryBorderFaded: "#5a1c1c",
+	DirectoryFill:        "#26100f",
 
 	GridLineInterior: "#1c2540",
 
@@ -303,7 +303,7 @@ var dark = Palette{
 
 	BarGridBand:      "#151b2e",
 	BarTextBand:      "#1b2213",
-	BarDirectoryBand: "#22101a",
+	BarDirectoryBand: "#220e0d",
 	BarEphemeralBand: "#1d1f24",
 	BarInk:           "#dff4f4",
 	CircleRim:        "#dff4f4",
@@ -348,9 +348,9 @@ var light = Palette{
 	FocusBorder:      "#4a6fff",
 	FocusBorderFaded: "#a9b8ff",
 
-	DirectoryBorder:      "#8f2f4d",
-	DirectoryBorderFaded: "#d9a3b6",
-	DirectoryFill:        "#f7e8ee",
+	DirectoryBorder:      "#8c2626",
+	DirectoryBorderFaded: "#d9a0a0",
+	DirectoryFill:        "#f8e8e6",
 
 	GridLineInterior: "#d6dcec",
 
@@ -402,7 +402,7 @@ var light = Palette{
 
 	BarGridBand:      "#e3e9f8",
 	BarTextBand:      "#eef4e0",
-	BarDirectoryBand: "#f3e1e8",
+	BarDirectoryBand: "#f3e0de",
 	BarEphemeralBand: "#eceef2",
 	BarInk:           "#1d2e2e",
 	CircleRim:        "#ffffff",
