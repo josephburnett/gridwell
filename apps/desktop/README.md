@@ -56,8 +56,9 @@ content box every draw and parks it off-screen during drag and menu gestures
 so canvas overlays paint on top, capturing one preview first for the pane to
 show meanwhile. A `MirrorPump` captures the live views another pane shows, on
 a modest cadence, so those panes mirror navigation. On
-ascend the view is captured once more, the capture, URL, and title are persisted
-through `SetTile`, and the view is destroyed.
+ascend the view is captured once more, the capture and title are persisted
+through `SetTile`, the address it settled on is written as content through
+`WriteContent`, and the view is destroyed.
 
 ## Packaging (hermetic AppImage)
 

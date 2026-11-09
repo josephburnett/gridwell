@@ -29,7 +29,10 @@ join: `readDir` supplies the names, `store.FileRows.Overlay` lays the rows
 the user made over them (`Source.synthesize`). Every listing is a verdict
 on every name in it, so a read that answers sweeps the rows whose paths it
 no longer names (`FileRows.Sweep`) and refreshes the rest
-(`FileRows.Refresh`). A directory below a root that is gone is dead; one
+(`FileRows.Refresh`). A directory that is gone, other than a root, is
+dead, unless Gridwell tiles sit over it or over a directory under it: then
+its parent lists it as a gone door and its grid answers those tiles alone
+(`Source.goneDoors`). One
 the OS refuses this user is refused with the reason, on its grid and,
 once a read of it was refused, on its door, and is not dark; a root that is gone, or any directory that cannot
 be read right now, is dark: its rows answer

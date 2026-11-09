@@ -71,7 +71,7 @@ empty list.
 | `rename` | `items`: `id`, `name`, `version` | Renames a url, shell, door or workspace tile, home's or a file's. A file keeps the typed name on the node's row, over its file name; the file on disk is not renamed. |
 | `move` | `items`: `id`, `x`, `y`, `w`, `h`, `grid` | Moves or resizes a tile. `w`/`h` of 0 keep its size; `grid` moves it to another grid of the same node: a Gridwell tile between home and a directory, a file to another directory, renamed on disk; a file onto a Gridwell grid and a move across a connection are refused. |
 | `copy` | `items`: `id`, `grid`, `at`, `link` | Lands in `grid` or the tile's own, at `at` or beside the tile. `link: false` is a deep copy; a directory's door, a file onto a Gridwell grid, a shell across nodes or a source that does not answer lands as a link, and a file into a directory of its node is a copy of the file on disk under its name (one already there is refused). `link: true` is a link to the tile: the same content shown in a second place, drawn dashed. A link to a link names the content. |
-| `delete` | `items`: `id`, `version` | Moves a home tile to the trash. A file goes to the OS trash, never home's. Deleting a link only unlinks. |
+| `delete` | `items`: `id`, `version` | Moves a home tile to the trash, on a directory's grid as in home. A file goes to the OS trash, never home's; a directory goes to the OS trash and every Gridwell tile over it, or over a directory under it, to home's. Deleting a link only unlinks. |
 | `select` | `grid`, `add`, `remove`, `clear`, `recurse`, `all` | Changes the grid's selection: `clear` empties it, then `add` puts tiles in and `remove` takes them out; a tile not on the grid is ignored. `clear` with `recurse` also empties every grid inside the grid's doors, to any depth, in the same namespace; `recurse` alone is refused. `clear` with `all` and no grid empties every selection the node holds, and each connected far node's. It claims nothing, and the last select of a tile wins. Use it to hand a set back: "I selected the five I changed". Every pane showing the grid shows it, inside a workspace tile too. |
 
 ## Here and these
@@ -134,8 +134,9 @@ starts with the kind of refusal, then the node's reason:
 - `unreachable:` a directory or a far node did not answer. Try again later.
 - `refused:` the request itself is wrong, such as renaming a text tile, whose
   name is its first line.
-- `not supported here:` the namespace does not do this, such as creating a
-  tile in a directory.
+- `not supported here:` the namespace does not do this.
+- `PermissionDenied:` the OS refuses this user the directory or the file.
+  It stands until someone changes the permission; it is not an outage.
 - `not found:` no such tile or grid.
 
 ## Not exposed
