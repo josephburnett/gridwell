@@ -56,8 +56,10 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 	return s.changedTile(path, changed, err, true)
 }
 
-// moveAcross renames path into to. The claim is checked before the rename,
-// since a rename is not undone.
+// moveAcross renames path into to, and the overlay under path follows it
+// (store.FileRows.Rekey). The claim, and a gone directory's Gridwell tiles
+// where it would land, are checked before the rename, since a rename is not
+// undone.
 func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.TileResponse, error) {
 	t, err := s.tileByPath(req.TileId)
 	if err != nil {
@@ -65,6 +67,13 @@ func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.
 	}
 	if err := store.ClaimPlacement(t, req.Claim, false); err != nil {
 		return nil, gwerr.ToStatus(err)
+	}
+	if held, err := s.mem.HeldAt(filepath.Join(to, filepath.Base(path))); err != nil || held {
+		if err == nil {
+			err = status.Errorf(codes.InvalidArgument,
+				"files: %s cannot move to %s: a gone directory's Gridwell tiles are there; move them out first", path, to)
+		}
+		return nil, err
 	}
 	id, err := s.mint(req.TileId)
 	if err != nil {
@@ -82,6 +91,9 @@ func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.
 			return "", false, err
 		}
 		changed, err := s.mem.Move(id, toGid, landed, req.X, req.Y, req.W, req.H, req.Claim)
+		if err == nil {
+			err = s.mem.Rekey(path, landed)
+		}
 		return landed, changed, err
 	}()
 	if err != nil {

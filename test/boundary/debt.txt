@@ -45,3 +45,4 @@ low-water | packages | 78
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): a release over a shell is the paste verdict, its ghost outlining the shell or naming the refusal | 98
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): a release over a shell is the paste verdict, its ghost outlining the shell or naming the refusal | 111
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): the MCP instructions say how to read a reference | 20
+2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): a directory moved within Gridwell rekeys every grid and file row under it, a gone directory's tiles where it would land refusing the move | 142
