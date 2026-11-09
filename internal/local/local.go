@@ -360,7 +360,7 @@ func (p *Home) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliv
 	if p.shell == nil {
 		return &gridwellv1.ShellTmuxAliveResponse{Alive: false}, nil
 	}
-	key, err := p.tmuxOf(ctx, req.TileId)
+	key, _, err := p.tmuxOf(ctx, req.TileId)
 	if status.Code(err) == codes.NotFound {
 		return &gridwellv1.ShellTmuxAliveResponse{Alive: false}, nil
 	}
@@ -374,17 +374,24 @@ func (p *Home) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliv
 	return &gridwellv1.ShellTmuxAliveResponse{Alive: alive}, nil
 }
 
-// tmuxOf is the tmux a shell tile names (rpc.ShellTmux), refusing a
-// row that is not there or is not an owned shell.
-func (p *Home) tmuxOf(ctx context.Context, tileID string) (string, error) {
+// tmuxOf is the tmux a shell tile names (rpc.ShellTmux) and the row naming
+// it, refusing a row that is not there or is not an owned shell.
+func (p *Home) tmuxOf(ctx context.Context, tileID string) (string, *gridwellv1.Tile, error) {
 	t, err := p.st.GetTile(ctx, tileID)
 	if err != nil {
-		return "", gwerr.ToStatus(err)
+		return "", nil, gwerr.ToStatus(err)
 	}
 	if !rpc.KindOf(t.Kind).Tmux || rpc.LeafLink(t) {
-		return "", status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
+		return "", nil, status.Errorf(codes.InvalidArgument, "tile %s is not a shell of this namespace", tileID)
 	}
-	return rpc.ShellTmux(t), nil
+	return rpc.ShellTmux(t), t, nil
+}
+
+// shellDir is where the shell row t starts its tmux: the directory its row
+// sits on at that moment, and "" on a home grid, where the node does.
+func shellDir(t *gridwellv1.Tile) string {
+	dir, _ := rpc.TileKey(t.GridId)
+	return dir
 }
 
 // OpenShell streams a tile's live PTY both ways: the first request binds the
@@ -407,7 +414,7 @@ func (p *Home) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShel
 	}
 	cols, rows = shellsvc.ClampSize(cols, rows)
 
-	key, err := p.tmuxOf(sctx, tileID)
+	key, row, err := p.tmuxOf(sctx, tileID)
 	if err != nil {
 		return err
 	}
@@ -418,7 +425,7 @@ func (p *Home) OpenShell(sctx context.Context, recv func() (*gridwellv1.OpenShel
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	att, stopOld, err := p.shell.Acquire(key, namers.Previewed == 0, cols, rows)
+	att, stopOld, err := p.shell.Acquire(key, namers.Previewed == 0, cols, rows, shellDir(row))
 	if err != nil {
 		if errors.Is(err, shellsvc.ErrTmuxGone) {
 			return status.Error(codes.FailedPrecondition, err.Error())
@@ -494,7 +501,7 @@ func (p *Home) DeleteTile(ctx context.Context, req *gridwellv1.DeleteTileRequest
 	// The key is read first: a destroy takes the row that names it.
 	key := ""
 	if p.shell != nil {
-		k, err := p.tmuxOf(ctx, req.TileId)
+		k, _, err := p.tmuxOf(ctx, req.TileId)
 		switch status.Code(err) {
 		case codes.OK:
 			key = k

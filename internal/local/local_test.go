@@ -195,7 +195,7 @@ type fakeStreamer struct {
 	probeErr error
 }
 
-func (f *fakeStreamer) Open(string, tmux.Mode, uint16, uint16) (shellsvc.Attachment, error) {
+func (f *fakeStreamer) Open(string, tmux.Mode, uint16, uint16, string) (shellsvc.Attachment, error) {
 	return nil, nil
 }
 func (f *fakeStreamer) Has(string) (bool, error)           { return f.alive, f.probeErr }

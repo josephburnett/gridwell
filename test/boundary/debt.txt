@@ -25,3 +25,4 @@ low-water | 57236
 2026-11-08 | trace fixes (Joe: his trace of ordinary use): a connection's call carries the request id of the call it serves to the far node | 31
 2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): a home row sits on a directory's grid, its grid spelled ~<path> on every read, event and set | 112
 2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): the files compose home's rows over a directory, the router places a Gridwell tile there and CreateTileRequest.file makes a file or a directory, rpc.CopyOf and rpc.MoveRefusal read the two sides, net of the markdown copy dropped both ways | 134
+2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): a shell on a directory starts its tmux there | 8

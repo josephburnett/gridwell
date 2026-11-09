@@ -39,14 +39,14 @@ func (f *FakeStreamer) SetAlive(key string, alive bool) {
 	f.alive[key] = alive
 }
 
-func (f *FakeStreamer) Open(key string, mode tmux.Mode, cols, rows uint16) (shellsvc.Attachment, error) {
+func (f *FakeStreamer) Open(key string, mode tmux.Mode, cols, rows uint16, dir string) (shellsvc.Attachment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.OpenErr != nil {
 		return nil, f.OpenErr
 	}
 	s := &FakeAttachment{
-		Key: key, OpenMode: mode, InitialCols: cols, InitialRows: rows,
+		Key: key, OpenMode: mode, InitialCols: cols, InitialRows: rows, StartDir: dir,
 		outCh: make(chan []byte, 64), done: make(chan struct{}),
 	}
 	f.tmuxes = append(f.tmuxes, s)
@@ -123,6 +123,7 @@ type FakeAttachment struct {
 	OpenMode    tmux.Mode
 	InitialCols uint16
 	InitialRows uint16
+	StartDir    string // the directory the tmux was asked to start in
 
 	mu      sync.Mutex
 	inputs  [][]byte

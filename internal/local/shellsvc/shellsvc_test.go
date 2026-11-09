@@ -14,7 +14,7 @@ func TestAcquire_FreshTileCreates(t *testing.T) {
 	fake := shellsvctest.New() // tile not alive
 	m := shellsvc.NewManager(fake)
 
-	sess, _, err := m.Acquire("1", true /*allowCreate*/, 100, 40)
+	sess, _, err := m.Acquire("1", true /*allowCreate*/, 100, 40, "")
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestAcquire_LiveTmuxAttaches(t *testing.T) {
 	fake.SetAlive("1", true) // a tmux already exists
 	m := shellsvc.NewManager(fake)
 
-	if _, _, err := m.Acquire("1", false /*allowCreate*/, 80, 24); err != nil {
+	if _, _, err := m.Acquire("1", false /*allowCreate*/, 80, 24, ""); err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
 	if got := fake.LastAttachment().OpenMode; got != tmux.ModeAttach {
@@ -49,7 +49,7 @@ func TestAcquire_SnapshotNoTmuxRejected(t *testing.T) {
 
 	// allowCreate false and no live tmux gives ErrTmuxGone, because a
 	// fresh shell must not be fabricated behind the JPEG.
-	if _, _, err := m.Acquire("1", false, 80, 24); !errors.Is(err, shellsvc.ErrTmuxGone) {
+	if _, _, err := m.Acquire("1", false, 80, 24, ""); !errors.Is(err, shellsvc.ErrTmuxGone) {
 		t.Fatalf("err = %v, want ErrTmuxGone", err)
 	}
 	if fake.AttachmentCount() != 0 {
@@ -61,12 +61,12 @@ func TestAcquire_TakeoverReusesPTYAndEvictsOld(t *testing.T) {
 	fake := shellsvctest.New()
 	m := shellsvc.NewManager(fake)
 
-	sess1, stopOld1, err := m.Acquire("1", true, 80, 24)
+	sess1, stopOld1, err := m.Acquire("1", true, 80, 24, "")
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
 	// A second acquire is a refresh from another pane.
-	sess2, _, err := m.Acquire("1", true, 80, 24)
+	sess2, _, err := m.Acquire("1", true, 80, 24, "")
 	if err != nil {
 		t.Fatalf("second Acquire: %v", err)
 	}
@@ -91,14 +91,14 @@ func TestAcquire_TakeoverForcesARepaint(t *testing.T) {
 	fake := shellsvctest.New()
 	m := shellsvc.NewManager(fake)
 
-	if _, _, err := m.Acquire("1", true, 80, 24); err != nil {
+	if _, _, err := m.Acquire("1", true, 80, 24, ""); err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
 	sess := fake.LastAttachment()
 	if got := len(sess.Resizes()); got != 0 {
 		t.Fatalf("a first attach resized %d times, want 0 (the open carries the size)", got)
 	}
-	if _, _, err := m.Acquire("1", true, 80, 24); err != nil {
+	if _, _, err := m.Acquire("1", true, 80, 24, ""); err != nil {
 		t.Fatalf("second Acquire: %v", err)
 	}
 	want := [][2]uint16{{80, 25}, {80, 24}}
@@ -111,7 +111,7 @@ func TestReleaseClosesAttachmentAndFiresOnDetach(t *testing.T) {
 	fake := shellsvctest.New()
 	m := shellsvc.NewManager(fake)
 
-	sess, stopOld, _ := m.Acquire("1", true, 80, 24)
+	sess, stopOld, _ := m.Acquire("1", true, 80, 24, "")
 	detached := false
 	m.Release("1", sess, stopOld, func() { detached = true })
 

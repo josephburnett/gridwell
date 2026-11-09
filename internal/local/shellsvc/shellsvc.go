@@ -44,7 +44,7 @@ type Attachment interface {
 
 // Streamer is the tmux and PTY backend, stubbed in tests.
 type Streamer interface {
-	Open(key string, mode tmux.Mode, cols, rows uint16) (Attachment, error)
+	Open(key string, mode tmux.Mode, cols, rows uint16, dir string) (Attachment, error)
 	Has(key string) (bool, error)
 	Kill(key string) error
 	ListLive() ([]string, error)
@@ -58,8 +58,8 @@ func NewLive(ctrl *tmux.Controller) Streamer { return &liveStreamer{ctrl: ctrl} 
 
 type liveStreamer struct{ ctrl *tmux.Controller }
 
-func (l *liveStreamer) Open(key string, mode tmux.Mode, cols, rows uint16) (Attachment, error) {
-	argv := l.ctrl.Args(key, mode, cols, rows, "")
+func (l *liveStreamer) Open(key string, mode tmux.Mode, cols, rows uint16, dir string) (Attachment, error) {
+	argv := l.ctrl.Args(key, mode, cols, rows, dir)
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("shellsvc: empty tmux argv for tmux %s mode %v", key, mode)
 	}
@@ -97,7 +97,8 @@ func NewManager(s Streamer) *Manager {
 // one created if allowCreate, which is false for a tmux that was started,
 // where fabricating state behind its previews would be wrong. The returned channel closes
 // when a later Acquire takes over.
-func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16) (Attachment, chan struct{}, error) {
+// A tmux created starts in dir, "" where the node does.
+func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16, dir string) (Attachment, chan struct{}, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if e, ok := m.active[key]; ok {
@@ -123,7 +124,7 @@ func (m *Manager) Acquire(key string, allowCreate bool, cols, rows uint16) (Atta
 		}
 		mode = tmux.ModeCreate
 	}
-	sess, err := m.streamer.Open(key, mode, cols, rows)
+	sess, err := m.streamer.Open(key, mode, cols, rows, dir)
 	if err != nil {
 		return nil, nil, err
 	}

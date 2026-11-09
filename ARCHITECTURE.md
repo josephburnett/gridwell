@@ -232,7 +232,7 @@ directory renames it on disk, and its row (placement, name, framing) follows
 under the new path's id while the old id retires; a
 file onto a Gridwell grid and anything across a connection are refused
 (`rpc.MoveRefusal`), while a Gridwell tile moves between home and a
-directory. A symlink is a link:
+directory. A shell on a directory starts its tmux there (`local.shellDir`). A symlink is a link:
 to a directory, a door onto the target's grid; to a file, a link tile whose
 target is the target's path id; followed wherever it lands, and dead only
 when the target is gone. Every absolute path is addressable, and one that
