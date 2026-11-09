@@ -574,8 +574,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   every Gridwell row under it, subdirectories included, follows to the new
   path, since their grids are keyed by the path that moved. A directory
   that goes away underneath Gridwell, deleted, renamed or moved outside it,
-  stays in its parent as a gone door (`Tile.gone`), grey, the muted family, holding only its
-  Gridwell tiles: the one door a listing does not supply, made from the
+  stays in its parent as a gone door (`Tile.gone`), grey, the muted family
+  (`pane.TileFamily`), holding only its Gridwell tiles, its grid still a
+  directory's and tinted so: the one door a listing does not supply, made from the
   rows, up to the root, so no Gridwell data is lost to a change of the
   disk; its tiles are moved out by hand. Deleting a directory within
   Gridwell sends the directory to the OS trash and every Gridwell tile

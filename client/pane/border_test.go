@@ -29,6 +29,7 @@ func TestTileFamily(t *testing.T) {
 		{"a root's swatch", rpc.SourceDoorTile(&gridwellv1.SourceInfo{RootGridId: dir}), theme.FamilyDirectory},
 		{"a directory's door into its subdirectory", door(dir, "n1/"+rpc.KeyTileID("/srv/a")), theme.FamilyDirectory},
 		{"a directory's own door", file(rpc.KindDoor, "/srv/a"), theme.FamilyDirectory},
+		{"a gone directory's door", &gridwellv1.Tile{Kind: rpc.KindDoor, Id: "n1/" + rpc.KeyTileID("/srv/a"), GridId: dir, ChildGridId: "n1/" + rpc.KeyTileID("/srv/a"), Gone: true}, theme.FamilyMuted},
 		{"a door to a far home in a directory", door(dir, "n1/geneva/n2/5"), theme.FamilyGrid},
 		{"a door onto a far home's grid", door("n1/1", "n1/geneva/n2/5"), theme.FamilyGrid},
 		{"a text tile", &gridwellv1.Tile{Kind: rpc.KindText}, theme.FamilyText},
@@ -63,6 +64,8 @@ func TestFamilyOf(t *testing.T) {
 		{"a file's text", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", TileID: "n1/" + rpc.KeyTileID("/srv/a.md"), InDirectory: true}, theme.FamilyDirectory},
 		{"a Gridwell text on a directory", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "text", TileID: "n1/7", InDirectory: true}, theme.FamilyText},
 		{"a directory", BorderInput{InDirectory: true}, theme.FamilyDirectory},
+		// The gone door is muted; the place it opens is still a directory.
+		{"inside a gone directory", BorderInput{DescentDepth: 1, InDirectory: true}, theme.FamilyDirectory},
 		{"a page file is a file, live or not", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", TileID: "n1/" + rpc.KeyTileID("/srv/p.png"), InDirectory: true, URLLive: true}, theme.FamilyDirectory},
 		{"url frozen", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url"}, theme.FamilyURL},
 		{"url live", BorderInput{HasTextFocus: true, TileKnown: true, TileKind: "url", URLLive: true}, theme.FamilyURLLive},

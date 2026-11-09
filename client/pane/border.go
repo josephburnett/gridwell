@@ -28,10 +28,13 @@ type BorderInput struct {
 // TileFamily is the one classifier of a tile's colour: its frame, its banner,
 // its swatch, its crumb, its ghost and a pane descended into it all read it.
 // A file or a directory is one by its id (rpc.OnDisk): a Gridwell tile on a
-// directory's grid wears its kind's family, as in home.
+// directory's grid wears its kind's family, as in home. A gone door is
+// muted; the grid it opens is still a directory's.
 func TileFamily(t *gridwellv1.Tile) theme.Family {
 	disk := rpc.OnDisk(t.GetId())
 	switch k := rpc.KindOf(t.GetKind()); {
+	case t.GetGone():
+		return theme.FamilyMuted
 	case k.Live == rpc.DescentShell:
 		return theme.FamilyShell
 	case k.Descends == rpc.DescendGrid && disk:
