@@ -20,6 +20,10 @@ func Main(args []string) int {
 		return RunStatus(rest)
 	case "backup":
 		return RunBackup(rest)
+	case "size":
+		return RunSize(rest)
+	case "clean":
+		return RunClean(rest)
 	case "clear-browser-data":
 		return RunClearBrowserData(rest)
 	case "version", "--version", "-v":
@@ -48,6 +52,14 @@ Usage:
                                               serving" (exit 1)
     gridwell backup DEST                      snapshot every DB + server.yaml
                                               (VACUUM INTO; safe while serving)
+    gridwell size [--json]                    report what gridwell.db holds: tables,
+                                              tiles by kind and place, blobs, the
+                                              trash, and what nothing reaches
+                                              (read-only; safe while serving)
+    gridwell clean [--yes]                    remove what nothing reaches (never
+                                              the trash or a tombstone), then
+                                              VACUUM; refuses while serving, and
+                                              without --yes only reports
     gridwell clear-browser-data [--user-data DIR]
                                               delete the desktop app's browser
                                               cookies, storage and caches (every
