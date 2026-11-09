@@ -157,7 +157,7 @@ const (
 	dFilesFind     = "a text query answers empty: no body is read for it."
 	dShellCopy     = "A shell copied across nodes lands as a link"
 	dTextName      = "A text tile's name stays the file's, since its presentation reads it"
-	dLinkDead      = "Either is dashed, opens the target, and is dead when the target is gone or outside every root"
+	dLinkDead      = "Either is dashed, opens the target, and is dead only when the target is gone"
 )
 
 var parityTable = []parityCell{

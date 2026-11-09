@@ -105,9 +105,9 @@ what each one is called.
 |---|---|---|
 | namespace | Home, the files or a connection as the node holds it (`internal/namespace`); the segments of an id before the tile's own, and for the files `<node>/~`. | |
 | home | The node's own namespace. A connection lands on the far node's home. | The node's directory. |
-| files | The node's second source: the directories `server.yaml`'s `files:` declares, shown as grids (`internal/files`). | Home, which holds the rows the user made. |
-| root | One directory `files:` declares, with its label: a swatch in the + menu. | Home's root grid, where a client lands. |
-| directory | A folder under a root, shown as a grid; its door sits in its parent's grid and wears the outside tint. | A grid of home's. |
+| files | The node's second source: the host's directories, shown as grids from the roots `server.yaml`'s `files:` declares (`internal/files`). | Home, which holds the rows the user made. |
+| root | One directory `files:` declares, with its label: a swatch in the + menu, where the files start. | Home's root grid, where a client lands. |
+| directory | A folder on the host, shown as a grid; its door sits in its parent's grid and wears the outside tint. | A grid of home's. |
 | source | Home, the files or a connection, as what a grid's rows come from (`SourceInfo`, `EventSourceHealth`); also the tile a copy was made from. The directory or node a source represents has no word of its own: name the thing. | |
 | roster | The handshake's list of a node's sources, one `SourceInfo` row each (`HandshakeResponse.sources`): home, the files, then each connection. | The + menu, which draws its swatches from it. |
 | cache | What a connection last answered (`cache.db`, `sourcecache`), served while it does not answer. Disposable, rewarmed by use. | Stale; a file's rows, which are node facts. |
@@ -162,7 +162,7 @@ what each one is called.
 
 | Word | What it names | What it is not |
 |---|---|---|
-| dead | A link whose namespace is not declared, whose path is outside every root, or whose target its source says is gone (`gwerr.DeadLink`). Nothing is said and nothing is asked until the declaration or that source's listing changes. | An error; dark. |
+| dead | A link whose namespace is not declared, or whose target its source says is gone (`gwerr.DeadLink`). Nothing is said and nothing is asked until the declaration or that source's listing changes. | An error; dark. |
 | dark | A source declared but not answering right now: a connection that will not dial, or a root or directory that will not read. Its grids serve what the node holds, a connection's from cache and a directory's from its rows, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
 | disabled | A connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). The files are never disabled. | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
@@ -469,10 +469,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   `{root: <absolute dir>, label: <text>}`. The roster has one files row
   (`<node>/~`, labelled files, the folder glyph) carrying one grid per root,
   between home and the connections, and each root is one swatch in the +
-  menu with its label, in config order. A path outside every root is dead
-  (`gwerr.DeadLink`). The node's own directory is outside every root, a
-  root that holds it included: it is not listed, its paths are dead, and
-  nothing in it is written or trashed (2026-11-08). A `server.yaml` that still has `plugins:` or `routes:`
+  menu with its label, in config order. A root is a starting point, not a
+  boundary (2026-11-08): every absolute path on the host is addressable
+  as `<node>/~<base64url of the path>`, and one that exists is live, the
+  node's own directory included, because a user who can get a shell on
+  the machine owns it. A `server.yaml` that still has `plugins:` or `routes:`
   is refused at parse with a message naming `files:`.
 - The files are one package, `internal/files`, reading disk and the
   store's file rows directly (2026-11-07). A directory's grid takes no new
@@ -541,11 +542,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   (`rpc.IntoDirectory`, which the drop verdict, its ghost and the node
   read alike), and nothing moves across the boundary. A directory's grid
   still answers `accepts_tiles` false, so the + menu offers it nothing.
-- A symlink is a link (2026-11-07). One to a directory is a door whose
+- A symlink is a link (2026-11-07), followed wherever it goes
+  (2026-11-08). One to a directory is a door whose
   grid is the target's, drawn as a link because the grid is not its own;
   one to a file is a link tile whose target is the target's path id,
-  `~<base64url of its absolute path>`. Either is dashed, opens the target,
-  and is dead when the target is gone or outside every root.
+  `~<base64url of its absolute path>`, and a path through a symlinked
+  directory resolves. Either is dashed, opens the target, and is dead
+  only when the target is gone.
 - A directory wears its own tint, the outside colour, a dark red in both
   themes of `theme.Palette`, a hue no kind uses, because a directory is
   outside the system (2026-11-07). A door whose grid is a directory wears
