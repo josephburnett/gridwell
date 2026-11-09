@@ -109,7 +109,6 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	in.CrossSource = dropCrossNamespace(d, t)
 	srcAccepts, srcKnown := a.gridAcceptsTiles(d.srcGridID)
 	in.CopiesAsLink = dragdrop.CarryCopiesAsLink(d.carried, t.gridID, srcAccepts, srcKnown)
-	in.IntoDirectory = dragdrop.CarryIntoDirectory(d.carried, t.gridID)
 	if !d.intent.Creates() {
 		in.Forbidden = a.dropForbiddenForMove(d, t)
 	}

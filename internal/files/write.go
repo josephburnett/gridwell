@@ -1,20 +1,20 @@
 package files
 
-// The writes the node keeps on a file's row, and the two the disk takes: a
-// move renames the file, a delete trashes it.
+// The writes the node keeps on a file's row, and the four the disk takes: a
+// create makes a file or a directory, a copy copies a file, a move renames
+// it, a delete trashes it.
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
-	"unicode"
-	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,7 +22,6 @@ import (
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/internal/doctype"
 	"github.com/josephburnett/gridwell/internal/local/store"
 )
 
@@ -37,7 +36,7 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 	to := dir
 	if req.GridId != "" {
 		if rpc.ShapeOf(req.GridId) != rpc.ShapeKey {
-			return nil, status.Error(codes.InvalidArgument, "files: "+rpc.MoveAcross)
+			return nil, status.Error(codes.InvalidArgument, "files: "+rpc.MoveFileOver)
 		}
 		if to, err = pathOf(req.GridId); err != nil {
 			return nil, err
@@ -92,27 +91,38 @@ func (s *Source) moveAcross(req *pb.MoveTileRequest, path, dir, to string) (*pb.
 	return s.changedTile(landed, changed, nil, true)
 }
 
-// CreateTile makes a text tile a new markdown file in the directory holding
-// its body, named for the tile or else the body's first line (fileName), its
-// row minted at the placement asked; a directory takes nothing else
-// (rpc.IntoDirectory). A name already there is refused and nothing written.
+// CreateTile makes the disk side's tile, CreateTileRequest.file: an empty
+// file for any kind but a door, whose kind is then its name's, or a directory
+// for a door, named tile.alt_text, its row minted at the placement asked. A
+// name already there, one that names no single entry, or a directory that is
+// not writable is refused with the reason, and nothing is written. A Gridwell
+// tile on a directory is home's row, never asked here.
 func (s *Source) CreateTile(_ context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	t := req.GetTile()
-	if why := rpc.IntoDirectory(t); why != "" {
-		return nil, status.Error(codes.InvalidArgument, "files: "+why)
+	if !req.File {
+		return nil, status.Error(codes.InvalidArgument, "files: a Gridwell tile on a directory is home's row")
+	}
+	if len(req.Content) > 0 || rpc.LeafLink(t) || t.GetLink() || t.GetChildGridId() != "" {
+		return nil, status.Error(codes.InvalidArgument, "files: a new file or directory is born empty and is no link")
 	}
 	dir, err := pathOf(req.GridId)
 	if err != nil {
 		return nil, err
 	}
-	name := fileName(cmp.Or(t.AltText, doctype.AltFromSource(string(req.Content))))
-	path := filepath.Join(dir, name)
-	if len(req.Content) > bodyCap {
-		return nil, status.Errorf(codes.InvalidArgument, "files: %s: a body is at most %d MiB", path, bodyCap>>20)
+	name := t.GetAltText()
+	if why := entryName(name); why != "" {
+		return nil, status.Errorf(codes.InvalidArgument, "files: %q %s", name, why)
 	}
-	if err := create(dir, name, req.Content); err != nil {
+	path := filepath.Join(dir, name)
+	if err := create(dir, name, rpc.IsDoorKind(t.GetKind())); err != nil {
 		return nil, err
 	}
+	return s.minted(dir, path, t)
+}
+
+// minted reads path back from its directory's listing and mints its row at
+// t's placement, the one way a write that made an entry lands it.
+func (s *Source) minted(dir, path string, t *pb.Tile) (*pb.TileResponse, error) {
 	l, err := s.synthesize(dir)
 	if err != nil {
 		return nil, err
@@ -122,63 +132,96 @@ func (s *Source) CreateTile(_ context.Context, req *pb.CreateTileRequest) (*pb.T
 		return nil, l.absent(dir, path)
 	}
 	gid, err := s.mem.GridOf(dir)
+	var child int64
+	if err == nil && e.Child != "" {
+		child, err = s.mem.GridOf(e.Child)
+	}
 	if err == nil {
-		_, err = s.mem.Mint(gid, e.Entry, 0, t.X, t.Y, t.W, t.H)
+		_, err = s.mem.Mint(gid, e.Entry, child, t.X, t.Y, max(t.W, 1), max(t.H, 1))
 	}
 	return s.changedTile(path, true, err, true)
 }
 
-// create writes data as the new file name in dir, made exclusively, so a
-// name taken meanwhile is refused and never overwritten; a write that fails
-// takes its file away again.
-func create(dir, name string, data []byte) error {
-	resolved()
-	path := filepath.Join(dir, name)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if errors.Is(err, iofs.ErrExist) {
-		return status.Errorf(codes.InvalidArgument, "files: %q is already in %s, and a copy replaces nothing", name, dir)
+// entryName is why name cannot be one new entry of a directory, "" when it
+// can: it is empty, a dot or two, or holds a separator or a NUL.
+func entryName(name string) string {
+	switch {
+	case name == "", name == ".", name == "..":
+		return "names no entry"
+	case strings.ContainsAny(name, "/\\\x00"):
+		return "holds a separator or a NUL, and names no single entry"
 	}
+	return ""
+}
+
+// CopyTile copies a file on disk into a directory, under its own name, made
+// exclusively so nothing is replaced, its row minted at the cell asked. It
+// is rpc.CopyFile's executor, the router asking it of a file alone.
+func (s *Source) CopyTile(_ context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
+	from, _, err := tilePath(req.TileId)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := pathOf(req.DestGridId)
+	if err != nil {
+		return nil, err
+	}
+	src, err := open(from)
+	if err != nil {
+		return nil, diskRefusal("read", from, err)
+	}
+	defer src.Close()
+	name := filepath.Base(from)
+	path := filepath.Join(dir, name)
+	if err := create(dir, name, false); err != nil {
+		return nil, err
+	}
+	if err := fill(path, src); err != nil {
+		return nil, err
+	}
+	return s.minted(dir, path, &pb.Tile{X: req.X, Y: req.Y, W: 1, H: 1})
+}
+
+// fill writes src's bytes into the empty file path create made, taking the
+// file away again when the write fails, so a copy is whole or absent.
+func fill(path string, src io.Reader) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err == nil {
-		if _, err = f.Write(data); err == nil {
+		if _, err = io.Copy(f, src); err == nil {
 			err = f.Sync()
 		}
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
-		if err != nil {
-			_ = os.Remove(path)
-		}
 	}
 	if err != nil {
+		_ = os.Remove(path)
 		return diskRefusal("written", path, err)
 	}
 	return nil
 }
 
-// fileName is the file a text tile made in a directory is named, from the
-// tile's name: no separator or control character (NUL among them), no
-// leading dot, trimmed, at most 120 bytes cut on a rune (below every
-// filesystem's 255), "untitled" when nothing is left, and ending in .md.
-func fileName(name string) string {
-	name = strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || unicode.IsControl(r) {
-			return -1
+// create makes the new entry name in dir, a directory or an empty file made
+// exclusively, so a name taken meanwhile is refused and never overwritten.
+func create(dir, name string, isDir bool) error {
+	resolved()
+	path := filepath.Join(dir, name)
+	var err error
+	if isDir {
+		err = os.Mkdir(path, 0o755)
+	} else {
+		var f *os.File
+		if f, err = os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644); err == nil {
+			err = f.Close()
 		}
-		return r
-	}, name)
-	name = strings.TrimLeft(strings.TrimSpace(name), ". ")
-	for len(name) > 120 {
-		_, n := utf8.DecodeLastRuneInString(name)
-		name = name[:len(name)-n]
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = "untitled"
+	if errors.Is(err, iofs.ErrExist) {
+		return status.Errorf(codes.InvalidArgument, "files: %q is already in %s, and nothing is replaced", name, dir)
 	}
-	if !rpc.Markdown(name) {
-		name += ".md"
+	if err != nil {
+		return diskRefusal("written", path, err)
 	}
-	return name
+	return nil
 }
 
 // rename moves path into the directory to under its name and answers where
@@ -360,6 +403,10 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 	}
 	var add, remove []int64
 	for _, id := range req.Add {
+		if row, ok := gridwellRow(id); ok {
+			add = append(add, row)
+			continue
+		}
 		if _, in, err := tilePath(id); err != nil || in != dir {
 			continue
 		}
@@ -373,6 +420,10 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 		add = append(add, row)
 	}
 	for _, id := range req.Remove {
+		if row, ok := gridwellRow(id); ok {
+			remove = append(remove, row)
+			continue
+		}
 		path, in, err := tilePath(id)
 		if err != nil {
 			continue
@@ -392,6 +443,17 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 		return nil, gwerr.ToStatus(err)
 	}
 	return &pb.SetSelectionResponse{}, s.announceSelections(changed)
+}
+
+// gridwellRow reads id as a Gridwell tile's row, one of home's placed on a
+// directory, which a select names by its digits; the store ignores one not on
+// the grid.
+func gridwellRow(id string) (int64, bool) {
+	if rpc.ShapeOf(id) != rpc.ShapeRow {
+		return 0, false
+	}
+	row, err := strconv.ParseInt(id, 10, 64)
+	return row, err == nil
 }
 
 // announceSelections tells each grid's whole set.

@@ -32,15 +32,15 @@ func TestFilesDirectoryLeftDraggedIntoHomeLinks(t *testing.T) {
 
 // A page file has no address to copy and its page is the node's, so a
 // right-drag of one into home lands a url link to it, as the ghost says
-// (rpc.CopiesAsLink); never a url tile with no address.
+// (rpc.CopyOf); never a url tile with no address.
 func TestFilesPageFileCopiedIntoHomeLinks(t *testing.T) {
 	root := t.TempDir()
 	pdf := filepath.Join(root, "doc.pdf")
 	writeFile(t, pdf, "%PDF-1.4\n")
 	n := newFilesNode(t, root)
 	page := n.tile(n.roots[0], pdf)
-	if !rpc.CopiesAsLink(page) {
-		t.Error("rpc.CopiesAsLink says the page copies, so the ghost would show a copy the node never makes")
+	if as, _ := rpc.CopyOf(page, n.home, true, func() bool { return true }); as != rpc.CopyLinkTile {
+		t.Errorf("rpc.CopyOf says the page copies as %v, so the ghost would show a copy the node never makes", as)
 	}
 	copied, err := n.cl.CopyTile(n.ctx, &gridwellv1.CopyTileRequest{TileId: page.Id, DestGridId: n.home, X: 3, Y: 3})
 	if err != nil {

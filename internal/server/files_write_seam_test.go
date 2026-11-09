@@ -74,16 +74,16 @@ func (k *contentClient) stampNow(id string) string {
 }
 
 // A directory's grid takes edits to its bodies, moves its tiles, and takes
-// no new tiles: the + menu offers nothing it would refuse, and a left-drag
-// to another directory is a move.
-func TestFilesGridTakesEditsAndNoTiles(t *testing.T) {
+// new tiles, Gridwell's placed over it: a left-drag to another directory is
+// a move.
+func TestFilesGridTakesEditsAndTiles(t *testing.T) {
 	k := newContentClient(t, t.TempDir())
 	g, err := k.cl.GetGrid(k.ctx, k.landing)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !g.Grid.Writable || g.Grid.AcceptsTiles == nil || g.Grid.GetAcceptsTiles() || !g.Grid.GetMoves() {
-		t.Errorf("directory grid: writable=%v accepts_tiles=%v moves=%v; want writable, moving, accepting no tiles", g.Grid.Writable, g.Grid.AcceptsTiles, g.Grid.Moves)
+	if !g.Grid.Writable || !g.Grid.GetAcceptsTiles() || !g.Grid.GetMoves() {
+		t.Errorf("directory grid: writable=%v accepts_tiles=%v moves=%v; want writable, moving, accepting tiles", g.Grid.Writable, g.Grid.AcceptsTiles, g.Grid.Moves)
 	}
 }
 

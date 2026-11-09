@@ -393,7 +393,8 @@ func TestFilesFramingOnRootAndDoor(t *testing.T) {
 
 // A directory's door never copies: into home it lands as the link a
 // left-drag makes, and a home door into a directory copies as another link.
-// A markdown file copies its bytes.
+// A file copies as a link to it, markdown too: nothing is converted between
+// the disk and Gridwell.
 func TestFilesCopyIntoHome(t *testing.T) {
 	root := t.TempDir()
 	f := filepath.Join(root, "a.md")
@@ -420,8 +421,8 @@ func TestFilesCopyIntoHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if text.Link || text.Kind != rpc.KindText || rpc.IsFilesID(text.Id) {
-		t.Fatalf("a file's text copied = %v, want a home text tile", text)
+	if !text.Link || text.LinkTargetId != fileID(f) || text.Kind != rpc.KindText || rpc.IsFilesID(text.Id) {
+		t.Fatalf("a markdown file copied = %v, want a home link to it", text)
 	}
 	if b, _, _, err := n.cl.ReadContent(n.ctx, text.Id); err != nil || string(b) != "the bytes" {
 		t.Errorf("the copy's bytes = %q, %v", b, err)

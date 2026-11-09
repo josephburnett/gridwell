@@ -363,14 +363,6 @@ func LinkOf(src *pb.Tile, x, y int64) *pb.Tile {
 		LinkTargetId: ContentID(src), AltText: src.AltText}
 }
 
-// CopiesAsLink reports that a copy of t, a file that is not markdown, a
-// page file among them, is a link, since its bytes stay on disk (CLAUDE.md,
-// 2026-11-08). CopyOf owns every other case.
-func CopiesAsLink(t *pb.Tile) bool {
-	p, file := FilePath(t.GetId())
-	return file && !IsDoorKind(t.GetKind()) && !Markdown(p)
-}
-
 // CopyAs is what a copy of a tile becomes; CopyOf decides it.
 type CopyAs int
 
@@ -381,47 +373,40 @@ const (
 	CopyDeep                   // a new door and a copy of the target grid beneath it
 	CopyLeaf                   // a new tile of the source's bytes and CopyFacts
 	CopyShell                  // a shell naming the target tmux, the source's
+	CopyFile                   // a new file of the source's bytes in the directory, on disk
 )
 
-// CopyOf is the one owner of what a copy of t becomes and the id it names,
-// read by the router's walk and the store's copy alike. t.Link is the wire's
+// CopyOf is the one owner of what a copy of t onto the grid dest becomes and
+// the id it names, read by the router's walk, the store's copy and the drop
+// verdict alike. Nothing is converted between the disk and Gridwell: a file
+// copies on disk into a directory of its node and links onto any Gridwell
+// grid, a directory never copies, and a Gridwell tile copies within the
+// Gridwell layer, sameNode saying dest is on t's node. t.Link is the wire's
 // bit for a door onto another namespace's grid; accepts, whether the grid a
-// door opens takes new tiles, is asked only of a door that is not a link.
-func CopyOf(t *pb.Tile, sameSource bool, accepts func() bool) (CopyAs, string) {
+// Gridwell door opens takes new tiles, is asked only of a door that is
+// neither a link nor a directory.
+func CopyOf(t *pb.Tile, dest string, sameNode bool, accepts func() bool) (CopyAs, string) {
 	k := KindOf(t.GetKind())
+	disk := OnDisk(t.GetId())
 	switch {
 	case LeafLink(t):
 		return CopyLinkTile, t.GetLinkTargetId()
-	case IsDoorKind(t.GetKind()) && (t.GetLink() || !accepts()):
+	case IsDoorKind(t.GetKind()) && (disk || t.GetLink() || !accepts()):
 		return CopyLinkGrid, cmp.Or(t.GetChildGridId(), t.GetId())
 	case IsDoorKind(t.GetKind()):
 		return CopyDeep, t.GetChildGridId()
-	case k.Tmux && sameSource:
-		return CopyShell, ShellTmux(t)
-	case k.Tmux || CopiesAsLink(t):
-		// A tmux lives on the node that started it.
+	case disk && sameNode && OnDisk(dest):
+		return CopyFile, ""
+	case disk || k.Tmux && !sameNode:
+		// A file's bytes stay on its disk, and a tmux on the node that
+		// started it.
 		return CopyLinkTile, t.GetId()
+	case k.Tmux:
+		return CopyShell, ShellTmux(t)
 	case k.Content != ContentNone:
 		return CopyLeaf, ""
 	}
 	return CopyRefused, "unsupported tile kind " + strconv.Quote(t.GetKind())
-}
-
-// Markdown is a file name a copy carries the bytes of, into the files or out
-// of them: one ending in .md, in any case.
-func Markdown(name string) bool { return strings.HasSuffix(strings.ToLower(name), ".md") }
-
-// IntoDirectory is why a directory refuses t, copied or created there, and ""
-// when it takes it: a text tile, which it makes a new markdown file of its
-// body. The drop verdict and the node both read it.
-func IntoDirectory(t *pb.Tile) string {
-	switch {
-	case t.GetLink() || LeafLink(t) || CopiesAsLink(t):
-		return "a directory takes no link, and a file that is not markdown copies as one"
-	case t.GetKind() != KindText:
-		return "a directory takes a text tile alone, made a markdown file, and refuses a " + t.GetKind()
-	}
-	return ""
 }
 
 // ShellTmux names the tmux a shell tile attaches: the tmux its

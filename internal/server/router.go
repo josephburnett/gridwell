@@ -268,11 +268,23 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.Find(ctx, rpc.PeelRequest(rt.hop(scope, transit), m))
+		peeled := rpc.PeelRequest(rt.hop(scope, transit), m)
+		resp, err := c.Find(ctx, peeled)
 		if err != nil {
 			return nil, err
 		}
-		return rt.qualifyFind(ctx, transit, rpc.OwnerNamespaceOf(scope, rt.srv.cfg.ID), uuid, resp), nil
+		out := rt.qualifyFind(ctx, transit, rpc.OwnerNamespaceOf(scope, rt.srv.cfg.ID), uuid, resp)
+		// A directory's grid holds home's rows beside the files'.
+		if !transit && rpc.IsFilesID(m.GridId) && rt.srv.src.Home != nil {
+			over, err := rt.srv.src.Home.Find(ctx, peeled)
+			if err != nil {
+				return nil, err
+			}
+			q := rt.qualifyFind(ctx, false, rt.srv.cfg.ID, uuid, over)
+			out.Results = append(out.Results, q.Results...)
+			out.Results = out.Results[:min(len(out.Results), rpc.FindLimit(m))]
+		}
+		return out, nil
 	}
 	out := &pb.FindResponse{}
 	for _, n := range rt.srv.namespaces() {
@@ -294,8 +306,9 @@ func (rt *router) qualifyFind(ctx context.Context, transit bool, owner, uuid str
 	})
 }
 
-// CreateTile forwards to the destination grid's owner, links spelled for
-// that node (spellLinks).
+// CreateTile forwards to the side of the destination grid the tile is made
+// on (CreateTileRequest.file, placeRoute), links spelled for that node
+// (spellLinks).
 func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*pb.TileResponse, error) {
 	m := req
 	// The node-wide shell refusal is the authority; the menu only hides.
@@ -303,8 +316,11 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 		return nil, status.Error(gcodes.PermissionDenied,
 			"shell tiles are disabled on this node (server.yaml disable_shells)")
 	}
-	c, _, uuid, transit, err := rt.route(m.GridId)
+	c, uuid, transit, taken, err := rt.placeRoute(ctx, m.GridId, m.File)
 	if err != nil {
+		return nil, err
+	}
+	if err := cellFree(taken, "", m.Tile.GetX(), m.Tile.GetY(), m.Tile.GetW(), m.Tile.GetH()); err != nil {
 		return nil, err
 	}
 	if err := rt.refuseDisabled(m.GridId); err != nil {
@@ -317,9 +333,11 @@ func (rt *router) CreateTile(ctx context.Context, req *pb.CreateTileRequest) (*p
 	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
-// CopyTile runs at the nearest node that sees both ends (rpc.SharedOwner);
-// where the ends part, the copy is made here (deepcopy.go). The link gesture
-// is a plain CreateTile, never a copy.
+// CopyTile runs at the nearest node that sees both ends (rpc.SharedOwner),
+// a Gridwell tile onto any grid of its node in home's store, since the
+// Gridwell layer is one space over home and every directory; where the ends
+// part, and for a file or a directory, the copy is made here (deepcopy.go).
+// The link gesture is a plain CreateTile, never a copy.
 func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.TileResponse, error) {
 	m := req
 	c, local, uuid, transit, err := rt.route(m.TileId)
@@ -330,12 +348,23 @@ func (rt *router) CopyTile(ctx context.Context, req *pb.CopyTileRequest) (*pb.Ti
 	if err := rt.refuseDisabled(m.DestGridId); err != nil {
 		return nil, err
 	}
-	// A copy into a directory is a new file of the bytes read, from any source.
-	if rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) == "" || rpc.IsFilesID(m.DestGridId) {
-		return rt.copyAcrossSources(ctx, m, c, local, uuid, transit)
+	shared := rpc.SharedOwner(m.TileId, m.DestGridId, rt.srv.cfg.ID) != ""
+	if transit && shared || !transit && rpc.SameNode(m.TileId, m.DestGridId) && !rpc.OnDisk(m.TileId) {
+		if _, _, _, taken, err := rt.placeRoute(ctx, m.DestGridId, false); err != nil {
+			return nil, err
+		} else if len(taken) > 0 {
+			src, err := c.GetTile(ctx, &pb.GetTileRequest{TileId: local})
+			if err != nil {
+				return nil, err
+			}
+			if err := cellFree(taken, "", m.X, m.Y, src.GetTile().GetW(), src.GetTile().GetH()); err != nil {
+				return nil, err
+			}
+		}
+		resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
+		return rt.tileResp(ctx, uuid, transit, resp, err)
 	}
-	resp, err := c.CopyTile(ctx, rpc.PeelRequest(rt.hop(m.TileId, transit), m))
-	return rt.tileResp(ctx, uuid, transit, resp, err)
+	return rt.copyAcrossSources(ctx, m, c, local, uuid, transit)
 }
 
 // copyAcrossSources lands a copy at the dropped cell; the per-kind copy is
@@ -347,10 +376,14 @@ func (rt *router) copyAcrossSources(ctx context.Context, m *pb.CopyTileRequest, 
 	}
 	srcLocalTile := resp.GetTile()
 	// No version claim: a copy is layout and the source row is untouched.
-	dst, dstLocal, dstUUID, dstTransit, err := rt.route(m.DestGridId)
+	dst, dstUUID, dstTransit, taken, err := rt.placeRoute(ctx, m.DestGridId, false)
 	if err != nil {
 		return nil, err
 	}
+	if err := cellFree(taken, "", m.X, m.Y, srcLocalTile.GetW(), srcLocalTile.GetH()); err != nil {
+		return nil, err
+	}
+	dstLocal := rt.hop(m.DestGridId, dstTransit).PeelID(m.DestGridId)
 	out, err := rt.deepCopyTile(ctx, src, srcTransit, srcUUID, srcLocalTile, copyDst{Namespace: dst, hop: rt.hop(m.DestGridId, dstTransit), holder: m.DestGridId}, dstLocal, m.X, m.Y)
 	if err != nil && out != nil {
 		// The partial is visible, so say what stopped the walk.
@@ -358,6 +391,36 @@ func (rt *router) copyAcrossSources(ctx context.Context, m *pb.CopyTileRequest, 
 			"deep copy incomplete (the partial copy remains, delete it if unwanted): %v", err)
 	}
 	return rt.tileResp(ctx, dstUUID, dstTransit, out, err)
+}
+
+// placeRoute is the namespace a tile placed on grid is written to: home for a
+// Gridwell tile on a directory of this node, whose Gridwell layer is home's
+// rows, and grid's owner for every other grid, a file's tile among them.
+// Home is asked only once the files have read the directory, so a path they
+// do not list is refused as they refuse it, and taken is what the grid
+// shows, a file's derived placement among it, which home's own overlap check
+// cannot see; nil for every other route.
+func (rt *router) placeRoute(ctx context.Context, grid string, file bool) (ns namespace.Namespace, uuid string, transit bool, taken []*pb.Tile, err error) {
+	c, local, uuid, transit, err := rt.route(grid)
+	if err != nil || transit || file || !rpc.IsFilesID(grid) || rt.srv.src.Home == nil {
+		return c, uuid, transit, nil, err
+	}
+	g, err := c.GetGrid(ctx, &pb.GetGridRequest{GridId: local})
+	if err != nil {
+		return nil, "", false, nil, err
+	}
+	return rt.srv.src.Home, uuid, false, g.GetTiles(), nil
+}
+
+// cellFree refuses a w×h tile at (x, y) over any of taken but the tile
+// named except, as home's overlap check refuses one over a row.
+func cellFree(taken []*pb.Tile, except string, x, y, w, h int64) error {
+	for _, t := range taken {
+		if t.GetId() != except && x < t.GetX()+t.GetW() && t.GetX() < x+max(w, 1) && y < t.GetY()+t.GetH() && t.GetY() < y+max(h, 1) {
+			return gwerr.ToStatus(gwerr.ErrOverlap)
+		}
+	}
+	return nil
 }
 
 // readAllContent drains a namespace's ReadContent stream into one value.
@@ -569,7 +632,12 @@ func (rt *router) SetSelection(ctx context.Context, req *pb.SetSelectionRequest)
 	if err := rt.refuseDisabled(req.GridId); err != nil {
 		return nil, err
 	}
-	if _, err := c.SetSelection(ctx, rpc.PeelRequest(rt.hop(req.GridId, transit), req)); err != nil {
+	m := rpc.PeelRequest(rt.hop(req.GridId, transit), req)
+	if !transit && rpc.IsFilesID(req.GridId) {
+		// A directory's set holds home's rows over it, named by their digits.
+		m = rpc.PeelRequest(rpc.Hop{Seg: rt.srv.cfg.ID, Via: rt.srv.cfg.ID}, m)
+	}
+	if _, err := c.SetSelection(ctx, m); err != nil {
 		return nil, err
 	}
 	return &pb.SetSelectionResponse{}, nil

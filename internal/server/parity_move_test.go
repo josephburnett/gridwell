@@ -74,7 +74,13 @@ func TestAFileMovesBetweenDirectories(t *testing.T) {
 			}
 		}
 		_, err = f.cl.MoveTile(f.ctx, &gridwellv1.MoveTileRequest{TileId: moved.Id, GridId: f.root[onHome], X: 3, Y: 3, W: 1, H: 1, Claim: rpc.PlacementOf(moved)})
-		if clientsync.Of(err) != clientsync.OutcomeRejected || !strings.Contains(err.Error(), "a move to another source is refused") {
+		// Onto this node's home a file is refused for being one, and from a
+		// far node for the connection between.
+		want := rpc.MoveFileOver
+		if prefix != "" {
+			want = rpc.MoveAcross
+		}
+		if clientsync.Of(err) != clientsync.OutcomeRejected || !strings.Contains(err.Error(), want) {
 			t.Fatalf("%q: a move to home = %v, want refused with the reason", prefix, err)
 		}
 	}

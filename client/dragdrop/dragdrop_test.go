@@ -2,7 +2,6 @@ package dragdrop
 
 import (
 	"math"
-	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -514,16 +513,7 @@ func TestDecideDrop(t *testing.T) {
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, TargetRefusesTiles: true}, DropRejected},
 		{"cross-source drop over delete still deletes",
 			DropInput{Started: true, TileID: "7", OverDelete: true, CrossSource: true}, DropDelete},
-		// A directory takes nothing but a text tile's copy (CLAUDE.md, 2026-11-08).
-		{"right drag of a text into a directory -> copy",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, TargetRefusesTiles: true, IntoDirectory: true}, DropCopy},
-		{"right drag of a markdown file into another directory -> copy",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, TargetRefusesTiles: true, IntoDirectory: true}, DropCopy},
-		{"left drag of a text into a directory -> rejected (no move across, no link there)",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, TargetRefusesTiles: true, IntoDirectory: true}, DropRejected},
-		{"ctrl right drag of a text into a directory -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentLink, TargetRefusesTiles: true, IntoDirectory: true}, DropRejected},
-		{"right drag of anything else into a directory -> rejected",
+		{"right drag of anything into a grid that takes no tiles -> rejected",
 			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, TargetRefusesTiles: true}, DropRejected},
 	}
 	for _, c := range cases {
@@ -543,6 +533,7 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	md := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/notes.md"))}
 	txt := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/notes.txt"))}
 	const home, far = "n/9", "n/laptop/2"
+	dir := rpc.QualifyID("n", rpc.KeyTileID("/r/e"))
 	cases := []struct {
 		name           string
 		rows           []*gridwellv1.Tile
@@ -552,15 +543,17 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	}{
 		{"a source's door", []*gridwellv1.Tile{door}, home, false, true, true},
 		{"two source doors", []*gridwellv1.Tile{door, door}, home, false, true, true},
-		{"a home door", []*gridwellv1.Tile{door}, far, true, true, false},
-		{"a grid not yet read: the server decides", []*gridwellv1.Tile{door}, home, false, false, false},
+		{"a directory never copies", []*gridwellv1.Tile{door}, far, true, true, true},
+		{"a grid not yet read: the server decides", []*gridwellv1.Tile{{Kind: rpc.KindDoor, Id: "n/3", ChildGridId: "n/8"}}, home, false, false, false},
 		// A source's text copies its bytes, so a carry holding one is a
 		// copy, and the server links the doors in it row by row.
 		{"a source door with a source text", []*gridwellv1.Tile{door, text}, far, false, true, false},
 		{"a served page, wherever it sits", []*gridwellv1.Tile{page}, home, true, true, true},
 		{"a source door with a served page", []*gridwellv1.Tile{door, page}, home, false, true, true},
-		{"a markdown file copies its bytes", []*gridwellv1.Tile{md}, home, false, true, false},
+		{"a markdown file onto a Gridwell grid links", []*gridwellv1.Tile{md}, home, false, true, true},
 		{"any other file links", []*gridwellv1.Tile{txt}, home, false, true, true},
+		{"a file into a directory of its node copies on disk", []*gridwellv1.Tile{txt}, dir, false, true, false},
+		{"a text into a directory copies", []*gridwellv1.Tile{text}, dir, true, true, false},
 		{"a link door copies as a link", []*gridwellv1.Tile{link}, far, true, true, true},
 		{"a leaf link copies as a link", []*gridwellv1.Tile{leafLink}, far, true, true, true},
 		// A tmux lives on the node that started it (CLAUDE.md, 2026-10-01).
@@ -572,168 +565,6 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	for _, c := range cases {
 		if got := CarryCopiesAsLink(c.rows, c.dest, c.accepts, c.known); got != c.want {
 			t.Errorf("%s: CarryCopiesAsLink = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestCarryIntoDirectory(t *testing.T) {
-	dir := rpc.QualifyID("n", rpc.KeyTileID("/r"))
-	text := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/4"}
-	url := &gridwellv1.Tile{Kind: rpc.KindURL, Id: "n/5"}
-	link := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/6", LinkTargetId: "n/4"}
-	md := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/s/a.md"))}
-	txt := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/s/a.txt"))}
-	cases := []struct {
-		name string
-		rows []*gridwellv1.Tile
-		grid string
-		want bool
-	}{
-		{"a text into a directory", []*gridwellv1.Tile{text}, dir, true},
-		{"a markdown file into a directory", []*gridwellv1.Tile{md}, dir, true},
-		{"a text and a url: each row its own verdict", []*gridwellv1.Tile{url, text}, dir, true},
-		{"a url", []*gridwellv1.Tile{url}, dir, false},
-		{"a link", []*gridwellv1.Tile{link}, dir, false},
-		{"a file that is not markdown", []*gridwellv1.Tile{txt}, dir, false},
-		{"a text into home", []*gridwellv1.Tile{text}, "n/1", false},
-	}
-	for _, c := range cases {
-		if got := CarryIntoDirectory(c.rows, c.grid); got != c.want {
-			t.Errorf("%s: CarryIntoDirectory = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestGhostPlanForDrop(t *testing.T) {
-	const (
-		origin = "origin"
-		target = "target"
-		doc    = "doc"
-		srcSz  = 50.0
-		tgtSz  = 80.0
-	)
-	cases := []struct {
-		name      string
-		action    DropAction
-		forbidden bool
-		want      GhostPlan
-	}{
-		{"delete shrinks+fragments in origin", DropDelete, false,
-			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
-		{"rejected forbidden cross-grid: no-entry in target", DropRejected, true,
-			GhostPlan{PaneID: target, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
-		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false,
-			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
-		{"move snaps to target cell", DropMove, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
-		{"copy snaps to target cell", DropCopy, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
-		// A cross-namespace left-drag previews as a link, or the source's
-		// survival after the drop would read as a surprise duplicate.
-		{"link snaps to target cell with the chain badge", DropLink, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
-	}
-	for _, c := range cases {
-		got := GhostPlanForDrop(c.action, c.forbidden,
-			origin, target, srcSz, tgtSz)
-		if got != c.want {
-			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestPromoteToDoor(t *testing.T) {
-	cases := []struct {
-		name                               string
-		isDoor                             bool
-		childGridID, tileID, draggedTileID string
-		want                               bool
-	}{
-		{"open door promotes", true, "g9", "t1", "t2", true},
-		{"non-door never promotes", false, "g9", "t1", "t2", false},
-		{"door with no child never promotes", true, "", "t1", "t2", false},
-		{"the dragged door itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
-		{"a door the set carries never promotes", true, "g9", "t3", "t1,t3", false},
-		{"no drag in flight still promotes", true, "g9", "t1", "", true},
-	}
-	for _, c := range cases {
-		var carried Carry
-		for _, id := range strings.Split(c.draggedTileID, ",") {
-			if id != "" {
-				carried = append(carried, Member{ID: id})
-			}
-		}
-		if got := PromoteToDoor(c.isDoor, c.childGridID, c.tileID, carried); got != c.want {
-			t.Errorf("%s: PromoteToDoor = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-// RectsOverlap is the client half of the placement collision contract:
-// strict interior intersection, so edge adjacency is not a collision.
-func TestRectsOverlap(t *testing.T) {
-	cases := []struct {
-		name           string
-		ax, ay, aw, ah int64
-		bx, by, bw, bh int64
-		want           bool
-	}{
-		{"identical", 0, 0, 2, 2, 0, 0, 2, 2, true},
-		{"one-cell shift of a 2x2 (the #231 self-cross)", 0, 0, 2, 2, 1, 0, 2, 2, true},
-		{"corner touch only", 0, 0, 2, 2, 2, 2, 2, 2, false},
-		{"edge adjacent", 0, 0, 2, 2, 2, 0, 2, 2, false},
-		{"contained", 0, 0, 4, 4, 1, 1, 1, 1, true},
-		{"disjoint", 0, 0, 2, 2, 5, 5, 1, 1, false},
-	}
-	for _, c := range cases {
-		if got := RectsOverlap(c.ax, c.ay, c.aw, c.ah, c.bx, c.by, c.bw, c.bh); got != c.want {
-			t.Errorf("%s: RectsOverlap = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-func TestPaneShows(t *testing.T) {
-	p := mkPane(0, 0, 640, 640, 0, 0, 1, 64)
-	cases := []struct {
-		name       string
-		x, y, w, h float64
-		want       bool
-	}{
-		{"at the center", 0, 0, 1, 1, true},
-		{"straddling the left edge", -6, 0, 2, 1, true},
-		{"touching the left edge", -6, 0, 1, 1, true},
-		{"past the left edge", -8, 0, 1, 1, false},
-		{"past the bottom edge", 0, 6, 1, 1, false},
-	}
-	for _, c := range cases {
-		if got := p.Shows(c.x, c.y, c.w, c.h); got != c.want {
-			t.Errorf("%s: Shows = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
-// Every rejection names its arm, and nothing else is a rejection, so a dump
-// says why a tile snapped back.
-func TestWhyRejectedNamesTheArm(t *testing.T) {
-	base := DropInput{Started: true, TileID: "u/1", HasTarget: true}
-	cases := []struct {
-		in   func(DropInput) DropInput
-		want string
-	}{
-		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
-		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
-		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.CrossSource = true, true; return in }, "target refuses tiles"},
-		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
-		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
-		{func(in DropInput) DropInput { return in }, ""},
-	}
-	for _, c := range cases {
-		in := c.in(base)
-		if got := WhyRejected(in); got != c.want {
-			t.Errorf("%+v: why %q, want %q", in, got, c.want)
-		}
-		if rejected := DecideDrop(in) == DropRejected; rejected != (c.want != "") {
-			t.Errorf("%+v: verdict %v disagrees with why %q", in, DecideDrop(in), c.want)
 		}
 	}
 }

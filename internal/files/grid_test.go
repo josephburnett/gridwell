@@ -29,7 +29,7 @@ func TestADirectoryListsItsKindsInNameOrder(t *testing.T) {
 		t.Fatalf("names = %v, want %v", got, want)
 	}
 	g := resp.Grid
-	if g.Id != idOf(f.root) || g.GetAcceptsTiles() || !g.Writable || !g.GetMoves() || g.Glyph != rpc.GlyphFolder {
+	if g.Id != idOf(f.root) || !g.GetAcceptsTiles() || !g.Writable || !g.GetMoves() || g.Glyph != rpc.GlyphFolder {
 		t.Errorf("grid stamps = %+v", g)
 	}
 	door := tileIn(t, resp, f.path("sub"))

@@ -5,7 +5,6 @@ package dragdrop
 
 import (
 	"math"
-	"slices"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -271,16 +270,6 @@ type DropInput struct {
 	CrossSource bool
 	// CopiesAsLink is CarryCopiesAsLink over what the drag carries.
 	CopiesAsLink bool
-	// IntoDirectory is CarryIntoDirectory: a directory takes a copy of what
-	// the drag carries, though it takes no other new tile.
-	IntoDirectory bool
-}
-
-// CarryIntoDirectory: the grid is a directory and it takes a row of the
-// carry (rpc.IntoDirectory), so a copy there is a copy, and the server
-// decides each row.
-func CarryIntoDirectory(rows []*gridwellv1.Tile, grid string) bool {
-	return rpc.IsFilesID(grid) && slices.ContainsFunc(rows, func(r *gridwellv1.Tile) bool { return rpc.IntoDirectory(r) == "" })
 }
 
 // CarryCopiesAsLink: rpc.CopyOf makes a link of every row copied onto dest,
@@ -292,9 +281,7 @@ func CarryCopiesAsLink(rows []*gridwellv1.Tile, dest string, accepts, known bool
 		return false
 	}
 	for _, r := range rows {
-		// The node copies within a source alone, never into a directory.
-		same := rpc.SourceOf(r.GetId()) == rpc.SourceOf(dest) && !rpc.IsFilesID(dest)
-		as, _ := rpc.CopyOf(r, same, func() bool { return accepts || !known })
+		as, _ := rpc.CopyOf(r, dest, rpc.SameNode(r.GetId(), dest), func() bool { return accepts || !known })
 		if as != rpc.CopyLinkGrid && as != rpc.CopyLinkTile {
 			return false
 		}
@@ -334,7 +321,7 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropCreateTemplate, ""
 	case in.Forbidden:
 		return DropRejected, "forbidden"
-	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource) && !(in.Intent == IntentCopy && in.IntoDirectory):
+	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource):
 		return DropRejected, "target refuses tiles"
 	case in.SameCell:
 		return DropRejected, "same cell"

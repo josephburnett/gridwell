@@ -212,7 +212,7 @@ func TestFilesRosterRowAndRootGrid(t *testing.T) {
 		}
 	}
 	got := n.grid(n.roots[0])
-	if got.Grid.Id != n.roots[0] || got.Grid.Glyph != rpc.GlyphFolder || got.Grid.GetAcceptsTiles() {
+	if got.Grid.Id != n.roots[0] || got.Grid.Glyph != rpc.GlyphFolder || !got.Grid.GetAcceptsTiles() {
 		t.Errorf("root grid = %v", got.Grid)
 	}
 	if len(got.Grid.SourceGrids) != 2 || got.Grid.SourceGrids[0].GridId != n.roots[0] {

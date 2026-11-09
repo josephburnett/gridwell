@@ -1,7 +1,8 @@
 package files
 
 // A directory as a grid: its listing joined with the rows the user made
-// (store.FileRows.Overlay), every listing a verdict on every name in it.
+// (store.FileRows.Overlay), every listing a verdict on every name in it, and
+// the Gridwell tiles over it, home's rows (store.FileRows.Over).
 
 import (
 	"context"
@@ -89,7 +90,8 @@ func (s *Source) linkFacts(out *listed, e diskEntry) {
 	out.preview, out.LinkTarget = 0, idOf(at)
 }
 
-// listing is one directory as GetGrid answers it; rows[i] is tiles[i].
+// listing is one directory as GetGrid answers it; rows[i] is tiles[i], and
+// over is home's rows placed on it.
 type listing struct {
 	dir     string
 	since   uint64 // the directory's servedDir.gen before the disk was read
@@ -98,6 +100,7 @@ type listing struct {
 	entries []listed
 	rows    []store.FileTile
 	tiles   []*pb.Tile
+	over    []*pb.Tile
 	grid    *pb.Grid
 }
 
@@ -164,9 +167,12 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 	if err != nil {
 		return nil, err
 	}
-	l.grid = &pb.Grid{Id: idOf(dir), AcceptsTiles: proto.Bool(false), Writable: true, Moves: proto.Bool(true),
+	l.grid = &pb.Grid{Id: idOf(dir), AcceptsTiles: proto.Bool(true), Writable: true, Moves: proto.Bool(true),
 		Glyph: rpc.GlyphFolder, Selection: sel}
 	if l.tiles, err = s.buildTiles(dir, l.rows, l.entries); err != nil {
+		return nil, err
+	}
+	if l.over, err = s.mem.Over(gid); err != nil {
 		return nil, err
 	}
 	return l, nil
@@ -264,13 +270,15 @@ func (s *Source) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGrid
 	return s.answer(l), nil
 }
 
-// answer is l as GetGrid answers it, noted as a listing a client holds, and
-// announced when a change settled while it was read.
+// answer is l as GetGrid answers it, the disk's rows and home's over them,
+// each named by its own id so the router qualifies it to its owner; noted as
+// a listing a client holds, and announced when a change settled while it was
+// read. Home tells its own rows' changes.
 func (s *Source) answer(l *listing) *pb.GetGridResponse {
 	if s.settle(l, false) {
 		s.announce([]string{l.dir})
 	}
-	return &pb.GetGridResponse{Grid: l.grid, Tiles: l.tiles}
+	return &pb.GetGridResponse{Grid: l.grid, Tiles: append(slices.Clip(l.tiles), l.over...)}
 }
 
 // tilePath reads a tile id as its path and the directory listing it, which

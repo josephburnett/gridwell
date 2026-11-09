@@ -140,6 +140,15 @@ func FilePath(id string) (string, bool) {
 	return TileKey(LocalOf(id))
 }
 
+// OnDisk reports whether an id, bare or qualified, names a file or a
+// directory: its own segment is a path. A Gridwell row's is digits, wherever
+// its grid is.
+func OnDisk(id string) bool { return ShapeOf(LocalOf(id)) == ShapeKey }
+
+// SameNode reports whether two qualified ids are held by one node, home's
+// and the files' alike: the Gridwell layer is one space there.
+func SameNode(a, b string) bool { return NamespaceOf(a) == NamespaceOf(b) }
+
 // SourceOf is the source a qualified id belongs to: its namespace chain, or
 // for a file or directory the files of that chain (FilesOwner), so home and
 // the files are two sources however their ids share a node.

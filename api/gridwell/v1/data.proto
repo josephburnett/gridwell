@@ -681,6 +681,10 @@ message CreateTileRequest {
   // row in one write, so no reader sees the tile without them. Refused on
   // every other kind.
   bytes  content = 5;
+  // file makes the tile on the disk side of a directory's grid: an empty file
+  // for any kind but a door, a directory for a door, named tile.alt_text.
+  // false, the default, makes a Gridwell tile, wherever the grid is.
+  bool   file    = 6;
 }
 
 // ShellTmuxAlive reports whether the tile's Gridwell-private tmux

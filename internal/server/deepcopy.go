@@ -28,8 +28,7 @@ import (
 //
 // The mechanics of each verdict:
 //   - a deep door's framing is preserved through SetFraming;
-//   - into a directory only a text tile copies, made a markdown file there
-//     (rpc.IntoDirectory);
+//   - a file copies on disk into a directory of its node, by the files;
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is a link's semantics in bytes;
@@ -85,19 +84,17 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	// The qualification every wire response gets decides whether this tile is
 	// a link, so the copy and a fresh read cannot disagree.
 	q := qualifyTilesFor(srcTransit, srcUUID, []*pb.Tile{t})[0]
-	if why := rpc.IntoDirectory(q); why != "" && rpc.IsFilesID(dst.holder) {
-		return nil, status.Error(gcodes.InvalidArgument, why)
-	}
 	// A grid that does not answer says nothing here: the deep arm reads it
 	// again and links if it is dark.
 	accepts := func() bool {
 		g, err := rt.GetGrid(ctx, &pb.GetGridRequest{GridId: q.ChildGridId})
 		return err != nil || g.GetGrid().GetAcceptsTiles()
 	}
-	// The walk runs where the ends part, or into a directory, which takes a
-	// text alone, so nothing here copies as a shell.
-	as, target := rpc.CopyOf(q, false, accepts)
+	as, target := rpc.CopyOf(q, dst.holder, rpc.SameNode(q.Id, dst.holder), accepts)
 	switch as {
+	case rpc.CopyFile:
+		// The ends share a node, so the source's frame is the grid's.
+		return src.CopyTile(ctx, &pb.CopyTileRequest{TileId: t.Id, DestGridId: dstGrid, X: x, Y: y})
 	case rpc.CopyLinkGrid, rpc.CopyLinkTile:
 		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, as, target)
 	case rpc.CopyDeep:

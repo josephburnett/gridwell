@@ -76,13 +76,27 @@ func CopyWrites(c *pb.Tile, preview []byte) []*pb.SetTileRequest {
 	return out
 }
 
-// MoveAcross is the refusal of a move onto another source's grid than its
-// tile's (SourceOf): a source places only its own rows, so the router refuses
-// it before either source is asked, for home, the files and a far node alike.
-const MoveAcross = "a move to another source is refused"
+// The refusals of a move before either side is asked (MoveRefusal), for
+// home, the files and a far node alike.
+const (
+	MoveAcross   = "a move across a connection is refused"
+	MoveFileOver = "a file moves within the files alone, and onto a Gridwell grid it links"
+)
 
-// MovesAcross reports a move whose grid is another source's than its tile's;
-// a move naming no grid stays where it is.
-func MovesAcross(req *pb.MoveTileRequest) bool {
-	return req.GetGridId() != "" && SourceOf(req.GetGridId()) != SourceOf(req.GetTileId())
+// MoveRefusal is why a move is refused before either side is asked, "" when
+// it lands: the Gridwell layer is one space over home and every directory of
+// a node, so a Gridwell row moves between them, while a file renames within
+// the files and nothing moves across a connection. A move naming no grid
+// stays where it is.
+func MoveRefusal(req *pb.MoveTileRequest) string {
+	g := req.GetGridId()
+	switch {
+	case g == "":
+		return ""
+	case !SameNode(g, req.GetTileId()):
+		return MoveAcross
+	case OnDisk(req.GetTileId()) && !OnDisk(g):
+		return MoveFileOver
+	}
+	return ""
 }

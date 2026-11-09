@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"slices"
-	"strings"
 	"testing"
 
 	"google.golang.org/grpc/codes"
@@ -13,71 +12,97 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A tile's name becomes a file name with nothing a directory would read as
-// a path, a hidden file or a control, bounded, and ending in .md.
-func TestFileName(t *testing.T) {
-	long := strings.Repeat("é", 100) // 200 bytes
-	for _, c := range []struct{ in, want string }{
-		{"Plan", "Plan.md"},
-		{"notes.md", "notes.md"},
-		{"NOTES.MD", "NOTES.MD"},
-		{"a/b\\c", "abc.md"},
-		{"  .hidden  ", "hidden.md"},
-		{"..", "untitled.md"},
-		{"", "untitled.md"},
-		{"\x00\t\n", "untitled.md"},
-		{"tab\there", "tabhere.md"},
-		{"/", "untitled.md"},
-		{long, strings.Repeat("é", 60) + ".md"},
-	} {
-		if got := fileName(c.in); got != c.want {
-			t.Errorf("fileName(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
+func createEntry(f *fixture, dir, kind, name string, x, y int64) (*pb.TileResponse, error) {
+	return f.s.CreateTile(context.Background(), &pb.CreateTileRequest{GridId: idOf(dir), File: true,
+		Tile: &pb.Tile{Kind: kind, AltText: name, X: x, Y: y, W: 2, H: 3}})
 }
 
-func createText(f *fixture, dir, name, body string, x, y int64) (*pb.TileResponse, error) {
-	return f.s.CreateTile(context.Background(), &pb.CreateTileRequest{GridId: idOf(dir),
-		Tile: &pb.Tile{Kind: rpc.KindText, AltText: name, X: x, Y: y, W: 2, H: 3}, Content: []byte(body)})
-}
-
-// A text made in a directory is a file holding its body, its row minted at
-// the placement asked and stamped from disk, and nothing else is left
-// beside it.
-func TestATextMadeInADirectoryIsAFile(t *testing.T) {
+// The file primitive makes an empty file, its kind its name's, its row minted
+// at the placement asked; the directory primitive makes a directory, a door.
+func TestTheDiskPrimitivesMakeAFileAndADirectory(t *testing.T) {
 	f := newFixture(t)
-	resp, err := createText(f, f.root, "Plan", "# Plan\n", 3, 4)
+	resp, err := createEntry(f, f.root, rpc.KindText, "cat.png", 3, 4)
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := f.path("Plan.md")
-	fi, err := os.Stat(p)
-	if err != nil {
-		t.Fatal(err)
+	p := f.path("cat.png")
+	if fi, err := os.Stat(p); err != nil || fi.Size() != 0 {
+		t.Fatalf("cat.png on disk: %v, %v; want an empty file", fi, err)
 	}
 	got := f.tile(p)
-	if resp.Tile.Id != idOf(p) || got.X != 3 || got.Y != 4 || got.W != 2 || got.H != 3 ||
-		got.ContentStamp != contentStamp(fi.ModTime(), fi.Size()) {
-		t.Errorf("made %v, listed %v; want Plan.md at 3,4 2x3 with its stamp", resp.Tile, got)
+	if resp.Tile.Id != idOf(p) || got.Kind != rpc.KindURL || got.X != 3 || got.Y != 4 || got.W != 2 || got.H != 3 {
+		t.Errorf("made %v, listed %v; want cat.png a url at 3,4 2x3", resp.Tile, got)
 	}
-	if n := names(f.grid(f.root)); !slices.Equal(n, []string{"Plan.md"}) {
-		t.Errorf("the root lists %v, want Plan.md alone", n)
+	if _, err := createEntry(f, f.root, rpc.KindDoor, "sub", 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(f.path("sub")); err != nil || !fi.IsDir() {
+		t.Fatalf("sub on disk: %v, %v; want a directory", fi, err)
+	}
+	if d := f.tile(f.path("sub")); d.Kind != rpc.KindDoor || d.ChildGridId != idOf(f.path("sub")) {
+		t.Errorf("sub listed %v, want a door onto its own grid", d)
 	}
 }
 
-// A file made at the name after it was checked is never overwritten: the
-// create is refused and the file stands, alone.
-func TestACreateNeverReplacesAFileMadeMeanwhile(t *testing.T) {
+// A name already there, one naming no single entry, and a Gridwell tile are
+// each refused with nothing written.
+func TestTheDiskPrimitivesRefuse(t *testing.T) {
 	f := newFixture(t)
-	was := resolved
-	t.Cleanup(func() { resolved = was })
-	resolved = func() { f.write("Plan.md", "theirs") }
-	_, err := createText(f, f.root, "Plan", "mine", 0, 0)
-	wantCode(t, "a create over a file made meanwhile", err, codes.InvalidArgument)
+	f.write("Plan.md", "theirs")
+	for _, name := range []string{"Plan.md", "", "..", "a/b", "nul\x00"} {
+		_, err := createEntry(f, f.root, rpc.KindText, name, 0, 0)
+		wantCode(t, "a create of "+name, err, codes.InvalidArgument)
+	}
+	_, err := f.s.CreateTile(context.Background(), &pb.CreateTileRequest{GridId: idOf(f.root),
+		Tile: &pb.Tile{Kind: rpc.KindText, AltText: "Gridwell", W: 1, H: 1}})
+	wantCode(t, "a Gridwell tile asked of the files", err, codes.InvalidArgument)
 	if b, _ := os.ReadFile(f.path("Plan.md")); string(b) != "theirs" {
 		t.Errorf("Plan.md holds %q, want theirs", b)
 	}
 	if es, _ := os.ReadDir(f.root); len(es) != 1 {
 		t.Errorf("the root holds %d names, want Plan.md alone", len(es))
+	}
+}
+
+// A name made after it was checked is never overwritten: the create is
+// refused and the file stands.
+func TestACreateNeverReplacesAFileMadeMeanwhile(t *testing.T) {
+	f := newFixture(t)
+	was := resolved
+	t.Cleanup(func() { resolved = was })
+	resolved = func() { f.write("Plan.md", "theirs") }
+	_, err := createEntry(f, f.root, rpc.KindText, "Plan.md", 0, 0)
+	wantCode(t, "a create over a file made meanwhile", err, codes.InvalidArgument)
+	if b, _ := os.ReadFile(f.path("Plan.md")); string(b) != "theirs" {
+		t.Errorf("Plan.md holds %q, want theirs", b)
+	}
+}
+
+// A file copied into another directory is a new file of its bytes there,
+// under its name, its row at the cell asked; a name already there is
+// refused and the file standing is untouched.
+func TestACopyWithinTheFilesCopiesTheFileOnDisk(t *testing.T) {
+	f := newFixture(t)
+	src := f.write("a/notes.txt", "body")
+	dst := f.mkdir("b")
+	resp, err := f.s.CopyTile(context.Background(), &pb.CopyTileRequest{TileId: idOf(src), DestGridId: idOf(dst), X: 2, Y: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := f.path("b/notes.txt")
+	if b, _ := os.ReadFile(p); string(b) != "body" {
+		t.Errorf("the copy holds %q, want body", b)
+	}
+	if got := f.tile(p); resp.Tile.Id != idOf(p) || got.X != 2 || got.Y != 1 {
+		t.Errorf("copied %v, listed %v; want notes.txt at 2,1", resp.Tile, got)
+	}
+	f.write("c/notes.txt", "theirs")
+	_, err = f.s.CopyTile(context.Background(), &pb.CopyTileRequest{TileId: idOf(src), DestGridId: idOf(f.path("c"))})
+	wantCode(t, "a copy over a name already there", err, codes.InvalidArgument)
+	if b, _ := os.ReadFile(f.path("c/notes.txt")); string(b) != "theirs" {
+		t.Errorf("c/notes.txt holds %q, want theirs", b)
+	}
+	if n := names(f.grid(f.path("b"))); !slices.Equal(n, []string{"notes.txt"}) {
+		t.Errorf("b lists %v, want notes.txt alone", n)
 	}
 }

@@ -58,17 +58,28 @@ func (rt *router) WriteContent(ctx context.Context, recv func() (*pb.WriteConten
 	return rt.tileResp(ctx, uuid, transit, resp, err)
 }
 
-// MoveTile is the single placement writeback.
+// MoveTile is the single placement writeback, refused before either side is
+// asked by rpc.MoveRefusal; a Gridwell tile onto a directory is home's move,
+// over a cell the directory's grid shows free (placeRoute).
 func (rt *router) MoveTile(ctx context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error) {
 	if err := refuseUnclaimed(req); err != nil {
 		return nil, err
 	}
-	if rpc.MovesAcross(req) {
-		return nil, status.Error(gcodes.InvalidArgument, rpc.MoveAcross)
+	if why := rpc.MoveRefusal(req); why != "" {
+		return nil, status.Error(gcodes.InvalidArgument, why)
 	}
-	c, _, uuid, transit, err := rt.route(req.TileId)
+	c, local, uuid, transit, err := rt.route(req.TileId)
 	if err != nil {
 		return nil, err
+	}
+	if !transit && !rpc.OnDisk(req.TileId) && req.GridId != "" {
+		_, _, _, taken, err := rt.placeRoute(ctx, req.GridId, false)
+		if err != nil {
+			return nil, err
+		}
+		if err := cellFree(taken, local, req.X, req.Y, req.W, req.H); err != nil {
+			return nil, err
+		}
 	}
 	if err := rt.refuseDisabled(req.TileId, req.GridId); err != nil {
 		return nil, err

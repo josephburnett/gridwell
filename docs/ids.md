@@ -42,6 +42,9 @@ of a find; the files' own ids are qualified with the node's id
   leaf link's target): full chains. A directory's grid and the door that
   shows it in its parent both name the directory's path; `GetGrid` and
   `GetTile` are separate verbs, so the two never collide.
+- `grid_id` of a home row is its grid's id: digits for a home grid, or
+  `~<path>` for a Gridwell tile sitting on a directory, its tile id still
+  digits and still home's.
 - `Link` (dashed = link) is derived from the target arriving already
   qualified, never stored. A link inside one namespace is still a link: a
   ctrl + right-drag makes one. A symlink's door arrives with the bit set by

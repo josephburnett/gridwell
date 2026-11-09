@@ -6,16 +6,15 @@ import { tileAt } from './oracle';
 
 // A right-drag of a directory's door onto home links it, as a left-drag does: a
 // directory door never copies (CLAUDE.md, 2026-10-20). The verdict
-// is the client's, so the commit is a CreateTile and no CopyTile is asked; a
-// markdown file still copies its bytes. The server makes the same link of a CopyTile,
-// so only the verb tells the client's verdict apart.
+// is the client's, so the commit is a CreateTile and no CopyTile is asked. The
+// server makes the same link of a CopyTile, so only the verb tells the
+// client's verdict apart.
 
 const ROOT = makeRunDir();
 fs.mkdirSync(path.join(ROOT, 'sub'), { recursive: true });
-fs.writeFileSync(path.join(ROOT, 'notes.md'), '# notes\n');
 test.use({ filesRoots: [{ root: ROOT, label: 'docs' }] });
 
-test('right-drag of a directory door onto home links it; a markdown file still copies', async ({ gw, window }) => {
+test('right-drag of a directory door onto home links it', async ({ gw, window }) => {
   const verbs: string[] = [];
   await window.route('**/gridwell.v1.Gridwell/{CopyTile,CreateTile}', async (r: any) => {
     verbs.push(r.request().url().split('/').pop());
@@ -38,8 +37,7 @@ test('right-drag of a directory door onto home links it; a markdown file still c
   const b = (await gw.panes()).find((p: any) => p.id === bId)!;
   const tiles = (await gw.getGrid(b.gridID)).tiles ?? [];
   const sub = tiles.find((t: any) => t.altText === 'sub')!;
-  const notes = tiles.find((t: any) => t.altText === 'notes.md')!;
-  expect(sub && notes, 'the directory and the file are listed').toBeTruthy();
+  expect(sub, 'the directory is listed').toBeTruthy();
 
   await gw.copyDragAcrossPanes(b.id, Number(sub.x ?? 0), Number(sub.y ?? 0), a.id, cx, cy);
   const link = tileAt(await gw.getGrid(a.gridID), 'door', cx, cy)!;
@@ -47,11 +45,4 @@ test('right-drag of a directory door onto home links it; a markdown file still c
   expect(link.link, 'the door is a link').toBe(true);
   expect(link.childGridId, 'the link opens the directory itself').toBe(sub.childGridId);
   expect(verbs, 'the commit was the link, not a copy').toEqual(['CreateTile']);
-
-  await gw.copyDragAcrossPanes(b.id, Number(notes.x ?? 0), Number(notes.y ?? 0), a.id, cx - 1, cy);
-  const copy = tileAt(await gw.getGrid(a.gridID), 'text', cx - 1, cy)!;
-  expect(copy, 'the right-drag of a file landed a text in home').toBeTruthy();
-  expect(copy.link ?? false, 'the file copied, not linked').toBe(false);
-  expect(await gw.getTileContent(copy.id), 'the copy holds the bytes').toBe('# notes\n');
-  expect(verbs, 'the file went by CopyTile').toEqual(['CreateTile', 'CopyTile']);
 });

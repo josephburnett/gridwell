@@ -39,7 +39,7 @@ func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (
 			return ErrOverlap
 		}
 
-		newID, err := s.insertTileCopy(ctx, tx, dstGrid, n, req.X, req.Y, s.now().Unix())
+		newID, err := s.insertTileCopy(ctx, tx, dstGrid, req.DestGridId, n, req.X, req.Y, s.now().Unix())
 		if err != nil {
 			return err
 		}

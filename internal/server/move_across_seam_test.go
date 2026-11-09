@@ -1,8 +1,9 @@
 package server_test
 
-// A move names one source's grid for another source's tile: home, the files
-// and a far node each refuse it with the one sentence, before either side
-// is asked, and nothing moves.
+// A move across a connection is refused by home, the files and a far node
+// alike with the one sentence, before either side is asked, and nothing
+// moves; within a node a Gridwell tile moves between home and a directory,
+// and a file onto a Gridwell grid is refused (rpc.MoveRefusal).
 
 import (
 	"os"
@@ -27,7 +28,7 @@ func wantMoveAcross(t *testing.T, what string, err error) {
 	}
 }
 
-func TestAMoveBetweenHomeAndTheFilesIsRefusedEitherWay(t *testing.T) {
+func TestAGridwellTileMovesBetweenHomeAndADirectory(t *testing.T) {
 	root := t.TempDir()
 	f := filepath.Join(root, "a.txt")
 	writeFile(t, f, "a")
@@ -37,13 +38,30 @@ func TestAMoveBetweenHomeAndTheFilesIsRefusedEitherWay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = n.move(note, n.roots[0], 0, 0)
-	wantMoveAcross(t, "home into a directory", err)
-	if got, err := n.cl.GetTile(n.ctx, note.Id); err != nil || got.GridId != n.home {
-		t.Errorf("the home tile after the refusal = %v, %v; want it on home's grid", got, err)
+	// The file nobody placed sits at its derived cell, which a drop over it
+	// may not take.
+	file := n.tile(n.roots[0], f)
+	if _, err = n.move(note, n.roots[0], file.X, file.Y); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("home onto a file's derived cell: %v, want the overlap refusal", err)
 	}
-	_, err = n.move(n.tile(n.roots[0], f), n.home, 0, 0)
-	wantMoveAcross(t, "a file into home", err)
+	moved, err := n.move(note, n.roots[0], 3, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.Id != note.Id || moved.GridId != n.roots[0] {
+		t.Fatalf("home into a directory = %v, want the same row on %s", moved, n.roots[0])
+	}
+	if g := n.grid(n.roots[0]); len(g.Tiles) != 2 {
+		t.Errorf("the directory lists %v, want a.txt and the tile over it", g.Tiles)
+	}
+	back, err := n.move(moved, n.home, 1, 1)
+	if err != nil || back.GridId != n.home {
+		t.Fatalf("back to home = %v, %v", back, err)
+	}
+	if _, err = n.move(n.tile(n.roots[0], f), n.home, 5, 5); connect.CodeOf(err) != connect.CodeInvalidArgument ||
+		!strings.Contains(err.Error(), rpc.MoveFileOver) {
+		t.Errorf("a file into home: %v, want InvalidArgument %q", err, rpc.MoveFileOver)
+	}
 	if _, err := os.Stat(f); err != nil {
 		t.Errorf("the file left its directory: %v", err)
 	}

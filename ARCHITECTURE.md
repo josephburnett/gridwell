@@ -132,7 +132,7 @@ disk retires an unfrozen screenshot (`files.pagePreviewStale`).
 owner's `Info` does not answer. `Grid.accepts_tiles` (the + menu, a drop,
 a url's address), `Grid.writable` (its bodies take edits) and `Grid.moves`
 are the owning namespace's stamp on its own grid — home's `GetGrid` and
-the files' (`files.Source.synthesize`: writable, takes no tiles, moves) —
+the files' (`files.Source.synthesize`: writable, takes tiles, moves) —
 carried verbatim in transit, where `TransitQualifyGrid` reads an older
 node's one bit for both. `Tile.read_only` (this one body takes none, and
 why) is the files' for a file the node cannot write, or the router's for a
@@ -162,10 +162,25 @@ it deep-copies (`deepcopy.go`), reading through one chain and writing through
 the other. So bytes travel no further than the two ends are apart. Two
 connections are two owners even though one transport serves both. Both
 executors, the store's in one transaction and the router's walk, read what
-each tile becomes from `rpc.CopyOf`. A copy
-into a directory always deep-copies, since its arrival is a new file of the
-bytes read: a text tile alone, made a markdown file (`rpc.IntoDirectory`),
-while a file that is not markdown copies out as a link (`rpc.CopiesAsLink`).
+each tile becomes from `rpc.CopyOf`. A Gridwell tile copies within its
+node's Gridwell layer, home and every directory, in home's store; a file
+copies on disk into a directory of its node, by the files, and links onto
+any Gridwell grid; a directory links everywhere. Nothing is converted
+between the disk and Gridwell.
+
+A directory's grid holds two sides. The files compose it: the listing
+joined with the file rows, and home's rows whose grid is the directory's
+keyed `grids` row (`store.FileRows.Over`), each named by its own id, so the
+router qualifies a home row to home. A Gridwell tile on a directory is a
+home row: the store spells its grid `~<path>` (`store.scanHomeTile`) and
+reads that back to the keyed row (`store.gridRow`), minting it on a write
+(`store.destGrid`); a structural change to it tells `GridChanged` for the
+directory (`store.bumpGridVersion`). `CreateTileRequest.file` picks the
+side a new tile is on: false, the default, is home's row; true is the
+files' file or directory primitive. The router's `placeRoute` sends a
+Gridwell write onto a directory to home once the files have read the
+directory, and refuses a cell any tile the grid shows covers, a file's
+derived placement among them (`cellFree`).
 
 Two sockets. The web API (`web.bind`) serves Connect, the content API,
 the shell API and the MCP API (`/mcp`) behind a password cookie, or the
@@ -215,7 +230,9 @@ permission the disk refuses is PermissionDenied, an unreadable page 403 at
 the content API. Delete moves the file to the OS trash. A move to another
 directory renames it on disk, and its row (placement, name, framing) follows
 under the new path's id while the old id retires; a
-move to another source is refused (`rpc.MoveAcross`). A symlink is a link:
+file onto a Gridwell grid and anything across a connection are refused
+(`rpc.MoveRefusal`), while a Gridwell tile moves between home and a
+directory. A symlink is a link:
 to a directory, a door onto the target's grid; to a file, a link tile whose
 target is the target's path id; followed wherever it lands, and dead only
 when the target is gone. Every absolute path is addressable, and one that

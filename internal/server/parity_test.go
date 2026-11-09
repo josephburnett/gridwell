@@ -94,10 +94,12 @@ var parityOps = []parityOp{opCreate, opMove, opCopy, opLink, opDelete, opRename,
 
 type parityOwner string
 
+// onDir is a Gridwell tile on a directory: home's row over the files' grid.
 const (
 	onHome  parityOwner = "home"
 	onFiles parityOwner = "files"
 	onFar   parityOwner = "far"
+	onDir   parityOwner = "on a directory"
 )
 
 type parityVerdict int
@@ -145,6 +147,7 @@ const (
 // The differences CLAUDE.md decides, quoted.
 const (
 	dFilesCreates  = "makes a file or a directory on disk only through the file and directory primitives"
+	dFilesLinks    = "Every file copies onto a Gridwell grid as a link too"
 	dFilesDelete   = "Delete moves the file to the OS trash, by a rename"
 	dFilesDoorCopy = "A directory's door never copies"
 	dFilesPageCopy = "a page file, whose page is the node's, has no address to copy"
@@ -162,292 +165,436 @@ const (
 var parityTable = []parityCell{
 	{kText, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kText, opCreate, onFar, same, "", checkCreate},
+	{kText, opCreate, onDir, same, "", checkCreate},
 	{kText, opMove, onFiles, decided, dFilesPath, nil},
 	{kText, opMove, onFar, same, "", checkMove},
-	{kText, opCopy, onFiles, same, "", checkCopy},
+	{kText, opMove, onDir, same, "", checkMove},
+	{kText, opCopy, onFiles, decided, dFilesLinks, nil},
 	{kText, opCopy, onFar, same, "", checkCopy},
+	{kText, opCopy, onDir, same, "", checkCopy},
 	{kText, opLink, onFiles, same, "", checkLink},
 	{kText, opLink, onFar, same, "", checkLink},
+	{kText, opLink, onDir, same, "", checkLink},
 	{kText, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kText, opDelete, onFar, same, "", checkDelete},
+	{kText, opDelete, onDir, same, "", checkDelete},
 	{kText, opRename, onFiles, na, naFilesTextName, nil},
 	{kText, opRename, onFar, na, naName, nil},
+	{kText, opRename, onDir, na, naName, nil},
 	{kText, opDescend, onFiles, same, "", checkDescend},
 	{kText, opDescend, onFar, same, "", checkDescend},
+	{kText, opDescend, onDir, same, "", checkDescend},
 	{kText, opFreeze, onFiles, na, naLive, nil},
 	{kText, opFreeze, onFar, na, naLive, nil},
+	{kText, opFreeze, onDir, na, naLive, nil},
 	{kText, opScreenshot, onFiles, na, naLive, nil},
 	{kText, opScreenshot, onFar, na, naLive, nil},
+	{kText, opScreenshot, onDir, na, naLive, nil},
 	{kText, opZoom, onFiles, same, "", checkZoom},
 	{kText, opZoom, onFar, same, "", checkZoom},
+	{kText, opZoom, onDir, same, "", checkZoom},
 	{kText, opScroll, onFiles, same, "", checkScroll},
 	{kText, opScroll, onFar, same, "", checkScroll},
+	{kText, opScroll, onDir, same, "", checkScroll},
 	{kText, opFraming, onFiles, na, naFraming, nil},
 	{kText, opFraming, onFar, na, naFraming, nil},
+	{kText, opFraming, onDir, na, naFraming, nil},
 	{kText, opRead, onFiles, same, "", checkRead},
 	{kText, opRead, onFar, same, "", checkRead},
+	{kText, opRead, onDir, same, "", checkRead},
 	{kText, opWrite, onFiles, decided, dTextName, nil},
 	{kText, opWrite, onFar, same, "", checkWrite},
+	{kText, opWrite, onDir, same, "", checkWrite},
 	{kText, opServe, onFiles, na, naServe, nil},
 	{kText, opServe, onFar, na, naServe, nil},
+	{kText, opServe, onDir, na, naServe, nil},
 	{kText, opFind, onFiles, decided, dFilesFind, nil},
 	{kText, opFind, onFar, same, "", checkFind},
+	{kText, opFind, onDir, same, "", checkFind},
 	{kText, opUpdate, onFiles, decided, dTextName, nil},
 	{kText, opUpdate, onFar, same, "", checkUpdate},
+	{kText, opUpdate, onDir, same, "", checkUpdate},
 	{kText, opDead, onFiles, same, "", checkDead},
 	{kText, opDead, onFar, same, "", checkDead},
+	{kText, opDead, onDir, same, "", checkDead},
 	{kURL, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kURL, opCreate, onFar, same, "", checkCreate},
+	{kURL, opCreate, onDir, same, "", checkCreate},
 	{kURL, opMove, onFiles, decided, dFilesPath, nil},
 	{kURL, opMove, onFar, same, "", checkMove},
+	{kURL, opMove, onDir, same, "", checkMove},
 	{kURL, opCopy, onFiles, decided, dFilesPageCopy, nil},
 	{kURL, opCopy, onFar, same, "", checkCopy},
+	{kURL, opCopy, onDir, same, "", checkCopy},
 	{kURL, opLink, onFiles, decided, dFilesPage, nil},
 	{kURL, opLink, onFar, same, "", checkLink},
+	{kURL, opLink, onDir, same, "", checkLink},
 	{kURL, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kURL, opDelete, onFar, same, "", checkDelete},
+	{kURL, opDelete, onDir, same, "", checkDelete},
 	{kURL, opRename, onFiles, same, "", checkRename},
 	{kURL, opRename, onFar, same, "", checkRename},
+	{kURL, opRename, onDir, same, "", checkRename},
 	{kURL, opDescend, onFiles, decided, dFilesPage, nil},
 	{kURL, opDescend, onFar, same, "", checkDescend},
+	{kURL, opDescend, onDir, same, "", checkDescend},
 	{kURL, opFreeze, onFiles, same, "", checkFreeze},
 	{kURL, opFreeze, onFar, same, "", checkFreeze},
+	{kURL, opFreeze, onDir, same, "", checkFreeze},
 	{kURL, opScreenshot, onFiles, decided, dPageCapture, nil},
 	{kURL, opScreenshot, onFar, same, "", checkScreenshot},
+	{kURL, opScreenshot, onDir, same, "", checkScreenshot},
 	{kURL, opZoom, onFiles, same, "", checkZoom},
 	{kURL, opZoom, onFar, same, "", checkZoom},
+	{kURL, opZoom, onDir, same, "", checkZoom},
 	{kURL, opScroll, onFiles, na, naScroll, nil},
 	{kURL, opScroll, onFar, na, naScroll, nil},
+	{kURL, opScroll, onDir, na, naScroll, nil},
 	{kURL, opFraming, onFiles, na, naFraming, nil},
 	{kURL, opFraming, onFar, na, naFraming, nil},
+	{kURL, opFraming, onDir, na, naFraming, nil},
 	{kURL, opRead, onFiles, decided, dPageAddress, nil},
 	{kURL, opRead, onFar, same, "", checkRead},
+	{kURL, opRead, onDir, same, "", checkRead},
 	{kURL, opWrite, onFiles, decided, dPageAddress, nil},
 	{kURL, opWrite, onFar, same, "", checkWrite},
+	{kURL, opWrite, onDir, same, "", checkWrite},
 	{kURL, opServe, onFiles, decided, dFilesPage, nil},
 	{kURL, opServe, onFar, same, "", checkServe},
+	{kURL, opServe, onDir, same, "", checkServe},
 	{kURL, opFind, onFiles, decided, dFilesFind, nil},
 	{kURL, opFind, onFar, same, "", checkFind},
+	{kURL, opFind, onDir, same, "", checkFind},
 	{kURL, opUpdate, onFiles, decided, dPageAddress, nil},
 	{kURL, opUpdate, onFar, same, "", checkUpdate},
+	{kURL, opUpdate, onDir, same, "", checkUpdate},
 	{kURL, opDead, onFiles, same, "", checkDead},
 	{kURL, opDead, onFar, same, "", checkDead},
+	{kURL, opDead, onDir, same, "", checkDead},
 	{kShell, opCreate, onFiles, na, naFilesKind, nil},
 	{kShell, opCreate, onFar, same, "", checkCreate},
+	{kShell, opCreate, onDir, same, "", checkCreate},
 	{kShell, opMove, onFiles, na, naFilesKind, nil},
 	{kShell, opMove, onFar, same, "", checkMove},
+	{kShell, opMove, onDir, same, "", checkMove},
 	{kShell, opCopy, onFiles, na, naFilesKind, nil},
 	{kShell, opCopy, onFar, decided, dShellCopy, nil},
+	{kShell, opCopy, onDir, same, "", checkCopy},
 	{kShell, opLink, onFiles, na, naFilesKind, nil},
 	{kShell, opLink, onFar, same, "", checkLink},
+	{kShell, opLink, onDir, same, "", checkLink},
 	{kShell, opDelete, onFiles, na, naFilesKind, nil},
 	{kShell, opDelete, onFar, same, "", checkDelete},
+	{kShell, opDelete, onDir, same, "", checkDelete},
 	{kShell, opRename, onFiles, na, naFilesKind, nil},
 	{kShell, opRename, onFar, same, "", checkRename},
+	{kShell, opRename, onDir, same, "", checkRename},
 	{kShell, opDescend, onFiles, na, naFilesKind, nil},
 	{kShell, opDescend, onFar, same, "", checkDescend},
+	{kShell, opDescend, onDir, same, "", checkDescend},
 	{kShell, opFreeze, onFiles, na, naFilesKind, nil},
 	{kShell, opFreeze, onFar, same, "", checkFreeze},
+	{kShell, opFreeze, onDir, same, "", checkFreeze},
 	{kShell, opScreenshot, onFiles, na, naFilesKind, nil},
 	{kShell, opScreenshot, onFar, same, "", checkScreenshot},
+	{kShell, opScreenshot, onDir, same, "", checkScreenshot},
 	{kShell, opZoom, onFiles, na, naFilesKind, nil},
 	{kShell, opZoom, onFar, same, "", checkZoom},
+	{kShell, opZoom, onDir, same, "", checkZoom},
 	{kShell, opScroll, onFiles, na, naScroll, nil},
 	{kShell, opScroll, onFar, na, naScroll, nil},
+	{kShell, opScroll, onDir, na, naScroll, nil},
 	{kShell, opFraming, onFiles, na, naFraming, nil},
 	{kShell, opFraming, onFar, na, naFraming, nil},
+	{kShell, opFraming, onDir, na, naFraming, nil},
 	{kShell, opRead, onFiles, na, naContent, nil},
 	{kShell, opRead, onFar, na, naContent, nil},
+	{kShell, opRead, onDir, na, naContent, nil},
 	{kShell, opWrite, onFiles, na, naContent, nil},
 	{kShell, opWrite, onFar, na, naContent, nil},
+	{kShell, opWrite, onDir, na, naContent, nil},
 	{kShell, opServe, onFiles, na, naServe, nil},
 	{kShell, opServe, onFar, na, naServe, nil},
+	{kShell, opServe, onDir, na, naServe, nil},
 	{kShell, opFind, onFiles, na, naFilesKind, nil},
 	{kShell, opFind, onFar, same, "", checkFind},
+	{kShell, opFind, onDir, same, "", checkFind},
 	{kShell, opUpdate, onFiles, na, naFilesKind, nil},
 	{kShell, opUpdate, onFar, same, "", checkUpdate},
+	{kShell, opUpdate, onDir, same, "", checkUpdate},
 	{kShell, opDead, onFiles, na, naFilesKind, nil},
 	{kShell, opDead, onFar, same, "", checkDead},
+	{kShell, opDead, onDir, same, "", checkDead},
 	{kWorkspace, opCreate, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opCreate, onFar, same, "", checkCreate},
+	{kWorkspace, opCreate, onDir, same, "", checkCreate},
 	{kWorkspace, opMove, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opMove, onFar, same, "", checkMove},
+	{kWorkspace, opMove, onDir, same, "", checkMove},
 	{kWorkspace, opCopy, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opCopy, onFar, same, "", checkCopy},
+	{kWorkspace, opCopy, onDir, same, "", checkCopy},
 	{kWorkspace, opLink, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opLink, onFar, same, "", checkLink},
+	{kWorkspace, opLink, onDir, same, "", checkLink},
 	{kWorkspace, opDelete, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opDelete, onFar, same, "", checkDelete},
+	{kWorkspace, opDelete, onDir, same, "", checkDelete},
 	{kWorkspace, opRename, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opRename, onFar, same, "", checkRename},
+	{kWorkspace, opRename, onDir, same, "", checkRename},
 	{kWorkspace, opDescend, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opDescend, onFar, same, "", checkDescend},
+	{kWorkspace, opDescend, onDir, same, "", checkDescend},
 	{kWorkspace, opFreeze, onFiles, na, naLive, nil},
 	{kWorkspace, opFreeze, onFar, na, naLive, nil},
+	{kWorkspace, opFreeze, onDir, na, naLive, nil},
 	{kWorkspace, opScreenshot, onFiles, na, naLive, nil},
 	{kWorkspace, opScreenshot, onFar, na, naLive, nil},
+	{kWorkspace, opScreenshot, onDir, na, naLive, nil},
 	{kWorkspace, opZoom, onFiles, na, naZoom, nil},
 	{kWorkspace, opZoom, onFar, na, naZoom, nil},
+	{kWorkspace, opZoom, onDir, na, naZoom, nil},
 	{kWorkspace, opScroll, onFiles, na, naScroll, nil},
 	{kWorkspace, opScroll, onFar, na, naScroll, nil},
+	{kWorkspace, opScroll, onDir, na, naScroll, nil},
 	{kWorkspace, opFraming, onFiles, na, naFraming, nil},
 	{kWorkspace, opFraming, onFar, na, naFraming, nil},
+	{kWorkspace, opFraming, onDir, na, naFraming, nil},
 	{kWorkspace, opRead, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opRead, onFar, same, "", checkRead},
+	{kWorkspace, opRead, onDir, same, "", checkRead},
 	{kWorkspace, opWrite, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opWrite, onFar, same, "", checkWrite},
+	{kWorkspace, opWrite, onDir, same, "", checkWrite},
 	{kWorkspace, opServe, onFiles, na, naServe, nil},
 	{kWorkspace, opServe, onFar, na, naServe, nil},
+	{kWorkspace, opServe, onDir, na, naServe, nil},
 	{kWorkspace, opFind, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opFind, onFar, same, "", checkFind},
+	{kWorkspace, opFind, onDir, same, "", checkFind},
 	{kWorkspace, opUpdate, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opUpdate, onFar, same, "", checkUpdate},
+	{kWorkspace, opUpdate, onDir, same, "", checkUpdate},
 	{kWorkspace, opDead, onFiles, na, naFilesKind, nil},
 	{kWorkspace, opDead, onFar, same, "", checkDead},
+	{kWorkspace, opDead, onDir, same, "", checkDead},
 	{kDoor, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kDoor, opCreate, onFar, same, "", checkCreate},
+	{kDoor, opCreate, onDir, same, "", checkCreate},
 	{kDoor, opMove, onFiles, decided, dFilesPath, nil},
 	{kDoor, opMove, onFar, same, "", checkMove},
+	{kDoor, opMove, onDir, same, "", checkMove},
 	{kDoor, opCopy, onFiles, decided, dFilesDoorCopy, nil},
 	{kDoor, opCopy, onFar, same, "", checkCopy},
+	{kDoor, opCopy, onDir, same, "", checkCopy},
 	{kDoor, opLink, onFiles, same, "", checkLink},
 	{kDoor, opLink, onFar, same, "", checkLink},
+	{kDoor, opLink, onDir, same, "", checkLink},
 	{kDoor, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kDoor, opDelete, onFar, same, "", checkDelete},
+	{kDoor, opDelete, onDir, same, "", checkDelete},
 	{kDoor, opRename, onFiles, same, "", checkRename},
 	{kDoor, opRename, onFar, same, "", checkRename},
+	{kDoor, opRename, onDir, same, "", checkRename},
 	{kDoor, opDescend, onFiles, same, "", checkDescend},
 	{kDoor, opDescend, onFar, same, "", checkDescend},
+	{kDoor, opDescend, onDir, same, "", checkDescend},
 	{kDoor, opFreeze, onFiles, na, naLive, nil},
 	{kDoor, opFreeze, onFar, na, naLive, nil},
+	{kDoor, opFreeze, onDir, na, naLive, nil},
 	{kDoor, opScreenshot, onFiles, na, naLive, nil},
 	{kDoor, opScreenshot, onFar, na, naLive, nil},
+	{kDoor, opScreenshot, onDir, na, naLive, nil},
 	{kDoor, opZoom, onFiles, na, naZoom, nil},
 	{kDoor, opZoom, onFar, na, naZoom, nil},
+	{kDoor, opZoom, onDir, na, naZoom, nil},
 	{kDoor, opScroll, onFiles, na, naScroll, nil},
 	{kDoor, opScroll, onFar, na, naScroll, nil},
+	{kDoor, opScroll, onDir, na, naScroll, nil},
 	{kDoor, opFraming, onFiles, same, "", checkFraming},
 	{kDoor, opFraming, onFar, same, "", checkFraming},
+	{kDoor, opFraming, onDir, same, "", checkFraming},
 	{kDoor, opRead, onFiles, na, naContent, nil},
 	{kDoor, opRead, onFar, na, naContent, nil},
+	{kDoor, opRead, onDir, na, naContent, nil},
 	{kDoor, opWrite, onFiles, na, naContent, nil},
 	{kDoor, opWrite, onFar, na, naContent, nil},
+	{kDoor, opWrite, onDir, na, naContent, nil},
 	{kDoor, opServe, onFiles, na, naServe, nil},
 	{kDoor, opServe, onFar, na, naServe, nil},
+	{kDoor, opServe, onDir, na, naServe, nil},
 	{kDoor, opFind, onFiles, decided, dFilesFind, nil},
 	{kDoor, opFind, onFar, same, "", checkFind},
+	{kDoor, opFind, onDir, same, "", checkFind},
 	{kDoor, opUpdate, onFiles, same, "", checkUpdate},
 	{kDoor, opUpdate, onFar, same, "", checkUpdate},
+	{kDoor, opUpdate, onDir, same, "", checkUpdate},
 	{kDoor, opDead, onFiles, same, "", checkDead},
 	{kDoor, opDead, onFar, same, "", checkDead},
+	{kDoor, opDead, onDir, same, "", checkDead},
 	{kDoorHome, opCreate, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opCreate, onFar, same, "", checkCreate},
+	{kDoorHome, opCreate, onDir, same, "", checkCreate},
 	{kDoorHome, opMove, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opMove, onFar, same, "", checkMove},
+	{kDoorHome, opMove, onDir, same, "", checkMove},
 	{kDoorHome, opCopy, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opCopy, onFar, same, "", checkCopy},
+	{kDoorHome, opCopy, onDir, same, "", checkCopy},
 	{kDoorHome, opLink, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opLink, onFar, same, "", checkLink},
+	{kDoorHome, opLink, onDir, same, "", checkLink},
 	{kDoorHome, opDelete, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opDelete, onFar, same, "", checkDelete},
+	{kDoorHome, opDelete, onDir, same, "", checkDelete},
 	{kDoorHome, opRename, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opRename, onFar, same, "", checkRename},
+	{kDoorHome, opRename, onDir, same, "", checkRename},
 	{kDoorHome, opDescend, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opDescend, onFar, same, "", checkDescend},
+	{kDoorHome, opDescend, onDir, same, "", checkDescend},
 	{kDoorHome, opFreeze, onFiles, na, naLive, nil},
 	{kDoorHome, opFreeze, onFar, na, naLive, nil},
+	{kDoorHome, opFreeze, onDir, na, naLive, nil},
 	{kDoorHome, opScreenshot, onFiles, na, naLive, nil},
 	{kDoorHome, opScreenshot, onFar, na, naLive, nil},
+	{kDoorHome, opScreenshot, onDir, na, naLive, nil},
 	{kDoorHome, opZoom, onFiles, na, naZoom, nil},
 	{kDoorHome, opZoom, onFar, na, naZoom, nil},
+	{kDoorHome, opZoom, onDir, na, naZoom, nil},
 	{kDoorHome, opScroll, onFiles, na, naScroll, nil},
 	{kDoorHome, opScroll, onFar, na, naScroll, nil},
+	{kDoorHome, opScroll, onDir, na, naScroll, nil},
 	{kDoorHome, opFraming, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opFraming, onFar, same, "", checkFraming},
+	{kDoorHome, opFraming, onDir, same, "", checkFraming},
 	{kDoorHome, opRead, onFiles, na, naContent, nil},
 	{kDoorHome, opRead, onFar, na, naContent, nil},
+	{kDoorHome, opRead, onDir, na, naContent, nil},
 	{kDoorHome, opWrite, onFiles, na, naContent, nil},
 	{kDoorHome, opWrite, onFar, na, naContent, nil},
+	{kDoorHome, opWrite, onDir, na, naContent, nil},
 	{kDoorHome, opServe, onFiles, na, naServe, nil},
 	{kDoorHome, opServe, onFar, na, naServe, nil},
+	{kDoorHome, opServe, onDir, na, naServe, nil},
 	{kDoorHome, opFind, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opFind, onFar, same, "", checkFind},
+	{kDoorHome, opFind, onDir, same, "", checkFind},
 	{kDoorHome, opUpdate, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opUpdate, onFar, same, "", checkUpdate},
+	{kDoorHome, opUpdate, onDir, same, "", checkUpdate},
 	{kDoorHome, opDead, onFiles, na, naFilesGrids, nil},
 	{kDoorHome, opDead, onFar, same, "", checkDead},
+	{kDoorHome, opDead, onDir, same, "", checkDead},
 	{kDoorDir, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kDoorDir, opCreate, onFar, same, "", checkCreate},
+	{kDoorDir, opCreate, onDir, same, "", checkCreate},
 	{kDoorDir, opMove, onFiles, decided, dFilesPath, nil},
 	{kDoorDir, opMove, onFar, same, "", checkMove},
+	{kDoorDir, opMove, onDir, same, "", checkMove},
 	{kDoorDir, opCopy, onFiles, same, "", checkCopy},
 	{kDoorDir, opCopy, onFar, same, "", checkCopy},
+	{kDoorDir, opCopy, onDir, same, "", checkCopy},
 	{kDoorDir, opLink, onFiles, same, "", checkLink},
 	{kDoorDir, opLink, onFar, same, "", checkLink},
+	{kDoorDir, opLink, onDir, same, "", checkLink},
 	{kDoorDir, opDelete, onFiles, decided, dFilesDelete, nil},
 	{kDoorDir, opDelete, onFar, same, "", checkDelete},
+	{kDoorDir, opDelete, onDir, same, "", checkDelete},
 	{kDoorDir, opRename, onFiles, same, "", checkRename},
 	{kDoorDir, opRename, onFar, same, "", checkRename},
+	{kDoorDir, opRename, onDir, same, "", checkRename},
 	{kDoorDir, opDescend, onFiles, same, "", checkDescend},
 	{kDoorDir, opDescend, onFar, same, "", checkDescend},
+	{kDoorDir, opDescend, onDir, same, "", checkDescend},
 	{kDoorDir, opFreeze, onFiles, na, naLive, nil},
 	{kDoorDir, opFreeze, onFar, na, naLive, nil},
+	{kDoorDir, opFreeze, onDir, na, naLive, nil},
 	{kDoorDir, opScreenshot, onFiles, na, naLive, nil},
 	{kDoorDir, opScreenshot, onFar, na, naLive, nil},
+	{kDoorDir, opScreenshot, onDir, na, naLive, nil},
 	{kDoorDir, opZoom, onFiles, na, naZoom, nil},
 	{kDoorDir, opZoom, onFar, na, naZoom, nil},
+	{kDoorDir, opZoom, onDir, na, naZoom, nil},
 	{kDoorDir, opScroll, onFiles, na, naScroll, nil},
 	{kDoorDir, opScroll, onFar, na, naScroll, nil},
+	{kDoorDir, opScroll, onDir, na, naScroll, nil},
 	{kDoorDir, opFraming, onFiles, same, "", checkFraming},
 	{kDoorDir, opFraming, onFar, same, "", checkFraming},
+	{kDoorDir, opFraming, onDir, same, "", checkFraming},
 	{kDoorDir, opRead, onFiles, na, naContent, nil},
 	{kDoorDir, opRead, onFar, na, naContent, nil},
+	{kDoorDir, opRead, onDir, na, naContent, nil},
 	{kDoorDir, opWrite, onFiles, na, naContent, nil},
 	{kDoorDir, opWrite, onFar, na, naContent, nil},
+	{kDoorDir, opWrite, onDir, na, naContent, nil},
 	{kDoorDir, opServe, onFiles, na, naServe, nil},
 	{kDoorDir, opServe, onFar, na, naServe, nil},
+	{kDoorDir, opServe, onDir, na, naServe, nil},
 	{kDoorDir, opFind, onFiles, decided, dFilesFind, nil},
 	{kDoorDir, opFind, onFar, same, "", checkFind},
+	{kDoorDir, opFind, onDir, same, "", checkFind},
 	{kDoorDir, opUpdate, onFiles, same, "", checkUpdate},
 	{kDoorDir, opUpdate, onFar, same, "", checkUpdate},
+	{kDoorDir, opUpdate, onDir, same, "", checkUpdate},
 	{kDoorDir, opDead, onFiles, decided, dLinkDead, nil},
 	{kDoorDir, opDead, onFar, same, "", checkDead},
+	{kDoorDir, opDead, onDir, same, "", checkDead},
 	{kDoorFar, opCreate, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opCreate, onFar, same, "", checkCreate},
+	{kDoorFar, opCreate, onDir, same, "", checkCreate},
 	{kDoorFar, opMove, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opMove, onFar, same, "", checkMove},
+	{kDoorFar, opMove, onDir, same, "", checkMove},
 	{kDoorFar, opCopy, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opCopy, onFar, same, "", checkCopy},
+	{kDoorFar, opCopy, onDir, same, "", checkCopy},
 	{kDoorFar, opLink, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opLink, onFar, same, "", checkLink},
+	{kDoorFar, opLink, onDir, same, "", checkLink},
 	{kDoorFar, opDelete, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDelete, onFar, same, "", checkDelete},
+	{kDoorFar, opDelete, onDir, same, "", checkDelete},
 	{kDoorFar, opRename, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opRename, onFar, same, "", checkRename},
+	{kDoorFar, opRename, onDir, same, "", checkRename},
 	{kDoorFar, opDescend, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDescend, onFar, same, "", checkDescend},
+	{kDoorFar, opDescend, onDir, same, "", checkDescend},
 	{kDoorFar, opFreeze, onFiles, na, naLive, nil},
 	{kDoorFar, opFreeze, onFar, na, naLive, nil},
+	{kDoorFar, opFreeze, onDir, na, naLive, nil},
 	{kDoorFar, opScreenshot, onFiles, na, naLive, nil},
 	{kDoorFar, opScreenshot, onFar, na, naLive, nil},
+	{kDoorFar, opScreenshot, onDir, na, naLive, nil},
 	{kDoorFar, opZoom, onFiles, na, naZoom, nil},
 	{kDoorFar, opZoom, onFar, na, naZoom, nil},
+	{kDoorFar, opZoom, onDir, na, naZoom, nil},
 	{kDoorFar, opScroll, onFiles, na, naScroll, nil},
 	{kDoorFar, opScroll, onFar, na, naScroll, nil},
+	{kDoorFar, opScroll, onDir, na, naScroll, nil},
 	{kDoorFar, opFraming, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opFraming, onFar, same, "", checkFraming},
+	{kDoorFar, opFraming, onDir, same, "", checkFraming},
 	{kDoorFar, opRead, onFiles, na, naContent, nil},
 	{kDoorFar, opRead, onFar, na, naContent, nil},
+	{kDoorFar, opRead, onDir, na, naContent, nil},
 	{kDoorFar, opWrite, onFiles, na, naContent, nil},
 	{kDoorFar, opWrite, onFar, na, naContent, nil},
+	{kDoorFar, opWrite, onDir, na, naContent, nil},
 	{kDoorFar, opServe, onFiles, na, naServe, nil},
 	{kDoorFar, opServe, onFar, na, naServe, nil},
+	{kDoorFar, opServe, onDir, na, naServe, nil},
 	{kDoorFar, opFind, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opFind, onFar, same, "", checkFind},
+	{kDoorFar, opFind, onDir, same, "", checkFind},
 	{kDoorFar, opUpdate, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opUpdate, onFar, same, "", checkUpdate},
+	{kDoorFar, opUpdate, onDir, same, "", checkUpdate},
 	{kDoorFar, opDead, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDead, onFar, same, "", checkDead},
+	{kDoorFar, opDead, onDir, same, "", checkDead},
 }
 
 // parityCount is the ledger's count: every hole, and every same cell still
@@ -478,6 +625,12 @@ func TestParity(t *testing.T) {
 			t.Parallel()
 			f := newParityFix(t)
 			want := c.check(f, onHome, c.kind)
+			// A Gridwell tile on a directory is home's row, so its run
+			// takes a node of its own, whose trash and far home home's run
+			// has not touched.
+			if c.owner == onDir {
+				f = newParityFix(t)
+			}
 			got := c.check(f, c.owner, c.kind)
 			parityOracle(t, c, want, got)
 		})
@@ -525,7 +678,7 @@ func checkParityTable(t *testing.T, table []parityCell) {
 	}
 	for _, k := range parityKinds {
 		for _, op := range parityOps {
-			for _, o := range []parityOwner{onFiles, onFar} {
+			for _, o := range []parityOwner{onFiles, onFar, onDir} {
 				if !seen[parityCell{kind: k, op: op, owner: o}.String()] {
 					t.Errorf("%s/%s/%s has no cell", k, op, o)
 				}
@@ -655,12 +808,13 @@ const (
 // parityNodeIDs is each node's id by the prefix it is reached through.
 var parityNodeIDs = map[string]string{"": localNodeID, parityConn: "rnode1"}
 
-// parityDisk is one node's files: three roots. main holds a text file, a
+// parityDisk is one node's files: five roots. main holds a text file, a
 // page file, a directory and a symlink to lib's hall; away is empty; lib
 // holds hall and inner, the directory a home door opens. Each directory
-// holds one file.
+// holds one file. place holds one file too, and Gridwell tiles sit over it,
+// moving to yonder.
 type parityDisk struct {
-	main, away, lib string
+	main, away, lib, place, yonder string
 }
 
 // parityFileNames is main's tiles by name; fileTile places each where home's
@@ -671,7 +825,7 @@ func (d parityDisk) hall() string  { return filepath.Join(d.lib, "hall") }
 func (d parityDisk) inner() string { return filepath.Join(d.lib, "inner") }
 
 func newParityDisk(t *testing.T) parityDisk {
-	d := parityDisk{main: t.TempDir(), away: t.TempDir(), lib: t.TempDir()}
+	d := parityDisk{main: t.TempDir(), away: t.TempDir(), lib: t.TempDir(), place: t.TempDir(), yonder: t.TempDir()}
 	var img bytes.Buffer
 	if err := png.Encode(&img, image.NewGray(image.Rect(0, 0, 2, 2))); err != nil {
 		t.Fatal(err)
@@ -681,6 +835,7 @@ func newParityDisk(t *testing.T) parityDisk {
 	writeFile(t, filepath.Join(d.main, "Door", "Inner"), "Inner")
 	writeFile(t, filepath.Join(d.hall(), "Inner"), "Inner")
 	writeFile(t, filepath.Join(d.inner(), "Inner"), "Inner")
+	writeFile(t, filepath.Join(d.place, "Ground"), "Ground")
 	if err := os.Symlink(d.hall(), filepath.Join(d.main, "Hall")); err != nil {
 		t.Fatal(err)
 	}
@@ -690,7 +845,7 @@ func newParityDisk(t *testing.T) parityDisk {
 // registerParityFiles registers d's roots as the node's files, as the node
 // does, a delete removing the path rather than moving it to the OS trash.
 func registerParityFiles(t *testing.T, reg *server.Sources, st *store.Store, node string, d parityDisk) {
-	src, err := files.New(st.Files(), []files.Root{{Path: d.main}, {Path: d.away}, {Path: d.lib}}, byPath(os.RemoveAll))
+	src, err := files.New(st.Files(), []files.Root{{Path: d.main}, {Path: d.away}, {Path: d.lib}, {Path: d.place}, {Path: d.yonder}}, byPath(os.RemoveAll))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -726,6 +881,7 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 		func(reg *server.Sources, st *store.Store) {
 			registerParityFiles(t, reg, st, localNodeID, disks[""])
 			at(onHome)(reg, st)
+			at(onDir)(reg, st)
 		},
 		func(reg *server.Sources, st *store.Store) {
 			registerParityFiles(t, reg, st, "rnode1", disks[parityConn])
@@ -747,6 +903,7 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 	f.roster, f.token = lp.Sources, lp.ContentToken
 	f.root[onHome], f.root[onFar] = lp.HomeGridId, connectionRows(lp)[0].RootGridId
 	f.root[onFiles], f.away[onFiles] = f.fileID("", disks[""].main), f.fileID("", disks[""].away)
+	f.root[onDir], f.away[onDir] = f.fileID("", disks[""].place), f.fileID("", disks[""].yonder)
 	// The far node's + menu, read through the connection, lands its own
 	// connection on the third node's home.
 	farMenu, err := f.cl.HandshakeNS(ctx, strings.TrimSuffix(parityConn, "/"))
@@ -756,7 +913,7 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 	if rows := connectionRows(farMenu); len(rows) != 1 || rows[0].RootGridId == "" {
 		t.Fatalf("the far node's connection rows = %+v, want zurich landed", rows)
 	} else {
-		f.farHome[onHome], f.farHome[onFar] = f.root[onFar], rows[0].RootGridId
+		f.farHome[onHome], f.farHome[onFar], f.farHome[onDir] = f.root[onFar], rows[0].RootGridId, f.root[onFar]
 	}
 	for _, o := range []parityOwner{onHome, onFar} {
 		f.away[o] = f.create(o, &gridwellv1.Tile{Kind: rpc.KindDoor, X: 9, Y: 9, W: 1, H: 1, AltText: "Away"}, nil).ChildGridId
@@ -768,7 +925,7 @@ func newParityFix(t *testing.T, variants ...parityVariant) *parityFix {
 		t.Fatal(err)
 	}
 	shown := []string{f.farHome[onFar]}
-	for _, o := range []parityOwner{onHome, onFiles, onFar} {
+	for _, o := range []parityOwner{onHome, onFiles, onFar, onDir} {
 		shown = append(shown, f.root[o], f.away[o])
 	}
 	for prefix, d := range disks {
@@ -943,13 +1100,17 @@ func (f *parityFix) settle(o parityOwner) {
 	f.t.Helper()
 	f.marks++
 	zoom := 1 + float64(f.marks)/64
-	if _, err := f.cl.SetFraming(f.ctx, &gridwellv1.SetFramingRequest{RootGridId: f.root[o], Cx: 0.5, Cy: 0.5, Zoom: zoom}); err != nil {
+	mark := f.root[o]
+	if o == onDir {
+		mark = f.root[onHome]
+	}
+	if _, err := f.cl.SetFraming(f.ctx, &gridwellv1.SetFramingRequest{RootGridId: mark, Cx: 0.5, Cy: 0.5, Zoom: zoom}); err != nil {
 		f.t.Fatalf("mark %s: %v", o, err)
 	}
 	for {
 		select {
 		case ev := <-f.events:
-			if fr := ev.GetGridFramingChanged(); fr != nil && fr.GetGridId() == f.root[o] && fr.GetViewZoom() == zoom {
+			if fr := ev.GetGridFramingChanged(); fr != nil && fr.GetGridId() == mark && fr.GetViewZoom() == zoom {
 				return
 			}
 		case <-f.ctx.Done():
@@ -1139,7 +1300,7 @@ func checkLink(f *parityFix, o parityOwner, k parityKind) observable {
 // drop is the cell on home a gesture from owner's tile lands on, one per
 // owner, since home's run and the owner's share home's root.
 func (f *parityFix) drop(o parityOwner) (x, y int64) {
-	return 0, map[parityOwner]int64{onHome: 4, onFiles: 5, onFar: 6}[o]
+	return 0, map[parityOwner]int64{onHome: 4, onFiles: 5, onFar: 6, onDir: 7}[o]
 }
 
 // dropped says a new row sits where its gesture dropped it.

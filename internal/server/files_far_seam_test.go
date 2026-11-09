@@ -57,10 +57,10 @@ func TestContentAPIThroughAConnection(t *testing.T) {
 	}
 }
 
-// A directory takes no link, so a link written into one is refused with
-// that reason (rpc.IntoDirectory), here or on a far node, before any route
-// for the link is looked for.
-func TestALinkIntoADirectoryHearsTheDirectorysRefusal(t *testing.T) {
+// A link written onto a directory is a Gridwell tile there, spelled for the
+// node holding the directory: a far node with no way to the target refuses
+// it with that reason, and this node's directory takes it as home's row.
+func TestALinkOntoADirectoryIsSpelledForItsNode(t *testing.T) {
 	dir := t.TempDir()
 	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil, filesAt(t, "rnode1", dir))
 	lp, err := h.localCl.Handshake(t.Context())
@@ -70,15 +70,18 @@ func TestALinkIntoADirectoryHearsTheDirectorysRefusal(t *testing.T) {
 	home := rpc.HomeGrid(lp)
 	far := farFileID(dir)
 	_, err = h.localCl.CreateTile(t.Context(), &gridwellv1.CreateTileRequest{GridId: far,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: home}})
-	if err == nil || !strings.Contains(err.Error(), "a directory takes") {
-		t.Fatalf("a link to home written into a far directory = %v, want the directory's refusal", err)
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, W: 1, H: 1, ChildGridId: home}})
+	if err == nil || !strings.Contains(err.Error(), "has no connection to") {
+		t.Fatalf("a link to home written onto a far directory = %v, want the missing route", err)
 	}
 	local := t.TempDir()
 	n := newFilesNode(t, local)
-	_, err = n.cl.CreateTile(n.ctx, &gridwellv1.CreateTileRequest{GridId: n.roots[0],
-		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: n.home}})
-	if err == nil || !strings.Contains(err.Error(), "a directory takes") {
-		t.Fatalf("a link to home written into a directory = %v, want the directory's refusal", err)
+	link, err := n.cl.CreateTile(n.ctx, &gridwellv1.CreateTileRequest{GridId: n.roots[0],
+		Tile: &gridwellv1.Tile{Kind: rpc.KindDoor, W: 1, H: 1, ChildGridId: n.home}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !link.Link || link.GridId != n.roots[0] || rpc.IsFilesID(link.Id) || link.ChildGridId != n.home {
+		t.Errorf("a link to home written onto a directory = %v, want home's link row on it", link)
 	}
 }

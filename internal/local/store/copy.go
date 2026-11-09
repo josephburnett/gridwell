@@ -40,7 +40,7 @@ func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (i
 		return 0, err
 	}
 	for _, src := range tiles {
-		if _, err := s.insertTileCopy(ctx, tx, newGridID, src, src.X, src.Y, now); err != nil {
+		if _, err := s.insertTileCopy(ctx, tx, newGridID, strconv.FormatInt(newGridID, 10), src, src.X, src.Y, now); err != nil {
 			return 0, err
 		}
 	}
@@ -56,7 +56,7 @@ func placeholders(n int) string {
 // decides, preserving the version and sharing the blob with its refcount
 // bumped. The per-kind column nullability mirrors the schema CHECK
 // constraint.
-func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *gridwellv1.Tile, x, y, now int64) (int64, error) {
+func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, dest string, n *gridwellv1.Tile, x, y, now int64) (int64, error) {
 	var (
 		child                                            any
 		blob, previewBlob                                sql.NullInt64
@@ -66,7 +66,7 @@ func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n 
 	// another namespace's grid: the wire's Link. Every home grid takes tiles.
 	row, notRow := strconv.ParseInt(n.ChildGridId, 10, 64)
 	n.Link = n.ChildGridId != "" && notRow != nil
-	as, target := rpc.CopyOf(n, true, func() bool { return true })
+	as, target := rpc.CopyOf(n, dest, true, func() bool { return true })
 	switch as {
 	case rpc.CopyRefused:
 		return 0, fmt.Errorf("%w: %s", ErrInvalidArgument, target)

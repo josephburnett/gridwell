@@ -2896,7 +2896,11 @@ type CreateTileRequest struct {
 	// content is the bytes a text or workspace tile is born with, stored with the
 	// row in one write, so no reader sees the tile without them. Refused on
 	// every other kind.
-	Content       []byte `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
+	Content []byte `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
+	// file makes the tile on the disk side of a directory's grid: an empty file
+	// for any kind but a door, a directory for a door, named tile.alt_text.
+	// false, the default, makes a Gridwell tile, wherever the grid is.
+	File          bool `protobuf:"varint,6,opt,name=file,proto3" json:"file,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2950,6 +2954,13 @@ func (x *CreateTileRequest) GetContent() []byte {
 		return x.Content
 	}
 	return nil
+}
+
+func (x *CreateTileRequest) GetFile() bool {
+	if x != nil {
+		return x.File
+	}
+	return false
 }
 
 // ShellTmuxAlive reports whether the tile's Gridwell-private tmux
@@ -4749,11 +4760,12 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x0eSourceDisabled\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"\n" +
 	"\n" +
-	"\bAnswered\"y\n" +
+	"\bAnswered\"\x8d\x01\n" +
 	"\x11CreateTileRequest\x12\x17\n" +
 	"\agrid_id\x18\x02 \x01(\tR\x06gridId\x12%\n" +
 	"\x04tile\x18\x03 \x01(\v2\x11.gridwell.v1.TileR\x04tile\x12\x18\n" +
-	"\acontent\x18\x05 \x01(\fR\acontentJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"0\n" +
+	"\acontent\x18\x05 \x01(\fR\acontent\x12\x12\n" +
+	"\x04file\x18\x06 \x01(\bR\x04fileJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05\"0\n" +
 	"\x15ShellTmuxAliveRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\".\n" +
 	"\x16ShellTmuxAliveResponse\x12\x14\n" +
