@@ -743,12 +743,15 @@ func TestKeyFormIdsCrossTheTunnel(t *testing.T) {
 	fileCopy := rpc(t, localOrigin, "CopyTile", map[string]any{
 		"tileId": farID, "destGridId": homeRoot, "x": 7, "y": 5,
 	})["tile"].(map[string]any)
-	if fileCopy["link"] == true || fileCopy["linkTargetId"] != nil {
-		t.Fatalf("copy of the far file = %v, want a copy", fileCopy)
+	// Nothing is converted between the disk and Gridwell, so a far file
+	// copied onto a Gridwell grid is a link to it, and the link reads the
+	// far bytes through the tunnel.
+	if fileCopy["link"] != true || fileCopy["linkTargetId"] != farID {
+		t.Fatalf("copy of the far file = %v, want a link to %v", fileCopy, farID)
 	}
 	body, _, _, err = clientFor(localOrigin).ReadContent(context.Background(), fileCopy["id"].(string))
 	if err != nil || string(body) != "hello from the far side" {
-		t.Fatalf("ReadContent of the copied far file = %q (%v)", body, err)
+		t.Fatalf("ReadContent of the far file's link = %q (%v)", body, err)
 	}
 	fmt.Println("connections spawn gate: key-form ids cross the tunnel, survive a touch, and route back OK")
 }
