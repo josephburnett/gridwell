@@ -145,7 +145,7 @@ func TestACancelledReadLeavesNoTrace(t *testing.T) {
 	if ReadSurfaces(o) {
 		t.Error("a withdrawn read surfaces")
 	}
-	if g := ReactGridRead(key, "", o); g.Surface || g.Resolve || g.Store || g.Renamed {
+	if g := ReactGridRead(key, "", o, false); g.Surface || g.Resolve || g.Store || g.Renamed {
 		t.Errorf("ReactGridRead(abandoned) = %+v, want nothing", g)
 	}
 	if p := ReactPreview(err, true); p.Surface || p.Settle || p.Store {
@@ -256,17 +256,20 @@ func TestReactGridRead(t *testing.T) {
 		name            string
 		asked, answered string
 		o               Outcome
+		preview         bool
 		want            GridRead
 	}{
-		{"answered as asked", "n1/7", "n1/7", OutcomeOK, GridRead{Latch: inflight.Answered, Store: true, Resolve: true}},
-		{"answered under another id latches, reports, and still stores", "n1/7", "n1/8", OutcomeOK, GridRead{Latch: inflight.Refused, Store: true, Renamed: true}},
-		{"transport latches unreachable", "n1/7", "", OutcomeTransport, GridRead{Latch: inflight.Unreachable, Surface: true}},
-		{"a verdict latches", "n1/7", "", OutcomeRejected, GridRead{Latch: inflight.Refused, Surface: true}},
-		{"a conflict latches", "n1/7", "", OutcomeConflict, GridRead{Latch: inflight.Refused, Surface: true}},
-		{"a withdrawn read does nothing", "n1/7", "", OutcomeAbandoned, GridRead{Latch: inflight.Abandoned}},
+		{"answered as asked", "n1/7", "n1/7", OutcomeOK, false, GridRead{Latch: inflight.Answered, Store: true, Resolve: true}},
+		{"answered under another id latches, reports, and still stores", "n1/7", "n1/8", OutcomeOK, false, GridRead{Latch: inflight.Refused, Store: true, Renamed: true}},
+		{"transport latches unreachable", "n1/7", "", OutcomeTransport, false, GridRead{Latch: inflight.Unreachable, Surface: true}},
+		{"a verdict latches", "n1/7", "", OutcomeRejected, false, GridRead{Latch: inflight.Refused, Surface: true}},
+		{"a preview's verdict latches and is the door's to say", "n1/7", "", OutcomeRejected, true, GridRead{Latch: inflight.Refused}},
+		{"a preview's outage is said", "n1/7", "", OutcomeTransport, true, GridRead{Latch: inflight.Unreachable, Surface: true}},
+		{"a conflict latches", "n1/7", "", OutcomeConflict, false, GridRead{Latch: inflight.Refused, Surface: true}},
+		{"a withdrawn read does nothing", "n1/7", "", OutcomeAbandoned, false, GridRead{Latch: inflight.Abandoned}},
 	}
 	for _, c := range cases {
-		if got := ReactGridRead(c.asked, c.answered, c.o); got != c.want {
+		if got := ReactGridRead(c.asked, c.answered, c.o, c.preview); got != c.want {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)
 		}
 	}
@@ -352,7 +355,7 @@ func TestTheDeadVerdict(t *testing.T) {
 	if got, want := ReactPreview(deadAnswer(), false), (PreviewReaction{Latch: inflight.Dead}); got != want {
 		t.Errorf("ReactPreview(dead) = %+v, want %+v", got, want)
 	}
-	if g := ReactGridRead("a", "", OutcomeDead); g.Latch != inflight.Dead || g.Store {
+	if g := ReactGridRead("a", "", OutcomeDead, false); g.Latch != inflight.Dead || g.Store {
 		t.Errorf("ReactGridRead(dead) = %+v", g)
 	}
 	for _, react := range []func(Outcome) Reaction{React, ReactOptimistic, ReactSave} {

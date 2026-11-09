@@ -253,13 +253,15 @@ type GridRead struct {
 	Resolve bool
 }
 
-// ReactGridRead is the one table for a grid read's outcome.
-func ReactGridRead(asked, answered string, o Outcome) GridRead {
-	r := GridRead{Latch: ReactRead(o), Store: o == OutcomeOK, Surface: ReadSurfaces(o)}
+// ReactGridRead is the one table for a grid read's outcome. A door preview's
+// refusal is said on the door its source then stamps (Tile.read_only), so
+// only a descent's goes on the notice row.
+func ReactGridRead(asked, answered string, o Outcome, preview bool) GridRead {
+	r := GridRead{Latch: ReactRead(o), Store: o == OutcomeOK, Surface: ReadSurfaces(o) && !(preview && o == OutcomeRejected)}
 	if o == OutcomeOK && answered != asked {
 		r.Latch, r.Renamed = inflight.Refused, true
 	}
-	r.Resolve = !r.Surface && !r.Renamed && o != OutcomeAbandoned
+	r.Resolve = !ReadSurfaces(o) && !r.Renamed && o != OutcomeAbandoned
 	return r
 }
 

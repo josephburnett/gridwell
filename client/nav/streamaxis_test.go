@@ -103,7 +103,7 @@ func streamAxis() []streamRow {
 var shimExecutors = []string{"runNavEffect", "navAwait"}
 
 // shimReads are the shim's read entry points: each asks the node.
-var shimReads = []string{"fetchGrid", "refetchGrid", "fetchTileContent", "fetchTileByID", "fetchLinkTarget", "readTileByID", "fetchURLPreview"}
+var shimReads = []string{"fetchGrid", "fetchGridFor", "refetchGrid", "fetchTileContent", "fetchTileByID", "fetchLinkTarget", "readTileByID", "fetchURLPreview"}
 
 // shimHeld are the shim's lookups of one held grid, row or body.
 var shimHeld = []string{"Grid", "TileContent", "cachedTileByID"}

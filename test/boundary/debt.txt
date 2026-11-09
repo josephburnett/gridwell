@@ -59,3 +59,4 @@ low-water | packages | 78
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: the OS's refusal is a verdict on its door and its grid, and the files stay told | 31
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a door its source refuses asks no preview | 9
 2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): a gone door is drawn in the muted family, the grid it opens still a directory's | 3
+2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a door preview's refusal is said on the door, never the notice row | 5

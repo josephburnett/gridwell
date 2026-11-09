@@ -747,11 +747,11 @@ func (a *App) resize() {
 
 // loadGrid is the one GetGrid-to-cache hop: the renderer's fetchGrid and the
 // restore walk's awaited read both come here.
-func (a *App) loadGrid(ctx context.Context, id string) error {
+func (a *App) loadGrid(ctx context.Context, id string, preview bool) error {
 	resp, err := a.cl.GetGrid(ctx, id)
 	// clientsync.ReactGridRead is the one table; this runs its arms.
 	o := clientsync.Of(err)
-	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), o)
+	r := clientsync.ReactGridRead(id, resp.GetGrid().GetId(), o, preview)
 	a.fetch.grids.Settle(id, r.Latch)
 	switch {
 	case r.Surface:
@@ -771,7 +771,10 @@ func (a *App) loadGrid(ctx context.Context, id string) error {
 // fetchGrid loads a grid in the background, deduped per id, since the
 // renderer fires it every draw on a miss. It returns the end of the read
 // that answers id, or nil when id is not asked for.
-func (a *App) fetchGrid(id string) <-chan struct{} {
+func (a *App) fetchGrid(id string) <-chan struct{} { return a.fetchGridFor(id, false) }
+
+// fetchGridFor is fetchGrid, for a door's preview when preview is set.
+func (a *App) fetchGridFor(id string, preview bool) <-chan struct{} {
 	if id == "" {
 		return nil
 	}
@@ -785,7 +788,7 @@ func (a *App) fetchGrid(id string) <-chan struct{} {
 		return end
 	}
 	go func() {
-		err := a.loadGrid(ctx, id)
+		err := a.loadGrid(ctx, id, preview)
 		// see inflight.Reads.Change
 		owed := done()
 		if err != nil {
@@ -795,7 +798,7 @@ func (a *App) fetchGrid(id string) <-chan struct{} {
 			a.scheduleDraw(traceevent.WhyGridLoaded)
 		}
 		if owed {
-			a.fetchGrid(id)
+			a.fetchGridFor(id, preview)
 		}
 	}()
 	return end
