@@ -137,9 +137,10 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		dragdrop.DropCopy:          "copy",
 		dragdrop.DropLink:          "link",
 		dragdrop.DropPaste:         "paste",
+		dragdrop.DropTemplate:      "template",
 	}
-	if len(want) != int(dragdrop.DropPaste)+1 {
-		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropPaste)+1)
+	if len(want) != int(dragdrop.DropTemplate)+1 {
+		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropTemplate)+1)
 	}
 	for v, name := range want {
 		e := Drop(v, DropAt{Pane: "p1", Tile: "t7abcde", Grid: "g7abcde"})
@@ -152,7 +153,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 			t.Errorf("verdict %d names %v", v, e.KV)
 		}
 	}
-	if got := Drop(dragdrop.DropPaste+1, DropAt{}).Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropPaste)+1) {
+	if got := Drop(dragdrop.DropTemplate+1, DropAt{}).Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropTemplate)+1) {
 		t.Errorf("an unnamed verdict reads %q", got)
 	}
 }

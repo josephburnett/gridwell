@@ -602,10 +602,14 @@ func TestGhostPlanForDrop(t *testing.T) {
 		{"link snaps to target cell with the chain badge", DropLink, false,
 			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
 		{"paste outlines the shell", DropPaste, false,
-			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Paste: true}},
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Outline: true}},
+		// The copy swatch keeps its size over the tile it copies, which it
+		// outlines.
+		{"the copy swatch outlines the tile", DropTemplate, false,
+			GhostPlan{PaneID: target, TargetCellSize: srcSz, Outline: true}},
 	}
 	for _, c := range cases {
-		got := GhostPlanForDrop(c.action, c.forbidden,
+		got := GhostPlanForDrop(c.action, DropInput{Forbidden: c.forbidden},
 			origin, target, srcSz, tgtSz)
 		if got != c.want {
 			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
@@ -783,7 +787,33 @@ func TestFingerDoesNotMoveOrDeleteAFile(t *testing.T) {
 		}
 	}
 	// Over the trashcan there is no target pane, so the badge stays with the origin.
-	if p := GhostPlanForDrop(DropRejected, true, "a", "", 10, 0); p.PaneID != "a" || !p.Forbidden {
+	if p := GhostPlanForDrop(DropRejected, DropInput{Forbidden: true}, "a", "", 10, 0); p.PaneID != "a" || !p.Forbidden {
 		t.Errorf("a refused trashcan drop's ghost = %+v, want the origin pane with the badge", p)
+	}
+}
+
+// The copy swatch's release copies the tile under it into the templates,
+// whatever else is there, and anywhere else does nothing; its ghost shows a
+// link when the copy will be one (rpc.CopyOf, as CopiesAsLink reads it).
+func TestCopySwatchDrop(t *testing.T) {
+	over := DropInput{Started: true, CopySwatch: true, OverTile: true, HasTarget: true}
+	if got := DecideDrop(over); got != DropTemplate {
+		t.Errorf("over a tile = %v, want DropTemplate", got)
+	}
+	shell := over
+	shell.OntoShell, shell.OverDelete = true, true
+	if got := DecideDrop(shell); got != DropTemplate {
+		t.Errorf("over a shell by the trashcan = %v, want DropTemplate: the copy swatch pastes and deletes nothing", got)
+	}
+	if got, why := DecideDrop(DropInput{Started: true, CopySwatch: true}), WhyRejected(DropInput{Started: true, CopySwatch: true}); got != DropRejected || why != "no tile" {
+		t.Errorf("over no tile = %v %q, want rejected: no tile", got, why)
+	}
+	if got := DecideDrop(DropInput{CopySwatch: true}); got != DropNavigate {
+		t.Errorf("a bare press = %v, want the click's arm", got)
+	}
+	link := over
+	link.CopiesAsLink = true
+	if p := GhostPlanForDrop(DropTemplate, link, "o", "t", 48, 80); !p.Link || !p.Outline {
+		t.Errorf("a copy that links = %+v, want the link ghost outlining the tile", p)
 	}
 }

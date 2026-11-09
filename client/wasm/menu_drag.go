@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
 
@@ -36,10 +37,14 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		a.startTemplateDrag(p, idx, item.template, sx, sy, dragdrop.IntentMove)
 		return
 	}
+	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	if item.copySwatch {
+		a.dragging = &dragState{originPaneID: p.ID, menuPress: true, copySwatch: true, item: item,
+			touch: a.fingerPress, startScreenX: sx, startScreenY: sy, curScreenX: sx, curScreenY: sy,
+			cellOffsetX: 0.5, cellOffsetY: 0.5, snapshotTile: menuItemGhostNode(item),
+			originScreenX: tx, originScreenY: ty, srcCellSize: tw}
 		return
 	}
-	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		menuPress:    true,
@@ -86,6 +91,24 @@ func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy 
 	}
 	a.dragging.grabTile(n, float64(n.X)+(sx-at.X)/cell, float64(n.Y)+(sy-at.Y)/cell, at.X, at.Y)
 	a.dragging.carried = a.carryRows(a.templates, n)
+}
+
+// commitTemplateCopy copies the tile the copy swatch was released over into
+// the templates grid, at menu.TemplateCell over the grid as cached, and the
+// ghost flies home to the swatch; the new template comes into the strip with
+// the event that tells of it.
+func (a *App) commitTemplateCopy(d *dragState, t *dropTarget) {
+	a.cancelDragSnapBack(d)
+	g, ok := a.c.Grid(a.templates)
+	if !ok {
+		a.reportErr(errsurface.Info, "templates", "the templates are still loading — try again in a moment")
+		return
+	}
+	x, y := menu.TemplateCell(g.Tiles, t.tile.H)
+	req := &gridwellv1.CopyTileRequest{TileId: t.tile.Id, DestGridId: a.templates, X: x, Y: y}
+	a.postTileMutate("CopyTile", a.templates, func(ctx context.Context) (*gridwellv1.Tile, error) {
+		return a.cl.CopyTile(ctx, req)
+	}, nil)
 }
 
 // menuItemGhostNode synthesizes the 1x1 tile the ghost renderer paints, so

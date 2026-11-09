@@ -589,8 +589,8 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 				}
 				a.drawEdgeIndicators(g.Tiles, pscreen, r)
-				if a.ghost != nil && a.ghost.pastePane == p.ID {
-					if n, ok := g.Tiles[a.ghost.pasteTile]; ok {
+				if a.ghost != nil && a.ghost.outlinePane == p.ID {
+					if n, ok := g.Tiles[a.ghost.outlineTile]; ok {
 						left, top := pscreen.CellToScreen(float64(n.X), float64(n.Y))
 						a.drawFocusedTileOutline(a.cctx, left, top, float64(n.W)*cellSize, float64(n.H)*cellSize)
 					}
@@ -630,7 +630,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 	urlLive := a.urlViewFor(p.ID) != nil
 	border := a.paneBorderColorFor(p, g, gridOK, focused, urlLive)
 	strokeTileBorder(a.cctx, r.X, r.Y, r.W, r.H, border, paneBorderPx)
-	if a.ghost != nil && a.ghost.pastePane == p.ID && a.ghost.pasteTile == p.ContentID() && p.ContentID() != "" {
+	if a.ghost != nil && a.ghost.outlinePane == p.ID && a.ghost.outlineTile == p.ContentID() && p.ContentID() != "" {
 		a.drawFocusedTileOutline(a.cctx, r.X+2, r.Y+2, r.W-4, r.H-4)
 	}
 
@@ -1007,7 +1007,11 @@ func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r 
 	// right-button mode is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
 	if frag < 0.02 {
-		a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, fam, dashed, "")
+		if a.ghost != nil && a.ghost.copySwatch {
+			a.drawCopySwatch(x, y, w, h)
+		} else {
+			a.drawNodeWithPreview(n, x, y, w, h, parentCellSize, false, fam, dashed, "")
+		}
 		if a.ghost != nil {
 			if a.ghost.forbidden {
 				a.drawGhostNoEntryBadge(a.cctx, x+w/2, y+h/2, min(w, h))

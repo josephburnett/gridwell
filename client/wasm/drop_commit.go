@@ -83,6 +83,10 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		a.scheduleURLUpdate()
 		return true
 
+	case dragdrop.DropTemplate:
+		a.commitTemplateCopy(d, t)
+		return true
+
 	case dragdrop.DropFromMenu:
 		// The target and the cell are the verdict's own, gathered above, so
 		// the create cannot land somewhere the verdict did not allow.
@@ -147,7 +151,7 @@ func (a *App) commitPaste(d *dragState, t *dropTarget) {
 	if !strings.HasPrefix(origin, "http") {
 		origin = ""
 	}
-	shell := rpc.ContentID(t.shell)
+	shell := rpc.ContentID(t.tile)
 	a.post(write{label: "PasteShell", call: func(ctx context.Context) error {
 		return a.cl.PasteShell(ctx, shell, ids, origin)
 	}})

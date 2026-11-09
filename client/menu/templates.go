@@ -5,6 +5,7 @@ package menu
 
 import (
 	"cmp"
+	"math"
 	"slices"
 	"strconv"
 
@@ -38,4 +39,18 @@ func Fit(slot Rect, w, h int64) (cell float64, at Rect) {
 	at = Rect{W: float64(w) * cell, H: float64(h) * cell}
 	at.X, at.Y = slot.X+(slot.W-at.W)/2, slot.Y+(slot.H-at.H)/2
 	return cell, at
+}
+
+// TemplateCell is where a new template h tall lands on the templates grid:
+// at column 0 above every tile there, so the grid opened as a place reads
+// newest first as the strip does, and no cell it takes is held.
+func TemplateCell(tiles map[string]*gridwellv1.Tile, h int64) (x, y int64) {
+	if len(tiles) == 0 {
+		return 0, 0
+	}
+	top := int64(math.MaxInt64)
+	for _, t := range tiles {
+		top = min(top, t.Y)
+	}
+	return 0, top - max(h, 1)
 }

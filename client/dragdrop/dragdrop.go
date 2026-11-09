@@ -245,6 +245,9 @@ const (
 	// DropPaste types what the carry names into the shell under the cursor
 	// (shellpaste.Text); nothing moves.
 	DropPaste
+	// DropTemplate copies the tile under the copy swatch's release into the
+	// templates grid.
+	DropTemplate
 )
 
 // DropInput is every world-read a drop decision needs, gathered once before
@@ -280,6 +283,9 @@ type DropInput struct {
 	// (shellpaste.Refusal) when it is not "".
 	OntoShell    bool
 	PasteRefusal string
+	// CopySwatch is a drag of the + menu's copy swatch, and OverTile a tile
+	// under its release, one on a grid or the one a pane is descended into.
+	CopySwatch, OverTile bool
 	// Touch is a press a finger made, fixed at the press; CarriesFile, a
 	// carried row is a file or a directory (rpc.OnDisk). Together they refuse
 	// a move to another grid and a delete (FingerNoFile).
@@ -351,6 +357,10 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropNavigateSplit, ""
 	case !in.Started:
 		return DropNavigate, ""
+	case in.CopySwatch && in.OverTile:
+		return DropTemplate, ""
+	case in.CopySwatch:
+		return DropRejected, "no tile"
 	case in.TileID == "" && !in.FromMenu:
 		return DropPanEnd, ""
 	case in.OverDelete && in.Touch && in.CarriesFile:
@@ -394,22 +404,27 @@ type GhostPlan struct {
 	// links would look like a move and the survivor read as a duplicate.
 	Link   bool
 	Cursor string // CSS cursor: "" or "not-allowed"
-	// Paste outlines the shell the drop types into, as the trashcan is lit.
-	Paste bool
+	// Outline outlines the tile the drop acts on, as the trashcan is lit: the
+	// shell a paste types into, the tile the copy swatch copies.
+	Outline bool
 }
 
 // GhostPlanForDrop takes both pane ids and cell sizes because the ghost rests
-// in a different pane per verdict. SameCell and Occupied get no style: the
-// preview is optimistic and the commit does the authoritative overlap check.
-func GhostPlanForDrop(action DropAction, forbidden bool,
+// in a different pane per verdict, and in the input the verdict was decided
+// on. SameCell and Occupied get no style: the preview is optimistic and the
+// commit does the authoritative overlap check.
+func GhostPlanForDrop(action DropAction, in DropInput,
 	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
+	forbidden := NoEntry(in)
 	switch action {
 	case DropDelete:
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
 	case DropLink:
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Link: true}
 	case DropPaste:
-		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Paste: true}
+		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Outline: true}
+	case DropTemplate:
+		return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Link: in.CopiesAsLink, Outline: true}
 	case DropRejected:
 		if forbidden {
 			// Over the trashcan there is no target pane.

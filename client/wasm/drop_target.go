@@ -26,10 +26,14 @@ type dropTarget struct {
 	cellSize float64
 	originX  float64
 	originY  float64
-	// shell is the shell a drop here pastes into (shellTargetAt), nil for
-	// any other target.
-	shell *gridwellv1.Tile
+	// tile is the tile a drop here acts on: the shell it pastes into
+	// (shellTargetAt) or the tile the copy swatch copies (tileTargetAt); nil
+	// for any other target.
+	tile *gridwellv1.Tile
 }
+
+// pans is a drag that carries nothing and is no menu item's: it pans.
+func (d *dragState) pans() bool { return d.tileID == "" && !d.fromMenu && !d.copySwatch }
 
 // carry is what the drag carries, as dragdrop sees it.
 func (d *dragState) carry() dragdrop.Carry { return carryOf(d.carried) }
@@ -109,9 +113,20 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	for _, r := range d.carried {
 		in.CarriesFile = in.CarriesFile || rpc.OnDisk(r.GetId())
 	}
+	if d.copySwatch {
+		in.CopySwatch = true
+		t, ok := a.tileTargetAt(sx, sy)
+		if !ok {
+			return in, nil, 0, 0
+		}
+		in.OverTile, in.HasTarget = true, true
+		accepts, known := a.gridAcceptsTiles(t.tile.GridId)
+		in.CopiesAsLink = dragdrop.CarryCopiesAsLink([]*gridwellv1.Tile{t.tile}, a.templates, accepts, known)
+		return in, t, 0, 0
+	}
 	if t, ok := a.shellTargetAt(sx, sy, d); ok {
 		in.HasTarget, in.OntoShell = true, true
-		in.PasteRefusal = shellpaste.Refusal(d.carried, t.shell)
+		in.PasteRefusal = shellpaste.Refusal(d.carried, t.tile)
 		return in, t, 0, 0
 	}
 	t, in.HasTarget = a.dropTargetAt(sx, sy, d.carry())
@@ -156,11 +171,11 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 		targetPaneID = t.pane.ID
 		targetCellSize = t.cellSize
 	}
-	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), dragdrop.NoEntry(in),
+	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in,
 		d.originPaneID, targetPaneID, d.srcCellSize, targetCellSize)
-	a.ghost.why, a.ghost.pastePane, a.ghost.pasteTile = in.PasteRefusal, "", ""
-	if plan.Paste {
-		a.ghost.pastePane, a.ghost.pasteTile = t.pane.ID, t.shell.Id
+	a.ghost.why, a.ghost.outlinePane, a.ghost.outlineTile = in.PasteRefusal, "", ""
+	if plan.Outline {
+		a.ghost.outlinePane, a.ghost.outlineTile = t.pane.ID, t.tile.Id
 	}
 	a.ghost.paneID = plan.PaneID
 	a.ghost.targetCellSize = plan.TargetCellSize
@@ -229,7 +244,7 @@ func (a *App) shellTargetAt(sx, sy float64, d *dragState) (*dropTarget, bool) {
 		if !ok || !rpc.KindOf(n.Kind).Tmux {
 			return nil, false
 		}
-		return &dropTarget{pane: p, cellSize: d.srcCellSize, shell: n}, true
+		return &dropTarget{pane: p, cellSize: d.srcCellSize, tile: n}, true
 	}
 	ps, ok := p.Screen(r)
 	if !ok {
@@ -241,7 +256,26 @@ func (a *App) shellTargetAt(sx, sy float64, d *dragState) (*dropTarget, bool) {
 		return nil, false
 	}
 	x, y := ps.CellToScreen(0, 0)
-	return &dropTarget{pane: p, gridID: a.gridIDForPane(p), cellSize: ps.Cell(), originX: x, originY: y, shell: n}, true
+	return &dropTarget{pane: p, gridID: a.gridIDForPane(p), cellSize: ps.Cell(), originX: x, originY: y, tile: n}, true
+}
+
+// tileTargetAt is the tile under the cursor as the copy swatch's drop sees
+// it: the tile on a pane's grid, or the one a pane is descended into, an
+// ephemeral visit's included. Over the popover there is none.
+func (a *App) tileTargetAt(sx, sy float64) (*dropTarget, bool) {
+	if mp, _, ok := a.menuPaneForPointer(); ok && a.pointInMenu(mp, sx, sy) {
+		return nil, false
+	}
+	p, r, ok := a.paneAtScreen(sx, sy)
+	if !ok {
+		return nil, false
+	}
+	if p.ContentID() != "" {
+		n, ok := a.descendedTile(p)
+		return &dropTarget{pane: p, tile: n}, ok
+	}
+	n := a.tileAtScreen(p, r, sx, sy)
+	return &dropTarget{pane: p, gridID: a.gridIDForPane(p), tile: n}, n != nil
 }
 
 // dropForbiddenForMove gathers dragdrop.MoveForbidden's inputs for a left-drag.

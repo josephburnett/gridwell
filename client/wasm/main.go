@@ -520,11 +520,15 @@ type ghost struct {
 	// links and the source stays.
 	link bool
 
+	// copySwatch draws the ghost as the + menu's copy swatch.
+	copySwatch bool
+
 	// why is a refused paste's reason, drawn under the no-entry badge.
 	why string
-	// pastePane and pasteTile are the shell a paste lands in, outlined: its
-	// tile, or with pasteTile "" the live pane itself.
-	pastePane, pasteTile string
+	// outlinePane and outlineTile are the tile the drop acts on, outlined (a
+	// shell a paste lands in, a tile the copy swatch copies): its tile on the
+	// pane's grid, or the pane itself when it is descended into it.
+	outlinePane, outlineTile string
 }
 
 // dragState tracks an in-progress drag; started is false until the cursor
@@ -563,6 +567,9 @@ type dragState struct {
 	fromMenu  bool
 	menuPress bool
 	item      menuItem
+	// copySwatch is a drag of the copy swatch, whose drop copies the tile
+	// under it into the templates grid.
+	copySwatch bool
 
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string
