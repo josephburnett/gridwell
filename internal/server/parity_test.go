@@ -144,11 +144,10 @@ const (
 
 // The differences CLAUDE.md decides, quoted.
 const (
-	dFilesCreates  = "A directory's grid takes no new tile but a text, which is made a markdown file on disk"
-	dFilesMakes    = "A text tile copied into a directory, by a right-drag or `copy`, or created there, as `write_text` does, is a new markdown file holding its body"
+	dFilesCreates  = "makes a file or a directory on disk only through the file and directory primitives"
 	dFilesDelete   = "Delete moves the file to the OS trash, by a rename"
 	dFilesDoorCopy = "A directory's door never copies"
-	dFilesPageCopy = "a page file, whose page is the node's, copies as a link"
+	dFilesPageCopy = "a page file, whose page is the node's, has no address to copy"
 	dFilesPath     = "a renamed or moved file retires its old id and a link to it reads dead"
 	dFilesPage     = "The node serves a page file's page through its content API"
 	dPageAddress   = "A page the node serves has no address of its own"
@@ -161,7 +160,7 @@ const (
 )
 
 var parityTable = []parityCell{
-	{kText, opCreate, onFiles, decided, dFilesMakes, nil},
+	{kText, opCreate, onFiles, decided, dFilesCreates, nil},
 	{kText, opCreate, onFar, same, "", checkCreate},
 	{kText, opMove, onFiles, decided, dFilesPath, nil},
 	{kText, opMove, onFar, same, "", checkMove},

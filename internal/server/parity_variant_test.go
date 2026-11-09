@@ -54,7 +54,7 @@ const (
 	dDisabled      = "every grid it serves is stamped `writable=false`, `accepts_tiles=false`, each row `read_only` with the reason, so an edit is refused before it is typed"
 	dNeverDisabled = "The files are dark or told, never disabled"
 	dUntold        = "a source whose changes are not told is read on every move"
-	dPlainCopy     = "a text file that is not markdown, since its bytes stay on disk"
+	dPlainCopy     = "Every file copies onto a Gridwell grid as a link too"
 )
 
 type parityVariantCell struct {
