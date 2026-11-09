@@ -1,7 +1,7 @@
-// Package boundary pins the module structure: the dependency arrows between
-// the in-repo modules, and the api module's dependency budget. It imports
-// nothing of ours, reading the tree and shelling out to `go list`, so it can
-// police every module without being inside any of them.
+// Package boundary pins the package structure: the dependency arrows between
+// the repo's trees, and the api's dependency budget. It imports nothing of
+// ours, reading the tree and shelling out to `go list`, so it polices the
+// tree without being a part it polices.
 package boundary
 
 import (
@@ -20,42 +20,38 @@ import (
 
 const repoModule = "github.com/josephburnett/gridwell"
 
-// modules maps each in-repo module, by path suffix with "" for the root, to
-// the other in-repo modules its non-test packages may import. Tests are
+// trees maps each package tree, by path under the module with "" for the
+// rest of it, to the other trees its non-test packages may import. Tests are
 // exempt, because `go list .Imports` excludes test files and a seam test
 // crosses on purpose.
-var modules = map[string][]string{
+var trees = map[string][]string{
 	// The api imports nothing of ours: it is the contract.
 	"api": {},
 	// doctype: neutral text-document semantics, self-contained.
 	"internal/doctype": {},
-	// The root module is the server library and its embedded client.
+	// The rest is the server library and its embedded client.
 	"": {"api", "internal/doctype"},
 	// The node's binary takes the server and the api.
-	"apps/gridwell": {"", "api", "internal/doctype"},
+	"apps": {"", "api", "internal/doctype"},
 }
 
-// moduleOf resolves an import path to its in-repo module by longest
-// prefix, "" for the root module, or "-" for a foreign import.
-func moduleOf(imp string) string {
-	if !strings.HasPrefix(imp, repoModule) {
+// treeOf resolves an import path to its tree by longest prefix, "" for the
+// rest of the module, or "-" for a foreign import.
+func treeOf(imp string) string {
+	if imp != repoModule && !strings.HasPrefix(imp, repoModule+"/") {
 		return "-"
 	}
 	rest := strings.TrimPrefix(strings.TrimPrefix(imp, repoModule), "/")
 	best := ""
-	for m := range modules {
-		if m == "" {
-			continue
-		}
-		if rest == m || strings.HasPrefix(rest, m+"/") {
-			if len(m) > len(best) {
-				best = m
-			}
+	for tr := range trees {
+		if tr != "" && (rest == tr || strings.HasPrefix(rest, tr+"/")) && len(tr) > len(best) {
+			best = tr
 		}
 	}
 	return best
 }
 
+// repoRoot is the directory holding the module's go.mod.
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -63,94 +59,91 @@ func repoRoot(t *testing.T) string {
 		t.Fatal(err)
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+		if data, err := os.ReadFile(filepath.Join(dir, "go.mod")); err == nil && bytes.HasPrefix(data, []byte("module "+repoModule+"\n")) {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			t.Fatal("no go.work above the test dir")
+			t.Fatal("no go.mod of " + repoModule + " above the test dir")
 		}
 		dir = parent
 	}
 }
 
-// TestArrows asserts every non-test import edge between our modules is in
-// the allowed set.
+// goList runs `go list` at the repo root with a template over every package
+// of the module, one line per package.
+func goList(t *testing.T, format string) []string {
+	t.Helper()
+	cmd := exec.Command("go", "list", "-f", format, repoModule+"/...")
+	cmd.Dir = repoRoot(t)
+	out, err := cmd.Output()
+	if ee, ok := err.(*exec.ExitError); ok {
+		t.Fatalf("go list: %v\n%s", err, ee.Stderr)
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	return lines
+}
+
+// TestArrows asserts every non-test import edge between our trees is in the
+// allowed set.
 func TestArrows(t *testing.T) {
-	root := repoRoot(t)
-	for mod, allowed := range modules {
-		allowedSet := map[string]bool{mod: true}
-		for _, a := range allowed {
-			allowedSet[a] = true
+	var bad []string
+	for _, line := range goList(t, `{{.ImportPath}} {{join .Imports " "}}`) {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
 		}
-		dir := filepath.Join(root, mod)
-		cmd := exec.Command("go", "list", "-f", "{{.ImportPath}} {{join .Imports \" \"}}", "./...")
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("go list in %s: %v\n%s", mod, err, out)
+		from := treeOf(fields[0])
+		allowed := map[string]bool{from: true}
+		for _, a := range trees[from] {
+			allowed[a] = true
 		}
-		sc := bufio.NewScanner(bytes.NewReader(out))
-		sc.Buffer(make([]byte, 1024*1024), 1024*1024)
-		var bad []string
-		for sc.Scan() {
-			fields := strings.Fields(sc.Text())
-			if len(fields) < 2 {
-				continue
-			}
-			from := fields[0]
-			for _, imp := range fields[1:] {
-				m := moduleOf(imp)
-				if m == "-" {
-					continue
-				}
-				if !allowedSet[m] {
-					bad = append(bad, from+" imports "+imp)
-				}
+		for _, imp := range fields[1:] {
+			if tr := treeOf(imp); tr != "-" && !allowed[tr] {
+				bad = append(bad, fields[0]+" imports "+imp)
 			}
 		}
-		if len(bad) > 0 {
-			sort.Strings(bad)
-			name := mod
-			if name == "" {
-				name = "(root)"
-			}
-			t.Errorf("module %s crosses a forbidden arrow:\n  %s",
-				name, strings.Join(bad, "\n  "))
-		}
+	}
+	if len(bad) > 0 {
+		sort.Strings(bad)
+		t.Errorf("a package crosses a forbidden arrow:\n  %s", strings.Join(bad, "\n  "))
 	}
 }
 
-// TestAPIDependencyBudget pins the api module's direct dependencies: the
-// contract every client of the wire builds on, so a new entry is a decision.
-// The budget is wire only; persistence lives in the root module.
+// TestAPIDependencyBudget pins the modules the api's packages and their tests
+// import beyond the standard library and this module, whose arrows TestArrows
+// owns: the contract every client of the wire builds on, so a new entry is a
+// decision. The budget is wire only; persistence lives outside the api.
 func TestAPIDependencyBudget(t *testing.T) {
-	allowed := map[string]bool{
-		"connectrpc.com/connect":     true,
-		"google.golang.org/grpc":     true,
-		"google.golang.org/protobuf": true,
+	allowed := []string{
+		"connectrpc.com/connect",
+		"google.golang.org/grpc",
+		"google.golang.org/protobuf",
 	}
-	data, err := os.ReadFile(filepath.Join(repoRoot(t), "api", "go.mod"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	inBlock := false
-	for _, line := range strings.Split(string(data), "\n") {
-		l := strings.TrimSpace(line)
-		switch {
-		case strings.HasPrefix(l, "require ("):
-			inBlock = true
-			continue
-		case inBlock && l == ")":
-			inBlock = false
+	within := func(imp, mod string) bool { return imp == mod || strings.HasPrefix(imp, mod+"/") }
+	for _, line := range goList(t, `{{.ImportPath}} {{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}`) {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || treeOf(fields[0]) != "api" {
 			continue
 		}
-		if !inBlock || strings.Contains(l, "// indirect") || l == "" {
-			continue
-		}
-		dep := strings.Fields(l)[0]
-		if !allowed[dep] {
-			t.Errorf("api/go.mod gained a direct dependency outside the budget: %s (every client of the wire inherits this graph)", dep)
+	imports:
+		for _, imp := range fields[1:] {
+			if !strings.Contains(strings.SplitN(imp, "/", 2)[0], ".") || treeOf(imp) != "-" {
+				continue
+			}
+			for _, mod := range allowed {
+				if within(imp, mod) {
+					continue imports
+				}
+			}
+			t.Errorf("%s imports %s, outside the api's budget (every client of the wire inherits this graph)", fields[0], imp)
 		}
 	}
 }
