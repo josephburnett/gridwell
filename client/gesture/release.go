@@ -17,6 +17,8 @@ const (
 	FinishRightDrag
 	FinishLeftDrag
 	FinishBand
+	// FinishStripScroll lets go of a press dragging the + menu's strip.
+	FinishStripScroll
 )
 
 // Armed is what a move finds armed. A left drag and a right-button gesture can
@@ -32,6 +34,9 @@ type Armed struct {
 	Pan bool
 	// Band is a shift + left-drag sweeping a band over the grid (SelectPress).
 	Band bool
+	// StripScroll is a left press on the + menu's strip between its items,
+	// whose drag scrolls the strip: the finger's wheel.
+	StripScroll bool
 }
 
 // Release is the commit path a mouseup of button finishes. A left drag ends on
@@ -47,6 +52,8 @@ func Release(button int, armed Armed) Recovery {
 		return FinishLeftDrag
 	case armed.Band && button == 0:
 		return FinishBand
+	case armed.StripScroll && button == 0:
+		return FinishStripScroll
 	}
 	return FinishNothing
 }
@@ -64,6 +71,8 @@ func RecoverRelease(buttons int, armed Armed) Recovery {
 		return FinishLeftDrag
 	case armed.Band && buttons&ButtonsLeft == 0:
 		return FinishBand
+	case armed.StripScroll && buttons&ButtonsLeft == 0:
+		return FinishStripScroll
 	}
 	return FinishNothing
 }

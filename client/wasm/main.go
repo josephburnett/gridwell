@@ -167,6 +167,9 @@ type App struct {
 
 	// band is a shift + left-drag sweep in flight; see selection.go.
 	band *bandState
+	// stripScroll is the pointer's last y while a press drags the + menu's
+	// strip (gesture.Armed.StripScroll), nil otherwise.
+	stripScroll *float64
 
 	// shellAlive caches the ShellTmuxAlive probe by tmux (missing: unknown);
 	// shellAliveProbing single-flights it.

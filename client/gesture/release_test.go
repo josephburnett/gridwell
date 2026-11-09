@@ -39,6 +39,8 @@ func TestRecoverRelease(t *testing.T) {
 		{"left drag, only right held", ButtonsRight, Armed{Drag: true}, FinishLeftDrag},
 		{"band, left still held", ButtonsLeft, Armed{Band: true}, FinishNothing},
 		{"band, left up", none, Armed{Band: true}, FinishBand},
+		{"strip scroll, left still held", ButtonsLeft, Armed{StripScroll: true}, FinishNothing},
+		{"strip scroll, left up", none, Armed{StripScroll: true}, FinishStripScroll},
 		{
 			name:    "resize outranks a right drag armed with it",
 			buttons: none,
@@ -91,5 +93,15 @@ func TestRecoverRelease(t *testing.T) {
 				t.Errorf("RecoverRelease(%d, %+v) = %v, want %v", c.buttons, c.armed, got, c.want)
 			}
 		})
+	}
+}
+
+// The strip's scroll is the left button's, as a pan is.
+func TestReleaseEndsAStripScroll(t *testing.T) {
+	if got := Release(0, Armed{StripScroll: true}); got != FinishStripScroll {
+		t.Errorf("Release(left) = %v, want FinishStripScroll", got)
+	}
+	if got := Release(2, Armed{StripScroll: true}); got != FinishNothing {
+		t.Errorf("Release(right) = %v, want FinishNothing", got)
 	}
 }

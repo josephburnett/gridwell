@@ -95,6 +95,7 @@ func (a *App) armed() gesture.Armed {
 		DragCreates: d != nil && d.intent.Creates(),
 		Pan:         d != nil && d.pans(),
 		Band:        a.band != nil,
+		StripScroll: a.stripScroll != nil,
 	}
 }
 
@@ -112,7 +113,7 @@ func (a *App) cancelGesture(relayed, onCanvas bool) bool {
 		return true
 	}
 	lr, d := a.leftResize, a.dragging
-	a.leftResize, a.rightDrag, a.dragging, a.band = nil, nil, nil, nil
+	a.leftResize, a.rightDrag, a.dragging, a.band, a.stripScroll = nil, nil, nil, nil, nil
 	// Every press focuses its pane before it arms anything.
 	a.emit(traceevent.Cancel(a.tree.Focus, relayed))
 	if u.Dividers {
@@ -145,6 +146,9 @@ func (a *App) recoverLostRelease(buttons int, sx, sy float64) bool {
 		return a.finishLeftDrag(sx, sy)
 	case gesture.FinishBand:
 		a.finishBand(sx, sy)
+		return true
+	case gesture.FinishStripScroll:
+		a.stripScroll = nil
 		return true
 	}
 	return false
@@ -438,6 +442,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 			}
 			if idx := a.menuTileIndexAt(mp, sx, sy); idx >= 0 {
 				a.startMenuDrag(mp, mr, idx, sx, sy)
+			} else if a.menuLayoutFor(mp).StripRect().Contains(sx, sy) {
+				a.stripScroll = &sy
 			}
 			return nil
 		}
@@ -574,6 +580,13 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 		a.moveBand(sx, sy)
 		return nil
 	}
+	if a.stripScroll != nil {
+		if mp, _, ok := a.menuPaneForPointer(); ok && a.menu.ScrollStrip(*a.stripScroll-sy, a.menuLayoutFor(mp)) {
+			a.draw()
+		}
+		*a.stripScroll = sy
+		return nil
+	}
 	// A move over a live URL view's content box belongs to the page. An in-flight
 	// drag parks every live view, so liveViewOwnsPoint answers false then.
 	if a.rightDrag == nil && a.dragging == nil {
@@ -689,6 +702,8 @@ func (a *App) onMouseUp(this js.Value, args []js.Value) any {
 		a.finishLeftDrag(sx, sy)
 	case gesture.FinishBand:
 		a.finishBand(sx, sy)
+	case gesture.FinishStripScroll:
+		a.stripScroll = nil
 	}
 	return nil
 }
