@@ -613,3 +613,41 @@ func TestShowingAGridNeverStampsAFramingOnIt(t *testing.T) {
 		t.Fatal("the two panes above must disagree, or the case is not covered")
 	}
 }
+
+func TestInView(t *testing.T) {
+	// A 640x480 pane at zoom 1 is 10 by 7.5 cells: a center the middle third
+	// holds is within 5/3 of the view's horizontally and 1.25 vertically.
+	pane := sz(640, 480)
+	at := func(cx, cy, zoom float64) rpc.Framing {
+		f, err := rpc.NewFraming(cx, cy, zoom)
+		if err != nil {
+			panic(err)
+		}
+		return f
+	}
+	cases := []struct {
+		name string
+		v    rpc.Framing
+		door Door
+		want rpc.Framing
+	}{
+		{"in view, centred", at(0, 0, 1), Door{X: -1, Y: -1, W: 2, H: 2}, at(0, 0, 1)},
+		{"in view, just inside the third", at(0, 0, 1), Door{X: 1, Y: 0, W: 1, H: 1}, at(0, 0, 1)},
+		{"just past the third", at(0, 0, 1), Door{X: 2, Y: 0, W: 1, H: 1}, at(2.5-5.0/3, 0, 1)},
+		{"off the right", at(0, 0, 1), Door{X: 20, Y: 0, W: 2, H: 2}, at(21-5.0/3, 0, 1)},
+		{"off the left", at(0, 0, 1), Door{X: -22, Y: 0, W: 2, H: 2}, at(-21+5.0/3, 0, 1)},
+		{"off the top", at(0, 0, 1), Door{X: 0, Y: -10, W: 2, H: 2}, at(0, -9+1.25, 1)},
+		{"off the bottom", at(0, 0, 1), Door{X: 0, Y: 10, W: 2, H: 2}, at(0, 11-1.25, 1)},
+		{"wide: wholly in view binds before the third", at(0, 0, 1), Door{X: 0, Y: 0, W: 8, H: 1}, at(3, 0, 1)},
+		{"the zoom is kept", at(0, 0, 2), Door{X: 20, Y: 0, W: 1, H: 1}, at(20.5-2.5/3, 0, 2)},
+		{"a footprint with no area moves nothing", at(0, 0, 4), Door{X: 50, Y: 0, W: 0, H: 1}, at(0, 0, 4)},
+		{"larger than the view: zoom out to fit", at(0, 0, 1), Door{X: 0, Y: 0, W: 20, H: 2}, at(10, 0, 0.5)},
+	}
+	for _, c := range cases {
+		got := InView(c.v, c.door, pane, cellPx)
+		if !near(got.Cx(), c.want.Cx()) || !near(got.Cy(), c.want.Cy()) || !near(got.Zoom(), c.want.Zoom()) {
+			t.Errorf("%s: got (%v, %v, %v), want (%v, %v, %v)", c.name,
+				got.Cx(), got.Cy(), got.Zoom(), c.want.Cx(), c.want.Cy(), c.want.Zoom())
+		}
+	}
+}

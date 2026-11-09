@@ -71,3 +71,4 @@ low-water | packages | 78
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): size and clean reach an ephemeral visit only while a reached workspace tile's layout names it, read by the node's id from server.yaml | 105
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): read_grid with the id templates reads home's templates grid, and the instructions say so as docs/mcp.md does | 11
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a layout holds every row of a pane's path, so the boot sweep, clean and the reap keep an ephemeral door a pane descended through (panelayout.HeldIDs) | 13
+2026-11-09 | Joe 2026-11-09 ascent keeps the door in view: zoomtrans.InView, the smallest pan that shows a door with its center in the middle third, zoomed out to fit only when it cannot | 25

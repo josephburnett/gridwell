@@ -227,6 +227,31 @@ func StoredView(w Door, s Size, cellPx float64) (rpc.Framing, bool) {
 	return f, err == nil
 }
 
+// InView is v moved by the smallest pan that shows the door wholly at s with
+// its center in the middle third of each axis, zoomed out to Fit first when
+// it does not fit at v's zoom: where an ascent through it lands (Joe
+// 2026-11-09). A v it cannot move is v.
+func InView(v rpc.Framing, door Door, s Size, cellPx float64) rpc.Framing {
+	if door.W <= 0 || door.H <= 0 || !(cellPx > 0) {
+		return v
+	}
+	zoom := min(v.Zoom(), Fit(door.W, door.H, s.w, s.h, cellPx))
+	axis := func(c, lo, extent, paneCells float64) float64 {
+		half := paneCells / 2
+		reach := max(min(half/3, half-extent/2), 0)
+		mid := lo + extent/2
+		return min(max(c, mid-reach), mid+reach)
+	}
+	cell := cellPx * zoom
+	cx := axis(v.Cx(), float64(door.X), float64(door.W), s.w/cell)
+	cy := axis(v.Cy(), float64(door.Y), float64(door.H), s.h/cell)
+	f, err := rpc.NewFraming(cx, cy, zoom)
+	if err != nil {
+		return v
+	}
+	return f
+}
+
 // ShownDoorFraming is the framing a door row is already showing: the stored
 // one, or StoredView's for a door never visited. The writeback diffs
 // against this, so a grid the user only looked at is never stamped.
