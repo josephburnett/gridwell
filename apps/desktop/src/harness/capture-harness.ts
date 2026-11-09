@@ -362,7 +362,13 @@ app.whenReady().then(async () => {
   const at = (t: string, x: number, buttons: number) =>
     `document.body.dispatchEvent(new MouseEvent('${t}', { bubbles: true, cancelable: true, button: 2,
       buttons: ${buttons}, clientX: ${x}, clientY: 60, screenX: ${x + 1000}, screenY: 1060 }))`;
-  await wcRt.executeJavaScript(at('mousedown', 60, 2) + ';' + at('contextmenu', 60, 2));
+  // A mouse press is a pointerdown and then a mousedown, as the input
+  // pipeline sends them; the preload hears the first.
+  const down = (x: number) =>
+    `document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 2,
+      buttons: 2, pointerType: 'mouse', clientX: ${x}, clientY: 60, screenX: ${x + 1000}, screenY: 1060 }));` +
+    at('mousedown', x, 2);
+  await wcRt.executeJavaScript(down(60) + ';' + at('contextmenu', 60, 2));
   const pressLog = await pageLog(1);
   await wcRt.executeJavaScript(at('mouseup', 60, 0));
   const releaseLog = await pageLog(2);
@@ -373,7 +379,7 @@ app.whenReady().then(async () => {
     fail(`a right-click did not hand the page its contextmenu at the release: ${JSON.stringify(releaseLog)}`);
   }
   await wcRt.executeJavaScript(
-    [at('mousedown', 60, 2), at('contextmenu', 60, 2), at('mousemove', 120, 2), at('mouseup', 120, 0)].join(';'),
+    [down(60), at('contextmenu', 60, 2), at('mousemove', 120, 2), at('mouseup', 120, 0)].join(';'),
   );
   const dragLog = await pageLog(2);
   if (JSON.stringify(dragLog) !== JSON.stringify(['mousedown 60,60', 'mouseup 120,60'])) {
@@ -384,7 +390,7 @@ app.whenReady().then(async () => {
   }
   // A contextmenu after the release was never held, so it passes untouched.
   await wcRt.executeJavaScript(
-    [at('mousedown', 70, 2), at('mouseup', 70, 0), at('contextmenu', 70, 0)].join(';'),
+    [down(70), at('mouseup', 70, 0), at('contextmenu', 70, 0)].join(';'),
   );
   const lateLog = await pageLog(3);
   if (JSON.stringify(lateLog) !== JSON.stringify(['mousedown 70,60', 'mouseup 70,60', 'contextmenu 70,60'])) {

@@ -122,25 +122,28 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 	}
 }
 
-// forwardedPaneAt refuses while a viewport transition animates. All three
-// forwarded handlers share it, so none can forget the transition gate.
-func (a *App) forwardedPaneAt(sx, sy float64) (*pane.Pane, pane.Rect, bool) {
+// forwardedPress traces a press a live url view forwarded and focuses the pane
+// under it, or refuses while a viewport transition animates.
+func (a *App) forwardedPress(sx, sy float64, button int) (*pane.Pane, pane.Rect, bool) {
+	a.emit(traceevent.Press(a.paneIDAt(sx, sy), button, traceevent.Mods{}, true))
 	if a.trans.Any() {
 		return nil, pane.Rect{}, false
 	}
-	return a.paneAtScreen(sx, sy)
+	p, r, ok := a.paneAtScreen(sx, sy)
+	if ok {
+		a.focusToPane(p)
+	}
+	return p, r, ok
 }
 
 // onForwardedRightDown begins a right-button pane gesture that started over a
 // live URL view, whose native WebContentsView swallows the renderer's own mouse
 // events and keeps the rest of the drag's, which main forwards too.
 func (a *App) onForwardedRightDown(sx, sy float64) {
-	a.emit(traceevent.Press(a.paneIDAt(sx, sy), 2, traceevent.Mods{}, true))
-	p, r, ok := a.forwardedPaneAt(sx, sy)
+	p, r, ok := a.forwardedPress(sx, sy, 2)
 	if !ok {
 		return
 	}
-	a.focusToPane(p)
 	// IntentCopy: a content descent can only arm pane gestures, which ignore it.
 	a.onRightDown(p, r, sx, sy, dragdrop.IntentCopy, false)
 	a.draw()
@@ -149,27 +152,22 @@ func (a *App) onForwardedRightDown(sx, sy float64) {
 // onForwardedMiddleDown is middle-click ascent's live-URL path, because the
 // WebContentsView swallows the renderer's own middle clicks.
 func (a *App) onForwardedMiddleDown(sx, sy float64) {
-	a.emit(traceevent.Press(a.paneIDAt(sx, sy), 1, traceevent.Mods{}, true))
-	p, _, ok := a.forwardedPaneAt(sx, sy)
+	p, _, ok := a.forwardedPress(sx, sy, 1)
 	if !ok {
 		return
 	}
-	a.focusToPane(p)
 	a.menu.Close()
 	a.ascendPane(p)
 }
 
-// onForwardedLeftDown moves pane focus and arms a boundary resize for a left
-// press over a live URL view. The preload does not prevent the default, so
-// in-page interaction still reaches the page. The grab band's inner half sits on
-// the live view, so such a drag could otherwise never start.
+// onForwardedLeftDown arms a boundary resize for a left press over a live URL
+// view, which the page keeps too: the grab band's inner half sits on the view,
+// so such a drag could otherwise never start.
 func (a *App) onForwardedLeftDown(sx, sy float64) {
-	a.emit(traceevent.Press(a.paneIDAt(sx, sy), 0, traceevent.Mods{}, true))
-	p, r, ok := a.forwardedPaneAt(sx, sy)
+	_, r, ok := a.forwardedPress(sx, sy, 0)
 	if !ok {
 		return
 	}
-	a.focusToPane(p)
 	a.armLeftResize(r, sx, sy)
 }
 

@@ -35,31 +35,32 @@ let menuHeld = false;
 // lets it through.
 let handingOver = false;
 
-// Capture phase at the window, so this fires before the page's own listeners.
-// screenX and screenY are physical screen pixels, unaffected by zoomFactor.
-window.addEventListener(
-  'mousedown',
-  (e: MouseEvent) => {
-    if (e.button === 2) {
-      // Not suppressed: a plain right-click must reach the page.
-      rightDown = true;
-      rightDragged = false;
-      rightStartX = e.screenX;
-      rightStartY = e.screenY;
-      rightDownTime = Date.now();
-      menuHeld = false;
-    } else if (e.button === 1) {
-      e.preventDefault();
-      e.stopPropagation();
-      ipcRenderer.send(VIEW_MIDDLEDOWN, { sx: e.screenX, sy: e.screenY });
-    } else if (e.button === 0) {
-      // A focus intent. Not suppressed, so selection and links stay with the
-      // page.
-      ipcRenderer.send(VIEW_LEFTDOWN, { sx: e.screenX, sy: e.screenY });
-    }
-  },
-  true,
-);
+// onPress forwards a press, whichever event heard it. screenX and screenY are
+// physical screen pixels, unaffected by zoomFactor.
+function onPress(e: MouseEvent): void {
+  if (e.button === 2) {
+    // Not suppressed: a plain right-click must reach the page.
+    rightDown = true;
+    rightDragged = false;
+    rightStartX = e.screenX;
+    rightStartY = e.screenY;
+    rightDownTime = Date.now();
+    menuHeld = false;
+  } else if (e.button === 1) {
+    e.preventDefault();
+    e.stopPropagation();
+    ipcRenderer.send(VIEW_MIDDLEDOWN, { sx: e.screenX, sy: e.screenY });
+  } else if (e.button === 0) {
+    // A focus intent. Not suppressed, so selection and links stay the page's.
+    ipcRenderer.send(VIEW_LEFTDOWN, { sx: e.screenX, sy: e.screenY });
+  }
+}
+
+// Capture phase at the window, so these fire before the page's listeners. A
+// mouse press is heard at its pointerdown, since a page that cancels one makes
+// Chromium skip the mousedown; a touch has no mousedown until its tap.
+window.addEventListener('pointerdown', (e: PointerEvent) => e.pointerType === 'mouse' && onPress(e), true);
+window.addEventListener('mousedown', (e) => (e as any).sourceCapabilities?.firesTouchEvents && onPress(e), true);
 
 window.addEventListener(
   'mousemove',
