@@ -374,6 +374,30 @@ func (p *Home) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAliv
 	return &gridwellv1.ShellTmuxAliveResponse{Alive: alive}, nil
 }
 
+// PasteShell types req.Text, its router's spelling of a drop, into the tmux
+// the tile names. A tmux that is not running is refused and none is started:
+// one no tile has a preview of was never started, and a paste is not an open.
+func (p *Home) PasteShell(ctx context.Context, req *gridwellv1.PasteShellRequest) (*gridwellv1.PasteShellResponse, error) {
+	if p.shell == nil {
+		return nil, status.Error(codes.Unimplemented, cmp.Or(p.off, "this namespace hosts no live shells"))
+	}
+	key, _, err := p.tmuxOf(ctx, req.TileId)
+	if err != nil {
+		return nil, err
+	}
+	alive, err := p.shell.Has(key)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !alive {
+		return nil, status.Error(codes.InvalidArgument, "this shell's tmux is not running, and a paste starts none: open the shell first")
+	}
+	if err := p.shell.Paste(key, req.Text); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	return &gridwellv1.PasteShellResponse{}, nil
+}
+
 // tmuxOf is the tmux a shell tile names (rpc.ShellTmux) and the row naming
 // it, refusing a row that is not there or is not an owned shell.
 func (p *Home) tmuxOf(ctx context.Context, tileID string) (string, *gridwellv1.Tile, error) {

@@ -47,6 +47,9 @@ type Config struct {
 	// node-wide shell refusal; Handshake carries it so the client drops the
 	// shell primitive from the + menu.
 	DisableShells bool
+	// WebAddr is where the web API listens, the origin a reference is
+	// spelled under when no client named one (shellpaste.BindOrigin).
+	WebAddr string
 	// Dir is the node's directory node.Options names; the trace API writes its
 	// dumps under it. Empty refuses a dump rather than guessing a directory.
 	Dir string

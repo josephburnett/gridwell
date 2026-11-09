@@ -92,6 +92,10 @@ func (h *connectHandler) ShellTmuxAlive(ctx context.Context, req *connect.Reques
 	return unary(h.rt.ShellTmuxAlive)(ctx, req)
 }
 
+func (h *connectHandler) PasteShell(ctx context.Context, req *connect.Request[pb.PasteShellRequest]) (*connect.Response[pb.PasteShellResponse], error) {
+	return unary(h.rt.PasteShell)(ctx, req)
+}
+
 func (h *connectHandler) ReadContent(ctx context.Context, req *connect.Request[pb.ReadContentRequest], stream *connect.ServerStream[pb.ContentChunk]) error {
 	return asConnectError(h.rt.ReadContent(ctx, req.Msg, stream.Send))
 }

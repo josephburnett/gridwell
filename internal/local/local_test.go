@@ -202,6 +202,7 @@ func (f *fakeStreamer) Has(string) (bool, error)           { return f.alive, f.p
 func (f *fakeStreamer) Kill(string) error                  { return nil }
 func (f *fakeStreamer) ListLive() ([]string, error)        { return nil, nil }
 func (f *fakeStreamer) PaneCommand(string) (string, error) { return "", nil }
+func (f *fakeStreamer) Paste(string, string) error         { return nil }
 
 // probedShell is a home hosting s, plus the id of one shell tile to probe.
 func probedShell(t *testing.T, s shellsvc.Streamer) (*local.Home, string) {

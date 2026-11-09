@@ -74,6 +74,7 @@ type Namespace interface {
 	// ── live ─────────────────────────────────────────────────────────────
 
 	ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error)
+	PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error)
 	// OpenShell's first recv binds the tile id and the initial size.
 	OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error
 	// Subscribe streams this namespace's change events until ctx ends. A

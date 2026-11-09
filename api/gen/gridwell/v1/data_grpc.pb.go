@@ -50,6 +50,7 @@ const (
 	Gridwell_SetFraming_FullMethodName     = "/gridwell.v1.Gridwell/SetFraming"
 	Gridwell_SetSelection_FullMethodName   = "/gridwell.v1.Gridwell/SetSelection"
 	Gridwell_ShellTmuxAlive_FullMethodName = "/gridwell.v1.Gridwell/ShellTmuxAlive"
+	Gridwell_PasteShell_FullMethodName     = "/gridwell.v1.Gridwell/PasteShell"
 	Gridwell_Subscribe_FullMethodName      = "/gridwell.v1.Gridwell/Subscribe"
 	Gridwell_SetView_FullMethodName        = "/gridwell.v1.Gridwell/SetView"
 	Gridwell_DisableSource_FullMethodName  = "/gridwell.v1.Gridwell/DisableSource"
@@ -96,6 +97,8 @@ type GridwellClient interface {
 	SetSelection(ctx context.Context, in *SetSelectionRequest, opts ...grpc.CallOption) (*SetSelectionResponse, error)
 	// ShellTmuxAlive gates the client's refresh button on shell descent.
 	ShellTmuxAlive(ctx context.Context, in *ShellTmuxAliveRequest, opts ...grpc.CallOption) (*ShellTmuxAliveResponse, error)
+	// PasteShell is a drop onto a shell.
+	PasteShell(ctx context.Context, in *PasteShellRequest, opts ...grpc.CallOption) (*PasteShellResponse, error)
 	Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error)
 	SetView(ctx context.Context, in *SetViewRequest, opts ...grpc.CallOption) (*SetViewResponse, error)
 	DisableSource(ctx context.Context, in *DisableSourceRequest, opts ...grpc.CallOption) (*DisableSourceResponse, error)
@@ -323,6 +326,16 @@ func (c *gridwellClient) ShellTmuxAlive(ctx context.Context, in *ShellTmuxAliveR
 	return out, nil
 }
 
+func (c *gridwellClient) PasteShell(ctx context.Context, in *PasteShellRequest, opts ...grpc.CallOption) (*PasteShellResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PasteShellResponse)
+	err := c.cc.Invoke(ctx, Gridwell_PasteShell_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridwellClient) Subscribe(ctx context.Context, in *SubscribeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Event], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Gridwell_ServiceDesc.Streams[4], Gridwell_Subscribe_FullMethodName, cOpts...)
@@ -403,6 +416,8 @@ type GridwellServer interface {
 	SetSelection(context.Context, *SetSelectionRequest) (*SetSelectionResponse, error)
 	// ShellTmuxAlive gates the client's refresh button on shell descent.
 	ShellTmuxAlive(context.Context, *ShellTmuxAliveRequest) (*ShellTmuxAliveResponse, error)
+	// PasteShell is a drop onto a shell.
+	PasteShell(context.Context, *PasteShellRequest) (*PasteShellResponse, error)
 	Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error
 	SetView(context.Context, *SetViewRequest) (*SetViewResponse, error)
 	DisableSource(context.Context, *DisableSourceRequest) (*DisableSourceResponse, error)
@@ -472,6 +487,9 @@ func (UnimplementedGridwellServer) SetSelection(context.Context, *SetSelectionRe
 }
 func (UnimplementedGridwellServer) ShellTmuxAlive(context.Context, *ShellTmuxAliveRequest) (*ShellTmuxAliveResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ShellTmuxAlive not implemented")
+}
+func (UnimplementedGridwellServer) PasteShell(context.Context, *PasteShellRequest) (*PasteShellResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method PasteShell not implemented")
 }
 func (UnimplementedGridwellServer) Subscribe(*SubscribeRequest, grpc.ServerStreamingServer[Event]) error {
 	return status.Error(codes.Unimplemented, "method Subscribe not implemented")
@@ -809,6 +827,24 @@ func _Gridwell_ShellTmuxAlive_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Gridwell_PasteShell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PasteShellRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridwellServer).PasteShell(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Gridwell_PasteShell_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridwellServer).PasteShell(ctx, req.(*PasteShellRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Gridwell_Subscribe_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SubscribeRequest)
 	if err := stream.RecvMsg(m); err != nil {
@@ -922,6 +958,10 @@ var Gridwell_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ShellTmuxAlive",
 			Handler:    _Gridwell_ShellTmuxAlive_Handler,
+		},
+		{
+			MethodName: "PasteShell",
+			Handler:    _Gridwell_PasteShell_Handler,
 		},
 		{
 			MethodName: "SetView",

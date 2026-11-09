@@ -189,6 +189,13 @@ func (c *Client) ShellTmuxAlive(ctx context.Context, tileID string) (bool, error
 	return m.GetAlive(), err
 }
 
+// PasteShell types into the shell tileID what a drop of tiles pastes, spelled
+// by the node owning it under origin.
+func (c *Client) PasteShell(ctx context.Context, tileID string, tiles []string, origin string) error {
+	_, err := msg(c.cl.PasteShell(ctx, connect.NewRequest(&pb.PasteShellRequest{TileId: tileID, TileIds: tiles, Origin: origin})))
+	return err
+}
+
 // RenameTile is a real user edit, so the server latches alt_user and automatic
 // captures defer.
 func (c *Client) RenameTile(ctx context.Context, tileID string, version int64, alt string) (*pb.Tile, error) {

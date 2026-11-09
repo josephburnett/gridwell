@@ -78,6 +78,10 @@ func (g *grpcServer) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveR
 	return g.ns.ShellTmuxAlive(ctx, req)
 }
 
+func (g *grpcServer) PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
+	return g.ns.PasteShell(ctx, req)
+}
+
 func (g *grpcServer) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
 	return g.ns.SetView(ctx, req)
 }

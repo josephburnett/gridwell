@@ -87,10 +87,11 @@ const (
 	opFind       parityOp = "find"
 	opUpdate     parityOp = "see it update"
 	opDead       parityOp = "see it dead"
+	opPaste      parityOp = "take a paste"
 )
 
 var parityOps = []parityOp{opCreate, opMove, opCopy, opLink, opDelete, opRename, opDescend, opFreeze,
-	opScreenshot, opZoom, opScroll, opFraming, opRead, opWrite, opServe, opFind, opUpdate, opDead}
+	opScreenshot, opZoom, opScroll, opFraming, opRead, opWrite, opServe, opFind, opUpdate, opDead, opPaste}
 
 type parityOwner string
 
@@ -135,6 +136,7 @@ const (
 	naFraming = "framing is a door's (rpc.IsDoorKind)"
 	naContent = "the kind holds no content of its own (rpc.KindCaps.Content)"
 	naServe   = "only a url tile serving its page has a page to serve (rpc.PageContent)"
+	naPaste   = "only a shell has a tmux to type a paste into (rpc.KindCaps.Tmux)"
 )
 
 // What the files cannot hold.
@@ -595,6 +597,30 @@ var parityTable = []parityCell{
 	{kDoorFar, opDead, onFiles, na, naFilesGrids, nil},
 	{kDoorFar, opDead, onFar, same, "", checkDead},
 	{kDoorFar, opDead, onDir, same, "", checkDead},
+	{kText, opPaste, onFiles, na, naPaste, nil},
+	{kText, opPaste, onFar, na, naPaste, nil},
+	{kURL, opPaste, onFiles, na, naPaste, nil},
+	{kURL, opPaste, onFar, na, naPaste, nil},
+	{kShell, opPaste, onFiles, na, naFilesKind, nil},
+	{kShell, opPaste, onFar, same, "", checkPaste},
+	{kWorkspace, opPaste, onFiles, na, naPaste, nil},
+	{kWorkspace, opPaste, onFar, na, naPaste, nil},
+	{kDoor, opPaste, onFiles, na, naPaste, nil},
+	{kDoor, opPaste, onFar, na, naPaste, nil},
+	{kDoorHome, opPaste, onFiles, na, naPaste, nil},
+	{kDoorHome, opPaste, onFar, na, naPaste, nil},
+	{kDoorDir, opPaste, onFiles, na, naPaste, nil},
+	{kDoorDir, opPaste, onFar, na, naPaste, nil},
+	{kDoorFar, opPaste, onFiles, na, naPaste, nil},
+	{kDoorFar, opPaste, onFar, na, naPaste, nil},
+	{kText, opPaste, onDir, na, naPaste, nil},
+	{kURL, opPaste, onDir, na, naPaste, nil},
+	{kShell, opPaste, onDir, same, "", checkPaste},
+	{kWorkspace, opPaste, onDir, na, naPaste, nil},
+	{kDoor, opPaste, onDir, na, naPaste, nil},
+	{kDoorHome, opPaste, onDir, na, naPaste, nil},
+	{kDoorDir, opPaste, onDir, na, naPaste, nil},
+	{kDoorFar, opPaste, onDir, na, naPaste, nil},
 }
 
 // parityCount is the ledger's count: every hole, and every same cell still

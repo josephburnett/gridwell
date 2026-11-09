@@ -145,6 +145,11 @@ func PeelRequest[T proto.Message](h Hop, req T) T {
 		r.Query = h.PeelFindQuery(r.Query)
 		r.GridId = h.PeelID(r.GridId)
 		r.Scope = ""
+	case *pb.PasteShellRequest:
+		r.TileId = h.PeelID(r.TileId)
+		for i, id := range r.TileIds {
+			r.TileIds[i] = h.PeelID(id)
+		}
 	case *pb.SetSelectionRequest:
 		r.GridId = h.PeelID(r.GridId)
 		for i, id := range r.Add {

@@ -20,6 +20,7 @@ type FakeStreamer struct {
 	alive   map[string]bool
 	tmuxes  []*FakeAttachment
 	killed  []string
+	pasted  map[string][]string
 	PaneCmd string // canned PaneCommand answer
 	PaneErr error  // when set, PaneCommand fails with it: tmux unreachable
 	// OpenErr, when set, makes every Open fail with it and open no
@@ -90,6 +91,24 @@ func (f *FakeStreamer) PaneCommand(string) (string, error) {
 		return "", f.PaneErr
 	}
 	return f.PaneCmd, nil
+}
+
+// Paste records text against key, as tmux's send-keys would type it.
+func (f *FakeStreamer) Paste(key, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.pasted == nil {
+		f.pasted = map[string][]string{}
+	}
+	f.pasted[key] = append(f.pasted[key], text)
+	return nil
+}
+
+// Pasted returns every text Paste typed into key, in order.
+func (f *FakeStreamer) Pasted(key string) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.pasted[key]...)
 }
 
 // LastAttachment returns the most recently opened tmux, or nil.

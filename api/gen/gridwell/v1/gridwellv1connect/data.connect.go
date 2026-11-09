@@ -83,6 +83,8 @@ const (
 	GridwellSetSelectionProcedure = "/gridwell.v1.Gridwell/SetSelection"
 	// GridwellShellTmuxAliveProcedure is the fully-qualified name of the Gridwell's ShellTmuxAlive RPC.
 	GridwellShellTmuxAliveProcedure = "/gridwell.v1.Gridwell/ShellTmuxAlive"
+	// GridwellPasteShellProcedure is the fully-qualified name of the Gridwell's PasteShell RPC.
+	GridwellPasteShellProcedure = "/gridwell.v1.Gridwell/PasteShell"
 	// GridwellSubscribeProcedure is the fully-qualified name of the Gridwell's Subscribe RPC.
 	GridwellSubscribeProcedure = "/gridwell.v1.Gridwell/Subscribe"
 	// GridwellSetViewProcedure is the fully-qualified name of the Gridwell's SetView RPC.
@@ -127,6 +129,8 @@ type GridwellClient interface {
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
 	// ShellTmuxAlive gates the client's refresh button on shell descent.
 	ShellTmuxAlive(context.Context, *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error)
+	// PasteShell is a drop onto a shell.
+	PasteShell(context.Context, *connect.Request[v1.PasteShellRequest]) (*connect.Response[v1.PasteShellResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error)
 	SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error)
 	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
@@ -257,6 +261,12 @@ func NewGridwellClient(httpClient connect.HTTPClient, baseURL string, opts ...co
 			connect.WithSchema(gridwellMethods.ByName("ShellTmuxAlive")),
 			connect.WithClientOptions(opts...),
 		),
+		pasteShell: connect.NewClient[v1.PasteShellRequest, v1.PasteShellResponse](
+			httpClient,
+			baseURL+GridwellPasteShellProcedure,
+			connect.WithSchema(gridwellMethods.ByName("PasteShell")),
+			connect.WithClientOptions(opts...),
+		),
 		subscribe: connect.NewClient[v1.SubscribeRequest, v1.Event](
 			httpClient,
 			baseURL+GridwellSubscribeProcedure,
@@ -299,6 +309,7 @@ type gridwellClient struct {
 	setFraming     *connect.Client[v1.SetFramingRequest, v1.SetFramingResponse]
 	setSelection   *connect.Client[v1.SetSelectionRequest, v1.SetSelectionResponse]
 	shellTmuxAlive *connect.Client[v1.ShellTmuxAliveRequest, v1.ShellTmuxAliveResponse]
+	pasteShell     *connect.Client[v1.PasteShellRequest, v1.PasteShellResponse]
 	subscribe      *connect.Client[v1.SubscribeRequest, v1.Event]
 	setView        *connect.Client[v1.SetViewRequest, v1.SetViewResponse]
 	disableSource  *connect.Client[v1.DisableSourceRequest, v1.DisableSourceResponse]
@@ -399,6 +410,11 @@ func (c *gridwellClient) ShellTmuxAlive(ctx context.Context, req *connect.Reques
 	return c.shellTmuxAlive.CallUnary(ctx, req)
 }
 
+// PasteShell calls gridwell.v1.Gridwell.PasteShell.
+func (c *gridwellClient) PasteShell(ctx context.Context, req *connect.Request[v1.PasteShellRequest]) (*connect.Response[v1.PasteShellResponse], error) {
+	return c.pasteShell.CallUnary(ctx, req)
+}
+
 // Subscribe calls gridwell.v1.Gridwell.Subscribe.
 func (c *gridwellClient) Subscribe(ctx context.Context, req *connect.Request[v1.SubscribeRequest]) (*connect.ServerStreamForClient[v1.Event], error) {
 	return c.subscribe.CallServerStream(ctx, req)
@@ -450,6 +466,8 @@ type GridwellHandler interface {
 	SetSelection(context.Context, *connect.Request[v1.SetSelectionRequest]) (*connect.Response[v1.SetSelectionResponse], error)
 	// ShellTmuxAlive gates the client's refresh button on shell descent.
 	ShellTmuxAlive(context.Context, *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error)
+	// PasteShell is a drop onto a shell.
+	PasteShell(context.Context, *connect.Request[v1.PasteShellRequest]) (*connect.Response[v1.PasteShellResponse], error)
 	Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error
 	SetView(context.Context, *connect.Request[v1.SetViewRequest]) (*connect.Response[v1.SetViewResponse], error)
 	DisableSource(context.Context, *connect.Request[v1.DisableSourceRequest]) (*connect.Response[v1.DisableSourceResponse], error)
@@ -576,6 +594,12 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 		connect.WithSchema(gridwellMethods.ByName("ShellTmuxAlive")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gridwellPasteShellHandler := connect.NewUnaryHandler(
+		GridwellPasteShellProcedure,
+		svc.PasteShell,
+		connect.WithSchema(gridwellMethods.ByName("PasteShell")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gridwellSubscribeHandler := connect.NewServerStreamHandler(
 		GridwellSubscribeProcedure,
 		svc.Subscribe,
@@ -634,6 +658,8 @@ func NewGridwellHandler(svc GridwellHandler, opts ...connect.HandlerOption) (str
 			gridwellSetSelectionHandler.ServeHTTP(w, r)
 		case GridwellShellTmuxAliveProcedure:
 			gridwellShellTmuxAliveHandler.ServeHTTP(w, r)
+		case GridwellPasteShellProcedure:
+			gridwellPasteShellHandler.ServeHTTP(w, r)
 		case GridwellSubscribeProcedure:
 			gridwellSubscribeHandler.ServeHTTP(w, r)
 		case GridwellSetViewProcedure:
@@ -723,6 +749,10 @@ func (UnimplementedGridwellHandler) SetSelection(context.Context, *connect.Reque
 
 func (UnimplementedGridwellHandler) ShellTmuxAlive(context.Context, *connect.Request[v1.ShellTmuxAliveRequest]) (*connect.Response[v1.ShellTmuxAliveResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.ShellTmuxAlive is not implemented"))
+}
+
+func (UnimplementedGridwellHandler) PasteShell(context.Context, *connect.Request[v1.PasteShellRequest]) (*connect.Response[v1.PasteShellResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("gridwell.v1.Gridwell.PasteShell is not implemented"))
 }
 
 func (UnimplementedGridwellHandler) Subscribe(context.Context, *connect.Request[v1.SubscribeRequest], *connect.ServerStream[v1.Event]) error {

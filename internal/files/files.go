@@ -228,6 +228,10 @@ func (s *Source) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb
 	return nil, status.Error(codes.Unimplemented, "files: a file is no shell; a tmux is home's")
 }
 
+func (s *Source) PasteShell(context.Context, *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "files: a file is no shell; a tmux is home's")
+}
+
 func (s *Source) OpenShell(context.Context, func() (*pb.OpenShellRequest, error), func(*pb.OpenShellResponse) error) error {
 	return status.Error(codes.Unimplemented, "files: a file is no shell; a tmux is home's")
 }

@@ -835,6 +835,10 @@ func (s *Server) ShellTmuxAlive(ctx context.Context, req *gridwellv1.ShellTmuxAl
 	}, namespace.Namespace.ShellTmuxAlive, qualifyAnswer)
 }
 
+func (s *Server) PasteShell(ctx context.Context, req *gridwellv1.PasteShellRequest) (*gridwellv1.PasteShellResponse, error) {
+	return forwardVerb(ctx, s, req.TileId, peeled(req), namespace.Namespace.PasteShell, qualifyAnswer)
+}
+
 func (s *Server) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest) (*gridwellv1.TileResponse, error) {
 	return forwardVerb(ctx, s, req.GridId, peeled(req), namespace.Namespace.CreateTile, qualifyAnswer)
 }

@@ -731,6 +731,20 @@ message ShellTmuxAliveResponse {
   bool alive = 1;
 }
 
+// PasteShell types into a shell's tmux what a drop of tiles onto it pastes
+// (client/shellpaste.Text), literally and with no Enter, attached or not.
+// The node owning the shell spells it from tile_ids and origin, the address
+// the client reached the node by; a far node is sent no origin and spells
+// under its own web address. text is that node's spelling, handed by its
+// router to its home, and an API refuses a request carrying one.
+message PasteShellRequest {
+  string tile_id = 1;
+  repeated string tile_ids = 2;
+  string origin = 3;
+  string text = 4;
+}
+message PasteShellResponse {}
+
 // Mutations. A write of something the user made or placed claims what it was
 // read at, one claim per fact: WriteContent and SetTile's rename claim the
 // version (a row with no version, its stamp), MoveTile the placement,
@@ -1059,6 +1073,9 @@ service Gridwell {
 
   // ShellTmuxAlive gates the client's refresh button on shell descent.
   rpc ShellTmuxAlive(ShellTmuxAliveRequest) returns (ShellTmuxAliveResponse);
+
+  // PasteShell is a drop onto a shell.
+  rpc PasteShell(PasteShellRequest) returns (PasteShellResponse);
 
   rpc Subscribe(SubscribeRequest) returns (stream Event);
 

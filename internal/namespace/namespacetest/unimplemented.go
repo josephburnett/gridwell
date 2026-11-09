@@ -79,6 +79,10 @@ func (Unimplemented) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) 
 	return nil, unimp("ShellTmuxAlive")
 }
 
+func (Unimplemented) PasteShell(context.Context, *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
+	return nil, unimp("PasteShell")
+}
+
 func (Unimplemented) ReadContent(context.Context, *pb.ReadContentRequest, func(*pb.ContentChunk) error) error {
 	return unimp("ReadContent")
 }

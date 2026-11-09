@@ -154,7 +154,12 @@ func Start(opts Options) (*Node, error) {
 	src.Transport = cache.Front(impl, sourcecache.Options{Prefetch: true})
 	src.Switches = impl
 	closers = append(closers, func() { closeImpl(impl) })
+	ln, err := net.Listen("tcp", cfg.Web.Bind)
+	if err != nil {
+		return fail(err)
+	}
 	srv, err := server.New(src, server.Config{
+		WebAddr:       ln.Addr().String(),
 		ID:            cfg.ID,
 		StaticFS:      opts.StaticFS,
 		Password:      cfg.WebPassword,
@@ -162,6 +167,7 @@ func Start(opts Options) (*Node, error) {
 		Dir:           opts.Dir,
 	})
 	if err != nil {
+		ln.Close()
 		return fail(err)
 	}
 	requestCtx, cancel := context.WithCancel(context.Background())
@@ -172,11 +178,6 @@ func Start(opts Options) (*Node, error) {
 	webSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
 	connSrv := server.ConnectionAPIServer(srv.ConnectionHandler())
 	connSrv.BaseContext = func(net.Listener) context.Context { return requestCtx }
-	ln, err := net.Listen("tcp", cfg.Web.Bind)
-	if err != nil {
-		cancel()
-		return fail(err)
-	}
 	var connLn net.Listener
 	if sock := cfg.Federation.Socket; sock != "" {
 		connLn, err = server.ListenConnectionAPI(sock)

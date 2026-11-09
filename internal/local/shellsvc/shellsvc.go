@@ -49,6 +49,7 @@ type Streamer interface {
 	Kill(key string) error
 	ListLive() ([]string, error)
 	PaneCommand(key string) (string, error)
+	Paste(key, text string) error
 }
 
 // NewLive composes the tmux argv through the controller and execs it through
@@ -71,6 +72,7 @@ func (l *liveStreamer) Has(key string) (bool, error)           { return l.ctrl.H
 func (l *liveStreamer) Kill(key string) error                  { return l.ctrl.Kill(key) }
 func (l *liveStreamer) ListLive() ([]string, error)            { return l.ctrl.List() }
 func (l *liveStreamer) PaneCommand(key string) (string, error) { return l.ctrl.PaneCommand(key) }
+func (l *liveStreamer) Paste(key, text string) error           { return l.ctrl.Paste(key, text) }
 
 // Manager owns the single live PTY per tmux and the takeover semantics, the
 // namespace-side half of OpenShell: one attached tmux client per tmux,
@@ -160,6 +162,9 @@ func (m *Manager) Kill(key string) error { return m.streamer.Kill(key) }
 
 // PaneCommand labels a frozen shell on detach, "" when the tmux is gone.
 func (m *Manager) PaneCommand(key string) (string, error) { return m.streamer.PaneCommand(key) }
+
+// Paste types text into the tmux, attached or not.
+func (m *Manager) Paste(key, text string) error { return m.streamer.Paste(key, text) }
 
 // CleanupOrphans kills tmuxes nothing names any more, the
 // bounded leak left by a delete that raced a crash. A per-tmux failure does

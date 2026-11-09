@@ -303,6 +303,17 @@ func (c *Controller) List() ([]string, error) {
 	return ids, nil
 }
 
+// Paste types text into the tmux's pane as keys, literally and with no Enter,
+// whether or not a client is attached; a tmux that is gone is an error.
+func (c *Controller) Paste(key, text string) error {
+	name := Name(key)
+	out, err := c.run("send-keys", "-t", name, "-l", "--", text)
+	if err != nil {
+		return fmt.Errorf("tmux send-keys %s: %w (output: %q)", name, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
 // PaneCommand is tmux's automatic window name, "" with no error when the
 // tmux is gone so callers skip relabeling.
 func (c *Controller) PaneCommand(key string) (string, error) {

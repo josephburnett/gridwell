@@ -104,6 +104,10 @@ func (r *restartable) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAlive
 	return r.ns().ShellTmuxAlive(ctx, req)
 }
 
+func (r *restartable) PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
+	return r.ns().PasteShell(ctx, req)
+}
+
 func (r *restartable) OpenShell(ctx context.Context, recv func() (*pb.OpenShellRequest, error), send func(*pb.OpenShellResponse) error) error {
 	return r.ns().OpenShell(ctx, recv, send)
 }

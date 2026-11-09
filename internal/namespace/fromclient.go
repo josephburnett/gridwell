@@ -111,6 +111,10 @@ func (f fromClient) ShellTmuxAlive(ctx context.Context, req *pb.ShellTmuxAliveRe
 	return f.c.ShellTmuxAlive(ctx, req)
 }
 
+func (f fromClient) PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
+	return f.c.PasteShell(ctx, req)
+}
+
 func (f fromClient) SetView(ctx context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
 	return f.c.SetView(ctx, req)
 }

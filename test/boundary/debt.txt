@@ -38,3 +38,4 @@ low-water | packages | 78
 2026-11-08 | gridwell size and clean (Joe, 2026-11-08): two commands, size read-only beside a serving node and clean only while it is stopped, with the report in text and JSON | 220
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): client/shellpaste decides a drop onto a shell and spells what it pastes | 82
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): client/shellpaste decides a drop onto a shell and spells what it pastes | 1 | packages
+2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): PasteShell types a drop into the shell's tmux, spelled by the node owning it | 147

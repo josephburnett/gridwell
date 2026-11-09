@@ -57,6 +57,7 @@ type fake struct {
 	shellIn  []*pb.OpenShellRequest
 	views    []*pb.SetViewRequest
 	selected []*pb.SetSelectionRequest
+	pasted   []*pb.PasteShellRequest
 }
 
 func (f *fake) Info(context.Context, *pb.InfoRequest) (*pb.InfoResponse, error) {
@@ -111,6 +112,10 @@ func (f *fake) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetViewRe
 }
 func (f *fake) ShellTmuxAlive(context.Context, *pb.ShellTmuxAliveRequest) (*pb.ShellTmuxAliveResponse, error) {
 	return &pb.ShellTmuxAliveResponse{Alive: true}, nil
+}
+func (f *fake) PasteShell(_ context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
+	f.pasted = append(f.pasted, req)
+	return &pb.PasteShellResponse{}, nil
 }
 func (f *fake) ReadContent(_ context.Context, _ *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	for _, c := range f.chunks {
@@ -203,6 +208,21 @@ func TestASelectCrossesWithItsAddsAndRemoves(t *testing.T) {
 	}
 	if len(f.selected) != 1 || !slices.Equal(f.selected[0].GetAdd(), []string{"7"}) || !slices.Equal(f.selected[0].GetRemove(), []string{"8"}) {
 		t.Fatalf("server saw %v", f.selected)
+	}
+}
+
+// A paste crosses the connection API with its tiles and origin.
+func TestAPasteCrossesWithItsTiles(t *testing.T) {
+	f := &fake{}
+	ns := loopback(t, f)
+	if _, err := ns.PasteShell(context.Background(), &pb.PasteShellRequest{
+		TileId: "5", TileIds: []string{"7", "~eA"}, Origin: "http://h:1",
+	}); err != nil {
+		t.Fatalf("PasteShell: %v", err)
+	}
+	if len(f.pasted) != 1 || f.pasted[0].GetTileId() != "5" || !slices.Equal(f.pasted[0].GetTileIds(), []string{"7", "~eA"}) ||
+		f.pasted[0].GetOrigin() != "http://h:1" {
+		t.Fatalf("server saw %v", f.pasted)
 	}
 }
 
