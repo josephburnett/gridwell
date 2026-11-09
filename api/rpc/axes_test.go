@@ -16,6 +16,7 @@ var flagMessages = []protoreflect.MessageDescriptor{
 	(&gridwellv1.InfoResponse{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.EventSourceHealth{}).ProtoReflect().Descriptor(),
 	(&gridwellv1.CreateTileRequest{}).ProtoReflect().Descriptor(),
+	(&gridwellv1.ReadContentRequest{}).ProtoReflect().Descriptor(),
 }
 
 // TestFlags fails on a bool or enum field Flags does not class, which is a

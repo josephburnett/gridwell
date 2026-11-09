@@ -139,6 +139,20 @@ func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, m
 	return data, mediaType, basis, nil
 }
 
+// ReadInfo is what the disk says of the file tileID names (FileInfo).
+func (c *Client) ReadInfo(ctx context.Context, tileID string) (*pb.FileInfo, error) {
+	stream, err := c.cl.ReadContent(ctx, connect.NewRequest(&pb.ReadContentRequest{TileId: tileID, Info: true}))
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+	var info *pb.FileInfo
+	for stream.Receive() {
+		info = cmp.Or(info, stream.Msg().GetFileInfo())
+	}
+	return info, stream.Err()
+}
+
 // WriteContent claims the basis the bytes it replaces were read under and
 // commits at close, so a failure anywhere leaves the old value intact. data is
 // the complete new value.

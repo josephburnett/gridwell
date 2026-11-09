@@ -13,7 +13,8 @@ type Flag struct {
 }
 
 // Flags is every bool and enum field on Tile, Grid, SourceGrid, InfoResponse,
-// EventSourceHealth and CreateTileRequest, and the strings whose emptiness
+// EventSourceHealth, CreateTileRequest and ReadContentRequest, and the strings
+// whose emptiness
 // is the flag; the test walks the descriptors against it.
 var Flags = []Flag{
 	{"gridwell.v1.Tile.link", true, "kind: the doors to a home grid, a directory and a far home are links, a directory's symlink among them; link and see it dead make a leaf one", "delete unlinks and copy links"},
@@ -28,5 +29,6 @@ var Flags = []Flag{
 	{"gridwell.v1.EventSourceHealth.told", true, "variant a far node refusing the share: the decided far url update cell", "a source's held grids are current, or read on every move (cache.Current)"},
 	{"gridwell.v1.EventSourceHealth.disabled", false, "", "a dark source says nothing more: no notice stands (events.ReactHealth)"},
 	{"gridwell.v1.EventSourceHealth.live_updates_off", false, "", "a notice says why the source failed to tell its changes (events.ReactHealth)"},
+	{"gridwell.v1.ReadContentRequest.info", true, "variant a file that renders as nothing: the decided read content cells, here and through the connection", "a read answers the facts about a file's bytes, not the bytes"},
 	{"gridwell.v1.Grid.moves", true, "variant a disabled source: the decided far text write cell reads it false; parity_move_test.go reads it true on home, the files and a far home", "a left-drag to another grid is a move, or refused (dragdrop.MoveForbidden)"},
 }

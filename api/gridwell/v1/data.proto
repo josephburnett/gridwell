@@ -354,14 +354,44 @@ message GetTilePreviewResponse {
 // resolution point, so callers never reimplement link semantics. The files,
 // whose bodies are not version-edited, send version 0 and, in its place, the
 // bytes' content_stamp (Tile.content_stamp).
+//
+// info asks for the facts about a file's bytes, not the bytes: the answer is
+// one chunk carrying file_info and no data. An owner whose tile is no file
+// refuses it.
 message ReadContentRequest {
   string tile_id = 1;
+  bool info = 2;
 }
 message ContentChunk {
   bytes data = 1;
   string media_type = 2;    // chunk 1 only
   int64 version = 3;        // chunk 1 only
   string content_stamp = 4; // chunk 1 only
+  FileInfo file_info = 5;   // an info read's one chunk
+}
+
+// FileInfo is what the disk says of a file when it is opened: its inode's
+// facts, its type sniffed from its first 512 bytes, and the type its name's
+// extension says (rpc.ExtensionType). Times are unix nanoseconds, and a name
+// or a birth time the host cannot say is absent.
+message FileInfo {
+  string path = 1;
+  int64 size = 2;
+  string mode = 3; // as ls -l spells it, "-rw-r--r--"
+  uint32 perm = 4; // the permission and special bits, shown in octal
+  uint32 uid = 5;
+  uint32 gid = 6;
+  string user = 7;
+  string group = 8;
+  uint64 nlink = 9;
+  uint64 inode = 10;
+  uint64 device = 11;
+  int64 atime_ns = 12;
+  int64 mtime_ns = 13;
+  int64 ctime_ns = 14;
+  optional int64 birth_ns = 15;
+  string sniffed_type = 16;
+  string extension_type = 17;
 }
 
 // WriteContent streams a tile's content bytes up. The first message binds

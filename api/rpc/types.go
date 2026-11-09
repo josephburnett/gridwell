@@ -230,10 +230,13 @@ const (
 	GlyphGlobe  = "globe"
 )
 
-// Text-tile display modes.
+// Text-tile display modes. A file shows two more: its file information, and
+// that with its bytes beneath in the hex view.
 const (
 	TextModeRendered = "rendered"
 	TextModeText     = "text"
+	TextModeInfo     = "info"
+	TextModeHex      = "hex"
 )
 
 // WebContent is a url tile: at the address it carries, or at the /content/
@@ -315,11 +318,12 @@ func PageRange(offset, length, size int64) (from, n int64, ok bool) {
 }
 
 // The text_presentation vocabulary: whether a file's text body is a
-// document. There is no document-only value, because the user can always
-// reach the source bytes.
+// document, or the file has none and shows its file information. There is no
+// document-only value, because the user can always reach the source bytes.
 const (
 	TextPresentationPlain = "plain"
 	TextPresentationBoth  = "both"
+	TextPresentationInfo  = "info"
 )
 
 // ContentBasis names a body's bytes as their owner does: the row version for a
