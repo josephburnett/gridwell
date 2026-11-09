@@ -18,9 +18,8 @@ import (
 // every row must be of the node the shell's tmux runs on, since only that node
 // spells a path or a reference its shell reaches. It reads ids alone.
 func Refusal(rows []*pb.Tile, shell *pb.Tile) string {
-	node := rpc.NamespaceOf(rpc.ContentID(shell))
 	for _, r := range rows {
-		if rpc.NamespaceOf(r.GetId()) != node {
+		if !rpc.SameNode(r.GetId(), rpc.ContentID(shell)) {
 			return cmp.Or(r.GetAltText(), r.GetId()) + " is not on the shell's node"
 		}
 	}
