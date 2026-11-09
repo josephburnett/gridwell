@@ -163,3 +163,48 @@ func TestAGridwellTileOnADirectoryIsSelectedAndFound(t *testing.T) {
 		t.Errorf("a file copied onto home = %v, %v; want a link to it", link, err)
 	}
 }
+
+// A file listed after a Gridwell tile was placed on its directory flows
+// around it, as a Gridwell tile is refused over a file's derived cell: no
+// two tiles of a directory's grid share a cell, and the Gridwell tile stays.
+func TestAFileListedLaterFlowsAroundAGridwellTile(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.txt"), "a")
+	writeFile(t, filepath.Join(root, "b.txt"), "b")
+	n := newFilesNode(t, root)
+	dir := n.roots[0]
+	b := fileID(filepath.Join(root, "b.txt"))
+	var cell *gridwellv1.Tile
+	for _, tl := range n.grid(dir).Tiles {
+		if tl.Id == b {
+			cell = tl
+		}
+	}
+	if cell == nil {
+		t.Fatal("b.txt is not listed")
+	}
+	if err := os.Remove(filepath.Join(root, "b.txt")); err != nil {
+		t.Fatal(err)
+	}
+	n.grid(dir)
+	note, err := n.cl.CreateWithContent(n.ctx, &gridwellv1.CreateTileRequest{GridId: dir,
+		Tile: &gridwellv1.Tile{Kind: rpc.KindText, X: cell.X, Y: cell.Y, W: 1, H: 1}}, []byte("Plan"))
+	if err != nil {
+		t.Fatalf("a text at the cell b.txt left: %v", err)
+	}
+	writeFile(t, filepath.Join(root, "b.txt"), "b")
+	g := n.grid(dir)
+	if len(g.Tiles) != 3 {
+		t.Fatalf("the directory lists %v, want a.txt, b.txt and the text", g.Tiles)
+	}
+	for i, p := range g.Tiles {
+		for _, q := range g.Tiles[i+1:] {
+			if p.X < q.X+q.W && q.X < p.X+p.W && p.Y < q.Y+q.H && q.Y < p.Y+p.H {
+				t.Errorf("%s at (%d,%d) shares a cell with %s at (%d,%d)", p.Id, p.X, p.Y, q.Id, q.X, q.Y)
+			}
+		}
+		if p.Id == note.Id && (p.X != cell.X || p.Y != cell.Y) {
+			t.Errorf("the text moved to (%d,%d) when the file came back", p.X, p.Y)
+		}
+	}
+}
