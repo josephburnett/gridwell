@@ -821,7 +821,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		"toggle": map[string]any{
 			"present":  show.Toggle,
 			"chevron":  show.Chevron.String(),
-			"expanded": show.Swatches,
+			"expanded": show.Strip,
 			"x":        tr.X,
 			"y":        tr.Y,
 			"w":        tr.W,

@@ -18,11 +18,16 @@ const (
 	// is over the bar, which no pane is under, so it is the escape hatch for a
 	// grid tiled wall to wall with doors.
 	WheelZoomFocused
+	// WheelScrollMenu scrolls the open + menu's strip: the popover floats
+	// over the canvas, so the wheel there is the menu's.
+	WheelScrollMenu
 )
 
 // WheelInput is the state ClassifyWheel decides on; the caller resolves the
 // impure facts.
 type WheelInput struct {
+	// OverMenu is the wheel over the open + menu's popover.
+	OverMenu bool
 	// Zone is where the wheel is in the bar's band, which no pane is under;
 	// on the bar every other field describes the FOCUSED pane.
 	Zone wsbar.Zone
@@ -65,6 +70,8 @@ func RectCoverage(rx, ry, rw, rh, bx, by, bw, bh float64) float64 {
 // the content box swallows strays because the view scrolls itself.
 func ClassifyWheel(in WheelInput) WheelAction {
 	switch {
+	case in.OverMenu:
+		return WheelScrollMenu
 	case in.Zone == wsbar.ZoneBand || in.Zone == wsbar.ZoneBar && in.TextFocused:
 		return WheelIgnore
 	case in.Zone == wsbar.ZoneBar:

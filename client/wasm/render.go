@@ -276,7 +276,7 @@ func (a *App) menuView(p *pane.Pane) ([]menuItem, menu.Shown) {
 		Primitives: len(primitives),
 		Expanded:   a.menu.StripOpen(),
 	})
-	if !show.Swatches {
+	if !show.Strip {
 		sources = nil
 	}
 	return append(sources, primitives...), show
@@ -315,14 +315,18 @@ func (a *App) offerOn(gid string) menu.Offer {
 	return menu.Offer{AcceptsTiles: g.GetAcceptsTiles(), Directory: rpc.IsFilesID(gid), Writable: g.GetWritable()}
 }
 
-func menuTopRow(items []menuItem) int {
+// inStrip is an item of the strip, above the primitives.
+func (it menuItem) inStrip() bool { return it.isSwatch }
+
+// menuSections counts the strip's sections in the item list, in order.
+func menuSections(items []menuItem) []int {
 	n := 0
 	for _, it := range items {
 		if it.isSwatch {
 			n++
 		}
 	}
-	return n
+	return []int{n}
 }
 
 const ghostSizeLerpAlpha = 0.20

@@ -114,7 +114,7 @@ func TestPopoverTracksCenter(t *testing.T) {
 func TestTwoRowPopover(t *testing.T) {
 	l := makeLayout()
 	l.NumTiles = 6
-	l.TopRow = 2
+	l.Sections = []int{2}
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
 	if got, want := l.PopoverRect().H, 2*tile+3*gap; got != want {
@@ -133,9 +133,9 @@ func TestTwoRowPopover(t *testing.T) {
 	}
 }
 
-// TestSingleRowWhenTopRowUnset pins that a node declaring no doors gets a
+// TestSingleRowWithNoStrip pins that a node declaring no doors gets a
 // single-row popover.
-func TestSingleRowWhenTopRowUnset(t *testing.T) {
+func TestSingleRowWithNoStrip(t *testing.T) {
 	l := makeLayout()
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
@@ -154,12 +154,12 @@ func TestSingleRowWhenTopRowUnset(t *testing.T) {
 	}
 }
 
-// TestSingleRowWhenTopRowCoversAll pins the read-only grid, where every tile
+// TestSingleRowWhenTheStripCoversAll pins the read-only grid, where every tile
 // is a door and the popover stays a single row.
-func TestSingleRowWhenTopRowCoversAll(t *testing.T) {
+func TestSingleRowWhenTheStripCoversAll(t *testing.T) {
 	l := makeLayout()
 	l.NumTiles = 3
-	l.TopRow = 3
+	l.Sections = []int{3}
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
 	if got, want := l.PopoverRect().H, tile+2*gap; got != want {
@@ -172,7 +172,7 @@ func TestSingleRowWhenTopRowCoversAll(t *testing.T) {
 func TestCollapsedSectionLayout(t *testing.T) {
 	l := makeLayout()
 	l.NumTiles = 4 // primitives only: the section contributed nothing
-	l.TopRow = 0
+	l.Sections = []int{0}
 	l.Toggle = true
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
@@ -218,7 +218,7 @@ func TestCollapsedSectionLayout(t *testing.T) {
 func TestExpandedSectionLayout(t *testing.T) {
 	l := makeLayout()
 	l.NumTiles = 7
-	l.TopRow = 3
+	l.Sections = []int{3}
 	l.Toggle = true
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
@@ -247,7 +247,7 @@ func TestExpandedSectionLayout(t *testing.T) {
 func TestNoToggleNoBand(t *testing.T) {
 	l := makeLayout()
 	l.NumTiles = 7
-	l.TopRow = 3
+	l.Sections = []int{3}
 	tile := l.TilePx()
 	gap := l.Cfg.GapPx
 	if got, want := l.PopoverRect().H, 2*tile+3*gap; got != want {
@@ -258,5 +258,81 @@ func TestNoToggleNoBand(t *testing.T) {
 	}
 	if l.PointInToggle(l.PopoverRect().X+1, l.PopoverRect().Y+1) {
 		t.Error("PointInToggle must be false with no toggle")
+	}
+}
+
+// TestStripWrapsEachSection pins the strip's rows: each section wraps at
+// RowMax and never shares a row with the next, templates above swatches.
+func TestStripWrapsEachSection(t *testing.T) {
+	l := makeLayout()
+	l.Sections = []int{2, 7} // [+] and one template; seven swatches
+	l.NumTiles = 9 + 5
+	l.Toggle = true
+	rowOf := func(i int) float64 { return l.TileRect(i).Y }
+	if rowOf(0) != rowOf(1) {
+		t.Error("the templates section's two items share a row")
+	}
+	if rowOf(2) <= rowOf(1) {
+		t.Errorf("the swatches start a row of their own: swatch row %v, templates row %v", rowOf(2), rowOf(1))
+	}
+	for i := 3; i < 7; i++ {
+		if rowOf(i) != rowOf(2) {
+			t.Errorf("swatch %d is not on the first swatch row", i-2)
+		}
+	}
+	if rowOf(7) <= rowOf(6) || rowOf(8) != rowOf(7) {
+		t.Errorf("the sixth and seventh swatches wrap onto the next row: %v %v %v", rowOf(6), rowOf(7), rowOf(8))
+	}
+	if got, want := l.PopoverRect().W, l.rowWidthPx(RowMax); got != want {
+		t.Errorf("popover width = %v, want a row of %d, %v", got, RowMax, want)
+	}
+	tile, gap := l.TilePx(), l.Cfg.GapPx
+	if got, want := l.PopoverRect().H, 4*tile+5*gap+l.Cfg.ToggleH+gap; got != want {
+		t.Errorf("popover height = %v, want three strip rows, the band and the primitives, %v", got, want)
+	}
+	if prim := l.TileRect(9); prim.Y < l.ToggleRect().Y+l.ToggleRect().H {
+		t.Error("the primitives row is not below the band")
+	}
+}
+
+// TestStripScrollsPastThreeRows pins that the strip shows StripRowsShown
+// rows, a scroll is clamped to the rows past them, and the hit test follows
+// the scroll and ignores an item scrolled out.
+func TestStripScrollsPastThreeRows(t *testing.T) {
+	l := makeLayout()
+	l.Sections = []int{11, 3} // three template rows, one swatch row
+	l.NumTiles = 14 + 5
+	pitch := l.TilePx() + l.Cfg.GapPx
+	if got := l.ClampScroll(-5); got != 0 {
+		t.Errorf("ClampScroll(-5) = %v, want 0", got)
+	}
+	if got := l.ClampScroll(1e6); got != pitch {
+		t.Errorf("ClampScroll(far) = %v, want one row, %v", got, pitch)
+	}
+	strip := l.StripRect()
+	if got, want := strip.H, 3*pitch-l.Cfg.GapPx; got != want {
+		t.Errorf("strip band height = %v, want three rows %v", got, want)
+	}
+	swatch := l.TileRect(11)
+	if l.TileIndexAt(swatch.X+swatch.W/2, swatch.Y+swatch.H/2) == 11 {
+		t.Error("the fourth row is hit before it is scrolled into the band")
+	}
+	l.Scroll = 1e6
+	swatch = l.TileRect(11)
+	if got := l.TileIndexAt(swatch.X+swatch.W/2, swatch.Y+swatch.H/2); got != 11 {
+		t.Errorf("TileIndexAt the scrolled-in swatch = %d, want 11", got)
+	}
+	first := l.TileRect(0)
+	if l.TileIndexAt(first.X+first.W/2, first.Y+first.H/2) != -1 {
+		t.Error("the first row is hit after it scrolled out of the band")
+	}
+	prim := l.TileRect(14)
+	if got := l.TileIndexAt(prim.X+prim.W/2, prim.Y+prim.H/2); got != 14 {
+		t.Errorf("the primitives do not scroll: TileIndexAt = %d, want 14", got)
+	}
+	l.Sections = []int{2}
+	l.NumTiles = 7
+	if got := l.ClampScroll(50); got != 0 {
+		t.Errorf("a strip that fits does not scroll: ClampScroll = %v", got)
 	}
 }

@@ -14,6 +14,7 @@ type State struct {
 	paneID   string
 	hover    int
 	expanded bool
+	scroll   float64
 }
 
 func New() State { return State{hover: noHover} }
@@ -43,7 +44,24 @@ func (s *State) StripOpen() bool { return s.expanded }
 func (s *State) ToggleStrip() bool {
 	s.expanded = !s.expanded
 	s.hover = noHover
+	s.scroll = 0
 	return s.expanded
+}
+
+// StripScroll is the strip's scroll, live state like the fold: every
+// opening and every unfold starts at the top.
+func (s *State) StripScroll() float64 { return s.scroll }
+
+// ScrollStrip moves the strip by dy px within l's bounds and reports whether
+// it moved. Hover is dropped, because the items under the pointer moved.
+func (s *State) ScrollStrip(dy float64, l Layout) bool {
+	next := l.ClampScroll(l.ClampScroll(s.scroll) + dy)
+	if !s.open || !s.expanded || next == s.scroll {
+		return false
+	}
+	s.scroll = next
+	s.hover = noHover
+	return true
 }
 
 // Open resets hover and the fold: every opening starts folded.
@@ -52,6 +70,7 @@ func (s *State) Open(paneID string) {
 	s.paneID = paneID
 	s.hover = noHover
 	s.expanded = false
+	s.scroll = 0
 }
 
 // Close clears the pane it holds, so nothing downstream reads a stale id.
@@ -60,6 +79,7 @@ func (s *State) Close() {
 	s.paneID = ""
 	s.hover = noHover
 	s.expanded = false
+	s.scroll = 0
 }
 
 // Toggle is the + click, returning the resulting open state.

@@ -242,6 +242,13 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	args[0].Call("preventDefault")
 	dy := args[0].Get("deltaY").Float()
 	sx, sy := mouseXY(args[0], a.canvas)
+	if mp, _, ok := a.menuPaneForPointer(); ok && gesture.ClassifyWheel(gesture.WheelInput{
+		OverMenu: a.pointInMenu(mp, sx, sy)}) == gesture.WheelScrollMenu {
+		if a.menu.ScrollStrip(dy, a.menuLayoutFor(mp)) {
+			a.draw()
+		}
+		return nil
+	}
 	// The band is under no pane, so a wheel there is classified for the
 	// focused pane; gesture.ClassifyWheel owns what it does.
 	if bx, top, bw, barOK := a.bottomBarRect(); barOK {

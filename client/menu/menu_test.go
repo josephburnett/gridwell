@@ -247,3 +247,36 @@ func TestToggleStripTouchesOnlyTheFold(t *testing.T) {
 		t.Fatal("folding back must still leave the menu open on its pane")
 	}
 }
+
+// TestStripScroll pins that the strip scrolls only while open and unfolded,
+// within the layout's bounds, and starts at the top on every opening and
+// every unfold.
+func TestStripScroll(t *testing.T) {
+	l := Layout{Cfg: Default(), Sections: []int{16}, NumTiles: 21}
+	pitch := l.TilePx() + l.Cfg.GapPx
+	s := New()
+	if s.ScrollStrip(10, l) {
+		t.Error("a closed menu scrolled")
+	}
+	s.Open("p1")
+	if s.ScrollStrip(10, l) {
+		t.Error("a folded strip scrolled")
+	}
+	s.ToggleStrip()
+	if !s.ScrollStrip(1e6, l) || s.StripScroll() != pitch {
+		t.Errorf("StripScroll = %v, want clamped to the one row past three, %v", s.StripScroll(), pitch)
+	}
+	if s.ScrollStrip(10, l) {
+		t.Error("a scroll past the end moved")
+	}
+	s.ToggleStrip()
+	s.ToggleStrip()
+	if s.StripScroll() != 0 {
+		t.Error("an unfold does not start at the top")
+	}
+	s.ScrollStrip(20, l)
+	s.Open("p1")
+	if s.StripScroll() != 0 {
+		t.Error("an opening does not start at the top")
+	}
+}

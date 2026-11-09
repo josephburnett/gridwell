@@ -2,7 +2,7 @@ package menu
 
 import "testing"
 
-// TestShow pins every state of the + menu's top section, including that it
+// TestShow pins every state of the + menu's strip, including that it
 // starts collapsed and that the two no-toggle states are the ones where
 // folding would leave nothing.
 func TestShow(t *testing.T) {
@@ -13,15 +13,15 @@ func TestShow(t *testing.T) {
 	}{{
 		name: "collapsed by default: primitives only, chevron points up",
 		in:   Section{Swatches: 4, Primitives: 5, Expanded: false},
-		want: Shown{Swatches: false, Toggle: true, Chevron: ChevronUp},
+		want: Shown{Strip: false, Toggle: true, Chevron: ChevronUp},
 	}, {
 		name: "expanded: the section shows, chevron folds it back",
 		in:   Section{Swatches: 4, Primitives: 5, Expanded: true},
-		want: Shown{Swatches: true, Toggle: true, Chevron: ChevronDown},
+		want: Shown{Strip: true, Toggle: true, Chevron: ChevronDown},
 	}, {
 		name: "one entry still folds: the section is not sized-based",
 		in:   Section{Swatches: 1, Primitives: 5},
-		want: Shown{Swatches: false, Toggle: true, Chevron: ChevronUp},
+		want: Shown{Strip: false, Toggle: true, Chevron: ChevronUp},
 	}, {
 		name: "no sources declared: no section and no control",
 		in:   Section{Swatches: 0, Primitives: 5},
@@ -33,11 +33,19 @@ func TestShow(t *testing.T) {
 	}, {
 		name: "read-only grid: the section IS the menu, always shown",
 		in:   Section{Swatches: 3, Primitives: 0},
-		want: Shown{Swatches: true},
+		want: Shown{Strip: true},
 	}, {
 		name: "read-only grid, expanded: the same, no control appears",
 		in:   Section{Swatches: 3, Primitives: 0, Expanded: true},
-		want: Shown{Swatches: true},
+		want: Shown{Strip: true},
+	}, {
+		name: "templates alone are a strip: it folds as the swatches do",
+		in:   Section{Templates: 1, Primitives: 5},
+		want: Shown{Strip: false, Toggle: true, Chevron: ChevronUp},
+	}, {
+		name: "templates alone, expanded",
+		in:   Section{Templates: 3, Primitives: 5, Expanded: true},
+		want: Shown{Strip: true, Toggle: true, Chevron: ChevronDown},
 	}, {
 		name: "nothing at all",
 		in:   Section{},

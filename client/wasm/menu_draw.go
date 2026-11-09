@@ -34,10 +34,11 @@ func (a *App) menuLayoutAndShow(p *pane.Pane) (menu.Layout, menu.Shown) {
 		PlusX:    cx,
 		PlusY:    cy,
 		NumTiles: len(items),
-		// Both counts come from the one item list, so a folded section leaves
-		// the top row empty rather than needing a second flag.
-		TopRow: menuTopRow(items),
-		Toggle: show.Toggle,
+		// The counts come from the one item list, so a folded strip leaves
+		// no strip row rather than needing a second flag.
+		Sections: menuSections(items),
+		Toggle:   show.Toggle,
+		Scroll:   a.menu.StripScroll(),
 	}, show
 }
 
@@ -125,13 +126,26 @@ func (a *App) drawMenu(p *pane.Pane) {
 	a.cctx.Set("lineWidth", 1.0)
 	a.cctx.Call("strokeRect", mx+0.5, my+0.5, mw-1, mh-1)
 	items, show := a.menuView(p)
+	l := a.menuLayoutFor(p)
+	strip := l.StripRect()
 	for i, item := range items {
 		tx, ty, tw, th := a.menuTileRect(p, i)
 		hovered := a.menu.Hover() == i
+		// A strip item scrolled part way out is cut at the strip's edge.
+		clip := item.inStrip()
+		if clip {
+			a.cctx.Call("save")
+			a.cctx.Call("beginPath")
+			a.cctx.Call("rect", strip.X, strip.Y, strip.W, strip.H)
+			a.cctx.Call("clip")
+		}
 		a.drawMenuItem(item, tx, ty, tw, th, hovered)
+		if clip {
+			a.cctx.Call("restore")
+		}
 	}
 	if show.Toggle {
-		a.drawMenuToggle(a.menuLayoutFor(p).ToggleRect(), show.Chevron)
+		a.drawMenuToggle(l.ToggleRect(), show.Chevron)
 	}
 }
 

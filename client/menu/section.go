@@ -1,12 +1,15 @@
 package menu
 
-// What the + menu shows. The primitives are always there. The swatches above
-// them are an open set, so that section folds behind a chevron. The fold lasts
-// one menu opening and every opening starts folded; State owns the flag.
+// What the + menu shows. The primitives are always there. The strip above
+// them, the templates and the swatches, is an open set, so it folds behind a
+// chevron. The fold lasts one menu opening and every opening starts folded;
+// State owns the flag.
 
-// Section counts the door swatches the node declares and the primitives the
-// grid takes, zero on a read-only grid.
+// Section counts the strip's items, the templates (the copy swatch with
+// them) and the door swatches the node declares, and the primitives the grid
+// takes, zero on a read-only grid.
 type Section struct {
+	Templates  int
 	Swatches   int
 	Primitives int
 	Expanded   bool
@@ -35,23 +38,23 @@ func (c Chevron) String() string {
 }
 
 type Shown struct {
-	Swatches bool
-	Toggle   bool
-	Chevron  Chevron
+	Strip   bool
+	Toggle  bool
+	Chevron Chevron
 }
 
-// Show gives two states no toggle, there being nothing to fold: a node that
-// declares no doors has no section, and a read-only grid offers no
-// primitives, so folding would leave the popover empty.
+// Show gives two states no toggle, there being nothing to fold: an empty
+// strip, and a read-only grid, which offers no primitives, so folding would
+// leave the popover empty.
 func Show(s Section) Shown {
-	if s.Swatches <= 0 {
+	if s.Templates+s.Swatches <= 0 {
 		return Shown{}
 	}
 	if s.Primitives <= 0 {
-		return Shown{Swatches: true}
+		return Shown{Strip: true}
 	}
 	if s.Expanded {
-		return Shown{Swatches: true, Toggle: true, Chevron: ChevronDown}
+		return Shown{Strip: true, Toggle: true, Chevron: ChevronDown}
 	}
 	return Shown{Toggle: true, Chevron: ChevronUp}
 }

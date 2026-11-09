@@ -13,6 +13,9 @@ func TestClassifyWheel(t *testing.T) {
 		want WheelAction
 	}{
 		{"grid view zooms", WheelInput{}, WheelZoomPane},
+		// The popover floats over panes and the bar alike, and takes the
+		// wheel wherever it is.
+		{"over the menu scrolls its strip", WheelInput{OverMenu: true, OverEnterableDoor: true, Zone: wsbar.ZoneBar}, WheelScrollMenu},
 		// The bar is under no pane, so a wheel there zooms the focused pane
 		// about its centre, or nothing when that pane is inside a document.
 		{"over the bar zooms the focused grid pane", WheelInput{Zone: wsbar.ZoneBar}, WheelZoomFocused},
