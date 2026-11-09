@@ -466,9 +466,8 @@ func (rt *router) reapWorkspaceEphemerals(ctx context.Context, candidates []stri
 			log.Printf("gridwell: delete %s: not reaping remote ephemeral candidate %s (transit)", qualifiedID, id)
 			continue
 		}
-		// Ephemeral means on the node's scratch grid.
 		et, err := ec.GetTile(ctx, &pb.GetTileRequest{TileId: elocal})
-		if err != nil || et.GetTile() == nil || rpc.QualifyID(euuid, et.GetTile().GridId) != scratch {
+		if err != nil || et.GetTile() == nil || !rpc.Ephemeral(scratch, rpc.QualifyID(euuid, et.GetTile().GridId)) {
 			continue // not an ephemeral: viewed content, never touched
 		}
 		dr, err := ec.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: elocal})

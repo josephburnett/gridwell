@@ -216,6 +216,21 @@ func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 	return s.singletonID(ctx, systemKeyScratchGridID)
 }
 
+// Ephemeral reports that gridID is the scratch grid, so a tile on it is an
+// ephemeral visit. An id that is not a home grid's is not.
+func (s *Store) Ephemeral(ctx context.Context, gridID string) (bool, error) {
+	id, err := parseID(gridID)
+	if err != nil {
+		return false, nil
+	}
+	return ephemeralGrid(ctx, s.db, id)
+}
+
+func ephemeralGrid(ctx context.Context, q gridReader, grid int64) (bool, error) {
+	scratch, err := singletonGrid(ctx, q, systemKeyScratchGridID)
+	return err == nil && grid == scratch, err
+}
+
 // SetNodeID injects the config id the binary verified against its DB at
 // boot. The stored node uuid is a second, independently minted identity
 // nothing outside this store sees: qualified links carry the config id,

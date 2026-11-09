@@ -263,6 +263,9 @@ const (
 // DescentOf classifies the tile a pane is descended into; nil is DescentNone.
 func DescentOf(t *pb.Tile) Descent { return KindOf(t.GetKind()).Live }
 
+// Ephemeral reports that grid is the scratch grid, so a tile on it is an ephemeral visit.
+func Ephemeral(scratch, grid string) bool { return scratch != "" && grid == scratch }
+
 // LeafLink is one content tile shown in a second place, owning no bytes of its
 // own. ContentID answers whose content it is.
 func LeafLink(t *pb.Tile) bool {

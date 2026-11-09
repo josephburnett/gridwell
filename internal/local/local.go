@@ -283,13 +283,13 @@ func (p *Home) CreateTile(ctx context.Context, req *gridwellv1.CreateTileRequest
 	case k.Content == rpc.ContentAddress:
 		// A url create on the scratch grid is an ephemeral visit, routed
 		// path-free because the scratch grid has no descent path.
-		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
+		if eph, err := p.st.Ephemeral(ctx, req.GridId); err == nil && eph {
 			return tileResp(p.st.CreateScratchURL(ctx, t.UrlString))
 		}
 		return tileResp(p.st.CreateURL(ctx, req.GridId, t.X, t.Y, t.W, t.H, t.UrlString, t.AltText, t.Named))
 	case k.Tmux:
 		// Likewise an ephemeral shell, deleted on ascent.
-		if scratch, err := p.st.ScratchGridID(ctx); err == nil && req.GridId == scratch {
+		if eph, err := p.st.Ephemeral(ctx, req.GridId); err == nil && eph {
 			return tileResp(p.st.CreateScratchShell(ctx))
 		}
 		return tileResp(p.st.CreateShell(ctx, req.GridId, t.X, t.Y, t.W, t.H))

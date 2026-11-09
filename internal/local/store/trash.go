@@ -30,12 +30,8 @@ func (s *Store) TrashGridID(ctx context.Context) (string, error) {
 // deleteBypassesTrash reports a real delete: the tile is in the scratch grid,
 // or already inside the trash tree.
 func (s *Store) deleteBypassesTrash(ctx context.Context, tx *sql.Tx, srcGrid int64) (bool, error) {
-	scratch, err := singletonGrid(ctx, tx, systemKeyScratchGridID)
-	if err != nil {
-		return false, err
-	}
-	if srcGrid == scratch {
-		return true, nil
+	if eph, err := ephemeralGrid(ctx, tx, srcGrid); err != nil || eph {
+		return eph, err
 	}
 	trash, err := singletonGrid(ctx, tx, systemKeyTrashGridID)
 	if err != nil {

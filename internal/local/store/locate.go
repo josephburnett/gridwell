@@ -32,7 +32,7 @@ func (s *Store) Find(ctx context.Context, req *gridwellv1.FindRequest) ([]*gridw
 	if q.ID != "" {
 		return s.locate(ctx, q.ID, f)
 	}
-	f.scratch = s.findScratchGrid(ctx)
+	f.scratch, _ = singletonGrid(ctx, s.db, systemKeyScratchGridID) // 0, filtering nothing, when unresolvable
 	where, args := f.sql()
 
 	var out []*gridwellv1.FindResult
@@ -201,20 +201,6 @@ func (f tileFilter) newest() string {
 		return "t.updated_at"
 	}
 	return "t.created_at"
-}
-
-// findScratchGrid resolves the scratch grid's id for the surface filter, 0
-// when it is unresolvable.
-func (s *Store) findScratchGrid(ctx context.Context) int64 {
-	id, err := s.ScratchGridID(ctx)
-	if err != nil {
-		return 0
-	}
-	gid, err := parseID(id)
-	if err != nil {
-		return 0
-	}
-	return gid
 }
 
 // findSnippet is a one-line window around the first case-insensitive

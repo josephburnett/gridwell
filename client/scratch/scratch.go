@@ -5,6 +5,8 @@
 // known rather than handed a guess.
 package scratch
 
+import "github.com/josephburnett/gridwell/api/rpc"
+
 // Grid is what the rule reads. An uncached grid carries no stamp, which is why
 // Cached is a field rather than an empty ScratchGridID.
 type Grid struct {
@@ -27,8 +29,5 @@ func For(g Grid) (id string, known bool) {
 // re-anchoring a pane onto it a known no.
 func Ephemeral(g Grid, tileGridID string) (ephemeral, known bool) {
 	id, known := For(g)
-	if !known {
-		return false, false
-	}
-	return id != "" && tileGridID == id, true
+	return rpc.Ephemeral(id, tileGridID), known
 }

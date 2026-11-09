@@ -262,17 +262,13 @@ func (s *Store) CreateURL(ctx context.Context, gridID string, x, y, w, h int64, 
 }
 
 // createScratch is createTile for the scratch grid: the grid comes from
-// ScratchGridID rather than the caller, and there is no overlap check because
+// the scratch singleton rather than the caller, and there is no overlap check because
 // the scratch grid is never rendered and two visits may share a cell.
 func (s *Store) createScratch(
 	ctx context.Context,
 	insert func(tx *sql.Tx, gridID, now int64) (tileID int64, err error),
 ) (*gridwellv1.Tile, error) {
-	scratch, err := s.ScratchGridID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	gridID, err := parseID(scratch)
+	gridID, err := singletonGrid(ctx, s.db, systemKeyScratchGridID)
 	if err != nil {
 		return nil, err
 	}
