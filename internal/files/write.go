@@ -30,7 +30,7 @@ import (
 // another directory renames the file, and its row follows under the new
 // path's id, the old one retired; a move to another source is refused.
 func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileResponse, error) {
-	path, dir, err := s.tilePath(req.TileId)
+	path, dir, err := tilePath(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 		if rpc.ShapeOf(req.GridId) != rpc.ShapeKey {
 			return nil, status.Error(codes.InvalidArgument, "files: "+rpc.MoveAcross)
 		}
-		if to, err = s.dirOf(req.GridId); err != nil {
+		if to, err = pathOf(req.GridId); err != nil {
 			return nil, err
 		}
 	}
@@ -101,7 +101,7 @@ func (s *Source) CreateTile(_ context.Context, req *pb.CreateTileRequest) (*pb.T
 	if why := rpc.IntoDirectory(t); why != "" {
 		return nil, status.Error(codes.InvalidArgument, "files: "+why)
 	}
-	dir, err := s.dirOf(req.GridId)
+	dir, err := pathOf(req.GridId)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (s *Source) CreateTile(_ context.Context, req *pb.CreateTileRequest) (*pb.T
 	if len(req.Content) > bodyCap {
 		return nil, status.Errorf(codes.InvalidArgument, "files: %s: a body is at most %d MiB", path, bodyCap>>20)
 	}
-	if err := s.create(dir, name, req.Content); err != nil {
+	if err := create(dir, name, req.Content); err != nil {
 		return nil, err
 	}
 	l, err := s.synthesize(dir)
@@ -131,18 +131,10 @@ func (s *Source) CreateTile(_ context.Context, req *pb.CreateTileRequest) (*pb.T
 // create writes data as the new file name in dir, made exclusively, so a
 // name taken meanwhile is refused and never overwritten; a write that fails
 // takes its file away again.
-func (s *Source) create(dir, name string, data []byte) error {
-	rr, rel, err := s.content(dir)
-	var root *os.Root
-	if err == nil {
-		resolved()
-		root, err = os.OpenRoot(rr)
-	}
-	var f *os.File
-	if err == nil {
-		defer root.Close()
-		f, err = root.OpenFile(filepath.Join(rel, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	}
+func create(dir, name string, data []byte) error {
+	resolved()
+	path := filepath.Join(dir, name)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if errors.Is(err, iofs.ErrExist) {
 		return status.Errorf(codes.InvalidArgument, "files: %q is already in %s, and a copy replaces nothing", name, dir)
 	}
@@ -154,11 +146,11 @@ func (s *Source) create(dir, name string, data []byte) error {
 			err = cerr
 		}
 		if err != nil {
-			_ = root.Remove(filepath.Join(rel, name))
+			_ = os.Remove(path)
 		}
 	}
 	if err != nil {
-		return diskRefusal("written", filepath.Join(dir, name), err)
+		return diskRefusal("written", path, err)
 	}
 	return nil
 }
@@ -197,7 +189,7 @@ func (s *Source) rename(path, to string) (string, error) {
 	refuse := func(c codes.Code, why string, a ...any) error {
 		return status.Errorf(c, "files: %s cannot move to %s: "+why, append([]any{path, to}, a...)...)
 	}
-	into, err := s.openDir(to)
+	into, err := openDir(to)
 	var fi os.FileInfo
 	if err == nil {
 		defer into.Close()
@@ -217,7 +209,7 @@ func (s *Source) rename(path, to string) (string, error) {
 		return "", refuse(codes.InvalidArgument, "it is gone")
 	}
 	name := filepath.Base(path)
-	from, err := s.openDir(filepath.Dir(path))
+	from, err := openDir(filepath.Dir(path))
 	if err == nil {
 		err = renameAt(from, name, into, name)
 		from.Close()
@@ -257,7 +249,7 @@ func (s *Source) SetTile(_ context.Context, req *pb.SetTileRequest) (*pb.TileRes
 		}
 		zoom = z
 	}
-	path, _, err := s.tilePath(req.TileId)
+	path, _, err := tilePath(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +307,7 @@ func (s *Source) SetFraming(_ context.Context, req *pb.SetFramingRequest) (*pb.S
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if req.RootGridId != "" {
-		dir, err := s.dirOf(req.RootGridId)
+		dir, err := pathOf(req.RootGridId)
 		if err != nil {
 			return nil, err
 		}
@@ -332,7 +324,7 @@ func (s *Source) SetFraming(_ context.Context, req *pb.SetFramingRequest) (*pb.S
 		}
 		return &pb.SetFramingResponse{}, nil
 	}
-	path, _, err := s.tilePath(req.TileId)
+	path, _, err := tilePath(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -362,13 +354,13 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 		}
 		return &pb.SetSelectionResponse{}, s.announceSelections(changed)
 	}
-	dir, err := s.dirOf(req.GridId)
+	dir, err := pathOf(req.GridId)
 	if err != nil {
 		return nil, err
 	}
 	var add, remove []int64
 	for _, id := range req.Add {
-		if _, in, err := s.tilePath(id); err != nil || in != dir {
+		if _, in, err := tilePath(id); err != nil || in != dir {
 			continue
 		}
 		row, err := s.mint(id)
@@ -381,7 +373,7 @@ func (s *Source) SetSelection(_ context.Context, req *pb.SetSelectionRequest) (*
 		add = append(add, row)
 	}
 	for _, id := range req.Remove {
-		path, in, err := s.tilePath(id)
+		path, in, err := tilePath(id)
 		if err != nil {
 			continue
 		}
@@ -423,15 +415,12 @@ func (s *Source) Probe(_ context.Context, req *pb.ProbeRequest) (*pb.ProbeRespon
 	presence := pb.ProbeResponse_PRESENCE_UNSPECIFIED
 	path, err := pathOf(req.TileId)
 	if err == nil {
-		err = s.inTree(path)
-	}
-	if err == nil {
 		_, err = os.Lstat(path)
 	}
 	switch {
 	case err == nil:
 		presence = pb.ProbeResponse_PRESENCE_PRESENT
-	case gone(err), errors.Is(err, errOutside), gwerr.IsDeadLink(err):
+	case gone(err), gwerr.IsDeadLink(err):
 		presence = pb.ProbeResponse_PRESENCE_GONE
 	}
 	return &pb.ProbeResponse{Presence: presence}, nil
@@ -445,12 +434,7 @@ func (s *Source) DeleteTile(_ context.Context, req *pb.DeleteTileRequest) (*pb.D
 	if err != nil {
 		return nil, err
 	}
-	switch err := s.inTree(path); {
-	case errors.Is(err, errOutside):
-		return nil, status.Errorf(codes.InvalidArgument, "files: %s %v, and nothing there is deleted", path, err)
-	case err != nil:
-		return nil, s.refuse(path, err)
-	case s.isRoot(path):
+	if s.isRoot(path) {
 		return nil, status.Errorf(codes.InvalidArgument, "files: %s is a root, which is config and is not deleted", path)
 	}
 	dir := filepath.Dir(path)
@@ -473,7 +457,7 @@ func (s *Source) DeleteTile(_ context.Context, req *pb.DeleteTileRequest) (*pb.D
 	case err != nil:
 		return nil, status.Errorf(codes.Unavailable, "files: delete %s: %v", path, pathErr(err))
 	default:
-		d, err := s.openDir(dir)
+		d, err := openDir(dir)
 		if err == nil {
 			err = s.trash(d, filepath.Base(path))
 			d.Close()

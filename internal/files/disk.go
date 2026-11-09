@@ -30,7 +30,7 @@ type diskKind int
 const (
 	diskFile diskKind = iota
 	diskDir
-	// diskLink is a symlink, listed as itself and never entered.
+	// diskLink is a symlink, listed as itself, never as what it lands on.
 	diskLink
 	// diskOther is a FIFO, a socket or a device: an open could block on it
 	// or read it forever, so it is never opened.

@@ -197,8 +197,9 @@ a home that had lost everything.
 tiles, shells, and the event stream. Shells run in tmux on a private
 socket, so they survive restarts.
 
-**Files** (`internal/files`) are the directories `files:` declares, each a
-`{root, label}`, shown as grids. One `files.Source` holds every root and is
+**Files** (`internal/files`) are every directory on the host, shown as
+grids, starting from the roots `files:` declares, each a `{root, label}`.
+One `files.Source` holds every root and is
 one namespace, owner id `<node>/~`, with one roster row labelled files
 carrying one swatch per root. A file or a directory is named by its
 absolute path (`rpc.KeyTileID`), and the files read disk and their store
@@ -216,8 +217,9 @@ directory renames it on disk, and its row (placement, name, framing) follows
 under the new path's id while the old id retires; a
 move to another source is refused (`rpc.MoveAcross`). A symlink is a link:
 to a directory, a door onto the target's grid; to a file, a link tile whose
-target is the target's path id; dead when the target is gone or outside
-every root. A path outside every root is dead. Find on the files locates by
+target is the target's path id; followed wherever it lands, and dead only
+when the target is gone. Every absolute path is addressable, and one that
+exists is live. Find on the files locates by
 `id:` and applies the node's row filters; a text query answers empty. The
 files watch, with fsnotify, only the directories some session shows and
 those their symlinks land in, debounced 200 ms, and tell each change as a
@@ -396,7 +398,7 @@ file's stamp) and
 next namespace — the files' roots dropped from `server.yaml`, a connection
 stanza removed, a connection name retired, here or on any node along the
 way — the link is dead. So is a link whose last hop answers but whose
-target is gone: a path outside every root, a file the files say is gone (a
+target is gone: a file the files say is gone (a
 directory that read and does not list it, never one that will not read),
 or a home tile destroyed out of the trash. `contentRoute` checks a link's target with `GetTile` as it checks a
 directly read id, so the owner's verdict is the answer whichever id the read

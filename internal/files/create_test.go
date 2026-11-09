@@ -3,7 +3,6 @@ package files
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -80,30 +79,5 @@ func TestACreateNeverReplacesAFileMadeMeanwhile(t *testing.T) {
 	}
 	if es, _ := os.ReadDir(f.root); len(es) != 1 {
 		t.Errorf("the root holds %d names, want Plan.md alone", len(es))
-	}
-}
-
-// A create lands only inside a root: a directory swapped for a link out of
-// the tree after the check, gets nothing.
-func TestACreateStaysInTheTree(t *testing.T) {
-	f := newFixture(t)
-	outside := filepath.Join(f.base, "outside")
-	if err := os.MkdirAll(outside, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	d := f.mkdir("d")
-	was := resolved
-	t.Cleanup(func() { resolved = was })
-	resolved = func() {
-		if err := os.Rename(d, d+".real"); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(outside, d); err != nil {
-			t.Skip("symlinks unsupported")
-		}
-	}
-	_, _ = createText(f, d, "Plan", "mine", 0, 0)
-	if es, _ := os.ReadDir(outside); len(es) != 0 {
-		t.Errorf("a create wrote %d names outside every root", len(es))
 	}
 }

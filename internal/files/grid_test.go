@@ -91,21 +91,17 @@ func TestAMintedPlacementSurvivesARelisting(t *testing.T) {
 	}
 }
 
-// A path no root holds, one reached through a symlinked directory, or an id
-// naming no path is dead; so is a file or directory that is gone.
-func TestWhatTheTreeDoesNotHoldIsDead(t *testing.T) {
+// A file or directory that is gone is dead, and so is an id naming no path.
+func TestWhatIsGoneIsDead(t *testing.T) {
 	f := newFixture(t)
 	f.write("dir/inner.txt", "x")
-	if err := os.Symlink(f.path("dir"), f.path("dirlink")); err != nil {
-		t.Skip("symlinks unsupported")
-	}
 	ctx := context.Background()
-	for _, p := range []string{f.base, filepath.Join(f.base, "elsewhere.txt"), f.path("gone.txt"), f.path("dirlink/inner.txt")} {
+	for _, p := range []string{filepath.Join(f.base, "elsewhere.txt"), f.path("gone.txt"), f.path("gone/inner.txt"), "/"} {
 		if _, err := f.s.GetTile(ctx, &pb.GetTileRequest{TileId: idOf(p)}); !gwerr.IsDeadLink(err) {
 			t.Errorf("GetTile(%s) = %v, want dead", p, err)
 		}
 	}
-	for _, p := range []string{f.base, f.path("gone"), f.path("dirlink")} {
+	for _, p := range []string{filepath.Join(f.base, "gone"), f.path("gone")} {
 		if _, err := f.s.GetGrid(ctx, &pb.GetGridRequest{GridId: idOf(p)}); !gwerr.IsDeadLink(err) {
 			t.Errorf("GetGrid(%s) = %v, want dead", p, err)
 		}
@@ -119,21 +115,13 @@ func TestWhatTheTreeDoesNotHoldIsDead(t *testing.T) {
 }
 
 // A symlink is a link: to a file a link tile naming the file's path, to a
-// directory a door onto its grid drawn as a link, and to nothing or to
-// outside every root a link that reads dead.
+// directory a door onto its grid drawn as a link, and to nothing a link that
+// reads dead.
 func TestASymlinkIsALink(t *testing.T) {
 	f := newFixture(t)
 	f.write("real.md", "# real")
 	f.write("dir/inner.txt", "inner")
-	outside := filepath.Join(f.base, "outside")
-	if err := os.MkdirAll(outside, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("secret"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for name, dest := range map[string]string{"file": "real.md", "dirlink": "dir", "cycle": ".", "broken": "missing.md",
-		"out": "../outside/secret.txt", "outdir": "../outside"} {
+	for name, dest := range map[string]string{"file": "real.md", "dirlink": "dir", "cycle": ".", "broken": "missing.md"} {
 		if err := os.Symlink(dest, f.path(name)); err != nil {
 			t.Skip("symlinks unsupported")
 		}
@@ -147,27 +135,12 @@ func TestASymlinkIsALink(t *testing.T) {
 			t.Errorf("%s = kind %q child %q link %v", name, tl.Kind, tl.ChildGridId, tl.Link)
 		}
 	}
-	ctx := context.Background()
-	for name, target := range map[string]string{"broken": f.path("missing.md"), "out": filepath.Join(outside, "secret.txt"), "outdir": outside} {
-		tl := tileIn(t, resp, f.path(name))
-		if tl.LinkTargetId != idOf(target) {
-			t.Errorf("%s targets %q, want %s", name, tl.LinkTargetId, target)
-			continue
-		}
-		if _, err := f.s.GetTile(ctx, &pb.GetTileRequest{TileId: tl.LinkTargetId}); !gwerr.IsDeadLink(err) {
-			t.Errorf("%s's target reads %v, want dead", name, err)
-		}
+	tl := tileIn(t, resp, f.path("broken"))
+	if tl.LinkTargetId != idOf(f.path("missing.md")) {
+		t.Errorf("broken targets %q", tl.LinkTargetId)
 	}
-	var got []byte
-	err := f.s.ReadContent(ctx, &pb.ReadContentRequest{TileId: idOf(f.path("out"))}, func(c *pb.ContentChunk) error {
-		got = append(got, c.Data...)
-		return nil
-	})
-	if !gwerr.IsDeadLink(err) {
-		t.Errorf("a link out of every root read by its own id = %v, want dead", err)
-	}
-	if len(got) != 0 {
-		t.Errorf("a link out of every root read %q", got)
+	if _, err := f.s.GetTile(context.Background(), &pb.GetTileRequest{TileId: tl.LinkTargetId}); !gwerr.IsDeadLink(err) {
+		t.Errorf("broken's target reads %v, want dead", err)
 	}
 }
 
@@ -179,7 +152,7 @@ func TestARootBehindASymlinkServes(t *testing.T) {
 	if err := os.Symlink(f.root, link); err != nil {
 		t.Skip("symlinks unsupported")
 	}
-	s, err := New(f.st.Files(), []Root{{Path: link}}, nil, "")
+	s, err := New(f.st.Files(), []Root{{Path: link}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +281,7 @@ func TestARootInsideARootIsADoorThere(t *testing.T) {
 	inner := f.mkdir("inner")
 	f.write("inner/a.txt", "a")
 	other := f.mkdir("other")
-	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: inner}}, nil, "")
+	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: inner}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,79 +315,14 @@ func TestARootInsideARootIsADoorThere(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(inner, "a.txt")); err != nil {
 		t.Errorf("the inner root moved: %v", err)
 	}
-	if _, err := s.GetTile(ctx, &pb.GetTileRequest{TileId: idOf(f.root)}); !gwerr.IsDeadLink(err) {
-		t.Errorf("the outer root as a tile = %v, want dead", err)
-	}
 }
 
 // A root is an absolute path, since every id the files answer is one.
 func TestARelativeRootIsRefused(t *testing.T) {
 	f := newFixture(t)
-	if s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: "notes"}}, nil, ""); err == nil {
+	if s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: "notes"}}, nil); err == nil {
 		s.Close()
 		t.Fatal("a relative root was taken")
-	}
-}
-
-// No verb reaches a file through a symlinked directory, whether it lands
-// inside the tree or outside it: the path is dead, nothing is served or
-// pictured, and nothing on disk moves or changes.
-func TestNoVerbReachesThroughALinkedDirectory(t *testing.T) {
-	f := newFixture(t)
-	f.write("dir/inner.txt", "inner")
-	f.write("dir/inner.png", "\x89PNG inner")
-	outside := filepath.Join(f.base, "outside")
-	for name, body := range map[string]string{"secret.txt": "secret", "secret.png": "\x89PNG secret"} {
-		if err := os.MkdirAll(outside, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(outside, name), []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for name, dest := range map[string]string{"dirlink": f.path("dir"), "outdir": outside} {
-		if err := os.Symlink(dest, f.path(name)); err != nil {
-			t.Skip("symlinks unsupported")
-		}
-	}
-	other := f.mkdir("other")
-	ctx := context.Background()
-	for _, p := range []string{f.path("dirlink/inner.txt"), f.path("dirlink/inner.png"), f.path("outdir/secret.txt"), f.path("outdir/secret.png")} {
-		id := idOf(p)
-		var read []byte
-		err := f.s.ReadContent(ctx, &pb.ReadContentRequest{TileId: id}, func(c *pb.ContentChunk) error {
-			read = append(read, c.Data...)
-			return nil
-		})
-		if !gwerr.IsDeadLink(err) || len(read) != 0 {
-			t.Errorf("ReadContent(%s) = %q, %v; want dead", p, read, err)
-		}
-		var served []byte
-		err = f.s.ServeContent(ctx, &pb.ServeContentRequest{TileId: id}, func(c *pb.ServeContentChunk) error {
-			served = append(served, c.Data...)
-			return nil
-		})
-		if !gwerr.IsDeadLink(err) || len(served) != 0 {
-			t.Errorf("ServeContent(%s) = %q, %v; want dead", p, served, err)
-		}
-		if resp, err := f.s.GetTilePreview(ctx, &pb.GetTilePreviewRequest{TileId: id}); !gwerr.IsDeadLink(err) || len(resp.GetJpeg()) != 0 {
-			t.Errorf("GetTilePreview(%s) = %d bytes, %v; want dead", p, len(resp.GetJpeg()), err)
-		}
-		if _, err := writeAll(f.s, id, "", []byte("mine")); !gwerr.IsDeadLink(err) {
-			t.Errorf("WriteContent(%s) = %v, want dead", p, err)
-		}
-		_, err = f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: id, GridId: idOf(other), X: 0, Y: 0, W: 1, H: 1, Claim: &pb.Placement{}})
-		if !gwerr.IsDeadLink(err) {
-			t.Errorf("MoveTile(%s) = %v, want dead", p, err)
-		}
-	}
-	for p, want := range map[string]string{f.path("dir/inner.txt"): "inner", filepath.Join(outside, "secret.txt"): "secret"} {
-		if b, err := os.ReadFile(p); err != nil || string(b) != want {
-			t.Errorf("%s = %q, %v", p, b, err)
-		}
-	}
-	if left, _ := os.ReadDir(other); len(left) != 0 {
-		t.Errorf("a move landed %v", left)
 	}
 }
 

@@ -56,7 +56,7 @@ func newFilesServer(t *testing.T) *filesServer {
 	// what lands in the node's one file.
 	src, err := files.New(st.Files(), []files.Root{{Path: f.root}}, func(d *os.File, name string) error {
 		return os.RemoveAll(filepath.Join(d.Name(), name))
-	}, "")
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

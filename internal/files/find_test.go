@@ -67,11 +67,10 @@ func TestFindLocatesAndFilters(t *testing.T) {
 	}
 }
 
-// A find on a directory that is gone finds nothing, as on one outside every
-// root: a filter over no rows.
+// A find on a directory that is gone finds nothing: a filter over no rows.
 func TestFindOnAGoneDirectoryIsEmpty(t *testing.T) {
 	f := newFixture(t)
-	for _, dir := range []string{f.path("gone"), f.base} {
+	for _, dir := range []string{f.path("gone"), filepath.Join(f.base, "gone")} {
 		for _, recurse := range []bool{false, true} {
 			if got := f.find(&pb.FindRequest{GridId: idOf(dir), Recurse: recurse, Kind: rpc.KindText}); len(got) != 0 {
 				t.Errorf("Find(%s, recurse %v) = %v", dir, recurse, got)
@@ -127,7 +126,7 @@ func TestARecursiveFindNeverFollowsALink(t *testing.T) {
 	if err := os.Symlink(other, f.path("link")); err != nil {
 		t.Skip("symlinks unsupported")
 	}
-	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: other}}, nil, "")
+	s, err := New(f.st.Files(), []Root{{Path: f.root}, {Path: other}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

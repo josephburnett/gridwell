@@ -1,5 +1,6 @@
-// Package files is the node's files: the directories server.yaml's files:
-// declares, shown as grids, as one namespace.Namespace. A file or directory
+// Package files is the node's files: every directory on the host, shown as
+// grids, as one namespace.Namespace, starting from the roots server.yaml's
+// files: declares. A file or directory
 // is named by its absolute path (rpc.KeyTileID), a directory's grid and the
 // door showing it alike; the node's facts about one (placement, framing, a
 // typed name, a frozen preview, the selection) are store rows minted on
@@ -44,13 +45,10 @@ type Root struct {
 // Source is the files as one namespace.Namespace.
 type Source struct {
 	roots []Root
-	// own is the node's own directory, lexically and with its links
-	// followed, which is outside every root.
-	own, ownReal string
-	mem          *store.FileRows
-	trash        func(dir *os.File, name string) error
-	hub          *eventhub.Hub[*pb.Event]
-	watch        *watcher
+	mem   *store.FileRows
+	trash func(dir *os.File, name string) error
+	hub   *eventhub.Hub[*pb.Event]
+	watch *watcher
 
 	// dark is, per directory, why its last read failed, until it leaves the
 	// view (rescope); liveOff is why the watch is not told. setHealth is
@@ -94,12 +92,11 @@ func (s *Source) lockPath(real string) (unlock func()) {
 
 var _ namespace.Namespace = (*Source)(nil)
 
-// New is the files over roots, their rows in mem, the node's own directory
-// own outside every root. trash moves the name in a directory opened through
-// its root out of the tree; nil is the OS trash. Close ends the watch. A relative root
-// is refused, since a path id names an absolute path and would name none of
-// its files.
-func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string) error, own string) (*Source, error) {
+// New is the files starting from roots, their rows in mem. trash moves the
+// name in an opened directory to the trash; nil is the OS trash. Close ends
+// the watch. A relative root is refused, since a path id names an absolute
+// path and would name none of its files.
+func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string) error) (*Source, error) {
 	if trash == nil {
 		trash = osTrash
 	}
@@ -115,12 +112,6 @@ func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string
 		}
 	}
 	s := &Source{roots: out, mem: mem, trash: trash, hub: eventhub.New(rpc.EventKey), dark: map[string]string{}}
-	if own != "" {
-		s.own, s.ownReal = filepath.Clean(own), filepath.Clean(own)
-		if real, err := filepath.EvalSymlinks(own); err == nil {
-			s.ownReal = real
-		}
-	}
 	s.watch = newWatcher(s)
 	return s, nil
 }
@@ -128,10 +119,6 @@ func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string
 // Close stops watching the disk.
 func (s *Source) Close() { s.watch.close() }
 
-// errOutside is a path no root holds: outside every root, or under one
-// through a directory that is a symlink, which is listed as a link and never
-// entered.
-var errOutside = errors.New("is outside every root")
 var errIrregular = errors.New("is not a regular file")
 
 func idOf(path string) string { return rpc.KeyTileID(path) }
@@ -145,180 +132,70 @@ func pathOf(id string) (string, error) {
 	return p, nil
 }
 
-// rootOf is the innermost root holding path, none for the node's own
-// directory.
-func (s *Source) rootOf(path string) (Root, bool) {
-	if s.own != "" && underRoot(s.own, path) {
-		return Root{}, false
-	}
-	var best Root
-	found := false
-	for _, r := range s.roots {
-		if underRoot(r.Path, path) && (!found || len(r.Path) > len(best.Path)) {
-			best, found = r, true
-		}
-	}
-	return best, found
-}
-
 func (s *Source) isRoot(path string) bool {
 	return slices.ContainsFunc(s.roots, func(r Root) bool { return r.Path == path })
 }
 
-// inTree is nil when path is under a root through real directories only. A
-// path whose way down is gone is in the tree, and absent there.
-func (s *Source) inTree(path string) error {
-	r, ok := s.rootOf(path)
-	if !ok {
-		return errOutside
-	}
-	rel, _ := filepath.Rel(r.Path, filepath.Dir(path))
-	if rel == "." || path == r.Path {
-		return nil
-	}
-	at := r.Path
-	for _, part := range strings.Split(rel, string(filepath.Separator)) {
-		at = filepath.Join(at, part)
-		fi, err := os.Lstat(at)
-		switch {
-		case gone(err):
-			return nil
-		case err != nil:
-			return err
-		case fi.Mode()&os.ModeSymlink != 0:
-			return errOutside
-		}
-	}
-	return nil
-}
-
-// dirOf reads a grid id as its directory: in the tree and, unless it is a
-// root, not itself a link, which opens its target's grid instead.
-func (s *Source) dirOf(gridID string) (string, error) {
-	dir, err := pathOf(gridID)
-	if err != nil {
-		return "", err
-	}
-	if err := s.inTree(dir); err != nil {
-		return "", s.refuse(dir, err)
-	}
-	if fi, err := os.Lstat(dir); err == nil && fi.Mode()&os.ModeSymlink != 0 && !s.isRoot(dir) {
-		return "", s.refuse(dir, errOutside)
-	}
-	return dir, nil
-}
-
-// refuse answers a path the tree does not hold, or cannot read right now.
-func (s *Source) refuse(path string, err error) error {
-	if errors.Is(err, errOutside) {
-		return gwerr.DeadLink("", "files: %s %v", path, err)
-	}
-	return status.Errorf(codes.Unavailable, "files: read %s: %v", path, pathErr(err))
-}
-
-// spell is where target, a path with every link followed, sits in the tree
-// as a root spells it, ok false when no root holds it.
-func (s *Source) spell(target string) (string, bool) {
+// spell is target, a path with every link followed, as the first root holding
+// it spells it, so a link into a root opens the grid the root lists.
+func (s *Source) spell(target string) string {
 	for _, r := range s.roots {
 		real, err := filepath.EvalSymlinks(r.Path)
 		if err != nil {
 			real = r.Path
 		}
-		if !underRoot(real, target) {
-			continue
-		}
-		rel, _ := filepath.Rel(real, target)
-		p := filepath.Join(r.Path, rel)
-		if s.inTree(p) == nil {
-			return p, true
+		if underRoot(real, target) {
+			rel, _ := filepath.Rel(real, target)
+			return filepath.Join(r.Path, rel)
 		}
 	}
-	return "", false
+	return target
 }
 
-// content is where path's bytes live, every link followed, as the real
-// directory of the root holding them and the path under it; errOutside when
-// that leaves every root.
-func (s *Source) content(path string) (root, rel string, err error) {
-	if err := s.inTree(path); err != nil {
-		return "", "", err
-	}
-	real, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", "", err
-	}
-	for _, r := range s.roots {
-		rr, err := filepath.EvalSymlinks(r.Path)
-		if err == nil && underRoot(rr, real) && (s.ownReal == "" || !underRoot(s.ownReal, real)) {
-			rel, _ := filepath.Rel(rr, real)
-			return rr, rel, nil
-		}
-	}
-	return "", "", errOutside
-}
-
-// opened is a file's bytes opened through the root holding them (os.Root),
-// so a directory swapped for a symlink after content resolved them is
-// refused rather than followed out of the tree. Its name is where the bytes
-// live.
+// opened is a file's bytes, opened where they live with every link followed,
+// which is its name.
 type opened struct {
 	*os.File
-	root *os.Root
-	rel  string
-	fi   os.FileInfo
+	fi os.FileInfo
 }
 
-// open opens path's bytes when they are a regular file, by its mode through
-// the root before the open and again after it (errIrregular), nonblocking so
-// that a FIFO swapped in between answers its mode rather than waiting.
-func (s *Source) open(path string) (*opened, error) {
-	rr, rel, err := s.content(path)
+// open opens path's bytes, every link followed, when they are a regular file:
+// by its mode before the open and again by fstat after it (errIrregular),
+// nonblocking so that a FIFO swapped in between answers its mode rather than
+// waiting for a writer.
+func open(path string) (*opened, error) {
+	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, err
 	}
-	resolved()
-	o := &opened{rel: rel}
-	if o.root, err = os.OpenRoot(rr); err != nil {
+	fi, err := os.Stat(real)
+	if err != nil {
 		return nil, err
 	}
-	if o.fi, err = o.root.Stat(rel); err == nil && o.fi.Mode().IsRegular() {
-		if o.File, err = o.root.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
-			o.fi, err = o.File.Stat()
+	if !fi.Mode().IsRegular() {
+		return nil, errIrregular
+	}
+	f, err := os.OpenFile(real, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	if fi, err = f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		f.Close()
+		if err == nil {
+			err = errIrregular
 		}
-	}
-	if err == nil && !o.fi.Mode().IsRegular() {
-		err = errIrregular
-	}
-	if err != nil {
-		o.close()
 		return nil, err
 	}
-	return o, nil
+	return &opened{File: f, fi: fi}, nil
 }
 
-func (o *opened) close() {
-	o.File.Close()
-	o.root.Close()
-}
-
-// openDir opens dir through the root that lexically holds it, the way down
-// inTree walked, for a rename that must not follow a directory swapped since.
-func (s *Source) openDir(dir string) (*os.File, error) {
-	r, ok := s.rootOf(dir)
-	if !ok {
-		return nil, errOutside
-	}
+// openDir opens dir, for a rename by name in it.
+func openDir(dir string) (*os.File, error) {
 	resolved()
-	root, err := os.OpenRoot(r.Path)
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
-	rel, _ := filepath.Rel(r.Path, dir)
-	return root.Open(rel)
+	return os.Open(dir)
 }
 
-// resolved runs between checking a path and opening it: a test's seam.
+// resolved runs before a directory is opened to take a name: a test's seam.
 var resolved = func() {}
 
 // Info is the files' row of the roster: one grid per root, each with its

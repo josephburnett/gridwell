@@ -256,9 +256,7 @@ func TestADeleteTrashesThePathItself(t *testing.T) {
 	if _, err := f.s.DeleteTile(ctx, rpc.DeleteOf(moved)); err != nil {
 		t.Errorf("deleting what is gone = %v", err)
 	}
-	_, err := f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(filepath.Join(f.base, "x")), Claim: &pb.Placement{}})
-	wantCode(t, "outside every root", err, codes.InvalidArgument)
-	_, err = f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(f.root), Claim: &pb.Placement{}})
+	_, err := f.s.DeleteTile(ctx, &pb.DeleteTileRequest{TileId: idOf(f.root), Claim: &pb.Placement{}})
 	wantCode(t, "a root", err, codes.InvalidArgument)
 	if len(f.trashed) != 1 {
 		t.Errorf("trashed %v", f.trashed)

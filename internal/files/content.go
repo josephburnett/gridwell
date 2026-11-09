@@ -49,14 +49,14 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 		return send(&pb.ContentChunk{Data: []byte(t.UrlString), MediaType: rpc.AddressMediaType, Version: t.Version})
 	}
 	path, _ := pathOf(req.TileId)
-	o, err := s.open(path)
+	o, err := open(path)
 	switch {
 	case gone(err) || errors.Is(err, errIrregular):
 		return send(&pb.ContentChunk{})
 	case err != nil:
 		return readRefusal(path, err)
 	}
-	defer o.close()
+	defer o.Close()
 	data, media := body(o.File, o.fi)
 	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: contentStamp(o.fi.ModTime(), o.fi.Size())}, send)
 }
@@ -107,14 +107,14 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 // (lockPath), and the stamp is read just before it, so neither another
 // save nor another process's write is overwritten unseen.
 func (s *Source) write(path, claimed string, data []byte) (string, error) {
-	o, err := s.open(path)
+	o, err := open(path)
 	switch {
 	case gone(err):
 		return "", gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
 		return "", diskRefusal("written", path, err)
 	}
-	defer o.close()
+	defer o.Close()
 	defer s.lockPath(o.Name())()
 	if err := unwritable(filepath.Base(o.Name()), o.fi.Size()); err != nil {
 		return "", status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
@@ -132,19 +132,19 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 	return replace(o, o.fi.Mode().Perm(), data, path, stale)
 }
 
-// replace writes data beside o's file, through its root, and renames it over
-// the file, unless stale refuses what the file is just before.
+// replace writes data beside o's file and renames it over the file, unless
+// stale refuses what the file is just before.
 func replace(o *opened, perm os.FileMode, data []byte, path string, stale func(os.FileInfo) error) (string, error) {
-	dir, base := filepath.Split(o.rel)
+	dir, base := filepath.Split(o.Name())
 	name := filepath.Join(dir, "."+base+".gridwell-"+strconv.FormatUint(rand.Uint64(), 36))
-	tmp, err := o.root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	tmp, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", diskRefusal("written", path, err)
 	}
 	keep := false
 	defer func() {
 		if !keep {
-			_ = o.root.Remove(name)
+			_ = os.Remove(name)
 		}
 	}()
 	_, err = tmp.Write(data)
@@ -155,20 +155,20 @@ func replace(o *opened, perm os.FileMode, data []byte, path string, stale func(o
 		err = cerr
 	}
 	if err == nil {
-		err = o.root.Chmod(name, perm)
+		err = os.Chmod(name, perm)
 	}
 	var fi, now os.FileInfo
 	if err == nil {
-		fi, err = o.root.Stat(name)
+		fi, err = os.Stat(name)
 	}
 	if err == nil {
-		now, err = o.root.Stat(o.rel)
+		now, err = os.Stat(o.Name())
 	}
 	if err == nil {
 		if err := stale(now); err != nil {
 			return "", err
 		}
-		err = o.root.Rename(name, o.rel)
+		err = os.Rename(name, o.Name())
 	}
 	if err != nil {
 		return "", diskRefusal("written", path, err)
@@ -177,14 +177,12 @@ func replace(o *opened, perm os.FileMode, data []byte, path string, stale func(o
 	return contentStamp(fi.ModTime(), fi.Size()), nil
 }
 
-// readRefusal answers a read the disk refused on path: one gone or outside
-// every root is dead, as a link out of the tree is; one not regular has none.
+// readRefusal answers a read the disk refused on path: one gone is dead; one
+// not regular has none.
 func readRefusal(path string, err error) error {
 	switch {
 	case gone(err):
 		return gwerr.DeadLink("", "files: %s is gone", path)
-	case errors.Is(err, errOutside):
-		return gwerr.DeadLink("", "files: %s %v", path, err)
 	case errors.Is(err, errIrregular):
 		return status.Errorf(codes.NotFound, "files: %s %v", path, err)
 	}
@@ -192,14 +190,12 @@ func readRefusal(path string, err error) error {
 }
 
 // diskRefusal answers a content verb the disk refused on path: a file that
-// is not regular, a path outside every root or a permission refused is a
-// verdict with its reason, anything else a disk that cannot answer right now.
+// is not regular or a permission refused is a verdict with its reason,
+// anything else a disk that cannot answer right now.
 func diskRefusal(verb, path string, err error) error {
 	switch {
 	case errors.Is(err, errIrregular):
 		return status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
-	case errors.Is(err, errOutside):
-		return status.Errorf(codes.PermissionDenied, "files: %s %v", path, err)
 	case errors.Is(err, iofs.ErrPermission) || errors.Is(err, syscall.EROFS):
 		return status.Errorf(codes.PermissionDenied, "files: %s cannot be %s: %v", path, verb, pathErr(err))
 	}
@@ -214,15 +210,15 @@ func diskRefusal(verb, path string, err error) error {
 // allows scripts. A link serves where it lands, so it is a page file by its
 // target's name.
 func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
-	path, _, err := s.tilePath(req.TileId)
+	path, _, err := tilePath(req.TileId)
 	if err != nil {
 		return err
 	}
-	f, err := s.open(path)
+	f, err := open(path)
 	if err != nil {
 		return readRefusal(path, err)
 	}
-	defer f.close()
+	defer f.Close()
 	if !isPage(f.Name()) {
 		return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
 	}
@@ -255,7 +251,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 // GetTilePreview answers the picture previewKey named: the row's screenshot
 // once there is one, else an image's own.
 func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest) (*pb.GetTilePreviewResponse, error) {
-	path, dir, err := s.tilePath(req.TileId)
+	path, dir, err := tilePath(req.TileId)
 	if err != nil {
 		return nil, err
 	}
@@ -272,13 +268,13 @@ func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest
 			return &pb.GetTilePreviewResponse{Jpeg: jpeg}, nil
 		}
 	}
-	f, err := s.open(path)
+	f, err := open(path)
 	switch {
 	case errors.Is(err, errIrregular):
 		return &pb.GetTilePreviewResponse{}, nil
 	case err != nil:
 		return nil, readRefusal(path, err)
 	}
-	defer f.close()
+	defer f.Close()
 	return &pb.GetTilePreviewResponse{Jpeg: previewJPEG(f.File, f.fi)}, nil
 }

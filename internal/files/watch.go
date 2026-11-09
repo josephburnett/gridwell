@@ -39,7 +39,7 @@ const debounceWindow = 200 * time.Millisecond
 func (s *Source) SetView(_ context.Context, req *pb.SetViewRequest) (*pb.SetViewResponse, error) {
 	var shown []string
 	for _, id := range req.GetShownGridIds() {
-		if dir, err := s.dirOf(id); err == nil {
+		if dir, err := pathOf(id); err == nil {
 			shown = append(shown, dir)
 		}
 	}

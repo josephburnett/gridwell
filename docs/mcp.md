@@ -111,8 +111,8 @@ starts with the kind of refusal, then the node's reason:
   cells are taken. Nothing was written.
 - `disabled:` the source is one the user switched off. It is read-only until
   the node restarts.
-- `dead link:` the path ends in nothing: a namespace not declared, a path
-  outside every root, or a target its source says is gone.
+- `dead link:` the path ends in nothing: a namespace not declared, or a
+  target its source says is gone.
 - `unreachable:` a directory or a far node did not answer. Try again later.
 - `refused:` the request itself is wrong, such as renaming a text tile, whose
   name is its first line.

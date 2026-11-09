@@ -20,7 +20,7 @@ here.
 |---|---|
 | **door to another namespace** | A door onto a grid in another source — a far home, a directory of the files. Derived from the ids alone (`rpc.IsDoorToOtherNamespace`), never stored. |
 | **leaf link** | One content tile shown in two places: `link_target_id` plus one owning row. The same document shown elsewhere, without a copy. |
-| **dead link** | A link whose path ends in nothing: a namespace some hop no longer declares, a path outside every root, or a target its source says is gone. Grey, inert, no notice, still deletable. Separates "gone" from "not answering". |
+| **dead link** | A link whose path ends in nothing: a namespace some hop no longer declares, or a target its source says is gone. Grey, inert, no notice, still deletable. Separates "gone" from "not answering". |
 | **childless link** | A link that names no namespace yet — the + menu swatch and the drag ghost, drawn before there is a grid to point at. |
 
 ## Places
@@ -44,7 +44,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **dead** (`client/deadlink`) | The namespace is not declared, the path is outside every root, or the source answered that the target is gone (`gwerr.DeadLink`). Nothing is said, and nothing is asked again until the declaration or that namespace's listing changes, so neither can storm the notice row. |
+| **dead** (`client/deadlink`) | The namespace is not declared, or the source answered that the target is gone (`gwerr.DeadLink`). Nothing is said, and nothing is asked again until the declaration or that namespace's listing changes, so neither can storm the notice row. |
 | **dark** (`internal/sourcecache` and `internal/files`, health events) | Declared, not answering right now — a connection that will not dial, or a root or directory that will not read. Fetched, reported, recovers on its own. It is one fact: a grid served by a dark source is served from what the node holds (a connection's cache, a directory's rows), not answered live, and the bar's chip is that fact drawn (`client/cache.SourceDark`). One bar chip; it never moves or restyles a tile. |
 | **disabled** (`connection.Server.Disable`, `EventSourceHealth.disabled`) | A connection the user switched off from its health notice, until the node restarts. It reads exactly as dark — the cache where there is one, the read failing where there is none — but nothing tries it again and no notice stands, and it is read-only: a write is refused (`gwerr.SourceDisabled`) and dropped, never retried, and its rows say why (`Tile.read_only`). Held in the node's memory only: `server.yaml` and `gridwell.db` never record it, so a restart brings the connection back. The files are never disabled. |
 | **waiting** (`sourcehealth.Waiting`) | A connection row minted with no root and no error: asked, not answered yet. The click reports at `Info`, and the probe's timeout ends the wait. |

@@ -35,7 +35,7 @@ func (s *Source) Find(_ context.Context, req *pb.FindRequest) (*pb.FindResponse,
 		var dir string
 		var above []*pb.Tile
 		// A directory no held way reaches lists with paths that start at it.
-		if dir, err = s.dirOf(req.GridId); err == nil {
+		if dir, err = pathOf(req.GridId); err == nil {
 			above, _, err = g.chain(dir)
 		}
 		if err == nil {
@@ -46,7 +46,7 @@ func (s *Source) Find(_ context.Context, req *pb.FindRequest) (*pb.FindResponse,
 	}
 	switch {
 	case gwerr.IsDeadLink(err):
-		// A directory gone, or outside every root, holds no rows to filter.
+		// A directory gone holds no rows to filter.
 		return &pb.FindResponse{}, nil
 	case err != nil:
 		return nil, err
@@ -57,7 +57,7 @@ func (s *Source) Find(_ context.Context, req *pb.FindRequest) (*pb.FindResponse,
 // locate is the id: mode, home's rule: the one tile, when it passes the
 // filters, on its chain of doors, and nothing for an id naming no file.
 func (s *Source) locate(req *pb.FindRequest, g *findGrids, id string) (*pb.FindResponse, error) {
-	path, dir, err := s.tilePath(id)
+	path, dir, err := tilePath(id)
 	switch {
 	case gwerr.IsDeadLink(err), rpc.ShapeOf(id) != rpc.ShapeKey:
 		return &pb.FindResponse{}, nil

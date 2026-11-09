@@ -13,8 +13,8 @@ import (
 )
 
 // DeadLink is the answer for an id whose path ends in nothing: a namespace this
-// node does not declare, or, with namespace empty, a path outside every root
-// or a key its declared namespace says is gone. NotFound, so every reader of the code is unchanged,
+// node does not declare, or, with namespace empty, a key its declared
+// namespace says is gone. NotFound, so every reader of the code is unchanged,
 // carrying a pb.DeadLink detail that survives every gRPC hop and the
 // web API.
 func DeadLink(namespace, format string, args ...any) error {

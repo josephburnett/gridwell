@@ -25,7 +25,7 @@ import (
 // facts read off disk on every read.
 type listed struct {
 	store.Entry
-	target       string // a symlink to a file: where it lands, "" outside every root
+	target       string // a symlink to a file: where it lands
 	stamp        string // a text file's content stamp
 	readOnly     string
 	presentation string
@@ -69,18 +69,18 @@ func fileFacts(out *listed, path string) (page bool) {
 // linkFacts lists a symlink as a link to where it lands: to a directory as a
 // door onto that directory's own grid, so a link back up the tree is one grid
 // and no endless descent, and to a file as a link tile naming the file's path.
-// One that lands nowhere, or outside every root, names where it points, which
-// reads dead.
+// Wherever it lands it is followed; one that lands nowhere names where it
+// points, which reads dead.
 func (s *Source) linkFacts(out *listed, e diskEntry) {
-	at, held := s.spell(e.target)
-	switch {
-	case held && e.targetKind == diskDir:
+	at := s.spell(e.target)
+	switch e.targetKind {
+	case diskDir:
 		out.Kind, out.Child = rpc.KindDoor, at
 		return
-	case held && e.targetKind == diskFile:
+	case diskFile:
 		fileFacts(out, at)
 		out.target = at
-	case held && e.targetKind == diskOther:
+	case diskOther:
 		out.Kind, out.target = rpc.KindText, at
 	default:
 		fileFacts(out, e.path)
@@ -145,9 +145,6 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 	}
 	present := map[string]bool{}
 	for _, e := range ents {
-		if _, ok := s.rootOf(e.path); !ok {
-			continue
-		}
 		le := s.entryOf(e)
 		l.entries = append(l.entries, le)
 		present[le.Key] = true
@@ -256,7 +253,7 @@ func (l *listing) entry(path string) (listed, bool) {
 }
 
 func (s *Source) GetGrid(_ context.Context, req *pb.GetGridRequest) (*pb.GetGridResponse, error) {
-	dir, err := s.dirOf(req.GridId)
+	dir, err := pathOf(req.GridId)
 	if err != nil {
 		return nil, err
 	}
@@ -276,20 +273,16 @@ func (s *Source) answer(l *listing) *pb.GetGridResponse {
 	return &pb.GetGridResponse{Grid: l.grid, Tiles: l.tiles}
 }
 
-// tilePath reads a tile id as its path and the directory listing it. A root
-// inside another root is a tile of the directory holding it; one no root
-// holds is listed by no directory.
-func (s *Source) tilePath(tileID string) (path, dir string, err error) {
+// tilePath reads a tile id as its path and the directory listing it, which
+// every path but / has.
+func tilePath(tileID string) (path, dir string, err error) {
 	path, err = pathOf(tileID)
 	if err != nil {
 		return "", "", err
 	}
-	if err := s.inTree(path); err != nil {
-		return "", "", s.refuse(path, err)
-	}
 	dir = filepath.Dir(path)
-	if dir == path || s.inTree(dir) != nil {
-		return "", "", gwerr.DeadLink("", "files: %s is a root, which no directory lists", path)
+	if dir == path {
+		return "", "", gwerr.DeadLink("", "files: %s is the top, which no directory lists", path)
 	}
 	return path, dir, nil
 }
@@ -303,7 +296,7 @@ func (s *Source) GetTile(_ context.Context, req *pb.GetTileRequest) (*pb.TileRes
 }
 
 func (s *Source) tileByPath(tileID string) (*pb.Tile, error) {
-	path, dir, err := s.tilePath(tileID)
+	path, dir, err := tilePath(tileID)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +322,7 @@ func (l listing) absent(dir, path string) error {
 // mint is the one place a file's row appears, at the placement GetGrid
 // already answers, so touching a tile never moves it.
 func (s *Source) mint(tileID string) (int64, error) {
-	path, dir, err := s.tilePath(tileID)
+	path, dir, err := tilePath(tileID)
 	if err != nil {
 		return 0, err
 	}

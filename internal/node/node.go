@@ -140,7 +140,7 @@ func Start(opts Options) (*Node, error) {
 		return nil, err
 	}
 	src := server.Sources{Home: newHome(st, cfg.ID, cfg.Shell)}
-	if files, err := startFiles(st, cfg, opts.Dir); err != nil {
+	if files, err := startFiles(st, cfg); err != nil {
 		return fail(err)
 	} else if files != nil {
 		src.Files = files
@@ -189,10 +189,10 @@ func Start(opts Options) (*Node, error) {
 	return &Node{Ln: ln, ConnLn: connLn, st: st, cache: cache, closers: closers, srv: srv, webSrv: webSrv, connSrv: connSrv, cancelRequest: cancel}, nil
 }
 
-// startFiles builds the files over the roots files: declares, the node's
-// directory dir outside them; a node that declares none has no files, nil.
-// The files are dark or told, never disabled, so they get no switch.
-func startFiles(st *store.Store, cfg *config.ServerConfig, dir string) (*files.Source, error) {
+// startFiles builds the files from the roots files: declares; a node that
+// declares none has no files, nil. The files are dark or told, never
+// disabled, so they get no switch.
+func startFiles(st *store.Store, cfg *config.ServerConfig) (*files.Source, error) {
 	if len(cfg.Files) == 0 {
 		return nil, nil
 	}
@@ -200,7 +200,7 @@ func startFiles(st *store.Store, cfg *config.ServerConfig, dir string) (*files.S
 	for i, r := range cfg.Files {
 		roots[i] = files.Root{Path: r.Root, Label: r.Label}
 	}
-	return files.New(st.Files(), roots, nil, dir)
+	return files.New(st.Files(), roots, nil)
 }
 
 // openCache opens ~/.gridwell/cache.db. A cache that cannot open degrades to the
