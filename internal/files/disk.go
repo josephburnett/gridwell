@@ -334,7 +334,7 @@ var decodes = make(chan struct{}, previewDecodes)
 // previewJPEG is the image file f's picture, nil for any file that is not an
 // image, is too large, or does not decode.
 func previewJPEG(f *os.File, fi os.FileInfo) []byte {
-	if !strings.HasPrefix(mediaType(f.Name()), "image/") || !fi.Mode().IsRegular() || fi.Size() > previewFileCap {
+	if !strings.HasPrefix(mediaType(f.Name()), "image/") || fi.Size() > previewFileCap {
 		return nil
 	}
 	data, err := io.ReadAll(f)

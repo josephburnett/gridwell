@@ -51,15 +51,12 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 	path, _ := pathOf(req.TileId)
 	o, err := s.open(path)
 	switch {
-	case gone(err):
+	case gone(err) || errors.Is(err, errIrregular):
 		return send(&pb.ContentChunk{})
 	case err != nil:
 		return readRefusal(path, err)
 	}
 	defer o.close()
-	if !o.fi.Mode().IsRegular() {
-		return send(&pb.ContentChunk{})
-	}
 	data, media := body(o.File, o.fi)
 	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: contentStamp(o.fi.ModTime(), o.fi.Size())}, send)
 }
@@ -107,25 +104,19 @@ func (s *Source) WriteContent(_ context.Context, recv func() (*pb.WriteContentRe
 
 // write puts data in place of path's file if claimed is its stamp, and
 // answers the stamp of the bytes written. The claim holds until the rename
-// (lockPath), and the stamp is read again just before it, so neither another
+// (lockPath), and the stamp is read just before it, so neither another
 // save nor another process's write is overwritten unseen.
 func (s *Source) write(path, claimed string, data []byte) (string, error) {
 	o, err := s.open(path)
-	var fi os.FileInfo
-	if err == nil {
-		defer o.close()
-		defer s.lockPath(o.Name())()
-		fi, err = o.root.Stat(o.rel)
-	}
 	switch {
 	case gone(err):
 		return "", gwerr.DeadLink("", "files: %s is gone", path)
 	case err != nil:
 		return "", diskRefusal("written", path, err)
-	case !fi.Mode().IsRegular():
-		return "", status.Errorf(codes.InvalidArgument, "files: %s is not a regular file", path)
 	}
-	if err := unwritable(filepath.Base(o.Name()), fi.Size()); err != nil {
+	defer o.close()
+	defer s.lockPath(o.Name())()
+	if err := unwritable(filepath.Base(o.Name()), o.fi.Size()); err != nil {
 		return "", status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
 	}
 	stale := func(fi os.FileInfo) error {
@@ -134,14 +125,11 @@ func (s *Source) write(path, claimed string, data []byte) (string, error) {
 		}
 		return nil
 	}
-	if err := stale(fi); err != nil {
-		return "", err
-	}
 	// The rename would replace a file its mode refuses writes to.
 	if err := denied(o.Name()); err != nil {
 		return "", diskRefusal("written", path, err)
 	}
-	return replace(o, fi.Mode().Perm(), data, path, stale)
+	return replace(o, o.fi.Mode().Perm(), data, path, stale)
 }
 
 // replace writes data beside o's file, through its root, and renames it over
@@ -189,23 +177,27 @@ func replace(o *opened, perm os.FileMode, data []byte, path string, stale func(o
 	return contentStamp(fi.ModTime(), fi.Size()), nil
 }
 
-// readRefusal answers a read the disk refused on path: one gone, or landing
-// outside every root, is dead, as a link out of the tree is.
+// readRefusal answers a read the disk refused on path: one gone or outside
+// every root is dead, as a link out of the tree is; one not regular has none.
 func readRefusal(path string, err error) error {
 	switch {
 	case gone(err):
 		return gwerr.DeadLink("", "files: %s is gone", path)
 	case errors.Is(err, errOutside):
 		return gwerr.DeadLink("", "files: %s %v", path, err)
+	case errors.Is(err, errIrregular):
+		return status.Errorf(codes.NotFound, "files: %s %v", path, err)
 	}
 	return diskRefusal("read", path, err)
 }
 
-// diskRefusal answers a content verb the disk refused on path: a path
-// outside every root or a permission refused is a verdict with its reason,
-// anything else a disk that cannot answer right now.
+// diskRefusal answers a content verb the disk refused on path: a file that
+// is not regular, a path outside every root or a permission refused is a
+// verdict with its reason, anything else a disk that cannot answer right now.
 func diskRefusal(verb, path string, err error) error {
 	switch {
+	case errors.Is(err, errIrregular):
+		return status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
 	case errors.Is(err, errOutside):
 		return status.Errorf(codes.PermissionDenied, "files: %s %v", path, err)
 	case errors.Is(err, iofs.ErrPermission) || errors.Is(err, syscall.EROFS):
@@ -231,7 +223,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 		return readRefusal(path, err)
 	}
 	defer f.close()
-	if !f.fi.Mode().IsRegular() || !isPage(f.Name()) {
+	if !isPage(f.Name()) {
 		return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
 	}
 	size := f.fi.Size()
@@ -281,7 +273,10 @@ func (s *Source) GetTilePreview(_ context.Context, req *pb.GetTilePreviewRequest
 		}
 	}
 	f, err := s.open(path)
-	if err != nil {
+	switch {
+	case errors.Is(err, errIrregular):
+		return &pb.GetTilePreviewResponse{}, nil
+	case err != nil:
 		return nil, readRefusal(path, err)
 	}
 	defer f.close()

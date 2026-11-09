@@ -132,6 +132,7 @@ func (s *Source) Close() { s.watch.close() }
 // through a directory that is a symlink, which is listed as a link and never
 // entered.
 var errOutside = errors.New("is outside every root")
+var errIrregular = errors.New("is not a regular file")
 
 func idOf(path string) string { return rpc.KeyTileID(path) }
 
@@ -267,8 +268,9 @@ type opened struct {
 	fi   os.FileInfo
 }
 
-// open opens path's bytes, nonblocking so that a FIFO answers its mode rather
-// than waiting for a writer.
+// open opens path's bytes when they are a regular file, by its mode through
+// the root before the open and again after it (errIrregular), nonblocking so
+// that a FIFO swapped in between answers its mode rather than waiting.
 func (s *Source) open(path string) (*opened, error) {
 	rr, rel, err := s.content(path)
 	if err != nil {
@@ -279,13 +281,16 @@ func (s *Source) open(path string) (*opened, error) {
 	if o.root, err = os.OpenRoot(rr); err != nil {
 		return nil, err
 	}
-	if o.File, err = o.root.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
-		if o.fi, err = o.File.Stat(); err != nil {
-			o.File.Close()
+	if o.fi, err = o.root.Stat(rel); err == nil && o.fi.Mode().IsRegular() {
+		if o.File, err = o.root.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK, 0); err == nil {
+			o.fi, err = o.File.Stat()
 		}
 	}
+	if err == nil && !o.fi.Mode().IsRegular() {
+		err = errIrregular
+	}
 	if err != nil {
-		o.root.Close()
+		o.close()
 		return nil, err
 	}
 	return o, nil
