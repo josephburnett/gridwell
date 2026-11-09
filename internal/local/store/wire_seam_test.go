@@ -42,6 +42,7 @@ func TestEveryStoredFieldCrossesTheWire(t *testing.T) {
 		"TextPresentation": "stated by the owning source from its content",
 		"ContentStamp":     "the owning source's name for a claimless row's bytes",
 		"ReadOnly":         "the owning source's reason a text body takes no edits",
+		"Gone":             "the files' word that a directory door is gone from the disk",
 	}
 	covered := map[string]bool{}
 	for _, tile := range wireFixtures(t) {

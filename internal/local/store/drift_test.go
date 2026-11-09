@@ -45,6 +45,7 @@ func TestDescriptorMatchesProto(t *testing.T) {
 				"text_presentation": "stated by the owning source: how its text body presents",
 				"content_stamp":     "the owning source's name for the bytes behind a claimless row, as its listing answered it",
 				"read_only":         "the owning source's reason this text body takes no edits",
+				"gone":              "the files' word that a directory door is gone from the disk, read off disk on every listing",
 			},
 		},
 	}

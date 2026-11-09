@@ -46,9 +46,11 @@ type Root struct {
 type Source struct {
 	roots []Root
 	mem   *store.FileRows
-	trash func(dir *os.File, name string) error
-	hub   *eventhub.Hub[*pb.Event]
-	watch *watcher
+	// unhear ends hear, which home's row changes reach (FileRows.Changes).
+	unhear func()
+	trash  func(dir *os.File, name string) error
+	hub    *eventhub.Hub[*pb.Event]
+	watch  *watcher
 
 	// dark is, per directory, why its last read failed, until it leaves the
 	// view (rescope); liveOff is why the watch is not told. setHealth is
@@ -113,11 +115,36 @@ func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string
 	}
 	s := &Source{roots: out, mem: mem, trash: trash, hub: eventhub.New(rpc.EventKey), dark: map[string]string{}}
 	s.watch = newWatcher(s)
+	var heard <-chan *pb.Event
+	heard, s.unhear = mem.Changes()
+	go s.hear(heard)
 	return s, nil
 }
 
 // Close stops watching the disk.
-func (s *Source) Close() { s.watch.close() }
+func (s *Source) Close() {
+	s.watch.close()
+	s.unhear()
+}
+
+// hear lists again each shown directory above a gone one whose Gridwell
+// tiles changed: whether it lists the gone door is a fact of home's rows,
+// which no disk event tells.
+func (s *Source) hear(events <-chan *pb.Event) {
+	for ev := range events {
+		path, err := pathOf(ev.GetGridChanged().GetGridId())
+		if err != nil {
+			continue
+		}
+		if _, err := os.Lstat(path); !gone(err) {
+			continue
+		}
+		s.scopeMu.Lock()
+		above := slices.DeleteFunc(slices.Clone(s.shown), func(d string) bool { return d == path || !underRoot(d, path) })
+		s.scopeMu.Unlock()
+		s.check(above)
+	}
+}
 
 var errIrregular = errors.New("is not a regular file")
 

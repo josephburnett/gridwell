@@ -459,7 +459,12 @@ type Tile struct {
 	// named: alt_text was typed, by the rename gesture, so no capture or
 	// listing replaces it. Stored as the store's alt_user; only a rename sets
 	// it, a copy carries it, and CreateTile honours it. SetTile ignores it.
-	Named         bool `protobuf:"varint,41,opt,name=named,proto3" json:"named,omitempty"`
+	Named bool `protobuf:"varint,41,opt,name=named,proto3" json:"named,omitempty"`
+	// gone: this door's directory is not on disk, and Gridwell tiles are
+	// still over it or a directory under it, so the files list it from the
+	// rows and its grid holds those tiles alone. Drawn in the muted family.
+	// Set by the files only; wire-only, never a stored column.
+	Gone          bool `protobuf:"varint,44,opt,name=gone,proto3" json:"gone,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -714,6 +719,13 @@ func (x *Tile) GetReadOnly() string {
 func (x *Tile) GetNamed() bool {
 	if x != nil {
 		return x.Named
+	}
+	return false
+}
+
+func (x *Tile) GetGone() bool {
+	if x != nil {
+		return x.Gone
 	}
 	return false
 }
@@ -4867,7 +4879,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\aview_cx\x18\b \x01(\x01R\x06viewCx\x12\x17\n" +
 	"\aview_cy\x18\t \x01(\x01R\x06viewCy\x12\x1b\n" +
 	"\tview_zoom\x18\n" +
-	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xa0\a\n" +
+	" \x01(\x01R\bviewZoomJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\a\"\xb4\a\n" +
 	"\x04Tile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\x03R\aversion\x12\x17\n" +
@@ -4905,7 +4917,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"shell_tmux\x18& \x01(\tR\tshellTmux\x12#\n" +
 	"\rcontent_stamp\x18' \x01(\tR\fcontentStamp\x12\x1b\n" +
 	"\tread_only\x18( \x01(\tR\breadOnly\x12\x14\n" +
-	"\x05named\x18) \x01(\bR\x05namedJ\x04\b\x02\x10\x03J\x04\b\n" +
+	"\x05named\x18) \x01(\bR\x05named\x12\x12\n" +
+	"\x04gone\x18, \x01(\bR\x04goneJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#J\x04\b#\x10$J\x04\b*\x10+J\x04\b+\x10,\"\r\n" +
 	"\vInfoRequest\"\xf3\x02\n" +
 	"\fInfoResponse\x12!\n" +

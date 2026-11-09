@@ -5,10 +5,12 @@ package files
 // the Gridwell tiles over it, home's rows (store.FileRows.Over).
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 
@@ -31,6 +33,7 @@ type listed struct {
 	readOnly     string
 	presentation string
 	preview      int64 // an image's preview stamp
+	gone         bool  // a directory gone, listed for its Gridwell tiles
 }
 
 // entryOf is what dir lists for e: the one owner, so a listing and a watched
@@ -97,6 +100,7 @@ type listing struct {
 	since   uint64 // the directory's servedDir.gen before the disk was read
 	gid     int64  // the directory's grid row, 0 when nobody touched it
 	dark    bool
+	gone    bool // not on disk, and listed for the Gridwell tiles over it
 	entries []listed
 	rows    []store.FileTile
 	tiles   []*pb.Tile
@@ -105,7 +109,8 @@ type listing struct {
 }
 
 // synthesize reads dir and joins it with its rows. A directory that is gone
-// is dead, a root that is gone is dark, and one that will not read is dark:
+// is dead unless Gridwell tiles are over it or under it, when it lists them
+// alone (gone); a root that is gone is dark, and one that will not read is dark:
 // its rows answer as they stand and nothing retires. Where its links land
 // is noted after the read, since noting may list those directories too.
 func (s *Source) synthesize(dir string) (*listing, error) {
@@ -137,7 +142,10 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 		note("")
 	case gone(err) && !s.isRoot(dir):
 		note("")
-		return nil, gwerr.DeadLink("", "files: %s is gone", dir)
+		if held, err := s.mem.HeldAt(dir); err != nil || !held {
+			return nil, cmp.Or(err, gwerr.DeadLink("", "files: %s is gone", dir))
+		}
+		l.gone = true
 	default:
 		why := fmt.Sprintf("%s cannot be read: %v", dir, pathErr(err))
 		if gone(err) {
@@ -152,7 +160,10 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 		l.entries = append(l.entries, le)
 		present[le.Key] = true
 	}
-	if !l.dark && gid != 0 {
+	if err := s.goneDoors(l, present); err != nil {
+		return nil, err
+	}
+	if !l.dark && !l.gone && gid != 0 {
 		if err := s.mem.Sweep(gid, present); err != nil {
 			return nil, err
 		}
@@ -163,11 +174,15 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 	if l.rows, err = s.mem.Overlay(gid, storeEntries(l.entries)); err != nil {
 		return nil, err
 	}
+	if l.gone {
+		// What the disk once listed there is not there now.
+		l.rows = slices.DeleteFunc(l.rows, func(r store.FileTile) bool { return !present[r.Key] })
+	}
 	sel, err := s.selection(gid)
 	if err != nil {
 		return nil, err
 	}
-	l.grid = &pb.Grid{Id: idOf(dir), AcceptsTiles: proto.Bool(true), Writable: true, Moves: proto.Bool(true),
+	l.grid = &pb.Grid{Id: idOf(dir), AcceptsTiles: proto.Bool(true), Writable: !l.gone, Moves: proto.Bool(true),
 		Glyph: rpc.GlyphFolder, Selection: sel}
 	if l.tiles, err = s.buildTiles(dir, l.rows, l.entries); err != nil {
 		return nil, err
@@ -176,6 +191,28 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 		return nil, err
 	}
 	return l, nil
+}
+
+// goneDoors adds to l a gone door for each name Gridwell tiles keep in its
+// directory that the disk does not list: a directory gone with its Gridwell
+// tiles kept (store.FileRows.HeldUnder). A directory that will not read
+// says nothing of which names are gone.
+func (s *Source) goneDoors(l *listing, present map[string]bool) error {
+	if l.dark && !s.isRoot(l.dir) {
+		return nil
+	}
+	held, err := s.mem.HeldUnder(l.dir)
+	for _, p := range held {
+		if present[p] {
+			continue
+		}
+		if _, err := os.Lstat(p); l.dark && !gone(err) {
+			continue
+		}
+		l.entries = append(l.entries, listed{Entry: store.Entry{Key: p, Label: filepath.Base(p), Kind: rpc.KindDoor, Child: p}, gone: true})
+		present[p] = true
+	}
+	return err
 }
 
 func storeEntries(es []listed) []store.Entry {
@@ -208,6 +245,7 @@ func (s *Source) buildTiles(dir string, rows []store.FileTile, entries []listed)
 		if child != "" {
 			t.ChildGridId, t.Link = idOf(child), child != r.Key
 		}
+		t.Gone = e.gone
 		if ok && !rpc.LeafLink(t) {
 			t.ContentStamp, t.ReadOnly, t.ServesPage = e.stamp, e.readOnly, e.ServesPage
 			t.TextPresentation = e.presentation
@@ -391,8 +429,8 @@ func sumOf(l *listing) listingSum {
 	}
 	h := sha256.New()
 	for _, e := range l.entries {
-		fmt.Fprintf(h, "%q %q %q %t %q %q %q %q %d\n", e.Key, e.Label, e.Kind, e.ServesPage, e.LinkTarget,
-			e.Child, e.readOnly, e.presentation, e.preview)
+		fmt.Fprintf(h, "%q %q %q %t %q %q %q %q %d %t\n", e.Key, e.Label, e.Kind, e.ServesPage, e.LinkTarget,
+			e.Child, e.readOnly, e.presentation, e.preview, e.gone)
 	}
 	var out listingSum
 	h.Sum(out[:0])

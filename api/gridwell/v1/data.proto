@@ -253,6 +253,12 @@ message Tile {
 
   reserved 42; // presented_by
   reserved 43; // broken_reason
+
+  // gone: this door's directory is not on disk, and Gridwell tiles are
+  // still over it or a directory under it, so the files list it from the
+  // rows and its grid holds those tiles alone. Drawn in the muted family.
+  // Set by the files only; wire-only, never a stored column.
+  bool gone = 44;
 }
 
 // ─── Node lifecycle ───────────────────────────────────────────────────────

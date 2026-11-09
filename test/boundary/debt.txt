@@ -47,3 +47,4 @@ low-water | packages | 78
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): the MCP instructions say how to read a reference | 20
 2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): a directory moved within Gridwell rekeys every grid and file row under it, a gone directory's tiles where it would land refusing the move | 142
 2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): deleting a directory sends every Gridwell tile under it to home's trash | 41
+2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): a directory gone underneath Gridwell stays in its parent as a gone door holding its Gridwell tiles (Tile.gone), told when its tiles change | 95

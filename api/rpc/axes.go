@@ -20,6 +20,7 @@ var Flags = []Flag{
 	{"gridwell.v1.Tile.link", true, "kind: the doors to a home grid, a directory and a far home are links, a directory's symlink among them; link and see it dead make a leaf one", "delete unlinks and copy links"},
 	{"gridwell.v1.Tile.url_frozen", true, "operation: freeze sets it and reads it back", "descent keeps the preview instead of going live"},
 	{"gridwell.v1.Tile.serves_page", true, "operation: serve a page, and the decided url copy cell on the files", "the address is the node's /content/ API, and a copy links"},
+	{"gridwell.v1.Tile.gone", false, "", "a door is drawn in the muted family; what its grid takes is the grid's own writable and accepts_tiles"},
 	{"gridwell.v1.Tile.named", true, "operation: rename sets it, and the decided url screenshot cell on the files", "no capture or listing replaces the name"},
 	{"gridwell.v1.Tile.read_only", true, "variant a read-only file: the decided text write cells, here and through the connection; variant a disabled source: the decided far text write cell", "a body write is refused before it is typed"},
 	{"gridwell.v1.Grid.writable", true, "variant a disabled source: the decided far text write cell reads it false, and the files' cell true", "the grid's text bodies take writes"},

@@ -2,13 +2,15 @@ package store
 
 // The Gridwell layer over a directory as a whole: every home row on a grid
 // keyed at or under a path. A directory moved within Gridwell carries it
-// (Rekey), a gone directory's tiles where it would land refusing it
-// (HeldAt), and one deleted sends it to the trash (TrashOver).
+// (Rekey), and one deleted sends it to the trash (TrashOver); one gone
+// underneath Gridwell is listed for it (HeldAt, HeldUnder), and a move
+// onto it is refused.
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -32,6 +34,10 @@ func atOrUnder(col, path string) (string, []any) {
 
 // heldSQL is the condition that grids row g holds a Gridwell tile.
 const heldSQL = `EXISTS (SELECT 1 FROM tiles t WHERE t.grid_id = g.id AND t.key = '')`
+
+// Changes is home's events, which tell the files when a gone directory's
+// Gridwell tiles change; cancel ends the stream.
+func (n *FileRows) Changes() (<-chan *gridwellv1.Event, func()) { return n.s.SubscribeEvents() }
 
 // HeldAt reports whether a grid keyed at or under path holds a Gridwell
 // tile: the overlay a directory at path has, or had before it went.
@@ -159,4 +165,27 @@ func (n *FileRows) TrashOver(path string) error {
 		}
 		return nil
 	}, "~:trash/"+path)
+}
+
+// HeldUnder is the entries of dir, as paths, sorted, that some grid keyed at
+// or under them holds a Gridwell tile on (HeldAt): the names Gridwell tiles
+// keep in dir whether or not the disk still lists them.
+func (n *FileRows) HeldUnder(dir string) ([]string, error) {
+	p := below(dir)
+	rows, err := n.s.db.Query(`SELECT DISTINCT g.key FROM grids g
+		WHERE g.key != '' AND substr(g.key, 1, length(?)) = ? AND `+heldSQL, p, p)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := collect(rows, func(rows *sql.Rows) (string, error) {
+		var k string
+		return k, rows.Scan(&k)
+	})
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		name, _, _ := strings.Cut(k[len(p):], "/")
+		out = append(out, p+name)
+	}
+	slices.Sort(out)
+	return slices.Compact(out), err
 }
