@@ -13,6 +13,7 @@ here.
 | **url** | The only tile with an address of its own and the browser's cookies and storage behind it. |
 | **shell** | The only tile whose content is a host process. It survives ascent as a tmux. |
 | **workspace tile** | The only tile whose content is an arrangement: a pane tree, with each frame's framing and scroll. Descent swaps the window's pane tree, not one pane. |
+| **file and directory** | Not tiles but the + menu's two red swatches on a writable directory's grid (`menu.Offer.Disk`): each asks for a name in the entry modal, then makes an empty file or a directory on disk, which the listing shows. Every other primitive on a directory's grid makes a Gridwell tile there. |
 
 ## Link shapes
 

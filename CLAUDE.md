@@ -558,7 +558,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   each verdict before the drop, and `rpc.CopyOf` owns them, read by the
   node and the drop verdict alike. A directory's grid answers
   `accepts_tiles` true, so the + menu offers every primitive there, and two
-  more: file and directory, each asking for a name before it is made, an
+  more: file and directory, each asking for a name before it is made, in
+  the url visit's modal (`openEntryModal`, `menu.DiskCreate`; an empty name
+  makes nothing), an
   empty file by O_EXCL or a directory by mkdir, a name already there
   refused with the reason, and offered only while the directory is
   writable, the grid's second accepts fact, the disk side's. A shell
