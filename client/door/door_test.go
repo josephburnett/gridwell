@@ -248,3 +248,26 @@ func TestRowLabelOfADirectoryIsTheFiles(t *testing.T) {
 		}
 	}
 }
+
+// A door the files refuse this user asks no preview; a disabled source's
+// doors, every row stamped on a grid taking no edits, still do.
+func TestPreviewAskedSkipsARefusedDoorOnly(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		readOnly string
+		writable bool
+		want     bool
+	}{
+		{"a door", "", true, true},
+		{"a door the OS refuses", "Trash cannot be read: operation not permitted", true, false},
+		{"a disabled source's door", "rtb is disabled", false, true},
+	} {
+		d := &gridwellv1.Tile{Kind: rpc.KindDoor, ChildGridId: "n/~L1RyYXNo", ReadOnly: c.readOnly}
+		if got := PreviewAsked(d, c.writable); got != c.want {
+			t.Errorf("%s: PreviewAsked = %v, want %v", c.name, got, c.want)
+		}
+	}
+	if PreviewAsked(&gridwellv1.Tile{Kind: rpc.KindText}, true) {
+		t.Error("a tile opening no grid asks a preview")
+	}
+}

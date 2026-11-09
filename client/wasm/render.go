@@ -761,7 +761,7 @@ func (a *App) drawNodeWithPreview(n *gridwellv1.Tile, x, y, w, h, parentCellSize
 	}
 	// One level: drawChildPreview paints its children through the flat drawNode.
 	child, haveChild := a.c.Grid(n.ChildGridId)
-	if !haveChild {
+	if writable, _ := a.gridWritable(n.GridId); !haveChild && door.PreviewAsked(n, writable) {
 		a.fetchGrid(n.ChildGridId)
 	}
 	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)

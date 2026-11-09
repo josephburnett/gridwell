@@ -219,3 +219,12 @@ func byUUID(u string, sources []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo,
 	}
 	return nil, false
 }
+
+// PreviewAsked is whether a door's preview asks for the grid it opens. A
+// door whose row says why on a grid that takes edits opens a grid its source
+// refuses this user, so nothing asks until the user descends; a switched-off
+// source stamps every row and its grid takes no edits, so its doors still
+// preview what the node holds.
+func PreviewAsked(t *gridwellv1.Tile, gridWritable bool) bool {
+	return t.GetChildGridId() != "" && (t.GetReadOnly() == "" || !gridWritable)
+}

@@ -56,3 +56,5 @@ low-water | packages | 78
 2026-11-08 | A finger does not move or delete a file (Joe, 2026-11-08): a touch press's drop of a file onto another directory or the trashcan is refused with the reason | 37
 2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): the + menu's file and directory primitives on a writable directory, named in the one entry modal | 105
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: the OS's refusal is a verdict on its door and its grid, and the files stay told | 36
+2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: the OS's refusal is a verdict on its door and its grid, and the files stay told | 31
+2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a door its source refuses asks no preview | 9
