@@ -44,6 +44,10 @@ type Release struct {
 	SameNode bool
 	// Promote marks the bar's current-visit crumb.
 	Promote bool
+	// Disk marks the file or directory swatch, and DiskWritable the
+	// destination's Offer.Disk: a name made on disk lands only on a
+	// writable directory's grid.
+	Disk, DiskWritable bool
 }
 
 // DropOn asks the destination before the swatch, because a drop with nowhere
@@ -61,6 +65,8 @@ func DropOn(r Release) Drop {
 		return DropRefuse
 	case r.Promote:
 		return DropPromote
+	case r.Disk && !r.DiskWritable:
+		return DropSnapBack
 	}
 	return DropCreate
 }

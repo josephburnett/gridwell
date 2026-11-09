@@ -8,6 +8,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
+	"github.com/josephburnett/gridwell/client/menu"
 	"github.com/josephburnett/gridwell/client/pane"
 )
 
@@ -36,6 +37,19 @@ func createAt(label, kind string) func(a *App, gid string, cellX, cellY int64) {
 	return func(a *App, gid string, cellX, cellY int64) {
 		a.createTile(label, gid, &gridwellv1.CreateTileRequest{GridId: gid,
 			Tile: &gridwellv1.Tile{Kind: kind, X: cellX, Y: cellY, W: 1, H: 1}}, nil)
+	}
+}
+
+// createOnDisk is the file and directory swatches' create: the name modal
+// titled title, then the request menu.DiskCreate builds of kind, an empty
+// name making nothing.
+func createOnDisk(label, title, kind string) func(a *App, gid string, cellX, cellY int64) {
+	return func(a *App, gid string, cellX, cellY int64) {
+		a.openEntryModal(nameEntry(title), func(name string) {
+			if req, ok := menu.DiskCreate(gid, kind, name, cellX, cellY); ok {
+				a.createTile(label, gid, req, nil)
+			}
+		}, nil)
 	}
 }
 

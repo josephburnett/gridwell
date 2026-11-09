@@ -141,8 +141,10 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 // that routed this call, so the create lands exactly where DecideDrop said it
 // may, and dropTargetAt owns what is legal.
 func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
+	pr, isPrimitive := primitiveFor(d.item.primitive)
 	r := menu.Release{Target: t != nil, Door: d.item.isSwatch,
-		Promote: d.item.primitive == tplURL && d.item.promotePane != ""}
+		Promote: d.item.primitive == tplURL && d.item.promotePane != "",
+		Disk:    !d.item.isSwatch && isPrimitive && pr.disk}
 	if r.Target {
 		// The target's grid is the open door's child when the cursor promoted
 		// into one, not the pane's own leaf grid.
@@ -150,6 +152,7 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)
 		r.SameNode = a.gridNodeNS(t.gridID) == d.menuNS
 		r.AcceptsTiles, _ = a.gridAcceptsTiles(t.gridID)
+		r.DiskWritable = a.offerOn(t.gridID).Disk()
 		if r.Door {
 			st, classified := sourcehealth.Classify(d.item.source)
 			r.Enterable = classified && st == sourcehealth.Enterable
@@ -176,10 +179,11 @@ func (a *App) commitTemplateDrop(d *dragState, t *dropTarget, dropX, dropY int64
 		a.landGhostAtCell(t, dropX, dropY)
 		a.promoteEphemeralURL(d.item.promotePane, t.pane.ID, t.gridID, dropX, dropY)
 	case menu.DropCreate:
-		// The drop never prompts: whatever a kind needs is asked for on the
-		// first descent, so create is one experience everywhere.
+		// A Gridwell tile's drop never prompts: whatever a kind needs is
+		// asked for on the first descent. A file or a directory is named
+		// before it exists, since the name is its address on disk.
 		a.landGhostAtCell(t, dropX, dropY)
-		if pr, ok := primitiveFor(d.item.primitive); ok {
+		if isPrimitive {
 			pr.create(a, t.gridID, dropX, dropY)
 		}
 	}

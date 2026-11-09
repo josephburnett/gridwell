@@ -36,10 +36,33 @@ func (a *App) urlSuggestCandidates(sourceUUID string) []urlnorm.Candidate {
 	return out
 }
 
-// openURLModal shows the URL-entry overlay and invokes onSubmit with the
-// normalized URL. onCancel fires on a dismissal. Validation runs in-modal, so
-// invalid input shows an inline error and keeps the modal open.
+// entry is what the one entry modal asks for: its heading, field label and
+// placeholder, the suggestions it offers, and parse, whose error keeps the
+// modal open with the reason inline.
+type entry struct {
+	title, label, placeholder string
+	candidates                []urlnorm.Candidate
+	parse                     func(string) (string, error)
+}
+
+// nameEntry asks for the name of a file or a directory; menu.DiskCreate
+// decides what an empty one makes.
+func nameEntry(title string) entry {
+	return entry{title: title, label: "name", parse: func(s string) (string, error) { return s, nil }}
+}
+
+// openURLModal shows the entry modal for a url and invokes onSubmit with the
+// normalized URL. onCancel fires on a dismissal.
 func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url string), onCancel func()) {
+	a.openEntryModal(entry{title: "new url tile", label: "url", placeholder: "example.com",
+		candidates: candidates, parse: urlnorm.Normalize}, onSubmit, onCancel)
+}
+
+// openEntryModal shows the entry overlay and invokes onSubmit with what
+// e.parse made of the input. Validation runs in-modal, so invalid input shows
+// an inline error and keeps the modal open.
+func (a *App) openEntryModal(e entry, onSubmit func(string), onCancel func()) {
+	candidates := e.candidates
 	if a.overlays.urlModalOpen {
 		return
 	}
@@ -82,6 +105,9 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 		renderSuggest()
 	}
 
+	doc.Call("getElementById", "gw-url-title").Set("textContent", e.title)
+	doc.Call("getElementById", "gw-url-label").Set("textContent", e.label)
+	input.Set("placeholder", e.placeholder)
 	input.Set("value", "")
 	errEl.Set("textContent", "")
 	modal.Get("classList").Call("add", "open")
@@ -107,7 +133,7 @@ func (a *App) openURLModal(candidates []urlnorm.Candidate, onSubmit func(url str
 
 	commit := func() {
 		raw := input.Get("value").String()
-		url, err := urlnorm.Normalize(raw)
+		url, err := e.parse(raw)
 		if err != nil {
 			errEl.Set("textContent", err.Error())
 			input.Call("focus")

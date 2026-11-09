@@ -27,6 +27,10 @@ func TestDropOn(t *testing.T) {
 			Release{Target: true, SameNode: true, AcceptsTiles: true, Promote: true}, DropPromote},
 		{"the promote crumb over another node's grid refuses",
 			Release{Target: true, Promote: true}, DropRefuse},
+		{"a file or directory over a writable directory creates",
+			Release{Target: true, SameNode: true, AcceptsTiles: true, Disk: true, DiskWritable: true}, DropCreate},
+		{"a file or directory over a home grid or a read-only directory snaps back",
+			Release{Target: true, SameNode: true, AcceptsTiles: true, Disk: true}, DropSnapBack},
 	}
 	for _, c := range cases {
 		if got := DropOn(c.in); got != c.want {

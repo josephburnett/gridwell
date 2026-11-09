@@ -156,6 +156,9 @@ const (
 	tplShell
 	// tplWorkspace is a stored split-pane layout, created never-arranged.
 	tplWorkspace
+	// tplFile and tplDirectory make a name on disk (menu.Offer.Disk).
+	tplFile
+	tplDirectory
 )
 
 // primitive is one row per built-in kind, so a kind cannot be half-added.
@@ -170,7 +173,14 @@ type primitive struct {
 	// click is what a bare click on the swatch does. A column, not an arm per
 	// kind, so no kind falls through to the canvas behind the popover.
 	click func(a *App, p *pane.Pane)
+	// disk is a swatch that makes a file or a directory, offered only where
+	// menu.Offer.Disk is.
+	disk bool
 }
+
+// onDisk is the ghost id of a name not yet made on disk: the key form of no
+// path, so pane.TileFamily draws the swatch and its ghost as a file.
+var onDisk = rpc.KeyTileID("")
 
 // primitives is the menu layout order and primitiveKinds its derived
 // order. Both fill in init, because the rows close over App methods.
@@ -212,6 +222,18 @@ func init() {
 			ghost:  &gridwellv1.Tile{Kind: rpc.KindWorkspace, W: 1, H: 1, AltText: "workspace"},
 			glyph:  drawWorkspaceGlyph,
 			create: createAt("CreateWorkspace", rpc.KindWorkspace),
+		},
+		{
+			kind: tplFile, name: "file", disk: true,
+			ghost:  &gridwellv1.Tile{Kind: rpc.KindText, Id: onDisk, W: 1, H: 1},
+			glyph:  drawDocumentGlyph,
+			create: createOnDisk("CreateFile", "new file", rpc.KindText),
+		},
+		{
+			kind: tplDirectory, name: "directory", disk: true,
+			ghost:  &gridwellv1.Tile{Kind: rpc.KindDoor, Id: onDisk, W: 1, H: 1},
+			glyph:  drawFolderGlyph,
+			create: createOnDisk("CreateDirectory", "new directory", rpc.KindDoor),
 		},
 	}
 	primitiveKinds = make([]templateKind, len(primitives))
@@ -273,17 +295,24 @@ func (a *App) menuGroups(p *pane.Pane) (sources, primitives []menuItem) {
 		items = append(items, menuItem{isSwatch: true, source: s.Row, grid: s.Grid})
 	}
 	prims := make([]menuItem, 0, len(primitiveKinds))
-	acceptsTiles, _ := a.gridAcceptsTiles(a.gridIDForPane(p))
-	offer := menu.Offer{AcceptsTiles: acceptsTiles, ShellsDisabled: ctx.shellsDisabled}
+	offer := a.offerOn(a.gridIDForPane(p))
+	offer.ShellsDisabled = ctx.shellsDisabled
 	if offer.Primitives() {
 		for _, k := range primitiveKinds {
-			if k == tplShell && !offer.Shell() {
+			if pr, _ := primitiveFor(k); k == tplShell && !offer.Shell() || pr.disk && !offer.Disk() {
 				continue
 			}
 			prims = append(prims, menuItem{primitive: k})
 		}
 	}
 	return items, prims
+}
+
+// offerOn is what grid gid declares to the + menu; the shells policy is
+// the context node's, which the caller adds.
+func (a *App) offerOn(gid string) menu.Offer {
+	g, _ := a.gridMeta(gid)
+	return menu.Offer{AcceptsTiles: g.GetAcceptsTiles(), Directory: rpc.IsFilesID(gid), Writable: g.GetWritable()}
 }
 
 func menuTopRow(items []menuItem) int {
