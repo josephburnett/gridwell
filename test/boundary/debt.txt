@@ -62,3 +62,4 @@ low-water | packages | 78
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a door preview's refusal is said on the door, never the notice row | 5
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a listing opens no subdirectory; the door says the refusal a read of it recorded, and its parent is told | 29
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a refusal is told to the parent alone, and a permission given back to the directory too | 8
+2026-11-08 | flake fixes (Joe: the content-zoom flake, fixed for the class): a content zoom is held in the cache ahead of its echo, as a placement is | 40

@@ -20,13 +20,9 @@ test('Ctrl+= zooms a text tile: persisted as framing, no version bump', async ({
   await gw.descendCell(cx, cy);
   await gw.waitIdle();
 
-  // Three steps of 1.1, about 1.331, persisted on the tile. Settle between
-  // presses: on a slow runner a chord sent while the previous redraw is in
-  // flight is lost, and keyboard rapid-fire is not what this pins.
-  for (let i = 0; i < 3; i++) {
-    await window.keyboard.press('Control+=');
-    await gw.waitIdle();
-  }
+  // Three steps of 1.1, about 1.331, persisted on the tile. The presses go
+  // back to back: each reads the zoom the cache holds (cache.Cache.Hold).
+  for (let i = 0; i < 3; i++) await window.keyboard.press('Control+=');
   await expect
     .poll(async () => Number(tileAt(await gw.getGrid(home.gridID), 'text', cx, cy)?.contentZoom ?? 0), {
       timeout: 10_000,
@@ -80,6 +76,9 @@ test('Ctrl+= zooms a live url view (composed with the layout zoom)', async ({
 
   await expect.poll(factorOf, { timeout: 10_000 }).toBeGreaterThan(0);
   const base = await factorOf();
+  // flake, 2026-11-07 and 2026-11-08, closed: two of three back-to-back
+  // presses took effect, the first press's echo putting its zoom back under
+  // the second; docs/flake-ledger.md carries the mechanism.
   for (let i = 0; i < 3; i++) await window.keyboard.press('Control+=');
   await expect
     .poll(factorOf, { timeout: 10_000 })

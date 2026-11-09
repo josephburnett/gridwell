@@ -70,12 +70,12 @@ func (a *App) flushDoorWheelSaves() {
 		a.emit(traceevent.Framing(gid, tileID, st.cx, st.cy, st.ratio))
 		// The unload transport is the dispatcher's business, so a parked
 		// framing write reaches the beacon path too.
-		a.postFramingPersist("SetFraming", gid, tileID, "",
-			func(ctx context.Context) error {
+		a.postFramingPersist(write{label: "SetFraming", gid: gid, id: tileID,
+			call: func(ctx context.Context) error {
 				_, err := a.cl.SetFraming(ctx, req)
 				return err
 			},
-			jsonBeacon(func() (string, []byte) { return rpc.SetFramingBeacon(req) }))
+			beacon: jsonBeacon(func() (string, []byte) { return rpc.SetFramingBeacon(req) })})
 	}
 }
 
@@ -245,12 +245,12 @@ func (a *App) persistFraming(p *pane.Pane, door *gridwellv1.Tile, doorAnchor str
 		key = req.RootGridId
 	}
 	a.emit(traceevent.Framing(gridID, req.TileId, next.Cx(), next.Cy(), next.Zoom()))
-	a.postFramingPersist("SetFraming", gridID, key, "",
-		func(ctx context.Context) error {
+	a.postFramingPersist(write{label: "SetFraming", gid: gridID, id: key,
+		call: func(ctx context.Context) error {
 			_, err := a.cl.SetFraming(ctx, &req)
 			return err
 		},
-		jsonBeacon(func() (string, []byte) { return rpc.SetFramingBeacon(&req) }))
+		beacon: jsonBeacon(func() (string, []byte) { return rpc.SetFramingBeacon(&req) })})
 }
 
 // persistTextScroll is the settle persister's text arm: a text descent's
@@ -283,12 +283,12 @@ func (a *App) persistTextScroll(p *pane.Pane) {
 	a.c.PatchTile(file, func(t *gridwellv1.Tile) {
 		t.TextX, t.TextY, t.TextMode = next.X, next.Y, next.Mode
 	})
-	a.postFramingPersist("SetTextScroll", gid, file.Id, file.Id,
-		func(ctx context.Context) error {
+	a.postFramingPersist(write{label: "SetTextScroll", gid: gid, id: file.Id, chain: file.Id,
+		call: func(ctx context.Context) error {
 			_, err := a.cl.SetTile(ctx, req)
 			return err
 		},
-		jsonBeacon(func() (string, []byte) { return rpc.SetTileBeacon(req) }))
+		beacon: jsonBeacon(func() (string, []byte) { return rpc.SetTileBeacon(req) })})
 }
 
 // scheduleURLUpdate marks the URL out of date. Cheap to call from any

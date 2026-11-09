@@ -3,13 +3,12 @@
 package main
 
 import (
-	"google.golang.org/protobuf/proto"
-
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/contentzoom"
 	"github.com/josephburnett/gridwell/client/pane"
 )
@@ -71,15 +70,14 @@ func (a *App) contentZoomVerdict(p *pane.Pane, t *gridwellv1.Tile, key string) c
 	return contentzoom.Decide(t.Kind, key, contentzoom.Of(t.GetContentZoom()))
 }
 
-// applyContentZoom updates the cache, pokes the live surface for the kinds
-// that hold native state, and persists, each arm as the verdict says.
+// applyContentZoom holds the zoom in the cache until its echo, since the
+// next press reads it there, pokes the live surface for the kinds that hold
+// native state, and persists, each arm as the verdict says.
 func (a *App) applyContentZoom(p *pane.Pane, t *gridwellv1.Tile, v contentzoom.Verdict) {
 	if !v.Apply {
 		return
 	}
-	nt := proto.CloneOf(t)
-	nt.ContentZoom = v.Next
-	a.c.UpdateTile(nt.GridId, nt)
+	hz := a.c.Hold(t.Id, cache.WroteZoom, func(n *gridwellv1.Tile) { n.ContentZoom = v.Next })
 	switch k := rpc.KindOf(t.Kind); {
 	case k.Content == rpc.ContentBody:
 		// Keep the pane's live scale, which the scroll math divides by, in
@@ -98,11 +96,15 @@ func (a *App) applyContentZoom(p *pane.Pane, t *gridwellv1.Tile, v contentzoom.V
 	// content zoom being the one framing write without one, so a quit inside
 	// its settle window still loses it.
 	tileID, z := t.Id, v.Next
-	a.postFramingPersist("SetContentZoom", nt.GridId, tileID, tileID,
-		func(ctx context.Context) error {
-			_, err := a.cl.SetContentZoom(ctx, tileID, z)
+	var resp *gridwellv1.Tile
+	a.postFramingPersist(write{label: "SetContentZoom", gid: t.GridId, id: tileID, chain: tileID,
+		call: func(ctx context.Context) error {
+			var err error
+			resp, err = a.cl.SetContentZoom(ctx, tileID, z)
 			return err
-		}, nil)
+		},
+		then: func() { hz.Landed(resp) },
+		done: func() { hz.Released() }})
 }
 
 // applyShellZoom sets the live terminal's font. The per-draw overlay sync

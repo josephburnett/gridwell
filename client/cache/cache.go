@@ -30,8 +30,8 @@ type Cache struct {
 	// not routable and editing one copy must leave a sibling alone.
 	content map[string]*contentEntry
 	gens    uint64
-	// holds is the placements written ahead of their echo, by tile id.
-	holds map[string]*hold
+	// holds is the facts written ahead of their echo; see Hold.
+	holds map[holdKey]*hold
 	// writing is the content writes in flight, by tile id; see BeginWrite.
 	writing map[string]*ownWrite
 	// sel is each grid's selection ahead of the node's word; see Select.
@@ -113,7 +113,7 @@ func (g *Grid) Directory() bool { return g != nil && rpc.IsFilesID(g.Meta.GetId(
 // New returns an empty cache.
 func New() *Cache {
 	return &Cache{grids: map[string]*Grid{}, content: map[string]*contentEntry{},
-		dark: map[string]bool{}, untold: map[string]bool{}, holds: map[string]*hold{}, writing: map[string]*ownWrite{},
+		dark: map[string]bool{}, untold: map[string]bool{}, holds: map[holdKey]*hold{}, writing: map[string]*ownWrite{},
 		sel: map[string]*selHold{}}
 }
 
@@ -568,9 +568,19 @@ const (
 	WroteFrozen
 	// WrotePlacement is a tile's grid and footprint, layout: no version.
 	WrotePlacement
+	// WroteZoom is the content zoom, framing: no version.
+	WroteZoom
 )
 
-func (w Wrote) claimsVersion() bool { return w != WroteFrozen && w != WrotePlacement }
+func (w Wrote) claimsVersion() bool { return w < WroteFrozen }
+
+// same says a and b agree on the fact w names, for the facts a hold carries.
+func (w Wrote) same(a, b *gridwellv1.Tile) bool {
+	if w == WrotePlacement {
+		return PlacementOf(a) == PlacementOf(b)
+	}
+	return a.GetContentZoom() == b.GetContentZoom()
+}
 
 func (w Wrote) copy(dst, src *gridwellv1.Tile) {
 	switch w {
@@ -584,6 +594,8 @@ func (w Wrote) copy(dst, src *gridwellv1.Tile) {
 		dst.UrlFrozen = src.UrlFrozen
 	case WrotePlacement:
 		PlacementOf(src).set(dst)
+	case WroteZoom:
+		dst.ContentZoom = src.ContentZoom
 	}
 }
 
@@ -661,7 +673,7 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 			return false
 		}
 		// The held placement put it here after this removal.
-		if h, ok := c.holds[r.TileId]; ok && h.p.GridID == r.GridId {
+		if h, ok := c.holds[holdKey{r.TileId, WrotePlacement}]; ok && h.row.GridId == r.GridId {
 			return false
 		}
 		_, present := g.Tiles[r.TileId]

@@ -43,12 +43,12 @@ func TestAPlacementHoldsUntilItsOwnEchoOrVerdict(t *testing.T) {
 			c.PutGrid(&gridwellv1.Grid{Id: grid}, tiles)
 		}
 	}
-	type step func(c *Cache, pls []*Moving)
-	ev := func(f func(*Cache)) step { return func(c *Cache, _ []*Moving) { f(c) } }
+	type step func(c *Cache, pls []*Holding)
+	ev := func(f func(*Cache)) step { return func(c *Cache, _ []*Holding) { f(c) } }
 	landed := func(i int, p Placement) step {
-		return func(_ *Cache, pls []*Moving) { pls[i].Landed(row(p, "answer")) }
+		return func(_ *Cache, pls []*Holding) { pls[i].Landed(row(p, "answer")) }
 	}
-	failed := func(i int) step { return func(_ *Cache, pls []*Moving) { pls[i].Failed() } }
+	failed := func(i int) step { return func(_ *Cache, pls []*Holding) { pls[i].Failed() } }
 
 	cases := []struct {
 		name   string
@@ -95,7 +95,7 @@ func TestAPlacementHoldsUntilItsOwnEchoOrVerdict(t *testing.T) {
 			c := New()
 			c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row(origin, "start")})
 			c.PutGrid(&gridwellv1.Grid{Id: "b"}, nil)
-			var pls []*Moving
+			var pls []*Holding
 			for _, p := range tc.places {
 				pl := c.Move(id, p)
 				if pl == nil {
@@ -160,7 +160,55 @@ func TestPlacingAnUncachedRowHoldsNothing(t *testing.T) {
 	if pl := c.Move("t", Placement{GridID: "a", W: 1, H: 1}); pl != nil {
 		t.Errorf("Move on an empty cache = %v, want nil", pl)
 	}
-	var pl *Moving
+	var pl *Holding
 	pl.Landed(nil)
 	pl.Failed()
+	pl.Released()
+}
+
+// A content zoom press reads the zoom the cache shows, so the echo of an
+// earlier press must not put an older zoom back while a later one is in
+// flight: three quick presses are three steps, whenever the echoes land.
+func TestAZoomHoldsUntilItsOwnEcho(t *testing.T) {
+	row := func(z float64) *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "t", GridId: "a", Kind: rpc.KindURL, W: 1, H: 1, ContentZoom: z}
+	}
+	echo := func(c *Cache, z float64) {
+		c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{TileChanged: &gridwellv1.TileChanged{Tile: row(z)}}})
+	}
+	zoomOf := func(c *Cache) float64 { return mustRow(t, c, "a", "t").GetContentZoom() }
+	press := func(c *Cache) *Holding {
+		z := zoomOf(c) * 1.1
+		return c.Hold("t", WroteZoom, func(n *gridwellv1.Tile) { n.ContentZoom = z })
+	}
+	c := New()
+	c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row(1)})
+	first := press(c)
+	press(c)
+	first.Landed(row(1.1))
+	echo(c, 1.1)
+	press(c)
+	if got := zoomOf(c); got < 1.33 || got > 1.332 {
+		t.Fatalf("zoom after three presses = %v, want 1.331: the first press's echo put its zoom back", got)
+	}
+	second := 1.1
+	second *= 1.1
+	echo(c, second)
+	echo(c, second*1.1)
+	echo(c, 2)
+	if got := zoomOf(c); got != 2 {
+		t.Errorf("zoom = %v, want 2: the last press's echo did not release the hold", got)
+	}
+
+	// A write that did not land releases its hold and leaves the zoom shown,
+	// for the outbox to send again or the refusal's re-read to reconcile.
+	parked := press(c)
+	parked.Released()
+	if got := zoomOf(c); got != 2*1.1 {
+		t.Errorf("zoom = %v, want 2.2: a release put the zoom back", got)
+	}
+	c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row(2)})
+	if got := zoomOf(c); got != 2 {
+		t.Errorf("zoom = %v, want 2: a released hold outlived its write", got)
+	}
 }

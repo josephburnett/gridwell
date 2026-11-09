@@ -252,15 +252,15 @@ func jsonBeacon(build func() (string, []byte)) func() (string, []byte, string) {
 	}
 }
 
-// postFramingPersist dispatches a settle-persister framing write. id is the
-// door tile's id, or the root grid's id when the framing lives on a grid
+// postFramingPersist dispatches a settle-persister framing write. Its id is
+// the door tile's id, or the root grid's id when the framing lives on a grid
 // row. beacon is nil only for content zoom, which has no *Beacon builder.
 // chain is the write's save chain: a content tile's row id, so an ephemeral
 // visit's retire follows it (see deleteEphemeralTile), or empty.
-func (a *App) postFramingPersist(label, gid, id, chain string,
-	call func(ctx context.Context) error, beacon func() (string, []byte, string)) {
-	a.e2e.persistPosts[label]++
-	a.post(write{label: label, gid: gid, id: id, chain: chain, optimistic: true, call: call, beacon: beacon})
+func (a *App) postFramingPersist(w write) {
+	a.e2e.persistPosts[w.label]++
+	w.optimistic = true
+	a.post(w)
 }
 
 // recordContent and syncContentOutbox read dirtiness from the cache and hand
