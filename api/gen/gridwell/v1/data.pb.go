@@ -132,10 +132,10 @@ type Grid struct {
 	// tiles on this grid, and its order means nothing. Each id is qualified
 	// per hop like the tiles'.
 	Selection []string `protobuf:"bytes,17,rep,name=selection,proto3" json:"selection,omitempty"`
-	// moves: a tile of this grid moves to another grid of its namespace
-	// (MoveTile), so a left-drag there is a move. The owning namespace stamps
-	// it on every grid it serves, true for the home and the files; transit
-	// carries it verbatim.
+	// moves: a tile of this grid moves to another grid of its node, home's or
+	// a directory's (MoveTile, rpc.MoveRefusal), so a left-drag there is a
+	// move. The owning namespace stamps it on every grid it serves, true for
+	// the home and the files; transit carries it verbatim.
 	// Wire-only.
 	Moves         *bool `protobuf:"varint,18,opt,name=moves,proto3,oneof" json:"moves,omitempty"`
 	unknownFields protoimpl.UnknownFields
