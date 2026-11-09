@@ -711,6 +711,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   released anywhere else it does nothing. Dragging a tile into the strip is
   not a gesture. A view whose strip is open lists the templates grid, so
   the node watches it only then.
+  The templates are this node's on every menu, a far node's grid's included,
+  from the handshake; newest first is by row id, highest first, since home
+  mints ids in creation order and no time is on the wire; a new template
+  lands at x 0, its own height above the topmost (`menu.TemplateCell`), so
+  the templates grid opened as a place reads newest first as the strip does;
+  a copy onto the scratch grid shares a cell, as a visit made there does,
+  so two clicks on one template both land. A click on the copy swatch does
+  nothing, the menu stays open after a drop on it, and since it is always
+  in the strip the fold toggle shows whenever the primitives do.
 - Agents reach the node through the MCP API (2026-10-15): `/mcp` on the
   web API, Streamable HTTP, the web password as a bearer beside the cookie,
   and no build gate, since no page is behind it. It decodes onto the one
