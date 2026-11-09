@@ -58,17 +58,27 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	door, doorTile, visit := m.leaveFrame(p, w, pl)
 	landing := p.Stack.Popped(1)
 	saved, haveSaved := landingView(landing, w)
+	size, sized := p.Rect.Size()
+	// The door the pane came through stays in view, whatever shape the pane
+	// had when it left the landing grid (see zoomtrans.InView). The landing
+	// is settled, so it writes no framing until the user frames it.
+	inView := func(v rpc.Framing) rpc.Framing {
+		if doorTile == nil || !sized || doorTile.GridId != w.Leave.LandingGridID {
+			return v
+		}
+		return zoomtrans.InView(v, zoomtrans.DoorOf(doorTile), size, w.CellPx)
+	}
 	jump := func() {
 		var vp *rpc.Framing
 		switch {
 		case haveSaved:
-			v := saved
+			v := inView(saved)
 			vp = &v
 		case p.Stack.Content:
 			// A content frame's viewport is already in the landing grid's
 			// coordinates, so keeping it is where the user was.
 		default:
-			v := zoomtrans.Origin
+			v := inView(zoomtrans.Origin)
 			vp = &v
 		}
 		pl.install(p.ID, landing, vp)
@@ -77,7 +87,6 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		m.retireVisit(visit, pl)
 	}
 	// A pane with no rect or no view has no geometry to animate through.
-	size, sized := p.Rect.Size()
 	live, viewed := p.View.Framing()
 	if !animate || doorTile == nil || !sized || !viewed {
 		jump()
@@ -103,6 +112,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 		if !haveSaved {
 			saved = centredAt(cx, cy)
 		}
+		saved = inView(saved)
 		land := landing.Copy()
 		pl.add(Effect{Kind: EffStartTransition, PaneID: p.ID, TraceTileID: door, Land: tok,
 			Segments: []transition.Segment{{
@@ -129,6 +139,7 @@ func (m *Machine) ascendOnce(p PaneView, w World, pl *planner, animate bool) {
 	if !haveSaved {
 		saved = centredAt(switchTo.Cx, switchTo.Cy)
 	}
+	saved = inView(saved)
 	cur := p.Stack.Copy()
 	land := landing.Copy()
 	childDist := zoomtrans.PanDist(mid.Cx-from.Cx, mid.Cy-from.Cy, from.Zoom, w.CellPx) +

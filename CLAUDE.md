@@ -967,6 +967,18 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A client the node served runs the node's build: the web API refuses any call
   from another build, and the client shows one persistent notice with a
   Reload button and reloads only when the user asks (2026-10-07).
+- An ascent keeps the door in view (Joe, 2026-11-09): "when I ascend
+  from a grid ... I would like to automatically zoom to a center point
+  such that my previous location is within view, at least 1/3 of the way
+  into the screen." The grid's own view is landed, moved by the smallest
+  pan that shows the door or content tile the pane came out of wholly,
+  its center in the middle third of each axis, and zoomed out to fit it
+  only when it cannot fit at that zoom (`zoomtrans.InView`). Every ascent
+  takes it, the crumb, the middle click, out of a content tile and inside
+  a workspace tile, and a row the landing grid does not hold, an
+  ephemeral visit's, moves nothing. The landing is settled, so it writes
+  no framing until the user frames the grid; inside a workspace tile the
+  layout the ascent writes carries it. A resize moves nothing.
 
 ## Gates
 

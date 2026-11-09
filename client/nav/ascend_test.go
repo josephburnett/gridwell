@@ -7,6 +7,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/scratch"
+	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
 
 // doorPane is a pane that descended from g1 through the door w1, sitting
@@ -358,5 +359,76 @@ func TestAscendInsideAWorkspaceWritesNoFraming(t *testing.T) {
 		if c.leave.DoorTile != nil && door.ViewCx != 99 {
 			t.Errorf("%s: the door row was patched", c.name)
 		}
+	}
+}
+
+// TestAscentKeepsTheDoorInView: a grid left at a view the door is far from,
+// as one left in a pane of another shape, lands where zoomtrans.InView puts
+// the door, by every path an ascent takes: animated, instant, inside a
+// workspace tile and out of a content tile (Joe 2026-11-09).
+func TestAscentKeepsTheDoorInView(t *testing.T) {
+	size, _ := pane.Rect{W: 800, H: 600}.Size()
+	wantFor := func(door *gridwellv1.Tile) rpc.Framing {
+		return zoomtrans.InView(fr(50, 0, 1), zoomtrans.DoorOf(door), size, 64)
+	}
+	leftFar := func(p PaneView) PaneView {
+		p.Stack = pane.StackOf(append([]pane.Frame{framed(pane.Frame{GridID: "g1"}, 50, 0, 1)},
+			p.Stack.Frames()[1:]...))
+		return p
+	}
+	textRow := &gridwellv1.Tile{Id: "t1", Kind: rpc.KindText, GridId: "g1", X: 2, Y: 2, W: 3, H: 2}
+	cases := []struct {
+		name    string
+		pane    PaneView
+		door    *gridwellv1.Tile
+		depth   int
+		animate bool
+	}{
+		{"animated out of a child grid", doorPane("pane1"), doorRow(), 0, true},
+		{"instant out of a child grid", doorPane("pane1"), doorRow(), 0, false},
+		{"inside a workspace tile", doorPane("pane1"), doorRow(), 1, true},
+		{"instant inside a workspace tile", doorPane("pane1"), doorRow(), 1, false},
+		{"animated out of a content tile", contentPane("pane1", "t1"), textRow, 0, true},
+		{"instant out of a content tile", contentPane("pane1", "t1"), textRow, 0, false},
+	}
+	for _, c := range cases {
+		w := baseWorld(leftFar(c.pane))
+		w.LevelDepth = c.depth
+		w.Leave = &LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow(),
+			DescendedTile: textRow, LandingGridID: "g1"}
+		plan := New().Do(ascendGesture("pane1", 1, c.animate), w)
+		var got rpc.Framing
+		if c.animate {
+			segs := only(t, plan, EffStartTransition).Segments
+			last := segs[len(segs)-1]
+			got = fr(last.ToCx, last.ToCy, last.ToZoom)
+		} else {
+			vp := only(t, plan, EffInstallPlace).Viewport
+			if vp == nil {
+				t.Fatalf("%s: installed no viewport", c.name)
+			}
+			got = *vp
+		}
+		if want := wantFor(c.door); got != want {
+			t.Errorf("%s: landed at %+v, want %+v", c.name, got, want)
+		}
+		if got == fr(50, 0, 1) {
+			t.Errorf("%s: the door was left out of view", c.name)
+		}
+	}
+}
+
+// A row the landing grid does not hold, as an ephemeral visit's, has no
+// place there to keep in view.
+func TestAscentOutOfAnOffGridRowKeepsTheView(t *testing.T) {
+	p := contentPane("pane1", "r1")
+	p.Stack = pane.StackOf(append([]pane.Frame{framed(pane.Frame{GridID: "g1"}, 50, 0, 1)},
+		p.Stack.Frames()[1:]...))
+	w := baseWorld(p)
+	w.Leave = &LeaveWorld{LandingGridID: "g1",
+		DescendedTile: &gridwellv1.Tile{Id: "r1", Kind: rpc.KindURL, GridId: "sg", X: 2, Y: 2, W: 3, H: 2}}
+	vp := only(t, New().Do(ascendGesture("pane1", 1, false), w), EffInstallPlace).Viewport
+	if vp == nil || *vp != fr(50, 0, 1) {
+		t.Fatalf("landed at %+v, want the view the grid was left at", vp)
 	}
 }
