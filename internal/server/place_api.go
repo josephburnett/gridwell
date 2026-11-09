@@ -93,7 +93,7 @@ func (s *Server) servePlace(w http.ResponseWriter, r *http.Request, st pane.URLS
 		refusedWeb(r.URL.Path, http.StatusNotFound, "dead link", nil)
 		http.Error(w, "dead link", http.StatusNotFound)
 	case out.Body != nil:
-		w.Header().Set("Content-Type", textType(rpc.ContentID(row)))
+		w.Header().Set("Content-Type", textType(row))
 		_, _ = w.Write([]byte(*out.Body))
 	case out.URL != "":
 		w.Header().Set("Content-Type", "text/uri-list")
@@ -108,10 +108,10 @@ func (s *Server) servePlace(w http.ResponseWriter, r *http.Request, st pane.URLS
 	}
 }
 
-// textType is a body's media type: markdown, but a file that is not is
-// plain text.
-func textType(id string) string {
-	if path, file := rpc.FilePath(id); file && !rpc.Markdown(path) {
+// textType is a body's media type: markdown when the row's presentation
+// renders it as markdown, else plain text.
+func textType(row *pb.Tile) string {
+	if row.GetTextPresentation() == rpc.TextPresentationPlain || row.GetTextPresentation() == rpc.TextPresentationInfo {
 		return "text/plain; charset=utf-8"
 	}
 	return "text/markdown; charset=utf-8"
