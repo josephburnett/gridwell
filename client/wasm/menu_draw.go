@@ -186,7 +186,7 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 		// A template moving out leaves its slot empty, as a tile moving
 		// on a grid does.
 		if a.ghost == nil || !a.ghost.hidden.Has(item.template.Id) {
-			a.drawTemplate(item.template, x, y, w)
+			a.drawTemplate(item.template, x, y, w, h)
 		}
 	case item.isSwatch:
 		// A source swatch is the linked door it drops into a grid, dashed
@@ -211,11 +211,10 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 }
 
 // drawTemplate draws a template as its tile is drawn on a grid, fitted to
-// the side px square of its slot with its shape kept.
-func (a *App) drawTemplate(n *gridwellv1.Tile, x, y, side float64) {
-	cell := side / float64(max(n.W, n.H, 1))
-	w, h := float64(max(n.W, 1))*cell, float64(max(n.H, 1))*cell
-	a.drawNodeWithPreview(n, x+(side-w)/2, y+(side-h)/2, w, h, cell, false, pane.TileFamily(n), isLinkTile(n), "")
+// its slot (menu.Fit).
+func (a *App) drawTemplate(n *gridwellv1.Tile, x, y, w, h float64) {
+	cell, at := menu.Fit(pane.Rect{X: x, Y: y, W: w, H: h}, n.W, n.H)
+	a.drawNodeWithPreview(n, at.X, at.Y, at.W, at.H, cell, false, pane.TileFamily(n), isLinkTile(n), "")
 }
 
 // drawCopySwatch is the strip's first item: dashed, grey on the menu's
@@ -277,6 +276,16 @@ func (a *App) drawSourceHealthTint(n *gridwellv1.Tile, x, y, w, h float64) {
 // menuTileIndexAt is the wasm-side adapter for menu.Layout.TileIndexAt.
 func (a *App) menuTileIndexAt(p *pane.Pane, x, y float64) int {
 	return a.menuLayoutFor(p).TileIndexAt(x, y)
+}
+
+// menuTemplateAt is the template under the pointer and its item index, nil
+// off one.
+func (a *App) menuTemplateAt(p *pane.Pane, x, y float64) (*gridwellv1.Tile, int) {
+	i := a.menuTileIndexAt(p, x, y)
+	if items := a.menuItems(p); i >= 0 && i < len(items) && items[i].template != nil {
+		return items[i].template, i
+	}
+	return nil, -1
 }
 
 // pointInMenu is the wasm-side adapter for menu.Layout.PointInPopover.

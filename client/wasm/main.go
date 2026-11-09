@@ -557,9 +557,12 @@ type dragState struct {
 	originScreenY float64
 
 	// item is a menu drag's grabbed entry: a primitive to create or a source
-	// to link as a door to another namespace.
-	fromMenu bool
-	item     menuItem
+	// to link as a door to another namespace, which fromMenu marks, or a
+	// template, a tile drag. menuPress is any press on a menu item, whose
+	// bare release is the item's click (clickMenuItem).
+	fromMenu  bool
+	menuPress bool
+	item      menuItem
 
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string

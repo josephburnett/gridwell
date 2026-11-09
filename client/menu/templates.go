@@ -28,3 +28,14 @@ func Templates(tiles map[string]*gridwellv1.Tile) []*gridwellv1.Tile {
 	})
 	return out
 }
+
+// Fit is where a w×h tile sits in a strip slot: the cell size it is drawn
+// at and its rect, its shape kept and centered. The strip's draw and the
+// ghost a press on it starts both read it.
+func Fit(slot Rect, w, h int64) (cell float64, at Rect) {
+	w, h = max(w, 1), max(h, 1)
+	cell = min(slot.W, slot.H) / float64(max(w, h))
+	at = Rect{W: float64(w) * cell, H: float64(h) * cell}
+	at.X, at.Y = slot.X+(slot.W-at.W)/2, slot.Y+(slot.H-at.H)/2
+	return cell, at
+}

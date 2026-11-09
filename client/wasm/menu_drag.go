@@ -32,12 +32,17 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		return
 	}
 	item := items[idx]
-	if item.copySwatch || item.template != nil {
+	if item.template != nil {
+		a.startTemplateDrag(p, idx, item.template, sx, sy, dragdrop.IntentMove)
+		return
+	}
+	if item.copySwatch {
 		return
 	}
 	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
+		menuPress:    true,
 		fromMenu:     true,
 		item:         item,
 		// The menu belongs to the pane's node, and the drop rules compare
@@ -57,6 +62,30 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		// as dragging a tile across doors.
 		srcCellSize: tw,
 	}
+}
+
+// startTemplateDrag arms the drag of template n, the menu's i'th item, as
+// any tile's drag is armed: it carries the template's row from the templates
+// grid, so a left-drag moves it out, a right-drag copies and ctrl links, and
+// dragdrop.DecideDrop decides as it does for every tile. The strip is only
+// where the ghost starts.
+func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
+	cell, at := menu.Fit(a.menuLayoutFor(p).TileRect(i), n.W, n.H)
+	a.dragging = &dragState{
+		originPaneID: p.ID,
+		menuPress:    true,
+		item:         menuItem{template: n},
+		intent:       intent,
+		touch:        a.fingerPress,
+		startScreenX: sx,
+		startScreenY: sy,
+		curScreenX:   sx,
+		curScreenY:   sy,
+		srcGridID:    a.templates,
+		srcCellSize:  cell,
+	}
+	a.dragging.grabTile(n, float64(n.X)+(sx-at.X)/cell, float64(n.Y)+(sy-at.Y)/cell, at.X, at.Y)
+	a.dragging.carried = a.carryRows(a.templates, n)
 }
 
 // menuItemGhostNode synthesizes the 1x1 tile the ghost renderer paints, so

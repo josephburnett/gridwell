@@ -819,7 +819,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 	tr := l.ToggleRect()
 	sr := l.StripRect()
 	return map[string]any{
-		"open":  a.menu.OpenOn(p.ID),
+		"open": a.menu.OpenOn(p.ID),
 		// The strip's visible band, which an item is hit only inside.
 		"strip": map[string]any{"x": sr.X, "y": sr.Y, "w": sr.W, "h": sr.H, "scroll": a.menu.StripScroll()},
 		"plusX": px,

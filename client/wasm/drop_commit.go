@@ -46,7 +46,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// verdict's bare-click arm, which is the canvas's. The popover floats
 	// over a live pane, so falling through would act on the tile behind the
 	// swatch.
-	if d.fromMenu && !d.started {
+	if d.menuPress && !d.started {
 		a.clickMenuItem(d)
 		return true
 	}

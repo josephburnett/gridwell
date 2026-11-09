@@ -31,6 +31,10 @@ const (
 	// rightDragTileResize is armed outside that center. The pin is the corner
 	// diagonally opposite the click quadrant; the cursor may cross it.
 	rightDragTileResize
+	// rightDragTemplate is armed on a right-down on a template in the + menu's
+	// strip: the copy or link drag of its row, a.dragging; a bare release is
+	// a no-op, as on a tile's center.
+	rightDragTemplate
 )
 
 type rightDragState struct {
@@ -197,6 +201,8 @@ func (a *App) onRightMove(sx, sy float64) {
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
 		a.advanceCopyDrag(sx, sy)
+	case rightDragTemplate:
+		a.advanceCopyDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
 	}
@@ -303,7 +309,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitSwap(rd, sx, sy)
 	case rd.kind == rightDragSplit:
 		a.commitSplit(rd, sx, sy)
-	case rd.kind == rightDragTileCenter:
+	case rd.kind == rightDragTileCenter, rd.kind == rightDragTemplate:
 		a.commitTileCenter(sx, sy)
 	case rd.kind == rightDragTileResize:
 		a.commitTileResize(rd)

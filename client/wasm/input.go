@@ -414,6 +414,16 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	// Routed before pane resolution: resolving the pane under the popover first
 	// would close the very menu being used. Missing a swatch swallows the click.
+	// A right press on a template copies it out, as on any tile; elsewhere
+	// over the popover it is the canvas's, as it always was.
+	if mp, _, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 2 {
+		if t, idx := a.menuTemplateAt(mp, sx, sy); t != nil {
+			args[0].Call("preventDefault")
+			a.rightDrag = &rightDragState{kind: rightDragTemplate, startX: sx, startY: sy, curX: sx, curY: sy}
+			a.startTemplateDrag(mp, idx, t, sx, sy, rightDragIntent(args[0]))
+			return nil
+		}
+	}
 	if mp, mr, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 0 {
 		if a.pointInMenu(mp, sx, sy) {
 			// Not a swatch, so no drag arms; it changes only the menu.
