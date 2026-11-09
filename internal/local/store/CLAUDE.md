@@ -34,7 +34,13 @@ over it is listed from these rows (`HeldUnder`).
 nothing and may run beside a serving node, and `Analysis`. `gridwell
 clean` runs `Clean`: one `withMutation` that removes what nothing reaches,
 through the delete's own teardown, refused whole if a kept row or blob
-would change. The trash and every tombstone are kept.
+would change. The trash, the templates and every tombstone are kept.
+
+Home's singleton grids, root, scratch, trash and templates, are `system`
+rows (`singletonGridKeys`), each minted by `Open` when absent and never on a
+read, so a file from before one existed gains it on its next open with no
+schema step. The templates grid is an ordinary home grid; its tiles are
+the + menu's templates.
 
 ## The promise
 

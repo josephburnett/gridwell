@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS system (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
--- Keys: root_grid_id, plugin_uuid (the node uuid), scratch_grid_id, trash_grid_id. Home's
+-- Keys: root_grid_id, plugin_uuid (the node uuid), scratch_grid_id, trash_grid_id,
+-- templates_grid_id. Home's
 -- root framing is not here: it lives on its root grid row, key = '', in the
 -- same three columns every other root uses.
 `

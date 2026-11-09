@@ -11,9 +11,9 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
-// sizeFixture is a node holding live rows of every place, the trash, a
-// tombstoned file row, and planted garbage of each class. It answers the ids
-// of the garbage rows, so a dump can leave them out.
+// sizeFixture is a node holding live rows of every place, the trash, the
+// templates, a tombstoned file row, and planted garbage of each class. It
+// answers the ids of the garbage rows, so a dump can leave them out.
 func sizeFixture(t *testing.T) (s *Store, path string, garbage map[string]bool) {
 	t.Helper()
 	ctx := context.Background()
@@ -39,6 +39,21 @@ func sizeFixture(t *testing.T) (s *Store, path string, garbage map[string]bool) 
 		t.Fatal(err)
 	}
 	if _, err := s.CreateScratchURL(ctx, "https://example.org"); err != nil {
+		t.Fatal(err)
+	}
+	// A template, and one that is a door with a text under it: kept.
+	templates, err := s.TemplatesGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateText(ctx, templates, 0, 0, 1, 1, []byte("a template")); err != nil {
+		t.Fatal(err)
+	}
+	tdoor, err := s.CreateDoor(ctx, templates, 1, 0, 1, 1, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateText(ctx, tdoor.ChildGridId, 0, 0, 1, 1, []byte("under a template")); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteTile(ctx, &gridwellv1.DeleteTileRequest{TileId: trashed.Id}); err != nil {
@@ -141,6 +156,7 @@ func TestCleanRemovesWhatNothingReaches(t *testing.T) {
 		"drift":           a.RefcountDrift,
 		"home texts":      a.Kinds["text"][PlaceHome],
 		"trash texts":     a.Kinds["text"][PlaceTrash],
+		"template texts":  a.Kinds["text"][PlaceTemplates],
 		"scratch urls":    a.Kinds["url"][PlaceScratch],
 		"files texts":     a.Kinds["text"][PlaceFiles],
 		"tombstoned":      a.Kinds["text"][PlaceTombstoned],
@@ -149,7 +165,7 @@ func TestCleanRemovesWhatNothingReaches(t *testing.T) {
 	}
 	want := map[string]int{
 		"unreached grids": 2, "unreached tiles": 3, "gone-grid tiles": 1, "unnamed blobs": 1,
-		"unreached-only": 1, "drift": 0, "home texts": 2, "trash texts": 1, "scratch urls": 1,
+		"unreached-only": 1, "drift": 0, "home texts": 2, "trash texts": 1, "template texts": 2, "scratch urls": 1,
 		"files texts": 1, "tombstoned": 1, "previews": 1, "trash only": 1,
 	}
 	for k, w := range want {

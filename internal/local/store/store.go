@@ -58,9 +58,10 @@ type Store struct {
 }
 
 const (
-	systemKeyRootGridID    = "root_grid_id"
-	systemKeyNodeUUID      = "plugin_uuid" // the stored spelling: a key is never renamed
-	systemKeyScratchGridID = "scratch_grid_id"
+	systemKeyRootGridID      = "root_grid_id"
+	systemKeyNodeUUID        = "plugin_uuid" // the stored spelling: a key is never renamed
+	systemKeyScratchGridID   = "scratch_grid_id"
+	systemKeyTemplatesGridID = "templates_grid_id"
 )
 
 // Open opens a SQLite database at path, applies the schema, and mints the
@@ -132,7 +133,7 @@ func systemValue(ctx context.Context, q gridReader, key string) (string, bool, e
 
 // singletonGridKeys names every grid the node holds exactly one of. Open mints
 // each absent one, so a read only ever finds them.
-var singletonGridKeys = []string{systemKeyRootGridID, systemKeyScratchGridID, systemKeyTrashGridID}
+var singletonGridKeys = []string{systemKeyRootGridID, systemKeyScratchGridID, systemKeyTrashGridID, systemKeyTemplatesGridID}
 
 // singletonGrid returns the grid a system key names. Absent is a store Open
 // did not bootstrap, never a cue to mint.
@@ -208,12 +209,18 @@ func (s *Store) singletonID(ctx context.Context, key string) (string, error) {
 	return strconv.FormatInt(id, 10), nil
 }
 
-// ScratchGridID returns the id of this store's scratch grid. It holds url tiles visited by descending into a url without
-// placing one on a visible grid. It never renders, yet it persists, so it
-// doubles as the visited-url history that feeds autocomplete and a deep link
-// into it still resolves. The id is stored once in system metadata.
+// ScratchGridID returns the id of this store's scratch grid. It holds the
+// ephemeral visits, tiles opened without placing one on a visible grid. It
+// never renders, and a row on it lives while a visit or a workspace tile's
+// layout holds it (see WorkspaceEphemeralRefs).
 func (s *Store) ScratchGridID(ctx context.Context) (string, error) {
 	return s.singletonID(ctx, systemKeyScratchGridID)
+}
+
+// TemplatesGridID returns home's templates grid, an ordinary home grid whose
+// tiles the + menu's strip lists.
+func (s *Store) TemplatesGridID(ctx context.Context) (string, error) {
+	return s.singletonID(ctx, systemKeyTemplatesGridID)
 }
 
 // Ephemeral reports that gridID is the scratch grid, so a tile on it is an

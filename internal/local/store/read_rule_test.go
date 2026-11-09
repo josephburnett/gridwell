@@ -165,6 +165,7 @@ func readCases() []readCase {
 		{"NodeUUID", func(ctx context.Context, s *Store, _ readSubject) { s.NodeUUID(ctx) }},
 		{"ScratchGridID", func(ctx context.Context, s *Store, _ readSubject) { s.ScratchGridID(ctx) }},
 		{"TrashGridID", func(ctx context.Context, s *Store, _ readSubject) { s.TrashGridID(ctx) }},
+		{"TemplatesGridID", func(ctx context.Context, s *Store, _ readSubject) { s.TemplatesGridID(ctx) }},
 		{"RootFraming", func(ctx context.Context, s *Store, _ readSubject) { s.RootFraming(ctx) }},
 		{"GridFraming/root", func(ctx context.Context, s *Store, sub readSubject) { s.GridFraming(sub.root) }},
 		{"GridFraming/child", func(ctx context.Context, s *Store, sub readSubject) { s.GridFraming(sub.child) }},

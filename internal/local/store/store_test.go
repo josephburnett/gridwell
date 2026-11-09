@@ -188,3 +188,30 @@ func TestOpenMintsEverySingletonOnce(t *testing.T) {
 		t.Errorf("trash grid not minted afresh on a home that lacked it")
 	}
 }
+
+// The templates grid is a home grid of its own: minted on open, empty, and
+// the same grid after a reopen.
+func TestTemplatesGridIsAHomeGrid(t *testing.T) {
+	ctx := context.Background()
+	s, path := newTestStoreFile(t)
+	id, err := s.TemplatesGridID(ctx)
+	if err != nil {
+		t.Fatalf("TemplatesGridID: %v", err)
+	}
+	g, err := s.GetGrid(ctx, id)
+	if err != nil {
+		t.Fatalf("GetGrid(templates): %v", err)
+	}
+	if len(g.Tiles) != 0 {
+		t.Errorf("templates grid holds %d tiles, want none", len(g.Tiles))
+	}
+	for key, other := range singletonIDs(t, s) {
+		if key != systemKeyTemplatesGridID && other == id {
+			t.Errorf("templates grid %s is also %s", id, key)
+		}
+	}
+	_ = s.Close()
+	if again, err := reopen(t, path).TemplatesGridID(ctx); err != nil || again != id {
+		t.Errorf("reopen: templates grid %q (%v), want %q", again, err, id)
+	}
+}

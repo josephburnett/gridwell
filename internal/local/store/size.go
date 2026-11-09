@@ -1,7 +1,7 @@
 package store
 
 // What gridwell.db holds, and the one removal of what nothing reaches. A grid
-// is reached from a singleton (root, scratch, trash) or a files row, through
+// is reached from a singleton (root, scratch, trash, templates) or a files row, through
 // the doors that own their grids (tileRefs); a blob is kept while a row names
 // it. The trash and a tombstoned file row are reached, by decision.
 
@@ -25,6 +25,7 @@ const (
 	PlaceHome       = "home"
 	PlaceScratch    = "scratch"
 	PlaceTrash      = "trash"
+	PlaceTemplates  = "templates"
 	PlaceFiles      = "files"
 	PlaceTombstoned = "tombstoned"
 	PlaceUnreached  = "unreached"
@@ -32,7 +33,7 @@ const (
 )
 
 // Places is every place, in report order.
-var Places = []string{PlaceHome, PlaceScratch, PlaceTrash, PlaceFiles, PlaceTombstoned, PlaceUnreached, PlaceGoneGrid}
+var Places = []string{PlaceHome, PlaceScratch, PlaceTrash, PlaceTemplates, PlaceFiles, PlaceTombstoned, PlaceUnreached, PlaceGoneGrid}
 
 // Blobs is a set of blobs: how many, and their data's bytes.
 type Blobs struct {
@@ -209,7 +210,8 @@ func analyze(ctx context.Context, q gridReader) (Analysis, cleanPlan, error) {
 			queue = append(queue, g)
 		}
 	}
-	for key, where := range map[string]string{systemKeyRootGridID: PlaceHome, systemKeyScratchGridID: PlaceScratch, systemKeyTrashGridID: PlaceTrash} {
+	for key, where := range map[string]string{systemKeyRootGridID: PlaceHome, systemKeyScratchGridID: PlaceScratch, systemKeyTrashGridID: PlaceTrash,
+		systemKeyTemplatesGridID: PlaceTemplates} {
 		g, err := singletonGrid(ctx, q, key)
 		if err != nil {
 			return a, p, err
