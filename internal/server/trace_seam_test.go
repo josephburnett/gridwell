@@ -125,7 +125,8 @@ func TestAnRPCWithoutARequestIDIsStillTraced(t *testing.T) {
 
 // A read of a namespace this node does not declare is answered with the dead
 // verdict, and its span says dead, never error, on both APIs: a dead link is
-// a state.
+// a state. Each span names the API that served it, so a far node's call
+// tells apart from this node's own in a dump.
 func TestADeadAnswerIsTracedAsDead(t *testing.T) {
 	srv := mustNew(t, &Sources{}, Config{Dir: t.TempDir()})
 	hs := serveWeb(t, srv)
@@ -149,7 +150,7 @@ func TestADeadAnswerIsTracedAsDead(t *testing.T) {
 	if _, err := pb.NewGridwellClient(conn).GetGrid(ctx, &pb.GetGridRequest{GridId: "afxl3c7/~Ym94OmltYm94"}); !gwerr.IsDeadLink(err) {
 		t.Fatalf("GetGrid of an undeclared namespace = %v, want the dead verdict", err)
 	}
-	for _, want := range []string{"dead-web", "dead-conn"} {
+	for want, api := range map[string]string{"dead-web": "web", "dead-conn": "connection"} {
 		var end tracewire.Record
 		for _, rec := range trace.Default().Snapshot() {
 			if rec.Src == "router" && rec.KV["req"] == want && rec.Msg != "GetGrid start" {
@@ -158,6 +159,9 @@ func TestADeadAnswerIsTracedAsDead(t *testing.T) {
 		}
 		if end.Msg != "GetGrid dead" || end.KV["code"] != "" {
 			t.Errorf("req %s ended %q code %q, want \"GetGrid dead\" with no code", want, end.Msg, end.KV["code"])
+		}
+		if end.KV["api"] != api {
+			t.Errorf("req %s was served by api %q, want %q", want, end.KV["api"], api)
 		}
 	}
 }

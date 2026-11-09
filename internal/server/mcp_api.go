@@ -39,7 +39,7 @@ func traceTools(next mcp.MethodHandler) mcp.MethodHandler {
 			return next(ctx, method, req)
 		}
 		tool := call.Params.Name
-		sp := rpcSpan("", tool, nil)
+		sp := rpcSpan("mcp", "", tool, nil)
 		sp.verb, sp.id = "mcp/"+tool, tracedID(call.Params.Arguments)
 		if call.Extra != nil {
 			if shell := call.Extra.Header.Get(mcpapi.ShellHeader); shell != "" {

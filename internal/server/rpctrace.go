@@ -5,7 +5,9 @@ package server
 // error code are already spelled, and both call the one rpcSpan. kv["req"] is
 // the client's own request id off tracewire.RequestHeader: it is what joins a
 // gesture to the calls it caused, on every node a connection carries it to
-// (trace.WithRequest), and it is empty when nobody sent one.
+// (trace.WithRequest), and it is empty when nobody sent one. kv["api"] is
+// the API that served the call, so a far node's call, which carries no
+// request id, tells apart from this node's own.
 // kv["id"] is the entity the request is about; see rpc.EntityOf. kv["session"]
 // is the client session it names; see sessionOf. A select's span carries its
 // counts and flags, since the ids it names are not one entity.
@@ -40,9 +42,11 @@ type span struct {
 	started         bool
 }
 
-// rpcSpan opens the span; req is the request message, nil for a stream.
-func rpcSpan(reqID, procedure string, req any) *span {
+// rpcSpan opens the span of a call api served; req is the request message,
+// nil for a stream.
+func rpcSpan(api, reqID, procedure string, req any) *span {
 	s := &span{reqID: reqID, verb: procedure[strings.LastIndex(procedure, "/")+1:], start: time.Now()}
+	s.add("api", api)
 	if req != nil {
 		s.saw(req)
 	}
@@ -127,7 +131,7 @@ type traceInterceptor struct{}
 
 func (traceInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		s := rpcSpan(req.Header().Get(tracewire.RequestHeader), req.Spec().Procedure, req.Any())
+		s := rpcSpan("web", req.Header().Get(tracewire.RequestHeader), req.Spec().Procedure, req.Any())
 		resp, err := next(trace.WithRequest(ctx, s.reqID), req)
 		s.end(err, connectCode(err))
 		return resp, err
@@ -141,7 +145,7 @@ func (traceInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) co
 
 func (traceInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		s := rpcSpan(conn.RequestHeader().Get(tracewire.RequestHeader), conn.Spec().Procedure, nil)
+		s := rpcSpan("web", conn.RequestHeader().Get(tracewire.RequestHeader), conn.Spec().Procedure, nil)
 		err := next(trace.WithRequest(ctx, s.reqID), sawConn{conn, s})
 		s.end(err, connectCode(err))
 		return err
@@ -195,14 +199,14 @@ func grpcCode(err error) string {
 // traceUnary and traceStream are the connection API's half, and stamp what it
 // returns as this node's answer (gwerr.Answered).
 func traceUnary(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	s := rpcSpan(requestIDOf(ctx), info.FullMethod, req)
+	s := rpcSpan("connection", requestIDOf(ctx), info.FullMethod, req)
 	resp, err := handler(trace.WithRequest(ctx, s.reqID), req)
 	s.end(err, grpcCode(err))
 	return resp, gwerr.Answered(err)
 }
 
 func traceStream(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	s := rpcSpan(requestIDOf(ss.Context()), info.FullMethod, nil)
+	s := rpcSpan("connection", requestIDOf(ss.Context()), info.FullMethod, nil)
 	err := handler(srv, sawStream{ss, s, trace.WithRequest(ss.Context(), s.reqID)})
 	s.end(err, grpcCode(err))
 	return gwerr.Answered(err)
