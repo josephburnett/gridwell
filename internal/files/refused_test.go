@@ -171,3 +171,28 @@ func toldIn(ev <-chan *pb.Event) map[string]int {
 		return told
 	}
 }
+
+// A shown directory the OS refused is watched once its permission is given
+// back, with no view change between, so a change in it is told.
+func TestAShownDirectoryGivenBackIsWatched(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+	f := newFixture(t)
+	locked := f.mkdir("locked")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	f.show(f.root, locked)
+	_, err := f.s.GetGrid(context.Background(), &pb.GetGridRequest{GridId: idOf(locked)})
+	wantCode(t, "GetGrid of the refused directory", err, codes.PermissionDenied)
+	ev := f.events()
+	if err := os.Chmod(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	await(t, ev, "the directory told when given back", gridChanged(locked))
+	f.grid(locked)
+	f.write("locked/new.md", "new")
+	await(t, ev, "a change in the directory given back", gridChanged(locked))
+}

@@ -489,7 +489,13 @@ func (w *watcher) event(fsw *fsnotify.Watcher, ev fsnotify.Event) {
 		w.touch(path, true, "")
 	}
 	// A refused directory has no watch of its own, so its parent's hears its
-	// permission given back, and a view showing it is told.
+	// permission given back, and a view showing it is watched and told.
+	if ev.Has(fsnotify.Chmod) && w.scope[path] {
+		if err := w.watchDir(path); err != nil {
+			w.failed = err.Error()
+			w.s.noteWatch(w.failed)
+		}
+	}
 	if ev.Has(fsnotify.Chmod) && w.s.noteRefusal(path, nil) && w.scope[path] {
 		w.s.emitGridChanged(path)
 	}
