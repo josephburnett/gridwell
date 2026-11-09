@@ -514,3 +514,23 @@ func verifyRefcounts(t *testing.T, s *Store) {
 		}
 	}
 }
+
+// A copy into the scratch grid is an ephemeral visit, and visits share a
+// cell as createScratch's do: the scratch grid is never drawn.
+func TestCopyIntoScratchSharesACell(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	src, err := s.CreateText(ctx, rootID(t, s), 0, 0, 1, 1, []byte("t"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, err := s.CopyTile(ctx, &gridwellv1.CopyTileRequest{TileId: src.Id, DestGridId: scratch}); err != nil {
+			t.Fatalf("copy into scratch at (0,0): %v", err)
+		}
+	}
+}

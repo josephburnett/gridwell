@@ -73,3 +73,5 @@ low-water | packages | 78
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a layout holds every row of a pane's path, so the boot sweep, clean and the reap keep an ephemeral door a pane descended through (panelayout.HeldIDs) | 13
 2026-11-09 | Joe 2026-11-09 ascent keeps the door in view: zoomtrans.InView, the smallest pan that shows a door with its center in the middle third, zoomed out to fit only when it cannot | 25
 2026-11-09 | Joe 2026-11-09 ascent keeps the door in view: every ascent lands on zoomtrans.InView of the door or content tile it came out of, settled so it writes no framing | 11
+2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): the templates grid, minimal, for the client's specs | 23
+2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a copy into the scratch grid shares a cell | 5

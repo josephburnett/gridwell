@@ -31,11 +31,16 @@ func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (
 			return err
 		}
 
+		// Visits share a cell on the scratch grid, as createScratch's do.
+		visit, err := ephemeralGrid(ctx, tx, dstGrid)
+		if err != nil {
+			return err
+		}
 		over, err := overlapsExisting(ctx, tx, dstGrid, req.X, req.Y, n.W, n.H)
 		if err != nil {
 			return err
 		}
-		if over {
+		if over && !visit {
 			return ErrOverlap
 		}
 
