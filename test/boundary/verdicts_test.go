@@ -25,6 +25,8 @@ var verdictOwners = []struct {
 		regexp.MustCompile(`[!=]=\s*[\w.]*[sS]cratch\w*|[sS]cratch\w*(\(\))?\s*[!=]=\s*[^"\s0]`), 0},
 	{"an id names a file or a directory (rpc.OnDisk)", []string{"api/rpc/segment.go"},
 		regexp.MustCompile(`ShapeOf\([^)]*\)\s*[!=]=\s*(rpc\.)?ShapeKey`), 0},
+	{"a tile kind's name (the rpc.Kind constants)", []string{"api/rpc/types.go"},
+		regexp.MustCompile(`[Kk]ind(\(\))?\s*[!=]=\s*"(text|url|shell|door|workspace)"|return "(text|url|shell|door|workspace)"`), 0},
 	{"two ids are held by one node (rpc.SameNode)", []string{"api/rpc/segment.go"},
 		regexp.MustCompile(`\bNamespaceOf\([^)]*\)\s*[!=]=|[!=]=\s*(rpc\.)?NamespaceOf\(`), 0},
 	{"a size as ls -h spells it (fileinfo.Size)", []string{"client/fileinfo/fileinfo.go"},

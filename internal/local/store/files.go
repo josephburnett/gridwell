@@ -184,7 +184,7 @@ func (n *FileRows) Overlay(gridID int64, entries []Entry) ([]FileTile, error) {
 // default, applied where the join and the mint both see it.
 func entryKind(e Entry) string {
 	if e.Kind == "" {
-		return "text"
+		return rpc.KindText
 	}
 	return e.Kind
 }
@@ -205,7 +205,7 @@ func snapshotOf(e Entry) entrySnapshot {
 		s.link = sql.NullString{String: t, Valid: true}
 		return s
 	}
-	if s.kind == "url" {
+	if rpc.KindOf(s.kind).Content == rpc.ContentAddress {
 		s.url = sql.NullString{Valid: true}
 		s.page = e.ServesPage
 	}
@@ -273,7 +273,7 @@ func (n *FileRows) Refresh(gridID int64, entries []Entry) error {
 		}
 		child := sql.NullInt64{Int64: r.ChildGridID, Valid: r.ChildGridID != 0}
 		switch {
-		case s.kind != "door" || s.link.Valid:
+		case !rpc.IsDoorKind(s.kind) || s.link.Valid:
 			child = sql.NullInt64{}
 		case !child.Valid:
 			if e.Child == "" {
