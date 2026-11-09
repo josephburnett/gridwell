@@ -607,8 +607,9 @@ export class GridwellDriver {
     await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'right');
   }
 
-  // Within one source this moves the tile; across a source boundary it links,
-  // because there is no move to another source.
+  // Within one node's Gridwell layer this moves the tile, home and every
+  // directory alike; a file onto a Gridwell grid, or anything across a
+  // connection, links.
   async leftDragAcrossPanes(fromID: string, fcx: number, fcy: number, toID: string, tcx: number, tcy: number): Promise<void> {
     await this.dragAcrossPanes(fromID, fcx, fcy, toID, tcx, tcy, 'left');
   }
