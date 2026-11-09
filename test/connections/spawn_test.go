@@ -31,9 +31,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/connection/dial/dialtest"
 )
 
-// repoRoot walks up to the directory holding go.work. This test is its own
-// module, so the nearest go.mod is its own and the binaries land at the
-// workspace root.
+// repoRoot walks up to the directory holding go.mod, where the binaries land.
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -41,12 +39,12 @@ func repoRoot(t *testing.T) string {
 		t.Fatal(err)
 	}
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.work")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			t.Fatal("no go.work above the test dir")
+			t.Fatal("no go.mod above the test dir")
 		}
 		dir = parent
 	}

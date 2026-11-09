@@ -136,25 +136,18 @@ proto-check:
 # field is read outside its owning predicate, and check-docpaths fails when a
 # doc or workflow names a repo path that no longer exists. None of it needs a
 # display or a network.
-#
-# MODULES lists every in-repo Go module beyond the root. check builds and
-# tests each one standalone with GOWORK=off, so no module can lean on the
-# workspace.
-MODULES := api internal/doctype apps/gridwell
 
 # check depends on wasm because web/embed.go embeds the built gridwell.wasm,
 # so a fresh checkout cannot `go build ./...` before one exists. `go vet ./...` runs at the host GOOS and
 # so sees none of the js/wasm-tagged files, which is why they are vetted
 # again under GOOS=js: this is the only gate that looks at them at all.
+# test/boundary runs again uncached because it reads the tree through `go
+# list`, which the test cache does not see.
 check: fmt-check proto-check wasm
 	go build ./...
 	go vet ./...
 	go test ./...
-	cd test/boundary && go test -count=1 .
-	@for m in $(MODULES); do \
-		echo "== module $$m (standalone)"; \
-		(cd $$m && GOWORK=off go build ./... && GOWORK=off go vet ./... && GOWORK=off go test ./...) || exit 1; \
-	done
+	go test -count=1 ./test/boundary
 	GOOS=js GOARCH=wasm go build -o /tmp/gridwell.wasm ./client/wasm
 	GOOS=js GOARCH=wasm go vet ./client/...
 	GOOS=windows GOARCH=amd64 go build -o /dev/null ./...
@@ -216,7 +209,7 @@ check-web: build node-modules
 # process leaves them green. The `connections` build tag keeps `make
 # check` fast. It is headless. CLAUDE.md's Gates table says when to run it.
 check-connections: build
-	cd test/connections && go test -tags connections -count=1 .
+	go test -tags connections -count=1 ./test/connections
 
 # serve runs the backend on its own, for poking at the RPC surface or loading
 # the wasm client in a plain browser, where live url tiles need the Electron

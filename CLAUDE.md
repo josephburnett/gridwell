@@ -462,6 +462,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   is spawned, and nothing under `~/.gridwell/plugins` is created, read or
   deleted. A behaviour the files have is the node's code, not a declaration
   on a wire.
+- The repo is one Go module (Joe, 2026-11-09, reversing the separate api
+  module): one `go.mod`, one `go.sum`, no `go.work`, import paths
+  unchanged. Nothing outside the repo builds against `api`, so its v0.x
+  tags stay in git history and none is pushed again. The arrows are package
+  arrows and `api` imports only the wire and the standard library, both held
+  by `test/boundary` (ARCHITECTURE.md, Package boundaries).
 - Under the node an id has two shapes and no third (2026-11-07):
   `<node>/<digits>` is a home row, `<node>/~<base64url of an absolute path>`
   is a file or a directory (`rpc.KeyTileID`, `rpc.TileKey`), and

@@ -1,5 +1,5 @@
-# The per-commit gate, `make check`: fmt, proto drift, every module
-# standalone, the boundary lint, wasm and TS.
+# The per-commit gate, `make check`: fmt, proto drift, the Go module, the
+# boundary lint, wasm and TS.
 name: check
 on:
   push:
@@ -13,10 +13,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          # Every module's go.sum keys the cache, which test/boundary
-          # pins. A module missing here never invalidates the cache when
-          # its dependencies change.
-          cache-dependency-path: '**/go.sum'
       - uses: actions/setup-node@v4
         with:
           node-version: 22

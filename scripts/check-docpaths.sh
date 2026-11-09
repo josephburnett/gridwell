@@ -3,8 +3,8 @@
 # rots silently when code moves, and a stale one is a false fact about where
 # something lives.
 #
-# The scope is every tracked *.md, *.go and *.ts, the go.mod and go.work
-# files, and .github/workflows/*.yml. A token is path-like when it starts with
+# The scope is every tracked *.md, *.go and *.ts, go.mod, and
+# .github/workflows/*.yml. A token is path-like when it starts with
 # a top-level directory and continues with path characters. A trailing `/` or
 # `/...` is allowed, and trailing punctuation and a `.GoSymbol` suffix are
 # stripped. A lowercase symbol suffix is not stripped, because `columns.go` is
@@ -31,8 +31,8 @@ allowed() {
   return 1
 }
 
-files=$(git ls-files '*.md' '*.go' '*.ts' 'go.mod' '*/go.mod' 'go.work' \
-  '.github/workflows/*.yml' | grep -v '/node_modules/')
+files=$(git ls-files '*.md' '*.go' '*.ts' 'go.mod' '.github/workflows/*.yml' |
+  grep -v '/node_modules/')
 bad=0
 for f in $files; do
   for s in "${skip_files[@]}"; do [ "$f" = "$s" ] && continue 2; done

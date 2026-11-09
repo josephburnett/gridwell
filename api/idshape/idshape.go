@@ -1,6 +1,6 @@
 // Package idshape owns the Gridwell contract's identity shapes: the short id
 // mint, the 128-bit mint behind the store's stored node uuid, and what a
-// namespace segment must satisfy. It is in the api module so a node and a
+// namespace segment must satisfy. It is in the api so a node and a
 // client agree without importing each other.
 package idshape
 

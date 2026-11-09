@@ -676,7 +676,7 @@ func axesUncovered(t *testing.T, root string) int {
 }
 
 // loggedCount is the number test's count subtest logs after label, run in pkg
-// from dir, since this module imports nothing of the tree's.
+// from dir, since this package imports nothing of the tree's.
 func loggedCount(t *testing.T, dir, pkg, test, label string) int {
 	cmd := exec.Command("go", "test", "-count=1", "-run", "^"+test+"$/^count$", "-v", pkg)
 	cmd.Dir = dir

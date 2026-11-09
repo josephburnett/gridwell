@@ -1,7 +1,6 @@
 // Package boundary pins the package structure: the dependency arrows between
 // the repo's trees, and the api's dependency budget. It imports nothing of
-// ours, reading the tree and shelling out to `go list`, so it polices the
-// tree without being a part it polices.
+// ours, reading the tree and shelling out to `go list`.
 package boundary
 
 import (

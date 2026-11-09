@@ -796,13 +796,16 @@ pane is inside" and do not use the word elsewhere.
 | A minted row retires only when its source says the path is gone | a listing that read and does not name it (`store.FileRows.Sweep`), or a delete that moved the file to the trash |
 | A workspace restores exactly as left | the live tree is the owner; the blob is derived and hash-diffed |
 
-## Module boundaries
+## Package boundaries
+
+The repo is one Go module. Its package trees keep these arrows:
 
 ```
-internal, server   → api
-apps/gridwell      → server, api
-api                → nothing of ours
+internal, client, web  → api, internal/doctype
+apps/gridwell          → the rest, api, internal/doctype
+api                    → nothing of ours
+internal/doctype       → nothing of ours
 ```
 
-`test/boundary` enforces the arrows and the api module's dependency budget,
-and `make check` builds every module standalone without go.work.
+`test/boundary` enforces the arrows from `go list`, and holds the api's
+imports to the wire (connect, grpc, protobuf) and the standard library.

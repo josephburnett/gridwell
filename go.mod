@@ -2,22 +2,11 @@ module github.com/josephburnett/gridwell
 
 go 1.27.1
 
-replace (
-	github.com/josephburnett/gridwell/api => ./api
-	github.com/josephburnett/gridwell/internal/doctype => ./internal/doctype
-)
-
-// The api module lives in this repo (ARCHITECTURE.md, Module boundaries): the
-// contract a far node builds against, carved out so the arrows are
-// structural. The replace makes the in-repo copy authoritative for the app
-// build.
 require (
 	connectrpc.com/connect v1.21.0
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/josephburnett/gridwell/api v0.0.0-00010101000000-000000000000
-	github.com/josephburnett/gridwell/internal/doctype v0.0.0-00010101000000-000000000000
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/niklasfasching/go-org v1.9.1

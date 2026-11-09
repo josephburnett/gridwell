@@ -1,6 +1,6 @@
 // Package tracewire is the trace API: where an emitter posts its records,
 // the header that ties one gesture to the server work it caused, and the
-// record both sides read. It is in the api module so the node and the client
+// record both sides read. It is in the api so the node and the client
 // agree on the shape without importing each other.
 package tracewire
 
