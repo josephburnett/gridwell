@@ -755,15 +755,6 @@ func TestUnheardByCodeIsHeldAtItsHops(t *testing.T) {
 	}
 }
 
-func isSelector(e ast.Expr, pkg, name string) bool {
-	sel, ok := e.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != name {
-		return false
-	}
-	x, ok := sel.X.(*ast.Ident)
-	return ok && x.Name == pkg
-}
-
 // e2eSaysFor is a comment saying the state it documents exists for the e2e.
 var e2eSaysFor = regexp.MustCompile(`\b(?:is|are)(?: the)? e2e\b|\bfor e2e\b`)
 
