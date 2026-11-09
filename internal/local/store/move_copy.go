@@ -63,7 +63,7 @@ func (s *Store) writeTextContent(ctx context.Context, tileIDStr string, version 
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	return s.claimContentVersion(ctx, "WriteContent/text", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
-		if rpc.KindOf(n.Kind).Content != rpc.ContentBody {
+		if !rpc.TextDocument(n) {
 			return nil, ErrNotTextTile
 		}
 		_, changed, err := s.swapTileBlob(ctx, tx, tileID, "blob_id", data, mediaMarkdown)

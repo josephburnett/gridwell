@@ -62,7 +62,7 @@ func (s *Store) writeURLContent(ctx context.Context, tileIDStr string, version i
 		return nil, fmt.Errorf("%w: invalid tile_id", ErrInvalidArgument)
 	}
 	return s.claimContentVersion(ctx, "WriteContent/url", tileID, version, func(tx *sql.Tx, n *gridwellv1.Tile, events *[]*gridwellv1.Event) (*gridwellv1.Tile, error) {
-		if rpc.KindOf(n.Kind).Content != rpc.ContentAddress {
+		if !rpc.WebContent(n) {
 			return nil, fmt.Errorf("%w: not a url tile", ErrInvalidArgument)
 		}
 		if n.UrlString == urlString {

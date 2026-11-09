@@ -287,7 +287,7 @@ func (s *Source) SetTile(_ context.Context, req *pb.SetTileRequest) (*pb.TileRes
 	if why := rpc.OneOperation(req); why != "" {
 		return nil, status.Error(codes.InvalidArgument, why)
 	}
-	if t := req.GetTile(); rpc.KindOf(t.GetKind()).Content == rpc.ContentAddress {
+	if t := req.GetTile(); rpc.WebContent(t) {
 		if t.UrlString != "" || t.AltText != "" || t.UrlHistory != "" {
 			return nil, status.Error(codes.InvalidArgument,
 				"files: a page file's title and history are its own and it has no address; the writeback carries the screenshot alone")

@@ -98,7 +98,7 @@ func (s *Server) servePlace(w http.ResponseWriter, r *http.Request, st pane.URLS
 	case out.URL != "":
 		w.Header().Set("Content-Type", "text/uri-list")
 		_, _ = w.Write([]byte(out.URL + "\r\n"))
-	case rpc.KindOf(row.GetKind()).Content == rpc.ContentAddress:
+	case rpc.WebContent(row):
 		// A url with no address is a page, whose bytes are the content API's.
 		page := r.Clone(ctx)
 		page.URL.Path = contentPathPrefix + ContentToken(s.cfg.Password) + "/" + id

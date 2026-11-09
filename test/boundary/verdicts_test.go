@@ -25,6 +25,8 @@ var verdictOwners = []struct {
 		regexp.MustCompile(`[!=]=\s*[\w.]*[sS]cratch\w*|[sS]cratch\w*(\(\))?\s*[!=]=\s*[^"\s0]`), 0},
 	{"an id names a file or a directory (rpc.OnDisk)", []string{"api/rpc/segment.go"},
 		regexp.MustCompile(`ShapeOf\([^)]*\)\s*[!=]=\s*(rpc\.)?ShapeKey`), 0},
+	{"a tile is a url or a text document (rpc.WebContent, rpc.TextDocument)", []string{"api/rpc/types.go"},
+		regexp.MustCompile(`KindOf\([^)]*(\.Kind|GetKind\(\))\)\.Content\s*[!=]=\s*(rpc\.)?Content(Address|Body)\b`), 0},
 }
 
 func TestVerdictsAreReadFromTheirOwner(t *testing.T) {
