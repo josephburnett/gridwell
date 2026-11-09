@@ -15,8 +15,8 @@ import (
 // copySubtree deep-copies a grid and everything beneath it into fresh rows.
 // Each grid and tile gets a new row id, with the version preserved, so no tile
 // is shared between two copies and editing one can never touch the other.
-// Blobs are immutable and shared by refcount; source grids behind file and
-// process doors are shared by identity. See childGridForCopy.
+// Blobs are immutable and shared by refcount; a door onto another namespace's
+// grid keeps naming it. See insertTileCopy.
 func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (int64, error) {
 	old, err := s.loadGrid(ctx, tx, srcGridID)
 	if err != nil {
@@ -40,37 +40,11 @@ func (s *Store) copySubtree(ctx context.Context, tx *sql.Tx, srcGridID int64) (i
 		return 0, err
 	}
 	for _, src := range tiles {
-		child, err := s.childGridForCopy(ctx, tx, src)
-		if err != nil {
-			return 0, err
-		}
-		if _, err := s.insertTileCopy(ctx, tx, newGridID, src, src.X, src.Y, child, now); err != nil {
+		if _, err := s.insertTileCopy(ctx, tx, newGridID, src, src.X, src.Y, now); err != nil {
 			return 0, err
 		}
 	}
 	return newGridID, nil
-}
-
-// childGridForCopy returns the child_grid_id a copy of tile n should carry,
-// ready to bind into the INSERT. An interior door gets a deep copy of its
-// subtree; a door to another namespace keeps its qualified link, since
-// another namespace owns that grid; everything else gets nil.
-func (s *Store) childGridForCopy(ctx context.Context, tx *sql.Tx, n *gridwellv1.Tile) (any, error) {
-	if n.ChildGridId == "" {
-		return nil, nil
-	}
-	childID, err := strconv.ParseInt(n.ChildGridId, 10, 64)
-	if err != nil {
-		return n.ChildGridId, nil
-	}
-	if rpc.IsDoorKind(n.Kind) {
-		newChild, err := s.copySubtree(ctx, tx, childID)
-		if err != nil {
-			return nil, err
-		}
-		return newChild, nil
-	}
-	return nil, nil
 }
 
 // placeholders returns "?, ?, …" with n placeholders.
@@ -78,34 +52,46 @@ func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
 }
 
-// insertTileCopy inserts a copy of tile n into gridID at (x, y), preserving
-// the version and sharing the blob with its refcount bumped. The per-kind
-// column nullability mirrors the schema CHECK constraint.
-func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *gridwellv1.Tile, x, y int64, child any, now int64) (int64, error) {
+// insertTileCopy inserts a copy of tile n into gridID at (x, y), as rpc.CopyOf
+// decides, preserving the version and sharing the blob with its refcount
+// bumped. The per-kind column nullability mirrors the schema CHECK
+// constraint.
+func (s *Store) insertTileCopy(ctx context.Context, tx *sql.Tx, gridID int64, n *gridwellv1.Tile, x, y, now int64) (int64, error) {
 	var (
-		blob, previewBlob         sql.NullInt64
-		urlStr, textMode, urlHist sql.NullString
-		linkTarget                sql.NullString
-		shellTmux                 sql.NullString
+		child                                            any
+		blob, previewBlob                                sql.NullInt64
+		urlStr, textMode, urlHist, linkTarget, shellTmux sql.NullString
 	)
-	if rpc.LeafLink(n) {
-		// A copy of a link is a link (CLAUDE.md, 2026-10-06); the CHECK's link
-		// branch requires every content column NULL.
-		linkTarget = sql.NullString{String: n.LinkTargetId, Valid: true}
+	// A home grid is a row id, so a door naming a qualified one is onto
+	// another namespace's grid: the wire's Link. Every home grid takes tiles.
+	row, notRow := strconv.ParseInt(n.ChildGridId, 10, 64)
+	n.Link = n.ChildGridId != "" && notRow != nil
+	as, target := rpc.CopyOf(n, true, func() bool { return true })
+	switch as {
+	case rpc.CopyRefused:
+		return 0, fmt.Errorf("%w: %s", ErrInvalidArgument, target)
+	case rpc.CopyLinkTile:
+		// The CHECK's link branch requires every content column NULL.
+		linkTarget = sql.NullString{String: target, Valid: true}
+	case rpc.CopyLinkGrid:
+		child = target
+	case rpc.CopyDeep:
+		var err error
+		if child, err = s.copySubtree(ctx, tx, row); err != nil {
+			return 0, err
+		}
+	case rpc.CopyShell:
+		// The copy shows the source's preview until it is live itself.
+		shellTmux = sql.NullString{String: target, Valid: true}
 	}
 	c := rpc.CopyFacts(n)
-	if !rpc.LeafLink(n) {
+	if as != rpc.CopyLinkTile {
 		k := rpc.KindOf(n.Kind)
 		if k.Content == rpc.ContentAddress {
 			urlStr = sql.NullString{String: n.UrlString, Valid: true}
 			if c.UrlHistory != "" {
 				urlHist = sql.NullString{String: c.UrlHistory, Valid: true}
 			}
-		}
-		if k.Tmux {
-			// The copy names its source's tmux, started or not, and shows the
-			// source's preview until it is live itself.
-			shellTmux = sql.NullString{String: rpc.ShellTmux(n), Valid: true}
 		}
 		if k.Freezes() && n.PreviewBlobId != 0 {
 			previewBlob = sql.NullInt64{Int64: n.PreviewBlobId, Valid: true}

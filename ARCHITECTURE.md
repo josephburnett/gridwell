@@ -160,7 +160,9 @@ they share an owner (`rpc.SharedOwner`), a connection included, the router
 forwards the whole copy and the node behind decides again; where they part,
 it deep-copies (`deepcopy.go`), reading through one chain and writing through
 the other. So bytes travel no further than the two ends are apart. Two
-connections are two owners even though one transport serves both. A copy
+connections are two owners even though one transport serves both. Both
+executors, the store's in one transaction and the router's walk, read what
+each tile becomes from `rpc.CopyOf`. A copy
 into a directory always deep-copies, since its arrival is a new file of the
 bytes read: a text tile alone, made a markdown file (`rpc.IntoDirectory`),
 while a file that is not markdown copies out as a link (`rpc.CopiesAsLink`).
@@ -697,7 +699,7 @@ pane is inside" and do not use the word elsewhere.
 |---|---|
 | Ids never reused | AUTOINCREMENT |
 | `version` = content bytes, a pane layout among them; a placement claims the placement it saw, a freeze the freeze it saw, a delete the version and the placement, and both APIs refuse one that names none; framing, captures and a select carry no claim | the two store pairs; reserved request fields; `version_rule_test.go`; `rpc.UnclaimedWrite` |
-| A copy is eager and deep | `CopyTile` |
+| A copy is eager and deep, each kind as `rpc.CopyOf` decides | `CopyTile`; `TestCopyOf`; `TestCopyExecutorsReadCopyOf` |
 | Blobs immutable, content-addressed, refcounted | the blob layer |
 | "Is a link" is one derived fact | `qualifyTiles` |
 | The APIs cannot drift | each decodes onto one `namespace.Namespace` |

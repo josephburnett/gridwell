@@ -5,6 +5,8 @@
 package rpc
 
 import (
+	"cmp"
+	"strconv"
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -376,6 +378,42 @@ func CopiesAsLink(t *pb.Tile, acceptsTiles bool) bool {
 	}
 	p, file := FilePath(t.GetId())
 	return file && !Markdown(p)
+}
+
+// CopyAs is what a copy of a tile becomes; CopyOf decides it.
+type CopyAs int
+
+const (
+	CopyRefused  CopyAs = iota // no copy; the target is the reason
+	CopyLinkGrid               // a door linking to the target grid
+	CopyLinkTile               // a leaf linking to the target tile
+	CopyDeep                   // a new door and a copy of the target grid beneath it
+	CopyLeaf                   // a new tile of the source's bytes and CopyFacts
+	CopyShell                  // a shell naming the target tmux, the source's
+)
+
+// CopyOf is the one owner of what a copy of t becomes and the id it names,
+// read by the router's walk and the store's copy alike. t.Link is the wire's
+// bit for a door onto another namespace's grid; accepts, whether the grid a
+// door opens takes new tiles, is asked only of a door that is not a link.
+func CopyOf(t *pb.Tile, sameSource bool, accepts func() bool) (CopyAs, string) {
+	k := KindOf(t.GetKind())
+	switch {
+	case LeafLink(t):
+		return CopyLinkTile, t.GetLinkTargetId()
+	case IsDoorKind(t.GetKind()) && (t.GetLink() || !accepts()):
+		return CopyLinkGrid, cmp.Or(t.GetChildGridId(), t.GetId())
+	case IsDoorKind(t.GetKind()):
+		return CopyDeep, t.GetChildGridId()
+	case k.Tmux && sameSource:
+		return CopyShell, ShellTmux(t)
+	case k.Tmux || CopiesAsLink(t, true):
+		// A tmux lives on the node that started it.
+		return CopyLinkTile, t.GetId()
+	case k.Content != ContentNone:
+		return CopyLeaf, ""
+	}
+	return CopyRefused, "unsupported tile kind " + strconv.Quote(t.GetKind())
 }
 
 // Markdown is a file name a copy carries the bytes of, into the files or out

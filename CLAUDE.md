@@ -436,7 +436,9 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A copy whose source is dark lands as a link to it, never a refused or
   empty copy: the copy reads the source before it creates anything, and a
   source that does not answer gets the link a ctrl + right-drag would make
-  (`server.deepCopyTile`, 2026-10-06).
+  (`server.deepCopyTile`, 2026-10-06). What a copy of each kind becomes,
+  across sources or within home, is `rpc.CopyOf`'s, which the router's walk
+  and the store's copy both read.
 
 **Node**
 
@@ -520,7 +522,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   (2026-10-21), and a text file that is not markdown, since its bytes stay
   on disk (2026-11-08). A door
   copies as a link when the grid it opens takes no new tiles
-  (`rpc.CopiesAsLink`, read by `server.deepCopyTile` and the drop verdict),
+  (`rpc.CopiesAsLink`, read by `rpc.CopyOf` and the drop verdict),
   so a disabled connection's door links too, as a dark one does.
 - Markdown crosses the files boundary by copy, and only markdown
   (2026-11-08): the user keeps text, previews and arrangement in

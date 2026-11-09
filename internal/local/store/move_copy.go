@@ -12,9 +12,8 @@ import (
 
 // CopyTile duplicates a tile into a destination grid as an eager, independent
 // copy: a fresh row id, the source's version, and the source row untouched, so
-// a copy is layout, not content. An interior door's whole subtree is
-// deep-copied; a door to another namespace keeps its qualified child_grid_id, another namespace
-// owning that grid; a leaf shares its blob with the refcount bumped. Nothing
+// a copy is layout, not content. What each tile copies as is rpc.CopyOf's
+// (insertTileCopy); a leaf shares its blob with the refcount bumped. Nothing
 // else is shared, so editing one can never touch the other.
 func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (*gridwellv1.Tile, error) {
 	tileID, err := parseID(req.TileId)
@@ -45,12 +44,7 @@ func (s *Store) CopyTile(ctx context.Context, req *gridwellv1.CopyTileRequest) (
 			return ErrOverlap
 		}
 
-		now := s.now().Unix()
-		child, err := s.childGridForCopy(ctx, tx, n)
-		if err != nil {
-			return err
-		}
-		newID, err := s.insertTileCopy(ctx, tx, dstGrid, n, req.X, req.Y, child, now)
+		newID, err := s.insertTileCopy(ctx, tx, dstGrid, n, req.X, req.Y, s.now().Unix())
 		if err != nil {
 			return err
 		}

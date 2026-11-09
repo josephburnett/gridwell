@@ -1,7 +1,6 @@
 package server
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 
@@ -14,13 +13,12 @@ import (
 	"github.com/josephburnett/gridwell/internal/namespace"
 )
 
-// Copy across namespaces. deepCopyTile is the one owner of what a copy of a tile
-// into another namespace is: the top-level copy enters through it at the
-// destination cell, the walk inside a copied door at each source cell, so the
-// rule is written once and holds at every depth. The router reads the source
-// subtree through the namespace interface and materializes it in the
-// destination namespace: create, recurse, framing and preview through the one
-// writeback.
+// Copy across namespaces. What a copy of a tile becomes is rpc.CopyOf's; this
+// is its executor across sources: the top-level copy enters deepCopyTile at
+// the destination cell, the walk inside a copied door at each source cell.
+// The router reads the source subtree through the namespace interface and
+// materializes it in the destination namespace: create, recurse, framing and
+// preview through the one writeback.
 //
 // Creation is necessarily top-down, because an interior door's child grid is
 // allocated by its create. So the destination door appears immediately and
@@ -28,20 +26,14 @@ import (
 // deletable with the error surfaced: never a silent half-state, and never a
 // rollback that could destroy what the user already sees.
 //
-// What copies as what:
-//   - a solid door becomes a new door plus a recursive copy of its child grid,
-//     with its framing preserved through SetFraming;
-//   - a door to another namespace or leaf link copies as a link (CLAUDE.md, 2026-10-06);
-//   - a directory's door or a file that is not markdown copies as a link to it
-//     (rpc.CopiesAsLink);
+// The mechanics of each verdict:
+//   - a deep door's framing is preserved through SetFraming;
 //   - into a directory only a text tile copies, made a markdown file there
 //     (rpc.IntoDirectory);
 //   - text and workspace bytes go ReadContent to the create, so the copy is born
 //     with them and no reader sees it bodiless; a pane layout stays
 //     owner-frame-relative, which is a link's semantics in bytes;
 //   - a url copies its url_string, and every leaf rpc.CopyFacts by rpc.CopyWrites;
-//   - a shell copies as a link to its source, since a copy shares its
-//     source's tmux and a tmux is namespace-local;
 //   - a source that never answered degrades to a link (CLAUDE.md, 2026-10-06).
 
 // deepCopyDoor reads the source child grid before anything is created, so an
@@ -96,44 +88,32 @@ func (rt *router) deepCopyTile(ctx context.Context, src namespace.Namespace, src
 	if why := rpc.IntoDirectory(q); why != "" && rpc.IsFilesID(dst.holder) {
 		return nil, status.Error(gcodes.InvalidArgument, why)
 	}
-
-	switch {
-	case rpc.IsDoorKind(q.Kind) && q.Link || rt.copiesAsLink(ctx, q):
-		// A door's link names the shared child, qualified.
-		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, cmp.Or(q.ChildGridId, q.Id))
-	case rpc.IsDoorKind(q.Kind):
+	// A grid that does not answer says nothing here: the deep arm reads it
+	// again and links if it is dark.
+	accepts := func() bool {
+		g, err := rt.GetGrid(ctx, &pb.GetGridRequest{GridId: q.ChildGridId})
+		return err != nil || g.GetGrid().GetAcceptsTiles()
+	}
+	// The walk runs where the ends part, or into a directory, which takes a
+	// text alone, so nothing here copies as a shell.
+	as, target := rpc.CopyOf(q, false, accepts)
+	switch as {
+	case rpc.CopyLinkGrid, rpc.CopyLinkTile:
+		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, as, target)
+	case rpc.CopyDeep:
 		created, err := rt.deepCopyDoor(ctx, src, srcTransit, srcUUID, t, dst, dstGrid, x, y)
 		// Degrade only when nothing was created. Degrading with a partial in
 		// place would stack a link on the cell it occupies, and the user
 		// would get an overlap refusal on a grid they never touched.
 		if created == nil && gwerr.IsTransport(err) {
 			// Dark, not gone: a link (CLAUDE.md, 2026-10-06).
-			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.ChildGridId)
+			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, rpc.CopyLinkGrid, target)
 		}
 		return created, err
-	case q.LinkTargetId != "":
-		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.LinkTargetId)
-	case rpc.KindOf(t.Kind).Tmux:
-		// A copy shares its source's tmux, and a tmux lives on the
-		// node that started it, so across namespaces the copy is a link.
-		return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
-	case rpc.KindOf(t.Kind).Content != rpc.ContentNone:
+	case rpc.CopyLeaf:
 		return rt.copyLeaf(ctx, src, t, q, dst, dstGrid, x, y)
 	}
-	return nil, status.Errorf(gcodes.InvalidArgument,
-		"copy across namespaces: unsupported tile kind %q", t.Kind)
-}
-
-// copiesAsLink is rpc.CopiesAsLink over the router's read of the grid a door
-// q opens, the stamp the client drew its ghost from (transit-normalized,
-// disabled-stamped). A grid that does not answer says nothing here: the door
-// arm reads it again and degrades to a link if it is dark.
-func (rt *router) copiesAsLink(ctx context.Context, q *pb.Tile) bool {
-	if !rpc.IsDoorKind(q.Kind) || q.Link {
-		return rpc.CopiesAsLink(q, true)
-	}
-	g, err := rt.GetGrid(ctx, &pb.GetGridRequest{GridId: q.ChildGridId})
-	return err == nil && rpc.CopiesAsLink(q, g.GetGrid().GetAcceptsTiles())
+	return nil, status.Error(gcodes.InvalidArgument, "copy across namespaces: "+target)
 }
 
 // copyLeaf copies a tile that owns no grid: bytes for a body kind, the address
@@ -149,7 +129,7 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 		var err error
 		body, err = readAllContent(ctx, src, t.Id)
 		if gwerr.IsTransport(err) {
-			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, q.Id)
+			return rt.linkCopy(ctx, dst, dstGrid, t, x, y, rpc.CopyLinkTile, q.Id)
 		}
 		if err != nil {
 			return nil, err
@@ -185,9 +165,9 @@ func (rt *router) copyLeaf(ctx context.Context, src namespace.Namespace, t, q *p
 // to: exactly the door to another namespace or leaf link a left-drag would have made. A door
 // links by the grid it opens and carries the framing the source was left at; a
 // leaf links by its target.
-func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *pb.Tile, x, y int64, target string) (*pb.TileResponse, error) {
+func (rt *router) linkCopy(ctx context.Context, dst copyDst, dstGrid string, t *pb.Tile, x, y int64, as rpc.CopyAs, target string) (*pb.TileResponse, error) {
 	tile := &pb.Tile{Kind: t.Kind, X: x, Y: y, W: t.W, H: t.H, AltText: t.AltText, Named: t.Named}
-	if rpc.IsDoorKind(t.Kind) {
+	if as == rpc.CopyLinkGrid {
 		tile.ChildGridId = target
 		tile.ViewCx, tile.ViewCy, tile.ViewZoom = t.ViewCx, t.ViewCy, t.ViewZoom
 	} else {
