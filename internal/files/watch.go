@@ -136,12 +136,18 @@ func (s *Source) linkedFrom(dir string) []string {
 }
 
 // check lists each directory and announces those whose listing moved. One
-// that will not list has moved, since what a client holds of it is unknown.
+// that will not list has moved, since what a client holds of it is unknown;
+// one the OS refuses has not, since its refusal is told to its parent
+// (noteRefusal) and nothing in it changed, and one it refused no longer has.
 func (s *Source) check(dirs []string) {
 	var moved []string
 	for _, d := range dirs {
+		was := s.unreadable("", d) != ""
 		l, err := s.synthesize(d)
-		if err != nil || s.settle(l, true) {
+		if status.Code(err) == codes.PermissionDenied {
+			continue
+		}
+		if err != nil || s.settle(l, true) || was {
 			moved = append(moved, d)
 		}
 	}
@@ -482,8 +488,10 @@ func (w *watcher) event(fsw *fsnotify.Watcher, ev fsnotify.Event) {
 		}
 		w.touch(path, true, "")
 	}
-	if ev.Has(fsnotify.Chmod) {
-		w.s.noteRefusal(path, nil)
+	// A refused directory has no watch of its own, so its parent's hears its
+	// permission given back, and a view showing it is told.
+	if ev.Has(fsnotify.Chmod) && w.s.noteRefusal(path, nil) && w.scope[path] {
+		w.s.emitGridChanged(path)
 	}
 	parent := filepath.Dir(path)
 	if !w.watched[parent] {

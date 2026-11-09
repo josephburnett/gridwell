@@ -116,3 +116,58 @@ func TestARecursiveFindPassesARefusedDirectory(t *testing.T) {
 		t.Errorf("a find past the refused directory = %v, want the one text", got)
 	}
 }
+
+// A refusal is told to the parent, whose door says it, and never to the
+// refused grid, since nothing in it changed, even when the view shows it
+// after the refusal. Given back, the directory is told once, by its
+// permission's change, which its parent's watch hears, and a read of it
+// tells nothing more.
+func TestARefusalTellsTheParentAlone(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+	f := newFixture(t)
+	locked := f.mkdir("locked")
+	f.write("locked/a.md", "a")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	ev := f.events()
+	f.show(f.root)
+	_, err := f.s.GetGrid(context.Background(), &pb.GetGridRequest{GridId: idOf(locked)})
+	wantCode(t, "GetGrid of the refused directory", err, codes.PermissionDenied)
+	f.show(f.root, locked)
+	if told := toldIn(ev); told[idOf(f.root)] == 0 || told[idOf(locked)] != 0 {
+		t.Errorf("told after the refusal = %v, want the parent and not the directory", told)
+	}
+
+	if err := os.Chmod(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if told := toldIn(ev); told[idOf(f.root)] == 0 || told[idOf(locked)] != 1 {
+		t.Errorf("told after the permission came back = %v, want the parent and the directory once", told)
+	}
+	if got := names(f.grid(locked)); len(got) != 1 {
+		t.Fatalf("the directory given back lists %v", got)
+	}
+	if told := toldIn(ev); len(told) != 0 {
+		t.Errorf("told after a read of it = %v, want nothing", told)
+	}
+}
+
+// toldIn counts the grids one quiet spell tells.
+func toldIn(ev <-chan *pb.Event) map[string]int {
+	told := map[string]int{}
+	for deadline := time.After(3 * debounceWindow); ; {
+		select {
+		case e := <-ev:
+			if g := e.GetGridChanged(); g != nil {
+				told[g.GridId]++
+			}
+			continue
+		case <-deadline:
+		}
+		return told
+	}
+}
