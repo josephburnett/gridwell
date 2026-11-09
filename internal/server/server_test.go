@@ -154,7 +154,11 @@ func TestSPAFallbackForUnknownPaths(t *testing.T) {
 		{"/wasm_exec.js", assetBody},
 	}
 	for _, tc := range tests {
-		resp, err := hs.Client().Get(hs.URL + tc.path)
+		// A browser's navigation; any other reader of a place gets its
+		// content (place_api.go).
+		req, _ := http.NewRequest(http.MethodGet, hs.URL+tc.path, nil)
+		req.Header.Set("Accept", "text/html,*/*;q=0.8")
+		resp, err := hs.Client().Do(req)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.path, err)
 		}

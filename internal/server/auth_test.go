@@ -58,6 +58,7 @@ func noRedirect(hs *httptest.Server) *http.Client {
 func get(t *testing.T, c *http.Client, url string, cookie string) (*http.Response, string) {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("Accept", "text/html,*/*;q=0.8") // a browser's, so a place serves the client
 	if cookie != "" {
 		req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: cookie})
 	}

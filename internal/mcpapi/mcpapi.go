@@ -64,6 +64,21 @@ type toolset struct {
 	screens Screens
 }
 
+// Reader answers read_grid and read_tiles outside a tool call, so the JSON
+// a reference's content GET answers is the tools' own.
+type Reader struct{ d *toolset }
+
+// NewReader reads through rt, judging dead links in node's frame.
+func NewReader(rt namespace.Namespace, node string) Reader {
+	return Reader{&toolset{rt: rt, node: node}}
+}
+
+// Grid is read_grid's answer for id, the home grid when id is empty.
+func (r Reader) Grid(ctx context.Context, id string) (GridOut, error) { return r.d.grid(ctx, id) }
+
+// Tile is one read_tiles answer.
+func (r Reader) Tile(ctx context.Context, id string) (TileOut, error) { return r.d.readTile(ctx, id) }
+
 // Cell is a grid cell.
 type Cell struct {
 	X int64 `json:"x"`

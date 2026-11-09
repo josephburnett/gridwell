@@ -53,6 +53,7 @@ func getEncoded(t *testing.T, url, acceptEncoding string) *http.Response {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
 	req.AddCookie(&http.Cookie{Name: AuthCookieName, Value: AuthToken(testPassword)})
+	req.Header.Set("Accept", "text/html,*/*;q=0.8") // a browser's, so a place serves the client
 	if acceptEncoding != "" {
 		req.Header.Set("Accept-Encoding", acceptEncoding)
 	}

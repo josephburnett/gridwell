@@ -39,3 +39,5 @@ low-water | packages | 78
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): client/shellpaste decides a drop onto a shell and spells what it pastes | 82
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): client/shellpaste decides a drop onto a shell and spells what it pastes | 1 | packages
 2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): PasteShell types a drop into the shell's tmux, spelled by the node owning it | 147
+2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): PasteShell types a drop into the shell's tmux, spelled by the node owning it | 153
+2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): a place URL read with the password answers its content | 143

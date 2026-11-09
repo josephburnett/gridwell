@@ -1,8 +1,8 @@
 // Package server is the HTTP layer of Gridwell: Connect-RPC at
-// /gridwell.v1.Gridwell/<Method>, the static web client at /, the shell
-// WebSocket, so every host that runs the client has shells, and the MCP API
-// for agents. Two APIs, WebHandler and ConnectionHandler; nodeexport.go
-// declares both.
+// /gridwell.v1.Gridwell/<Method>, the static web client at / (a place read
+// by anything but a browser answers its content), the shell WebSocket, so
+// every host that runs the client has shells, and the MCP API for agents.
+// Two APIs, WebHandler and ConnectionHandler; nodeexport.go declares both.
 package server
 
 import (
@@ -247,9 +247,8 @@ func (s *Server) routes() {
 	s.mux.Handle(tracewire.Path, s.traceAPI())
 	s.mux.Handle(tracewire.DumpPath, s.traceDumpAPI())
 
-	if s.cfg.StaticFS != nil {
-		s.mux.Handle("/", s.staticOrSPA(s.cfg.StaticFS))
-	}
+	// A place URL's content for a reader, else the client (place_api.go).
+	s.mux.Handle("/", s.placeOrStatic(s.cfg.StaticFS))
 }
 
 // staticOrSPA falls back to index.html for any request that matches no file,
