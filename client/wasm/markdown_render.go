@@ -10,7 +10,9 @@ import (
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/client/contentrow"
 	"github.com/josephburnett/gridwell/client/contentzoom"
+	"github.com/josephburnett/gridwell/client/fileinfo"
 	"github.com/josephburnett/gridwell/client/markdown"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/textedit"
@@ -53,7 +55,18 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 	originY := y - p.TextScrollY*scale
 
 	withClip(a.cctx, x, y, w, h, func() {
-		mode := textedit.ShownMode(p.TextMode, a.tileReadOnly(n))
+		row, s := a.contentRow(n)
+		if s != contentrow.Ready {
+			row = n
+		}
+		mode := textedit.DecideDescent(row, a.tileReadOnly(n), p.TextMode).Mode
+		if textedit.FileView(mode) {
+			// The view is the focused pane's overlay; any other pane shows
+			// the file's preview, which reads nothing.
+			a.e2e.paintedText["pane:"+p.ID] = strings.Join(a.drawMarkdownText(a.cctx, filePreview(row), x, y,
+				a.textContentWidth(p), h, scale, 0, markdown.WrapRawText), "\n")
+			return
+		}
 		ready := a.overlays.textareaReady
 		if mode == rpc.TextModeRendered {
 			ready = a.overlays.renderedReady
@@ -110,7 +123,12 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected 
 				topInset = bannerH
 			}
 		}
-		if markdown.PreviewContentVisible(h-topInset, scale) {
+		if row, _ := a.contentRow(n); row.GetTextPresentation() == rpc.TextPresentationInfo {
+			// A file that renders as nothing has no body to read: its preview is
+			// what its row says.
+			a.e2e.paintedText[n.Id] = strings.Join(a.drawMarkdownText(a.cctx, fileinfo.Preview(row), x, y+topInset,
+				frame.ContentW, h-topInset, scale, 0, markdown.WrapRawText), "\n")
+		} else if markdown.PreviewContentVisible(h-topInset, scale) {
 			drawn := false
 			if n.TextMode == rpc.TextModeRendered {
 				drawn = a.drawRenderedPreview(n, frame, x, y, w, h, topInset)
@@ -132,6 +150,9 @@ func (a *App) drawMarkdownNode(n *gridwellv1.Tile, x, y, w, h float64, selected 
 
 	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.Family(fam).Line, dashed, selected)
 }
+
+// filePreview is a file's name over its preview (fileinfo.Preview).
+func filePreview(row *gridwellv1.Tile) string { return row.GetAltText() + "\n" + fileinfo.Preview(row) }
 
 // markdownStyle is the raw-text painter's font, spacing and color in logical
 // pixels, before scale. The soft-wrap painter and the textarea sizing read

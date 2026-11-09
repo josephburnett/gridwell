@@ -310,6 +310,7 @@ func (a *App) refreshFileToggle() {
 func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
 	a.refreshRenderedOverlay()
+	a.refreshFileView()
 	a.ensureFileTextarea()
 	ta := a.overlays.textTextarea
 
@@ -453,4 +454,76 @@ func (a *App) applyTextareaEdit(ta js.Value, e textedit.ListEdit) bool {
 	}
 	ta.Call("setSelectionRange", e.Caret, e.Caret)
 	return true
+}
+
+// ensureInfoToggle creates the floating "i" button beside the rendered/raw
+// toggle, which opens a file's file information and closes it.
+func (a *App) ensureInfoToggle() js.Value {
+	btn := a.doc.Call("createElement", "div")
+	btn.Set("id", "gw-info-toggle")
+	btn.Set("textContent", "i")
+	style := btn.Get("style")
+	for k, val := range map[string]string{"position": "absolute", "display": "none", "boxSizing": "border-box",
+		"borderRadius": "50%", "cursor": "pointer", "alignItems": "center", "justifyContent": "center",
+		"zIndex": "6", "userSelect": "none", "fontSize": "16px", "fontFamily": bannerFontFamily,
+		"width": pxf(2 * plusButtonRadius), "height": pxf(2 * plusButtonRadius)} {
+		style.Set(k, val)
+	}
+	btn.Call("addEventListener", "mousedown", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		ev := args[0]
+		ev.Call("preventDefault")
+		ev.Call("stopPropagation")
+		if ev.Get("button").Int() == 0 {
+			a.onInfoToggle()
+		}
+		return nil
+	}))
+	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		args[0].Call("preventDefault")
+		return nil
+	}))
+	a.installOverlayTouch(btn, nil)
+	a.doc.Get("body").Call("appendChild", btn)
+	return btn
+}
+
+// refreshInfoToggle shows the "i" button for a descent that offers it
+// (textedit.Descent.Info), left of the rendered/raw toggle.
+func (a *App) refreshInfoToggle(v *fileView) {
+	style := v.toggle.Get("style")
+	_, _, r, d := a.focusedTextDescent()
+	if !d.Info || r.W <= 0 || r.H <= 0 {
+		style.Set("display", "none")
+		return
+	}
+	cx, cy := a.plusButtonCenter()
+	style.Set("left", pxf(cx-3.5*plusButtonRadius))
+	style.Set("top", pxf(cy-plusButtonRadius))
+	band, button := a.barTheme()
+	style.Set("border", "1px solid "+a.pal.CircleRim)
+	style.Set("background", button)
+	style.Set("color", band)
+	style.Set("display", "flex")
+}
+
+// onInfoToggle opens the focused file's file information, its typing saved
+// first, or closes it onto the rendered document.
+func (a *App) onInfoToggle() {
+	p, _, _, d := a.focusedTextDescent()
+	if p == nil || !d.Info {
+		return
+	}
+	switch {
+	case textedit.FileView(d.Mode):
+		p.TextMode = rpc.TextModeRendered
+	case p.TextMode == rpc.TextModeText:
+		a.flushTileContent(p.ContentID())
+		fallthrough
+	default:
+		p.TextMode = rpc.TextModeInfo
+	}
+	a.refreshFileOverlay()
+	a.takeKeyboard()
+	a.draw()
+	a.scheduleURLUpdate()
 }

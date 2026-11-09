@@ -227,6 +227,9 @@ type overlayState struct {
 	textToggleBtn js.Value
 	textToggleCb  js.Func
 
+	// fileView is the file information view and its "i" button.
+	fileView *fileView
+
 	urlModalOpen bool
 
 	// lastTextareaTileID is what the textarea is bound to: the same tile on a

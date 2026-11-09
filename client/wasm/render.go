@@ -348,6 +348,7 @@ func (a *App) draw() {
 	// Native views park off-screen during a canvas gesture.
 	a.syncTextOverlayPosition()
 	a.refreshRenderedOverlay()
+	a.refreshFileView()
 	a.syncShellOverlayPosition()
 	a.syncURLViews()
 	a.syncMirrors(rects)

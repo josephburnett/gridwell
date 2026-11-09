@@ -33,3 +33,4 @@ low-water | packages | 78
 2026-11-08 | the file information view (Joe, 2026-11-08): the files answer an info read with the inode's facts and the sniffed type, and serve every other file's bytes as octet-stream by range | 212
 2026-11-08 | the file information view (Joe, 2026-11-08): client/fileinfo, a file's preview, its file information table and its hex view in pure code, and textedit's info and hex modes | 214
 2026-11-08 | the file information view (Joe, 2026-11-08): client/fileinfo, the package of a file's preview, file information and hex view | 1 | packages
+2026-11-08 | the file information view (Joe, 2026-11-08): the shim's view, the table, the see more row, the hex view paging through the content API, the i button and a file's preview | 405
