@@ -269,14 +269,14 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 			return nil, err
 		}
 		peeled := rpc.PeelRequest(rt.hop(scope, transit), m)
-		resp, err := c.Find(ctx, peeled)
+		resp, err := rt.find(ctx, c, peeled)
 		if err != nil {
 			return nil, err
 		}
 		out := rt.qualifyFind(ctx, transit, rpc.OwnerNamespaceOf(scope, rt.srv.cfg.ID), uuid, resp)
 		// A directory's grid holds home's rows beside the files'.
 		if !transit && rpc.IsFilesID(m.GridId) && rt.srv.src.Home != nil {
-			over, err := rt.srv.src.Home.Find(ctx, peeled)
+			over, err := rt.find(ctx, rt.srv.src.Home, peeled)
 			if err != nil {
 				return nil, err
 			}
@@ -291,13 +291,46 @@ func (rt *router) Find(ctx context.Context, req *pb.FindRequest) (*pb.FindRespon
 		pctx, cancel := context.WithTimeout(ctx, rpc.FindHopTimeout)
 		// No routed id narrows a fan-out, so the hop is the namespace's own.
 		hop := rpc.Hop{Seg: n.prefix(), Via: n.UUID, Transit: n.Transit}
-		resp, err := n.NS.Find(pctx, rpc.PeelRequest(hop, m))
+		resp, err := rt.find(pctx, n.NS, rpc.PeelRequest(hop, m))
 		cancel()
 		q := rt.qualifyFind(ctx, n.Transit, n.UUID, n.prefix(), rpc.FindHop(resp, err))
 		out.Results = append(out.Results, q.Results...)
 		out.Skipped = append(out.Skipped, q.Skipped...)
 	}
 	return out, nil
+}
+
+// find asks ns, and a home result over a directory is placed on the
+// directory's path from its root, the files' doors before home's: home
+// holds no row of a directory's door.
+func (rt *router) find(ctx context.Context, ns namespace.Namespace, req *pb.FindRequest) (*pb.FindResponse, error) {
+	resp, err := ns.Find(ctx, req)
+	if err != nil || ns != rt.srv.src.Home || rt.srv.src.Files == nil {
+		return resp, err
+	}
+	above := map[string][]*pb.Tile{}
+	for _, r := range resp.GetResults() {
+		dir := r.GetTile().GetGridId()
+		if len(r.Path) > 0 {
+			dir = r.Path[0].GetGridId()
+		}
+		if rpc.ShapeOf(dir) != rpc.ShapeKey {
+			continue
+		}
+		chain, ok := above[dir]
+		if !ok {
+			at, err := rt.srv.src.Files.Find(ctx, &pb.FindRequest{Query: "id:" + dir})
+			if err != nil {
+				return nil, err
+			}
+			if hit := at.GetResults(); len(hit) == 1 {
+				chain = append(slices.Clone(hit[0].Path), hit[0].Tile)
+			}
+			above[dir] = chain
+		}
+		r.Path = append(slices.Clone(chain), r.Path...)
+	}
+	return resp, nil
 }
 
 func (rt *router) qualifyFind(ctx context.Context, transit bool, owner, uuid string, resp *pb.FindResponse) *pb.FindResponse {

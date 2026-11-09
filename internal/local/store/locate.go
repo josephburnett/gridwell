@@ -23,15 +23,18 @@ func (s *Store) Find(ctx context.Context, req *gridwellv1.FindRequest) ([]*gridw
 	f := tileFilter{req: req}
 	if req.GridId != "" {
 		gid, err := gridRow(ctx, s.db, req.GridId)
-		if errors.Is(err, ErrNotFound) {
-			// A directory never touched holds no Gridwell row.
+		f.under, _ = rpc.TileKey(req.GridId)
+		switch {
+		case errors.Is(err, ErrNotFound) && f.under != "" && req.Recurse:
+			// A directory never touched holds no Gridwell row, and the
+			// directories under it may.
+			gid = -1
+		case errors.Is(err, ErrNotFound):
 			return nil, nil
-		}
-		if err != nil {
+		case err != nil:
 			return nil, fmt.Errorf("%w: invalid grid_id %q", ErrInvalidArgument, req.GridId)
 		}
 		f.grid = gid
-		f.under, _ = rpc.TileKey(req.GridId)
 	}
 	q := rpc.ParseFindQuery(req.Query)
 	if q.ID != "" {
@@ -164,11 +167,11 @@ func (f tileFilter) sql() (string, []any) {
 		// qualified path elsewhere, which recursion does not follow.
 		conds = append(conds, `t.grid_id IN (WITH RECURSIVE scope(id) AS (
 			SELECT ? UNION
-			SELECT g.id FROM grids g WHERE ? != '' AND substr(g.key, 1, length(?) + 1) = ? || '/' UNION
+			SELECT g.id FROM grids g WHERE ? != '' AND substr(g.key, 1, length(?)) = ? UNION
 			SELECT w.child_grid_id FROM tiles w JOIN scope ON w.grid_id = scope.id
 			WHERE w.kind = 'door' AND `+f.on.of("w.key")+` AND w.tombstoned = 0 AND typeof(w.child_grid_id) = 'integer')
 			SELECT id FROM scope)`)
-		args = append(args, f.grid, f.under, f.under, f.under)
+		args = append(args, f.grid, f.under, below(f.under), below(f.under))
 	case f.grid != 0:
 		conds = append(conds, "t.grid_id = ?")
 		args = append(args, f.grid)

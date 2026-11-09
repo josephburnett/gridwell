@@ -222,9 +222,9 @@ func (g *findGrids) placed(r store.FindRow) (*findHit, error) {
 }
 
 // chain is the doors from a root down to dir, found by listing down from each
-// root through the directories the node holds rows for, the ones the user
-// has touched, so a locate reads only those. ok is false when no such way
-// down reaches it.
+// root through the directories above it and those the node holds rows for,
+// the ones the user has touched, so a locate reads only those. ok is false
+// when no such way down reaches it.
 func (g *findGrids) chain(target string) (above []*pb.Tile, ok bool, err error) {
 	type step struct {
 		dir   string
@@ -256,7 +256,7 @@ func (g *findGrids) chain(target string) (above []*pb.Tile, ok bool, err error) 
 			if child == "" || seen[child] {
 				continue
 			}
-			if child != target {
+			if !underRoot(child, target) {
 				if _, held, err := g.s.mem.LookupGrid(child); err != nil || !held {
 					if err != nil {
 						return nil, false, err
