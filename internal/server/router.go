@@ -176,6 +176,7 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		return rpc.TransitQualifySourceList(hop, resp), nil
 	}
 	var out []*pb.SourceInfo
+	var templates string // home's, from its Info
 	for _, n := range rt.srv.namespaces() {
 		if n.Transit {
 			// One row per connection, from the transport's own handshake
@@ -190,6 +191,9 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		// A failed Info leaves info nil and the error rides along.
 		info, err := rt.srv.sourceInfo(ctx, n.UUID)
 		out = append(out, buildSourceInfo(n.UUID, n.Label, info, err))
+		if n.UUID == rt.srv.cfg.ID {
+			templates = info.GetTemplatesGridId()
+		}
 	}
 	resp := &pb.HandshakeResponse{
 		ShellsDisabled: rt.srv.cfg.DisableShells,
@@ -204,6 +208,9 @@ func (rt *router) Handshake(ctx context.Context, req *pb.HandshakeRequest) (*pb.
 		if p.Uuid == rt.srv.cfg.ID && rt.srv.src.Home != nil {
 			resp.HomeGridId = p.RootGridId
 		}
+	}
+	if templates != "" {
+		resp.TemplatesGridId = rpc.QualifyID(rt.srv.cfg.ID, templates)
 	}
 	return resp, nil
 }

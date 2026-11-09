@@ -257,3 +257,27 @@ func TestGetGridFailsWhenHomeInfoFails(t *testing.T) {
 		t.Errorf("scratch grid = %q, want the node home's", got)
 	}
 }
+
+// The handshake names home's templates grid, qualified, and it reads as a
+// home grid: empty, writable, taking tiles.
+func TestHandshakeNamesTheTemplatesGrid(t *testing.T) {
+	ctx := context.Background()
+	_, cl, root := newTestServer(t)
+	hs, err := cl.Handshake(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, _, _ := rpc.SplitID(root)
+	got := hs.GetTemplatesGridId()
+	if !strings.HasPrefix(got, node+"/") || got == root || got == hs.GetHomeGridId() {
+		t.Fatalf("templates_grid_id = %q, want a grid of home %s other than its root", got, node)
+	}
+	g, err := cl.GetGrid(ctx, got)
+	if err != nil {
+		t.Fatalf("GetGrid(templates): %v", err)
+	}
+	if len(g.Tiles) != 0 || !g.Grid.GetWritable() || !g.Grid.GetAcceptsTiles() || got == g.Grid.GetScratchGridId() {
+		t.Errorf("templates grid = %d tiles, writable %v, accepts %v, scratch %q; want an empty home grid",
+			len(g.Tiles), g.Grid.GetWritable(), g.Grid.GetAcceptsTiles(), g.Grid.GetScratchGridId())
+	}
+}

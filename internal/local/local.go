@@ -106,6 +106,10 @@ func (p *Home) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 	if err != nil {
 		return nil, gwerr.ToStatus(err)
 	}
+	templates, err := p.st.TemplatesGridID(ctx)
+	if err != nil {
+		return nil, gwerr.ToStatus(err)
+	}
 	// Every declared door carries its grid's framing, root and trashcan
 	// alike.
 	view, err := p.st.RootFraming(ctx)
@@ -119,10 +123,11 @@ func (p *Home) Info(ctx context.Context, _ *gridwellv1.InfoRequest) (*gridwellv1
 	tcx, tcy, tzoom := trashView.Wire()
 	rcx, rcy, rzoom := view.Wire()
 	return &gridwellv1.InfoResponse{
-		Glyph:         rpc.GlyphDoor,
-		DisplayName:   "home",
-		RootGridId:    id,
-		ScratchGridId: scratch,
+		Glyph:           rpc.GlyphDoor,
+		DisplayName:     "home",
+		RootGridId:      id,
+		ScratchGridId:   scratch,
+		TemplatesGridId: templates,
 		SourceGrids: []*gridwellv1.SourceGrid{{
 			Id:     "trash",
 			Label:  "trash",

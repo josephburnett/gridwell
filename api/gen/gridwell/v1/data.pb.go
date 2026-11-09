@@ -776,7 +776,8 @@ type InfoResponse struct {
 	// scratch_grid_id is home's off-grid grid for ephemeral visits, where
 	// descending into a url places no tile; the node stamps it on every grid
 	// it serves as Grid.scratch_grid_id. Never rendered, never linked; it
-	// persists as visited-url history. The files answer none.
+	// lives while a visit or a workspace tile's layout holds it. The files
+	// answer none.
 	ScratchGridId string `protobuf:"bytes,8,opt,name=scratch_grid_id,json=scratchGridId,proto3" json:"scratch_grid_id,omitempty"`
 	// root_view_cx/cy/zoom is the source's root grid's last-saved viewport: the
 	// center in grid coordinates and the intrinsic zoom. The home fills it from
@@ -792,9 +793,12 @@ type InfoResponse struct {
 	Glyph string `protobuf:"bytes,16,opt,name=glyph,proto3" json:"glyph,omitempty"`
 	// source_grids is the source's (+) menu rows; see SourceGrid. The serving
 	// node stamps them onto every grid the source serves.
-	SourceGrids   []*SourceGrid `protobuf:"bytes,17,rep,name=source_grids,json=sourceGrids,proto3" json:"source_grids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SourceGrids []*SourceGrid `protobuf:"bytes,17,rep,name=source_grids,json=sourceGrids,proto3" json:"source_grids,omitempty"`
+	// templates_grid_id is home's templates grid, an ordinary home grid whose
+	// tiles are the + menu's templates. The files answer none.
+	TemplatesGridId string `protobuf:"bytes,19,opt,name=templates_grid_id,json=templatesGridId,proto3" json:"templates_grid_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *InfoResponse) Reset() {
@@ -881,6 +885,13 @@ func (x *InfoResponse) GetSourceGrids() []*SourceGrid {
 		return x.SourceGrids
 	}
 	return nil
+}
+
+func (x *InfoResponse) GetTemplatesGridId() string {
+	if x != nil {
+		return x.TemplatesGridId
+	}
+	return ""
 }
 
 // Probe reports whether one tile is there, as its owner says: a file can
@@ -2764,9 +2775,13 @@ type HandshakeResponse struct {
 	// build is the commit the node was built from (tracewire.BuildCommit), ""
 	// for an unstamped build, for the client's log. Nothing depends on it: the
 	// web API refuses a page of another build on every call (OtherBuild).
-	Build         string `protobuf:"bytes,14,opt,name=build,proto3" json:"build,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Build string `protobuf:"bytes,14,opt,name=build,proto3" json:"build,omitempty"`
+	// templates_grid_id is home's templates grid, qualified: the + menu's
+	// strip lists its tiles. A node-level fact like home_grid_id, never
+	// forwarded for a far node.
+	TemplatesGridId string `protobuf:"bytes,16,opt,name=templates_grid_id,json=templatesGridId,proto3" json:"templates_grid_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *HandshakeResponse) Reset() {
@@ -2837,6 +2852,13 @@ func (x *HandshakeResponse) GetContentToken() string {
 func (x *HandshakeResponse) GetBuild() string {
 	if x != nil {
 		return x.Build
+	}
+	return ""
+}
+
+func (x *HandshakeResponse) GetTemplatesGridId() string {
+	if x != nil {
+		return x.TemplatesGridId
 	}
 	return ""
 }
@@ -4919,7 +4941,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\x05named\x18) \x01(\bR\x05named\x12\x12\n" +
 	"\x04gone\x18, \x01(\bR\x04goneJ\x04\b\x02\x10\x03J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\x16\x10\x17J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b\"\x10#J\x04\b#\x10$J\x04\b*\x10+J\x04\b+\x10,\"\r\n" +
-	"\vInfoRequest\"\xf3\x02\n" +
+	"\vInfoRequest\"\x9f\x03\n" +
 	"\fInfoResponse\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\froot_grid_id\x18\x05 \x01(\tR\n" +
@@ -4932,7 +4954,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\f \x01(\x01R\frootViewZoom\x12\x14\n" +
 	"\x05glyph\x18\x10 \x01(\tR\x05glyph\x12:\n" +
-	"\fsource_grids\x18\x11 \x03(\v2\x17.gridwell.v1.SourceGridR\vsourceGridsJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
+	"\fsource_grids\x18\x11 \x03(\v2\x17.gridwell.v1.SourceGridR\vsourceGrids\x12*\n" +
+	"\x11templates_grid_id\x18\x13 \x01(\tR\x0ftemplatesGridIdJ\x04\b\x01\x10\x02J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\t\x10\n" +
 	"J\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x12\x10\x13\"'\n" +
 	"\fProbeRequest\x12\x17\n" +
 	"\atile_id\x18\x01 \x01(\tR\x06tileId\"\x9f\x01\n" +
@@ -5079,7 +5102,7 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\froot_view_cy\x18\x05 \x01(\x01R\n" +
 	"rootViewCy\x12$\n" +
 	"\x0eroot_view_zoom\x18\x06 \x01(\x01R\frootViewZoom\x12#\n" +
-	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xc1\x02\n" +
+	"\rstatus_detail\x18\a \x01(\tR\fstatusDetail\"\xed\x02\n" +
 	"\x11HandshakeResponse\x121\n" +
 	"\asources\x18\x01 \x03(\v2\x17.gridwell.v1.SourceInfoR\asources\x12 \n" +
 	"\fhome_grid_id\x18\t \x01(\tR\n" +
@@ -5087,7 +5110,8 @@ const file_gridwell_v1_data_proto_rawDesc = "" +
 	"\vconnections\x18\r \x03(\v2\x1b.gridwell.v1.ConnectionInfoR\vconnections\x12'\n" +
 	"\x0fshells_disabled\x18\x04 \x01(\bR\x0eshellsDisabled\x12#\n" +
 	"\rcontent_token\x18\x05 \x01(\tR\fcontentToken\x12\x14\n" +
-	"\x05build\x18\x0e \x01(\tR\x05buildJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
+	"\x05build\x18\x0e \x01(\tR\x05build\x12*\n" +
+	"\x11templates_grid_id\x18\x10 \x01(\tR\x0ftemplatesGridIdJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0f\x10\x10\"5\n" +
 	"\fTileResponse\x12%\n" +
 	"\x04tile\x18\x01 \x01(\v2\x11.gridwell.v1.TileR\x04tile\"(\n" +

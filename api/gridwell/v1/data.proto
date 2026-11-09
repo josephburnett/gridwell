@@ -282,7 +282,8 @@ message InfoResponse {
   // scratch_grid_id is home's off-grid grid for ephemeral visits, where
   // descending into a url places no tile; the node stamps it on every grid
   // it serves as Grid.scratch_grid_id. Never rendered, never linked; it
-  // persists as visited-url history. The files answer none.
+  // lives while a visit or a workspace tile's layout holds it. The files
+  // answer none.
   string scratch_grid_id = 8;
   reserved 9; // writable; the namespace stamps Grid.accepts_tiles and Grid.writable
   // root_view_cx/cy/zoom is the source's root grid's last-saved viewport: the
@@ -303,6 +304,9 @@ message InfoResponse {
   // node stamps them onto every grid the source serves.
   repeated SourceGrid source_grids = 17;
   reserved 18; // presents
+  // templates_grid_id is home's templates grid, an ordinary home grid whose
+  // tiles are the + menu's templates. The files answer none.
+  string templates_grid_id = 19;
 }
 
 // Probe reports whether one tile is there, as its owner says: a file can
@@ -652,6 +656,10 @@ message HandshakeResponse {
   // web API refuses a page of another build on every call (OtherBuild).
   string build = 14;
   reserved 15; // routes
+  // templates_grid_id is home's templates grid, qualified: the + menu's
+  // strip lists its tiles. A node-level fact like home_grid_id, never
+  // forwarded for a far node.
+  string templates_grid_id = 16;
 }
 
 
