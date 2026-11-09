@@ -11,6 +11,7 @@ package sourcecache
 
 import (
 	"context"
+	"crypto/sha256"
 	"strconv"
 	"sync"
 	"time"
@@ -52,6 +53,10 @@ type prefetcher struct {
 	// wg counts the running walk. The closer waits on it after cancelling and
 	// before closing the DB, so a walk never writes into a closed cache.
 	wg sync.WaitGroup
+	// dead is each leaf link target the source answered dead, by the listing
+	// of the grid the link was read in then; a later walk asks it again only
+	// once that listing has changed.
+	dead map[string]string
 }
 
 // kickPrefetch is the one owner of when a walk starts, on either trigger: a
@@ -180,8 +185,9 @@ func (w *walker) walkGrid(gridID string) bool {
 			return false
 		}
 	}
+	listing := listingKey(resp)
 	for _, t := range resp.GetTiles() {
-		if !w.walkTile(t) {
+		if !w.walkTile(t, listing) {
 			return false
 		}
 	}
@@ -196,8 +202,9 @@ func (w *walker) walkGrid(gridID string) bool {
 }
 
 // walkTile warms one tile's preview and, for a content kind, its body,
-// following a leaf link to its target row once.
-func (w *walker) walkTile(t *pb.Tile) bool {
+// following a leaf link to its target row once; listing is the key of the
+// grid t was read in.
+func (w *walker) walkTile(t *pb.Tile, listing string) bool {
 	if w.seenTiles[t.GetId()] {
 		return true
 	}
@@ -245,21 +252,49 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	// if its own grid is never walked. walkTile owns the seen-set:
 	// pre-marking the target here would make the recursion below return at
 	// its seen-check with nothing warmed.
-	if target := t.GetLinkTargetId(); target != "" && !rpc.IsFilesID(target) && !w.seenTiles[target] {
+	if target := t.GetLinkTargetId(); target != "" && !rpc.IsFilesID(target) && !w.seenTiles[target] && !w.knownDead(target, listing) {
 		if !w.pause() {
 			return false
 		}
 		tr, err := w.c.GetTile(w.ctx, &pb.GetTileRequest{TileId: target})
+		w.noteDead(target, listing, gwerr.IsDeadLink(err))
 		if err != nil {
 			return !gwerr.IsUnheard(err)
 		}
 		if tt := tr.GetTile(); tt != nil {
 			tt2 := proto.Clone(tt).(*pb.Tile)
 			tt2.LinkTargetId = "" // never chase a chain twice
-			return w.walkTile(tt2)
+			return w.walkTile(tt2, listing)
 		}
 	}
 	return true
+}
+
+func (w *walker) knownDead(target, listing string) bool {
+	w.c.pf.mu.Lock()
+	defer w.c.pf.mu.Unlock()
+	was, ok := w.c.pf.dead[target]
+	return ok && was == listing
+}
+
+func (w *walker) noteDead(target, listing string, dead bool) {
+	w.c.pf.mu.Lock()
+	defer w.c.pf.mu.Unlock()
+	if !dead {
+		delete(w.c.pf.dead, target)
+		return
+	}
+	if w.c.pf.dead == nil {
+		w.c.pf.dead = map[string]string{}
+	}
+	w.c.pf.dead[target] = listing
+}
+
+// listingKey is a digest of a grid answer: the same answer, the same key.
+func listingKey(resp *pb.GetGridResponse) string {
+	b, _ := proto.MarshalOptions{Deterministic: true}.Marshal(resp)
+	sum := sha256.Sum256(b)
+	return string(sum[:])
 }
 
 // drain runs one content read to warm the cache and reports the bytes seen.

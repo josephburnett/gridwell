@@ -64,3 +64,4 @@ low-water | packages | 78
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a refusal is told to the parent alone, and a permission given back to the directory too | 8
 2026-11-08 | flake fixes (Joe: the content-zoom flake, fixed for the class): a content zoom is held in the cache ahead of its echo, as a placement is | 40
 2026-11-08 | trace fixes (Joe's trace, 2026-11-08): a refused directory is not dark: a shown directory given back is watched, as the files watch every directory a session shows | 6
+2026-11-08 | a link broken at any hop is dead, and nothing is asked for it until the declaration or that source's listing changes (CLAUDE.md, Health: dead; the far cache walk, 2026-10-06): the far walk asks a dead link's target once per listing | 35
