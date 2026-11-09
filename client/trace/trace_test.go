@@ -18,8 +18,8 @@ func TestPendingBatchIsJSONLines(t *testing.T) {
 	c.Emit("nav", "push", "descend a1b2c3d", map[string]string{"req": "k3f9x2a"}, t0)
 	c.Emit("rpc", "call", "GetGrid", nil, t0.Add(2*time.Millisecond))
 	batch, _ := c.PendingBatch()
-	const want = `{"origin":"client","src":"nav","kind":"push","msg":"descend a1b2c3d","kv":{"req":"k3f9x2a"},"cid":"cid7abc","ct":1727000000123}` + "\n" +
-		`{"origin":"client","src":"rpc","kind":"call","msg":"GetGrid","cid":"cid7abc","ct":1727000000125}` + "\n"
+	const want = `{"origin":"client","src":"nav","kind":"push","msg":"descend a1b2c3d","kv":{"req":"k3f9x2a"},"cid":"cid7abc","ct":1727000000123,"cs":1}` + "\n" +
+		`{"origin":"client","src":"rpc","kind":"call","msg":"GetGrid","cid":"cid7abc","ct":1727000000125,"cs":2}` + "\n"
 	if string(batch) != want {
 		t.Errorf("batch is\n%s\nwant\n%s", batch, want)
 	}

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -238,5 +240,33 @@ func TestDumpNameNamesTheBuild(t *testing.T) {
 	}
 	if got := DumpName(at, ""); got != "trace-20260923-100000.jsonl" {
 		t.Errorf("DumpName with no stamp = %q", got)
+	}
+}
+
+// A sender's serials (Record.CS) are kept once each, in whatever order the
+// batches land: the page's last batch can arrive before the one still out.
+func TestIngestKeepsEachSerialOnce(t *testing.T) {
+	r := New(20)
+	line := func(cid string, cs int) string {
+		return `{"src":"s","kind":"k","msg":"m` + strconv.Itoa(cs) + `","cid":"` + cid + `","cs":` + strconv.Itoa(cs) + "}\n"
+	}
+	for _, body := range []string{
+		line("c1", 3) + line("c1", 4),
+		line("c1", 1) + line("c1", 2) + line("c1", 3),
+		line("c1", 2) + line("c1", 4) + line("c1", 5),
+		line("c2", 1),
+		`{"src":"s","kind":"k","msg":"no serial"}` + "\n" + `{"src":"s","kind":"k","msg":"no serial"}` + "\n",
+	} {
+		if _, err := r.Ingest(strings.NewReader(body), 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held := map[string]int{}
+	for _, rec := range r.Snapshot() {
+		held[rec.CID+" "+rec.Msg]++
+	}
+	want := map[string]int{"c1 m1": 1, "c1 m2": 1, "c1 m3": 1, "c1 m4": 1, "c1 m5": 1, "c2 m1": 1, " no serial": 2}
+	if !reflect.DeepEqual(held, want) {
+		t.Errorf("the ring holds %v, want %v", held, want)
 	}
 }

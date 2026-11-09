@@ -39,6 +39,13 @@ type Ring struct {
 	n    int    // records held, up to len(buf)
 	seq  uint64 // the one total order
 	now  func() time.Time
+	held map[serial]bool // the sent records the ring holds
+}
+
+// serial names a sent record (tracewire.Record.CS) across its sender's posts.
+type serial struct {
+	cid string
+	cs  uint64
 }
 
 // New returns a ring of capacity records. A capacity below one holds one.
@@ -46,7 +53,7 @@ func New(capacity int) *Ring {
 	if capacity < 1 {
 		capacity = 1
 	}
-	return &Ring{buf: make([]tracewire.Record, capacity), now: time.Now}
+	return &Ring{buf: make([]tracewire.Record, capacity), now: time.Now, held: map[serial]bool{}}
 }
 
 // def is the node's ring; see the package comment.
@@ -68,13 +75,22 @@ func (r *Ring) Emit(rec tracewire.Record) {
 	r.put(rec)
 }
 
-// put stamps seq onto rec, whose T is already set, and appends it.
-func (r *Ring) put(rec tracewire.Record) {
+// put stamps seq onto rec, whose T is already set, and appends it, unless
+// the ring already holds it under its sender's serial.
+func (r *Ring) put(rec tracewire.Record) bool {
 	if rec.Origin == "" {
 		rec.Origin = tracewire.OriginNode
 	}
 	rec.Msg = capMsg(rec.Msg)
 	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s := (serial{rec.CID, rec.CS}); rec.CS > 0 {
+		if r.held[s] {
+			return false
+		}
+		r.held[s] = true
+	}
+	delete(r.held, serial{r.buf[r.next].CID, r.buf[r.next].CS})
 	r.seq++
 	rec.Seq = r.seq
 	r.buf[r.next] = rec
@@ -82,7 +98,7 @@ func (r *Ring) put(rec tracewire.Record) {
 	if r.n < len(r.buf) {
 		r.n++
 	}
-	r.mu.Unlock()
+	return true
 }
 
 // Snapshot is every record the ring still holds, oldest seq first.
@@ -97,7 +113,8 @@ func (r *Ring) Snapshot() []tracewire.Record {
 	return out
 }
 
-// Ingest reads JSON lines — records without seq or t — and appends each one.
+// Ingest reads JSON lines — records without seq or t — and appends each one
+// the ring does not already hold (tracewire.Record.CS); n counts those.
 // sent is the sender's clock at the post (tracewire.ClockHeader), zero when it
 // named none. A record's t is its CT moved by receipt minus sent; without a
 // sent or a CT, it is receipt time. A malformed line stops the read
@@ -124,8 +141,9 @@ func (r *Ring) Ingest(in io.Reader, sent int64) (n int, err error) {
 		if sent > 0 && rec.CT > 0 {
 			rec.T = rec.CT + received - sent
 		}
-		r.put(rec)
-		n++
+		if r.put(rec) {
+			n++
+		}
 	}
 	if err := sc.Err(); err != nil {
 		return n, err

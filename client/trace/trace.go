@@ -83,6 +83,7 @@ func emit(c *Client, src, kind, msg string, kv map[string]string, ct int64) {
 		KV:     copyKV(kv),
 		CID:    c.cid,
 		CT:     ct,
+		CS:     c.base + uint64(c.count) + 1,
 	}
 	c.count++
 }

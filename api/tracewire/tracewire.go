@@ -75,6 +75,9 @@ type Record struct {
 	KV     map[string]string `json:"kv,omitempty"`
 	CID    string            `json:"cid,omitempty"`
 	CT     int64             `json:"ct,omitempty"`
+	// CS is the record's serial under its CID, from 1: a batch sent again
+	// after a lost answer carries the same ones, and the node keeps each once.
+	CS uint64 `json:"cs,omitempty"`
 }
 
 // A dump ends with the node's server.yaml as it was on disk at the dump:

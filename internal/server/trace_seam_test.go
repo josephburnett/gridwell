@@ -276,3 +276,41 @@ func TestAClientBatchLandsAtItsEmitTimeOnTheNodesClock(t *testing.T) {
 		t.Errorf("the record is stamped %d, want 900ms before receipt, in [%d, %d]", rec.T, before-900, after-900)
 	}
 }
+
+// A post the node kept but whose answer the page never heard leaves its
+// records owed, and the next post carries them again: the dump holds each
+// record once.
+func TestABatchSentAgainAfterALostAnswerIsKeptOnce(t *testing.T) {
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
+	post := func(batch []byte) {
+		t.Helper()
+		res, err := hs.Client().Post(hs.URL+tracewire.Path, "application/x-ndjson", bytes.NewReader(batch))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusNoContent {
+			t.Fatalf("POST /trace = %d, want 204", res.StatusCode)
+		}
+	}
+	c := clienttrace.New(8, "c7resend")
+	now := time.Now()
+	c.Emit("drag", "drop", "delete", nil, now)
+	c.Emit("rpc", "rpc", "DeleteTile start", nil, now)
+	lost, _ := c.PendingBatch()
+	post(lost) // the node keeps it; the ack never runs
+	c.Emit("rpc", "rpc", "DeleteTile ok", nil, now)
+	again, _ := c.PendingBatch()
+	post(again)
+	held := map[string]int{}
+	for _, r := range trace.Default().Snapshot() {
+		if r.CID == "c7resend" {
+			held[r.Msg]++
+		}
+	}
+	for _, msg := range []string{"delete", "DeleteTile start", "DeleteTile ok"} {
+		if held[msg] != 1 {
+			t.Errorf("the dump holds %q %d times, want once: %v", msg, held[msg], held)
+		}
+	}
+}
