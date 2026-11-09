@@ -58,6 +58,10 @@ type Source struct {
 	healthMu sync.Mutex
 	dark     map[string]string
 	liveOff  string
+	// refused is, per directory, why the OS refused its last read, until one
+	// reads or its mode changes, while it or its parent is in the view; its
+	// door says it, so a listing opens no subdirectory.
+	refused map[string]string
 
 	// shown is the directories some session shows, and links, per directory,
 	// the directories its symlinks to files land in; the watch follows both.
@@ -113,7 +117,7 @@ func New(mem *store.FileRows, roots []Root, trash func(dir *os.File, name string
 			out[i].Label = filepath.Base(p)
 		}
 	}
-	s := &Source{roots: out, mem: mem, trash: trash, hub: eventhub.New(rpc.EventKey), dark: map[string]string{}}
+	s := &Source{roots: out, mem: mem, trash: trash, hub: eventhub.New(rpc.EventKey), dark: map[string]string{}, refused: map[string]string{}}
 	s.watch = newWatcher(s)
 	var heard <-chan *pb.Event
 	heard, s.unhear = mem.Changes()
@@ -350,6 +354,29 @@ func (s *Source) noteRead(dir, why string) {
 			s.dark[dir] = why
 		}
 	})
+}
+
+// noteRefusal records whether the OS refused dir its read, by err, and
+// reports whether that moved.
+func (s *Source) noteRefusal(dir string, err error) bool {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	was := s.refused[dir]
+	delete(s.refused, dir)
+	if refused(err) {
+		s.refused[dir] = pathErr(err).Error()
+	}
+	return was != s.refused[dir]
+}
+
+// unreadable is what a door named name onto dir says of its refusal.
+func (s *Source) unreadable(name, dir string) string {
+	s.healthMu.Lock()
+	defer s.healthMu.Unlock()
+	if why := s.refused[dir]; why != "" {
+		return name + " cannot be read: " + why
+	}
+	return ""
 }
 
 func (s *Source) noteWatch(why string) {

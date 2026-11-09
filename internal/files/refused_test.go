@@ -13,10 +13,12 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 )
 
-// A directory the OS refuses this user is a verdict, not darkness: its door
-// says why, a read of it is refused with the reason, and the files stay
-// light and told, though a session shows it. Its permission given back, it
-// lists again with nothing told but the changes.
+// A directory the OS refuses this user is a verdict, not darkness: a read
+// of it is refused with the reason, its parent is told and its door then
+// says why, and the files stay light and told, though a session shows it.
+// A listing opens no subdirectory, so the door says nothing before a read
+// was refused. Its permission given back, it lists again with nothing told
+// but the changes.
 func TestARefusedDirectoryIsAVerdictNotDark(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads every directory")
@@ -29,15 +31,19 @@ func TestARefusedDirectoryIsAVerdictNotDark(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
 	ev := f.events()
-	f.show(f.root, locked)
-	door := tileIn(t, f.grid(f.root), locked)
-	if door.Kind != rpc.KindDoor || !strings.Contains(door.ReadOnly, "locked cannot be read") {
-		t.Errorf("the refused directory's door = kind %q, read_only %q, want a door saying why", door.Kind, door.ReadOnly)
+	f.show(f.root)
+	if door := tileIn(t, f.grid(f.root), locked); door.Kind != rpc.KindDoor || door.ReadOnly != "" {
+		t.Errorf("the door before any read of it = kind %q, read_only %q, want a plain door", door.Kind, door.ReadOnly)
 	}
+	f.show(f.root, locked)
 	_, err := f.s.GetGrid(context.Background(), &pb.GetGridRequest{GridId: idOf(locked)})
 	wantCode(t, "GetGrid of the refused directory", err, codes.PermissionDenied)
 	if !strings.Contains(err.Error(), "cannot be read") {
 		t.Errorf("the refusal = %v, want its reason", err)
+	}
+	await(t, ev, "the parent told after the refusal", func(e *pb.Event) bool { return e.GetGridChanged().GetGridId() == idOf(f.root) })
+	if door := tileIn(t, f.grid(f.root), locked); !strings.Contains(door.ReadOnly, "locked cannot be read") {
+		t.Errorf("the refused directory's door says read_only %q, want why", door.ReadOnly)
 	}
 	if h := f.s.health(); h != (health{}) {
 		t.Errorf("health after a refused read = %+v, want light and told", h)

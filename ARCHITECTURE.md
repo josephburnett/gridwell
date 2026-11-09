@@ -257,7 +257,8 @@ those their symlinks land in, debounced 200 ms, and tell each change as a
 that watch is healthy. A root or directory that cannot be read right now
 is dark: its grid answers what its rows hold and the files' health event,
 keyed `<node>/~`, says so. One the OS refuses this user is no outage: its
-grid answers the refusal and its door carries the reason (`read_only`).
+grid answers the refusal and, once a read of it was refused, its door
+carries the reason (`read_only`); a listing opens no subdirectory.
 The files are never disabled.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a

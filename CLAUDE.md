@@ -607,8 +607,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   root or directory that cannot be read right now is dark: its grid serves
   what its rows hold and says so through the health event, as a dark
   connection's serves its cache. One the OS refuses this user (`EACCES`,
-  `EPERM`) is refused with the reason on its door and its grid, not dark,
-  and the files stay told (2026-11-08, Joe's Mac trace, the Trash on
+  `EPERM`) is refused with the reason on its grid, and on its door once a
+  read of it was refused, since a listing opens no subdirectory; it is not
+  dark, and the files stay told (2026-11-08, Joe's Mac trace, the Trash on
   macOS). Nothing watches a directory nobody shows, and nothing
   reads one unasked: a recursive Find is the user asking, so it reads the
   directories under the grid it names, never through a link, and a read for

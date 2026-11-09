@@ -115,6 +115,9 @@ func (s *Source) rescope(scope []string) []string {
 				delete(s.dark, d)
 			}
 		}
+		maps.DeleteFunc(s.refused, func(d, _ string) bool {
+			return !slices.Contains(scope, d) && !slices.Contains(scope, filepath.Dir(d))
+		})
 	})
 	return added
 }
@@ -479,6 +482,9 @@ func (w *watcher) event(fsw *fsnotify.Watcher, ev fsnotify.Event) {
 		}
 		w.touch(path, true, "")
 	}
+	if ev.Has(fsnotify.Chmod) {
+		w.s.noteRefusal(path, nil)
+	}
 	parent := filepath.Dir(path)
 	if !w.watched[parent] {
 		return
@@ -533,6 +539,13 @@ func (w *watcher) touch(dir string, listing bool, file string) {
 	if file != "" {
 		win.files[file] = true
 	}
+}
+
+// relist touches dir's listing, as a change heard in it would.
+func (w *watcher) relist(dir string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.touch(dir, true, "")
 }
 
 // owe closes dir's window and tells what it gathered, while dir is still

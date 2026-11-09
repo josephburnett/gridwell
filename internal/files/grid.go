@@ -42,7 +42,7 @@ func (s *Source) entryOf(e diskEntry) listed {
 	out := listed{Entry: store.Entry{Key: e.path, Label: e.name}}
 	switch e.kind {
 	case diskDir:
-		out.Kind, out.Child, out.readOnly = rpc.KindDoor, e.path, unreadable(e.name, e.path)
+		out.Kind, out.Child, out.readOnly = rpc.KindDoor, e.path, s.unreadable(e.name, e.path)
 	case diskLink:
 		s.linkFacts(&out, e)
 	case diskOther:
@@ -79,7 +79,7 @@ func (s *Source) linkFacts(out *listed, e diskEntry) {
 	at := s.spell(e.target)
 	switch e.targetKind {
 	case diskDir:
-		out.Kind, out.Child, out.readOnly = rpc.KindDoor, at, unreadable(e.name, at)
+		out.Kind, out.Child, out.readOnly = rpc.KindDoor, at, s.unreadable(e.name, at)
 		return
 	case diskFile:
 		fileFacts(out, at)
@@ -137,6 +137,9 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 		if speaks {
 			s.noteRead(dir, why)
 		}
+	}
+	if speaks && s.noteRefusal(dir, err) {
+		s.watch.relist(filepath.Dir(dir))
 	}
 	switch {
 	case err == nil:

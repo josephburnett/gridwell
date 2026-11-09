@@ -54,7 +54,7 @@ var (
 const (
 	dReadOnly      = "a file the node cannot write is read-only with the reason"
 	dDark          = "its grid serves what its rows hold and says so through the health event"
-	dRefused       = "is refused with the reason on its door and its grid, not dark, and the files stay told"
+	dRefused       = "is refused with the reason on its grid, and on its door once a"
 	dDisabled      = "every grid it serves is stamped `writable=false`, `accepts_tiles=false`, each row `read_only` with the reason, so an edit is refused before it is typed"
 	dNeverDisabled = "The files are dark or told, never disabled"
 	dUntold        = "a source whose changes are not told is read on every move"
@@ -318,8 +318,8 @@ func holdsDark(f *parityFix, prefix string) error {
 }
 
 // holdsRefused proves a directory the OS refuses this user is a verdict at
-// every hop: its door says why, a read of its grid is refused with the
-// reason, and the files' health never goes dark, though a session shows it.
+// every hop: a read of its grid is refused with the reason, its door then
+// says why, and the files' health never goes dark, though a session shows it.
 func holdsRefused(f *parityFix, prefix string) error {
 	if os.Geteuid() == 0 {
 		f.t.Skip("root reads every directory")
@@ -338,12 +338,19 @@ func holdsRefused(f *parityFix, prefix string) error {
 	if i < 0 {
 		return fmt.Errorf("the files list no Door")
 	}
-	if tl := g.Tiles[i]; !strings.Contains(tl.ReadOnly, "Door cannot be read") {
-		return fmt.Errorf("the refused door says read_only %q", tl.ReadOnly)
-	}
 	_, err = f.cl.GetGrid(f.ctx, g.Tiles[i].ChildGridId)
 	if clientsync.Of(err) != clientsync.OutcomeRejected || !strings.Contains(fmt.Sprint(err), "cannot be read") {
 		return fmt.Errorf("the refused grid answered %v, want refused with the reason", err)
+	}
+	says := ""
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline) && !strings.Contains(says, "Door cannot be read"); time.Sleep(50 * time.Millisecond) {
+		if g, err = f.cl.GetGrid(f.ctx, g.Grid.Id); err != nil {
+			return err
+		}
+		says = g.Tiles[i].ReadOnly
+	}
+	if !strings.Contains(says, "Door cannot be read") {
+		return fmt.Errorf("the refused door says read_only %q after the refusal", says)
 	}
 	time.Sleep(300 * time.Millisecond)
 	f.healthMu.Lock()
