@@ -218,9 +218,10 @@ func TestTransportFailureParksAndTheKickLandsIt(t *testing.T) {
 
 // echoesOf drives two real content writes through the real handler and
 // returns the two response rows alongside the two TileChanged rows the real
-// Subscribe stream carried back, in the order the server emitted them. Both
-// halves come off the wire: a constructed echo would only re-test the client's
-// own unit rules.
+// Subscribe stream carried back. Both halves come off the wire: a constructed
+// echo would only re-test the client's own unit rules. The stream promises the
+// latest row of each tile, not one echo per write (eventhub coalesces an
+// undelivered echo), so each write's echo is awaited before the next write.
 func echoesOf(t *testing.T, cl *rpc.Client, tileID string, basis int64) (resp, echo [2]*gridwellv1.Tile) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -253,25 +254,21 @@ func echoesOf(t *testing.T, cl *rpc.Client, tileID string, basis int64) (resp, e
 		}
 		resp[i] = tile
 		basis = tile.Version
-	}
-	// The stream also carries the create's own row, so collect by version
-	// rather than by arrival position.
-	seen := map[int64]*gridwellv1.Tile{}
-	for {
-		_, got1 := seen[resp[0].Version]
-		_, got2 := seen[resp[1].Version]
-		if got1 && got2 {
-			return resp, [2]*gridwellv1.Tile{seen[resp[0].Version], seen[resp[1].Version]}
-		}
-		select {
-		case row := <-rows:
-			seen[row.Version] = row
-		case err := <-streamErr:
-			t.Fatalf("the subscribe stream ended: %v", err)
-		case <-ctx.Done():
-			t.Fatalf("only %d of the two echoes arrived", len(seen))
+		// The stream may also carry the create's own row first.
+		for echo[i] == nil {
+			select {
+			case row := <-rows:
+				if row.Version == tile.Version {
+					echo[i] = row
+				}
+			case err := <-streamErr:
+				t.Fatalf("the subscribe stream ended: %v", err)
+			case <-ctx.Done():
+				t.Fatalf("write %d's echo never arrived", i+1)
+			}
 		}
 	}
+	return resp, echo
 }
 
 // The echo interlock over the real wire: a real response row and a real echo of
