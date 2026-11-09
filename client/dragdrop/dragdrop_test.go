@@ -739,3 +739,51 @@ func TestCarryMovesAsLink(t *testing.T) {
 		}
 	}
 }
+
+// A finger does not move or delete a file (CLAUDE.md, 2026-11-08): device
+// times the side of the row times the target. Every other cell is the mouse's.
+func TestFingerDoesNotMoveOrDeleteAFile(t *testing.T) {
+	type target struct {
+		name string
+		in   DropInput
+	}
+	base := DropInput{Started: true, TileID: "7", HasTarget: true}
+	with := func(f func(*DropInput)) DropInput { in := base; f(&in); return in }
+	targets := []target{
+		{"its own grid", with(func(in *DropInput) { in.SameGrid = true })},
+		{"another directory", base},
+		{"a Gridwell grid", with(func(in *DropInput) { in.MovesAsLink = true })},
+		{"a copy into another directory", with(func(in *DropInput) { in.Intent = IntentCopy })},
+		{"the trashcan", DropInput{Started: true, TileID: "7", OverDelete: true}},
+	}
+	want := map[string][2]DropAction{ // [mouse, touch] for a file; a Gridwell row is always the mouse's
+		"its own grid":                  {DropMove, DropMove},
+		"another directory":             {DropMove, DropRejected},
+		"a Gridwell grid":               {DropLink, DropLink},
+		"a copy into another directory": {DropCopy, DropCopy},
+		"the trashcan":                  {DropDelete, DropRejected},
+	}
+	for _, tg := range targets {
+		for _, file := range []bool{false, true} {
+			for _, touch := range []bool{false, true} {
+				in := tg.in
+				in.CarriesFile, in.Touch = file, touch
+				w := want[tg.name][0]
+				if file && touch {
+					w = want[tg.name][1]
+				}
+				got := DecideDrop(in)
+				if got != w {
+					t.Errorf("%s, file %v, touch %v: DecideDrop = %v, want %v", tg.name, file, touch, got, w)
+				}
+				if refused := got == DropRejected; refused != NoEntry(in) || refused != (WhyRejected(in) == FingerNoFile) {
+					t.Errorf("%s, file %v, touch %v: refused %v, NoEntry %v, why %q", tg.name, file, touch, refused, NoEntry(in), WhyRejected(in))
+				}
+			}
+		}
+	}
+	// Over the trashcan there is no target pane, so the badge stays with the origin.
+	if p := GhostPlanForDrop(DropRejected, true, "a", "", 10, 0); p.PaneID != "a" || !p.Forbidden {
+		t.Errorf("a refused trashcan drop's ghost = %+v, want the origin pane with the badge", p)
+	}
+}

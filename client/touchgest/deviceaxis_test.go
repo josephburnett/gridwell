@@ -4,7 +4,8 @@ package touchgest_test
 // made with a mouse and with a finger. The finger's gesture is the machine's
 // output, the mouse's the events a mouse sends, and each is fed to the pure
 // verdict that routes the surface's presses, which must give touch exactly
-// the one action it gives the mouse. A cell no pure verdict can run, or one
+// the one action it gives the mouse, or the other one a decision on differs
+// names. A cell no pure verdict can run, or one
 // whose events carry Select on a surface whose Select arm is
 // client/wasm/touch.go's, is not same. The count, the cells not same, the mouse gestures with no touch form
 // and no decision, and the surfaces and bar actions no row names, is
@@ -22,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/gesture"
 	"github.com/josephburnett/gridwell/client/pane"
 	tg "github.com/josephburnett/gridwell/client/touchgest"
@@ -95,13 +97,15 @@ var mouseOnly = []struct{ gesture, decision string }{
 }
 
 // record is what a verdict reads of a gesture: the button of its press,
-// whether shift was held and whether it moved, or the direction of its wheel.
+// whether shift was held and whether it moved, or the direction of its wheel,
+// and whether a finger made it.
 type record struct {
 	button  int // -1 for a wheel
 	shift   bool
 	moved   bool
 	zoomOut bool
 	selects bool
+	touch   bool
 }
 
 func recordOf(as []tg.Action) (record, error) {
@@ -147,6 +151,12 @@ type surface struct {
 	route        verdict
 	selects      string
 	selectRouted bool
+}
+
+// differs is the CLAUDE.md line, per surface, deciding that its pure verdict
+// gives a finger another action than the mouse's.
+var differs = map[string]string{
+	"door tile": `"a finger does not move or delete a file" (2026-11-08)`,
 }
 
 func shimOnly(record) (string, bool) { return "", false }
@@ -202,6 +212,25 @@ func inGrid(in gesture.Input, click func() (string, bool), wheel gesture.WheelIn
 	}
 }
 
+// tileDrag routes a left drag of a tile through dragdrop.DecideDrop: a
+// Gridwell door and a directory's door, each onto another directory's grid
+// and onto the trashcan.
+func tileDrag(next verdict) verdict {
+	return func(r record) (string, bool) {
+		if r.button != 0 || !r.moved {
+			return next(r)
+		}
+		var out []string
+		for _, file := range []bool{false, true} {
+			for _, trash := range []bool{false, true} {
+				out = append(out, fmt.Sprint(dragdrop.DecideDrop(dragdrop.DropInput{Started: true, TileID: "7",
+					HasTarget: !trash, OverDelete: trash, Touch: r.touch, CarriesFile: file})))
+			}
+		}
+		return "drag " + strings.Join(out, "/"), true
+	}
+}
+
 func deviceSurfaces() []surface {
 	door := gesture.WheelInput{OverEnterableDoor: true, DoorCoverage: 0.1}
 	return []surface{
@@ -219,10 +248,10 @@ func deviceSurfaces() []surface {
 				arm, _ := gesture.ResizeAffordance(pane.DividerGrab{HasVert: true})
 				return fmt.Sprint("resize ", arm), true
 			}, gesture.WheelInput{}), "", false},
-		{"door tile", "input.go", inGrid(gesture.Input{InGridView: true, OverTile: true, InTileCenter: true},
+		{"door tile", "input.go", tileDrag(inGrid(gesture.Input{InGridView: true, OverTile: true, InTileCenter: true},
 			func() (string, bool) {
 				return fmt.Sprint("click ", gesture.DecideTileClick(gesture.ClickInput{Door: true})), true
-			}, door), `"on touch a long-press lifted in place toggles" (2026-10-15)`, false},
+			}, door)), `"on touch a long-press lifted in place toggles" (2026-10-15)`, false},
 		{"grid background", "input.go", inGrid(gesture.Input{InGridView: true}, nil, gesture.WheelInput{}), "", false},
 		{"live content", "input.go", func(r record) (string, bool) {
 			switch {
@@ -253,6 +282,7 @@ func cell(s surface, g deviceGesture) string {
 	if err != nil {
 		return "the finger's events: " + err.Error()
 	}
+	tr.touch = true
 	if tr.selects && s.selectRouted {
 		// The Select is the mouse's shift + left press, through one verdict;
 		// what is left of the gesture is compared as any other.
@@ -272,10 +302,26 @@ func cell(s surface, g deviceGesture) string {
 	switch {
 	case !mok || !tok:
 		return "only the shim routes it"
-	case ma != ta:
+	case ma != ta && differs[s.name] == "":
 		return fmt.Sprintf("the mouse does %s, touch %s", ma, ta)
 	}
 	return ""
+}
+
+// touchDiffers reports whether some gesture's pure verdict over s gives a
+// finger another action than the mouse's.
+func touchDiffers(s surface) bool {
+	for _, g := range deviceGestures {
+		mr, _ := recordOf(g.mouse)
+		tr, _ := recordOf(g.touch(tg.New()))
+		tr.touch = true
+		ma, mok := s.route(mr)
+		ta, tok := s.route(tr)
+		if mok && tok && ma != ta {
+			return true
+		}
+	}
+	return false
 }
 
 // listenerFiles are the client/wasm files that listen for a press or a click,
@@ -332,6 +378,11 @@ func TestDeviceAxis(t *testing.T) {
 			if why := cell(s, g); why != "" {
 				holes = append(holes, fmt.Sprintf("%s, %s: %s", s.name, g.name, why))
 			}
+		}
+	}
+	for _, s := range surfaces {
+		if differs[s.name] != "" && !touchDiffers(s) {
+			holes = append(holes, s.name+": decided to differ on touch, and no gesture does")
 		}
 	}
 	for _, m := range mouseOnly {

@@ -111,7 +111,9 @@ func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 			if target.IsUndefined() || target.IsNull() || act.Button == 1 {
 				target = a.canvas
 			}
+			a.fingerPress = true
 			a.dispatchMouse(target, "mousedown", act, buttonsMask(act.Button))
+			a.fingerPress = false
 		case touchgest.MouseMove:
 			a.dispatchMouse(a.canvas, "mousemove", act, buttonsMask(act.Button))
 		case touchgest.MouseUp:

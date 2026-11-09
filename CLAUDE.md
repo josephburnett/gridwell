@@ -849,6 +849,15 @@ These were decided deliberately. Do not reverse one without a new decision.
   otherwise with "<name> is not on the shell's node", which the ghost
   reads from the ids alone and writes under its no-entry badge; a paste
   that lands outlines the shell.
+- A finger does not move or delete a file (2026-11-08): on a touch press,
+  a file or a directory dropped on another directory's grid, a rename
+  across directories, or on the trashcan is refused with the reason ("a
+  finger does not move or delete a file; use a mouse"), the ghost wearing
+  the no-entry badge and snapping back, nothing asked of the node, because
+  a stray finger should not reshape the disk. A finger still places and
+  resizes a file within its grid, copies or links it, creates from the +
+  menu, and does anything to a Gridwell tile wherever it sits; a mouse does
+  all of it (`dragdrop.FingerNoFile`, the press's `DropInput.Touch`).
 - A link is a path, and a link broken at any hop — a namespace this node
   does not declare, one a node further along the chain does not declare, or
   a target its namespace says is gone — is dead: greyed, inert, still

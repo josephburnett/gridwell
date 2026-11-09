@@ -4,6 +4,7 @@
 package dragdrop
 
 import (
+	"cmp"
 	"math"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -279,6 +280,22 @@ type DropInput struct {
 	// (shellpaste.Refusal) when it is not "".
 	OntoShell    bool
 	PasteRefusal string
+	// Touch is a press a finger made, fixed at the press; CarriesFile, a
+	// carried row is a file or a directory (rpc.OnDisk). Together they refuse
+	// a move to another grid and a delete (FingerNoFile).
+	Touch, CarriesFile bool
+}
+
+// FingerNoFile is why a finger's drag of a file or a directory onto another
+// directory's grid or the trashcan is refused: those are the disk's
+// destructive gestures, a mouse's alone. Placing a file within its grid,
+// copying it and every gesture on a Gridwell tile stay a finger's too.
+const FingerNoFile = "a finger does not move or delete a file; use a mouse"
+
+// NoEntry is whether the ghost wears the no-entry badge: a move the server
+// would refuse, or a finger's refused drag of a file.
+func NoEntry(in DropInput) bool {
+	return in.Forbidden || in.PasteRefusal != "" || WhyRejected(in) == FingerNoFile
 }
 
 // CarryCopiesAsLink: rpc.CopyOf makes a link of every row copied onto dest,
@@ -336,6 +353,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropNavigate, ""
 	case in.TileID == "" && !in.IsTemplate:
 		return DropPanEnd, ""
+	case in.OverDelete && in.Touch && in.CarriesFile:
+		return DropRejected, FingerNoFile
 	case in.OverDelete:
 		return DropDelete, ""
 	case !in.HasTarget:
@@ -346,6 +365,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, in.PasteRefusal
 	case in.OntoShell:
 		return DropPaste, ""
+	case in.Touch && in.CarriesFile && in.Intent == IntentMove && !in.SameGrid && !in.MovesAsLink:
+		return DropRejected, FingerNoFile
 	case in.Forbidden:
 		return DropRejected, "forbidden"
 	case in.TargetRefusesTiles && (in.Intent.Creates() || in.MovesAsLink):
@@ -391,7 +412,8 @@ func GhostPlanForDrop(action DropAction, forbidden bool,
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Paste: true}
 	case DropRejected:
 		if forbidden {
-			return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
+			// Over the trashcan there is no target pane.
+			return GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
 		}
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
 	default: // DropMove / DropCopy

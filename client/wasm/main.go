@@ -137,10 +137,13 @@ type App struct {
 	gate         *nodebuild.Gate
 	buildVerdict *nodebuild.Verdict
 
-	// touchDownTarget is where synthetic MouseDowns route; owned by touch.go.
+	// touchDownTarget is where synthetic MouseDowns route; fingerPress is
+	// true while one is dispatched, so the press it starts knows a finger
+	// made it. Both owned by touch.go.
 	touch           *touchgest.Machine
 	touchTimerCb    js.Func
 	touchDownTarget js.Value
+	fingerPress     bool
 
 	fetch fetchState
 
@@ -530,7 +533,9 @@ type dragState struct {
 	menuNS       string
 	originPaneID string
 	// splitNav is gesture.SplitNav at left-press: a bare click descends in a new split.
-	splitNav     bool
+	splitNav bool
+	// touch is App.fingerPress at the press (dragdrop.DropInput.Touch).
+	touch        bool
 	tileID       string
 	cellOffsetX  float64
 	cellOffsetY  float64

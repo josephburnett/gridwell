@@ -347,6 +347,7 @@ func (a *App) armRightCopy(p *pane.Pane, r pane.Rect, n *gridwellv1.Tile, sx, sy
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		intent:       intent,
+		touch:        a.fingerPress,
 		startScreenX: sx,
 		startScreenY: sy,
 		curScreenX:   sx,

@@ -507,6 +507,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		splitNav:     gesture.SplitNav(args[0].Get("ctrlKey").Truthy(), args[0].Get("metaKey").Truthy()),
+		touch:        a.fingerPress,
 		tileID:       "",
 		startScreenX: sx,
 		startScreenY: sy,

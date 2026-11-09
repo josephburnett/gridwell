@@ -9,6 +9,7 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellpaste"
 	"github.com/josephburnett/gridwell/client/traceevent"
@@ -77,6 +78,9 @@ func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget, 
 		at.Grid = t.gridID
 	}
 	a.emit(traceevent.Drop(v, at))
+	if at.Why == dragdrop.FingerNoFile {
+		a.reportErr(errsurface.Info, "drop", at.Why)
+	}
 	return v
 }
 
@@ -100,6 +104,10 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 		Intent:     d.intent,
 		TileID:     d.tileID,
 		OverDelete: a.overDeleteButton(d, sx, sy),
+		Touch:      d.touch,
+	}
+	for _, r := range d.carried {
+		in.CarriesFile = in.CarriesFile || rpc.OnDisk(r.GetId())
 	}
 	if t, ok := a.shellTargetAt(sx, sy, d); ok {
 		in.HasTarget, in.OntoShell = true, true
@@ -148,7 +156,7 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 		targetPaneID = t.pane.ID
 		targetCellSize = t.cellSize
 	}
-	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in.Forbidden || in.PasteRefusal != "",
+	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), dragdrop.NoEntry(in),
 		d.originPaneID, targetPaneID, d.srcCellSize, targetCellSize)
 	a.ghost.why, a.ghost.pastePane, a.ghost.pasteTile = in.PasteRefusal, "", ""
 	if plan.Paste {
