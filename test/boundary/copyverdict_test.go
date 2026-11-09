@@ -21,7 +21,7 @@ var copyExecutors = []string{
 // not a verdict on what a copy becomes, each with why.
 var copyMechanics = map[string]string{
 	"internal/server/deepcopy.go: if rpc.IsBodyKind(t.Kind) {": "copyLeaf: which bytes a leaf's create carries",
-	"internal/server/deepcopy.go: tile.LinkTargetId = target": "linkCopy: the field a leaf link's target binds to",
+	"internal/server/deepcopy.go: tile.LinkTargetId = target":  "linkCopy: the field a leaf link's target binds to",
 	"internal/local/store/copy.go: case rpc.IsDoorKind(kind):": "tileRefs: what a delete releases, not what a copy becomes",
 	"internal/local/store/copy.go: case rpc.IsBodyKind(kind):": "tileRefs: what a delete releases",
 }
