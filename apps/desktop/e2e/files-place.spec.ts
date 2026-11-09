@@ -17,8 +17,9 @@ fs.mkdirSync(path.join(ROOT, 'sub'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'notes.md'), '# notes\n');
 test.use({ filesRoots: [{ root: ROOT, label: 'docs' }] });
 
-// The dark palette's DirectoryBorder (client/theme).
+// The dark palette's DirectoryBorder and Muted (client/theme).
 const RED = '168,50,50';
+const GREY = '108,111,120';
 
 async function edgeColours(gw: GridwellDriver, win: Page, paneID: string, cx: number, cy: number): Promise<string[]> {
   const c = await gw.cellCenter(paneID, cx, cy);
@@ -168,20 +169,26 @@ test('a shell made on a directory starts there', async ({ gw, window }) => {
   await gw.deleteTileCell(sx, sy);
 });
 
-// The node sends the directory to the OS trash but leaves its Gridwell rows
-// on the directory's grid: the sweep to the Gridwell trash is node work not
-// on main yet (CLAUDE.md, "A directory moved within Gridwell carries its
-// overlay").
-test.fixme('deleting a directory sends its Gridwell tiles to the Gridwell trash', async ({ gw }) => {
-  fs.mkdirSync(path.join(ROOT, 'box'), { recursive: true });
-  await gw.enterSource('docs (files)');
+// The door named name on the focused grid, once it is listed.
+async function doorNamed(gw: GridwellDriver, name: string): Promise<any> {
   const f = await gw.focused();
   await expect
-    .poll(async () => ((await gw.getGrid(f.gridID)).tiles ?? []).some((t: any) => t.altText === 'box'))
+    .poll(async () => ((await gw.getGrid(f.gridID)).tiles ?? []).some((t: any) => t.altText === name))
     .toBe(true);
-  const door = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t: any) => t.altText === 'box')!;
-  const [bx, by] = [Number(door.x ?? 0), Number(door.y ?? 0)];
-  await gw.descendCell(bx, by);
+  return ((await gw.getGrid(f.gridID)).tiles ?? []).find((t: any) => t.altText === name)!;
+}
+
+// A Gridwell text made inside a directory the test makes under parent, and
+// the door to it, with the parent's grid focused.
+async function tileInside(gw: GridwellDriver, name: string, parent = ''): Promise<{ door: any; text: any }> {
+  fs.mkdirSync(path.join(ROOT, parent, name), { recursive: true });
+  await gw.enterSource('docs (files)');
+  if (parent) {
+    const p = await doorNamed(gw, parent);
+    await gw.descendCell(Number(p.x ?? 0), Number(p.y ?? 0));
+  }
+  const door = await doorNamed(gw, name);
+  await gw.descendCell(Number(door.x ?? 0), Number(door.y ?? 0));
   const inside = await gw.focused();
   expect(inside.gridID, 'inside the directory').toBe(door.childGridId);
   const [tx, ty] = [Math.round(inside.cx), Math.round(inside.cy)];
@@ -190,15 +197,39 @@ test.fixme('deleting a directory sends its Gridwell tiles to the Gridwell trash'
   const text = tileAt(await gw.getGrid(inside.gridID), 'text', tx, ty)!;
   expect(text, 'a Gridwell text inside it').toBeTruthy();
   await gw.ascendViaCrumb();
+  return { door, text };
+}
 
-  await gw.deleteTileCell(bx, by);
+test('deleting a directory sends its Gridwell tiles to the Gridwell trash', async ({ gw }) => {
+  const { door, text } = await tileInside(gw, 'box');
+  await gw.deleteTileCell(Number(door.x ?? 0), Number(door.y ?? 0));
   await expect.poll(() => fs.existsSync(path.join(ROOT, 'box')), { message: 'the directory left the disk' }).toBe(false);
   const parked = await getTile(gw.origin, text.id!);
   expect(parked.gridId, 'its Gridwell tile is in the Gridwell trash').not.toBe(door.childGridId);
   expect(parked.gridId, 'a home grid').toMatch(/\/\d+$/);
 });
 
-// Phase 2 tells a directory gone underneath Gridwell as a grey door
-// (CLAUDE.md, "A directory moved within Gridwell carries its overlay"); its
-// wire fact is not on main yet.
-test.skip('a directory removed outside Gridwell stays a grey door holding its tiles', async () => {});
+test('after rm -rf of a directory holding a Gridwell tile its parent shows a grey door and the tile is still reachable through it', async ({ gw, window }) => {
+  // Alone in its parent, so the door sits at the parent's first cell.
+  const { door, text } = await tileInside(gw, 'held', 'aaa');
+  const f = await gw.focused();
+  fs.rmSync(path.join(ROOT, 'aaa', 'held'), { recursive: true, force: true });
+  await expect
+    .poll(async () => ((await gw.getGrid(f.gridID)).tiles ?? []).find((t: any) => t.altText === 'held')?.gone, {
+      message: 'the parent lists it as a gone door',
+    })
+    .toBe(true);
+  const gone = ((await gw.getGrid(f.gridID)).tiles ?? []).find((t: any) => t.altText === 'held')!;
+  expect([gone.id, gone.x, gone.y], 'the same door where it was').toEqual([door.id, door.x, door.y]);
+  const [gx, gy] = [Number(gone.x ?? 0), Number(gone.y ?? 0)];
+  await expect
+    .poll(() => edgeColours(gw, window, f.id, gx, gy), { message: 'drawn grey' })
+    .toContain(GREY);
+  expect(await edgeColours(gw, window, f.id, gx, gy), 'not red').not.toContain(RED);
+
+  await gw.descendCell(gx, gy);
+  const inside = await gw.focused();
+  expect(inside.gridID, 'the gone door opens its grid').toBe(door.childGridId);
+  expect(((await gw.getGrid(inside.gridID)).tiles ?? []).map((t: any) => t.id), 'holding the tile').toContain(text.id);
+  await gw.ascendViaCrumb();
+});
