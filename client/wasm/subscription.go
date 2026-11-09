@@ -14,7 +14,11 @@ import (
 // show draws one. pane.View is the view; subscription.Tracker decides when it is
 // owed.
 func (a *App) syncView(rects map[string]pane.Rect) {
-	if a.subscription.Show(pane.View(a.tree, &a.ws, rects, a.caps.Label(), a.gridIDForPathFrom, a.cachedTiles)) {
+	strip := ""
+	if a.menu.IsOpen() && a.menu.StripOpen() {
+		strip = a.templates
+	}
+	if a.subscription.Show(pane.View(a.tree, &a.ws, rects, a.caps.Label(), a.gridIDForPathFrom, a.cachedTiles, strip)) {
 		a.kickSubscription()
 	}
 }

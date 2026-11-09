@@ -48,6 +48,15 @@ type currencyCase struct {
 }
 
 var currencyCases = []currencyCase{{
+	name: "unfolding the + menu's strip",
+	fn:   "showStrip",
+	grid: "tg",
+	plan: func(t *testing.T, current map[string]bool) Plan {
+		w := baseWorld(gridPane("pane1", "g1"))
+		w.Current = current
+		return New().Do(Gesture{Kind: GestureShowStrip, GridID: "tg"}, w)
+	},
+}, {
 	name: "descending into a door",
 	fn:   "descendGrid",
 	grid: "g2",

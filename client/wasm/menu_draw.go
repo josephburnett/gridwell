@@ -179,7 +179,16 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	n := menuItemGhostNode(item)
 	fam := pane.TileFamily(n)
 	line := a.pal.Family(fam).Line
-	if item.isSwatch {
+	switch {
+	case item.copySwatch:
+		a.drawCopySwatch(x, y, w, h)
+	case item.template != nil:
+		// A template moving out leaves its slot empty, as a tile moving
+		// on a grid does.
+		if a.ghost == nil || !a.ghost.hidden.Has(item.template.Id) {
+			a.drawTemplate(item.template, x, y, w)
+		}
+	case item.isSwatch:
 		// A source swatch is the linked door it drops into a grid, dashed
 		// because a cross-source link can be unlinked. Drawn identically
 		// here, as the drag ghost, and once dropped.
@@ -190,7 +199,7 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 		// A broken or waiting source gets the same health tint its link
 		// tiles do.
 		a.drawSourceHealthTint(n, x, y, w, h)
-	} else {
+	default:
 		a.drawNode(a.cctx, n, x, y, w, h, false, fam, tileBorderPx, false)
 		if pr, ok := primitiveFor(item.primitive); ok {
 			pr.glyph(a.cctx, x, y, w, h, line)
@@ -199,6 +208,31 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	if hovered {
 		a.drawFocusedTileOutline(a.cctx, x, y, w, h)
 	}
+}
+
+// drawTemplate draws a template as its tile is drawn on a grid, fitted to
+// the side px square of its slot with its shape kept.
+func (a *App) drawTemplate(n *gridwellv1.Tile, x, y, side float64) {
+	cell := side / float64(max(n.W, n.H, 1))
+	w, h := float64(max(n.W, 1))*cell, float64(max(n.H, 1))*cell
+	a.drawNodeWithPreview(n, x+(side-w)/2, y+(side-h)/2, w, h, cell, false, pane.TileFamily(n), isLinkTile(n), "")
+}
+
+// drawCopySwatch is the strip's first item: dashed, grey on the menu's
+// ground, with a plus, so it reads as no tile of any kind.
+func (a *App) drawCopySwatch(x, y, w, h float64) {
+	fillRectC(a.cctx, x, y, w, h, a.pal.Bg)
+	a.strokeTileFrame(a.cctx, x, y, w, h, a.pal.PlusFg, true /* dashed */, false /* selected */)
+	a.cctx.Set("strokeStyle", a.pal.PlusFg)
+	a.cctx.Set("lineWidth", 2.0)
+	a.cctx.Call("beginPath")
+	cx, cy, arm := x+w/2, y+h/2, min(w, h)/5
+	a.cctx.Call("moveTo", cx-arm, cy)
+	a.cctx.Call("lineTo", cx+arm, cy)
+	a.cctx.Call("moveTo", cx, cy-arm)
+	a.cctx.Call("lineTo", cx, cy+arm)
+	a.cctx.Call("stroke")
+	a.cctx.Set("lineWidth", 1.0)
 }
 
 // drawSourceGlyph is the name-to-pixels half of a declared identity glyph.

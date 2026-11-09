@@ -251,15 +251,25 @@ func primitiveFor(k primitiveKind) (primitive, bool) {
 	return primitive{}, false
 }
 
-// menuItem is a configured source or a built-in primitive.
+// menuItem is a strip item, the copy swatch, a template or a configured
+// source, or a built-in primitive. A strip item is asked for before the
+// primitive, whose zero value is a kind.
 type menuItem struct {
+	// copySwatch is the strip's first item, dragged onto a tile to copy it
+	// into the templates grid.
+	copySwatch bool
+	// template is a row of the templates grid.
+	template  *gridwellv1.Tile
 	isSwatch  bool
 	source    *gridwellv1.SourceInfo // when isSwatch (for a grid's swatch, its pseudo-row)
-	primitive primitiveKind          // when !isSwatch
+	primitive primitiveKind          // when no other field is set
 	grid      *gridwellv1.SourceGrid
 	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
 	promotePane string
 }
+
+// inStrip is an item of the strip, above the primitives.
+func (it menuItem) inStrip() bool { return it.copySwatch || it.template != nil || it.isSwatch }
 
 // menuItems returns pane p's declared grids in display order. Every
 // consumer reads this one list, so a swatch not shown cannot be clicked.
@@ -270,21 +280,31 @@ func (a *App) menuItems(p *pane.Pane) []menuItem {
 
 // menuView returns the items and the section decision; see menu.Show.
 func (a *App) menuView(p *pane.Pane) ([]menuItem, menu.Shown) {
-	sources, primitives := a.menuGroups(p)
+	templates, sources, primitives := a.menuGroups(p)
 	show := menu.Show(menu.Section{
+		Templates:  len(templates),
 		Swatches:   len(sources),
 		Primitives: len(primitives),
 		Expanded:   a.menu.StripOpen(),
 	})
 	if !show.Strip {
-		sources = nil
+		templates, sources = nil, nil
 	}
-	return append(sources, primitives...), show
+	return append(append(templates, sources...), primitives...), show
 }
 
 // menuGroups is unfiltered by the fold, so menu.Show counts what the
-// node declares.
-func (a *App) menuGroups(p *pane.Pane) (sources, primitives []menuItem) {
+// node declares. The templates are this node's on every menu, a far node's
+// included: a copy into them crosses the connection as any copy does.
+func (a *App) menuGroups(p *pane.Pane) (templates, sources, primitives []menuItem) {
+	if a.templates != "" {
+		templates = append(templates, menuItem{copySwatch: true})
+		if g, ok := a.c.Grid(a.templates); ok {
+			for _, t := range menu.Templates(g.Tiles) {
+				templates = append(templates, menuItem{template: t})
+			}
+		}
+	}
 	// The menu belongs to the pane's node; "", local or uncached, is the handshake.
 	ctx := a.menuCtx(p)
 	// menu.Doors owns the composition. Every swatch is a pseudo-source, so
@@ -305,7 +325,7 @@ func (a *App) menuGroups(p *pane.Pane) (sources, primitives []menuItem) {
 			prims = append(prims, menuItem{primitive: k})
 		}
 	}
-	return items, prims
+	return templates, items, prims
 }
 
 // offerOn is what grid gid declares to the + menu; the shells policy is
@@ -315,18 +335,19 @@ func (a *App) offerOn(gid string) menu.Offer {
 	return menu.Offer{AcceptsTiles: g.GetAcceptsTiles(), Directory: rpc.IsFilesID(gid), Writable: g.GetWritable()}
 }
 
-// inStrip is an item of the strip, above the primitives.
-func (it menuItem) inStrip() bool { return it.isSwatch }
-
-// menuSections counts the strip's sections in the item list, in order.
+// menuSections counts the strip's sections in the item list, in order:
+// the templates, then the swatches.
 func menuSections(items []menuItem) []int {
-	n := 0
+	var templates, swatches int
 	for _, it := range items {
-		if it.isSwatch {
-			n++
+		switch {
+		case it.copySwatch || it.template != nil:
+			templates++
+		case it.isSwatch:
+			swatches++
 		}
 	}
-	return []int{n}
+	return []int{templates, swatches}
 }
 
 const ghostSizeLerpAlpha = 0.20

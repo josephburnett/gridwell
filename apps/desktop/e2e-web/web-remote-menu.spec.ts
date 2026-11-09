@@ -402,12 +402,14 @@ test('a menu read the network swallows does not latch the remote menu empty', as
   await gw.openMenu();
   const menu = await window.evaluate(() => (window as any).__gridwellTest.menu());
   expect(menu.open, 'the remote pane has its menu open').toBe(true);
-  expect(menu.toggle.present, 'the swallowed read leaves no swatch section to unfold').toBe(false);
+  // The strip still holds this node's templates, so it unfolds, with no swatch.
+  await gw.expandSources();
+  const unfolded = await window.evaluate(() => (window as any).__gridwellTest.menu());
+  expect(unfolded.items.some((i: any) => i.isSwatch), 'the swallowed read leaves no swatch in the strip').toBe(false);
 
   // No user action beyond keeping the menu open: the bounded read gives up,
   // says so on the notice row, and the draw of the menu after the backstop tick
-  // asks again over a link that works. Unfolding the section is part of reading it, and it cannot be
-  // unfolded until there is something to unfold.
+  // asks again over a link that works.
   let sawNotice = false;
   await expect
     .poll(

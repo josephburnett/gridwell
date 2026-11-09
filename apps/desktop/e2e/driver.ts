@@ -55,7 +55,13 @@ export interface MenuItem {
   // descends into it, a drag drops a link to it. isSwatch tells them from
   // the primitives.
   isSwatch: boolean;
-  kind: string; // a primitive's; a door swatch has none
+  // strip is an item above the primitives: the copy swatch, a template or a
+  // door swatch, in that order.
+  strip: boolean;
+  copySwatch?: boolean;
+  template?: string; // a template's row id
+  templateKind?: string;
+  kind: string; // a primitive's; a strip item has none
   connection?: boolean; // a door swatch's: the row is a connection
   label?: string;
   uuid?: string;
@@ -130,6 +136,8 @@ export interface MenuInfo {
   // menu's live state.
   hover: number;
   toggle: MenuToggle;
+  // The strip's visible band and its scroll in px.
+  strip: { x: number; y: number; w: number; h: number; scroll: number };
 }
 
 export class GridwellDriver {

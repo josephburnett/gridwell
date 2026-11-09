@@ -1,6 +1,7 @@
 package pane
 
 import (
+	"slices"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -36,7 +37,7 @@ func TestView(t *testing.T) {
 	lv.Push(Level{TileID: "home/4", GridID: "home/1"})
 	lv.Push(Level{TileID: "p/9", GridID: "p/1"})
 
-	got := View(tr, &lv, laid, "desktop", fakeLeaf, tiles)
+	got := View(tr, &lv, laid, "desktop", fakeLeaf, tiles, "")
 	want := &gridwellv1.SetViewRequest{
 		Label:          "desktop",
 		WorkspaceTiles: []string{"home/4", "p/9"},
@@ -55,12 +56,26 @@ func TestView(t *testing.T) {
 // resolve yet still names its place, with no grid.
 func TestViewOfTheSessionTree(t *testing.T) {
 	tr := TreeAtPlace("", "p/1", []string{"w5", "?"}, rpc.ViewOf(0, 0, 1))
-	got := View(tr, &Levels{}, allLaidOut(tr), "browser", func(string, []string) string { return "" }, noTiles)
+	got := View(tr, &Levels{}, allLaidOut(tr), "browser", func(string, []string) string { return "" }, noTiles, "")
 	want := &gridwellv1.SetViewRequest{
 		Label: "browser",
 		Panes: []*gridwellv1.ViewPane{{Id: tr.Focus, Anchor: "p/1", Path: []string{"w5", "?"}, Focused: true}},
 	}
 	if !proto.Equal(got, want) {
 		t.Errorf("View =\n%v\nwant\n%v", got, want)
+	}
+}
+
+// An open strip shows the templates grid, so the view lists it, once and in
+// order; a closed one lists nothing for it.
+func TestViewListsAnOpenStrip(t *testing.T) {
+	tr := TreeAtPlace("", "p/1", nil, rpc.ViewOf(0, 0, 1))
+	leaf := func(string, []string) string { return "p/1" }
+	got := View(tr, &Levels{}, allLaidOut(tr), "browser", leaf, noTiles, "n/4").ShownGridIds
+	if want := []string{"n/4", "p/1"}; !slices.Equal(got, want) {
+		t.Errorf("ShownGridIds = %v, want %v", got, want)
+	}
+	if got := View(tr, &Levels{}, allLaidOut(tr), "browser", leaf, noTiles, "p/1").ShownGridIds; !slices.Equal(got, []string{"p/1"}) {
+		t.Errorf("a strip on a grid already shown lists it twice: %v", got)
 	}
 }

@@ -32,6 +32,9 @@ const (
 	// GestureReconcileLevel replaces the open level's tree with the
 	// arrangement on disk after the node refused a stale layout write: TileID.
 	GestureReconcileLevel
+	// GestureShowStrip unfolds the + menu's strip, which shows the templates
+	// grid: GridID, asked for unless held current.
+	GestureShowStrip
 )
 
 // Gesture is one navigation verb with its arguments. Like Effect it is a
@@ -58,6 +61,7 @@ type Gesture struct {
 	OldID      string
 	Created    *gridwellv1.Tile
 	TileID     string
+	GridID     string
 	Count      int
 	// Outer says the level just popped had parked a tree, so its landing is
 	// the return animation rather than the post-reload re-centre. Read at pop

@@ -76,3 +76,4 @@ low-water | packages | 78
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): the templates grid, minimal, for the client's specs | 23
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a copy into the scratch grid shares a cell | 5
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): the strip wraps at five, shows three rows and scrolls | 87
+2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): the strip shows the templates, the copy swatch first | 140

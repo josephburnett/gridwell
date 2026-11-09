@@ -785,12 +785,19 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		e := map[string]any{
 			"index":    i,
 			"isSwatch": item.isSwatch,
+			"strip":    item.inStrip(),
 			"x":        tx,
 			"y":        ty,
 			"w":        tw,
 			"h":        th,
 		}
-		if item.isSwatch {
+		switch {
+		case item.copySwatch:
+			e["copySwatch"] = true
+		case item.template != nil:
+			e["template"] = item.template.Id
+			e["templateKind"] = item.template.Kind
+		case item.isSwatch:
 			e["connection"] = rpc.IsConnectionRow(item.source)
 			e["label"] = item.source.Label
 			e["uuid"] = item.source.Uuid
@@ -798,7 +805,7 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 			e["status"] = sourceStatusName(item.source)
 			// The exact selector drawMenuItem renders.
 			e["glyph"] = door.RowGlyph(item.source)
-		} else {
+		default:
 			e["kind"] = primitiveName(item.primitive)
 		}
 		// A declared grid reports its identity, but the label stays
@@ -810,8 +817,11 @@ func (a *App) thMenu(js.Value, []js.Value) any {
 		entries = append(entries, e)
 	}
 	tr := l.ToggleRect()
+	sr := l.StripRect()
 	return map[string]any{
 		"open":  a.menu.OpenOn(p.ID),
+		// The strip's visible band, which an item is hit only inside.
+		"strip": map[string]any{"x": sr.X, "y": sr.Y, "w": sr.W, "h": sr.H, "scroll": a.menu.StripScroll()},
 		"plusX": px,
 		"plusY": py,
 		"items": entries,

@@ -32,6 +32,9 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 		return
 	}
 	item := items[idx]
+	if item.copySwatch || item.template != nil {
+		return
+	}
 	tx, ty, tw, _ := a.menuTileRect(p, idx)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
@@ -63,6 +66,12 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // primitives share one ghost apiece, and a caller placing the ghost at a
 // cell would otherwise leave those coordinates on the next gesture's swatch.
 func menuItemGhostNode(item menuItem) *gridwellv1.Tile {
+	switch {
+	case item.template != nil:
+		return proto.CloneOf(item.template)
+	case item.copySwatch:
+		return &gridwellv1.Tile{W: 1, H: 1}
+	}
 	if item.isSwatch {
 		t := rpc.SourceDoorTile(item.source)
 		t.Id = item.source.Uuid

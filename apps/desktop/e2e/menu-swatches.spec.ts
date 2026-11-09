@@ -77,7 +77,7 @@ test('swatches fill the + menu top row above the primitives', async ({ gw }) => 
   const menu = await gw.menu();
 
   const swatches = menu.items.filter((i) => i.isSwatch);
-  const primitives = menu.items.filter((i) => !i.isSwatch);
+  const primitives = menu.items.filter((i) => !i.strip);
   // One swatch per declared door. The node's home and the connection's far
   // home are places and get a row each; the files are not a place, and each
   // root they declare is a swatch of its own. Home, then the files, then the
@@ -91,7 +91,9 @@ test('swatches fill the + menu top row above the primitives', async ({ gw }) => 
   ).toEqual(['home', 'trash (home)', 'docs (files)', 'second']);
   expect(primitives.length, 'the primitive swatches are still there').toBeGreaterThanOrEqual(5);
 
-  expect(menu.items.slice(0, swatches.length).every((i) => i.isSwatch)).toBe(true);
+  const strip = menu.items.filter((i) => i.strip).length;
+  expect(menu.items.slice(0, strip).every((i) => i.strip), 'the strip comes first').toBe(true);
+  expect(menu.items.slice(strip - swatches.length, strip).every((i) => i.isSwatch), 'the swatches end it').toBe(true);
   const swatchRowY = Math.max(...swatches.map((i) => i.y));
   const primitiveRowY = Math.min(...primitives.map((i) => i.y));
   expect(swatchRowY, 'the swatch row is above the primitive row').toBeLessThan(primitiveRowY);

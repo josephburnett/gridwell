@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/gesture"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/panebox"
 	"github.com/josephburnett/gridwell/client/traceevent"
@@ -417,7 +418,11 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		if a.pointInMenu(mp, sx, sy) {
 			// Not a swatch, so no drag arms; it changes only the menu.
 			if a.pointInMenuToggle(mp, sx, sy) {
-				a.menu.ToggleStrip()
+				// The templates are read for an open strip alone: nothing
+				// for nobody.
+				if a.menu.ToggleStrip() {
+					a.runGesture(nav.Gesture{Kind: nav.GestureShowStrip, GridID: a.templates})
+				}
 				a.draw()
 				return nil
 			}

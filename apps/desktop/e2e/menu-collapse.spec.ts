@@ -24,7 +24,7 @@ test('the + menu opens with the swatch section folded, and the chevron works it'
     folded.items.some((i) => i.isSwatch),
     'no swatch is in the popover — nothing to click, drag or hover',
   ).toBe(false);
-  const primitives = folded.items.filter((i) => !i.isSwatch);
+  const primitives = folded.items.filter((i) => !i.strip);
   expect(primitives.length, 'the regular tiles are there').toBeGreaterThanOrEqual(4);
   // The strip is inside the popover and on no swatch, so a press there belongs
   // to the menu rather than the canvas underneath it.
@@ -50,7 +50,7 @@ test('the + menu opens with the swatch section folded, and the chevron works it'
   expect(
     Math.max(...swatches.map((i) => i.y)),
     'the section sits above the primitives',
-  ).toBeLessThan(Math.min(...open.items.filter((i) => !i.isSwatch).map((i) => i.y)));
+  ).toBeLessThan(Math.min(...open.items.filter((i) => !i.strip).map((i) => i.y)));
   const still = await gw.focused();
   expect(still.id, 'working the chevron moved no focus').toBe(before.id);
   expect(still.gridID, 'and descended nowhere').toBe(before.gridID);

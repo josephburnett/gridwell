@@ -82,6 +82,8 @@ type App struct {
 	// home is the qualified grid id "/" means; every "empty anchor" reader
 	// resolves through it.
 	home string
+	// templates is home's templates grid, the strip's tiles; boot-time.
+	templates string
 
 	tree *pane.Tree
 	c    *cache.Cache
@@ -709,6 +711,7 @@ func (a *App) bootstrap() {
 	// Boot-time, immutable, read only by webAddress.
 	a.contentToken = sources.ContentToken
 	a.home = rpc.HomeGrid(sources)
+	a.templates = sources.TemplatesGridId
 	a.afterBootstrap()
 }
 

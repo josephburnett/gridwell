@@ -205,8 +205,18 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		var pl planner
 		m.engageLeaves(w, &pl)
 		return pl.plan()
+	case GestureShowStrip:
+		return showStrip(g, w)
 	}
 	return Plan{}
+}
+
+// showStrip reads the grid the + menu's strip shows, unless the cache holds
+// it current.
+func showStrip(g Gesture, w World) Plan {
+	var pl planner
+	pl.fetchGrid(w, g.GridID)
+	return pl.plan()
 }
 
 // URLWritable reports whether the one history writer may write now: a popstate

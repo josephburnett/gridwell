@@ -155,7 +155,7 @@ func workspaceView(t *testing.T, f *shellAPIFixture) (*rpc.Client, *gridwellv1.T
 	var lv pane.Levels
 	lv.Push(pane.Level{TileID: pt.Id, GridID: f.root})
 	v := pane.View(tr, &lv, pane.Layout(tr, pane.Rect{W: 800, H: 600}), "desktop",
-		func(string, []string) string { return f.root }, func(string) map[string]*gridwellv1.Tile { return nil })
+		func(string, []string) string { return f.root }, func(string) map[string]*gridwellv1.Tile { return nil }, "")
 	cl := viewer(t, f.hs, "desktop")
 	time.Sleep(2 * time.Millisecond)
 	if err := cl.SetView(ctx, v); err != nil {
