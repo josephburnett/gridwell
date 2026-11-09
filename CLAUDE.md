@@ -15,7 +15,7 @@ When a decision is unclear, this rule wins — over performance, elegance, and
 convenience. Ask of every change: is everything the user didn't touch
 byte-for-byte the same, and does every reference still resolve to the thing
 it named? That is why ids are never reassigned, a copy is deep, framing
-never bumps `version`, and there is no move across sources.
+never bumps `version`, and there is no move across a connection.
 
 ## The promises
 
@@ -107,7 +107,7 @@ what each one is called.
 | home | The node's own namespace. A connection lands on the far node's home. | The node's directory. |
 | files | The node's second source: the host's directories, shown as grids from the roots `server.yaml`'s `files:` declares (`internal/files`). | Home, which holds the rows the user made. |
 | root | One directory `files:` declares, with its label: a swatch in the + menu, where the files start. | Home's root grid, where a client lands. |
-| directory | A folder on the host, shown as a grid; its door sits in its parent's grid and wears the outside tint. | A grid of home's. |
+| directory | A folder on the host, shown as a grid, over which Gridwell tiles sit as the tiles themselves; its door sits in its parent's grid and wears the outside tint. | A grid of home's. |
 | source | Home, the files or a connection, as what a grid's rows come from (`SourceInfo`, `EventSourceHealth`); also the tile a copy was made from. The directory or node a source represents has no word of its own: name the thing. | |
 | roster | The handshake's list of a node's sources, one `SourceInfo` row each (`HandshakeResponse.sources`): home, the files, then each connection. | The + menu, which draws its swatches from it. |
 | cache | What a connection last answered (`cache.db`, `sourcecache`), served while it does not answer. Disposable, rewarmed by use. | Stale; a file's rows, which are node facts. |
@@ -118,10 +118,10 @@ what each one is called.
 |---|---|---|
 | grid | A plane of tiles. | |
 | tile | One thing on a grid: a text, a url, a shell, a door or a workspace tile. | |
-| door | A tile that leads to a grid, its own or, as a link, another's; descending through it pushes a frame. A drop into another namespace links, never moves. `client/door`. | A content tile; an API. |
+| door | A tile that leads to a grid, its own or, as a link, another's; descending through it pushes a frame. A drop onto a far node links, never moves. `client/door`. | A content tile; an API. |
 | content tile | A text, a url or a shell; a pane descends into one and it goes live. | A door; a workspace tile. |
 | link | A tile whose content is a path to another tile, drawn dashed, resolved one hop at a time; broken at any hop it reads dead. Deleting one unlinks. A link to a grid is a door. | A copy. |
-| copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target; of a text into a directory, a new markdown file. Right-drag copies. | A link; a move, which never crosses a source. |
+| copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target. Right-drag copies. | A link; a move, which never crosses a connection or the disk. |
 | text | A tile holding a body; its name is the body's first line. | |
 | url | A tile holding an address; it goes live on descent. | |
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
@@ -476,8 +476,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   the machine owns it. A `server.yaml` that still has `plugins:` or `routes:`
   is refused at parse with a message naming `files:`.
 - The files are one package, `internal/files`, reading disk and the
-  store's file rows directly (2026-11-07). A directory's grid takes no new
-  tile but a text, which is made a markdown file on disk (2026-11-08). A directory is a door; an image,
+  store's file rows directly (2026-11-07). A directory's grid takes every
+  Gridwell tile, home's rows placed over it, and makes a file or a directory
+  on disk only through the file and directory primitives (the place
+  decision below, 2026-11-08). A directory is a door; an image,
   video, audio or PDF file, a page file, is a url tile whose page the node
   serves, since none of them runs a script; every other file, HTML, CSS,
   JavaScript, JSON and SVG (which can carry a script) included, is a text
@@ -497,7 +499,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   to rename into is refused with the reason; nothing is copied (2026-11-08).
   Move renames within the files, and the file's row (placement,
   name, framing) follows it under its new path's id while the old id
-  retires; a move to another source is refused. Find on the files
+  retires; a move to a far node is refused, and a Gridwell tile moves
+  between home and a directory as between two home grids. Find on the files
   locates by `id:` and applies the node's row filters, and a text query
   answers empty: no body is read for it.
 - A file's facts the user made are rows, minted on touch (2026-11-07):
@@ -514,34 +517,58 @@ These were decided deliberately. Do not reverse one without a new decision.
   navigation in it writes nothing (2026-10-21), and a capture of it keeps
   the screenshot alone, in place of an image's own picture: its title is
   the file's name and it has no history (2026-11-08).
-- A directory's door never copies (2026-10-20): copied into another
-  namespace, home or a far node's, it lands as the link to its grid a
-  left-drag makes, and the ghost shows the link before the drop. A
-  markdown file, one whose name ends in `.md` in any case, copies its bytes
-  (`rpc.Markdown`), and any other file copies as a link: a page file, whose
-  page is the node's, copies as a link, since it has no address to copy
-  (2026-10-21), and a text file that is not markdown, since its bytes stay
-  on disk (2026-11-08). A door
-  copies as a link when the grid it opens takes no new tiles
-  (`rpc.CopyOf`, read by the node and the drop verdict alike),
-  so a disabled connection's door links too, as a dark one does.
-- Markdown crosses the files boundary by copy, and only markdown
-  (2026-11-08): the user keeps text, previews and arrangement in
-  `gridwell.db` and every other file's bytes on disk. A text tile copied
-  into a directory, by a right-drag or `copy`, or created there, as
-  `write_text` does, is a new markdown file holding its body, its row
-  minted at the drop's cell and its stamp and preview read from disk. Its
-  file name is the tile's name, typed or else its body's first line, with
-  no separator, NUL or control character and no leading dot, trimmed, at
-  most 120 bytes, `untitled` when nothing is left, ending in `.md`
-  (`files.fileName`). A name already there is refused with the reason and
-  nothing is written; a copy replaces nothing. A markdown file copied to
-  home or a far node's grid is a text tile holding its bytes, its name kept
-  as any copy's is, and any other file copied there links. Anything else
-  dropped into a directory is refused with the reason
-  (`rpc.IntoDirectory`, which the drop verdict, its ghost and the node
-  read alike), and nothing moves across the boundary. A directory's grid
-  still answers `accepts_tiles` false, so the + menu offers it nothing.
+- A directory's door never copies (2026-10-20): copied onto a Gridwell
+  grid, home's or a far node's, it lands as the link to its grid a
+  left-drag makes, and the ghost shows the link before the drop. Every file
+  copies onto a Gridwell grid as a link too (2026-11-08): a page file, whose
+  page is the node's, has no address to copy (2026-10-21), and a text
+  file's bytes stay on disk, markdown included, since nothing is converted
+  between the disk and Gridwell (the place decision below). Within the
+  files a right-drag copies the file on disk. A door copies as a link when
+  the grid it opens takes no new tiles (`rpc.CopyOf`, read by the node and
+  the drop verdict alike), so a disabled connection's door links too, as a
+  dark one does.
+- A directory is a place for Gridwell tiles (2026-11-08): the filesystem
+  is the physical space, and Gridwell's tiles sit over it. Any Gridwell
+  tile, a text, url, shell, door or workspace tile, is placed on a
+  directory's grid as the tile itself: a home row (`<node>/<digits>`) whose
+  grid is the directory's, the `grids` row keyed by its path, its bytes in
+  `gridwell.db` and nothing on disk. The Gridwell layer is one space, home,
+  every directory and every Gridwell grid under one: a left-drag moves
+  within it, so a text tile moved onto a directory moves and does not cross
+  into the disk; a right-drag copies within it; ctrl + right-drag links.
+  Nothing is ever converted between the disk and Gridwell: a file never
+  becomes a tile and a tile never becomes a file, which drops the markdown
+  copy of the same morning both ways. A file or a directory dragged onto
+  any Gridwell grid, home's or a Gridwell door's inside a directory, is a
+  link, because disk things never live on a Gridwell grid; within the files
+  a left-drag renames and a right-drag copies the file. The ghost shows
+  each verdict before the drop, and `rpc.CopyOf` owns them, read by the
+  node and the drop verdict alike. A directory's grid answers
+  `accepts_tiles` true, so the + menu offers every primitive there, and two
+  more: file and directory, each asking for a name before it is made, an
+  empty file by O_EXCL or a directory by mkdir, a name already there
+  refused with the reason, and offered only while the directory is
+  writable, the grid's second accepts fact, the disk side's. A shell
+  created on a directory's grid starts its tmux in that directory, read
+  from the grid its row sits on when the tmux starts; a home grid's starts
+  where the node does. `write_text` on a directory's grid makes a Gridwell
+  text there, never a file; the MCP has no verb that writes the disk. Tint
+  is the only tell: a file wears the outside colour, a Gridwell tile its
+  kind's, in a directory as in home.
+- A directory moved within Gridwell carries its overlay (2026-11-08):
+  every Gridwell row under it, subdirectories included, follows to the new
+  path, since their grids are keyed by the path that moved. A directory
+  that goes away underneath Gridwell, deleted, renamed or moved outside it,
+  stays in its parent as a grey door, the muted family, holding only its
+  Gridwell tiles: the one door a listing does not supply, made from the
+  rows, up to the root, so no Gridwell data is lost to a change of the
+  disk; its tiles are moved out by hand. Deleting a directory within
+  Gridwell sends the directory to the OS trash and every Gridwell tile
+  under it, recursively, to the Gridwell trash grid, where every deleted
+  tile is found again; restoring one does not restore the other. Deleting a
+  Gridwell tile on a directory's grid alone is the Gridwell trash, as in
+  home; deleting a file is the OS trash.
 - A symlink is a link (2026-11-07), followed wherever it goes
   (2026-11-08). One to a directory is a door whose
   grid is the target's, drawn as a link because the grid is not its own;
@@ -738,11 +765,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   `pane.LayoutFingerprint`).
 - Left-drag moves, right-drag copies, ctrl + right-drag links — the
   modifier flips the right button from copy to link, in the namespace the
-  drop lands in or across one. Across sources a left-drag links too, because
-  there is no move across sources, and so does a right-drag of a
-  directory's door, because a directory never copies (2026-10-20), and of a
-  file that is not markdown (2026-11-08); into a directory only a text
-  tile's right-drag lands, as a new file (2026-11-08). Dashed means link; deleting a link
+  drop lands in or across one. Across a connection a left-drag links too,
+  because there is no move across one; between home and a directory a
+  Gridwell tile moves, since the Gridwell layer is one space (2026-11-08).
+  A right-drag of a directory's door links, because a directory never
+  copies (2026-10-20), and so does any file's onto a Gridwell grid, because
+  nothing is converted between the disk and Gridwell (2026-11-08). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
   the same split a link out of a live tile opens — in any pane; macOS
   reports ctrl + left as a right press with ctrl held, so a ctrl or cmd
