@@ -26,7 +26,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gen/gridwell/v1/gridwellv1connect"
 	"github.com/josephburnett/gridwell/api/rpc"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/shellws"
 	"github.com/josephburnett/gridwell/internal/config"
@@ -38,6 +40,7 @@ import (
 	"github.com/josephburnett/gridwell/internal/local/store"
 	"github.com/josephburnett/gridwell/internal/server"
 	"github.com/josephburnett/gridwell/internal/server/servertest"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 const localNodeID = "lnode1"
@@ -282,6 +285,26 @@ func undeclareConnections(t *testing.T, reg *server.Sources, st *store.Store) fu
 	t.Cleanup(func() { _ = none.Close() })
 	restart(reg, none)
 	return func() { restart(reg, declared) }
+}
+
+// A read a client's gesture makes through a connection carries the gesture's
+// request id to the far node, so the far node's record of it joins the
+// client's in a dump, and a far node's own work reads as nobody's gesture.
+func TestARequestIDCrossesTheConnection(t *testing.T) {
+	h := newTransportHarness(t, []config.ConnectionConfig{{Name: "geneva", Addr: "/s"}}, nil)
+	const reqID = "fwdreq7"
+	req := connect.NewRequest(&gridwellv1.GetGridRequest{GridId: localNodeID + "/geneva/rnode1/" + h.rootBare})
+	req.Header().Set(tracewire.RequestHeader, reqID)
+	if _, err := gridwellv1connect.NewGridwellClient(h.localHTTP.Client(), h.localURL).GetGrid(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	var far bool
+	for _, rec := range trace.Default().Snapshot() {
+		far = far || (rec.Src == "router" && rec.Msg == "GetGrid ok" && rec.KV["req"] == reqID && rec.KV["id"] == "rnode1/"+h.rootBare)
+	}
+	if !far {
+		t.Errorf("the far node traced no GetGrid of %s under req %q", "rnode1/"+h.rootBare, reqID)
+	}
 }
 
 func TestConnectionThroughTheChain(t *testing.T) {

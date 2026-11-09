@@ -11,6 +11,7 @@ package trace
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +63,20 @@ var def = New(NodeCapacity)
 // Emit stamps a node record onto the default ring.
 func Emit(src, kind, msg string, kv map[string]string) {
 	def.Emit(tracewire.Record{Origin: tracewire.OriginNode, Src: src, Kind: kind, Msg: msg, KV: kv})
+}
+
+type requestKey struct{}
+
+// WithRequest is ctx carrying the request id of the call it serves
+// (tracewire.RequestHeader), which a connection's call forwards (dial).
+func WithRequest(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, requestKey{}, id)
+}
+
+// RequestOf is the request id ctx carries, "" for none.
+func RequestOf(ctx context.Context) string {
+	id, _ := ctx.Value(requestKey{}).(string)
+	return id
 }
 
 // Default is the node's one ring: what the API dumps and every Emit above

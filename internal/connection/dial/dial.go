@@ -18,10 +18,13 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
+	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/internal/namespace"
+	"github.com/josephburnett/gridwell/internal/trace"
 )
 
 // Config's Host is the transport selector: set, the connection bridges over
@@ -272,16 +275,25 @@ func ClientConn(target string, transport ...grpc.DialOption) (*grpc.ClientConn, 
 		grpc.WithKeepaliveParams(keepaliveParams),
 		grpc.WithConnectParams(grpc.ConnectParams{Backoff: connectBackoff}),
 		grpc.WithChainUnaryInterceptor(func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-			return gwerr.Received(invoker(ctx, method, req, reply, cc, opts...))
+			return gwerr.Received(invoker(forwarded(ctx), method, req, reply, cc, opts...))
 		}),
 		grpc.WithChainStreamInterceptor(func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-			s, err := streamer(ctx, desc, cc, method, opts...)
+			s, err := streamer(forwarded(ctx), desc, cc, method, opts...)
 			if err != nil {
 				return nil, gwerr.Received(err)
 			}
 			return receivedStream{s}, nil
 		}),
 	}, transport...)...)
+}
+
+// forwarded is ctx carrying to the far node the request id of the call it
+// serves, so the far node's records of it name the same gesture.
+func forwarded(ctx context.Context) context.Context {
+	if id := trace.RequestOf(ctx); id != "" {
+		return metadata.AppendToOutgoingContext(ctx, tracewire.RequestHeader, id)
+	}
+	return ctx
 }
 
 // receivedStream's RecvMsg carries the stream's verdict; SendMsg says only
