@@ -1,6 +1,7 @@
 # What a decision raised a ceiling by, owed until brought back down by the ceiling row's ways: one entry per rise, entered in the commit that makes the rise. date | decision | amount raises lines, and low-water | lines is its value before the first rise; date | decision | amount | packages raises packages, and low-water | packages | count is its value before the first rise.
 # The debt row of ratchet.txt counts the lines and packages above their low-water marks; at 0 that row, the low-water lines and the paid entries go, and the next rise brings them back.
 low-water | 57236
+low-water | packages | 78
 2026-11-08 | verification fixes (Joe: a clean and complete change): ChainedThrough tells home from the files, and a hop peels by the chain an id is spelled under | 7
 2026-11-08 | verification fixes (Joe: a clean and complete change): a link written into a directory hears the directory's refusal, not a missing route | 1
 2026-11-08 | verification fixes (Joe: a clean and complete change): an uncached grid's bar and notice name its roster row by door.RowLabel | 2
@@ -29,3 +30,6 @@ low-water | 57236
 2026-11-08 | the file information view (Joe, 2026-11-08): a file that renders as nothing shows its file information, read by an info read, and its extension names its type | 61
 2026-11-08 | the file information view (Joe, 2026-11-08): a file that renders as nothing shows its file information, read by an info read, and its extension names its type | 60
 2026-11-08 | the file information view (Joe, 2026-11-08): the files answer an info read with the inode's facts and the sniffed type, and serve every other file's bytes as octet-stream by range | 152
+2026-11-08 | the file information view (Joe, 2026-11-08): the files answer an info read with the inode's facts and the sniffed type, and serve every other file's bytes as octet-stream by range | 212
+2026-11-08 | the file information view (Joe, 2026-11-08): client/fileinfo, a file's preview, its file information table and its hex view in pure code, and textedit's info and hex modes | 214
+2026-11-08 | the file information view (Joe, 2026-11-08): client/fileinfo, the package of a file's preview, file information and hex view | 1 | packages

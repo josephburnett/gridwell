@@ -2,8 +2,23 @@ package rpc
 
 import (
 	"path"
+	"strconv"
 	"strings"
 )
+
+// ContentStamp names a file's bytes by its mtime to the nanosecond and its
+// size, so a write within one mtime tick still moves it unless it keeps the
+// size. A write claims it, and a preview reads the size off it (StampSize).
+func ContentStamp(mtimeNs, size int64) string {
+	return strconv.FormatInt(mtimeNs, 10) + "-" + strconv.FormatInt(size, 10)
+}
+
+// StampSize is the size a ContentStamp names, ok false for any other stamp.
+func StampSize(stamp string) (int64, bool) {
+	_, size, ok := strings.Cut(stamp, "-")
+	n, err := strconv.ParseInt(size, 10, 64)
+	return n, ok && err == nil && n >= 0
+}
 
 // extensionTypes names a file's type by its extension alone, so a preview in a
 // directory says it without opening the file; the node sniffs the real one

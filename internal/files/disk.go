@@ -17,7 +17,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -230,11 +229,9 @@ func previewStamp(path string) int64 {
 	return fi.ModTime().UnixNano()
 }
 
-// contentStamp names a file's bytes by its mtime to the nanosecond and its
-// size, so a write within one mtime tick still moves it unless it keeps the
-// size. A write claims it.
+// contentStamp is a file's rpc.ContentStamp.
 func contentStamp(mtime time.Time, size int64) string {
-	return strconv.FormatInt(mtime.UnixNano(), 10) + "-" + strconv.FormatInt(size, 10)
+	return rpc.ContentStamp(mtime.UnixNano(), size)
 }
 
 // bodyCap bounds a body: a document view, not a file transfer. A file past

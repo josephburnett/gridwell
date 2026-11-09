@@ -113,6 +113,10 @@ func TestReadOnlyTable(t *testing.T) {
 func TestDecideDescentTable(t *testing.T) {
 	doc := &gridwellv1.Tile{Kind: rpc.KindText, AltText: "notes.md"}
 	url := &gridwellv1.Tile{Kind: rpc.KindURL}
+	file := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("ahome01", rpc.KeyTileID("/r/main.go")),
+		TextPresentation: rpc.TextPresentationPlain}
+	blob := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("ahome01", rpc.KeyTileID("/r/a.bin")),
+		TextPresentation: rpc.TextPresentationInfo}
 	cases := []struct {
 		name     string
 		tile     *gridwellv1.Tile
@@ -133,6 +137,15 @@ func TestDecideDescentTable(t *testing.T) {
 		// editor opens on the first draw rather than after the fetch.
 		{"row not landed", nil, false, rpc.TextModeText, Descent{Mode: rpc.TextModeText}},
 		{"row not landed, no mode", nil, false, "", Descent{Mode: rpc.TextModeRendered}},
+		// A file that renders as nothing shows its file information, the hex
+		// view only once asked, and has no other mode to flip to.
+		{"a file that renders as nothing", blob, true, rpc.TextModeRendered, Descent{Mode: rpc.TextModeInfo}},
+		{"its hex view", blob, true, rpc.TextModeHex, Descent{Mode: rpc.TextModeHex}},
+		// Any other file reaches its file information by the info toggle.
+		{"a text file", file, false, rpc.TextModeText, Descent{Mode: rpc.TextModeText, Info: true}},
+		{"a text file's information", file, true, rpc.TextModeInfo, Descent{Mode: rpc.TextModeInfo, Info: true}},
+		{"a home text has no file information", doc, false, rpc.TextModeHex,
+			Descent{Mode: rpc.TextModeRendered, Toggle: true}},
 	}
 	for _, c := range cases {
 		if got := DecideDescent(c.tile, c.readOnly, c.paneMode); got != c.want {

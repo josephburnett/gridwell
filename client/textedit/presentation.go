@@ -64,12 +64,18 @@ func DecideCheckboxClick(textDocument, org, readOnly, bodyCached bool) CheckboxC
 	return CheckboxToggle
 }
 
-// Descent is what a focused text descent shows: the mode, and whether the
-// raw/rendered toggle rides with it.
+// Descent is what a focused text descent shows: the mode, whether the
+// raw/rendered toggle rides with it, and whether the file information toggle
+// does.
 type Descent struct {
 	Mode   string // "" when nothing text-shaped is descended
 	Toggle bool
+	Info   bool
 }
+
+// FileView is a mode that shows a file's file information: alone, or with
+// its bytes beneath in the hex view.
+func FileView(mode string) bool { return mode == rpc.TextModeInfo || mode == rpc.TextModeHex }
 
 // DecideDescent is the one verdict behind the textarea, the rendered view and
 // the file toggle. A nil tile is a row that has not landed: the descent's mode
@@ -81,8 +87,19 @@ func DecideDescent(tile *gridwellv1.Tile, readOnly bool, paneMode string) Descen
 	if !rpc.TextDocument(tile) {
 		return Descent{}
 	}
+	file, infoOnly := rpc.IsFilesID(tile.Id), tile.TextPresentation == rpc.TextPresentationInfo
+	mode := ShownMode(paneMode, readOnly)
+	switch {
+	case infoOnly && paneMode != rpc.TextModeHex:
+		mode = rpc.TextModeInfo
+	case file && FileView(paneMode):
+		mode = paneMode
+	case FileView(mode):
+		mode = rpc.TextModeRendered
+	}
 	return Descent{
-		Mode:   ShownMode(paneMode, readOnly),
-		Toggle: ToggleVisible(tile, readOnly),
+		Mode:   mode,
+		Toggle: !FileView(mode) && ToggleVisible(tile, readOnly),
+		Info:   file && !infoOnly,
 	}
 }
