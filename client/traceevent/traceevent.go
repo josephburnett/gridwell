@@ -497,6 +497,7 @@ var dropNames = map[dragdrop.DropAction]string{
 	dragdrop.DropMove:           "move",
 	dragdrop.DropCopy:           "copy",
 	dragdrop.DropLink:           "link",
+	dragdrop.DropPaste:          "paste",
 }
 
 func dropName(v dragdrop.DropAction) string {

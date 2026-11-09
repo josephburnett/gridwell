@@ -240,6 +240,9 @@ const (
 	// DropLink creates a link, a door to another namespace for a grid and a leaf link
 	// otherwise. The source is untouched and identity never migrates.
 	DropLink
+	// DropPaste types what the carry names into the shell under the cursor
+	// (shellpaste.Text); nothing moves.
+	DropPaste
 )
 
 // DropInput is every world-read a drop decision needs, gathered once before
@@ -270,6 +273,11 @@ type DropInput struct {
 	CrossSource bool
 	// CopiesAsLink is CarryCopiesAsLink over what the drag carries.
 	CopiesAsLink bool
+	// OntoShell is a release over a shell, its tile on a grid or its live
+	// pane, whatever the button: a paste, refused for PasteRefusal
+	// (shellpaste.Refusal) when it is not "".
+	OntoShell    bool
+	PasteRefusal string
 }
 
 // CarryCopiesAsLink: rpc.CopyOf makes a link of every row copied onto dest,
@@ -319,6 +327,10 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, "no target"
 	case in.IsTemplate:
 		return DropCreateTemplate, ""
+	case in.OntoShell && in.PasteRefusal != "":
+		return DropRejected, in.PasteRefusal
+	case in.OntoShell:
+		return DropPaste, ""
 	case in.Forbidden:
 		return DropRejected, "forbidden"
 	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource):
@@ -346,6 +358,8 @@ type GhostPlan struct {
 	// left-drag would look like a move and the survivor read as a duplicate.
 	Link   bool
 	Cursor string // CSS cursor: "" or "not-allowed"
+	// Paste outlines the shell the drop types into, as the trashcan is lit.
+	Paste bool
 }
 
 // GhostPlanForDrop takes both pane ids and cell sizes because the ghost rests
@@ -358,6 +372,8 @@ func GhostPlanForDrop(action DropAction, forbidden bool,
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
 	case DropLink:
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Link: true}
+	case DropPaste:
+		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Paste: true}
 	case DropRejected:
 		if forbidden {
 			return GhostPlan{PaneID: targetPaneID, TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}

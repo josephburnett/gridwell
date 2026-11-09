@@ -2,6 +2,7 @@ package dragdrop
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -565,6 +566,142 @@ func TestCarryCopiesAsLink(t *testing.T) {
 	for _, c := range cases {
 		if got := CarryCopiesAsLink(c.rows, c.dest, c.accepts, c.known); got != c.want {
 			t.Errorf("%s: CarryCopiesAsLink = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestGhostPlanForDrop(t *testing.T) {
+	const (
+		origin = "origin"
+		target = "target"
+		doc    = "doc"
+		srcSz  = 50.0
+		tgtSz  = 80.0
+	)
+	cases := []struct {
+		name      string
+		action    DropAction
+		forbidden bool
+		want      GhostPlan
+	}{
+		{"delete shrinks+fragments in origin", DropDelete, false,
+			GhostPlan{PaneID: origin, TargetCellSize: srcSz * 0.2, Fragmentation: 1.0}},
+		{"rejected forbidden cross-grid: no-entry in target", DropRejected, true,
+			GhostPlan{PaneID: target, TargetCellSize: srcSz, Forbidden: true, Cursor: "not-allowed"}},
+		{"rejected off-canvas: glide back in origin, no badge", DropRejected, false,
+			GhostPlan{PaneID: origin, TargetCellSize: srcSz}},
+		{"move snaps to target cell", DropMove, false,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+		{"copy snaps to target cell", DropCopy, false,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz}},
+		// A cross-namespace left-drag previews as a link, or the source's
+		// survival after the drop would read as a surprise duplicate.
+		{"link snaps to target cell with the chain badge", DropLink, false,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Link: true}},
+		{"paste outlines the shell", DropPaste, false,
+			GhostPlan{PaneID: target, TargetCellSize: tgtSz, Paste: true}},
+	}
+	for _, c := range cases {
+		got := GhostPlanForDrop(c.action, c.forbidden,
+			origin, target, srcSz, tgtSz)
+		if got != c.want {
+			t.Errorf("%s: GhostPlanForDrop = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPromoteToDoor(t *testing.T) {
+	cases := []struct {
+		name                               string
+		isDoor                             bool
+		childGridID, tileID, draggedTileID string
+		want                               bool
+	}{
+		{"open door promotes", true, "g9", "t1", "t2", true},
+		{"non-door never promotes", false, "g9", "t1", "t2", false},
+		{"door with no child never promotes", true, "", "t1", "t2", false},
+		{"the dragged door itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
+		{"a door the set carries never promotes", true, "g9", "t3", "t1,t3", false},
+		{"no drag in flight still promotes", true, "g9", "t1", "", true},
+	}
+	for _, c := range cases {
+		var carried Carry
+		for _, id := range strings.Split(c.draggedTileID, ",") {
+			if id != "" {
+				carried = append(carried, Member{ID: id})
+			}
+		}
+		if got := PromoteToDoor(c.isDoor, c.childGridID, c.tileID, carried); got != c.want {
+			t.Errorf("%s: PromoteToDoor = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// RectsOverlap is the client half of the placement collision contract:
+// strict interior intersection, so edge adjacency is not a collision.
+func TestRectsOverlap(t *testing.T) {
+	cases := []struct {
+		name           string
+		ax, ay, aw, ah int64
+		bx, by, bw, bh int64
+		want           bool
+	}{
+		{"identical", 0, 0, 2, 2, 0, 0, 2, 2, true},
+		{"one-cell shift of a 2x2 (the #231 self-cross)", 0, 0, 2, 2, 1, 0, 2, 2, true},
+		{"corner touch only", 0, 0, 2, 2, 2, 2, 2, 2, false},
+		{"edge adjacent", 0, 0, 2, 2, 2, 0, 2, 2, false},
+		{"contained", 0, 0, 4, 4, 1, 1, 1, 1, true},
+		{"disjoint", 0, 0, 2, 2, 5, 5, 1, 1, false},
+	}
+	for _, c := range cases {
+		if got := RectsOverlap(c.ax, c.ay, c.aw, c.ah, c.bx, c.by, c.bw, c.bh); got != c.want {
+			t.Errorf("%s: RectsOverlap = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPaneShows(t *testing.T) {
+	p := mkPane(0, 0, 640, 640, 0, 0, 1, 64)
+	cases := []struct {
+		name       string
+		x, y, w, h float64
+		want       bool
+	}{
+		{"at the center", 0, 0, 1, 1, true},
+		{"straddling the left edge", -6, 0, 2, 1, true},
+		{"touching the left edge", -6, 0, 1, 1, true},
+		{"past the left edge", -8, 0, 1, 1, false},
+		{"past the bottom edge", 0, 6, 1, 1, false},
+	}
+	for _, c := range cases {
+		if got := p.Shows(c.x, c.y, c.w, c.h); got != c.want {
+			t.Errorf("%s: Shows = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// Every rejection names its arm, and nothing else is a rejection, so a dump
+// says why a tile snapped back.
+func TestWhyRejectedNamesTheArm(t *testing.T) {
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true}
+	cases := []struct {
+		in   func(DropInput) DropInput
+		want string
+	}{
+		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
+		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
+		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.CrossSource = true, true; return in }, "target refuses tiles"},
+		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
+		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
+		{func(in DropInput) DropInput { return in }, ""},
+	}
+	for _, c := range cases {
+		in := c.in(base)
+		if got := WhyRejected(in); got != c.want {
+			t.Errorf("%+v: why %q, want %q", in, got, c.want)
+		}
+		if rejected := DecideDrop(in) == DropRejected; rejected != (c.want != "") {
+			t.Errorf("%+v: verdict %v disagrees with why %q", in, DecideDrop(in), c.want)
 		}
 	}
 }

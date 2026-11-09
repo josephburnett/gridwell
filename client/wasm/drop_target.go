@@ -10,6 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/shellpaste"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -24,6 +25,9 @@ type dropTarget struct {
 	cellSize float64
 	originX  float64
 	originY  float64
+	// shell is the shell a drop here pastes into (shellTargetAt), nil for
+	// any other target.
+	shell *gridwellv1.Tile
 }
 
 // carry is what the drag carries, as dragdrop sees it.
@@ -97,6 +101,11 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 		TileID:     d.tileID,
 		OverDelete: a.overDeleteButton(d, sx, sy),
 	}
+	if t, ok := a.shellTargetAt(sx, sy, d); ok {
+		in.HasTarget, in.OntoShell = true, true
+		in.PasteRefusal = shellpaste.Refusal(d.carried, t.shell)
+		return in, t, 0, 0
+	}
 	t, in.HasTarget = a.dropTargetAt(sx, sy, d.carry())
 	if !in.HasTarget {
 		return in, t, 0, 0
@@ -139,8 +148,12 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 		targetPaneID = t.pane.ID
 		targetCellSize = t.cellSize
 	}
-	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in.Forbidden,
+	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in.Forbidden || in.PasteRefusal != "",
 		d.originPaneID, targetPaneID, d.srcCellSize, targetCellSize)
+	a.ghost.why, a.ghost.pastePane, a.ghost.pasteTile = in.PasteRefusal, "", ""
+	if plan.Paste {
+		a.ghost.pastePane, a.ghost.pasteTile = t.pane.ID, t.shell.Id
+	}
 	a.ghost.paneID = plan.PaneID
 	a.ghost.targetCellSize = plan.TargetCellSize
 	a.ghost.targetFragmentation = plan.Fragmentation
@@ -193,6 +206,34 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 		originX:  parentOriginX,
 		originY:  parentOriginY,
 	}, true
+}
+
+// shellTargetAt is the shell a release at the cursor pastes into: a live
+// shell pane's, or a shell tile on the pane's grid the drag does not carry.
+// A menu template is no carry and pastes nothing.
+func (a *App) shellTargetAt(sx, sy float64, d *dragState) (*dropTarget, bool) {
+	p, r, ok := a.paneAtScreen(sx, sy)
+	if !ok || d.isTemplate {
+		return nil, false
+	}
+	if p.ContentID() != "" {
+		n, ok := a.descendedTile(p)
+		if !ok || !rpc.KindOf(n.Kind).Tmux {
+			return nil, false
+		}
+		return &dropTarget{pane: p, cellSize: d.srcCellSize, shell: n}, true
+	}
+	ps, ok := p.Screen(r)
+	if !ok {
+		return nil, false
+	}
+	cx, cy := ps.CellAt(sx, sy)
+	n := a.tileAtCell(p, cx, cy)
+	if n == nil || !rpc.KindOf(n.Kind).Tmux || d.carry().Has(n.Id) {
+		return nil, false
+	}
+	x, y := ps.CellToScreen(0, 0)
+	return &dropTarget{pane: p, gridID: a.gridIDForPane(p), cellSize: ps.Cell(), originX: x, originY: y, shell: n}, true
 }
 
 // dropCrossNamespace reports whether the source and destination grids are of

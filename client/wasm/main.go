@@ -515,6 +515,12 @@ type ghost struct {
 	// link is set while a left-drag hovers a different id namespace: the drop
 	// links and the source stays.
 	link bool
+
+	// why is a refused paste's reason, drawn under the no-entry badge.
+	why string
+	// pastePane and pasteTile are the shell a paste lands in, outlined: its
+	// tile, or with pasteTile "" the live pane itself.
+	pastePane, pasteTile string
 }
 
 // dragState tracks an in-progress drag; started is false until the cursor

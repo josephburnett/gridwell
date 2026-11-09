@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"strings"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
@@ -119,6 +120,9 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 		a.draw()
 	case dragdrop.DropRejected:
 		a.cancelDragSnapBack(d)
+	case dragdrop.DropPaste:
+		a.cancelDragSnapBack(d)
+		a.commitPaste(d, t)
 	case dragdrop.DropLink:
 		if a.ghost != nil {
 			a.ghost.hidden, a.ghost.hiddenPaneID = nil, ""
@@ -130,6 +134,23 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 		return false
 	}
 	return true
+}
+
+// commitPaste asks the node owning the shell to type what the carry names
+// into its tmux, spelled under this page's origin; a refusal is a notice.
+func (a *App) commitPaste(d *dragState, t *dropTarget) {
+	ids := make([]string, len(d.carried))
+	for i, row := range d.carried {
+		ids[i] = row.Id
+	}
+	origin := a.origin
+	if !strings.HasPrefix(origin, "http") {
+		origin = ""
+	}
+	shell := rpc.ContentID(t.shell)
+	a.post(write{label: "PasteShell", call: func(ctx context.Context) error {
+		return a.cl.PasteShell(ctx, shell, ids, origin)
+	}})
 }
 
 // commitMove places every carried tile by the grabbed tile's offset, each
