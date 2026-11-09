@@ -1312,8 +1312,8 @@ func (x *GetTilePreviewResponse) GetJpeg() []byte {
 // bytes' content_stamp (Tile.content_stamp).
 //
 // info asks for the facts about a file's bytes, not the bytes: the answer is
-// one chunk carrying file_info and no data. An owner whose tile is no file
-// refuses it.
+// one chunk carrying file_info and no data. Only the files answer it; any
+// other owner reads the bytes as if it were unset.
 type ReadContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TileId        string                 `protobuf:"bytes,1,opt,name=tile_id,json=tileId,proto3" json:"tile_id,omitempty"`

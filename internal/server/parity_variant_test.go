@@ -8,8 +8,11 @@ package server_test
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +42,11 @@ var (
 	vDark     = parityVariant{"a directory that will not read", nil}
 	vDisabled = parityVariant{"a disabled source", nil}
 	vUntold   = parityVariant{"a far node refusing the share", func(f *parityFix) { f.h.refuseShare.Store(true) }}
+	vInfo     = parityVariant{"a file that renders as nothing", func(f *parityFix) {
+		for _, d := range f.disk {
+			writeFile(f.t, filepath.Join(d.main, "Blob.bin"), "\x1f\x8bBlob")
+		}
+	}}
 )
 
 // The decisions the variants are held to, quoted.
@@ -48,6 +56,8 @@ const (
 	dDisabled      = "every grid it serves is stamped `writable=false`, `accepts_tiles=false`, each row `read_only` with the reason, so an edit is refused before it is typed"
 	dNeverDisabled = "The files are dark or told, never disabled"
 	dUntold        = "a source whose changes are not told is read on every move"
+	dInfo          = "a file whose name renders as nothing, by the one table of what renders as text, is a text tile with no body that shows its file information"
+	dBytes         = "and every other file's bytes as `application/octet-stream`, which no browser runs"
 )
 
 type parityVariantCell struct {
@@ -67,6 +77,10 @@ var parityVariantTable = []parityVariantCell{
 	{vDisabled, parityCell{kText, opWrite, onFar, decided, dDisabled, nil}, holdsDisabled},
 	{vDisabled, parityCell{kText, opWrite, onFiles, decided, dNeverDisabled, nil}, holdsNeverDisabled},
 	{vUntold, parityCell{kURL, opUpdate, onFar, decided, dUntold, nil}, holdsUntold},
+	{vInfo, parityCell{kText, opRead, onFiles, decided, dInfo, nil}, holdsInfo},
+	{vInfo, parityCell{kText, opRead, onFar, decided, dInfo, nil}, holdsInfo},
+	{vInfo, parityCell{kText, opServe, onFiles, decided, dBytes, nil}, holdsBytes},
+	{vInfo, parityCell{kText, opServe, onFar, decided, dBytes, nil}, holdsBytes},
 }
 
 // parityVariantPrefix is the node whose files a decided cell's owner
@@ -161,6 +175,66 @@ func holdsReadOnly(f *parityFix, prefix string) error {
 	}
 	if data, _, _, err := f.cl.ReadContent(f.ctx, tl.Id); err != nil || string(data) != "Body.md" {
 		return fmt.Errorf("the body reads %q, %v after the refusal", data, err)
+	}
+	return nil
+}
+
+// blob is the file Blob.bin on main of the files reached through prefix.
+func (f *parityFix) blob(prefix string) (*gridwellv1.Tile, error) {
+	g, err := f.cl.GetGrid(f.ctx, f.fileID(prefix, f.disk[prefix].main))
+	if err != nil {
+		return nil, err
+	}
+	if i := slices.IndexFunc(g.Tiles, func(tl *gridwellv1.Tile) bool { return tl.AltText == "Blob.bin" }); i >= 0 {
+		return g.Tiles[i], nil
+	}
+	return nil, fmt.Errorf("the files list no Blob.bin")
+}
+
+// holdsInfo proves a file that renders as nothing is listed as a text tile
+// shown as its file information, read-only, whose read is no bytes and whose
+// info read is the disk's facts, the sniffed type among them.
+func holdsInfo(f *parityFix, prefix string) error {
+	tl, err := f.blob(prefix)
+	if err != nil {
+		return err
+	}
+	if tl.Kind != rpc.KindText || tl.TextPresentation != rpc.TextPresentationInfo || tl.ReadOnly == "" {
+		return fmt.Errorf("Blob.bin is kind %q presentation %q read_only %q", tl.Kind, tl.TextPresentation, tl.ReadOnly)
+	}
+	if data, _, _, err := f.cl.ReadContent(f.ctx, tl.Id); err != nil || len(data) != 0 {
+		return fmt.Errorf("its read answered %q, %v, want no bytes", data, err)
+	}
+	info, err := f.cl.ReadInfo(f.ctx, tl.Id)
+	if err != nil || info.GetSize() != 6 || info.GetSniffedType() != "gzip" || info.GetExtensionType() != "binary" {
+		return fmt.Errorf("its info read answered %v, %v", info, err)
+	}
+	return nil
+}
+
+// holdsBytes proves the content API serves a file that renders as nothing
+// as octet-stream, sniffed by no browser, one range at a time.
+func holdsBytes(f *parityFix, prefix string) error {
+	tl, err := f.blob(prefix)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodGet, rpc.PageURL(f.h.localURL, f.token, tl.Id), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Range", "bytes=2-5")
+	resp, err := f.h.localHTTP.Client().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	h := resp.Header
+	if err != nil || resp.StatusCode != http.StatusPartialContent || string(body) != "Blob" ||
+		h.Get("Content-Type") != "application/octet-stream" || h.Get("X-Content-Type-Options") != "nosniff" ||
+		h.Get("Content-Range") != "bytes 2-5/6" {
+		return fmt.Errorf("the range answered %d %q %v with %v", resp.StatusCode, body, err, h)
 	}
 	return nil
 }

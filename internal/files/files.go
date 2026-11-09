@@ -162,8 +162,8 @@ type opened struct {
 // open opens path's bytes, every link followed, when they are a regular file:
 // by its mode before the open and again by fstat after it (errIrregular),
 // nonblocking so that a FIFO swapped in between answers its mode rather than
-// waiting for a writer.
-func open(path string) (*opened, error) {
+// waiting for a writer. A test counts its calls.
+var open = func(path string) (*opened, error) {
 	real, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, err

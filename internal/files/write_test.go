@@ -322,10 +322,10 @@ func TestADirectoryKeepsItsSelection(t *testing.T) {
 	}
 }
 
-// A page file's page is its whole bytes and media type; every other file,
-// and a directory, serves none, since its bytes could be a page that runs a
-// script: an html file, an svg, or a link named like a picture.
-func TestAPageFileServesItsBytes(t *testing.T) {
+// A page file's page is its whole bytes and media type; every other file's
+// bytes are octet-stream, since they could be a page that runs a script: an
+// html file, an svg, or a link named like a picture. A directory serves none.
+func TestAFileServesItsBytes(t *testing.T) {
 	f := newFixture(t)
 	png := f.write("pic.png", "\x89PNG fake")
 	bin := f.write("blob", "plain words")
@@ -351,12 +351,18 @@ func TestAPageFileServesItsBytes(t *testing.T) {
 	if data, media, err := serve(png); err != nil || media != "image/png" || string(data) != "\x89PNG fake" {
 		t.Errorf("png = %q %q %v", data, media, err)
 	}
-	for _, p := range []string{bin, html, svg, disguised, f.mkdir("dir")} {
-		data, _, err := serve(p)
-		wantCode(t, filepath.Base(p), err, codes.NotFound)
-		if len(data) != 0 {
-			t.Errorf("%s served %q", filepath.Base(p), data)
+	// Any other file's bytes are served as bytes no browser runs, a link's
+	// by where it lands.
+	for p, want := range map[string]string{bin: "plain words", html: "<script>alert(1)</script>",
+		svg: "<svg><script>alert(1)</script></svg>", disguised: "<script>alert(1)</script>"} {
+		if data, media, err := serve(p); err != nil || media != bytesMediaType || string(data) != want {
+			t.Errorf("%s = %q %q %v, want its bytes as %s", filepath.Base(p), data, media, err, bytesMediaType)
 		}
+	}
+	data, _, err := serve(f.mkdir("dir"))
+	wantCode(t, "dir", err, codes.NotFound)
+	if len(data) != 0 {
+		t.Errorf("a directory served %q", data)
 	}
 	if tl := tileIn(t, f.grid(f.root), svg); tl.Kind != rpc.KindText || tl.ServesPage || tl.TextPresentation != rpc.TextPresentationPlain {
 		t.Errorf("an svg = kind %q page %v presentation %q, want a plain text tile", tl.Kind, tl.ServesPage, tl.TextPresentation)

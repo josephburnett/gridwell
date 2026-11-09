@@ -817,6 +817,12 @@ func (c *Layer) GetTilePreview(ctx context.Context, in *pb.GetTilePreviewRequest
 // ReadContent tees the live stream, storing only at a clean end. An unheard
 // call falls back to the cached body only before any chunk has flowed.
 func (c *Layer) ReadContent(ctx context.Context, in *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
+	if in.Info {
+		// A file's information is read when it is opened, and not kept.
+		err := c.Namespace.ReadContent(ctx, in, send)
+		c.noteReachTile(ctx, err, in.TileId)
+		return err
+	}
 	r := c.order.begin()
 	defer r.end()
 	first, data, flowed, fits, err := tee(func(f func(*pb.ContentChunk) error) error { return c.Namespace.ReadContent(ctx, in, f) }, send, rpc.MaxContentBytes)

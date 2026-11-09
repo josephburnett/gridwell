@@ -14,8 +14,9 @@ import (
 )
 
 // Every text tile carries a presentation, and its body is the media type
-// the presentation names: plain is text/plain, both is markdown. Past the
-// body cap a file still answers in its presentation's form.
+// the presentation names: plain is text/plain, both is markdown, and info
+// has none, its file information read on the ask. Past the body cap a file
+// still answers in its presentation's form.
 func TestFilesTextTilesAreWhatTheirPresentationSays(t *testing.T) {
 	root := t.TempDir()
 	bodies := map[string]string{
@@ -40,15 +41,22 @@ func TestFilesTextTilesAreWhatTheirPresentationSays(t *testing.T) {
 			continue
 		}
 		seen++
-		want := map[string]string{rpc.TextPresentationPlain: "text/plain", rpc.TextPresentationBoth: "text/markdown"}[tl.TextPresentation]
-		if want == "" {
-			t.Errorf("%s declares text_presentation %q; every text tile declares plain or both", tl.AltText, tl.TextPresentation)
+		want, ok := map[string]string{rpc.TextPresentationPlain: "text/plain", rpc.TextPresentationBoth: "text/markdown",
+			rpc.TextPresentationInfo: ""}[tl.TextPresentation]
+		if !ok {
+			t.Errorf("%s declares text_presentation %q; every text tile declares plain, both or info", tl.AltText, tl.TextPresentation)
 			continue
 		}
-		_, mediaType, _, err := n.cl.ReadContent(n.ctx, tl.Id)
+		data, mediaType, _, err := n.cl.ReadContent(n.ctx, tl.Id)
 		if err != nil {
 			t.Errorf("read %s: %v", tl.AltText, err)
 			continue
+		}
+		if tl.TextPresentation == rpc.TextPresentationInfo {
+			info, err := n.cl.ReadInfo(n.ctx, tl.Id)
+			if len(data) != 0 || err != nil || info.GetSize() != int64(len(bodies[tl.AltText])) {
+				t.Errorf("%s shows its file information, and reads %q and %v, %v", tl.AltText, data, info, err)
+			}
 		}
 		if mediaType != want {
 			t.Errorf("%s declares %q and its body is %q; want %q", tl.AltText, tl.TextPresentation, mediaType, want)

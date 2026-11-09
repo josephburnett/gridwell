@@ -1,6 +1,7 @@
 package server
 
-// The HTTP /content/ API: the node's pages. A GET or HEAD of
+// The HTTP /content/ API: the node's pages, and every other file's bytes as
+// octet-stream, which the hex view reads by range. A GET or HEAD of
 //
 //	/content/<content-token>/<qualified-tile-id>
 //
@@ -18,7 +19,8 @@ package server
 // A sandboxed page and the desktop's native views cannot present the auth
 // cookie, so the API is exempt from that gate and carries its own capability
 // in the path. Leaked, that token opens this API alone, which reaches only
-// the node's pages; changed, every old content URL dies with it.
+// the node's pages and its files' bytes; changed, every old content URL dies
+// with it.
 
 import (
 	"crypto/sha256"

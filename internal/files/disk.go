@@ -203,14 +203,18 @@ func isPlainText(name string) bool {
 	return plainTextExts[filepath.Ext(lower)] || plainTextNames[lower]
 }
 
-// presentation is a text file's: the plain families show verbatim, and every
-// other name renders, a document as itself and anything else as its
-// summary (body).
+// presentation is a text file's, read off its name and never its bytes, so
+// a listing opens nothing: a document renders, the plain families show
+// verbatim, and any other name renders as nothing, so the file shows its
+// file information. It is the one owner of what renders as text.
 func presentation(name string) string {
-	if isPlainText(name) && !renderable(name) {
+	switch {
+	case renderable(name):
+		return rpc.TextPresentationBoth
+	case isPlainText(name):
 		return rpc.TextPresentationPlain
 	}
-	return rpc.TextPresentationBoth
+	return rpc.TextPresentationInfo
 }
 
 // previewStamp is an image's mtime to the nanosecond, so two saves within a
@@ -238,31 +242,19 @@ func contentStamp(mtime time.Time, size int64) string {
 const bodyCap = 4 << 20
 
 // body is the text file f's body in the media type its presentation names:
-// its bytes, up to the cap, when it is renderable or plain, and a summary of
-// the file otherwise.
-func body(f *os.File, fi os.FileInfo) (data []byte, media string) {
-	name := filepath.Base(f.Name())
-	media = "text/markdown"
-	if presentation(name) == rpc.TextPresentationPlain {
+// its bytes, up to the cap, and none for a file that shows its file
+// information.
+func body(f *os.File) (data []byte, media string, err error) {
+	switch presentation(filepath.Base(f.Name())) {
+	case rpc.TextPresentationInfo:
+		return nil, "", nil
+	case rpc.TextPresentationPlain:
 		media = "text/plain"
+	default:
+		media = "text/markdown"
 	}
-	if renderable(name) || isPlainText(name) {
-		if b, err := io.ReadAll(io.LimitReader(f, bodyCap)); err == nil {
-			return b, media
-		}
-	}
-	return []byte(summary(entryFromInfo(filepath.Dir(f.Name()), fi))), media
-}
-
-// summary is the body of a file whose bytes are not shown: markdown that
-// reads as itself verbatim, the same for the same file.
-func summary(e diskEntry) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", e.name)
-	fmt.Fprintf(&b, "- path: `%s`\n", e.path)
-	fmt.Fprintf(&b, "- size: %d bytes\n", e.size)
-	fmt.Fprintf(&b, "- modified: %s\n", e.mtime.UTC().Format(time.RFC3339))
-	return b.String()
+	data, err = io.ReadAll(io.LimitReader(f, bodyCap))
+	return data, media, err
 }
 
 // unwritable says why a file's body cannot be saved back to it: only a body
@@ -272,8 +264,8 @@ func unwritable(name string, size int64) error {
 	switch {
 	case isPage(name):
 		return errors.New("is a page, which has no body to edit")
-	case !renderable(name) && !isPlainText(name):
-		return errors.New("is shown as a summary of the file, not its bytes")
+	case presentation(name) == rpc.TextPresentationInfo:
+		return errors.New("is shown as its file information, which takes no edit")
 	case size > bodyCap:
 		return fmt.Errorf("is larger than the %d MiB a body shows, so its bytes are not all here to save", bodyCap>>20)
 	}

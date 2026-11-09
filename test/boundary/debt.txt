@@ -27,3 +27,5 @@ low-water | 57236
 2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): the files compose home's rows over a directory, the router places a Gridwell tile there and CreateTileRequest.file makes a file or a directory, rpc.CopyOf and rpc.MoveRefusal read the two sides, net of the markdown copy dropped both ways | 134
 2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): a shell on a directory starts its tmux there | 8
 2026-11-08 | the file information view (Joe, 2026-11-08): a file that renders as nothing shows its file information, read by an info read, and its extension names its type | 61
+2026-11-08 | the file information view (Joe, 2026-11-08): a file that renders as nothing shows its file information, read by an info read, and its extension names its type | 60
+2026-11-08 | the file information view (Joe, 2026-11-08): the files answer an info read with the inode's facts and the sniffed type, and serve every other file's bytes as octet-stream by range | 152

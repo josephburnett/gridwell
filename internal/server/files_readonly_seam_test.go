@@ -39,7 +39,7 @@ func TestFilesBodyItWouldRefuseIsReadOnlyOnTheTile(t *testing.T) {
 	}{
 		{"notes.md", ""},
 		{"locked.md", "permission"},
-		{"data.bin", "summary"},
+		{"data.bin", "file information"},
 		{"big.txt", "larger"},
 	}
 	for _, c := range cases {

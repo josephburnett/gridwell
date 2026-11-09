@@ -864,7 +864,7 @@ func (s *Server) ReadContent(ctx context.Context, req *gridwellv1.ReadContentReq
 	if err != nil {
 		return err
 	}
-	return fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local}, send)
+	return fw.client.ReadContent(ctx, &gridwellv1.ReadContentRequest{TileId: local, Info: req.Info}, send)
 }
 
 func (s *Server) ServeContent(ctx context.Context, req *gridwellv1.ServeContentRequest, send func(*gridwellv1.ServeContentChunk) error) error {

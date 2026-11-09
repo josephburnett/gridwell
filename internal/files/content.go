@@ -1,9 +1,11 @@
 package files
 
 // A file's bytes: a text file's body, read and written whole under its
-// content stamp; a page file's page; an image's picture.
+// content stamp; its file information; any file's bytes served by range, a
+// page file's as its page; an image's picture.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
@@ -39,11 +41,15 @@ func sendChunks(data []byte, first *pb.ContentChunk, send func(*pb.ContentChunk)
 
 // ReadContent answers a text file's body with its stamp, taken before the
 // read so bytes written during it read as a stamp they do not match. A page
-// file has no address, so its content is the empty address.
+// file has no address, so its content is the empty address. An info read
+// answers any file's file information instead.
 func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send func(*pb.ContentChunk) error) error {
 	t, err := s.tileByPath(req.TileId)
 	if err != nil {
 		return err
+	}
+	if req.Info {
+		return s.readInfo(req.TileId, send)
 	}
 	if rpc.WebContent(t) {
 		return send(&pb.ContentChunk{Data: []byte(t.UrlString), MediaType: rpc.AddressMediaType, Version: t.Version})
@@ -57,7 +63,10 @@ func (s *Source) ReadContent(_ context.Context, req *pb.ReadContentRequest, send
 		return readRefusal(path, err)
 	}
 	defer o.Close()
-	data, media := body(o.File, o.fi)
+	data, media, err := body(o.File)
+	if err != nil {
+		return diskRefusal("read", path, err)
+	}
 	return sendChunks(data, &pb.ContentChunk{MediaType: media, ContentStamp: contentStamp(o.fi.ModTime(), o.fi.Size())}, send)
 }
 
@@ -202,13 +211,14 @@ func diskRefusal(verb, path string, err error) error {
 	return status.Errorf(codes.Unavailable, "files: %s cannot be %s right now: %v", path, verb, pathErr(err))
 }
 
-// ServeContent is a page file's bytes, the range asked (rpc.PageRange), with
-// its media type and size, read and sent a chunk at a time through one
-// buffer, so a video plays and seeks as it arrives and none is held whole. A
-// range past the end sends the first chunk alone. Only a page file has a page: any other file's bytes
-// could be a page that runs a script, in the content API's sandbox, which
-// allows scripts. A link serves where it lands, so it is a page file by its
-// target's name.
+// ServeContent is a file's bytes, the range asked (rpc.PageRange), with its
+// media type and size, read and sent a chunk at a time through one buffer,
+// so a video plays and seeks as it arrives and none is held whole. A range
+// past the end sends the first chunk alone. Only a page file has a page, in
+// its own media type: any other file's bytes could be a page that runs a
+// script in the content API's sandbox, which allows scripts, so they are
+// application/octet-stream, which no browser runs. A link serves where it
+// lands, so it is a page file by its target's name.
 func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, send func(*pb.ServeContentChunk) error) error {
 	path, _, err := tilePath(req.TileId)
 	if err != nil {
@@ -219,9 +229,6 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 		return readRefusal(path, err)
 	}
 	defer f.Close()
-	if !isPage(f.Name()) {
-		return status.Errorf(codes.NotFound, "files: %s is not an image, video, audio or PDF file, which alone serve a page", path)
-	}
 	size := f.fi.Size()
 	from, left, _ := rpc.PageRange(req.Offset, req.Length, size)
 	if _, err := f.Seek(from, io.SeekStart); err != nil {
@@ -236,7 +243,7 @@ func (s *Source) ServeContent(_ context.Context, req *pb.ServeContentRequest, se
 		}
 		if c := (&pb.ServeContentChunk{Data: buf[:n]}); n > 0 || first {
 			if first {
-				c.MediaType, c.Size = mediaType(f.Name()), &size
+				c.MediaType, c.Size = cmp.Or(mediaType(f.Name()), bytesMediaType), &size
 			}
 			if err := send(c); err != nil {
 				return err

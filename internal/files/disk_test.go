@@ -23,11 +23,11 @@ func bodyOf(t *testing.T, path string) ([]byte, string) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	fi, err := f.Stat()
+	data, media, err := body(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return body(f, fi)
+	return data, media
 }
 
 // previewOf is previewJPEG of the file at path, nil for none there.
@@ -61,13 +61,14 @@ func TestABodyPastTheCapIsTheFilesBeginning(t *testing.T) {
 	}
 }
 
-// Every name has a presentation, and its body is the media type that names.
+// Every name has a presentation, read off the name alone, and its body is
+// the media type that names; a file that renders as nothing has none.
 func TestABodyIsWhatItsPresentationSays(t *testing.T) {
 	dir := t.TempDir()
 	want := map[string]string{
 		"notes.md": rpc.TextPresentationBoth, "plan.org": rpc.TextPresentationBoth, "app.log": rpc.TextPresentationPlain,
-		"Makefile": rpc.TextPresentationPlain, "blob.bin": rpc.TextPresentationBoth, "untitled": rpc.TextPresentationBoth,
-		"index.html": rpc.TextPresentationPlain,
+		"Makefile": rpc.TextPresentationPlain, "blob.bin": rpc.TextPresentationInfo, "untitled": rpc.TextPresentationInfo,
+		"index.html": rpc.TextPresentationPlain, "archive.tar.gz": rpc.TextPresentationInfo,
 	}
 	media := map[string]string{rpc.TextPresentationPlain: "text/plain", rpc.TextPresentationBoth: "text/markdown"}
 	for name, p := range want {
@@ -78,7 +79,7 @@ func TestABodyIsWhatItsPresentationSays(t *testing.T) {
 		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if data, mt := bodyOf(t, path); data == nil || mt != media[p] {
+		if data, mt := bodyOf(t, path); (data == nil) != (p == rpc.TextPresentationInfo) || mt != media[p] {
 			t.Errorf("body(%q) = %q in %q, want %q", name, data, mt, media[p])
 		}
 	}

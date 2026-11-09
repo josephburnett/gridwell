@@ -483,7 +483,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   video, audio or PDF file, a page file, is a url tile whose page the node
   serves, since none of them runs a script; every other file, HTML, CSS,
   JavaScript, JSON and SVG (which can carry a script) included, is a text
-  tile, plain or both by its extension. A name that is no regular file,
+  tile, plain or both by its extension, or info: a file whose name renders
+  as nothing, by the one table of what renders as text, is a text tile with
+  no body that shows its file information (2026-11-08). A name that is no regular file,
   directory or symlink, a FIFO, a socket or a device, is a text tile with
   no body, read-only because it is not a regular file, and nothing opens it
   (2026-11-08). A file
@@ -695,7 +697,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   TCP. Its `server.yaml` key stays `federation:` and its file stays
   `federation.sock`: an existing `~/.gridwell` already has them written down.
 - The node serves a page file's page through its content API
-  (2026-11-07): a GET or HEAD of `/content/<token>/<qualified tile id>`
+  (2026-11-07), and every other file's bytes as
+  `application/octet-stream`, which no browser runs (2026-11-08): a GET or HEAD of `/content/<token>/<qualified tile id>`
   streams the file in chunks as it is read, with its media type, `nosniff`,
   the sandbox CSP and its `Content-Length` when its size is known, and
   honours one byte range (`Range`: 206 with `Content-Range`, 416 past the

@@ -36,8 +36,8 @@ func TestADirectoryListsItsKindsInNameOrder(t *testing.T) {
 	if door.Kind != rpc.KindDoor || door.ChildGridId != idOf(f.path("sub")) || door.Link {
 		t.Errorf("door = %+v", door)
 	}
-	for name, want := range map[string]string{"notes.md": rpc.TextPresentationBoth, "data.bin": rpc.TextPresentationBoth,
-		"main.go": rpc.TextPresentationPlain, "page.html": rpc.TextPresentationPlain, ".hidden": rpc.TextPresentationBoth} {
+	for name, want := range map[string]string{"notes.md": rpc.TextPresentationBoth, "data.bin": rpc.TextPresentationInfo,
+		"main.go": rpc.TextPresentationPlain, "page.html": rpc.TextPresentationPlain, ".hidden": rpc.TextPresentationInfo} {
 		tl := tileIn(t, resp, f.path(name))
 		if tl.Kind != rpc.KindText || tl.TextPresentation != want || tl.ServesPage || tl.ContentStamp == "" {
 			t.Errorf("%s = kind %q presentation %q page %v stamp %q", name, tl.Kind, tl.TextPresentation, tl.ServesPage, tl.ContentStamp)
@@ -55,7 +55,7 @@ func TestADirectoryListsItsKindsInNameOrder(t *testing.T) {
 		t.Errorf("a pdf has no picture of its own, got %d", tl.PreviewBlobId)
 	}
 	if tl := tileIn(t, resp, f.path("data.bin")); tl.ReadOnly == "" {
-		t.Error("a file shown as its summary is read-only")
+		t.Error("a file shown as its file information is read-only")
 	}
 }
 

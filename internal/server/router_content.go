@@ -24,7 +24,7 @@ func (rt *router) ReadContent(ctx context.Context, req *pb.ReadContentRequest, s
 	if err != nil {
 		return err
 	}
-	return c.ReadContent(ctx, &pb.ReadContentRequest{TileId: local}, send)
+	return c.ReadContent(ctx, &pb.ReadContentRequest{TileId: local, Info: req.Info}, send)
 }
 
 // ServeContent forwards a web-content request one hop. HTTP terminates at the
