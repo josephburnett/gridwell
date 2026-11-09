@@ -319,7 +319,7 @@ func TestDecideDropBareClickAlwaysNavigates(t *testing.T) {
 
 // Rejected before the RPC, so no reconcile notice follows.
 func TestDecideDropTargetRefusesTiles(t *testing.T) {
-	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true, CrossSource: true}
+	base := DropInput{Started: true, TileID: "u/1", HasTarget: true, TargetRefusesTiles: true, MovesAsLink: true}
 	if got := DecideDrop(base); got != DropRejected {
 		t.Errorf("left-drag link onto read-only grid = %v, want DropRejected", got)
 	}
@@ -348,16 +348,16 @@ func TestDecideDropReadOnlyPlacement(t *testing.T) {
 	if got := DecideDrop(cp); got != DropRejected {
 		t.Errorf("same-grid copy on read-only grid = %v, want DropRejected (creation)", got)
 	}
-	// The files move, so a left-drag goes to another of their grids,
-	// though they take no new tiles; across a namespace it is a link.
+	// A left-drag that moves goes to another grid that takes no new
+	// tiles; one that links creates, and is refused.
 	across := rearrange
 	across.SameGrid = false
 	if got := DecideDrop(across); got != DropMove {
 		t.Errorf("cross-grid move in one read-only namespace = %v, want DropMove", got)
 	}
-	across.CrossSource = true
+	across.MovesAsLink = true
 	if got := DecideDrop(across); got != DropRejected {
-		t.Errorf("cross-namespace left-drag onto a read-only grid = %v, want DropRejected (a link creates)", got)
+		t.Errorf("a left-drag that links onto a read-only grid = %v, want DropRejected (a link creates)", got)
 	}
 }
 
@@ -367,7 +367,7 @@ func TestMoveForbidden(t *testing.T) {
 	cases := []struct {
 		name               string
 		sameGrid           bool
-		crossSource        bool
+		movesAsLink        bool
 		srcMoves, srcKnown bool
 		dstMoves, dstKnown bool
 		want               bool
@@ -378,13 +378,13 @@ func TestMoveForbidden(t *testing.T) {
 		{"to a grid that does not move", false, false, true, true, false, true, true},
 		{"neither moves (a mailbox)", false, false, false, true, false, true, true},
 		{"to a grid not yet read", false, false, true, true, false, false, false},
-		// A drag across an id namespace is a link, so the stamps are exempt
-		// and TargetRefusesTiles gates the destination.
-		{"cross-source left-drag is a link, not forbidden", false, true, false, true, false, true, false},
+		// A left-drag that links is no move, so the stamps are exempt and
+		// TargetRefusesTiles gates the destination.
+		{"a left-drag that links is not forbidden", false, true, false, true, false, true, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := MoveForbidden(c.sameGrid, c.crossSource, c.srcMoves, c.srcKnown, c.dstMoves, c.dstKnown); got != c.want {
+			if got := MoveForbidden(c.sameGrid, c.movesAsLink, c.srcMoves, c.srcKnown, c.dstMoves, c.dstKnown); got != c.want {
 				t.Errorf("MoveForbidden = %v, want %v", got, c.want)
 			}
 		})
@@ -480,10 +480,9 @@ func TestDecideDrop(t *testing.T) {
 		// link, so it links inside one namespace too.
 		{"ctrl right drag in one namespace -> link",
 			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink}, DropLink},
-		// Crossing a namespace with the modifier held reaches the same
-		// verdict a plain left-drag does.
-		{"ctrl right drag across a namespace -> link",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, CrossSource: true}, DropLink},
+		// Where a plain left-drag links, the modifier reaches the same verdict.
+		{"ctrl right drag where a move links -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentLink, MovesAsLink: true}, DropLink},
 		// A link lands a new row, so the source cell is a real neighbor
 		// and a read-only grid refuses it.
 		{"ctrl right drag onto occupied -> rejected",
@@ -497,25 +496,29 @@ func TestDecideDrop(t *testing.T) {
 		{"ctrl right drag over delete still deletes",
 			DropInput{Started: true, TileID: "7", OverDelete: true, Intent: IntentLink}, DropDelete},
 
-		// A cross-namespace left-drag is a link.
-		{"cross-source left drag -> link",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true}, DropLink},
-		{"cross-source right drag -> copy (copy, not link)",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy}, DropCopy},
-		// A source's door never copies: a right-drag of one across a
-		// namespace is the link a left-drag makes (CLAUDE.md, 2026-10-20).
-		{"cross-source right drag of a source door -> link",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, CopiesAsLink: true}, DropLink},
-		{"right drag of a source door in its own namespace -> copy",
-			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, CopiesAsLink: true}, DropCopy},
-		{"cross-source link onto occupied -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Occupied: true}, DropRejected},
-		{"cross-source link onto read-only target -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, TargetRefusesTiles: true}, DropRejected},
-		{"cross-source drop over delete still deletes",
-			DropInput{Started: true, TileID: "7", OverDelete: true, CrossSource: true}, DropDelete},
+		// A left-drag links where rpc.MoveRefusal refuses the move: a file
+		// onto a Gridwell grid, anything across a connection.
+		{"a left-drag that links -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, MovesAsLink: true}, DropLink},
+		// A left-drag that moves, home's row onto a directory's grid as
+		// onto another home grid (CLAUDE.md, 2026-11-08).
+		{"a left-drag that moves to another grid -> move",
+			DropInput{Started: true, TileID: "7", HasTarget: true}, DropMove},
+		{"a right drag where a move links still copies",
+			DropInput{Started: true, TileID: "7", HasTarget: true, MovesAsLink: true, Intent: IntentCopy}, DropCopy},
+		// A right-drag links where rpc.CopyOf makes a link: a directory's
+		// door, a file onto a Gridwell grid, a link (CLAUDE.md, 2026-10-20,
+		// 2026-11-08), so the ghost shows the link it lands.
+		{"a right drag that copies as a link -> link",
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, CopiesAsLink: true}, DropLink},
+		{"a left-drag link onto occupied -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, MovesAsLink: true, Occupied: true}, DropRejected},
+		{"a left-drag link onto read-only target -> rejected",
+			DropInput{Started: true, TileID: "7", HasTarget: true, MovesAsLink: true, TargetRefusesTiles: true}, DropRejected},
+		{"a left-drag link over delete still deletes",
+			DropInput{Started: true, TileID: "7", OverDelete: true, MovesAsLink: true}, DropDelete},
 		{"right drag of anything into a grid that takes no tiles -> rejected",
-			DropInput{Started: true, TileID: "7", HasTarget: true, CrossSource: true, Intent: IntentCopy, TargetRefusesTiles: true}, DropRejected},
+			DropInput{Started: true, TileID: "7", HasTarget: true, Intent: IntentCopy, TargetRefusesTiles: true}, DropRejected},
 	}
 	for _, c := range cases {
 		if got := DecideDrop(c.in); got != c.want {
@@ -690,7 +693,7 @@ func TestWhyRejectedNamesTheArm(t *testing.T) {
 	}{
 		{func(in DropInput) DropInput { in.HasTarget = false; return in }, "no target"},
 		{func(in DropInput) DropInput { in.Forbidden = true; return in }, "forbidden"},
-		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.CrossSource = true, true; return in }, "target refuses tiles"},
+		{func(in DropInput) DropInput { in.TargetRefusesTiles, in.MovesAsLink = true, true; return in }, "target refuses tiles"},
 		{func(in DropInput) DropInput { in.SameGrid, in.SameCell = true, true; return in }, "same cell"},
 		{func(in DropInput) DropInput { in.Occupied = true; return in }, "occupied"},
 		{func(in DropInput) DropInput { return in }, ""},
@@ -702,6 +705,37 @@ func TestWhyRejectedNamesTheArm(t *testing.T) {
 		}
 		if rejected := DecideDrop(in) == DropRejected; rejected != (c.want != "") {
 			t.Errorf("%+v: verdict %v disagrees with why %q", in, DecideDrop(in), c.want)
+		}
+	}
+}
+
+// The Gridwell layer is one space over home and every directory of a node, so
+// a Gridwell row moves between them; a file onto a Gridwell grid and anything
+// across a connection link (rpc.MoveRefusal, CLAUDE.md 2026-11-08).
+func TestCarryMovesAsLink(t *testing.T) {
+	file := &gridwellv1.Tile{Kind: rpc.KindText, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/a.txt"))}
+	dirDoor := &gridwellv1.Tile{Kind: rpc.KindDoor, Id: rpc.QualifyID("n", rpc.KeyTileID("/r/d"))}
+	text := &gridwellv1.Tile{Kind: rpc.KindText, Id: "n/4"}
+	dir := rpc.QualifyID("n", rpc.KeyTileID("/r/e"))
+	const home, far = "n/9", "n/laptop/2"
+	cases := []struct {
+		name string
+		rows []*gridwellv1.Tile
+		dest string
+		want bool
+	}{
+		{"a home text onto a directory moves", []*gridwellv1.Tile{text}, dir, false},
+		{"a home text onto another home grid moves", []*gridwellv1.Tile{text}, home, false},
+		{"a file into another directory moves", []*gridwellv1.Tile{file}, dir, false},
+		{"a file onto a Gridwell grid links", []*gridwellv1.Tile{file}, home, true},
+		{"a directory onto a Gridwell grid links", []*gridwellv1.Tile{dirDoor}, home, true},
+		{"a home text across a connection links", []*gridwellv1.Tile{text}, far, true},
+		{"a carry with one file onto home links whole", []*gridwellv1.Tile{text, file}, home, true},
+		{"nothing carried", nil, home, false},
+	}
+	for _, c := range cases {
+		if got := CarryMovesAsLink(c.rows, c.dest); got != c.want {
+			t.Errorf("%s: CarryMovesAsLink = %v, want %v", c.name, got, c.want)
 		}
 	}
 }

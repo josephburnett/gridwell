@@ -196,11 +196,12 @@ func RangeFromAnchors(pin, moving int64, origRight bool) (start, length int64) {
 	return moving, pin - moving
 }
 
-// MoveForbidden reports whether the server would reject a left-drag to
-// another grid of the same namespace: either end is known not to move its
-// tiles (Grid.moves). An end not yet read is left to the server.
-func MoveForbidden(sameGrid, crossSource, srcMoves, srcKnown, dstMoves, dstKnown bool) bool {
-	if sameGrid || crossSource {
+// MoveForbidden reports whether the server would reject a left-drag that
+// moves to another grid: either end is known not to move its tiles
+// (Grid.moves). An end not yet read is left to the server, and a left-drag
+// that links is no move.
+func MoveForbidden(sameGrid, movesAsLink, srcMoves, srcKnown, dstMoves, dstKnown bool) bool {
+	if sameGrid || movesAsLink {
 		return false
 	}
 	return srcKnown && !srcMoves || dstKnown && !dstMoves
@@ -262,16 +263,16 @@ type DropInput struct {
 	Forbidden  bool
 	// TargetRefusesTiles is a destination known not to accept tiles
 	// (Grid.accepts_tiles), which rejects an arrival before the RPC. A
-	// left-drag within one namespace is a move, not creation, and is exempt;
-	// Forbidden gates it.
+	// left-drag that moves is not creation, and is exempt; Forbidden gates it.
 	TargetRefusesTiles bool
 	SameGrid           bool
 	SameCell           bool
 	Occupied           bool
-	// CrossSource: the grids are in different id namespaces, so a left-drag
-	// verdicts DropLink and a right-drag stays DropCopy, unless CopiesAsLink.
-	CrossSource bool
-	// CopiesAsLink is CarryCopiesAsLink over what the drag carries.
+	// MovesAsLink is CarryMovesAsLink over what the drag carries: a left-drag
+	// links.
+	MovesAsLink bool
+	// CopiesAsLink is CarryCopiesAsLink over what the drag carries: a
+	// right-drag links.
 	CopiesAsLink bool
 	// OntoShell is a release over a shell, its tile on a grid or its live
 	// pane, whatever the button: a paste, refused for PasteRefusal
@@ -295,6 +296,20 @@ func CarryCopiesAsLink(rows []*gridwellv1.Tile, dest string, accepts, known bool
 		}
 	}
 	return true
+}
+
+// CarryMovesAsLink: rpc.MoveRefusal refuses a row of the carry onto dest, so
+// the left-drag links the whole carry rather than moving some of it. The
+// Gridwell layer is one space over home and every directory of a node, so a
+// Gridwell row moves between them; a file onto a Gridwell grid, or anything
+// across a connection, links.
+func CarryMovesAsLink(rows []*gridwellv1.Tile, dest string) bool {
+	for _, r := range rows {
+		if rpc.MoveRefusal(&gridwellv1.MoveTileRequest{TileId: r.GetId(), GridId: dest}) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // DecideDrop's branch order is the decision: an earlier arm wins. HasTarget
@@ -333,15 +348,15 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropPaste, ""
 	case in.Forbidden:
 		return DropRejected, "forbidden"
-	case in.TargetRefusesTiles && (in.Intent.Creates() || in.CrossSource):
+	case in.TargetRefusesTiles && (in.Intent.Creates() || in.MovesAsLink):
 		return DropRejected, "target refuses tiles"
 	case in.SameCell:
 		return DropRejected, "same cell"
 	case in.Occupied:
 		return DropRejected, "occupied"
-	case in.Intent == IntentCopy && !(in.CrossSource && in.CopiesAsLink):
+	case in.Intent == IntentCopy && !in.CopiesAsLink:
 		return DropCopy, ""
-	case in.Intent == IntentLink || in.CrossSource:
+	case in.Intent != IntentMove || in.MovesAsLink:
 		return DropLink, ""
 	default:
 		return DropMove, ""
@@ -354,8 +369,8 @@ type GhostPlan struct {
 	TargetCellSize float64 // size the ghost lerps toward
 	Fragmentation  float64 // 1 shatters into the trashcan
 	Forbidden      bool    // draw the no-entry badge
-	// Link draws the dashed ghost and chain badge. Without it a cross-source
-	// left-drag would look like a move and the survivor read as a duplicate.
+	// Link draws the dashed ghost and chain badge. Without it a left-drag that
+	// links would look like a move and the survivor read as a duplicate.
 	Link   bool
 	Cursor string // CSS cursor: "" or "not-allowed"
 	// Paste outlines the shell the drop types into, as the trashcan is lit.

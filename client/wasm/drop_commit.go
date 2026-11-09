@@ -110,7 +110,7 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 // commitShared commits the verdicts both buttons' drags share, reporting
 // whether verdict was one: the trashcan, which resolves against the bar
 // button wherever the cursor is; a snap back with no doomed round trip; and a
-// link, made by a ctrl + right-drag or a cross-namespace left-drag, which
+// link, made by a ctrl + right-drag or a left-drag that links, which
 // leaves the sources a would-be move hid where they are.
 func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTarget, dropX, dropY int64) bool {
 	switch verdict {

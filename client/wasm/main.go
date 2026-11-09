@@ -512,7 +512,7 @@ type ghost struct {
 	// then snaps back with no RPC.
 	forbidden bool
 
-	// link is set while a left-drag hovers a different id namespace: the drop
+	// link is set while a drag hovers where it links (dragdrop.DecideDrop): the drop
 	// links and the source stays.
 	link bool
 

@@ -115,11 +115,11 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 	accepts, targetKnown := a.gridAcceptsTiles(t.gridID)
 	in.TargetRefusesTiles = targetKnown && !accepts
 	in.SameGrid = t.gridID == d.srcGridID
-	in.CrossSource = dropCrossNamespace(d, t)
+	in.MovesAsLink = dragdrop.CarryMovesAsLink(d.carried, t.gridID)
 	srcAccepts, srcKnown := a.gridAcceptsTiles(d.srcGridID)
 	in.CopiesAsLink = dragdrop.CarryCopiesAsLink(d.carried, t.gridID, srcAccepts, srcKnown)
 	if !d.intent.Creates() {
-		in.Forbidden = a.dropForbiddenForMove(d, t)
+		in.Forbidden = a.dropForbiddenForMove(d, t, in.MovesAsLink)
 	}
 	if !placement {
 		return in, t, 0, 0
@@ -248,13 +248,13 @@ func dropCrossNamespace(d *dragState, t *dropTarget) bool {
 }
 
 // dropForbiddenForMove gathers dragdrop.MoveForbidden's inputs for a left-drag.
-func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget) bool {
+func (a *App) dropForbiddenForMove(d *dragState, t *dropTarget, movesAsLink bool) bool {
 	if d == nil || t == nil {
 		return false
 	}
 	src, srcOK := a.gridMeta(d.srcGridID)
 	dst, dstOK := a.gridMeta(t.gridID)
-	return dragdrop.MoveForbidden(d.srcGridID == t.gridID, dropCrossNamespace(d, t),
+	return dragdrop.MoveForbidden(d.srcGridID == t.gridID, movesAsLink,
 		src.GetMoves(), srcOK, dst.GetMoves(), dstOK)
 }
 

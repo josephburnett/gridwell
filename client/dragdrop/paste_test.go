@@ -15,7 +15,7 @@ func TestDecideDropOntoAShell(t *testing.T) {
 		{"a left-drag pastes", func(in DropInput) DropInput { return in }, DropPaste, ""},
 		{"a right-drag pastes", func(in DropInput) DropInput { in.Intent = IntentCopy; return in }, DropPaste, ""},
 		{"a link drag pastes", func(in DropInput) DropInput { in.Intent = IntentLink; return in }, DropPaste, ""},
-		{"a cross-source drag pastes", func(in DropInput) DropInput { in.CrossSource, in.Occupied = true, true; return in }, DropPaste, ""},
+		{"a drag that would link pastes", func(in DropInput) DropInput { in.MovesAsLink, in.Occupied = true, true; return in }, DropPaste, ""},
 		{"a refusal snaps back with its reason", func(in DropInput) DropInput {
 			in.PasteRefusal = "Notes is not on the shell's node"
 			return in
