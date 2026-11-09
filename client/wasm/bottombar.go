@@ -345,7 +345,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, select
 			if cells < 1 {
 				cells = 1
 			}
-			a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, pane.TileFamily(t, rpc.IsFilesID(t.GetGridId())), isLinkTile(t), "")
+			a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, pane.TileFamily(t), isLinkTile(t), "")
 		} else {
 			// The row is not cached, so draw a placeholder; the fetch kicked
 			// by chainCrumbTile fills it in.

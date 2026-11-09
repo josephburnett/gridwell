@@ -50,3 +50,5 @@ low-water | packages | 78
 2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): a directory gone underneath Gridwell stays in its parent as a gone door holding its Gridwell tiles (Tile.gone), told when its tiles change | 95
 2026-11-08 | A directory moved within Gridwell carries its overlay (Joe, 2026-11-08): a Gridwell tile over a directory is found on its path, the directories from the root before home's doors, and a recursive find from an untouched directory reaches the ones under it | 36
 2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): the drop verdict moves a Gridwell row onto a directory, linking where rpc.MoveRefusal refuses the move | 15
+2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): the drop verdict moves a Gridwell row onto a directory, linking where rpc.MoveRefusal refuses the move | 4
+2026-11-08 | A directory is a place for Gridwell tiles (Joe, 2026-11-08): a Gridwell tile on a directory wears its kind's tint, a file being one by its id | 4

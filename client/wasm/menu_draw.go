@@ -163,7 +163,7 @@ func (a *App) drawMenuToggle(r pane.Rect, c menu.Chevron) {
 // that has no content yet.
 func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	n := menuItemGhostNode(item)
-	fam := pane.TileFamily(n, false)
+	fam := pane.TileFamily(n)
 	line := a.pal.Family(fam).Line
 	if item.isSwatch {
 		// A source swatch is the linked door it drops into a grid, dashed

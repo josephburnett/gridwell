@@ -14,8 +14,9 @@ type BorderInput struct {
 	DescentDepth int  // greater than 0 means inside at least one door
 	TileKnown    bool // the descended row is cached, so TileKind is meaningful
 	TileKind     string
-	Focused      bool // the keyboard-focused pane in the split tree
-	URLLive      bool // a live native view renders into this pane
+	TileID       string // the descended row's id, which says whether it is a file
+	Focused      bool   // the keyboard-focused pane in the split tree
+	URLLive      bool   // a live native view renders into this pane
 	// InDirectory is whether the viewed grid is a directory
 	// (cache.Grid.Directory).
 	InDirectory bool
@@ -26,15 +27,19 @@ type BorderInput struct {
 
 // TileFamily is the one classifier of a tile's colour: its frame, its banner,
 // its swatch, its crumb, its ghost and a pane descended into it all read it.
-// inDirectory is whether the grid the tile sits in is a directory.
-func TileFamily(t *gridwellv1.Tile, inDirectory bool) theme.Family {
+// A file or a directory is one by its id (rpc.OnDisk): a Gridwell tile on a
+// directory's grid wears its kind's family, as in home.
+func TileFamily(t *gridwellv1.Tile) theme.Family {
+	disk := rpc.OnDisk(t.GetId())
 	switch k := rpc.KindOf(t.GetKind()); {
 	case k.Live == rpc.DescentShell:
 		return theme.FamilyShell
+	case k.Descends == rpc.DescendGrid && disk:
+		return theme.FamilyDirectory
 	case k.Descends == rpc.DescendGrid:
 		// A door wears the family of the grid it opens, wherever it sits.
 		return GridFamily(t.GetChildGridId())
-	case inDirectory && (k.Live == rpc.DescentURL || k.Content == rpc.ContentBody):
+	case disk && (k.Live == rpc.DescentURL || k.Content == rpc.ContentBody):
 		// A file is outside, whatever it holds.
 		return theme.FamilyDirectory
 	case k.Live == rpc.DescentURL:
@@ -67,7 +72,7 @@ func FamilyOf(s BorderInput) theme.Family {
 	if s.Ephemeral {
 		return theme.FamilyEphemeral
 	}
-	f := TileFamily(&gridwellv1.Tile{Kind: s.TileKind}, s.InDirectory)
+	f := TileFamily(&gridwellv1.Tile{Kind: s.TileKind, Id: s.TileID})
 	if f == theme.FamilyURL && s.URLLive {
 		return theme.FamilyURLLive
 	}

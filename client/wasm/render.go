@@ -498,7 +498,6 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					}
 				}
 			} else {
-				inDirectory := g.Directory()
 				picked := map[string]bool{}
 				for _, id := range a.selectionShown(p) {
 					picked[id] = true
@@ -516,7 +515,7 @@ func (a *App) drawPane(p *pane.Pane, r pane.Rect) {
 					h := float64(n.H) * cellSize
 					nn := n
 					dashed := isLinkTile(nn)
-					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, pane.TileFamily(nn, inDirectory), dashed, p.ID)
+					a.drawNodeWithPreview(nn, left, top, w, h, cellSize, n.Id == selected, pane.TileFamily(nn), dashed, p.ID)
 					a.drawSourceHealthTint(nn, left, top, w, h)
 					a.drawDeadLink(nn, left, top, w, h)
 					if picked[n.Id] {
@@ -911,7 +910,6 @@ func (a *App) drawChildPreview(child *cache.Grid,
 	hidden dragdrop.Carry,
 ) {
 	c := a.cctx
-	childInDirectory := child.Directory()
 	borderPx := previewBorderPxFor(previewCell)
 	for _, n := range child.Tiles {
 		if hidden.Has(n.Id) {
@@ -927,7 +925,7 @@ func (a *App) drawChildPreview(child *cache.Grid,
 		}
 		nn := n
 		// url and shell children skip their JPEGs, so a door's interior reads uniformly.
-		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, pane.TileFamily(nn, childInDirectory), borderPx, false)
+		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, pane.TileFamily(nn), borderPx, false)
 	}
 }
 
@@ -950,7 +948,7 @@ func (a *App) drawNode(c js.Value, n *gridwellv1.Tile, x, y, w, h float64, selec
 // cells of parentCellSize.
 func (a *App) drawGhostTile(n *gridwellv1.Tile, x, y, parentCellSize float64, r pane.Rect, frag float64) {
 	w, h := float64(n.W)*parentCellSize, float64(n.H)*parentCellSize
-	fam := pane.TileFamily(n, rpc.IsFilesID(n.GetGridId()))
+	fam := pane.TileFamily(n)
 	// Dashed means this is, or becomes, a link: it shows mid-drag which
 	// right-button mode is armed.
 	dashed := isLinkTile(n) || (a.ghost != nil && a.ghost.link)
@@ -1005,6 +1003,7 @@ func (a *App) borderInputFor(p *pane.Pane, g *cache.Grid, gridOK bool, focused b
 		if tile, ok := a.descendedTile(p); ok {
 			in.TileKnown = true
 			in.TileKind = tile.Kind
+			in.TileID = tile.Id
 			in.Ephemeral = a.certainlyEphemeral(p, tile)
 		}
 	}

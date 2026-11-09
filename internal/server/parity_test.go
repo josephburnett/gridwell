@@ -1169,7 +1169,6 @@ func (f *parityFix) told(ids, grids []string) bool {
 // kind's or the outside colour, the one difference the directory tint allows
 // a draw (pane.TileFamily).
 func (f *parityFix) draw(t *gridwellv1.Tile) string {
-	inDir := rpc.IsFilesID(t.GridId)
 	dead := deadlink.DeadTile(t, f.roster, localNodeID, func(id string) bool {
 		var err error
 		if t.LinkTargetId != "" {
@@ -1179,8 +1178,8 @@ func (f *parityFix) draw(t *gridwellv1.Tile) string {
 		}
 		return clientsync.Of(err) == clientsync.OutcomeDead
 	})
-	kind := pane.TileFamily(&gridwellv1.Tile{Kind: t.Kind}, false)
-	fam := pane.TileFamily(t, inDir)
+	kind := pane.TileFamily(&gridwellv1.Tile{Kind: t.Kind})
+	fam := pane.TileFamily(t)
 	return fmt.Sprintf("dead=%v kind-or-outside=%v family=%d banner=%q", dead, fam == kind || fam == theme.FamilyDirectory,
 		kind, t.GetAltText())
 }
