@@ -24,6 +24,18 @@ to a file is a link row (`link_target_id` holds the target's path id), and a
 row whose file becomes a link is converted in place by `Refresh`, keeping
 its id and placement.
 
+The Gridwell tiles over a directory are home rows on grids keyed at or
+under its path (`overlay.go`): a move of the directory re-keys them with
+the files' rows under it (`Rekey`), and its delete sends them to home's
+trash (`TrashOver`). A directory gone from disk with Gridwell tiles still
+over it is listed from these rows (`HeldUnder`).
+
+`gridwell size` reads the file through `OpenReadOnly`, which writes
+nothing and may run beside a serving node, and `Analysis`. `gridwell
+clean` runs `Clean`: one `withMutation` that removes what nothing reaches,
+through the delete's own teardown, refused whole if a kept row or blob
+would change. The trash and every tombstone are kept.
+
 ## The promise
 
 Data written by any released binary stays readable forever. A newer binary
