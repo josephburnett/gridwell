@@ -302,7 +302,13 @@ These were decided deliberately. Do not reverse one without a new decision.
   (2026-09-30).
 - `gridwell.db` holds node facts only: minted ids, layout, framing, the
   user's bytes, connections, tombstones. What a connection last answered is
-  cache.
+  cache. `gridwell size` reports what it holds, read-only and safe while
+  serving; `gridwell clean` removes what nothing reaches (a grid no root or
+  owning door reaches, the tiles on it or on a gone grid, a blob no kept
+  row names), never the trash or a tombstone, through the delete's own
+  teardown and refused whole if a reached row would change, then VACUUMs,
+  and only while the node is stopped (`store.Analysis`, `store.Clean`,
+  2026-11-08).
 - The storage format is additive by default. Dead storage — no released
   binary reads it for a user-visible meaning, shown by grep — may be
   retired by a rebuild migration that preserves every surviving row. A row
