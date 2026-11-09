@@ -509,11 +509,10 @@ func TestLayoutOmitsPlaceWhenTheProjectionHoldsIt(t *testing.T) {
 	}
 }
 
-// TestEncoderAlwaysWritesTextFocus: TextFocus is the server's one record of a
-// leaf's content descent (panelayout.TextFocusIDs reads it, for both the boot
-// sweep's protection set and the delete-time reap), so the encoder must write
-// it for every content descent — including the deep places where it also
-// writes the full Place stack, whose top frame says the same thing.
+// TestEncoderAlwaysWritesTextFocus: TextFocus is an older Gridwell's one
+// record of a leaf's content descent, so the encoder writes it for every
+// content descent, including the deep places where it also writes the full
+// Place stack, whose frames panelayout.HeldIDs reads as held too.
 func TestEncoderAlwaysWritesTextFocus(t *testing.T) {
 	tr := NewTree()
 	p := tr.FocusedPane()
@@ -531,12 +530,12 @@ func TestEncoderAlwaysWritesTextFocus(t *testing.T) {
 	if !bytes.Contains(data, []byte(`"place"`)) {
 		t.Fatalf("expected the full place stack in the blob: %s", data)
 	}
-	ids, err := panelayout.TextFocusIDs(data)
+	ids, err := panelayout.HeldIDs(data)
 	if err != nil {
-		t.Fatalf("TextFocusIDs: %v", err)
+		t.Fatalf("HeldIDs: %v", err)
 	}
-	if len(ids) != 1 || ids[0] != "other/12" {
-		t.Errorf("the server sees %v referenced, want [other/12]: %s", ids, data)
+	if len(ids) != 2 || ids[0] != "source/9" || ids[1] != "other/12" {
+		t.Errorf("the server sees %v held, want [source/9 other/12]: %s", ids, data)
 	}
 }
 

@@ -366,3 +366,40 @@ func TestCleanKeepsEveryVisitWithoutTheNodeID(t *testing.T) {
 			a.Kinds["url"][PlaceScratch], a.Removable())
 	}
 }
+
+// A layout holds every row of a pane's path, so clean keeps a scratch door a
+// pane descended through, and its grid, and sweeps one no layout names.
+func TestCleanKeepsADoorOnAPanesPath(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	s.SetNodeID(fixtureNode)
+	scratch, err := s.ScratchGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err := s.CreateDoor(ctx, scratch, 0, 0, 1, 1, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateDoor(ctx, scratch, 1, 0, 1, 1, "", false); err != nil {
+		t.Fatal(err)
+	}
+	layout := `{"v":1,"root":{"pane":{"id":"p1","anchor":"` + fixtureNode + `/` + scratch + `","path":["` + fixtureNode + `/` + held.Id + `"]}},"focus":"p1"}`
+	if _, err := s.CreateWorkspace(ctx, rootID(t, s), 0, 0, 1, 1, "ws", false, []byte(layout)); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.Analysis(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Kinds["door"][PlaceScratch] != 1 || a.UnreachedScratch != 1 || a.UnreachedGrids != 1 {
+		t.Errorf("scratch doors %d, loose %d, unreached grids %d; want the held door kept and the loose one and its grid swept",
+			a.Kinds["door"][PlaceScratch], a.UnreachedScratch, a.UnreachedGrids)
+	}
+	if err := s.Clean(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetTile(ctx, held.Id); err != nil {
+		t.Errorf("clean swept the door on the pane's path: %v", err)
+	}
+}

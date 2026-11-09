@@ -115,7 +115,7 @@ func encodeNode(n TreeNode, rel func(string) (string, bool), idPrefix string, sk
 // encodeLeaf maps one pane's place into the owning node's frame; false means
 // an id was outside it and the leaf was serialized as home. The place is
 // written twice by design: Anchor, Path and TextFocus are what an older
-// Gridwell and panelayout.TextFocusIDs read, and Place is omitted wherever
+// Gridwell reads, and Place is omitted wherever
 // ProjectionHolds, so the common blob stays byte-identical to older ones.
 func encodeLeaf(p *Pane, rel func(string) (string, bool), idPrefix string) (*LayoutPane, bool) {
 	bareID := strings.TrimPrefix(p.ID, idPrefix)

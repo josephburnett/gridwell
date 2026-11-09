@@ -70,3 +70,4 @@ low-water | packages | 78
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): the handshake names home's templates grid (HandshakeResponse.templates_grid_id), from home's Info | 12
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): size and clean reach an ephemeral visit only while a reached workspace tile's layout names it, read by the node's id from server.yaml | 105
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): read_grid with the id templates reads home's templates grid, and the instructions say so as docs/mcp.md does | 11
+2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a layout holds every row of a pane's path, so the boot sweep, clean and the reap keep an ephemeral door a pane descended through (panelayout.HeldIDs) | 13

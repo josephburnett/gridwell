@@ -584,3 +584,47 @@ func TestTheTrashcanEntryKeepsItsFraming(t *testing.T) {
 		t.Errorf("framing the trashcan moved home's own root: zoom %v", after.RootViewZoom)
 	}
 }
+
+// A layout holds every row of a pane's path: a scratch door the pane
+// descended through survives the boot sweep, and one no layout names goes.
+func TestCleanupScratchSparesADoorOnAPanesPath(t *testing.T) {
+	p := openHome(t)
+	ctx := context.Background()
+	scratch := scratchGrid(t, p)
+	uuid, err := p.Store().NodeUUID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := p.Store().RootGridID(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	door := func(x int64) string {
+		d, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: scratch,
+			Tile: &gridwellv1.Tile{Kind: "door", X: x, Y: 0, W: 1, H: 1}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Tile.Id
+	}
+	held, loose := door(0), door(1)
+	pt, err := p.CreateTile(ctx, &gridwellv1.CreateTileRequest{GridId: root,
+		Tile: &gridwellv1.Tile{Kind: "workspace", X: 0, Y: 0, W: 1, H: 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := fmt.Sprintf(`{"v":1,"root":{"pane":{"id":"p1","anchor":%q,"path":[%q]}},"focus":"p1"}`,
+		uuid+"/"+scratch, uuid+"/"+held)
+	if _, err := p.Store().WriteContent(ctx, pt.Tile.Id, pt.Tile.Version, []byte(layout)); err != nil {
+		t.Fatal(err)
+	}
+	if swept, err := p.CleanupScratch(ctx); err != nil || swept != 1 {
+		t.Errorf("CleanupScratch = (%d, %v), want (1, nil): the loose door alone", swept, err)
+	}
+	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: held}); err != nil {
+		t.Errorf("the door on the pane's path was swept: %v", err)
+	}
+	if _, err := p.GetTile(ctx, &gridwellv1.GetTileRequest{TileId: loose}); err == nil {
+		t.Error("the door no layout names survived the sweep")
+	}
+}

@@ -52,13 +52,13 @@ func destroyWorkspace(t *testing.T, cl *rpc.Client, tileID string) {
 	}
 }
 
-// "Which content tiles does a pane blob reference" has one owner,
-// api/panelayout.TextFocusIDs, the `text_focus` projection the boot sweep's
-// protection set reads, and the delete-time reap must answer from that same
-// field. The blob here is one no encoder writes: a `place` frame stack whose
-// top frame is a content descent, with `text_focus` omitted. A reap that
-// re-derives from `place` reaps a shell the sweep never protected.
-func TestReapReadsTheSameFieldTheSweepProtects(t *testing.T) {
+// What a layout holds has one owner, api/panelayout.HeldIDs, which the boot
+// sweep's protection set and the delete-time reap both read. The blob here
+// is one no encoder writes: a `place` frame stack whose top frame is a
+// content descent, with `text_focus` omitted. Its frames are held, so the
+// reap takes the visit with the workspace tile, as the sweep spared it
+// while the tile stood.
+func TestReapTakesWhatTheLayoutHeld(t *testing.T) {
 	ctx := context.Background()
 	cl, root, scratch := reapFixture(t)
 
@@ -79,9 +79,8 @@ func TestReapReadsTheSameFieldTheSweepProtects(t *testing.T) {
 
 	destroyWorkspace(t, cl, pt.Id)
 
-	if _, err := cl.GetTile(ctx, eph.Id); err != nil {
-		t.Errorf("the reap derived a reference the boot sweep's protection set "+
-			"does not see — two decoders of the same blob: %v", err)
+	if _, err := cl.GetTile(ctx, eph.Id); err == nil {
+		t.Error("the visit a destroyed layout held by its place outlived it")
 	}
 }
 

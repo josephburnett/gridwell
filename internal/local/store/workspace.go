@@ -78,7 +78,7 @@ func (s *Store) SetWorkspaceLayout(ctx context.Context, tileID, version int64, d
 }
 
 // WorkspaceEphemeralRefs returns the local tile ids any workspace tile's layout
-// blob references as a content descent. The boot scratch sweep reads it to
+// blob holds (panelayout.HeldIDs). The boot scratch sweep reads it to
 // spare pane-owned ephemerals. The blob is the one record of that ownership,
 // so a reference dies exactly when its workspace tile does. unreadable is true when
 // any pane blob failed to decode, and the caller must then reap nothing: a
@@ -125,7 +125,7 @@ func workspaceLayouts(ctx context.Context, q gridReader) (map[int64][]byte, erro
 	return out, errors.Join(rows.Err(), rows.Close())
 }
 
-// layoutRefs is the home rows of node a layout names, by their local ids; ok
+// layoutRefs is the home rows of node a layout holds, by their local ids; ok
 // is false for a layout that will not read, nil being one whose blob is
 // missing. Blob ids are qualified in the owning node's frame, so only node's
 // own references are rows of this store.
@@ -133,7 +133,7 @@ func layoutRefs(node string, data []byte) (ids []string, ok bool) {
 	if data == nil {
 		return nil, false
 	}
-	named, err := panelayout.TextFocusIDs(data)
+	named, err := panelayout.HeldIDs(data)
 	if err != nil {
 		return nil, false
 	}

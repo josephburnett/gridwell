@@ -99,20 +99,33 @@ func Parse(data []byte) (*LayoutV1, error) {
 	return &l, nil
 }
 
-// TextFocusIDs returns the content tiles a workspace tile references. Both sides
-// of the ephemeral reap read it, the store's boot sweep and the router, so
-// the two cannot disagree. It reads TextFocus because a blob older than
-// Place carries nothing else.
-func TextFocusIDs(data []byte) ([]string, error) {
+// HeldIDs returns the rows a workspace tile's layout holds: every frame of
+// each pane's path, its doors and the tile it is inside, each once. Every
+// reader of what a layout holds reads it, the boot sweep, clean and the
+// router's reap, so none can disagree.
+func HeldIDs(data []byte) ([]string, error) {
 	l, err := Parse(data)
 	if err != nil {
 		return nil, err
 	}
 	var out []string
+	seen := map[string]bool{}
+	hold := func(id string) {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
 	var walk func(n LayoutNode)
 	walk = func(n LayoutNode) {
-		if n.Pane != nil && n.Pane.TextFocus != "" {
-			out = append(out, n.Pane.TextFocus)
+		if p := n.Pane; p != nil {
+			for _, id := range p.Path {
+				hold(id)
+			}
+			for _, f := range p.Place {
+				hold(f.Door)
+			}
+			hold(p.TextFocus)
 		}
 		if n.Split != nil {
 			walk(n.Split.A)
