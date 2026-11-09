@@ -502,7 +502,9 @@ func (s *Source) Probe(_ context.Context, req *pb.ProbeRequest) (*pb.ProbeRespon
 
 // DeleteTile moves the file to the trash, a link itself and never what it
 // points at, and retires its row once the path is gone. A path already gone
-// is deleted.
+// is deleted. Every Gridwell tile over a directory deleted, or gone already,
+// goes to home's trash (store.FileRows.TrashOver): two trashes, and
+// restoring one does not restore the other.
 func (s *Source) DeleteTile(_ context.Context, req *pb.DeleteTileRequest) (*pb.DeleteTileResponse, error) {
 	path, err := pathOf(req.TileId)
 	if err != nil {
@@ -525,9 +527,11 @@ func (s *Source) DeleteTile(_ context.Context, req *pb.DeleteTileRequest) (*pb.D
 			}
 		}
 	}
-	_, err = os.Lstat(path)
+	fi, err := os.Lstat(path)
+	overlay := err == nil && fi.IsDir()
 	switch {
 	case gone(err):
+		overlay = true
 	case err != nil:
 		return nil, status.Errorf(codes.Unavailable, "files: delete %s: %v", path, pathErr(err))
 	default:
@@ -545,6 +549,11 @@ func (s *Source) DeleteTile(_ context.Context, req *pb.DeleteTileRequest) (*pb.D
 	} else if ok {
 		if err := s.mem.Retire(id); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, fmt.Errorf("files: %s trashed but its row not retired: %w", path, err)
+		}
+	}
+	if overlay {
+		if err := s.mem.TrashOver(path); err != nil {
+			return nil, fmt.Errorf("files: %s trashed but its Gridwell tiles not: %w", path, err)
 		}
 	}
 	s.emitGridChanged(dir)

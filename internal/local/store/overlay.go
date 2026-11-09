@@ -2,8 +2,8 @@ package store
 
 // The Gridwell layer over a directory as a whole: every home row on a grid
 // keyed at or under a path. A directory moved within Gridwell carries it
-// (Rekey), and a gone directory's tiles where it would land refuse it
-// (HeldAt).
+// (Rekey), a gone directory's tiles where it would land refusing it
+// (HeldAt), and one deleted sends it to the trash (TrashOver).
 
 import (
 	"context"
@@ -127,4 +127,36 @@ func homeRowsOn(ctx context.Context, q gridReader, gridID int64) ([]int64, error
 		var id int64
 		return id, rows.Scan(&id)
 	})
+}
+
+// TrashOver sends every Gridwell tile over the directory at path, its
+// subdirectories' included, to home's trash as DeleteTile files one
+// (moveTileToTrash), all in one write. A door goes with its grid.
+func (n *FileRows) TrashOver(path string) error {
+	ctx := context.Background()
+	return n.s.withMutation(ctx, "TrashOver", func(tx *sql.Tx, events *[]*gridwellv1.Event) error {
+		cond, args := atOrUnder("g.key", path)
+		rows, err := tx.QueryContext(ctx, `SELECT t.id FROM tiles t JOIN grids g ON g.id = t.grid_id
+			WHERE t.key = '' AND g.key != '' AND `+cond+` ORDER BY t.id`, args...)
+		if err != nil {
+			return err
+		}
+		ids, err := collect(rows, func(rows *sql.Rows) (int64, error) {
+			var id int64
+			return id, rows.Scan(&id)
+		})
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			t, err := n.s.loadTile(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if err := n.s.moveTileToTrash(ctx, tx, events, t); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, "~:trash/"+path)
 }
