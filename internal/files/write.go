@@ -35,7 +35,7 @@ func (s *Source) MoveTile(_ context.Context, req *pb.MoveTileRequest) (*pb.TileR
 	}
 	to := dir
 	if req.GridId != "" {
-		if rpc.ShapeOf(req.GridId) != rpc.ShapeKey {
+		if !rpc.OnDisk(req.GridId) {
 			return nil, status.Error(codes.InvalidArgument, "files: "+rpc.MoveFileOver)
 		}
 		if to, err = pathOf(req.GridId); err != nil {

@@ -62,7 +62,7 @@ func (s *Source) Find(_ context.Context, req *pb.FindRequest) (*pb.FindResponse,
 func (s *Source) locate(req *pb.FindRequest, g *findGrids, id string) (*pb.FindResponse, error) {
 	path, dir, err := tilePath(id)
 	switch {
-	case gwerr.IsDeadLink(err), rpc.ShapeOf(id) != rpc.ShapeKey:
+	case gwerr.IsDeadLink(err), !rpc.OnDisk(id):
 		return &pb.FindResponse{}, nil
 	case err != nil:
 		return nil, err

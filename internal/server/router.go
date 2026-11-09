@@ -314,7 +314,7 @@ func (rt *router) find(ctx context.Context, ns namespace.Namespace, req *pb.Find
 		if len(r.Path) > 0 {
 			dir = r.Path[0].GetGridId()
 		}
-		if rpc.ShapeOf(dir) != rpc.ShapeKey {
+		if !rpc.OnDisk(dir) {
 			continue
 		}
 		chain, ok := above[dir]
