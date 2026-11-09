@@ -105,7 +105,8 @@ over `rpc.Reframe`), which is also where an accepted root `SetFraming` lands,
 so a far grid reopens dark where it was last left. `SelectionChanged` and an
 accepted `SetSelection` land the whole set on the cached grid
 (`Layer.reselect`). A write the source did not accept is cached nowhere. `prefetch.go` warms
-every source on Subscribe and one source when it comes back;
+every far home on Subscribe and one when its source comes back, never a far
+node's files;
 `servecontent.go` gives the `/content/` API the same treatment under its own
 caps: a page is its tile's whole bytes, so one read answers every later
 one.
@@ -600,6 +601,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | A recovery the layer learns from its own answering call walks it too | `prefetch_seam_test.go:TestARecoveryNoticedByAReadWalksTheSourceToo` |
 | It walks only the source that recovered | `prefetch_seam_test.go:TestARecoveryWalksOnlyTheSourceThatRecovered` (two connections, two far nodes) |
 | A flap storm does not stack walks: single-flight per source | `prefetch_seam_test.go:TestAFlapStormDoesNotStackWalks` |
+| The walk asks for the far home and no far directory, and a directory opened while connected reads dark | `internal/server/far_walk_seam_test.go:TestTheFarWalkCoversHomeOnlyAndAVisitedDirectoryReadsDark` |
 | Real binaries, real ssh: a revived connection warms what nobody read, so a second partition serves it | `test/connections/partition_test.go:TestConnectionPartitionServesCache` (`make check-connections`) |
 | A cache that never opened reaches a real subscriber as the transport's health | `internal/node/cache_health_test.go:TestAnUnopenableCacheSurfacesAsHealth`, `TestAnOpenedCacheReportsNothing` |
 

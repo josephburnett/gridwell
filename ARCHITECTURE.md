@@ -326,7 +326,9 @@ surfaces on the next read. Other reads pass through and cache, and when the
 far node went unheard serve the cached answer. Writes always pass
 through, and their responses fold into the cached rows.
 Prefetch is a per-seam option only the transport takes, rooted at the
-connections the fronted namespace's own handshake declares. A dark node is
+connections the fronted namespace's own handshake declares. It walks the far
+home only: it stops at a door onto a far directory and at any link, so a far
+directory is cached only once opened. A dark node is
 answered by the cache. A dark directory is answered by the durable rows, so
 a move made during the outage still lands, and the files publish it as
 their health.

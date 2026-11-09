@@ -87,7 +87,7 @@ func (u *linkFar) ReadContent(_ context.Context, req *pb.ReadContentRequest, sen
 
 // The link arm must not pre-mark the target seen before recursing: walkTile
 // would then return at its own seen-check without warming anything, leaving
-// the target's body offline-unreadable after a whole-source prefetch whenever
+// the target's body offline-unreadable after a prefetch whenever
 // the link was its only path.
 func TestPrefetchWarmsLinkTargetBody(t *testing.T) {
 	up := &linkFar{}

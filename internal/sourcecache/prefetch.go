@@ -1,13 +1,13 @@
 package sourcecache
 
-// Whole-source prefetch: the cache keeps what you touched, and this walker
-// warms what you did not (CLAUDE.md, 2026-10-06). It is a per-namespace policy
-// (Options.Prefetch), and the data is small by construction, so the walk is a
-// full traversal and the caps are emergency valves. It goes through the
-// wrapper's own read methods, so every answer lands by the one existing write
-// path. A transport failure aborts quietly and the next trigger walks again; a
-// coded refusal skips that branch, because the walker must never invent
-// reachability the source denies.
+// Home prefetch: the cache keeps what you touched; this walker warms the far
+// home you did not, by its own doors, never a link or a directory (CLAUDE.md,
+// 2026-10-06, 2026-11-08). It is a per-namespace policy (Options.Prefetch), and
+// the data is small by construction, so the walk is a full traversal and the
+// caps are emergency valves. It goes through the wrapper's own read methods, so
+// every answer lands by the one existing write path. A transport failure aborts
+// quietly and the next trigger walks again; a coded refusal skips that branch,
+// because the walker must never invent reachability the source denies.
 
 import (
 	"context"
@@ -186,7 +186,7 @@ func (w *walker) walkGrid(gridID string) bool {
 		}
 	}
 	for _, t := range resp.GetTiles() {
-		if child := t.GetChildGridId(); child != "" {
+		if child := t.GetChildGridId(); child != "" && !t.GetLink() && !rpc.IsFilesID(child) {
 			if !w.walkGrid(child) {
 				return false
 			}
@@ -245,7 +245,7 @@ func (w *walker) walkTile(t *pb.Tile) bool {
 	// if its own grid is never walked. walkTile owns the seen-set:
 	// pre-marking the target here would make the recursion below return at
 	// its seen-check with nothing warmed.
-	if target := t.GetLinkTargetId(); target != "" && !w.seenTiles[target] {
+	if target := t.GetLinkTargetId(); target != "" && !rpc.IsFilesID(target) && !w.seenTiles[target] {
 		if !w.pause() {
 			return false
 		}

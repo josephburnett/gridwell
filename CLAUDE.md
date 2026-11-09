@@ -638,12 +638,17 @@ These were decided deliberately. Do not reverse one without a new decision.
   right now is one fact, `EventSourceHealth.told`, and it is the one fact the
   client's cache reads (`cache.Current`). A declaration is never a notice;
   only a failure is (2026-10-25).
-- The connection cache walks a far node's whole source on every subscribe
-  and again when the connection comes back, so a far home reads while its
+- The connection cache walks a far node's home on every subscribe and
+  again when the connection comes back, so a far home reads while its
   connection is down. It is the decided exception to "nothing is done for
   nobody": the store needs the result, because offline readability means
-  everything on the far machine, not only what was visited
-  (`sourcecache.kickPrefetch`, 2026-10-06).
+  all of the far home, not only what was visited
+  (`sourcecache.kickPrefetch`, 2026-10-06). The walk is home's only, never
+  the far node's files (2026-11-08): it stops at a door onto a far
+  directory and at any link, because a files root can be a whole home
+  directory and a link can lead anywhere, even back. A far directory reads
+  live when opened, and while dark serves what the cache last answered for
+  it, if it was opened while connected.
 - A stream is established by its header, never by time: a source is back
   when it says it is listening, so a change made before then is not missed.
   Both ends of a connection run a build that sends it; a far node that sends
