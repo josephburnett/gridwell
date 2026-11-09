@@ -4,21 +4,22 @@ import "testing"
 
 func TestCanvasHiddenByOverlay(t *testing.T) {
 	cases := []struct {
-		name                                string
-		isDescended, isFocused, ready, want bool
+		name                           string
+		isFocused, ready, parked, want bool
 	}{
-		{"focused descended with ready overlay hides canvas", true, true, true, true},
-		{"preview node never hidden", false, true, true, false},
-		{"descended not focused → overlay not here", true, false, true, false},
+		{"focused with ready overlay hides canvas", true, true, false, true},
+		{"not focused → overlay not here", false, true, false, false},
 		// Overlay cleared on pane switch, blob not yet arrived.
-		{"overlay not ready → canvas paints", true, true, false, false},
+		{"overlay not ready → canvas paints", true, false, false, false},
+		// A pane gesture's preview is drawn on the canvas.
+		{"overlay parked → canvas paints", true, true, true, false},
 		{"all false", false, false, false, false},
 	}
 	for _, c := range cases {
-		got := CanvasHiddenByOverlay(c.isDescended, c.isFocused, c.ready)
+		got := CanvasHiddenByOverlay(c.isFocused, c.ready, c.parked)
 		if got != c.want {
 			t.Errorf("%s: CanvasHiddenByOverlay(%v,%v,%v) = %v, want %v",
-				c.name, c.isDescended, c.isFocused, c.ready, got, c.want)
+				c.name, c.isFocused, c.ready, c.parked, got, c.want)
 		}
 	}
 }

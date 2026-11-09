@@ -74,7 +74,7 @@ func (a *App) drawMarkdownInPane(p *pane.Pane, n *gridwellv1.Tile, x, y, w, h fl
 		// textedit.CanvasHiddenByOverlay is the one owner of "canvas paints
 		// or overlay covers", and the ready guard keeps the canvas painting
 		// through the loading race.
-		if !textedit.CanvasHiddenByOverlay(true, p.ID == a.tree.Focus, ready) {
+		if !textedit.CanvasHiddenByOverlay(p.ID == a.tree.Focus, ready, a.overlayParked(p)) {
 			// A rendered-mode pane the overlay is not covering paints the
 			// rendered raster: the pane must not flip to raw source just
 			// because focus moved. Raw is only the raster's loading frame.

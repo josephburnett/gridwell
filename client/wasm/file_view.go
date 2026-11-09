@@ -71,21 +71,12 @@ func (a *App) ensureFileView() *fileView {
 		a.onFileViewScroll()
 		return nil
 	}))
-	// The left button is the view's, for the see more row and a selection,
-	// but at the edge, where a press ascends as it does on the textarea.
 	a.installOverlayMouse(v.root, func(ev js.Value, sx, sy float64) bool {
-		p := a.tree.FocusedPane()
-		if ev.Get("button").Int() != 0 || p == nil {
-			return false
-		}
-		switch {
-		case !pointInFileInner(paneRectFor(a, p), sx, sy):
-			ev.Call("preventDefault")
-			a.ascend(p, 1, true)
-		case v.more.Call("contains", ev.Get("target")).Bool():
+		if p := a.tree.FocusedPane(); p != nil && ev.Get("button").Int() == 0 &&
+			pointInFileInner(paneRectFor(a, p), sx, sy) && v.more.Call("contains", ev.Get("target")).Bool() {
 			a.onSeeMore()
 		}
-		return true
+		return a.claimTextPress(ev, sx, sy)
 	})
 	a.installTextareaTouch(v.root)
 	a.doc.Get("body").Call("appendChild", v.root)
@@ -113,6 +104,7 @@ func (a *App) refreshFileView() {
 	setBoundsPx(s, x, y, w, h)
 	s.Set("background", a.pal.FileInnerBg)
 	s.Set("color", a.pal.TextFg)
+	s.Set("clipPath", a.overlayClip(p))
 	s.Set("display", "block")
 	if !v.asked {
 		v.asked = true

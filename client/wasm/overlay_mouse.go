@@ -2,11 +2,30 @@
 
 package main
 
-import "syscall/js"
+import (
+	"syscall/js"
 
-// Owns how a DOM overlay over a pane shares the mouse with the canvas. The
-// overlays paint above the canvas and hit-test first, so without this the
-// press that arms a pane gesture never reaches Gridwell.
+	"github.com/josephburnett/gridwell/client/pane"
+)
+
+// Owns how a DOM overlay over a pane shares the mouse and the screen with the
+// canvas, which it paints above and hit-tests before: a pane gesture's press
+// and its preview are the canvas's.
+
+// overlayParked is pane.ParkSurface for the text overlay over the focused p;
+// the canvas paints p's text meanwhile.
+func (a *App) overlayParked(p *pane.Pane) bool {
+	return p != nil && pane.ParkSurface(a.canvasGesture(), p.ID)
+}
+
+// overlayClip parks it by clipping it whole, which keeps the keyboard, caret
+// and scroll that display none would drop.
+func (a *App) overlayClip(p *pane.Pane) string {
+	if a.overlayParked(p) {
+		return "inset(50%)"
+	}
+	return "none"
+}
 
 // installOverlayMouse gives the overlay el the canvas's press behavior. The
 // right button and the context menu are Gridwell's on every overlay, so they

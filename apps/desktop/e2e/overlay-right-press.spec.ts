@@ -48,3 +48,69 @@ test('a right-drag started on the shell overlay splits the pane', async ({ gw })
 
   expect(await rightDragSplitFromOverlay(gw), 'the press over the xterm host armed the split').toBe(2);
 });
+
+// A pane gesture's preview is drawn on the canvas, under every overlay, so
+// the overlay over the pane parks while the gesture is armed
+// (pane.ParkSurface), as a live url view and a shell do; the text is drawn on
+// the canvas meanwhile. The raw editor parks without losing the keyboard, so
+// an Esc that cancels the drag leaves the user typing where they were.
+async function holdRightDrag(gw: any, window: any): Promise<{ x: number; y: number }> {
+  const p = await gw.focused();
+  const y = Math.round(p.y + p.h / 2);
+  const from = Math.round(p.x + p.w * 0.15);
+  const to = Math.round(p.x + p.w * 0.5);
+  await window.mouse.move(from, y);
+  await window.mouse.down({ button: 'right' });
+  await window.mouse.move(to, y, { steps: 10 });
+  await gw.waitIdle();
+  return { x: to, y };
+}
+
+const topAt = (window: any, pt: { x: number; y: number }) =>
+  window.evaluate(([x, y]: number[]) => {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.tagName + (el.id ? '#' + el.id : '') : '';
+  }, [pt.x, pt.y]);
+
+for (const mode of ['raw', 'rendered']) {
+  test(`a right-drag over a ${mode} text pane shows its preview and lands`, async ({ gw, window }) => {
+    await gw.enterSource('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx);
+    const cy = Math.round(f.cy);
+
+    await gw.openMenu();
+    await gw.dragCreate('markdown', cx, cy);
+    await gw.descendCell(cx, cy);
+    await expect.poll(async () => (await gw.textareaInfo()) != null, { timeout: 10_000 }).toBe(true);
+    await gw.pasteText('# Title\n\n' + 'a line of text\n'.repeat(30));
+    const overlay = mode === 'raw' ? '#gw-text-editor' : '#gw-rendered-view';
+    if (mode === 'rendered') {
+      await gw.toggleTextMode();
+      await expect(window.locator(overlay)).toBeVisible();
+    }
+
+    const pt = await holdRightDrag(gw, window);
+    const rd = await window.evaluate(() => (window as any).__gridwellTest.rightDrag());
+    expect(rd, 'the press over the overlay armed the gesture').not.toBeNull();
+    expect(rd.x, 'the preview follows the pointer').toBe(pt.x);
+    expect(await topAt(window, pt), 'nothing covers the preview').toBe('CANVAS#canvas');
+
+    if (mode === 'raw') {
+      await window.keyboard.press('Escape');
+      await gw.waitIdle();
+      expect(await topAt(window, pt), 'the editor is back').toBe('TEXTAREA#gw-text-editor');
+      expect(
+        await window.evaluate(() => document.activeElement?.id),
+        'the editor kept the keyboard through the park',
+      ).toBe('gw-text-editor');
+      await window.mouse.up({ button: 'right' });
+      await gw.waitIdle();
+      expect((await gw.panes()).length, 'the cancelled drag split nothing').toBe(1);
+      return;
+    }
+    await window.mouse.up({ button: 'right' });
+    await gw.waitIdle();
+    expect((await gw.panes()).length, 'the drag split the pane').toBe(2);
+  });
+}

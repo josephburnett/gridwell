@@ -64,6 +64,26 @@ func pointInFileInner(r pane.Rect, sx, sy float64) bool {
 	return panebox.PointInInner(r, textSideInset, sx, sy)
 }
 
+// claimTextPress is installOverlayMouse's claim for the overlays over a text
+// descent: the editor, the rendered view and the file view. The left button
+// is the overlay's, for the caret, a selection, a link or a checkbox, except
+// at the edge, where the pane has no margin left to click and the press
+// ascends.
+func (a *App) claimTextPress(ev js.Value, sx, sy float64) bool {
+	if ev.Get("button").Int() != 0 {
+		return false
+	}
+	p := a.tree.FocusedPane()
+	if p == nil || p.ContentID() == "" {
+		return true
+	}
+	if !pointInFileInner(paneRectFor(a, p), sx, sy) {
+		ev.Call("preventDefault")
+		a.ascend(p, 1, true)
+	}
+	return true
+}
+
 // liveViewOwnsPoint is the one decision behind handing a pointer event to the
 // native view instead of acting on it. It supplies the two facts the shim
 // owns, so no handler re-derives either.
@@ -184,26 +204,8 @@ func (a *App) ensureFileTextarea() {
 	// No wheel listener: text mode uses the textarea's native scroll, and
 	// TextZoom is fixed for the visit.
 
-	// The textarea covers the whole pane in text mode, so the canvas never sees
-	// a press here and installOverlayMouse hands the pane gestures back. The
-	// left button is the textarea's, for the caret and the selection, except at
-	// the edge, where the pane has no margin left to click and the press
-	// ascends. The textarea lives for the session, so nothing releases its
-	// js.Funcs.
-	a.installOverlayMouse(ta, func(ev js.Value, sx, sy float64) bool {
-		if ev.Get("button").Int() != 0 {
-			return false
-		}
-		p := a.tree.FocusedPane()
-		if p == nil || p.ContentID() == "" {
-			return true
-		}
-		if !pointInFileInner(paneRectFor(a, p), sx, sy) {
-			ev.Call("preventDefault")
-			a.ascend(p, 1, true)
-		}
-		return true
-	})
+	// The textarea lives for the session, so nothing releases its js.Funcs.
+	a.installOverlayMouse(ta, a.claimTextPress)
 
 	// Multi-finger touches forward into the touch gesture machine, the analogue
 	// of the mouse forwarding above. Single-finger touches keep native textarea
@@ -214,60 +216,16 @@ func (a *App) ensureFileTextarea() {
 	a.overlays.textTextarea = ta
 }
 
-// ensureFileToggle creates, once, the floating rendered/raw toggle button. Its
-// zIndex 6 layers it above the textarea's 5, so the text can fill the pane.
+// ensureFileToggle creates, once, the floating rendered/raw toggle button.
 func (a *App) ensureFileToggle() {
 	if !a.overlays.textToggleBtn.IsUndefined() && !a.overlays.textToggleBtn.IsNull() {
 		return
 	}
-	btn := a.doc.Call("createElement", "div")
-	btn.Set("id", "gw-text-toggle")
-	style := btn.Get("style")
-	style.Set("position", "absolute")
-	style.Set("display", "none")
-	style.Set("boxSizing", "border-box")
-	style.Set("width", pxf(2*plusButtonRadius))
-	style.Set("height", pxf(2*plusButtonRadius))
-	style.Set("borderRadius", "50%")
-	// The rim, background and color come from the palette on every
-	// refreshFileToggle, so there is no second, frozen copy of the theme fact.
-	style.Set("cursor", "pointer")
-	style.Set("alignItems", "center")
-	style.Set("justifyContent", "center")
-	style.Set("zIndex", "6")
-	style.Set("userSelect", "none")
-	style.Set("fontSize", "18px")
-	btn.Set("textContent", "a")
-
-	a.overlays.textToggleCb = js.FuncOf(func(this js.Value, args []js.Value) any {
-		if len(args) == 0 {
-			return nil
+	btn := a.newBarButton("gw-text-toggle", "a", "18px", func() {
+		if p := a.tree.FocusedPane(); p != nil && p.ContentID() != "" {
+			a.onToggleFileMode(p)
 		}
-		ev := args[0]
-		ev.Call("preventDefault")
-		ev.Call("stopPropagation")
-		p := a.tree.FocusedPane()
-		if p == nil || p.ContentID() == "" {
-			return nil
-		}
-		// A right-click does nothing: ascent is the previous crumb.
-		if ev.Get("button").Int() != 0 {
-			return nil
-		}
-		a.onToggleFileMode(p)
-		return nil
 	})
-	btn.Call("addEventListener", "mousedown", a.overlays.textToggleCb)
-	// A right-click on the toggle stays inert instead of popping a menu.
-	btn.Call("addEventListener", "contextmenu", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		if len(args) > 0 {
-			args[0].Call("preventDefault")
-		}
-		return nil
-	}))
-	// The shared translation routes a tap here as a left mousedown.
-	a.installOverlayTouch(btn, nil)
-	a.doc.Get("body").Call("appendChild", btn)
 	a.overlays.textToggleBtn = btn
 }
 
@@ -284,14 +242,7 @@ func (a *App) refreshFileToggle() {
 		hide()
 		return
 	}
-	cx, cy := a.plusButtonCenter()
-	style.Set("left", pxf(cx-plusButtonRadius))
-	style.Set("top", pxf(cy-plusButtonRadius))
-	// The same family shades and rim as the canvas slot buttons.
-	band, button := a.barTheme()
-	style.Set("border", "1px solid "+a.pal.CircleRim)
-	style.Set("background", button)
-	style.Set("color", band)
+	placeBarButton(a, style, 1)
 	// The glyph names the target mode: an italic serif "a" renders, a
 	// monospace "a" edits the source.
 	if d.Mode == rpc.TextModeRendered {
@@ -302,6 +253,19 @@ func (a *App) refreshFileToggle() {
 		style.Set("fontStyle", "italic")
 	}
 	style.Set("display", "flex")
+}
+
+// placeBarButton puts a DOM button in the bar, its left edge left radii left
+// of the + button's center, in the family shades and rim of the canvas slot
+// buttons.
+func placeBarButton(a *App, style js.Value, left float64) {
+	cx, cy := a.plusButtonCenter()
+	style.Set("left", pxf(cx-left*plusButtonRadius))
+	style.Set("top", pxf(cy-plusButtonRadius))
+	band, button := a.barTheme()
+	style.Set("border", "1px solid "+a.pal.CircleRim)
+	style.Set("background", button)
+	style.Set("color", band)
 }
 
 // refreshFileOverlay shows or hides the textarea for the focused pane,
@@ -327,7 +291,7 @@ func (a *App) refreshFileOverlay() {
 	left, top, width, height, fontPx := a.textTextareaBox(p, r)
 
 	setBoundsPx(style, left, top, width, height)
-	style.Set("clipPath", "none")
+	style.Set("clipPath", a.overlayClip(p))
 	style.Set("fontSize", pxf(fontPx))
 	style.Set("display", "block")
 
@@ -396,7 +360,7 @@ func (a *App) syncTextOverlayPosition() {
 	style := a.overlays.textTextarea.Get("style")
 	setBoundsPx(style, left, top, width, height)
 	style.Set("fontSize", pxf(fontPx))
-	style.Set("clipPath", "none")
+	style.Set("clipPath", a.overlayClip(p))
 }
 
 func (a *App) textTextareaBox(p *pane.Pane, r pane.Rect) (left, top, width, height, fontPx float64) {
@@ -459,13 +423,24 @@ func (a *App) applyTextareaEdit(ta js.Value, e textedit.ListEdit) bool {
 // ensureInfoToggle creates the floating "i" button beside the rendered/raw
 // toggle, which opens a file's file information and closes it.
 func (a *App) ensureInfoToggle() js.Value {
+	btn := a.newBarButton("gw-info-toggle", "i", "16px", a.onInfoToggle)
+	btn.Get("style").Set("fontFamily", bannerFontFamily)
+	return btn
+}
+
+// newBarButton makes a round DOM button for the bar, hidden until placed. A
+// left press or a tap runs onLeft; a right press does nothing and pops no
+// menu. Its zIndex 6 layers it above the text overlays' 5. The rim, background
+// and color come from the palette on every placeBarButton, so there is no
+// second, frozen copy of the theme fact.
+func (a *App) newBarButton(id, glyph, fontSize string, onLeft func()) js.Value {
 	btn := a.doc.Call("createElement", "div")
-	btn.Set("id", "gw-info-toggle")
-	btn.Set("textContent", "i")
+	btn.Set("id", id)
+	btn.Set("textContent", glyph)
 	style := btn.Get("style")
 	for k, val := range map[string]string{"position": "absolute", "display": "none", "boxSizing": "border-box",
 		"borderRadius": "50%", "cursor": "pointer", "alignItems": "center", "justifyContent": "center",
-		"zIndex": "6", "userSelect": "none", "fontSize": "16px", "fontFamily": bannerFontFamily,
+		"zIndex": "6", "userSelect": "none", "fontSize": fontSize,
 		"width": pxf(2 * plusButtonRadius), "height": pxf(2 * plusButtonRadius)} {
 		style.Set(k, val)
 	}
@@ -474,7 +449,7 @@ func (a *App) ensureInfoToggle() js.Value {
 		ev.Call("preventDefault")
 		ev.Call("stopPropagation")
 		if ev.Get("button").Int() == 0 {
-			a.onInfoToggle()
+			onLeft()
 		}
 		return nil
 	}))
@@ -482,6 +457,7 @@ func (a *App) ensureInfoToggle() js.Value {
 		args[0].Call("preventDefault")
 		return nil
 	}))
+	// The shared translation routes a tap here as a left mousedown.
 	a.installOverlayTouch(btn, nil)
 	a.doc.Get("body").Call("appendChild", btn)
 	return btn
@@ -496,13 +472,7 @@ func (a *App) refreshInfoToggle(v *fileView) {
 		style.Set("display", "none")
 		return
 	}
-	cx, cy := a.plusButtonCenter()
-	style.Set("left", pxf(cx-3.5*plusButtonRadius))
-	style.Set("top", pxf(cy-plusButtonRadius))
-	band, button := a.barTheme()
-	style.Set("border", "1px solid "+a.pal.CircleRim)
-	style.Set("background", button)
-	style.Set("color", band)
+	placeBarButton(a, style, 3.5)
 	style.Set("display", "flex")
 }
 

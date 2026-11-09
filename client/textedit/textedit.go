@@ -2,10 +2,11 @@
 // scheduler in client/wasm so `go test` executes them.
 package textedit
 
-// CanvasHiddenByOverlay is the one owner of whether the canvas paints or the
-// DOM overlay, a singleton over the focused descended pane, covers it.
-func CanvasHiddenByOverlay(isDescended, isFocused, overlayReady bool) bool {
-	return isDescended && isFocused && overlayReady
+// CanvasHiddenByOverlay is the one owner of whether the canvas paints a
+// descended pane's text or the DOM overlay, a singleton over the focused
+// pane, covers it. A parked overlay covers nothing; see pane.ParkSurface.
+func CanvasHiddenByOverlay(isFocused, overlayReady, parked bool) bool {
+	return isFocused && overlayReady && !parked
 }
 
 // TextareaSyncInput is the snapshot DecideTextareaSync reads.

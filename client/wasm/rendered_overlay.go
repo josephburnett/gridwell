@@ -88,6 +88,8 @@ func (a *App) ensureRenderedView() {
 		return nil
 	})
 	div.Call("addEventListener", "scroll", scrollCb)
+	// The view lives for the session, so nothing releases its js.Funcs.
+	a.installOverlayMouse(div, a.claimTextPress)
 
 	a.doc.Get("body").Call("appendChild", div)
 	a.overlays.renderedView = div
@@ -130,6 +132,7 @@ func (a *App) refreshRenderedOverlay() {
 	padding, fontSize := markdown.RenderedBox(w-a.overlays.renderedGutter, rasterprev.Bucket(a.renderedContentWidth(p)), scale)
 	s.Set("padding", padding)
 	s.Set("fontSize", fontSize)
+	s.Set("clipPath", a.overlayClip(p))
 	s.Set("display", "block")
 
 	key := t.Id + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(t)), 10) + "\x00" +

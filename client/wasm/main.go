@@ -228,7 +228,6 @@ type overlayState struct {
 	// textToggleBtn is a DOM element, not a canvas button, so it can sit above
 	// the textarea and let the text fill the pane edge to edge.
 	textToggleBtn js.Value
-	textToggleCb  js.Func
 
 	// fileView is the file information view and its "i" button.
 	fileView *fileView
