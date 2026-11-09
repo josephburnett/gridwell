@@ -102,6 +102,24 @@ has used lately are workspace tiles: `find` with `kind` `workspace` and
 `content_changed` `{}` (both ends open) lists them by when their layout last
 changed, newest first.
 
+## Gridwell references
+
+A Gridwell reference is a URL naming a tile or a grid, such as
+`https://<host>/<node>/3/12` or `https://<host>/?w=<node>%2F40`: the address the
+app shows for that place, and what a drop onto a shell pastes. To read one
+here, turn its path into an id. With `w=` the id is its value, decoded, a workspace
+tile. Otherwise the segments up to and including the first that is all
+digits or starts with `~` name the anchor grid, and every segment after it is
+a tile, qualified as `<the anchor without its last segment>/<segment>`; a path
+that starts with such a segment has the home grid as its anchor and the
+node's id as that qualifier. The last tile is the one named, and with no
+tile the anchor grid is. Read a grid with `read_grid` and a tile with
+`read_tiles`; a door names its grid as `child_grid`. Anything else reads it with
+`curl -H 'Authorization: Bearer <the web password>' <url>`: a text answers its
+body, a url its address, a page its bytes, a door or a grid `read_grid`'s
+JSON, and any other tile `read_tiles`' JSON. A browser opening it shows the
+place.
+
 ## Refusals
 
 A refused call is a tool error, and a refused item's verdict is text; each

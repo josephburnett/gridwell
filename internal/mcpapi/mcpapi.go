@@ -36,7 +36,27 @@ mean the grid of the focused pane, or the workspace tile they are in, on their
 screen: sessions lists the screens showing this node, and marks yours, the
 one showing the shell you run in. "These" is that grid's selection, from
 read_grid. A screen on another node is not listed, so the workspaces used
-lately come from find with kind workspace and content_changed {}.`
+lately come from find with kind workspace and content_changed {}.
+
+Gridwell references. ` + references
+
+// references is the section docs/mcp.md says word for word under "Gridwell
+// references".
+const references = `A Gridwell reference is a URL naming a tile or a grid, such as
+https://<host>/<node>/3/12 or https://<host>/?w=<node>%2F40: the address the
+app shows for that place, and what a drop onto a shell pastes. To read one
+here, turn its path into an id. With w= the id is its value, decoded, a workspace
+tile. Otherwise the segments up to and including the first that is all
+digits or starts with ~ name the anchor grid, and every segment after it is
+a tile, qualified as <the anchor without its last segment>/<segment>; a path
+that starts with such a segment has the home grid as its anchor and the
+node's id as that qualifier. The last tile is the one named, and with no
+tile the anchor grid is. Read a grid with read_grid and a tile with
+read_tiles; a door names its grid as child_grid. Anything else reads it with
+curl -H 'Authorization: Bearer <the web password>' <url>: a text answers its
+body, a url its address, a page its bytes, a door or a grid read_grid's
+JSON, and any other tile read_tiles' JSON. A browser opening it shows the
+place.`
 
 // New is the MCP server over rt, the node's router, which every tool calls as
 // the web API does. node is the node's own id, the frame dead links are
