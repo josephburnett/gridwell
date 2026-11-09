@@ -36,3 +36,5 @@ low-water | packages | 78
 2026-11-08 | the file information view (Joe, 2026-11-08): the shim's view, the table, the see more row, the hex view paging through the content API, the i button and a file's preview | 405
 2026-11-08 | gridwell size and clean (Joe, 2026-11-08): the store reads what gridwell.db holds and removes what nothing reaches, through the delete teardown | 363
 2026-11-08 | gridwell size and clean (Joe, 2026-11-08): two commands, size read-only beside a serving node and clean only while it is stopped, with the report in text and JSON | 220
+2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): client/shellpaste decides a drop onto a shell and spells what it pastes | 82
+2026-11-08 | drop onto a shell pastes; Gridwell references (Joe, 2026-11-08): client/shellpaste decides a drop onto a shell and spells what it pastes | 1 | packages
