@@ -22,9 +22,6 @@ import (
 // under the files' owner id with told carried through, and the root back,
 // every file lists again with the move standing.
 func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	root := t.TempDir()
 	notes, other := filepath.Join(root, "notes.md"), filepath.Join(root, "other.txt")
 	writeFile(t, notes, "# n")
@@ -36,10 +33,7 @@ func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(root, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+	heal := unanswering(t, root)
 	moved, err := n.move(first, n.roots[0], 9, 9)
 	if err != nil || moved.X != 9 {
 		t.Fatalf("a move while dark = %v, %v", moved, err)
@@ -55,9 +49,7 @@ func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
 	if h.Healthy || h.Uuid != rpc.FilesOwner(localNodeID) || !h.GetTold() {
 		t.Errorf("health = %v, want dark and still told", h)
 	}
-	if err := os.Chmod(root, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	heal()
 	healed := n.grid(n.roots[0])
 	if len(healed.Tiles) != 2 {
 		t.Fatalf("the healed listing = %v", healed.Tiles)
@@ -65,6 +57,35 @@ func TestFilesDarkRootKeepsTheArrangement(t *testing.T) {
 	if got := n.tile(n.roots[0], notes); got.X != 9 || got.Y != 9 {
 		t.Errorf("the healed listing moved the tile: %v", got)
 	}
+}
+
+// unanswering makes dir a directory that will not read right now and is
+// not refused: its path a symlink to itself, the directory kept beside it
+// until heal puts it back. Its bytes stay at dir + ".away".
+func unanswering(t *testing.T, dir string) (heal func()) {
+	t.Helper()
+	away := dir + ".away"
+	if err := os.Rename(dir, away); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dir, dir); err != nil {
+		t.Fatal(err)
+	}
+	healed := false
+	heal = func() {
+		if healed {
+			return
+		}
+		healed = true
+		if err := os.Remove(dir); err != nil {
+			t.Error(err)
+		}
+		if err := os.Rename(away, dir); err != nil {
+			t.Error(err)
+		}
+	}
+	t.Cleanup(heal)
+	return heal
 }
 
 // A page file keeps the screenshot it was left with, which its preview then

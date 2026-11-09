@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	iofs "io/fs"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -205,7 +204,7 @@ func diskRefusal(verb, path string, err error) error {
 	switch {
 	case errors.Is(err, errIrregular):
 		return status.Errorf(codes.InvalidArgument, "files: %s %v", path, err)
-	case errors.Is(err, iofs.ErrPermission) || errors.Is(err, syscall.EROFS):
+	case refused(err) || errors.Is(err, syscall.EROFS):
 		return status.Errorf(codes.PermissionDenied, "files: %s cannot be %s: %v", path, verb, pathErr(err))
 	}
 	return status.Errorf(codes.Unavailable, "files: %s cannot be %s right now: %v", path, verb, pathErr(err))

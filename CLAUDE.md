@@ -166,7 +166,7 @@ what each one is called.
 | Word | What it names | What it is not |
 |---|---|---|
 | dead | A link whose namespace is not declared, or whose target its source says is gone (`gwerr.DeadLink`). Nothing is said and nothing is asked until the declaration or that source's listing changes. | An error; dark. |
-| dark | A source declared but not answering right now: a connection that will not dial, or a root or directory that will not read. Its grids serve what the node holds, a connection's from cache and a directory's from its rows, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
+| dark | A source declared but not answering right now: a connection that will not dial, or a root or directory that cannot be read right now, never one the OS refuses this user. Its grids serve what the node holds, a connection's from cache and a directory's from its rows, and the bar's chip shows it. Recovers on its own. | Dead; disabled. |
 | disabled | A connection the user switched off from its health notice, until the node restarts. Reads as dark, but nothing tries it again, no notice stands, and a write is refused (`gwerr.SourceDisabled`). The files are never disabled. | Dark. |
 | waiting | A connection row minted with no root and no error: asked, not answered yet. The probe's timeout ends the wait. | Broken. |
 | broken | A connection's door that will not open, whatever the reason: `Info` failed or the probe timed out (`InfoError` set). One tint; `BrokenReason` carries the detail. | Dark. |
@@ -603,9 +603,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   watches only the directories some open session shows, with a 200 ms
   debounce and a re-walk on overflow, and tells each change as
   `GridChanged` or `TileChanged`; told is whether that watch is healthy. A
-  root or directory that will not read is dark: its grid serves what its
-  rows hold and says so through the health event, as a dark connection's
-  serves its cache. Nothing watches a directory nobody shows, and nothing
+  root or directory that cannot be read right now is dark: its grid serves
+  what its rows hold and says so through the health event, as a dark
+  connection's serves its cache. One the OS refuses this user (`EACCES`,
+  `EPERM`) is refused with the reason on its door and its grid, not dark,
+  and the files stay told (2026-11-08, Joe's Mac trace, the Trash on
+  macOS). Nothing watches a directory nobody shows, and nothing
   reads one unasked: a recursive Find is the user asking, so it reads the
   directories under the grid it names, never through a link, and a read for
   a Find says nothing of the files' health (2026-11-08).
@@ -867,7 +870,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   for it and nothing is said about it (`gwerr.DeadLink` is the answer,
   `client/deadlink` the verdict). A gone key listed again is live again under
   the same id. Dead is not dark: a root that
-  will not read and a declared connection that will not answer are
+  cannot be read right now and a declared connection that will not answer are
   health, and they come back. Nor is dead always forever: a retired
   connection name never returns, but a namespace merely undeclared is live
   again the moment it is declared again. `client/deadlink`.

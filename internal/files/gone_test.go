@@ -130,9 +130,6 @@ func TestADeletedFileMadeAgainStartsFresh(t *testing.T) {
 // move and is refused; the root back, every file lists again and the move
 // stands.
 func TestADarkRootKeepsTheArrangement(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	notes := f.write("notes.md", "n")
 	pdf := f.write("doc.pdf", "%PDF-1.4\n")
@@ -146,10 +143,7 @@ func TestADarkRootKeepsTheArrangement(t *testing.T) {
 		}
 	}
 	ut := tileIn(t, before, untouched)
-	if err := os.Chmod(f.root, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(f.root, 0o755) })
+	heal := f.failReads(f.root)
 	nt := f.tile(notes)
 	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: nt.Id, X: 9, Y: 9, W: 1, H: 1, Claim: rpc.PlacementOf(nt)}); err != nil {
 		t.Fatalf("a move while dark: %v", err)
@@ -172,9 +166,7 @@ func TestADarkRootKeepsTheArrangement(t *testing.T) {
 	if _, err := f.s.MoveTile(ctx, &pb.MoveTileRequest{TileId: ut.Id, X: 1, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(ut)}); err == nil {
 		t.Error("an untouched file under a dark root was moved; it has no row to move")
 	}
-	if err := os.Chmod(f.root, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	heal()
 	healed := f.grid(f.root)
 	if len(healed.Tiles) != len(before.Tiles) {
 		t.Fatalf("healed listing = %v", names(healed))
@@ -187,16 +179,10 @@ func TestADarkRootKeepsTheArrangement(t *testing.T) {
 // An untouched file under a dark root is not dead: a move of it is refused
 // as the dark answers a read of it, never with the dead verdict.
 func TestAnUntouchedFileUnderADarkRootIsNotDead(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	p := f.write("data.bin", "x")
 	ut := f.tile(p)
-	if err := os.Chmod(f.root, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(f.root, 0o755) })
+	f.failReads(f.root)
 	_, err := f.s.MoveTile(context.Background(), &pb.MoveTileRequest{TileId: ut.Id, X: 1, Y: 1, W: 1, H: 1, Claim: rpc.PlacementOf(ut)})
 	if grpcCode(err) != codes.Unavailable {
 		t.Errorf("moving an untouched file under a dark root = %v, want Unavailable", err)

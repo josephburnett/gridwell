@@ -232,15 +232,9 @@ func TestAViewChecksWhatItAdds(t *testing.T) {
 // Dark follows the view: an unreadable directory a session showed and left
 // darkens the files no longer.
 func TestADarkDirectoryLeftIsNoLongerDark(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	locked := f.mkdir("locked")
-	if err := os.Chmod(locked, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	f.failReads(locked)
 	ev := f.events()
 	f.grid(f.root)
 	f.grid(locked)
@@ -407,15 +401,9 @@ func TestWhatIsKeptOfADirectoryIsBounded(t *testing.T) {
 // A directory nobody shows that will not read says nothing of the files'
 // health: an agent's read of it darkens nothing.
 func TestAnUnreadableDirectoryNobodyShowsDarkensNothing(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	locked := f.mkdir("locked")
-	if err := os.Chmod(locked, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	f.failReads(locked)
 	f.show(f.root)
 	f.grid(locked)
 	if h := f.s.health(); h.dark {
@@ -423,8 +411,8 @@ func TestAnUnreadableDirectoryNobodyShowsDarkensNothing(t *testing.T) {
 	}
 }
 
-// A shown directory that would not read or be watched is watched once it
-// can be, at the next view, and told: a permission fixed is seen.
+// A shown directory the OS refused to read or watch is watched once it can
+// be, at the next view, and told: a permission fixed is seen.
 func TestAShownDirectoryFixedIsWatchedAndTold(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads every directory")
@@ -436,19 +424,12 @@ func TestAShownDirectoryFixedIsWatchedAndTold(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
 	ev := f.events()
-	f.grid(locked)
 	f.show(f.root, locked)
-	if h := await(t, ev, "dark", func(e *pb.Event) bool { return e.GetSourceHealth() != nil }).GetSourceHealth(); h.Healthy {
-		t.Fatalf("health = %+v", h)
-	}
 	if err := os.Chmod(locked, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	f.show(f.root, locked)
-	awaitAll(t, ev, map[string]func(*pb.Event) bool{
-		"the fixed directory": gridChanged(locked),
-		"light":               func(e *pb.Event) bool { return e.GetSourceHealth().GetHealthy() },
-	})
+	await(t, ev, "the fixed directory", gridChanged(locked))
 	if !slices.Contains(f.watched(), locked) {
 		t.Errorf("watched %v, want the fixed directory", f.watched())
 	}

@@ -40,6 +40,7 @@ var (
 		}
 	}}
 	vDark     = parityVariant{"a directory that will not read", nil}
+	vRefused  = parityVariant{"a directory the OS refuses", nil}
 	vDisabled = parityVariant{"a disabled source", nil}
 	vUntold   = parityVariant{"a far node refusing the share", func(f *parityFix) { f.h.refuseShare.Store(true) }}
 	vInfo     = parityVariant{"a file that renders as nothing", func(f *parityFix) {
@@ -53,6 +54,7 @@ var (
 const (
 	dReadOnly      = "a file the node cannot write is read-only with the reason"
 	dDark          = "its grid serves what its rows hold and says so through the health event"
+	dRefused       = "is refused with the reason on its door and its grid, not dark, and the files stay told"
 	dDisabled      = "every grid it serves is stamped `writable=false`, `accepts_tiles=false`, each row `read_only` with the reason, so an edit is refused before it is typed"
 	dNeverDisabled = "The files are dark or told, never disabled"
 	dUntold        = "a source whose changes are not told is read on every move"
@@ -74,6 +76,8 @@ var parityVariantTable = []parityVariantCell{
 	{vReadOnly, parityCell{kText, opDescend, onFiles, same, "", checkDescend}, nil},
 	{vDark, parityCell{kText, opDead, onFiles, decided, dDark, nil}, holdsDark},
 	{vDark, parityCell{kText, opDead, onFar, decided, dDark, nil}, holdsDark},
+	{vRefused, parityCell{kDoorDir, opDescend, onFiles, decided, dRefused, nil}, holdsRefused},
+	{vRefused, parityCell{kDoorDir, opDescend, onFar, decided, dRefused, nil}, holdsRefused},
 	{vDisabled, parityCell{kText, opWrite, onFar, decided, dDisabled, nil}, holdsDisabled},
 	{vDisabled, parityCell{kText, opWrite, onFiles, decided, dNeverDisabled, nil}, holdsNeverDisabled},
 	{vUntold, parityCell{kURL, opUpdate, onFar, decided, dUntold, nil}, holdsUntold},
@@ -285,11 +289,8 @@ func holdsDark(f *parityFix, prefix string) error {
 		return err
 	}
 	main := f.disk[prefix].main
-	if err := os.Chmod(main, 0o300); err != nil {
-		return err
-	}
-	f.t.Cleanup(func() { _ = os.Chmod(main, 0o755) })
-	if err := os.Remove(filepath.Join(main, "Body.md")); err != nil {
+	unanswering(f.t, main)
+	if err := os.Remove(filepath.Join(main+".away", "Body.md")); err != nil {
 		return err
 	}
 	if err := f.awaitHealth(g.Id, func(c *cache.Cache, h *gridwellv1.EventSourceHealth) bool {
@@ -311,6 +312,45 @@ func holdsDark(f *parityFix, prefix string) error {
 		}
 		if d := f.draw(row); !strings.HasPrefix(d, "dead=false") {
 			return fmt.Errorf("the link draws %s", d)
+		}
+	}
+	return nil
+}
+
+// holdsRefused proves a directory the OS refuses this user is a verdict at
+// every hop: its door says why, a read of its grid is refused with the
+// reason, and the files' health never goes dark, though a session shows it.
+func holdsRefused(f *parityFix, prefix string) error {
+	if os.Geteuid() == 0 {
+		f.t.Skip("root reads every directory")
+	}
+	main := f.disk[prefix].main
+	door := filepath.Join(main, "Door")
+	if err := os.Chmod(door, 0); err != nil {
+		return err
+	}
+	f.t.Cleanup(func() { _ = os.Chmod(door, 0o755) })
+	g, err := f.cl.GetGrid(f.ctx, f.fileID(prefix, main))
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(g.Tiles, func(tl *gridwellv1.Tile) bool { return tl.AltText == "Door" })
+	if i < 0 {
+		return fmt.Errorf("the files list no Door")
+	}
+	if tl := g.Tiles[i]; !strings.Contains(tl.ReadOnly, "Door cannot be read") {
+		return fmt.Errorf("the refused door says read_only %q", tl.ReadOnly)
+	}
+	_, err = f.cl.GetGrid(f.ctx, g.Tiles[i].ChildGridId)
+	if clientsync.Of(err) != clientsync.OutcomeRejected || !strings.Contains(fmt.Sprint(err), "cannot be read") {
+		return fmt.Errorf("the refused grid answered %v, want refused with the reason", err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	f.healthMu.Lock()
+	defer f.healthMu.Unlock()
+	for uuid, h := range f.health {
+		if cache.ServedBy(g.Grid.Id, uuid) && !h.Healthy {
+			return fmt.Errorf("the refused directory was told as the files' health: %+v", h)
 		}
 	}
 	return nil

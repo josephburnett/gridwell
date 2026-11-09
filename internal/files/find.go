@@ -9,6 +9,9 @@ import (
 	"slices"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -178,7 +181,7 @@ func (g *findGrids) walk(dir string, above []*pb.Tile, recurse bool, seen map[st
 			continue
 		}
 		under, err := g.walk(child, append(slices.Clone(above), t), true, seen)
-		if gwerr.IsDeadLink(err) {
+		if unlisted(err) {
 			continue
 		}
 		if err != nil {
@@ -245,7 +248,7 @@ func (g *findGrids) chain(target string) (above []*pb.Tile, ok bool, err error) 
 			return at.above, true, nil
 		}
 		l, err := g.grid(at.dir)
-		if gwerr.IsDeadLink(err) {
+		if unlisted(err) {
 			continue
 		}
 		if err != nil {
@@ -269,4 +272,10 @@ func (g *findGrids) chain(target string) (above []*pb.Tile, ok bool, err error) 
 		}
 	}
 	return nil, false, nil
+}
+
+// unlisted is a directory below the one asked that lists nothing to find: it
+// is gone, or the OS refuses it to this user.
+func unlisted(err error) bool {
+	return gwerr.IsDeadLink(err) || status.Code(err) == codes.PermissionDenied
 }

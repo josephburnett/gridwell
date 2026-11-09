@@ -42,7 +42,7 @@ func (s *Source) entryOf(e diskEntry) listed {
 	out := listed{Entry: store.Entry{Key: e.path, Label: e.name}}
 	switch e.kind {
 	case diskDir:
-		out.Kind, out.Child = rpc.KindDoor, e.path
+		out.Kind, out.Child, out.readOnly = rpc.KindDoor, e.path, unreadable(e.name, e.path)
 	case diskLink:
 		s.linkFacts(&out, e)
 	case diskOther:
@@ -79,7 +79,7 @@ func (s *Source) linkFacts(out *listed, e diskEntry) {
 	at := s.spell(e.target)
 	switch e.targetKind {
 	case diskDir:
-		out.Kind, out.Child = rpc.KindDoor, at
+		out.Kind, out.Child, out.readOnly = rpc.KindDoor, at, unreadable(e.name, at)
 		return
 	case diskFile:
 		fileFacts(out, at)
@@ -110,8 +110,9 @@ type listing struct {
 
 // synthesize reads dir and joins it with its rows. A directory that is gone
 // is dead unless Gridwell tiles are over it or under it, when it lists them
-// alone (gone); a root that is gone is dark, and one that will not read is dark:
-// its rows answer as they stand and nothing retires. Where its links land
+// alone (gone); one the OS refuses this user is refused with the reason; a
+// root that is gone or one that will not read right now is dark: its rows
+// answer as they stand and nothing retires. Where its links land
 // is noted after the read, since noting may list those directories too.
 func (s *Source) synthesize(dir string) (*listing, error) {
 	l, err := s.read(dir, true)
@@ -140,6 +141,9 @@ func (s *Source) read(dir string, speaks bool) (*listing, error) {
 	switch {
 	case err == nil:
 		note("")
+	case refused(err):
+		note("")
+		return nil, diskRefusal("read", dir, err)
 	case gone(err) && !s.isRoot(dir):
 		note("")
 		if held, err := s.mem.HeldAt(dir); err != nil || !held {

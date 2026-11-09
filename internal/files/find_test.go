@@ -145,23 +145,15 @@ func TestARecursiveFindNeverFollowsALink(t *testing.T) {
 // A find's reads say nothing of the files' health, as an abandoned read says
 // nothing of a source's: only the view's reads and the watch do.
 func TestAFindsReadsSayNothingOfHealth(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	locked := f.mkdir("locked")
 	f.write("locked/a.md", "a")
-	if err := os.Chmod(locked, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	heal := f.failReads(locked)
 	f.show(f.root, locked)
 	if !f.s.health().dark {
 		t.Fatal("a shown directory that will not read is not dark")
 	}
-	if err := os.Chmod(locked, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	heal()
 	if got := f.find(&pb.FindRequest{GridId: idOf(f.root), Recurse: true, Kind: rpc.KindText}); len(got) != 1 {
 		t.Errorf("a find under the root = %v, want the file the directory now shows", got)
 	}

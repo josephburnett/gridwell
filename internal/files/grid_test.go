@@ -226,16 +226,10 @@ func TestARootThatWillNotReadIsDark(t *testing.T) {
 
 // A shown directory under a root that will not read is dark too.
 func TestADirectoryThatWillNotReadIsDark(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	locked := f.mkdir("locked")
 	f.write("locked/a.txt", "a")
-	if err := os.Chmod(locked, 0); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	f.failReads(locked)
 	f.show(locked)
 	if resp := f.grid(locked); len(resp.Tiles) != 0 {
 		t.Errorf("tiles = %v", resp.Tiles)
@@ -247,21 +241,14 @@ func TestADirectoryThatWillNotReadIsDark(t *testing.T) {
 
 // A dark directory that is then gone is dead, and no longer dark.
 func TestADarkDirectoryThatGoesIsNoLongerDark(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root reads every directory")
-	}
 	f := newFixture(t)
 	locked := f.mkdir("locked")
-	if err := os.Chmod(locked, 0); err != nil {
-		t.Fatal(err)
-	}
+	heal := f.failReads(locked)
 	f.show(locked)
 	if !f.s.health().dark {
 		t.Fatal("not dark")
 	}
-	if err := os.Chmod(locked, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	heal()
 	if err := os.Remove(locked); err != nil {
 		t.Fatal(err)
 	}

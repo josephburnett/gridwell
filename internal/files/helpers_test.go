@@ -2,9 +2,11 @@ package files
 
 import (
 	"context"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -81,6 +83,29 @@ func (f *fixture) mkdir(name string) string {
 		f.t.Fatal(err)
 	}
 	return p
+}
+
+// failReads makes every listing of dir fail as a disk that cannot answer
+// right now does, until heal.
+func (f *fixture) failReads(dir string) (heal func()) {
+	was := readDir
+	var mu sync.Mutex
+	failing := true
+	readDir = func(d string) ([]diskEntry, error) {
+		mu.Lock()
+		fail := failing && d == dir
+		mu.Unlock()
+		if fail {
+			return nil, &iofs.PathError{Op: "open", Path: d, Err: syscall.EIO}
+		}
+		return was(d)
+	}
+	f.t.Cleanup(func() { readDir = was })
+	return func() {
+		mu.Lock()
+		failing = false
+		mu.Unlock()
+	}
 }
 
 func (f *fixture) grid(dir string) *pb.GetGridResponse {

@@ -129,6 +129,25 @@ func brokenTarget(link string) string {
 	return filepath.Clean(dest)
 }
 
+// refused is an error saying the OS will not let this user at the path, a
+// verdict that stands until someone changes the permission, where any other
+// error is a disk that cannot answer right now.
+func refused(err error) bool { return errors.Is(err, iofs.ErrPermission) }
+
+// unreadable is why the OS refuses this user a listing of dir, which the door
+// named name carries, "" when it does not.
+func unreadable(name, dir string) string {
+	f, err := os.Open(dir)
+	if err == nil {
+		_, err = f.Readdirnames(1)
+		_ = f.Close()
+	}
+	if err == nil || !refused(err) {
+		return ""
+	}
+	return name + " cannot be read: " + pathErr(err).Error()
+}
+
 // gone is an error saying the path is not there: it does not exist, or
 // something on the way is a file. Any other error is a disk that cannot
 // answer right now.

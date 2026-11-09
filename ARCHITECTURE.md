@@ -254,9 +254,11 @@ exists is live. Find on the files locates by
 files watch, with fsnotify, only the directories some session shows and
 those their symlinks land in, debounced 200 ms, and tell each change as a
 `GridChanged` or a `TileChanged` (`docs/freshness.md`); `told` is whether
-that watch is healthy. A root or directory that will not read is dark: its
-grid answers what its rows hold and the files' health event, keyed
-`<node>/~`, says so. The files are never disabled.
+that watch is healthy. A root or directory that cannot be read right now
+is dark: its grid answers what its rows hold and the files' health event,
+keyed `<node>/~`, says so. One the OS refuses this user is no outage: its
+grid answers the refusal and its door carries the reason (`read_only`).
+The files are never disabled.
 
 **Connections** (`internal/connection`) are config rows: an immutable name, a
 label, how to dial. The transport dials each at boot, lands on the far node's

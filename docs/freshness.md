@@ -29,8 +29,10 @@ join: `readDir` supplies the names, `store.FileRows.Overlay` lays the rows
 the user made over them (`Source.synthesize`). Every listing is a verdict
 on every name in it, so a read that answers sweeps the rows whose paths it
 no longer names (`FileRows.Sweep`) and refreshes the rest
-(`FileRows.Refresh`). A directory below a root that is gone is dead; a root
-that is gone, or any directory that will not read, is dark: its rows answer
+(`FileRows.Refresh`). A directory below a root that is gone is dead; one
+the OS refuses this user is refused with the reason, on its door and its
+grid, and is not dark; a root that is gone, or any directory that cannot
+be read right now, is dark: its rows answer
 as they stand, with the same ids, placement and labels, nothing retires,
 and a file with no row is absent. Dark is kept per directory and published
 as the files' health, the transition only, on one event keyed `<node>/~`
@@ -577,6 +579,7 @@ Each cross-layer behaviour in the three traces, and what pins it.
 | Direction two: the relayed health event alone is darkness | `dark_test.go:TestAConnectionsHealthIsDarkness` |
 | Discovering darkness announces the grid at hand | `dark_test.go:TestDarkDiscoveryTellsTheClientToReRead` |
 | A root or directory that will not read is the files' health, keyed `<node>/~`, announced on the transition only, healed when it reads again, and dark only while a view shows it | `internal/server/files_seam_test.go:TestFilesDarkRootHealthIsKeyedByTheFilesOwner`, `internal/files/events_test.go:TestHealthIsToldOnTransitionsAndTraced`, `internal/files/watch_test.go:TestADarkDirectoryLeftIsNoLongerDark` |
+| A directory the OS refuses this user is refused with the reason on its door and its grid, and never the files' health | `internal/files/refused_test.go:TestARefusedDirectoryIsAVerdictNotDark`, `internal/server/parity_variant_test.go:holdsRefused` |
 | A change on disk is a `GridChanged` at the web API, locally and through a connection, only when the listing moved, so a directory whose names stay announces nothing; a file written in place is its `TileChanged` flagged `content_changed`, and a client's open body and text preview show the new bytes, a page file's live view reloads and its unfrozen screenshot gives way; a directory a view adds is checked, one nobody read is noted and announced by nothing, a booting node tells a client re-reading what it shows nothing while the disk is quiet, a read in flight across the check is announced only when it differs, an overflow relists what is watched, a watch failure is live updates off with told false and recovers on the next event; only what a session shows is watched, across a connection too; a grid seen only as a door's preview is shown | `internal/server/files_watch_seam_test.go`, `internal/server/files_content_change_seam_test.go`, `internal/files/watch_test.go`, `internal/files/events_test.go`, `client/urlview/moved_test.go`, `apps/desktop/e2e/fs-page-changed.spec.ts`, `client/cache/binding_test.go:TestAClaimlessBodyAgesOnlyWhenAnEventSaysSo`, `internal/server/parity_variant_test.go`, `internal/server/subscription_seam_test.go`, `client/pane/showing_test.go`, `apps/desktop/e2e/door-preview-watch.spec.ts` |
 | Both directions write the same fact through `setDark`, and differ only in the announcement | `dark_test.go:TestBothDirectionsLearnTheSameDarkness` |
 | Serve the cached answer when dark; verdicts never masked | `sourcecache_test.go:TestServesTheCacheWhenDark`, `TestVerdictNeverMasked` |
