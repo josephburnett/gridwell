@@ -179,3 +179,12 @@ source_label api/gridwell/v1/data\.proto:[0-9]+:.*reserved
 HostContent
 SourceLabel
 isPlugin
+# "promote" — an ephemeral visit's crumb drags as the tile it is, and a
+# left-drag moves it like any tile (CLAUDE.md, 2026-11-10), so the url-only
+# promote and its word are gone; a drop over an open door lands in it.
+promote
+promotes
+promoted
+promoting
+promotion
+promotable

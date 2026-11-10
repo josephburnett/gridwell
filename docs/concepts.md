@@ -42,7 +42,7 @@ here.
 
 | Concept | What it does |
 |---|---|
-| **ephemeral scratch visit** | A real row in the scratch grid that no pane owns — a url typed into the + menu, a shell opened from it. Try it without placing it: grey border, promotable onto a grid. It writes, freezes, zooms and renames like a placed tile of its kind; the ascent deletes it unless another pane or a workspace tile's layout still holds it, and `gridwell clean` removes one no layout holds. `client/scratch` reads the `Grid.scratch_grid_id` stamp and nothing else. |
+| **ephemeral scratch visit** | A real row in the scratch grid that no pane owns — a url typed into the + menu, a shell opened from it. Try it without placing it: grey border; its crumb in the bar drags as the tile it is, so a left-drag moves it onto a grid and keeps it, the pane following. It writes, freezes, zooms and renames like a placed tile of its kind; the ascent deletes it unless another pane or a workspace tile's layout still holds it, and `gridwell clean` removes one no layout holds. `client/scratch` reads the `Grid.scratch_grid_id` stamp and nothing else. |
 | **trash** | Delete moves a tile into a per-month subgrid; delete again destroys it. Ids and versions continue, so links keep resolving, and undo needs no undo machinery. Scratch bypasses it (`deleteBypassesTrash`) — a visit was never placed. A file bypasses it too: its delete moves the file to the OS trash, and a path is never a row of home's. A directory's delete sends the directory to the OS trash and every Gridwell tile over it, or over a directory under it, to this trash (`store.FileRows.TrashOver`); restoring one does not restore the other. |
 
 ## Health
