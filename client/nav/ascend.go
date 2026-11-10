@@ -195,11 +195,6 @@ func (m *Machine) leaveFrame(p PaneView, w World, pl *planner) (doorID string, d
 		}
 		return own.TileID, file, visit
 	}
-	if own.Layout {
-		// The view leaves with the popped frame and the layout write follows
-		// from the settle; the ascent animates onto the door's own framing.
-		return own.TileID, lw.DoorTile, visit
-	}
 	if own.TileID == "" {
 		pl.add(Effect{Kind: EffPersistFraming, PaneID: p.ID, Owner: own})
 		return "", nil, nil

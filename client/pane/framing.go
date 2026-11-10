@@ -19,8 +19,10 @@ type FramingOwner struct {
 	// writes its whole scroll (textedit.RowScroll, 2026-10-16).
 	Content bool
 	// Layout: the pane is inside a workspace tile, whose layout blob owns its grid
-	// views (2026-10-14), so nothing is written to the row named below. That
-	// row's framing is still where a frame with no view of its own starts.
+	// views (2026-10-14), so a settle writes nothing to the row named below;
+	// an ascent, which is leaving, writes it as anywhere, since the popped
+	// frame takes its view with it. That row's framing is where a frame with
+	// no view of its own starts.
 	Layout bool
 	// TileID is the door the pane came in through, or the content tile.
 	// Empty at a root grid with no door.
@@ -35,9 +37,9 @@ type FramingOwner struct {
 
 // FramingTarget is the row that owns the pane's framing: the door it came
 // in by, or the grid itself at a root. Inside a workspace tile a grid place's view
-// and a text place's live scroll are the layout's, so the answer names a grid
-// place's row for reading only and a text place's row for its mode on a
-// settle and its whole scroll on leaving.
+// and a text place's live scroll are the layout's, so the answer names a
+// row a settle leaves be, but for a text place's mode, and leaving writes
+// whole.
 func (s *Stack) FramingTarget(inWorkspace bool) FramingOwner {
 	if s.Content {
 		return FramingOwner{Content: true, Layout: inWorkspace, TileID: s.Door}

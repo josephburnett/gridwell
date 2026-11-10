@@ -128,3 +128,23 @@ test('a link on home to a root, and one to a directory, each keep their own', as
   await roundTrip(gw, window, hx, hy);
   await roundTrip(gw, window, hx, hy + 1);
 });
+
+test('inside a workspace tile, a directory and a home door each reopen as left', async ({ gw, window }) => {
+  await gw.sources();
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const [wx, wy] = [Math.round(f.cx), Math.round(f.cy) - 1];
+  await gw.openMenu();
+  await gw.dragCreate('workspace', wx, wy);
+  await gw.descendCell(wx, wy);
+  await gw.waitIdle();
+  const inner = await gw.focused();
+  const [dx, dy] = [Math.round(inner.cx), Math.round(inner.cy)];
+  await gw.openMenu();
+  await gw.dragCreate('door', dx, dy);
+  await roundTrip(gw, window, dx, dy);
+
+  await gw.enterSource('docs (files)');
+  const sub = await doorTo(gw, (await gw.focused()).gridID, 'sub');
+  await roundTrip(gw, window, Number(sub.x ?? 0), Number(sub.y ?? 0));
+});

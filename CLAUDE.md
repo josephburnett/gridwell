@@ -419,7 +419,9 @@ These were decided deliberately. Do not reverse one without a new decision.
   wire verb (`SetFraming`), one store writer, one client function. Inside a
   workspace tile a grid's view is per pane, not the row's: each frame of each
   pane's stack keeps its center and zoom in the layout blob, a pan there
-  writes the blob on the layout's settle and never the door row, and the
+  writes the blob on the layout's settle, an ascent, which is leaving,
+  writes the door row's framing as it does anywhere, since the popped frame
+  takes its view with it (Joe, 2026-11-09), and the
   one-active-surface rule is the home view's only, since no row is shared
   (`pane.FramingOwner.Layout`, 2026-10-14).
 - A text tile's scroll is where its doc is scrolled and its mode, never the

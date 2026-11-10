@@ -332,32 +332,36 @@ func findKind(p Plan, k EffectKind) (Effect, bool) {
 	return Effect{}, false
 }
 
-// Inside a workspace tile the layout owns a grid frame's view, so an ascent writes
-// nothing to the door row, at a door and at a root, and animates onto the
-// row's own framing, the preview the door shows from outside.
-func TestAscendInsideAWorkspaceWritesNoFraming(t *testing.T) {
-	door := doorRow()
-	door.ViewCx, door.ViewCy, door.ViewZoom = 99, 99, 0.5
+// Inside a workspace tile a settle writes only the layout, but an ascent is
+// leaving, and the popped frame takes its view with it, so it writes the
+// door row, or the root's, as an ascent anywhere does: a directory or a grid
+// reframed there and left reopens as it was left.
+func TestAscendInsideAWorkspaceWritesTheFramingItLeaves(t *testing.T) {
 	root := gridPane("pane1", "g1")
 	root.Stack = pane.StackOf([]pane.Frame{framed(pane.Frame{GridID: "g1"}, 0, 0, 1), framed(pane.Frame{GridID: "g2"}, 0, 0, 1)})
 	for _, c := range []struct {
 		name  string
 		pane  PaneView
 		leave LeaveWorld
+		door  bool
 	}{
-		{"a door", doorPane("pane1"), LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: door}},
-		{"a root", root, LeaveWorld{}},
+		{"a door", doorPane("pane1"), LeaveWorld{DoorGridID: "g1", DoorGridCached: true, DoorTile: doorRow()}, true},
+		{"a root", root, LeaveWorld{}, false},
 	} {
-		w := baseWorld(c.pane)
-		w.LevelDepth = 1
-		lw := c.leave
-		w.Leave = &lw
-		plan := New().Do(ascendGesture("pane1", 1, true), w)
-		if pf, ok := findKind(plan, EffPersistFraming); ok {
-			t.Errorf("%s: an ascent inside a workspace tile wrote framing: %+v", c.name, pf)
-		}
-		if c.leave.DoorTile != nil && door.ViewCx != 99 {
-			t.Errorf("%s: the door row was patched", c.name)
+		for _, depth := range []int{0, 1} {
+			w := baseWorld(c.pane)
+			w.LevelDepth = depth
+			lw := c.leave
+			w.Leave = &lw
+			plan := New().Do(ascendGesture("pane1", 1, true), w)
+			pf, ok := findKind(plan, EffPersistFraming)
+			if !ok {
+				t.Errorf("%s at depth %d: the ascent wrote no framing", c.name, depth)
+				continue
+			}
+			if pf.Door != c.door || pf.Owner.Layout != (depth > 0) {
+				t.Errorf("%s at depth %d: framing effect %+v", c.name, depth, pf)
+			}
 		}
 	}
 }
