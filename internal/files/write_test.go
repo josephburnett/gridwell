@@ -264,7 +264,7 @@ func TestADeleteTrashesThePathItself(t *testing.T) {
 }
 
 // A root's framing is on its grid row and comes back in Info; a door's is on
-// its row.
+// its row, under every later listing.
 func TestFramingOnARootAndOnADoor(t *testing.T) {
 	f := newFixture(t)
 	dir := f.mkdir("dir")
@@ -291,6 +291,11 @@ func TestFramingOnARootAndOnADoor(t *testing.T) {
 	}
 	if got := tileIn(t, f.grid(f.root), dir); got.ViewCy != 2 {
 		t.Errorf("listed door = %+v", got)
+	}
+	// A listing that moved since keeps the row's framing on the door.
+	f.write("new.txt", "n")
+	if got := tileIn(t, f.grid(f.root), dir); got.ViewCx != 1 || got.ViewCy != 2 || got.ViewZoom != 0.5 {
+		t.Errorf("door after the listing moved = %+v", got)
 	}
 }
 
