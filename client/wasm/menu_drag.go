@@ -212,7 +212,7 @@ func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 		Promote: d.item.primitive == primURL && d.item.promotePane != "",
 		Disk:    !d.item.isSwatch && isPrimitive && pr.disk}
 	if r.Target {
-		// The target's grid is the open door's child when the cursor promoted
+		// The target's grid is the open door's child when the cursor went
 		// into one, not the pane's own leaf grid.
 		r.Occupied = a.occupiedForDrop(t.gridID, dragdrop.Carry{{
 			W: max(d.snapshotTile.W, 1), H: max(d.snapshotTile.H, 1)}}, dropX, dropY, false)

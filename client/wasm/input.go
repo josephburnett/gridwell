@@ -644,7 +644,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// advanceDragGhost promotes an armed drag past the threshold and materializes
+// advanceDragGhost starts an armed drag past the threshold and materializes
 // its ghost, once, for both buttons. A move hides the original by row id,
 // because a by-lineage hide would vanish every copy; a creating drag shows
 // both, since what lands is new.

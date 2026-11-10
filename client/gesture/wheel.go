@@ -37,7 +37,7 @@ type WheelInput struct {
 	LiveURLView      bool
 	InContentBox     bool
 	TextModeRendered bool
-	// OverEnterableDoor is the same predicate a drop's PromoteToDoor uses.
+	// OverEnterableDoor is the same predicate a drop's DropsIntoDoor uses.
 	OverEnterableDoor bool
 	// ZoomOut is deltaY > 0, zoomtrans.WheelZoom's convention.
 	ZoomOut bool

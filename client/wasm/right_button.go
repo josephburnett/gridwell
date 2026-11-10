@@ -318,7 +318,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 	a.scheduleURLUpdate()
 }
 
-// advanceCopyDrag runs the one ghost promotion the left-drag path runs.
+// advanceCopyDrag runs the one ghost start the left-drag path runs.
 func (a *App) advanceCopyDrag(sx, sy float64) {
 	d := a.dragging
 	if d == nil {

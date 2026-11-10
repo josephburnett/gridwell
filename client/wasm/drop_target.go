@@ -17,7 +17,7 @@ import (
 )
 
 // dropTarget is where the cursor points as a drop destination: either the
-// pane's leaf grid or, when the cursor promoted into an open door, that
+// pane's leaf grid or, when the cursor is over an open door, that
 // door's child grid. origin{X,Y} is the screen coordinate of cell (0, 0) in
 // that grid, so cellSize and the cursor give the target cell.
 type dropTarget struct {
@@ -207,11 +207,11 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 	parentCell := ps.Cell()
 	parentOriginX, parentOriginY := ps.CellToScreen(0, 0)
 
-	// An open door under the cursor promotes the target to its child grid.
-	// The rule is dragdrop.PromoteToDoor's.
+	// An open door under the cursor takes the drop into its child grid.
+	// The rule is dragdrop.DropsIntoDoor's.
 	cellX, cellY := ps.CellAt(sx, sy)
 	if n := a.tileAtCell(p, cellX, cellY); n != nil &&
-		dragdrop.PromoteToDoor(rpc.IsDoorKind(n.Kind), n.ChildGridId, n.Id, carried) {
+		dragdrop.DropsIntoDoor(rpc.IsDoorKind(n.Kind), n.ChildGridId, n.Id, carried) {
 		cp := doorPreviewFor(ps, n)
 		return &dropTarget{
 			pane:     p,

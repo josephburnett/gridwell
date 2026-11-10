@@ -436,9 +436,9 @@ func GhostPlanForDrop(action DropAction, in DropInput,
 	}
 }
 
-// PromoteToDoor excludes every carried tile: a door dropped into its own
-// subtree is a cycle the server rejects. The caller resolves isDoor from
-// rpc.IsDoorKind, keeping api/rpc out of here.
-func PromoteToDoor(isDoor bool, childGridID, tileID string, carried Carry) bool {
+// DropsIntoDoor: a drop over an open door lands in its grid, unless the
+// door is carried, since one dropped into its own subtree is a cycle the
+// server rejects. isDoor is rpc.IsDoorKind's, keeping api/rpc out of here.
+func DropsIntoDoor(isDoor bool, childGridID, tileID string, carried Carry) bool {
 	return isDoor && childGridID != "" && !carried.Has(tileID)
 }

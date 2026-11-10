@@ -617,19 +617,19 @@ func TestGhostPlanForDrop(t *testing.T) {
 	}
 }
 
-func TestPromoteToDoor(t *testing.T) {
+func TestDropsIntoDoor(t *testing.T) {
 	cases := []struct {
 		name                               string
 		isDoor                             bool
 		childGridID, tileID, draggedTileID string
 		want                               bool
 	}{
-		{"open door promotes", true, "g9", "t1", "t2", true},
-		{"non-door never promotes", false, "g9", "t1", "t2", false},
-		{"door with no child never promotes", true, "", "t1", "t2", false},
-		{"the dragged door itself never promotes (self-cycle)", true, "g9", "t1", "t1", false},
-		{"a door the set carries never promotes", true, "g9", "t3", "t1,t3", false},
-		{"no drag in flight still promotes", true, "g9", "t1", "", true},
+		{"open door takes the drop", true, "g9", "t1", "t2", true},
+		{"non-door never takes it", false, "g9", "t1", "t2", false},
+		{"door with no child never takes it", true, "", "t1", "t2", false},
+		{"the dragged door itself never takes it (self-cycle)", true, "g9", "t1", "t1", false},
+		{"a door the set carries never takes it", true, "g9", "t3", "t1,t3", false},
+		{"no drag in flight still takes it", true, "g9", "t1", "", true},
 	}
 	for _, c := range cases {
 		var carried Carry
@@ -638,8 +638,8 @@ func TestPromoteToDoor(t *testing.T) {
 				carried = append(carried, Member{ID: id})
 			}
 		}
-		if got := PromoteToDoor(c.isDoor, c.childGridID, c.tileID, carried); got != c.want {
-			t.Errorf("%s: PromoteToDoor = %v, want %v", c.name, got, c.want)
+		if got := DropsIntoDoor(c.isDoor, c.childGridID, c.tileID, carried); got != c.want {
+			t.Errorf("%s: DropsIntoDoor = %v, want %v", c.name, got, c.want)
 		}
 	}
 }
