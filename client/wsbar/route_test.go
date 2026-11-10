@@ -107,21 +107,29 @@ func TestRouteClickSlotMenu(t *testing.T) {
 	}
 }
 
-// Only the current crumb of an ephemeral visit is a drag handle; the crumbs
-// above it stay ascents, and without the visit it is an ascent too.
-func TestRouteClickPromote(t *testing.T) {
-	in := barClick(0, BoundaryW+RowH+2)
-	in.Promote = true
-	if got := RouteClick(in); got.Action != ActionPromote || got.Segment.Index != 2 {
-		t.Fatalf("RouteClick(current crumb of a visit) = %+v, want promote on 2", got)
+// The crumb standing for an ephemeral visit's row is its drag handle for
+// either button, wherever it sits in the chain; every other crumb keeps its
+// action, and without a visit the crumb is an ascent.
+func TestRouteClickVisitDrag(t *testing.T) {
+	for _, at := range []int{1, 2} {
+		for _, button := range []int{0, 2} {
+			in := barClick(button, BoundaryW+float64(at-1)*RowH+2)
+			in.Visit, in.VisitOK = at, true
+			if got := RouteClick(in); got.Action != ActionVisitDrag || got.Segment.Index != at {
+				t.Fatalf("RouteClick(button %d on the visit's crumb at %d) = %+v, want its drag", button, at, got)
+			}
+		}
 	}
-	in = barClick(0, BoundaryW+2)
-	in.Promote = true
+	in := barClick(0, BoundaryW+2)
+	in.Visit, in.VisitOK = 2, true
 	if got := RouteClick(in); got.Action != ActionAscend || got.Segment.Index != 1 {
 		t.Fatalf("RouteClick(crumb above a visit) = %+v, want ascend on 1", got)
 	}
 	if got := RouteClick(barClick(0, BoundaryW+RowH+2)); got.Action != ActionAscend {
 		t.Fatalf("RouteClick(current crumb, no visit) = %v, want %v", got.Action, ActionAscend)
+	}
+	if got := RouteClick(barClick(2, BoundaryW+RowH+2)); got.Action != ActionNone {
+		t.Fatalf("RouteClick(right on a crumb, no visit) = %v, want %v", got.Action, ActionNone)
 	}
 }
 
@@ -172,7 +180,7 @@ func TestRouteClickSelect(t *testing.T) {
 	closeOnly.Chain = slices.Clone(closeOnly.Chain)
 	closeOnly.Chain[0] = pane.NavCrumb{CloseOnly: true, Crumb: pane.Crumb{Anchor: "g/0", ParentAnchor: "g/0"}}
 	visit := barClick(0, BoundaryW+RowH+2)
-	visit.Promote = true
+	visit.Visit, visit.VisitOK = 2, true
 	cases := []struct {
 		name string
 		in   Click

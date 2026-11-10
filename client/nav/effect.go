@@ -17,10 +17,7 @@ const (
 	// keeps the pane's own).
 	EffInstallPlace   EffectKind = iota
 	EffClearSelection            // PaneID
-	// EffRelocatePane moves a pane onto another and descends it into a tile:
-	// PaneID, DestPaneID, TileID, Foot, Zoom.
-	EffRelocatePane
-	EffForgetPane // drops every session resource keyed to a pane: PaneID
+	EffForgetPane                // drops every session resource keyed to a pane: PaneID
 	// EffInstallLevel swaps the pane tree for a workspace level: Level, Tree
 	// (nil with Capture: the window layout at the swap), Baseline, KeepOuter,
 	// IDPrefix.
@@ -51,7 +48,7 @@ const (
 	// Expand, with Tile, grows the tile's preview into the level outline instead.
 	EffStartTransition
 
-	EffCloseStream // PaneID, Streams, Freeze, FreezeOnto
+	EffCloseStream // PaneID, Streams, Freeze
 	EffOpenStream  // PaneID, TileID, Stream, and for a shell Key
 	// EffPlaceURLView re-parents a live url view onto a pane: PaneID, TileID,
 	// Tile (by value: a just-created tile is in no cached grid).
@@ -96,13 +93,6 @@ const (
 	StreamBoth
 )
 
-// FreezeTarget names the row a closing url view's capture is persisted onto
-// when it is not the row the view was opened for.
-type FreezeTarget struct {
-	TileID string
-	GridID string
-}
-
 // Effect is one thing the shim does.
 type Effect struct {
 	Kind EffectKind
@@ -118,8 +108,6 @@ type Effect struct {
 	// Place and tree.
 	Stack     *pane.Stack
 	Viewport  *rpc.Framing
-	Foot      pane.Footprint
-	Zoom      float64
 	Level     *pane.Level
 	Tree      *pane.Tree
 	Baseline  []byte
@@ -142,9 +130,8 @@ type Effect struct {
 	Streams StreamKind
 	Stream  StreamKind
 	// Key is the tmux an opened shell attaches (shellconn.TmuxKey).
-	Key        string
-	Freeze     bool
-	FreezeOnto *FreezeTarget
+	Key    string
+	Freeze bool
 
 	// Await.
 	Token   Token

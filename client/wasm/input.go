@@ -423,8 +423,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if mp, _, ok := a.menuPaneForPointer(); ok && args[0].Get("button").Int() == 2 {
 		if t, idx := a.menuTemplateAt(mp, sx, sy); t != nil {
 			args[0].Call("preventDefault")
-			a.rightDrag = &rightDragState{kind: rightDragTemplate, startX: sx, startY: sy, curX: sx, curY: sy}
-			a.startTemplateDrag(mp, idx, t, sx, sy, rightDragIntent(args[0]))
+			a.rightDrag = &rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy}
+			a.startTemplateDrag(mp, idx, t, sx, sy, rightDragIntent(modsOf(args[0]).Ctrl))
 			return nil
 		}
 	}
@@ -463,7 +463,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		args[0].Call("preventDefault")
 		// The modifiers are read at the press and never again; see
 		// rightDragIntent and gesture.RightClickIsSplitNav.
-		a.onRightDown(p, r, sx, sy, rightDragIntent(args[0]),
+		a.onRightDown(p, r, sx, sy, rightDragIntent(modsOf(args[0]).Ctrl),
 			gesture.SplitNav(args[0].Get("ctrlKey").Truthy(), args[0].Get("metaKey").Truthy()))
 		return nil
 	}

@@ -98,19 +98,6 @@ func (lw *LevelWorld) tile() *gridwellv1.Tile {
 	return lw.Tile
 }
 
-// PromoteWorld is the ephemeral row being promoted away from, as the cache
-// last held it. nil leaves it undeleted rather than guessing.
-type PromoteWorld struct {
-	OldTile *gridwellv1.Tile
-}
-
-func (pw *PromoteWorld) old() *gridwellv1.Tile {
-	if pw == nil {
-		return nil
-	}
-	return pw.OldTile
-}
-
 // RestoreTile is one cached row as the URL restore reads it.
 type RestoreTile struct {
 	ChildGridID string
@@ -197,12 +184,11 @@ type World struct {
 	Current map[string]bool
 
 	// One per verb: a descent, an ascent hop, a restore and every step of its
-	// walk, a workspace tile landing, a promote, a re-engage.
+	// walk, a workspace tile landing, a re-engage.
 	Door    *DoorWorld
 	Leave   *LeaveWorld
 	Restore *RestoreWorld
 	Level   *LevelWorld
-	Promote *PromoteWorld
 	Engage  *EngageWorld
 }
 
@@ -230,10 +216,8 @@ func (w World) otherPaneHolds(paneID, tileID string) bool {
 		if p.ID == paneID {
 			continue
 		}
-		for _, f := range p.Stack.Frames() {
-			if f.Door == tileID {
-				return true
-			}
+		if _, ok := p.Stack.LevelOf(tileID); ok {
+			return true
 		}
 	}
 	return false

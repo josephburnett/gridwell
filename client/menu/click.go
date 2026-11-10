@@ -23,8 +23,6 @@ const (
 type Swatch struct {
 	// IsSwatch marks a source, connection or declared-root row.
 	IsSwatch bool
-	// Promote marks the bar's current-visit crumb, dragged as a menu item.
-	Promote bool
 	// Visits marks a primitive whose table row declares a click behavior.
 	Visits bool
 	// Template marks a template; the copy swatch is a press with no click.
@@ -32,8 +30,7 @@ type Swatch struct {
 }
 
 // ClickOn asks identity before kind, because a row can carry more than one
-// flag: the promote crumb is spelled as the url primitive, so Promote is read
-// before Visits, and a strip item carries the zero primitive.
+// flag: a source row and a strip item carry the zero primitive.
 func ClickOn(s Swatch) ClickTarget {
 	switch {
 	case s.Template:
@@ -42,8 +39,6 @@ func ClickOn(s Swatch) ClickTarget {
 		return ClickNothing
 	case s.IsSwatch:
 		return ClickEnter
-	case s.Promote:
-		return ClickNothing
 	case s.Visits:
 		return ClickVisit
 	default:

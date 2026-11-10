@@ -11,15 +11,11 @@ func TestClickOn(t *testing.T) {
 		want ClickTarget
 	}{
 		{"a source row enters it", Swatch{IsSwatch: true}, ClickEnter},
-		{"the promote crumb is where you already are", Swatch{Promote: true}, ClickNothing},
 		{"a primitive that declares a visit opens it", Swatch{Visits: true}, ClickVisit},
 		{"a primitive that declares none does nothing", Swatch{}, ClickNothing},
-		// A source row carries the zero primitive kind and the promote
-		// crumb is spelled as the url primitive, so identity beats kind.
+		// A source row carries the zero primitive kind, so identity beats kind.
 		{"a source row beats its zero-value primitive",
 			Swatch{IsSwatch: true, Visits: true}, ClickEnter},
-		{"the promote crumb beats the url primitive it is spelled as",
-			Swatch{Promote: true, Visits: true}, ClickNothing},
 		{"a template visits a copy of itself", Swatch{Template: true}, ClickCopy},
 		{"the copy swatch is only dragged", Swatch{CopySwatch: true}, ClickNothing},
 	}

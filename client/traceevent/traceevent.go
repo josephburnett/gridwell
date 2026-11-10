@@ -333,8 +333,8 @@ func Nav(g nav.Gesture) Event {
 		e.Kind, e.Msg, e.KV = "restore", "restore "+g.Raw, kv("pane", g.PaneID)
 	case nav.GestureRestoreFromHistory:
 		e.Kind, e.Msg = "restore", "restore session "+g.Raw
-	case nav.GesturePromote:
-		e.Kind, e.Msg, e.KV = "promote", "promote ephemeral", kv("pane", g.PaneID, "tile", g.OldID)
+	case nav.GestureVisitMoved:
+		e.Kind, e.Msg, e.KV = "push", "follow a moved visit", kv("pane", g.PaneID, "tile", g.Door.GetId())
 	case nav.GestureReEngage:
 		e.Kind, e.Msg, e.KV = "reengage", "re-engage content", kv("pane", g.PaneID, "tile", g.TileID)
 	case nav.GestureEngageLeaves:
@@ -499,6 +499,7 @@ var dropNames = map[dragdrop.DropAction]string{
 	dragdrop.DropLink:          "link",
 	dragdrop.DropPaste:         "paste",
 	dragdrop.DropTemplate:      "template",
+	dragdrop.DropEndVisit:      "end the visit",
 }
 
 func dropName(v dragdrop.DropAction) string {

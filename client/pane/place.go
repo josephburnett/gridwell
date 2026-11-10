@@ -251,6 +251,40 @@ func (s *Stack) Popped(n int) Stack {
 	return c
 }
 
+// LevelOf is the frame whose door or content tile is tileID, false when the
+// place passes through none.
+func (s *Stack) LevelOf(tileID string) (int, bool) {
+	for i, f := range s.Frames() {
+		if f.Door == tileID {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// RelocatedOnto is this place once the row of frame level has moved onto
+// dest's grid, or through dest's open door through: the frames from level up
+// pushed on dest's place as they were, views and scrolls intact. A content
+// frame's view is its grid's camera, so the row's is the descent onto foot
+// at zoom. A content descent on dest is replaced, never stacked on.
+func (s *Stack) RelocatedOnto(dest Stack, level int, through string, foot Footprint, zoom float64) Stack {
+	out := dest.Copy()
+	if out.Content {
+		out.Pop()
+	}
+	if through != "" {
+		out.Push(Frame{Door: through})
+	}
+	for i, f := range s.Frames()[level:] {
+		if i == 0 && f.Content {
+			cx, cy := foot.Center()
+			f.SetView(cx, cy, zoom)
+		}
+		out.Push(f)
+	}
+	return out
+}
+
 // Reset replaces the whole stack with a single frame: the boot and restore
 // door. Nothing else clears the stack; a place is left by popping it.
 func (s *Stack) Reset(f Frame) {

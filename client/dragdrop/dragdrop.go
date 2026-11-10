@@ -248,6 +248,9 @@ const (
 	// DropTemplate copies the tile under the copy swatch's release into the
 	// templates grid.
 	DropTemplate
+	// DropEndVisit ends the ephemeral visit the carry is, as the ascent out
+	// of it does: a visit dropped on the trashcan.
+	DropEndVisit
 )
 
 // DropInput is every world-read a drop decision needs, gathered once before
@@ -290,6 +293,10 @@ type DropInput struct {
 	// carried row is a file or a directory (rpc.OnDisk). Together they refuse
 	// a move to another grid and a delete (FingerNoFile).
 	Touch, CarriesFile bool
+	// CarriesEphemeral is a carried row on the scratch grid (rpc.Ephemeral):
+	// a visit's crumb, which links nowhere (EphemeralNoLink) and whose
+	// trashcan is the ascent (DropEndVisit).
+	CarriesEphemeral bool
 }
 
 // FingerNoFile is why a finger's drag of a file or a directory onto another
@@ -298,10 +305,23 @@ type DropInput struct {
 // copying it and every gesture on a Gridwell tile stay a finger's too.
 const FingerNoFile = "a finger does not move or delete a file; use a mouse"
 
+// EphemeralNoLink is why a drop that would link to an ephemeral visit is
+// refused: no link holds a visit, so the link would read dead once it ends.
+const EphemeralNoLink = "a link to an ephemeral visit would die with it"
+
+// Told is the reason a refused drop tells the user, "" when it says nothing.
+func Told(in DropInput) string {
+	switch why := WhyRejected(in); why {
+	case FingerNoFile, EphemeralNoLink:
+		return why
+	}
+	return ""
+}
+
 // NoEntry is whether the ghost wears the no-entry badge: a move the server
-// would refuse, or a finger's refused drag of a file.
+// would refuse, or a refusal the user is told.
 func NoEntry(in DropInput) bool {
-	return in.Forbidden || in.PasteRefusal != "" || WhyRejected(in) == FingerNoFile
+	return in.Forbidden || in.PasteRefusal != "" || Told(in) != ""
 }
 
 // CarryCopiesAsLink: rpc.CopyOf makes a link of every row copied onto dest,
@@ -365,6 +385,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropPanEnd, ""
 	case in.OverDelete && in.Touch && in.CarriesFile:
 		return DropRejected, FingerNoFile
+	case in.OverDelete && in.CarriesEphemeral:
+		return DropEndVisit, ""
 	case in.OverDelete:
 		return DropDelete, ""
 	case !in.HasTarget:
@@ -377,6 +399,9 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropPaste, ""
 	case in.Touch && in.CarriesFile && in.Intent == IntentMove && !in.SameGrid && !in.MovesAsLink:
 		return DropRejected, FingerNoFile
+	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentMove && in.MovesAsLink ||
+		in.Intent == IntentCopy && in.CopiesAsLink):
+		return DropRejected, EphemeralNoLink
 	case in.Forbidden:
 		return DropRejected, "forbidden"
 	case in.TargetRefusesTiles && (in.Intent.Creates() || in.MovesAsLink):
@@ -417,7 +442,7 @@ func GhostPlanForDrop(action DropAction, in DropInput,
 	originPaneID, targetPaneID string, srcCellSize, targetCellSize float64) GhostPlan {
 	forbidden := NoEntry(in)
 	switch action {
-	case DropDelete:
+	case DropDelete, DropEndVisit:
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize * 0.2, Fragmentation: 1.0}
 	case DropLink:
 		return GhostPlan{PaneID: targetPaneID, TargetCellSize: targetCellSize, Link: true}

@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"slices"
 
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/errsurface"
@@ -48,8 +49,6 @@ func (a *App) runNavEffect(e nav.Effect) {
 		a.clearSelected(e.PaneID)
 	case nav.EffForgetPane:
 		a.forgetPane(e.PaneID)
-	case nav.EffRelocatePane:
-		a.navRelocatePane(e)
 	case nav.EffInstallLevel:
 		a.navInstallLevel(e)
 	case nav.EffReplaceLevel:
@@ -142,6 +141,15 @@ func (a *App) navInstallPlace(e nav.Effect) {
 	}
 	if e.Stack != nil {
 		p.Stack = e.Stack.Copy()
+		// A surface still on the pane's content writes under its new place.
+		if pl, ok := a.localIf(p.ID); ok {
+			if v := pl.urlView; v != nil && v.descentID == p.ContentID() {
+				v.anchor, v.path = p.Anchor(), slices.Clone(p.Path())
+			}
+			if c := pl.shellConn; c != nil && c.descentID == p.ContentID() {
+				c.placeIn(p)
+			}
+		}
 	}
 	if v := e.Viewport; v != nil {
 		p.SetView(v.Cx(), v.Cy(), v.Zoom())
@@ -218,28 +226,13 @@ func (a *App) navStartTransition(e nav.Effect) {
 
 func (a *App) navCloseStream(e nav.Effect) {
 	if e.Streams == nav.StreamURL || e.Streams == nav.StreamBoth {
-		if t := e.FreezeOnto; t != nil {
-			a.closeURLStreamTo(e.PaneID, &freezeTarget{tileID: t.TileID, gridID: t.GridID}, e.Freeze)
-		} else {
-			a.closeURLStream(e.PaneID, e.Freeze)
-		}
+		a.closeURLStream(e.PaneID, e.Freeze)
 	}
 	if e.Streams == nav.StreamShell || e.Streams == nav.StreamBoth {
 		// closeShellStream captures the JPEG, persists it and closes the
 		// socket.
 		a.closeShellStream(e.PaneID, e.Freeze)
 	}
-}
-
-// navRelocatePane is the promote gesture's landing: pane.RelocateTo is the
-// one mover.
-func (a *App) navRelocatePane(e nav.Effect) {
-	p := a.tree.FindPane(e.PaneID)
-	dest := a.tree.FindPane(e.DestPaneID)
-	if p == nil || dest == nil {
-		return
-	}
-	p.RelocateTo(dest, e.TileID, e.Foot, e.Zoom)
 }
 
 func (a *App) navOpenStream(e nav.Effect) {

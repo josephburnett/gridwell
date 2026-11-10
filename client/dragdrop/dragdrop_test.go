@@ -817,3 +817,45 @@ func TestCopySwatchDrop(t *testing.T) {
 		t.Errorf("a copy that links = %+v, want the link ghost outlining the tile", p)
 	}
 }
+
+// An ephemeral visit's crumb drags as the tile it is (CLAUDE.md, 2026-11-10):
+// it moves and copies as any row, but a drop that would link to it is
+// refused with the reason, and the trashcan ends the visit.
+func TestAVisitLinksNowhere(t *testing.T) {
+	base := DropInput{Started: true, TileID: "7", HasTarget: true}
+	cases := []struct {
+		name       string
+		in         func(*DropInput)
+		row, visit DropAction
+	}{
+		{"a left-drag that moves", func(in *DropInput) {}, DropMove, DropMove},
+		{"a left-drag across a connection", func(in *DropInput) { in.MovesAsLink = true }, DropLink, DropRejected},
+		{"a right-drag that copies", func(in *DropInput) { in.Intent = IntentCopy }, DropCopy, DropCopy},
+		{"a right-drag that copies as a link", func(in *DropInput) { in.Intent, in.CopiesAsLink = IntentCopy, true }, DropLink, DropRejected},
+		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected},
+		{"a drop on a shell", func(in *DropInput) { in.OntoShell, in.Intent = true, IntentLink }, DropPaste, DropPaste},
+		{"the trashcan", func(in *DropInput) { in.HasTarget, in.OverDelete = false, true }, DropDelete, DropEndVisit},
+	}
+	for _, c := range cases {
+		for _, eph := range []bool{false, true} {
+			in := base
+			c.in(&in)
+			in.CarriesEphemeral = eph
+			want := c.row
+			if eph {
+				want = c.visit
+			}
+			if got := DecideDrop(in); got != want {
+				t.Errorf("%s, ephemeral %v: DecideDrop = %v, want %v", c.name, eph, got, want)
+			}
+			refused := DecideDrop(in) == DropRejected
+			if refused != NoEntry(in) || refused != (Told(in) == EphemeralNoLink) {
+				t.Errorf("%s, ephemeral %v: refused %v, NoEntry %v, told %q", c.name, eph, refused, NoEntry(in), Told(in))
+			}
+		}
+	}
+	end := DropInput{Started: true, TileID: "7", OverDelete: true, CarriesEphemeral: true}
+	if p := GhostPlanForDrop(DropEndVisit, end, "o", "", 40, 0); p.PaneID != "o" || p.Fragmentation != 1 {
+		t.Errorf("the trashcan's ghost for a visit = %+v, want it shattered in the origin pane", p)
+	}
+}

@@ -9,7 +9,6 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
-	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/scratch"
 )
@@ -192,33 +191,4 @@ func (a *App) shellURLActivate(paneID, url string) {
 	if p := a.tree.FindPane(paneID); p != nil && p.ContentID() != "" {
 		a.openLinkBelow(paneID, url)
 	}
-}
-
-// promoteEphemeralURL turns the ephemeral url visit in originPaneID into a
-// persistent tile at (cellX, cellY) of gid, relocating the visit into
-// destPaneID. The tile carries the visit's current address, since the page may
-// have navigated, and the promote verb then moves the visit onto it.
-func (a *App) promoteEphemeralURL(originPaneID, destPaneID, gid string, cellX, cellY int64) {
-	op := a.tree.FindPane(originPaneID)
-	if op == nil {
-		return
-	}
-	t, ok := a.descendedTile(op)
-	if !ok || !rpc.WebContent(t) || !a.certainlyEphemeral(op, t) {
-		return
-	}
-	url := t.UrlString
-	if v := a.urlViewFor(op.ID); v != nil && v.lastURL != "" {
-		url = v.lastURL
-	}
-	destID := destPaneID
-	oldID := t.Id
-	a.createTile("CreateURL", gid, &gridwellv1.CreateTileRequest{GridId: gid,
-		Tile: &gridwellv1.Tile{Kind: rpc.KindURL, X: cellX, Y: cellY, W: 1, H: 1, UrlString: url}},
-		func(created *gridwellv1.Tile) {
-			// The create was the await. The rest is the promote verb, planned
-			// against the world as it is when the row lands.
-			a.runGesture(nav.Gesture{Kind: nav.GesturePromote, PaneID: originPaneID,
-				DestPaneID: destID, OldID: oldID, Created: created})
-		})
 }

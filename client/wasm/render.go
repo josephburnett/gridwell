@@ -264,8 +264,6 @@ type menuItem struct {
 	source    *gridwellv1.SourceInfo // when isSwatch (for a grid's swatch, its pseudo-row)
 	primitive primitiveKind          // when no other field is set
 	grid      *gridwellv1.SourceGrid
-	// promotePane marks a promote drag of the ephemeral url crumb in that pane.
-	promotePane string
 }
 
 // inStrip is an item of the strip, above the primitives.

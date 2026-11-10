@@ -399,32 +399,80 @@ func TestStillDescended(t *testing.T) {
 	}
 }
 
-func TestRelocateToFollowsTheDestination(t *testing.T) {
-	p := &Pane{ID: "a", Stack: StackAt("u1/0", []string{"u1/3"}, "u1/9")}
-	p.TextMode, p.TextScrollY = "text", 40
-	dest := &Pane{ID: "b", Stack: StackAt("u2/0", []string{"u2/7", "u2/8"}, "")}
+// A visit's row moved onto dest's grid re-roots the place there: the frames
+// from the row's up keep their views and scrolls, the row's own content frame
+// is re-centred where a descent into its new footprint lands, and the place is
+// a copy.
+func TestRelocatedOntoKeepsTheFramesAboveTheRow(t *testing.T) {
+	dest := StackAt("u2/0", []string{"u2/7", "u2/8"}, "")
 	dest.SetView(10, 20, 2)
-	p.RelocateTo(dest, "u2/44", Footprint{X: 4, Y: 6, W: 2, H: 2}, 3)
-	if p.Anchor() != "u2/0" || len(p.Path()) != 2 || p.Path()[1] != "u2/8" {
-		t.Fatalf("location not taken: %+v", p.Crumbs())
+	foot := Footprint{X: 4, Y: 6, W: 2, H: 2}
+
+	t.Run("a content visit", func(t *testing.T) {
+		s := StackAt("u1/0", []string{"u1/3"}, "u1/9")
+		s.SetView(0.5, 0.5, 1)
+		s.TextMode, s.TextScrollY = "rendered", 40
+		got := s.RelocatedOnto(dest, 2, "", foot, 3)
+		if got.Anchor() != "u2/0" || len(got.Path()) != 2 || got.Path()[1] != "u2/8" || got.ContentID() != "u1/9" {
+			t.Fatalf("place = %+v, want the content frame on dest's place", got.Crumbs())
+		}
+		if got.TextMode != "rendered" || got.TextScrollY != 40 {
+			t.Fatalf("scroll = %q %v, want the visit's", got.TextMode, got.TextScrollY)
+		}
+		// A content frame's view is the landing grid's camera, so the next
+		// ascent overtakes the tile where it now sits.
+		if !got.HasView() || !viewIs(got.View, 5, 7, 3) {
+			t.Fatalf("view = %+v, want the descent onto the new footprint", got.View)
+		}
+		if !got.Pop() || !viewIs(got.View, 10, 20, 2) {
+			t.Fatalf("ascent lands on %+v, want where dest stood", got.View)
+		}
+		if dest.ContentID() != "" || dest.Depth() != 3 {
+			t.Fatal("dest's own place changed")
+		}
+	})
+
+	t.Run("a door visit held at depth", func(t *testing.T) {
+		s := StackAt("u1/0", []string{"u1/3", "u1/5"}, "")
+		s.SetView(7, 8, 0.5) // inside u1/5, a door on the visit's grid
+		got := s.RelocatedOnto(dest, 1, "", foot, 3)
+		if got.Depth() != 5 || got.Path()[2] != "u1/3" || got.Path()[3] != "u1/5" {
+			t.Fatalf("place = %+v, want the visit and the door inside it on dest's place", got.Crumbs())
+		}
+		if !viewIs(got.View, 7, 8, 0.5) {
+			t.Fatalf("view = %+v, want the one the pane had", got.View)
+		}
+	})
+
+	t.Run("through an open door", func(t *testing.T) {
+		s := StackAt("u1/0", nil, "u1/9")
+		got := s.RelocatedOnto(dest, 1, "u2/11", foot, 3)
+		if got.Depth() != 5 || got.Path()[2] != "u2/11" || got.ContentID() != "u1/9" {
+			t.Fatalf("place = %+v, want the open door's frame under the visit", got.Crumbs())
+		}
+	})
+
+	t.Run("onto a content descent", func(t *testing.T) {
+		d := StackAt("u2/0", nil, "u2/44")
+		s := StackAt("u1/0", nil, "u1/9")
+		if got := s.RelocatedOnto(d, 1, "", foot, 3); got.Depth() != 2 || got.Anchor() != "u2/0" {
+			t.Fatalf("place = %+v, want the content descent replaced", got.Crumbs())
+		}
+	})
+}
+
+func TestLevelOf(t *testing.T) {
+	s := StackAt("u1/0", []string{"u1/3", "u1/5"}, "u1/9")
+	for id, want := range map[string]int{"u1/3": 1, "u1/5": 2, "u1/9": 3} {
+		if got, ok := s.LevelOf(id); !ok || got != want {
+			t.Errorf("LevelOf(%s) = %d %v, want %d", id, got, ok, want)
+		}
 	}
-	if p.ContentID() != "u2/44" || p.TextMode != "" || p.TextScrollY != 0 {
-		t.Fatalf("descent not reset onto the new tile: %+v", p.Frame)
-	}
-	// A promoted pane is a descended pane, so the next ascent has an overtake
-	// to compute from instead of zoom 0.
-	if !p.HasView() || !viewIs(p.View, 5, 7, 3) {
-		t.Fatalf("promoted frame carries no viewport: %+v", p.Frame)
-	}
-	// The pane ascends into the destination's viewport, not the origin's.
-	if !p.Pop() || !viewIs(p.View, 10, 20, 2) {
-		t.Fatalf("ascent does not land where the destination stood: %+v", p.Frame)
-	}
-	dest.Pop()
-	if len(p.Path()) != 2 {
-		t.Fatal("place must be a copy, not shared with the destination pane")
+	if _, ok := s.LevelOf("u1/0"); ok {
+		t.Error("the anchor grid is no tile's frame")
 	}
 }
+
 func TestGridNotice(t *testing.T) {
 	if got := GridNotice("gitlab", false); got != "loading gitlab…" {
 		t.Errorf("loading = %q", got)

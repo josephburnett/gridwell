@@ -665,9 +665,8 @@ func TestGridDirectoryIsItsIdAndNilSafe(t *testing.T) {
 }
 
 // Grid hands out the cached rows themselves, so a gesture that shapes one
-// into something of its own copies first: the bar's promote drag carries the
-// visited row at 1x1, and writing that through the handed-out pointer would
-// resize the row the crumb is standing on. A gesture is a read, and a read
+// into something of its own copies first: writing a 1x1 ghost through the
+// handed-out pointer would resize the row. A gesture is a read, and a read
 // leaves the cache byte-identical.
 func TestShapingAHandedOutRowLeavesTheCachedRowAlone(t *testing.T) {
 	c := New()

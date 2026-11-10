@@ -96,7 +96,7 @@ func TestEveryGestureIsNamed(t *testing.T) {
 		{nav.Gesture{Kind: nav.GestureAscend, PaneID: "p1", N: 2}, "pop", "ascend 2"},
 		{nav.Gesture{Kind: nav.GestureRestore, Raw: "/a"}, "restore", "restore /a"},
 		{nav.Gesture{Kind: nav.GestureRestoreFromHistory, Raw: "/b"}, "restore", "restore session /b"},
-		{nav.Gesture{Kind: nav.GesturePromote, OldID: "e7abcde"}, "promote", "promote ephemeral"},
+		{nav.Gesture{Kind: nav.GestureVisitMoved, Door: &pb.Tile{Id: "e7abcde"}}, "push", "follow a moved visit"},
 		{nav.Gesture{Kind: nav.GestureEnterLevel, Door: &pb.Tile{Id: "w7abcde"}}, "push", "enter workspace tile"},
 		{nav.Gesture{Kind: nav.GestureLeaveLevels, Count: 3}, "pop", "leave 3 levels"},
 		{nav.Gesture{Kind: nav.GestureLandLevel, TileID: "t7abcde"}, "pop", "land level"},
@@ -138,9 +138,10 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 		dragdrop.DropLink:          "link",
 		dragdrop.DropPaste:         "paste",
 		dragdrop.DropTemplate:      "template",
+		dragdrop.DropEndVisit:      "end the visit",
 	}
-	if len(want) != int(dragdrop.DropTemplate)+1 {
-		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropTemplate)+1)
+	if len(want) != int(dragdrop.DropEndVisit)+1 {
+		t.Fatalf("%d verdicts named, %d declared", len(want), int(dragdrop.DropEndVisit)+1)
 	}
 	for v, name := range want {
 		e := Drop(v, DropAt{Pane: "p1", Tile: "t7abcde", Grid: "g7abcde"})
@@ -153,7 +154,7 @@ func TestEveryDropVerdictIsNamed(t *testing.T) {
 			t.Errorf("verdict %d names %v", v, e.KV)
 		}
 	}
-	if got := Drop(dragdrop.DropTemplate+1, DropAt{}).Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropTemplate)+1) {
+	if got := Drop(dragdrop.DropEndVisit+1, DropAt{}).Msg; got != "unnamed verdict "+strconv.Itoa(int(dragdrop.DropEndVisit)+1) {
 		t.Errorf("an unnamed verdict reads %q", got)
 	}
 }

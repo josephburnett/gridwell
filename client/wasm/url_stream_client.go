@@ -36,9 +36,6 @@ type urlView struct {
 	// navDirty marks a page that navigated since place. The unload beacon
 	// reads it, because the teardown's IPC reply never arrives then.
 	navDirty bool
-	// lastURL is where the page last landed (urlview.Landed), for the promote
-	// gesture.
-	lastURL string
 	// lastTitle is for the unload beacon, which cannot wait for the bridge.
 	lastTitle string
 	// gen is main's view behind this handle, minted at place and kept by a
@@ -157,7 +154,6 @@ func (a *App) noteLandedAddress(v *urlView, landed string) {
 	if !ok {
 		return
 	}
-	v.lastURL = site
 	if urlview.WriteAddress(v.page, site, string(stored)) {
 		a.putEditedContent(v.tileID, []byte(site))
 	}
@@ -173,7 +169,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 	old := from.urlView
 	from.urlView = nil
 	v := a.urlViewIn(to, old.tileID, old.owns, old.page)
-	v.navDirty, v.lastURL, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.lastURL, old.lastTitle, old.gen, old.reloadOwed
+	v.navDirty, v.lastTitle, v.gen, v.reloadOwed = old.navDirty, old.lastTitle, old.gen, old.reloadOwed
 	a.local(to.ID).urlView = v
 	a.emit(traceevent.URLMove(fromID, to.ID, v.tileID))
 	urlConsole("move pane=%s→%s tile=%s", fromID, to.ID, v.tileID)
@@ -201,22 +197,9 @@ func (a *App) dropURLView(paneID string, v *urlView) {
 	a.draw()
 }
 
-// freezeTarget names the row a closing view's freeze is written to when it
-// is not the view's own tile, as the promote gesture does.
-type freezeTarget struct {
-	tileID string
-	gridID string
-}
-
 // closeURLStream tears the live view down and, when freeze is true, persists
 // the landed address and the capture urlview.Writeback shapes.
 func (a *App) closeURLStream(paneID string, freeze bool) {
-	a.closeURLStreamTo(paneID, nil, freeze)
-}
-
-// closeURLStreamTo is closeURLStream with the freeze redirected to target
-// (nil = the pane's own descended tile).
-func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool) {
 	pl, ok := a.localIf(paneID)
 	if !ok || pl.urlView == nil {
 		return
@@ -230,10 +213,6 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	if ct := a.cachedTileByID(tileID); ct != nil {
 		previewKey = rpc.ContentID(ct)
 	}
-	if target != nil {
-		tileID = target.tileID
-		previewKey = target.tileID
-	}
 	anchor := v.anchor
 	path := slices.Clone(v.path)
 	a.emit(traceevent.URLClose(paneID, tileID, freeze))
@@ -243,17 +222,13 @@ func (a *App) closeURLStreamTo(paneID string, target *freezeTarget, freeze bool)
 	release := a.persist.contentSaves.Hold(v.tileID)
 	a.bridgeRemove(paneID, func(jpeg []byte, url, title, history string) {
 		defer release()
-		// A promote's target was created carrying the visit's address.
-		if freeze && target == nil {
+		if freeze {
 			a.noteLandedAddress(v, url)
 			a.flushTileContent(v.tileID)
 		}
 		if c, ok := urlview.Writeback(freeze, v.owns,
 			urlview.Capture{JPEG: jpeg, Title: title, History: history}); ok {
 			gid := a.gridIDForPathFrom(anchor, path)
-			if target != nil {
-				gid = target.gridID
-			}
 			// No claim and no version bump, so a racing foreign writer cannot
 			// refuse it.
 			req := &gridwellv1.SetTileRequest{TileId: tileID,

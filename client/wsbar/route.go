@@ -32,9 +32,9 @@ const (
 	// ActionLeaveLevels pops out to Segment's level, for a workspace tile crumb or
 	// the leading close-only root.
 	ActionLeaveLevels
-	// ActionPromote arms the drag that lands the current ephemeral visit on
-	// the grid it is dropped on.
-	ActionPromote
+	// ActionVisitDrag arms the drag of Segment's ephemeral visit row, as of
+	// the tile it is; a release with no drag is the crumb's click.
+	ActionVisitDrag
 	// ActionAscend ascends to Segment's crumb.
 	ActionAscend
 	// ActionFocusColumn focuses the pane BandFocus names, which takes the bar.
@@ -64,9 +64,10 @@ type Click struct {
 	// SlotMenu is whether the slot's mode has a right-click menu at all; see
 	// circlemenu.For.
 	SlotMenu bool
-	// Promote is whether the pane's current visit is an ephemeral url, which
-	// makes its crumb a drag handle rather than an ascent.
-	Promote bool
+	// Visit is the chain index of the crumb standing for an ephemeral visit's
+	// row, a drag handle for either button; VisitOK is false for none.
+	Visit   int
+	VisitOK bool
 }
 
 // Hit's Segment is the crumb the action names, for the three crumb actions.
@@ -114,8 +115,12 @@ func RouteClick(in Click) Hit {
 		case inTitle:
 			return Hit{Action: ActionRename}
 		}
-		if s, ok := At(in.Segments, in.X); ok && in.Chain[s.Index].Workspace {
+		s, ok := At(in.Segments, in.X)
+		switch {
+		case ok && in.Chain[s.Index].Workspace:
 			return Hit{Action: ActionWorkspaceRename, Segment: s}
+		case ok && in.VisitOK && s.Index == in.Visit:
+			return Hit{Action: ActionVisitDrag, Segment: s}
 		}
 		return Hit{Action: ActionNone}
 	}
@@ -135,8 +140,8 @@ func RouteClick(in Click) Hit {
 	switch nc := in.Chain[s.Index]; {
 	case nc.Workspace || nc.CloseOnly:
 		return Hit{Action: ActionLeaveLevels, Segment: s}
-	case in.Promote && s.Index == len(in.Chain)-1:
-		return Hit{Action: ActionPromote, Segment: s}
+	case in.VisitOK && s.Index == in.Visit:
+		return Hit{Action: ActionVisitDrag, Segment: s}
 	}
 	return Hit{Action: ActionAscend, Segment: s}
 }

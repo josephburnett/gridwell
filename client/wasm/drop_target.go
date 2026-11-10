@@ -11,6 +11,7 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/shellpaste"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
@@ -30,6 +31,8 @@ type dropTarget struct {
 	// (shellTargetAt) or the tile the copy swatch copies (tileTargetAt); nil
 	// for any other target.
 	tile *gridwellv1.Tile
+	// door is the open door the cursor went through to gridID, "" for none.
+	door string
 }
 
 // pans is a drag that carries nothing and is no menu item's: it pans.
@@ -82,8 +85,8 @@ func (a *App) commitVerdict(in dragdrop.DropInput, d *dragState, t *dropTarget, 
 		at.Grid = t.gridID
 	}
 	a.emit(traceevent.Drop(v, at))
-	if at.Why == dragdrop.FingerNoFile {
-		a.reportErr(errsurface.Info, "drop", at.Why)
+	if why := dragdrop.Told(in); why != "" {
+		a.reportErr(errsurface.Info, "drop", why)
 	}
 	return v
 }
@@ -110,8 +113,14 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 		OverDelete: a.overDeleteButton(d, sx, sy),
 		Touch:      d.touch,
 	}
+	var scratchOf scratch.Grid
+	if p := a.tree.FindPane(d.originPaneID); p != nil && len(d.carried) > 0 {
+		scratchOf = a.scratchGridOf(p)
+	}
 	for _, r := range d.carried {
+		eph, known := scratch.Ephemeral(scratchOf, r.GetGridId())
 		in.CarriesFile = in.CarriesFile || rpc.OnDisk(r.GetId())
+		in.CarriesEphemeral = in.CarriesEphemeral || eph && known
 	}
 	if d.copySwatch {
 		in.CopySwatch = true
@@ -219,6 +228,7 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 			cellSize: cp.CellPx,
 			originX:  cp.OriginX,
 			originY:  cp.OriginY,
+			door:     n.Id,
 		}, true
 	}
 

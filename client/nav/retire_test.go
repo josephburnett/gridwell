@@ -136,17 +136,6 @@ func TestRetireVisitAfterTheLayoutIsHeld(t *testing.T) {
 		}
 	})
 
-	t.Run("a promote flushes after the relocate, then deletes", func(t *testing.T) {
-		m := New()
-		created := &gridwellv1.Tile{Id: "n1", Kind: rpc.KindURL, GridId: "g2", X: 4, Y: 5, W: 1, H: 1}
-		w := baseWorld(visitPane("pane1"), gridPane("pane2", "g2"))
-		w.Promote = &PromoteWorld{OldTile: &gridwellv1.Tile{Id: "v1", Kind: rpc.KindURL, GridId: "sg"}}
-		a := flushAwait(t, m.Do(promoteGesture(created), w), EffRelocatePane)
-		after := baseWorld(contentPane("pane1", "n1"), gridPane("pane2", "g2"))
-		if d := only(t, m.Resume(a.Token, Result{OK: true}, after), EffDeleteEphemeral); d.Tile.GetId() != "v1" || d.Tile.GetGridId() != "sg" {
-			t.Fatalf("deleted %+v, want the visit", d)
-		}
-	})
 }
 
 // A template's ephemeral copy can be a door or a workspace tile (Joe

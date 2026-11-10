@@ -10,6 +10,7 @@ import (
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
@@ -48,6 +49,14 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	// swatch.
 	if d.menuPress && !d.started {
 		a.clickMenuItem(d)
+		return true
+	}
+	// A visit's crumb released without a drag is the crumb's click.
+	if d.visit != nil && !d.started {
+		if p := a.tree.FindPane(d.originPaneID); p != nil {
+			a.ascend(p, p.AscentsTo(*d.visit), true)
+		}
+		a.draw()
 		return true
 	}
 
@@ -122,6 +131,13 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 		a.runDeleteTile(d, nil)
 		a.ghost = nil
 		a.draw()
+	case dragdrop.DropEndVisit:
+		// The ascent out of the visit is the one way it ends (nav.retireVisit).
+		a.ghost = nil
+		if p := a.tree.FindPane(d.originPaneID); p != nil && d.visit != nil {
+			a.ascend(p, p.AscentsTo(*d.visit)+1, true)
+		}
+		a.draw()
 	case dragdrop.DropRejected:
 		a.cancelDragSnapBack(d)
 	case dragdrop.DropPaste:
@@ -179,6 +195,15 @@ func (a *App) commitMove(d *dragState, t *dropTarget, dropX, dropY int64) {
 			H:      row.H,
 			Claim:  rpc.PlacementOf(row),
 		}, snapBack))
+	}
+	if d.visit != nil {
+		// The visiting pane follows the row once it has landed.
+		landed := ws[0].then
+		ws[0].then = func() {
+			landed()
+			a.runGesture(nav.Gesture{Kind: nav.GestureVisitMoved, PaneID: d.originPaneID,
+				DestPaneID: t.pane.ID, Door: a.cachedTileByID(d.tileID), TileID: t.door})
+		}
 	}
 	a.postInOrder(ws)
 }

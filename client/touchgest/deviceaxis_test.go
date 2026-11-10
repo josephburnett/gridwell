@@ -182,7 +182,7 @@ func barRegion(zone wsbar.Zone, x float64) verdict {
 				{Crumb: pane.Crumb{TileID: "w1", ParentAnchor: "g/1"}},
 				{Crumb: pane.Crumb{TileID: "w2", ParentAnchor: "g/1", ParentPath: []string{"w1"}}},
 			},
-			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true, Promote: true,
+			TitleX: 200, TitleW: 80, TitleOK: true, SlotMenu: true, Visit: 2, VisitOK: true,
 		})
 		barActions[h.Action] = true
 		return fmt.Sprint("bar ", h.Action), true

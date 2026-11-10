@@ -231,9 +231,9 @@ test('Esc on a swatch drag-create makes nothing', async ({ gw, window }) => {
 });
 
 // The press, the move, Esc and the release in one synchronous turn, as in
-// ephemeral-promote.spec.ts: arming the drag parks the live view, and the layer
+// visit-crumb-drag.spec.ts: arming the drag parks the live view, and the layer
 // change under the real cursor would otherwise read as a lost release.
-test('Esc on the ephemeral crumb drag promotes nothing', async ({ electronApp, window, gw }) => {
+test('Esc on the ephemeral crumb drag moves nothing', async ({ electronApp, window, gw }) => {
   await gw.enterSource('home');
   const home = await gw.focused();
   await gw.splitFocusedPaneVertical();
@@ -278,7 +278,7 @@ test('Esc on the ephemeral crumb drag promotes nothing', async ({ electronApp, w
   await gw.waitIdle();
 
   const urls = ((await gw.getGrid(home.gridID)).tiles ?? []).filter((t) => t.kind === 'url');
-  expect(urls, 'no url tile was promoted onto the grid').toEqual([]);
+  expect(urls, 'no url tile was moved onto the grid').toEqual([]);
   expect((await gw.focused()).textFocus, 'the pane is still on its visit').toBe(visiting.textFocus);
   expect(writes(), 'no write left the client').toEqual([]);
 });

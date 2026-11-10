@@ -330,19 +330,6 @@ func StillDescended(p *Pane, tileID string) bool {
 	return p != nil && p.ContentID() == tileID
 }
 
-// RelocateTo moves pane p to where dest stands and descends it into tileID, so
-// the nav chain and the next ascent read the new place. The frame comes from
-// ContentFrame, so a promoted pane is in every way a descended pane.
-func (p *Pane) RelocateTo(dest *Pane, tileID string, foot Footprint, zoom float64) {
-	p.Stack = dest.Stack.Copy()
-	if p.Content {
-		// A destination already in a content descent is replaced rather than
-		// stacked on: the pane follows its content, one level deep.
-		p.Pop()
-	}
-	p.Push(ContentFrame(tileID, foot, zoom, "", 0, 0))
-}
-
 // GridNotice is the one wording for a pane whose grid is not cached: the wait
 // while a fetch is in flight, or the failure once one failed. name is the
 // source's label when known, else the grid id.

@@ -195,8 +195,8 @@ func (m *Machine) Do(g Gesture, w World) Plan {
 		return m.leaveLevels(g, w)
 	case GestureLandLevel:
 		return m.landLevel(g, w)
-	case GesturePromote:
-		return m.promote(g, w)
+	case GestureVisitMoved:
+		return m.visitMoved(g, w)
 	case GestureFollowLink:
 		return m.followLink(g, w)
 	case GestureReconcileLevel:

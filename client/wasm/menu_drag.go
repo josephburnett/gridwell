@@ -146,7 +146,6 @@ func (a *App) clickMenuItem(d *dragState) {
 	pr, _ := primitiveFor(d.item.primitive)
 	switch menu.ClickOn(menu.Swatch{
 		IsSwatch:   d.item.isSwatch,
-		Promote:    d.item.promotePane != "",
 		Visits:     pr.click != nil,
 		Template:   d.item.template != nil,
 		CopySwatch: d.item.copySwatch,
@@ -209,8 +208,7 @@ func (a *App) visitShellFromMenu(p *pane.Pane) {
 func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 	pr, isPrimitive := primitiveFor(d.item.primitive)
 	r := menu.Release{Target: t != nil, Door: d.item.isSwatch,
-		Promote: d.item.primitive == primURL && d.item.promotePane != "",
-		Disk:    !d.item.isSwatch && isPrimitive && pr.disk}
+		Disk: !d.item.isSwatch && isPrimitive && pr.disk}
 	if r.Target {
 		// The target's grid is the open door's child when the cursor went
 		// into one, not the pane's own leaf grid.
@@ -239,11 +237,6 @@ func (a *App) commitMenuDrop(d *dragState, t *dropTarget, dropX, dropY int64) {
 		// qualified.
 		a.landGhostAtCell(t, dropX, dropY)
 		a.createSourceLinkAtCell(t.gridID, d.item.source, dropX, dropY)
-	case menu.DropPromote:
-		// The ephemeral url off the bar's crumb becomes a persistent tile and
-		// the pane relocates onto it.
-		a.landGhostAtCell(t, dropX, dropY)
-		a.promoteEphemeralURL(d.item.promotePane, t.pane.ID, t.gridID, dropX, dropY)
 	case menu.DropCreate:
 		// A Gridwell tile's drop never prompts: whatever a kind needs is
 		// asked for on the first descent. A file or a directory is named

@@ -1,8 +1,8 @@
 package menu
 
-// What a menu drag's release does. The + menu's swatches and the bar's
-// promote crumb ride the same drag, so one verdict answers for every one of
-// them, and a release that creates nothing still says why.
+// What a menu drag's release does. Every swatch rides the same drag, so one
+// verdict answers for every one of them, and a release that creates nothing
+// still says why.
 
 type Drop int
 
@@ -15,9 +15,6 @@ const (
 	DropRefuse
 	// DropLink places a door to another namespace onto the door's root grid.
 	DropLink
-	// DropPromote turns the bar's ephemeral visit into a persistent tile and
-	// relocates the pane onto it.
-	DropPromote
 	// DropCreate creates the primitive the swatch names.
 	DropCreate
 )
@@ -42,8 +39,6 @@ type Release struct {
 	// SameNode is whether the destination belongs to the node whose menu
 	// offered the swatch.
 	SameNode bool
-	// Promote marks the bar's current-visit crumb.
-	Promote bool
 	// Disk marks the file or directory swatch, and DiskWritable the
 	// destination's Offer.Disk: a name made on disk lands only on a
 	// writable directory's grid.
@@ -63,8 +58,6 @@ func DropOn(r Release) Drop {
 		return DropSnapBack
 	case !r.SameNode:
 		return DropRefuse
-	case r.Promote:
-		return DropPromote
 	case r.Disk && !r.DiskWritable:
 		return DropSnapBack
 	}

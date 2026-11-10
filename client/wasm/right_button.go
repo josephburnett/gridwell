@@ -6,7 +6,6 @@ import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
-	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/dragdrop"
@@ -31,10 +30,10 @@ const (
 	// rightDragTileResize is armed outside that center. The pin is the corner
 	// diagonally opposite the click quadrant; the cursor may cross it.
 	rightDragTileResize
-	// rightDragTemplate is armed on a right-down on a template in the + menu's
-	// strip: the copy or link drag of its row, a.dragging; a bare release is
-	// a no-op, as on a tile's center.
-	rightDragTemplate
+	// rightDragCarry is armed on a right-down on a template in the + menu's
+	// strip or a visit's crumb in the bar: the copy or link drag of its row,
+	// a.dragging; a bare release is a no-op, as on a tile's center.
+	rightDragCarry
 )
 
 type rightDragState struct {
@@ -75,8 +74,8 @@ type rightDragState struct {
 // rightDragIntent reads the press's modifier: ctrl flips the right button from
 // copy to link. It is the one place that reading lives, and the intent is fixed
 // at the press, so letting the key go mid-drag changes nothing.
-func rightDragIntent(ev js.Value) dragdrop.Intent {
-	if ev.Truthy() && ev.Get("ctrlKey").Truthy() {
+func rightDragIntent(ctrl bool) dragdrop.Intent {
+	if ctrl {
 		return dragdrop.IntentLink
 	}
 	return dragdrop.IntentCopy
@@ -201,7 +200,7 @@ func (a *App) onRightMove(sx, sy float64) {
 	case rightDragTileCenter:
 		rd.cursorInCenter = inTileCenter(rd.tileNode, rd.tilePane, rd.tilePaneR, sx, sy)
 		a.advanceCopyDrag(sx, sy)
-	case rightDragTemplate:
+	case rightDragCarry:
 		a.advanceCopyDrag(sx, sy)
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
@@ -309,7 +308,7 @@ func (a *App) finishRightDrag(sx, sy float64) {
 		a.commitSwap(rd, sx, sy)
 	case rd.kind == rightDragSplit:
 		a.commitSplit(rd, sx, sy)
-	case rd.kind == rightDragTileCenter, rd.kind == rightDragTemplate:
+	case rd.kind == rightDragTileCenter, rd.kind == rightDragCarry:
 		a.commitTileCenter(sx, sy)
 	case rd.kind == rightDragTileResize:
 		a.commitTileResize(rd)

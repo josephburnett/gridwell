@@ -24,8 +24,8 @@ func For(g Grid) (id string, known bool) {
 }
 
 // Ephemeral reports whether a tile in tileGridID is an ephemeral visit from a
-// pane standing on g. Unknown is not false: deleting one on ascent or promoting
-// it needs a known yes, and dropping it from a captured arrangement or
+// pane standing on g. Unknown is not false: deleting one on ascent or
+// dragging its crumb needs a known yes, and dropping it from a captured arrangement or
 // re-anchoring a pane onto it a known no.
 func Ephemeral(g Grid, tileGridID string) (ephemeral, known bool) {
 	id, known := For(g)

@@ -17,7 +17,7 @@ func TestEscape(t *testing.T) {
 		{"crush: a resize pressed past the wall", Armed{LeftResize: true}, Undo{Dividers: true}, true},
 		{"pan", Armed{Drag: true, Pan: true}, Undo{View: true}, true},
 		{"tile move, in a pane or across one", Armed{Drag: true}, Undo{Ghost: true}, true},
-		{"swatch drag-create and the crumb's promote drag", Armed{Drag: true}, Undo{Ghost: true}, true},
+		{"swatch drag-create and a visit crumb's drag", Armed{Drag: true}, Undo{Ghost: true}, true},
 		{"right-drag copy", Armed{RightDrag: true, Drag: true, DragCreates: true}, Undo{Ghost: true}, true},
 		{"ctrl + right-drag link", Armed{RightDrag: true, Drag: true, DragCreates: true}, Undo{Ghost: true}, true},
 		{"tile resize, pane swap, pane split: previews only", Armed{RightDrag: true}, Undo{}, true},

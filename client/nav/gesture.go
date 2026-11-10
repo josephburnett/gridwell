@@ -16,9 +16,11 @@ const (
 	// focused pane), Raw, Reset.
 	GestureRestore
 	GestureRestoreFromHistory // installs a whole session place: Raw
-	// GesturePromote turns an ephemeral visit into a persistent tile: PaneID,
-	// DestPaneID, OldID, Created.
-	GesturePromote
+	// GestureVisitMoved re-roots a pane whose place holds a visit's row once
+	// the row's move landed: PaneID, DestPaneID, Door (the row as it landed),
+	// TileID (the open door of DestPaneID's grid the drop went through, "" for
+	// none).
+	GestureVisitMoved
 	GestureEnterLevel  // descends the window into a workspace tile: PaneID, Door
 	GestureLeaveLevels // Count
 	// GestureLandLevel finishes one leave hop against the tree the pop
@@ -58,8 +60,6 @@ type Gesture struct {
 	// restore lands over whatever the pane already shows.
 	Reset      bool
 	DestPaneID string
-	OldID      string
-	Created    *gridwellv1.Tile
 	TileID     string
 	GridID     string
 	Count      int

@@ -6,12 +6,11 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"syscall/js"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/barslot"
 	"github.com/josephburnett/gridwell/client/bartitle"
 	"github.com/josephburnett/gridwell/client/contentrow"
+	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
@@ -398,10 +397,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 		}
 		if p != nil {
 			in.SlotMenu = a.slotHasMenu(p)
-			if t, ok := a.descendedTile(p); ok && rpc.WebContent(t) &&
-				a.certainlyEphemeral(p, t) {
-				visit, in.Promote = t, true
-			}
+			visit, in.Visit, in.VisitOK = a.visitCrumb(p, in.Chain)
 		}
 	}
 	hit := wsbar.RouteClick(in)
@@ -428,8 +424,9 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 		// session, whose own state the bar never touches.
 		a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels,
 			Count: a.ws.PopCountTo(in.Chain[hit.Segment.Index].WsLevel)})
-	case wsbar.ActionPromote:
-		a.startPromoteDrag(p, visit, hit.Segment, bx, top, sx, sy)
+	case wsbar.ActionVisitDrag:
+		a.startVisitDrag(p, visit, in.Chain[hit.Segment.Index].Crumb, hit.Segment, bx, top, sx, sy,
+			button, mods.Ctrl)
 	case wsbar.ActionSelect:
 		// A tile crumb is drawn only under a focused pane (NavChain).
 		a.toggleCrumb(p.ID, in.Chain[hit.Segment.Index])
@@ -443,32 +440,52 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 	return true
 }
 
-// startPromoteDrag arms the promote drag from the bar's current crumb, as a
-// menu-shaped drag whose item carries the origin pane.
-func (a *App) startPromoteDrag(p *pane.Pane, t *gridwellv1.Tile, seg wsbar.Segment, bx, top, sx, sy float64) {
-	square := min(seg.W, wsbar.RowH)
-	// cache.Grid hands out the cached rows themselves, so the ghost is a
-	// copy: shaping it to 1x1 through t would resize the visit the crumb is
-	// standing on.
-	ghost := proto.CloneOf(t)
-	ghost.W, ghost.H = 1, 1
-	a.dragging = &dragState{
-		originPaneID:  p.ID,
-		fromMenu:      true,
-		menuPress:     true,
-		item:          menuItem{primitive: primURL, promotePane: p.ID},
-		menuNS:        a.paneNodeNS(p),
-		startScreenX:  sx,
-		startScreenY:  sy,
-		curScreenX:    sx,
-		curScreenY:    sy,
-		cellOffsetX:   0.5,
-		cellOffsetY:   0.5,
-		snapshotTile:  ghost,
-		originScreenX: bx + seg.X,
-		originScreenY: top,
-		srcCellSize:   square,
+// visitCrumb is the row and the chain index of the crumb standing for an
+// ephemeral visit in p's place, wherever it sits; false for none. A door
+// visit's frame carries its grid, so its crumb is the grid's, and the row is
+// read off the frame.
+func (a *App) visitCrumb(p *pane.Pane, chain []pane.NavCrumb) (*gridwellv1.Tile, int, bool) {
+	frames := p.Frames()
+	for i, nc := range chain {
+		if nc.Workspace || nc.CloseOnly || nc.Crumb.Level >= len(frames) || frames[nc.Crumb.Level].Door == "" {
+			continue
+		}
+		if t := a.cachedTileByID(frames[nc.Crumb.Level].Door); t != nil && a.certainlyEphemeral(p, t) {
+			return t, i, true
+		}
 	}
+	return nil, 0, false
+}
+
+// startVisitDrag arms the drag of visit row t from its crumb, as any tile's
+// drag is armed (startTemplateDrag): it carries the row from the scratch
+// grid, so dragdrop.DecideDrop decides as for every tile. The right button
+// copies, or with ctrl links, through the right-button release; a left
+// release with no drag is the crumb's click.
+func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, cr pane.Crumb, seg wsbar.Segment, bx, top, sx, sy float64, button int, ctrl bool) {
+	// The square drawChainCrumb paints the row in.
+	square := min(seg.W, wsbar.RowH)
+	side := square - 2
+	x, y := bx+seg.X+(square-side)/2, top+(wsbar.RowH-side)/2
+	cell := pane.SquareCell(side, t)
+	intent := dragdrop.IntentMove
+	if button == 2 {
+		intent = rightDragIntent(ctrl)
+		a.rightDrag = &rightDragState{kind: rightDragCarry, startX: sx, startY: sy, curX: sx, curY: sy}
+	}
+	a.dragging = &dragState{
+		originPaneID: p.ID,
+		visit:        &cr,
+		intent:       intent,
+		startScreenX: sx,
+		startScreenY: sy,
+		curScreenX:   sx,
+		curScreenY:   sy,
+		srcGridID:    t.GridId,
+		srcCellSize:  cell,
+		carried:      []*gridwellv1.Tile{t},
+	}
+	a.dragging.grabTile(t, float64(t.X)+(sx-x)/cell, float64(t.Y)+(sy-y)/cell, x, y)
 }
 
 // openWorkspaceRenameInput opens the shared inline rename input over the
