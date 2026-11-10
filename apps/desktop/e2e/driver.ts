@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { ElectronApplication, Page } from '@playwright/test';
 import { getGrid, getTileContent, GridSnapshot } from './oracle';
 
 // GridwellDriver is the gesture layer the e2e tests are written against. It
@@ -333,6 +333,20 @@ export class GridwellDriver {
   // time mouse.up() resolves the handler has armed whatever this waits on.
   async waitIdle(timeout = 20_000): Promise<void> {
     await this.win.waitForFunction(() => (window as any).__gridwellTest.idle(), null, { timeout });
+  }
+
+  // Sets the window's content to w x h and returns once the client has laid
+  // its canvas out at that size (its resize handler sizes the canvas). The
+  // main process answers setContentSize before the renderer sees the new
+  // size, so a geometry read right after it can be of the old layout, and
+  // idle cannot know of a size it has not been sent.
+  async resizeWindow(app: ElectronApplication, w: number, h: number): Promise<void> {
+    await app.evaluate(({ BaseWindow }, [cw, ch]) => BaseWindow.getAllWindows()[0].setContentSize(cw, ch), [w, h]);
+    await this.win.waitForFunction(([cw, ch]) => {
+      const c = document.querySelector('canvas');
+      return c?.style.width === `${cw}px` && c?.style.height === `${ch}px`;
+    }, [w, h]);
+    await this.waitIdle();
   }
 
   // ── Gestures ────────────────────────────────────────────────────────────

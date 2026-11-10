@@ -86,9 +86,8 @@ test('two levels down, across a window resize', async ({ gw, window, electronApp
   const deeper = await doorTo(gw, (await gw.focused()).gridID, 'deeper');
   let w = 1180;
   await roundTrip(gw, window, Number(deeper.x ?? 0), Number(deeper.y ?? 0), async () => {
-    await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setSize(width, 760), w);
+    await gw.resizeWindow(electronApp, w, 720);
     w -= 100;
-    await gw.waitIdle();
   });
 });
 

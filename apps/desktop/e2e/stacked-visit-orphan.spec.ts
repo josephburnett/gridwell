@@ -40,10 +40,8 @@ test('a stacked visit in place tears the outgoing live view down as the pane lea
   // Shrink the window below two minimum panes plus the bar's reserved row
   // (pane.MinPanePx is 32, wsbar.RowH is 32), so the link's split is refused
   // and the visit lands in this pane.
-  await electronApp.evaluate(({ BaseWindow }) => {
-    BaseWindow.getAllWindows()[0].setContentSize(1000, 90);
-  });
-  await expect.poll(async () => (await gw.panes())[0]?.h ?? 999, { timeout: 10_000 }).toBeLessThan(64);
+  await gw.resizeWindow(electronApp, 1000, 90);
+  expect((await gw.panes())[0]?.h ?? 999, 'too short for a split').toBeLessThan(64);
 
   // Stretch the descent animation so the gap is wide enough to sample: the
   // pane's place pops to the grid at the start of the descent and only lands on
