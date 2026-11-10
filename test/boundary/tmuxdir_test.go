@@ -11,8 +11,9 @@ import (
 )
 
 // A node started by a test writes its tmux directory (tmux.New) under
-// TMPDIR, and nothing removes it, since a real node's tmuxes outlive it. So a
-// test run must leave TMPDIR as it found it.
+// TMPDIR, and nothing removes it, since a real node's tmuxes outlive it; a
+// tmux server leaves its socket under TMUX_TMPDIR. So a test run that starts
+// a node, a tmux and a shell's tmux must leave both as it found them.
 func TestANodeTestLeavesNothingInTMPDIR(t *testing.T) {
 	// Not t.TempDir: a node's sockets sit under it, and unix socket paths are
 	// short.
@@ -21,18 +22,24 @@ func TestANodeTestLeavesNothingInTMPDIR(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
-	cmd := exec.Command("go", "test", "-count=1", "-run", "^TestCloseIsIdempotent$", "./internal/node/")
+	cmd := exec.Command("go", "test", "-count=1",
+		"-run", "^(TestCloseIsIdempotent|TestCreateThenHasThenKill|TestAPasteTypesIntoARealTmux)$",
+		"./internal/node/", "./internal/local/tmux/", "./internal/server/")
 	cmd.Dir = repoRoot(t)
-	cmd.Env = append(os.Environ(), "TMPDIR="+tmp)
+	cmd.Env = append(os.Environ(), "TMPDIR="+tmp, "TMUX_TMPDIR="+tmp)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("go test ./internal/node: %v\n%s", err, out)
+		t.Fatalf("go test: %v\n%s", err, out)
 	}
-	left, err := filepath.Glob(filepath.Join(tmp, "gridwell-tmux-*"))
-	if err != nil {
-		t.Fatal(err)
+	var left []string
+	for _, pattern := range []string{"gridwell-tmux-*", "tmux-*/*"} {
+		m, err := filepath.Glob(filepath.Join(tmp, pattern))
+		if err != nil {
+			t.Fatal(err)
+		}
+		left = append(left, m...)
 	}
 	if len(left) > 0 {
-		t.Errorf("a node test left %v in TMPDIR", left)
+		t.Errorf("the tests left %v in TMPDIR or TMUX_TMPDIR", left)
 	}
 }
 
