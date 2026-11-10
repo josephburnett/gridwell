@@ -93,3 +93,14 @@ func TestADoorAndThePaneItOpensAgree(t *testing.T) {
 		}
 	}
 }
+
+// TestSquareCellFillsTheSquare pins that a 2x1 tile is drawn at half the
+// side, so its preview fills the square, and an unsized one at the side.
+func TestSquareCellFillsTheSquare(t *testing.T) {
+	if got := SquareCell(48, &gridwellv1.Tile{W: 2, H: 1}); got != 24 {
+		t.Errorf("SquareCell(48, 2x1) = %v, want 24", got)
+	}
+	if got := SquareCell(48, &gridwellv1.Tile{}); got != 48 {
+		t.Errorf("SquareCell(48, 0x0) = %v, want 48", got)
+	}
+}

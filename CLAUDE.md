@@ -700,10 +700,11 @@ These were decided deliberately. Do not reverse one without a new decision.
   rows of at most five, as the primitives are, the templates' rows first,
   the copy swatch then the templates newest first, then the swatches' rows,
   the two never sharing a row; three rows show and the rest scroll in the
-  strip. A template is a tile and is drawn as it is on a grid. Left-drag,
-  right-drag and ctrl + right-drag of one move, copy and link it as of any
-  tile, a drop on a shell pastes its reference and the trashcan deletes it,
-  so the strip behaves as a copy buffer. A click opens an ephemeral copy:
+  strip. A template is drawn as its crumb is in the bar: its preview
+  filling the square slot, its kind's border on it (`pane.SquareCell`, Joe
+  2026-11-10). Left-drag, right-drag and ctrl + right-drag of one move,
+  copy and link it as of any tile, a drop on a shell pastes its reference
+  and the trashcan deletes it, so the strip behaves as a copy buffer. A click opens an ephemeral copy:
   the copy is made on the scratch grid first, deep as every copy is (a
   shell's naming the template's tmux), and the visit descends into it, for
   every kind, so the template's row, preview included, is never touched.

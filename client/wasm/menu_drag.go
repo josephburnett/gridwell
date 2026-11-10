@@ -75,7 +75,7 @@ func (a *App) startMenuDrag(p *pane.Pane, r pane.Rect, idx int, sx, sy float64) 
 // dragdrop.DecideDrop decides as it does for every tile. The strip is only
 // where the ghost starts.
 func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy float64, intent dragdrop.Intent) {
-	cell, at := menu.Fit(a.menuLayoutFor(p).TileRect(i), n.W, n.H)
+	r := a.menuLayoutFor(p).TileRect(i)
 	a.dragging = &dragState{
 		originPaneID: p.ID,
 		menuPress:    true,
@@ -87,9 +87,9 @@ func (a *App) startTemplateDrag(p *pane.Pane, i int, n *gridwellv1.Tile, sx, sy 
 		curScreenX:   sx,
 		curScreenY:   sy,
 		srcGridID:    a.templates,
-		srcCellSize:  cell,
+		srcCellSize:  pane.SquareCell(min(r.W, r.H), n),
 	}
-	a.dragging.grabTile(n, float64(n.X)+(sx-at.X)/cell, float64(n.Y)+(sy-at.Y)/cell, at.X, at.Y)
+	a.dragging.grabTile(n, float64(n.X)+(sx-r.X)/r.W*float64(max(n.W, 1)), float64(n.Y)+(sy-r.Y)/r.H*float64(max(n.H, 1)), r.X, r.Y)
 	a.dragging.carried = a.carryRows(a.templates, n)
 }
 

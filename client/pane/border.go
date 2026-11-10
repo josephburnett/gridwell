@@ -55,6 +55,12 @@ func TileFamily(t *gridwellv1.Tile) theme.Family {
 	return theme.FamilyMuted
 }
 
+// SquareCell is the cell a tile is drawn at to fill a square of side, read
+// by the bar's crumb and the strip's template so the two cannot differ.
+func SquareCell(side float64, t *gridwellv1.Tile) float64 {
+	return side / float64(max(t.GetW(), t.GetH(), 1))
+}
+
 // GridFamily is a grid's family: a directory is outside the system.
 func GridFamily(gridID string) theme.Family {
 	if rpc.IsFilesID(gridID) {

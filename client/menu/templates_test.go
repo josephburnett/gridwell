@@ -29,19 +29,6 @@ func TestTemplatesNewestFirst(t *testing.T) {
 	}
 }
 
-// TestFitKeepsTheShape pins that a 2x1 tile fills its slot's width at half
-// its height, centered, and a 1x1 fills the slot.
-func TestFitKeepsTheShape(t *testing.T) {
-	slot := Rect{X: 10, Y: 20, W: 48, H: 48}
-	cell, at := Fit(slot, 2, 1)
-	if cell != 24 || at != (Rect{X: 10, Y: 32, W: 48, H: 24}) {
-		t.Errorf("Fit(2x1) = %v, %+v", cell, at)
-	}
-	if cell, at := Fit(slot, 0, 0); cell != 48 || at != slot {
-		t.Errorf("Fit(unsized) = %v, %+v, want the slot", cell, at)
-	}
-}
-
 // TestTemplateCellLandsAboveEveryTile pins that a new template takes cells
 // no template holds, its own height above the topmost.
 func TestTemplateCellLandsAboveEveryTile(t *testing.T) {

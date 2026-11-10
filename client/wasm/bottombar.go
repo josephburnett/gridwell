@@ -341,11 +341,7 @@ func (a *App) drawChainCrumb(cr pane.Crumb, s wsbar.Segment, top float64, select
 			c.Set("lineWidth", 1.0)
 			c.Call("strokeRect", x+0.5, y+0.5, side-1, side-1)
 		} else if t := a.chainCrumbTile(cr); t != nil {
-			cells := float64(max(t.W, t.H))
-			if cells < 1 {
-				cells = 1
-			}
-			a.drawNodeWithPreview(t, x, y, side, side, side/cells, false, pane.TileFamily(t), isLinkTile(t), "")
+			a.drawNodeWithPreview(t, x, y, side, side, pane.SquareCell(side, t), false, pane.TileFamily(t), isLinkTile(t), "")
 		} else {
 			// The row is not cached, so draw a placeholder; the fetch kicked
 			// by chainCrumbTile fills it in.

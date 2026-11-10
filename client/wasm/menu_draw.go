@@ -210,11 +210,10 @@ func (a *App) drawMenuItem(item menuItem, x, y, w, h float64, hovered bool) {
 	}
 }
 
-// drawTemplate draws a template as its tile is drawn on a grid, fitted to
-// its slot (menu.Fit).
+// drawTemplate draws a template as its crumb is drawn in the bar: its
+// preview filling the square slot, its kind's border on it.
 func (a *App) drawTemplate(n *gridwellv1.Tile, x, y, w, h float64) {
-	cell, at := menu.Fit(pane.Rect{X: x, Y: y, W: w, H: h}, n.W, n.H)
-	a.drawNodeWithPreview(n, at.X, at.Y, at.W, at.H, cell, false, pane.TileFamily(n), isLinkTile(n), "")
+	a.drawNodeWithPreview(n, x, y, w, h, pane.SquareCell(min(w, h), n), false, pane.TileFamily(n), isLinkTile(n), "")
 }
 
 // drawCopySwatch is the strip's first item: dashed, grey on the menu's
