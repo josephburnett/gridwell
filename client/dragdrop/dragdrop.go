@@ -294,8 +294,9 @@ type DropInput struct {
 	// a move to another grid and a delete (FingerNoFile).
 	Touch, CarriesFile bool
 	// CarriesEphemeral is a carried row on the scratch grid (rpc.Ephemeral):
-	// a visit's crumb, which links nowhere (EphemeralNoLink) and whose
-	// trashcan is the ascent (DropEndVisit).
+	// a visit's crumb, which links nowhere (EphemeralNoLink), moves across
+	// no connection (EphemeralNoFarMove) and whose trashcan is the ascent
+	// (DropEndVisit).
 	CarriesEphemeral bool
 }
 
@@ -309,10 +310,14 @@ const FingerNoFile = "a finger does not move or delete a file; use a mouse"
 // refused: no link holds a visit, so the link would read dead once it ends.
 const EphemeralNoLink = "a link to an ephemeral visit would die with it"
 
+// EphemeralNoFarMove is why a left-drag of a visit across a connection, which
+// would link, is refused as the move it is (Joe, 2026-11-11).
+const EphemeralNoFarMove = "an ephemeral visit does not move across a connection"
+
 // Told is the reason a refused drop tells the user, "" when it says nothing.
 func Told(in DropInput) string {
 	switch why := WhyRejected(in); why {
-	case FingerNoFile, EphemeralNoLink:
+	case FingerNoFile, EphemeralNoLink, EphemeralNoFarMove:
 		return why
 	}
 	return ""
@@ -399,8 +404,9 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropPaste, ""
 	case in.Touch && in.CarriesFile && in.Intent == IntentMove && !in.SameGrid && !in.MovesAsLink:
 		return DropRejected, FingerNoFile
-	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentMove && in.MovesAsLink ||
-		in.Intent == IntentCopy && in.CopiesAsLink):
+	case in.CarriesEphemeral && in.Intent == IntentMove && in.MovesAsLink:
+		return DropRejected, EphemeralNoFarMove
+	case in.CarriesEphemeral && (in.Intent == IntentLink || in.Intent == IntentCopy && in.CopiesAsLink):
 		return DropRejected, EphemeralNoLink
 	case in.Forbidden:
 		return DropRejected, "forbidden"

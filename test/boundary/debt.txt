@@ -81,3 +81,4 @@ low-water | packages | 78
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a click on a template visits an ephemeral copy | 92
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): the copy swatch copies a tile into the templates | 104
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a drag between the strip's items scrolls it | 27
+2026-11-11 | a visit does not move across a connection (Joe, 2026-11-11): a left-drag of an ephemeral visit onto a far grid is refused as the move it is, told as information | 6

@@ -820,37 +820,40 @@ func TestCopySwatchDrop(t *testing.T) {
 
 // An ephemeral visit's crumb drags as the tile it is (CLAUDE.md, 2026-11-10):
 // it moves and copies as any row, but a drop that would link to it is
-// refused with the reason, and the trashcan ends the visit.
+// refused with the reason, a left-drag across a connection with the move's
+// own (2026-11-11), and the trashcan ends the visit.
 func TestAVisitLinksNowhere(t *testing.T) {
 	base := DropInput{Started: true, TileID: "7", HasTarget: true}
 	cases := []struct {
 		name       string
 		in         func(*DropInput)
 		row, visit DropAction
+		told       string
 	}{
-		{"a left-drag that moves", func(in *DropInput) {}, DropMove, DropMove},
-		{"a left-drag across a connection", func(in *DropInput) { in.MovesAsLink = true }, DropLink, DropRejected},
-		{"a right-drag that copies", func(in *DropInput) { in.Intent = IntentCopy }, DropCopy, DropCopy},
-		{"a right-drag that copies as a link", func(in *DropInput) { in.Intent, in.CopiesAsLink = IntentCopy, true }, DropLink, DropRejected},
-		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected},
-		{"a drop on a shell", func(in *DropInput) { in.OntoShell, in.Intent = true, IntentLink }, DropPaste, DropPaste},
-		{"the trashcan", func(in *DropInput) { in.HasTarget, in.OverDelete = false, true }, DropDelete, DropEndVisit},
+		{"a left-drag that moves", func(in *DropInput) {}, DropMove, DropMove, ""},
+		{"a left-drag across a connection", func(in *DropInput) { in.MovesAsLink = true }, DropLink, DropRejected, EphemeralNoFarMove},
+		{"a right-drag that copies", func(in *DropInput) { in.Intent = IntentCopy }, DropCopy, DropCopy, ""},
+		{"a right-drag that copies as a link", func(in *DropInput) { in.Intent, in.CopiesAsLink = IntentCopy, true }, DropLink, DropRejected, EphemeralNoLink},
+		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected, EphemeralNoLink},
+		{"a ctrl + right-drag across a connection", func(in *DropInput) { in.Intent, in.MovesAsLink, in.CopiesAsLink = IntentLink, true, true }, DropLink, DropRejected, EphemeralNoLink},
+		{"a drop on a shell", func(in *DropInput) { in.OntoShell, in.Intent = true, IntentLink }, DropPaste, DropPaste, ""},
+		{"the trashcan", func(in *DropInput) { in.HasTarget, in.OverDelete = false, true }, DropDelete, DropEndVisit, ""},
 	}
 	for _, c := range cases {
 		for _, eph := range []bool{false, true} {
 			in := base
 			c.in(&in)
 			in.CarriesEphemeral = eph
-			want := c.row
+			want, told := c.row, ""
 			if eph {
-				want = c.visit
+				want, told = c.visit, c.told
 			}
 			if got := DecideDrop(in); got != want {
 				t.Errorf("%s, ephemeral %v: DecideDrop = %v, want %v", c.name, eph, got, want)
 			}
 			refused := DecideDrop(in) == DropRejected
-			if refused != NoEntry(in) || refused != (Told(in) == EphemeralNoLink) {
-				t.Errorf("%s, ephemeral %v: refused %v, NoEntry %v, told %q", c.name, eph, refused, NoEntry(in), Told(in))
+			if refused != NoEntry(in) || Told(in) != told {
+				t.Errorf("%s, ephemeral %v: refused %v, NoEntry %v, told %q, want %q", c.name, eph, refused, NoEntry(in), Told(in), told)
 			}
 		}
 	}

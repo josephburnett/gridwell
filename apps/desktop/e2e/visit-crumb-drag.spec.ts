@@ -228,3 +228,39 @@ test('a visit dropped on the trashcan ends as the ascent ends it', async ({ wind
   expect(await onGrid(gw, tg, tpl.id), 'the template stayed').toBeTruthy();
   expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
+
+test.describe('across a connection', () => {
+  test.use({ extraNodes: ['second'] });
+
+  // There is no move across a connection, and the link a left-drag makes
+  // there would die with the visit, so the move is refused and says so
+  // (Joe, 2026-11-11), as information.
+  test('a left-drag of a visit onto a far grid is refused as the move it is', async ({ window, gw }) => {
+    const origin = new URL(window.url()).origin;
+    const tg = await templatesGrid(window);
+    const tpl = await createText(origin, tg, 0, 0, 'a text that stays home');
+    const { home, dest } = await twoPanes(gw);
+    const visitor = await gw.focused();
+    await gw.clickScreen(dest.x + 20, dest.y + 20);
+    await gw.enterSource('second');
+    const far = (await gw.panes()).find((p) => p.id === dest.id)!;
+    expect(far.gridID, 'the other pane is on the far home').not.toBe(home.gridID);
+    await gw.clickScreen(visitor.x + 20, visitor.y + 20);
+    const scratch = await gw.scratchGridID('home');
+
+    await visitTemplate(window, gw, tpl.id);
+    await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).not.toBe('');
+    const visit = (await gw.focused()).textFocus;
+    const n = ((await gw.getGrid(far.gridID)).tiles ?? []).length;
+
+    await dragCrumb(window, gw, visit, await gw.cellCenter(far.id, Math.round(far.cx), Math.round(far.cy)));
+    const told = async () =>
+      ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).find(
+        (x: any) => x.message === 'an ephemeral visit does not move across a connection',
+      )?.severity ?? null;
+    await expect.poll(told).toBe('info');
+    expect(((await gw.getGrid(far.gridID)).tiles ?? []).length, 'nothing landed on the far grid').toBe(n);
+    expect(await onGrid(gw, scratch, visit), 'the visit stayed').toBeTruthy();
+    expect((await gw.focused()).textFocus, 'the pane is still on the visit').toBe(visit);
+  });
+});
