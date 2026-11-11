@@ -14,6 +14,7 @@ import (
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/scratch"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/wsbar"
 )
@@ -388,7 +389,6 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 	p := a.tree.FocusedPane()
 	in := wsbar.Click{Button: button, Shift: mods.Shift, Ctrl: mods.Ctrl, Meta: mods.Meta,
 		X: sx - bx, BarW: bw, Zone: wsbar.Where(sx, sy, bx, top, bw)}
-	var visit *gridwellv1.Tile
 	if in.Zone == wsbar.ZoneBar {
 		in.Chain = a.navChain()
 		in.Segments = a.bottomBarSegments(in.Chain)
@@ -397,7 +397,7 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 		}
 		if p != nil {
 			in.SlotMenu = a.slotHasMenu(p)
-			visit, in.Visit, in.VisitOK = a.visitCrumb(p, in.Chain)
+			in.Visits = a.visitCrumbs(p, in.Chain)
 		}
 	}
 	hit := wsbar.RouteClick(in)
@@ -417,57 +417,77 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 		a.openRenameInput()
 	case wsbar.ActionZoom:
 		a.togglePaneZoom()
-	case wsbar.ActionWorkspaceRename:
-		a.openWorkspaceRenameInput(in.Chain[hit.Segment.Index].WsLevel)
-	case wsbar.ActionLeaveLevels:
-		// Be inside level wsLevel, or for the root crumb back in the
-		// session, whose own state the bar never touches.
-		a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels,
-			Count: a.ws.PopCountTo(in.Chain[hit.Segment.Index].WsLevel)})
+	case wsbar.ActionWorkspaceRename, wsbar.ActionLeaveLevels, wsbar.ActionAscend:
+		a.crumbAct(p, hit.Action, in.Chain[hit.Segment.Index])
 	case wsbar.ActionVisitDrag:
-		a.startVisitDrag(p, visit, in.Chain[hit.Segment.Index].Crumb, hit.Segment, bx, top, sx, sy,
-			button, mods.Ctrl)
+		if t := a.cachedTileByID(in.Visits[hit.Segment.Index]); t != nil {
+			a.startVisitDrag(p, t, in.Chain[hit.Segment.Index], hit.Bare, hit.Segment, bx, top, sx, sy,
+				button, mods.Ctrl)
+		}
 	case wsbar.ActionSelect:
 		// A tile crumb is drawn only under a focused pane (NavChain).
 		a.toggleCrumb(p.ID, in.Chain[hit.Segment.Index])
+	}
+	return true
+}
+
+// crumbAct runs a crumb's click: a press on it, or the bare release of a
+// visit drag armed from it.
+func (a *App) crumbAct(p *pane.Pane, act wsbar.Action, nc navCrumb) {
+	switch act {
+	case wsbar.ActionWorkspaceRename:
+		a.openWorkspaceRenameInput(nc.WsLevel)
+	case wsbar.ActionLeaveLevels:
+		// Be inside level wsLevel, or for the root crumb back in the
+		// session, whose own state the bar never touches.
+		a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels, Count: a.ws.PopCountTo(nc.WsLevel)})
 	case wsbar.ActionAscend:
 		// Only the focused pane's own frame stack yields an ascending crumb
 		// (pane.Levels.NavChain), so there is a pane here. How many ascents
 		// the crumb is is pane.AscentsTo's arithmetic; the last hop animates
 		// and the ones above it are instant.
-		a.ascend(p, p.AscentsTo(in.Chain[hit.Segment.Index].Crumb), true)
+		a.ascend(p, p.AscentsTo(nc.Crumb), true)
 	}
-	return true
 }
 
-// visitCrumb is the row and the chain index of the crumb standing for an
-// ephemeral visit in p's place, wherever it sits; false for none. A door
-// visit's frame carries its grid, so its crumb is the grid's, and the row is
-// read off the frame.
-func (a *App) visitCrumb(p *pane.Pane, chain []pane.NavCrumb) (*gridwellv1.Tile, int, bool) {
-	frames := p.Frames()
-	for i, nc := range chain {
-		if nc.Workspace || nc.CloseOnly || nc.Crumb.Level >= len(frames) || frames[nc.Crumb.Level].Door == "" {
-			continue
+// visitCrumbs is wsbar.Visits over p's place: a frame's row is ephemeral by
+// p's scratch rule, the open level's workspace tile by the rule of the pane
+// it was entered from.
+func (a *App) visitCrumbs(p *pane.Pane, chain []pane.NavCrumb) map[int]string {
+	return wsbar.Visits(chain, p.Frames(), a.ws.Depth(), func(id string, level bool) bool {
+		t := a.cachedTileByID(id)
+		if t == nil {
+			return false
 		}
-		if t := a.cachedTileByID(frames[nc.Crumb.Level].Door); t != nil && a.certainlyEphemeral(p, t) {
-			return t, i, true
+		if level {
+			eph, known := scratch.Ephemeral(a.levelScratch(), t.GridId)
+			return eph && known
 		}
-	}
-	return nil, 0, false
+		return a.certainlyEphemeral(p, t)
+	})
 }
 
-// startVisitDrag arms the drag of visit row t from its crumb, as any tile's
-// drag is armed (startTemplateDrag): it carries the row from the scratch
-// grid, so dragdrop.DecideDrop decides as for every tile. The right button
-// copies, or with ctrl links, through the right-button release; a left
-// release with no drag is the crumb's click.
-func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, cr pane.Crumb, seg wsbar.Segment, bx, top, sx, sy float64, button int, ctrl bool) {
-	// The square drawChainCrumb paints the row in.
+// startVisitDrag arms the drag of visit row t from its crumb nc, as any
+// tile's drag is armed (startTemplateDrag): it carries the row from the
+// scratch grid, so dragdrop.DecideDrop decides as for every tile. The right
+// button copies, or with ctrl links, through the right-button release; a
+// release with no drag is bare, the crumb's click. The ghost starts as the
+// row drawn where the crumb is: the square drawChainCrumb paints, or a
+// boundary's band, held at the press's place along it.
+func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, nc navCrumb, bare wsbar.Action, seg wsbar.Segment, bx, top, sx, sy float64, button int, ctrl bool) {
 	square := min(seg.W, wsbar.RowH)
 	side := square - 2
 	x, y := bx+seg.X+(square-side)/2, top+(wsbar.RowH-side)/2
+	if nc.Workspace {
+		side = wsbar.RowH - 6
+	}
 	cell := pane.SquareCell(side, t)
+	ox, oy := (sx-x)/cell, (sy-y)/cell
+	if nc.Workspace {
+		bandX, bandW := bx+seg.X+2, seg.W-4
+		ox = float64(t.W) * min(max((sx-bandX)/bandW, 0), 1)
+		oy = float64(t.H) * min(max((sy-top-3)/side, 0), 1)
+	}
 	intent := dragdrop.IntentMove
 	if button == 2 {
 		intent = rightDragIntent(ctrl)
@@ -475,7 +495,8 @@ func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, cr pane.Crumb, se
 	}
 	a.dragging = &dragState{
 		originPaneID: p.ID,
-		visit:        &cr,
+		visit:        &nc,
+		visitBare:    bare,
 		intent:       intent,
 		startScreenX: sx,
 		startScreenY: sy,
@@ -485,7 +506,7 @@ func (a *App) startVisitDrag(p *pane.Pane, t *gridwellv1.Tile, cr pane.Crumb, se
 		srcCellSize:  cell,
 		carried:      []*gridwellv1.Tile{t},
 	}
-	a.dragging.grabTile(t, float64(t.X)+(sx-x)/cell, float64(t.Y)+(sy-y)/cell, x, y)
+	a.dragging.grabTile(t, float64(t.X)+ox, float64(t.Y)+oy, sx-ox*cell, sy-oy*cell)
 }
 
 // openWorkspaceRenameInput opens the shared inline rename input over the

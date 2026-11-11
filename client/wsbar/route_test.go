@@ -1,6 +1,7 @@
 package wsbar
 
 import (
+	"maps"
 	"slices"
 	"testing"
 
@@ -108,20 +109,35 @@ func TestRouteClickSlotMenu(t *testing.T) {
 }
 
 // The crumb standing for an ephemeral visit's row is its drag handle for
-// either button, wherever it sits in the chain; every other crumb keeps its
-// action, and without a visit the crumb is an ascent.
+// either button, wherever it sits in the chain, a level's boundary band
+// included (Joe, 2026-11-11); a release with no drag is the crumb's own
+// click; every other crumb keeps its action, and without a visit the crumb
+// is an ascent.
 func TestRouteClickVisitDrag(t *testing.T) {
-	for _, at := range []int{1, 2} {
+	cases := []struct {
+		at                  int
+		x                   float64
+		bareLeft, bareRight Action
+	}{
+		{0, 10, ActionLeaveLevels, ActionWorkspaceRename},
+		{1, BoundaryW + 2, ActionAscend, ActionNone},
+		{2, BoundaryW + RowH + 2, ActionAscend, ActionNone},
+	}
+	for _, c := range cases {
 		for _, button := range []int{0, 2} {
-			in := barClick(button, BoundaryW+float64(at-1)*RowH+2)
-			in.Visit, in.VisitOK = at, true
-			if got := RouteClick(in); got.Action != ActionVisitDrag || got.Segment.Index != at {
-				t.Fatalf("RouteClick(button %d on the visit's crumb at %d) = %+v, want its drag", button, at, got)
+			in := barClick(button, c.x)
+			in.Visits = map[int]string{c.at: "v"}
+			bare := c.bareLeft
+			if button == 2 {
+				bare = c.bareRight
+			}
+			if got := RouteClick(in); got.Action != ActionVisitDrag || got.Segment.Index != c.at || got.Bare != bare {
+				t.Fatalf("RouteClick(button %d on the visit's crumb at %d) = %+v, want its drag, bare %v", button, c.at, got, bare)
 			}
 		}
 	}
 	in := barClick(0, BoundaryW+2)
-	in.Visit, in.VisitOK = 2, true
+	in.Visits = map[int]string{2: "v"}
 	if got := RouteClick(in); got.Action != ActionAscend || got.Segment.Index != 1 {
 		t.Fatalf("RouteClick(crumb above a visit) = %+v, want ascend on 1", got)
 	}
@@ -130,6 +146,44 @@ func TestRouteClickVisitDrag(t *testing.T) {
 	}
 	if got := RouteClick(barClick(2, BoundaryW+RowH+2)); got.Action != ActionNone {
 		t.Fatalf("RouteClick(right on a crumb, no visit) = %v, want %v", got.Action, ActionNone)
+	}
+}
+
+// The visits in a chain: a frame entered through an ephemeral row, wherever
+// it sits, and the innermost level's boundary when its workspace tile is
+// ephemeral; an outer level's boundary is never a handle (Joe, 2026-11-11).
+func TestVisitsInChain(t *testing.T) {
+	chain := []pane.NavCrumb{
+		{CloseOnly: true},
+		{Workspace: true, WsLevel: 1, TileID: "ws1"},
+		{Workspace: true, WsLevel: 2, TileID: "ws2"},
+		{Crumb: pane.Crumb{Level: 0, Anchor: "g/1"}},
+		{Crumb: pane.Crumb{Level: 1, TileID: "d1"}},
+	}
+	frames := []pane.Frame{{}, {Door: "d1"}}
+	eph := func(ids ...string) func(string, bool) bool {
+		return func(id string, _ bool) bool { return slices.Contains(ids, id) }
+	}
+	cases := []struct {
+		name string
+		eph  func(string, bool) bool
+		want map[int]string
+	}{
+		{"nothing ephemeral", eph(), map[int]string{}},
+		{"the innermost level's tile", eph("ws2"), map[int]string{2: "ws2"}},
+		{"an outer level's tile only", eph("ws1"), map[int]string{}},
+		{"a door visit inside the level", eph("d1"), map[int]string{4: "d1"}},
+		{"both", eph("ws2", "d1"), map[int]string{2: "ws2", 4: "d1"}},
+	}
+	for _, c := range cases {
+		if got := Visits(chain, frames, 2, c.eph); !maps.Equal(got, c.want) {
+			t.Errorf("%s: Visits = %v, want %v", c.name, got, c.want)
+		}
+	}
+	var level []bool
+	Visits(chain, frames, 2, func(id string, isLevel bool) bool { level = append(level, isLevel); return false })
+	if !slices.Equal(level, []bool{true, false}) {
+		t.Errorf("asked level %v, want the innermost boundary as a level, then the door as a frame", level)
 	}
 }
 
@@ -180,7 +234,7 @@ func TestRouteClickSelect(t *testing.T) {
 	closeOnly.Chain = slices.Clone(closeOnly.Chain)
 	closeOnly.Chain[0] = pane.NavCrumb{CloseOnly: true, Crumb: pane.Crumb{Anchor: "g/0", ParentAnchor: "g/0"}}
 	visit := barClick(0, BoundaryW+RowH+2)
-	visit.Visit, visit.VisitOK = 2, true
+	visit.Visits = map[int]string{2: "w2"}
 	cases := []struct {
 		name string
 		in   Click

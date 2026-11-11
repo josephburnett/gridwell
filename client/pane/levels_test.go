@@ -154,3 +154,45 @@ func TestLevelsClaimAndLanded(t *testing.T) {
 		t.Fatalf("claim %d after a foreign landing, want 5 kept", got)
 	}
 }
+
+// The trashcan ends a visit as leaving it does (Joe, 2026-11-11): the leave
+// out of the level a boundary crumb stands for, the ascent out of the frame a
+// chain crumb does.
+func TestEndVisit(t *testing.T) {
+	var s Levels
+	s.Push(Level{TileID: "u/7"})
+	s.Push(Level{TileID: "u/9"})
+	st := StackAt("g/1", []string{"d1", "d2"}, "")
+	cases := []struct {
+		name          string
+		nc            NavCrumb
+		leave, ascend int
+	}{
+		{"the innermost level's boundary", NavCrumb{Workspace: true, WsLevel: 2}, 1, 0},
+		{"the outer level's boundary", NavCrumb{Workspace: true, WsLevel: 1}, 2, 0},
+		{"the top frame", NavCrumb{Crumb: Crumb{Level: 2}}, 0, 1},
+		{"a frame below it", NavCrumb{Crumb: Crumb{Level: 1}}, 0, 2},
+	}
+	for _, c := range cases {
+		if leave, ascend := s.EndVisit(&st, c.nc); leave != c.leave || ascend != c.ascend {
+			t.Errorf("%s: EndVisit = (%d, %d), want (%d, %d)", c.name, leave, ascend, c.leave, c.ascend)
+		}
+	}
+}
+
+// A workspace tile moved while the window is inside it carries every level
+// open on it to its new grid: the close-all landing and the root crumb's
+// glyph follow the row (Joe, 2026-11-11).
+func TestLevelsMoved(t *testing.T) {
+	var s Levels
+	s.Push(Level{TileID: "u/9", GridID: "g/scratch"})
+	s.Push(Level{TileID: "u/4", GridID: "g/2"})
+	s.Moved("u/9", "g/1")
+	if s.At(1).GridID != "g/1" || s.At(2).GridID != "g/2" {
+		t.Fatalf("levels after the move = %+v, %+v, want only u/9 on g/1", *s.At(1), *s.At(2))
+	}
+	chain := s.NavChain(nil)
+	if chain[0].Crumb.Anchor != "g/1" || chain[1].GridID != "g/1" {
+		t.Fatalf("chain after the move = %+v, want the root and the boundary on g/1", chain[:2])
+	}
+}

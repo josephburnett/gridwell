@@ -26,6 +26,18 @@ func (a *App) scratchGridOf(p *pane.Pane) scratch.Grid {
 	return a.scratchGridIn(a.gridIDForPane(p))
 }
 
+// levelScratch is the scratch rule of the pane the open level was entered
+// from, which says whether its workspace tile is ephemeral; unknown for a
+// level that parked no tree.
+func (a *App) levelScratch() scratch.Grid {
+	if top := a.ws.Top(); top != nil && top.OuterTree != nil {
+		if op := top.OuterTree.FindPane(top.OriginPane); op != nil {
+			return a.scratchGridOf(op)
+		}
+	}
+	return scratch.Grid{}
+}
+
 // scratchGridIn is that read by grid id, for callers that have just walked
 // the place and must not walk it twice.
 func (a *App) scratchGridIn(gridID string) scratch.Grid {

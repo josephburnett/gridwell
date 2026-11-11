@@ -229,6 +229,87 @@ test('a visit dropped on the trashcan ends as the ascent ends it', async ({ wind
   expect(await notices(window), 'nothing went wrong').toEqual([]);
 });
 
+// A workspace tile's visit drags from its boundary band (Joe, 2026-11-11):
+// its panes are its own, so the only grids to drop it on are the ones they
+// show; the level follows the row and leaving lands where it did.
+test('a workspace visit moved off its boundary crumb keeps its id and its layout', async ({ window, gw }) => {
+  const origin = new URL(window.url()).origin;
+  const tg = await templatesGrid(window);
+  const res = await fetch(`${origin}/gridwell.v1.Gridwell/CreateTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Cookie: (await window.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ') },
+    body: JSON.stringify({ gridId: tg, tile: { kind: 'workspace', x: 0, y: 0, w: 1, h: 1, altText: 'a workspace' } }),
+  });
+  expect(res.ok, 'the workspace template was made').toBe(true);
+  await gw.enterSource('home');
+  const home = await gw.focused();
+  const scratch = await gw.scratchGridID('home');
+  const cx = Math.round(home.cx);
+  const cy = Math.round(home.cy);
+  const text = await createText(origin, home.gridID, cx - 2, cy, 'a text inside');
+
+  await visitTemplate(window, gw, ((await gw.getGrid(tg)).tiles ?? [])[0].id);
+  await expect.poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth, { timeout: 15_000 }).toBe(1);
+  const ws = ((await gw.getGrid(scratch)).tiles ?? []).find((t) => t.kind === 'workspace')!;
+  expect(ws, 'the visit is on the scratch grid').toBeTruthy();
+
+  // Two panes inside, one in the text, so the layout holds it.
+  await gw.splitFocusedPaneVertical();
+  await gw.descendCell(cx - 2, cy);
+  await expect.poll(async () => (await gw.focused()).textFocus, { timeout: 15_000 }).toBe(text.id);
+  await expect.poll(async () => (await gw.getTileContent(ws.id)).includes(text.id), { timeout: 10_000 }).toBe(true);
+  const inner = await gw.focused();
+  const dest = (await gw.panes()).find((p) => p.id !== inner.id)!;
+  expect(dest.gridID, 'the other pane shows home').toBe(home.gridID);
+  const before = await getTile(origin, ws.id);
+
+  const dropX = Math.round(dest.cx) + 1;
+  const dropY = Math.round(dest.cy) + 1;
+  await dragCrumb(window, gw, ws.id, await gw.cellCenter(dest.id, dropX, dropY));
+  await expect.poll(async () => (await onGrid(gw, home.gridID, ws.id))?.id, { timeout: 15_000 }).toBe(ws.id);
+  const row = (await onGrid(gw, home.gridID, ws.id))!;
+  expect([Number(row.x ?? 0), Number(row.y ?? 0)], 'it landed on the cell the drop resolved').toEqual([dropX, dropY]);
+  expect(await onGrid(gw, scratch, ws.id), 'it left the scratch grid').toBeUndefined();
+  expect((await getTile(origin, ws.id)).version, 'a move changes no layout').toBe(before.version);
+  expect(await gw.getTileContent(ws.id), 'the layout still holds the text').toContain(text.id);
+  expect((await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth, 'still inside').toBe(1);
+  expect((await gw.focused()).textFocus, 'the panes are as they were').toBe(text.id);
+
+  // Leaving lands where it did, and retires nothing.
+  await gw.leaveWorkspace();
+  await expect.poll(async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth).toBe(0);
+  const back = await gw.focused();
+  expect([back.id, back.gridID], 'back on the pane it was entered from').toEqual([home.id, home.gridID]);
+  await gw.waitIdle();
+  expect((await onGrid(gw, home.gridID, ws.id))?.id, 'the leave kept it').toBe(ws.id);
+  expect((await gw.getGrid(scratch)).tiles ?? [], 'the scratch grid is empty').toEqual([]);
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+});
+
+test('a workspace visit dropped on the trashcan leaves the level and ends', async ({ window, gw }) => {
+  const origin = new URL(window.url()).origin;
+  const tg = await templatesGrid(window);
+  const res = await fetch(`${origin}/gridwell.v1.Gridwell/CreateTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', Cookie: (await window.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ') },
+    body: JSON.stringify({ gridId: tg, tile: { kind: 'workspace', x: 0, y: 0, w: 1, h: 1, altText: 'a workspace' } }),
+  });
+  expect(res.ok, 'the workspace template was made').toBe(true);
+  await gw.enterSource('home');
+  const home = await gw.focused();
+  const scratch = await gw.scratchGridID('home');
+  await visitTemplate(window, gw, ((await gw.getGrid(tg)).tiles ?? [])[0].id);
+  const depth = async () => (await window.evaluate(() => (window as any).__gridwellTest.workspace())).depth;
+  await expect.poll(depth, { timeout: 15_000 }).toBe(1);
+  const ws = ((await gw.getGrid(scratch)).tiles ?? []).find((t) => t.kind === 'workspace')!;
+
+  await dragCrumb(window, gw, ws.id, await gw.circleCenter());
+  await expect.poll(depth).toBe(0);
+  expect((await gw.focused()).gridID, 'back where it was entered from').toBe(home.gridID);
+  await expect.poll(async () => await onGrid(gw, scratch, ws.id), { timeout: 10_000 }).toBeUndefined();
+  expect(await notices(window), 'nothing went wrong').toEqual([]);
+});
+
 test.describe('across a connection', () => {
   test.use({ extraNodes: ['second'] });
 

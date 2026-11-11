@@ -125,6 +125,26 @@ func (s *Levels) Landed(tileID string, claimed, landed int64) {
 	}
 }
 
+// Moved carries every level open on tileID to gridID, where its workspace
+// tile now sits.
+func (s *Levels) Moved(tileID, gridID string) {
+	for i := range s.levels {
+		if s.levels[i].TileID == tileID {
+			s.levels[i].GridID = gridID
+		}
+	}
+}
+
+// EndVisit is how the trashcan ends the visit crumb nc stands for, as
+// leaving it does: the levels to leave for a boundary, the ascents out of a
+// frame of st otherwise.
+func (s *Levels) EndVisit(st *Stack, nc NavCrumb) (leave, ascend int) {
+	if nc.Workspace {
+		return s.PopCountTo(nc.WsLevel - 1), 0
+	}
+	return 0, st.AscentsTo(nc.Crumb) + 1
+}
+
 // At returns the level at a 1-based nesting depth, mutable so the crumb
 // rename can update Name in place, or nil when out of range.
 func (s *Levels) At(level int) *Level {

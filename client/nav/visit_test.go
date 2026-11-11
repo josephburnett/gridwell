@@ -148,3 +148,31 @@ func TestASiblingLeavingTheMovedRowRetiresNothing(t *testing.T) {
 	w.Leave = &LeaveWorld{DescendedTile: &gridwellv1.Tile{Id: "r1", Kind: rpc.KindText, GridId: "g2", W: 1, H: 1}}
 	noRetire(t, New().Do(ascendGesture("pane1", 1, false), w))
 }
+
+// A workspace tile's visit moved off its boundary crumb (Joe, 2026-11-11):
+// the panes are the level's own, so no place changes; the level follows the
+// row to its grid, and leaving it lands where it did and retires nothing.
+func TestWorkspaceVisitMoved(t *testing.T) {
+	for _, outer := range []bool{true, false} {
+		w := levelWorld(outer)
+		w.LevelTop.GridID = "sg"
+		w.LevelScratch = scratch.Grid{Cached: true, ScratchGridID: "sg"}
+		row := &gridwellv1.Tile{Id: "pt1", Kind: rpc.KindWorkspace, GridId: "g2", X: 3, Y: 4, W: 1, H: 1}
+		plan := New().Do(Gesture{Kind: GestureVisitMoved, PaneID: "pane1", DestPaneID: "pane1", Door: row}, w)
+		if !sameKinds(kinds(plan), []EffectKind{EffLevelMoved}) {
+			t.Fatalf("outer %v: the move planned %v, want only the level's grid", outer, kinds(plan))
+		}
+		if e := plan.Effects[0]; e.TileID != "pt1" || e.GridID != "g2" {
+			t.Fatalf("outer %v: %+v, want pt1 onto g2", outer, e)
+		}
+
+		// The shim performs it; the leave reads the level and the row after.
+		w.LevelTop.GridID, w.LevelRow = "g2", row
+		leave := New().Do(leaveGesture(1), w)
+		noRetire(t, leave)
+		pop := only(t, leave, EffPopLevel)
+		if outer && pop.GridID != "" || !outer && pop.GridID != "g2" {
+			t.Fatalf("outer %v: the leave landed on %q", outer, pop.GridID)
+		}
+	}
+}

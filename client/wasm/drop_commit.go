@@ -51,12 +51,8 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 		a.clickMenuItem(d)
 		return true
 	}
-	// A visit's crumb released without a drag is the crumb's click.
 	if d.visit != nil && !d.started {
-		if p := a.tree.FindPane(d.originPaneID); p != nil {
-			a.ascend(p, p.AscentsTo(*d.visit), true)
-		}
-		a.draw()
+		a.visitBare(d)
 		return true
 	}
 
@@ -120,6 +116,14 @@ func (a *App) finishLeftDrag(sx, sy float64) bool {
 	return true
 }
 
+// visitBare is a visit crumb released without a drag: the crumb's click.
+func (a *App) visitBare(d *dragState) {
+	if p := a.tree.FindPane(d.originPaneID); p != nil {
+		a.crumbAct(p, d.visitBare, *d.visit)
+	}
+	a.draw()
+}
+
 // commitShared commits the verdicts both buttons' drags share, reporting
 // whether verdict was one: the trashcan, which resolves against the bar
 // button wherever the cursor is; a snap back with no doomed round trip; and a
@@ -132,10 +136,14 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 		a.ghost = nil
 		a.draw()
 	case dragdrop.DropEndVisit:
-		// The ascent out of the visit is the one way it ends (nav.retireVisit).
+		// Leaving the visit is the one way it ends (nav.retireVisit).
 		a.ghost = nil
 		if p := a.tree.FindPane(d.originPaneID); p != nil && d.visit != nil {
-			a.ascend(p, p.AscentsTo(*d.visit)+1, true)
+			if leave, ascend := a.ws.EndVisit(&p.Stack, *d.visit); leave > 0 {
+				a.runGesture(nav.Gesture{Kind: nav.GestureLeaveLevels, Count: leave})
+			} else {
+				a.ascend(p, ascend, true)
+			}
 		}
 		a.draw()
 	case dragdrop.DropRejected:

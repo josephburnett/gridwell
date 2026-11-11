@@ -33,7 +33,7 @@ const (
 	// the leading close-only root.
 	ActionLeaveLevels
 	// ActionVisitDrag arms the drag of Segment's ephemeral visit row, as of
-	// the tile it is; a release with no drag is the crumb's click.
+	// the tile it is; a release with no drag is Hit.Bare, the crumb's click.
 	ActionVisitDrag
 	// ActionAscend ascends to Segment's crumb.
 	ActionAscend
@@ -64,16 +64,45 @@ type Click struct {
 	// SlotMenu is whether the slot's mode has a right-click menu at all; see
 	// circlemenu.For.
 	SlotMenu bool
-	// Visit is the chain index of the crumb standing for an ephemeral visit's
-	// row, a drag handle for either button; VisitOK is false for none.
-	Visit   int
-	VisitOK bool
+	// Visits is Visits' answer: the chain index of each crumb standing for
+	// an ephemeral visit's row, a drag handle for either button, to its id.
+	Visits map[int]string
 }
 
-// Hit's Segment is the crumb the action names, for the three crumb actions.
+// Hit's Segment is the crumb the action names, for the crumb actions; Bare
+// is what an ActionVisitDrag's release with no drag does to it.
 type Hit struct {
 	Action  Action
 	Segment Segment
+	Bare    Action
+}
+
+// Visits is each crumb of chain standing for an ephemeral visit's row: a
+// frame entered through a row ephemeral answers yes for, and the innermost
+// level's boundary when ephemeral answers yes for its workspace tile, level
+// true. An outer level's is no handle, since its tree is parked.
+func Visits(chain []pane.NavCrumb, frames []pane.Frame, depth int, ephemeral func(id string, level bool) bool) map[int]string {
+	out := map[int]string{}
+	for i, nc := range chain {
+		id, level := "", nc.Workspace
+		switch {
+		case level && nc.WsLevel == depth:
+			id = nc.TileID
+		case !level && !nc.CloseOnly && nc.Crumb.Level < len(frames):
+			id = frames[nc.Crumb.Level].Door
+		}
+		if id != "" && ephemeral(id, level) {
+			out[i] = id
+		}
+	}
+	return out
+}
+
+// visitDrag is the drag a press on visit crumb s arms, its bare release the
+// click the crumb would take without one.
+func visitDrag(in Click, s Segment) Hit {
+	in.Visits = nil
+	return Hit{Action: ActionVisitDrag, Segment: s, Bare: RouteClick(in).Action}
 }
 
 // RouteClick asks the zone, then the two fixed ends of the bar, then the
@@ -116,11 +145,12 @@ func RouteClick(in Click) Hit {
 			return Hit{Action: ActionRename}
 		}
 		s, ok := At(in.Segments, in.X)
+		_, visit := in.Visits[s.Index]
 		switch {
+		case ok && visit:
+			return visitDrag(in, s)
 		case ok && in.Chain[s.Index].Workspace:
 			return Hit{Action: ActionWorkspaceRename, Segment: s}
-		case ok && in.VisitOK && s.Index == in.Visit:
-			return Hit{Action: ActionVisitDrag, Segment: s}
 		}
 		return Hit{Action: ActionNone}
 	}
@@ -137,11 +167,12 @@ func RouteClick(in Click) Hit {
 	if !ok || in.Button != 0 {
 		return Hit{Action: ActionNone}
 	}
+	_, visit := in.Visits[s.Index]
 	switch nc := in.Chain[s.Index]; {
+	case visit:
+		return visitDrag(in, s)
 	case nc.Workspace || nc.CloseOnly:
 		return Hit{Action: ActionLeaveLevels, Segment: s}
-	case in.VisitOK && s.Index == in.Visit:
-		return Hit{Action: ActionVisitDrag, Segment: s}
 	}
 	return Hit{Action: ActionAscend, Segment: s}
 }

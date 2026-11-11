@@ -16,10 +16,10 @@ const (
 	// focused pane), Raw, Reset.
 	GestureRestore
 	GestureRestoreFromHistory // installs a whole session place: Raw
-	// GestureVisitMoved re-roots a pane whose place holds a visit's row once
-	// the row's move landed: PaneID, DestPaneID, Door (the row as it landed),
-	// TileID (the open door of DestPaneID's grid the drop went through, "" for
-	// none).
+	// GestureVisitMoved re-roots a pane whose place holds a visit's row, or
+	// moves the open level whose workspace tile it is, once the row's move
+	// landed: PaneID, DestPaneID, Door (the row as it landed), TileID (the
+	// open door of DestPaneID's grid the drop went through, "" for none).
 	GestureVisitMoved
 	GestureEnterLevel  // descends the window into a workspace tile: PaneID, Door
 	GestureLeaveLevels // Count

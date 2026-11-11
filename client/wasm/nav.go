@@ -169,11 +169,7 @@ func (a *App) navWorldCommon() nav.World {
 	}
 	if top := a.ws.Top(); top != nil {
 		w.LevelRow = a.cachedTileByID(top.TileID)
-		if top.OuterTree != nil {
-			if op := top.OuterTree.FindPane(top.OriginPane); op != nil {
-				w.LevelScratch = a.scratchGridOf(op)
-			}
-		}
+		w.LevelScratch = a.levelScratch()
 	}
 	rects := a.layoutPanes()
 	a.tree.Walk(func(p *pane.Pane) {

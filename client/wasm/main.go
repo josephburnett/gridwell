@@ -46,6 +46,7 @@ import (
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/transition"
 	"github.com/josephburnett/gridwell/client/urlview"
+	"github.com/josephburnett/gridwell/client/wsbar"
 )
 
 const (
@@ -573,9 +574,10 @@ type dragState struct {
 	// copySwatch is a drag of the copy swatch, whose drop copies the tile
 	// under it into the templates grid.
 	copySwatch bool
-	// visit is the bar's crumb an ephemeral visit's drag was armed from, whose
-	// bare release is the crumb's click (startVisitDrag).
-	visit *pane.Crumb
+	// visit is the bar's crumb an ephemeral visit's drag was armed from, and
+	// visitBare the crumb's click a release with no drag is (startVisitDrag).
+	visit     *pane.NavCrumb
+	visitBare wsbar.Action
 
 	// The source grid, set at mousedown, for when source and dest differ in a pane.
 	srcGridID   string
