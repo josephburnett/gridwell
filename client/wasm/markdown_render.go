@@ -175,7 +175,7 @@ func (a *App) defaultMarkdownStyle() markdownStyle {
 }
 
 func setFont(c js.Value, sizePx float64, family string, bold bool) {
-	c.Set("font", fontSpec(sizePx, family, bold))
+	c.Set("font", canvasStr(fontSpec(sizePx, family, bold)))
 }
 
 // fontSpec is the one canvas font string, so a measured font and the drawn
@@ -209,12 +209,12 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 	st := a.defaultMarkdownStyle()
 	fontPx := st.codePx
 	setFont(c, fontPx*scale, st.monospace, false)
-	c.Set("fillStyle", st.textColor)
+	c.Set("fillStyle", canvasStr(st.textColor))
 	// Each line's baseline goes exactly where a CSS line box would put it, so
 	// this matches the editing textarea to the pixel and the raw text does
 	// not shift when focus enters or leaves the pane.
-	c.Set("textBaseline", "alphabetic")
-	m := c.Call("measureText", "M")
+	c.Set("textBaseline", canvasStr("alphabetic"))
+	m := c.Call("measureText", canvasStr("M"))
 	asc := m.Get("fontBoundingBoxAscent").Float()
 	desc := m.Get("fontBoundingBoxDescent").Float()
 	// markdown.RawTextLineSlot is the pixel-match-the-textarea contract. asc

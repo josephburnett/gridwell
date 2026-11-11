@@ -37,6 +37,24 @@ const (
 	tileBorderPx = 2.0
 )
 
+// canvasStrs holds the canvas's repeated strings (fonts, colours, keywords) as
+// JS values: a Go string handed to JS is copied and given a finalizer on
+// every call, and a paint of many tiles makes thousands of them. Derived, and
+// bounded by wholesale reset.
+var canvasStrs = map[string]js.Value{}
+
+func canvasStr(s string) js.Value {
+	if v, ok := canvasStrs[s]; ok {
+		return v
+	}
+	if len(canvasStrs) >= 512 {
+		canvasStrs = map[string]js.Value{}
+	}
+	v := js.ValueOf(s)
+	canvasStrs[s] = v
+	return v
+}
+
 // withClip balances save/restore even for a paint that returns early.
 func withClip(c js.Value, x, y, w, h float64, paint func()) {
 	c.Call("save")
@@ -48,7 +66,7 @@ func withClip(c js.Value, x, y, w, h float64, paint func()) {
 }
 
 func fillRectC(c js.Value, x, y, w, h float64, color string) {
-	c.Set("fillStyle", color)
+	c.Set("fillStyle", canvasStr(color))
 	c.Call("fillRect", x, y, w, h)
 }
 
@@ -65,10 +83,10 @@ type labelOpts struct {
 // fillText goes through here except drawMarkdownText.
 func drawLabel(c js.Value, text string, x, y float64, o labelOpts) {
 	c.Call("save")
-	c.Set("font", o.font)
-	c.Set("fillStyle", o.fill)
-	c.Set("textAlign", cmp.Or(o.align, "start"))
-	c.Set("textBaseline", cmp.Or(o.baseline, "alphabetic"))
+	c.Set("font", canvasStr(o.font))
+	c.Set("fillStyle", canvasStr(o.fill))
+	c.Set("textAlign", canvasStr(cmp.Or(o.align, "start")))
+	c.Set("textBaseline", canvasStr(cmp.Or(o.baseline, "alphabetic")))
 	if o.maxW > 0 {
 		c.Call("fillText", text, x, y, o.maxW)
 	} else {
@@ -79,7 +97,7 @@ func drawLabel(c js.Value, text string, x, y float64, o labelOpts) {
 
 // strokeTileBorder keeps the outline inside (x, y, w, h).
 func strokeTileBorder(c js.Value, x, y, w, h float64, color string, borderPx float64) {
-	c.Set("strokeStyle", color)
+	c.Set("strokeStyle", canvasStr(color))
 	c.Set("lineWidth", borderPx)
 	half := borderPx / 2
 	c.Call("strokeRect", x+half, y+half, w-borderPx, h-borderPx)
