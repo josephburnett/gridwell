@@ -205,7 +205,7 @@ func (a *App) onRightMove(sx, sy float64) {
 	case rightDragTileResize:
 		rd.tileNewX, rd.tileNewY, rd.tileNewW, rd.tileNewH = tileResizeFromPin(rd, sx, sy)
 	}
-	a.drawNow(traceevent.WhyPointer)
+	a.scheduleDraw(traceevent.WhyPointer)
 }
 
 func (a *App) tileAtScreen(p *pane.Pane, r pane.Rect, sx, sy float64) *gridwellv1.Tile {
@@ -579,7 +579,7 @@ func (a *App) onLeftResizeMove(sx, sy float64) {
 		// Walled at the pane minimum: the drag never collapses, the release does.
 		pane.ResizeThrough(a.tree.Root, a.rootLayoutRect(), ax.targetSplit, cursor, pane.MinPanePx)
 	}
-	a.drawNow(traceevent.WhyPointer)
+	a.scheduleDraw(traceevent.WhyPointer)
 }
 
 // finishLeftResize closes what the drag pressed, reading the same stored red

@@ -503,11 +503,12 @@ func (a *App) thShellVisitURL(_ js.Value, args []js.Value) any {
 	return nil
 }
 
-// thIdle reports that no transition, drag, fetch, or write is in flight. Specs poll it instead of sleeping, so they never race the zoom
+// thIdle reports that no transition, drag, fetch, write or input-asked paint is in flight. Specs poll it instead of sleeping, so they never race the zoom
 // animation, the create-then-refetch, or a descent waiting on a row the
 // server has not made yet.
 func (a *App) thIdle(js.Value, []js.Value) any {
 	return !a.trans.Any() &&
+		!a.persist.sched.drawAsks.InputAsked() &&
 		!a.writes.Any() &&
 		!a.nav.LevelPending() &&
 		a.dragging == nil &&
@@ -527,6 +528,7 @@ func (a *App) thIdleDetail(js.Value, []js.Value) any {
 	}
 	return map[string]any{
 		"transition":   a.trans.Any(),
+		"draw":         a.persist.sched.drawAsks.InputAsked(),
 		"writes":       a.writes.Len(),
 		"levelPending": a.nav.LevelPending(),
 		// All three armed gesture states, not just the one thIdle gates on:

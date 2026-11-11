@@ -120,20 +120,26 @@ const (
 // DrawAsks is the paint asked for and not yet drawn. Asks coalesce, so the
 // first reason is the draw's and the count says how many sites wanted it.
 type DrawAsks struct {
-	why string
-	n   int
+	why   string
+	n     int
+	input bool
 }
 
 // Ask records one ask and reports whether it is the first, the one that must
 // request the draw.
 func (f *DrawAsks) Ask(why string) bool {
 	f.n++
+	f.input = f.input || why == WhyWheel || why == WhyPointer
 	if f.n > 1 {
 		return false
 	}
 	f.why = why
 	return true
 }
+
+// InputAsked reports a paint an input event asked for and not yet drawn; an
+// animation's ask does not count, since it asks again every frame.
+func (f DrawAsks) InputAsked() bool { return f.input }
 
 // Take clears the asks, so an ask made during the draw arms the next draw.
 func (f *DrawAsks) Take() DrawAsks {

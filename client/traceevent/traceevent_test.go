@@ -71,7 +71,17 @@ func TestADrawIsOneRecordUnderItsFirstReason(t *testing.T) {
 	if f.Ask(WhyNotice) || f.Ask(WhyDrag) {
 		t.Fatal("a later ask requested a second draw")
 	}
+	if f.InputAsked() {
+		t.Error("an animation's ask reads as an input's")
+	}
+	f.Ask(WhyWheel)
+	if !f.InputAsked() {
+		t.Error("a wheel's ask does not read as an input's")
+	}
 	asks := f.Take()
+	if f.InputAsked() {
+		t.Error("a taken draw still reads as asked")
+	}
 	if !f.Ask(WhyTransition) {
 		t.Error("an ask after the take did not request the next draw")
 	}
@@ -79,8 +89,8 @@ func TestADrawIsOneRecordUnderItsFirstReason(t *testing.T) {
 	if e.Src != "render" || e.Kind != "draw" || e.Msg != WhyGhost {
 		t.Errorf("the draw reads %+v, want render/draw under %q", e, WhyGhost)
 	}
-	if e.KV["asks"] != "3" || e.KV["ms"] != "3.2" && e.KV["ms"] != "3.3" {
-		t.Errorf("the draw's kv is %v, want 3 asks and the draw's duration", e.KV)
+	if e.KV["asks"] != "4" || e.KV["ms"] != "3.2" && e.KV["ms"] != "3.3" {
+		t.Errorf("the draw's kv is %v, want 4 asks and the draw's duration", e.KV)
 	}
 }
 
