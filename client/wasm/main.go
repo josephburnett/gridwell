@@ -905,6 +905,16 @@ func taggedLog(tag string) func(format string, args ...any) {
 	}
 }
 
+// drawNow paints at once under why, recorded as a scheduled draw is.
+func (a *App) drawNow(why string) {
+	var asks traceevent.DrawAsks
+	asks.Ask(why)
+	perf := js.Global().Get("performance")
+	start := perf.Call("now").Float()
+	a.draw()
+	a.emit(asks.Drawn(perf.Call("now").Float() - start))
+}
+
 // scheduleDraw asks for one paint under why; see traceevent.DrawAsks.
 func (a *App) scheduleDraw(why string) {
 	if !a.persist.sched.drawAsks.Ask(why) {

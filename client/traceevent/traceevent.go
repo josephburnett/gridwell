@@ -113,6 +113,8 @@ const (
 	WhyDrag       = "drag snap"
 	WhyReask      = "latched read re-asked"
 	WhySelection  = "selection reconciled"
+	WhyWheel      = "wheel"
+	WhyPointer    = "pointer move"
 )
 
 // DrawAsks is the paint asked for and not yet drawn. Asks coalesce, so the

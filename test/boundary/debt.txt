@@ -83,3 +83,4 @@ low-water | packages | 78
 2026-11-09 | the templates in the + menu (Joe 2026-11-09 templates): a drag between the strip's items scrolls it | 27
 2026-11-11 | a visit does not move across a connection (Joe, 2026-11-11): a left-drag of an ephemeral visit onto a far grid is refused as the move it is, told as information | 6
 2026-11-11 | a workspace tile's visit drags from its boundary crumb (Joe, 2026-11-11): the innermost level's band is the visit's handle, its bare release the band's click, its trashcan the leave, and the level follows the moved row to its grid | 105
+2026-11-11 | a big grid zooms and pans at frame rate (Joe's evil-plans report, 2026-11-11): an input event's paint is recorded with its ms, so a spec can measure it | 12

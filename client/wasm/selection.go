@@ -133,7 +133,7 @@ func (a *App) moveBand(sx, sy float64) {
 	}
 	if x, y, ok := cellAtScreen(p, paneRectFor(a, p), sx, sy); ok && (x != b.bx || y != b.by) {
 		b.bx, b.by = x, y
-		a.draw()
+		a.drawNow(traceevent.WhyPointer)
 	}
 }
 

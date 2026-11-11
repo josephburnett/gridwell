@@ -250,7 +250,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 	if mp, _, ok := a.menuPaneForPointer(); ok && gesture.ClassifyWheel(gesture.WheelInput{
 		OverMenu: a.pointInMenu(mp, sx, sy)}) == gesture.WheelScrollMenu {
 		if a.menu.ScrollStrip(dy, a.menuLayoutFor(mp)) {
-			a.draw()
+			a.drawNow(traceevent.WhyWheel)
 		}
 		return nil
 	}
@@ -335,7 +335,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 			gridID: a.gridIDForPane(p), cx: cx1, cy: cy1,
 			ratio: ratio, version: hoverDoor.Version,
 		}
-		a.draw()
+		a.drawNow(traceevent.WhyWheel)
 		return nil
 	}
 	// WheelZoomPane — smooth zoom centered on the cursor.
@@ -347,7 +347,7 @@ func (a *App) onWheel(this js.Value, args []js.Value) any {
 // overlay's own. See pane.Frame.ScrollText.
 func (a *App) scrollText(p *pane.Pane, x, y float64) {
 	if p.ScrollText(x, y) {
-		a.draw()
+		a.drawNow(traceevent.WhyWheel)
 	}
 }
 
@@ -363,7 +363,7 @@ func (a *App) wheelZoomPaneAt(p *pane.Pane, r pane.Rect, dy, sx, sy float64) {
 	if z, cx, cy, ok := zoomtrans.WheelZoom(dy, v.Zoom(), v.Cx(), v.Cy(), cellX, cellY, zoomFactor, zoomMin, zoomMax); ok {
 		p.Steer(cx, cy, z)
 	}
-	a.draw()
+	a.drawNow(traceevent.WhyWheel)
 	a.scheduleURLUpdate()
 }
 
@@ -582,7 +582,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	}
 	if a.stripScroll != nil {
 		if mp, _, ok := a.menuPaneForPointer(); ok && a.menu.ScrollStrip(*a.stripScroll-sy, a.menuLayoutFor(mp)) {
-			a.draw()
+			a.drawNow(traceevent.WhyPointer)
 		}
 		*a.stripScroll = sy
 		return nil
@@ -612,7 +612,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 			hover = a.menuTileIndexAt(mp, sx, sy)
 		}
 		if a.menu.SetHover(hover) {
-			a.draw()
+			a.drawNow(traceevent.WhyPointer)
 		}
 	}
 	if a.dragging == nil {
@@ -640,7 +640,7 @@ func (a *App) onMouseMove(this js.Value, args []js.Value) any {
 	}
 	d.curScreenX = sx
 	d.curScreenY = sy
-	a.draw()
+	a.drawNow(traceevent.WhyPointer)
 	return nil
 }
 
