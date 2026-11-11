@@ -846,29 +846,41 @@ These were decided deliberately. Do not reverse one without a new decision.
   delete rides the row's save chain behind every write on the row and
   claims the row as they left it (`outbox.SaveQueue.EnqueueAfterHolds`).
 - An ephemeral visit's crumb is its tile (Joe, 2026-11-10: "That behavior
-  should be consistent"). The bar's crumb standing for a url, text, shell
-  or door visit, wherever it sits in the place, drags as the tile it is,
-  from the scratch grid, through the one drag and its verdicts
-  (`dragdrop.DecideDrop`). A left-drag moves the row onto the grid it lands
-  on, claiming the placement as every move does, so it keeps its id, its
-  content, preview, framing and tmux, and a door its grid with everything
-  on it. Once the move lands the visiting pane's place is re-rooted under
-  the destination pane's, the frames from the row's up as they were and a
-  live surface kept, so the pane shows what it showed, and the grey border
-  goes because the row's grid is no longer the scratch grid
-  (`nav.visitMoved`, `pane.Stack.RelocatedOnto`). Nothing is retired: a
-  sibling pane on the row keeps its place, and its ascent retires nothing.
-  A right-drag copies the row, deep as any copy, and the visit stays as it
-  was. A drop that would link to it, a ctrl + right-drag, a left-drag
-  across a connection or a copy that lands as a link, is refused with "a
-  link to an ephemeral visit would die with it", the ghost wearing the
-  no-entry badge, since no link holds a visit (`dragdrop.EphemeralNoLink`).
-  A drop on a shell pastes its reference. The trashcan ends the visit as
-  the ascent does, never a delete from under the pane
-  (`dragdrop.DropEndVisit`). A press that never becomes a drag is the
-  crumb's click: on the current crumb nothing, on any other an ascent to it
-  (`wsbar.ActionVisitDrag`). A workspace tile's visit, whose crumb is the
-  level's boundary band, does not drag.
+  should be consistent"; Joe, 2026-11-11: "for every kind: text, shell,
+  grid and workspace alike"). The bar's crumb standing for a url, text,
+  shell or door visit, wherever it sits in the place, and the innermost
+  level's boundary band when its workspace tile is a visit, drags as the
+  tile it is, from the scratch grid, through the one drag and its verdicts
+  (`dragdrop.DecideDrop`, `wsbar.Visits`). An outer level's band does not
+  drag, since its tree is parked. A left-drag moves the row onto the grid
+  it lands on, claiming the placement as every move does, so it keeps its
+  id, its content, preview, framing and tmux, a door its grid with
+  everything on it and a workspace tile its layout. Once the move lands the
+  visiting pane's place is re-rooted under the destination pane's, the
+  frames from the row's up as they were and a live surface kept, so the
+  pane shows what it showed, and the grey border goes because the row's
+  grid is no longer the scratch grid (`nav.visitMoved`,
+  `pane.Stack.RelocatedOnto`). A workspace tile's visit is dropped only on
+  a grid one of its own panes shows, and those panes stay as they are: the
+  level follows the row to its grid, where a close-all ascent re-anchors
+  and whose glyph the root crumb wears (`pane.Levels.Moved`), and leaving
+  lands where it did. Nothing is retired: a sibling pane on the row keeps
+  its place, and its ascent or leave retires nothing. A right-drag copies
+  the row, deep as any copy, and the visit stays as it was. A left-drag
+  across a connection is refused with "an ephemeral visit does not move
+  across a connection", told as information (Joe, 2026-11-11: "let's just
+  disallow this for now ... with a message (info). We'll see if it becomes
+  a problem."; `dragdrop.EphemeralNoFarMove`). A drop that would link to
+  it, a ctrl + right-drag or a copy that lands as a link, is refused with
+  "a link to an ephemeral visit would die with it", since no link holds a
+  visit (`dragdrop.EphemeralNoLink`); either refusal wears the no-entry
+  badge. A drop on a shell pastes its reference. The trashcan ends the
+  visit as leaving it does, the ascent out of a frame's and the leave out
+  of a level's, never a delete from under the pane
+  (`dragdrop.DropEndVisit`, `pane.Levels.EndVisit`). A press that never
+  becomes a drag is the crumb's click (`wsbar.Hit.Bare`): on the current
+  crumb nothing, on any other an ascent to it, and on a level's band its
+  own, left leaving to that level and right renaming it.
 - Shells ride the web API: a WebSocket at `/shell`, same cookie, same
   origin. Every host with the web client has shells — a phone reaches them
   through the browser, like everything else. The only thing that turns
