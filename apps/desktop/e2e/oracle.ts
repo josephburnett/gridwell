@@ -271,14 +271,15 @@ export async function createDoorToOtherNamespace(
   return ((await res.json()) as { tile: Tile }).tile;
 }
 
-// A door on gridId with a grid of its own, which the node mints.
-export async function createDoor(origin: string, gridId: string, x: number, y: number): Promise<Tile> {
+// A 1x1 tile of kind on gridId, empty; a door gets a grid of its own, which
+// the node mints.
+export async function createTile(origin: string, gridId: string, kind: string, x: number, y: number): Promise<Tile> {
   const res = await fetch(`${origin}/${SERVICE}/CreateTile`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
-    body: JSON.stringify({ gridId, tile: { kind: 'door', x, y, w: 1, h: 1 } }),
+    body: JSON.stringify({ gridId, tile: { kind, x, y, w: 1, h: 1 } }),
   });
-  if (!res.ok) throw new Error(`CreateTile(door) failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`CreateTile(${kind}) failed: ${res.status} ${await res.text()}`);
   return ((await res.json()) as { tile: Tile }).tile;
 }
 
