@@ -271,6 +271,17 @@ export async function createDoorToOtherNamespace(
   return ((await res.json()) as { tile: Tile }).tile;
 }
 
+// A door on gridId with a grid of its own, which the node mints.
+export async function createDoor(origin: string, gridId: string, x: number, y: number): Promise<Tile> {
+  const res = await fetch(`${origin}/${SERVICE}/CreateTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ gridId, tile: { kind: 'door', x, y, w: 1, h: 1 } }),
+  });
+  if (!res.ok) throw new Error(`CreateTile(door) failed: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as { tile: Tile }).tile;
+}
+
 // A leaf link: one content tile shown here by its id. The node stores the
 // target as given, so this is also how a spec seeds a link to a gone key.
 export async function createLeafLink(
