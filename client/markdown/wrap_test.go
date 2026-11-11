@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -58,9 +59,25 @@ func TestWrapRawLineLossless(t *testing.T) {
 }
 
 func TestWrapRawText(t *testing.T) {
-	got := WrapRawText("aa bb\n\ncc", 4)
+	got := WrapRawText("aa bb\n\ncc", 4, 0)
 	want := []string{"aa ", "bb", "", "cc"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("WrapRawText = %q, want %q", got, want)
+	}
+}
+
+// A bounded wrap is the whole wrap's first rows, and reads no further: a
+// row past the bound is never wrapped, whatever the document's length.
+func TestWrapRawTextStopsAtTheRowsItShows(t *testing.T) {
+	src := "aa bb\n\ncc\ndd"
+	whole := WrapRawText(src, 4, 0)
+	for rows := 1; rows <= len(whole); rows++ {
+		got := WrapRawText(src, 4, rows)
+		if len(got) < rows || !reflect.DeepEqual(got, whole[:len(got)]) {
+			t.Fatalf("rows %d: %q, want a prefix of %q at least %d long", rows, got, whole, rows)
+		}
+	}
+	if got := WrapRawText("aa bb\n"+strings.Repeat("x\n", 1<<20), 4, 2); len(got) != 2 {
+		t.Fatalf("a megabyte under a two-row bound wrapped %d rows", len(got))
 	}
 }

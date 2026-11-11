@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"math"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -200,7 +201,7 @@ const rawTextLineHeight = 1.35
 // monospace, so the budget is a pure column count and the text cannot reflow
 // when focus moves.
 func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scrollY float64,
-	wrap func(src string, cols int) []string) []string {
+	wrap func(src string, cols, rows int) []string) []string {
 	// One font for the whole document: the wrap measure and every line share
 	// it, and the bracket keeps it from outliving the paint.
 	c.Call("save")
@@ -220,7 +221,7 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 	// and desc come from the scaled canvas font above.
 	slotted := markdown.RawTextLineSlot(fontPx, rawTextLineHeight, scale, st.pad, scrollY, asc, desc)
 	slotTop := slotted.Top0
-	lines := wrap(src, rawWrapCols(m, w, scale, st.pad))
+	lines := wrap(src, rawWrapCols(m, w, scale, st.pad), max(1, int(math.Ceil((h-slotTop)/slotted.Slot))))
 	for _, ln := range lines {
 		if slotTop >= h {
 			break // nothing below the bottom edge is visible
@@ -235,16 +236,21 @@ func (a *App) drawMarkdownText(c js.Value, src string, x, y, w, h, scale, scroll
 
 // memoWrap caches the wrap, because re-wrapping every visible document each
 // draw costs O(doc x tiles). Keyed by content id, the bytes' generation
-// (cache.BodyGen) and columns. Bounded by wholesale reset, since it is
-// derived and never a fact.
-func (a *App) memoWrap(n *gridwellv1.Tile) func(string, int) []string {
-	return func(src string, cols int) []string {
+// (cache.BodyGen), columns and a row bound rounded up to a power of two, so a
+// box growing under a zoom re-wraps at doublings. Bounded by wholesale reset,
+// since it is derived and never a fact.
+func (a *App) memoWrap(n *gridwellv1.Tile) func(string, int, int) []string {
+	return func(src string, cols, rows int) []string {
+		bound := 32
+		for bound < rows {
+			bound *= 2
+		}
 		key := rpc.ContentID(n) + "\x00" + strconv.FormatUint(a.c.BodyGen(rpc.ContentID(n)), 10) + "\x00" +
-			strconv.Itoa(cols)
+			strconv.Itoa(cols) + "\x00" + strconv.Itoa(bound)
 		if lines, ok := a.views.wrapCache[key]; ok {
 			return lines
 		}
-		lines := markdown.WrapRawText(src, cols)
+		lines := markdown.WrapRawText(src, cols, bound)
 		if len(a.views.wrapCache) >= 512 {
 			a.views.wrapCache = map[string][]string{}
 		}

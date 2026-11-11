@@ -54,11 +54,12 @@ func WrapRawLine(line string, cols int) []string {
 }
 
 // WrapRawText flattens WrapRawLine over every source line, one row per slot
-// the canvas paints.
-func WrapRawText(src string, cols int) []string {
+// the canvas paints, stopping once it holds rows rows, so a long document
+// costs only what its box shows. rows <= 0 wraps the whole text.
+func WrapRawText(src string, cols, rows int) []string {
 	var out []string
 	start := 0
-	for i := 0; i <= len(src); i++ {
+	for i := 0; i <= len(src) && (rows <= 0 || len(out) < rows); i++ {
 		if i == len(src) || src[i] == '\n' {
 			out = append(out, WrapRawLine(src[start:i], cols)...)
 			start = i + 1

@@ -1005,7 +1005,7 @@ func (a *App) thRawRows(js.Value, []js.Value) any {
 	setFont(a.cctx, st.codePx*scale, st.monospace, false)
 	m := a.cctx.Call("measureText", "M")
 	w := a.textContentWidth(p)
-	return len(markdown.WrapRawText(src, rawWrapCols(m, w, scale, st.pad)))
+	return len(markdown.WrapRawText(src, rawWrapCols(m, w, scale, st.pad), 0))
 }
 
 // thWorkspace exposes the workspace stack: depth, crumb names, and the
