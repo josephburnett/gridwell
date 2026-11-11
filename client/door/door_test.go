@@ -271,3 +271,17 @@ func TestPreviewAskedSkipsARefusedDoorOnly(t *testing.T) {
 		t.Error("a tile opening no grid asks a preview")
 	}
 }
+
+// A child under a pixel is not painted, under two is one fill, and from two
+// it is framed; the steps rise with its size, so a zoom in reveals the door's
+// interior in order.
+func TestChildPaintOf(t *testing.T) {
+	for _, c := range []struct {
+		side float64
+		want ChildPaint
+	}{{0, ChildNone}, {0.99, ChildNone}, {1, ChildFill}, {1.99, ChildFill}, {2, ChildFramed}, {64, ChildFramed}} {
+		if got := ChildPaintOf(c.side); got != c.want {
+			t.Errorf("ChildPaintOf(%v) = %v, want %v", c.side, got, c.want)
+		}
+	}
+}

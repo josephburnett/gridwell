@@ -993,9 +993,13 @@ func (a *App) drawChildPreview(child *cache.Grid,
 			nodeScreenX > clipX+clipW || nodeScreenY > clipY+clipH {
 			continue
 		}
-		nn := n
 		// url and shell children skip their JPEGs, so a door's interior reads uniformly.
-		a.drawNode(c, nn, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, pane.TileFamily(nn), borderPx, false)
+		switch door.ChildPaintOf(min(nodeScreenW, nodeScreenH)) {
+		case door.ChildFill:
+			fillRectC(c, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, a.pal.Family(pane.TileFamily(n)).Fill)
+		case door.ChildFramed:
+			a.drawNode(c, n, nodeScreenX, nodeScreenY, nodeScreenW, nodeScreenH, false, pane.TileFamily(n), borderPx, false)
+		}
 	}
 }
 

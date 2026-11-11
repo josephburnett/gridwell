@@ -228,3 +228,24 @@ func byUUID(u string, sources []*gridwellv1.SourceInfo) (*gridwellv1.SourceInfo,
 func PreviewAsked(t *gridwellv1.Tile, gridWritable bool) bool {
 	return t.GetChildGridId() != "" && (t.GetReadOnly() == "" || !gridWritable)
 }
+
+// ChildPaint is how a door's preview paints one child.
+type ChildPaint int
+
+const (
+	ChildNone   ChildPaint = iota // a smear: the door's ground shows
+	ChildFill                     // its border and its fill would be one pixel
+	ChildFramed                   // filled and framed, as on its own grid
+)
+
+// ChildPaintOf decides by the child's smaller side in screen px, so a door
+// holding hundreds of children costs what can be seen of them.
+func ChildPaintOf(sidePx float64) ChildPaint {
+	switch {
+	case sidePx < 1:
+		return ChildNone
+	case sidePx < 2:
+		return ChildFill
+	}
+	return ChildFramed
+}
