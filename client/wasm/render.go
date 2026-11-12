@@ -8,6 +8,7 @@ import (
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"math"
 	"strconv"
+	"sync/atomic"
 	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
@@ -369,6 +370,8 @@ func menuSections(items []menuItem) []int {
 const ghostSizeLerpAlpha = 0.20
 
 func (a *App) draw() {
+	a.fetch.bodies.Begin()
+	defer func() { a.readBodies(a.fetch.bodies.End()) }()
 	if a.ghost != nil {
 		ds := a.ghost.displayedCellSize
 		ts := a.ghost.targetCellSize
@@ -934,19 +937,73 @@ func (a *App) fetchTileContent(tileID string, again bool) {
 	if !ok {
 		return
 	}
+	a.readBodies(a.fetch.bodies.Add(bodyAsk{id: tileID, ctx: ctx, done: done}))
+}
+
+// bodyAsk is one claimed body read, held until the paint that asked ends.
+type bodyAsk struct {
+	id   string
+	ctx  context.Context
+	done func() bool
+}
+
+// readBodies reads the bodies a paint asked for as one list read
+// (inflight.Batch). Each id lands as a read of it alone would, an id whose
+// claim was cancelled lands as abandoned, and the list asks one redraw. The
+// list is cancelled once every claim in it is done or cancelled.
+func (a *App) readBodies(asks []bodyAsk) {
+	if len(asks) == 0 {
+		return
+	}
 	go func() {
-		defer done()
-		// Coalesced: body fetches land in bursts.
-		_ = a.loadTileContent(ctx, tileID, func() { a.scheduleDraw(traceevent.WhyContent) })
+		ctx, cancel := a.fetch.contents.Context()
+		defer cancel()
+		ids := make([]string, len(asks))
+		byID := make(map[string]bodyAsk, len(asks))
+		asked := make(map[string]cache.RowBasis, len(asks))
+		var left atomic.Int32
+		left.Store(int32(len(asks)))
+		for i, ask := range asks {
+			ids[i], byID[ask.id], asked[ask.id] = ask.id, ask, a.c.AskContent(ask.id)
+			context.AfterFunc(ask.ctx, func() {
+				if left.Add(-1) == 0 {
+					cancel()
+				}
+			})
+		}
+		landed := false
+		a.cl.ReadContents(ctx, ids, func(id string, data []byte, _ string, basis rpc.ContentBasis, err error) {
+			ask := byID[id]
+			err = cmp.Or(ask.ctx.Err(), err)
+			a.emit(traceevent.BodyRead(id, err))
+			landed = a.landBody(id, data, basis, asked[id], err) == nil || landed
+			ask.done()
+		})
+		if landed {
+			a.refreshFileOverlay()
+			a.scheduleDraw(traceevent.WhyContent)
+		}
 	}()
 }
 
-// loadTileContent is the one content-fetch body. It returns the error as well
-// as surfacing it, because a waiting caller has a continuation.
+// loadTileContent reads one body alone, for a caller waiting on it. It
+// returns the error as well as surfacing it, because that caller has a
+// continuation.
 func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) error {
 	asked := a.c.AskContent(tileID)
 	data, _, basis, err := a.cl.ReadContent(ctx, tileID)
-	// clientsync.ReactRead is the one table; this runs its arms.
+	if err := a.landBody(tileID, data, basis, asked, err); err != nil {
+		return err
+	}
+	a.refreshFileOverlay()
+	then()
+	return nil
+}
+
+// landBody is the one landing of a body read, alone or in a list: the
+// failure latches and surfaces as clientsync.ReactRead says, the bytes go to
+// the cache.
+func (a *App) landBody(tileID string, data []byte, basis rpc.ContentBasis, asked cache.RowBasis, err error) error {
 	o := clientsync.Of(err)
 	a.fetch.contents.Settle(tileID, clientsync.ReactRead(o))
 	if err != nil {
@@ -957,8 +1014,6 @@ func (a *App) loadTileContent(ctx context.Context, tileID string, then func()) e
 		return err
 	}
 	a.c.PutFetchedContent(tileID, data, basis, asked)
-	a.refreshFileOverlay()
-	then()
 	return nil
 }
 

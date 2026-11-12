@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
+	"github.com/josephburnett/gridwell/api/gwerr"
 	"github.com/josephburnett/gridwell/api/tracewire"
 	"github.com/josephburnett/gridwell/client/clientsync"
 	"github.com/josephburnett/gridwell/client/dragdrop"
@@ -312,6 +313,14 @@ func closeMsg(freeze bool) string {
 		return "frozen"
 	}
 	return "closed"
+}
+
+// BodyRead is one id of a list read answered (rpc.Client.ReadContents),
+// spelled as an rpc span's exit record is, since the list's own span names
+// no id.
+func BodyRead(id string, err error) Event {
+	msg, _ := gwerr.EndRecord("body", err)
+	return Event{Src: "content", Kind: "read", Msg: msg, KV: kv("id", id)}
 }
 
 // TextSave is one document's bytes entering the save queue.

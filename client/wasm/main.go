@@ -286,6 +286,8 @@ type fetchState struct {
 	contents *inflight.Reads
 	previews *inflight.Reads
 	menus    *inflight.Reads
+	// bodies holds the content reads a paint asks for until it ends.
+	bodies *inflight.Batch[bodyAsk]
 }
 
 func newFetchState() fetchState {
@@ -295,6 +297,7 @@ func newFetchState() fetchState {
 		contents: inflight.NewReads(),
 		previews: inflight.NewReads(),
 		menus:    inflight.NewReads(),
+		bodies:   &inflight.Batch[bodyAsk]{},
 	}
 }
 

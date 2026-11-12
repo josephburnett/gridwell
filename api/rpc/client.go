@@ -139,6 +139,70 @@ func (c *Client) ReadContent(ctx context.Context, tileID string) (data []byte, m
 	return data, mediaType, basis, nil
 }
 
+// ReadContents is ReadContent over a list in one stream: each is called once
+// per id, as each id's bytes end, with what ReadContent would have answered
+// for it alone. A failed id's error is rebuilt from its verdict as the web
+// API would have sent it, and an id the stream ended without answering gets
+// the stream's error.
+func (c *Client) ReadContents(ctx context.Context, ids []string, each func(id string, data []byte, mediaType string, basis ContentBasis, err error)) {
+	owed := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		owed[id] = true
+	}
+	var (
+		cur       string
+		data      []byte
+		mediaType string
+		basis     ContentBasis
+	)
+	end := func(err error) {
+		if owed[cur] {
+			delete(owed, cur)
+			each(cur, data, mediaType, basis, err)
+		}
+		cur, data = "", nil
+	}
+	stream, err := c.cl.ReadContent(ctx, connect.NewRequest(&pb.ReadContentRequest{TileIds: ids}))
+	if err == nil {
+		defer stream.Close()
+		for stream.Receive() {
+			msg := stream.Msg()
+			if msg.TileId != cur {
+				end(nil)
+				cur, mediaType, basis = msg.TileId, msg.MediaType, ContentBasis{Version: msg.Version, Stamp: msg.ContentStamp}
+			}
+			if v := msg.GetVerdict(); v != nil {
+				end(verdictError(v))
+				continue
+			}
+			data = append(data, msg.Data...)
+		}
+		if err = stream.Err(); err == nil {
+			end(nil)
+			err = errors.New("read: the stream ended without the id")
+		}
+	}
+	end(err)
+	for _, id := range ids {
+		if owed[id] {
+			delete(owed, id)
+			each(id, nil, "", ContentBasis{}, err)
+		}
+	}
+}
+
+// verdictError is the error the web API sends for a single read that ended
+// with v (server.verdictOf).
+func verdictError(v *pb.ReadVerdict) error {
+	ce := connect.NewWireError(connect.Code(v.Code), errors.New(v.Message))
+	for _, d := range v.Details {
+		if ed, err := connect.NewErrorDetail(d); err == nil {
+			ce.AddDetail(ed)
+		}
+	}
+	return ce
+}
+
 // ReadInfo is what the disk says of the file tileID names (FileInfo).
 func (c *Client) ReadInfo(ctx context.Context, tileID string) (*pb.FileInfo, error) {
 	stream, err := c.cl.ReadContent(ctx, connect.NewRequest(&pb.ReadContentRequest{TileId: tileID, Info: true}))

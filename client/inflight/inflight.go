@@ -2,8 +2,9 @@
 // is outstanding or has failed. Reads is the only way to hold a claim: the
 // claim set and the failure latches are unexported, so no caller can take a
 // claim without the latch that stops a failure being asked every draw. A
-// claim ends when its fetch returns or CancelIf declares its link gone. Only
-// the event Subscribe and the shell WebSocket are unbounded.
+// claim ends when its fetch returns or CancelIf declares its link gone. Batch
+// holds the reads a paint asks for until it ends. Only the event Subscribe
+// and the shell WebSocket are unbounded.
 package inflight
 
 import (
