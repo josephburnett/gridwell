@@ -94,7 +94,7 @@ record shapes. Everything else derives from it:
 |---|---|
 | Lifecycle | `Info`, `Probe`, `Handshake` |
 | Reads | `GetGrid`, `GetTile`, `GetTilePreview`, `Find` |
-| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a file's body its stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. `ReadContent{info}` asks a file for the facts about its bytes instead: one chunk carrying `file_info` (the inode's facts and the type sniffed from its first 512 bytes) and no data. |
+| Content | `ReadContent`, `WriteContent` — the one way bytes move. Claimed: a write names the version, or for a file's body its stamp, its bytes were read under. A write commits at close; a broken stream leaves the old value. `ReadContent{info}` asks a file for the facts about its bytes instead: one chunk carrying `file_info` (the inode's facts and the type sniffed from its first 512 bytes) and no data. `ReadContent{tile_ids}` reads a list in one stream, the bodies one paint asks for: the router reads each id over the one content route, eight at a time, and each id's chunks are contiguous and carry its id, a failed id's one chunk its verdict (`ReadVerdict`, the status a single read ends with). |
 | Web content | `ServeContent` — behind `/content/<token>/<tile-id>`, a page file's bytes with its media type, and every other file's as `application/octet-stream`, streamed in chunks as they are read, with the size when it is known and one byte range when asked (`offset`, `length`). Sandboxed (`CSP: sandbox allow-scripts allow-popups`), gated by the content token, never the cookie. |
 | Framing | `SetFraming` — the one framing write |
 | Selection | `SetSelection` — a grid's selection, a fact on the owning node's grid row. Names the tiles it adds and removes, or clears the set (with `recurse`, every grid under its doors too; with `all`, every set the node and its live far nodes hold), claims nothing, bumps no version; `SelectionChanged` carries the whole new set. |
@@ -730,6 +730,7 @@ copy:
 | what a copy of each kind becomes | `rpc.CopyOf`, read by the store's copy, the router's walk and the drop verdict |
 | whether a drop onto a shell lands, and what it types | `shellpaste.Refusal`; `shellpaste.Text`, at the node owning the shell |
 | what a place URL answers a tool | `place_api.go`, over `pane.DecodeURL` and `mcpapi.Reader` |
+| which body reads leave together, and when | `inflight.Batch`: a paint's asks, as one list read when the paint ends; an ask outside a paint at once |
 | a file's information and its hex view, laid out | `client/fileinfo`, over `ReadContent{info}` and the content API's ranges |
 | what the database holds, and what nothing reaches | `store.Analysis`; `store.Clean` removes it |
 | which grid holds the templates | `store.TemplatesGridID`, named by `HandshakeResponse.templates_grid_id` |

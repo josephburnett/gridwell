@@ -353,6 +353,12 @@ These were decided deliberately. Do not reverse one without a new decision.
   adds and removes and claims nothing (2026-10-17). Only framing (pan and
   zoom, the text scroll, content zoom), captures and a select carry no claim. A workspace tile's layout counted as framing
   until this decision.
+- The bodies one paint asks for ride one ReadContent (Joe, 2026-11-11:
+  chose a bulk read over bodies riding GetGrid): `tile_ids`, chunks tagged
+  by id, a verdict per failed id, the fan-out in the router over the one
+  content route (`router.readList`); a body is still read only for a tile
+  on screen, and the client holds a paint's asks until it ends
+  (`inflight.Batch`).
 - A write to a tile carries one operation: a rename, a content zoom, a
   freeze or a writeback. One carrying more, or none, is refused with the
   reason before anything lands, by every owner alike, home's, the files' or
