@@ -5,6 +5,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 )
 
 // EntityOf is a request's primary entity, the kv["id"] both halves of an rpc
@@ -28,4 +30,11 @@ func EntityOf(msg any) string {
 		}
 	}
 	return ""
+}
+
+// ListLen is how many ids a list read names, the kv["n"] both halves of its
+// rpc span record, 0 for any other request.
+func ListLen(msg any) int {
+	r, _ := msg.(*pb.ReadContentRequest)
+	return len(r.GetTileIds())
 }

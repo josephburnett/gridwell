@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures';
-import { createDoorToOtherNamespace, createLeafLink, moveTile, tileAt } from './oracle';
+import { test, expect, homePassword, loginToken } from './fixtures';
+import { createDoorToOtherNamespace, createLeafLink, createText, createTile, moveTile, tileAt } from './oracle';
 import { makeRunDir } from './homes';
+import { dumpNow } from './trace';
 
 // A link into a namespace this node does not declare is DEAD. Removing a
 // connection from server.yaml, retiring its name, or an id that never
@@ -159,6 +160,42 @@ test.describe('a declared namespace is never dead', () => {
     await expect
       .poll(async () => tileAt(await gw.getGrid(f.gridID), 'text', cx, cy))
       .toBeUndefined();
+  });
+  // The bodies one paint asks for ride one read: a dead id among them is
+  // answered dead and drawn dead, quietly, and the good body beside it lands.
+  test('a paint reading a gone target and a good body draws one dead and paints the other', async ({ gw, home, window }) => {
+    const file = path.join(FS_ROOT, 'gone-too.md');
+    fs.writeFileSync(file, '# gone too\n');
+    const root = await gw.swatchGridID('docs (files)');
+    const entry = ((await gw.getGrid(root)).tiles ?? []).find((t) => t.altText === 'gone-too.md');
+    expect(entry, 'the file is listed').toBeTruthy();
+    fs.rmSync(file);
+
+    await gw.enterSource('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx);
+    const cy = Math.round(f.cy);
+    const door = await createTile(gw.origin, f.gridID, 'door', cx, cy);
+    const inner = door.childGridId!;
+    const good = await createText(gw.origin, inner, 0, 0, '# kept');
+    const link = await createLeafLink(gw.origin, inner, entry!.id, 'gone-too.md', 1, 0);
+    await expect.poll(async () => tileAt(await gw.getGrid(f.gridID), 'door', cx, cy)?.id).toBe(door.id);
+    await gw.waitIdle();
+    await gw.descendCell(cx, cy);
+    expect((await gw.focused()).gridID, 'descended').toBe(inner);
+
+    await expect.poll(async () => deadLinks(window, inner), { timeout: 15_000 }).toEqual([link.id]);
+    await expect
+      .poll(async () => ((await window.evaluate(() => (window as any).__gridwellTest.paintedText()))[good.id] ?? '') as string)
+      .toContain('kept');
+    await window.waitForTimeout(1_000);
+    expect((await errors(window)).notices, 'a dead id in a list raises no notice').toEqual([]);
+
+    const token = await loginToken(gw.origin, homePassword(home));
+    const lines = (await dumpNow(window, gw.origin, token)).lines.filter((r) => r.origin === 'client');
+    const body = (id: string) => lines.find((r) => r.src === 'content' && r.kind === 'read' && r.kv?.id === id);
+    expect(body(good.id)?.msg, 'the good body landed from the list').toBe('body ok');
+    expect(body(entry!.id)?.msg, 'the gone target was answered dead in the same list').toBe('body dead');
   });
 });
 

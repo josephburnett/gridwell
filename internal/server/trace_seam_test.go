@@ -358,3 +358,42 @@ func TestABatchSentAgainAfterALostAnswerIsKeptOnce(t *testing.T) {
 		}
 	}
 }
+
+// A list read's span says how many ids it named, on the client's half and
+// the node's, so a dump reads one paint's bodies as one call of n.
+func TestAListReadSpanCarriesItsCount(t *testing.T) {
+	hs := serveWeb(t, mustNew(t, &Sources{}, Config{Dir: t.TempDir()}))
+	c := clienttrace.New(16, "c7list")
+	cl := gridwellv1connect.NewGridwellClient(hs.Client(), hs.URL,
+		connect.WithInterceptors(clienttrace.Interceptor(c, time.Now)))
+	stream, err := cl.ReadContent(context.Background(), connect.NewRequest(&pb.ReadContentRequest{TileIds: []string{"nope/t7abcde", "nope/t8abcde"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for stream.Receive() {
+	}
+	stream.Close()
+	var req string
+	var client []tracewire.Record
+	for _, line := range bytes.Split(c.UnsentBatch(), []byte("\n")) {
+		var rec tracewire.Record
+		if json.Unmarshal(line, &rec) == nil && strings.HasPrefix(rec.Msg, "ReadContent") {
+			client = append(client, rec)
+			req = rec.KV["req"]
+		}
+	}
+	var node []tracewire.Record
+	for _, rec := range trace.Default().Snapshot() {
+		if rec.Src == "router" && rec.KV["req"] == req {
+			node = append(node, rec)
+		}
+	}
+	if len(client) != 2 || len(node) != 2 {
+		t.Fatalf("a list read left %d client and %d node records, want a start and an end each", len(client), len(node))
+	}
+	for _, rec := range append(client, node...) {
+		if rec.KV["n"] != "2" {
+			t.Errorf("%s %q carries n=%q, want 2", rec.Origin, rec.Msg, rec.KV["n"])
+		}
+	}
+}

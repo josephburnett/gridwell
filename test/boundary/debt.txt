@@ -87,3 +87,4 @@ low-water | packages | 78
 2026-11-11 | a big grid zooms and pans at frame rate (Joe's evil-plans report, 2026-11-11): a text preview wraps only the rows its box shows | 7
 2026-11-11 | a big grid zooms and pans at frame rate (Joe's evil-plans report, 2026-11-11): the canvas's repeated strings are handed to JS once | 18
 2026-11-11 | a big grid zooms and pans at frame rate (Joe's evil-plans report, 2026-11-11): a door's preview paints a child under two pixels as one fill and under one as nothing | 25
+2026-11-11 | Joe's bulk read decision, 2026-11-11: the bodies one paint asks for ride one ReadContent: tile_ids, chunks tagged by id, a verdict per failed id, the fan-out in the router over the one content route, n on a list read's span | 100

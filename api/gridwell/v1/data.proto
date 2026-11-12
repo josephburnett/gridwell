@@ -13,6 +13,8 @@ syntax = "proto3";
 
 package gridwell.v1;
 
+import "google/protobuf/any.proto";
+
 option go_package = "github.com/josephburnett/gridwell/api/gen/gridwell/v1;gridwellv1";
 
 // Every mutation is id-addressed; the server derives location facts itself.
@@ -352,7 +354,8 @@ message GetTilePreviewResponse {
 
 // ─── Content streams ──────────────────────────────────────────────────────
 // ReadContent and WriteContent are the one way content bytes move: finite,
-// versioned, transactional values. OpenShell is the live wire instead.
+// versioned, transactional values, a read of one id or of a list.
+// OpenShell is the live wire instead.
 // A text or workspace tile may be born with its bytes (CreateTileRequest.content);
 // every later change is a write.
 
@@ -367,9 +370,15 @@ message GetTilePreviewResponse {
 // info asks for the facts about a file's bytes, not the bytes: the answer is
 // one chunk carrying file_info and no data. Only the files answer it; any
 // other owner reads the bytes as if it were unset.
+//
+// tile_ids reads a list in one stream, the bodies one paint asks for: a
+// request names tile_id or tile_ids, never both or neither. Each id is read
+// as tile_id would be, and its chunks are contiguous and carry it, spelled
+// as asked; an id that fails gets one chunk carrying its verdict and no data.
 message ReadContentRequest {
   string tile_id = 1;
   bool info = 2;
+  repeated string tile_ids = 3;
 }
 message ContentChunk {
   bytes data = 1;
@@ -377,6 +386,17 @@ message ContentChunk {
   int64 version = 3;        // chunk 1 only
   string content_stamp = 4; // chunk 1 only
   FileInfo file_info = 5;   // an info read's one chunk
+  string tile_id = 6;       // a list read's every chunk
+  ReadVerdict verdict = 7;  // a list read's failed id
+}
+
+// ReadVerdict is the status a read of one id of a list ended with, as the
+// web API spells a single read's: google.rpc.Status's shape, so its details
+// (DeadLink, SourceDisabled) survive.
+message ReadVerdict {
+  int32 code = 1;
+  string message = 2;
+  repeated google.protobuf.Any details = 3;
 }
 
 // FileInfo is what the disk says of a file when it is opened: its inode's

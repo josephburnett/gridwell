@@ -35,6 +35,7 @@ type interceptor struct {
 type span struct {
 	i               interceptor
 	req, verb, id   string
+	n               int // a list read's; see rpc.ListLen
 	start           time.Time
 	started, closed bool
 }
@@ -54,6 +55,7 @@ func (s *span) saw(msg any) {
 	if s.id == "" {
 		s.id = rpc.EntityOf(msg)
 	}
+	s.n = max(s.n, rpc.ListLen(msg))
 	s.open()
 }
 
@@ -86,6 +88,9 @@ func (s *span) kv() map[string]string {
 	kv := map[string]string{"req": s.req}
 	if s.id != "" {
 		kv["id"] = s.id
+	}
+	if s.n > 0 {
+		kv["n"] = strconv.Itoa(s.n)
 	}
 	return kv
 }

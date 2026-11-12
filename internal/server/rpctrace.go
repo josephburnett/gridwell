@@ -10,7 +10,8 @@ package server
 // request id, tells apart from this node's own.
 // kv["id"] is the entity the request is about; see rpc.EntityOf. kv["session"]
 // is the client session it names; see sessionOf. A select's span carries its
-// counts and flags, since the ids it names are not one entity.
+// counts and flags, since the ids it names are not one entity, and a list
+// read its n (rpc.ListLen).
 
 import (
 	"context"
@@ -68,6 +69,9 @@ func (s *span) saw(msg any) {
 		s.add("clear", strconv.FormatBool(sel.GetClear()))
 		s.add("recurse", strconv.FormatBool(sel.GetRecurse()))
 		s.add("all", strconv.FormatBool(sel.GetAll()))
+	}
+	if n := rpc.ListLen(msg); n > 0 {
+		s.add("n", strconv.Itoa(n))
 	}
 	s.open()
 }

@@ -146,14 +146,31 @@ test('a grid of many long texts zooms and pans within the paint budget', async (
     .toBe(ids.size);
   await gw.waitIdle();
   const token = await loginToken(gw.origin, homePassword(home));
-  const loaded = (await dumpNow(window, gw.origin, token)).lines.filter(
-    (r) => r.origin === 'client' && r.src === 'rpc' && r.msg === 'ReadContent ok' && ids.has(r.kv?.id ?? ''),
-  );
-  await measure(window, gw, home, f, testInfo, {
+  const lines = (await dumpNow(window, gw.origin, token)).lines.filter((r) => r.origin === 'client' && (r.ct ?? 0) >= entered);
+  // A body lands from a list read (traceevent.BodyRead) or a single one,
+  // whose rpc record names it.
+  const landed = new Map<string, number>();
+  for (const r of lines) {
+    const id = r.kv?.id ?? '';
+    if (!ids.has(id) || landed.has(id)) continue;
+    if ((r.src === 'content' && r.msg === 'body ok') || (r.src === 'rpc' && r.msg === 'ReadContent ok')) landed.set(id, r.ct ?? 0);
+  }
+  const lastBody = Math.max(...landed.values());
+  // The reads the first paint's bodies took: one per paint that shows tiles
+  // not yet read (the descent's frames, the wheel to the zoom), however many
+  // bodies each shows, never one per body.
+  const reads = lines.filter((r) => r.src === 'rpc' && /^ReadContent (ok|dead|error)/.test(r.msg) && (r.ct ?? 0) <= lastBody);
+  const report = {
     tiles: ids.size,
-    bodies: loaded.length,
-    firstBodiesMs: Math.max(...loaded.map((r) => r.ct ?? 0)) - entered,
-  });
+    bodies: landed.size,
+    reads: reads.length,
+    readSizes: reads.map((r) => Number(r.kv?.n ?? 1)),
+    readMs: reads.map((r) => Number(r.kv?.ms ?? 0)),
+    firstBodiesMs: lastBody - entered,
+  };
+  expect(report.reads, `the first paint's bodies ride one read a paint: ${JSON.stringify(report)}`).toBeLessThanOrEqual(10);
+  expect(report.bodies, 'every body landed').toBe(ids.size);
+  await measure(window, gw, home, f, testInfo, report);
 });
 
 test('a grid of many doors over many tiles zooms and pans within the paint budget', async ({ gw, home, window, electronApp }, testInfo) => {
