@@ -553,6 +553,9 @@ func (a *App) onShellExit(key, message string, tmuxGone bool) {
 	if message != "" {
 		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
 	}
+	// The pane draws the preview cache once the terminal goes, so it keeps the
+	// last frame as a park does; nothing is posted, an end is not a capture.
+	a.parkShellOverlay(conn)
 	conn.closed = true
 	a.releaseShellStream(conn.paneID, conn)
 	a.draw()
