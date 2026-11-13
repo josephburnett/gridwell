@@ -3,7 +3,6 @@ import { test, expect } from './fixtures';
 import { tileAt, GridSnapshot } from './oracle';
 import { settle } from './cadence';
 import type { GridwellDriver } from './driver';
-import { EV } from '../src/main/ipc';
 
 // Esc lets go of any drag in flight with nothing changed: everything returns
 // to where the press found it, and the release that follows is neither a drop
@@ -335,13 +334,16 @@ test('Esc reaches a drag forwarded from a live view that holds keyboard focus', 
   const gy = before[0].y + before[0].h / 2;
 
   await electronApp.evaluate(
-    ({ BrowserWindow, webContents }, { ch, pt }) => {
+    ({ BaseWindow, webContents }, a) => {
       const view = webContents.getAllWebContents().find((w) => w.getURL().includes('esc=1'));
       if (!view) throw new Error('live view not found');
       view.focus();
-      BrowserWindow.getAllWindows()[0].webContents.send(ch, pt);
+      const v = (globalThis as any).__gwRegistry.viewBoundsFor(a.paneId);
+      const cb = BaseWindow.getAllWindows()[0].getContentBounds();
+      const at = { x: a.x - v.x, y: a.y - v.y, globalX: cb.x + a.x, globalY: cb.y + a.y };
+      view.sendInputEvent({ type: 'mouseDown', ...at, button: 'left', clickCount: 1 } as any);
     },
-    { ch: EV.leftForward, pt: { x: gx - 8, y: gy } },
+    { paneId: urlPaneId, x: gx - 8, y: gy },
   );
   await expect
     .poll(() => window.evaluate(() => (window as any).__gridwellTest.leftResizeArmed()), { timeout: 5_000 })

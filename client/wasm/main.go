@@ -162,6 +162,9 @@ type App struct {
 	nav *nav.Machine
 
 	rightDrag *rightDragState
+	// viewRight is the last right press over a live url view, which arms a
+	// drag only once the view says it became one; see onViewPress.
+	viewRight *viewPress
 
 	// leftResize clamps to the pane minimum; the release decides a close.
 	leftResize *leftResizeState

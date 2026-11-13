@@ -29,12 +29,11 @@ export const CH = {
                                      // main's trace records, else why not.
 } as const;
 
-// Live url view's preload → main (send, fire-and-forget). The view swallows the
-// renderer's own mouse events, so its preload forwards presses here.
+// Live url view's preload → main (send, fire-and-forget), from every frame of
+// the page. Main hears every press itself (EV.press); the preload says what
+// only the page's own events tell.
 export const VIEW = {
-  rightdown: 'gw:view-rightdown',   // ViewRightdown
-  middledown: 'gw:view-middledown', // ViewRightdown (same payload: screen coords)
-  leftdown: 'gw:view-leftdown',     // ViewRightdown (focus intent; no preventDefault in preload)
+  rightdown: 'gw:view-rightdown',   // nothing: the right press main sent as EV.press became a drag
   touchscroll: 'gw:view-touchscroll', // ViewTouchScroll — single-finger drag over live content
 } as const;
 
@@ -42,24 +41,32 @@ export const VIEW = {
 export const EV = {
   frame: 'gw:frame', // FrameEvent
   nav: 'gw:nav',     // NavEvent
-  rightForward: 'gw:right-forward',   // ForwardedRightdown — over a live url view
+  press: 'gw:press', // ViewPress — a press over a live url view, from any of its frames
+  rightForward: 'gw:right-forward',   // nothing — the last right press became a drag
   rightMoveForward: 'gw:right-move-forward', // ForwardedRightdown — a move of that drag, which the view keeps
   rightUpForward: 'gw:right-up-forward',     // ForwardedRightdown — its release
-  middleForward: 'gw:middle-forward', // ForwardedRightdown — middle-click over a live url view (ascend)
-  leftForward: 'gw:left-forward',     // ForwardedRightdown — left-down over a live url view (focus intent)
   error: 'gw:error', // ErrorEvent — see ErrorEvent below
   openBelow: 'gw:open-below', // OpenBelowEvent — a live view's new-window or ctrl-click link
   freezeUrl: 'gw:freeze-url', // FreezeURLEvent — the context menu's explicit freeze gesture
-  rightPress: 'gw:right-press', // PaneRef — a right press over a live url view, which moves pane focus there
   zoomKey: 'gw:zoom-key', // ZoomKeyEvent — the content-zoom chord pressed while a live view owns focus
   escapeKey: 'gw:escape-key', // EscapeKeyEvent — Esc pressed while a parked live view owns focus
   viewGone: 'gw:view-gone', // ViewGoneEvent — a live view ended outside a remove
 } as const;
 
-// Physical screen coordinates, independent of the page's zoomFactor.
-export interface ViewRightdown {
+// Screen coordinates, independent of the page's zoomFactor.
+export interface ScreenPoint {
   sx: number;
   sy: number;
+}
+
+// A press main heard on a live view's webContents: the pane the view serves,
+// the DOM button, and the point in canvas pixels, absent for a touch, whose
+// input event carries none.
+export interface ViewPress {
+  paneId: string;
+  button: number;
+  x?: number;
+  y?: number;
 }
 
 // One step of a single-finger drag, which main injects as a mouseWheel. dx/dy

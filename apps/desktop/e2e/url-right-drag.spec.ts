@@ -145,3 +145,71 @@ test('a right-drag started inside a live url view previews and lands where it is
     });
   }
 });
+
+// The drag starts in a pane focus has left, so the press's focus and the
+// drag's forward both run on it, and once from inside a same-origin iframe
+// covering the page, which no top-frame listener hears.
+for (const iframe of [false, true]) {
+  test(`a right-drag started in an unfocused live url pane${iframe ? ' from inside an iframe' : ''} focuses it and lands`, async ({
+    electronApp,
+    gw,
+    window,
+  }) => {
+    await gw.enterSource('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx);
+    const cy = Math.round(f.cy);
+    const marker = `gwe2erightdragunfocused${iframe ? 'iframe' : ''}`;
+    await gw.openMenu();
+    await gw.dragCreate('url', cx, cy);
+    await gw.descendCell(cx, cy);
+    await window.locator('#gw-url-modal.open').waitFor({ timeout: 5_000 });
+    await window.fill('#gw-url-input', `${gw.origin}/wasm_exec.js?${marker}=1`);
+    await window.locator('#gw-url-form').evaluate((fm: HTMLFormElement) => fm.requestSubmit());
+    await expect
+      .poll(
+        () =>
+          electronApp.evaluate(
+            ({ webContents }, m) => webContents.getAllWebContents().some((w) => w.getURL().includes(m)),
+            marker,
+          ),
+        { timeout: 15_000 },
+      )
+      .toBe(true);
+    const urlPaneId = (await gw.focused()).id;
+    await gw.splitFocusedPaneVertical();
+    expect((await gw.focused()).id, 'the split moved focus off the url pane').not.toBe(urlPaneId);
+    await electronApp.evaluate(async ({ webContents }, a) => {
+      const wc = webContents.getAllWebContents().find((w: any) => w.getURL().includes(a.marker));
+      if (!wc) throw new Error('live view webContents not found');
+      if (wc.isLoadingMainFrame()) await new Promise<void>((res) => wc.once('did-stop-loading', () => res()));
+      if (!a.iframe) return;
+      await wc.executeJavaScript(`new Promise((done) => {
+        const f = document.createElement('iframe');
+        f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;margin:0';
+        f.onload = () => done(true);
+        f.srcdoc = '<body style="margin:0;height:100vh">inner</body>';
+        document.body.appendChild(f);
+      })`);
+    }, { marker, iframe });
+
+    const p = (await gw.panes()).find((q) => q.id === urlPaneId)!;
+    const from = { x: Math.round(p.x + p.w * 0.15), y: Math.round(p.y + p.h / 2) };
+    const to = { x: Math.round(p.x + p.w * 0.6), y: from.y };
+    const dragAt = () =>
+      window.evaluate(() => {
+        const rd = (window as any).__gridwellTest.rightDrag();
+        return rd && { x: rd.x, y: rd.y };
+      });
+    try {
+      expect(await rightDragInView(electronApp, marker, urlPaneId, from, to), 'the drag parked the view').toBe(true);
+      await expect.poll(() => gw.focused().then((q) => q.id), { message: 'the press focused the url pane' }).toBe(urlPaneId);
+      await expect.poll(dragAt, { message: 'the split preview followed the pointer' }).toEqual(to);
+      await electronApp.evaluate(() => (globalThis as any).__gwDragRelease());
+      await gw.waitIdle();
+      expect((await gw.panes()).length, 'the right-drag split the url pane').toBe(3);
+    } finally {
+      await electronApp.evaluate(() => delete (globalThis as any).__gwDragRelease).catch(() => {});
+    }
+  });
+}

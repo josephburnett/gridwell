@@ -5,7 +5,7 @@ import type { BaseWindow, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
 import { viewCreated } from './viewtrace';
 import { FOCUS_SETTLE_MS } from './focusguard';
-import type { ErrorEvent, NavEvent, OpenBelowEvent, ViewGoneEvent } from './ipc';
+import type { ErrorEvent, NavEvent, OpenBelowEvent, ViewGoneEvent, ViewPress } from './ipc';
 import type { TraceEvent } from './trace';
 
 // The registry against a fake view, for the paths the capture harness cannot
@@ -88,7 +88,7 @@ interface Rig {
   children: Set<FakeView>;
   records: TraceEvent[];
   below: OpenBelowEvent[];
-  rightPresses: string[];
+  presses: ViewPress[];
 }
 
 function rig(): Rig {
@@ -101,7 +101,7 @@ function rig(): Rig {
   const children = new Set<FakeView>();
   const records: TraceEvent[] = [];
   const below: OpenBelowEvent[] = [];
-  const rightPresses: string[] = [];
+  const presses: ViewPress[] = [];
   const win = {
     contentView: {
       addChildView: (v: FakeView) => children.add(v),
@@ -109,7 +109,7 @@ function rig(): Rig {
     },
     setFullScreen: () => {},
     isFullScreen: () => false,
-    getContentBounds: () => ({ x: 0, y: 0, width: 800, height: 600 }),
+    getContentBounds: () => ({ x: 100, y: 50, width: 800, height: 600 }),
   } as unknown as BaseWindow;
   const reg = new WebviewRegistry(
     win,
@@ -120,7 +120,7 @@ function rig(): Rig {
       onFocusStolen: (ev) => steals.push(ev.paneId),
       onEscapeKey: (ev) => escapes.push(ev.paneId),
       onOpenBelow: (ev) => below.push(ev),
-      onRightPress: (ev) => rightPresses.push(ev.paneId),
+      onPress: (ev) => presses.push(ev),
     },
     () => {
       const v = new FakeView();
@@ -129,7 +129,7 @@ function rig(): Rig {
     },
     (ev) => records.push(ev),
   );
-  return { reg, views, errors, gone, navs, steals, escapes, children, records, below, rightPresses };
+  return { reg, views, errors, gone, navs, steals, escapes, children, records, below, presses };
 }
 
 const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
@@ -354,19 +354,27 @@ test('a view that ends with its focus settle armed drops the settle with its ent
   assert.deepEqual(kinds(r, 'steal'), []);
 });
 
-// A right press is what moves pane focus to a live view, since the page
-// keeps the click.
-test('a right press over a live view names the pane it serves now', async () => {
+// The view takes every press over it, so main names the pane and the point of
+// each, whatever frame of the page it landed in.
+test('every press over a live view names the pane it serves now and the canvas point', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
   const wc = r.views[0].webContents!;
-  wc.emit('input-event', {}, { type: 'mouseDown', button: 'left' });
-  wc.emit('input-event', {}, { type: 'mouseUp', button: 'right' });
-  assert.deepEqual(r.rightPresses, [], 'a press that is not the right one, or a release, moved focus');
-  wc.emit('input-event', {}, { type: 'mouseDown', button: 'right' });
+  wc.emit('input-event', {}, { type: 'mouseUp', button: 'right', globalX: 110, globalY: 60 });
+  wc.emit('input-event', {}, { type: 'mouseMove', globalX: 110, globalY: 60 });
+  wc.emit('input-event', {}, { type: 'mouseWheel', globalX: 110, globalY: 60 });
+  assert.deepEqual(r.presses, [], 'a release, a move or a wheel is not a press');
+  wc.emit('input-event', {}, { type: 'mouseDown', button: 'left', globalX: 110, globalY: 60 });
+  wc.emit('input-event', {}, { type: 'mouseDown', button: 'middle', globalX: 120, globalY: 70 });
   r.reg.move('p1', 'p2', BOUNDS, false, false);
-  wc.emit('input-event', {}, { type: 'mouseDown', button: 'right' });
-  assert.deepEqual(r.rightPresses, ['p1', 'p2']);
+  wc.emit('input-event', {}, { type: 'mouseDown', button: 'right', globalX: 130, globalY: 80 });
+  wc.emit('input-event', {}, { type: 'touchStart' });
+  assert.deepEqual(r.presses, [
+    { paneId: 'p1', button: 0, x: 10, y: 10 },
+    { paneId: 'p1', button: 1, x: 20, y: 20 },
+    { paneId: 'p2', button: 2, x: 30, y: 30 },
+    { paneId: 'p2', button: 0 },
+  ]);
 });
 
 // A key event as before-input-event hands it, with the prevented flag a

@@ -975,7 +975,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   took the press, and nothing deferred may move it before the next press
   (`gesture.Land`, `takeKeyboard`). The right button acts where it was
   pressed, and a right press over a live url view moves pane focus as any
-  press does (`EV.rightPress`). A right press over a live page is the
+  press does (`EV.press`). A right press over a live page is the
   site's unless it becomes a drag (2026-11-06): a right-drag that starts
   anywhere over the view is the pane gesture it would be on the canvas, on
   every platform, and a release without a drag hands the page its own

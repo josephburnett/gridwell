@@ -1,9 +1,10 @@
-// Injected into every live url WebContentsView, where it tells a right-click
-// from a right-drag. Nothing is suppressed on right-down: once the cursor
-// passes the drag threshold with the button still held, the gesture is
-// forwarded and the page sees no contextmenu; a release short of that hands
-// the page its contextmenu. Middle is always ascend; left, wheel, keyboard and
-// selection stay with the page.
+// Injected into every frame of every live url WebContentsView, where it tells
+// a right-click from a right-drag. Main hears every press itself; nothing is
+// suppressed on right-down: once the cursor passes the drag threshold with the
+// button still held, the drag is forwarded and the page sees no contextmenu; a
+// release short of that hands the page its contextmenu. Middle is always
+// ascend, so the page's own middle-click is stopped here; left, wheel,
+// keyboard and selection stay with the page.
 //
 // This runs inside arbitrary web pages, so the view stays sandboxed, and a
 // sandboxed isolated preload may not require local modules. That is why the
@@ -12,8 +13,6 @@ import { ipcRenderer } from 'electron';
 
 // Keep in sync with VIEW in ../main/ipc.ts.
 const VIEW_RIGHTDOWN = 'gw:view-rightdown';
-const VIEW_MIDDLEDOWN = 'gw:view-middledown';
-const VIEW_LEFTDOWN = 'gw:view-leftdown';
 const VIEW_TOUCHSCROLL = 'gw:view-touchscroll';
 // Keep in sync with ../main/viewutil.ts, which owns what each one is for.
 // gesture-threshold.test.ts lints the copies.
@@ -35,32 +34,29 @@ let menuHeld = false;
 // lets it through.
 let handingOver = false;
 
-// onPress forwards a press, whichever event heard it. screenX and screenY are
-// physical screen pixels, unaffected by zoomFactor.
-function onPress(e: MouseEvent): void {
-  if (e.button === 2) {
-    // Not suppressed: a plain right-click must reach the page.
-    rightDown = true;
-    rightDragged = false;
-    rightStartX = e.screenX;
-    rightStartY = e.screenY;
-    rightDownTime = Date.now();
-    menuHeld = false;
-  } else if (e.button === 1) {
-    e.preventDefault();
-    e.stopPropagation();
-    ipcRenderer.send(VIEW_MIDDLEDOWN, { sx: e.screenX, sy: e.screenY });
-  } else if (e.button === 0) {
-    // A focus intent. Not suppressed, so selection and links stay the page's.
-    ipcRenderer.send(VIEW_LEFTDOWN, { sx: e.screenX, sy: e.screenY });
-  }
-}
-
-// Capture phase at the window, so these fire before the page's listeners. A
-// mouse press is heard at its pointerdown, since a page that cancels one makes
-// Chromium skip the mousedown; a touch has no mousedown until its tap.
-window.addEventListener('pointerdown', (e: PointerEvent) => e.pointerType === 'mouse' && onPress(e), true);
-window.addEventListener('mousedown', (e) => (e as any).sourceCapabilities?.firesTouchEvents && onPress(e), true);
+// Capture phase at the window, so this fires before the page's listeners. A
+// press is heard at its pointerdown, since a page that cancels one makes
+// Chromium skip the mousedown. screenX and screenY are screen pixels,
+// unaffected by zoomFactor.
+window.addEventListener(
+  'pointerdown',
+  (e: PointerEvent) => {
+    if (e.pointerType !== 'mouse') return;
+    if (e.button === 2) {
+      // Not suppressed: a plain right-click must reach the page.
+      rightDown = true;
+      rightDragged = false;
+      rightStartX = e.screenX;
+      rightStartY = e.screenY;
+      rightDownTime = Date.now();
+      menuHeld = false;
+    } else if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  },
+  true,
+);
 
 window.addEventListener(
   'mousemove',
@@ -82,10 +78,10 @@ window.addEventListener(
       (d2 > RIGHT_DRAG_THRESHOLD * RIGHT_DRAG_THRESHOLD &&
         Date.now() - rightDownTime >= RIGHT_DRAG_TIME_MS)
     ) {
-      // The original press point, so the renderer classifies the gesture
-      // where it began. Main follows the rest of it (register.ts).
+      // The renderer arms the drag at main's press; main follows the rest of
+      // it (register.ts).
       rightDragged = true;
-      ipcRenderer.send(VIEW_RIGHTDOWN, { sx: rightStartX, sy: rightStartY });
+      ipcRenderer.send(VIEW_RIGHTDOWN);
     }
   },
   true,

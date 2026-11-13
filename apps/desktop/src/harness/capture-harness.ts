@@ -12,7 +12,7 @@ import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { captureAttempt, describeAttempt } from '../main/capture';
 import { registerWebviewIpc } from '../main/register';
-import { VIEW, type ErrorEvent, type FrameEvent, type NavEvent, type ViewRightdown } from '../main/ipc';
+import { VIEW, type ErrorEvent, type FrameEvent, type NavEvent, type ViewPress } from '../main/ipc';
 import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
 import { FOCUS_SETTLE_MS } from '../main/focusguard';
 import { hostWindow } from './host';
@@ -335,10 +335,12 @@ app.whenReady().then(async () => {
   // Chromium fires contextmenu at the press here and on macOS, and at the
   // release on Windows. Both orders are driven in the page as events, then a
   // real press through the input pipeline. The page logs what reaches it.
-  const rightDowns: ViewRightdown[] = [];
-  const onRightdown = (_e: unknown, p: ViewRightdown) => rightDowns.push(p);
+  const rightDowns: unknown[] = [];
+  const onRightdown = (_e: unknown, p: unknown) => rightDowns.push(p);
+  const forwarded = (): number => rightDowns.length;
   ipcMain.on(VIEW.rightdown, onRightdown);
-  const regRt = new WebviewRegistry(win, {});
+  const presses: ViewPress[] = [];
+  const regRt = new WebviewRegistry(win, { onPress: (p) => presses.push(p) });
   await regRt.place('paneRt', 'u1/46', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regRt, 'paneRt', 'right press scenario');
   const wcRt = regRt.webContentsFor('paneRt')!;
@@ -385,9 +387,7 @@ app.whenReady().then(async () => {
   if (JSON.stringify(dragLog) !== JSON.stringify(['mousedown 60,60', 'mouseup 120,60'])) {
     fail(`a right-drag let its contextmenu reach the page: ${JSON.stringify(dragLog)}`);
   }
-  if (JSON.stringify(rightDowns) !== JSON.stringify([{ sx: 1060, sy: 1060 }])) {
-    fail(`a right-drag did not send its press point once: ${JSON.stringify(rightDowns)}`);
-  }
+  if (forwarded() !== 1) fail(`a right-drag was not forwarded once: ${forwarded()}`);
   // A contextmenu after the release was never held, so it passes untouched.
   await wcRt.executeJavaScript(
     [down(70), at('mouseup', 70, 0), at('contextmenu', 70, 0)].join(';'),
@@ -397,15 +397,49 @@ app.whenReady().then(async () => {
     fail(`a contextmenu after a right-click's release did not reach the page once: ${JSON.stringify(lateLog)}`);
   }
   // The page reads the point at the view's min-width zoom of one half.
-  wcRt.sendInputEvent({ type: 'mouseDown', x: 80, y: 70, button: 'right', clickCount: 1 });
-  wcRt.sendInputEvent({ type: 'mouseUp', x: 80, y: 70, button: 'right', clickCount: 1 });
+  // The view sits at content (0,0), so the screen point is the content
+  // origin plus the view's.
+  const cbRt = win.getContentBounds();
+  const inView = (x: number) => ({ x, y: 70, globalX: cbRt.x + x, globalY: cbRt.y + 70 });
+  wcRt.sendInputEvent({ type: 'mouseDown', ...inView(80), button: 'right', clickCount: 1 } as any);
+  wcRt.sendInputEvent({ type: 'mouseUp', ...inView(80), button: 'right', clickCount: 1 } as any);
   const realLog = await pageLog(3);
   if (JSON.stringify(realLog) !== JSON.stringify(['mousedown 160,140', 'contextmenu 160,140', 'mouseup 160,140'])) {
     fail(`a real right-click did not reach the page with one contextmenu: ${JSON.stringify(realLog)}`);
   }
+  if (JSON.stringify(presses) !== JSON.stringify([{ paneId: 'paneRt', button: 2, x: 80, y: 70 }])) {
+    fail(`main did not name the real right press's pane once: ${JSON.stringify(presses)}`);
+  }
+  // A press inside an iframe reaches no top-frame listener: main still names
+  // it, and the iframe's own preload forwards its right-drag.
+  await wcRt.executeJavaScript(`new Promise((done) => {
+    const f = document.createElement('iframe');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0';
+    f.onload = () => done(true);
+    f.srcdoc = '<body style="margin:0;height:100vh">inner</body>';
+    document.body.appendChild(f);
+  })`);
+  presses.length = 0;
+  wcRt.sendInputEvent({ type: 'mouseDown', ...inView(80), button: 'left', clickCount: 1 } as any);
+  wcRt.sendInputEvent({ type: 'mouseUp', ...inView(80), button: 'left', clickCount: 1 } as any);
+  wcRt.sendInputEvent({ type: 'mouseDown', ...inView(80), button: 'right', clickCount: 1 } as any);
+  for (let i = 1; i <= 8; i++) {
+    wcRt.sendInputEvent({ type: 'mouseMove', ...inView(80 + i * 5), modifiers: ['rightButtonDown'] } as any);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  wcRt.sendInputEvent({ type: 'mouseUp', ...inView(120), button: 'right', clickCount: 1 } as any);
+  for (const by = Date.now() + 3000; forwarded() < 2 && Date.now() < by; ) await new Promise((r) => setTimeout(r, 50));
+  const want = [
+    { paneId: 'paneRt', button: 0, x: 80, y: 70 },
+    { paneId: 'paneRt', button: 2, x: 80, y: 70 },
+  ];
+  if (JSON.stringify(presses) !== JSON.stringify(want)) {
+    fail(`main did not name the presses inside an iframe: ${JSON.stringify(presses)}`);
+  }
+  if (forwarded() !== 2) fail(`a right-drag inside an iframe was not forwarded: ${forwarded()}`);
   ipcMain.removeListener(VIEW.rightdown, onRightdown);
   await regRt.remove('paneRt');
-  console.log('right press ok: a click hands the page one contextmenu at the release, a drag none');
+  console.log('right press ok: a click hands the page one contextmenu at the release, a drag none, from any frame');
 
   // ── a view placed on an unfocused pane may not keep OS focus ────────────
   // A pane goes live on paths that are not a gesture on the focused pane, such

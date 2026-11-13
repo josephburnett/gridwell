@@ -2,7 +2,7 @@ import { BaseWindow, WebContentsView, Menu, clipboard, session, WebContents } fr
 import type { MenuItemConstructorOptions, MouseInputEvent } from 'electron';
 import * as path from 'node:path';
 import type { WebContentsViewConstructorOptions } from 'electron';
-import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, PaneRef, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent } from './ipc';
+import type { Bounds, FreezeResult, FrameEvent, NavEvent, ErrorEvent, NoticeSeverity, OpenBelowEvent, FreezeURLEvent, ViewPress, ZoomKeyEvent, EscapeKeyEvent, ViewGoneEvent } from './ipc';
 import {
   SESSION_PARTITION,
   roundBounds,
@@ -22,6 +22,7 @@ import {
   zoomChordKey,
   webUrl,
   toContentPoint,
+  viewPress,
 } from './viewutil';
 import { urlContextMenuTemplate } from './contextmenu';
 import { capturable, captureAttempt, captureJpegBase64, describeAttempt } from './capture';
@@ -102,9 +103,9 @@ interface RegistryCallbacks {
   onError?: (ev: ErrorEvent) => void;
   onOpenBelow?: (ev: OpenBelowEvent) => void;
   onFreezeURL?: (ev: FreezeURLEvent) => void;
-  // The view takes a right press and the preload forwards only a drag, so
-  // this is the renderer's only word of a plain one.
-  onRightPress?: (ev: PaneRef) => void;
+  // The view takes every press over it, so this is the renderer's word of
+  // each; see viewPress.
+  onPress?: (ev: ViewPress) => void;
   onZoomKey?: (ev: ZoomKeyEvent) => void;
   onEscapeKey?: (ev: EscapeKeyEvent) => void;
   // focusguard.ts owns the verdict that a focus grab was a steal.
@@ -231,6 +232,9 @@ export class WebviewRegistry {
         // Stacked levels keep running while parked, so a call keeps ringing.
         backgroundThrottling: false,
         preload: urlViewPreload,
+        // The preload tells a right-click from a right-drag in the frame the
+        // press landed in, an iframe's included; it exposes nothing to a page.
+        nodeIntegrationInSubFrames: true,
       },
     });
     // hidden and focused start from the renderer's verdict for this draw,
@@ -520,7 +524,8 @@ export class WebviewRegistry {
     // isPressInput excludes the registry's own mouseWheel injection.
     e.view.webContents.on('input-event', (_event, input) => {
       if (isPressInput(input.type)) e.presses++;
-      if (input.type === 'mouseDown' && (input as MouseInputEvent).button === 'right') this.cb.onRightPress?.({ paneId: e.paneId });
+      const press = viewPress(this.win, e.paneId, input as Partial<MouseInputEvent> & { type: string });
+      if (press) this.cb.onPress?.(press);
     });
     // A page-initiated navigation makes Chromium focus the new document's
     // widget, and the grab can re-land asynchronously after any one navigation

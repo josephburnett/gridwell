@@ -1,4 +1,4 @@
-import { EV, type Bounds, type ForwardedRightdown, type ViewRightdown } from './ipc';
+import { EV, type Bounds, type ForwardedRightdown, type ScreenPoint, type ViewPress } from './ipc';
 
 // The decisions a live url view obeys, apart from webviews.ts so they run under
 // `node --test` with no Electron import.
@@ -179,10 +179,26 @@ const RIGHT_DRAG_FAR_THRESHOLD = 24;
 // with them.
 export function toContentPoint(
   win: { getContentBounds(): { x: number; y: number } },
-  p: ViewRightdown,
+  p: ScreenPoint,
 ): ForwardedRightdown {
   const cb = win.getContentBounds();
   return { x: p.sx - cb.x, y: p.sy - cb.y };
+}
+
+const DOM_BUTTON: Record<string, number> = { left: 0, middle: 1, right: 2 };
+
+// viewPress is a live view's input event as a press on paneId, or null. Main
+// hears a press in every frame before the page can cancel it; a touch's event
+// carries no point, so it lands as a left press on the pane alone.
+export function viewPress(
+  win: { getContentBounds(): { x: number; y: number } },
+  paneId: string,
+  ie: { type: string; button?: string; globalX?: number; globalY?: number },
+): ViewPress | null {
+  if (ie.type === 'touchStart') return { paneId, button: 0 };
+  const button = DOM_BUTTON[ie.button ?? ''];
+  if (ie.type !== 'mouseDown' || button === undefined) return null;
+  return { paneId, button, ...toContentPoint(win, { sx: ie.globalX ?? 0, sy: ie.globalY ?? 0 }) };
 }
 
 // forwardedDragStep is what one of a live view's input events is to a

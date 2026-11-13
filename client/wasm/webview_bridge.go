@@ -283,10 +283,19 @@ func (a *App) installWebviewListeners() {
 			a.persist.sched.urlAddress.Arm(cadence.URLAddressMs)
 			a.draw()
 		}},
-		// The native view owns the press, so the preload forwards it in
-		// canvas coords.
+		// The native view owns every press over it, so main names its pane
+		// and its point in canvas coords.
+		{"onPress", func(ev js.Value) {
+			x, y := ev.Get("x"), ev.Get("y")
+			vp := viewPress{paneID: jsString(ev.Get("paneId")), at: x.Type() == js.TypeNumber}
+			if vp.at {
+				vp.sx, vp.sy = x.Float(), y.Float()
+			}
+			a.onViewPress(vp, ev.Get("button").Int())
+		}},
+		// The view says its last right press became a drag.
 		{"onRightForward", func(ev js.Value) {
-			a.onForwardedRightDown(ev.Get("x").Float(), ev.Get("y").Float())
+			a.onForwardedRightDown()
 		}},
 		// The rest of that drag, which the view keeps; a canvas duplicate is harmless.
 		{"onRightMoveForward", func(ev js.Value) {
@@ -294,16 +303,6 @@ func (a *App) installWebviewListeners() {
 		}},
 		{"onRightUpForward", func(ev js.Value) {
 			a.finishRightDrag(ev.Get("x").Float(), ev.Get("y").Float())
-		}},
-		// The ascend gesture, which the native view swallows, forwarded in
-		// canvas coords.
-		{"onMiddleForward", func(ev js.Value) {
-			a.onForwardedMiddleDown(ev.Get("x").Float(), ev.Get("y").Float())
-		}},
-		// A focus-transfer intent. The preload did not prevent the click, so
-		// in-page interaction stays with the page.
-		{"onLeftForward", func(ev js.Value) {
-			a.onForwardedLeftDown(ev.Get("x").Float(), ev.Get("y").Float())
 		}},
 		// The page tried to open a new window. Main denies the popup and
 		// forwards the url, and the link opens as an ephemeral visit below.
@@ -313,10 +312,6 @@ func (a *App) installWebviewListeners() {
 		// "Freeze Page" in the circle's menu over a live view.
 		{"onFreezeURL", func(ev js.Value) {
 			a.freezeURLPaneByIntent(jsString(ev.Get("paneId")))
-		}},
-		// The view takes a plain right press, so this is the only word of it.
-		{"onRightPress", func(ev js.Value) {
-			a.onForwardedRightPress(jsString(ev.Get("paneId")))
 		}},
 		// The window-level keydown never fires while a live view owns OS
 		// keyboard focus, so main relays the chord keyed by pane.

@@ -11,7 +11,6 @@ import {
   PaneRef,
   ReloadArgs,
   FreezeResult,
-  ViewRightdown,
   ViewTouchScroll,
   ErrorEvent,
   NoticeSeverity,
@@ -37,29 +36,18 @@ function safeSend(wc: WebContents, channel: string, payload: unknown): void {
 
 // registerWebviewIpc connects the renderer-facing IPC channels to the registry,
 // once, after the root window is created. win is the window toContentPoint
-// re-aims a press against; onMirrored takes the mirror pump's pane set.
+// re-aims a drag's moves against; onMirrored takes the mirror pump's pane set.
 export function registerWebviewIpc(
   registry: WebviewRegistry,
   rootWC: WebContents,
   win: BaseWindow,
   onMirrored: (paneIds: string[]) => void,
 ): void {
-  // The live view swallows the renderer's own mouse events, so its preload
-  // sends each press here to be re-aimed at the canvas. What the renderer then
-  // does with one is EV's business in ipc.ts.
-  for (const [inbound, outbound] of [
-    [VIEW.rightdown, EV.rightForward],
-    [VIEW.middledown, EV.middleForward],
-    [VIEW.leftdown, EV.leftForward],
-  ]) {
-    ipcMain.on(inbound, (_event, p: ViewRightdown): void => {
-      safeSend(rootWC, outbound, toContentPoint(win, p));
-    });
-  }
-
-  // The view that took a right-drag's press keeps the rest of it, parked or
-  // not, and its page sees none of it outside its bounds; see forwardedDragStep.
+  // A right press main sent as EV.press became a drag, which the view that
+  // took the press keeps, parked or not, and its page sees none of outside its
+  // bounds; see forwardedDragStep.
   ipcMain.on(VIEW.rightdown, ({ sender: view }): void => {
+    safeSend(rootWC, EV.rightForward, {});
     const onInput = (_e: unknown, ie: InputEvent): void => {
       const m = ie as Partial<MouseInputEvent>;
       const { to, over } = forwardedDragStep(ie.type, m.button);

@@ -1,18 +1,16 @@
 import { test, expect } from './fixtures';
-import { EV } from '../src/main/ipc';
 
 // A left border-drag whose grab point lands on a live url WebContentsView must
 // still resize the divider. The 10px grab band (resizeBandPx) straddles the
 // divider while the view's content box ends 5px (LiveViewInsetPx) inside the
-// pane, so the view swallows the press and the preload forwards it as
-// EV.leftForward. A handler there that only transfers focus leaves the resize
-// unarmed and every later move eaten.
+// pane, so the view swallows the press and main relays it as EV.press. A
+// handler there that only transfers focus leaves the resize unarmed and every
+// later move eaten.
 //
-// CDP input lands on the canvas and the native view never intercepts it, so a
-// real drag cannot reproduce the swallow. This fires EV.leftForward from the
-// main process with the coordinates the relay produces, then continues with
-// canvas mousemove and mouseup, which is what the wasm sees once the view is
-// parked.
+// CDP input lands on the canvas and the native view never intercepts it, so
+// the press is real input in the view's own webContents, then the drag
+// continues with canvas mousemove and mouseup, which is what the wasm sees
+// once the view is parked.
 
 test('a forwarded left press in the grab band arms the divider resize', async ({
   electronApp,
@@ -48,10 +46,15 @@ test('a forwarded left press in the grab band arms the divider resize', async ({
   // 8px left of the divider: inside the 10px band and past the 5px inset, so on
   // real hardware this press belongs to the live view.
   await electronApp.evaluate(
-    ({ BrowserWindow }, { ch, pt }) => {
-      BrowserWindow.getAllWindows()[0].webContents.send(ch, pt);
+    ({ webContents, BaseWindow }, a) => {
+      const view = webContents.getAllWebContents().find((w) => w.getURL().includes('b81=1'));
+      if (!view) throw new Error('live view not found');
+      const v = (globalThis as any).__gwRegistry.viewBoundsFor(a.paneId);
+      const cb = BaseWindow.getAllWindows()[0].getContentBounds();
+      const at = { x: a.x - v.x, y: a.y - v.y, globalX: cb.x + a.x, globalY: cb.y + a.y };
+      view.sendInputEvent({ type: 'mouseDown', ...at, button: 'left', clickCount: 1 } as any);
     },
-    { ch: EV.leftForward, pt: { x: gx - 8, y: gy } },
+    { paneId: urlPaneId, x: gx - 8, y: gy },
   );
 
   // Arming the resize is also what parks the view.

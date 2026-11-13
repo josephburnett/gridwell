@@ -125,64 +125,53 @@ func (a *App) onRightDown(p *pane.Pane, r pane.Rect, sx, sy float64, intent drag
 	}
 }
 
-// forwardedPress traces a press a live url view forwarded and focuses the pane
-// under it, or refuses while a viewport transition animates.
-func (a *App) forwardedPress(sx, sy float64, button int) (*pane.Pane, pane.Rect, bool) {
-	a.emit(traceevent.Press(a.paneIDAt(sx, sy), button, traceevent.Mods{}, true))
-	if a.trans.Any() {
-		return nil, pane.Rect{}, false
-	}
-	p, r, ok := a.paneAtScreen(sx, sy)
-	if ok {
-		a.focusToPane(p)
-	}
-	return p, r, ok
+// viewPress is a press main heard on a live url view: the pane the view
+// serves and the point, which a touch's press does not carry.
+type viewPress struct {
+	paneID string
+	sx, sy float64
+	at     bool
 }
 
-// onForwardedRightDown begins a right-button pane gesture that started over a
-// live URL view, whose native WebContentsView swallows the renderer's own mouse
-// events and keeps the rest of the drag's, which main forwards too.
-func (a *App) onForwardedRightDown(sx, sy float64) {
-	p, r, ok := a.forwardedPress(sx, sy, 2)
-	if !ok {
-		return
-	}
-	// IntentCopy: a content descent can only arm pane gestures, which ignore it.
-	a.onRightDown(p, r, sx, sy, dragdrop.IntentCopy, false)
-	a.draw()
-}
-
-// onForwardedMiddleDown is middle-click ascent's live-URL path, because the
-// WebContentsView swallows the renderer's own middle clicks.
-func (a *App) onForwardedMiddleDown(sx, sy float64) {
-	p, _, ok := a.forwardedPress(sx, sy, 1)
-	if !ok {
-		return
-	}
-	a.menu.Close()
-	a.ascendPane(p)
-}
-
-// onForwardedLeftDown arms a boundary resize for a left press over a live URL
-// view, which the page keeps too: the grab band's inner half sits on the view,
-// so such a drag could otherwise never start.
-func (a *App) onForwardedLeftDown(sx, sy float64) {
-	_, r, ok := a.forwardedPress(sx, sy, 0)
-	if !ok {
-		return
-	}
-	a.armLeftResize(r, sx, sy)
-}
-
-// onForwardedRightPress focuses the pane a right press over a live URL view
-// landed in. Main names the pane, since the preload forwards no point until the
-// press becomes a drag.
-func (a *App) onForwardedRightPress(paneID string) {
-	p := a.tree.FindPane(paneID)
-	if p == nil {
+// onViewPress lands a press main heard on a live url view, from any frame of
+// its page, which the canvas never sees. A left press arms a boundary resize,
+// since the grab band's inner half sits on the view; a middle press ascends;
+// a right press waits for the view to say it became a drag.
+func (a *App) onViewPress(vp viewPress, button int) {
+	a.emit(traceevent.Press(vp.paneID, button, traceevent.Mods{}, true))
+	a.viewRight = nil
+	p := a.tree.FindPane(vp.paneID)
+	if p == nil || a.trans.Any() {
 		return
 	}
 	a.focusToPane(p)
+	switch {
+	case button == 0 && vp.at:
+		a.armLeftResize(paneRectFor(a, p), vp.sx, vp.sy)
+	case button == 1:
+		a.menu.Close()
+		a.ascendPane(p)
+	case button == 2:
+		a.viewRight = &vp
+	}
+}
+
+// onForwardedRightDown begins the right-button pane gesture the last right
+// press over a live url view became, at that press; the view keeps the rest of
+// the drag, which main forwards too.
+func (a *App) onForwardedRightDown() {
+	vp := a.viewRight
+	a.viewRight = nil
+	if vp == nil {
+		return
+	}
+	p := a.tree.FindPane(vp.paneID)
+	if p == nil {
+		return
+	}
+	// IntentCopy: a content descent can only arm pane gestures, which ignore it.
+	a.onRightDown(p, paneRectFor(a, p), vp.sx, vp.sy, dragdrop.IntentCopy, false)
+	a.draw()
 }
 
 // onRightMove is the only path that mutates the tree mid-drag; the rest preview.

@@ -73,14 +73,12 @@ test('the right-drag time threshold agrees between viewutil and the preload', ()
 // Drift lint for the view-to-main IPC channel names. VIEW in ipc.ts owns them,
 // and the sandboxed preload duplicates them as string literals because it
 // cannot import ipc.ts. A rename in ipc.ts compiles clean and the handlers
-// never fire: no right-drag gesture, no middle-click ascend, no touch scroll
+// never fire: no right-drag gesture, no touch scroll
 // over live content, and nothing says why.
 test('the preload sends on the same VIEW channels ipc.ts declares', () => {
   const preload = 'apps/desktop/src/preload/urlview-preload.ts';
   const copies: Record<keyof typeof VIEW, string> = {
     rightdown: literalText(preload, /VIEW_RIGHTDOWN\s*=\s*'([^']+)'/),
-    middledown: literalText(preload, /VIEW_MIDDLEDOWN\s*=\s*'([^']+)'/),
-    leftdown: literalText(preload, /VIEW_LEFTDOWN\s*=\s*'([^']+)'/),
     touchscroll: literalText(preload, /VIEW_TOUCHSCROLL\s*=\s*'([^']+)'/),
   };
   for (const key of Object.keys(VIEW) as Array<keyof typeof VIEW>) {

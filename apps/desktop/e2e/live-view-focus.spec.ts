@@ -3,11 +3,10 @@ import { test, expect } from './fixtures';
 // Left-clicking a pane with a live url WebContentsView transfers pane focus to
 // it and closes the + menu on the pane that had focus. Chromium's
 // WebContentsView swallows the left-click, so the canvas onMouseDown never
-// runs: urlview-preload.ts sends VIEW_LEFTDOWN on every left-down without
-// preventDefault, main relays it as EV.leftForward, and the wasm
-// onForwardedLeftDown calls focusToPane. onForwardedRightDown routes through
-// the same focusToPane, so the two buttons cannot drift apart on the focus
-// rules (see wasm/right_button.go).
+// runs: main hears the press on the view's webContents and relays it as
+// EV.press, and the wasm onViewPress calls focusToPane for every button, so
+// the buttons cannot drift apart on the focus rules (see
+// wasm/right_button.go).
 
 test('left-clicking a live URL pane transfers focus when the menu is closed', async ({
   electronApp,
@@ -41,8 +40,8 @@ test('left-clicking a live URL pane transfers focus when the menu is closed', as
   expect(textPaneId, 'split moved focus off the URL pane').not.toBe(urlPaneId);
 
   // No gesture runs and no menu is open, so the live view is not parked and
-  // the click reaches the native WebContentsView. Only the VIEW_LEFTDOWN relay
-  // can move focus from there.
+  // the click reaches the native WebContentsView. Only main's press relay
+  // (EV.press) can move focus from there.
   const urlPane = (await gw.panes()).find((p) => p.id === urlPaneId)!;
   await gw.clickScreen(urlPane.x + urlPane.w / 2, urlPane.y + urlPane.h / 2);
 

@@ -2,10 +2,9 @@ import { test, expect } from './fixtures';
 
 // Right-clicking a live url pane focuses it, as any press in a pane does,
 // though the click itself is the page's. A live url view swallows the
-// renderer's mouse events and urlview-preload forwards a right press only once
-// it has become a drag, so the focus cannot come from the canvas: the registry
-// sees the press on the view's webContents, main relays it as EV.rightPress,
-// and the wasm routes it into focusToPane, the one owner of "a click in an
+// renderer's mouse events, so the focus cannot come from the canvas: the
+// registry sees the press on the view's webContents, main relays it as
+// EV.press, and the wasm routes it into focusToPane, the one owner of "a click in an
 // unfocused pane moves focus". The spec crosses that seam with a real right
 // press inside the view's own webContents.
 
