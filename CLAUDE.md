@@ -973,9 +973,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   the same press (2026-10-02, reversing 'moves focus, nothing else'). No
   press is focus-only. Keyboard focus is set once, by the surface that
   took the press, and nothing deferred may move it before the next press
-  (`gesture.Land`, `takeKeyboard`). The right button acts where it was
-  pressed, and a right press over a live url view moves pane focus as any
-  press does (`EV.press`). A right press over a live page is the
+  (`gesture.Land`, `takeKeyboard`). A press over a live url view is heard
+  by main on the view's webContents, from every frame of its page, an
+  iframe's included, and names its pane and point (`EV.press`), so it moves
+  pane focus as any press does, whatever the page does with it; and a
+  press's focus lands while a transition animates, only its gesture waiting
+  for the layout to settle (`gesture.PressStartsGesture`) (Joe,
+  2026-11-12). The right button acts where it was pressed. A right press
+  over a live page is the
   site's unless it becomes a drag (2026-11-06): a right-drag that starts
   anywhere over the view is the pane gesture it would be on the canvas, on
   every platform, and a release without a drag hands the page its own
