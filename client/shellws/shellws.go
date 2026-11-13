@@ -44,7 +44,7 @@ type Options struct {
 }
 
 func Dialer(o Options) shellstream.Dialer {
-	return func(tileID string, cols, rows int, onData func([]byte), onEnd func(string, bool)) shellstream.Handle {
+	return func(tileID string, cols, rows int, onData func([]byte), onEnd func(shellstream.End)) shellstream.Handle {
 		ctx, cancel := context.WithCancel(context.Background())
 		bound := o.WriteTimeout
 		if bound == 0 {
@@ -53,7 +53,7 @@ func Dialer(o Options) shellstream.Dialer {
 		c := &conn{wake: make(chan struct{}, 1), ctx: ctx, cancel: cancel, onEnd: onEnd, writeBound: bound}
 		addr, err := shellwire.AttachURL(o.Origin, o.Build, o.Session, tileID, cols, rows)
 		if err != nil {
-			c.end("shell address: "+err.Error(), false)
+			c.end(shellstream.End{Message: "shell address: " + err.Error()})
 			return c
 		}
 		go c.run(addr, o, onData)
@@ -82,21 +82,21 @@ type conn struct {
 	writeBound time.Duration
 
 	once  sync.Once
-	onEnd func(string, bool)
+	onEnd func(shellstream.End)
 }
 
 // end delivers the stream's end exactly once and tears the context down.
-func (c *conn) end(message string, tmuxGone bool) {
+func (c *conn) end(e shellstream.End) {
 	c.once.Do(func() {
 		c.cancel()
-		c.onEnd(message, tmuxGone)
+		c.onEnd(e)
 	})
 }
 
 func (c *conn) run(addr string, o Options, onData func([]byte)) {
 	ws, err := dialConn(c.ctx, addr, o)
 	if err != nil {
-		c.end("shell connect: "+err.Error(), false)
+		c.end(shellstream.End{Message: "shell connect: " + err.Error()})
 		return
 	}
 	ws.SetReadLimit(shellwire.ReadLimit)
@@ -104,7 +104,7 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 	if c.closed { // closed while the handshake was in flight
 		c.mu.Unlock()
 		_ = ws.CloseNow()
-		c.end("", false)
+		c.end(shellstream.End{})
 		return
 	}
 	c.ws = ws
@@ -117,10 +117,10 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 		typ, data, rerr := ws.Read(c.ctx)
 		if rerr != nil {
 			if c.isClosed() {
-				c.end("", false) // this side asked; the caller already knows
+				c.end(shellstream.End{}) // this side asked; the caller already knows
 				return
 			}
-			c.end("shell stream: "+rerr.Error(), false)
+			c.end(shellstream.End{Message: "shell stream: " + rerr.Error()})
 			return
 		}
 		switch typ {
@@ -129,14 +129,14 @@ func (c *conn) run(addr string, o Options, onData func([]byte)) {
 		case websocket.MessageText:
 			ctl, derr := shellwire.DecodeControl(data)
 			if derr != nil {
-				c.end("shell protocol: "+derr.Error(), false)
+				c.end(shellstream.End{Message: "shell protocol: " + derr.Error()})
 				return
 			}
 			if ctl.Kind == shellwire.KindExit {
 				if ctl.OtherBuild != "" && o.OnOtherBuild != nil {
 					o.OnOtherBuild(ctl.OtherBuild)
 				}
-				c.end(ctl.Message, ctl.TmuxGone)
+				c.end(shellstream.End{Message: ctl.Message, TmuxGone: ctl.TmuxGone, Said: true})
 				return
 			}
 		}
@@ -160,7 +160,7 @@ func (c *conn) writeLoop() {
 			wcancel()
 			if err != nil {
 				if !c.isClosed() {
-					c.end("shell write: "+err.Error(), false)
+					c.end(shellstream.End{Message: "shell write: " + err.Error()})
 				}
 				return
 			}
@@ -231,5 +231,5 @@ func (c *conn) Close() {
 		// Waiting here would block the loop that must deliver the answer.
 		go func() { _ = ws.Close(websocket.StatusNormalClosure, "") }()
 	}
-	c.end("", false)
+	c.end(shellstream.End{})
 }

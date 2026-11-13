@@ -428,6 +428,9 @@ type paneLocal struct {
 	pane.SessionState
 	urlView   *urlView
 	shellConn *shellStreamConn
+	// shellDropped is the descent whose shell stream dropped, which rejoins
+	// when the node's event stream opens (rejoinShells).
+	shellDropped string
 }
 
 func (a *App) shellConnFor(paneID string) *shellStreamConn {
@@ -687,7 +690,7 @@ func main() {
 	app.shells = shellstream.New(
 		shellws.Dialer(shellws.Options{Origin: origin, Build: gate.Build(), OnOtherBuild: gate.OtherBuild, Session: app.cl.Session()}),
 		func(key string, data []byte) { app.onShellData(key, data) },
-		func(e shellstream.Exit) { app.onShellExit(e.Key, e.Message, e.TmuxGone) },
+		app.onShellExit,
 	)
 
 	app.installCanvasInput()
@@ -1055,6 +1058,9 @@ func (a *App) startSSE() {
 		},
 		Opened: func(resync bool) {
 			a.emit(traceevent.EventsOpen(resync))
+			// Before the cache counts as told again, so the rejoin reads each
+			// row afresh rather than what a gap may have left stale.
+			a.rejoinShells()
 			a.c.NoteStream(true)
 			a.resolveErr(errsurface.EventsSource)
 			if resync {

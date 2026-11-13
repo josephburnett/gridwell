@@ -111,14 +111,16 @@ func DecideLinkPress(hoveredURL, mouseTracking string, modifier bool) bool {
 	return mouseTracking != "" && mouseTracking != MouseTrackingNone
 }
 
-// ExitAlive is what a stream's end says about the tmux's liveness, the
-// fact DecideAutoLive and DecideShellRefreshVisible read back. tmuxGone is
-// the server's definitive verdict, so the answer is known dead; any other
-// end carries none, so the cached answer is forgotten and the next descent
-// probes again.
-func ExitAlive(tmuxGone bool) (alive, known bool) {
-	if tmuxGone {
-		return false, true
-	}
-	return false, false
+// EndVerdict is what a stream's end says: whether the tmux is known dead, the
+// fact DecideAutoLive and DecideShellRefreshVisible read back, any other end
+// forgetting it so the next go-live probes; and whether the pane rejoins when
+// the node's event stream next opens.
+type EndVerdict struct{ Dead, Rejoin bool }
+
+// DecideEnd: a live shell rejoins only after a drop, an end the node did not
+// say (Joe, 2026-11-13). A takeover by another screen or the tmux client's exit
+// is the node's word, and the pane stays down until a gesture. The rejoin is
+// the descent's go-live, so a frozen row or a dead tmux stays down there.
+func DecideEnd(tmuxGone, said bool) EndVerdict {
+	return EndVerdict{Dead: tmuxGone, Rejoin: !said}
 }

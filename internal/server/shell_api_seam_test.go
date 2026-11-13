@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -249,6 +250,64 @@ func TestShellAPIReportsTmuxGone(t *testing.T) {
 	}
 	if f.fake.AttachmentCount() != 0 {
 		t.Errorf("a dead snapshotted tmux must not spawn a fresh PTY")
+	}
+}
+
+// An end the node gives its reason for is said, a takeover by another screen
+// among them; a socket that breaks under the attachment is not, and only that
+// one is a drop a live pane rejoins (shellconn.DecideEnd).
+func TestShellAPIEndsSayWhetherTheNodeSaidThem(t *testing.T) {
+	f := newShellAPIFixture(t, Config{})
+	tile := f.createShell(t, 0, 0)
+	exitOf := func(cs *clientStack) shellstream.Exit {
+		t.Helper()
+		select {
+		case e := <-cs.exit:
+			return e
+		case <-time.After(3 * time.Second):
+			t.Fatal("no exit reported within 3s")
+		}
+		return shellstream.Exit{}
+	}
+
+	first := f.clientStack()
+	first.reg.Open(tile.Id, tile.Id, 80, 24)
+	waitAttachment(t, f.fake)
+	// The taking attachment rides a socket the test can break, as a sleep
+	// breaks one.
+	var mu sync.Mutex
+	var conns []net.Conn
+	var d net.Dialer
+	breakable := &http.Client{Jar: f.hs.Client().Jar, Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			c, err := d.DialContext(ctx, network, addr)
+			mu.Lock()
+			conns = append(conns, c)
+			mu.Unlock()
+			return c, err
+		}}}
+	second := &clientStack{out: make(chan []byte, 64), exit: make(chan shellstream.Exit, 4)}
+	second.reg = shellstream.New(shellws.Dialer(shellws.Options{Origin: f.hs.URL, HTTPClient: breakable}),
+		func(_ string, b []byte) { second.out <- b }, func(e shellstream.Exit) { second.exit <- e })
+	second.reg.Open(tile.Id, tile.Id, 80, 24)
+	t.Cleanup(func() { second.reg.Close(tile.Id) })
+	if e := exitOf(first); !e.Said || e.TmuxGone {
+		t.Errorf("a takeover's end = %+v, want said, the tmux not gone", e)
+	}
+
+	second.reg.Write(tile.Id, []byte("up"))
+	select {
+	case <-second.out:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the taking attachment never echoed")
+	}
+	mu.Lock()
+	for _, c := range conns {
+		_ = c.Close()
+	}
+	mu.Unlock()
+	if e := exitOf(second); e.Said || e.TmuxGone {
+		t.Errorf("a broken socket's end = %+v, want unsaid", e)
 	}
 }
 

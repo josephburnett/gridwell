@@ -276,8 +276,14 @@ func TestStreamClosesSayWhichKind(t *testing.T) {
 	if got := ShellClose("p1", "t7abcde", false).Msg; got != "closed" {
 		t.Errorf("a shell close reads %q", got)
 	}
-	if got := ShellExit("p1", "t7abcde", "the shell exited", true).Msg; got != "the shell exited (tmux gone)" {
+	if got := ShellExit("p1", "t7abcde", "the shell exited", true, false).Msg; got != "the shell exited (tmux gone)" {
 		t.Errorf("a tmux-gone exit reads %q", got)
+	}
+	if got := ShellExit("p1", "t7abcde", "shell stream: EOF", false, true).Msg; got != "shell stream: EOF (dropped)" {
+		t.Errorf("a dropped exit reads %q", got)
+	}
+	if e := ShellRejoin("p1", "t7abcde"); e.Src != "shell" || e.Kind != "rejoin" || e.KV["pane"] != "p1" || e.KV["tile"] != "t7abcde" {
+		t.Errorf("a rejoin is %+v", e)
 	}
 	if e := URLOpen("p1", "t7abcde", ""); e.Src != "url" || e.Kind != "open" || e.KV["pane"] != "p1" {
 		t.Errorf("a url open is %+v", e)

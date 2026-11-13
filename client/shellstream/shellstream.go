@@ -21,17 +21,25 @@ type Handle interface {
 }
 
 // Dialer opens one attachment bound to tileID, the tile whose preview and title
-// the server writes. onEnd fires exactly once, with message "" for a clean end.
-// tmuxGone is the server's verdict that the tmux is gone, which the
-// caller reads to hide the refresh affordance.
-type Dialer func(tileID string, cols, rows int, onData func(data []byte), onEnd func(message string, tmuxGone bool)) Handle
+// the server writes. onEnd fires exactly once.
+type Dialer func(tileID string, cols, rows int, onData func(data []byte), onEnd func(End)) Handle
+
+// End is how an attachment ended, as its dialer saw it.
+type End struct {
+	// Message is "" for a clean end.
+	Message string
+	// TmuxGone is the node's verdict that the tmux is gone.
+	TmuxGone bool
+	// Said is an end the node gave its reason for, an exit frame; any other
+	// end is the socket breaking or never opening.
+	Said bool
+}
 
 // Exit is an unexpected end reported to the caller.
 type Exit struct {
-	Key      string
-	TileID   string
-	Message  string
-	TmuxGone bool
+	Key    string
+	TileID string
+	End
 }
 
 type entry struct {
@@ -72,7 +80,7 @@ func (r *Registry) Open(key, tileID string, cols, rows int) {
 			}
 			r.onData(key, data)
 		},
-		func(message string, tmuxGone bool) {
+		func(end End) {
 			r.mu.Lock()
 			if e.ended { // exactly-once, whatever raced
 				r.mu.Unlock()
@@ -85,7 +93,7 @@ func (r *Registry) Open(key, tileID string, cols, rows int) {
 			}
 			delete(r.streams, key)
 			r.mu.Unlock()
-			r.onExit(Exit{Key: key, TileID: tileID, Message: message, TmuxGone: tmuxGone})
+			r.onExit(Exit{Key: key, TileID: tileID, End: end})
 		},
 	)
 	r.mu.Lock()

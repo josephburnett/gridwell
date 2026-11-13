@@ -121,18 +121,33 @@ func TestDecideLinkPress(t *testing.T) {
 	}
 }
 
-// A stream end that says the tmux is gone leaves a known dead answer; any
-// other end forgets, so the next descent probes rather than trusting either.
-func TestExitAliveFeedsTheProbe(t *testing.T) {
-	if alive, known := ExitAlive(true); alive || !known {
-		t.Fatalf("tmux gone: got (%v, %v), want (false, true)", alive, known)
+// What a stream's end means (Joe, 2026-11-13: "A live shell should rejoin of
+// course. A frozen one should not."): the tmux gone is a known dead answer and
+// stays down; any other end forgets, so the next go-live probes; and only a
+// drop, an end the node did not say, rejoins.
+func TestDecideEnd(t *testing.T) {
+	cases := []struct {
+		name           string
+		tmuxGone, said bool
+		want           EndVerdict
+	}{
+		{"the tmux gone stays down, known dead", true, true, EndVerdict{Dead: true}},
+		{"a takeover or the tmux client's exit is the node's word", false, true, EndVerdict{}},
+		{"a socket that broke rejoins", false, false, EndVerdict{Rejoin: true}},
 	}
-	if _, known := ExitAlive(false); known {
-		t.Fatal("a plain stream end must not be recorded as a verdict")
+	for _, c := range cases {
+		if got := DecideEnd(c.tmuxGone, c.said); got != c.want {
+			t.Errorf("%s: = %+v, want %+v", c.name, got, c.want)
+		}
 	}
-	// The forgotten answer routes a snapshotted tile back through the probe.
-	_, known := ExitAlive(false)
-	if got := DecideAutoLive(rpc.DescentShell, true, true, true, known, false, false); got != AutoLiveProbeShell {
-		t.Fatalf("after a plain end a snapshotted shell should probe, got %v", got)
+	// The forgotten answer routes a snapshotted tile back through the probe,
+	// so a rejoin over a tmux that went meanwhile finds it dead.
+	v := DecideEnd(false, false)
+	if got := DecideAutoLive(rpc.DescentShell, true, true, true, v.Dead, false, false); got != AutoLiveProbeShell {
+		t.Fatalf("after a drop a snapshotted shell should probe, got %v", got)
+	}
+	// The user's freeze beats the rejoin as it beats a descent.
+	if got := DecideAutoLive(rpc.DescentShell, true, true, true, v.Dead, false, true); got != AutoLiveNone {
+		t.Fatalf("a frozen shell must not rejoin, got %v", got)
 	}
 }

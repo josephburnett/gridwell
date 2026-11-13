@@ -213,6 +213,20 @@ export async function setTextScroll(
   }
 }
 
+// A foreign writer freezing or unfreezing a url or shell row: another device's
+// freeze gesture. It claims the freeze it read.
+export async function setFrozen(origin: string, tileId: string, frozen: boolean): Promise<void> {
+  const row = await getTile(origin, tileId);
+  const res = await fetch(`${origin}/${SERVICE}/SetTile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1', ...authHeaders(origin) },
+    body: JSON.stringify({ tileId, urlFrozen: frozen, claimFrozen: Boolean(row.urlFrozen) }),
+  });
+  if (!res.ok) {
+    throw new Error(`SetTile(${tileId}) freeze failed: ${res.status} ${await res.text()}`);
+  }
+}
+
 // A foreign writer deleting a row out from under the app: another device, or
 // this one in a pane the spec is not driving. It claims the row it read.
 export async function deleteTile(origin: string, tileId: string): Promise<void> {

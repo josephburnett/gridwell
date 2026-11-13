@@ -1,6 +1,7 @@
 import { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { GridwellDriver } from './driver';
+import { getTile, setFrozen, shellTmuxAlive, tileAt } from './oracle';
 
 // A live shell whose stream drops under it, as a laptop's sleep drops it,
 // with the node still up and the tmux running. Neither Electron nor the
@@ -51,6 +52,19 @@ const cut = (window: Page, down = false) =>
     for (const a of c.streams.splice(0)) a.abort();
   }, down);
 
+const shellLive = (window: Page) =>
+  window.evaluate(() => (window as any).__gridwellTest.shellRenderer() as string);
+
+const shellText = (window: Page) =>
+  window.evaluate(() => (window as any).__gridwellTest.shellText() as string);
+
+// The event stream is down while the network is: its retry raises the events
+// notice, and its reopening resolves it.
+const eventsDown = async (window: Page) =>
+  ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).some(
+    (n: any) => n.source === 'events',
+  );
+
 async function liveShell(gw: GridwellDriver) {
   await gw.enterSource('home');
   const f = await gw.focused();
@@ -60,7 +74,8 @@ async function liveShell(gw: GridwellDriver) {
   await gw.dragCreate('shell', cx, cy);
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
-  return { cx, cy };
+  const id = tileAt(await gw.getGrid(f.gridID), 'shell', cx, cy)!.id;
+  return { cx, cy, id };
 }
 
 async function deleteShell(gw: GridwellDriver, cx: number, cy: number) {
@@ -85,6 +100,68 @@ test('a live shell whose stream drops shows its last picture', async ({ gw, wind
     await window.evaluate(() => (window as any).__gridwellTest.shellStandin()),
     'the pane has a picture to stand in',
   ).toBeTruthy();
+
+  await deleteShell(gw, cx, cy);
+});
+
+test('a live shell whose stream drops rejoins the same tmux when the node is back', async ({ gw, window }) => {
+  await wrapped(window, gw);
+  const { cx, cy } = await liveShell(gw);
+  await window.keyboard.type('printf "%s\\n" gw-before-drop');
+  await window.keyboard.press('Enter');
+  await gw.waitShellLine('gw-before-drop');
+
+  // Down long enough that the pane is seen down, then back: the event
+  // stream's reopening is the one signal the pane rejoins on.
+  await cut(window, true);
+  await expect.poll(() => shellLive(window), { timeout: 10_000 }).toBe('');
+  await expect.poll(() => eventsDown(window), { timeout: 10_000 }).toBe(true);
+  await window.evaluate(() => ((window as any).__gwCut.down = false));
+  await expect
+    .poll(() => shellLive(window), { message: 'the shell rejoined with no gesture', timeout: 20_000 })
+    .not.toBe('');
+  // The same tmux: what it printed before the drop is still on its screen.
+  await expect.poll(() => shellText(window), { timeout: 10_000 }).toContain('gw-before-drop');
+  await gw.shellAttached();
+
+  await deleteShell(gw, cx, cy);
+});
+
+test('a dropped shell frozen meanwhile stays frozen when the node is back', async ({ gw, window }) => {
+  await wrapped(window, gw);
+  const { cx, cy, id } = await liveShell(gw);
+
+  // Another screen freezes the shell while this one is away: the freeze is
+  // the user's standing word, which the rejoin reads on the row as a descent
+  // does.
+  await cut(window, true);
+  await expect.poll(() => shellLive(window), { timeout: 10_000 }).toBe('');
+  await setFrozen(gw.origin, id, true);
+  await window.evaluate(() => ((window as any).__gwCut.down = false));
+  await expect.poll(() => eventsDown(window), { timeout: 20_000 }).toBe(false);
+  await window.waitForTimeout(3_000);
+  expect(await shellLive(window), 'a frozen shell does not rejoin').toBe('');
+  expect((await getTile(gw.origin, id)).urlFrozen, 'the row is still frozen').toBe(true);
+  expect(await shellTmuxAlive(gw.origin, id), 'the freeze kept the tmux').toBe(true);
+
+  await deleteShell(gw, cx, cy);
+});
+
+test('a shell whose tmux went while the node was away stays down', async ({ gw, window }) => {
+  await wrapped(window, gw);
+  const { cx, cy, id } = await liveShell(gw);
+
+  // The tmux ends itself after the cut, while the event stream is held down.
+  await window.keyboard.type('(sleep 2; tmux kill-session) >/dev/null 2>&1 & disown');
+  await window.keyboard.press('Enter');
+  await cut(window, true);
+  await expect.poll(() => shellLive(window), { timeout: 10_000 }).toBe('');
+  await window.waitForTimeout(4_000);
+  await window.evaluate(() => ((window as any).__gwCut.down = false));
+  await expect.poll(() => eventsDown(window), { timeout: 20_000 }).toBe(false);
+  await window.waitForTimeout(3_000);
+  expect(await shellLive(window), 'a dead tmux is never recreated behind its preview').toBe('');
+  expect(await shellTmuxAlive(gw.origin, id), 'the tmux is gone').toBe(false);
 
   await deleteShell(gw, cx, cy);
 });

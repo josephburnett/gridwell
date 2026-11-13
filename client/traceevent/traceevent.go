@@ -298,12 +298,22 @@ func ShellClose(paneID, tileID string, freeze bool) Event {
 }
 
 // ShellExit is the far end going away, which is not this client closing the
-// stream: tmuxGone says the tmux went with it.
-func ShellExit(paneID, tileID, message string, tmuxGone bool) Event {
+// stream: tmuxGone says the tmux went with it, dropped that the socket broke
+// with nothing said and the pane rejoins (ShellRejoin).
+func ShellExit(paneID, tileID, message string, tmuxGone, dropped bool) Event {
 	if tmuxGone {
 		message += " (tmux gone)"
 	}
+	if dropped {
+		message += " (dropped)"
+	}
 	return Event{Src: SrcShell, Kind: "exit", Msg: message, KV: kv("pane", paneID, "tile", tileID)}
+}
+
+// ShellRejoin is a pane whose shell dropped going live again, now that the
+// node's event stream is back.
+func ShellRejoin(paneID, tileID string) Event {
+	return Event{Src: SrcShell, Kind: "rejoin", Msg: "rejoins after a drop", KV: kv("pane", paneID, "tile", tileID)}
 }
 
 // closeMsg: a frozen surface keeps its preview and its address, a closed one is

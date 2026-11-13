@@ -13,7 +13,7 @@ type fakeStream struct {
 	resizes [][2]int
 	closed  bool
 	onData  func([]byte)
-	onEnd   func(string, bool)
+	onEnd   func(End)
 }
 
 func (f *fakeStream) Write(d []byte)        { f.writes = append(f.writes, d) }
@@ -32,7 +32,7 @@ type harness struct {
 
 func newHarness() *harness {
 	h := &harness{}
-	dial := func(tileID string, cols, rows int, onData func([]byte), onEnd func(string, bool)) Handle {
+	dial := func(tileID string, cols, rows int, onData func([]byte), onEnd func(End)) Handle {
 		f := &fakeStream{tileID: tileID, cols: cols, rows: rows, onData: onData, onEnd: onEnd}
 		h.dialed = append(h.dialed, f)
 		return f
@@ -79,8 +79,8 @@ func TestLateBytesFromAReplacedStreamNeverReachTheRenderer(t *testing.T) {
 func TestExitFiresExactlyOnce(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/1", "u/1", 80, 24)
-	h.dialed[0].onEnd("boom", false)
-	h.dialed[0].onEnd("", false) // a failure and a close can both arrive
+	h.dialed[0].onEnd(End{Message: "boom"})
+	h.dialed[0].onEnd(End{}) // a failure and a close can both arrive
 	if len(h.exits) != 1 || h.exits[0].Message != "boom" {
 		t.Fatalf("exits = %+v, want exactly one 'boom'", h.exits)
 	}
@@ -97,7 +97,7 @@ func TestLocalCloseSuppressesTheExitReport(t *testing.T) {
 	if !h.dialed[0].closed {
 		t.Fatal("close must reach the stream")
 	}
-	h.dialed[0].onEnd("", false) // the end still arrives after a local close
+	h.dialed[0].onEnd(End{}) // the end still arrives after a local close
 	if len(h.exits) != 0 {
 		t.Fatalf("this side asked: no exit report, got %+v", h.exits)
 	}
@@ -108,7 +108,7 @@ func TestReplacedStreamsLateEndNeverFreezesTheNewStream(t *testing.T) {
 	h.reg.Open("u/1", "u/1", 80, 24)
 	old := h.dialed[0]
 	h.reg.Open("u/1", "u/1", 80, 24) // re-attach (the refresh gesture)
-	old.onEnd("", false)             // the torn-down stream's end arrives late
+	old.onEnd(End{})                 // the torn-down stream's end arrives late
 	if len(h.exits) != 0 {
 		t.Fatalf("a replaced stream's end must not freeze the tile: %+v", h.exits)
 	}
@@ -132,12 +132,15 @@ func TestWriteAndResizeAfterCloseAreNoOps(t *testing.T) {
 	h.reg.Resize("nobody", 10, 10)
 }
 
-func TestTmuxGoneRidesTheExit(t *testing.T) {
+// The dialer's whole end rides the exit: the gone verdict and whether the
+// node said it.
+func TestTheEndRidesTheExit(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/1", "u/1", 80, 24)
-	h.dialed[0].onEnd("tmux gone", true)
-	if len(h.exits) != 1 || !h.exits[0].TmuxGone {
-		t.Fatalf("the gone verdict must ride the exit: %+v", h.exits)
+	end := End{Message: "tmux gone", TmuxGone: true, Said: true}
+	h.dialed[0].onEnd(end)
+	if len(h.exits) != 1 || h.exits[0].End != end {
+		t.Fatalf("the end must ride the exit: %+v", h.exits)
 	}
 }
 
@@ -161,8 +164,8 @@ func TestTwoTilesHoldIndependentStreams(t *testing.T) {
 func TestASynchronousDialFailureIsReported(t *testing.T) {
 	var closed bool
 	reg := New(
-		func(_ string, _, _ int, _ func([]byte), onEnd func(string, bool)) Handle {
-			onEnd("dial refused", false)
+		func(_ string, _, _ int, _ func([]byte), onEnd func(End)) Handle {
+			onEnd(End{Message: "dial refused"})
 			return &fakeStream{}
 		},
 		func(string, []byte) {},
@@ -191,7 +194,7 @@ func TestOutputAndExitNameTheTile(t *testing.T) {
 	h := newHarness()
 	h.reg.Open("u/7", "u/7", 80, 24)
 	h.dialed[0].onData([]byte{1})
-	h.dialed[0].onEnd("boom", false)
+	h.dialed[0].onEnd(End{Message: "boom"})
 	if len(h.data) != 1 || h.data[0].tileID != "u/7" {
 		t.Fatalf("data = %+v, want one chunk for u/7", h.data)
 	}
@@ -214,7 +217,7 @@ func TestOpenOnATmuxReplacesAnotherTilesStream(t *testing.T) {
 		t.Fatalf("dialed %q, want the copy u/8 bound", h.dialed[1].tileID)
 	}
 	h.dialed[1].onData([]byte{1})
-	h.dialed[1].onEnd("", false)
+	h.dialed[1].onEnd(End{})
 	if len(h.data) != 1 || h.data[0].tileID != "u/7" {
 		t.Fatalf("data = %+v, want one chunk keyed by the tmux u/7", h.data)
 	}

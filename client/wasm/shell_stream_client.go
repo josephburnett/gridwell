@@ -17,6 +17,7 @@ import (
 	"github.com/josephburnett/gridwell/client/inflight"
 	"github.com/josephburnett/gridwell/client/pane"
 	"github.com/josephburnett/gridwell/client/shellconn"
+	"github.com/josephburnett/gridwell/client/shellstream"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/urlnorm"
 )
@@ -417,6 +418,7 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	// The pane owns the conn before the dial: an instant failure reports through
 	// onShellExit, which finds it among the panes'.
 	a.local(p.ID).shellConn = conn
+	a.local(p.ID).shellDropped = ""
 	a.shells.Open(key, tileID, int(cols), int(rows))
 	a.syncShellOverlayPosition()
 	// A stream can open after an await, by when a press may have moved on.
@@ -536,22 +538,26 @@ func (a *App) onShellData(key string, data []byte) {
 	conn.term.Call("write", u8)
 }
 
-// onShellExit handles an unexpected stream end; see shellconn.ExitAlive. The
+// onShellExit handles an unexpected stream end; see shellconn.DecideEnd. The
 // verdict keys by tmux, so one exit reaches every tile naming it.
-func (a *App) onShellExit(key, message string, tmuxGone bool) {
-	conn := a.shellConnOfTmux(key)
+func (a *App) onShellExit(e shellstream.Exit) {
+	conn := a.shellConnOfTmux(e.Key)
 	if conn == nil {
 		return
 	}
-	a.emit(traceevent.ShellExit(conn.paneID, conn.tileID, message, tmuxGone))
-	shellConsole("exit pane=%s tile=%s gone=%v msg=%q", conn.paneID, conn.tileID, tmuxGone, message)
-	if alive, known := shellconn.ExitAlive(tmuxGone); known {
-		a.setShellAlive(key, alive)
+	v := shellconn.DecideEnd(e.TmuxGone, e.Said)
+	a.emit(traceevent.ShellExit(conn.paneID, conn.tileID, e.Message, e.TmuxGone, v.Rejoin))
+	shellConsole("exit pane=%s tile=%s gone=%v said=%v msg=%q", conn.paneID, conn.tileID, e.TmuxGone, e.Said, e.Message)
+	if v.Dead {
+		a.setShellAlive(e.Key, false)
 	} else {
-		delete(a.shellAlive, key)
+		delete(a.shellAlive, e.Key)
 	}
-	if message != "" {
-		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+message)
+	if e.Message != "" {
+		a.reportErr(errsurface.Error, "shell", "shell stream ended: "+e.Message)
+	}
+	if v.Rejoin {
+		a.local(conn.paneID).shellDropped = conn.descentID
 	}
 	// The pane draws the preview cache once the terminal goes, so it keeps the
 	// last frame as a park does; nothing is posted, an end is not a capture.
@@ -559,6 +565,22 @@ func (a *App) onShellExit(key, message string, tmuxGone bool) {
 	conn.closed = true
 	a.releaseShellStream(conn.paneID, conn)
 	a.draw()
+}
+
+// rejoinShells re-engages every pane whose shell dropped: the node is back when
+// its event stream opens, never by a clock or the shell socket's own redial.
+func (a *App) rejoinShells() {
+	dropped := map[string]string{}
+	for paneID, pl := range a.locals {
+		if pl.shellDropped != "" {
+			dropped[paneID] = pl.shellDropped
+			pl.shellDropped = ""
+		}
+	}
+	for paneID, descentID := range dropped {
+		a.emit(traceevent.ShellRejoin(paneID, descentID))
+		a.navReEngage(paneID, descentID)
+	}
 }
 
 // mirrorShell snapshots a live terminal into the tile's preview cache.
