@@ -828,7 +828,14 @@ These were decided deliberately. Do not reverse one without a new decision.
   standing exception, for url and shell alike: it is a screenshot, so the
   tile keeps that preview, the address and the tmux keep existing, a
   copy taken while frozen keeps the copy, and only the reconnect clears it
-  (`shellconn.DecideGoLive`).
+  (`shellconn.DecideGoLive`). A live shell whose stream drops, the socket
+  breaking with nothing said by the node, as a sleep breaks it, keeps the
+  terminal's last frame as its preview, as a park does, and rejoins when
+  the node's event stream opens, the one signal that the node is back,
+  through the descent's go-live; a frozen one does not, nor one whose tmux
+  is gone, nor one another screen took over (Joe, 2026-11-13: "A live
+  shell should rejoin of course. A frozen one should not.";
+  `shellconn.DecideEnd`).
 - A file whose name renders as nothing shows its file information
   (Joe, 2026-11-08). Its preview in a directory is its size, as `ls -h`
   spells it, off the stamp, and the type its extension says
