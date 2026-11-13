@@ -5,8 +5,9 @@ import type { GridwellDriver } from './driver';
 // A left press in an unfocused pane's live url view focuses that pane, on any
 // page and from any frame of it. The view swallows the renderer's own mouse
 // events, so main hears the press on the view's webContents and names the
-// pane: a press on a page that cancels pointerdown, and one inside an iframe,
-// which no top-frame listener hears, both land.
+// pane: a press on a page that cancels pointerdown, one inside an iframe,
+// which no top-frame listener hears, and one while a transition animates all
+// land.
 // The press here is real input in the view's own webContents, which the canvas
 // never sees.
 
@@ -91,3 +92,24 @@ for (const [label, cancels, iframe] of [
     await expect.poll(() => gw.focused().then((p) => p.id), { timeout: 5_000 }).toBe(urlPaneId);
   });
 }
+
+// The other pane descends, its transition stretched long enough to press
+// through, and the press in the live view still moves focus.
+test('a left press in an unfocused live url pane focuses it while a transition runs', async ({ electronApp, gw, window }) => {
+  const marker = 'gwe2eleftfocustrans';
+  const { urlPaneId, cx, cy } = await liveUnfocused(electronApp, gw, window, marker);
+  // The split ascends the copied place, so the other pane shows the url
+  // tile's grid; a click on the tile descends there.
+  const tile = await gw.cellCenter((await gw.focused()).id, cx, cy);
+  await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(4000));
+  try {
+    await window.mouse.click(tile.x, tile.y);
+    await expect.poll(() => window.evaluate(() => (window as any).__gridwellTest.transitioning())).toBe(true);
+    expect(await pressInView(electronApp, { marker, paneId: urlPaneId, cancels: false, iframe: false }), 'the press reached the page').toBe(1);
+    const during = await window.evaluate(() => (window as any).__gridwellTest.transitioning());
+    expect(during, 'the press landed while the transition ran').toBe(true);
+    await expect.poll(() => gw.focused().then((p) => p.id), { timeout: 1_500 }).toBe(urlPaneId);
+  } finally {
+    await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(350));
+  }
+});

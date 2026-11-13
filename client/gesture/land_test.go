@@ -28,3 +28,9 @@ func TestLand(t *testing.T) {
 		}
 	}
 }
+
+func TestPressStartsGestureOnlyAtRest(t *testing.T) {
+	if !PressStartsGesture(false) || PressStartsGesture(true) {
+		t.Error("a press starts its gesture at rest and only its focus during a transition")
+	}
+}

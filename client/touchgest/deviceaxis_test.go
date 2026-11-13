@@ -254,6 +254,14 @@ func deviceSurfaces() []surface {
 				return fmt.Sprint("click ", gesture.DecideTileClick(gesture.ClickInput{Door: true})), true
 			}, door)), `"on touch a long-press lifted in place toggles" (2026-10-15)`, true},
 		{"grid background", "input.go", inGrid(gesture.Input{InGridView: true}, nil, gesture.WheelInput{}), "", false},
+		// Any press lands its focus alone while a transition animates; touch's
+		// Select there finds no armed drag, as the mouse's shift press arms none.
+		{"any pane mid-transition", "input.go", func(r record) (string, bool) {
+			if r.button < 0 {
+				return fmt.Sprint("wheel ", gesture.ClassifyWheel(gesture.WheelInput{ZoomOut: r.zoomOut})), true
+			}
+			return fmt.Sprint("press focuses, gesture ", gesture.PressStartsGesture(true)), true
+		}, "", true},
 		{"live content", "input.go", func(r record) (string, bool) {
 			switch {
 			case r.button < 0:

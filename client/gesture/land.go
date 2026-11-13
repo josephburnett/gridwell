@@ -56,3 +56,7 @@ func Land(s Surface, inText bool) Landing {
 	}
 	return LandPane
 }
+
+// PressStartsGesture reports whether a press starts its gesture as well as the
+// pane focus every press moves: not on a layout a transition is still moving.
+func PressStartsGesture(transitioning bool) bool { return !transitioning }

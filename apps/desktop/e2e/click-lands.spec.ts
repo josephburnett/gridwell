@@ -161,3 +161,28 @@ test('one click on an unfocused live url pane hands its page the keyboard, and i
     await window.waitForTimeout(50);
   }
 });
+
+// A press while another pane's transition animates lands its focus; the
+// gesture it would start waits for the layout to settle (gesture.PressReach).
+test('one click on an unfocused grid pane focuses it while another pane descends', async ({ gw, window }) => {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy) + 1;
+  await gw.openMenu();
+  await gw.dragCreate('markdown', cx, cy);
+  await gw.splitFocusedPaneVertical();
+  const [left, right] = (await gw.panes()).slice().sort((a: any, b: any) => a.x - b.x);
+  await gw.focusPane(right);
+  const tile = await gw.cellCenter(right.id, cx, cy);
+  await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(4000));
+  try {
+    await window.mouse.click(tile.x, tile.y);
+    await expect.poll(() => window.evaluate(() => (window as any).__gridwellTest.transitioning())).toBe(true);
+    await window.mouse.click(left.x + left.w / 2, left.y + left.h / 2);
+    expect(await window.evaluate(() => (window as any).__gridwellTest.transitioning()), 'the click landed mid-transition').toBe(true);
+    expect((await paneById(gw, left.id)).focused, 'the click focused the grid pane').toBe(true);
+  } finally {
+    await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(350));
+  }
+});

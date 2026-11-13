@@ -382,8 +382,11 @@ func (d *dragState) grabTile(n *gridwellv1.Tile, cursorCellX, cursorCellY, tlX, 
 func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	a.emit(traceevent.Press(a.paneIDAt(sx, sy), args[0].Get("button").Int(), modsOf(args[0]), false))
-	// The tree and the viewport stay atomic across a transition.
-	if a.trans.Any() {
+	if !gesture.PressStartsGesture(a.trans.Any()) {
+		if p, _, ok := a.paneAtScreen(sx, sy); ok {
+			a.focusToPane(p)
+			a.takeKeyboard()
+		}
 		return nil
 	}
 	// A landing ghost parks every live surface, and its drop has already

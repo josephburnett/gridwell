@@ -141,11 +141,12 @@ func (a *App) onViewPress(vp viewPress, button int) {
 	a.emit(traceevent.Press(vp.paneID, button, traceevent.Mods{}, true))
 	a.viewRight = nil
 	p := a.tree.FindPane(vp.paneID)
-	if p == nil || a.trans.Any() {
+	if p == nil {
 		return
 	}
 	a.focusToPane(p)
 	switch {
+	case !gesture.PressStartsGesture(a.trans.Any()):
 	case button == 0 && vp.at:
 		a.armLeftResize(paneRectFor(a, p), vp.sx, vp.sy)
 	case button == 1:
