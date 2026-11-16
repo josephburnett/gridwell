@@ -282,8 +282,9 @@ type DropInput struct {
 	// right-drag links.
 	CopiesAsLink bool
 	// OntoShell is a release over a shell, its tile on a grid or its live
-	// pane, whatever the button: a paste, refused for PasteRefusal
-	// (shellpaste.Refusal) when it is not "".
+	// pane: a right-drop pastes, refused for PasteRefusal
+	// (shellpaste.Refusal) when it is not "", and a left-drop is refused
+	// (PasteNeedsRight).
 	OntoShell    bool
 	PasteRefusal string
 	// CopySwatch is a drag of the + menu's copy swatch, and OverTile a tile
@@ -314,10 +315,15 @@ const EphemeralNoLink = "a link to an ephemeral visit would die with it"
 // would link, is refused as the move it is (Joe, 2026-11-11).
 const EphemeralNoFarMove = "an ephemeral visit does not move across a connection"
 
+// PasteNeedsRight is why a left-drop onto a paste target is refused: a
+// paste leaves the tile where it is, as a copy does, and a left-drag moves
+// (Joe, 2026-11-16).
+const PasteNeedsRight = "only a right-drag pastes; a left-drag moves"
+
 // Told is the reason a refused drop tells the user, "" when it says nothing.
 func Told(in DropInput) string {
 	switch why := WhyRejected(in); why {
-	case FingerNoFile, EphemeralNoLink, EphemeralNoFarMove:
+	case FingerNoFile, EphemeralNoLink, EphemeralNoFarMove, PasteNeedsRight:
 		return why
 	}
 	return ""
@@ -398,6 +404,8 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, "no target"
 	case in.FromMenu:
 		return DropFromMenu, ""
+	case in.OntoShell && in.Intent == IntentMove:
+		return DropRejected, PasteNeedsRight
 	case in.OntoShell && in.PasteRefusal != "":
 		return DropRejected, in.PasteRefusal
 	case in.OntoShell:
@@ -438,6 +446,8 @@ type GhostPlan struct {
 	// Outline outlines the tile the drop acts on, as the trashcan is lit: the
 	// shell a paste types into, the tile the copy swatch copies.
 	Outline bool
+	// Why is written under the no-entry badge: why a paste is refused.
+	Why string
 }
 
 // GhostPlanForDrop takes both pane ids and cell sizes because the ghost rests
@@ -459,7 +469,11 @@ func GhostPlanForDrop(action DropAction, in DropInput,
 	case DropRejected:
 		if forbidden {
 			// Over the trashcan there is no target pane.
-			return GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
+			p := GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
+			if in.OntoShell {
+				p.Why = WhyRejected(in)
+			}
+			return p
 		}
 		return GhostPlan{PaneID: originPaneID, TargetCellSize: srcCellSize}
 	default: // DropMove / DropCopy

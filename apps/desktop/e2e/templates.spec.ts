@@ -209,15 +209,15 @@ test('the copy swatch on a shell copies it in; a template dropped on a shell pas
   await gw.waitIdle();
   await expect.poll(async () => ((await gw.getGrid(tg)).tiles ?? []).map((t) => t.kind), { message: 'the shell was copied in, not pasted into' }).toEqual(['shell']);
 
-  // A template dropped on the shell tile pastes its reference into the tmux
-  // and moves nothing.
+  // A template right-dropped on the shell tile pastes its reference into the
+  // tmux and moves nothing.
   const note = await createText(origin, tg, 3, 3, 'a reference');
   await gw.descendCell(cx, cy);
   await gw.shellAttached();
   await gw.ascendViaCrumb();
   await openStrip(gw);
   const item = await stripItem(gw, (i) => i.template === note.id, 'the template to paste');
-  await dragItem(window, item, at.x, at.y);
+  await dragItem(window, item, at.x, at.y, 'right');
   await gw.waitIdle();
   expect(((await gw.getGrid(tg)).tiles ?? []).some((t) => t.id === note.id), 'the paste moved nothing').toBe(true);
   const ref = `${origin}/${tg}/${note.id.split('/').pop()}`;

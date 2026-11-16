@@ -182,7 +182,7 @@ func (a *App) previewDrop(d *dragState, sx, sy float64) {
 	}
 	plan := dragdrop.GhostPlanForDrop(dragdrop.DecideDrop(in), in,
 		d.originPaneID, targetPaneID, d.srcCellSize, targetCellSize)
-	a.ghost.why, a.ghost.outlinePane, a.ghost.outlineTile = in.PasteRefusal, "", ""
+	a.ghost.why, a.ghost.outlinePane, a.ghost.outlineTile = plan.Why, "", ""
 	if plan.Outline {
 		a.ghost.outlinePane, a.ghost.outlineTile = t.pane.ID, t.tile.Id
 	}

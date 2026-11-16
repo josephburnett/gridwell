@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -5,11 +6,12 @@ import { test, expect } from './fixtures';
 import { homeEnv, makeRunDir } from './homes';
 import { tileAt } from './oracle';
 
-// A drop onto a shell pastes (CLAUDE.md, 2026-11-08): a file dropped on a
-// live shell types its absolute path, so `cat `, the drop and Enter show the
-// file; a home tile dropped on a shell tile on the grid, its tmux running
-// with no terminal attached, types its reference, the window's origin and
-// the tile's place.
+// A drop onto a shell pastes (CLAUDE.md, 2026-11-08): a file right-dropped
+// on a live shell types its absolute path, so `cat `, the drop and Enter show
+// the file; a home tile right-dropped on a shell tile on the grid, its tmux
+// running with no terminal attached, types its reference, the window's origin
+// and the tile's place. A left-drop is refused with the reason and types
+// nothing, since a paste leaves the tile where it is (Joe, 2026-11-16).
 
 const ROOT = makeRunDir();
 const MARKER = `pasted-${Math.random().toString(36).slice(2, 8)}`;
@@ -27,7 +29,10 @@ function paneText(home: string, key: string): string {
   return r.status === 0 ? r.stdout : '';
 }
 
-test('a file dropped on a shell pastes its path; a tile, its reference', async ({ gw, home, window }) => {
+const notices = async (window: Page): Promise<string[]> =>
+  ((await window.evaluate(() => (window as any).__gridwellTest.errors())).notices ?? []).map((n: any) => String(n.message));
+
+test('a file right-dropped on a shell pastes its path; a tile, its reference', async ({ gw, home, window }) => {
   const origin = new URL(window.url()).origin;
   const shellText = (): Promise<string> => window.evaluate(() => (window as any).__gridwellTest.shellText());
 
@@ -67,12 +72,22 @@ test('a file dropped on a shell pastes its path; a tile, its reference', async (
   const live = (await gw.panes()).find((p: any) => p.id === a.id)!;
   const from = await gw.cellCenter(b.id, Number(notes.x ?? 0), Number(notes.y ?? 0));
   const m = window.mouse;
-  await m.move(from.x, from.y);
-  await m.down({ button: 'left' });
-  await m.move(from.x + 8, from.y + 8);
-  await m.move(live.x + live.w / 2, live.y + live.h / 2, { steps: 10 });
-  await m.up({ button: 'left' });
-  await gw.waitIdle();
+  const dropOnShell = async (button: 'left' | 'right') => {
+    await m.move(from.x, from.y);
+    await m.down({ button });
+    await m.move(from.x + 8, from.y + 8);
+    await m.move(live.x + live.w / 2, live.y + live.h / 2, { steps: 10 });
+    await m.up({ button });
+    await gw.waitIdle();
+  };
+  await dropOnShell('left');
+  await expect
+    .poll(async () => notices(window), { message: 'the left-drop was refused with the reason', timeout: 10_000 })
+    .toContain('only a right-drag pastes; a left-drag moves');
+  const unmoved = ((await gw.getGrid(b.gridID)).tiles ?? []).find((t: any) => t.id === notes.id)!;
+  expect([unmoved.x, unmoved.y], 'the left-drop snapped back').toEqual([notes.x, notes.y]);
+  expect(await shellText(), 'the left-drop typed nothing').not.toContain(path.join(ROOT, 'notes.txt'));
+  await dropOnShell('right');
   // The press focused the file's pane; the shell's terminal is read focused.
   await gw.clickScreen(live.x + live.w / 2, live.y + live.h / 2);
   const pathTyped = async () => (await shellText()).includes(`cat ${path.join(ROOT, 'notes.txt')}`);
@@ -86,7 +101,7 @@ test('a file dropped on a shell pastes its path; a tile, its reference', async (
   // Leave the shell, its tmux running, and drop the text tile on its tile.
   await window.keyboard.type('echo ');
   await gw.ascendViaCrumb();
-  await gw.dragTileCell(cx + 1, cy, cx, cy);
+  await gw.copyTileCell(cx + 1, cy, cx, cy);
   const key = shell.id.split('/').pop()!;
   const ref = `${origin}/${a.gridID}/${text.id.split('/').pop()}`;
   await expect
