@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
@@ -25,11 +26,17 @@ import (
 // gmRenderer is the one GFM configuration, so the overlay's render and
 // tasklist.go's marker scan read the same dialect.
 var gmRenderer = goldmark.New(
-	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithExtensions(extension.NewLinkify(extension.WithLinkifyURLRegexp(bareURL)),
+		extension.Table, extension.Strikethrough, extension.TaskList),
 	goldmark.WithRendererOptions(renderer.WithNodeRenderers(
 		util.Prioritized(taskCheckboxRenderer{}, 100),
 	)),
 )
+
+// bareURL is goldmark's bare-URL pattern with an IPv4 or localhost host too, so
+// a reference to a node reached at 127.0.0.1 is a link as one at its name is.
+var bareURL = regexp.MustCompile(`^(?:http|https|ftp)://(?:[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-z]+|localhost|[0-9]{1,3}(?:\.[0-9]{1,3}){3})` +
+	`(?::\d+)?(?:[/#?][-a-zA-Z0-9@:%_+.~#$!?&/=\(\);,'">\^{}\[\]` + "`" + `]*)?`)
 
 // taskCheckboxRenderer drops `disabled`. Task-list checkboxes are the one
 // interactive control in the read-only rendered view, and a disabled input

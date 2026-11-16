@@ -19,6 +19,24 @@ func TestRenderHTMLMarkdown(t *testing.T) {
 	}
 }
 
+// A bare URL is a link whatever names its host, a reference to a node at
+// 127.0.0.1 as one at its name, and a word that only looks like one is not.
+func TestRenderHTMLLinksBareURLs(t *testing.T) {
+	for in, link := range map[string]bool{
+		"https://rtb.example.ts.net:10100/n1abcde/3/12": true,
+		"http://127.0.0.1:38367/n1abcde/1/2":            true,
+		"http://localhost:3000/?w=n1abcde%2F12":         true,
+		"www.example.com/a":                             true,
+		"http://nohost/a":                               false,
+		"127.0.0.1:8080":                                false,
+	} {
+		got := RenderHTML([]byte("see "+in+" here"), false)
+		if has := strings.Contains(got, `href="`); has != link {
+			t.Errorf("%s: linked %v, want %v:\n%s", in, has, link, got)
+		}
+	}
+}
+
 func TestRenderHTMLOrg(t *testing.T) {
 	got := RenderHTML([]byte("* Heading\n\nSome /italic/ text.\n\n- item one\n- item two"), true)
 	for _, want := range []string{"Heading", "<em>italic</em>", "<li>"} {
