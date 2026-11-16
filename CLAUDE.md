@@ -122,7 +122,7 @@ what each one is called.
 | content tile | A text, a url or a shell; a pane descends into one and it goes live. | A door; a workspace tile. |
 | link | A tile whose content is a path to another tile, drawn dashed, resolved one hop at a time; broken at any hop it reads dead. Deleting one unlinks. A link to a grid is a door. | A copy. |
 | copy | A new tile with the same content, copied to any depth when it is made; of a link, another link to the same target. Right-drag copies. | A link; a move, which never crosses a connection or the disk. |
-| reference | A Gridwell URL naming a tile or a grid: its place in the client's address grammar under an origin. A browser opens the place; read with the web password it answers the content. A drop onto a shell pastes one. | A link, which is a tile. |
+| reference | A Gridwell URL naming a tile or a grid: its place in the client's address grammar under an origin. A browser opens the place; read with the web password it answers the content; clicked out of a live tile it opens the place in the pane below. A right-drop onto a shell or a raw text pastes one. | A link, which is a tile. |
 | text | A tile holding a body; its name is the body's first line. | |
 | url | A tile holding an address; it goes live on descent. | |
 | shell | A tile showing a terminal; it names the tmux it runs in. | |
@@ -709,8 +709,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   strip. A template is drawn as its crumb is in the bar: its preview
   filling the square slot, its kind's border on it (`pane.SquareCell`, Joe
   2026-11-10). Left-drag, right-drag and ctrl + right-drag of one move,
-  copy and link it as of any tile, a drop on a shell pastes its reference
-  and the trashcan deletes it, so the strip behaves as a copy buffer. A click opens an ephemeral copy:
+  copy and link it as of any tile, a right-drop on a shell or a raw text
+  pastes its reference and the trashcan deletes it, so the strip behaves as a copy buffer. A click opens an ephemeral copy:
   the copy is made on the scratch grid first, deep as every copy is (a
   shell's naming the template's tmux), and the visit descends into it, for
   every kind, so the template's row, preview included, is never touched.
@@ -796,7 +796,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   grammar, never a second parser. Like the content API it is outside the
   build gate: a tool's read names no build. The MCP instructions say how
   to read one, and docs/mcp.md says the same words.
-- A drop onto a shell is one verb, `PasteShell{tile_id, tile_ids,
+- A paste into a shell is one verb, `PasteShell{tile_id, tile_ids,
   origin}` (Joe, 2026-11-08), which the web and connection APIs decode
   onto the router and the MCP API does not expose. The node owning the
   shell's tmux answers it: its router refuses a row of another node
@@ -812,7 +812,12 @@ These were decided deliberately. Do not reverse one without a new decision.
 - A url tile opens its own address, and a link followed inside a live page
   navigates that page (2026-11-07, reversing the site pages and address
   rules of 2026-10-25). A link that opens a window opens its address in a
-  pane below.
+  pane below. A link out of a live tile, a rendered text's, a shell's or
+  a page's window, whose address is a reference under the client's own
+  origin opens the place it names in the pane below, never a page of the
+  client, and makes no visit; a workspace tile's place enters the window
+  from that pane, as its descent does; any other address, a far node's
+  web address included, opens as a visit (Joe, 2026-11-16, `paste.Place`).
 
 **Experience**
 
@@ -887,7 +892,7 @@ These were decided deliberately. Do not reverse one without a new decision.
   it, a ctrl + right-drag or a copy that lands as a link, is refused with
   "a link to an ephemeral visit would die with it", since no link holds a
   visit (`dragdrop.EphemeralNoLink`); either refusal wears the no-entry
-  badge. A drop on a shell pastes its reference. The trashcan ends the
+  badge. A right-drop on a shell or a raw text pastes its reference. The trashcan ends the
   visit as leaving it does, the ascent out of a frame's and the leave out
   of a level's, never a delete from under the pane
   (`dragdrop.DropEndVisit`, `pane.Levels.EndVisit`). A press that never
@@ -922,7 +927,8 @@ These were decided deliberately. Do not reverse one without a new decision.
   drop lands in or across one. Across a connection a left-drag links too,
   because there is no move across one; between home and a directory a
   Gridwell tile moves, since the Gridwell layer is one space (2026-11-08).
-  A right-drag of a directory's door links, because a directory never
+  Over a shell or a raw text the right button pastes and the left is
+  refused (2026-11-16). A right-drag of a directory's door links, because a directory never
   copies (2026-10-20), and so does any file's onto a Gridwell grid, because
   nothing is converted between the disk and Gridwell (2026-11-08). Dashed means link; deleting a link
   unlinks. Ctrl or cmd + left-click descends in a new pane split below —
@@ -941,14 +947,25 @@ These were decided deliberately. Do not reverse one without a new decision.
   on a cell the set does not vacate; each tile is its own write with its
   own claim, so a stale one is refused and snaps back alone
   (2026-10-15, `dragdrop.CarryOf`).
-- A drop onto a shell pastes (Joe, 2026-11-08): a release over a shell,
-  its tile on a grid or its live pane, whatever the button, types into its
-  tmux what the carry names and moves nothing; only a menu template, a
-  bare click and the trashcan stand above it (`dragdrop.DropPaste`). It
-  lands when every carried row is of the shell's node, and is refused
-  otherwise with "<name> is not on the shell's node", which the ghost
-  reads from the ids alone and writes under its no-entry badge; a paste
-  that lands outlines the shell.
+- A right-drop onto a shell or a raw text pane pastes (Joe, 2026-11-08,
+  2026-11-16): a release of a right-drag or a ctrl + right-drag over a
+  shell, its tile on a grid or its live pane, or over a pane descended
+  into a text shown raw, pastes what the carry names and moves nothing;
+  only a menu template, a bare click and the trashcan stand above it
+  (`dragdrop.DropPaste`). A left-drop there is refused with "only a
+  right-drag pastes; a left-drag moves", since a paste leaves the tile
+  where it is, as a copy does (`dragdrop.PasteNeedsRight`); a finger's
+  drag is a left-drag, so a finger never pastes. Into a shell its tmux
+  types it, and it lands when every carried row is of the shell's node,
+  refused otherwise with "<name> is not on the shell's node", which the
+  ghost reads from the ids alone. Into a text the client inserts every
+  row's reference, a file's too, since a reference is what a click opens,
+  at the release, as words of their own, through the editor, so it is one
+  undo step and the save claims the version (`paste.Text`,
+  `textedit.InsertWords`). A text tile on a grid and a rendered, info or
+  hex pane take no paste; a text that takes no edits refuses with its
+  reason (`paste.TextRefusal`). Every refusal is told and written under
+  the no-entry badge; a paste that lands outlines the shell or the text.
 - A finger does not move or delete a file (2026-11-08): on a touch press,
   a file or a directory dropped on another directory's grid, a rename
   across directories, or on the trashcan is refused with the reason ("a

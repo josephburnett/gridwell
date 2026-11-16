@@ -618,7 +618,10 @@ ends outside `remove()` — a page that called `window.close()` — is retired a
 once (`retire`): its entry goes, every later call for the pane is a no-op, and
 the renderer hears `onViewGone` and drops its handle, so the pane shows the
 tile's frozen preview. A navigation the page itself starts moves the page,
-and a link that opens a window opens below (`onOpenBelow`). The browser's
+and a link that opens a window opens below (`onOpenBelow`), as every link
+out of a live tile does (`openLinkBelow`): a reference under the client's
+origin (`paste.Place`) restores its place in that pane, and any other
+address is a visit. The browser's
 cookies and storage are one Electron
 partition (`persist:gridwell`), shared by every live url tile, local or far; live tiles browse from the host's network.
 Nothing here touches shells. Nothing here is visible to `make check`.
@@ -733,6 +736,7 @@ copy:
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
 | what a copy of each kind becomes | `rpc.CopyOf`, read by the store's copy, the router's walk and the drop verdict |
 | whether a paste lands, and what it pastes | `paste.Refusal` and `paste.Text` at the node owning a shell; `paste.TextRefusal` and `paste.Text` at the client for a text |
+| whether a link out of a live tile is a reference, and the place it names | `paste.Place`, over `pane.DecodeURL` |
 | what a place URL answers a tool | `place_api.go`, over `pane.DecodeURL` and `mcpapi.Reader` |
 | which body reads leave together, and when | `inflight.Batch`: a paint's asks, as one list read when the paint ends; an ask outside a paint at once |
 | a file's information and its hex view, laid out | `client/fileinfo`, over `ReadContent{info}` and the content API's ranges |
