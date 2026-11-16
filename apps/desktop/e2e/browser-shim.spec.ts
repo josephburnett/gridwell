@@ -60,7 +60,7 @@ test('running $BROWSER in a shell opens an ephemeral url visit below', async ({
   );
 
   // What a terminal app does. The local origin loads with no network.
-  await window.keyboard.type(`"$BROWSER" ${gw.origin}/?opened=via-shim`);
+  await window.keyboard.type(`"$BROWSER" ${gw.origin}/wasm_exec.js?opened=via-shim`);
   await window.keyboard.press('Enter');
 
   await expect
@@ -106,7 +106,7 @@ test('xdg-open under a desktop session opens an ephemeral url visit below', asyn
 
   // What emacs browse-url does, with the desktop environment visible in the env.
   await window.keyboard.type(
-    `XDG_CURRENT_DESKTOP=GNOME xdg-open ${gw.origin}/?opened=via-shadow`,
+    `XDG_CURRENT_DESKTOP=GNOME xdg-open ${gw.origin}/wasm_exec.js?opened=via-shadow`,
   );
   await window.keyboard.press('Enter');
 

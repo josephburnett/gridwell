@@ -32,7 +32,7 @@ test('clicking a url in a shell opens an ephemeral visit in a split below (#207)
 
   // The visit targets the local sidecar origin, so the view loads with no
   // network and tears down cleanly.
-  const visitURL = `${gw.origin}/?visited=shx`;
+  const visitURL = `${gw.origin}/wasm_exec.js?visited=shx`;
   await gw.shellVisitURL(visitURL);
   await expect.poll(async () => (await gw.panes()).length, { timeout: 15_000 }).toBe(
     panesBefore + 1,

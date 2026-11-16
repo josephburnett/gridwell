@@ -2,12 +2,13 @@
 // pane: whether it lands (Refusal for a shell, TextRefusal for a text, read
 // by the ghost and the commit alike) and what it pastes (Text), each tile's
 // reference, its place URL (pane.EncodeURL) under an origin, or into a shell
-// a file's absolute path.
+// a file's absolute path; and which link is a reference (Place).
 package paste
 
 import (
 	"cmp"
 	"net"
+	"net/url"
 	"strings"
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
@@ -81,6 +82,36 @@ func Reference(origin string, t *pb.Tile) string {
 		st.Anchor, st.TileIDs = t.GetGridId(), []string{t.GetId()}
 	}
 	return strings.TrimSuffix(origin, "/") + pane.EncodeURL(st)
+}
+
+// Place is the place path href names when it is a reference under origin:
+// the same scheme, host and port, and a path and query pane.DecodeURL reads.
+// Any other href is an address of its own.
+func Place(origin, href string) (string, bool) {
+	o, err := url.Parse(origin)
+	if err != nil {
+		return "", false
+	}
+	h, err := url.Parse(href)
+	if err != nil || !strings.EqualFold(h.Scheme, o.Scheme) || !strings.EqualFold(h.Hostname(), o.Hostname()) || port(h) != port(o) {
+		return "", false
+	}
+	path := cmp.Or(h.EscapedPath(), "/")
+	if h.RawQuery != "" {
+		path += "?" + h.RawQuery
+	}
+	if _, err := pane.DecodeURL(path); err != nil {
+		return "", false
+	}
+	return path, true
+}
+
+// port is u's port, its scheme's own when it names none.
+func port(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	return map[string]string{"http": "80", "https": "443"}[strings.ToLower(u.Scheme)]
 }
 
 const plain = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./:@%+=,-"

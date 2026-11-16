@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect } from './fixtures';
-import { createText, getTile, getTileContent } from './oracle';
+import { createText, createTile, getTile, getTileContent } from './oracle';
 import type { GridwellDriver, PaneInfo } from './driver';
 import { makeRunDir } from './homes';
 
@@ -10,7 +10,8 @@ import { makeRunDir } from './homes';
 // dropped tile's reference where the pointer is, through the editor, so the
 // save claims the version and bumps it once (Joe, 2026-11-16). A left-drop is
 // refused with the reason and writes nothing, a rendered pane takes no paste,
-// and a text that takes no edits refuses with its reason.
+// and a text that takes no edits refuses with its reason. A reference clicked
+// out of a live tile opens the place it names below.
 
 const ROOT = makeRunDir();
 test.use({ filesRoots: [{ root: ROOT, label: 'code' }] });
@@ -83,6 +84,46 @@ test('a tile right-dropped on a raw text pane lands its reference where the poin
   await dropAt(gw, window, s.aId, s.cx + 1, s.cy, at.x, at.y, 'right');
   await gw.waitIdle();
   expect(await getTileContent(origin, s.text.id), 'a rendered pane took nothing').toBe(BODY + ref);
+
+  // The reference, clicked in the rendered view, opens the tile it names in
+  // the pane below, not a page of the client, and makes no visit.
+  const scratch = await gw.scratchGridID('home');
+  const urlRows = async () => ((await gw.getGrid(scratch)).tiles ?? []).filter((t: any) => t.kind === 'url').length;
+  const visits = await urlRows();
+  await gw.focusPane((await gw.panes()).find((p: PaneInfo) => p.id === s.bId)!);
+  await window.locator('#gw-rendered-view a', { hasText: ref }).click();
+  await gw.waitIdle();
+  await expect.poll(async () => (await gw.panes()).length, { message: 'a pane opened below' }).toBe(3);
+  const below = (await gw.panes()).find((p: PaneInfo) => p.id !== s.aId && p.id !== s.bId)!;
+  await expect.poll(async () => (await gw.panes()).find((p: PaneInfo) => p.id === below.id)?.textFocus, { message: 'the pane below shows the tile' })
+    .toBe(s.pasted.id);
+  await expect.poll(() => gw.textareaValue(), { message: "the tile's body" }).toBe('the referenced body');
+  expect(await urlRows(), 'no visit was made').toBe(visits);
+});
+
+test('a reference clicked in a shell opens the tile it names below', async ({ gw, window }) => {
+  const origin = new URL(window.url()).origin;
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const [cx, cy] = [Math.round(f.cx), Math.round(f.cy)];
+  const door = await createTile(origin, f.gridID, 'door', cx + 1, cy);
+  const scratch = await gw.scratchGridID('home');
+  const urlRows = async () => ((await gw.getGrid(scratch)).tiles ?? []).filter((t: any) => t.kind === 'url').length;
+  const visits = await urlRows();
+  await gw.openMenu();
+  await gw.dragCreate('shell', cx, cy);
+  await gw.descendCell(cx, cy);
+  await gw.shellAttached();
+  const shellPane = await gw.focused();
+
+  await gw.shellVisitURL(`${origin}/${door.childGridId}`);
+  await expect.poll(async () => (await gw.panes()).length, { message: 'a pane opened below' }).toBe(2);
+  const below = (await gw.panes()).find((p: PaneInfo) => p.id !== shellPane.id)!;
+  await expect.poll(async () => (await gw.panes()).find((p: PaneInfo) => p.id === below.id)?.gridID, { message: "the pane below shows the door's grid" })
+    .toBe(door.childGridId);
+  expect((await gw.panes()).find((p: PaneInfo) => p.id === below.id)!.textFocus, 'the pane below is on a grid').toBe('');
+  expect((await gw.panes()).find((p: PaneInfo) => p.id === shellPane.id)!.textFocus, 'the shell stayed live above').not.toBe('');
+  expect(await urlRows(), 'no visit was made').toBe(visits);
 });
 
 test('a text that takes no edits refuses a paste with its reason', async ({ gw, window }) => {

@@ -145,3 +145,28 @@ func TestBindOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestPlace(t *testing.T) {
+	for _, c := range []struct {
+		name, origin, href, want string
+		ok                       bool
+	}{
+		{"a tile under the origin", origin, origin + "/" + node + "/3/12", "/" + node + "/3/12", true},
+		{"an origin with a trailing slash", origin + "/", origin + "/" + node + "/3/12", "/" + node + "/3/12", true},
+		{"the root", origin, origin, "/", true},
+		{"a workspace's place", origin, origin + "/?w=n1abcde%2F12", "/?w=n1abcde%2F12", true},
+		{"the scheme's own port named", "http://h", "http://h:80/" + node + "/3", "/" + node + "/3", true},
+		{"a host in another case", "http://Host:1", "http://host:1/" + node + "/3", "/" + node + "/3", true},
+		{"another port", origin, "https://rtb.example.ts.net:10011/" + node + "/3/12", "", false},
+		{"another scheme", origin, "http://rtb.example.ts.net:10010/" + node + "/3/12", "", false},
+		{"another host", origin, "https://example.com:10010/" + node + "/3/12", "", false},
+		{"a host that starts with the origin's", "http://h:1", "http://h:10/" + node + "/3", "", false},
+		{"a path that is no place", origin, origin + "/wasm_exec.js", "", false},
+		{"no origin", "", origin + "/" + node + "/3", "", false},
+	} {
+		got, ok := Place(c.origin, c.href)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%s: Place = %q %v, want %q %v", c.name, got, ok, c.want, c.ok)
+		}
+	}
+}

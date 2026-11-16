@@ -9,7 +9,10 @@ import (
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/errsurface"
+	"github.com/josephburnett/gridwell/client/inflight"
+	"github.com/josephburnett/gridwell/client/nav"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/paste"
 	"github.com/josephburnett/gridwell/client/scratch"
 )
 
@@ -173,9 +176,10 @@ func (a *App) visitEphemeralShell(p *pane.Pane) {
 		&gridwellv1.Tile{Kind: rpc.KindShell, X: 0, Y: 0, W: 1, H: 1})
 }
 
-// openLinkBelow handles a link opened out of a live tile: an ephemeral visit
-// in the pane pane.SplitBelowForOpen names, below the page it came from or in
-// its place, so the link is never silently dropped.
+// openLinkBelow handles a link opened out of a live tile in the pane
+// pane.SplitBelowForOpen names, below the page it came from or in its place,
+// so the link is never silently dropped: a reference to this node opens the
+// place it names (paste.Place), and any other address an ephemeral visit.
 func (a *App) openLinkBelow(paneID, url string) {
 	p := a.tree.FindPane(paneID)
 	if p == nil {
@@ -194,7 +198,52 @@ func (a *App) openLinkBelow(paneID, url string) {
 		a.draw()
 		a.scheduleURLUpdate()
 	}
+	if place, ok := paste.Place(a.origin, url); ok {
+		a.openPlace(target, place)
+		return
+	}
 	a.visitEphemeralURL(target, url)
+}
+
+// openPlace puts pane p at place, a path pane.DecodeURL reads, by the one
+// restore verb; a pane still in the tile the link came from leaves it first,
+// as a split's copy does. A workspace tile's place is the window's, so the
+// window enters it from p, as a descent into the tile does.
+func (a *App) openPlace(p *pane.Pane, place string) {
+	if st, _ := pane.DecodeURL(place); st.Workspace != "" {
+		a.enterWorkspaceByID(p, st.Workspace)
+		return
+	}
+	if p.ContentID() != "" {
+		a.ascend(p, 1, false)
+	}
+	a.runGesture(nav.Gesture{Kind: nav.GestureRestore, PaneID: p.ID, Raw: place})
+}
+
+// enterWorkspaceByID descends p into the workspace tile id, read first when
+// the cache does not hold it.
+func (a *App) enterWorkspaceByID(p *pane.Pane, id string) {
+	if t := a.cachedTileByID(id); t != nil {
+		a.descend(p, t)
+		return
+	}
+	paneID := p.ID
+	go func() {
+		ctx, cancel := inflight.Bounded()
+		defer cancel()
+		t, err := a.cl.GetTile(ctx, id)
+		if err != nil {
+			a.reportErr(errsurface.Error, "tile:"+id, "tile unavailable: "+rpcErrText(err))
+			return
+		}
+		if t == nil {
+			a.reportErr(errsurface.Error, "tile:"+id, "tile unavailable: the row is gone")
+			return
+		}
+		if fp := a.tree.FindPane(paneID); fp != nil {
+			a.descend(fp, t)
+		}
+	}()
 }
 
 // shellURLActivate opens a url clicked in a live shell below, exactly like a
