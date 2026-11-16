@@ -10,11 +10,11 @@ import (
 
 	pb "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/shellpaste"
+	"github.com/josephburnett/gridwell/client/paste"
 )
 
 // PasteShell routes a drop onto a shell to the node owning its tmux, which
-// spells what it types (shellpaste.Text) and hands the text to its home. A
+// spells what it types (paste.Text) and hands the text to its home. A
 // far node is sent no origin, so it spells under its own web address, the one
 // a shell on its machine reaches.
 func (rt *router) PasteShell(ctx context.Context, req *pb.PasteShellRequest) (*pb.PasteShellResponse, error) {
@@ -52,10 +52,10 @@ func (rt *router) pasteText(ctx context.Context, req *pb.PasteShellRequest) (str
 	for i, id := range req.TileIds {
 		rows[i] = &pb.Tile{Id: id}
 	}
-	if why := shellpaste.Refusal(rows, &pb.Tile{Id: req.TileId}); why != "" {
+	if why := paste.Refusal(rows, &pb.Tile{Id: req.TileId}); why != "" {
 		return "", status.Error(gcodes.InvalidArgument, why)
 	}
-	origin := cmp.Or(req.Origin, shellpaste.BindOrigin(rt.srv.cfg.WebAddr))
+	origin := cmp.Or(req.Origin, paste.BindOrigin(rt.srv.cfg.WebAddr))
 	for i, id := range req.TileIds {
 		resp, err := rt.GetTile(ctx, &pb.GetTileRequest{TileId: id})
 		if err != nil {
@@ -66,5 +66,5 @@ func (rt *router) pasteText(ctx context.Context, req *pb.PasteShellRequest) (str
 			return "", status.Error(gcodes.InvalidArgument, "this node knows no web address to spell a reference under")
 		}
 	}
-	return shellpaste.Text(rows, origin), nil
+	return paste.Text(rows, origin, paste.IntoShell), nil
 }

@@ -3,6 +3,7 @@ package textedit
 import (
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 )
 
@@ -132,4 +133,21 @@ func isThematicBreak(s string) bool {
 		}
 	}
 	return n >= 3
+}
+
+// InsertWords inserts words at off, a UTF-16 offset clamped to the body, as
+// words of their own: a space on a side whose neighbour is not whitespace or
+// the body's edge, and the caret after what went in.
+func InsertWords(body string, off int, words string) ListEdit {
+	u := utf16.Encode([]rune(body))
+	off = clampSel(off, len(u))
+	word := func(c uint16) bool { return !unicode.IsSpace(rune(c)) }
+	insert := words
+	if off > 0 && word(u[off-1]) {
+		insert = " " + insert
+	}
+	if off < len(u) && word(u[off]) {
+		insert += " "
+	}
+	return ListEdit{Start: off, End: off, Insert: insert, Caret: off + len(utf16.Encode([]rune(insert)))}
 }

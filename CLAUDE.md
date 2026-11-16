@@ -800,10 +800,10 @@ These were decided deliberately. Do not reverse one without a new decision.
   origin}` (Joe, 2026-11-08), which the web and connection APIs decode
   onto the router and the MCP API does not expose. The node owning the
   shell's tmux answers it: its router refuses a row of another node
-  (`shellpaste.Refusal`), reads the rows and spells the text
-  (`shellpaste.Text`): a file or a directory its absolute path, any other
+  (`paste.Refusal`), reads the rows and spells the text
+  (`paste.Text`): a file or a directory its absolute path, any other
   tile its reference under the client's origin or, with none, as a far
-  node is sent none, under its own web address (`shellpaste.BindOrigin`),
+  node is sent none, under its own web address (`paste.BindOrigin`),
   which a shell on its machine reaches; each word single-quoted where a
   shell would split it, space-separated, no newline. Home types it with
   `tmux send-keys -l`, attached or not, so a frozen shell takes a drop; a

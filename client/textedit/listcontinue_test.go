@@ -93,3 +93,32 @@ func TestContinueListComposingIsNative(t *testing.T) {
 		t.Fatal("Enter that commits an IME composition must stay native")
 	}
 }
+
+// A paste lands as words of its own wherever the drop put the caret.
+func TestInsertWords(t *testing.T) {
+	const ref = "http://h:1/n1abcde/3/12"
+	for _, c := range []struct {
+		name, text, want string // the caret marked with |
+	}{
+		{"an empty body", "|", ref + "|"},
+		{"between two spaces", "see | here", "see " + ref + "| here"},
+		{"after a word", "see| here", "see " + ref + "| here"},
+		{"before a word", "see |here", "see " + ref + " |here"},
+		{"inside a word", "se|e", "se " + ref + " |e"},
+		{"at the start of a word", "|see", ref + " |see"},
+		{"at the end of the body", "see|", "see " + ref + "|"},
+		{"after a newline", "see\n|", "see\n" + ref + "|"},
+		{"after a wide rune, counted in units", "😀|x", "😀 " + ref + " |x"},
+	} {
+		off := len(utf16.Encode([]rune(c.text[:strings.Index(c.text, "|")])))
+		text := strings.Replace(c.text, "|", "", 1)
+		got, caret := apply(text, off, off, InsertWords(text, off, ref), true)
+		u := utf16.Encode([]rune(got))
+		if marked := string(utf16.Decode(u[:caret])) + "|" + string(utf16.Decode(u[caret:])); marked != c.want {
+			t.Errorf("%s: %q, want %q", c.name, marked, c.want)
+		}
+	}
+	if e := InsertWords("ab", 99, "x"); e.Start != 2 {
+		t.Errorf("an offset past the end lands at the end, got %+v", e)
+	}
+}

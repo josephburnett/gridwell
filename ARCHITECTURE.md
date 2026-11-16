@@ -554,17 +554,21 @@ tmux, so the client keys every shell fact by `shellconn.TmuxKey`, which
 reads the target row first. A tmux lives on the node that
 started it, so a shell copied across namespaces copies as a link.
 
-A drop onto a shell pastes (`dragdrop.DropPaste`): `PasteShell` names the
-shell, the dropped tiles and the client's origin, and moves nothing. It
-lands only when every dropped row is of the shell's node
-(`shellpaste.Refusal`, which the ghost reads from the ids too). The router
-of the node owning the shell's tmux spells the text (`shellpaste.Text`): a
+A right-drop onto a shell or a raw text pane pastes (`dragdrop.DropPaste`);
+a left-drop is refused (`dragdrop.PasteNeedsRight`). Onto a shell,
+`PasteShell` names the shell, the dropped tiles and the client's origin, and
+moves nothing. It lands only when every dropped row is of the shell's node
+(`paste.Refusal`, which the ghost reads from the ids too). The router of the
+node owning the shell's tmux spells the text (`paste.Text`, `IntoShell`): a
 file's or a directory's absolute path, any other tile's reference, its
 place URL under the client's origin or, at a far node, which is sent none,
-under its own web address (`shellpaste.BindOrigin`). Home types it with
+under its own web address (`paste.BindOrigin`). Home types it with
 `tmux send-keys -l`, attached or not; a tmux that is not running is refused
 and none is started. The files refuse a paste, and a connection forwards
-it.
+it. Onto a text the client inserts every row's reference (`paste.Text`,
+`IntoText`) at the release through the editor (`textedit.InsertWords`,
+`applyTextareaEdit`), so the save chain claims the version; a text that
+takes no edits refuses with its reason (`paste.TextRefusal`).
 
 **Takeover.** One live surface per key: a content tile, or for a shell the
 tmux it names. Opening it elsewhere takes over, and `pane.TakeOver` says
@@ -728,7 +732,7 @@ copy:
 | what that slot's right-click offers | `circlemenu.For` |
 | what color anything is | `theme.Of` (canvas, DOM, terminal, documents) |
 | what a copy of each kind becomes | `rpc.CopyOf`, read by the store's copy, the router's walk and the drop verdict |
-| whether a drop onto a shell lands, and what it types | `shellpaste.Refusal`; `shellpaste.Text`, at the node owning the shell |
+| whether a paste lands, and what it pastes | `paste.Refusal` and `paste.Text` at the node owning a shell; `paste.TextRefusal` and `paste.Text` at the client for a text |
 | what a place URL answers a tool | `place_api.go`, over `pane.DecodeURL` and `mcpapi.Reader` |
 | which body reads leave together, and when | `inflight.Batch`: a paint's asks, as one list read when the paint ends; an ask outside a paint at once |
 | a file's information and its hex view, laid out | `client/fileinfo`, over `ReadContent{info}` and the content API's ranges |

@@ -3381,7 +3381,7 @@ func (x *ShellTmuxAliveResponse) GetAlive() bool {
 }
 
 // PasteShell types into a shell's tmux what a drop of tiles onto it pastes
-// (client/shellpaste.Text), literally and with no Enter, attached or not.
+// (client/paste.Text), literally and with no Enter, attached or not.
 // The node owning the shell spells it from tile_ids and origin, the address
 // the client reached the node by; a far node is sent no origin and spells
 // under its own web address. text is that node's spelling, handed by its

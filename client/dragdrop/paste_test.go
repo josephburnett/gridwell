@@ -2,12 +2,12 @@ package dragdrop
 
 import "testing"
 
-// A right-drop onto a shell pastes, a link drag's too, and only a menu item
-// or the early arms beat it; a left-drop, a finger's included, is refused
+// A right-drop onto a paste target pastes, a link drag's too, and only a menu
+// item or the early arms beat it; a left-drop, a finger's included, is refused
 // and told, since a paste leaves the tile where it is (Joe, 2026-11-16); a
-// refusal snaps back naming its reason under the badge.
-func TestDecideDropOntoAShell(t *testing.T) {
-	onto := DropInput{Started: true, TileID: "u/1", HasTarget: true, OntoShell: true, Intent: IntentCopy}
+// refusal snaps back, told and named under the badge.
+func TestDecideDropOntoAPasteTarget(t *testing.T) {
+	onto := DropInput{Started: true, TileID: "u/1", HasTarget: true, PasteTarget: true, Intent: IntentCopy}
 	for _, c := range []struct {
 		name string
 		in   func(DropInput) DropInput
@@ -23,10 +23,14 @@ func TestDecideDropOntoAShell(t *testing.T) {
 			DropRejected, PasteNeedsRight, PasteNeedsRight},
 		{"a finger's drag is a left-drag", func(in DropInput) DropInput { in.Intent, in.Touch = IntentMove, true; return in },
 			DropRejected, PasteNeedsRight, PasteNeedsRight},
-		{"a refusal snaps back with its reason", func(in DropInput) DropInput {
+		{"a refusal snaps back and tells its reason", func(in DropInput) DropInput {
 			in.PasteRefusal = "Notes is not on the shell's node"
 			return in
-		}, DropRejected, "Notes is not on the shell's node", ""},
+		}, DropRejected, "Notes is not on the shell's node", "Notes is not on the shell's node"},
+		{"a text that takes no edits tells its reason", func(in DropInput) DropInput {
+			in.PasteRefusal = "x.txt cannot be written: permission denied"
+			return in
+		}, DropRejected, "x.txt cannot be written: permission denied", "x.txt cannot be written: permission denied"},
 		{"the trashcan still deletes", func(in DropInput) DropInput { in.Intent, in.OverDelete = IntentMove, true; return in }, DropDelete, "", ""},
 		{"a menu item still creates", func(in DropInput) DropInput { in.FromMenu = true; return in }, DropFromMenu, "", ""},
 		{"a bare click still navigates", func(in DropInput) DropInput { in.Started = false; return in }, DropNavigate, "", ""},

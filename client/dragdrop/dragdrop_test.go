@@ -801,7 +801,7 @@ func TestCopySwatchDrop(t *testing.T) {
 		t.Errorf("over a tile = %v, want DropTemplate", got)
 	}
 	shell := over
-	shell.OntoShell, shell.OverDelete = true, true
+	shell.PasteTarget, shell.OverDelete = true, true
 	if got := DecideDrop(shell); got != DropTemplate {
 		t.Errorf("over a shell by the trashcan = %v, want DropTemplate: the copy swatch pastes and deletes nothing", got)
 	}
@@ -836,7 +836,7 @@ func TestAVisitLinksNowhere(t *testing.T) {
 		{"a right-drag that copies as a link", func(in *DropInput) { in.Intent, in.CopiesAsLink = IntentCopy, true }, DropLink, DropRejected, EphemeralNoLink},
 		{"a ctrl + right-drag", func(in *DropInput) { in.Intent = IntentLink }, DropLink, DropRejected, EphemeralNoLink},
 		{"a ctrl + right-drag across a connection", func(in *DropInput) { in.Intent, in.MovesAsLink, in.CopiesAsLink = IntentLink, true, true }, DropLink, DropRejected, EphemeralNoLink},
-		{"a drop on a shell", func(in *DropInput) { in.OntoShell, in.Intent = true, IntentLink }, DropPaste, DropPaste, ""},
+		{"a drop on a shell", func(in *DropInput) { in.PasteTarget, in.Intent = true, IntentLink }, DropPaste, DropPaste, ""},
 		{"the trashcan", func(in *DropInput) { in.HasTarget, in.OverDelete = false, true }, DropDelete, DropEndVisit, ""},
 	}
 	for _, c := range cases {

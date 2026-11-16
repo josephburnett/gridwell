@@ -16,7 +16,7 @@ import (
 
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"github.com/josephburnett/gridwell/api/rpc"
-	"github.com/josephburnett/gridwell/client/shellpaste"
+	"github.com/josephburnett/gridwell/client/paste"
 	"github.com/josephburnett/gridwell/internal/files"
 	"github.com/josephburnett/gridwell/internal/local"
 	"github.com/josephburnett/gridwell/internal/local/store"
@@ -97,7 +97,7 @@ func TestAReferenceAnswersItsContent(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		return resp.StatusCode, resp.Header.Get("Content-Type"), string(b)
 	}
-	ref := func(row *gridwellv1.Tile) string { return shellpaste.Reference(hs.URL, row) }
+	ref := func(row *gridwellv1.Tile) string { return paste.Reference(hs.URL, row) }
 	curl := &http.Client{}
 
 	for _, c := range []struct {

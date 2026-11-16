@@ -188,3 +188,6 @@ promoted
 promoting
 promotion
 promotable
+# "shellpaste" — a paste lands in a shell or a raw text, so its package is
+# client/paste (2026-11-16). Allowed in the debt ledger, which records history.
+shellpaste test/boundary/debt\.txt:

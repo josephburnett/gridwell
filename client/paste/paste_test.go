@@ -1,4 +1,4 @@
-package shellpaste
+package paste
 
 import (
 	"testing"
@@ -39,10 +39,40 @@ func TestText(t *testing.T) {
 			origin + "/r2abcde/1/9"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			if got := Text(c.rows, origin); got != c.want {
+			if got := Text(c.rows, origin, IntoShell); got != c.want {
 				t.Errorf("Text = %q, want %q", got, c.want)
 			}
 		})
+	}
+}
+
+// Into a text every row is its reference, unquoted, a file's included, since
+// a reference is what a click opens.
+func TestTextIntoAText(t *testing.T) {
+	notes := file(node, "/home/joe/my notes.md")
+	notes.GridId = rpc.QualifyID(node, rpc.KeyTileID("/home/joe"))
+	rows := []*pb.Tile{notes, {Id: node + "/12", GridId: node + "/3", Kind: rpc.KindWorkspace}, {Id: "r2abcde/9", GridId: "r2abcde/1", Kind: rpc.KindText}}
+	want := Reference(origin, notes) + " " + origin + "/?w=n1abcde%2F12" + " " + origin + "/r2abcde/1/9"
+	if got := Text(rows, origin, IntoText); got != want {
+		t.Errorf("Text = %q, want %q", got, want)
+	}
+}
+
+func TestTextRefusal(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		row      *pb.Tile
+		readOnly bool
+		want     string
+	}{
+		{"a writable text pastes", &pb.Tile{Id: node + "/1", AltText: "Notes"}, false, ""},
+		{"a read-only file says its reason", &pb.Tile{Id: node + "/~eA", AltText: "x.txt", ReadOnly: "x.txt cannot be written: permission denied"}, true,
+			"x.txt cannot be written: permission denied"},
+		{"a text on a grid that takes no edits says so", &pb.Tile{Id: node + "/1", AltText: "Notes"}, true, "Notes takes no edits"},
+	} {
+		if got := TextRefusal(c.row, c.readOnly); got != c.want {
+			t.Errorf("%s: TextRefusal = %q, want %q", c.name, got, c.want)
+		}
 	}
 }
 

@@ -6,11 +6,15 @@ import (
 	"context"
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 	"strings"
+	"syscall/js"
 
 	"github.com/josephburnett/gridwell/api/rpc"
 	"github.com/josephburnett/gridwell/client/cache"
 	"github.com/josephburnett/gridwell/client/dragdrop"
+	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/nav"
+	"github.com/josephburnett/gridwell/client/paste"
+	"github.com/josephburnett/gridwell/client/textedit"
 	"github.com/josephburnett/gridwell/client/traceevent"
 )
 
@@ -165,8 +169,13 @@ func (a *App) commitShared(verdict dragdrop.DropAction, d *dragState, t *dropTar
 }
 
 // commitPaste asks the node owning the shell to type what the carry names
-// into its tmux, spelled under this page's origin; a refusal is a notice.
+// into its tmux, spelled under this page's origin, or inserts it into the
+// text; a refusal is a notice.
 func (a *App) commitPaste(d *dragState, t *dropTarget) {
+	if t.into == paste.IntoText {
+		a.pasteIntoText(d, t)
+		return
+	}
 	ids := make([]string, len(d.carried))
 	for i, row := range d.carried {
 		ids[i] = row.Id
@@ -179,6 +188,53 @@ func (a *App) commitPaste(d *dragState, t *dropTarget) {
 	a.post(write{label: "PasteShell", call: func(ctx context.Context) error {
 		return a.cl.PasteShell(ctx, shell, ids, origin)
 	}})
+}
+
+// pasteIntoText inserts the carry's references at the release through the
+// editor, so the edit is the user's own: one undo step, and saved by the save
+// chain under the version it claims. The press focused the drag's pane, and
+// the textarea lives only over the focused pane, so the text's pane takes
+// focus first; its body is held, since the pane painted it, and one that is
+// not is refused rather than waited for.
+func (a *App) pasteIntoText(d *dragState, t *dropTarget) {
+	if !strings.HasPrefix(a.origin, "http") {
+		a.reportErr(errsurface.Error, "paste", "this page has no web address to spell a reference under")
+		return
+	}
+	a.focusToPane(t.pane)
+	a.takeKeyboard()
+	_, file, _, desc := a.focusedTextDescent()
+	if _, held := a.tileBody(file); !held || desc.Mode != rpc.TextModeText || a.overlays.lastTextareaTileID != t.pane.ContentID() {
+		a.reportErr(errsurface.Info, "paste", "the text has not loaded; drop again")
+		return
+	}
+	ta := a.overlays.textTextarea
+	e := textedit.InsertWords(ta.Get("value").String(), a.textareaOffsetAt(ta, t.atX, t.atY),
+		paste.Text(d.carried, a.origin, paste.IntoText))
+	if !a.applyTextareaEdit(ta, e) {
+		a.reportErr(errsurface.Error, "paste", "the browser refused the paste")
+	}
+}
+
+// textareaOffsetAt is the UTF-16 offset in ta under canvas point (sx, sy),
+// by document.caretPositionFromPoint, which Chromium 128 and later answers
+// with ta itself and the offset in its value. Where the call is absent or
+// answers another node the caret stands in, so a paste always lands. The
+// drop's ghost parks ta by a clip (overlayClip), and a clipped point hits
+// nothing, so the clip is lifted for the read, within one task.
+func (a *App) textareaOffsetAt(ta js.Value, sx, sy float64) int {
+	rect := a.canvas.Call("getBoundingClientRect")
+	if a.doc.Get("caretPositionFromPoint").Type() == js.TypeFunction {
+		style := ta.Get("style")
+		clip := style.Get("clipPath")
+		style.Set("clipPath", "none")
+		pos := a.doc.Call("caretPositionFromPoint", sx+rect.Get("left").Float(), sy+rect.Get("top").Float())
+		style.Set("clipPath", clip)
+		if pos.Truthy() && pos.Get("offsetNode").Equal(ta) {
+			return pos.Get("offset").Int()
+		}
+	}
+	return ta.Get("selectionStart").Int()
 }
 
 // commitMove places every carried tile by the grabbed tile's offset, each

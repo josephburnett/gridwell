@@ -1,8 +1,9 @@
-// Package shellpaste owns a drop onto a shell: whether it lands (Refusal,
-// read by the ghost and the commit alike) and the text the node owning the
-// shell types into its tmux (Text): a file's absolute path, or any other
-// tile's reference, its place URL (pane.EncodeURL) under an origin.
-package shellpaste
+// Package paste owns a right-drop that pastes, onto a shell or a raw text
+// pane: whether it lands (Refusal for a shell, TextRefusal for a text, read
+// by the ghost and the commit alike) and what it pastes (Text), each tile's
+// reference, its place URL (pane.EncodeURL) under an origin, or into a shell
+// a file's absolute path.
+package paste
 
 import (
 	"cmp"
@@ -26,16 +27,43 @@ func Refusal(rows []*pb.Tile, shell *pb.Tile) string {
 	return ""
 }
 
-// Text is what a paste of rows types: each row's path or reference, quoted
-// where a shell would split it, space-separated, with no newline.
-func Text(rows []*pb.Tile, origin string) string {
+// TextRefusal is why a drop onto a text whose body takes no edits
+// (textedit.ReadOnly) does not paste, "" when it does: the row's own reason,
+// or that it takes none.
+func TextRefusal(row *pb.Tile, readOnly bool) string {
+	if !readOnly {
+		return ""
+	}
+	return cmp.Or(row.GetReadOnly(), cmp.Or(row.GetAltText(), row.GetId())+" takes no edits")
+}
+
+// Into is the kind of pane a paste lands in.
+type Into int
+
+const (
+	// IntoShell is typed into a tmux by the node owning it, where a path is
+	// what a command reads.
+	IntoShell Into = iota
+	// IntoText is inserted into a body, where a reference is what a click
+	// opens, so a file is its reference too.
+	IntoText
+)
+
+// Text is what a paste of rows into a pane of kind into inserts, the words
+// space-separated with no newline: into a shell a file's absolute path or any
+// other row's reference, quoted where a shell would split it; into a text
+// every row's reference as it is.
+func Text(rows []*pb.Tile, origin string, into Into) string {
 	words := make([]string, len(rows))
 	for i, r := range rows {
 		word, file := rpc.FilePath(r.GetId())
-		if !file {
+		if !file || into == IntoText {
 			word = Reference(origin, r)
 		}
-		words[i] = Quote(word)
+		if into == IntoShell {
+			word = Quote(word)
+		}
+		words[i] = word
 	}
 	return strings.Join(words, " ")
 }

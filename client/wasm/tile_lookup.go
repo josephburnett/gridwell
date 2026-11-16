@@ -107,18 +107,25 @@ func (a *App) focusedTextDescent() (*pane.Pane, *gridwellv1.Tile, pane.Rect, tex
 	if p == nil || p.ContentID() == "" || p.ViewPending {
 		return nil, nil, pane.Rect{}, textedit.Descent{}
 	}
-	t, _ := a.descendedTile(p)
-	readOnly := false
+	t, _, _, d := a.textDescentOf(p)
+	return p, t, paneRectFor(a, p), d
+}
+
+// textDescentOf is what pane p, descended, shows of its row t: shown, the
+// row whose content it presents, nil until it lands, whether that takes no
+// edits, and textedit.DecideDescent's verdict.
+func (a *App) textDescentOf(p *pane.Pane) (t, shown *gridwellv1.Tile, readOnly bool, d textedit.Descent) {
+	t, _ = a.descendedTile(p)
 	if t != nil {
 		readOnly = a.tileReadOnly(t)
 	}
-	shown := t
+	shown = t
 	if t != nil && rpc.TextDocument(t) {
 		// A link's presentation is its target's, so a target not read yet
 		// is a row that has not landed.
 		shown, _ = a.askContentRow(t)
 	}
-	return p, t, paneRectFor(a, p), textedit.DecideDescent(shown, readOnly, p.TextMode)
+	return t, shown, readOnly, textedit.DecideDescent(shown, readOnly, p.TextMode)
 }
 
 // descentKind classifies what the pane is descended into, off the one

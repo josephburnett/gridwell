@@ -3,6 +3,8 @@
 package main
 
 import (
+	"cmp"
+
 	gridwellv1 "github.com/josephburnett/gridwell/api/gen/gridwell/v1"
 
 	"google.golang.org/protobuf/proto"
@@ -11,8 +13,8 @@ import (
 	"github.com/josephburnett/gridwell/client/dragdrop"
 	"github.com/josephburnett/gridwell/client/errsurface"
 	"github.com/josephburnett/gridwell/client/pane"
+	"github.com/josephburnett/gridwell/client/paste"
 	"github.com/josephburnett/gridwell/client/scratch"
-	"github.com/josephburnett/gridwell/client/shellpaste"
 	"github.com/josephburnett/gridwell/client/traceevent"
 	"github.com/josephburnett/gridwell/client/zoomtrans"
 )
@@ -27,10 +29,13 @@ type dropTarget struct {
 	cellSize float64
 	originX  float64
 	originY  float64
-	// tile is the tile a drop here acts on: the shell it pastes into
-	// (shellTargetAt) or the tile the copy swatch copies (tileTargetAt); nil
-	// for any other target.
+	// tile is the tile a drop here acts on: the shell or the text it pastes
+	// into (pasteTargetAt), into saying which, or the tile the copy swatch
+	// copies (tileTargetAt); nil for any other target.
 	tile *gridwellv1.Tile
+	into paste.Into
+	// atX, atY is the release a paste into a text lands at.
+	atX, atY float64
 	// door is the open door the cursor went through to gridID, "" for none.
 	door string
 }
@@ -133,9 +138,8 @@ func (a *App) dropInputAt(d *dragState, sx, sy float64, placement bool) (
 		in.CopiesAsLink = dragdrop.CarryCopiesAsLink([]*gridwellv1.Tile{t.tile}, a.templates, accepts, known)
 		return in, t, 0, 0
 	}
-	if t, ok := a.shellTargetAt(sx, sy, d); ok {
-		in.HasTarget, in.OntoShell = true, true
-		in.PasteRefusal = shellpaste.Refusal(d.carried, t.tile)
+	if t, why, ok := a.pasteTargetAt(sx, sy, d); ok {
+		in.HasTarget, in.PasteTarget, in.PasteRefusal = true, true, why
 		return in, t, 0, 0
 	}
 	t, in.HasTarget = a.dropTargetAt(sx, sy, d.carry())
@@ -241,32 +245,43 @@ func (a *App) dropTargetAt(sx, sy float64, carried dragdrop.Carry) (*dropTarget,
 	}, true
 }
 
-// shellTargetAt is the shell a release at the cursor pastes into: a live
-// shell pane's, or a shell tile on the pane's grid the drag does not carry.
-// A menu item is no carry and pastes nothing.
-func (a *App) shellTargetAt(sx, sy float64, d *dragState) (*dropTarget, bool) {
+// pasteTargetAt is what a release at the cursor pastes into, and why it
+// refuses: a live shell pane's shell, a pane descended into a text in raw mode
+// or one that takes no edits, whatever it shows, or a shell tile on the pane's
+// grid the drag does not carry. A text on a grid takes no paste, and a menu
+// item is no carry and pastes nothing.
+func (a *App) pasteTargetAt(sx, sy float64, d *dragState) (*dropTarget, string, bool) {
 	p, r, ok := a.paneAtScreen(sx, sy)
 	if !ok || d.fromMenu {
-		return nil, false
+		return nil, "", false
 	}
 	if p.ContentID() != "" {
-		n, ok := a.descendedTile(p)
-		if !ok || !rpc.KindOf(n.Kind).Tmux {
-			return nil, false
+		n, shown, readOnly, desc := a.textDescentOf(p)
+		t := &dropTarget{pane: p, cellSize: d.srcCellSize, tile: n, atX: sx, atY: sy}
+		switch {
+		case n == nil:
+		case rpc.KindOf(n.Kind).Tmux:
+			return t, paste.Refusal(d.carried, n), true
+		case readOnly:
+			t.into = paste.IntoText
+			return t, paste.TextRefusal(cmp.Or(shown, n), true), true
+		case desc.Mode == rpc.TextModeText:
+			t.into = paste.IntoText
+			return t, "", true
 		}
-		return &dropTarget{pane: p, cellSize: d.srcCellSize, tile: n}, true
+		return nil, "", false
 	}
 	ps, ok := p.Screen(r)
 	if !ok {
-		return nil, false
+		return nil, "", false
 	}
 	cx, cy := ps.CellAt(sx, sy)
 	n := a.tileAtCell(p, cx, cy)
 	if n == nil || !rpc.KindOf(n.Kind).Tmux || d.carry().Has(n.Id) {
-		return nil, false
+		return nil, "", false
 	}
 	x, y := ps.CellToScreen(0, 0)
-	return &dropTarget{pane: p, gridID: a.gridIDForPane(p), cellSize: ps.Cell(), originX: x, originY: y, tile: n}, true
+	return &dropTarget{pane: p, gridID: a.gridIDForPane(p), cellSize: ps.Cell(), originX: x, originY: y, tile: n}, paste.Refusal(d.carried, n), true
 }
 
 // tileTargetAt is the tile under the cursor as the copy swatch's drop sees

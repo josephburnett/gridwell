@@ -242,8 +242,8 @@ const (
 	// DropLink creates a link, a door to another namespace for a grid and a leaf link
 	// otherwise. The source is untouched and identity never migrates.
 	DropLink
-	// DropPaste types what the carry names into the shell under the cursor
-	// (shellpaste.Text); nothing moves.
+	// DropPaste pastes what the carry names (paste.Text) into the shell or
+	// the raw text under the cursor; nothing moves.
 	DropPaste
 	// DropTemplate copies the tile under the copy swatch's release into the
 	// templates grid.
@@ -281,11 +281,12 @@ type DropInput struct {
 	// CopiesAsLink is CarryCopiesAsLink over what the drag carries: a
 	// right-drag links.
 	CopiesAsLink bool
-	// OntoShell is a release over a shell, its tile on a grid or its live
-	// pane: a right-drop pastes, refused for PasteRefusal
-	// (shellpaste.Refusal) when it is not "", and a left-drop is refused
-	// (PasteNeedsRight).
-	OntoShell    bool
+	// PasteTarget is a release over a shell, its tile on a grid or its live
+	// pane, or over a pane descended into a text in raw mode or one that
+	// takes no edits: a right-drop pastes, refused for PasteRefusal
+	// (paste.Refusal, paste.TextRefusal) when it is not "", and a left-drop
+	// is refused (PasteNeedsRight).
+	PasteTarget  bool
 	PasteRefusal string
 	// CopySwatch is a drag of the + menu's copy swatch, and OverTile a tile
 	// under its release, one on a grid or the one a pane is descended into.
@@ -323,7 +324,7 @@ const PasteNeedsRight = "only a right-drag pastes; a left-drag moves"
 // Told is the reason a refused drop tells the user, "" when it says nothing.
 func Told(in DropInput) string {
 	switch why := WhyRejected(in); why {
-	case FingerNoFile, EphemeralNoLink, EphemeralNoFarMove, PasteNeedsRight:
+	case FingerNoFile, EphemeralNoLink, EphemeralNoFarMove, PasteNeedsRight, in.PasteRefusal:
 		return why
 	}
 	return ""
@@ -404,11 +405,11 @@ func decideDrop(in DropInput) (DropAction, string) {
 		return DropRejected, "no target"
 	case in.FromMenu:
 		return DropFromMenu, ""
-	case in.OntoShell && in.Intent == IntentMove:
+	case in.PasteTarget && in.Intent == IntentMove:
 		return DropRejected, PasteNeedsRight
-	case in.OntoShell && in.PasteRefusal != "":
+	case in.PasteTarget && in.PasteRefusal != "":
 		return DropRejected, in.PasteRefusal
-	case in.OntoShell:
+	case in.PasteTarget:
 		return DropPaste, ""
 	case in.Touch && in.CarriesFile && in.Intent == IntentMove && !in.SameGrid && !in.MovesAsLink:
 		return DropRejected, FingerNoFile
@@ -444,7 +445,7 @@ type GhostPlan struct {
 	Link   bool
 	Cursor string // CSS cursor: "" or "not-allowed"
 	// Outline outlines the tile the drop acts on, as the trashcan is lit: the
-	// shell a paste types into, the tile the copy swatch copies.
+	// shell or the text a paste lands in, the tile the copy swatch copies.
 	Outline bool
 	// Why is written under the no-entry badge: why a paste is refused.
 	Why string
@@ -470,7 +471,7 @@ func GhostPlanForDrop(action DropAction, in DropInput,
 		if forbidden {
 			// Over the trashcan there is no target pane.
 			p := GhostPlan{PaneID: cmp.Or(targetPaneID, originPaneID), TargetCellSize: srcCellSize, Forbidden: true, Cursor: "not-allowed"}
-			if in.OntoShell {
+			if in.PasteTarget {
 				p.Why = WhyRejected(in)
 			}
 			return p
