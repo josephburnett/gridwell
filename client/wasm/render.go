@@ -424,6 +424,7 @@ func (a *App) draw() {
 	a.refreshFileView()
 	a.syncShellOverlayPosition()
 	a.syncURLViews()
+	a.applyKeyboard(false)
 	a.syncMirrors(rects)
 	a.syncView(rects)
 	a.drawBottomBar()

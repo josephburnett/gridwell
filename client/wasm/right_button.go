@@ -139,6 +139,8 @@ type viewPress struct {
 // a right press waits for the view to say it became a drag.
 func (a *App) onViewPress(vp viewPress, button int) {
 	a.emit(traceevent.Press(vp.paneID, button, traceevent.Mods{}, true))
+	a.endInput()
+	defer a.applyKeyboard(true)
 	a.viewRight = nil
 	p := a.tree.FindPane(vp.paneID)
 	if p == nil {

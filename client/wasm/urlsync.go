@@ -391,6 +391,5 @@ func (a *App) placeCursorAt(col, row int) {
 	}
 	val := a.overlays.textTextarea.Get("value").String()
 	off := textcursor.OffsetFromRowCol(val, row, col)
-	a.overlays.textTextarea.Call("focus")
 	a.overlays.textTextarea.Call("setSelectionRange", off, off)
 }

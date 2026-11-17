@@ -97,8 +97,8 @@ test('one click on a shell parked under an open menu closes the menu and takes k
   await teardownShell(gw, shell, cx, cy);
 });
 
-// Keyboard focus is set once, by the surface that took the press. A content
-// fetch and the draws it causes arrive after the press and must not move it.
+// The keyboard's owner is a function of state: a content fetch and the draws
+// it causes arrive after the press, change no owner and move nothing.
 test('nothing deferred moves keyboard focus off a clicked shell', async ({ window, gw, home }) => {
   const token = await loginToken(gw.origin, homePassword(home));
   const { shell, cx, cy } = await shellBesideGrid(gw);
@@ -122,11 +122,11 @@ test('nothing deferred moves keyboard focus off a clicked shell', async ({ windo
       return el ? `${el.tagName}#${el.id}.${el.className}` : 'none';
     });
   expect(await active(), 'the terminal took the press').toContain('xterm-helper-textarea');
-  const domFocus = async () => {
+  const keyboard = async () => {
     const { cid, lines } = await dumpNow(window, gw.origin, token);
-    return lines.filter((r) => r.cid === cid && r.kind === 'dom-focus').length;
+    return lines.filter((r) => r.cid === cid && r.kind.startsWith('keyboard')).length;
   };
-  const before = await domFocus();
+  const before = await keyboard();
   await window.evaluate(() => {
     const w = globalThis as any;
     w.__focusMoves = 0;
@@ -141,7 +141,7 @@ test('nothing deferred moves keyboard focus off a clicked shell', async ({ windo
   }
   expect(await window.evaluate(() => (window as any).__focusMoves), 'no focusin after the press').toBe(0);
   expect(before, 'the press itself is recorded').toBeGreaterThan(0);
-  expect(await domFocus(), 'no dom-focus trace after the press').toBe(before);
+  expect(await keyboard(), 'no keyboard record after the press').toBe(before);
   await window.keyboard.type("printf '%s\\n' STILL-HERE\n");
   await gw.waitShellLine('STILL-HERE');
   await teardownShell(gw, shell, cx, cy);

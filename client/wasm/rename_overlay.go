@@ -124,6 +124,13 @@ func (a *App) togglePaneZoom() {
 	a.scheduleURLUpdate()
 }
 
+// renameInput is the open inline rename: its element, and end, which closes
+// it, committing a changed value when commit is true.
+type renameInput struct {
+	el  js.Value
+	end func(commit bool)
+}
+
 // openNameInputAt spawns the one inline rename input, the same DOM shape and
 // keys for every rename surface. onCommit receives the trimmed value on Enter
 // or on blur, because a phone keyboard's done key blurs and a typed name must
@@ -146,7 +153,6 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 	st.Set("outline", "none")
 	st.Set("width", pxf(width))
 	position(st)
-	a.overlays.renameEditing = true
 
 	orig := strings.TrimSpace(value)
 	closed := false
@@ -160,12 +166,11 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		in.Call("remove")
 		offKey()
 		offBlur()
-		a.overlays.renameEditing = false
+		a.overlays.rename = nil
 		if commit && val != orig {
 			onCommit(val)
 		}
 		a.draw()
-		a.takeKeyboard()
 	}
 	offKey = listen(in, "keydown", func(ev js.Value) {
 		ev.Call("stopPropagation")
@@ -180,9 +185,9 @@ func (a *App) openNameInputAt(value string, width float64, position func(st js.V
 		closeInput(true) // blur commits; see the doc comment
 	})
 	doc.Get("body").Call("appendChild", in)
-	in.Call("focus")
+	a.overlays.rename = &renameInput{el: in, end: closeInput}
+	a.draw() // hides the title while editing, and gives the input the keyboard
 	in.Call("select")
-	a.draw() // hides the title while editing
 }
 
 // commitRename posts the user-owned name and patches the cache so the title

@@ -180,10 +180,14 @@ func TestFocusNamesBothEnds(t *testing.T) {
 
 // A spec asserts silence by this kind, so the kind is the contract; the
 // element is prose and the pane an id.
-func TestDOMFocusIsItsOwnKind(t *testing.T) {
-	e := DOMFocus("terminal", "p1")
-	if e.Kind != "dom-focus" || e.Msg != "terminal" || e.KV["pane"] != "p1" {
-		t.Errorf("dom-focus record is %+v", e)
+func TestKeyboardRecords(t *testing.T) {
+	e := Keyboard("terminal", "p1", true)
+	if e.Kind != "keyboard" || e.Msg != "terminal" || e.KV["pane"] != "p1" || e.KV["took"] != "true" {
+		t.Errorf("keyboard record is %+v", e)
+	}
+	b := KeyboardPutBack("#gw-text-editor", "page", "p2")
+	if b.Kind != "keyboard-put-back" || b.Msg != "#gw-text-editor" || b.KV["owner"] != "page" || b.KV["pane"] != "p2" {
+		t.Errorf("put-back record is %+v", b)
 	}
 }
 

@@ -405,12 +405,17 @@ func PaneZoom(paneID string, zoomed bool) Event {
 	return Event{Src: "pane", Kind: "zoom", Msg: msg, KV: kv("pane", paneID)}
 }
 
-// DOMFocus is the document's keyboard focus landing on an element: which
-// surface it is and the pane it serves, "" for none. Only a press, a user's
-// descent or ascent, or a modal moves it, so one after the press that caused
-// it is a steal.
-func DOMFocus(element, paneID string) Event {
-	return Event{Src: "dom", Kind: "dom-focus", Msg: element, KV: kv("pane", paneID)}
+// Keyboard is the keyboard's owner the page applied: the kind of surface
+// (gesture.OwnerKind's name) and the pane it serves. took is false when its
+// element would not take focus yet, and the next draw tries again.
+func Keyboard(owner, paneID string, took bool) Event {
+	return Event{Src: "dom", Kind: "keyboard", Msg: owner, KV: kv("pane", paneID, "took", strconv.FormatBool(took))}
+}
+
+// KeyboardPutBack is a focus that landed on element, a surface that is not
+// the owner, with no press behind it, put back on the owner.
+func KeyboardPutBack(element, owner, paneID string) Event {
+	return Event{Src: "dom", Kind: "keyboard-put-back", Msg: element, KV: kv("owner", owner, "pane", paneID)}
 }
 
 // Mods are the modifier keys held at a press.

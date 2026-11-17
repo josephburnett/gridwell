@@ -22,16 +22,14 @@ const (
 type Landing int
 
 const (
-	// LandPane: nothing in the pane takes a click, so the press only gives
-	// the pane the keyboard.
+	// LandPane: nothing in the pane takes a click; the press moved pane
+	// focus, and with it the keyboard's owner (Keyboard).
 	LandPane Landing = iota
 	// LandCaret puts the textarea's caret where the painted text was hit.
 	LandCaret
 	// LandElement clicks the rendered element under the point: a task
 	// checkbox or a link.
 	LandElement
-	// LandTerminal gives the terminal the keyboard.
-	LandTerminal
 	// LandAscend is the raw-text edge press, which ascends as it does on the
 	// focused pane's textarea.
 	LandAscend
@@ -51,8 +49,6 @@ func Land(s Surface, inText bool) Landing {
 		if inText {
 			return LandElement
 		}
-	case SurfaceShell:
-		return LandTerminal
 	}
 	return LandPane
 }

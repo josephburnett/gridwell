@@ -192,7 +192,7 @@ func (a *App) barTitleGeom() (x, w, textX float64, label string, editable, muted
 // drawBarTitle paints the focused pane's name centered in the band, hidden
 // while the rename input replaces it in place.
 func (a *App) drawBarTitle(top float64) {
-	if a.overlays.renameEditing {
+	if a.overlays.rename != nil {
 		return
 	}
 	x, w, textX, label, _, muted, ok := a.barTitleGeom()
@@ -407,7 +407,6 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 	case wsbar.ActionFocusColumn:
 		if id, ok := wsbar.BandFocus(a.layoutPanes(), a.tree.Recency(), sx); ok {
 			a.focusToPane(a.tree.FindPane(id))
-			a.takeKeyboard()
 		}
 	case wsbar.ActionSlotMenu:
 		a.openCircleMenu(p)
@@ -543,9 +542,8 @@ func (a *App) openWorkspaceRenameInput(level int) {
 	})
 }
 
-// openRenameInput swaps the centered bar title for the shared inline input.
-// The name lives in the bar, not over pane content, so this works over live
-// views with no native help.
+// openRenameInput swaps the centered bar title for the shared inline input,
+// which the keyboard's owner then is (gesture.Keyboard).
 func (a *App) openRenameInput() {
 	p := a.tree.FocusedPane()
 	if p == nil {

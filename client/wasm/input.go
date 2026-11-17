@@ -66,7 +66,7 @@ func (a *App) installCanvasInput() {
 	}), captureOpts)
 	// Single-finger touch becomes the same mouse gestures; see touch.go.
 	a.installTouchInput()
-	a.installFocusTrace()
+	a.installKeyboard()
 }
 
 // onKeyDown owns the content-zoom chord. Esc on a drag in flight, or on the
@@ -385,7 +385,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	if !gesture.PressStartsGesture(a.trans.Any()) {
 		if p, _, ok := a.paneAtScreen(sx, sy); ok {
 			a.focusToPane(p)
-			a.takeKeyboard()
 		}
 		return nil
 	}
@@ -460,8 +459,6 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 		return nil
 	}
 	a.focusToPane(p)
-	// Last, once the press has shown, un-parked or left what it acts on.
-	defer a.takeKeyboard()
 	if button == 2 {
 		args[0].Call("preventDefault")
 		// The modifiers are read at the press and never again; see
@@ -494,12 +491,8 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	// A surface that was not there to take the press gets it from here.
 	if p.ContentID() != "" {
 		// Held off so the canvas does not take the keyboard from the
-		// surface the press lands on. An open rename is committed here, as
-		// the canvas taking focus would have.
+		// surface the press lands on; see applyKeyboard.
 		args[0].Call("preventDefault")
-		if in := a.doc.Call("getElementById", "gw-rename-input"); in.Truthy() {
-			in.Call("blur")
-		}
 		if a.menu.OpenOn(p.ID) {
 			a.menu.Close()
 		}

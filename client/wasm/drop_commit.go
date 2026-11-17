@@ -201,8 +201,8 @@ func (a *App) pasteIntoText(d *dragState, t *dropTarget) {
 		a.reportErr(errsurface.Error, "paste", "this page has no web address to spell a reference under")
 		return
 	}
+	// Its draw gives the editor the keyboard, which the insert types through.
 	a.focusToPane(t.pane)
-	a.takeKeyboard()
 	_, file, _, desc := a.focusedTextDescent()
 	if _, held := a.tileBody(file); !held || desc.Mode != rpc.TextModeText || a.overlays.lastTextareaTileID != t.pane.ContentID() {
 		a.reportErr(errsurface.Info, "paste", "the text has not loaded; drop again")

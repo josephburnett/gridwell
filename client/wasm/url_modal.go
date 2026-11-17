@@ -66,10 +66,6 @@ func (a *App) openEntryModal(e entry, onSubmit func(string), onCancel func()) {
 	if a.overlays.urlModalOpen {
 		return
 	}
-	a.overlays.urlModalOpen = true
-	// Park live views so none paints over the dialog.
-	a.draw()
-
 	doc := a.doc
 	modal := doc.Call("getElementById", "gw-url-modal")
 	form := doc.Call("getElementById", "gw-url-form")
@@ -112,17 +108,17 @@ func (a *App) openEntryModal(e entry, onSubmit func(string), onCancel func()) {
 	errEl.Set("textContent", "")
 	modal.Get("classList").Call("add", "open")
 	a.centerCardOnActivePane(form) // the card is the form element
-	input.Call("focus")
+	a.overlays.urlModalOpen = true
+	// Parks live views so none paints over the dialog, and gives the input
+	// the keyboard.
+	a.draw()
 	refreshSuggest() // empty input lists a few, so a pick is one key away
 
 	var offs []func()
 
 	close := func() {
 		a.overlays.urlModalOpen = false
-		defer func() {
-			a.draw() // un-park the live views
-			a.takeKeyboard()
-		}()
+		defer a.draw() // un-parks the live views
 		modal.Get("classList").Call("remove", "open")
 		suggestEl.Set("innerHTML", "")
 		for _, off := range offs {
@@ -136,7 +132,6 @@ func (a *App) openEntryModal(e entry, onSubmit func(string), onCancel func()) {
 		url, err := e.parse(raw)
 		if err != nil {
 			errEl.Set("textContent", err.Error())
-			input.Call("focus")
 			input.Call("select")
 			return
 		}

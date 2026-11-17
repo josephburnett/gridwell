@@ -420,11 +420,10 @@ func (a *App) openShellStream(p *pane.Pane, tileID, key string) {
 	a.local(p.ID).shellConn = conn
 	a.local(p.ID).shellDropped = ""
 	a.shells.Open(key, tileID, int(cols), int(rows))
+	// Shown, its pane's terminal is the keyboard's owner if the pane is still
+	// focused; the draw applies it.
 	a.syncShellOverlayPosition()
-	// A stream can open after an await, by when a press may have moved on.
-	if p.ID == a.tree.Focus {
-		term.Call("focus")
-	}
+	a.draw()
 }
 
 // attachShellRenderer gives the terminal the WebGL addon, falling back to
@@ -507,9 +506,6 @@ func (a *App) moveShellStream(fromID string, to *pane.Pane) {
 	a.emit(traceevent.ShellMove(fromID, to.ID, conn.tileID))
 	shellConsole("move pane=%s→%s tile=%s", fromID, to.ID, conn.tileID)
 	a.syncShellOverlayPosition()
-	if to.ID == a.tree.Focus {
-		conn.term.Call("focus")
-	}
 	a.draw()
 }
 

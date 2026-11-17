@@ -270,7 +270,7 @@ func placeBarButton(a *App, style js.Value, left float64) {
 
 // refreshFileOverlay shows or hides the textarea for the focused pane,
 // whenever pane state changes: a descent, a mode toggle, an ascent, a fetch.
-// It never moves the keyboard; see takeKeyboard.
+// It never moves the keyboard; see applyKeyboard.
 func (a *App) refreshFileOverlay() {
 	a.refreshFileToggle()
 	a.refreshRenderedOverlay()
@@ -338,17 +338,22 @@ func (a *App) refreshFileOverlay() {
 }
 
 // syncTextOverlayPosition repositions an already-shown textarea every draw so
-// it tracks the focused pane. It does not refocus or mutate the value.
+// it tracks the focused pane, and rebinds it when the focused pane's raw text
+// is not the tile it holds: pane focus moved under it, as a crush moves it.
 func (a *App) syncTextOverlayPosition() {
 	a.refreshFileToggle()
 	if !a.hasTextarea() {
 		return
 	}
-	display := a.overlays.textTextarea.Get("style").Get("display").String()
-	if display == "none" {
+	p, _, r, d := a.focusedTextDescent()
+	shown := a.overlays.textTextarea.Get("style").Get("display").String() != "none"
+	if d.Mode == rpc.TextModeText && p.ContentID() != a.overlays.lastTextareaTileID {
+		a.refreshFileOverlay()
 		return
 	}
-	p, _, r, d := a.focusedTextDescent()
+	if !shown {
+		return
+	}
 	if d.Mode != rpc.TextModeText {
 		a.overlays.textTextarea.Get("style").Set("display", "none")
 		return
@@ -397,7 +402,6 @@ func (a *App) onToggleFileMode(p *pane.Pane) {
 	// The mode persists to the tile on ascent, in saveTextBeforeAscent; while
 	// descended the focused pane's live TextMode drives the preview.
 	a.refreshFileOverlay()
-	a.takeKeyboard() // the toggle's press
 	a.draw()
 	a.scheduleURLUpdate()
 }
@@ -493,7 +497,6 @@ func (a *App) onInfoToggle() {
 		p.TextMode = rpc.TextModeInfo
 	}
 	a.refreshFileOverlay()
-	a.takeKeyboard()
 	a.draw()
 	a.scheduleURLUpdate()
 }

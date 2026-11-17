@@ -193,6 +193,7 @@ type App struct {
 	traces map[string]traceState
 
 	overlays overlayState
+	kb       keyboardState
 
 	urlGens urlview.Gens
 
@@ -214,7 +215,8 @@ type overlayState struct {
 	textTextareaInputCb  js.Func
 	textTextareaScrollCb js.Func
 
-	renameEditing bool
+	// rename is the open inline rename input, nil when none is.
+	rename *renameInput
 
 	// renderedReady mirrors textareaReady for rendered mode; lastRenderedKey
 	// caches the render, so scrolling never re-renders.
@@ -743,7 +745,6 @@ func (a *App) bootstrap() {
 }
 
 func (a *App) afterBootstrap() {
-	a.canvas.Call("focus")
 	p := a.tree.FocusedPane()
 	// Land at home; applyURLOnBoot may restore a place over it.
 	p.Reset(pane.Frame{GridID: a.home, View: p.View})
