@@ -615,10 +615,10 @@ view's pixels — a pan in one pane leaves the others alone. Main makes the
 keyboard's owner true in the OS (`applyKeyboard`, never while the window is
 not focused), and the focus guard (`focusguard.ts`) gives it back when another
 webContents takes OS focus with no press behind it. A view swallows the renderer's own mouse events, so the
-presses that must move pane focus are relayed back: the preload forwards a
-left press, and main hears a right press from the view's own input events
-(`onRightPress`). Both land in `focusToPane`, so a right press moves focus
-like every other press. A right-drag that starts over the view is the pane
+presses that must move pane focus are relayed back: main hears every press,
+of any button and from every frame, on the view's own input events and sends
+it with its pane and point (`EV.press`). Each lands in `focusToPane`, so a
+press over a page moves focus like every other press. A right-drag that starts over the view is the pane
 gesture it would be on the canvas, and a right-click without a drag is the
 page's own `contextmenu` (`urlview-preload.ts`); Gridwell pops no menu of
 its own over a page. A view whose webContents
