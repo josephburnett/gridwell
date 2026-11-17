@@ -529,10 +529,16 @@ menu cannot take the press itself, so the canvas finishes it, closing the menu
 or ending a drop's landing to un-park it:
 `gesture.Land` says what, from the caret under the painted character
 (`textcursor.CaretAt`, through the painter's own wrap) to the checkbox under
-the point. Keyboard focus has one writer, `takeKeyboard`, which a press, a
-user's descent or ascent, or a modal closing calls; a refresh only lays out,
-so a content fetch landing after a click cannot take the keyboard back. Every
-DOM focus change is a `dom-focus` trace record.
+the point. Typing goes to the keyboard's owner, `gesture.Keyboard`'s answer
+from state: an open input, else the focused pane's raw editor, live terminal
+or live page, else the canvas. `applyKeyboard` (`client/wasm/keyboard.go`) is
+the one writer of DOM focus: it runs at the end of every press and at every
+draw whose owner changed, so a content fetch landing after a click cannot
+take the keyboard, and a focusin anywhere else with no press behind it is put
+back. It tells main the owner (`setKeyboard`), and main's
+`WebviewRegistry.applyKeyboard` gives that webContents OS focus. Each owner
+applied is a `keyboard` trace record, each focus put back a
+`keyboard-put-back`, and main records its own as `webview/keyboard`.
 
 **Shells** attach over a WebSocket at `/shell` on the page's own origin
 (`client/shellwire` writes the address and frames; `client/shellstream` owns
@@ -576,7 +582,7 @@ how — keep the surface the pane already has, move the one another pane holds
 on the same tile, close one another tile holds on the same tmux, or place
 a fresh one. Every kind of surface moves within its tile. A url view: the
 bridge's `moveWebview` re-keys main's entry to the new pane with that pane's
-bounds, park and focus verdicts, and nothing navigates, so the page keeps its
+bounds and park verdict, and nothing navigates, so the page keeps its
 scroll, its script state and a half-typed field. A shell: its xterm and its
 `/shell` socket go to the new pane, and the socket never knew the pane,
 because `client/shellstream` keys each attachment by its tmux; nothing
@@ -605,8 +611,10 @@ over the canvas for live url tiles. `WebviewRegistry` (`webviews.ts`) owns
 one entry per pane. `syncURLViews` runs every draw: the renderer sends CSS-px
 bounds, `roundBounds` snaps to DIP, `boundsEqual` skips churn, and
 `pane.ParkSurface` says, per pane, whether this draw's gesture needs that
-view's pixels — a pan in one pane leaves the others alone. The focus guard keeps OS keyboard focus in the focused
-pane's view only. A view swallows the renderer's own mouse events, so the
+view's pixels — a pan in one pane leaves the others alone. Main makes the
+keyboard's owner true in the OS (`applyKeyboard`, never while the window is
+not focused), and the focus guard (`focusguard.ts`) gives it back when another
+webContents takes OS focus with no press behind it. A view swallows the renderer's own mouse events, so the
 presses that must move pane focus are relayed back: the preload forwards a
 left press, and main hears a right press from the view's own input events
 (`onRightPress`). Both land in `focusToPane`, so a right press moves focus
@@ -800,7 +808,7 @@ pane is inside" and do not use the word elsewhere.
 | preview = descent target = ascent return | one place stack + the tile row; `framing-roundtrip.spec.ts` (the preview bytes have no oracle yet) |
 | Text preview never re-wraps | `PreviewFrameOf` takes only the tile's facts |
 | Text letters never follow grid zoom | `PreviewRasterDraw` draws at the frame's scale; `preview-letter-height.spec.ts` |
-| Focus steal is impossible | the registry's focus guard, armed by the renderer's own focus fact on `place`, `setHidden` and `move`; `url-focus-steal.spec.ts`, the capture harness |
+| Typing goes to the keyboard's owner | `gesture.Keyboard`, one applier in the page and one in main (`test/boundary/keyboard_test.go`), the focus guard; `keyboard-owner.spec.ts`, the invariant every spec ends on (`e2e/fixtures.ts`), the capture harness |
 | Menu changes only by user action | `client/menu` |
 | Reading never mutates | events flow only into `cache` — by inspection, no injection test yet |
 | User state survives an unreachable source | the rows the user touched answer (an untouched file has no row and is absent until its directory reads); a directory that will not read sweeps nothing |

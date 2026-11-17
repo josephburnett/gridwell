@@ -74,8 +74,9 @@ job is to find the next one (2026-10-21, 2026-10-22).
    much as it adds. Held by the ledger's ceilings.
 6. **Decisions in pure code, everything else glue.** A branch the user can
    see lives where a unit test can call it; the shim and Electron main
-   gather inputs and perform effects. Held in part by the boundary tests;
-   the shim is still checked by reading.
+   gather inputs and perform effects. Held in part by the boundary tests
+   and by the keyboard invariant every e2e and web spec ends on; the rest
+   of the shim is still checked by reading.
 
 ## Vocabulary
 
@@ -143,6 +144,7 @@ what each one is called.
 | level | The workspace tiles the window is inside, outermost first. | A place, the other axis of where you are. |
 | crumb | One per frame, in the bar; a click ascends. | |
 | bar | The one bottom bar, riding the focused pane (`wsbar`). | |
+| keyboard's owner | The one surface typing goes to, derived from state (`gesture.Keyboard`): an open input, else the focused pane's raw editor, live terminal or live page, else the canvas. | The focused tile; pane focus, which it follows. |
 | focused tile | The keyboard target a plain click lands on. Session-ephemeral. | The selection. |
 
 **Writes**
@@ -995,9 +997,28 @@ These were decided deliberately. Do not reverse one without a new decision.
   click ascends; middle-click is the in-pane shortcut.
 - A click lands on what it hits, in any pane, and pane focus follows in
   the same press (2026-10-02, reversing 'moves focus, nothing else'). No
-  press is focus-only. Keyboard focus is set once, by the surface that
-  took the press, and nothing deferred may move it before the next press
-  (`gesture.Land`, `takeKeyboard`). A press over a live url view is heard
+  press is focus-only. Typing goes to exactly one surface, the keyboard's
+  owner, and it is a function of state, never of history (Joe, 2026-11-17:
+  "What should happen in all cases should be CRYSTAL CLEAR"): an open
+  input, the rename input or the entry modal's, while it is open;
+  otherwise the focused pane's surface, the raw editor of a text shown
+  raw, the terminal of a live shell, the page of a live url view that is
+  not parked; and for everything else, a grid, a rendered, info or hex
+  text, a frozen or parked tile, a pane with nothing live, the canvas. The
+  owner is derived once (`gesture.Keyboard`), applied in the page by one
+  function at every press and at every draw that changes it
+  (`applyKeyboard`, the only code in `client/wasm` that focuses an
+  element), and made true in the OS by main, which the page tells
+  (`setKeyboard`) and which never raises a window the user left
+  (`WebviewRegistry.applyKeyboard`, the only call in main that focuses a
+  webContents). An input ends on Enter, on Esc, or on any press outside
+  it, a press main relays from a page and an ascent included, and the
+  press commits it as its blur does, onto the row it was opened on.
+  Nothing else moves the keyboard: a focus that lands on any other surface
+  with no press behind it, a page's own grab or a Tab, is put back; a blur
+  to nothing, a phone dismissing its keyboard, stays until the owner
+  changes or the next press. Esc reads the owner, not the element the key
+  reached. A press over a live url view is heard
   by main on the view's webContents, from every frame of its page, an
   iframe's included, and names its pane and point (`EV.press`), so it moves
   pane focus as any press does, whatever the page does with it; and a
