@@ -1,11 +1,12 @@
 import { test, expect } from './fixtures';
 import type { PaneInfo } from './driver';
-import { createText, getTile, setSelection } from './oracle';
+import { createText, createTile, getTile, setSelection } from './oracle';
 
 // The rest of the keyboard's class, one case each: nothing but the owner
 // moves the keyboard, and an open input ends on Enter, Esc or a press
 // outside it, committing as its blur does.
 
+const paneOf = async (gw: any, id: string): Promise<PaneInfo> => (await gw.panes()).find((p: PaneInfo) => p.id === id)!;
 const inputOpen = (window: any) => window.locator('#gw-rename-input');
 
 // wrapNetwork lets a spec cut the client's sockets and its event stream, as
@@ -133,3 +134,31 @@ test('a press beside the bar during a transition focuses the column above', asyn
     await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(350));
   }
 });
+
+// K: a press of any button outside an open rename ends it by commit, onto the
+// row it was opened on, and so does an ascent.
+for (const button of ['right', 'middle'] as const) {
+  test(`a ${button} press outside an open rename commits it to the row it was opened on`, async ({ gw, window }) => {
+    await gw.enterSource('home');
+    const f = await gw.focused();
+    const cx = Math.round(f.cx);
+    const cy = Math.round(f.cy);
+    const t = await createTile(gw.origin, f.gridID, 'door', cx, cy);
+    await gw.descendCell(cx, cy);
+    const doorPane = (await gw.focused()).id;
+    await gw.splitFocusedPaneVertical();
+    const other = (await gw.focused()).id;
+    await gw.focusPane(await paneOf(gw, doorPane));
+    const textPane = await paneOf(gw, doorPane);
+    await gw.clickBarName('right');
+    await expect(inputOpen(window)).toBeVisible();
+    await window.keyboard.type('kept');
+    // A middle press ascends the pane it lands on; a right press there only
+    // focuses it.
+    const target = button === 'middle' ? textPane : await paneOf(gw, other);
+    await window.mouse.click(target.x + target.w / 2, target.y + target.h / 2, { button });
+    await gw.waitIdle();
+    await expect(inputOpen(window), 'the press ended the rename').toHaveCount(0);
+    await expect.poll(async () => String((await getTile(gw.origin, t.id)).altText ?? '')).toBe('kept');
+  });
+}
