@@ -25,6 +25,8 @@ type Fixtures = {
   filesRoots: FilesRoot[];
   // Raw server.yaml sections seedHome appends, as the Electron fixture's.
   extraYaml: string;
+  // The keyboard invariant, as the Electron fixture's, in the page alone.
+  keyboardInvariant: void;
 };
 
 // One running `gridwell serve`. token is what a logged-in browser's cookie
@@ -148,6 +150,26 @@ export const test = base.extend<Fixtures>({
     await use(page);
   },
 
+  // After every test that passed, the page holds the keyboard's owner. A
+  // browser has no OS-focus half to read, and a page that has not the focus
+  // is not judged.
+  keyboardInvariant: [
+    async ({ window }, use, testInfo) => {
+      await use();
+      if (testInfo.status !== testInfo.expectedStatus) return;
+      let miss = '';
+      for (let i = 0; i < 20; i++) {
+        const k = await window
+          .evaluate(() => (document.hasFocus() ? ((window as any).__gridwellTest?.keyboard?.() ?? null) : null))
+          .catch(() => null);
+        if (!k || !k.settled || k.holds) return;
+        miss = `the owner is ${k.owner} (pane ${k.pane}) but the page holds ${k.active}`;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error(`keyboard invariant: ${miss}`);
+    },
+    { auto: true },
+  ],
   gw: async ({ window, serve }, use) => {
     await use(new GridwellDriver(window, serve.origin));
   },

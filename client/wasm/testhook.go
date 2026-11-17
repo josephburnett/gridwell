@@ -135,6 +135,7 @@ func (a *App) installTestHook() {
 		"shellViews":    js.FuncOf(a.thShellViews),
 		"textInnerBox":  js.FuncOf(a.thTextInnerBox),
 		"textareaInfo":  js.FuncOf(a.thTextareaInfo),
+		"keyboard":      js.FuncOf(a.thKeyboard),
 		"errors":        js.FuncOf(a.thErrors),
 		// The trace's identity and backlog: the cid every record this client
 		// makes carries, and how many the node has not answered for.
@@ -1023,4 +1024,19 @@ func (a *App) thWorkspace(js.Value, []js.Value) any {
 		out["readOnly"] = top.ReadOnly
 	}
 	return out
+}
+
+// thKeyboard answers the keyboard's owner derived from live state beside what
+// the page holds, for the invariant every spec ends on: holds is whether the
+// focused element is the owner's, settled whether nothing is mid-gesture.
+func (a *App) thKeyboard(js.Value, []js.Value) any {
+	o := a.keyboardOwner()
+	active := a.doc.Get("activeElement")
+	return map[string]any{
+		"owner":   ownerNames[o.Kind],
+		"pane":    o.Pane,
+		"holds":   holdsKeyboard(a.keyboardElement(o), active),
+		"active":  a.focusName(active),
+		"settled": !a.gestureInFlight() && !a.trans.Any() && a.ghost == nil && !a.kb.pressing,
+	}
 }

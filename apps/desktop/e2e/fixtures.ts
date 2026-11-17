@@ -150,7 +150,34 @@ type Fixtures = {
   // Set with test.use({ fontconfig: path }) to launch on that fontconfig
   // file; '' keeps the host's.
   fontconfig: string;
+  // The keyboard invariant every spec ends on; see keyboardHeld.
+  keyboardInvariant: void;
 };
+
+// KEYBOARD_OPT_OUTS are specs that end the app mid-gesture by design, by
+// title, each with its reason. keyboardHeld skips them.
+export const KEYBOARD_OPT_OUTS: Record<string, string> = {};
+
+// keyboardHeld is where typing would go against where it should: the
+// keyboard's owner derived from live state (gesture.Keyboard, through the
+// hook), against the element the root page holds and the webContents that
+// holds OS focus. It answers null when they agree, or when the window is not
+// focused or a gesture is in flight, which the invariant does not judge.
+export async function keyboardHeld(app: ElectronApplication, win: Page): Promise<string | null> {
+  const k = await win.evaluate(() => (window as any).__gridwellTest?.keyboard?.() ?? null).catch(() => null);
+  if (!k || !k.settled) return null;
+  const os = await app.evaluate(({ BrowserWindow }, pane) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    if (!w || !w.isFocused()) return null;
+    const view = pane ? (globalThis as any).__gwRegistry?.webContentsFor(pane) : undefined;
+    return { root: w.webContents.isFocused(), view: view ? view.isFocused() : null };
+  }, k.owner === 'page' ? k.pane : '');
+  if (!os) return null;
+  if (!k.holds) return `the owner is ${k.owner} (pane ${k.pane}) but the page holds ${k.active}`;
+  if (k.owner === 'page' && os.view !== true) return `the owner is pane ${k.pane}'s page but its view does not hold OS focus (root ${os.root})`;
+  if (k.owner !== 'page' && !os.root) return `the owner is the root's ${k.owner} but the root does not hold OS focus`;
+  return null;
+}
 
 // The fixture launches the same `electron .` entry `make launch` uses, so the
 // whole stack runs: renderer, wasm, Connect-RPC, server, SQLite. Each test gets
@@ -164,6 +191,22 @@ export const test = base.extend<Fixtures>({
   extraYaml: ['', { option: true }],
   forceDeviceScaleFactor: [0, { option: true }],
   fontconfig: ['', { option: true }],
+
+  // After every test that passed, the keyboard is where its owner says.
+  keyboardInvariant: [
+    async ({ electronApp, window }, use, testInfo) => {
+      await use();
+      if (testInfo.status !== testInfo.expectedStatus || KEYBOARD_OPT_OUTS[testInfo.title]) return;
+      let miss: string | null = null;
+      for (let i = 0; i < 20; i++) {
+        miss = await keyboardHeld(electronApp, window);
+        if (!miss) return;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error(`keyboard invariant: ${miss}`);
+    },
+    { auto: true },
+  ],
 
   home: async ({ filesRoots, extraNodes, extraYaml }, use) => {
     // Far nodes come up before the local node, so its boot-time connect learns
