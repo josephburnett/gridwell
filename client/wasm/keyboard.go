@@ -14,8 +14,9 @@ import (
 // Typing goes to the keyboard's owner, gesture.Keyboard, and this file is
 // the only code in client/wasm that focuses or blurs an element: applyKeyboard
 // makes the owner true in the page, at every press and at every draw whose
-// owner differs from the one last applied, and a focus that lands anywhere
-// else with no press behind it is put back.
+// owner differs from the one last applied, and tells main, which makes it true
+// in the OS. A focus that lands anywhere else with no press behind it is put
+// back.
 
 // keyboardState is what applyKeyboard last made true.
 type keyboardState struct {
@@ -94,6 +95,11 @@ func (a *App) applyKeyboard(press bool) {
 	if changed {
 		a.emit(traceevent.Keyboard(ownerNames[o.Kind], o.Pane, took))
 	}
+	page := ""
+	if o.Kind == gesture.OwnerPage {
+		page = o.Pane
+	}
+	a.bridgeSetKeyboard(page)
 	if took {
 		a.kb.applied, a.kb.el = o, el
 	}

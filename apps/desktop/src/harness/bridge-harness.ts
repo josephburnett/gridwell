@@ -30,15 +30,13 @@ const PAGE =
           console.log('BRIDGE_RESULT ' + JSON.stringify({ err: 'caps contract broken: ' + JSON.stringify(caps) }));
           return;
         }
-        // focused:false is the renderer's verdict for a placement on a pane
-        // that is not the focused one, such as a workspace restore. It must
-        // reach the registry's entry across the real IPC seam.
         await window.gridwell.placeWebview({
           paneId: 'p1', tileId: 'u1/7',
           url: 'data:text/html,' + encodeURIComponent('<title>Inner</title><body style="margin:0;background:#2980b9">y</body>'),
           bounds: { x: 0, y: 0, width: 400, height: 300 },
-          focused: false,
         });
+        // The keyboard's owner crosses the real IPC seam to the registry.
+        await window.gridwell.setKeyboard({ paneId: 'p1' });
         // The pump's pane set crosses the same seam, whole, and an empty set
         // is a set, not a missing one.
         await window.gridwell.setMirrored({ paneIds: ['p1', 'p2'] });
@@ -50,10 +48,10 @@ const PAGE =
         await window.gridwell.moveWebview({
           fromPaneId: 'p1', toPaneId: 'w1:p1',
           bounds: { x: 20, y: 30, width: 300, height: 200 },
-          hidden: false, focused: true,
+          hidden: false,
         });
         let refused = '';
-        await window.gridwell.moveWebview({ fromPaneId: 'p9', toPaneId: 'p8', hidden: false, focused: false })
+        await window.gridwell.moveWebview({ fromPaneId: 'p9', toPaneId: 'p8', hidden: false })
           .catch((e) => { refused = String(e); });
         if (!refused.includes('no live view to move')) throw new Error('a move from an empty pane was not refused: ' + refused);
         console.log('BRIDGE_MOVED');
@@ -86,7 +84,7 @@ app.whenReady().then(async () => {
   Menu.prototype.popup = function stubPopup(this: Menu): void {
     popups++;
   };
-  const registry = new WebviewRegistry(win, {});
+  const registry = new WebviewRegistry(win, root.webContents, {});
   const mirrored: string[][] = [];
   registerWebviewIpc(registry, root.webContents, win, (paneIds) => mirrored.push(paneIds));
 
@@ -100,23 +98,18 @@ app.whenReady().then(async () => {
       if (JSON.stringify(b) !== JSON.stringify({ x: 20, y: 30, width: 300, height: 200 })) {
         fail(`MoveArgs.bounds did not reach the view: ${JSON.stringify(b)}`);
       }
-      if (registry.focusedFor('w1:p1') !== true) fail('MoveArgs.focused did not reach the entry');
-      console.log('bridge ok: moveWebview carried the same view to w1:p1 with its bounds and focus');
+      console.log('bridge ok: moveWebview carried the same view to w1:p1 with its bounds');
       return;
     }
     if (message === 'BRIDGE_PLACED') {
       placedWC = registry.webContentsFor('p1')?.id ?? -1;
-      // The entry must carry the renderer's verdict, because the steal guard
-      // reads it from the first draw, before the next setHidden could correct
-      // it and before addChildView and loadURL hand the widget OS focus.
       if (JSON.stringify(mirrored) !== JSON.stringify([['p1', 'p2'], []])) {
         fail(`setMirrored did not reach main as sent: ${JSON.stringify(mirrored)}`);
       }
       console.log('bridge ok: setMirrored carried both pane sets to main');
 
-      const f = registry.focusedFor('p1');
-      if (f !== false) fail(`PlaceArgs.focused did not reach the registry entry (focusedFor=${String(f)})`);
-      console.log('bridge ok: PlaceArgs.focused=false reached the entry');
+      if (registry.keyboardOwner() !== 'p1') fail(`KeyboardArgs did not reach the registry (owner=${registry.keyboardOwner()})`);
+      console.log('bridge ok: setKeyboard named p1 the owner');
 
       registry.showMenu('p1');
       Menu.prototype.popup = realPopup;

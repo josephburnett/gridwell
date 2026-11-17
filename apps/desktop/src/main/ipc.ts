@@ -25,6 +25,7 @@ export const CH = {
                                // rows; main knows nothing of what they mean.
   setMirrored: 'gw:setMirrored', // MirroredArgs → void
   move: 'gw:move', // MoveArgs → void; rejects when fromPaneId holds no view
+  setKeyboard: 'gw:setKeyboard', // KeyboardArgs → void: the keyboard's owner
   handOverTrace: 'gw:handOverTrace', // void → string: '' once the node holds
                                      // main's trace records, else why not.
 } as const;
@@ -115,10 +116,6 @@ export interface PlaceArgs {
   // placed under an open menu starts parked. The registry must not infer it
   // from whichever setHidden arrived last.
   hidden?: boolean;
-  // The renderer owns this because a pane goes live on paths that have nothing
-  // to do with focus, such as a workspace restore, and main cannot tell those
-  // from a descent.
-  focused?: boolean;
   url: string;
   bounds: Bounds;
   // The tile's persisted user content zoom; absent means 1.0.
@@ -136,10 +133,15 @@ export interface MoveArgs {
   toPaneId: string;
   // Absent keeps the view's own bounds, for a pane not laid out yet.
   bounds?: Bounds;
-  // The same two verdicts PlaceArgs carries, for the pane the view now
-  // serves.
+  // The verdict PlaceArgs carries, for the pane the view now serves.
   hidden: boolean;
-  focused: boolean;
+}
+
+// The keyboard's owner, client/gesture.Keyboard's answer: the pane whose live
+// view's page takes the typing, '' for the root webContents. The renderer
+// sends it whenever it applies the owner, and main makes it true.
+export interface KeyboardArgs {
+  paneId: string;
 }
 
 // The live panes whose preview another pane shows, pane.Mirrored's answer, which
@@ -161,8 +163,6 @@ export interface SetBoundsArgs {
 export interface SetHiddenArgs {
   paneId: string;
   hidden: boolean;
-  // Feeds the steal guard: only a focused pane's view may hold OS focus.
-  focused: boolean;
 }
 
 export interface RemoveArgs {

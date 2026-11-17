@@ -139,7 +139,7 @@ func rejectionText(v js.Value) string {
 // bridgePlace asks main to create or attach a WebContentsView for paneID, on
 // the one host-local session. onFail runs when main refuses: no view exists,
 // so the caller's live handle must go.
-func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b viewBounds, contentZoom float64, history string, hidden, focused bool, onFail func()) {
+func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b viewBounds, contentZoom float64, history string, hidden bool, onFail func()) {
 	a.bridgeVerb("placeWebview", map[string]any{
 		"paneId":      paneID,
 		"tileId":      tileID,
@@ -151,23 +151,17 @@ func (a *App) bridgePlace(paneID, tileID string, gen urlview.Gen, url string, b 
 		// This draw's gesture-hide verdict, so a view placed mid-drag or
 		// under the + menu starts parked. The registry never guesses.
 		"hidden": hidden,
-		// The renderer owns focus, and a view goes live on paths that are not
-		// a gesture on the focused pane, so this cannot be inferred. Chromium
-		// focuses the new widget as it attaches, so a wrong guess leaks a
-		// draw's worth of keystrokes into it.
-		"focused": focused,
 	}, nil, onFail)
 }
 
 // bridgeMove hands the view on fromID to toID with its page: no reload. A nil
 // b keeps the view's own bounds, for a pane not laid out yet. onFail runs when
 // main has no view on fromID, so the caller's handle must go.
-func (a *App) bridgeMove(fromID, toID string, b *viewBounds, hidden, focused bool, onFail func()) {
+func (a *App) bridgeMove(fromID, toID string, b *viewBounds, hidden bool, onFail func()) {
 	fields := map[string]any{
 		"fromPaneId": fromID,
 		"toPaneId":   toID,
 		"hidden":     hidden,
-		"focused":    focused,
 	}
 	if b != nil {
 		fields["bounds"] = b.toJS()
@@ -180,11 +174,15 @@ func (a *App) bridgeSetBounds(paneID string, b viewBounds) {
 }
 
 // bridgeSetHidden parks and unparks the view so canvas overlays can paint
-// where the native view would occlude. focused feeds main's focus-steal
-// guard.
-func (a *App) bridgeSetHidden(paneID string, hidden, focused bool) {
-	a.bridgeVerb("setHidden",
-		map[string]any{"paneId": paneID, "hidden": hidden, "focused": focused}, nil, nil)
+// where the native view would occlude.
+func (a *App) bridgeSetHidden(paneID string, hidden bool) {
+	a.bridgeVerb("setHidden", map[string]any{"paneId": paneID, "hidden": hidden}, nil, nil)
+}
+
+// bridgeSetKeyboard tells main the keyboard's owner: the pane whose live
+// view's page it is, "" for the root. Main makes it true in the OS.
+func (a *App) bridgeSetKeyboard(paneID string) {
+	a.bridgeVerb("setKeyboard", map[string]any{"paneId": paneID}, nil, nil)
 }
 
 // bridgeSetZoom sets the tile's content_zoom on the live view. Main composes

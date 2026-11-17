@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { WebviewRegistry } from '../main/webviews';
 import { captureAttempt, describeAttempt } from '../main/capture';
 import { registerWebviewIpc } from '../main/register';
+import type { TraceEvent } from '../main/trace';
 import { VIEW, type ErrorEvent, type FrameEvent, type NavEvent, type ViewPress } from '../main/ipc';
 import { PARK_COORD, SESSION_PARTITION } from '../main/viewutil';
 import { FOCUS_SETTLE_MS } from '../main/focusguard';
@@ -144,7 +145,13 @@ async function startPage(): Promise<{ url: string; slowUrl: string; close: () =>
 app.whenReady().then(async () => {
   const navEvents: NavEvent[] = [];
   const win = await hostWindow().catch((e: unknown) => fail(String(e)));
-  const registry = new WebviewRegistry(win, { onNav: (ev) => navEvents.push(ev) });
+  // The root webContents every registry here is given, as index.ts gives it
+  // the canvas's.
+  const rootView = new WebContentsView({ webPreferences: { sandbox: false } });
+  win.contentView.addChildView(rootView);
+  rootView.setBounds({ x: 0, y: 0, width: 800, height: 600 });
+  await rootView.webContents.loadURL('data:text/html,' + encodeURIComponent('<title>root</title>root'));
+  const registry = new WebviewRegistry(win, rootView.webContents, { onNav: (ev) => navEvents.push(ev) });
 
   await registry.place('pane1', 'u1/42', DATA_URL, { x: 0, y: 0, width: 800, height: 600 });
 
@@ -221,7 +228,7 @@ app.whenReady().then(async () => {
   await registry.place('pane1h', 'u1/45', DATA_URL, hiddenBounds, 0, '', true);
   const parked = registry.viewBoundsFor('pane1h');
   if (parked?.x !== PARK_COORD) fail(`place(hidden=true) did not park the view (x=${parked?.x})`);
-  registry.setHidden('pane1h', false, true);
+  registry.setHidden('pane1h', false);
   const shown = registry.viewBoundsFor('pane1h');
   if (shown?.x !== hiddenBounds.x || shown?.y !== hiddenBounds.y) {
     fail(`un-park after a hidden place landed at (${shown?.x},${shown?.y}), want (${hiddenBounds.x},${hiddenBounds.y})`);
@@ -233,11 +240,11 @@ app.whenReady().then(async () => {
   // A parked pane draws the tile's cached preview, and a parked view has nothing
   // to capture, so the view stays up until one frame is taken and sent.
   const parkFrames: FrameEvent[] = [];
-  const regPark = new WebviewRegistry(win, { onFrame: (ev) => parkFrames.push(ev) });
+  const regPark = new WebviewRegistry(win, rootView.webContents, { onFrame: (ev) => parkFrames.push(ev) });
   const parkAt = { x: 10, y: 20, width: 300, height: 200 };
   await regPark.place('paneP', 'u1/50', DATA_URL, parkAt);
   await waitForFirstFrame(regPark, 'paneP', 'park scenario');
-  regPark.setHidden('paneP', true, false);
+  regPark.setHidden('paneP', true);
   if (regPark.viewBoundsFor('paneP')?.x === PARK_COORD) fail('the view parked before its preview was taken');
   const parkDeadline = Date.now() + FRAME_BUDGET_MS;
   while (regPark.viewBoundsFor('paneP')?.x !== PARK_COORD && Date.now() < parkDeadline) {
@@ -248,9 +255,9 @@ app.whenReady().then(async () => {
     fail(`a park sent ${parkFrames.length} frames, want one JPEG for u1/50`);
   }
   // A show that lands while the preview is being taken wins: the view stays up.
-  regPark.setHidden('paneP', false, false);
-  regPark.setHidden('paneP', true, false);
-  regPark.setHidden('paneP', false, false);
+  regPark.setHidden('paneP', false);
+  regPark.setHidden('paneP', true);
+  regPark.setHidden('paneP', false);
   await new Promise((r) => setTimeout(r, 1000));
   const overtaken = regPark.viewBoundsFor('paneP');
   if (overtaken?.x !== parkAt.x || overtaken?.y !== parkAt.y) {
@@ -267,7 +274,7 @@ app.whenReady().then(async () => {
   // freeze the wasm side skips writing back.
   const deadErrs: ErrorEvent[] = [];
   const gone: string[] = [];
-  const reg2 = new WebviewRegistry(win, {
+  const reg2 = new WebviewRegistry(win, rootView.webContents, {
     onError: (ev) => deadErrs.push(ev),
     onViewGone: (ev) => gone.push(`${ev.paneId} ${ev.tileId}`),
   });
@@ -294,7 +301,7 @@ app.whenReady().then(async () => {
   // production wiring, registry.touchScroll, sendInputEvent, Chromium scrolls.
   // It also pins the delta sign: drag the finger up, the offset must increase.
   const rootWin = new BrowserWindow({ show: false });
-  const reg3 = new WebviewRegistry(win, {});
+  const reg3 = new WebviewRegistry(win, rootView.webContents, {});
   registerWebviewIpc(reg3, rootWin.webContents, win, () => {});
   const TALL_URL =
     'data:text/html,' + encodeURIComponent('<body style="margin:0;height:20000px">tall</body>');
@@ -340,7 +347,7 @@ app.whenReady().then(async () => {
   const forwarded = (): number => rightDowns.length;
   ipcMain.on(VIEW.rightdown, onRightdown);
   const presses: ViewPress[] = [];
-  const regRt = new WebviewRegistry(win, { onPress: (p) => presses.push(p) });
+  const regRt = new WebviewRegistry(win, rootView.webContents, { onPress: (p) => presses.push(p) });
   await regRt.place('paneRt', 'u1/46', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regRt, 'paneRt', 'right press scenario');
   const wcRt = regRt.webContentsFor('paneRt')!;
@@ -441,94 +448,13 @@ app.whenReady().then(async () => {
   await regRt.remove('paneRt');
   console.log('right press ok: a click hands the page one contextmenu at the release, a drag none, from any frame');
 
-  // ── a view placed on an unfocused pane may not keep OS focus ────────────
-  // A pane goes live on paths that are not a gesture on the focused pane, such
-  // as a workspace restore, and attaching a view hands the new widget focus. A
-  // registry that assumed the placement was focused would land the user's next
-  // keystrokes in a page they never clicked on.
-  const steals: string[] = [];
-  const regF = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push(ev.paneId) });
-  await regF.place('paneU', 'u1/47', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false);
-  if (regF.focusedFor('paneU') !== false) {
-    fail(`place(focused=false) recorded focused=${String(regF.focusedFor('paneU'))}`);
-  }
-  const wcU = regF.webContentsFor('paneU')!;
-  // Chromium emits 'focus' on the webContents, which is where the guard sits.
-  wcU.focus();
-  const stealDeadline = Date.now() + 5000;
-  while (steals.length === 0 && Date.now() < stealDeadline) {
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (steals[0] !== 'paneU') fail('a view placed on an unfocused pane kept OS focus: no steal reported');
-  // The focused case is not bounced, or every legitimate descent would fight
-  // the guard.
-  const regG = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push('WRONG:' + ev.paneId) });
-  await regG.place('paneG', 'u1/48', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, true);
-  if (regG.focusedFor('paneG') !== true) fail('place(focused=true) did not record focused');
-  const wcG = regG.webContentsFor('paneG')!;
-  wcG.focus();
-  await new Promise((r) => setTimeout(r, 500));
-  if (steals.some((s) => s.startsWith('WRONG:'))) fail('a view placed on the FOCUSED pane was bounced');
-  await regF.remove('paneU');
-  await regG.remove('paneG');
-  console.log('place focus ok: unfocused placement bounced, focused placement kept');
-
-  // ── the user's own click into an unfocused live pane is not a steal ──────
-  // At the `focus` event neither the browser-process input-event nor the
-  // preload's IPC has arrived, so a guard deciding there would report a steal
-  // for the click the user just made. The order below is the measured one:
-  // focus first, then a real sendInputEvent press. Only the widget-focus half
-  // is stood in for, because sendInputEvent cannot produce a `focus` event.
-  const rootView = new WebContentsView({ webPreferences: { sandbox: false } });
-  win.contentView.addChildView(rootView);
-  rootView.setBounds({ x: 0, y: 0, width: 800, height: 600 });
-  await rootView.webContents.loadURL('data:text/html,' + encodeURIComponent('<title>root</title>root'));
-
-  const clickSteals: string[] = [];
-  // Wired as index.ts wires it: a reported steal hands OS focus back to the
-  // root webContents.
-  const regC = new WebviewRegistry(win, {
-    onFocusStolen: (ev) => {
-      clickSteals.push(ev.paneId);
-      rootView.webContents.focus();
-    },
-  });
-  await regC.place('paneC', 'u1/49', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false);
-  const wcC = regC.webContentsFor('paneC')!;
-  // Let the placement's own grab be bounced and focus land back on the root, so
-  // the click below starts from an unfocused live pane whose view does not hold
-  // OS focus.
-  await new Promise((r) => setTimeout(r, 1000));
-  rootView.webContents.focus();
-  await new Promise((r) => setTimeout(r, 300));
-  if (wcC.isFocused()) fail('setup: the view still held OS focus before the click');
-  clickSteals.length = 0;
-
-  wcC.focus(); // the widget focus Chromium applies while routing the press
-  wcC.sendInputEvent({ type: 'mouseDown', x: 200, y: 150, button: 'left', clickCount: 1 });
-  wcC.sendInputEvent({ type: 'mouseUp', x: 200, y: 150, button: 'left', clickCount: 1 });
-  await new Promise((r) => setTimeout(r, 800));
-  if (clickSteals.length > 0) {
-    fail(`the user's own click into an unfocused live pane was reported as a steal (${clickSteals.length}x)`);
-  }
-  if (!wcC.isFocused()) fail("the user's own click did not leave the view holding OS focus");
-  await regC.remove('paneC');
-  console.log('click-into-unfocused ok: the press explains the focus, no bounce');
-
-  // The precondition every steal starts from: an unfocused pane with OS focus
-  // on the root. The placement's own grab is bounced first, so the recorder
-  // starts empty.
-  const armSteal = async (paneId: string, tileId: string, steals: string[]) => {
-    const reg = new WebviewRegistry(win, { onFocusStolen: (ev) => steals.push(ev.paneId) });
-    await reg.place(paneId, tileId, DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false);
-    const wc = reg.webContentsFor(paneId)!;
-    await new Promise((r) => setTimeout(r, 800));
-    rootView.webContents.focus();
-    await new Promise((r) => setTimeout(r, 300));
-    if (wc.isFocused()) fail(`${paneId}: setup left the view holding OS focus`);
-    steals.length = 0;
-    return { reg, wc };
-  };
+  // ── the keyboard's owner holds OS focus, and nothing else keeps it ──────
+  // Main is told the owner (setKeyboard) and makes it true. A view that grabs
+  // focus without being the owner, with no press behind it, gives it back one
+  // settle later: attaching a view hands the new widget focus, and so does a
+  // page's own navigation. The orders below are the measured ones.
+  const keyRecs: TraceEvent[] = [];
+  const applied = () => keyRecs.filter((r) => r.kind === 'keyboard');
   const waitFor = async (ok: () => boolean, timeoutMs: number): Promise<boolean> => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -537,45 +463,73 @@ app.whenReady().then(async () => {
     }
     return ok();
   };
+  const settled = () => new Promise((r) => setTimeout(r, FOCUS_SETTLE_MS * 4));
+  const regKb = new WebviewRegistry(win, rootView.webContents, {}, undefined, (ev) => keyRecs.push(ev));
 
-  // ── a page grab is bounced, then confirmed once, then stops ──────────────
-  // The widget-focus commit can land after the bounce with no further focus
-  // event, so the guard confirms once at FOCUS_SETTLE_MS. Nothing here hands
-  // focus back, so the second bounce fires; it must then stop, or a chain would
-  // report a steal every 120 ms forever.
-  const settleSteals: string[] = [];
-  const { reg: regD, wc: wcD } = await armSteal('paneD', 'u1/50', settleSteals);
-  wcD.focus(); // the page-initiated grab: no press behind it
-  if (!(await waitFor(() => settleSteals.length >= 2, 4000))) {
-    fail(`the settle arm did not confirm the bounce (${settleSteals.length} steals)`);
+  // A view placed on a pane the owner does not name gives the root its focus
+  // back.
+  await regKb.place('paneU', 'u1/47', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await waitForFirstFrame(regKb, 'paneU', 'unowned place');
+  const wcU = regKb.webContentsFor('paneU')!;
+  wcU.focus(); // the grab Chromium makes as the widget attaches or navigates
+  if (!(await waitFor(() => rootView.webContents.isFocused(), 3000))) fail('a view the owner does not name kept OS focus');
+  if (!applied().some((r) => r.msg === 'steal:settle' && r.kv?.view === '')) {
+    fail(`the root was not given focus back by the guard: ${JSON.stringify(applied())}`);
   }
-  await new Promise((r) => setTimeout(r, 600));
-  if (settleSteals.length !== 2) fail(`the bounce chained past its confirmation (${settleSteals.length} steals)`);
-  await regD.remove('paneD');
-  console.log('settle arm ok: bounce, one confirmation, no chain');
+  console.log('unowned grab ok: the root takes it back at the settle');
 
-  // ── a press between the bounce and its confirmation stops the second ─────
-  // The user clicks into the pane just after a page grabbed focus. The press is
-  // counted in the browser process, the confirmation sees the count risen, and
-  // the view keeps the focus the click gave it.
-  const raceSteals: string[] = [];
-  const { reg: regE, wc: wcE } = await armSteal('paneE', 'u1/51', raceSteals);
-  wcE.focus();
-  if (!(await waitFor(() => raceSteals.length >= 1, 4000))) fail('paneE: the first bounce never fired');
-  wcE.sendInputEvent({ type: 'mouseDown', x: 200, y: 150, button: 'left', clickCount: 1 });
-  wcE.sendInputEvent({ type: 'mouseUp', x: 200, y: 150, button: 'left', clickCount: 1 });
-  await new Promise((r) => setTimeout(r, 600));
-  if (raceSteals.length !== 1) fail(`a press during the settle did not stop the second bounce (${raceSteals.length} steals)`);
-  await regE.remove('paneE');
-  console.log('press-during-settle ok: the second bounce is suppressed');
+  // Named the owner, the view takes OS focus, and its own grab stands.
+  keyRecs.length = 0;
+  regKb.setKeyboard('paneU');
+  if (!wcU.isFocused()) fail('the view the owner names did not take OS focus');
+  if (applied().length !== 1 || applied()[0].msg !== 'told' || applied()[0].kv?.took !== 'true') {
+    fail(`want one told record that took: ${JSON.stringify(applied())}`);
+  }
+  await settled();
+  if (!wcU.isFocused()) fail('the owner view lost OS focus');
+  console.log('owner ok: told, it takes OS focus and keeps it');
+
+  // A page's grab while the root is the owner, with no press: taken back once,
+  // and the confirmation finds nothing to do.
+  regKb.setKeyboard('');
+  if (!rootView.webContents.isFocused()) fail('the root, named the owner, did not take OS focus');
+  keyRecs.length = 0;
+  wcU.focus();
+  await settled();
+  if (!rootView.webContents.isFocused()) fail('a page grab kept OS focus from the root');
+  if (applied().length !== 1) fail(`a page grab was taken back ${applied().length} times, want once`);
+  console.log('page grab ok: taken back once, no chain');
+
+  // The user's own click into a view the owner does not name: Chromium focuses
+  // the widget first and the press arrives after, and the press is the user's,
+  // so the view keeps it until the renderer names it.
+  keyRecs.length = 0;
+  wcU.focus();
+  wcU.sendInputEvent({ type: 'mouseDown', x: 200, y: 150, button: 'left', clickCount: 1 });
+  wcU.sendInputEvent({ type: 'mouseUp', x: 200, y: 150, button: 'left', clickCount: 1 });
+  await settled();
+  if (!wcU.isFocused()) fail("the user's own click did not leave the view holding OS focus");
+  if (applied().length > 0) fail(`the user's own click was taken back (${applied().length}x)`);
+  console.log('click ok: a press explains the focus, nothing taken back');
+
+  // The owner's view removed while it holds OS focus: the root takes it, with
+  // no press to give it one.
+  regKb.setKeyboard('paneU');
+  await regKb.remove('paneU');
+  if (!rootView.webContents.isFocused()) fail("removing the owner's view left nobody holding the keyboard");
+  console.log('remove ok: the root holds the keyboard after the owner view goes');
 
   // ── the view dies under the settle timer ────────────────────────────────
   // remove() cancels the timer only for a teardown that went through the
   // registry. A crash or a host-side close leaves it armed over a destroyed
   // WebContents, where every read throws uncaught inside a timer and hangs main
   // behind an error dialog.
-  const deadSteals: string[] = [];
-  const { reg: regH, wc: wcH } = await armSteal('paneH', 'u1/52', deadSteals);
+  regKb.setKeyboard('');
+  await regKb.place('paneH', 'u1/52', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await waitForFirstFrame(regKb, 'paneH', 'died under settle');
+  await settled();
+  const wcH = regKb.webContentsFor('paneH')!;
+  keyRecs.length = 0;
   const uncaught: string[] = [];
   const onUncaught = (err: Error) => uncaught.push(String(err));
   process.on('uncaughtException', onUncaught);
@@ -585,16 +539,34 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 800));
   process.off('uncaughtException', onUncaught);
   if (uncaught.length > 0) fail(`the settle timer threw over a destroyed view: ${uncaught[0]}`);
-  if (deadSteals.length > 0) fail(`a destroyed view reported a steal (${deadSteals.length})`);
-  await regH.remove('paneH');
-  console.log('died-under-settle ok: no throw, no phantom steal');
+  await regKb.remove('paneH');
+  console.log('died-under-settle ok: no throw');
+
+  // ── an unfocused window is never raised ──────────────────────────────────
+  // Focusing a webContents raises its window, so an owner told while the
+  // window is not focused waits for the window's own focus event.
+  await regKb.place('paneW', 'u1/53', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await waitForFirstFrame(regKb, 'paneW', 'unfocused window');
+  await settled();
+  win.blur();
+  if (!(await waitFor(() => !win.isFocused(), 3000))) fail('setup: the window did not blur');
+  regKb.setKeyboard('paneW');
+  await settled();
+  if (win.isFocused()) fail('an owner told while the window was not focused raised the window');
+  win.focus();
+  if (!(await waitFor(() => regKb.webContentsFor('paneW')!.isFocused(), 3000))) {
+    fail("the window's focus did not give the owner its view");
+  }
+  await regKb.remove('paneW');
+  regKb.setKeyboard('');
+  console.log('unfocused window ok: nothing raised, the owner applied on the focus event');
 
   // ── a place() into a pane that already holds a view is loud ─────────────
   // The renderer closes a pane's live view before placing another, so this
   // branch is a renderer bug. The replaced view's freeze has no caller, so the
   // preview is lost and this report is the only evidence.
   const replaceErrs: ErrorEvent[] = [];
-  const regR = new WebviewRegistry(win, { onError: (ev) => replaceErrs.push(ev) });
+  const regR = new WebviewRegistry(win, rootView.webContents, { onError: (ev) => replaceErrs.push(ev) });
   await regR.place('paneR', 'u1/60', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   const replacedWc = regR.webContentsFor('paneR')!;
   await regR.place('paneR', 'u1/61', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
@@ -625,7 +597,7 @@ app.whenReady().then(async () => {
     ],
   });
   const refuseErrs: ErrorEvent[] = [];
-  const regRefuse = new WebviewRegistry(win, { onError: (ev) => refuseErrs.push(ev) });
+  const regRefuse = new WebviewRegistry(win, rootView.webContents, { onError: (ev) => refuseErrs.push(ev) });
   await regRefuse.place('paneS', 'u1/63', REFUSED_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, refusedHistory);
   if (!(await waitFor(() => refuseErrs.length > 0, 8000))) {
     fail('a refused back-stack reported nothing: the pane is blank and the user is not told');
@@ -652,7 +624,7 @@ app.whenReady().then(async () => {
   // is the difference between a no-op and re-applying the composed zoom sixty
   // times a second. Zoom makes it observable, because applyMinWidthZoom is the
   // only thing in the registry that touches zoomFactor.
-  const regB = new WebviewRegistry(win, {});
+  const regB = new WebviewRegistry(win, rootView.webContents, {});
   const narrow = { x: 0, y: 0, width: 320, height: 300 };
   await regB.place('paneB2', 'u1/62', DATA_URL, narrow);
   const wcB = regB.webContentsFor('paneB2')!;
@@ -667,32 +639,13 @@ app.whenReady().then(async () => {
   await regB.remove('paneB2');
   console.log('setBounds ok: equal bounds are a no-op, a changed width recomputes the zoom');
 
-  // ── setHidden carries a focus change with no view change ────────────────
-  // Focus and visibility ride the same call because syncURLViews reports both
-  // every draw. A focus-only change must be recorded and must not move the
-  // view, or a focus move would blank live content.
-  const regFo = new WebviewRegistry(win, {});
-  const foBounds = { x: 5, y: 6, width: 400, height: 300 };
-  await regFo.place('paneFo', 'u1/63', DATA_URL, foBounds, 0, '', false, false);
-  const beforeFo = regFo.viewBoundsFor('paneFo');
-  regFo.setHidden('paneFo', false, true);
-  if (regFo.focusedFor('paneFo') !== true) fail('a focus-only setHidden was not recorded on the entry');
-  const afterFo = regFo.viewBoundsFor('paneFo');
-  if (afterFo?.x !== beforeFo?.x || afterFo?.y !== beforeFo?.y) {
-    fail(`a focus-only setHidden moved the view (${beforeFo?.x},${beforeFo?.y}) → (${afterFo?.x},${afterFo?.y})`);
-  }
-  regFo.setHidden('paneFo', false, false);
-  if (regFo.focusedFor('paneFo') !== false) fail('a focus-only setHidden back to unfocused was not recorded');
-  await regFo.remove('paneFo');
-  console.log('setHidden focus ok: tracked on the entry, the view never moved');
-
   // ── remove() cannot detach: the blank-overlay report ────────────────────
   // Destroying the window under the registry, which is what a host-side close
   // does, makes removeChildView throw. remove() must still complete and say why
   // a blank rectangle is covering a pane.
   const detachErrs: string[] = [];
   const doomed = new BaseWindow({ width: 300, height: 200, show: false });
-  const regX = new WebviewRegistry(doomed, { onError: (ev) => detachErrs.push(ev.message) });
+  const regX = new WebviewRegistry(doomed, rootView.webContents, { onError: (ev) => detachErrs.push(ev.message) });
   await regX.place('paneX', 'u1/64', DATA_URL, { x: 0, y: 0, width: 300, height: 200 });
   doomed.destroy();
   await new Promise((r) => setTimeout(r, 200));
@@ -724,7 +677,7 @@ app.whenReady().then(async () => {
       return false; // no leveldb yet is no marker
     }
   };
-  const regS = new WebviewRegistry(win, {});
+  const regS = new WebviewRegistry(win, rootView.webContents, {});
   await regS.place('paneS', 'u1/65', lsPage.url, { x: 0, y: 0, width: 400, height: 300 });
   const wcS = regS.webContentsFor('paneS')!;
   if (!(await waitFor(() => wcS.getURL() === lsPage.url, 6000))) fail('storage page never loaded');
@@ -754,10 +707,17 @@ app.whenReady().then(async () => {
     if (armedSettles.includes(t)) clearedSettles.push(t);
     return (realClearTimeout as (...a: unknown[]) => unknown)(t);
   };
-  const cancelSteals: string[] = [];
-  const { reg: regT, wc: wcT } = await armSteal('paneT', 'u1/66', cancelSteals);
-  wcT.focus(); // a page grab: the guard waits, bounces, then arms its confirmation
-  if (!(await waitFor(() => cancelSteals.length >= 1, 4000))) fail('paneT: the first bounce never fired');
+  const cancelRecs: TraceEvent[] = [];
+  const cancelled = () => cancelRecs.filter((r) => r.kind === 'keyboard').length;
+  const regT = new WebviewRegistry(win, rootView.webContents, {}, undefined, (ev) => cancelRecs.push(ev));
+  await regT.place('paneT', 'u1/66', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
+  await waitForFirstFrame(regT, 'paneT', 'settle cancel');
+  await new Promise((r) => realSetTimeout(r, FOCUS_SETTLE_MS * 4));
+  cancelRecs.length = 0;
+  armedSettles.length = 0;
+  const wcT = regT.webContentsFor('paneT')!;
+  wcT.focus(); // a page grab: the guard waits, takes it back, then arms its confirmation
+  if (!(await waitFor(() => cancelled() >= 1, 4000))) fail('paneT: the grab was never taken back');
   if (armedSettles.length === 0) fail('paneT: no settle timer was armed');
   const pending = armedSettles[armedSettles.length - 1];
   await regT.remove('paneT');
@@ -765,7 +725,7 @@ app.whenReady().then(async () => {
   (globalThis as { clearTimeout: unknown }).clearTimeout = realClearTimeout;
   if (!clearedSettles.includes(pending)) fail('remove() left the pending settle timer armed');
   await new Promise((r) => setTimeout(r, FOCUS_SETTLE_MS * 4));
-  if (cancelSteals.length !== 1) fail(`a removed pane kept bouncing (${cancelSteals.length} steals)`);
+  if (cancelled() !== 1) fail(`a removed pane's settle fired again (${cancelled()} records)`);
   console.log('settle cancel ok: the pending timer was cleared and never fired again');
 
   // ── F11 inside a live view toggles the host window ──────────────────────
@@ -779,12 +739,14 @@ app.whenReady().then(async () => {
     contentView: win.contentView,
     getContentBounds: () => win.getContentBounds(),
     isFullScreen: () => fullScreen,
+    isFocused: () => win.isFocused(),
+    on: () => {},
     setFullScreen: (v: boolean) => {
       fullScreen = v;
       fsCalls.push(v);
     },
   } as unknown as BaseWindow;
-  const regK = new WebviewRegistry(fakeWin, {});
+  const regK = new WebviewRegistry(fakeWin, rootView.webContents, {});
   await regK.place('paneK', 'u1/67', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   const wcK = regK.webContentsFor('paneK')!;
   wcK.focus();
@@ -805,7 +767,7 @@ app.whenReady().then(async () => {
   // persists, so both must emit.
   const inPageNavs: NavEvent[] = [];
   const navPage = await startPage();
-  const regN = new WebviewRegistry(win, { onNav: (ev) => inPageNavs.push(ev) });
+  const regN = new WebviewRegistry(win, rootView.webContents, { onNav: (ev) => inPageNavs.push(ev) });
   await regN.place('paneN', 'u1/69', navPage.url, { x: 0, y: 0, width: 400, height: 300 });
   const wcN = regN.webContentsFor('paneN')!;
   if (!(await waitFor(() => wcN.getURL() === navPage.url, 6000))) fail('the nav page never loaded');
@@ -826,7 +788,7 @@ app.whenReady().then(async () => {
   // ── the min-width zoom survives a navigation ────────────────────────────
   // Chromium resets zoomFactor across a navigation, so a narrow pane would
   // reflow to a cramped mobile layout unless did-finish-load re-applies it.
-  const regZ = new WebviewRegistry(win, {});
+  const regZ = new WebviewRegistry(win, rootView.webContents, {});
   await regZ.place('paneZ', 'u1/71', DATA_URL, { x: 0, y: 0, width: 320, height: 300 });
   const wcZ = regZ.webContentsFor('paneZ')!;
   if (!(await waitFor(() => wcZ.getZoomFactor() < 1, 6000))) fail('the min-width zoom never applied');
@@ -843,7 +805,7 @@ app.whenReady().then(async () => {
   // say nothing, so the notice row does not read "mirror capture failing" for a
   // page that closed itself.
   const capErrs: ErrorEvent[] = [];
-  const regM = new WebviewRegistry(win, { onError: (ev) => capErrs.push(ev) });
+  const regM = new WebviewRegistry(win, rootView.webContents, { onError: (ev) => capErrs.push(ev) });
   await regM.place('paneM', 'u1/72', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regM, 'paneM', 'mirror scenario');
   regM.webContentsFor('paneM')!.close(); // destroyed behind the registry's back
@@ -865,7 +827,7 @@ app.whenReady().then(async () => {
   // nothing is reported.
   const navPage2 = await startPage();
   const gapErrs: string[] = [];
-  const regGap = new WebviewRegistry(win, { onError: (ev) => gapErrs.push(ev.message) });
+  const regGap = new WebviewRegistry(win, rootView.webContents, { onError: (ev) => gapErrs.push(ev.message) });
   await regGap.place('paneGap', 'u1/77', navPage2.url, { x: 0, y: 0, width: 400, height: 300 });
   await waitForFirstFrame(regGap, 'paneGap', 'nav-gap scenario');
   const wcGap = regGap.webContentsFor('paneGap')!;
@@ -902,11 +864,11 @@ app.whenReady().then(async () => {
   // webviews.test.ts owns the registry's capture-streak wiring.
   const crashErrs: ErrorEvent[] = [];
   const crashGone: string[] = [];
-  const regCrash = new WebviewRegistry(win, {
+  const regCrash = new WebviewRegistry(win, rootView.webContents, {
     onError: (ev) => crashErrs.push(ev),
     onViewGone: (ev) => crashGone.push(`${ev.paneId} ${ev.tileId} ${ev.gen}`),
   });
-  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, 5);
+  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, 5);
   await waitForFirstFrame(regCrash, 'paneCrash', 'crash scenario');
   const wcCrash = regCrash.webContentsFor('paneCrash')!;
   wcCrash.forcefullyCrashRenderer();
@@ -923,7 +885,7 @@ app.whenReady().then(async () => {
   }
   // getURL() is read on a webContents whose renderer just died.
   if (!crashSaid[0].includes('data:text/html')) fail(`the crash notice does not name the page: ${crashSaid[0]}`);
-  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, false, 6);
+  await regCrash.place('paneCrash', 'u1/75', DATA_URL, { x: 0, y: 0, width: 400, height: 300 }, 0, '', false, 6);
   await waitForFirstFrame(regCrash, 'paneCrash', 'crash recovery');
   if (crashErrs.length !== 1) fail(`the new view raised notices: ${JSON.stringify(crashErrs)}`);
   await regCrash.remove('paneCrash');
@@ -942,7 +904,7 @@ app.whenReady().then(async () => {
     popped = t;
     return { popup: () => {} };
   };
-  const regMenu = new WebviewRegistry(win, {});
+  const regMenu = new WebviewRegistry(win, rootView.webContents, {});
   await regMenu.place('paneM', 'u1/73', DATA_URL, { x: 0, y: 0, width: 400, height: 300 });
   regMenu.showMenu('paneM');
   const menuItems = popped.map((i) => i.label).filter(Boolean);
@@ -958,7 +920,7 @@ app.whenReady().then(async () => {
   // localStorage flush for every other pane and leave the quit to its
   // watchdog.
   const quitErrs: string[] = [];
-  const regQ = new WebviewRegistry(win, { onError: (ev) => quitErrs.push(ev.message) });
+  const regQ = new WebviewRegistry(win, rootView.webContents, { onError: (ev) => quitErrs.push(ev.message) });
   const quitPanes = ['paneQ1', 'paneQ2', 'paneQ3'];
   for (let i = 0; i < quitPanes.length; i++) {
     await regQ.place(quitPanes[i], `u1/8${i}`, DATA_URL, { x: i * 200, y: 0, width: 200, height: 150 });

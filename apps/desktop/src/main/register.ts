@@ -17,6 +17,7 @@ import {
   ChoiceMenuArgs,
   MirroredArgs,
   MoveArgs,
+  KeyboardArgs,
 } from './ipc';
 import { forwardedDragStep, toContentPoint } from './viewutil';
 import { choiceMenuTemplate } from './contextmenu';
@@ -64,7 +65,7 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.place, (_e, a: PlaceArgs): Promise<void> => {
-    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.hidden ?? false, a.focused ?? false, a.gen ?? 0);
+    return registry.place(a.paneId, a.tileId, a.url, a.bounds, a.contentZoom ?? 0, a.history ?? '', a.hidden ?? false, a.gen ?? 0);
   });
 
   ipcMain.handle(CH.setZoom, (_e, a: SetZoomArgs): void => {
@@ -76,11 +77,15 @@ export function registerWebviewIpc(
   });
 
   ipcMain.handle(CH.setHidden, (_e, a: SetHiddenArgs): void => {
-    registry.setHidden(a.paneId, a.hidden, a.focused);
+    registry.setHidden(a.paneId, a.hidden);
   });
 
   ipcMain.handle(CH.move, (_e, a: MoveArgs): void => {
-    registry.move(a.fromPaneId, a.toPaneId, a.bounds, a.hidden, a.focused);
+    registry.move(a.fromPaneId, a.toPaneId, a.bounds, a.hidden);
+  });
+
+  ipcMain.handle(CH.setKeyboard, (_e, a: KeyboardArgs): void => {
+    registry.setKeyboard(a.paneId);
   });
 
   ipcMain.handle(CH.remove, async (_e, a: RemoveArgs): Promise<FreezeResult> => {

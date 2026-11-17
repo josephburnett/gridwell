@@ -96,7 +96,7 @@ async function boot(): Promise<void> {
 
   const { win } = createRootWindow(sidecar.origin);
   const rootWC = win.webContents;
-  const reg = new WebviewRegistry(win, {
+  const reg = new WebviewRegistry(win, rootWC, {
     onNav: forwarder(rootWC, EV.nav),
     onFrame: forwarder(rootWC, EV.frame),
     onError: (ev) => sendError(rootWC, ev.source, ev.message, ev.severity),
@@ -106,8 +106,6 @@ async function boot(): Promise<void> {
     onZoomKey: forwarder(rootWC, EV.zoomKey),
     onEscapeKey: forwarder(rootWC, EV.escapeKey),
     onViewGone: forwarder(rootWC, EV.viewGone),
-    // Give focus back to the root renderer, where the user was typing.
-    onFocusStolen: () => rootWC.focus(),
   });
   registry = reg;
   pump = new MirrorPump(async (paneIds) => {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import type { BaseWindow, WebContentsView } from 'electron';
+import type { BaseWindow, WebContents, WebContentsView } from 'electron';
 import { WebviewRegistry } from './webviews';
 import { viewCreated } from './viewtrace';
 import { FOCUS_SETTLE_MS } from './focusguard';
@@ -15,11 +15,25 @@ import type { TraceEvent } from './trace';
 // FakeWC is the slice of WebContents the registry touches. destroy() is what a
 // page's window.close() does: 'destroyed', and then the view's webContents
 // reads undefined.
+// osHolder is the one webContents holding OS focus, as the OS keeps one.
+let osHolder: FakeWC | null = null;
+
 class FakeWC extends EventEmitter {
   url = '';
   loads = 0;
-  focused = false;
+  focusCalls = 0;
   closed = 0;
+  get focused(): boolean {
+    return osHolder === this;
+  }
+  set focused(v: boolean) {
+    if (v) osHolder = this;
+    else if (osHolder === this) osHolder = null;
+  }
+  focus(): void {
+    this.focusCalls++;
+    this.focused = true;
+  }
   // What capturePage answers; null is an empty frame.
   frame: Buffer | null = null;
   restoreRejects: ((err: Error) => void)[] = [];
@@ -83,7 +97,9 @@ interface Rig {
   errors: ErrorEvent[];
   gone: ViewGoneEvent[];
   navs: NavEvent[];
-  steals: string[];
+  root: FakeWC;
+  winFocused: { now: boolean };
+  focusWindow: () => void;
   escapes: string[];
   children: Set<FakeView>;
   records: TraceEvent[];
@@ -96,7 +112,10 @@ function rig(): Rig {
   const errors: ErrorEvent[] = [];
   const gone: ViewGoneEvent[] = [];
   const navs: NavEvent[] = [];
-  const steals: string[] = [];
+  osHolder = null;
+  const root = new FakeWC();
+  const winFocused = { now: true };
+  const winFocus: (() => void)[] = [];
   const escapes: string[] = [];
   const children = new Set<FakeView>();
   const records: TraceEvent[] = [];
@@ -110,14 +129,18 @@ function rig(): Rig {
     setFullScreen: () => {},
     isFullScreen: () => false,
     getContentBounds: () => ({ x: 100, y: 50, width: 800, height: 600 }),
+    isFocused: () => winFocused.now,
+    on: (ev: string, fn: () => void) => {
+      if (ev === 'focus') winFocus.push(fn);
+    },
   } as unknown as BaseWindow;
   const reg = new WebviewRegistry(
     win,
+    root as unknown as WebContents,
     {
       onError: (ev) => errors.push(ev),
       onViewGone: (ev) => gone.push(ev),
       onNav: (ev) => navs.push(ev),
-      onFocusStolen: (ev) => steals.push(ev.paneId),
       onEscapeKey: (ev) => escapes.push(ev.paneId),
       onOpenBelow: (ev) => below.push(ev),
       onPress: (ev) => presses.push(ev),
@@ -129,7 +152,11 @@ function rig(): Rig {
     },
     (ev) => records.push(ev),
   );
-  return { reg, views, errors, gone, navs, steals, escapes, children, records, below, presses };
+  const focusWindow = () => {
+    winFocused.now = true;
+    for (const fn of winFocus) fn();
+  };
+  return { reg, views, errors, gone, navs, root, winFocused, focusWindow, escapes, children, records, below, presses };
 }
 
 const BOUNDS = { x: 10, y: 20, width: 400, height: 300 };
@@ -140,7 +167,7 @@ function kinds(r: Rig, kind: string): TraceEvent[] {
 
 test('a page that closes itself retires its entry: one notice, the renderer told, nothing throws', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/7', 'https://accounts.example/signinclose', BOUNDS, 0, '', false, false, 3);
+  await r.reg.place('p1', 'u1/7', 'https://accounts.example/signinclose', BOUNDS, 0, '', false, 3);
   const view = r.views[0];
 
   view.destroy();
@@ -156,7 +183,7 @@ test('a page that closes itself retires its entry: one notice, the renderer told
   assert.equal(await r.reg.capture('p1'), '');
   await r.reg.mirror('p1');
   r.reg.setBounds('p1', { ...BOUNDS, width: 500 });
-  r.reg.setHidden('p1', true, false);
+  r.reg.setHidden('p1', true);
   r.reg.setZoom('p1', 1.5);
   r.reg.goBack('p1');
   r.reg.reload('p1', 'https://accounts.example/signinclose');
@@ -168,7 +195,7 @@ test('a page that closes itself retires its entry: one notice, the renderer told
 
 test('a view whose renderer died is retired like one that closed: one notice, the renderer told, the page closed', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS, 0, '', false, true, 4);
+  await r.reg.place('p1', 'u1/7', 'https://example.com/', BOUNDS, 0, '', false, 4);
   const view = r.views[0];
   const wc = view.webContents!;
   // Closing a crashed webContents destroys it, which must not announce twice.
@@ -265,11 +292,11 @@ test('a live view whose stack Chromium refuses is still reported', async () => {
 
 test('a move re-keys the view onto the new pane: its bounds, no reload, and every event under the new id', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false);
   const view = r.views[0];
   const wc = view.webContents!;
 
-  r.reg.move('p1', 'w1:p1', { x: 100.4, y: 50, width: 600, height: 400 }, false, true);
+  r.reg.move('p1', 'w1:p1', { x: 100.4, y: 50, width: 600, height: 400 }, false);
 
   assert.equal(r.views.length, 1, 'a move made a second view');
   assert.equal(wc.loads, 1, 'a move reloaded the page');
@@ -301,11 +328,11 @@ test('a move into a hidden pane parks the view at the size it had, and one with 
   await r.reg.place('w1:p1', 'u1/9', SLACK, BOUNDS);
   const view = r.views[0];
 
-  r.reg.move('w1:p1', 'p1', undefined, true, false);
+  r.reg.move('w1:p1', 'p1', undefined, true);
 
   assert.ok(view.bounds.x < -1000, 'a hidden move left the view on screen');
   assert.equal(view.bounds.width, BOUNDS.width, 'a move with no bounds resized the page');
-  r.reg.setHidden('p1', false, true);
+  r.reg.setHidden('p1', false);
   assert.deepEqual(view.bounds, BOUNDS, 'the next show put it back where it was');
 });
 
@@ -313,52 +340,109 @@ test('a park still taking its preview for the old pane does not park the view it
   const r = rig();
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
   const view = r.views[0];
-  r.reg.setHidden('p1', true, false); // waits on its preview before it parks
-  r.reg.move('p1', 'w1:p1', BOUNDS, false, true);
+  r.reg.setHidden('p1', true); // waits on its preview before it parks
+  r.reg.move('p1', 'w1:p1', BOUNDS, false);
   await settle();
   assert.deepEqual(view.bounds, BOUNDS, 'the stale park moved the view off screen');
 });
 
-test('a view that holds OS focus and moves to an unfocused pane gives the focus back', async () => {
+const applied = (r: Rig) => kinds(r, 'keyboard').map((ev) => ({ view: ev.kv?.view, cause: ev.msg, took: ev.kv?.took }));
+const settle2 = () => new Promise((res) => setTimeout(res, FOCUS_SETTLE_MS * 2 + 30));
+
+test('the owner told takes OS focus, and a pane holding no view is the root\'s', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
-  r.views[0].webContents!.focused = true;
-  r.reg.move('p1', 'w1:p1', BOUNDS, false, false);
-  assert.deepEqual(r.steals, ['w1:p1']);
-  assert.deepEqual(kinds(r, 'steal').map((ev) => ev.kv), [{ view: 'w1:p1', phase: 'move' }]);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.reg.setKeyboard('p1');
+  assert.equal(r.views[0].webContents!.focused, true);
+  r.reg.setKeyboard('p2');
+  assert.equal(r.root.focused, true, 'a pane with no view here is the root\'s');
+  assert.deepEqual(applied(r).slice(-2), [
+    { view: 'p1', cause: 'told', took: 'true' },
+    { view: '', cause: 'told', took: 'true' },
+  ]);
+  const calls = r.root.focusCalls;
+  r.reg.setKeyboard('p2');
+  assert.equal(r.root.focusCalls, calls, 'an owner that holds OS focus is not focused again');
 });
 
-// A keystroke that went to the canvas instead of the page reads in a dump as a
-// steal the guard bounced.
-test('a focus grab on an unfocused pane is bounced and traced with its phase', async () => {
+test('an owner told while the window is not focused raises nothing, and the window\'s focus applies it', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, false);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.winFocused.now = false;
+  r.reg.setKeyboard('p1');
+  assert.equal(r.views[0].webContents!.focusCalls, 0, 'focusing a webContents raises its window');
+  r.focusWindow();
+  await new Promise((res) => setImmediate(res));
+  assert.equal(r.views[0].webContents!.focused, true);
+  assert.deepEqual(applied(r).at(-1), { view: 'p1', cause: 'window', took: 'true' });
+});
+
+test('a view holding OS focus moved to a pane the owner does not name gives the root the keyboard', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.views[0].webContents!.focused = true;
+  r.reg.move('p1', 'w1:p1', BOUNDS, false);
+  assert.equal(r.root.focused, true);
+  assert.deepEqual(applied(r).at(-1), { view: '', cause: 'move', took: 'true' });
+});
+
+test("the owner's view removed while it holds OS focus leaves the root holding it", async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.reg.setKeyboard('p1');
+  await r.reg.remove('p1');
+  assert.equal(r.root.focused, true);
+  assert.deepEqual(applied(r).at(-1), { view: '', cause: 'remove', took: 'true' });
+});
+
+// A keystroke that went to the wrong surface reads in a dump as a grab the
+// guard took back.
+test('a grab by a view the owner does not name is taken back at the settle and traced', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.records.length = 0;
   const wc = r.views[0].webContents!;
   wc.focused = true;
   wc.emit('focus');
-  await new Promise((res) => setTimeout(res, FOCUS_SETTLE_MS + 30));
-  await r.reg.remove('p1'); // cancels the confirmation
-  assert.deepEqual(r.steals, ['p1']);
-  assert.deepEqual(kinds(r, 'steal').map((ev) => ev.kv), [{ view: 'p1', phase: 'settle' }]);
+  assert.equal(wc.focused, true, 'nothing is decided at the focus event');
+  await settle2();
+  assert.equal(r.root.focused, true);
+  assert.deepEqual(applied(r), [{ view: '', cause: 'steal:settle', took: 'true' }], 'taken back once, the confirmation finding nothing');
+});
+
+test('a grab with a press behind it is the user\'s, the root\'s included', async () => {
+  const r = rig();
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.reg.setKeyboard('p1');
+  r.records.length = 0;
+  r.root.focused = true;
+  r.root.emit('focus');
+  r.root.emit('input-event', {}, { type: 'mouseDown' });
+  await settle2();
+  assert.equal(r.root.focused, true, 'a press on the root is the user\'s');
+  assert.deepEqual(applied(r), []);
+  r.root.emit('focus');
+  await settle2();
+  assert.equal(r.views[0].webContents!.focused, true, 'a root grab with no press gives the owner its view back');
 });
 
 test('a view that ends with its focus settle armed drops the settle with its entry', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, false);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS);
+  r.records.length = 0;
   const wc = r.views[0].webContents!;
   wc.focused = true;
   wc.emit('focus');
   r.views[0].destroy();
-  await new Promise((res) => setTimeout(res, FOCUS_SETTLE_MS + 30));
-  assert.deepEqual(r.steals, [], 'a settle armed for a retired view still ran');
-  assert.deepEqual(kinds(r, 'steal'), []);
+  await settle2();
+  assert.deepEqual(applied(r).filter((a) => a.cause.startsWith('steal')), [], 'a settle armed for a retired view still ran');
 });
 
 // The view takes every press over it, so main names the pane and the point of
 // each, whatever frame of the page it landed in.
 test('every press over a live view names the pane it serves now and the canvas point', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false);
   const wc = r.views[0].webContents!;
   wc.emit('input-event', {}, { type: 'mouseUp', button: 'right', globalX: 110, globalY: 60 });
   wc.emit('input-event', {}, { type: 'mouseMove', globalX: 110, globalY: 60 });
@@ -366,7 +450,7 @@ test('every press over a live view names the pane it serves now and the canvas p
   assert.deepEqual(r.presses, [], 'a release, a move or a wheel is not a press');
   wc.emit('input-event', {}, { type: 'mouseDown', button: 'left', globalX: 110, globalY: 60 });
   wc.emit('input-event', {}, { type: 'mouseDown', button: 'middle', globalX: 120, globalY: 70 });
-  r.reg.move('p1', 'p2', BOUNDS, false, false);
+  r.reg.move('p1', 'p2', BOUNDS, false);
   wc.emit('input-event', {}, { type: 'mouseDown', button: 'right', globalX: 130, globalY: 80 });
   wc.emit('input-event', {}, { type: 'touchStart' });
   assert.deepEqual(r.presses, [
@@ -387,13 +471,13 @@ function keyDown(wc: FakeWC, key: string): boolean {
 
 test('a parked view hands Esc to the renderer; a shown one keeps it for its page', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false);
   const wc = r.views[0].webContents!;
 
   assert.equal(keyDown(wc, 'Escape'), false, 'a shown view gave its page\'s Esc away');
   assert.deepEqual(r.escapes, []);
 
-  r.reg.setHidden('p1', true, true);
+  r.reg.setHidden('p1', true);
   assert.equal(keyDown(wc, 'Escape'), true, 'a parked view let its offscreen page take Esc');
   assert.equal(keyDown(wc, 'a'), false, 'a parked view took a key that is not Esc');
   assert.deepEqual(r.escapes, ['p1']);
@@ -403,7 +487,7 @@ test('a parked view hands Esc to the renderer; a shown one keeps it for its page
 test('a reload loads the address again in the same view, and a pane with no view ignores it', async () => {
   const r = rig();
   const page = 'http://127.0.0.1:1/content/tok/p%2F~dA/';
-  await r.reg.place('p1', 'p/~dA', page, BOUNDS, 0, '', false, true);
+  await r.reg.place('p1', 'p/~dA', page, BOUNDS, 0, '', false);
   const wc = r.views[0].webContents!;
 
   r.reg.reload('p1', page);
@@ -418,13 +502,13 @@ test('a reload loads the address again in the same view, and a pane with no view
 
 test('a move from a pane that holds no view is refused', async () => {
   const r = rig();
-  assert.throws(() => r.reg.move('p1', 'w1:p1', BOUNDS, false, true), /no live view to move/);
+  assert.throws(() => r.reg.move('p1', 'w1:p1', BOUNDS, false), /no live view to move/);
 });
 
 test('a restore on a moved view belongs to the view: a refusal reports under the new pane', async () => {
   const r = rig();
   await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, STACK);
-  r.reg.move('p1', 'w1:p1', BOUNDS, false, true);
+  r.reg.move('p1', 'w1:p1', BOUNDS, false);
   r.views[0].webContents!.restoreRejects[0](new Error(`ERR_FAILED (-2) loading '${SLACK}'`));
   await settle();
   assert.equal(r.errors.length, 1);
@@ -433,12 +517,12 @@ test('a restore on a moved view belongs to the view: a refusal reports under the
 
 test('a gone event names the view by the gen it was placed with, which a move keeps', async () => {
   const r = rig();
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true, 1);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, 1);
   const first = r.views[0];
   await r.reg.remove('p1');
   // The same tile live again in the same pane: only the gen tells the views apart.
-  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, true, 2);
-  r.reg.move('p1', 'w1:p1', BOUNDS, false, true);
+  await r.reg.place('p1', 'u1/9', SLACK, BOUNDS, 0, '', false, 2);
+  r.reg.move('p1', 'w1:p1', BOUNDS, false);
 
   first.webContents!.emit('destroyed');
   assert.deepEqual(r.gone, [], 'the removed view announced an end');

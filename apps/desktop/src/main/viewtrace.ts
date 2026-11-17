@@ -89,11 +89,11 @@ export function viewShown(paneId: string, tileId: string, hidden: boolean): Trac
   return view(hidden ? 'hide' : 'show', paneId, tileId);
 }
 
-// A focus grab the registry handed back to the canvas. phase is
-// focusguard.GuardPhase, or 'move' for a focused view moved into an unfocused
-// pane.
-export function viewStealBounced(paneId: string, tileId: string, phase: string): TraceEvent {
-  return view('steal', paneId, tileId, { phase });
+// The keyboard's owner given OS focus: a view's pane, '' for the root. cause
+// is what applied it, steal:<focusguard.GuardPhase> for a focus taken back;
+// took false is a focus the OS did not make true.
+export function keyboardApplied(paneId: string, cause: string, took: boolean): TraceEvent {
+  return view('keyboard', paneId, cause, { took: String(took) });
 }
 
 export function viewFocused(paneId: string, tileId: string, focused: boolean): TraceEvent {

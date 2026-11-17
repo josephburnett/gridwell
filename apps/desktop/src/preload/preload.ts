@@ -51,6 +51,8 @@ const VERBS = {
   setZoom: CH.setZoom,
   // Hands a live view to another pane without a reload.
   moveWebview: CH.move,
+  // The keyboard's owner; see KeyboardArgs.
+  setKeyboard: CH.setKeyboard,
   removeWebview: CH.remove,
   goBack: CH.goBack,
   reload: CH.reload,

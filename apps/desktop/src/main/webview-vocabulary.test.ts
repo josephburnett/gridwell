@@ -42,7 +42,7 @@ test('the wasm calls exactly the bridge verbs the preload exposes', () => {
   const preload = matches(table![1], /^\s*(\w+):/gm);
   const wasm = matches(wasmSource(), /bridgeVerb\("(\w+)"/g);
 
-  assert.equal(preload.length, 12, `expected 12 verbs in ${PRELOAD}, got ${JSON.stringify(preload)}`);
+  assert.equal(preload.length, 13, `expected 13 verbs in ${PRELOAD}, got ${JSON.stringify(preload)}`);
   assert.deepEqual(
     wasm,
     preload,

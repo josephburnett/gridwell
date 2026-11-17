@@ -108,10 +108,8 @@ func (a *App) placeURLView(paneID string, t *gridwellv1.Tile) {
 	addr := a.webAddress(t)
 	a.emit(traceevent.URLOpen(p.ID, t.Id, addr))
 	urlConsole("place pane=%s tile=%s url=%s", p.ID, t.Id, addr)
-	// The focus fact rides the placement, because going live is not always a
-	// gesture on the focused pane.
 	a.bridgePlace(p.ID, t.Id, v.gen, addr, contentViewBounds(paneRectFor(a, p)), contentzoom.Of(t.GetContentZoom()),
-		t.UrlHistory, pane.ParkSurface(a.canvasGesture(), p.ID), p.ID == a.tree.Focus,
+		t.UrlHistory, pane.ParkSurface(a.canvasGesture(), p.ID),
 		func() { a.dropURLView(p.ID, v) })
 	a.draw()
 }
@@ -180,7 +178,7 @@ func (a *App) moveURLView(fromID string, to *pane.Pane) {
 		b = &cb
 	}
 	hidden := b == nil || pane.ParkSurface(a.canvasGesture(), to.ID)
-	a.bridgeMove(fromID, to.ID, b, hidden, to.ID == a.tree.Focus,
+	a.bridgeMove(fromID, to.ID, b, hidden,
 		func() { a.dropURLView(to.ID, v) })
 	a.draw()
 }
@@ -324,7 +322,7 @@ func (a *App) syncURLViews() {
 		switch pane.SurfaceOf(ok, contentID, v.descentID) {
 		case pane.SurfacePark:
 			// A stacked level parked behind a workspace tile stays alive.
-			a.bridgeSetHidden(paneID, true, false)
+			a.bridgeSetHidden(paneID, true)
 			continue
 		case pane.SurfaceOrphan:
 			// The pane moved on without this view's teardown; hiding it would
@@ -337,9 +335,7 @@ func (a *App) syncURLViews() {
 			a.reloadURLView(paneID, v)
 		}
 		a.bridgeSetBounds(paneID, contentViewBounds(r))
-		// focused feeds main's focus-steal guard in webviews.ts: only the
-		// focused pane's view may take keyboard focus back after a park.
-		a.bridgeSetHidden(paneID, pane.ParkSurface(g, paneID), paneID == a.tree.Focus)
+		a.bridgeSetHidden(paneID, pane.ParkSurface(g, paneID))
 	}
 }
 

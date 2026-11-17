@@ -27,9 +27,10 @@ import {
 import { urlContextMenuTemplate } from './contextmenu';
 import { capturable, captureAttempt, captureJpegBase64, describeAttempt } from './capture';
 import { decideStreak, streakNotice, FRESH, StreakState } from './capturestreak';
-import { decideFocus, isPressInput, GuardPhase } from './focusguard';
+import { decideApply, decideFocus, isPressInput, GuardPhase } from './focusguard';
 import { trace, type TraceEvent } from './trace';
 import {
+  keyboardApplied,
   menuChose,
   menuOpened,
   VIEW,
@@ -45,7 +46,6 @@ import {
   viewOpenRequested,
   viewRevived,
   viewShown,
-  viewStealBounced,
 } from './viewtrace';
 
 // The live view's pane menu, as a trace record names it; register.ts names the
@@ -55,11 +55,20 @@ const URL_MENU = 'url';
 // __dirname is dist/main at runtime, so the compiled preload sits one level up.
 const urlViewPreload = path.join(__dirname, '..', 'preload', 'urlview-preload.js');
 
-interface Entry {
+// A webContents the focus guard watches: a view's entry, or the root's ('').
+interface Guarded {
+  paneId: string;
+  // Main sees a press before the renderer does, so no page can delay or
+  // suppress the count.
+  presses: number;
+  // Tracked so remove() can cancel it before the closure reads a closed view.
+  focusSettle: ReturnType<typeof setTimeout> | null;
+}
+
+interface Entry extends Guarded {
   view: WebContentsView;
   // The pane the view serves now. move() re-keys the entry, so every handler
   // reads the pane here, never the one the view was placed on.
-  paneId: string;
   tileId: string;
   // The address main placed the view on, or last saw it reach. A dead
   // renderer answers getURL() with nothing, so a notice reads this.
@@ -72,14 +81,8 @@ interface Entry {
   // Whether the main frame is between did-start-navigation and its load, which
   // capture() reads through capture.capturable.
   navigating: boolean;
-  focused: boolean;
   // userZoom is the tile's persisted content zoom; 0 means 1.0.
   userZoom: number;
-  // Main sees a press before the renderer does, so no page can delay or
-  // suppress the count.
-  presses: number;
-  // Tracked so remove() can cancel it before the closure reads a closed view.
-  focusSettle: ReturnType<typeof setTimeout> | null;
   captureStreak: StreakState;
   // Bumped by every show, hide and move, so a park still waiting on its frame
   // can tell it was overtaken.
@@ -108,8 +111,6 @@ interface RegistryCallbacks {
   onPress?: (ev: ViewPress) => void;
   onZoomKey?: (ev: ZoomKeyEvent) => void;
   onEscapeKey?: (ev: EscapeKeyEvent) => void;
-  // focusguard.ts owns the verdict that a focus grab was a steal.
-  onFocusStolen?: (ev: { paneId: string }) => void;
   // A view ended outside remove(); see retire().
   onViewGone?: (ev: ViewGoneEvent) => void;
 }
@@ -122,12 +123,18 @@ type NewView = (opts: WebContentsViewConstructorOptions) => WebContentsView;
 type Emit = (ev: TraceEvent) => void;
 
 // WebviewRegistry owns the live url-tile WebContentsViews parented to the root
-// window, one per paneId, all on SESSION_PARTITION. It knows nothing of IPC or
-// the store: register.ts wires the Electron handlers to these methods.
+// window, one per paneId, all on SESSION_PARTITION, and which webContents holds
+// OS focus. It knows nothing of IPC or the store: register.ts wires the
+// Electron handlers to these methods.
 export class WebviewRegistry {
   private readonly win: BaseWindow;
+  private readonly root: WebContents;
   private readonly cb: RegistryCallbacks;
   private readonly entries = new Map<string, Entry>();
+  // The keyboard's owner the renderer last named: a view's pane, '' for the
+  // root. A pane holding no view here is the root's.
+  private keyboard = '';
+  private readonly rootGuard: Guarded = { paneId: '', presses: 0, focusSettle: null };
   // The e2e reads these through __gwRegistry to tell a synthetic
   // sendInputEvent lost in the input pipeline from a real relay bug.
   zoomChordRelays = 0;
@@ -138,11 +145,46 @@ export class WebviewRegistry {
   private readonly newView: NewView;
   private readonly trace: Emit;
 
-  constructor(win: BaseWindow, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o), emit: Emit = trace) {
+  constructor(win: BaseWindow, root: WebContents, cb: RegistryCallbacks = {}, newView: NewView = (o) => new WebContentsView(o), emit: Emit = trace) {
     this.win = win;
+    this.root = root;
     this.cb = cb;
     this.newView = newView;
     this.trace = emit;
+    root.on('input-event', (_event, input) => {
+      if (isPressInput(input.type)) this.rootGuard.presses++;
+    });
+    root.on('focus', () => this.guard(this.rootGuard, () => root, 'focus-event', this.rootGuard.presses, false));
+    // After the handler, by when the platform has restored its first
+    // responder; see focusguard.decideApply.
+    win.on('focus', () => setImmediate(() => this.applyKeyboard('window')));
+  }
+
+  // setKeyboard stores the owner the renderer derived and makes it true.
+  setKeyboard(paneId: string): void {
+    this.keyboard = paneId;
+    this.applyKeyboard('told');
+  }
+
+  // Test-only: the owner main was last told.
+  keyboardOwner(): string {
+    return this.keyboard;
+  }
+
+  // applyKeyboard is the one call in main that focuses a webContents: the
+  // owner's, or the root's when the owner's pane holds no view.
+  private applyKeyboard(cause: string): void {
+    const e = this.entries.get(this.keyboard);
+    const wc = e ? e.view.webContents : this.root;
+    let act;
+    try {
+      act = decideApply({ windowFocused: this.win.isFocused(), ownerHoldsOSFocus: wc.isFocused() });
+    } catch {
+      return; // a view or a window gone under this ends on its own event
+    }
+    if (act !== 'focus') return;
+    wc.focus();
+    this.trace(keyboardApplied(e ? e.paneId : '', cause, wc.isFocused()));
   }
 
   // Every notice the registry raises carries this one source, which
@@ -194,10 +236,6 @@ export class WebviewRegistry {
     return this.entries.get(paneId)?.tileId;
   }
 
-  focusedFor(paneId: string): boolean | undefined {
-    return this.entries.get(paneId)?.focused;
-  }
-
   // Test-only: a harness drives real Chromium focus and input with it.
   webContentsFor(paneId: string): WebContents | undefined {
     return this.entries.get(paneId)?.view.webContents;
@@ -212,7 +250,7 @@ export class WebviewRegistry {
 
   // The view is a child of the window's contentView, so it paints above the
   // root canvas renderer. Later bounds arrive through setBounds.
-  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', hidden = false, focused = false, gen = 0): Promise<void> {
+  async place(paneId: string, tileId: string, url: string, bounds: Bounds, contentZoom = 0, history = '', hidden = false, gen = 0): Promise<void> {
     const rounded = roundBounds(bounds);
     const partition = SESSION_PARTITION;
     const stale = this.entries.get(paneId);
@@ -237,12 +275,9 @@ export class WebviewRegistry {
         nodeIntegrationInSubFrames: true,
       },
     });
-    // hidden and focused start from the renderer's verdict for this draw,
-    // because it owns both. hidden keeps a view placed under an open menu
-    // off the canvas overlay; focused feeds the steal guard from the first
-    // frame, because addChildView and loadURL hand the new widget OS focus even
-    // on an unfocused pane.
-    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, focused, userZoom: contentZoom, presses: 0, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
+    // hidden starts from the renderer's verdict for this draw, which keeps a
+    // view placed under an open menu off the canvas overlay.
+    const e: Entry = { view, paneId, tileId, url, gen, bounds: rounded, hidden, navigating: false, userZoom: contentZoom, presses: 0, focusSettle: null, captureStreak: FRESH, parkGen: 0 };
     // Nothing Chromium would open as a window or tab spawns a BrowserWindow.
     view.webContents.setWindowOpenHandler(({ url: target }) => {
       const below = webUrl(target);
@@ -284,6 +319,9 @@ export class WebviewRegistry {
     view.setBounds(hidden ? parkedBounds(rounded.width, rounded.height) : rounded);
     this.wireNav(e);
     this.applyMinWidthZoom(e);
+    // addChildView and loadURL hand the new widget OS focus, whoever owns it;
+    // a grab after this is the guard's.
+    this.applyKeyboard('place');
     // reviveNavigation owns the tie-break between the persisted back-stack and
     // the tile's user-editable address.
     const nav = reviveNavigation(url, history);
@@ -362,16 +400,14 @@ export class WebviewRegistry {
   // the native view sits. syncURLViews calls this every draw.
   // A park is the one moment the pane reads its own preview, and a parked view
   // has nothing to capture, so the view stays up until the preview is taken.
-  setHidden(paneId: string, hidden: boolean, focused: boolean): void {
+  setHidden(paneId: string, hidden: boolean): void {
     const e = this.entries.get(paneId);
-    if (!e || (e.hidden === hidden && e.focused === focused)) return;
-    const viewChanged = e.hidden !== hidden;
+    if (!e || e.hidden === hidden) return;
     // Before the flip, because capture reads hidden before its first await.
-    const capture = viewChanged && hidden ? this.mirror(paneId) : null;
+    const capture = hidden ? this.mirror(paneId) : null;
     e.hidden = hidden;
-    e.focused = focused;
-    if (!viewChanged) return;
     this.trace(viewShown(paneId, e.tileId, hidden));
+    this.applyKeyboard(hidden ? 'park' : 'unpark');
     const gen = ++e.parkGen;
     if (!capture) {
       e.view.setBounds(e.bounds);
@@ -389,7 +425,7 @@ export class WebviewRegistry {
   // navigates. It throws when fromPaneId holds no view, which the renderer
   // hears as a refusal and drops the handle it moved. Absent bounds keep the
   // view's own, for a pane not laid out yet.
-  move(fromPaneId: string, toPaneId: string, bounds: Bounds | undefined, hidden: boolean, focused: boolean): void {
+  move(fromPaneId: string, toPaneId: string, bounds: Bounds | undefined, hidden: boolean): void {
     const e = this.entries.get(fromPaneId);
     if (!e) throw new Error(`pane ${fromPaneId}: no live view to move`);
     const stale = this.entries.get(toPaneId);
@@ -406,17 +442,10 @@ export class WebviewRegistry {
     e.parkGen++;
     if (bounds) e.bounds = roundBounds(bounds);
     e.hidden = hidden;
-    e.focused = focused;
     e.view.setBounds(hidden ? parkedBounds(e.bounds.width, e.bounds.height) : e.bounds);
     this.applyMinWidthZoom(e);
     this.trace(viewMoved(fromPaneId, toPaneId, e.tileId));
-    // A view that keeps OS focus in a pane that lost it would take the next
-    // keystrokes, the steal the guard exists for.
-    try {
-      if (!focused && e.view.webContents.isFocused()) this.bounce(e, 'move');
-    } catch {
-      // A view gone under the move retires on its own event.
-    }
+    this.applyKeyboard('move');
   }
 
   async remove(paneId: string): Promise<FreezeResult> {
@@ -458,6 +487,7 @@ export class WebviewRegistry {
       }
     }
     this.trace(viewDestroyed(paneId, e.tileId, url, jpegBase64));
+    this.applyKeyboard('remove');
     return { jpegBase64, url, title, history };
   }
 
@@ -529,42 +559,10 @@ export class WebviewRegistry {
     });
     // A page-initiated navigation makes Chromium focus the new document's
     // widget, and the grab can re-land asynchronously after any one navigation
-    // event, so the guard sits on the focus event and asks focusguard.
-    //
-    // A view can also die outside remove(), and a read of a destroyed
-    // WebContents throws uncaught inside a timer, hanging main behind an error
-    // dialog, so the settle reads isFocused() inside a catch.
-    const step = (phase: GuardPhase, pressesAtFocus: number, alreadyBounced: boolean): void => {
-      let viewHoldsOSFocus = true; // at 'focus-event' the event is the evidence
-      if (phase === 'settle') {
-        try {
-          viewHoldsOSFocus = e.view.webContents.isFocused();
-        } catch {
-          return; // the view died between the grab and this settle
-        }
-      }
-      const act = decideFocus({
-        phase,
-        paneFocused: e.focused,
-        viewHoldsOSFocus,
-        pressesAtFocus,
-        pressesNow: e.presses,
-        alreadyBounced,
-      });
-      if (act.kind === 'allow') return;
-      if (act.kind === 'bounce') this.bounce(e, phase);
-      if (act.settleMs === null) return;
-      if (e.focusSettle) clearTimeout(e.focusSettle);
-      const bounced = act.kind === 'bounce';
-      e.focusSettle = setTimeout(() => {
-        e.focusSettle = null;
-        if (this.entries.get(e.paneId) !== e) return; // removed or moved meanwhile
-        step('settle', pressesAtFocus, bounced);
-      }, act.settleMs);
-    };
+    // event, so the guard sits on the focus event.
     e.view.webContents.on('focus', () => {
       this.trace(viewFocused(e.paneId, e.tileId, true));
-      step('focus-event', e.presses, false);
+      this.guard(e, () => e.view.webContents, 'focus-event', e.presses, false);
     });
     e.view.webContents.on('blur', () => this.trace(viewFocused(e.paneId, e.tileId, false)));
     // Both halves of a navigation, because the gap between them is where a
@@ -616,9 +614,39 @@ export class WebviewRegistry {
     e.view.webContents.on('destroyed', () => this.retire(e, { reason: 'closed', message: pageClosedMessage, severity: 'info', close: false }));
   }
 
-  private bounce(e: Entry, phase: string): void {
-    this.trace(viewStealBounced(e.paneId, e.tileId, phase));
-    this.cb.onFocusStolen?.({ paneId: e.paneId });
+  // guard asks focusguard.decideFocus about a webContents that took OS focus.
+  // A view can die outside remove(), and a read of a destroyed WebContents
+  // throws uncaught inside a timer, hanging main behind an error dialog, so the
+  // settle reads isFocused() inside a catch.
+  private guard(g: Guarded, wc: () => WebContents, phase: GuardPhase, pressesAtFocus: number, alreadyApplied: boolean): void {
+    let holdsOSFocus = true; // at 'focus-event' the event is the evidence
+    let windowFocused: boolean;
+    try {
+      if (phase === 'settle') holdsOSFocus = wc().isFocused();
+      windowFocused = this.win.isFocused();
+    } catch {
+      return; // the view or the window died between the grab and this settle
+    }
+    const owner = this.entries.get(this.keyboard)?.paneId ?? '';
+    const act = decideFocus({
+      phase,
+      isOwner: g.paneId === owner,
+      windowFocused,
+      holdsOSFocus,
+      pressesAtFocus,
+      pressesNow: g.presses,
+      alreadyApplied,
+    });
+    if (act.kind === 'allow') return;
+    if (act.kind === 'apply') this.applyKeyboard(`steal:${phase}`);
+    if (act.settleMs === null) return;
+    if (g.focusSettle) clearTimeout(g.focusSettle);
+    const applied = act.kind === 'apply';
+    g.focusSettle = setTimeout(() => {
+      g.focusSettle = null;
+      if (g !== this.rootGuard && this.entries.get(g.paneId) !== g) return; // removed or moved meanwhile
+      this.guard(g, wc, 'settle', pressesAtFocus, applied);
+    }, act.settleMs);
   }
 
   // take drops the pane's entry and its focus settle, whose closure holds the
@@ -652,6 +680,7 @@ export class WebviewRegistry {
       }
     }
     this.trace(viewGone(paneId, e.tileId, url, end.reason));
+    this.applyKeyboard('gone');
     this.cb.onViewGone?.({ paneId, tileId: e.tileId, gen: e.gen });
     this.reportErr(end.message(url), end.severity);
   }
