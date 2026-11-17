@@ -122,7 +122,7 @@ func (a *App) dispatchTouchActions(actions []touchgest.Action) {
 		case touchgest.Wheel:
 			a.dispatchWheel(act.Pos.X, act.Pos.Y, act.DeltaY)
 		case touchgest.Select: // the mouse's shift + left press, in the bar or on its tile
-			if sx, sy := canvasXY(act.Pos.X, act.Pos.Y, a.canvas); a.bottomBarClick(sx, sy, 0, traceevent.Mods{Shift: true}) {
+			if sx, sy := canvasXY(act.Pos.X, act.Pos.Y, a.canvas); a.bottomBarClick(sx, sy, 0, traceevent.Mods{Shift: true}, true) {
 				continue
 			}
 			if rd := a.rightDrag; rd != nil && gesture.ClassifySelect(gesture.SelectInput{Shift: true, OverTile: rd.tileNode != nil,

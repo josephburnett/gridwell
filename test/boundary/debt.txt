@@ -100,3 +100,4 @@ low-water | packages | 78
 2026-11-17 | Joe's keyboard decision, 2026-11-17: main is told the keyboard's owner (CH.setKeyboard) and makes it true in the OS through one function (WebviewRegistry.applyKeyboard), never raising an unfocused window, the guard taking a grab by any webContents but the owner's back, the root's included | 51
 2026-11-17 | Joe's keyboard decision, 2026-11-17: every e2e and web spec ends on the keyboard invariant, read through a test hook answering the owner from live state (thKeyboard) | 16
 2026-11-17 | Joe's keyboard decision, 2026-11-17: Esc reads the keyboard's owner (gesture.Keyboard), not the element the key reached | 1
+2026-11-17 | Joe's keyboard decision, 2026-11-17: a bar press during a transition takes the focus beside the bar and drops its gesture, as a pane's press does | 8

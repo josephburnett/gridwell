@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import type { PaneInfo } from './driver';
 import { createText, getTile, setSelection } from './oracle';
 
 // The rest of the keyboard's class, one case each: nothing but the owner
@@ -108,4 +109,27 @@ test('Esc clears the selection after a press on a rendered view and an ascent', 
   await expect.poll(async () => (await gw.focused()).selection).toEqual([t.id]);
   await window.keyboard.press('Escape');
   await expect.poll(async () => (await gw.focused()).selection, { message: 'Esc cleared it' }).toEqual([]);
+});
+
+// J: a press on the band beside the bar during a transition still moves pane
+// focus, as a pane's press does; only its gesture waits.
+test('a press beside the bar during a transition focuses the column above', async ({ gw, window }) => {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  await createText(gw.origin, f.gridID, Math.round(f.cx), Math.round(f.cy), 'slow');
+  await gw.splitFocusedPaneVertical();
+  const [left, right] = (await gw.panes()).slice().sort((a: PaneInfo, b: PaneInfo) => a.x - b.x);
+  await gw.focusPane(left);
+  const bar = await gw.bar();
+  const tile = await gw.cellCenter(left.id, Math.round(left.cx), Math.round(left.cy));
+  await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(4000));
+  try {
+    await window.mouse.click(tile.x, tile.y);
+    await expect.poll(() => window.evaluate(() => (window as any).__gridwellTest.transitioning())).toBe(true);
+    await window.mouse.click(right.x + right.w / 2, bar.top + bar.height / 2);
+    expect(await window.evaluate(() => (window as any).__gridwellTest.transitioning()), 'still in the transition').toBe(true);
+    await expect.poll(async () => (await gw.focused()).id, { timeout: 1_500 }).toBe(right.id);
+  } finally {
+    await window.evaluate(() => (window as any).__gridwellTest.setTransitionMs(350));
+  }
 });

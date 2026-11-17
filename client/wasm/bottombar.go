@@ -380,8 +380,10 @@ func (a *App) chainCrumbTile(cr pane.Crumb) *gridwellv1.Tile {
 // which moves the bar there. wsbar.RouteClick
 // says where the press goes; this gathers the world facts and runs the effect.
 // They are gathered on the ZoneBar arm alone, so a press anywhere else in the
-// window never walks the caches.
-func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) bool {
+// window never walks the caches. A press that starts no gesture
+// (gesture.PressStartsGesture) takes the focus beside the bar and nothing
+// else, as a pane's press does.
+func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods, starts bool) bool {
 	bx, top, bw, ok := a.bottomBarRect()
 	if !ok {
 		return false
@@ -401,6 +403,9 @@ func (a *App) bottomBarClick(sx, sy float64, button int, mods traceevent.Mods) b
 		}
 	}
 	hit := wsbar.RouteClick(in)
+	if !starts && hit.Action != wsbar.ActionFocusColumn {
+		return hit.Action != wsbar.ActionPass
+	}
 	switch hit.Action {
 	case wsbar.ActionPass:
 		return false

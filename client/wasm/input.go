@@ -384,6 +384,9 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	a.emit(traceevent.Press(a.paneIDAt(sx, sy), args[0].Get("button").Int(), modsOf(args[0]), false))
 	if !gesture.PressStartsGesture(a.trans.Any()) {
+		if a.bottomBarClick(sx, sy, args[0].Get("button").Int(), modsOf(args[0]), false) {
+			return nil
+		}
 		if p, _, ok := a.paneAtScreen(sx, sy); ok {
 			a.focusToPane(p)
 		}
@@ -415,7 +418,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	// A left-click on a workspace tile crumb goes there, closing everything deeper,
 	// the one gesture that crosses the level boundary; a right-click renames.
-	if a.bottomBarClick(sx, sy, args[0].Get("button").Int(), modsOf(args[0])) {
+	if a.bottomBarClick(sx, sy, args[0].Get("button").Int(), modsOf(args[0]), true) {
 		args[0].Call("preventDefault")
 		return nil
 	}
