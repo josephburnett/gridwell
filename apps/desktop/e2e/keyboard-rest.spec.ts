@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { createText, getTile } from './oracle';
+import { createText, getTile, setSelection } from './oracle';
 
 // The rest of the keyboard's class, one case each: nothing but the owner
 // moves the keyboard, and an open input ends on Enter, Esc or a press
@@ -88,4 +88,24 @@ test('a raw text restored from its place takes the keyboard when its editor show
   await expect
     .poll(() => window.evaluate(() => document.activeElement?.id), { message: 'the restored editor holds the keyboard' })
     .toBe('gw-text-editor');
+});
+
+// I: Esc reads the keyboard's owner, not the element the key reached: after a
+// press on a rendered view and an ascent by the bar, the grid's selection
+// still clears.
+test('Esc clears the selection after a press on a rendered view and an ascent', async ({ gw, window }) => {
+  await gw.enterSource('home');
+  const f = await gw.focused();
+  const cx = Math.round(f.cx);
+  const cy = Math.round(f.cy);
+  const t = await createText(gw.origin, f.gridID, cx, cy, '# rendered\n\nbody');
+  await gw.descendCell(cx, cy);
+  await expect.poll(() => gw.textareaValue(), { timeout: 10_000 }).toContain('rendered');
+  await gw.toggleTextMode();
+  await window.locator('#gw-rendered-view').click();
+  await gw.ascendViaCrumb();
+  await setSelection(gw.origin, f.gridID, [t.id]);
+  await expect.poll(async () => (await gw.focused()).selection).toEqual([t.id]);
+  await window.keyboard.press('Escape');
+  await expect.poll(async () => (await gw.focused()).selection, { message: 'Esc cleared it' }).toEqual([]);
 });

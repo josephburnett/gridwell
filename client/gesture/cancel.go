@@ -18,8 +18,8 @@ type Undo struct {
 
 // Idle is what Esc reads when no gesture is armed.
 type Idle struct {
-	// OnCanvas: the key reached the canvas, so no overlay, field or live
-	// surface owns it.
+	// OnCanvas: the canvas is the keyboard's owner (Keyboard), so no input,
+	// editor, terminal or page takes the key.
 	OnCanvas bool
 	// GridPlace: the focused pane shows a grid, not a content tile.
 	GridPlace bool

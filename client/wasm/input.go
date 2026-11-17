@@ -54,11 +54,12 @@ func (a *App) installCanvasInput() {
 	// Window-level so the content-zoom chord is caught wherever focus sits.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(a.onKeyDown))
 	// In the capture phase, ahead of every overlay's own Esc: a drag in flight
-	// owns the key wherever DOM focus sits. With none, Esc on the canvas
-	// clears the focused grid's selection, and anywhere else goes on as before.
+	// owns the key wherever DOM focus sits. With none, Esc while the canvas is
+	// the keyboard's owner clears the focused grid's selection, and anywhere
+	// else goes on as before.
 	a.win.Call("addEventListener", "keydown", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if args[0].Get("key").String() == "Escape" &&
-			a.cancelGesture(false, args[0].Get("target").Equal(a.canvas)) {
+			a.cancelGesture(false, a.keyboardOwner().Kind == gesture.OwnerCanvas) {
 			args[0].Call("preventDefault")
 			args[0].Call("stopPropagation")
 		}
@@ -102,7 +103,7 @@ func (a *App) armed() gesture.Armed {
 // cancelGesture runs gesture.Escape's verdict: it lets go of every armed
 // gesture and puts back what it names, or with none armed clears the focused
 // grid's selection; false when Esc is not its to take. relayed is a key a
-// parked live view handed on, onCanvas one the canvas heard.
+// parked live view handed on, onCanvas one while the canvas owns the keyboard.
 func (a *App) cancelGesture(relayed, onCanvas bool) bool {
 	u, ok := gesture.Escape(a.armed(), a.escapeIdle(onCanvas))
 	if !ok {

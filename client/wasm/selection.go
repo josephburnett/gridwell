@@ -158,7 +158,7 @@ func (a *App) finishBand(sx, sy float64) {
 }
 
 // escapeIdle is what Esc reads when no gesture is armed; onCanvas says the
-// key reached the canvas.
+// canvas owns the keyboard.
 func (a *App) escapeIdle(onCanvas bool) gesture.Idle {
 	p := a.tree.FocusedPane()
 	if p == nil {
