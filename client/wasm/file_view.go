@@ -27,21 +27,21 @@ import (
 // scrolled; and the "i" button that opens it on any other file. Every
 // decision is fileinfo's or textedit's.
 
-// fileView is the overlay and what it shows: the file whose content id and
-// stamp it was read for, its FileInfo, and the bytes loaded so far, one text
-// node per page.
+// fileView is the overlay and what it shows: the file and the reset it was
+// read under, its FileInfo, and the bytes loaded so far, one text node per
+// page.
 type fileView struct {
 	root, table, more, header, hex, toggle js.Value
 
-	id, stamp string
-	info      *gridwellv1.FileInfo
-	asked     bool
-	buf       []byte
-	size      int64
-	pages     []js.Value
-	paging    bool
-	failed    bool
-	restored  bool
+	shown    fileinfo.View
+	info     *gridwellv1.FileInfo
+	asked    bool
+	buf      []byte
+	size     int64
+	pages    []js.Value
+	paging   bool
+	failed   bool
+	restored bool
 }
 
 func (a *App) ensureFileView() *fileView {
@@ -96,8 +96,8 @@ func (a *App) refreshFileView() {
 		return
 	}
 	row, _ := a.contentRow(t)
-	if id := rpc.ContentID(t); id != v.id || row.GetContentStamp() != v.stamp {
-		a.resetFileView(v, id, row.GetContentStamp())
+	if v.shown.Show(rpc.ContentID(t), row.GetContentStamp()) {
+		a.resetFileView(v)
 	}
 	s := v.root.Get("style")
 	x, y, w, h := textInnerBox(r)
@@ -108,7 +108,7 @@ func (a *App) refreshFileView() {
 	s.Set("display", "block")
 	if !v.asked {
 		v.asked = true
-		go a.readFileInfo(v, v.id)
+		go a.readFileInfo(v, v.shown.ID, v.shown.Ask())
 	}
 	hex := d.Mode == rpc.TextModeHex
 	more, display := "see more: its bytes in hex", "none"
@@ -124,8 +124,8 @@ func (a *App) refreshFileView() {
 	a.restoreFileViewScroll(p, v, hex)
 }
 
-func (a *App) resetFileView(v *fileView, id, stamp string) {
-	v.id, v.stamp, v.info, v.asked = id, stamp, nil, false
+func (a *App) resetFileView(v *fileView) {
+	v.info, v.asked = nil, false
 	v.buf, v.size, v.pages, v.paging, v.failed, v.restored = nil, 0, nil, false, false, false
 	v.table.Set("textContent", "reading…")
 	v.header.Set("textContent", "")
@@ -134,12 +134,12 @@ func (a *App) resetFileView(v *fileView, id, stamp string) {
 }
 
 // readFileInfo asks the node for id's file information and fills the table,
-// unless the view has moved on to another file meanwhile.
-func (a *App) readFileInfo(v *fileView, id string) {
+// unless the view was reset meanwhile.
+func (a *App) readFileInfo(v *fileView, id string, asked fileinfo.Asked) {
 	ctx, cancel := inflight.Bounded()
 	defer cancel()
 	info, err := a.cl.ReadInfo(ctx, id)
-	if v.id != id {
+	if !v.shown.Lands(asked) {
 		return
 	}
 	v.table.Set("textContent", "")
@@ -174,10 +174,10 @@ func (a *App) nextFilePage(v *fileView) {
 		return
 	}
 	v.paging = true
-	id := v.id
+	id, asked := v.shown.ID, v.shown.Ask()
 	go func() {
 		data, size, err := a.fetchFileBytes(id, rng)
-		if v.id != id {
+		if !v.shown.Lands(asked) {
 			return
 		}
 		v.paging = false

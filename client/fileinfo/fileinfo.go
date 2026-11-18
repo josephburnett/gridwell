@@ -1,6 +1,7 @@
 // Package fileinfo says what a file is: the preview of a file that renders as
 // nothing, from its row alone; its file information as rows of a table, from
-// the node's FileInfo; and its bytes as the hex view lays them out.
+// the node's FileInfo; its bytes as the hex view lays them out; and which
+// read's answer still belongs to the view.
 package fileinfo
 
 import (
@@ -74,3 +75,28 @@ func Rows(info *gridwellv1.FileInfo, loc *time.Location) []Row {
 	}
 	return rows
 }
+
+// View is the file a file view shows, at which stamp, under which reset.
+type View struct {
+	ID, Stamp string
+	gen       Asked
+}
+
+// Asked is the reset of the view a read was asked under.
+type Asked uint64
+
+// Show moves the view to id at stamp, reporting whether that resets it; a
+// reset retires every read asked before it, even one of the same file.
+func (v *View) Show(id, stamp string) bool {
+	if id == v.ID && stamp == v.Stamp {
+		return false
+	}
+	v.ID, v.Stamp, v.gen = id, stamp, v.gen+1
+	return true
+}
+
+// Ask is what a read of the view as it is now carries.
+func (v View) Ask() Asked { return v.gen }
+
+// Lands reports whether the answer to a read asked belongs to the view.
+func (v View) Lands(a Asked) bool { return a == v.gen }
