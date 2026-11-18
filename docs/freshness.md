@@ -46,7 +46,9 @@ leaves every session's view darkens the files no more.
 The files are told of a change by the operating system
 (`internal/files/watch.go`, fsnotify), for the directories some session
 shows (`SetView`) and the directories their symlinks land in, so what
-watching costs is what is on screen. A directory's changes gather for
+watching costs is what is on screen. One of them that cannot be watched,
+gone or refused, is waited for on the nearest directory above it that can,
+and only while it cannot (`watcher.sync`), so its return is told. A directory's changes gather for
 200 ms (`debounceWindow`) and are then told: a name that came, went or
 changed kind is a `GridChanged`, checked rather than relayed — the node
 lists the directory and announces it, and every directory linking into

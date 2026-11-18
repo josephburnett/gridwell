@@ -342,21 +342,17 @@ func (w *watcher) set(scope []string) (added []string, err error) {
 	next := map[string]bool{}
 	for _, d := range scope {
 		next[d] = true
-	}
-	for d := range w.watched {
-		if !next[d] {
-			_ = w.fsw.Remove(d)
-			delete(w.watched, d)
-		}
-	}
-	for _, d := range scope {
-		was := w.watched[d]
-		err = errors.Join(err, w.watchDir(d))
-		if !w.scope[d] || !was && w.watched[d] {
+		if !w.scope[d] {
 			added = append(added, d)
 		}
 	}
 	w.scope = next
+	now, err := w.sync()
+	for _, d := range now {
+		if !slices.Contains(added, d) {
+			added = append(added, d)
+		}
+	}
 	closing := w.detachIfIdle()
 	if err == nil && w.failed != "" {
 		err = errors.New(w.failed)
@@ -364,6 +360,59 @@ func (w *watcher) set(scope []string) (added []string, err error) {
 	w.mu.Unlock()
 	closeWatcher(closing)
 	return added, err
+}
+
+// sync watches each directory in scope or, while it cannot be, the nearest
+// above it that can, to hear it come back, and nothing else; a watch made
+// above walks again, since nothing heard what changed before it. It answers
+// the scope directories watched only now. Callers hold mu.
+func (w *watcher) sync() (now []string, err error) {
+	want := map[string]bool{}
+	for d := range w.scope {
+		a, grew, e := w.nearest(d)
+		for e == nil && grew && a != d {
+			a, grew, e = w.nearest(d)
+		}
+		err = errors.Join(err, e)
+		want[a] = a != ""
+		if a == d && grew {
+			now = append(now, d)
+		}
+	}
+	for d := range w.watched {
+		if !want[d] {
+			_ = w.fsw.Remove(d)
+			delete(w.watched, d)
+		}
+	}
+	return now, err
+}
+
+// leadsIntoScope reports whether path is a directory in scope or above one.
+func (w *watcher) leadsIntoScope(path string) bool {
+	for d := range w.scope {
+		if underRoot(path, d) {
+			return true
+		}
+	}
+	return false
+}
+
+// nearest watches d or the nearest directory above it that can be watched,
+// answering which, "" for none, and whether it was watched only now.
+func (w *watcher) nearest(d string) (string, bool, error) {
+	for a := d; ; a = filepath.Dir(a) {
+		was := w.watched[a]
+		if err := w.watchDir(a); err != nil {
+			return "", false, err
+		}
+		if w.watched[a] {
+			return a, !was, nil
+		}
+		if a == filepath.Dir(a) {
+			return "", false, nil
+		}
+	}
 }
 
 // watchDir puts dir under an OS watch. One missing or unreadable is not
@@ -476,31 +525,20 @@ func (w *watcher) event(fsw *fsnotify.Watcher, ev fsnotify.Event) {
 		w.s.noteWatch("")
 	}
 	path := filepath.Clean(ev.Name)
-	switch {
-	case w.watched[path] && ev.Has(fsnotify.Remove|fsnotify.Rename):
+	if w.watched[path] && ev.Has(fsnotify.Remove|fsnotify.Rename) {
 		_ = fsw.Remove(path)
 		delete(w.watched, path)
 		w.touch(path, true, "")
-	case !w.watched[path] && ev.Has(fsnotify.Create) && w.scope[path]:
-		if err := w.watchDir(path); err != nil {
-			w.failed = err.Error()
-			w.s.noteWatch(w.failed)
-		}
-		w.touch(path, true, "")
 	}
-	// A refused directory has no watch of its own, so its parent's hears its
-	// permission given back, and a view showing it is watched and told.
-	if ev.Has(fsnotify.Chmod) && w.scope[path] {
-		if err := w.watchDir(path); err != nil {
-			w.failed = err.Error()
-			w.s.noteWatch(w.failed)
-		}
+	// A directory in scope with no watch is waited for above it (sync).
+	if ev.Has(fsnotify.Create|fsnotify.Remove|fsnotify.Rename|fsnotify.Chmod) && w.leadsIntoScope(path) {
+		w.resync()
 	}
 	if ev.Has(fsnotify.Chmod) && w.s.noteRefusal(path, nil) && w.scope[path] {
 		w.s.emitGridChanged(path)
 	}
 	parent := filepath.Dir(path)
-	if !w.watched[parent] {
+	if !w.watched[parent] || !w.scope[parent] {
 		return
 	}
 	file := ""
@@ -530,6 +568,20 @@ func (w *watcher) eventError(fsw *fsnotify.Watcher, err error) {
 			w.touch(d, true, e.path)
 		}
 		w.touch(d, true, "")
+	}
+	w.resync()
+}
+
+// resync is sync for an event: a refusal leaves the files not told until the
+// next, and a directory watched only now came back, which is told.
+func (w *watcher) resync() {
+	now, err := w.sync()
+	if err != nil {
+		w.failed = err.Error()
+		w.s.noteWatch(w.failed)
+	}
+	for _, d := range now {
+		w.s.emitGridChanged(d)
 	}
 }
 
