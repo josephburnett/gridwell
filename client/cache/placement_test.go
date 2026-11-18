@@ -212,3 +212,45 @@ func TestAZoomHoldsUntilItsOwnEcho(t *testing.T) {
 		t.Errorf("zoom = %v, want 2: a released hold outlived its write", got)
 	}
 }
+
+// A local patch is not the node's word: it ends no hold, so a read that
+// predates the held write still cannot put the old fact back, and a patch of
+// a row read before the write does not put it back either.
+func TestAPatchEndsNoHold(t *testing.T) {
+	row := func() *gridwellv1.Tile {
+		return &gridwellv1.Tile{Id: "t", GridId: "a", Kind: rpc.KindText, W: 1, H: 1, ContentZoom: 1}
+	}
+	read := func(c *Cache) { c.PutGrid(&gridwellv1.Grid{Id: "a"}, []*gridwellv1.Tile{row()}) }
+	scroll := func(n *gridwellv1.Tile) { n.TextY = 40 }
+	for _, tc := range []struct {
+		name string
+		hold func(c *Cache)
+		want func(n *gridwellv1.Tile) bool
+	}{
+		{"content zoom", func(c *Cache) {
+			c.Hold("t", WroteZoom, func(n *gridwellv1.Tile) { n.ContentZoom = 1.25 })
+		}, func(n *gridwellv1.Tile) bool { return n.ContentZoom == 1.25 }},
+		{"placement", func(c *Cache) {
+			c.Move("t", Placement{GridID: "a", X: 5, W: 1, H: 1})
+		}, func(n *gridwellv1.Tile) bool { return n.X == 5 }},
+	} {
+		for _, stale := range []bool{false, true} {
+			c := New()
+			read(c)
+			before := mustRow(t, c, "a", "t")
+			tc.hold(c)
+			patched := mustRow(t, c, "a", "t")
+			if stale {
+				patched = before
+			}
+			c.PatchTile(patched, scroll)
+			if got := mustRow(t, c, "a", "t"); !tc.want(got) || got.TextY != 40 {
+				t.Errorf("%s, stale %v: after the patch row = %v, want the held fact and the scroll", tc.name, stale, got)
+			}
+			read(c)
+			if got := mustRow(t, c, "a", "t"); !tc.want(got) {
+				t.Errorf("%s, stale %v: a read that predates the write put it back: %v", tc.name, stale, got)
+			}
+		}
+	}
+}

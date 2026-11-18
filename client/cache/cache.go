@@ -268,7 +268,7 @@ func (c *Cache) PutGrid(g *gridwellv1.Grid, tiles []*gridwellv1.Tile) {
 	gr := &Grid{Meta: g, Tiles: map[string]*gridwellv1.Tile{}}
 	var away []*gridwellv1.Tile
 	for _, n := range tiles {
-		if n = c.admitLocked(n, false); n.GridId != g.Id {
+		if n = c.admitLocked(n, byRead); n.GridId != g.Id {
 			away = append(away, n)
 			continue
 		}
@@ -535,7 +535,7 @@ func (c *Cache) UpdateTile(gridID string, t *gridwellv1.Tile) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if _, ok := c.cachedRowLocked(gridID, t); ok {
-		c.storeLocked(c.admitLocked(t, false), false)
+		c.storeLocked(c.admitLocked(t, byRead), false)
 	}
 }
 
@@ -620,7 +620,7 @@ func (c *Cache) PutWriteResponse(gridID string, resp *gridwellv1.Tile, w Wrote) 
 		n.Version = resp.Version
 	}
 	w.copy(n, resp)
-	if n = c.admitLocked(n, false); n.GridId != g.Meta.GetId() {
+	if n = c.admitLocked(n, byRead); n.GridId != g.Meta.GetId() {
 		c.storeLocked(n, false)
 		return
 	}
@@ -640,16 +640,17 @@ func (c *Cache) storeLocked(n *gridwellv1.Tile, told bool) bool {
 	return c.putTileLocked(g, n, told)
 }
 
-// PatchTile folds an optimistic local change to one row in through the event
-// path, and reports whether it landed. edit sees a copy.
+// PatchTile folds an optimistic local change to one row in, ending no hold,
+// and reports whether it landed. edit sees a copy.
 func (c *Cache) PatchTile(t *gridwellv1.Tile, edit func(*gridwellv1.Tile)) bool {
 	if t == nil {
 		return false
 	}
 	patched := proto.CloneOf(t)
 	edit(patched)
-	return c.Apply(&gridwellv1.Event{Payload: &gridwellv1.Event_TileChanged{
-		TileChanged: &gridwellv1.TileChanged{Tile: patched}}})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.storeLocked(c.admitLocked(patched, byPatch), false)
 }
 
 // Apply consumes a Subscribe event, returning whether visible state changed.
@@ -663,7 +664,7 @@ func (c *Cache) Apply(ev *gridwellv1.Event) bool {
 		if n == nil {
 			return false
 		}
-		return c.storeLocked(c.admitLocked(n, true), p.TileChanged.GetContentChanged())
+		return c.storeLocked(c.admitLocked(n, byStream), p.TileChanged.GetContentChanged())
 	case *gridwellv1.Event_TileRemoved:
 		r := p.TileRemoved
 		if r == nil {

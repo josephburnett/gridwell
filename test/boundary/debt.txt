@@ -101,3 +101,4 @@ low-water | packages | 78
 2026-11-17 | Joe's keyboard decision, 2026-11-17: every e2e and web spec ends on the keyboard invariant, read through a test hook answering the owner from live state (thKeyboard) | 16
 2026-11-17 | Joe's keyboard decision, 2026-11-17: Esc reads the keyboard's owner (gesture.Keyboard), not the element the key reached | 1
 2026-11-17 | Joe's keyboard decision, 2026-11-17: a bar press during a transition takes the focus beside the bar and drops its gesture, as a pane's press does | 8
+2026-11-17 | Joe's sweep goal, 2026-11-17 (find bugs, non-dry code and distributed responsibility, fix the class, guard it): a row's origin (read, stream, local patch) decides the holds it ends, so cache.PatchTile ends none | 10

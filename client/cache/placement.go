@@ -121,10 +121,19 @@ func (pl *Holding) end(restore bool) {
 	}
 }
 
+// origin is where a row came from, which decides the holds it ends: a read
+// those whose write landed, the stream its echo's, a local patch none.
+type origin int
+
+const (
+	byRead origin = iota
+	byStream
+	byPatch
+)
+
 // admitLocked is the row a held tile may store: n with each held fact n does
-// not end the hold of. stream says n came on the Subscribe stream. Callers
-// hold c.mu.
-func (c *Cache) admitLocked(n *gridwellv1.Tile, stream bool) *gridwellv1.Tile {
+// not end the hold of. Callers hold c.mu.
+func (c *Cache) admitLocked(n *gridwellv1.Tile, from origin) *gridwellv1.Tile {
 	out := n
 	for _, w := range held {
 		key := holdKey{n.Id, w}
@@ -133,7 +142,7 @@ func (c *Cache) admitLocked(n *gridwellv1.Tile, stream bool) *gridwellv1.Tile {
 			continue
 		}
 		at := w.same(n, h.row)
-		if (stream && at) || (!stream && h.landed) {
+		if (from == byStream && at) || (from == byRead && h.landed) {
 			delete(c.holds, key)
 			continue
 		}
