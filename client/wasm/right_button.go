@@ -139,6 +139,10 @@ type viewPress struct {
 // a right press waits for the view to say it became a drag.
 func (a *App) onViewPress(vp viewPress, button int) {
 	a.emit(traceevent.Press(vp.paneID, button, traceevent.Mods{}, true))
+	act := gesture.Press(a.trans.Any(), a.armed())
+	if act == gesture.PressNothing {
+		return
+	}
 	a.endInput()
 	defer a.applyKeyboard(true)
 	a.viewRight = nil
@@ -148,7 +152,7 @@ func (a *App) onViewPress(vp viewPress, button int) {
 	}
 	a.focusToPane(p)
 	switch {
-	case !gesture.PressStartsGesture(a.trans.Any()):
+	case act == gesture.PressFocuses:
 	case button == 0 && vp.at:
 		a.armLeftResize(paneRectFor(a, p), vp.sx, vp.sy)
 	case button == 1:
@@ -165,7 +169,7 @@ func (a *App) onViewPress(vp viewPress, button int) {
 func (a *App) onForwardedRightDown() {
 	vp := a.viewRight
 	a.viewRight = nil
-	if vp == nil {
+	if vp == nil || gesture.Press(a.trans.Any(), a.armed()) == gesture.PressNothing {
 		return
 	}
 	p := a.tree.FindPane(vp.paneID)

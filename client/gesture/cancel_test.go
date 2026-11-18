@@ -100,6 +100,9 @@ func TestRelease(t *testing.T) {
 		{"a creating drag is the right button's", 0, Armed{RightDrag: true, Drag: true, DragCreates: true}, FinishNothing},
 		{"left up ends a band sweep", 0, Armed{Band: true}, FinishBand},
 		{"right up does not end a band sweep", 2, Armed{Band: true}, FinishNothing},
+		{"right up does not end a left drag", 2, Armed{Drag: true}, FinishNothing},
+		{"middle up does not end a left drag", 1, Armed{Drag: true}, FinishNothing},
+		{"right up does not end a pan", 2, Armed{Drag: true, Pan: true}, FinishNothing},
 	}
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {

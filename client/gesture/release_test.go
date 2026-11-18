@@ -96,6 +96,33 @@ func TestRecoverRelease(t *testing.T) {
 	}
 }
 
+// A gesture owns the pointer from its press: a press of any button during it
+// does nothing, from a mouse or a finger, and only a press at rest starts one.
+func TestPress(t *testing.T) {
+	armed := map[string]Armed{
+		"left drag":       {Drag: true},
+		"pan":             {Drag: true, Pan: true},
+		"right copy":      {RightDrag: true, Drag: true, DragCreates: true},
+		"right pane drag": {RightDrag: true},
+		"left resize":     {LeftResize: true},
+		"band":            {Band: true},
+		"strip scroll":    {StripScroll: true},
+	}
+	for name, a := range armed {
+		for _, transitioning := range []bool{false, true} {
+			if got := Press(transitioning, a); got != PressNothing {
+				t.Errorf("a press during a %s (transitioning %v) = %v, want PressNothing", name, transitioning, got)
+			}
+		}
+	}
+	if got := Press(false, Armed{}); got != PressStarts {
+		t.Errorf("a press at rest = %v, want PressStarts", got)
+	}
+	if got := Press(true, Armed{}); got != PressFocuses {
+		t.Errorf("a press during a transition = %v, want PressFocuses", got)
+	}
+}
+
 // The strip's scroll is the left button's, as a pan is.
 func TestReleaseEndsAStripScroll(t *testing.T) {
 	if got := Release(0, Armed{StripScroll: true}); got != FinishStripScroll {

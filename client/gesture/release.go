@@ -39,16 +39,46 @@ type Armed struct {
 	StripScroll bool
 }
 
-// Release is the commit path a mouseup of button finishes. A left drag ends on
-// any button's release; a creating drag ends only through the right drag it
-// is.
+// InFlight reports whether any gesture is armed.
+func (a Armed) InFlight() bool {
+	return a.LeftResize || a.RightDrag || a.Drag || a.Band || a.StripScroll
+}
+
+// PressAct is what a press does, of any button and from either device.
+type PressAct int
+
+const (
+	// PressStarts: pane focus follows the press and it starts its gesture.
+	PressStarts PressAct = iota
+	// PressFocuses: pane focus follows and nothing else (PressStartsGesture).
+	PressFocuses
+	// PressNothing: a gesture owns the pointer until its own button comes up,
+	// so another button's press neither moves focus nor arms anything.
+	PressNothing
+)
+
+// Press decides it from what is in flight.
+func Press(transitioning bool, armed Armed) PressAct {
+	switch {
+	case armed.InFlight():
+		return PressNothing
+	case !PressStartsGesture(transitioning):
+		return PressFocuses
+	}
+	return PressStarts
+}
+
+// Release is the commit path a mouseup of button finishes. Every gesture ends
+// on its own button's release, so another button's, whose press did nothing
+// (Press), finishes nothing; a creating drag ends only through the right drag
+// it is.
 func Release(button int, armed Armed) Recovery {
 	switch {
 	case armed.RightDrag && button == 2:
 		return FinishRightDrag
 	case armed.LeftResize && button == 0:
 		return FinishLeftResize
-	case armed.Drag && !armed.DragCreates:
+	case armed.Drag && !armed.DragCreates && button == 0:
 		return FinishLeftDrag
 	case armed.Band && button == 0:
 		return FinishBand

@@ -82,9 +82,7 @@ func (a *App) onKeyDown(_ js.Value, args []js.Value) any {
 }
 
 // gestureInFlight is the routing gate for the window-level move and up.
-func (a *App) gestureInFlight() bool {
-	return a.leftResize != nil || a.rightDrag != nil || a.dragging != nil || a.band != nil
-}
+func (a *App) gestureInFlight() bool { return a.armed().InFlight() }
 
 // armed reports the gesture states to the verdicts in client/gesture.
 func (a *App) armed() gesture.Armed {
@@ -383,7 +381,10 @@ func (d *dragState) grabTile(n *gridwellv1.Tile, cursorCellX, cursorCellY, tlX, 
 func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	sx, sy := mouseXY(args[0], a.canvas)
 	a.emit(traceevent.Press(a.paneIDAt(sx, sy), args[0].Get("button").Int(), modsOf(args[0]), false))
-	if !gesture.PressStartsGesture(a.trans.Any()) {
+	switch gesture.Press(a.trans.Any(), a.armed()) {
+	case gesture.PressNothing:
+		return nil
+	case gesture.PressFocuses:
 		if a.bottomBarClick(sx, sy, args[0].Get("button").Int(), modsOf(args[0]), false) {
 			return nil
 		}
@@ -394,7 +395,7 @@ func (a *App) onMouseDown(this js.Value, args []js.Value) any {
 	}
 	// A landing ghost parks every live surface, and its drop has already
 	// committed, so a press ends the landing rather than missing a surface.
-	if a.ghost != nil && a.dragging == nil && a.rightDrag == nil {
+	if a.ghost != nil {
 		a.ghost = nil
 	}
 	// The notice row occupies the band layoutPanes reserved below every pane,
